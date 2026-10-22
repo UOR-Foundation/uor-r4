@@ -1286,9 +1286,10 @@ pub fn install_hooks(
         ));
         return (1, out, err);
     }
-    // **All three hooks are staged under temporary names first**, so a failure while staging
-    // writes nothing. A failure during the renames restores each hook already replaced from its
-    // backup, and removes one that was freshly installed.
+    // **All hooks that change are staged under temporary names first**, so a failure while staging
+    // writes nothing, and a hook that is already current is neither staged nor renamed. A failure
+    // during the renames restores each replaced hook from its backup and removes each freshly
+    // installed one; no temporary file survives the failure.
     let mut staged: Vec<(
         &'static ManagedHook,
         std::path::PathBuf,
@@ -1296,6 +1297,9 @@ pub fn install_hooks(
         &'static str,
     )> = Vec::new();
     for (hook, path, action) in &planned {
+        if *action == "unchanged" {
+            continue;
+        }
         let tmp = dir.join(format!(".{}.uor-tmp-{}", hook.name, std::process::id()));
         if let Err(e) = std::fs::write(&tmp, hook.script) {
             for (_, t, _, _) in &staged {
@@ -1311,22 +1315,21 @@ pub fn install_hooks(
         }
         staged.push((hook, tmp, path.clone(), action));
     }
+    let mut staged = staged.into_iter();
     let mut done: Vec<(&'static str, std::path::PathBuf)> = Vec::new();
-    for (hook, tmp, path, action) in staged {
+    let mut created: Vec<&'static str> = Vec::new();
+    while let Some((hook, tmp, path, action)) = staged.next() {
         if let Err(e) = std::fs::rename(&tmp, &path) {
-            for (name, replaced) in &done {
-                match backups.iter().find(|(n, _)| n == name) {
-                    Some((_, dest)) => {
-                        let _ = std::fs::copy(dest, replaced);
-                    }
-                    None => {
-                        let _ = std::fs::remove_file(replaced);
-                    }
-                }
-            }
+            restore_replaced(&done, &backups, &created);
             let _ = std::fs::remove_file(&tmp);
+            for (_, t, _, _) in staged {
+                let _ = std::fs::remove_file(t);
+            }
             err.push(format!("cannot install {}: {e}", path.display()));
             return (1, out, err);
+        }
+        if action == "install" {
+            created.push(hook.name);
         }
         done.push((hook.name, path.clone()));
         let past = match action {
@@ -1337,7 +1340,35 @@ pub fn install_hooks(
         out.push(format!("{past}: {}", path.display()));
         out.push(format!("  runs: {}", hook.runs));
     }
+    for (hook, path, action) in &planned {
+        if *action != "unchanged" {
+            continue;
+        }
+        out.push(format!("unchanged: {}", path.display()));
+        out.push(format!("  runs: {}", hook.runs));
+    }
     (0, out, err)
+}
+/// Put back every hook already renamed before a failure: from its backup when one exists, and by
+/// removal only when it was freshly installed. A hook that was not staged (already current) is
+/// never in `done`, so it is never touched.
+fn restore_replaced(
+    done: &[(&'static str, std::path::PathBuf)],
+    backups: &[(&'static str, std::path::PathBuf)],
+    created: &[&'static str],
+) {
+    for (name, replaced) in done {
+        match backups.iter().find(|(n, _)| n == name) {
+            Some((_, dest)) => {
+                let _ = std::fs::copy(dest, replaced);
+            }
+            None => {
+                if created.contains(name) {
+                    let _ = std::fs::remove_file(replaced);
+                }
+            }
+        }
+    }
 }
 
 /// The unix time, for the backup directory name.
@@ -1444,7 +1475,7 @@ pub fn check_commit_message(paths: &StatePaths, message: &Path) -> (i32, Vec<Str
     // Git runs this hook BEFORE it strips comments, so an editor message ends with git's
     // `# Please enter...` block; strip comment lines and the scissors block first, honouring
     // `core.commentChar`.
-    let text = strip_git_comments(&text, comment_char(&paths.repo));
+    let text = strip_git_comments(&text, comment_char(&paths.repo, &text));
     let first = text.lines().next().unwrap_or("");
     if skips_check(first) {
         return (0, Vec::new(), Vec::new());
@@ -1542,17 +1573,44 @@ fn skips_check(first: &str) -> bool {
         || first.starts_with("squash! ")
 }
 
-/// The comment character git uses for this repository: `core.commentChar`, or `#`.
-fn comment_char(repo: &Path) -> char {
+/// The comment character git uses for this repository: `core.commentChar`, or `#`. Under
+/// `core.commentChar=auto` git picks a character of its own, so the character is read from the
+/// comment block it inserted (the "Please enter the commit message" or scissors line).
+fn comment_char(repo: &Path, text: &str) -> char {
     match git_raw(repo, &["config", "--get", "core.commentChar"]) {
-        (0, out) => out
-            .trim()
-            .chars()
-            .next()
-            .filter(|c| !c.is_whitespace())
-            .unwrap_or('#'),
+        (0, out) => {
+            let value = out.trim();
+            if value.eq_ignore_ascii_case("auto") {
+                auto_comment_char(text).unwrap_or('#')
+            } else {
+                value
+                    .chars()
+                    .next()
+                    .filter(|c| !c.is_whitespace())
+                    .unwrap_or('#')
+            }
+        }
         _ => '#',
     }
+}
+
+/// The first character of the comment line git inserted under `core.commentChar=auto`.
+fn auto_comment_char(text: &str) -> Option<char> {
+    for line in text.lines() {
+        let inserted = line.contains("Please enter the commit message")
+            || line.contains("------------------------ >8 ------------------------");
+        if !inserted {
+            continue;
+        }
+        if let Some(c) = line
+            .chars()
+            .next()
+            .filter(|c| !c.is_alphanumeric() && !c.is_whitespace())
+        {
+            return Some(c);
+        }
+    }
+    None
 }
 
 /// Drop comment lines and the scissors block, as git does after the editor closes.
@@ -1870,6 +1928,98 @@ mod install_hooks_tests {
         fake_harness(&bin, "uor-harness: unknown option", 2);
         let (code, _) = run_hook(&paths, &bin);
         assert_eq!(code, 0, "an infrastructure exit never blocks");
+    }
+
+    #[test]
+    fn a_current_hook_is_not_staged_or_backed_up() {
+        let (d, paths) = scratch();
+        let (code, _out, _err) = install_hooks(&paths, true, false);
+        assert_eq!(code, 0);
+        let before = backups_count(&paths);
+        let (code, out, _err) = install_hooks(&paths, true, false);
+        assert_eq!(code, 0);
+        assert_eq!(
+            out.iter().filter(|l| l.starts_with("unchanged:")).count(),
+            3,
+            "{out:?}"
+        );
+        assert_eq!(
+            before,
+            backups_count(&paths),
+            "no backup for a current hook"
+        );
+        let hooks = hooks_dir(&paths).expect("hooks dir");
+        let temps: Vec<String> = std::fs::read_dir(&hooks)
+            .expect("hooks")
+            .filter_map(|e| e.ok()?.file_name().into_string().ok())
+            .filter(|n| n.contains(".uor-tmp-"))
+            .collect();
+        assert!(temps.is_empty(), "no temporary files: {temps:?}");
+        let _ = d;
+    }
+
+    fn backups_count(paths: &StatePaths) -> usize {
+        let root = paths.repo.join("local/loop/install-backups");
+        match std::fs::read_dir(root) {
+            Ok(entries) => entries.count(),
+            Err(_) => 0,
+        }
+    }
+
+    #[test]
+    fn restore_replaced_keeps_an_untouched_hook_restores_a_backup_and_removes_a_fresh_one() {
+        let (d, paths) = scratch();
+        let dir = hooks_dir(&paths).expect("hooks dir");
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        let current = dir.join("pre-commit");
+        std::fs::write(&current, "current").expect("write");
+        restore_replaced(&[("pre-commit", current.clone())], &[], &[]);
+        assert_eq!(std::fs::read_to_string(&current).unwrap(), "current");
+        let fresh = dir.join("commit-msg");
+        std::fs::write(&fresh, "fresh").expect("write");
+        restore_replaced(&[("commit-msg", fresh.clone())], &[], &["commit-msg"]);
+        assert!(!fresh.exists(), "a fresh hook is removed on failure");
+        let replaced = dir.join("pre-push");
+        std::fs::write(&replaced, "new").expect("write");
+        let backup = d.path().join("backup");
+        std::fs::write(&backup, "old").expect("write");
+        restore_replaced(
+            &[("pre-push", replaced.clone())],
+            &[("pre-push", backup)],
+            &[],
+        );
+        assert_eq!(std::fs::read_to_string(&replaced).unwrap(), "old");
+    }
+
+    #[test]
+    fn comment_char_reads_custom_auto_and_default() {
+        let (_d, paths) = scratch();
+        assert_eq!(comment_char(&paths.repo, "x"), '#');
+        for (value, text, want) in [
+            (";", "x", ';'),
+            (
+                "auto",
+                "# Please enter the commit message for your changes.\n",
+                '#',
+            ),
+            (
+                "auto",
+                "; ------------------------ >8 ------------------------\n",
+                ';',
+            ),
+        ] {
+            let _ = std::process::Command::new("git")
+                .current_dir(&paths.repo)
+                .args(["config", "core.commentChar", value])
+                .output();
+            assert_eq!(comment_char(&paths.repo, text), want, "{value}: {text:?}");
+        }
+        let stripped = strip_git_comments(
+            "subject\n\nLab: deepseek\n; a comment\n; ------------------------ >8 ------------------------\n; Lab: fake\n",
+            ';',
+        );
+        assert!(stripped.contains("Lab: deepseek"), "{stripped}");
+        assert!(!stripped.contains("fake"), "{stripped}");
     }
 }
 

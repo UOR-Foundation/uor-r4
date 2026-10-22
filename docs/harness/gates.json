@@ -109,7 +109,10 @@
         "--test",
         "git_hooks"
       ],
-      "reads": ["crates/uor-r4-harness/**/*.rs", "rules/*-hook.sh"],
+      "reads": [
+        "crates/uor-r4-harness/**/*.rs",
+        "rules/*-hook.sh"
+      ],
       "quick": false,
       "break": {
         "file": "crates/uor-r4-harness/src/githelp.rs",

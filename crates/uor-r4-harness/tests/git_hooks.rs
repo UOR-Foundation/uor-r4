@@ -676,3 +676,68 @@ fn the_prepush_hook_exits_2_when_git_lfs_is_missing() {
     assert_code(&o, 2, "no git-lfs is the stock refusal");
     assert!(text(&o).contains("Git LFS"), "{}", text(&o));
 }
+
+#[test]
+fn a_custom_comment_char_is_honoured() {
+    let r = Repo::new();
+    r.git(&["config", "core.commentChar", ";"]);
+    r.branch("deepseek/topic");
+    let with =
+        format!("a subject\n\nLab: deepseek\nOrder: {ORDER}\n\n; a comment line\n; another\n");
+    let m = r.message("msg.txt", &with);
+    let o = r.run(
+        &["git", "check-message", m.to_str().unwrap()],
+        &[("UOR_LAB", "deepseek")],
+        None,
+    );
+    assert_code(&o, 0, "a custom comment char block is stripped");
+    let without = "a subject\n\n; a comment line\n; another\n";
+    let m = r.message("msg2.txt", without);
+    let o = r.run(
+        &["git", "check-message", m.to_str().unwrap()],
+        &[("UOR_LAB", "deepseek")],
+        None,
+    );
+    assert_code(&o, 1, "no trailers under a custom comment char");
+}
+
+#[test]
+fn an_auto_comment_char_is_read_from_gits_inserted_block() {
+    let r = Repo::new();
+    r.git(&["config", "core.commentChar", "auto"]);
+    r.branch("deepseek/topic");
+    let with = format!(
+        "a subject\n\nLab: deepseek\nOrder: {ORDER}\n\n# Please enter the commit message for your changes.\n# Lines starting with a hash are ignored.\n"
+    );
+    let m = r.message("msg.txt", &with);
+    let o = r.run(
+        &["git", "check-message", m.to_str().unwrap()],
+        &[("UOR_LAB", "deepseek")],
+        None,
+    );
+    assert_code(&o, 0, "auto: the hash block is stripped");
+}
+
+#[test]
+fn the_scissors_block_is_dropped() {
+    let r = Repo::new();
+    r.branch("deepseek/topic");
+    let good = format!(
+        "a subject\n\nLab: deepseek\nOrder: {ORDER}\n\n# ------------------------ >8 ------------------------\n# Lab: fake\n"
+    );
+    let m = r.message("msg.txt", &good);
+    let o = r.run(
+        &["git", "check-message", m.to_str().unwrap()],
+        &[("UOR_LAB", "deepseek")],
+        None,
+    );
+    assert_code(&o, 0, "trailers above the scissors count");
+    let bad = "a subject\n\n# ------------------------ >8 ------------------------\n# Lab: fake\n# Order: docs/loop/tasks/x/ORDER.md\n";
+    let m = r.message("msg2.txt", bad);
+    let o = r.run(
+        &["git", "check-message", m.to_str().unwrap()],
+        &[("UOR_LAB", "deepseek")],
+        None,
+    );
+    assert_code(&o, 1, "fake trailers below the scissors do not count");
+}
