@@ -1,7 +1,7 @@
 //! `loop migrate --check` integration tests: the notes-migration invariants (loop PR 8).
 //! Each negative test removes or breaks exactly one invariant and must fail naming it.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Output};
 
 const BIN: &str = env!("CARGO_BIN_EXE_uor-harness");
