@@ -145,7 +145,7 @@
         "file": "crates/uor-r4-harness/src/loopnext.rs",
         "replace": {
           "from": "                        if item.lane.as_deref() == Some(lane.as_str()) {",
-          "to": "                        if false {"
+          "to": "                        if lane.is_empty() {"
         },
         "expect": "the top of the lab lane must be offered before any"
       }
