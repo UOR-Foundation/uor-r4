@@ -13,12 +13,11 @@
       "lab": "deepseek",
       "status": "in-progress",
       "headline": {
-        "label": "D11-export integer top-1 beats unigram and T2 tables (2 seeds)",
-        "current": 0,
-        "target": 6300,
-        "of": 14287,
-        "unit": "DEV top-1 rows",
-        "note": "CHARTER section 4 row 8 (the M1 closing bar, D39): integer top-1 through the D11 export, on each of two seeds, beats both the unigram table (1,226/14,287) and the T2 successor table (6,300/14,287) on the same DEV panel, with tokens/s reported. The reply-acceptable bar (116/232) is BLOCKED under R14 (instrument ruled non-vacuous by the PM on 2026-10-22, #2029 comment 6339245936) and is not a closing condition; the D39 interim admission headline (injective codebook + Q4 admission >= 4,894) is interim, not the closing bar."
+        "label": "reply acceptable",
+        "current": 37,
+        "target": 116,
+        "of": 232,
+        "unit": "acceptable replies"
       },
       "secondary": [
         {
