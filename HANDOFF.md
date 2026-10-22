@@ -1,4 +1,4 @@
-<!-- rendered by uor-harness loop render from 4c7970ea71d794db4b32b78404c19c65956b24e6; do not edit -->
+<!-- rendered by uor-harness loop render from 16c6b56474e339376c11bca3aded488077a7c928; do not edit -->
 # HANDOFF
 
 Rendered from `docs/roadmap/items/*.md` at the commit in the stamp above. Each open-item row gives the first sentence of the item's `Done when` and `Cancel if` sections; blocked items are listed once, in the blocked table, with their owner; `not recorded` means the item has no such section or key yet.
@@ -7,7 +7,7 @@ Rendered from `docs/roadmap/items/*.md` at the commit in the stamp above. Each o
 
 Items not `held`, `decision` or `done`. Held and decision items are listed once, in the blocked table below.
 
-### ready (37)
+### ready (36)
 
 | Item | Title | Done when | Cancel if | Size | Stands |
 |---|---|---|---|---|---|
@@ -16,7 +16,6 @@ Items not `held`, `decision` or `done`. Held and decision items are listed once,
 | infra-desktop-client-tauri | Build the Tauri desktop client against the synthetic stand-in | A Tauri app sharing the web interface that runs the integer engine natively, offline, with durable memory, matching the written specification. | not recorded | not recorded | ready; after m7-studio-connect-wasm-engine |
 | infra-loop-harness | Build the five-lab loop harness (the loop subcommands of uor-harness) | Every PR in the build plan on [the loop page](../../loop/README.md#build-plan) is merged, each with its planted fault turning its gate red. | not recorded | not recorded | ready |
 | infra-loop-pr08-migration | Loop PR 8: migrate the notes to STATE, HANDOFF and PLAN | STATE, HANDOFF and PLAN replace `STATUS.md`, `NOW.md` and the roadmap page, with the old files moved byte-identical to the archive with pointers (§4.7). | not recorded | not recorded | ready; after infra-loop-pr03-render |
-| infra-loop-pr10-supervisor | Loop PR 10: loop drive, watchers, kill switch and the soft check-in | `loop drive` starts a fresh headless session per unit with the lab's pinned model and stops on the loop page's stops, including the kill switch. | not recorded | not recorded | ready; after infra-loop-pr07b-session, infra-loop-pr07c-queue-board, infra-loop-pr09-client-adapters |
 | legal-construction-exact-solve | Solve the saved legal-construction case in exact arithmetic | The saved 1,960-variable case is solved in exact arithmetic and the result is recorded as an optimal assignment with its objective, or as an infeasibility proof. | not recorded | not recorded | ready |
 | m1-a8-erosion-diagnosis | Diagnose A8 reach erosion from retained checkpoints | A diagnosis note from the retained checkpoints and move logs that states which causal claims it does and does not support; recorded as one notebook row. | not recorded | not recorded | ready |
 | m1-address-as-read | Build the address-as-read mechanism and an object-store consumer | A read that resolves an address to stored content from the object store, with finite tests, and a registered serving-time oracle test that measures the gain from supplying the true address. | not recorded | not recorded | ready |
