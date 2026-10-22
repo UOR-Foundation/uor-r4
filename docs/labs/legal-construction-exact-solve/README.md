@@ -24,10 +24,9 @@ The order is the one used by `legal_proposals` (`protected_joint_vector.rs`) whe
 - the exact zero move is legal and every guard holds: `guard_value_min = 0/1`, `objective = 0/1`;
 - the 31 per-term gradient files per family, summed in f32 order, are **bit-identical** to the corresponding `coupled-*-gradient.f32le` aggregate (both families), which is the original source's own replay check.
 
-**The solve attempt, and why the item stays open.** The unit-2 solver is an exact rational dense tableau; its root LP at this size is a 1,960-variable, 440-row rational problem. Two independent runs agree:
+**The solve attempt, and why the item stays open.** The unit-2 solver is an exact rational dense tableau; its root LP at this size is a 1,960-variable, 440-row rational problem. This unit's exact root LP (`solve-case --stage lp`) did not return within a **120 s** cap and produced no objective/status line.
 
-- the original dense run in `local/claude/legal-case/root-lp-run1.log` (2026-10-22T22:05:45Z) reached pivot 650 at 4,290 s without returning, with denominators growing to ~15.6k bits;
-- this unit's exact root LP (`solve-case --stage lp`) did not return within a **120 s** cap and produced no objective/status line.
+**Correction (deepseek-34, after a counted review).** An earlier draft of this section claimed an "independent dense run" in `local/claude/legal-case/root-lp-run1.log` had failed after 72+ minutes. That was wrong: the log is **claude-50's bounded-variable revised simplex** (`blp`, commit `95328fb27`, visible on PR #3015), which started at 2026-10-22T22:05:45Z under a declared **7,800 s cap**, was still running inside that cap when first cited, and whose objective had turned negative after ~250 degenerate pivots. This record uses only deepseek's own 120 s dense-tableau measurement and makes **no claim** about claude-50's method or outcome; that belongs to #3015's record.
 
 The structural reason is visible in the data: the guard matrix is dense-ish (median 1,033 non-zeros per row; 380 rows over 1,920 columns) and simplex pivots on growing rationals. That is a **tooling/solver blocker, not a mechanism negative** (D22): the case has not been solved, so no optimality or infeasibility claim is made, and the item remains `ready`.
 
