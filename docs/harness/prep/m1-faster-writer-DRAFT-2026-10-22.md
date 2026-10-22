@@ -52,7 +52,7 @@ Casey registers the bar. This is the form proposed in the design note:
 
 None. The tables are seeded or pinned (§5), with no checkpoint and no training.
 
-## 5. Data and panel
+## 5. Data split and panel
 
 **Tables (B = 4 blocks, K = 16 unless stated):**
 - **pinned V = 4,096:** `address_structured_v1` (A8), file SHA-256 `6600bdb1306dbaea4d77f5bf021e717a6bef791e44c1ec7d7c9bb9f0e8cd3cd1` (`attention_learning.rs:33`). The file is not committed. It is rebuilt from TRAIN by `address-cells-codebook`, and the run checks the SHA before use. The PrimeZeta table `83c1380a…` (`:31`) is a second pinned row set if the reviewer wants it.
