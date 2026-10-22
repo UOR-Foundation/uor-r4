@@ -38,7 +38,9 @@ Casey registers the bar. This is the form proposed in the design note:
 | Output mismatches against the full scan | 0, on every row and kind (B1) |
 | `token_cell` calls per row, in `writer` and the evaluate entry's top-8 scan | 0 for kinds 0, 2 and 3; at most 1 for kind 1 (B2) |
 | Cell-distance evaluations per row, admission pass | at most 256, one per cell (B2) |
-| Token-distance evaluations per row | equal to the members of the admitted cells; this sheet has no prune (B2) |
+| Token-distance evaluations per row, membership walk only | equal to the members of the admitted cells; this sheet has no prune (B2) |
+
+**What B2 counts.** In `writer`, the token-distance count is the membership walk only (`:319-322` in the full scan). The target's own distance (`td`, `:326`) is one more call per row in both writers and is reported separately. The evaluate entry's top-8 scan (`:483`) is counted separately again, with the same bar. Under kind 1, "members" means virtual membership: the moved token counts in its moved cell when that cell is admitted, and not in its base cell. These definitions match the host counter (`writer_bucket_controls.rs`).
 
 **B1 compares every output `writer` writes** (signature at `:307`): the return value (the loss, or MAX); `prediction`; `token_rivals`; `address_rivals`; `admitted[0..16)`; `token_hinge`; `address_hinge`; `telemetry[0..6)`, which holds the rank hinge, the target's cell rank, occupancy, the eligible count, `loss_tr` and the reported loss; and `arithmetic_status`, including status 12. For the evaluate entry it also compares the top-8 list, its distances and the status-11 check (`:479-490`). On a MAX row, `writer` returns before writing some outputs (`:309`, `:325`), so both sides prefill every output buffer with the same sentinel and B1 compares the return value, the status and every buffer.
 
@@ -68,7 +70,14 @@ None. The tables are seeded or pinned (§5), with no checkpoint and no training.
 - a token-id tie within one cell and across two admitted cells;
 - an ABSENT token (MAX, status 8), including an ABSENT moved token;
 - `kind==1` moves into, out of and across admitted cells;
-- K = 1 and K = 16, and a vocabulary with fewer than K occupied cells.
+- K = 1 and K = 16, and a vocabulary with fewer than K occupied cells;
+- a kind-1 move whose moved token is not the target and whose base cell is admitted, the case where a double-counted moved token shows in `token_rivals`.
+
+**Moves (the index update against a full rebuild).** Each seeded table runs two sequences:
+- **Scripted edits.** There are 64 one-token, one-block table edits, written the way `discrete_apply` (`:431`) writes an accepted move and followed by the index update. They are drawn by the run's seed and always include a block-0 and a block-(B−1) edit that change a token's bucket, and an interior-block edit that does not.
+- **The real loop.** There are 64 steps of the existing `discrete_counterfactual` → `discrete_apply` loop. Only accepted moves change the table.
+
+After every change, the incrementally updated index must equal a full rebuild entry for entry, and B1 is re-run on the panel rows. The stale-index fault (§8) fires on these sequences. No accepted move can make a token ABSENT: such a proposal's loss is MAX, and `discrete_apply` refuses a proposal that does not lower the loss (status 5). ABSENT is therefore exercised by the kind-1 rows and by tables built with an ABSENT token.
 
 ## 6. Source
 
@@ -91,9 +100,9 @@ None. The tables are seeded or pinned (§5), with no checkpoint and no training.
 
 Each planted fault runs in the instrumented build and must produce a mismatch or a count above the bar:
 - the tie rule flipped (`t > best_t`);
-- the index stale by one move (the update skipped after one accepted move);
+- the index stale by one move (the update skipped after one bucket-changing edit in §5's move sequences);
 - an ABSENT token ignored by the index build;
-- under kind 1, the moved token not skipped in its base bucket, so it is counted twice.
+- under kind 1, the moved token not skipped in its base bucket, so it is counted twice. This shows only when the base cell is admitted and the moved token is not the target; §5 pins such a row.
 
 On the host (#2983), the flipped tie rule fails 4 of the 6 tests and an ignored ABSENT token fails the ABSENT test. The stale index and the double-counted moved token are new in this qualification. A planted fault that passes is an instrument fault. A negative closes this configuration, never the mechanism (CHARTER §4.1).
 
