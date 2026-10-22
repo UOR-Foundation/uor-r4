@@ -28,15 +28,15 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent: [deepseek-33/REPORT.md](../d
 
 `loop report --check`, `loop pr-check --local`, `loop gates --full`, and a non-author exact-head review record (requested on #2028/#3013).
 
-## Still open
-
-- The saved case is still unsolved; the item stays `ready`. Next unit: a reduced/bounded-variable exact method (claude-50 is pursuing one; no claim here).
-- Any optimality/infeasibility claim still requires that method and its own record.
-
 ## Skills used
 
 - `solution-integrity`: when a reviewer shows the evidence was misattributed, correct the record rather than defend the original claim; keep only what this lab measured.
 - `scope-guard`: docs-only repair inside the ORDER's scope; no other lab's data or result is copied.
+
+## Still open
+
+- The saved case is still unsolved; the item stays `ready`. Next unit: a reduced/bounded-variable exact method (claude-50 is pursuing one; no claim here).
+- Any optimality/infeasibility claim still requires that method and its own record.
 
 ## Plain summary
 
