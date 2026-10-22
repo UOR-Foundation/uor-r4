@@ -75,3 +75,12 @@ pub fn problem_from_f32_bits(
     let guards = guards.iter().map(|row| conv(row)).collect::<Result<Vec<_>, _>>()?;
     Ok(Problem::new(masters, g, guards))
 }
+
+/// File-name suffix of a saved little-endian binary32 array.
+pub const BINARY32_LE_SUFFIX: &str = ".f32le";
+
+/// Convert a vector of binary32 bit patterns (as read, `u32` little-endian
+/// words) to the exact rationals they encode. Refuses NaN and infinity.
+pub fn rationals_from_bits(words: &[u32]) -> Result<Vec<BigRational>, ExactError> {
+    words.iter().map(|&b| f32_to_rational(b)).collect()
+}
