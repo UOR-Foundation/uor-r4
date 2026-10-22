@@ -415,7 +415,8 @@ fn catalog_change(
 /// over the same tracked-file universe it uses.
 fn render_catalog(root: &Path, text: &[u8]) -> Option<Vec<(String, String)>> {
     let recs = crate::docs_catalog::parse_records(std::str::from_utf8(text).ok()?).ok()?;
-    let uni = crate::docs_catalog::git_universe(root).ok()?;
+    // The same universe `docs-catalog --check` builds (docs_catalog::git_universe).
+    let uni = Universe::new(tracked_files(root).ok()?);
     Some(crate::docs_catalog::render(&recs, &|p| uni.exists(p)))
 }
 

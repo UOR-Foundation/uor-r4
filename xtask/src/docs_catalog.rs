@@ -243,7 +243,7 @@ pub fn render(recs: &[Record], exists: &dyn Fn(&str) -> bool) -> Vec<(String, St
     files
 }
 
-pub(crate) fn git_universe(root: &Path) -> Result<Universe, String> {
+fn git_universe(root: &Path) -> Result<Universe, String> {
     Ok(Universe::new(tracked_files(root)?))
 }
 
