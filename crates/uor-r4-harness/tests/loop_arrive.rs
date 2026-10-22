@@ -7,8 +7,6 @@ use std::process::{Command, Output};
 
 const BIN: &str = env!("CARGO_BIN_EXE_uor-harness");
 const HOOK: &str = include_str!("../rules/precommit-hook.sh");
-const COMMIT_MSG_HOOK: &str = include_str!("../rules/commit-msg-hook.sh");
-const PREPUSH_HOOK: &str = include_str!("../rules/prepush-hook.sh");
 const LABS: &str = r#"{"schema":1,"labs":{"claude":{"vendor":"Anthropic","client":"Claude Code","headless":"claude -p","open_pr_limit":3}}}"#;
 
 fn clean(cmd: &mut Command) -> &mut Command {
@@ -107,12 +105,6 @@ impl Repo {
         let hook = dir.join("pre-commit");
         std::fs::write(&hook, HOOK).unwrap();
         std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
-        // Loop PR 12 adds two more managed hooks; arrive checks all three.
-        for (name, body) in [("commit-msg", COMMIT_MSG_HOOK), ("pre-push", PREPUSH_HOOK)] {
-            let p = dir.join(name);
-            std::fs::write(&p, body).unwrap();
-            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
         hook
     }
 

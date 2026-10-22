@@ -62,7 +62,7 @@ uor-harness budget show|scan            cumulative cost, and the pod specs of ru
 uor-harness lint check|format           lint a PR body against the contract; render a compliant one
 uor-harness ratchet d23|d25             the D23 (norm-exp/squashing/activation/rotary) and D25 (matmul/tensor-core) ratchets
 uor-harness heartbeat --milestone m1    check in (live tier; 5-minute window)
-uor-harness git install-hooks|status    the three managed git hooks, and this branch's delivery state
+uor-harness git install-hooks|status    the pre-commit guard, and this branch's delivery state
 uor-harness check [--staged]            every machine-checkable rule in one pass
 ```
 
@@ -197,9 +197,9 @@ UOR_LAB=claude uor-harness --json loop arrive   # {"lab","checks":[{"check","ver
 Needs a lab (`UOR_LAB` or `--lab`). Exit codes: 0 every check PASS or N/A; 1 a check FAILs; 2 cannot run (usage, no lab, not a git repository). **The checks that used to WARN FAIL since loop PR 11** — the loop relies on them, so a session may not start on a stale or unguarded checkout. The checks, in order:
 
 - `fetch`: `git fetch origin main`; a failure FAILs with git's message, and the later checks read the `origin/main` already present.
-- `checkout`: HEAD against `origin/main`; behind or unreadable FAILs, and a branch ahead of or not in `origin/main` PASSes (every task branch is in that state).
+- `checkout`: HEAD against `origin/main`; behind or unplaceable FAILs.
 - `binary`: the running binary against the newest build in this checkout, by age (no commit is baked into the binary; `build.rs` says why); older FAILs with the install command.
-- `hooks`: the three managed git hooks (`pre-commit`, `commit-msg`, `pre-push`) must be the exact text `uor-harness git install-hooks` writes and executable; otherwise WARN, because the shared hook is opt-in and a check that is always red teaches labs to ignore FAIL (a matching hook without an execute bit WARNs "not executable"). `client-hooks` is N/A until loop PR 9.
+- `hooks`: the git `pre-commit` hook must be the exact text `uor-harness git install-hooks` writes and executable; otherwise FAILs (a matching hook without an execute bit FAILs "not executable"). `client-hooks` is N/A until loop PR 9.
 - `views`: renders STATE, HANDOFF and LESSONS from `origin/main` into `local/<lab>/views/`; a view committed at `origin/main` whose text below the stamp line differs from its render FAILs, because the repository's inputs win (run `loop render`).
 - `pickup`: `local/<lab>/PICKUP.md` under the main checkout, where `loop close --session` writes it (so a linked worktree reads the same file); absent is N/A, an unlocatable main checkout FAILs; 8,192 bytes or more FAILs, and so does each non-blank line under `## Standing references` that cites no `§<n>`, `D<n>` or `L-<nnn>` (fenced code blocks and `#` subheading lines are skipped; only a `## ` heading outside a fence ends the section).
 - `read-path`: AGENTS.md, CHARTER.md, STATE.md and HANDOFF.md at `origin/main` (a view not committed there is measured as its render in `local/<lab>/views/`) plus the PICKUP the `pickup` check read; AGENTS.md over 80 lines, STATE.md or HANDOFF.md at 24,576 bytes or more, a total above 76,800 bytes, or a total above 128,000 bytes all FAIL.
@@ -509,28 +509,21 @@ A rule added for a mistake cites that mistake's id, so a lesson becomes a guard 
 `gelu`, `silu`, `rope`, `ropei`, `rotary`) and `uor-harness ratchet d25` (`.matmul(`, `MatMul`, `cublas`,
 `gemm`, `wmma`, `mma_sync`) in process across `crates/` and `docs/labs/*/instrument/`.
 
-## Before you install the hooks
+## Before you install the hook
 
-`uor-harness git install-hooks` writes three hooks and resolves the hooks directory with
+`uor-harness git install-hooks` resolves the hooks directory with
 `git rev-parse --git-path hooks`, which in a linked worktree points at the **shared**
 `.git/hooks` of the whole repository — including the owner's checkout and every other lab's
 worktree. Installing there changes commit behaviour for labs that never asked for it, so:
 
-- the installer refuses to overwrite a hook it did not write (a symlink is refused outright), and
-- it is **not installed by default**. Run `check` and `lint` yourself, or install the hooks
+- the installer refuses to overwrite a `pre-commit` hook it did not write, and
+- it is **not installed by default**. Run `check` and `lint` yourself, or install the hook
   deliberately after telling the other active labs.
 
-| Hook | Runs | Blocks |
-|---|---|---|
-| `pre-commit` | `uor-harness check --staged` | `error` severity only; `warn`/`info` print and pass |
-| `commit-msg` | `uor-harness git check-message <file>` | a message without `Lab:` and `Order:` trailers, and a binary older than this checkout's newest build |
-| `pre-push` | `uor-harness git push-check` | any pushed `<lab>/<topic>` branch whose `loop pr-check --local` fails |
+The hook runs `uor-harness check --staged`, so `uor-harness` must be on `PATH` for it to check
+anything; without it the hook lets the commit through. It only ever blocks on `error` severity;
+`warn` and `info` print and pass. A hook installed before 20 October 2026 (v1) ran the retired
+Python entry point; `uor-harness git install-hooks` upgrades it in place.
 
-All three let the commit or push through when `uor-harness` is not on `PATH`, and when the harness
-itself cannot produce a result (any exit other than 0 or 1). The trailers are tags, not proof (D55):
-they record the lab and the ORDER, and a person may bypass a hook with `--no-verify`, which no lab
-may use. A hook installed before 20 October 2026 (v1) ran the retired Python entry point;
-`uor-harness git install-hooks` upgrades it in place.
-
-`loop arrive` reports a missing or different hook as **WARN**, not FAIL: the shared hook is opt-in,
-and a check that is always red teaches labs to ignore FAIL.
+`loop arrive` reports a missing, different or non-executable hook as **WARN**, not FAIL, until loop
+PR 12 sanctions installing the shared hook: a check that is always red teaches labs to ignore FAIL.
