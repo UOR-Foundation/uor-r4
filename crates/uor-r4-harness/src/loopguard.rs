@@ -199,6 +199,10 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 /// Execute `f` while holding an exclusive advisory lockfile in `gdir`.
+///
+/// Fails closed (`Err`) if the lock cannot be acquired within the retry budget, and renames stale
+/// locks (> 5s old) to a unique path before unlinking so concurrent waiters cannot delete a newly
+/// acquired peer lock.
 fn with_guard_lock<T>(gdir: &Path, f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
     fs::create_dir_all(gdir).map_err(|e| format!("cannot create {}: {e}", gdir.display()))?;
     let lock_path = gdir.join(".lock");
@@ -215,12 +219,22 @@ fn with_guard_lock<T>(gdir: &Path, f: impl FnOnce() -> Result<T, String>) -> Res
             }
             Err(_) => {
                 if attempt == 50 {
-                    // Break stale lock older than 5 seconds.
+                    // Break stale lock older than 5 seconds by renaming to a unique path first.
                     if let Ok(meta) = fs::metadata(&lock_path) {
                         if let Ok(modified) = meta.modified() {
                             if modified.elapsed().map(|d| d.as_secs() >= 5).unwrap_or(true) {
-                                let _ = fs::remove_file(&lock_path);
-                                continue;
+                                let stale_path = gdir.join(format!(
+                                    ".lock.stale.{}.{}",
+                                    std::process::id(),
+                                    std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .map(|d| d.as_nanos())
+                                        .unwrap_or(0)
+                                ));
+                                if fs::rename(&lock_path, &stale_path).is_ok() {
+                                    let _ = fs::remove_file(&stale_path);
+                                    continue;
+                                }
                             }
                         }
                     }
@@ -229,10 +243,14 @@ fn with_guard_lock<T>(gdir: &Path, f: impl FnOnce() -> Result<T, String>) -> Res
             }
         }
     }
-    let res = f();
-    if acquired {
-        let _ = fs::remove_file(&lock_path);
+    if !acquired {
+        return Err(format!(
+            "cannot acquire guard lock {}: lock contention timeout (fail-closed)",
+            lock_path.display()
+        ));
     }
+    let res = f();
+    let _ = fs::remove_file(&lock_path);
     res
 }
 
@@ -335,11 +353,11 @@ fn update_and_detect_subagent(
                             }
                         } else if state.root_cid.is_empty()
                             || state.root_cid == c
-                            || (state.pending_subagents == 0 && state.root_tool_calls > 0)
+                            || state.pending_subagents == 0
                         {
-                            // Either no prior root exists, or the previous root already ran tools
-                            // without spawning a pending subagent (e.g. it exited or was killed),
-                            // so this SessionStart begins a fresh top-level session.
+                            // Either no prior root exists, or no subagent spawn is pending from the
+                            // previous root (even if it exited or crashed with 0 tool calls), so
+                            // this SessionStart begins a fresh top-level session.
                             state.root_cid = c.to_string();
                             state.pending_subagents = 0;
                             state.root_tool_calls = 0;
@@ -469,9 +487,14 @@ fn update_and_detect_subagent(
                 .filter(|s| !s.is_empty())
                 .map(String::from);
             let bindings_file = gdir.join("subagent-bindings.json");
+            let depth_file = gdir.join(format!("{client}-unnamed.depth"));
+            let cur_depth: u32 = fs::read_to_string(&depth_file)
+                .ok()
+                .and_then(|s| s.trim().parse::<u32>().ok())
+                .unwrap_or(0);
             match event {
-                "SessionStart" | "Stop" if aid.is_none() => {
-                    let _ = fs::remove_file(&bindings_file);
+                "SessionStart" if aid.is_none() => {
+                    let _ = atomic_write(&depth_file, b"0\n");
                 }
                 "SubagentStart" => {
                     if let Some(ref agent_id) = aid {
@@ -490,6 +513,10 @@ fn update_and_detect_subagent(
                                 }
                             }
                         }
+                    } else {
+                        let next = cur_depth + 1;
+                        let _ = atomic_write(&depth_file, format!("{next}\n").as_bytes());
+                        return Ok(SubagentContext::Subagent(None));
                     }
                 }
                 "SubagentStop" => {
@@ -504,6 +531,9 @@ fn update_and_detect_subagent(
                                 let _ = atomic_write(&bindings_file, &bytes);
                             }
                         }
+                    } else {
+                        let next = cur_depth.saturating_sub(1);
+                        let _ = atomic_write(&depth_file, format!("{next}\n").as_bytes());
                     }
                 }
                 _ => {}
@@ -511,7 +541,8 @@ fn update_and_detect_subagent(
             if let Some(agent_id) = aid {
                 return Ok(SubagentContext::Subagent(Some(agent_id)));
             }
-            if payload.get("is_subagent").and_then(Value::as_bool) == Some(true)
+            if cur_depth > 0
+                || payload.get("is_subagent").and_then(Value::as_bool) == Some(true)
                 || payload.get("origin_name").and_then(Value::as_str) == Some("subagent")
             {
                 return Ok(SubagentContext::Subagent(None));
@@ -680,8 +711,19 @@ fn is_credential_path(path: &str) -> bool {
         .or_else(|| path.strip_prefix("--config="))
         .or_else(|| path.strip_prefix("file://"))
         .unwrap_or(path);
-    let lower = stripped.replace('\\', "/").to_lowercase();
-    let base = lower.rsplit('/').next().unwrap_or(&lower);
+    let mut lower = stripped.replace('\\', "/").to_lowercase();
+    while lower.contains("//") {
+        lower = lower.replace("//", "/");
+    }
+    while lower.contains("/./") {
+        lower = lower.replace("/./", "/");
+    }
+    let lower = lower.trim_end_matches('/');
+    // Public SSH keys (`*.pub`) are not secret credentials.
+    if lower.ends_with(".pub") {
+        return false;
+    }
+    let base = lower.rsplit('/').next().unwrap_or(lower);
     let is_env_secret = base == ".env"
         || (base.starts_with(".env.")
             && !matches!(base, ".env.example" | ".env.sample" | ".env.template"));
@@ -701,12 +743,21 @@ fn is_credential_path(path: &str) -> bool {
                 | "auth.json"
                 | "client_secret.json"
                 | "service_account.json"
+                | ".aws"
+                | ".runpod"
+                | ".huggingface"
         )
         || lower.contains("/.ssh/id_")
-        || lower.contains("/.aws/credentials")
+        || lower.contains("/.aws/")
+        || lower.ends_with("/.aws")
         || lower.contains("/.config/gh/hosts.yml")
-        || lower.contains("/.runpod/config.toml")
+        || lower.contains("/.runpod/")
+        || lower.ends_with("/.runpod")
         || lower.contains("/.cargo/credentials")
+        || lower.contains("/.huggingface/token")
+        || lower.contains("/huggingface/token")
+        || lower.contains("/.docker/config.json")
+        || (lower.starts_with("/proc/") && lower.ends_with("/environ"))
 }
 
 /// One tokenized shell command segment extracted from a command line.
@@ -801,7 +852,15 @@ fn tokenize_shell_segments(cmd: &str) -> Vec<ShellSegment> {
                 cur_seg.subshells.push(sub);
                 in_token = true;
             }
-            ';' | '\n' | '(' | ')' => {
+            ';' | '\n' | '(' | ')' | '{' | '}' => {
+                flush_seg(&mut cur_tok, &mut in_token, &mut cur_seg, &mut segments);
+            }
+            '#' if !in_token => {
+                for hc in chars.by_ref() {
+                    if hc == '\n' {
+                        break;
+                    }
+                }
                 flush_seg(&mut cur_tok, &mut in_token, &mut cur_seg, &mut segments);
             }
             '|' => {
@@ -975,7 +1034,9 @@ fn contains_secret_var_expansion(tok: &str) -> bool {
                     || var.contains("TOKEN")
                     || var.contains("SECRET")
                     || var.contains("PASSWORD")
-                    || var.contains("CREDENTIAL"))
+                    || var.contains("CREDENTIAL")
+                    || var == "PAT"
+                    || var.ends_with("_PAT"))
                     && !matches!(var.as_str(), "MONKEY" | "KEYBOARD")
                 {
                     return true;
@@ -1009,18 +1070,19 @@ fn check_command(
     }
 
     let segments = tokenize_shell_segments(trimmed);
+    let mut effective_cwd = cwd.to_path_buf();
     for seg in &segments {
         for sub in &seg.subshells {
-            check_command(roots, lab, subagent, cwd, sub)?;
+            check_command(roots, lab, subagent, &effective_cwd, sub)?;
         }
         for redir in &seg.redirects {
             let target = redir.trim_matches('"').trim_matches('\'');
             if !target.is_empty() && !target.starts_with("/dev/") && !target.starts_with('&') {
-                check_write_path(roots, lab, subagent, cwd, target)?;
+                check_write_path(roots, lab, subagent, &effective_cwd, target)?;
             }
         }
         if !seg.tokens.is_empty() {
-            check_command_segment(roots, lab, subagent, cwd, &seg.tokens)?;
+            check_command_segment(roots, lab, subagent, &mut effective_cwd, &seg.tokens)?;
         }
     }
     Ok(())
@@ -1031,12 +1093,13 @@ fn check_command_segment(
     roots: &UorRoots,
     lab: &str,
     subagent: &SubagentContext,
-    cwd: &Path,
+    cwd: &mut PathBuf,
     tokens: &[String],
 ) -> Result<(), String> {
-    // 1. Scan all tokens for universal flags (`--no-verify`), secret expansions, and credential paths.
+    // 1. Scan all tokens for universal flags (`--no-verify` / `--no-verif*`), secret expansions,
+    //    and credential paths (both raw and resolved against `cwd`).
     for tok in tokens {
-        if tok == "--no-verify" {
+        if tok == "--no-verify" || tok.starts_with("--no-verif") {
             return Err("hook bypass (--no-verify) is forbidden".into());
         }
         if contains_secret_var_expansion(tok) {
@@ -1050,10 +1113,18 @@ fn check_command_segment(
                 "CHARTER §3.13: reading, writing or referencing credential path {tok} is forbidden"
             ));
         }
+        if !tok.starts_with('-') && !tok.contains('=') {
+            let resolved_tok = resolve_target_path(cwd, tok);
+            if is_credential_path(&resolved_tok.to_string_lossy()) {
+                return Err(format!(
+                    "CHARTER §3.13: reading, writing or referencing credential path {tok} is forbidden"
+                ));
+            }
+        }
     }
 
-    // 2. Strip leading `KEY=VALUE` assignments and command wrappers (`env`, `command`, `nohup`,
-    //    `time`, `nice`, `sudo`, `timeout`, `stdbuf`, `xargs`).
+    // 2. Strip leading shell keywords, `KEY=VALUE` assignments, and command wrappers (`env`,
+    //    `command`, `nohup`, `time`, `nice`, `sudo`, `timeout`, `stdbuf`, `xargs`, `exec`, `eval`).
     let mut idx = 0usize;
     while idx < tokens.len() {
         let tok = tokens[idx].as_str();
@@ -1062,8 +1133,49 @@ fn check_command_segment(
             idx += 1;
             continue;
         }
+        if matches!(
+            tok,
+            "do" | "then"
+                | "else"
+                | "elif"
+                | "if"
+                | "while"
+                | "until"
+                | "!"
+                | "{"
+                | "}"
+                | "done"
+                | "fi"
+                | "esac"
+                | "coproc"
+        ) {
+            idx += 1;
+            continue;
+        }
+        if matches!(tok, "for" | "select" | "case") {
+            // `for i in ...` or `case x in ...`: the body after `;` or `\n` is in the next segment.
+            return Ok(());
+        }
         let base = executable_basename(tok);
         match base {
+            "eval" => {
+                let rest = tokens[idx + 1..].join(" ");
+                return check_command(roots, lab, subagent, cwd, &rest);
+            }
+            "exec" => {
+                idx += 1;
+                while idx < tokens.len() && tokens[idx].starts_with('-') {
+                    let f = tokens[idx].as_str();
+                    if f == "--" {
+                        idx += 1;
+                        break;
+                    }
+                    idx += 1;
+                    if f == "-a" && idx < tokens.len() {
+                        idx += 1;
+                    }
+                }
+            }
             "env" => {
                 idx += 1;
                 while idx < tokens.len() {
@@ -1095,7 +1207,32 @@ fn check_command_segment(
                             "D56 / CHARTER §5.1: clearing the environment (-i) in a lab session is forbidden"
                                 .into(),
                         );
-                    } else if a == "-0" || a == "--null" {
+                    } else if a == "-C" || a == "--chdir" {
+                        if let Some(dir) = tokens.get(idx + 1) {
+                            *cwd = resolve_target_path(cwd, dir);
+                        }
+                        idx += 2;
+                    } else if let Some(dir) =
+                        a.strip_prefix("--chdir=").or_else(|| a.strip_prefix("-C"))
+                    {
+                        if !dir.is_empty() {
+                            *cwd = resolve_target_path(cwd, dir);
+                        }
+                        idx += 1;
+                    } else if a == "-S" || a == "--split-string" {
+                        if let Some(script) = tokens.get(idx + 1) {
+                            check_command(roots, lab, subagent, cwd, script)?;
+                        }
+                        idx += 2;
+                    } else if let Some(script) = a
+                        .strip_prefix("--split-string=")
+                        .or_else(|| a.strip_prefix("-S"))
+                    {
+                        if !script.is_empty() {
+                            check_command(roots, lab, subagent, cwd, script)?;
+                        }
+                        idx += 1;
+                    } else if a == "-0" || a == "--null" || a == "-v" || a == "--debug" {
                         idx += 1;
                     } else if let Some((k, v)) = split_env_assignment(a) {
                         check_env_assignment(k, v)?;
@@ -1183,7 +1320,23 @@ fn check_command_segment(
                     idx += 1;
                     if matches!(
                         f,
-                        "-I" | "-J" | "-L" | "-n" | "-P" | "-s" | "-d" | "-E" | "-a"
+                        "-I" | "-J"
+                            | "-L"
+                            | "-n"
+                            | "-P"
+                            | "-s"
+                            | "-d"
+                            | "-E"
+                            | "-a"
+                            | "--max-args"
+                            | "--max-procs"
+                            | "--max-chars"
+                            | "--max-lines"
+                            | "--replace"
+                            | "--eof"
+                            | "--arg-file"
+                            | "--delimiter"
+                            | "--process-slot-var"
                     ) && idx < tokens.len()
                     {
                         idx += 1;
@@ -1202,6 +1355,17 @@ fn check_command_segment(
     let args = &tokens[idx + 1..];
 
     match prog {
+        "cd" => {
+            if let Some(dir) = args.iter().find(|a| !a.starts_with('-')) {
+                let next_cwd = resolve_target_path(cwd, dir);
+                if is_credential_path(&next_cwd.to_string_lossy()) {
+                    return Err(format!(
+                        "CHARTER §3.13: entering credential directory {dir} is forbidden"
+                    ));
+                }
+                *cwd = next_cwd;
+            }
+        }
         "sh" | "bash" | "zsh" | "dash" | "ksh" => {
             for (i, a) in args.iter().enumerate() {
                 let is_c = a == "-c"
@@ -1226,6 +1390,26 @@ fn check_command_segment(
         }
         "pkill" | "killall" => {
             return Err("pkill and killall are forbidden; stop only your own started pids".into());
+        }
+        "ps" => {
+            for a in args {
+                if a == "eww"
+                    || a == "auxe"
+                    || a == "auxwwwe"
+                    || a == "-e"
+                    || (!a.starts_with('-')
+                        && a.contains('e')
+                        && (a.contains('w')
+                            || a.contains('a')
+                            || a.contains('u')
+                            || a.contains('x')))
+                {
+                    return Err(
+                        "CHARTER §3.13: dumping process environment variables via ps eww is forbidden"
+                            .into(),
+                    );
+                }
+            }
         }
         "printenv" => {
             if args.is_empty() {
@@ -1257,13 +1441,15 @@ fn check_command_segment(
             }
         }
         "export" | "declare" | "typeset" => {
+            let has_assignment = args.iter().any(|a| a.contains('='));
             if args.is_empty()
-                || args
-                    .iter()
-                    .any(|a| a == "-p" || a == "-xp" || a == "-px" || a == "--")
+                || (!has_assignment
+                    && args
+                        .iter()
+                        .any(|a| matches!(a.as_str(), "-p" | "-x" | "-xp" | "-px" | "--")))
             {
                 return Err(
-                    "CHARTER §3.13: dumping environment variables via export/declare -p is forbidden"
+                    "CHARTER §3.13: dumping environment variables via export/declare is forbidden"
                         .into(),
                 );
             }
@@ -1282,7 +1468,14 @@ fn check_command_segment(
         }
         "git" => check_git_command(roots, lab, subagent, cwd, args)?,
         "gh" => check_gh_command(subagent, args)?,
-        "uor-harness" => check_uor_harness_command(subagent, args)?,
+        "uor-harness" | "uor-r4-harness" => check_uor_harness_command(subagent, args)?,
+        "cargo" => {
+            if args.iter().any(|a| a == "run" || a == "r") {
+                if let Some(dd) = args.iter().position(|a| a == "--") {
+                    check_uor_harness_command(subagent, &args[dd + 1..])?;
+                }
+            }
+        }
         "uor-pod" => check_uor_pod_command(args)?,
         _ => {}
     }
@@ -1331,13 +1524,36 @@ fn check_env_assignment(key: &str, val: &str) -> Result<(), String> {
                 .into(),
         );
     }
-    if (key.eq_ignore_ascii_case("GIT_CONFIG_PARAMETERS")
-        || key.to_ascii_uppercase().starts_with("GIT_CONFIG_"))
-        && trimmed.to_ascii_lowercase().contains("core.hookspath")
-    {
-        return Err("hook bypass (core.hooksPath override) is forbidden".into());
+    let key_upper = key.to_ascii_uppercase();
+    if matches!(
+        key_upper.as_str(),
+        "GIT_CONFIG_GLOBAL" | "GIT_CONFIG_SYSTEM" | "GIT_CONFIG_NOSYSTEM"
+    ) {
+        return Err("hook bypass (GIT_CONFIG_GLOBAL/SYSTEM override) is forbidden".into());
+    }
+    if key_upper == "GIT_CONFIG_PARAMETERS" || key_upper.starts_with("GIT_CONFIG_") {
+        let lower_val = trimmed.to_ascii_lowercase();
+        if is_forbidden_git_config_kv(&lower_val) {
+            return Err("hook bypass (git config override via environment) is forbidden".into());
+        }
     }
     Ok(())
+}
+
+fn is_forbidden_git_config_kv(lower_kv: &str) -> bool {
+    let key_part = lower_kv
+        .split('=')
+        .next()
+        .unwrap_or(lower_kv)
+        .trim()
+        .trim_matches('\'')
+        .trim_matches('"');
+    lower_kv.contains("core.hookspath")
+        || lower_kv.contains("include.path")
+        || lower_kv.contains("includeif.")
+        || key_part == "push.default"
+        || (key_part.starts_with("remote.") && key_part.ends_with(".push"))
+        || (lower_kv.contains("remote.") && lower_kv.contains(".push"))
 }
 
 /// Inspect a `git` invocation after unwrapping all global `git` flags (`-C`, `-c`, `--git-dir`,
@@ -1373,8 +1589,8 @@ fn check_git_command(
         }
         if a == "-c" || a == "--config-env" {
             let kv = args.get(i + 1).map(String::as_str).unwrap_or("");
-            if kv.to_ascii_lowercase().contains("core.hookspath") {
-                return Err("hook bypass (git -c core.hooksPath=...) is forbidden".into());
+            if is_forbidden_git_config_kv(&kv.to_ascii_lowercase()) {
+                return Err("hook/push config bypass (git -c ...) is forbidden".into());
             }
             i += 2;
             continue;
@@ -1383,8 +1599,8 @@ fn check_git_command(
             .strip_prefix("-c")
             .or_else(|| a.strip_prefix("--config-env="))
         {
-            if kv.to_ascii_lowercase().contains("core.hookspath") {
-                return Err("hook bypass (git -c core.hooksPath=...) is forbidden".into());
+            if is_forbidden_git_config_kv(&kv.to_ascii_lowercase()) {
+                return Err("hook/push config bypass (git -c ...) is forbidden".into());
             }
             i += 1;
             continue;
@@ -1436,6 +1652,56 @@ fn check_git_command(
                 "git stash is forbidden in the five-lab loop; commit WIP in your worktree".into(),
             );
         }
+        "config" => {
+            let mut readonly = false;
+            let mut pos = Vec::new();
+            let mut j = 0usize;
+            while j < sub_args.len() {
+                let a = sub_args[j].as_str();
+                if a == "--" {
+                    pos.extend(sub_args[j + 1..].iter().map(String::as_str));
+                    break;
+                }
+                if matches!(
+                    a,
+                    "--get" | "--get-all" | "--get-regexp" | "--get-urlmatch" | "--list" | "-l"
+                ) {
+                    readonly = true;
+                    j += 1;
+                    continue;
+                }
+                if matches!(
+                    a,
+                    "-f" | "--file" | "--blob" | "--type" | "-t" | "--default"
+                ) {
+                    j += 2;
+                    continue;
+                }
+                if a.starts_with('-') {
+                    j += 1;
+                    continue;
+                }
+                pos.push(a);
+                j += 1;
+            }
+            if !readonly {
+                if let Some(&first) = pos.first() {
+                    if matches!(first, "list" | "get") {
+                        readonly = true;
+                    }
+                }
+            }
+            if !readonly {
+                for p in &pos {
+                    let lower = p.to_ascii_lowercase();
+                    if is_forbidden_git_config_kv(&lower) {
+                        return Err(format!(
+                            "git config write to {p} is forbidden (hook/include/push override)"
+                        ));
+                    }
+                }
+            }
+        }
         "commit" => {
             let mut j = 0usize;
             while j < sub_args.len() {
@@ -1443,7 +1709,7 @@ fn check_git_command(
                 if a == "--" {
                     break;
                 }
-                if a == "--no-verify" {
+                if a == "--no-verify" || a.starts_with("--no-verif") {
                     return Err("hook bypass (--no-verify / git commit -n) is forbidden".into());
                 }
                 if a.starts_with('-') && !a.starts_with("--") {
@@ -1504,7 +1770,12 @@ fn check_git_command(
                 if a == "--force" || a == "--force-if-includes" {
                     return Err("git push --force is forbidden".into());
                 }
-                if a == "--no-verify" {
+                if a == "--mirror" || a == "--all" || a == "--branches" {
+                    return Err(format!(
+                        "git push {a} is forbidden (would push to or overwrite main)"
+                    ));
+                }
+                if a == "--no-verify" || a.starts_with("--no-verif") {
                     return Err("hook bypass (git push --no-verify) is forbidden".into());
                 }
                 if a == "--delete" || a == "-d" {
@@ -1542,8 +1813,17 @@ fn check_git_command(
                 }
                 // Positional 0 is the remote name unless it contains `:` (a refspec).
                 if pi >= 1 || pos.contains(':') {
-                    let dst = pos.rsplit(':').next().unwrap_or(pos);
-                    if dst == "main" || dst == "refs/heads/main" || (delete_flag && dst == "main") {
+                    let dst = pos
+                        .rsplit(':')
+                        .next()
+                        .unwrap_or(pos)
+                        .trim_start_matches('+');
+                    if dst == "main"
+                        || dst == "refs/heads/main"
+                        || dst == "heads/main"
+                        || dst.ends_with("/main")
+                        || (delete_flag && dst == "main")
+                    {
                         return Err("direct push to main is forbidden; deliver through a PR".into());
                     }
                 }
@@ -1561,6 +1841,32 @@ fn check_git_command(
             if let Some(dd) = sub_args.iter().position(|a| a == "--") {
                 for a in &sub_args[dd + 1..] {
                     check_write_path(roots, lab, subagent, &effective_cwd, a)?;
+                }
+            } else {
+                let mut pos = Vec::new();
+                let mut j = 0usize;
+                while j < sub_args.len() {
+                    let a = sub_args[j].as_str();
+                    if matches!(
+                        a,
+                        "-b" | "-B" | "--orphan" | "--conflict" | "--pathspec-from-file"
+                    ) {
+                        j += 2;
+                        continue;
+                    }
+                    if a.starts_with('-') {
+                        j += 1;
+                        continue;
+                    }
+                    pos.push(a);
+                    j += 1;
+                }
+                // `git checkout <tree-ish> <path...>` or `git checkout <existing-file>`
+                for (pi, p) in pos.iter().copied().enumerate() {
+                    let resolved = resolve_target_path(&effective_cwd, p);
+                    if pi >= 1 || resolved.is_file() {
+                        check_write_path(roots, lab, subagent, &effective_cwd, p)?;
+                    }
                 }
             }
         }
@@ -1593,9 +1899,14 @@ fn check_gh_command(subagent: &SubagentContext, args: &[String]) -> Result<(), S
         return Err("CHARTER §3.13: reading or printing credentials or tokens is forbidden".into());
     }
     if s1 == "api"
-        && pos
-            .iter()
-            .any(|a| a.contains("/Merge") || a.contains("/merge") || a.ends_with("merge"))
+        && pos.iter().any(|a| {
+            let lower = a.to_ascii_lowercase();
+            lower.contains("/merge")
+                || lower.ends_with("merge")
+                || lower.contains("mergepullrequest")
+                || lower.contains("enqueuepullrequest")
+                || lower.contains("enablepullrequestautomerge")
+        })
     {
         return Err(
             "merging via gh api is forbidden; use gh pr merge --match-head-commit <full-sha>"
@@ -1608,6 +1919,9 @@ fn check_gh_command(subagent: &SubagentContext, args: &[String]) -> Result<(), S
                 "subagent stop rule: subagents may never claim, open, review or merge a PR, push, or post as the lab"
                     .into(),
             );
+        }
+        if pos.iter().any(|a| *a == "--admin" || *a == "--auto") {
+            return Err("gh pr merge --admin / --auto is forbidden".into());
         }
         let mut matched_sha = None;
         for (idx, a) in pos.iter().copied().enumerate() {
@@ -1641,10 +1955,43 @@ fn check_gh_command(subagent: &SubagentContext, args: &[String]) -> Result<(), S
 
 /// Inspect a `uor-harness` CLI invocation for owner-only commands and subagent restrictions.
 fn check_uor_harness_command(subagent: &SubagentContext, args: &[String]) -> Result<(), String> {
-    let s1 = args.first().map(String::as_str).unwrap_or("");
-    let s2 = args.get(1).map(String::as_str).unwrap_or("");
+    let mut i = 0usize;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if a == "--" {
+            i += 1;
+            break;
+        }
+        if a == "--repo" {
+            i += 2;
+            continue;
+        }
+        if a.starts_with("--repo=")
+            || matches!(
+                a,
+                "--json" | "-v" | "--verbose" | "-q" | "--quiet" | "--offline" | "--locked"
+            )
+        {
+            i += 1;
+            continue;
+        }
+        if a.starts_with('-') {
+            i += 1;
+            continue;
+        }
+        break;
+    }
+    let rem = if i <= args.len() { &args[i..] } else { &[] };
+    let s1 = rem.first().map(String::as_str).unwrap_or("");
+    let s2 = rem.get(1).map(String::as_str).unwrap_or("");
 
-    if s1 == "release" || (s1 == "team" && s2 == "release" && args.iter().any(|a| a == "--owner")) {
+    if s1 == "release"
+        || (s1 == "team"
+            && s2 == "release"
+            && rem
+                .iter()
+                .any(|a| a == "--owner" || a.starts_with("--owner=")))
+    {
         return Err(
             "D56 / CHARTER §5.1: the guard never runs an owner release command for a lab; stage it for Casey"
                 .into(),
@@ -1656,7 +2003,12 @@ fn check_uor_harness_command(subagent: &SubagentContext, args: &[String]) -> Res
                 .into(),
         );
     }
-    if s1 == "loop" && s2 == "install" && args.iter().any(|a| a == "--apply") {
+    if s1 == "loop"
+        && s2 == "install"
+        && rem
+            .iter()
+            .any(|a| a == "--apply" || a.starts_with("--apply="))
+    {
         return Err(
             "owner decision (#2028): uor-harness loop install --apply may be run only by the owner from Terminal"
                 .into(),
@@ -1881,37 +2233,65 @@ fn normalize_lexical(path: &Path) -> PathBuf {
     out
 }
 
-/// Resolve `raw_path` against `cwd`, canonicalizing the deepest existing ancestor so `/var` and
-/// `/private/var` symlinks on macOS match `roots`.
+/// Resolve `raw_path` against `cwd`, expanding symlinks on each existing prefix component before
+/// applying `..` so a symlink inside `local/<lab>/` pointing to `../../docs` followed by
+/// `../CHARTER.md` resolves to `<repo>/CHARTER.md` and is refused.
 fn resolve_target_path(cwd: &Path, raw_path: &str) -> PathBuf {
+    let base_cwd = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
     let expanded = if let Some(rest) = raw_path.strip_prefix("~/") {
         if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
             home.join(rest)
         } else {
             PathBuf::from(raw_path)
         }
+    } else if raw_path == "~" {
+        std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(raw_path))
     } else if Path::new(raw_path).is_absolute() {
         PathBuf::from(raw_path)
     } else {
-        cwd.join(raw_path)
+        base_cwd.join(raw_path)
     };
-    let norm = normalize_lexical(&expanded);
-    let mut tail = Vec::new();
-    let mut cur = norm.as_path();
-    while !cur.exists() {
-        if let Some(name) = cur.file_name() {
-            tail.push(name.to_os_string());
-        }
-        match cur.parent() {
-            Some(p) if !p.as_os_str().is_empty() => cur = p,
-            _ => break,
+    resolve_components_with_symlinks(&expanded, 0)
+}
+
+fn resolve_components_with_symlinks(path: &Path, depth: u32) -> PathBuf {
+    if depth > 16 {
+        return normalize_lexical(path);
+    }
+    let mut acc = PathBuf::new();
+    for comp in path.components() {
+        match comp {
+            std::path::Component::Prefix(p) => acc.push(p.as_os_str()),
+            std::path::Component::RootDir => acc.push(comp.as_os_str()),
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                if let Ok(canon) = acc.canonicalize() {
+                    acc = canon;
+                }
+                acc.pop();
+                if let Ok(canon) = acc.canonicalize() {
+                    acc = canon;
+                }
+            }
+            std::path::Component::Normal(name) => {
+                acc.push(name);
+                if let Ok(canon) = acc.canonicalize() {
+                    acc = canon;
+                } else if let Ok(target) = fs::read_link(&acc) {
+                    acc.pop();
+                    let next = if target.is_absolute() {
+                        target
+                    } else {
+                        acc.join(target)
+                    };
+                    acc = resolve_components_with_symlinks(&next, depth + 1);
+                }
+            }
         }
     }
-    let mut base = cur.canonicalize().unwrap_or_else(|_| cur.to_path_buf());
-    for part in tail.into_iter().rev() {
-        base.push(part);
-    }
-    base
+    acc
 }
 
 /// Load the owner-only path globs from `docs/harness/owner-paths.json`.
@@ -2020,15 +2400,18 @@ fn find_active_order(roots: &UorRoots, lab: &str) -> Option<(String, String, Str
             }
         }
 
-        let mut best: Option<(u64, String, String, String)> = None;
+        let mut best: Option<(bool, u64, String, String, String)> = None;
         for rel in candidate_rels {
             let full = roots.worktree_root.join(&rel);
             let Ok(text) = fs::read_to_string(&full) else {
                 continue;
             };
-            let Some(topic) = full
-                .parent()
-                .and_then(Path::file_name)
+            let Some(parent) = full.parent() else {
+                continue;
+            };
+            let is_open = !parent.join("REPORT.md").exists();
+            let Some(topic) = parent
+                .file_name()
                 .and_then(|n| n.to_str())
                 .map(String::from)
             else {
@@ -2040,11 +2423,14 @@ fn find_active_order(roots: &UorRoots, lab: &str) -> Option<(String, String, Str
             let Ok(num) = num_str.parse::<u64>() else {
                 continue;
             };
-            if best.as_ref().is_none_or(|(b_num, _, _, _)| num >= *b_num) {
-                best = Some((num, rel, topic, text));
+            if best
+                .as_ref()
+                .is_none_or(|(b_open, b_num, _, _, _)| (is_open, num) >= (*b_open, *b_num))
+            {
+                best = Some((is_open, num, rel, topic, text));
             }
         }
-        return best.map(|(_, rel, topic, text)| (rel, topic, text));
+        return best.map(|(_, _, rel, topic, text)| (rel, topic, text));
     }
 
     // 3. Standalone test fixture without `origin/main`: scan `docs/loop/tasks/<folder>/<lab>-<n>/ORDER.md`
@@ -2434,7 +2820,8 @@ fn check_repo_rel_write(
         let always_allowed = rel.starts_with(order_folder)
             || item_rel.as_deref() == Some(rel)
             || rel.starts_with("docs/harness/mistakes/")
-            || rel == "docs/start/FILEMAP.md";
+            || rel == "docs/start/FILEMAP.md"
+            || crate::loopclaim::SHARED_FILES.contains(&rel);
         if !always_allowed {
             // Collect scope globs from the item's `scope:` line (if present) and the ORDER's
             // `## Files in scope` / `## Scope` section.
@@ -2848,12 +3235,8 @@ pub fn plan_client_install(
     match c.as_str() {
         "claude" => {
             let settings_path = home.join(".claude").join("settings.json");
-            let mut root_obj = fs::read_to_string(&settings_path)
-                .ok()
-                .and_then(|s| serde_json::from_str::<Value>(&s).ok())
-                .and_then(|v| v.as_object().cloned())
-                .unwrap_or_default();
-            let mut hooks_obj = serde_json::Map::new();
+            let mut root_obj = read_existing_json_object(&settings_path)?;
+            let mut hooks_obj = extract_existing_hooks_map(&root_obj, &settings_path)?;
             for ev in [
                 "SessionStart",
                 "PreToolUse",
@@ -2861,16 +3244,18 @@ pub fn plan_client_install(
                 "SubagentStop",
                 "Stop",
             ] {
-                hooks_obj.insert(
-                    ev.to_string(),
-                    json!([{
+                merge_event_hook(
+                    &mut hooks_obj,
+                    ev,
+                    json!({
                         "matcher": ".*",
                         "hooks": [{
                             "type": "command",
                             "command": guard_cmd(ev)
                         }]
-                    }]),
-                );
+                    }),
+                    &settings_path,
+                )?;
             }
             root_obj.insert("hooks".to_string(), Value::Object(hooks_obj));
             let content =
@@ -2892,18 +3277,25 @@ pub fn plan_client_install(
         }
         "codex" => {
             let hooks_path = home.join(".codex").join("hooks.json");
-            let hooks_val = json!({
-                "schema": 1,
-                "hooks": {
-                    "SessionStart": [{ "command": guard_cmd("SessionStart") }],
-                    "PreToolUse": [{ "command": guard_cmd("PreToolUse") }],
-                    "Stop": [{ "command": guard_cmd("Stop") }]
-                }
-            });
+            let mut root_obj = read_existing_json_object(&hooks_path)?;
+            root_obj
+                .entry("schema".to_string())
+                .or_insert_with(|| json!(1));
+            let mut hooks_obj = extract_existing_hooks_map(&root_obj, &hooks_path)?;
+            for ev in ["SessionStart", "PreToolUse", "Stop"] {
+                merge_event_hook(
+                    &mut hooks_obj,
+                    ev,
+                    json!({ "command": guard_cmd(ev) }),
+                    &hooks_path,
+                )?;
+            }
+            root_obj.insert("hooks".to_string(), Value::Object(hooks_obj));
             writes.push(PlannedWrite {
                 client: c.clone(),
                 path: hooks_path,
-                content: serde_json::to_string_pretty(&hooks_val).unwrap_or_default() + "\n",
+                content: serde_json::to_string_pretty(&Value::Object(root_obj)).unwrap_or_default()
+                    + "\n",
                 description: "Codex user-level loop guard hooks",
             });
             let rules_path = home.join(".codex").join("rules").join("uor-r4.rules");
@@ -2926,8 +3318,13 @@ prefix_rule(pattern=[\"killall\"], decision=\"forbidden\")
         }
         "kimi" => {
             let cfg_path = home.join(".kimi-code").join("config.toml");
-            let existing = fs::read_to_string(&cfg_path).unwrap_or_default();
-            let cleaned = strip_kimi_hooks(&existing);
+            let existing = if cfg_path.exists() {
+                fs::read_to_string(&cfg_path)
+                    .map_err(|e| format!("cannot read existing {}: {e}", cfg_path.display()))?
+            } else {
+                String::new()
+            };
+            let cleaned = strip_kimi_hooks(&existing)?;
             let mut toml_out = cleaned.trim_end().to_string();
             if !toml_out.is_empty() {
                 toml_out.push_str("\n\n");
@@ -2954,8 +3351,9 @@ prefix_rule(pattern=[\"killall\"], decision=\"forbidden\")
             });
             let pointer_start = "# UOR-R4 start pointer\n\nRead `AGENTS.md`, `CHARTER.md` §5.10 and `docs/loop/README.md` in the repository. Private rulebooks and the second Kimi loop are retired (D47).\n";
             let pointer_handoff = "# UOR-R4 handoff pointer\n\nSession handoff lives in `local/kimi/PICKUP.md` and the rendered `STATE.md` / `HANDOFF.md` views (`CHARTER.md` §5.10, `docs/loop/README.md`).\n";
-            debug_assert!(pointer_start.len() <= 1024);
-            debug_assert!(pointer_handoff.len() <= 1024);
+            if pointer_start.len() > 1024 || pointer_handoff.len() > 1024 {
+                return Err("Kimi pointer file exceeds 1024-byte cap".into());
+            }
             writes.push(PlannedWrite {
                 client: c.clone(),
                 path: home.join(".kimi-code").join("UOR-R4-START.md"),
@@ -2981,34 +3379,25 @@ prefix_rule(pattern=[\"killall\"], decision=\"forbidden\")
                 "description": "UOR-R4 five-lab loop guard plugin for Antigravity",
                 "hooks": "./hooks.json"
             });
-            let hooks_json = json!({
-                "hooks": {
-                    "SessionStart": [{
+            let hooks_path = pdir.join("hooks.json");
+            let mut root_obj = read_existing_json_object(&hooks_path)?;
+            let mut hooks_obj = extract_existing_hooks_map(&root_obj, &hooks_path)?;
+            for ev in ["SessionStart", "PreToolUse", "Stop"] {
+                merge_event_hook(
+                    &mut hooks_obj,
+                    ev,
+                    json!({
                         "matcher": ".*",
                         "hooks": [{
                             "type": "command",
-                            "command": guard_cmd("SessionStart"),
+                            "command": guard_cmd(ev),
                             "timeout": 15
                         }]
-                    }],
-                    "PreToolUse": [{
-                        "matcher": ".*",
-                        "hooks": [{
-                            "type": "command",
-                            "command": guard_cmd("PreToolUse"),
-                            "timeout": 15
-                        }]
-                    }],
-                    "Stop": [{
-                        "matcher": ".*",
-                        "hooks": [{
-                            "type": "command",
-                            "command": guard_cmd("Stop"),
-                            "timeout": 15
-                        }]
-                    }]
-                }
-            });
+                    }),
+                    &hooks_path,
+                )?;
+            }
+            root_obj.insert("hooks".to_string(), Value::Object(hooks_obj));
             writes.push(PlannedWrite {
                 client: c.clone(),
                 path: pdir.join("plugin.json"),
@@ -3017,26 +3406,37 @@ prefix_rule(pattern=[\"killall\"], decision=\"forbidden\")
             });
             writes.push(PlannedWrite {
                 client: c.clone(),
-                path: pdir.join("hooks.json"),
-                content: serde_json::to_string_pretty(&hooks_json).unwrap_or_default() + "\n",
+                path: hooks_path,
+                content: serde_json::to_string_pretty(&Value::Object(root_obj)).unwrap_or_default()
+                    + "\n",
                 description: "Antigravity uor-r4-loop guard hooks",
             });
         }
         "deepseek" => {
             let hooks_path = home.join(".dsh").join("hooks.json");
-            let hooks_val = json!({
-                "schema": 1,
-                "note": "DeepSeek dsh has no native hook runner (P-1); supervisor stream guard and policy gate enforce scope, and subagents without a suborder stay read-only.",
-                "hooks": {
-                    "SessionStart": [{ "command": guard_cmd("SessionStart") }],
-                    "PreToolUse": [{ "command": guard_cmd("PreToolUse") }],
-                    "Stop": [{ "command": guard_cmd("Stop") }]
-                }
-            });
+            let mut root_obj = read_existing_json_object(&hooks_path)?;
+            root_obj
+                .entry("schema".to_string())
+                .or_insert_with(|| json!(1));
+            root_obj.insert(
+                "note".to_string(),
+                json!("DeepSeek dsh has no native hook runner (P-1); supervisor stream guard and policy gate enforce scope, and subagents without a suborder stay read-only."),
+            );
+            let mut hooks_obj = extract_existing_hooks_map(&root_obj, &hooks_path)?;
+            for ev in ["SessionStart", "PreToolUse", "Stop"] {
+                merge_event_hook(
+                    &mut hooks_obj,
+                    ev,
+                    json!({ "command": guard_cmd(ev) }),
+                    &hooks_path,
+                )?;
+            }
+            root_obj.insert("hooks".to_string(), Value::Object(hooks_obj));
             writes.push(PlannedWrite {
                 client: c.clone(),
                 path: hooks_path,
-                content: serde_json::to_string_pretty(&hooks_val).unwrap_or_default() + "\n",
+                content: serde_json::to_string_pretty(&Value::Object(root_obj)).unwrap_or_default()
+                    + "\n",
                 description: "DeepSeek loop guard descriptor",
             });
             let overlay = "\
@@ -3072,15 +3472,102 @@ subagents_default: read-only
     Ok(writes)
 }
 
-/// Remove existing `[[hooks]]` blocks and any previous `# uor-r4-loop-guard` block from Kimi's
-/// `config.toml`, keeping all other TOML tables intact.
-fn strip_kimi_hooks(toml_text: &str) -> String {
-    let mut out = Vec::new();
+/// Read an existing JSON object from `path`, failing closed if the file exists and cannot be
+/// parsed as a top-level JSON object.
+fn read_existing_json_object(path: &Path) -> Result<serde_json::Map<String, Value>, String> {
+    if !path.exists() {
+        return Ok(serde_json::Map::new());
+    }
+    let raw = fs::read_to_string(path)
+        .map_err(|e| format!("cannot read existing {}: {e}", path.display()))?;
+    let val: Value = serde_json::from_str(&raw)
+        .map_err(|e| format!("cannot parse existing {} as JSON: {e}", path.display()))?;
+    val.as_object()
+        .cloned()
+        .ok_or_else(|| format!("existing {} is not a JSON object", path.display()))
+}
+
+/// Extract the existing `hooks` map from `root_obj`, failing closed if `hooks` is present and not
+/// a JSON object.
+fn extract_existing_hooks_map(
+    root_obj: &serde_json::Map<String, Value>,
+    path: &Path,
+) -> Result<serde_json::Map<String, Value>, String> {
+    match root_obj.get("hooks") {
+        None | Some(Value::Null) => Ok(serde_json::Map::new()),
+        Some(Value::Object(m)) => Ok(m.clone()),
+        Some(_) => Err(format!(
+            "existing `hooks` key in {} is not a JSON object",
+            path.display()
+        )),
+    }
+}
+
+/// Merge a `uor-harness loop guard` hook entry into `hooks_obj[ev]`, preserving any existing
+/// user hook entries on `ev` whose JSON does not invoke `uor-harness`.
+fn merge_event_hook(
+    hooks_obj: &mut serde_json::Map<String, Value>,
+    ev: &str,
+    new_entry: Value,
+    path: &Path,
+) -> Result<(), String> {
+    let mut entries = match hooks_obj.get(ev) {
+        None | Some(Value::Null) => Vec::new(),
+        Some(Value::Array(arr)) => arr
+            .iter()
+            .filter(|elem| {
+                !serde_json::to_string(elem)
+                    .unwrap_or_default()
+                    .contains("uor-harness")
+            })
+            .cloned()
+            .collect(),
+        Some(_) => {
+            return Err(format!(
+                "existing `hooks.{ev}` in {} is not a JSON array",
+                path.display()
+            ))
+        }
+    };
+    entries.push(new_entry);
+    hooks_obj.insert(ev.to_string(), Value::Array(entries));
+    Ok(())
+}
+
+/// Remove existing `uor-harness` / retired UOR-R4 `[[hooks]]` blocks and any previous
+/// `# uor-r4-loop-guard` block from Kimi's `config.toml`, keeping user `[[hooks]]` tables and all
+/// other TOML tables intact, and failing on malformed TOML lines.
+fn strip_kimi_hooks(toml_text: &str) -> Result<String, String> {
+    let mut out: Vec<String> = Vec::new();
     let mut skip_guard_block = false;
-    let mut skip_hook_table = false;
+    let mut in_hook_table = false;
+    let mut hook_buf: Vec<String> = Vec::new();
+    let mut bracket_depth: i32 = 0;
+
+    let flush_hook_buf = |buf: &mut Vec<String>, out: &mut Vec<String>| {
+        if buf.is_empty() {
+            return;
+        }
+        let body = buf.join("\n");
+        if !body.contains("uor-harness") && !body.contains("UOR-R4") {
+            // Trim trailing blank lines inside preserved hook block before appending.
+            while buf.last().is_some_and(|l| l.trim().is_empty()) {
+                buf.pop();
+            }
+            out.append(buf);
+            out.push(String::new());
+        } else {
+            buf.clear();
+        }
+    };
+
     for line in toml_text.lines() {
         let trimmed = line.trim();
         if trimmed == "# uor-r4-loop-guard:start" {
+            if in_hook_table {
+                flush_hook_buf(&mut hook_buf, &mut out);
+                in_hook_table = false;
+            }
             skip_guard_block = true;
             continue;
         }
@@ -3091,18 +3578,50 @@ fn strip_kimi_hooks(toml_text: &str) -> String {
         if skip_guard_block {
             continue;
         }
-        if trimmed == "[[hooks]]" {
-            skip_hook_table = true;
+
+        // Validate syntax of non-empty, non-comment lines outside multiline bracket arrays.
+        if !trimmed.is_empty() && !trimmed.starts_with('#') && bracket_depth == 0 {
+            let no_comment = trimmed.split('#').next().unwrap_or("").trim();
+            let is_header = no_comment.starts_with('[') && no_comment.ends_with(']');
+            let is_kv = no_comment.contains('=');
+            if !is_header && !is_kv {
+                return Err(format!(
+                    "cannot parse existing ~/.kimi-code/config.toml (malformed line: {trimmed})"
+                ));
+            }
+        }
+        if !trimmed.starts_with('#') && (!trimmed.starts_with('[') || bracket_depth > 0) {
+            for ch in trimmed.chars() {
+                if ch == '[' {
+                    bracket_depth += 1;
+                } else if ch == ']' {
+                    bracket_depth = (bracket_depth - 1).max(0);
+                }
+            }
+        }
+
+        if bracket_depth == 0 && trimmed == "[[hooks]]" {
+            if in_hook_table {
+                flush_hook_buf(&mut hook_buf, &mut out);
+            }
+            in_hook_table = true;
+            hook_buf.push(line.to_string());
             continue;
         }
-        if skip_hook_table && trimmed.starts_with('[') {
-            skip_hook_table = false;
+        if bracket_depth == 0 && in_hook_table && trimmed.starts_with('[') {
+            flush_hook_buf(&mut hook_buf, &mut out);
+            in_hook_table = false;
         }
-        if !skip_hook_table {
-            out.push(line);
+        if in_hook_table {
+            hook_buf.push(line.to_string());
+        } else {
+            out.push(line.to_string());
         }
     }
-    out.join("\n")
+    if in_hook_table {
+        flush_hook_buf(&mut hook_buf, &mut out);
+    }
+    Ok(out.join("\n"))
 }
 
 /// Execute `loop install` for the selected clients.
@@ -3121,14 +3640,19 @@ pub fn run_install(
         all_writes.append(&mut w);
     }
 
-    // Verify that no write inside `repo` lands outside `repo/local/`.
+    // Verify that no write inside `repo` lands outside `repo/local/`, checking both raw and
+    // symlink-resolved paths so `--home <repo>/docs` is refused.
+    let canon_repo = resolve_target_path(repo, ".");
     for w in &all_writes {
-        if let Ok(rel) = w.path.strip_prefix(repo) {
-            let rel_s = rel.to_string_lossy().replace('\\', "/");
-            if !rel_s.starts_with("local/") {
-                return Err(format!(
-                    "loop install refuses to write outside gitignored local/ inside the repository: {rel_s}"
-                ));
+        let canon_w = resolve_target_path(repo, &w.path.to_string_lossy());
+        for (r_base, w_target) in [(repo, &w.path), (canon_repo.as_path(), &canon_w)] {
+            if let Ok(rel) = w_target.strip_prefix(r_base) {
+                let rel_s = rel.to_string_lossy().replace('\\', "/");
+                if !rel_s.starts_with("local/") {
+                    return Err(format!(
+                        "loop install refuses to write outside gitignored local/ inside the repository: {rel_s}"
+                    ));
+                }
             }
         }
     }
@@ -3344,18 +3868,21 @@ fn client_hooks_applied(home: &Path, client: &str) -> bool {
 
 /// Check that the 6 allowed skills are present in `sdir` (or report `N/A` when `loop install --apply`
 /// has not yet been run by the owner for that client) and that `start-here` is absent.
-fn check_client_skills(_repo: &Path, home: &Path, client: &str) -> OnboardRow {
+fn check_client_skills(_repo: &Path, home: &Path, client: &str) -> (OnboardRow, Vec<String>) {
     let sdir = client_skills_dir(home, client);
     let sh = sdir.join(EXCLUDED_SKILL).join("SKILL.md");
     if sh.exists() {
-        return OnboardRow {
-            check: "skills".into(),
-            verdict: OnboardVerdict::Refused,
-            detail: format!(
-                "{EXCLUDED_SKILL} is installed at {} and must be removed so it cannot start a second setup",
-                sh.display()
-            ),
-        };
+        return (
+            OnboardRow {
+                check: "skills".into(),
+                verdict: OnboardVerdict::Refused,
+                detail: format!(
+                    "{EXCLUDED_SKILL} is installed at {} and must be removed so it cannot start a second setup",
+                    sh.display()
+                ),
+            },
+            Vec::new(),
+        );
     }
     let mut found = Vec::new();
     let mut bad_yaml = Vec::new();
@@ -3377,61 +3904,78 @@ fn check_client_skills(_repo: &Path, home: &Path, client: &str) -> OnboardRow {
             }
         }
     }
+    let found_strings: Vec<String> = found.iter().map(|s| (*s).to_string()).collect();
     if found.len() == ALLOWED_SKILLS.len() {
         if !bad_yaml.is_empty() {
             if client_hooks_applied(home, client) {
-                return OnboardRow {
-                    check: "skills".into(),
-                    verdict: OnboardVerdict::Fail,
-                    detail: format!(
-                        "unquoted YAML colon in description of {} under {}",
-                        bad_yaml.join(", "),
-                        sdir.display()
-                    ),
-                };
+                return (
+                    OnboardRow {
+                        check: "skills".into(),
+                        verdict: OnboardVerdict::Fail,
+                        detail: format!(
+                            "unquoted YAML colon in description of {} under {}",
+                            bad_yaml.join(", "),
+                            sdir.display()
+                        ),
+                    },
+                    found_strings,
+                );
             }
-            return OnboardRow {
+            return (
+                OnboardRow {
+                    check: "skills".into(),
+                    verdict: OnboardVerdict::NotApplicable,
+                    detail: format!(
+                        "N/A until owner runs uor-harness loop install --all --apply --replace (6 allowed skills present in {}; YAML frontmatter normalization staged for {})",
+                        client_skills_rel(client),
+                        bad_yaml.join(", ")
+                    ),
+                },
+                found_strings,
+            );
+        }
+        return (
+            OnboardRow {
                 check: "skills".into(),
                 verdict: OnboardVerdict::Pass,
                 detail: format!(
-                    "6 allowed skills installed in {} (start-here excluded; YAML frontmatter normalization staged for loop install --apply --replace)",
+                    "6 allowed skills installed in {} (start-here excluded)",
                     client_skills_rel(client)
                 ),
-            };
-        }
-        return OnboardRow {
-            check: "skills".into(),
-            verdict: OnboardVerdict::Pass,
-            detail: format!(
-                "6 allowed skills installed in {} (start-here excluded)",
-                client_skills_rel(client)
-            ),
-        };
+            },
+            found_strings,
+        );
     }
     if found.is_empty() && !client_hooks_applied(home, client) {
-        return OnboardRow {
-            check: "skills".into(),
-            verdict: OnboardVerdict::NotApplicable,
-            detail: format!(
-                "N/A until owner runs uor-harness loop install --all --apply (target: {}; 6 allowed skills staged, start-here excluded)",
-                client_skills_rel(client)
-            ),
-        };
+        return (
+            OnboardRow {
+                check: "skills".into(),
+                verdict: OnboardVerdict::NotApplicable,
+                detail: format!(
+                    "N/A until owner runs uor-harness loop install --all --apply (target: {}; 6 allowed skills staged, start-here excluded)",
+                    client_skills_rel(client)
+                ),
+            },
+            found_strings,
+        );
     }
     let missing: Vec<&str> = ALLOWED_SKILLS
         .iter()
         .copied()
         .filter(|s| !found.contains(s))
         .collect();
-    OnboardRow {
-        check: "skills".into(),
-        verdict: OnboardVerdict::Fail,
-        detail: format!(
-            "missing skill(s) in {}: {}",
-            sdir.display(),
-            missing.join(", ")
-        ),
-    }
+    (
+        OnboardRow {
+            check: "skills".into(),
+            verdict: OnboardVerdict::Fail,
+            detail: format!(
+                "missing skill(s) in {}: {}",
+                sdir.display(),
+                missing.join(", ")
+            ),
+        },
+        found_strings,
+    )
 }
 
 /// Check hook/adapter wiring for `client`.
@@ -3555,7 +4099,8 @@ pub fn run_onboard(
     }
 
     // 2. skills found
-    checks.push(check_client_skills(repo, home, &c));
+    let (skills_row, skills_installed) = check_client_skills(repo, home, &c);
+    checks.push(skills_row);
 
     // 3. hooks on the current binary
     checks.push(check_client_hooks(repo, home, &c));
@@ -3638,7 +4183,7 @@ pub fn run_onboard(
         vendor: lab_info.vendor.clone(),
         headless: lab_info.headless.clone(),
         skills_dir: client_skills_rel(&c).to_string(),
-        skills_installed: ALLOWED_SKILLS.iter().map(|s| (*s).to_string()).collect(),
+        skills_installed,
         start_here_excluded: true,
         hook_entry: format!("uor-harness loop guard --client {c} --lab {c} --event <Event>"),
         canary_target: "CHARTER.md".to_string(),
@@ -3680,6 +4225,7 @@ pub fn write_onboarding_receipt(
 /// re-run each client's live canary write refusal check.
 pub fn check_all_receipts(repo: &Path) -> Result<Vec<String>, String> {
     let labs = crate::labs::load_labs(repo)?;
+    let expected_skills: Vec<String> = ALLOWED_SKILLS.iter().map(|s| (*s).to_string()).collect();
     let mut verified = Vec::new();
     for client in CLIENTS {
         let path = onboarding_receipt_path(repo, client);
@@ -3706,13 +4252,12 @@ pub fn check_all_receipts(repo: &Path) -> Result<Vec<String>, String> {
                 path.display()
             ));
         }
-        if !receipt.start_here_excluded
-            || receipt.skills_installed
-                != ALLOWED_SKILLS
-                    .iter()
-                    .map(|s| (*s).to_string())
-                    .collect::<Vec<_>>()
-        {
+        let skills_check = receipt.checks.iter().find(|r| r.check == "skills");
+        let skills_na = skills_check.is_some_and(|r| r.verdict == OnboardVerdict::NotApplicable);
+        let skills_ok = receipt.start_here_excluded
+            && (receipt.skills_installed == expected_skills
+                || (skills_na && receipt.skills_installed.is_empty()));
+        if !skills_ok {
             return Err(format!(
                 "receipt {} does not list the 6 allowed skills with start-here excluded",
                 path.display()
@@ -3724,7 +4269,7 @@ pub fn check_all_receipts(repo: &Path) -> Result<Vec<String>, String> {
                 path.display()
             ));
         }
-        // Re-run the live canary write check for this client (the planted fault!).
+        // Re-run the live in-process canary write check for this client (the planted fault!).
         run_canary(repo, client)?;
         verified.push(client.to_string());
     }
@@ -3738,38 +4283,39 @@ pub fn check_all_receipts(repo: &Path) -> Result<Vec<String>, String> {
 /// Number of consecutive words in a copyright comparison window.
 pub const COPYRIGHT_WINDOW: usize = 8;
 
-/// Tokenize text into lowercase alphanumeric words.
-fn tokenize_words(text: &str) -> Vec<String> {
+/// Tokenize text into `(lowercase_alphanumeric_word, 1_based_line_number)` pairs across the entire
+/// file (including YAML frontmatter, which carries multi-sentence skill descriptions).
+fn tokenize_words_with_lines(text: &str) -> Vec<(String, usize)> {
     let mut words = Vec::new();
     let mut cur = String::new();
+    let mut line_no = 1usize;
+    let mut word_start_line = 1usize;
     for ch in text.chars() {
         if ch.is_ascii_alphanumeric() {
+            if cur.is_empty() {
+                word_start_line = line_no;
+            }
             cur.push(ch.to_ascii_lowercase());
-        } else if !cur.is_empty() {
-            words.push(std::mem::take(&mut cur));
+        } else {
+            if !cur.is_empty() {
+                words.push((std::mem::take(&mut cur), word_start_line));
+            }
+            if ch == '\n' {
+                line_no += 1;
+            }
         }
     }
     if !cur.is_empty() {
-        words.push(cur);
+        words.push((cur, word_start_line));
     }
     words
-}
-
-/// Strip YAML frontmatter (`--- ... ---`) at the top of a markdown file so generic YAML keys (`name`,
-/// `description`) are not treated as prose windows.
-fn strip_frontmatter(text: &str) -> &str {
-    if let Some(rest) = text.strip_prefix("---\n") {
-        if let Some(end) = rest.find("\n---\n") {
-            return &rest[end + 5..];
-        }
-    }
-    text
 }
 
 /// One 8-word overlap match found in a repository file (never stores or prints kit text).
 #[derive(Debug, Clone, Serialize)]
 pub struct CopyrightHit {
     pub repo_file: String,
+    pub line: usize,
     pub kit_entry: String,
     pub word_offset: usize,
 }
@@ -3789,8 +4335,10 @@ pub fn check_copyright(repo: &Path, kit_source: &Path) -> Result<Vec<CopyrightHi
     // Build an in-memory map from each 8-word window `Vec<String>` to the kit entry name.
     let mut kit_windows: HashMap<Vec<String>, String> = HashMap::new();
     for (entry_name, text) in &kit_entries {
-        let body = strip_frontmatter(text);
-        let words = tokenize_words(body);
+        let words: Vec<String> = tokenize_words_with_lines(text)
+            .into_iter()
+            .map(|(w, _)| w)
+            .collect();
         if words.len() < COPYRIGHT_WINDOW {
             continue;
         }
@@ -3808,17 +4356,18 @@ pub fn check_copyright(repo: &Path, kit_source: &Path) -> Result<Vec<CopyrightHi
         let Ok(text) = fs::read_to_string(&full) else {
             continue;
         };
-        let body = strip_frontmatter(&text);
-        let words = tokenize_words(body);
-        if words.len() < COPYRIGHT_WINDOW {
+        let words_with_lines = tokenize_words_with_lines(&text);
+        if words_with_lines.len() < COPYRIGHT_WINDOW {
             continue;
         }
+        let words: Vec<String> = words_with_lines.iter().map(|(w, _)| w.clone()).collect();
         let mut seen_entries = HashSet::new();
         for (idx, win) in words.windows(COPYRIGHT_WINDOW).enumerate() {
             if let Some(kit_entry) = kit_windows.get(win) {
                 if seen_entries.insert(kit_entry.clone()) {
                     hits.push(CopyrightHit {
                         repo_file: rel.clone(),
+                        line: words_with_lines[idx].1,
                         kit_entry: kit_entry.clone(),
                         word_offset: idx,
                     });
@@ -4026,7 +4575,7 @@ fn cli_install(root: &Path, lab: &str, args: &[String]) -> u8 {
 
     let explicit_home = flags.get("--home").map(PathBuf::from);
     let real_home = std::env::var_os("HOME").map(PathBuf::from);
-    let home = explicit_home.clone().or_else(|| real_home.clone());
+    let home = explicit_home.or(real_home);
     let Some(home) = home else {
         eprintln!("uor-harness loop install: HOME is not set and --home was not given");
         return 2;
@@ -4043,14 +4592,10 @@ fn cli_install(root: &Path, lab: &str, args: &[String]) -> u8 {
             .to_string()
     };
     // Owner decision (#2028): `loop install` is plan-only by default; `--apply` writes files and is
-    // refused from a lab session targeting the user's live `$HOME`.
-    let targets_real_home = explicit_home.is_none()
-        || real_home
-            .as_ref()
-            .is_some_and(|rh| rh.canonicalize().ok() == home.canonicalize().ok());
-    if apply && !active_lab.is_empty() && targets_real_home {
+    // refused from any lab session (`UOR_LAB` set), regardless of `--home` or `HOME`.
+    if apply && !active_lab.is_empty() {
         eprintln!(
-            "uor-harness loop install: REFUSED: owner decision (#2028): loop install --apply against $HOME may be run only by the owner from Terminal with UOR_LAB unset (found UOR_LAB={active_lab})"
+            "uor-harness loop install: REFUSED: owner decision (#2028): loop install --apply may be run only by the owner from Terminal with UOR_LAB unset (found UOR_LAB={active_lab})"
         );
         return 2;
     }
@@ -4146,7 +4691,7 @@ fn cli_onboard(root: &Path, lab: &str, args: &[String]) -> u8 {
                     );
                 } else {
                     println!(
-                        "PASS onboarding receipts: {} verified and canary writes refused ({})",
+                        "PASS onboarding receipts: {} verified and in-process canary writes refused ({})",
                         verified.len(),
                         verified.join(", ")
                     );
@@ -4265,8 +4810,8 @@ fn cli_copyright(root: &Path, args: &[String]) -> u8 {
                 );
                 for h in &hits {
                     eprintln!(
-                        "  {} (word offset {}) overlaps {}",
-                        h.repo_file, h.word_offset, h.kit_entry
+                        "  {}:{} (word offset {}) overlaps {}",
+                        h.repo_file, h.line, h.word_offset, h.kit_entry
                     );
                 }
             }

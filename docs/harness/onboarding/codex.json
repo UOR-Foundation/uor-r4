@@ -5,14 +5,7 @@
   "vendor": "OpenAI",
   "headless": "codex exec",
   "skills_dir": "~/.codex/skills",
-  "skills_installed": [
-    "gates",
-    "holding-the-goal",
-    "scope-guard",
-    "session-close",
-    "solution-integrity",
-    "working-discipline"
-  ],
+  "skills_installed": [],
   "start_here_excluded": true,
   "hook_entry": "uor-harness loop guard --client codex --lab codex --event <Event>",
   "canary_target": "CHARTER.md",

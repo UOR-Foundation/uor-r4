@@ -359,7 +359,23 @@ fn subagent_scoping_enforced_per_client_p1_design() {
         ),
         GuardOutcome::Allow
     );
-    // Subagent SessionStart with `sub-conv-200` does not overwrite `root-conv-100`.
+    // Parent invokes `invoke_subagent` (`PreToolUse`), then subagent `SessionStart` with
+    // `sub-conv-200` does not overwrite `root-conv-100`.
+    let invoke_sub = json!({
+        "conversationId": "root-conv-100",
+        "workspacePaths": [a_root.display().to_string()],
+        "toolCall": { "name": "invoke_subagent", "args": { "TypeName": "research" } }
+    });
+    assert_eq!(
+        evaluate_guard(
+            a_root,
+            "antigravity",
+            "antigravity",
+            "PreToolUse",
+            &invoke_sub
+        ),
+        GuardOutcome::Allow
+    );
     let start_sub = json!({
         "conversationId": "sub-conv-200",
         "workspacePaths": [a_root.display().to_string()]
@@ -880,5 +896,335 @@ fn repair_order_antigravity_2_regressions() {
     assert!(
         !home.path().join(".claude/settings.json").exists(),
         "default loop install without --apply must not write files"
+    );
+}
+
+/// Regression tests for all 10 required items in repair order `antigravity-3`.
+#[test]
+fn repair_order_antigravity_3_regressions() {
+    let fixture = make_uor_fixture("claude");
+    let root = fixture.path();
+
+    // 1. HIGH 1: `uor-harness` global flags (`--repo`, `--json`) and `cargo run -- ...` forwarding
+    //    do not bypass `loop install --apply` or `git install-hooks`.
+    for cmd in [
+        "uor-harness --repo /tmp loop install --apply",
+        "uor-harness --json loop install --all --apply",
+        "uor-harness --repo=/tmp loop install --client claude --apply",
+        "uor-harness --repo /tmp git install-hooks --install",
+        "cargo run -p uor-r4-harness -- loop install --all --apply",
+        "~/.cargo/bin/cargo run --release -p uor-r4-harness -- git install-hooks --install",
+    ] {
+        let payload = json!({
+            "cwd": root.display().to_string(),
+            "tool_name": "Bash",
+            "tool_input": { "command": cmd }
+        });
+        assert!(
+            matches!(
+                evaluate_guard(root, "claude", "claude", "PreToolUse", &payload),
+                GuardOutcome::Refused(_)
+            ),
+            "expected HIGH 1 command to be refused: {cmd}"
+        );
+    }
+
+    // 2. HIGH 2: shell compound keywords (`for`/`do`/`done`, `if`/`then`/`fi`, `eval`, `exec`, `{}`)
+    //    do not hide forbidden commands.
+    for cmd in [
+        "eval git push origin main",
+        "for i in 1; do pkill x; done",
+        "exec git stash",
+        "if true; then git push --force origin claude/x; fi",
+        "{ killall cargo; }",
+        "while false; do git commit --no-verify -m x; done",
+    ] {
+        let payload = json!({
+            "cwd": root.display().to_string(),
+            "tool_name": "Bash",
+            "tool_input": { "command": cmd }
+        });
+        assert!(
+            matches!(
+                evaluate_guard(root, "claude", "claude", "PreToolUse", &payload),
+                GuardOutcome::Refused(_)
+            ),
+            "expected HIGH 2 command to be refused: {cmd}"
+        );
+    }
+
+    // 3. HIGH 3: `git config core.hooksPath`, `git -c include.path=...`, and `GIT_CONFIG_GLOBAL=...`
+    //    are all refused.
+    for cmd in [
+        "git config core.hooksPath /dev/null",
+        "git config --local core.hooksPath /tmp",
+        "git -c include.path=/tmp/evil status",
+        "git -c includeIf.gitdir:~/uor-r4/.path=/tmp/evil status",
+        "GIT_CONFIG_GLOBAL=/tmp/evil git status",
+        "GIT_CONFIG_SYSTEM=/tmp/evil git commit -m ok",
+    ] {
+        let payload = json!({
+            "cwd": root.display().to_string(),
+            "tool_name": "Bash",
+            "tool_input": { "command": cmd }
+        });
+        assert!(
+            matches!(
+                evaluate_guard(root, "claude", "claude", "PreToolUse", &payload),
+                GuardOutcome::Refused(_)
+            ),
+            "expected HIGH 3 command to be refused: {cmd}"
+        );
+    }
+
+    // 4. HIGH 4: symlink + `..` traversal (`local/claude/d2 -> ../../docs` + `local/claude/d2/../CHARTER.md`)
+    //    expands the symlink before applying `..` and refuses the write to `CHARTER.md`.
+    #[cfg(unix)]
+    {
+        let local_claude = root.join("local/claude");
+        fs::create_dir_all(&local_claude).expect("create local/claude");
+        std::os::unix::fs::symlink("../../docs", local_claude.join("d2"))
+            .expect("create d2 symlink");
+        let traversal = local_claude.join("d2/../CHARTER.md").display().to_string();
+        let payload = json!({
+            "cwd": root.display().to_string(),
+            "tool_name": "Write",
+            "tool_input": { "file_path": traversal }
+        });
+        assert!(
+            matches!(
+                evaluate_guard(root, "claude", "claude", "PreToolUse", &payload),
+                GuardOutcome::Refused(_)
+            ),
+            "expected HIGH 4 symlink + .. traversal write to CHARTER.md to be refused"
+        );
+    }
+
+    // 5. MEDIUM 5: `run_install` preserves existing user hooks (`PostToolUse` and non-`uor-harness`
+    //    `PreToolUse` in `.claude/settings.json`; user `[[hooks]]` in `.kimi-code/config.toml`) and
+    //    refuses malformed JSON/TOML.
+    let home = tempfile::tempdir().expect("temp home");
+    let kit = make_synthetic_kit();
+    fs::create_dir_all(home.path().join(".claude")).expect("mkdir .claude");
+    fs::write(
+        home.path().join(".claude/settings.json"),
+        serde_json::to_string_pretty(&json!({
+            "theme": "dark",
+            "hooks": {
+                "PostToolUse": [{ "matcher": ".*", "hooks": [{ "type": "command", "command": "echo post-user-hook" }] }],
+                "PreToolUse": [{ "matcher": "Bash", "hooks": [{ "type": "command", "command": "echo pre-user-hook" }] }]
+            }
+        }))
+        .unwrap(),
+    )
+    .expect("seed settings.json");
+    fs::create_dir_all(home.path().join(".kimi-code")).expect("mkdir .kimi-code");
+    fs::write(
+        home.path().join(".kimi-code/config.toml"),
+        "default_model = \"kimi-for-coding\"\n\n[[hooks]]\nevent = \"PostToolUse\"\ncommand = \"echo custom-kimi-hook\"\n",
+    )
+    .expect("seed kimi config.toml");
+
+    run_install(
+        root,
+        home.path(),
+        &["claude".to_string(), "kimi".to_string()],
+        kit.path(),
+        true,
+        false,
+    )
+    .expect("install with --replace merges existing user hooks");
+
+    let merged_claude: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(home.path().join(".claude/settings.json")).unwrap(),
+    )
+    .expect("valid merged settings.json");
+    assert_eq!(merged_claude["theme"], "dark");
+    assert!(
+        merged_claude["hooks"]["PostToolUse"]
+            .to_string()
+            .contains("post-user-hook"),
+        "PostToolUse user hook must be preserved"
+    );
+    let pre_arr = merged_claude["hooks"]["PreToolUse"]
+        .as_array()
+        .expect("PreToolUse array");
+    assert_eq!(
+        pre_arr.len(),
+        2,
+        "PreToolUse must keep user hook and append uor-harness hook"
+    );
+    let merged_kimi = fs::read_to_string(home.path().join(".kimi-code/config.toml")).unwrap();
+    assert!(
+        merged_kimi.contains("echo custom-kimi-hook"),
+        "user Kimi [[hooks]] table must be preserved"
+    );
+
+    // Malformed JSON in `.claude/settings.json` fails closed.
+    fs::write(home.path().join(".claude/settings.json"), "{not valid json").unwrap();
+    assert!(
+        run_install(
+            root,
+            home.path(),
+            &["claude".to_string()],
+            kit.path(),
+            true,
+            true
+        )
+        .is_err(),
+        "malformed settings.json must be refused"
+    );
+
+    // 6. MEDIUM 6: CLI `loop install --apply` is refused whenever `UOR_LAB` is set, even with
+    //    `--home <scratch>` and `HOME=<other>`; and `run_install` refuses `--home <repo>/docs`.
+    let clean_home = tempfile::tempdir().expect("clean home");
+    let out = Command::new(bin())
+        .current_dir(root)
+        .env("UOR_LAB", "claude")
+        .env("HOME", "/tmp")
+        .args(["loop", "install", "--client", "claude", "--home"])
+        .arg(clean_home.path())
+        .arg("--zip")
+        .arg(kit.path())
+        .arg("--apply")
+        .output()
+        .expect("run cli loop install --apply with UOR_LAB=claude");
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "CLI loop install --apply must be refused whenever UOR_LAB is set"
+    );
+    assert!(
+        run_install(
+            root,
+            &root.join("docs"),
+            &["claude".to_string()],
+            kit.path(),
+            true,
+            true
+        )
+        .is_err(),
+        "--home inside repo outside local/ must be refused"
+    );
+
+    // 7. MEDIUM 7: writing to any of the 9 `SHARED_FILES` (e.g. `crates/uor-r4-harness/src/lib.rs`,
+    //    `docs/loop/README.md`) is allowed even when not listed in the active ORDER's scope.
+    for shared in [
+        "crates/uor-r4-harness/src/lib.rs",
+        "docs/loop/README.md",
+        "docs/harness/gates.json",
+    ] {
+        let payload = json!({
+            "cwd": root.display().to_string(),
+            "tool_name": "Edit",
+            "tool_input": { "file_path": root.join(shared).display().to_string() }
+        });
+        assert_eq!(
+            evaluate_guard(root, "claude", "claude", "PreToolUse", &payload),
+            GuardOutcome::Allow,
+            "shared registration file {shared} must be writable under active ORDER"
+        );
+    }
+
+    // 8. MEDIUM 8: Claude `SubagentStart` binding survives top-level `Stop` and `SessionStart`
+    //    (compaction/resume) and is cleared only at `SubagentStop`; unnamed `SubagentStart` fails closed.
+    let sub_orders_dir = root.join("local/claude/claude-1/orders");
+    fs::create_dir_all(&sub_orders_dir).expect("mkdir orders");
+    fs::write(
+        sub_orders_dir.join("1.md"),
+        "# Suborder 1\n\n## Scope\n\n- `crates/uor-r4-harness/src/loopguard.rs`\n",
+    )
+    .expect("write 1.md");
+    assert_eq!(
+        evaluate_guard(
+            root,
+            "claude",
+            "claude",
+            "SubagentStart",
+            &json!({ "cwd": root.display().to_string(), "agent_id": "sub-persist" })
+        ),
+        GuardOutcome::Allow
+    );
+    // Top-level `Stop` and `SessionStart` happen while `sub-persist` is still alive.
+    assert_eq!(
+        evaluate_guard(
+            root,
+            "claude",
+            "claude",
+            "Stop",
+            &json!({ "cwd": root.display().to_string() })
+        ),
+        GuardOutcome::Allow
+    );
+    assert_eq!(
+        evaluate_guard(
+            root,
+            "claude",
+            "claude",
+            "SessionStart",
+            &json!({ "cwd": root.display().to_string() })
+        ),
+        GuardOutcome::Allow
+    );
+    let sub_write = json!({
+        "cwd": root.display().to_string(),
+        "agent_id": "sub-persist",
+        "tool_name": "Edit",
+        "tool_input": {
+            "file_path": root.join("crates/uor-r4-harness/src/loopguard.rs").display().to_string()
+        }
+    });
+    assert_eq!(
+        evaluate_guard(root, "claude", "claude", "PreToolUse", &sub_write),
+        GuardOutcome::Allow,
+        "subagent binding must survive top-level Stop and SessionStart"
+    );
+    assert_eq!(
+        evaluate_guard(
+            root,
+            "claude",
+            "claude",
+            "SubagentStop",
+            &json!({ "cwd": root.display().to_string(), "agent_id": "sub-persist" })
+        ),
+        GuardOutcome::Allow
+    );
+
+    // 9. MEDIUM 9: `git push` with `--mirror`, `--all`, `--branches`, `feat:heads/main`, or
+    //    `-c remote.origin.push=HEAD:main` is refused.
+    for cmd in [
+        "git push origin --mirror",
+        "git push origin --all",
+        "git push origin --branches",
+        "git push origin feat:heads/main",
+        "git -c remote.origin.push=HEAD:main push origin",
+    ] {
+        let payload = json!({
+            "cwd": root.display().to_string(),
+            "tool_name": "Bash",
+            "tool_input": { "command": cmd }
+        });
+        assert!(
+            matches!(
+                evaluate_guard(root, "claude", "claude", "PreToolUse", &payload),
+                GuardOutcome::Refused(_)
+            ),
+            "expected MEDIUM 9 push command to be refused: {cmd}"
+        );
+    }
+
+    // 10. MEDIUM 10: when `local/claude/guard/.lock` is held (fresh), `evaluate_guard` fails closed.
+    let lock_path = root.join("local/claude/guard/.lock");
+    fs::write(&lock_path, "99999\n").expect("create fresh .lock");
+    let benign_read = json!({
+        "cwd": root.display().to_string(),
+        "tool_name": "Read",
+        "tool_input": { "file_path": root.join("README.md").display().to_string() }
+    });
+    let locked_outcome = evaluate_guard(root, "claude", "claude", "PreToolUse", &benign_read);
+    let _ = fs::remove_file(&lock_path);
+    assert!(
+        matches!(locked_outcome, GuardOutcome::Refused(_)),
+        "expected MEDIUM 10 held lock to fail closed, got {locked_outcome:?}"
     );
 }

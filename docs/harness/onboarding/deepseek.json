@@ -25,8 +25,8 @@
     },
     {
       "check": "skills",
-      "verdict": "PASS",
-      "detail": "6 allowed skills installed in ~/.dsh/skills (start-here excluded; YAML frontmatter normalization staged for loop install --apply --replace)"
+      "verdict": "N/A",
+      "detail": "N/A until owner runs uor-harness loop install --all --apply --replace (6 allowed skills present in ~/.dsh/skills; YAML frontmatter normalization staged for gates)"
     },
     {
       "check": "hooks",
