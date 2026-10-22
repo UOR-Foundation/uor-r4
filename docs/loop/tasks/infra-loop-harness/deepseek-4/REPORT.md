@@ -20,6 +20,7 @@ Answering the CHANGES record at `77fd684db`, point by point, and building in the
 - **LOW, the REPORT counts.** `tests/git_hooks.rs` now has 16 tests; the previous REPORT said 20 and the wrong line count.
 - **LOW, trailer parsing.** Trailers are read only from the message's final paragraph, keys are matched case-insensitively, and a test puts trailers above a later body paragraph to prove they do not count.
 - **LOW, no lab may bypass; the hooks must not suggest it.** Both hook scripts now say to fix the message or the policy failure and never print `--no-verify`.
+- **The first full suite after this repair found two more failures, both real.** Three `install-hooks` unit tests read `out[0]` and now saw the backup line first, and `committed_writes_refuse_the_shared_checkout` saw the owner guard's message where it requires R10's. Fixed: the guard moved into the library after the shared-checkout refusal and applies only to a write, unchanged hooks are not backed up, and the unit tests find their action line anywhere in the plan. The suite and both test groups are green now.
 - **Still structural:** on a repaired branch the local `commit-order` fails (the active ORDER is added after code already pushed; the history cannot be rebuilt without a force push, which the rules forbid). The queue gate today is the `uor-review v1` record plus CI, as on the PM's own repairs; the REPORT names it.
 
 ## What changed
