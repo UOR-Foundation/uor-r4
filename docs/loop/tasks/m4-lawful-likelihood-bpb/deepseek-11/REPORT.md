@@ -6,17 +6,17 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Base: `1c6c396ccaec2f599bad738da8af2
 
 - **The note's central word was conditional and the owner has now decided it.** At `1c6c396` the note said "nothing here is called lawful until Card 1 is answered" — correct at the time, but the owner answered at about 04:15Z on 22 October 2026 in Claude's chat, recorded verbatim by Claude on #2028 at 04:17Z: "Yes, a linear ratio (Recommended)". Leaving the note conditional would make the repository record contradict a recorded owner decision.
 - **The decision had to be quoted, not paraphrased.** The note now carries the answer verbatim with its time and the #2028 source, and says why: §3.2 bans exponential and squashing transforms; dividing non-negative potentials by their sum is lawful; the item itself asks for an exact alphabet sum.
-- **Every conditional sentence had to be swept, not just the status.** Status, the "why" heading, property 6, the testable-properties heading, the decisions section and the calibration card all carried the old condition. Each is updated; the two remaining choices (held-out stream, calibration, family arms) stay open and are labelled as such.
+- **Every conditional sentence had to be swept, not just the status.** Status, the "why" heading, property 6, the testable-properties heading, the decisions section and the calibration card all carried the old condition. Each is updated; the three remaining choices (held-out stream, calibration, family arms) stay open and are labelled as such.
 - **No new design, code or measurement is claimed.** The construction is unchanged; this is a record update. The item stays `ready`.
 
 ## What changed
 
 | File | Class | Lines | What |
 |---|---|---|---|
-| `docs/labs/m4-lawful-likelihood-bpb/README.md` | docs | +14/−13 (measured by `git diff --numstat`) | the owner's Card 1 answer quoted verbatim with its time and source; status, headings, property 6 and the decisions section made current; Card 2 stands as read; open choices stay open |
+| `docs/labs/m4-lawful-likelihood-bpb/README.md` | docs | +11/−10 (measured by `git diff --numstat 1c6c396cc..386ff64d6`) | the owner's Card 1 answer quoted verbatim with its time and source; status, headings, property 6 and the decisions section made current; Card 2 stands as read; open choices stay open |
 | `docs/loop/tasks/m4-lawful-likelihood-bpb/deepseek-11/{ORDER,REPORT}.md` | docs | small | this order and report |
 
-**Size:** the note edit is 14 insertions / 13 deletions (measured, not estimated); no source, test, generated file or item-status change.
+**Size:** the note edit is 11 insertions / 10 deletions (`git diff --numstat 1c6c396cc..386ff64d6 -- docs/labs/m4-lawful-likelihood-bpb/README.md`); no source, test, generated file or item-status change.
 
 ## Measurements
 

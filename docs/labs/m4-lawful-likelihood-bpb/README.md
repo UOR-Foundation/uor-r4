@@ -58,7 +58,7 @@ The current integer model does produce Q48 masses — but only through an intege
 ## Crate choice
 
 - **Pure scorer**: `crates/uor-r4-integer`, beside the Q24 potentials and the Q48 contract it consumes; the crate owns `stack_div_u128` and must not gain GPU dependencies.
-- **Evaluation integration and reporting**: `crates/uor-r4-discrete`'s `eval-corpus` path, which owns the panel scoring and the report schema. Both are integer-only; the sentence in the construction about "the discrete crate can host the scorer" refers to that integration layer, not to the pure function's home.
+- **Evaluation integration and reporting**: `crates/uor-r4-discrete`'s `eval-corpus` path, which owns the panel scoring and the report schema. Both are integer-only; the pure function's home is the integer crate, and the discrete crate only integrates it into `eval-corpus` and its report.
 
 ## Owner and PM decisions
 
