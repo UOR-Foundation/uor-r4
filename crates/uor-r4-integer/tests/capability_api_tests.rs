@@ -95,6 +95,10 @@ fn metadata_declares_the_contract_without_certifying_it() -> Result<()> {
     assert!(meta
         .truth_matrix
         .durable_memory
+        .contains("width-576 value stores are not persisted"));
+    assert!(meta
+        .truth_matrix
+        .durable_memory
         .contains("uor-r4.stack-session/1"));
     assert!(meta
         .truth_matrix
@@ -141,6 +145,24 @@ fn empty_prompt_is_rejected_without_changing_the_session() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn restore_session_rejects_width_576_serialized_state() -> Result<()> {
+    let api = IntegerCapabilityApi::new(create_test_bundle_with_byte_vocab());
+    let id = api.create_session(SessionConfig::default())?;
+    api.ingest_user_turn(id, "hello")?;
+    let mut saved = api.save_session(id)?;
+    saved.session_state.state.resize(576, 0);
+    let err = api
+        .restore_session(saved)
+        .expect_err("restore_session must reject width-576 serialized state");
+    assert!(
+        err.to_string()
+            .contains("width-576 value stores are not persisted"),
+        "unexpected error: {err}"
+    );
+    Ok(())
+}
+
 /// Load the width-576 fixture and run one turn in a new session.
 fn dialogue576_session() -> Result<(IntegerCapabilityApi, u32)> {
     let bundle_path = Path::new(DIALOGUE576_BUNDLE_PATH);
@@ -177,9 +199,13 @@ fn capability_api_lifecycle_on_dialogue576_bundle() -> Result<()> {
     assert!(telemetry.active_tokens > 0);
     assert_eq!(telemetry.context_capacity, 256);
 
-    let saved = api.save_session(session_id)?;
-    assert_eq!(saved.schema, "uor-r4.integer-session/1");
-    assert_eq!(saved.session_state.state.len(), 576);
-    restore_and_compare_saved_state(&api, session_id)?;
+    let err = api
+        .save_session(session_id)
+        .expect_err("save_session must reject width-576 sessions");
+    assert!(
+        err.to_string()
+            .contains("width-576 value stores are not persisted"),
+        "unexpected error: {err}"
+    );
     Ok(())
 }
