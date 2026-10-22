@@ -1,7 +1,7 @@
 //! `uor-harness loop board --bench DIR [--every SECONDS]`: the bench feed (claude-25, #2904).
 //!
-//! Writes `STATE.md`, `HANDOFF.md`, `PLAN.md`, `DECISIONS.md` and `.gates.jsonl` into DIR in the
-//! shape the CorvusWing bench reads, from every lab's real state: roadmap items, decisions and
+//! Writes five files into DIR (`.gates.jsonl` and the decisions, plan, handoff and state pages) in
+//! the shape the CorvusWing bench reads, from every lab's real state: roadmap items, decisions and
 //! committed receipts on `origin/main` (read with `git show`, never the working tree), each lab's
 //! open PRs with their ORDER and review record, lab presence, and each lab's local gate ledger.
 //! Every write is a temp file in DIR then a rename; `INBOX.md` is never touched.
@@ -540,7 +540,7 @@ fn refresh(
     let handoff = format!(
         "{banner}# Handoff\n\n## Next\n\n{}\n## Blocked\n\n{}",
         table(
-            &["Id", "Task", "Done when", "Cancel if", "Size", "Status"],
+            &["Id", "Task", "Done when", "Cancel when", "Size", "Status"],
             &next_rows
         ),
         table(&["Id", "Task", "Waiting on"], &blocked_rows)
@@ -555,8 +555,8 @@ fn refresh(
                 "Id",
                 "Date",
                 "Decision",
-                "Why",
-                "What was rejected",
+                "Reason",
+                "Alternatives turned down",
                 "Reversal cost"
             ],
             &dec_rows

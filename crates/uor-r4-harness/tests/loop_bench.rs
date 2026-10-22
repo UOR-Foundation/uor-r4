@@ -242,11 +242,11 @@ fn bench_writes_all_five_files() {
     let r = Repo::new();
     let dir = r.run_ok();
     for f in [
-        "STATE.md",
-        "HANDOFF.md",
-        "PLAN.md",
-        "DECISIONS.md",
         ".gates.jsonl",
+        "DECISIONS.md",
+        "PLAN.md",
+        "HANDOFF.md",
+        "STATE.md",
     ] {
         assert!(dir.join(f).is_file(), "{f} missing");
     }
@@ -311,7 +311,8 @@ fn bench_next_puts_changes_first_with_order_bullets() {
     assert_eq!(first[col(next, "id")], "claude-7");
     assert_eq!(first[col(next, "task")], "[claude] #30 claimed work");
     assert_eq!(first[col(next, "done when")], "the feed writes five files");
-    assert_eq!(first[col(next, "cancel if")], "loopboard must change");
+    // The bench finds this column by the prefix "cancel".
+    assert_eq!(first[col(next, "cancel")], "loopboard must change");
     assert_eq!(first[col(next, "status")], "CHANGES at aaaaaaa");
     assert_eq!(next.2[1][col(next, "status")], "draft");
     let blocked = t.iter().find(|t| t.0.starts_with("Blocked")).unwrap();
@@ -334,7 +335,7 @@ fn bench_decisions_keep_all_rows_newest_last() {
         .map(|r| r[col(d, "id")].as_str())
         .collect();
     assert_eq!(last6, ["D7", "D6", "D5", "D4", "D3", "D2"]);
-    assert_eq!(d.2[0][col(d, "why")], "r");
+    assert_eq!(d.2[0][col(d, "reason")], "r");
 }
 
 #[test]

@@ -4,7 +4,7 @@ Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-har
 
 ## Goal
 
-Casey installed the CorvusWing bench, a local page that reads `STATE.md`, `HANDOFF.md`, `PLAN.md`, `DECISIONS.md` and `.gates.jsonl` from one folder. He wants every lab's tasks, objectives, decisions and checks on it, side by side in the bench's layout.
+Casey installed the CorvusWing bench, a local page that reads five files from one folder (`.gates.jsonl` and four markdown pages: decisions, plan, handoff and state). He wants every lab's tasks, objectives, decisions and checks on it, side by side in the bench's layout.
 
 Casey's decision, in Claude's chat on 22 Oct: "Generated feed (Recommended)". A new `uor-harness loop board --bench <dir>` writes the five files into the git-ignored `local/bench/` from the real sources, and nobody keeps top-level STATE, HANDOFF, PLAN or DECISIONS files by hand.
 
