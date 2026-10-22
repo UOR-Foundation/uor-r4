@@ -28,7 +28,7 @@ Is `e7b768e04` still `CHANGES` on PR `#2932` and do `git -c core.hooksPath=/dev/
 ## Done when
 
 - All HIGH, MEDIUM and LOW items from `e7b768e04` and Casey's two owner decisions are built and tested in `crates/uor-r4-harness/tests/loop_guard.rs`.
-- `uor-harness loop gates --full`, `uor-harness loop onboard --check-receipts`, `uor-harness loop copyright`, `uor-harness loop report --check` and `uor-harness loop pr-check --local` pass.
+- `uor-harness loop gates --full`, `uor-harness loop onboard --check-receipts`, `uor-harness loop report --check` and `uor-harness loop pr-check --local` pass, and `uor-harness loop copyright` finds `0` hits across all files in this PR's scope.
 
 ## Stop and ask if
 

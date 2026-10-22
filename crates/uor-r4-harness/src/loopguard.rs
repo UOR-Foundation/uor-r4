@@ -3738,23 +3738,13 @@ pub fn check_all_receipts(repo: &Path) -> Result<Vec<String>, String> {
 /// Number of consecutive words in a copyright comparison window.
 pub const COPYRIGHT_WINDOW: usize = 8;
 
-/// Tokenize text into lowercase alphanumeric words, keeping internal apostrophes in contractions
-/// and possessives (`ORDER's` -> `orders`, `don't` -> `dont`) as one word rather than splitting the
-/// suffix into a second token.
+/// Tokenize text into lowercase alphanumeric words.
 fn tokenize_words(text: &str) -> Vec<String> {
     let mut words = Vec::new();
     let mut cur = String::new();
-    let chars: Vec<char> = text.chars().collect();
-    for (idx, &ch) in chars.iter().enumerate() {
+    for ch in text.chars() {
         if ch.is_ascii_alphanumeric() {
             cur.push(ch.to_ascii_lowercase());
-        } else if (ch == '\'' || ch == '’')
-            && !cur.is_empty()
-            && chars
-                .get(idx + 1)
-                .is_some_and(|next| next.is_ascii_alphanumeric())
-        {
-            continue;
         } else if !cur.is_empty() {
             words.push(std::mem::take(&mut cur));
         }
