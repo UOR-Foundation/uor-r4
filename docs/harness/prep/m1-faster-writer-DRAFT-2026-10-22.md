@@ -94,7 +94,7 @@ Each planted fault runs in the instrumented build and must produce a mismatch or
 - the index stale by one move (the update skipped after one accepted move);
 - an ABSENT token ignored.
 
-On the host these already fail 4, 3 and the ABSENT test respectively. A planted fault that passes is an instrument fault. A negative closes this configuration, never the mechanism (CHARTER §4.1).
+On the host (#2983), the flipped tie rule fails 4 of the 6 tests, the `>=` prune fails 3, and an ignored ABSENT token fails the ABSENT test. The stale index has no host test yet; it is new in this qualification. A planted fault that passes is an instrument fault. A negative closes this configuration, never the mechanism (CHARTER §4.1).
 
 ## 9. Stop rule and outcomes
 
