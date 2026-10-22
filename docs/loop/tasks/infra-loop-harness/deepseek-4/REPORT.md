@@ -63,7 +63,7 @@ Answering the CHANGES record at `77fd684db`, point by point, and building in the
 ## Still open
 
 - **`looparrive.rs` is dropped from this PR.** PR 11's scope owns it and it is not on the shared list, so the three installed hooks are checked by `loop arrive` only for `pre-commit`. The ORDER done-when is recorded here as changed: extending it needs a scope delta for pr12 (asked on #2028) and would be a follow-up.
-- **`scope` stays FAIL until claude-22's shared-file exemption lands**: `main.rs`, `doccheck.rs`, `docs/harness/README.md` and `docs/harness/gates.json` are the shared-nine, and the tool side is not on `main` yet.
+- **`scope` now PASSES.** claude-22 (`3994731aa`, merged into this branch) put the nine shared registration files into the rule and taught it one PR's repair chain: with the two added ORDERs (`deepseek-3`, `deepseek-4`) and all 16 changed paths, `pr-check --local` reports `PASS scope`.
 - **The binary warning path has no direct test**, because it needs a build inside the checkout.
 - **The LFS chain is tested with a fake `git-lfs`**, not the real one: the ordering and stdin are proven; real LFS transfer is not exercised.
 - **A repaired branch cannot satisfy `commit-order`** without a force push, which the rules forbid; the counted review record and CI are the queue gate.
