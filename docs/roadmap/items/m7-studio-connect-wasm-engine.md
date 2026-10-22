@@ -3,7 +3,7 @@ id: m7-studio-connect-wasm-engine
 title: Connect the Studio to the browser WASM engine
 milestone: M7
 area: serving
-status: done
+status: ready
 open_to: anyone
 needs_gpu: false
 depends_on: []

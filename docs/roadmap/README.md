@@ -20,10 +20,10 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 36 |
+| ready | 37 |
 | held | 26 |
 | decision | 4 |
-| done | 22 |
+| done | 21 |
 | total | 88 |
 
 ## Start here
@@ -45,6 +45,7 @@ These items are ready and open to anyone.
 | [Measure M1-class laptop cost on the accepted served model](items/m5-laptop-full-path-measurement.md) | M5 | [#2862](https://github.com/UOR-Foundation/uor-r4/issues/2862) |
 | [Build and freeze the m6-reasoning panel and oracles](items/m6-reasoning-panel-freeze.md) | M6 | [#2866](https://github.com/UOR-Foundation/uor-r4/issues/2866) |
 | [Build the library, CLI and browser bit-identity parity harness](items/m7-parity-library-cli-browser.md) | M7 | [#2867](https://github.com/UOR-Foundation/uor-r4/issues/2867) |
+| [Connect the Studio to the browser WASM engine](items/m7-studio-connect-wasm-engine.md) | M7 | [#2868](https://github.com/UOR-Foundation/uor-r4/issues/2868) |
 | [Independently verify the alpha on consumer hardware](items/m8-independent-verification.md) | M8 | [#2869](https://github.com/UOR-Foundation/uor-r4/issues/2869) |
 | [Prepare the checksummed alpha release package and install path](items/m8-release-packaging.md) | M8 | [#2870](https://github.com/UOR-Foundation/uor-r4/issues/2870) |
 | [Wire the object store into the model and run the durable-memory bars](items/object-store-consumer-m3.md) | M3 | [#2873](https://github.com/UOR-Foundation/uor-r4/issues/2873) |
@@ -127,7 +128,7 @@ These items are ready and open to anyone.
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
 | [Build the library, CLI and browser bit-identity parity harness](items/m7-parity-library-cli-browser.md) | ready | anyone | no | [m7-studio-connect-wasm-engine](items/m7-studio-connect-wasm-engine.md), [m4-export-uorlut01-cli](items/m4-export-uorlut01-cli.md) | [#2867](https://github.com/UOR-Foundation/uor-r4/issues/2867) |
-| [Connect the Studio to the browser WASM engine](items/m7-studio-connect-wasm-engine.md) | done | anyone | no | none | [#2868](https://github.com/UOR-Foundation/uor-r4/issues/2868) |
+| [Connect the Studio to the browser WASM engine](items/m7-studio-connect-wasm-engine.md) | ready | anyone | no | none | [#2868](https://github.com/UOR-Foundation/uor-r4/issues/2868) |
 
 ## M8
 

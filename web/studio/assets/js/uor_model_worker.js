@@ -3,12 +3,15 @@
 // `init`, `tickClock`, `loadStack`, `step`, `saveSession`, `restoreSession`,
 // `weightsPerToken`, `allocEvents`, `leakedModels`.
 //
-// Zero remote network calls are made by this worker. Every capability field
+// Zero remote network calls are made by this model worker. Every capability field
 // comes directly from the loaded `UORLUT01` stack header or the WASM exports.
+// Prompt text is mapped to token IDs by a deterministic UTF-8 byte-mod stand-in
+// (`rawBytes[i] % vocabSize`) until a stack-bound tokenizer artifact is bundled.
 
 const ENGINE_TAG = 'uor-r4-integer/serving-wasm';
 const LUT_MAGIC = 'UORLUT01';
 const LUT_SCHEMA = 'uor-r4.lut-stack/1';
+const PROMPT_TOKENIZER_LABEL = 'UTF-8 byte-mod stand-in (rawBytes[i] % vocabSize)';
 const MAX_SESSIONS = 32;
 
 let wasmModule = null;
@@ -18,6 +21,14 @@ let activeHandle = null;
 let initialSessionBytes = null;
 let activeJob = null;
 const sessions = new Map();
+const sessionEpochs = new Map();
+
+function bumpSessionEpoch(conversationId) {
+    if (!conversationId) return 0;
+    const next = (sessionEpochs.get(conversationId) || 0) + 1;
+    sessionEpochs.set(conversationId, next);
+    return next;
+}
 
 async function ensureWasmLoaded() {
     if (!wasmInitPromise) {
@@ -90,6 +101,9 @@ function ensureSessionEntry(conversationId) {
     if (!sessions.has(conversationId)) {
         if (sessions.size >= MAX_SESSIONS) {
             throw new Error('32 sessions are open. Export and close an unused conversation.');
+        }
+        if (!sessionEpochs.has(conversationId)) {
+            sessionEpochs.set(conversationId, 1);
         }
         sessions.set(conversationId, {
             bytes: new Uint8Array(initialSessionBytes),
@@ -189,6 +203,7 @@ self.onmessage = async ({ data }) => {
             activeHandle = handle;
             initialSessionBytes = new Uint8Array(blankState);
             sessions.clear();
+            sessionEpochs.clear();
 
             capabilities = {
                 engine: ENGINE_TAG,
@@ -200,6 +215,7 @@ self.onmessage = async ({ data }) => {
                 group: headerInfo.group,
                 synthetic: headerInfo.synthetic,
                 status_label: headerInfo.status_label,
+                tokenizer_label: PROMPT_TOKENIZER_LABEL,
                 weights_per_token: wpt,
                 checkpoint_bytes: initialSessionBytes.byteLength,
                 alloc_events: allocCount,
@@ -217,9 +233,13 @@ self.onmessage = async ({ data }) => {
         requireModel();
 
         if (action === 'close_session' || action === 'reset_session') {
+            if (activeJob) {
+                throw new Error('Stop generation before closing or resetting a session.');
+            }
             const convId = payload.conversationId;
             if (convId) {
                 sessions.delete(convId);
+                bumpSessionEpoch(convId);
             }
             wasmModule.restoreSession(activeHandle, initialSessionBytes);
             self.postMessage({
@@ -261,6 +281,7 @@ self.onmessage = async ({ data }) => {
             }
             wasmModule.restoreSession(activeHandle, rawCheckpoint);
             const verifiedBytes = wasmModule.saveSession(activeHandle);
+            bumpSessionEpoch(convId);
             sessions.set(convId, {
                 bytes: new Uint8Array(verifiedBytes),
                 lastToken: typeof payload.lastToken === 'number' ? payload.lastToken : null,
@@ -283,11 +304,12 @@ self.onmessage = async ({ data }) => {
 
         const convId = payload.conversationId || 'default';
         const entry = ensureSessionEntry(convId);
+        const startEpoch = sessionEpochs.get(convId) || 1;
         wasmModule.restoreSession(activeHandle, entry.bytes);
 
         const promptTokens = encodePromptTokens(payload, capabilities.shape.vocab);
         const maxTokens = Math.min(4096, Math.max(1, Number(payload.options?.max_new_tokens) || 32));
-        const job = { id, conversationId: convId, cancelled: false };
+        const job = { id, conversationId: convId, epoch: startEpoch, cancelled: false };
         activeJob = job;
 
         const started = performance.now();
@@ -302,15 +324,15 @@ self.onmessage = async ({ data }) => {
             const allocBefore = wasmModule.allocEvents();
             const tokenIds = [];
             let fullText = '';
-            let lastMarginQ16 = 0;
-            let lastStepCount = 0;
 
             for (let stepIdx = 0; stepIdx < maxTokens && !job.cancelled; stepIdx++) {
+                if ((sessionEpochs.get(convId) || 0) !== startEpoch || !sessions.has(convId)) {
+                    job.cancelled = true;
+                    break;
+                }
                 wasmModule.tickClock(1n);
                 const [nextTok, marginQ16, stepCount] = wasmModule.step(activeHandle, tok);
                 tok = nextTok;
-                lastMarginQ16 = marginQ16;
-                lastStepCount = stepCount;
                 tokenIds.push(tok);
                 const chunk = formatTokenChunk(tok, stepIdx);
                 fullText += chunk;
@@ -335,11 +357,13 @@ self.onmessage = async ({ data }) => {
 
             const allocAfter = wasmModule.allocEvents();
             const allocDelta = Number(allocAfter - allocBefore);
-            const savedBytes = wasmModule.saveSession(activeHandle);
-            sessions.set(convId, {
-                bytes: new Uint8Array(savedBytes),
-                lastToken: tok,
-            });
+            if ((sessionEpochs.get(convId) || 0) === startEpoch && sessions.has(convId)) {
+                const savedBytes = wasmModule.saveSession(activeHandle);
+                sessions.set(convId, {
+                    bytes: new Uint8Array(savedBytes),
+                    lastToken: tok,
+                });
+            }
 
             capabilities.alloc_events = Number(allocAfter);
             capabilities.leaked_models = Number(wasmModule.leakedModels());
@@ -359,6 +383,7 @@ self.onmessage = async ({ data }) => {
                 allocDelta,
                 allocEvents: capabilities.alloc_events,
                 statusLabel: capabilities.status_label,
+                tokenizerLabel: capabilities.tokenizer_label,
             });
         } finally {
             if (activeJob === job) {
