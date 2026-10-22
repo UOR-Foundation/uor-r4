@@ -12,14 +12,14 @@ References #2873.
 
 ## What changed
 
-- [`crates/uor-r4-object-store/src/durable_consumer.rs`](../../../../crates/uor-r4-object-store/src/durable_consumer.rs) and [`crates/uor-r4-object-store/src/lib.rs`](../../../../crates/uor-r4-object-store/src/lib.rs):
+- [`crates/uor-r4-object-store/src/durable_consumer.rs`](../../../../../crates/uor-r4-object-store/src/durable_consumer.rs) and [`crates/uor-r4-object-store/src/lib.rs`](../../../../../crates/uor-r4-object-store/src/lib.rs):
   - Implemented `DurableObjectMemoryStore`, `IdentityScope`, `FactAction` (`Assert`, `Revise`, `Retract`), `FactProvenance`, `FactVersionRecord`, `FactReadOutcome` (`Quoted`, `RefusedUnstated`, `RefusedRetracted`), and `Ur4Sess1HeaderView` using exact integer binary framing (`UORMEM01` + `UR4SESS1`) over `Store`, `Manifest`, and `Bindings` (`UORBND01`).
   - Wired `export_scope` (`fold` of canonical `UORMEM01` envelope into `Store`) and `import_scope` / `import_scope_expecting` (`Store::rebuild` whole-object SHA-256 verification and state restoration), `assert_fact`, `revise_fact`, `retract_fact`, `ingest_non_memory_prose` (`#1718`), `read_fact` / `read_fact_from` (zero backend fetches on unstated or retracted queries), and `reset_scope`.
-- [`crates/uor-r4-integer/src/session_codec.rs`](../../../../crates/uor-r4-integer/src/session_codec.rs):
+- [`crates/uor-r4-integer/src/session_codec.rs`](../../../../../crates/uor-r4-integer/src/session_codec.rs):
   - Added `ScopedSessionIdent`, `export_scope`, and `import_scope` producing and decoding the same `UORMEM01` binary envelope wrapping `UR4SESS1` (`SerializedStackSession`), plus unit test `export_and_import_scope_round_trip_and_refuse_corrupt_envelope`.
-- [`crates/uor-r4-object-store/tests/durable_consumer.rs`](../../../../crates/uor-r4-object-store/tests/durable_consumer.rs):
+- [`crates/uor-r4-object-store/tests/durable_consumer.rs`](../../../../../crates/uor-r4-object-store/tests/durable_consumer.rs):
   - Added 6 finite CPU integration controls verifying byte-identical write/read and occurrence quotation, process restart and restore with `UR4SESS1`, unstated/retracted fact refusal with zero backend fetches, `#1718` non-memory prose non-overwrite, explicit reset and `IdentityScope` isolation, and fail-closed refusal of corrupt/hostile records, manifests, and envelopes.
-- [`docs/labs/object-store-consumer-m3/README.md`](../../../labs/object-store-consumer-m3/README.md), [`docs/mechanisms/object-store.md`](../../../mechanisms/object-store.md), and [`docs/mechanisms/exact-memory.md`](../../../mechanisms/exact-memory.md):
+- [`docs/labs/object-store-consumer-m3/README.md`](../../../../labs/object-store-consumer-m3/README.md), [`docs/mechanisms/object-store.md`](../../../../mechanisms/object-store.md), and [`docs/mechanisms/exact-memory.md`](../../../../mechanisms/exact-memory.md):
   - Recorded the resolved open design decisions, the 6 CPU controls, and the drafted M3 `m3-memory` pre-registration sheet.
 
 ## Measurements
