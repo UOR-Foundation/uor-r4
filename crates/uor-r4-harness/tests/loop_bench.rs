@@ -375,3 +375,28 @@ fn bench_refuses_tracked_dir_and_short_interval() {
     assert!(o.status.success(), "{o:?}");
     assert!(r.root.join("local/bench/PLAN.md").is_file());
 }
+
+#[test]
+fn bench_reads_the_lab_registry_from_origin_main() {
+    let r = Repo::new();
+    // A lab added in the working tree only, never committed: the feed must not list it.
+    r.write(
+        "docs/harness/labs.json",
+        r#"{"labs":{"claude":{"vendor":"Anthropic","client":"Claude Code","headless":"c","open_pr_limit":3},
+          "codex":{"vendor":"OpenAI","client":"Codex","headless":"c","open_pr_limit":3},
+          "kimi":{"vendor":"Moonshot","client":"Kimi","headless":"c","open_pr_limit":3}}}"#,
+    );
+    let dir = r.run_ok();
+    let t = tables(&read(&dir, "STATE.md"));
+    let w = t
+        .iter()
+        .find(|t| t.0.to_lowercase().contains("what works now"))
+        .unwrap();
+    let areas: Vec<&str> = w.2.iter().map(|r| r[0].as_str()).collect();
+    assert_eq!(areas.len(), 3, "{areas:?}");
+    assert!(
+        areas[0].starts_with("claude") && areas[1].starts_with("codex"),
+        "{areas:?}"
+    );
+    assert!(!areas.iter().any(|a| a.starts_with("kimi")), "{areas:?}");
+}
