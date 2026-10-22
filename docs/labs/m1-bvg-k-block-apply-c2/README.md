@@ -20,12 +20,13 @@ The item's step 6 asks for one row in `docs/research/notebook/m1-discrete-attent
 
 | Date | Item | Change / Finding | Verification |
 |---|---|---|---|
-| 2026-10-22 | `m1-bvg-k-block-apply-c2` (`#2835`) | BVG-K Stage C2 (block propose/verify/apply) qualified: V0, RC, UT, JR, DC, V3, RF and C1R pass on synthetic fixture devices (3,419 updates; `Device::apply` never called). Stage T sheet exists as a machine-complete DRAFT, but registration is blocked on the W2 `H_law` predicate, a base lineage that reaches admission, and the margin/base-lineage registration items; no compute is requested and training stays HELD. | C2 receipt SHA-256 `2fff942fa2b802e180c9bd87336692730d6beaf22f2c0bac8867afb0dea345f3`; `prep-check` on the Stage T DRAFT reports `complete: true`, `TEST FITNESS: PENDING`; A8 dose Q1 stop and the host census (Q1–Q5) recorded in [the diagnosis record](../m1-a8-erosion-diagnosis/README.md). |
+| 2026-10-22 | `m1-bvg-k-block-apply-c2` (`#2835`) | BVG-K Stage C2 (block propose/verify/apply) qualified: V0, RC, UT, JR, DC, V3, RF and C1R pass on synthetic fixture devices (3,419 updates; `Device::apply` never called). Stage T sheet exists as a machine-complete DRAFT, but registration is blocked on the W2 `H_law` predicate, a base lineage that reaches admission, and the margin/base-lineage registration items; no compute is requested and training stays HELD. | C2 receipt SHA-256 `2fff942fa2b802e180c9bd87336692730d6beaf22f2c0bac8867afb0dea345f3`; `prep-check` on the Stage T DRAFT reports `complete: true`, `TEST FITNESS: PENDING`; the A8 dose Q1 stop (P_succ 1,351 → 551; FrozenZero 857) is in [the dose record](../../labs/a8-dose-2026-10-19/README.md), and the host census (Q1–Q5) in [the diagnosis record](../../labs/m1-a8-erosion-diagnosis/README.md). |
 
 ## Sources
 
 - [`docs/harness/prep/m1-bvgk-stagec2-block-qualification-2026-10-18.md`](../../harness/prep/m1-bvgk-stagec2-block-qualification-2026-10-18.md) (C2 sheet and FIT).
 - [`docs/harness/prep/m1-bvgk-staget-learning-law-DRAFT-2026-10-19.md`](../../harness/prep/m1-bvgk-staget-learning-law-DRAFT-2026-10-19.md) (Stage T DRAFT).
 - [`docs/labs/injective-preflight-and-c2-qualify-2026-10-19/README.md`](../injective-preflight-and-c2-qualify-2026-10-19/README.md) (C2 PASS record).
-- [`docs/labs/m1-a8-erosion-diagnosis/README.md`](../m1-a8-erosion-diagnosis/README.md) (the base-lineage evidence).
+- [`docs/labs/a8-dose-2026-10-19/README.md`](../a8-dose-2026-10-19/README.md) (the A8 dose result and its registered Q1 admission-collapse stop).
+- [`docs/labs/m1-a8-erosion-diagnosis/README.md`](../m1-a8-erosion-diagnosis/README.md) (the host placement census that narrows, but does not answer, the erosion question).
 - [`docs/integration/NOW.md`](../../integration/NOW.md), [`docs/integration/project-track.md`](../../integration/project-track.md) (the W2 status contradiction).

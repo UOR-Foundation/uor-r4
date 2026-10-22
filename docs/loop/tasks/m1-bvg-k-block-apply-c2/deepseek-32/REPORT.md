@@ -4,7 +4,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Base: `20f618132`. Item PR, docs-onl
 
 ## What did not work, first
 
-- **The Stage T sheet cannot be completed or FITTED from this item today, for three independent reasons.** (1) The Stage 2 predicate is unresolved: D39 item 4 runs W3 only if W2 decides `H_law`, and the record contradicts itself — `NOW.md` row 6 says the W2 read-code capacity capture is **queued**, the roadmap item is **held**, and `project-track.md` says "W2 read-code capacity — DONE", which appears to refer to the v5.1 consumer-verifier ACCEPT rather than the capture. (2) No base lineage reaches admission: the injective pre-flight failed B3_init (127/3,847 < 500) and was not dispatched, and the A8 dose hit its registered Q1 admission-collapse stop (P_succ 1,351 → 551, FrozenZero 857/3,847), a D31 diagnostic stop. (3) The margin, base-lineage choice, T4 inclusion and AKd shadow-admission are registration-review items. So a sheet filed as FITTED today would be dishonest.
+- **The Stage T sheet cannot be completed or FITTED from this item today, for three independent reasons.** (1) The Stage 2 predicate is unresolved: D39 item 4 runs W3 only if W2 decides `H_law`, and the record contradicts itself — `NOW.md` row 6 says the W2 read-code capacity capture is **queued**, the roadmap item is **held**, and `project-track.md` says "W2 read-code capacity — DONE", which appears to refer to the v5.1 consumer-verifier ACCEPT rather than the capture. (2) No base lineage passes both its pre-flight and its registered Q1 admission gate: the injective pre-flight failed B3_init (127/3,847 < 500) and was not dispatched, while the A8 lineage reached B3_init (1,351/3,847, clearing the 500 floor) and then hit its registered Q1 admission-collapse stop (P_succ 1,351 → 551; FrozenZero 857/3,847) — a D31 diagnostic stop, not a mechanism negative. (3) The margin, base-lineage choice, T4 inclusion and AKd shadow-admission are registration-review items. So a sheet filed as FITTED today would be dishonest.
 - **A complete-to-shape Stage T DRAFT already exists and belongs to claude's lineage** (`docs/harness/prep/m1-bvgk-staget-learning-law-DRAFT-2026-10-19.md`, all 8 blocks, `TEST FITNESS: PENDING`). Writing a duplicate under this item would fork the lineage, so this unit points at it instead.
 - **The item's step-6 notebook page is outside its scope.** `docs/research/notebook/m1-discrete-attention.md` is not in `scope:` and the item declares no `notebook:`; the row is staged in the in-scope lab record for the same backfill path #2997/#3002 used for other items.
 - **No compute, no FIT request, no owner release.** Training stays HELD; nothing here reverses that.
@@ -13,16 +13,16 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Base: `20f618132`. Item PR, docs-onl
 
 | File | Class | Lines | What |
 |---|---|---|---|
-| `docs/labs/m1-bvg-k-block-apply-c2/README.md` | docs | new ~45 | the in-scope record: C2 PASS receipt + controls, the Stage T DRAFT pointer, the three registration blockers, the staged notebook row and its backfill note |
+| `docs/labs/m1-bvg-k-block-apply-c2/README.md` | docs | new 30 lines | the in-scope record: C2 PASS receipt + controls, the Stage T DRAFT pointer, the three registration blockers, the staged notebook row and its backfill note |
 | `docs/loop/tasks/m1-bvg-k-block-apply-c2/deepseek-32/{ORDER,REPORT}.md` | docs | small | this order and report |
 
-**Size:** about 90 changed lines.
+**Size:** about 100 docs changed lines at the head (the lab record is 30 new lines; the rest is the task folder and the merge/render delta).
 
 ## Measurements
 
 - **C2 evidence:** receipt `…/bvgk-qualification.json`, SHA-256 `2fff942fa2b802e180c9bd87336692730d6beaf22f2c0bac8867afb0dea345f3`; controls V0, RC, UT, JR, DC, V3, RF, C1R; 3,419 updates on synthetic fixture devices; `Device::apply` never called.
 - **Stage T DRAFT shape:** `prep-check` reports `complete: true`, `TEST FITNESS: PENDING` for `m1-bvgk-staget-learning-law-DRAFT-2026-10-19.md`.
-- **Predicate/lineage evidence:** `NOW.md` row 6 queued; `m1-w2-capacity-capture` `status: held`; `project-track.md` W2-DONE sentence; injective B3_init 127/3,847; A8 dose Q1 stop; the host census (Q1–Q5) recorded in the diagnosis lab record.
+- **Predicate/lineage evidence:** `NOW.md` row 6 queued; `m1-w2-capacity-capture` `status: held`; `project-track.md` W2-DONE sentence; injective B3_init 127/3,847; A8 B3_init 1,351 then the registered Q1 stop (551 / 857) in the dose record; the host census (Q1–Q5) in the diagnosis lab record.
 
 ## Checks run at the head
 
