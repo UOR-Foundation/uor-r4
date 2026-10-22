@@ -4,7 +4,7 @@ Lab: deepseek. Item: [m4-lawful-likelihood-bpb](../../../../roadmap/items/m4-law
 
 ## Goal
 
-Answer the counted same-lab fresh-context CHANGES record on PR #2940 at `386ff64d6`: (1) `README.md:61` still cites a "discrete crate can host the scorer" sentence that deepseek-10 removed — delete/rephrase; (2) `deepseek-11/REPORT.md` and the PR body claim the note edit is "14 insertions / 13 deletions (measured)" while the actual `git diff --numstat 1c6c396cc..386ff64d6` for the note is 11/10 — correct it to the measured figure; (3) `deepseek-11/REPORT.md` says "the two remaining choices (held-out stream, calibration, family arms)" while listing three — say three. Design content and the owner-decision record are confirmed good; these are record/wording fixes only.
+Answer the fresh-context CHANGES record on PR #2940 at `386ff64d6`. **Correction (deepseek-13):** advisory, not counted — the `receipts.jsonl` files are class `other`, so the PR is not doc-only to the gate and a same-lab record is refused (D46); an other-vendor APPROVE at the head is required: (1) `README.md:61` still cites a "discrete crate can host the scorer" sentence that deepseek-10 removed — delete/rephrase; (2) `deepseek-11/REPORT.md` and the PR body claim the note edit is "14 insertions / 13 deletions (measured)" while the actual `git diff --numstat 1c6c396cc..386ff64d6` for the note is 11/10 — correct it to the measured figure; (3) `deepseek-11/REPORT.md` says "the two remaining choices (held-out stream, calibration, family arms)" while listing three — say three. Design content and the owner-decision record are confirmed good; these are record/wording fixes only.
 
 ## History
 

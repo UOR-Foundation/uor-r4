@@ -4,7 +4,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Base: `effe1e9c1b3961608092eda425017
 
 ## What did not work, first
 
-Answering the counted same-lab fresh-context CHANGES record at `effe1e9c1` (a record allowed only because this PR is doc-only):
+Answering the fresh-context CHANGES record at `effe1e9c1`. **Correction (deepseek-13):** that record was advisory, not counted — the gate classes the `receipts.jsonl` files as `other`, so this PR is not doc-only to the gate and a same-lab record is refused under D46; an other-vendor APPROVE at the head is required.
 
 - **BLOCKING 1, the note contradicted itself on lawfulness.** It said "this note calls nothing lawful until [Card 1] is answered" and then said "PRLL is lawful but not temperature-calibrated"; the same unqualified claim sat in the "Why it is lawful" heading and property 6. Fixed: the status, the heading ("Why this would be lawful if §3.2 permits a linear ratio"), property 6 and Card 4 are all conditional; nothing here is called lawful while Card 1 is open.
 - **BLOCKING 2, required edit 5 was still incomplete.** The note put the softmax-free learned rank table under "Prior art for no-normalization reads" and called the Flock read "no-normalization", but the integer implementation ships an actual rank-weight normalization: `RAW_RANK_WEIGHTS_Q16`, `RECIPROCAL_Q32` and `rank_table_q31` (`stack/flock.rs:382-470`), documented as `w_r ∝ 1/(r+1)` or a learned per-head table with Q31 rank tables in `uor-r4.lut-stack/3` (`archive/mechanisms/flock-rank-reads-2026-10-20.md`). Fixed: the note now cites that normalization as the existing read-weight precedent and keeps the board's Normalization row as a *model-mechanism* gap that still stands.

@@ -4,7 +4,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Base: `386ff64d6936535b96b45bc9521d5
 
 ## What did not work, first
 
-Answering the counted same-lab fresh-context CHANGES record at `386ff64d6` (doc-only allowance). Three record/wording defects, not design defects:
+Answering the fresh-context CHANGES record at `386ff64d6`. **Correction (deepseek-13):** advisory, not counted — the `receipts.jsonl` files are class `other`, so the PR is not doc-only to the gate and a same-lab record is refused under D46; an other-vendor APPROVE at the head is required. Three record/wording defects, not design defects:
 
 - **`README.md:61` cited a sentence that no longer exists.** It referred to "the sentence in the construction about 'the discrete crate can host the scorer'", which deepseek-10 had removed. Fixed: the crate paragraph now only says the pure function's home is the integer crate and the discrete crate integrates it into `eval-corpus` and its report — no backward reference.
 - **The measured size was wrong.** The deepseek-11 REPORT and the PR body said "14 insertions / 13 deletions (measured)" for the note edit; `git diff --numstat 1c6c396cc..386ff64d6 -- docs/labs/m4-lawful-likelihood-bpb/README.md` is **11/10**. Fixed in the REPORT-11 file: the table row and the Size line both cite the exact command and the true figures. (The prior review had already flagged a size low; repeating it is the defect.)
