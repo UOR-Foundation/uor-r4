@@ -647,12 +647,18 @@ fn the_prepush_hook_exits_2_when_git_lfs_is_missing() {
     let sha = r.git(&["rev-parse", "HEAD"]);
     let line = format!("refs/heads/deepseek/topic {sha} refs/heads/deepseek/topic {sha}\n");
     let script = r.hooks_dir().join("pre-push");
+    // A PATH that has the shell tools the hook uses but no git-lfs, on any runner.
+    let bin = r._tmp.path().canonicalize().unwrap().join("no-lfs-bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    for tool in ["git", "mktemp", "cat"] {
+        std::os::unix::fs::symlink(format!("/usr/bin/{tool}"), bin.join(tool)).unwrap();
+    }
     let mut shell = Command::new("/bin/sh");
     let cmd = clean(&mut shell);
     let mut child = cmd
         .arg(&script)
         .current_dir(&r.root)
-        .env("PATH", "/usr/bin:/bin")
+        .env("PATH", &bin)
         .env("UOR_LAB", "deepseek")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
