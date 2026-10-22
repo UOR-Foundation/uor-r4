@@ -4,7 +4,13 @@ Lab: claude. Base: `77fedb347`. Order: [ORDER.md](ORDER.md), committed first (`7
 
 ## What did not work, first
 
-- **The archive was not listed live.** The read-only scout found no list command in `docs/reference/storage.md`. The file names, counts and sizes in the note therefore come from the 2026-10-20 index (`archive/storage/hf-store-index-2026-10-20.tsv`). The census must confirm them with a live listing before it downloads anything.
+- **The first draft took the archive from the 2026-10-20 index, not a live listing.** The read-only scout found no list command in `docs/reference/storage.md`. I then listed the store through the HF filesystem. It matches: 65 Relation checkpoints (00000…04096) and both gates receipts at 8,192 B.
+- **The fresh self-review of `13963ca3c` returned CHANGES,** with one MEDIUM and three LOWs, all fixed in the next commit:
+  - **MEDIUM: the split between update moves and the read leaked.** Admission takes the K = 8 *occupied* cells nearest `q`, so a cell-changing move of **any** token can change a row's admitted cells. Q4 now compares writes on targets, on their TRAIN predecessors and on the occupied-cell set. It points to the read only if Relation exceeds FrozenZero on none of the three.
+  - **LOW:**
+    - the cell rule now cites the kernel's `token_cell` and its ABSENT branch, not the test inverse alone;
+    - the `token_cells.u16` format (little-endian u16, values 0–255) is stated;
+    - the note says the census does not reuse `coverage_census::run`.
 - **The interval count disagrees.** The attribution correction (6261186285) says "all 66 64-batch intervals (0→4,096)". The index holds 65 Relation checkpoints, which is 64 intervals. The note leaves this unresolved and makes it control 5.
 - **The move logs carry no table values.** `steps.jsonl` is one `StepReceipt` per batch (`training.rs:2530`): coordinate kind and slot index, candidate, losses, `applied`. The census has to take the values before and after from the bracketing checkpoints.
 - **The control eroded too.** FrozenZero lost 37% with 0 relation updates applied. Relation updates therefore cannot be the whole story. The note splits the question into the shared loss and Relation's extra ~300 positions.
@@ -16,7 +22,8 @@ Lab: claude. Base: `77fedb347`. Order: [ORDER.md](ORDER.md), committed first (`7
 |---|---|
 | `7ac949ae8` | This ORDER, alone. |
 | `de16f99a6` | `docs/labs/m1-a8-erosion-diagnosis/DESIGN.md`, also posted on #2829 (6349205403). |
-| this REPORT's commit | This REPORT. |
+| `13963ca3c` | This REPORT, first version. |
+| this commit | The self-review fixes: Q4 over three write sets, the occupied-set route in §2, the cell rule and receipt format, and the live listing. |
 
 The note sets out:
 - the three suspects (update moves, read, instrument), and which are visible on the host;

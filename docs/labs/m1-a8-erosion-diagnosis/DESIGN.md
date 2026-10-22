@@ -25,8 +25,8 @@ The two A8 dose arms start from byte-equal checkpoint-0 models (`docs/labs/a8-do
 
 | Suspect | How it could cut reach | Host-observable? |
 |---|---|---|
-| **Update moves** (accepted `VectorBlock` writes) | A write to block 0 or block B−1 changes the token's address cell. It can move a P_succ target out of the cells its predecessors' reads admit. A write to block 1 or 2 changes only rank data inside the cell. | **Yes.** Cells are rebuilt from each checkpoint's table, and the receipts name each written slot. |
-| **The read** (accepted `Gate` writes: combine, and relation for Relation only) | Gate values change the read output `q`, so a different set of cells is admitted for the same row, with no token moving. | **No.** `q` and admission need device evaluation, which this item excludes. The host can only count and time these writes. |
+| **Update moves** (accepted `VectorBlock` writes) | A write to block 0 or block B−1 changes the token's address cell. It can move a P_succ target out of the cells its predecessors' reads admit. It can also change the **occupied-cell set**: the reader admits the K = 8 *occupied* cells nearest `q` (`docs/mechanisms/address-cells.md:23`). So a move of **any** token, target or not, that empties a cell or fills a new one can change which cells a row admits. A write to block 1 or 2 changes only rank data inside the cell. | **Yes.** Cells are rebuilt from each checkpoint's table, and the receipts name each written slot. |
+| **The read** (accepted `Gate` writes: combine, and relation for Relation only) | Gate values change the read output `q`, so a different set of cells is admitted for the same row even with the table unchanged. | **No.** `q` and admission need device evaluation, which this item excludes. The host can only count and time these writes. |
 | **The instrument** | The Q1 evaluation differs from the checkpoint-0 one; the wrong checkpoint is scored; custody or join errors. | **Partly.** Checkpoint identity, hashes and the receipt-to-checkpoint join are checkable. The Q1 evaluator itself is not re-run. |
 
 ## 3. Questions the host data can answer, with what each supports
@@ -36,7 +36,7 @@ The two A8 dose arms start from byte-equal checkpoint-0 models (`docs/labs/a8-do
 | Q1 | Per arm and per 64-batch checkpoint: the token→cell map, occupied cells, occupancy histogram, max occupancy, and the count of tokens whose cell differs from checkpoint 0 | How much **placement** changed, and when | Any admission or reach value |
 | Q2 | For the target tokens of the 3,847 P_succ rows: how many changed cell by each checkpoint, and the root-metric L1 distance from each target's cell to its TRAIN predecessors' cells (the relation A8 placed on) | Whether the **A8 placement property eroded**, per arm, and how fast | That a target lost admission; admission depends on `q`, not only on cells |
 | Q3 | Per interval and arm: which accepted moves changed a cell (`VectorBlock` with `index % 4` ∈ {0, 3}) and which only ranks (∈ {1, 2}) | The **direct cell-changing write rate** per arm. The correction found 91 such writes over 80 tokens for Relation (6261186285). | That those writes, rather than the gate writes, caused the loss |
-| Q4 | Do the arms differ in direct cell-changing writes on P_succ targets specifically? | If Relation does **not** move more targets than FrozenZero, the extra loss (b) is unlikely to come from placement, which **points to** the read, as a hypothesis | Proof that the read caused it; that needs a device run under its own FIT'd sheet |
+| Q4 | Do the arms differ in cell-changing writes on three sets: (i) the P_succ target tokens, (ii) their TRAIN predecessors, (iii) any token whose move empties a cell or fills a new one (the occupied-cell set)? | If Relation exceeds FrozenZero on **none** of the three, the extra loss (b) is unlikely to come from placement, which **points to** the read, as a hypothesis. If it exceeds on any of them, placement stays a live suspect for (b). | Proof that the read caused it; that needs a device run under its own FIT'd sheet. Writes to blocks 1–2 of context tokens may also act on `q` through the read; the host cannot see that. |
 | Q5 | Gate writes per interval: count and timing against the reach curve, where checkpoints carry B3 | Co-occurrence only, as the dose README already words it (`:68-69`) | Attribution |
 
 **A placement census is not admission.** No result from this work can be called KEEP, a paired DEV verdict or a fresh result, and fresh stays sealed.
@@ -56,7 +56,7 @@ If any control fails, the result is an instrument finding, recorded as such, not
 
 ## 5. Data (read-only, verified copies)
 
-- **Where it lives:** HF store `vast-archive/vast-56670997/uor-r4/runs/claude/`. This is per the 2026-10-20 index (`archive/storage/hf-store-index-2026-10-20.tsv`); a live listing confirms it before download.
+- **Where it lives:** HF store `vast-archive/vast-56670997/uor-r4/runs/claude/`. A live listing on 22 Oct 2026 at about 19:25Z matched the 2026-10-20 index (`archive/storage/hf-store-index-2026-10-20.tsv`). It shows 65 Relation checkpoints, 00000…04096, so 64 intervals, and both gates receipts at 8,192 B.
 - **Relation:**
   - 65 checkpoints, `a8-dose-relation-seed1/checkpoint-{00000..04096}.json`, about 6.97 MB each, 453 MB in all;
   - `steps.jsonl` (4.0 MB);
@@ -75,7 +75,9 @@ If any control fails, the result is an instrument finding, recorded as such, not
 ## 6. The tool
 
 - **What it is:** a Rust host binary in `docs/labs/m1-a8-erosion-diagnosis/census/`, an instrument crate like the one in `docs/labs/m2-fresh-heldout-panel/instrument`. It reads only `.model.table` from each checkpoint JSON (`Snapshot.table`, `vocab × blocks × 8` words, `snapshot.rs:12`). It needs no driver, corpus or GPU.
-- **Cell rule:** it rebuilds each token's cell with the same rule as `address_cells.rs:286-298`: find blocks 0 and B−1 among `geometry::ROOTS`, then `cell = root(block 0)·16 + root(block B−1)`, and ABSENT if either block is not a root.
+- **Cell rule:** it rebuilds each token's cell with the kernel's rule (`token_cell`, `discrete.cu:286-290`): find blocks 0 and B−1 among `geometry::ROOTS`, then `cell = root(block 0)·16 + root(block B−1)`. If either block is not one of the 16 roots, the token is **ABSENT**. A write that takes a block off the 16-root orbit therefore makes the token ABSENT; it never yields a cell off the 256 grid. The host test inverse in `address_cells.rs:286-298` uses the same rule but has no ABSENT branch, so the census adds one.
+- **The GPU receipt for control 3:** `token_cells.u16` is written by `export_token_cells` (`attention_preflight.rs`, over `discrete_export_token_cells`, `discrete.cu:367-372`). It holds one little-endian u16 per token, 4,096 entries (`coverage_census.rs:186-192`). The export refuses a table with an ABSENT token (status 8, `discrete.cu:370`), so its entries are 0–255.
+- **Not reused:** the census does not reuse `coverage_census::run`, which needs `PreparedDriver` and a corpus. It only reads `DriverCheckpoint.model` as JSON (`training.rs:409`), down to `.table`.
 - **P_succ targets and predecessors:** these come from the dose's DEV panel and TRAIN pins, read the same way the A8 builder reads them.
 - **Order of testing:** controls 1–3 first, on checkpoint 0 only; then the join (control 4); then Q1–Q5.
 - **Output:** one JSON per arm and checkpoint, plus a joined summary. The result is one row in `docs/research/notebook/m1-discrete-attention.md`.
