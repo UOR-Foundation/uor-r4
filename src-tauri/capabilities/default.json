@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.tauri.app/config/2/capability",
+  "identifier": "default",
+  "description": "Local-only capability allowlist for the UOR-R4 desktop client. File access is restricted to user-granted directories; shell execution is off by default and requires per-command user confirmation inside a granted directory; network access is disabled except for an explicit user-triggered release pin check.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}

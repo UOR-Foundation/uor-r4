@@ -1,8 +1,8 @@
-# The desktop client (specification)
+# The desktop client
 
-The desktop client is a planned app you install on your laptop. It shows the same interface as the web client, but it runs the model as native code rather than inside a browser, which should make it faster. It can open your project folders, it remembers your conversations between sessions in a durable local store, and it works with no internet connection. The target machine is an M1-class laptop. **This page is a specification, not a description of working software.** No desktop app project exists in the repository yet, and there is no trained model for it to run. The owner asked for a spec only in this round (decision 8, 19 October 2026). Nothing ships until a trained model passes milestones M1 to M8.
+The desktop client is a pre-alpha native shell you install on your laptop. It shows the same interface as the web client, but it runs the model engine as native Rust code rather than inside a browser worker. It opens only user-granted project folders, remembers your conversations between sessions in a durable local object store, and runs 100% offline with zero external CDN requests. The target machine is an M1-class laptop. **No trained model exists for it to run.** The project is pre-alpha: 0 of 8 milestones are complete, and the `src-tauri/` desktop shell is verified only on the 469,252-byte `mk-synthetic-stack` (`seed = 5`) synthetic stand-in artifact ([record](../labs/infra-desktop-client-tauri/README.md)). Nothing ships until a trained model passes milestones M1 to M8.
 
-Labels used below: **proof** (derived from definitions or code), **measurement** (a recorded run with its artifact), **hypothesis** (untested). Words in this spec such as *must* are requirements, not claims about existing code. See the [glossary](../start/glossary.md).
+Labels used below: **proof** (derived from definitions or code), **measurement** (a recorded run with its artifact), **hypothesis** (untested). See the [glossary](../start/glossary.md).
 
 ![A laptop outline split in two. Left half, "webview": the shared Studio interface (editor, chat, model manager). Right half, "Rust core": four boxes — the integer model engine (uor-r4-integer), the memory store (uor-r4-object-store), a scoped file-access layer, and a model manager with an update checker. Arrows between the halves are labelled "Tauri commands". The model file and the memory store sit on a disk icon inside the laptop. A single dashed arrow leaves the laptop, labelled "optional: check for a new model release", and nothing else crosses the border.](../figures/products/desktop-client-architecture.svg)
 
@@ -26,23 +26,23 @@ The app is built with **Tauri**: a small native shell that shows a web page in t
 
 | Component | Built from | Exists today? |
 |---|---|---|
-| **Interface** | The Studio page, [`index.html`](../../web/studio/index.html), shared with the web client | Yes, one 7,107-line file. It detects Tauri (`window.__TAURI__`) and calls `native_read_file`, `native_write_file`, `native_git_status`, `native_run_terminal_command` and `native_list_local_models`, falling back to browser APIs when they are absent |
-| **Tauri project** | `src-tauri/` with `tauri.conf.json` and the Rust commands above | No. Nothing in the repository defines those commands |
-| **Model engine** | [`crates/uor-r4-integer`](../../crates/uor-r4-integer/) linked as a library: the same code as the `uor-chat` command-line program | Yes, as a library and CLI, verified only on test and synthetic models |
-| **Memory store** | [`crates/uor-r4-object-store`](../../crates/uor-r4-object-store/) | Yes, as a tested library; no crate uses it yet |
-| **File-access layer** | New Rust commands limited to folders the user grants | No |
-| **Model manager** | New: lists, verifies and loads `UORLUT01` files; checks for updates | No |
+| **Interface** | The Studio page, [`index.html`](../../web/studio/index.html), shared with the web client, plus self-hosted offline vendor shims ([`uor_offline_vendor.js`](../../web/studio/assets/js/uor_offline_vendor.js) and [`uor_offline_fonts.css`](../../web/studio/assets/css/uor_offline_fonts.css)) | Yes. It detects Tauri (`window.__TAURI__.core`) and calls `native_grant_folder`, `native_read_file`, `native_write_file`, `native_list_directory`, `native_git_status`, `native_run_terminal_command`, `native_list_local_models`, `native_load_model`, `native_step_tokens`, `native_save_session_durable` and `native_restore_session_durable`, falling back to browser APIs when absent |
+| **Tauri project** | [`src-tauri/`](../../src-tauri/) with [`tauri.conf.json`](../../src-tauri/tauri.conf.json), [`capabilities/default.json`](../../src-tauri/capabilities/default.json) and [`src/lib.rs`](../../src-tauri/src/lib.rs) | Yes (`#2826`), excluded from the root Cargo workspace so `cargo test --workspace` stays lightweight while `cargo test --manifest-path src-tauri/Cargo.toml --locked` verifies the native backend ([record](../labs/infra-desktop-client-tauri/README.md)) |
+| **Model engine** | [`crates/uor-r4-integer`](../../crates/uor-r4-integer/) linked as a library: the same `LoadedLutStack` / `LutStackSession` engine as `uor-chat` and `serving-wasm` | Yes, linked directly into `src-tauri` and verified on the `seed = 5` synthetic stand-in (`32`-token trajectory matches `docs/wasm-serving/verify.mjs` token-for-token) |
+| **Memory store** | [`crates/uor-r4-object-store`](../../crates/uor-r4-object-store/) (`UORMEM01` + `UR4SESS1` envelope) | Yes, linked into `src-tauri`: `native_save_session_durable` and `native_restore_session_durable` fold and verify `UORMEM01` envelopes + `UR4SESS1` session snapshots in `uor-r4-object-store::Store` |
+| **File-access layer** | `GrantedFolders` allowlist in [`src-tauri/src/lib.rs`](../../src-tauri/src/lib.rs) | Yes: `native_read_file`, `native_write_file`, `native_list_directory` and `native_git_status` canonicalize paths and refuse any target outside user-granted roots |
+| **Model manager** | `native_list_local_models` and `native_load_model` in [`src-tauri/src/lib.rs`](../../src-tauri/src/lib.rs) | Yes: accepts only `UORLUT01` (`b"UORLUT01"` magic) and checks SHA-256 against the pinned digest before passing bytes to `format.rs` |
 
-Sources: reading `web/studio/index.html` and the repository tree, and the [object-store dossier](../mechanisms/object-store.md).
+Sources: [`src-tauri/src/lib.rs`](../../src-tauri/src/lib.rs), [`web/studio/index.html`](../../web/studio/index.html), the [desktop client record](../labs/infra-desktop-client-tauri/README.md), and the [object-store dossier](../mechanisms/object-store.md).
 
 ## Data flow
 
 1. **Install.** The installer carries the app and, optionally, the model file. If the model is not bundled, the first run downloads it once ([update and download](#update-and-model-download)).
-2. **Load.** The model manager reads the file, checks its SHA-256 against the release pin, and passes the bytes to the engine. The `UORLUT01` reader checks every offset and length and returns an error rather than crashing on a malformed file ([`format.rs`](../../crates/uor-r4-integer/src/stack/format.rs); **proof** by reading the code).
-3. **Chat.** The interface sends the user's text to a Rust command. The engine steps token by token with integer adds, shifts and table look-ups and streams tokens back to the page.
-4. **Remember.** At the end of a turn, the app saves the session state as a `UR4SESS1` snapshot and stores conversation bytes in the object store. The store cuts bytes into 32-byte pieces arranged in a hashed three-way tree, so repeated content is stored once and any byte range can be read back and checked ([object-store dossier](../mechanisms/object-store.md)). Storing session snapshots in the store is a design note, not yet done.
-5. **Resume.** On reopening, the app restores the snapshot, and the conversation continues token for token. That is the M3 restore bar ([project track](../integration/project-track.md), M3).
-6. **Work on files.** When the user asks about code, the app reads files only from granted folders and passes their text to the model as context.
+2. **Load.** The model manager reads the file, checks its SHA-256 against the release pin before parsing, and passes the verified bytes to `LoadedLutStack::from_bytes`. The `UORLUT01` reader checks every offset and length and returns an error rather than crashing on a malformed file ([`format.rs`](../../crates/uor-r4-integer/src/stack/format.rs); **proof** by reading the code).
+3. **Chat.** The interface sends the user's prompt tokens to `native_step_tokens`. The engine steps token by token with integer adds, shifts and table look-ups (`LutStackSession::step_token`) and streams tokens back to the page.
+4. **Remember.** At the end of a turn, `native_save_session_durable` snapshots the session state as `UR4SESS1` (`9,782 B` after 32 steps on the synthetic stand-in), wraps the conversation history and snapshot in a `UORMEM01` envelope (`encode_memory_envelope` + `fold_memory_envelope`), and stores the content-addressed records (`446` records on the 32-token self-test, `object_version = bc98ac3d0a8f363ea6e7bcb10dea9acf59bd1a43859d9e6dd4417f0e1d5364ca`) in `uor-r4-object-store::Store` ([record](../labs/infra-desktop-client-tauri/README.md)).
+5. **Resume.** On reopening, `native_restore_session_durable` reconstructs and verifies the `UORMEM01` envelope from the local store (`verify_memory_envelope`), loads the embedded `UR4SESS1` snapshot back into `LutStackSession::from_session_bytes`, and continues generation token-for-token (`16 + 16 == 32` verified in `durable_memory_object_store_close_and_resume_continues_token_for_token`). That is the M3 restore contract on the synthetic stand-in; M3 itself remains `0/8` until a trained model passes the full M3 acceptance panel ([project track](../integration/project-track.md), M3).
+6. **Work on files.** When the user opens a workspace folder, `native_grant_folder` canonicalizes and registers it in `GrantedFolders`; `native_read_file`, `native_write_file`, `native_list_directory` and `native_git_status` refuse any path outside granted roots.
 
 ## Why native, and how fast
 
@@ -57,20 +57,21 @@ D19 makes grounded conversation and durable memory the first priority ([D19](../
 - 60 tests pass, and a pure-Python client pulled a 256 KiB object byte-identically from the Rust server ([conformance record](../labs/uorobj01-conformance-2026-10-18/README.md)).
 - A 23-byte read of a 32,768-byte object touched 8 authenticated nodes, 384 bytes ([object-store dossier](../mechanisms/object-store.md)).
 - Repeated content compresses well (7,776 bytes stored in 380), but unique content expands about 2.17 times (32,768 bytes become 70,972) ([D19 store record](../../archive/labs/d19-object-store-2026-10-15/README.md)).
+- `src-tauri` folds and restores `UORMEM01` + `UR4SESS1` session state through `uor-r4-object-store::Store` (`446` records for a 32-token synthetic session, `9,782 B` `UR4SESS1` snapshot), and resumes generation token-for-token across process close/reopen ([desktop client record](../labs/infra-desktop-client-tauri/README.md)).
 
-Never tested: any model reading from the store, the M3 memory bars on a real model, and storage cost on real chat logs ([object-store dossier](../mechanisms/object-store.md)). The store keeps exact identity (what was said, where, in which version) separate from any geometric address, as the charter requires (section 3.12).
+Never tested: any trained model reading from the store, the M3 memory bars on a trained model, and storage cost on real chat logs ([object-store dossier](../mechanisms/object-store.md)). The store keeps exact identity (what was said, where, in which version) separate from any geometric address, as the charter requires (section 3.12).
 
 ## Security model: local only
 
-| Risk | Requirement |
+| Risk | Requirement and implementation (`#2826`) |
 |---|---|
-| Data leaving the device | No network access except the optional, user-visible update check. No telemetry. No remote model calls (as in M7). The shared Studio page currently loads CDN assets and sends web-search queries to Wikipedia and DuckDuckGo ([web client](./web-client.md)), so the desktop build must self-host every asset and drop or gate web search, or the "only an update check" claim is false |
-| Broad file access | The Studio already calls `native_write_file`, so write access exists as well as read access. The backend may read and write only folders the user has explicitly granted, using Tauri's capability allowlist. No access outside them |
-| Running shell commands | The Studio already calls `native_run_terminal_command`. This is the riskiest command. It must be off by default, show each command to the user before it runs, and be limited to a granted folder |
-| A tampered model file | Load only files whose SHA-256 matches a pinned release hash. The reader already rejects malformed structure |
-| A malformed saved session | The `UR4SESS1` parser checks varint counts before allocating and returns an error on truncated input ([record](../labs/wasm-serving-runtime-2026-10-18/README.md)) |
+| Data leaving the device | No network access except an optional, user-visible update check. No telemetry. No remote model calls (as in M7). [`web/studio/index.html`](../../web/studio/index.html) self-hosts all vendor functionality in [`uor_offline_vendor.js`](../../web/studio/assets/js/uor_offline_vendor.js) and [`uor_offline_fonts.css`](../../web/studio/assets/css/uor_offline_fonts.css) (`0` external `http(s)://` URLs), and [`tauri.conf.json`](../../src-tauri/tauri.conf.json) sets `connect-src 'self' ipc: http://ipc.localhost` |
+| Broad file access | `native_read_file`, `native_write_file`, `native_list_directory` and `native_git_status` check canonical paths against `GrantedFolders` in [`src-tauri/src/lib.rs`](../../src-tauri/src/lib.rs). Paths outside user-granted roots (including `..` traversal) are refused |
+| Running shell commands | `native_run_terminal_command` is disabled by default (`terminal_enabled = false`), requires explicit per-command user confirmation (`user_confirmed: true` with `confirmed_command == command`), and executes via `sh -c` only inside a user-granted folder |
+| A tampered model file | `native_load_model` verifies `b"UORLUT01"` magic and checks SHA-256 against the pinned digest before calling `LoadedLutStack::from_bytes` |
+| A malformed saved session | The `UR4SESS1` parser checks varint counts before allocating and returns an error on truncated input ([record](../labs/wasm-serving-runtime-2026-10-18/README.md)), and `verify_memory_envelope` authenticates the `UORMEM01` store tree before restore |
 | Memory-store sync between machines | Pins prove integrity, not authentication. Peer sync stays off unless the user sets it up, and is out of scope for the first release ([object-store dossier](../mechanisms/object-store.md)) |
-| Unsafe code | Keep `forbid(unsafe_code)` in the runtime and format crates ([charter](../../CHARTER.md), section 3.13) |
+| Unsafe code | `#![forbid(unsafe_code)]` is enforced in [`src-tauri/src/lib.rs`](../../src-tauri/src/lib.rs) as well as the runtime and format crates ([charter](../../CHARTER.md), section 3.13) |
 
 ## Update and model download
 
