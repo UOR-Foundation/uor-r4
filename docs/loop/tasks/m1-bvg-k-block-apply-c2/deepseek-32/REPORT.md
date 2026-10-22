@@ -27,7 +27,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Base: `20f618132`. Item PR, docs-onl
 ## Checks run at the head
 
 - `uor-harness loop report --check`, `loop pr-check --local`, `loop gates --full`, `--break all`: run before the review request.
-- A fresh-context same-lab review record at the head (doc-only D46 exception, like #2998).
+- A fresh-context same-lab review record is **to be posted at this head** (doc-only D46 exception, like #2998); the earlier reviewer's CHANGES at `84044e8` means the ORDER's review-record clause is met only by the repair's later APPROVE.
 
 ## Skills used
 
