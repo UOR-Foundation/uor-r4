@@ -124,6 +124,33 @@
       }
     },
     {
+      "id": "loop-next-sources",
+      "proves": "`loop next` offers the top of the lab lane from the registry lane plus item `lane:`/`rank:` keys, offers the first open premise probe from PLAN.md's `## Premises` table, and names what is missing when either input is absent; the planted fault removes the lane filter.",
+      "command": [
+        "cargo",
+        "test",
+        "-q",
+        "--locked",
+        "-p",
+        "uor-r4-harness",
+        "--test",
+        "loop_next_sources"
+      ],
+      "reads": [
+        "crates/uor-r4-harness/**/*.rs",
+        "docs/harness/gates.json"
+      ],
+      "quick": false,
+      "break": {
+        "file": "crates/uor-r4-harness/src/loopnext.rs",
+        "replace": {
+          "from": "                        if item.lane.as_deref() == Some(lane.as_str()) {",
+          "to": "                        if lane.is_empty() {"
+        },
+        "expect": "the top of the lab lane must be offered before any"
+      }
+    },
+    {
       "id": "loop-next-wait",
       "proves": "loop next stops only on the kill switch: a lab with no work, including one at its open_pr_limit whose own PRs await review, gets WAIT naming what is pending, a re-check time and exit 3, so no lab is parked without a time to look again; the planted fault turns that WAIT back into STOP.",
       "command": [

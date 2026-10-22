@@ -42,7 +42,7 @@ Each part of the kit, what it is for, and what takes its place here. "Private sk
 Each lab runs in a loop. A small supervisor program starts a fresh session. The session does one unit of work, then ends. The supervisor then starts the next session.
 A unit of work is one of: a build, a repair, a review, or collecting a GPU run.
 Every unit has a written order (ORDER). The order names the item, the files the lab may touch, when the work is done, a cancel probe, and when to stop.
-A change enters `main` only when its gates pass and a lab from a different vendor has reviewed the exact head. During the setup, until the other labs run the loop, Claude's fresh-context reviewers review the setup PRs instead (D59).
+A change enters `main` only when its gates pass and a lab from a different vendor has reviewed the exact head. Setup PRs included: the owner ended D59, which had routed them to Claude's reviewers alone, on 22 Oct 2026.
 Shared status pages are rendered by the harness from committed inputs. Nobody edits them by hand, so they cannot quietly drift. Drifting records cost this project more than any other failure.
 
 ## The steps for one lab
@@ -67,7 +67,9 @@ Steps that need no judgement run in the supervisor, without a model.
 | 14 | Render | Refresh the render PR. | `loop render --pr` (to build) | Kimi; a cover lab after 2 hours red |
 | 15 | Restart | Start the next fresh session, after `loop next` says go: one fresh headless session per unit, its pid/group recorded, the soft 2-hour check-in and a watcher for a leased GPU run. | `loop drive` (built, loop PR 10) | supervisor |
 
-`loop drive` now runs this cycle for one or more sessions on the laptop, and it calls `loop next` for every stop including the kill switch. Until it is wired into every client's headless launcher, a lab does steps 1–15 itself and the delivery path in CHARTER §5.5 applies as written.
+`loop drive` now runs this cycle for one or more sessions on the laptop, and it calls `loop next` for every stop including the kill switch.
+
+`loop next`'s sources beyond the kill switch, repairs and reviews: `premise-probes` read PLAN's premise table (the first `open` row of a `## Premises` table whose probe cell holds a command in backticks) and `lane` reads the lab's owner-set lane plus the PM's item `lane:`/`rank:` ranking; both name what is missing when the data is absent. GPU collections still need a collection record the watcher does not write yet, which is a separate unit. Until it is wired into every client's headless launcher, a lab does steps 1–15 itself and the delivery path in CHARTER §5.5 applies as written.
 
 ## The notes
 
@@ -216,7 +218,7 @@ All Rust. Small PRs, through today's delivery path. From PR A on, every PR carri
 
 **Teams.** Claude leads the architecture, with Kimi as PM reviewing. Codex and DeepSeek build PRs 2–7 and 10–12. Antigravity builds PR 9. Every review comes from a different vendor than the author. While Claude runs alone, Claude builds every setup PR, and each other client's adapter is added when that lab joins (D52, amended 21 Oct).
 
-**Review of the setup itself (D59).** Until the other labs are running the loop, every setup PR in this plan, whichever lab built it, gets its exact-head review from Claude's fresh-context reviewers, and no other lab is asked to review it (charter §5.5; owner, 21 Oct, amended the same day). The cross-vendor reviews above, Kimi's included, start once the other labs run the loop.
+**Review of the setup itself (D59, ended 22 Oct 2026).** From 21 Oct every setup PR, whichever lab built it, got its exact-head review from Claude's fresh-context reviewers alone (charter §5.5; owner, 21 Oct, amended the same day). With no timeout, one blocked reviewer stalled every setup PR, so the owner ended it on 22 Oct ("End D59 now"). Setup PRs now take any other-vendor fresh-context review, like every PR. The switch is `docs/harness/d59.json`, listed in `docs/harness/owner-paths.json`, and `loop review` reads both at the merge base.
 
 **PR 0, probes.** Scratch tests; results go to PLAN's premise table.
 
