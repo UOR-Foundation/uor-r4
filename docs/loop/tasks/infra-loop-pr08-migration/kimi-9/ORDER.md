@@ -5,7 +5,7 @@ Setup row: 8. Base: `fb6df367b`.
 
 ## Owner approval
 
-**"ok well I approve of #1"** — Casey in the kimi chat, 2026-10-22 ~16:47Z, assigning PR 8 to kimi (#1 on my pending list was "PR 8 (#2913) yes/no") and thereby approving this PR's changes to the owner paths `AGENTS.md` and `docs/integration/DECISIONS.md` (owner-paths.json). The item's D52 (claude builds) and D59 (claude-only review) notes are superseded: by the owner's assignment, and by D59's end (13:56Z) — review is by another vendor.
+**"ok well I approve of #1"** — Casey in the kimi chat, received 2026-10-22T16:49Z, assigning PR 8 to kimi (#1 on my pending list was "PR 8 (#2913) yes/no") and thereby approving this PR's changes to the owner paths `AGENTS.md` and `docs/integration/DECISIONS.md` (owner-paths.json). The item's D52 (claude builds) and D59 (claude-only review) notes are superseded: by the owner's assignment, and by D59's end (13:56Z) — review is by another vendor.
 
 ## Goal
 
