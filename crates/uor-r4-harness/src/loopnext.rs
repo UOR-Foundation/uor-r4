@@ -1,4 +1,4 @@
-//! `uor-harness loop next [--json]`: loop step 1, decide go or stop (loop PR 7b).
+//! `uor-harness loop next [--json] [--wait [--poll SECS] [--max SECS]]`: loop step 1, decide go, wait or stop (loop PR 7b).
 //!
 //! **Why this exists.** The loop page's step 1 decides go or stop and which kind of session, in a
 //! fixed order of preference: owner direction, repairs to the lab's own PRs, reviews, GPU
@@ -21,7 +21,7 @@ use serde::Deserialize;
 use crate::loopclaim::PrFile;
 use crate::loopprcheck::{Comment, PrGh as _};
 
-const USAGE: &str = "usage: uor-harness loop next [--json]";
+const USAGE: &str = "usage: uor-harness loop next [--json] [--wait [--poll SECS] [--max SECS]]";
 
 /// TEST-ONLY: a JSON file standing in for `gh`: `{"prs": [{number, headRefName, headRefOid,
 /// isDraft, mergeable, files: [{path}], checks: [{name, conclusion}]}], "comments": {"<n>":
@@ -666,19 +666,98 @@ pub fn run(
 
 pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
     let mut json = false;
-    for a in args {
+    let mut wait = false;
+    let mut poll = RECHECK_SECS;
+    let mut max = None;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
         match a.as_str() {
             "--json" => json = true,
+            "--wait" => wait = true,
+            "--poll" | "--max" => {
+                let Some(secs) = it.next().and_then(|v| v.parse::<u64>().ok()) else {
+                    eprintln!(
+                        "uor-harness: loop next: {a} needs a whole number of seconds\n{USAGE}"
+                    );
+                    return 2;
+                };
+                if a == "--poll" {
+                    poll = secs;
+                } else {
+                    max = Some(secs);
+                }
+            }
             _ => {
                 eprintln!("uor-harness: loop next: unexpected argument {a:?}\n{USAGE}");
                 return 2;
             }
         }
     }
+    if !wait && (poll != RECHECK_SECS || max.is_some()) {
+        eprintln!("uor-harness: loop next: --poll and --max need --wait\n{USAGE}");
+        return 2;
+    }
     if lab.trim().is_empty() {
         eprintln!("uor-harness: loop next: set UOR_LAB or pass --lab\n{USAGE}");
         return 2;
     }
+    if !wait {
+        return once(root, lab, json);
+    }
+    let start = std::time::Instant::now();
+    wait_loop(
+        poll,
+        max,
+        || once(root, lab, json),
+        |secs| std::thread::sleep(std::time::Duration::from_secs(secs)),
+        || start.elapsed().as_secs(),
+    )
+}
+
+/// Read failures in a row that end `loop next --wait` with exit 2.
+pub const WAIT_MAX_ERRORS: u32 = 3;
+
+/// `loop next --wait`: ask until GO (0) or STOP (1). On WAIT (3) sleep `poll` seconds and ask
+/// again, until `max` seconds have elapsed (exit 3; the last ask printed its WAIT line). A read
+/// failure (2) is retried at the next poll; `WAIT_MAX_ERRORS` in a row end with exit 2. `ask`,
+/// `sleep` and `elapsed` are injected so tests never sleep.
+pub fn wait_loop(
+    poll: u64,
+    max: Option<u64>,
+    mut ask: impl FnMut() -> u8,
+    mut sleep: impl FnMut(u64),
+    mut elapsed: impl FnMut() -> u64,
+) -> u8 {
+    let mut errors = 0;
+    loop {
+        let code = ask();
+        match code {
+            0 | 1 => return code,
+            2 => {
+                errors += 1;
+                if errors >= WAIT_MAX_ERRORS {
+                    return 2;
+                }
+                eprintln!("uor-harness: loop next --wait: read failed ({errors} in a row); retrying in {poll}s");
+            }
+            _ => errors = 0,
+        }
+        let nap = match max {
+            None => poll,
+            Some(m) => {
+                let spent = elapsed();
+                if spent >= m {
+                    // A run that ends on a read failure says so; otherwise it ends on WAIT.
+                    return if code == 2 { 2 } else { 3 };
+                }
+                poll.min(m - spent)
+            }
+        };
+        sleep(nap);
+    }
+}
+
+fn once(root: &Path, lab: &str, json: bool) -> u8 {
     let gh: Box<dyn NextGh> = match std::env::var_os(NEXT_GH_FAKE_ENV) {
         Some(p) => match FakeNextGh::from_file(Path::new(&p)) {
             Ok(f) => Box::new(f),
@@ -770,6 +849,52 @@ fn path_absent(e: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    /// Drives `wait_loop` with scripted exit codes, a fake clock that advances only by the naps it
+    /// is asked for, and no real sleeping. Returns the exit code, the asks made and the naps taken.
+    fn wait_run(poll: u64, max: Option<u64>, codes: &[u8]) -> (u8, usize, Vec<u64>) {
+        let clock = std::cell::Cell::new(0u64);
+        let naps = std::cell::RefCell::new(Vec::new());
+        let mut asks = 0;
+        let code = super::wait_loop(
+            poll,
+            max,
+            || {
+                asks += 1;
+                codes.get(asks - 1).copied().unwrap_or(3)
+            },
+            |s| {
+                naps.borrow_mut().push(s);
+                clock.set(clock.get() + s);
+            },
+            || clock.get(),
+        );
+        (code, asks, naps.into_inner())
+    }
+
+    #[test]
+    fn wait_ends_on_go_once_work_appears() {
+        assert_eq!(wait_run(600, None, &[3, 3, 0]), (0, 3, vec![600, 600]));
+        assert_eq!(wait_run(600, None, &[3, 1]), (1, 2, vec![600]));
+    }
+
+    #[test]
+    fn wait_gives_exit_3_when_max_elapses() {
+        // 600 + 600 + 300 = 1500: the last nap is cut to what remains, then one last ask.
+        assert_eq!(wait_run(600, Some(1500), &[]), (3, 4, vec![600, 600, 300]));
+        assert_eq!(wait_run(600, Some(0), &[]), (3, 1, vec![]));
+    }
+
+    #[test]
+    fn wait_gives_exit_2_after_three_read_failures_in_a_row() {
+        assert_eq!(wait_run(10, None, &[2, 2, 2]), (2, 3, vec![10, 10]));
+        assert_eq!(wait_run(10, None, &[2, 3, 2, 2, 2]), (2, 5, vec![10; 4]));
+    }
+
+    #[test]
+    fn wait_retries_a_single_read_failure_then_takes_go() {
+        assert_eq!(wait_run(10, None, &[2, 0]), (0, 2, vec![10]));
+    }
+
     #[test]
     fn only_gh_s_own_message_can_say_a_path_is_absent() {
         let call = "gh api repos/{owner}/{repo}/contents/docs/loop/tasks/x/claude-404/ORDER.md?ref=refs%2Fpull%2F4040%2Fhead";
