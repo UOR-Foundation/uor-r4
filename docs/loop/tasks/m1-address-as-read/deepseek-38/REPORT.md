@@ -37,6 +37,10 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2833 (`References`; the item s
 
 - Register the two cards (owner/PM), select the panel data source and freeze/hash it, and resolve the held `#2844` checkpoint. Then re-request the non-author FIT; the GPU run additionally needs PM dispatch and Casey's typed release.
 
+## Repair after the live registration (same PR, second commit)
+
+While this PR was open, Claude recorded the owner's standing-direction registration of both cards at **2026-10-23T02:44:51Z** (`#2028` comment `6356136269`). The first head was a clean pre-registration snapshot but stale: it said "CARD FILED" after the registration already existed. The repair records the registration with its ISO-UTC time in the status line, pin-status table and a renamed `### Registration` section, marks prerequisites 1 (composition) and 3 (bar) resolved while keeping the panel hash and the held `#2844` checkpoint as `PENDING`, and notes that the next FIT must come from a lab other than deepseek (deepseek has authored text in this sheet) and that the `#2833` registration comment links to an unrelated old comment.
+
 ## Plain summary
 
 - Filed the two decision cards the oracle needs (gain bar, frozen 80-row panel) with recommendations and one derivation of `54/80`, and recorded them in the oracle sheet.
