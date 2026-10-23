@@ -1001,6 +1001,7 @@ pub fn default_at(root: &Path, branch: &str) -> Result<String, String> {
     if branch != "kimi/render" {
         return Ok("HEAD".to_string());
     }
+    git(root, &["fetch", "-q", "origin", "main"])?;
     let out = git(root, &["merge-base", "origin/main", "HEAD"])?;
     let sha = String::from_utf8_lossy(&out).trim().to_string();
     if sha.is_empty() {

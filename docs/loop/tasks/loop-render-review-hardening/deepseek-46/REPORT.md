@@ -16,7 +16,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item `loop-render-review-hardening`.
 | `crates/uor-r4-harness/src/loopreview.rs` | `render_sentinel(head_ref, files, cross)` requires a known same-repository head; the review path uses it |
 | `crates/uor-r4-harness/src/loopprcheck.rs` | `Pr.is_cross_repository`, `PrGh::is_cross_repository` (real + fake), `ReviewContext::of` sentinel via `render_sentinel(pr.is_cross_repository)`, pr-check `--pr` fills the flag |
 | `crates/uor-r4-harness/src/loopqueue.rs` | `QueuePr.is_cross_repository` read from `gh pr view --json ...isCrossRepository` and set on the `Pr` |
-| `crates/uor-r4-harness/tests/loop_review.rs` | offline temp-git test for the merge-base default; sentinel tests (fork, unknown, wrong branch, non-view path); the render-gate fixture with all six refusal/accept cases |
+| `crates/uor-r4-harness/tests/loop_review.rs` | offline temp-git test for the merge-base default; sentinel tests; the end-to-end render-gate fixture (six cases through the real CLI); the queue-mirror cross-repository pin via the built binary |
 | `docs/roadmap/items/loop-render-review-hardening.md` | the deepseek-42 REPORT nit is **recorded** for the report owner (that file is outside any claimable item scope, so a lab PR cannot edit it) |
 
 The item's five follow-ups are all closed: the fixture is in, the queue-mirror fork check and the render-at-merge-base default are implemented, the roadmap README is **exempt with a recorded reason** (xtask renders the working tree; the views-only set keeps it out of the no-ORDER path; the docs job gates it advisably), and the deepseek-42 REPORT nit is **recorded for the report owner** rather than edited here, because that file sits outside every claimable item's scope. The loop-page wording is owner-only and carded on #2028.
@@ -27,7 +27,7 @@ The item's five follow-ups are all closed: the fixture is in, the queue-mirror f
 
 ## Measurements
 
-- `cargo test -p uor-r4-harness --test loop_review`: **35 passed** (32 existing + merge-base default + sentinel + fixture). Full `cargo test -p uor-r4-harness`, clippy `-D warnings`, fmt, `roadmap check`, `report`, `pr-check` and `gates --full` results are recorded after they run.
+- `cargo test -p uor-r4-harness --test loop_review`: **36 passed**. Full `cargo test -p uor-r4-harness`, clippy `-D warnings`, fmt, `roadmap check`, `report`, `pr-check` and `gates --full` results are recorded after they run. `looprender::default_at` now fetches `origin/main`, prints the chosen merge-base stamp on `kimi/render`, and returns a hard error instead of falling back to HEAD when the merge base cannot be read.
 - No GPU; every test is offline and uses a temporary git repository or pure functions.
 
 ## Checks run at the head
