@@ -19,8 +19,9 @@
 //! 3. **Interventional serving-time forced-copy oracle ([`CopySpanOracle`]):**
 //!    - `Off`: bit-for-bit identity with the unforced lawful pointer and base scorer.
 //!    - `O1SpanLearnedGate`: forces source selection onto a supplied window span
-//!      `[start, end)` while keeping `learned_gate_margin` against `gate_threshold_margin`
-//!      (isolating source addressing from gating).
+//!      `[start, end)` with its canonical route score while keeping `learned_gate_margin`
+//!      and the `total_copy_margin > base_top_margin` comparison (isolating source
+//!      addressing alone).
 //!    - `O2SpanForcedGate`: forces both the supplied window span `[start, end)` and
 //!      an above-threshold gate margin (isolating gating from multi-token span emission).
 
@@ -240,8 +241,9 @@ pub enum CopySpanOracle {
     /// Normal (`N`): no span override; runs the head's own admission and gate margins.
     #[default]
     Off,
-    /// Condition `O1`: overrides source admission to `[start, end)` while keeping
-    /// the head's `learned_gate_margin` against `gate_threshold_margin`.
+    /// Condition `O1`: overrides source admission to `[start, end)` with its canonical
+    /// route score while keeping `learned_gate_margin` and the `total_copy_margin > base_top_margin`
+    /// comparison. Isolates source addressing alone.
     O1SpanLearnedGate { start: usize, end: usize },
     /// Condition `O2`: overrides source admission to `[start, end)` and forces the
     /// copy gate margin to `forced_gate_margin` (above threshold).
@@ -397,6 +399,36 @@ impl LawfulPointerHead {
         }
     }
 
+    /// Canonical integer route score for an oracle-forced span `[start, end)`.
+    ///
+    /// Uses the query's full admitted route weight under `self.admission_mode` plus
+    /// the candidate's `learned_rank_bonus` when `[start, end)` appears in `candidates`
+    /// (or `0` when absent), so `O1` and `N` share the exact same margin law when the
+    /// same span is selected.
+    fn oracle_route_score(
+        &self,
+        start: usize,
+        end: usize,
+        query_slot: Option<SlotAddressKey>,
+        query_product: u128,
+        candidates: &[SourceSpanCandidate],
+    ) -> i64 {
+        let rank_bonus = candidates
+            .iter()
+            .rev()
+            .find(|c| c.span == (start, end))
+            .map(|c| c.learned_rank_bonus)
+            .unwrap_or(0);
+        let weight = match self.admission_mode {
+            RouteAdmissionMode::SlotAddressSemiprime => query_slot
+                .map(|slot| ilog2_gcd_weight_q8(slot.semiprime()))
+                .unwrap_or_else(|| ilog2_gcd_weight_q8(query_product)),
+            RouteAdmissionMode::SharedAtomGcd => ilog2_gcd_weight_q8(query_product),
+            RouteAdmissionMode::OrderedNlet { width } => (width as i64) << 8,
+        };
+        weight.saturating_add(rank_bonus)
+    }
+
     /// Select the next token at `step_offset` within an admitted or oracle-forced value span.
     #[allow(clippy::too_many_arguments)]
     pub fn select_step(
@@ -436,7 +468,7 @@ impl LawfulPointerHead {
             }
         }
 
-        match self.oracle {
+        let (selected, effective_gate_margin) = match self.oracle {
             CopySpanOracle::Off => {
                 // Evaluate admitted candidates; highest route_score wins, breaking ties
                 // by latest span start (`span.0`).
@@ -457,129 +489,89 @@ impl LawfulPointerHead {
                         }
                     }
                 }
-
-                let Some((span, route_score)) = best else {
-                    return Ok(PointerDecision {
-                        emitted_token: base_top_token,
-                        base_top_token,
-                        base_top_margin,
-                        copied: false,
-                        selected_span: None,
-                        candidate_copy_token: None,
-                        route_score: None,
-                        effective_gate_margin: learned_gate_margin,
-                    });
-                };
-
-                let span_len = span.1 - span.0;
-                if step_offset >= span_len {
-                    return Ok(PointerDecision {
-                        emitted_token: base_top_token,
-                        base_top_token,
-                        base_top_margin,
-                        copied: false,
-                        selected_span: Some(span),
-                        candidate_copy_token: None,
-                        route_score: Some(route_score),
-                        effective_gate_margin: learned_gate_margin,
-                    });
-                }
-
-                let copy_token = window_tokens[span.0 + step_offset];
-                let total_copy_margin = route_score.saturating_add(learned_gate_margin);
-                let gate_open = learned_gate_margin >= self.gate_threshold_margin
-                    && total_copy_margin > base_top_margin;
-
-                Ok(PointerDecision {
-                    emitted_token: if gate_open {
-                        copy_token
-                    } else {
-                        base_top_token
-                    },
-                    base_top_token,
-                    base_top_margin,
-                    copied: gate_open,
-                    selected_span: Some(span),
-                    candidate_copy_token: Some(copy_token),
-                    route_score: Some(route_score),
-                    effective_gate_margin: learned_gate_margin,
-                })
+                (best, learned_gate_margin)
             }
             CopySpanOracle::O1SpanLearnedGate { start, end } => {
-                let span_len = end - start;
-                if step_offset >= span_len {
-                    return Ok(PointerDecision {
-                        emitted_token: base_top_token,
-                        base_top_token,
-                        base_top_margin,
-                        copied: false,
-                        selected_span: Some((start, end)),
-                        candidate_copy_token: None,
-                        route_score: None,
-                        effective_gate_margin: learned_gate_margin,
-                    });
-                }
-                let copy_token = window_tokens[start + step_offset];
-                let gate_open = learned_gate_margin >= self.gate_threshold_margin;
-                Ok(PointerDecision {
-                    emitted_token: if gate_open {
-                        copy_token
-                    } else {
-                        base_top_token
-                    },
-                    base_top_token,
-                    base_top_margin,
-                    copied: gate_open,
-                    selected_span: Some((start, end)),
-                    candidate_copy_token: Some(copy_token),
-                    route_score: None,
-                    effective_gate_margin: learned_gate_margin,
-                })
+                let score =
+                    self.oracle_route_score(start, end, query_slot, query_product, candidates);
+                (Some(((start, end), score)), learned_gate_margin)
             }
             CopySpanOracle::O2SpanForcedGate {
                 start,
                 end,
                 forced_gate_margin,
             } => {
-                let span_len = end - start;
-                if step_offset >= span_len {
-                    return Ok(PointerDecision {
-                        emitted_token: base_top_token,
-                        base_top_token,
-                        base_top_margin,
-                        copied: false,
-                        selected_span: Some((start, end)),
-                        candidate_copy_token: None,
-                        route_score: None,
-                        effective_gate_margin: forced_gate_margin,
-                    });
-                }
-                let copy_token = window_tokens[start + step_offset];
-                let gate_open = forced_gate_margin >= self.gate_threshold_margin;
-                Ok(PointerDecision {
-                    emitted_token: if gate_open {
-                        copy_token
-                    } else {
-                        base_top_token
-                    },
-                    base_top_token,
-                    base_top_margin,
-                    copied: gate_open,
-                    selected_span: Some((start, end)),
-                    candidate_copy_token: Some(copy_token),
-                    route_score: None,
-                    effective_gate_margin: forced_gate_margin,
-                })
+                let score =
+                    self.oracle_route_score(start, end, query_slot, query_product, candidates);
+                (Some(((start, end), score)), forced_gate_margin)
             }
+        };
+
+        let Some((span, route_score)) = selected else {
+            return Ok(PointerDecision {
+                emitted_token: base_top_token,
+                base_top_token,
+                base_top_margin,
+                copied: false,
+                selected_span: None,
+                candidate_copy_token: None,
+                route_score: None,
+                effective_gate_margin,
+            });
+        };
+
+        let span_len = span.1 - span.0;
+        if step_offset >= span_len {
+            return Ok(PointerDecision {
+                emitted_token: base_top_token,
+                base_top_token,
+                base_top_margin,
+                copied: false,
+                selected_span: Some(span),
+                candidate_copy_token: None,
+                route_score: Some(route_score),
+                effective_gate_margin,
+            });
         }
+
+        let copy_token = window_tokens[span.0 + step_offset];
+        let total_copy_margin = route_score.saturating_add(effective_gate_margin);
+        let gate_open = effective_gate_margin >= self.gate_threshold_margin
+            && total_copy_margin > base_top_margin;
+
+        Ok(PointerDecision {
+            emitted_token: if gate_open {
+                copy_token
+            } else {
+                base_top_token
+            },
+            base_top_token,
+            base_top_margin,
+            copied: gate_open,
+            selected_span: Some(span),
+            candidate_copy_token: Some(copy_token),
+            route_score: Some(route_score),
+            effective_gate_margin,
+        })
     }
+}
+
+fn has_alphanumeric_boundary(flat_bytes: &[u8], pos: usize, len: usize) -> bool {
+    let first_alnum = flat_bytes[pos].is_ascii_alphanumeric();
+    let last_alnum = flat_bytes[pos + len - 1].is_ascii_alphanumeric();
+    let left_ok = !first_alnum || pos == 0 || !flat_bytes[pos - 1].is_ascii_alphanumeric();
+    let right_ok = !last_alnum
+        || pos + len == flat_bytes.len()
+        || !flat_bytes[pos + len].is_ascii_alphanumeric();
+    left_ok && right_ok
 }
 
 /// Locate the last occurrence of `expected_value` in the decoded bytes of `window_tokens`,
 /// returning the minimal token interval `[start, end)` covering that occurrence.
 ///
-/// Handles values that cross token boundaries (for example, a two-digit number `"47"`
-/// tokenized as `[" 4", "7"]` or a multi-word value `"four two seven"`).
+/// Enforces ASCII alphanumeric word boundaries so a short value such as `"4"` never
+/// falsely matches inside `"47"` or `"14"`, while still matching values that cross
+/// token boundaries (for example, `"47"` tokenized as `[" 4", "7"]`).
 pub fn locate_last_value_span(
     window_tokens: &[u32],
     pieces: &[Vec<u8>],
@@ -605,7 +597,10 @@ pub fn locate_last_value_span(
 
     let match_start = (0..=flat_bytes.len() - expected_value.len())
         .rev()
-        .find(|&pos| &flat_bytes[pos..pos + expected_value.len()] == expected_value);
+        .find(|&pos| {
+            &flat_bytes[pos..pos + expected_value.len()] == expected_value
+                && has_alphanumeric_boundary(&flat_bytes, pos, expected_value.len())
+        });
 
     let Some(byte_start) = match_start else {
         return Ok(None);
@@ -729,9 +724,10 @@ mod tests {
             learned_rank_bonus: 0,
         }];
         let ana_locker = SlotAddressKey::from_entity_attribute_primes(5, 11).expect("valid");
+        let bob_locker = SlotAddressKey::from_entity_attribute_primes(7, 11).expect("valid");
 
-        // Gate margin 40 < gate_threshold_margin 100 -> oracle-off returns base top token (7) bit-for-bit.
-        let decision = head
+        // Case 1 (gate closed): candidate is admitted, but gate margin 40 < threshold 100.
+        let gate_closed = head
             .select_step(
                 &window,
                 &base_margins,
@@ -742,25 +738,219 @@ mod tests {
                 &[],
                 &candidates,
             )
-            .expect("decision");
-        assert!(!decision.copied);
-        assert_eq!(decision.emitted_token, 7);
-        assert_eq!(decision.base_top_token, 7);
-        assert_eq!(decision.base_top_margin, 105);
+            .expect("gate closed");
+        assert!(!gate_closed.copied);
+        assert_eq!(gate_closed.selected_span, Some((3, 5)));
+        assert_eq!(gate_closed.emitted_token, 7);
+        assert_eq!(gate_closed.base_top_token, 7);
+        assert_eq!(gate_closed.base_top_margin, 105);
+
+        // Case 2 (unadmitted): gate margin 500 >= threshold 100, but query is Bob's locker (77)
+        // which does not divide candidate slot_product (55).
+        let unadmitted = head
+            .select_step(
+                &window,
+                &base_margins,
+                500,
+                0,
+                Some(bob_locker),
+                77,
+                &[],
+                &candidates,
+            )
+            .expect("unadmitted");
+        assert!(!unadmitted.copied);
+        assert_eq!(unadmitted.selected_span, None);
+        assert_eq!(unadmitted.route_score, None);
+        assert_eq!(unadmitted.emitted_token, 7);
+        assert_eq!(unadmitted.base_top_token, 7);
+        assert_eq!(unadmitted.base_top_margin, 105);
+    }
+
+    #[test]
+    fn base_margin_comparison_blocks_copy_when_base_outscores_copy_in_both_n_and_o1() {
+        let fold = CanonicalFoldTable::from_pieces(&sample_pieces()).expect("fold table");
+        let mut head = LawfulPointerHead::new(RouteAdmissionMode::SlotAddressSemiprime, fold, 100);
+        let window = vec![1, 5, 7, 8, 9, 12];
+        let ana_locker = SlotAddressKey::from_entity_attribute_primes(5, 11).expect("valid");
+        // ilog2_gcd_weight_q8(55) = floor(log2(55)) * 256 = 5 * 256 = 1280.
+        // With learned_rank_bonus = 74 and learned_gate_margin = 120 (>= threshold 100),
+        // route_score = 1354 and total_copy_margin = 1354 + 120 = 1474.
+        let candidates = vec![SourceSpanCandidate {
+            span: (3, 5),
+            slot_product: 55,
+            preceding_tokens: vec![1, 5, 7],
+            learned_rank_bonus: 74,
+        }];
+
+        // When base_top_margin = 1500 >= total_copy_margin (1474), N does NOT copy even though
+        // learned_gate_margin (120) >= gate_threshold_margin (100).
+        let mut high_base = vec![0i64; 13];
+        high_base[7] = 1500;
+        let n_blocked = head
+            .select_step(
+                &window,
+                &high_base,
+                120,
+                0,
+                Some(ana_locker),
+                55,
+                &[],
+                &candidates,
+            )
+            .expect("N blocked by base margin");
+        assert!(!n_blocked.copied);
+        assert_eq!(n_blocked.route_score, Some(1354));
+        assert_eq!(n_blocked.emitted_token, 7);
+
+        // O1 on the same span [3, 5) preserves the exact same base-margin comparison, so O1
+        // is also blocked and matches N bit-for-bit!
+        head.set_copy_span_oracle(
+            CopySpanOracle::O1SpanLearnedGate { start: 3, end: 5 },
+            window.len(),
+        )
+        .expect("set O1");
+        let o1_blocked = head
+            .select_step(
+                &window,
+                &high_base,
+                120,
+                0,
+                Some(ana_locker),
+                55,
+                &[],
+                &candidates,
+            )
+            .expect("O1 blocked by base margin");
+        assert_eq!(o1_blocked, n_blocked);
+
+        // Lowering base_top_margin to 1400 (< 1474) allows the copy in both N and O1.
+        let mut low_base = vec![0i64; 13];
+        low_base[7] = 1400;
+        let o1_open = head
+            .select_step(
+                &window,
+                &low_base,
+                120,
+                0,
+                Some(ana_locker),
+                55,
+                &[],
+                &candidates,
+            )
+            .expect("O1 open");
+        assert!(o1_open.copied);
+        assert_eq!(o1_open.emitted_token, 8);
+        head.clear_copy_span_oracle();
+        let n_open = head
+            .select_step(
+                &window,
+                &low_base,
+                120,
+                0,
+                Some(ana_locker),
+                55,
+                &[],
+                &candidates,
+            )
+            .expect("N open");
+        assert_eq!(n_open, o1_open);
+    }
+
+    #[test]
+    fn shared_atom_gcd_ranks_rarer_primes_higher_and_breaks_ties_by_latest_span_start() {
+        let fold = CanonicalFoldTable::from_pieces(&sample_pieces()).expect("fold table");
+        let head = LawfulPointerHead::new(RouteAdmissionMode::SharedAtomGcd, fold, 100);
+        let window = vec![1, 5, 7, 8, 9, 12, 3, 5, 7, 10, 11, 12];
+        let base_margins = vec![0i64; 13];
+
+        // Query product has common prime 3 (ilog2=1 -> 256) and rare prime 13 (ilog2=3 -> 768).
+        let query_product = 3u128 * 13u128;
+        let candidates_rarity = vec![
+            SourceSpanCandidate {
+                span: (3, 5),
+                slot_product: 3,
+                preceding_tokens: vec![],
+                learned_rank_bonus: 0,
+            },
+            SourceSpanCandidate {
+                span: (9, 11),
+                slot_product: 13,
+                preceding_tokens: vec![],
+                learned_rank_bonus: 0,
+            },
+        ];
+        let rare_wins = head
+            .select_step(
+                &window,
+                &base_margins,
+                150,
+                0,
+                None,
+                query_product,
+                &[],
+                &candidates_rarity,
+            )
+            .expect("rare prime wins");
+        assert!(rare_wins.copied);
+        assert_eq!(rare_wins.selected_span, Some((9, 11)));
+        assert_eq!(rare_wins.route_score, Some(768));
+        assert_eq!(rare_wins.emitted_token, 10);
+
+        // Equal route_score tie-break: latest span.0 ((9, 11) over (3, 5)) wins.
+        let candidates_tie = vec![
+            SourceSpanCandidate {
+                span: (3, 5),
+                slot_product: 13,
+                preceding_tokens: vec![],
+                learned_rank_bonus: 0,
+            },
+            SourceSpanCandidate {
+                span: (9, 11),
+                slot_product: 13,
+                preceding_tokens: vec![],
+                learned_rank_bonus: 0,
+            },
+        ];
+        let latest_wins = head
+            .select_step(
+                &window,
+                &base_margins,
+                150,
+                0,
+                None,
+                query_product,
+                &[],
+                &candidates_tie,
+            )
+            .expect("latest span start wins tie");
+        assert!(latest_wins.copied);
+        assert_eq!(latest_wins.selected_span, Some((9, 11)));
+        assert_eq!(latest_wins.emitted_token, 10);
     }
 
     #[test]
     fn copy_span_oracle_separates_o1_learned_gate_from_o2_forced_gate_and_restores_on_clear() {
         let fold = CanonicalFoldTable::from_pieces(&sample_pieces()).expect("fold table");
         let mut head = LawfulPointerHead::new(RouteAdmissionMode::SlotAddressSemiprime, fold, 100);
-        // Window whereBob's locker [9, 11) is " 9", "2"
+        // Window where Bob's locker [9, 11) is " 9", "2"
         let window = vec![1, 5, 7, 8, 9, 12, 3, 5, 7, 10, 11, 12];
         let mut base_margins = vec![0i64; 13];
         base_margins[7] = 300; // Base model predicts frame token 7 (" is")
+        let bob_locker = SlotAddressKey::from_entity_attribute_primes(7, 11).expect("valid");
 
         // Suppose the head's learned gate margin is 25 (below threshold 100) and no candidates match.
         let normal = head
-            .select_step(&window, &base_margins, 25, 0, None, 1, &[], &[])
+            .select_step(
+                &window,
+                &base_margins,
+                25,
+                0,
+                Some(bob_locker),
+                77,
+                &[],
+                &[],
+            )
             .expect("normal");
         assert!(!normal.copied);
         assert_eq!(normal.emitted_token, 7);
@@ -772,11 +962,21 @@ mod tests {
         )
         .expect("set O1");
         let o1 = head
-            .select_step(&window, &base_margins, 25, 0, None, 1, &[], &[])
+            .select_step(
+                &window,
+                &base_margins,
+                25,
+                0,
+                Some(bob_locker),
+                77,
+                &[],
+                &[],
+            )
             .expect("O1");
         assert!(!o1.copied);
         assert_eq!(o1.selected_span, Some((9, 11)));
         assert_eq!(o1.candidate_copy_token, Some(10));
+        assert_eq!(o1.route_score, Some(1536));
         assert_eq!(o1.emitted_token, 7);
 
         // O2 (span supplied, gate forced to 250 >= 100): both tokens of the span (" 9", "2") emit!
@@ -790,10 +990,28 @@ mod tests {
         )
         .expect("set O2");
         let o2_step0 = head
-            .select_step(&window, &base_margins, 25, 0, None, 1, &[], &[])
+            .select_step(
+                &window,
+                &base_margins,
+                25,
+                0,
+                Some(bob_locker),
+                77,
+                &[],
+                &[],
+            )
             .expect("O2 step 0");
         let o2_step1 = head
-            .select_step(&window, &base_margins, 25, 1, None, 1, &[], &[])
+            .select_step(
+                &window,
+                &base_margins,
+                25,
+                1,
+                Some(bob_locker),
+                77,
+                &[],
+                &[],
+            )
             .expect("O2 step 1");
         assert!(o2_step0.copied);
         assert_eq!(o2_step0.emitted_token, 10); // " 9"
@@ -803,7 +1021,16 @@ mod tests {
         // Clearing restores normal behavior bit-for-bit.
         head.clear_copy_span_oracle();
         let restored = head
-            .select_step(&window, &base_margins, 25, 0, None, 1, &[], &[])
+            .select_step(
+                &window,
+                &base_margins,
+                25,
+                0,
+                Some(bob_locker),
+                77,
+                &[],
+                &[],
+            )
             .expect("restored");
         assert_eq!(restored, normal);
     }
@@ -847,6 +1074,30 @@ mod tests {
 
         let missing = locate_last_value_span(&window, &pieces, b"38").expect("valid pieces");
         assert_eq!(missing, None);
+    }
+
+    #[test]
+    fn locate_last_value_span_enforces_alphanumeric_boundaries() {
+        let pieces = sample_pieces();
+        // Window: "Ana locker is 47." ([1, 5, 7, 8, 9, 12]) where "47" is tokens 8 (" 4") + 9 ("7").
+        let window_with_47_only = vec![1, 5, 7, 8, 9, 12];
+        // Searching for single-digit "4" or "7" must NOT match inside "47".
+        assert_eq!(
+            locate_last_value_span(&window_with_47_only, &pieces, b"4").expect("valid"),
+            None
+        );
+        assert_eq!(
+            locate_last_value_span(&window_with_47_only, &pieces, b"7").expect("valid"),
+            None
+        );
+
+        // When standalone "4" is stated ("Ana locker is 4." -> [1, 5, 7, 8, 12]) followed by
+        // "Bob locker is 47." ([3, 5, 7, 8, 9, 12]), searching for "4" skips "47" and finds [3, 4)!
+        let window_4_then_47 = vec![1, 5, 7, 8, 12, 3, 5, 7, 8, 9, 12];
+        assert_eq!(
+            locate_last_value_span(&window_4_then_47, &pieces, b"4").expect("valid"),
+            Some((3, 4))
+        );
     }
 
     #[test]
