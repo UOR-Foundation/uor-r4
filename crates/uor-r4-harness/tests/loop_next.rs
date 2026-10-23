@@ -778,3 +778,59 @@ fn a_lab_at_its_open_pr_limit_waits_naming_its_prs_awaiting_review() {
     );
     assert!(d.ends_with("— check again in 600s"), "{o:?}");
 }
+
+/// A views-only render refresh PR on `kimi/render`: four rendered files, same repository, no ORDER.
+fn render_pr(n: u64) -> Value {
+    let files: Vec<Value> = ["STATE.md", "HANDOFF.md", "docs/harness/LESSONS.md", "AGENTS.md"]
+        .into_iter()
+        .map(|path| json!({"path": path}))
+        .collect();
+    json!({"number": n, "headRefName": "kimi/render", "headRefOid": HEAD, "isDraft": false,
+           "isCrossRepository": false, "mergeable": "MERGEABLE", "files": files, "checks": []})
+}
+
+fn fake_render(prs: Vec<Value>, comments: Value) -> Value {
+    json!({"prs": prs, "comments": comments, "files": {}, "labels": {}})
+}
+
+fn render_record(lab: &str, n: u64) -> Value {
+    use uor_r4_harness::loopreview::{render, DoneWhen, Record, Verdict};
+    let body = render(&Record {
+        lab: lab.to_string(),
+        pr: n,
+        head: HEAD.to_string(),
+        model: "m".to_string(),
+        launch: "l".to_string(),
+        verdict: Verdict::Approve,
+        order: "kimi/render".to_string(),
+        fresh_context: true,
+        done_when: DoneWhen::Host("cargo test: ok".to_string()),
+    });
+    json!({"author": "x", "body": body})
+}
+
+#[test]
+fn a_views_only_render_pr_is_offered_to_another_lab_for_review() {
+    let r = Repo::new(&[]);
+    let o = r.next(&fake_render(vec![render_pr(30)], json!({})));
+    assert!(decision(&o).starts_with("GO review #30"), "{o:?}");
+    assert!(stdout(&o).contains("views-only render review"), "{o:?}");
+}
+
+#[test]
+fn a_render_pr_recorded_at_its_head_owes_no_review() {
+    let r = Repo::new(&[]);
+    let o = r.next(&fake_render(
+        vec![render_pr(30)],
+        json!({"30": [render_record("claude", 30)]}),
+    ));
+    assert!(!decision(&o).contains("review #30"), "{o:?}");
+}
+
+#[test]
+fn the_render_owner_lab_is_not_asked_to_review_its_own_render_pr() {
+    let r = Repo::new(&[]);
+    let o = r.next_as("kimi", &fake_render(vec![render_pr(30)], json!({})), &json!([]), false);
+    assert!(!decision(&o).contains("review #30"), "{o:?}");
+}
+
