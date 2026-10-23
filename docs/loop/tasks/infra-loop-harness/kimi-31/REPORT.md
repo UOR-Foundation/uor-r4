@@ -25,9 +25,9 @@ Lab: kimi. Order: [ORDER.md](ORDER.md). Setup row: 2 (item metadata). `Reference
 ## Checks run at the head
 
 - `uor-harness loop gates --quick`: 3/3 GREEN at `a5305edde`.
-- `uor-harness loop gates --full`: 11/11 GREEN at `50ee24b90`, before the cross-item repair; final run RESULT_PENDING.
+- `uor-harness loop gates --full`: 11/11 GREEN at `50ee24b90` before the cross-item repair and again at `3c2123fed` after it and the merge of current main.
 - `cargo fmt -p uor-r4-harness -- --check`: PASS. `git diff --check`: PASS.
-- PR-built `uor-harness loop pr-check --local`: scope PASS at `3ee4f4bf4`; REPORT was then missing. `loop report --check` and final PR check: RESULT_PENDING.
+- PR-built `uor-harness loop pr-check --local`: scope PASS at `3ee4f4bf4`; REPORT was then missing. `loop report --check` and final PR check at `3c2123fed`: verdict PASS, every applicable rule green.
 
 ## Skills used
 
