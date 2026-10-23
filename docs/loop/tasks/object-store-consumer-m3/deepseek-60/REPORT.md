@@ -12,7 +12,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2873. Base: `127632bc3`. `Refe
 
 | File | Change |
 |---|---|
-| `crates/uor-r4-object-store/tests/fixtures/integer_ur4sess1_v1.bin` (new) | 337 B canonical contract fixture produced by `uor_r4_integer::session_codec::encode` for the fixture state; sha256 `ef0ffeee…` |
+| `crates/uor-r4-object-store/tests/fixtures/integer_ur4sess1_v1.hex` (new) | 337 B canonical contract fixture produced by `uor_r4_integer::session_codec::encode` for the fixture state; sha256 `ef0ffeee…` |
 | `crates/uor-r4-object-store/tests/integer_session_interop.rs` (new) | fixture digest + header pin; `set -> export -> import -> ur4sess1_snapshot` returns the exact fixture bytes; store-side `UORMEM01` identity pinned |
 | `crates/uor-r4-integer/tests/session_codec_interop_fixture.rs` (new, `serving-wasm`) | `encode(sample)` equals the committed fixture byte-for-byte and by sha256; fixture decodes back to the typed state; integer envelope identity/embedding pinned |
 | this folder | ORDER and REPORT |
@@ -33,7 +33,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2873. Base: `127632bc3`. `Refe
 ## Skills used
 
 - `solution-integrity`: the test was mutation-checked so it provably catches the framing drift it names, and the unit does not claim a stronger envelope interop than the public API allows.
-- `scope-guard`: one dev-dependency line, one new test file and this folder only.
+- `scope-guard`: two new test files, one committed hex fixture and this folder only; no `Cargo.toml`, `Cargo.lock` or existing-source change.
 
 ## Still open
 
