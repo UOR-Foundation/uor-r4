@@ -291,6 +291,13 @@ fn next_seeded_u64(state: &mut u64) -> u64 {
 
 /// Pure-integer constructor for `CodebookMode::RandomInjective` and
 /// `CodebookMode::QuotaOnlyInjective`.
+///
+/// Note on witness fields: `phases_q29` and `spinors_s3_q30` are populated with
+/// deterministic integer XOR tags purely for `QuantizedCodebook` JSON schema
+/// compatibility and uniqueness accounting (`unique_phase_vectors`,
+/// `unique_spinor_vectors`). They are not geometric $S^1$ phases or unit-$S^3$
+/// spinors; the discrete training and evaluation battery (`pinned_table_v1`)
+/// reads only `root_indices` / `Snapshot.table`.
 fn generate_integer_injective_null(
     spec: Spec,
     seed: u32,
@@ -300,8 +307,29 @@ fn generate_integer_injective_null(
 ) -> Result<QuantizedCodebook> {
     let vocab = spec.vocabulary as usize;
     let blocks = spec.blocks as usize;
+    if !(3..=16).contains(&blocks) {
+        return Err(invalid(
+            "integer injective nulls require spec.blocks in 3..=16",
+        ));
+    }
+    let interior_cap: usize = if blocks == 3 { 16 } else { 256 };
+    if is_quota_only {
+        if vocab == 0 || !vocab.is_multiple_of(256) || vocab / 256 > interior_cap {
+            return Err(invalid(
+                "quota_only_injective requires vocabulary to be a positive multiple of 256 within per-cell interior capacity",
+            ));
+        }
+    } else {
+        let total_tuples = 1u128 << (4 * blocks);
+        if vocab == 0 || (vocab as u128) * 2 > total_tuples {
+            return Err(invalid(
+                "random_injective requires 0 < vocabulary <= 16^blocks / 2 for uniform rejection sampling",
+            ));
+        }
+    }
+
     let primes = permute_primes_for_normal_null(&first_n_primes(vocab)?, null_seed);
-    let enforce_unique_full_vector = blocks >= 3 || vocab <= (1usize << (4 * blocks));
+    let enforce_unique_full_vector = true;
 
     let mut rng_state = if is_quota_only {
         u64::from(null_seed) ^ 0xbb67_ae85_84ca_a73bu64
@@ -318,9 +346,9 @@ fn generate_integer_injective_null(
 
     if is_quota_only {
         // Quota-only injective null:
-        // 1. Build a quota-balanced cell assignment where each of the 256 writer cells
-        //    appears floor(V / 256) or ceil(V / 256) times (for V = 4096, 16 tokens in
-        //    each of the 256 cells), then shuffle across tokens via seeded Fisher-Yates.
+        // 1. Build a uniform cell assignment where each of the 256 writer cells
+        //    appears exactly V / 256 times (for V = 4096, 16 tokens in each of the
+        //    256 cells), then shuffle across tokens via seeded Fisher-Yates.
         let mut cell_schedule: Vec<u8> = (0..vocab).map(|i| (i % 256) as u8).collect();
         for i in (1..vocab).rev() {
             let j = (next_seeded_u64(&mut rng_state) as usize) % (i + 1);
@@ -328,14 +356,7 @@ fn generate_integer_injective_null(
         }
 
         // 2. Pre-shuffle the interior root choices per writer cell so every token in a
-        //    cell receives a unique interior root vector when 16^B >= V.
-        let interior_cap: usize = if blocks == 2 {
-            1
-        } else if blocks == 3 {
-            16
-        } else {
-            256
-        };
+        //    cell receives a unique interior root vector.
         let mut cell_interior_orders: Vec<Vec<u16>> = Vec::with_capacity(256);
         for _cell in 0..256 {
             let mut order: Vec<u16> = (0..interior_cap as u16).collect();
@@ -346,22 +367,41 @@ fn generate_integer_injective_null(
             cell_interior_orders.push(order);
         }
 
+        // For blocks >= 5, pre-shuffle per-cell root permutations for each additional
+        // interior block (3..blocks - 1) using SplitMix64 Fisher-Yates. When blocks <= 4,
+        // this loop does not execute, keeping B = 4 outputs bit-identical.
+        let extra_blocks = blocks.saturating_sub(4);
+        let mut extra_interior_orders: Vec<Vec<Vec<u8>>> = Vec::with_capacity(extra_blocks);
+        for _extra in 0..extra_blocks {
+            let mut per_cell: Vec<Vec<u8>> = Vec::with_capacity(256);
+            for _cell in 0..256 {
+                let mut order: Vec<u8> = (0..interior_cap).map(|k| (k & 0x0f) as u8).collect();
+                for i in (1..interior_cap).rev() {
+                    let j = (next_seeded_u64(&mut rng_state) as usize) % (i + 1);
+                    order.swap(i, j);
+                }
+                per_cell.push(order);
+            }
+            extra_interior_orders.push(per_cell);
+        }
+
         for &cell_u8 in &cell_schedule {
             let cell = usize::from(cell_u8);
             let r_first = (cell / 16) as u8;
             let r_last = (cell % 16) as u8;
             let rank_in_cell = cell_counts[cell];
-            let interior_code = cell_interior_orders[cell][rank_in_cell % interior_cap];
+            let interior_code = cell_interior_orders[cell][rank_in_cell];
 
             let mut selected = Vec::with_capacity(blocks);
             selected.push(r_first);
             if blocks == 3 {
                 selected.push((interior_code & 0x0f) as u8);
-            } else if blocks >= 4 {
+            } else {
                 selected.push(((interior_code >> 4) & 0x0f) as u8);
                 selected.push((interior_code & 0x0f) as u8);
-                for extra in 3..blocks - 1 {
-                    selected.push(((rank_in_cell + extra) & 0x0f) as u8);
+                for (extra_idx, per_cell) in extra_interior_orders.iter().enumerate() {
+                    let _ = extra_idx;
+                    selected.push(per_cell[cell][rank_in_cell]);
                 }
             }
             selected.push(r_last);
@@ -381,36 +421,20 @@ fn generate_integer_injective_null(
         }
     } else {
         // Random injective null without writer-cell quota:
-        // Draw V distinct B-block root tuples uniformly without replacement from {0..16}^B.
+        // Draw V distinct B-block root tuples uniformly without replacement from {0..16}^B
+        // via rejection sampling (guaranteed load factor <= 1/2 by the entry guard).
         for _t in 0..vocab {
             let mut chosen: Option<Vec<u8>> = None;
-            for _attempt in 0..64 {
+            for _attempt in 0..1024 {
                 let word = next_seeded_u64(&mut rng_state);
                 let mut candidate = Vec::with_capacity(blocks);
                 for b in 0..blocks {
-                    let shift = (b % 16) * 4;
+                    let shift = b * 4;
                     candidate.push(((word >> shift) & 0x0f) as u8);
                 }
-                if !enforce_unique_full_vector || !used_vectors.contains(&candidate) {
+                if !used_vectors.contains(&candidate) {
                     chosen = Some(candidate);
                     break;
-                }
-            }
-            if chosen.is_none() {
-                // Fallback linear probe over lexicographic orbit space when V approaches 16^B.
-                let total_orbit = 1usize << (4 * blocks.min(4));
-                let start = (next_seeded_u64(&mut rng_state) as usize) % total_orbit;
-                for offset in 0..total_orbit {
-                    let code = (start + offset) % total_orbit;
-                    let mut candidate = Vec::with_capacity(blocks);
-                    for b in 0..blocks {
-                        let shift = (b.min(3)) * 4;
-                        candidate.push(((code >> shift) & 0x0f) as u8);
-                    }
-                    if !enforce_unique_full_vector || !used_vectors.contains(&candidate) {
-                        chosen = Some(candidate);
-                        break;
-                    }
                 }
             }
             let selected = chosen.ok_or_else(|| {
@@ -430,8 +454,10 @@ fn generate_integer_injective_null(
         }
     }
 
-    // Populate integer boundary witnesses (`phases_q29` and `spinors_s3_q30`) purely
-    // from the selected integer roots, token index, block index, and seed.
+    // Populate integer schema witnesses (`phases_q29` and `spinors_s3_q30`) with
+    // deterministic integer XOR tags derived from the selected roots, token index,
+    // block index, and seed. The training and evaluation battery reads only
+    // `root_indices` / `Snapshot.table`.
     let mode_tag: i32 = if is_quota_only {
         0x1357_2468
     } else {
@@ -1215,10 +1241,7 @@ mod tests {
         for report in [&pz_census, &q0_census, &r0_census] {
             assert_eq!(report["distinct_vectors"], 4096);
             assert_eq!(report["dev_alias_ceiling_rows"], 14_287);
-            assert_eq!(
-                report["within_cell_tie_mass"]["tokens_in_alias_groups"],
-                0
-            );
+            assert_eq!(report["within_cell_tie_mass"]["tokens_in_alias_groups"], 0);
             assert_eq!(
                 report["within_cell_tie_mass"]["dev_rows_targeting_non_representative"],
                 0
@@ -1230,6 +1253,49 @@ mod tests {
         assert_eq!(q0_census["cells"]["cell_collision_pairs"], 30_720);
         assert!(r0_census["cells"]["max_cell_occupancy"].as_u64().unwrap() > 16);
         assert!(r0_census["cells"]["cell_collision_pairs"].as_u64().unwrap() > 30_720);
+
+        // 6. Pinned B=4 table_sha256 preservation and fairness-guard / B=5 shuffle checks
+        assert_eq!(
+            quota0.table_sha256,
+            "0098d4c3df8ce101e4a2dda8d8d28a29ac64f6ed3d521430504d0bb03ffbc18f"
+        );
+        assert_eq!(
+            random0.table_sha256,
+            "35c8da6250a5d986ffa5f6758cbf761b45af6fa24d3893114b9693c1b0d9ee37"
+        );
+        let non_multiple_spec = Spec {
+            vocabulary: 500,
+            ..spec
+        };
+        assert!(generate_codebook(
+            non_multiple_spec,
+            0,
+            CodebookMode::QuotaOnlyInjective { seed: 0 }
+        )
+        .is_err());
+        let two_block_spec = Spec {
+            vocabulary: 256,
+            blocks: 2,
+            ..spec
+        };
+        assert!(generate_codebook(
+            two_block_spec,
+            0,
+            CodebookMode::QuotaOnlyInjective { seed: 0 }
+        )
+        .is_err());
+        assert!(
+            generate_codebook(two_block_spec, 0, CodebookMode::RandomInjective { seed: 0 })
+                .is_err()
+        );
+        let five_block_spec = Spec { blocks: 5, ..spec };
+        let quota_b5 = generate_codebook(
+            five_block_spec,
+            0,
+            CodebookMode::QuotaOnlyInjective { seed: 0 },
+        )?;
+        assert_eq!(quota_b5.unique_table_vectors, 4096);
+        assert_eq!(writer_cell_occupancy(&quota_b5), [16usize; 256]);
 
         Ok(())
     }
