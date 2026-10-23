@@ -43,7 +43,7 @@ The FIT prerequisite that the saved `world=v2` compiler and tokenizer be named b
 
 - **Compiler identity fields (read from the pinned `compiler.json`):** `schema = uor-r4.relation-compiler/1`, `label_schema = m-world-v2.relations-acts/1`, `tokenizer_sha256 = d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`. The `artifact_sha256` that `TurnCompiler::identity()` carries is the SHA-256 of the `compiler.json` bytes above, `34cdf896…`; the tokenizer digest the compiler expects is exactly the tokenizer file's digest, so the pair is self-consistent.
 - **Run configuration is therefore fixed:** `world=v2`, `compiler=<the compiler.json>`, `trunk=<the model directory containing model.safetensors and config.json>`, `tokenizer=<the tokenizer.json>`, `op_policy=unless_query`, `log_recall` irrelevant to this single-pass grading.
-- **Pre-run pin gate (add to §6):** before the GPU run, extract the bundle and the tokenizer tar, `shasum -a 256` each of the five member files, and compare with the table; any mismatch aborts before a checkpoint is loaded. This pin releases nothing: the run still needs the non-author FIT and Casey's typed D40 release.
+- **Pre-run pin gate (add to §6):** before the GPU run, extract the bundle and the tokenizer tar and `shasum -a 256` every file named in the table above (the two tars and the four extracted members), comparing sizes and digests; any mismatch aborts before a checkpoint is loaded. This pin releases nothing: the run still needs the non-author FIT and Casey's typed D40 release.
 ## 3. Grader and measured rates (`crates/uor-r4-training/src/nonrelation_prose_panel.rs`, commit `b0430d40`)
 
 For each turn $i \in \{1, \dots, 50\}$ in `nonrelation-prose-v1.txt`:
