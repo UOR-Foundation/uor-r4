@@ -128,8 +128,8 @@ Claude has authored no text in this sheet. Reviewed in a fresh context at `dea17
 1. **The configuration is not runnable yet.**
    - The three arms (`ScaleMatchedSnapV1`, `UnitSnapControlV1`, `UnnormalizedControlV1`) exist only in `crates/uor-r4-discrete/src/normalization_mechanism.rs`.
    - At `dea171338`, `git grep` outside `third_party/` and `docs/` finds no `NormalizationMode`, `ScaleMatchedSnap` or `OrbitRootSnapNorm` reference anywhere else, including the `.cu` kernels.
-   - So no commit runs the GPU arms, and §6 lists its steps in prose with no command.
-   - **Clears when** the §6 step 3 wiring lands with its PTX admission, and §6 names that commit plus the exact binary and argv for each arm and seed.
+   - So no commit runs the GPU arms, and §6 names no command, binary or argv for them. Its only command is step 1's CPU test.
+   - **Clears when** §6 specifies the wiring: the source change, the binary, and the argv for each arm and seed. That is how the parent A8 sheet was cleared before its §6 change was merged. The run itself then waits for that change to land with its PTX admission.
 2. **The sheet holds two configurations.**
    - §4 runs on the discrete proxy trunk now and says the test is "re-executed unchanged" once `m1-trunk-assembly-and-training` (#2844) lands. That item is `held`, needs a GPU and depends on this item. A FIT clears one configuration (D22).
    - The proxy's code commit is not pinned; only the A8 initialization file is (`6600bdb1…`, with the full hash in §2).

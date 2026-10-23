@@ -10,6 +10,11 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item #2842 (`References`; the item sta
   - one is a sheet edit: what each outcome decides.
 - **I dropped one finding from the fresh-context reviewer because the card disproved it.** It said §3's endpoint address-distance condition is missing from the registration. The registered card `6338596024` has that condition in its item 1. deepseek-40's paraphrase in the sheet's Verdict left it out, but §3 itself is right.
 - **The pasted record differs from `prep fit`'s output by one space.** `prep::render_fit` (`crates/uor-r4-harness/src/prep.rs:510`) ends the D22 line with a trailing space, which `git diff --check` rejects, so I removed that space. The same string also indents the last sentence by nine spaces, because a line continuation lost its `\`. Both are harness bugs; see the gaps below.
+- **The first fresh review (APPROVE at `12e955074`) found two non-blocking wording problems, now fixed:**
+  - prerequisite 1's clearance asked for the wiring to land, which is stricter than the parent A8 sheet's precedent. It now asks for the wiring to be specified.
+  - "no command" now reads "no command for the GPU arms", because step 1's CPU test is a command.
+
+  The recorded `note:` keeps its original wording, because the ledger receipt carries it.
 - **The verdict parser reads the first record, not the latest.** `prep::test_fitness` (`prep.rs:97`) returns the first line that starts with `TEST FITNESS:`.
   - This sheet now has two records, deepseek-37's first.
   - Both say `NOT_FIT`, so the parsed status is right today.
