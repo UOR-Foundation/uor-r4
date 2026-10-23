@@ -22,7 +22,7 @@ The strict failure is the **evidence the claim was asserted-only before**: the d
 
 The demo page is 1,647 lines with **263 distinct utility classes**, including a custom `cyber-*` Tailwind palette with opacity variants, gradients, animations and Font Awesome icon classes; faithful self-hosting is a large bespoke CSS/SVG rewrite, not the "three CDN links" the item text implies. Decision card on #2028 and #2868 asks for one of: (a) owner retires the page (archive step needed, outside this item's scope), (b) PM rules the page-load bar covers `web/studio/index.html` only and the demo page is a documented legacy residual, or (c) a follow-up item funds the demo page rewrite. Recommended: (b).
 
-## 3. Open decision (design) — stack-bound tokenizer
+## 3. Stack-bound tokenizer artifact (implemented, deepseek-52)
 
 The worker's `UTF-8 byte-mod stand-in` mapping (`uor_model_worker.js:140`) is unbound: it derives token ids from the prompt bytes only. Plan (next unit): a JS tool under `web/**` reads the shipped `pkg/synthetic-stack.lut` header (magic/schema/vocab size), emits `pkg/tokenizer.json` `{stack_sha256, vocab_size, mode: "byte-mod", schema}` plus the derived 256-entry table, and the worker loads it, labelling the capability truthfully ("stack-bound byte-mod tokenizer, vocab N, stack sha256 …") with the old unbound path only as an explicit fallback. A real corpus tokenizer requires a real model (M4 export) and is out of this item. No Rust change (outside scope), no new Python.
 
@@ -33,3 +33,5 @@ The worker's `UTF-8 byte-mod stand-in` mapping (`uor_model_worker.js:140`) is un
 ## 5. Pages deploy
 
 Stays paused (D36); this unit touches assets and verification only.
+
+**Implemented (deepseek-52):** web/studio/tools/make_tokenizer.mjs generates the artifact from the shipped stack header (UORLUT01 magic, little-endian u64 header length, JSON schema and shape.vocab) into pkg/tokenizer.json with the stack sha256, vocabulary, mode byte-mod and the 256-entry byte-to-token table, plus a --check mode. The worker loads it by same-origin dynamic JSON import, validates sha/vocab/table through web/studio/assets/js/uor_tokenizer_artifact.js, uses its table for prompt bytes, and labels the capability stack-bound byte-mod tokenizer (vocab N, stack sha256 ...); an absent or mismatched artifact keeps the same encoding but labels it explicitly unbound. verify_studio_worker.mjs generates the artifact from the stack it already reads, writes it beside the bundle, asserts the live label and unit-asserts the fallback. **Still a stand-in, said plainly:** this binds the mapping to the shipped synthetic stack; a real corpus tokenizer needs a real model artifact (M4 export).
