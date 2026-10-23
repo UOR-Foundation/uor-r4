@@ -94,7 +94,11 @@ pub fn sections(text: &str) -> Vec<Section> {
 /// Anchored at line start and followed by a non-word character, so prose that merely mentions
 /// "TEST FITNESS" — a record explaining the gate, for instance — is not read as a verdict. That is
 /// the difference between a sheet being FIT and a document talking about fitness.
+///
+/// The LAST anchored verdict wins: the re-review flow appends a new verdict line rather than
+/// editing history, so a sheet that earned NOT_FIT and later FIT must read FIT (#3041).
 pub fn test_fitness(text: &str) -> &'static str {
+    let mut found = ABSENT;
     for line in text.lines() {
         let t = line.trim_start_matches([' ', '\t']);
         let upper = t.to_ascii_uppercase();
@@ -107,12 +111,13 @@ pub fn test_fitness(text: &str) -> &'static str {
                 // `(?![A-Za-z_])`: FIT must not match FITNESS, and NOT_FIT is tried first so it is
                 // not read as FIT.
                 if !tail.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
-                    return verdict;
+                    found = verdict;
                 }
+                break;
             }
         }
     }
-    ABSENT
+    found
 }
 
 /// A `- Label: value` field from anywhere in the sheet.
@@ -358,6 +363,25 @@ TEST FITNESS: FIT
         assert_eq!(test_fitness("  TEST FITNESS: fit"), FIT);
         assert_eq!(test_fitness("TEST FITNESS:FIT"), FIT);
         assert_eq!(test_fitness("\tTEST FITNESS:   NOT_FIT"), NOT_FIT);
+    }
+
+    /// The re-review flow appends a new verdict line instead of editing history, so the LAST
+    /// anchored verdict is the sheet's verdict (#3041): a FIT appended after an earlier NOT_FIT
+    /// must win, and a NOT_FIT appended after an earlier FIT must win too.
+    #[test]
+    fn the_last_verdict_wins() {
+        let text = COMPLETE.replace("TEST FITNESS: FIT", "TEST FITNESS: NOT_FIT");
+        let appended_fit = format!("{text}\nTEST FITNESS: FIT\n");
+        assert_eq!(test_fitness(&appended_fit), FIT);
+        let appended_not_fit = format!("{COMPLETE}\nTEST FITNESS: NOT_FIT\n");
+        assert_eq!(test_fitness(&appended_not_fit), NOT_FIT);
+        let appended_pending = format!("{COMPLETE}\nTEST FITNESS: PENDING\n");
+        assert_eq!(test_fitness(&appended_pending), PENDING);
+        assert_eq!(
+            test_fitness(&format!("{COMPLETE}\nProse after the verdict, no new line.\n")),
+            FIT,
+            "an unrelated later line does not erase the verdict"
+        );
     }
 
     #[test]
