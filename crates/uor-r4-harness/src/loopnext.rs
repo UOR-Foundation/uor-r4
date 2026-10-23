@@ -23,10 +23,15 @@ use crate::loopprcheck::{Comment, PrGh as _};
 
 const USAGE: &str = "usage: uor-harness loop next [--json] [--wait [--poll SECS] [--max SECS]]";
 
+/// The gh pr list --json fields loop next needs. isCrossRepository is included so the render
+/// sentinel can tell a same-repository kimi/render PR from a fork; a test pins this list.
+const PR_LIST_FIELDS: &str =
+    "number,headRefName,headRefOid,isDraft,isCrossRepository,mergeable,files,statusCheckRollup";
+
 /// TEST-ONLY: a JSON file standing in for `gh`: `{"prs": [{number, headRefName, headRefOid,
 /// isDraft, mergeable, files: [{path}], checks: [{name, conclusion}]}], "comments": {"<n>":
 /// [{author, body}]}, "files": {"<n>:<path>": text}, "labels": {"<n>": [name]}}`.
-pub const NEXT_GH_FAKE_ENV: &str = "UOR_LOOP_NEXT_GH_FAKE";
+const NEXT_GH_FAKE_ENV: &str = "UOR_LOOP_NEXT_GH_FAKE";
 
 /// The issue whose `loop:pause` label pauses every lab's loop.
 const PAUSE_ISSUE: u64 = 2028;
@@ -95,7 +100,7 @@ impl NextGh for RealNextGh {
                 "--limit",
                 "200",
                 "--json",
-                "number,headRefName,headRefOid,isDraft,mergeable,files,statusCheckRollup",
+                PR_LIST_FIELDS,
             ],
         )?;
         let v: Vec<serde_json::Value> = serde_json::from_str(&text)

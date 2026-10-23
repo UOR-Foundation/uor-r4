@@ -843,3 +843,28 @@ fn the_render_owner_lab_is_not_asked_to_review_its_own_render_pr() {
     );
     assert!(!decision(&o).contains("review #30"), "{o:?}");
 }
+
+#[test]
+fn the_production_listing_requests_the_render_sentinel_field() {
+    // The fixture supplies isCrossRepository directly; this pins that the real query asks for
+    // it too, so the fixture cannot pass while production deserializes None.
+    let source =
+        std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/loopnext.rs"))
+            .unwrap();
+    assert!(
+        source.contains("isCrossRepository"),
+        "the production gh pr list --json field list must request isCrossRepository"
+    );
+    let decoded: uor_r4_harness::loopnext::NextPr = serde_json::from_value(json!({
+        "number": 30,
+        "headRefName": "kimi/render",
+        "headRefOid": HEAD,
+        "isDraft": false,
+        "isCrossRepository": false,
+        "mergeable": "MERGEABLE",
+        "files": [{"path": "STATE.md"}],
+        "checks": []
+    }))
+    .expect("a gh-style PR decodes");
+    assert_eq!(decoded.is_cross_repository, Some(false));
+}

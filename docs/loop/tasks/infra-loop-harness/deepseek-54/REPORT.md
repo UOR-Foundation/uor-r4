@@ -14,13 +14,13 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2904. Base: `2365778e9`. `Refe
 |---|---|
 | `crates/uor-r4-harness/src/loopnext.rs` | `NextPr.is_cross_repository` (from `gh pr list ... isCrossRepository`), `is_render_pr` helper, and a review branch for `OrderErr::Missing` that offers a views-only same-repo `kimi/render` PR to a non-owner lab when no record exists at its head |
 | `crates/uor-r4-harness/src/loopreview.rs` | `records_at_head` helper (records at a PR head regardless of ORDER) |
-| `crates/uor-r4-harness/tests/loop_next.rs` | three tests: render PR offered; recorded-at-head render PR owes nothing; the owner lab is not asked |
+| `crates/uor-r4-harness/tests/loop_next.rs` | four tests: render PR offered; recorded-at-head owes nothing; owner lab not asked; the production `gh pr list --json` field list requests `isCrossRepository` (the fixture alone cannot hide a missing production field) |
 | `docs/loop/README.md` | the render-PR paragraph now states that `loop next` assigns the refresh for review |
 | this folder | ORDER and REPORT |
 
 ## Measurements
 
-- `cargo test -p uor-r4-harness --test loop_next`: **32 passed, 0 failed** (29 before this unit; 3 new render cases).
+- `cargo test -p uor-r4-harness --test loop_next`: **33 passed, 0 failed** (29 before this unit; 4 new render cases). The production field list is pinned by a test after review showed the fixture could pass while the real `gh` query omitted `isCrossRepository` (fixed: the field is now in `PR_LIST_FIELDS`, used by `RealNextGh`).
 - Fake-gh test data: PR on `kimi/render`, four rendered views, `isCrossRepository: false`, no ORDER; `next` prints `GO review #30` with `views-only render review`; with a `kimi/render` record at `HEAD` it does not; as lab `kimi` it does not.
 
 ## Checks run at the head
