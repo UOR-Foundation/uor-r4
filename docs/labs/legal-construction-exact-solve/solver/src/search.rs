@@ -445,7 +445,10 @@ pub fn search<const P: u32>(
         x0.push(v);
         state.push(st);
     }
-    let mut slack: Vec<BigRational> = b.iter().map(|v| BigRational::from_integer(v.clone())).collect();
+    let mut slack: Vec<BigRational> = b
+        .iter()
+        .map(|v| BigRational::from_integer(v.clone()))
+        .collect();
     for (j, col) in cols.iter().enumerate() {
         if !x0[j].is_zero() {
             for (k, a) in col {
@@ -516,7 +519,10 @@ pub fn search<const P: u32>(
             let sum = sx.objective(1);
             let scale = sx.b.iter().map(|v| v.abs()).fold(Dy::<P>::ONE, Dy::max);
             if !negligible(sum, scale) {
-                return Err(format!("phase 1: infeasible (artificial sum ~2^{})", bits(sum)));
+                return Err(format!(
+                    "phase 1: infeasible (artificial sum ~2^{})",
+                    bits(sum)
+                ));
             }
             sx.drive_out()?;
             for j in n + m..total {

@@ -5,8 +5,8 @@
 //! The generators are copied from `certify_basis.rs`.
 
 use legal_exact_solver::lp::{Lp, LpResult};
-use legal_exact_solver::{blp, search};
 use legal_exact_solver::{bb, problem::Problem};
+use legal_exact_solver::{blp, search};
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::{Signed, Zero};
@@ -269,11 +269,19 @@ fn repair_p12_equals_blp_on_every_lp() {
 fn planted_corrupted_basis_is_repaired_exactly() {
     let (mut planted, mut warm, mut warm_pivots) = (0usize, 0usize, 0u64);
     for (what, lp) in suite() {
-        let (LpResult::Optimal { objective: want, .. }, Some(good)) = blp::solve_with_basis(&lp)
+        let (
+            LpResult::Optimal {
+                objective: want, ..
+            },
+            Some(good),
+        ) = blp::solve_with_basis(&lp)
         else {
             continue;
         };
-        assert!(blp::certify_basis(&lp, &good).is_ok(), "{what}: good basis rejected");
+        assert!(
+            blp::certify_basis(&lp, &good).is_ok(),
+            "{what}: good basis rejected"
+        );
         let total = good.nonbasic_pos.len();
         let mut is_basic = vec![false; total];
         for &j in &good.basic {
@@ -293,7 +301,10 @@ fn planted_corrupted_basis_is_repaired_exactly() {
         let (got, stats) = blp::solve_from_basis_with_stats(&lp, &bad, None);
         match got {
             LpResult::Optimal { objective, .. } => {
-                assert_eq!(objective, want, "{what}: repair from {bad:?} missed the optimum")
+                assert_eq!(
+                    objective, want,
+                    "{what}: repair from {bad:?} missed the optimum"
+                )
             }
             other => panic!("{what}: repair gave {other:?}"),
         }

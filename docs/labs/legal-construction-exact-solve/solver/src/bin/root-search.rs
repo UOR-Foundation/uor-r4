@@ -58,9 +58,12 @@ fn main() -> ExitCode {
                 Ok(LpResult::Optimal { objective, .. }) => {
                     (Some(ms), true, Some(objective.to_string()), None)
                 }
-                Ok(LpResult::Infeasible) => {
-                    (Some(ms), false, None, Some("certificate: infeasible".into()))
-                }
+                Ok(LpResult::Infeasible) => (
+                    Some(ms),
+                    false,
+                    None,
+                    Some("certificate: infeasible".into()),
+                ),
                 Err(e) => (Some(ms), false, None, Some(format!("certificate: {e}"))),
             }
         }
