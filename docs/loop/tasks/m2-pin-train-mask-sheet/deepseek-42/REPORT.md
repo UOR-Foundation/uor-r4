@@ -23,11 +23,11 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2851 (`References`; the item s
 ## Measurements
 
 - Pins verified by command: `git cat-file -t 2fd6358bb/9e904a834` -> commit; `expected_train_targets` and `train_mask` present in `crates/uor-r4-training/examples/geometric-stack-native.rs`; `b5e7352d…` in `crates/uor-r4-discrete/src/attention_learning.rs`; `2,425,925` in `archive/labs/count-reference-2026-10-13/README.md`.
-- `prep-check` on the new sheet: **complete=yes**, fitness **`PENDING`** by design; `loop pr-check --local` PASS. CI at the head was green when measured; the result is recorded here after the run, not before it.
+- `prep-check` on the new sheet: **complete=yes**, fitness **`PENDING`** by design; `loop pr-check --local` PASS. This REPORT is updated only after each measurement; the check and review results at the current head are recorded below once they exist (nothing here claims an unrun check or an unposted review).
 
 ## Checks run at the head
 
-`prep-check`, `loop report --check`, `loop pr-check --local`, `loop gates --full`, and a fresh-context review record at the head (docs-only, D46).
+`prep-check`, `loop report --check`, `loop pr-check --local`, `loop gates --full`; the fresh-context review record is requested at the current head and its result is recorded after it is posted (docs-only, D46). The PR body is refreshed from this REPORT before the merge queue runs.
 
 ## Skills used
 
