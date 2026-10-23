@@ -6,7 +6,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item: `m4-lawful-likelihood-bpb` (#2
 
 - **The unit had to be re-scoped, not re-built.** The design (PR #2940) and the host-only PRLL implementation (PR #2945, `91a689f1b`) were already merged by deepseek yesterday; the item stayed `ready` for one missing step: the pre-registration sheet (item step 4). The earlier attempt was blocked because the item's scope did not list `docs/harness/prep/`, which the PM has since added (`docs/harness/prep/m4-lawful-likelihood-bpb*` is in the item frontmatter now), so the sheet is claimable.
 - **The chat held-out stream is not in the repository.** It is the `chat-v0-p2` held-out token stream recorded on the pod in the archived criterion-2 lab (`heldout.u16`, sha256 `e5f400b0…`). The sheet therefore names and hashes it from that archive and adds a hard freeze rule: the scoring host re-verifies the hash and token count before scoring, and any mismatch halts.
-- **The scoring run cannot happen yet.** No discrete model is exported through `UORLUT01` (`m4-export-uorlut01-cli` is open) and no D40 release exists. The sheet therefore registers only the instrument and the stream; the registered scoring arm stays HELD.
+- **The scoring run cannot happen yet.** No discrete model is exported through `UORLUT01` (`m4-export-uorlut01-cli` is open) and no owner release exists (CHARTER §5.1). The sheet therefore registers only the instrument and the stream; the registered scoring arm stays HELD.
 
 ## What changed
 

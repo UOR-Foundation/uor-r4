@@ -1,32 +1,20 @@
-# ORDER: m4-lawful-likelihood-bpb, deepseek-50
+# ORDER: m4-lawful-likelihood-bpb, deepseek-50 (residual record clean-up)
 
-Lab: deepseek. Item: [m4-lawful-likelihood-bpb](../../../../roadmap/items/m4-lawful-likelihood-bpb.md). Base: `903dbf701`.
+Lab: deepseek. Item: [m4-lawful-likelihood-bpb](../../../../roadmap/items/m4-lawful-likelihood-bpb.md) (#2861). Base: `903dbf701`. `References #2861`.
 
 ## Goal
 
-The item's done-when reads:
+PR #3060 merged at `23eb1c275` with the pre-registration sheet and the single-interval outcome rule. Three review residuals were committed after that merge and did not land: (1) the lab design note's control 7 still says zero-count mass is "infinite and is reported as such", contradicting the merged `MassZero` control and the sheet; (2) `deepseek-49/REPORT.md` still says "no D40 release exists" where CHARTER §5.1 means "no owner release exists"; (3) the sheet header does not cite the design PR #2940. This unit lands exactly those three doc corrections.
 
-> A likelihood with no softmax or squashing (D23, D25) feeding a registered instrument that scores the chat held-out stream in bits per byte, so the M4 bar "held-out quality at or below 0.90 bits per byte" can be tested. The sources do not say which stream file or byte count is "the chat held-out stream"; naming and hashing it is part of the pre-registration (step 4).
+## Cancel probe
 
-## Cancel probe (run first)
-
-To fill in.
+Class instrument (docs). At the base: `git show origin/main:docs/labs/m4-lawful-likelihood-bpb/README.md | grep -c 'infinite and is reported'` = 1; the sheet header lists #2945 but not #2940; the REPORT says D40. Task stands.
 
 ## Files in scope
 
-- `crates/uor-r4-discrete/**`
-- `crates/uor-r4-integer/**`
-- `docs/mechanisms/lut-serving.md`
-- `docs/model/serving-and-export.md`
-- `docs/research/findings.md`
-- `docs/research/open-questions.md`
-- `docs/labs/m4-lawful-likelihood-bpb/**`
-- `docs/harness/prep/m4-lawful-likelihood-bpb*`
+- `docs/labs/m4-lawful-likelihood-bpb/**`, `docs/harness/prep/m4-lawful-likelihood-bpb*`, `docs/loop/tasks/m4-lawful-likelihood-bpb/**`
 
 ## Done when
 
-To fill in.
-
-## Stop and ask if
-
-To fill in.
+- The three residuals are corrected, checks pass (`prep-check` PENDING/complete, report, pr-check, gates), a docs-only D46 fresh-context record is at the head, and the PR is merged and verified.
+- No content, bar, stream hash or FIT-status change; the sheet stays `TEST FITNESS: PENDING`.
