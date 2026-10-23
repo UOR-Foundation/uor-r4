@@ -12,7 +12,7 @@ The cancel probe stands. At the base, `grep -c sha256 src/case.rs` is 0 and `src
   - made 775 pivots, all in phase 2, with 2 bound flips;
   - grew `D` to at most 22,846 bits, with the last pivots taking about 20 s each.
 
-  Its objective was negative from about pivot 250–375. That is an observation of the instrument, not a proof: there was no certificate, so no optimum and no sign of one is claimed. Under D22 this is an instrument stop, not a mechanism negative.
+  Its objective was 0 through pivot 275 and negative from pivot 300 (progress lines every 25 pivots). That is an observation of the instrument, not a proof: there was no certificate, so no optimum and no sign of one is claimed. Under D22 this is an instrument stop, not a mechanism negative.
 - **The work first went to the wrong place.** It was built on draft #3015, alongside DeepSeek's #3013 for the same item. My branch was unpushed, so my claim looked stale. The two were reconciled on #3013 (6353849400, 6353993780): #3013 landed first, and this unit moves #3015's work onto the merged `case.rs`. #3015 is closed.
 - **The ported files were reformatted** by `cargo fmt`. Their logic is unchanged; only imports and paths differ. `saved::load` calls became `case::load_verified(..)` plus `.problem`.
 

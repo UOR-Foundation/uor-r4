@@ -61,8 +61,9 @@ CARGO_TARGET_DIR=/tmp/legal-case-target ~/.cargo/bin/cargo build --release --loc
 **The root-LP run (claude-50, `blp` at commit `95328fb27`).** This is an instrument stop:
 - Started 2026-10-22T22:05:45Z under a declared 7,800 s cap. Ended 2026-10-23T00:15:46Z with `timeout` exit 124, and no result line.
 - 775 pivots (the last progress line at 7,510 s), 2 bound flips, all in phase 2: the start point δ = 0 is feasible.
-- `D = |det B|` grew about 53 bits per pivot early, then flattened, reaching at most 22,846 bits. The last pivots took about 20 s each.
-- The objective was 0 through about 250 degenerate pivots, and negative from the first progress line after that (pivot 375).
+- `D = |det B|` grew 46–71 bits per pivot in each 25-pivot stretch up to pivot 250 (13,834 bits there). It then flattened, reaching at most 22,846 bits. The last pivots took about 20 s each.
+- Progress lines come every 25 pivots. The objective was 0 at every line through pivot 275, and negative from pivot 300 on.
+- To re-run: `cargo run --offline --locked --release --bin root-lp -- <attempt2 dir>`, with the case directory as in the commands above.
 
 **What it establishes:** only that this exact search does not finish in the ORDER's time budget on this laptop.
 - The negative phase-2 objective is an observation of the instrument. Phase 2 keeps iterates primal-feasible in exact arithmetic, so it points to a relaxation optimum below 0, in which case branch-and-bound decides the item.
