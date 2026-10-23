@@ -41,5 +41,8 @@ Verified at the review head: `cargo test -p uor-r4-discrete --lib normalization_
   - `1` sets `n := 1` at the three snap sites: tree, consensus and output.
   - `0` keeps `snap_n`, so the default path is unchanged.
   - `C_raw` is refused on the device path, because it needs a ℤ⁸ carry.
-- **What still blocks a run.** The snapshot schema has no mode field, so `snapshot()` refuses a non-default mode, and no driver or CLI flag selects one. The next unit adds both. Until then no command runs the `C_unscaled` arm.
-- **Not run yet.** The GPU test `device::unit_snap_device_tests::unit_snap_device_word_runs_and_refuses` (ignored without a GPU) waits for an approved pod.
+- **Carried end to end (claude-61, same PR).**
+  - Snapshots record `normalization_mode`. The field is omitted when it is the default, so existing snapshots and their hashes are byte-identical.
+  - `DriverConfig.normalization_mode` selects the arm (`unit_snap_control_v1`). A checkpoint whose mode differs from the config is refused.
+  - `export_d11` refuses a non-default mode, because the integer engine has no unit snap.
+- **Not run yet.** The GPU test `device::unit_snap_device_tests::unit_snap_device_word_runs_and_refuses` (ignored without a GPU) checks the mode, the refusals and the snapshot round trip. It runs with the default-path A8 checkpoint-0 identity check on one pod, once approved.
