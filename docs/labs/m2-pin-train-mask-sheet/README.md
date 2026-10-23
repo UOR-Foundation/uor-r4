@@ -11,8 +11,8 @@
    - the CLI still carries `train_mask`/`expected_train_targets` (`crates/uor-r4-training/examples/geometric-stack-native.rs`);
    - the TRAIN mask digest `b5e7352d…` is the current code pin (`attention_learning.rs`); the expected count `2,425,925` is carried by the count-reference archive;
    - the DEV pins (42,856 tokens / 14,287 targets / 111+232 window inventory) are restated in the refresh from the old sheet's Amendment 4 record.
-2. **Wrote the refreshed one-page sheet on the D37 basis:** D37 revised D32's learning-path float ban, so the sheet's offline f32 training law is legal again **with a reported export gap**; bars, reference, data pins, steps, stop rule, cost and power are restated unchanged (the old sheet's full wording remains authoritative).
-3. **Posted the decision card on #2028/#2851:** ask the PM to record whether the Amendment 6 sheet is **live under D37** (recommended: yes, with the export gap reported at export) or **superseded** by a discrete-law sheet. The card changes no bar, hold or spend.
+2. **Wrote the refreshed one-page sheet on the D37 basis:** floating point is legal offline with a reported export gap, and **a gap above the two-seed noise band disqualifies** (CHARTER §3.7); per **CHARTER §4 rule 5**, an archived float sheet returns only as a **new sheet with a fresh FIT**, so this page is a new sheet at `PENDING`, not a revival - the old sheet stays the archived design record. The arm objectives are explicit (M1 `hinge`, M8 `hinge8`). Bars, reference, data pins, steps, stop conditions, cost and power are restated unchanged (the old sheet's full wording remains authoritative).
+3. **Posted the decision card on #2028/#2851, then corrected its framing** after review: under CHARTER §4 rule 5 an archived float sheet cannot be simply "revived", so the question for the PM is whether this **new D37-basis sheet** is the right successor to the Amendment 6 design record (recommended) or whether a discrete-law sheet is still wanted. The correction is posted on both issues; the card changes no bar, hold or spend.
 
 ## Open items before closing `#2851`
 

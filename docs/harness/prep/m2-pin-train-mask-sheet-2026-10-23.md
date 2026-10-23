@@ -4,7 +4,8 @@
 - milestone: M1 #2029 rung 0 on the compliant trunk (the design record this refresh re-pins); it is the M2 pre-registration source (`#2030`).
 - mechanism: rank-margin-objective; mechanism brief `docs/mechanisms/rank-margin-objective.md`.
 - old sheet: [`m1-rank-margin-rung0-2026-10-13.md`](m1-rank-margin-rung0-2026-10-13.md) (Amendments 1-7; Amendment 7 froze it under D32).
-- **legal basis of this refresh: D37** (`docs/integration/DECISIONS.md`) - floating point is legal in **offline training only**, with a **reported export gap**. D37 revises D32's learning-path float ban. The sheet's registered training law is an offline f32 optimizer run; serving stays integer (CHARTER §3.7, §3.1-§3.3).
+- **legal basis: D37 + CHARTER §4 rule 5** - floating point is legal in **offline training only**, every float candidate reports its **export gap on the same evaluator**, and **a gap above the two-seed noise band disqualifies it** (CHARTER §3.7). D37 revises D32's learning-path float ban; serving stays integer (§3.1-§3.3, §3.6).
+- **this is a NEW sheet, not a revival.** CHARTER §4 rule 5: "Archived float sheets return only as new sheets with a fresh FIT." The old Amendment 6 sheet stays an archived design record; this page is the new D37-basis sheet and carries its own `TEST FITNESS: PENDING` (and needs its own non-author FIT).
 - status: **refresh, `TEST FITNESS: PENDING`** - it needs the PM's recorded live/superseded answer and a non-author FIT before the milestone can treat it as the live pre-registration. It runs nothing and releases no hold; training and rental stay HELD.
 - scope: this refresh re-pins the old sheet's four Amendment 6 mechanical pins against current `main` and re-states its bars unchanged. No bar, hold or spend is changed here; a bar change is a decision card (CHARTER §5.2).
 
@@ -24,8 +25,8 @@ Nothing above is narrower than the old sheet's registered bars; the old sheet's 
 ## Base artifact
 
 - **base: none** - trained from seed initialization at the pinned config (the historical 4.4M `rrarra` smoke config is context only, not a base artifact).
-- **pinned config (unchanged):** `arch=geometric pattern=rrrrrr width=256 heads=4 stack_mlp=384 context=384 gate=hamilton rec_gates=geometric projection=spiralcore_fbs head=spiralcore_product objective=hinge device=cuda precision=f32 data_parallel=1`.
-- **D37 export gap, stated:** the run trains in offline f32; the exported artifact is the integer artifact, and the run report must state the measured gap between the f32 training evaluations and the exported integer artifact's evaluations (D37; CHARTER §3.7). Serving is integer only.
+- **pinned config (unchanged), with the per-arm objective made explicit:** `arch=geometric pattern=rrrrrr width=256 heads=4 stack_mlp=384 context=384 gate=hamilton rec_gates=geometric projection=spiralcore_fbs head=spiralcore_product device=cuda precision=f32 data_parallel=1`; **`objective=hinge` for M1 (1 rival) and `objective=hinge8` for M8 (8 rivals)** - the old sheet's arm table (line 212) and the trainer's accepted values (`geometric-stack-native.rs:451/494`: `hinge|hinge8`).
+- **D37 export gap and its outcome rule, stated:** the run trains in offline f32; the exported artifact is the integer artifact, and the run report must state the measured gap between the f32 training evaluations and the exported integer artifact's evaluations on the same evaluator (D37; CHARTER §3.7). **Outcome rule: a gap above the two-seed noise band disqualifies the configuration** - the reported between-seed disagreement is that band; a float arm cannot KEEP with an export gap above it. Serving is integer only.
 
 ## Data split and pins
 
@@ -38,7 +39,7 @@ Nothing above is narrower than the old sheet's registered bars; the old sheet's 
 
 ## Steps
 
-- **exact CLI (unchanged from Amendment 6; verified present in `crates/uor-r4-training/examples/geometric-stack-native.rs`):**
+- **exact CLI (unchanged from Amendment 6; verified present in `crates/uor-r4-training/examples/geometric-stack-native.rs`). The CLI below is the M1 arm (`objective=hinge`); for the M8 arm substitute `objective=hinge8` and change nothing else:**
 
 ```text
 geometric-stack train arch=geometric pattern=rrrrrr width=256 heads=4 stack_mlp=384 context=384 gate=hamilton rec_gates=geometric projection=spiralcore_fbs head=spiralcore_product objective=hinge device=cuda precision=f32 data_parallel=1 train=/workspace/rung0/data/mw-balp/train/tokens.u16 train_mask=/workspace/rung0/data/mw-balp/train/response_mask.u8 valid=/workspace/rung0/data/ft/dev/tokens.u16 valid_mask=/workspace/rung0/data/ft/dev/response_mask.u8 tokenizer=/workspace/rung0/data/tokenizer-d36d3e87.json expected_dev_targets=14287 expected_train_targets=2425925 batch=16 steps=7324 lr=0.002 warmup=200 min_lr=0.1 weight_decay=0.1 clip=1 eval_every=128 eval_windows=111 final_windows=111 checkpoint_every=128 sample_tokens=0 max_seconds=inf seed=SEED out=EXCLUSIVE_REPORT_ROOT
@@ -52,11 +53,12 @@ geometric-stack train arch=geometric pattern=rrrrrr width=256 heads=4 stack_mlp=
 - **what the CLI actually enforces (verified in `crates/uor-r4-training/examples/geometric-stack-native.rs` and `native_rung0.rs`):** it refuses without `train_mask`; it binds the TRAIN input content (records bytes + sha256) and aborts when the masked TRAIN reference count differs from `expected_train_targets` (2,425,925); it checks the mask length equals the token count; it stores `expected_dev_targets` in the panel plan and **reports** any DEV denominator mismatch (14,287) as a diagnostic rather than aborting; on resume it requires the checkpoint's saved input binding to match.
 - **manual pre-run verification this sheet requires (restored from the old sheet's step list):** before launching, the operator verifies the declared tar/member identities and mask inventory by hand - `data/ft-balp.tar` and `data/ft-dev.tar` sizes/md5/sha256 above, the mask member's 7,512,797 bytes and sha256 `b5e7352d…`, the 42,856 DEV tokens and the 14,287 mask sum - and records each result in the run report. A mismatch stops the launch; it is not absorbed.
 - **lawful stops:** the enforced abort above, a failed manual hash/count check, a hashing/read error, a GPU/lease failure, or an owner stop. A self-set wall-clock or budget estimate is not a stop rule; a healthy run is extended and its lease renewed (AGENTS.md). The DEV denominator mismatch is reported, not absorbed, and the report must name it.
-- **negative classification:** a failed bar closes this configuration (offline float, hinge objective, rival counts M1/M8, pinned dose), never the mechanism; the old sheet's verdict wording applies.
+- **outcome rule (D37/§3.7):** the export gap on the same evaluator must be stated in the report, and **a gap above the two-seed noise band disqualifies the configuration**; that is a negative, and it closes this configuration, not the mechanism.
+- **negative classification:** a failed bar closes this configuration (offline float, hinge objective/arm objectives M1 `hinge` / M8 `hinge8`, rival counts, pinned dose), never the mechanism; the old sheet's verdict wording and §4 rule 1 apply.
 ## Cost
 
 - preparation: no GPU (source, sheet, pins; the data is already published).
-- run: **one Vast pod, 1x RTX 5090 or the next rung, <= $4 total UNVERIFIED projection** for the four runs (history: <= $2 on a 1x4090), within the owner caps (**<= 4 running pods and <= $8/h across all labs**; D26).
+- run: **one Vast pod, 1x RTX 5090 or the next rung, <= $4 total UNVERIFIED projection** for the four runs (history: <= $2 on a 1x4090), within the owner caps (**<= 4 running pods and <= $8/h across all labs**: CHARTER §5 rule 4, not D26 - D26 is only that Vast is the default provider).
 - no separate control pod: the count predictor and the untrained same-seed guard are computed on the same GPU inside the run; retention: small checkpoints/report only, cloud-store round-trip, 128 MiB physical stop margin.
 
 ## Minimum test power
