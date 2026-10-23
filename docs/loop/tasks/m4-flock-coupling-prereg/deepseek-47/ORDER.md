@@ -12,13 +12,13 @@ Class **instrument** (docs verdict; no GPU). At the base: the draft says `TEST F
 
 ## Files in scope
 
-- `docs/harness/prep/m4-c1-flock-coupling-DRAFT-2026-10-18.md` (status + verdict)
+- `docs/harness/prep/m4-flock-coupling-prereg-DRAFT-2026-10-22.md` (status + verdict; canonical per PM ruling `#2028` `6362816839`)
 - `docs/labs/m4-flock-coupling-prereg/**` (lab record)
 - this task folder
 
 ## Done when
 
-- The non-author `TEST FITNESS: NOT_FIT` block is rendered by `prep fit` and its prerequisites (the five open questions, priority order, what clears each) are recorded in the lab note and the REPORT. NOTE: the item scope does not cover the draft's filename (`docs/harness/prep/m4-c1-flock-coupling*`), so the block cannot be pasted into the sheet in this PR; a one-glob PM scope widening is requested, and the sheet edit follows when it lands.
+- The canonical sheet (`docs/harness/prep/m4-flock-coupling-prereg-DRAFT-2026-10-22.md`, per the PM ruling on #2028 `6362816839`) carries the non-author `TEST FITNESS: NOT_FIT` and the rendered `prep fit` block; the lab note and REPORT record the five decisions in priority order and the verified finite controls. The superseded 10-18 draft is untouched.
 - The design-note conclusions are verified against current main (finite control test passes; re-derived literals still match; no bar is invented and no PM/owner question is answered on their behalf).
 - A consolidated decision card on #2860 (mirrored on #2028) gives the PM/owner one recommendation per question, with evidence and the note that it releases nothing.
 - `loop report --check`, `loop pr-check --local`, `loop gates --full` and a fresh-context review record at the head pass (docs-only).

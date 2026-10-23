@@ -5,15 +5,16 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2860 (`References`; the item s
 ## What did not work, first
 
 - **The unit cannot finish the registration by itself.** antigravity's design note and machine-complete draft landed yesterday, but its five registration questions have gone unanswered (searched #2860 and #2028) - and each one is a PM or owner call: D11's wording on `k_max > 1`, line identity, base-checkpoint binding, D37 item-3, and the numeric bar. A lab that answers them would be deciding the bar for itself.
-- **The sheet still said `TEST FITNESS: PENDING`, not requested.** That understates the state: the design and finite controls are done and reviewable; the missing pieces are decisions, not engineering. This unit records exactly that as a `NOT_FIT` with the five decision prerequisites in priority order.
-- **The verdict cannot be written into the sheet by this PR.** The item's scope lists `docs/harness/prep/m4-flock-coupling-prereg*` but the draft is `m4-c1-flock-coupling-DRAFT-2026-10-18.md`, so `pr-check`'s scope rule refuses the edit. The review is recorded in the lab note and this REPORT instead, with a one-glob PM scope widening requested on #2028 (the #3019/#3026/#3027 pattern); the sheet stays untouched until then.
+- **The canonical sheet still said `TEST FITNESS: PENDING`, not requested.** The design and finite controls are done and reviewable; the missing pieces are decisions, not engineering. This unit records exactly that as a `NOT_FIT` on the canonical 10-22 sheet, with the five decision prerequisites in priority order.
+- **The first sheet target was the wrong file.** I aimed the review at the 10-18 draft and asked for a scope widening, but the PM's answer (`#2028` `6362816839`) shows the canonical sheet is `m4-flock-coupling-prereg-DRAFT-2026-10-22.md` (it supersedes the 10-18 draft and matches the item scope), so no widening was needed; the review is now recorded there and the widening request is withdrawn.
 - **No compute or bar is touched.** The finite-control suite passes on current main (`cargo test -p uor-r4-discrete --test flock_coupling_controls` = 7 passed); the re-derived literals still match the build-time geometry; the sheet has zero bar, zero run and no compute cleared.
 
 ## What changed
 
 | File | Change |
 |---|---|
-| `docs/labs/m4-flock-coupling-prereg/README.md` | the non-author review note, including the scope limitation and the pending PM widening |
+| `docs/harness/prep/m4-flock-coupling-prereg-DRAFT-2026-10-22.md` | the canonical sheet: status line and Verdict now carry the non-author `TEST FITNESS: NOT_FIT` (deepseek-47) and the rendered `prep fit` block |
+| `docs/labs/m4-flock-coupling-prereg/README.md` | the non-author review note (canonical sheet, verified controls, five open decisions) |
 | this folder | ORDER (committed first) and this REPORT |
 
 **Size:** about 80 docs lines; docs-only (no receipts file, D46 fresh-context record).
@@ -21,8 +22,8 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2860 (`References`; the item s
 ## Measurements
 
 - `cargo test -p uor-r4-discrete --test flock_coupling_controls`: **7 passed** (the finite-control suite; `--lib flock` separately runs one `d11_export` roundtrip test, 1 passed, 217 filtered).
-- `uor-harness prep fit -m m4 --verdict NOT_FIT ...` recorded the receipt and rendered the block; the block is held in the PR history/ledger but **the sheet itself remains `TEST FITNESS: PENDING` and untouched**, because its filename is outside the item scope.
-- `prep-check` lists the sheet as `PENDING`, complete, zero bar, zero run.
+- `uor-harness prep fit -m m4 --verdict NOT_FIT ... --sheet docs/harness/prep/m4-flock-coupling-prereg-DRAFT-2026-10-22.md` recorded the receipt and rendered the block now in the canonical sheet's Verdict.
+- `prep-check` lists the canonical sheet as `NOT_FIT`, complete, zero bar, zero run.
 
 ## Checks run at the head
 

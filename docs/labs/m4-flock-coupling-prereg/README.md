@@ -62,8 +62,9 @@ Because `docs/research/notebook/m1-discrete-attention.md` is outside the declare
 
 ## Non-author FIT review (deepseek-47, 2026-10-23)
 
-Non-author `TEST FITNESS` review of the DRAFT sheet: **NOT_FIT**, held in PR #3052. The verdict could not be written into the sheet itself: the item's scope lists `docs/harness/prep/m4-flock-coupling-prereg*`, while the draft's filename is `m4-c1-flock-coupling-DRAFT-2026-10-18.md`, so `loop pr-check`'s scope rule refuses a sheet edit. A PM scope widening (one glob, the #3019/#3026/#3027 pattern) is requested on #2028. The verdict text is in this note and the PR's REPORT; the rendered `prep fit` block is held in the PR history/ledger because the sheet cannot be edited until the scope widens, and the sheet remains `TEST FITNESS: PENDING`. No compute is cleared.
+Non-author `TEST FITNESS` review of the canonical sheet [`m4-flock-coupling-prereg-DRAFT-2026-10-22.md`](../../harness/prep/m4-flock-coupling-prereg-DRAFT-2026-10-22.md): **NOT_FIT**, recorded in that sheet's `## Verdict` (status line + rendered `prep fit` block). No compute is cleared.
 
-- **Verified:** the finite-control suite passes on current main (`cargo test -p uor-r4-discrete --test flock_coupling_controls` = 7 passed); the re-derived control literals still match the build-time geometry; the sheet is machine-complete and has zero bar, zero run.
-- **Remaining prerequisites (all PM/owner):** `k_max > 1` under D11; C1 line identity/decisive-run status; base-checkpoint binding after the two October Q1 stops; D37 item-3 confirmation for the float forward; and the registration numbers (C0 sample size, proxy threshold, numeric bar).
+- The PM declined the scope widening at `#2028` comment `6362816839` and named the `-2026-10-22` sheet the canonical one; it supersedes the 10-18 draft (retained byte-identical) and matches the item scope glob, so no widening was needed. The earlier 10-18 sheet is untouched.
+- **Verified:** the finite-control suite passes on current main (`cargo test -p uor-r4-discrete --test flock_coupling_controls` = **7 passed**); the re-derived control literals match the build-time geometry; the sheet is machine-complete with zero bar and zero run.
+- **Remaining prerequisites (all PM/owner):** `k_max > 1` under D11; C1 line identity/decisive-run status; base-checkpoint binding after the two October Q1 stops; D37 item-3 confirmation for the float forward; and the registration numbers.
 - The consolidated decision card with one recommendation per question is on #2860.
