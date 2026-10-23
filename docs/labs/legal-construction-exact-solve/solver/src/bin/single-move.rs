@@ -1,14 +1,16 @@
-//! Exact single-coefficient legality census, best single move, and a greedy joint legal-move pass
-//! for the saved legal-construction case (#2828, deepseek-57).
+//! Exact single-coefficient legality census, best single move, and a greedy joint pass with exact
+//! rational slack for the saved legal-construction case (#2828, deepseek-57).
 //!
-//! If only coefficient i moves by delta_i, every guard row sees J_j . delta = J[j][i] * delta_i,
-//! so a positive delta_i is legal exactly when every entry of column i is >= 0 and a negative one
-//! when every entry is <= 0. That is an exact sign test, no solver numerics. The unit reports the
-//! census, the exact best single move, and runs a greedy joint pass over the exact rational slack
-//! J . delta; every accepted move re-verifies all 380 guard rows exactly.
+//! If only coefficient i moves by delta_i, every guard sees J_j . delta = J[j][i] * delta_i, so a
+//! positive delta_i is legal exactly when every entry of column i is >= 0 and a negative one when
+//! every entry is <= 0: an exact sign test with no solver numerics. The joint pass may re-destination
+//! any coefficient, so a stop means no single-coefficient improvement remains (a local optimum in
+//! single-coefficient space, not a global one). Every accepted move is checked on all 380 guard rows
+//! and the returned assignment is recomputed from scratch from g and J: objective and the full guard
+//! vector must equal the incremental ones exactly.
 //!
 //! It never claims an optimum unless it proves one. A feasible improving move is progress recorded
-//! with its objective and full exact guard vector; the item stays open.
+//! with its objective; the item stays open.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -36,7 +38,6 @@ fn frac(r: &BigRational) -> String {
 fn destinations(c: &Coeff) -> Vec<(i64, BigRational)> {
     let mut out = Vec::with_capacity(15);
     out.push((c.q0, BigRational::zero()));
-    let four = BigRational::from_integer(BigInt::from(4));
     for q in -7..c.q0 {
         let delta = BigRational::new(BigInt::from(q - c.q0), BigInt::from(4)) + &c.shift;
         out.push((q, delta));
@@ -45,7 +46,6 @@ fn destinations(c: &Coeff) -> Vec<(i64, BigRational)> {
         let delta = BigRational::new(BigInt::from(q - c.q0), BigInt::from(4)) + &c.shift;
         out.push((q, delta));
     }
-    let _ = four;
     out
 }
 
@@ -63,6 +63,15 @@ fn column_has(g: &[Vec<BigRational>], i: usize) -> (bool, bool) {
     (has_pos, has_neg)
 }
 
+#[derive(Default)]
+struct Census {
+    pos_only: usize,
+    neg_only: usize,
+    both_signs: usize,
+    all_zero: usize,
+    movable: usize,
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let dir = arg(&args, "--case")
@@ -70,7 +79,7 @@ fn main() -> ExitCode {
         .unwrap_or_else(case::default_case_dir);
     let max_moves: usize = arg(&args, "--max-moves")
         .and_then(|s| s.parse().ok())
-        .unwrap_or(64);
+        .unwrap_or(256);
 
     let t = Instant::now();
     let (case, verified) = match case::load_verified(&dir) {
@@ -94,13 +103,7 @@ fn main() -> ExitCode {
     );
 
     let coeffs = problem.coeffs();
-    let mut census = CENSUS {
-        pos_only: 0,
-        neg_only: 0,
-        both_signs: 0,
-        all_zero: 0,
-        movable: 0,
-    };
+    let mut census = Census::default();
     let mut best_single: Option<(usize, i64, BigRational, BigRational)> = None;
     let t = Instant::now();
     for i in 0..n {
@@ -146,13 +149,11 @@ fn main() -> ExitCode {
     );
     match &best_single {
         Some((i, q, delta, contribution)) => {
-            let mut guard_min = BigRational::from_integer(BigInt::from(0));
-            let mut first_min = true;
-            for row in &problem.guards {
+            let mut guard_min = BigRational::zero();
+            for (j, row) in problem.guards.iter().enumerate() {
                 let v = &row[*i] * delta;
-                if first_min || v < guard_min {
+                if j == 0 || v < guard_min {
                     guard_min = v;
-                    first_min = false;
                 }
             }
             println!(
@@ -167,7 +168,8 @@ fn main() -> ExitCode {
         None => println!("single_best none (no legal single-coefficient change lowers g)"),
     }
 
-    // Greedy joint pass with exact slack.
+    // Greedy joint pass with exact slack. Every coefficient may be re-destined; a stop means no
+    // single-coefficient re-destination improves the objective (single-coefficient local optimum).
     let mut chosen: Vec<Option<(i64, BigRational)>> = vec![None; n];
     let mut slack: Vec<BigRational> = vec![BigRational::zero(); guards];
     let mut objective = BigRational::zero();
@@ -177,10 +179,10 @@ fn main() -> ExitCode {
     for _pass in 0..max_moves {
         let mut best: Option<(usize, i64, BigRational, BigRational)> = None;
         for i in 0..n {
-            if chosen[i].is_some() {
-                continue;
-            }
-            // Exact feasible interval for delta_i given the current slack.
+            let current: BigRational = chosen[i]
+                .as_ref()
+                .map(|(_, d)| d.clone())
+                .unwrap_or_else(BigRational::zero);
             let mut low: Option<BigRational> = None;
             let mut high: Option<BigRational> = None;
             let mut infeasible = false;
@@ -193,7 +195,6 @@ fn main() -> ExitCode {
                     }
                     continue;
                 }
-                // Need slack_j + a * delta >= 0.
                 let bound = -&slack[j] / a;
                 if a.is_positive() {
                     if low.as_ref().is_none_or(|l| bound > *l) {
@@ -206,34 +207,40 @@ fn main() -> ExitCode {
             if infeasible {
                 continue;
             }
-            for (q, delta) in destinations(&coeffs[i]) {
-                if delta.is_zero() {
+            for (q, destination) in destinations(&coeffs[i]) {
+                let change = &destination - &current;
+                if change.is_zero() {
                     continue;
                 }
-                if low.as_ref().is_some_and(|l| delta < *l) {
+                if low.as_ref().is_some_and(|l| change < *l) {
                     continue;
                 }
-                if high.as_ref().is_some_and(|h| delta > *h) {
+                if high.as_ref().is_some_and(|h| change > *h) {
                     continue;
                 }
-                let contribution = &problem.g[i] * &delta;
+                let contribution = &problem.g[i] * &change;
                 if contribution.is_negative()
                     && best.as_ref().is_none_or(|b| contribution < b.3)
                 {
-                    best = Some((i, q, delta, contribution));
+                    best = Some((i, q, destination, contribution));
                 }
             }
         }
-        let Some((i, q, delta, contribution)) = best else {
+        let Some((i, q, destination, contribution)) = best else {
             stopped_at_cap = false;
-            println!("greedy stop: no legal improving move remains");
+            println!("greedy stop: no improving single-coefficient re-destination remains");
             break;
         };
+        let current = chosen[i]
+            .as_ref()
+            .map(|(_, d)| d.clone())
+            .unwrap_or_else(BigRational::zero);
+        let change = &destination - &current;
         for j in 0..guards {
-            slack[j] += &problem.guards[j][i] * &delta;
+            slack[j] += &problem.guards[j][i] * &change;
         }
         objective += &contribution;
-        chosen[i] = Some((q, delta));
+        chosen[i] = Some((q, destination));
         accepted += 1;
         println!(
             "greedy move={} i={} q={} contribution={} objective={}",
@@ -244,28 +251,15 @@ fn main() -> ExitCode {
             frac(&objective)
         );
     }
-    let mut guard_min = BigRational::zero();
-    for (j, s) in slack.iter().enumerate() {
-        if j == 0 || s < &guard_min {
-            guard_min = s.clone();
-        }
-    }
-    println!(
-        "greedy summary seconds={:.3} moves={} cap_reached={} objective={} exact_guard_min={}",
-        t.elapsed().as_secs_f64(),
-        accepted,
-        stopped_at_cap && accepted == max_moves,
-        frac(&objective),
-        frac(&guard_min)
-    );
-    // Independent recomputation from the returned assignment: objective from g and every
-    // guard row from J, with no use of the incremental slack above.
+
+    // Independent recomputation from the returned assignment: objective from g, and all 380 guard
+    // rows from J, with no use of the incremental slack. The full vector must match exactly.
     let mut objective2 = BigRational::zero();
-    let mut guard_min2: Option<BigRational> = None;
     for (i, c) in chosen.iter().enumerate() {
         let Some((_, delta)) = c else { continue };
         objective2 += &problem.g[i] * delta;
     }
+    let mut guard2: Vec<BigRational> = Vec::with_capacity(guards);
     for row in &problem.guards {
         let mut v = BigRational::zero();
         for (i, c) in chosen.iter().enumerate() {
@@ -273,22 +267,34 @@ fn main() -> ExitCode {
                 v += &row[i] * delta;
             }
         }
-        if guard_min2.as_ref().is_none_or(|m| v < *m) {
-            guard_min2 = Some(v);
-        }
+        guard2.push(v);
     }
-    let guard_min2 = guard_min2.unwrap_or_else(BigRational::zero);
+    let matches = objective2 == objective
+        && guard2.len() == slack.len()
+        && guard2.iter().zip(slack.iter()).all(|(a, b)| a == b);
+    let guard_min2 = guard2
+        .iter()
+        .cloned()
+        .min()
+        .unwrap_or_else(BigRational::zero);
+    let active = guard2.iter().filter(|v| v.is_zero()).count();
     println!(
-        "independent objective={} exact_guard_min={} matches_incremental={}",
-        frac(&objective2),
-        frac(&guard_min2),
-        objective2 == objective && guard_min2 == guard_min
+        "greedy summary seconds={:.3} moves={} cap_reached={} objective={} exact_guard_min={}",
+        t.elapsed().as_secs_f64(),
+        accepted,
+        stopped_at_cap && accepted == max_moves,
+        frac(&objective),
+        frac(&guard_min2)
     );
-    if objective2 != objective || guard_min2 != guard_min {
+    println!(
+        "independent objective={} exact_guard_min={} full_guard_vector_matches={matches}",
+        frac(&objective2),
+        frac(&guard_min2)
+    );
+    if !matches {
         eprintln!("independent recomputation disagrees with the incremental pass");
         return ExitCode::FAILURE;
     }
-    let active = slack.iter().filter(|v| v.is_zero()).count();
     println!("active_guards={} of {}", active, guards);
     let moved: Vec<String> = chosen
         .iter()
@@ -301,15 +307,6 @@ fn main() -> ExitCode {
         .collect();
     println!("assignment_moved={} {}", moved.len(), moved.join(","));
     ExitCode::SUCCESS
-}
-
-#[derive(Default)]
-struct CENSUS {
-    pos_only: usize,
-    neg_only: usize,
-    both_signs: usize,
-    all_zero: usize,
-    movable: usize,
 }
 
 #[cfg(test)]
@@ -345,13 +342,9 @@ mod tests {
                 vec![q(2), q(-2), q(0), q(-1)],
             ],
         );
-        let mut pos_only = 0;
-        let mut neg_only = 0;
-        let mut both = 0;
-        let mut zero = 0;
+        let (mut pos_only, mut neg_only, mut both, mut zero) = (0, 0, 0, 0);
         for i in 0..p.n() {
-            let (has_pos, has_neg) = column_has(&p.guards, i);
-            match (has_pos, has_neg) {
+            match column_has(&p.guards, i) {
                 (false, false) => zero += 1,
                 (true, false) => pos_only += 1,
                 (false, true) => neg_only += 1,
