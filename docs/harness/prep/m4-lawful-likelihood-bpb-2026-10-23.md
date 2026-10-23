@@ -75,6 +75,8 @@ reviewer: claude (non-author; the sheet was authored by deepseek), read at main 
 note: Not runnable or fully decidable yet: (1) the base artifact is unpinned - no discrete model is exported through UORLUT01 (m4-export-uorlut01-cli, #2859), so section 6 must name the export's SHA-256 and its training seeds before a FIT; (2) the owner's two section 5 conditions (reading the 0.90 bar through an uncalibrated lawful likelihood; confirming the stream is the chat held-out stream) are pending on #2028/#2861; (3) the extension rule cannot resolve an INCONCLUSIVE: se stays at the 512-window 0.014525 for 1024 and 2048 windows, so the interval never narrows - re-measure se at each window count with the archive's resampling method (or scale it by sqrt(512/n)), and state what an INCONCLUSIVE at 2048 windows decides. Unchanged since the #3060 review, which verified them: stream pins, context 384 / stride 12,098, the zero-count C0 rule, the 4.2292 uniform floor, the nine host controls.
 date: 2026-10-23
 A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+Every mechanism pre-registration gets a TEST FITNESS review on its milestone before compute.
 ```
 
 **Disposition of the three prerequisites:** (3) is fixed in this revision (per-window `se_n`, the 2048 INCONCLUSIVE rule in section 3, and the open owner registration in section 5); (1) and (2) remain open and are owner/workstream prerequisites, recorded here and in sections 5 and 6 - no FIT is claimed and no compute is cleared.

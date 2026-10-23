@@ -28,7 +28,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2861. Base: `1cb89e81a`. `Refe
 ## Checks run at the head
 
 - `loop report --check`: PASS; `loop pr-check --local`: verdict PASS.
-- `loop gates --full`: see the closing line (run at the head before review).
+- `loop gates --full`: all 11 gates GREEN at `93079764030186d96a12820773b784ffe32e43e4`.
 - `uor-harness check` on the patched tree: no failure for the sheet; the docs/links gate passes (all changed paths under `docs/`).
 - No GPU, no compute, no training; the patch applies cleanly to the base and `cargo xtask roadmap render --check` is untouched by it.
 
