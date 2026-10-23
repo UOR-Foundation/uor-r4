@@ -1,7 +1,7 @@
 # ORDER: infra-loop-harness, kimi-17 (card the render-PR review gap)
 
 Lab: kimi. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904).
-Base: `dea171338`.
+Setup row: 6. Base: `dea171338`.
 
 ## Goal
 
