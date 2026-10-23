@@ -2,7 +2,7 @@
 
 **Status:** `DRAFT` (`TEST FITNESS: PENDING`; bar `PROPOSED, NOT REGISTERED`)
 **Item:** [`m3-memory-turn-discriminator-gate`](../../roadmap/items/m3-memory-turn-discriminator-gate.md) (`#2855`, Milestone M3 [`#2031`](https://github.com/UOR-Foundation/uor-r4/issues/2031))
-**Mechanism:** [`exact-memory-store`](../../mechanisms/exact-memory-store.md) — turn-compiler decision boundary (`StatementMargin` + `MemoryTurnGate` in [`crates/uor-r4-training/src/relation_compiler.rs`](../../../crates/uor-r4-training/src/relation_compiler.rs))
+**Mechanism:** [`exact-memory`](../../mechanisms/exact-memory.md) — turn-compiler decision boundary (`StatementMargin` + `MemoryTurnGate` in [`crates/uor-r4-training/src/relation_compiler.rs`](../../../crates/uor-r4-training/src/relation_compiler.rs))
 **Parent evidence:** [`#1718`](https://github.com/UOR-Foundation/uor-r4/issues/1718) (`compiler-save-op-v25-rawtable` + `op-model-v25`, `op_policy = unless_query`) and [`m3-nonrelation-prose-panel`](../m3-nonrelation-prose-panel/README.md) (`#2854`)
 
 ---

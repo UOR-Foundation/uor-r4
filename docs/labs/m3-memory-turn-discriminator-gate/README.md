@@ -2,7 +2,7 @@
 
 - **Roadmap item:** [`m3-memory-turn-discriminator-gate`](../../roadmap/items/m3-memory-turn-discriminator-gate.md) (`#2855`)
 - **Milestone:** M3 — Exact Memory & Grounded Sessions (`#2031`)
-- **Mechanism:** [`exact-memory-store`](../../mechanisms/exact-memory-store.md)
+- **Mechanism:** [`exact-memory`](../../mechanisms/exact-memory.md)
 - **Source:** [`crates/uor-r4-training/src/relation_compiler.rs`](../../../crates/uor-r4-training/src/relation_compiler.rs)
 - **Draft pre-registration sheet:** [`preregistration-DRAFT-2026-10-23.md`](preregistration-DRAFT-2026-10-23.md) (`TEST FITNESS: PENDING`)
 
