@@ -21,8 +21,8 @@ Class docs/PM (host-only). At `259f9b9b2`: the item file reads `status: ready` w
 ## Done when
 
 - Item reads `status: done` with the #2978 evidence; stale present-tense claims (retired router engine) corrected; the CDN/tokenizer residual named and carried by the new item file.
-- `cargo xtask roadmap render` produces the matching `docs/roadmap/README.md` and `cargo xtask roadmap check` passes; `loop report --check`, `loop pr-check --local`, `loop gates --full` pass.
-- #2868 is referenced, not closed (the residual item owns the remaining work).
+- `cargo xtask roadmap render` produces the matching `docs/roadmap/README.md` and `cargo xtask roadmap check` passes; `loop report --check`, `loop pr-check --local`, `loop gates --full` pass (the `scope` failure on the roadmap item paths is the known pre-scopes condition and is expected).
+- #2868 closes via the post-merge `roadmap sync --apply` (sync closes the issue of a done item and creates the new item's issue); the REPORT carries `Closes #2868`.
 
 ## Stop and ask if
 

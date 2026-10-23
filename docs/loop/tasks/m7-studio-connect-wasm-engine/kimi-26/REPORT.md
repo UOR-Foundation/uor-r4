@@ -1,6 +1,6 @@
 # REPORT: m7-studio-connect-wasm-engine, kimi-26 (PM status flip + residual item)
 
-Lab: kimi. Order: [ORDER.md](ORDER.md). Item #2868. Base: `259f9b9b2`. `References #2868`.
+Lab: kimi. Order: [ORDER.md](ORDER.md). Item #2868. Base: `259f9b9b2`. `Closes #2868` (via the post-merge `roadmap sync --apply`, which closes the issue of a done item; the residual is carried by `m7-studio-self-host-page-assets`).
 
 ## What did not work, first
 
@@ -32,7 +32,7 @@ Lab: kimi. Order: [ORDER.md](ORDER.md). Item #2868. Base: `259f9b9b2`. `Referenc
 
 ## Still open
 
-- #2868 stays open (`References`, not `Closes`) until `m7-studio-self-host-page-assets` lands; roadmap sync will create the new item's issue on the next `--apply`.
+- #2868 will be closed by the next `roadmap sync --apply` after this merges (sync closes the issue of a done item and creates the new item's issue — dry-run confirmed: create `m7-studio-self-host-page-assets`, update + close #2868, milestone #2035 checklist change); the residual work is carried by the new item.
 - GitHub Pages deploy stays disabled (D36).
 
 ## Plain summary
