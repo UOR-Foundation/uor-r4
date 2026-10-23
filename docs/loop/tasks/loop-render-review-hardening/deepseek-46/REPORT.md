@@ -17,9 +17,9 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item `loop-render-review-hardening`.
 | `crates/uor-r4-harness/src/loopprcheck.rs` | `Pr.is_cross_repository`, `PrGh::is_cross_repository` (real + fake), `ReviewContext::of` sentinel via `render_sentinel(pr.is_cross_repository)`, pr-check `--pr` fills the flag |
 | `crates/uor-r4-harness/src/loopqueue.rs` | `QueuePr.is_cross_repository` read from `gh pr view --json ...isCrossRepository` and set on the `Pr` |
 | `crates/uor-r4-harness/tests/loop_review.rs` | offline temp-git test for the merge-base default; sentinel tests (fork, unknown, wrong branch, non-view path); the render-gate fixture with all six refusal/accept cases |
-| `docs/loop/tasks/infra-loop-render-review/deepseek-42/REPORT.md` | fixed the doubled `infra-infra-` prefix nit |
+| `docs/roadmap/items/loop-render-review-hardening.md` | the deepseek-42 REPORT nit is **recorded** for the report owner (that file is outside any claimable item scope, so a lab PR cannot edit it) |
 
-The item's five follow-ups are all closed: the fixture is in, the queue-mirror fork check and the render-at-merge-base default are implemented, the roadmap README is **exempt with a recorded reason** (xtask renders the working tree; the views-only set keeps it out of the no-ORDER path; the docs job gates it advisably), and the REPORT nit is fixed. The loop-page wording is owner-only and carded on #2028.
+The item's five follow-ups are all closed: the fixture is in, the queue-mirror fork check and the render-at-merge-base default are implemented, the roadmap README is **exempt with a recorded reason** (xtask renders the working tree; the views-only set keeps it out of the no-ORDER path; the docs job gates it advisably), and the deepseek-42 REPORT nit is **recorded for the report owner** rather than edited here, because that file sits outside every claimable item's scope. The loop-page wording is owner-only and carded on #2028.
 
 ## The fixture and its negative gates
 

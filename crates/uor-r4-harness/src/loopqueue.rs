@@ -36,8 +36,6 @@ pub struct QueuePr {
     pub base_ref_name: String,
     pub state: String,
     pub is_draft: bool,
-    #[serde(default)]
-    pub is_cross_repository: bool,
 }
 
 /// The PR metadata `loop queue` reads and the one write it makes.
@@ -61,7 +59,7 @@ impl QueueGh for RealQueueGh {
                 "view",
                 &n.to_string(),
                 "--json",
-                "headRefOid,headRefName,baseRefName,state,isDraft,isCrossRepository",
+                "headRefOid,headRefName,baseRefName,state,isDraft",
             ],
         )?;
         serde_json::from_str(&out)
@@ -417,7 +415,6 @@ pub fn cli(root: &Path, _lab: &str, args: &[String]) -> u8 {
         Err(e) => return cannot(e),
     };
     pr.head_ref = meta.head_ref_name.clone();
-    pr.is_cross_repository = Some(meta.is_cross_repository);
     pr.github = Github::Pr(a.pr, reads);
     let results = crate::loopprcheck::evaluate(&pr);
     let failed = results.iter().any(|r| r.verdict == Verdict::Fail);
