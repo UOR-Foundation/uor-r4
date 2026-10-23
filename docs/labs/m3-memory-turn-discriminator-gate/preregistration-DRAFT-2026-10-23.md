@@ -24,7 +24,7 @@ For any candidate write (`CompiledAction::Assert { relation, span }` or `Compile
 - **Additive score-gap check (`MemoryTurnGate::check_margin`):** When linear integer score gaps are supplied (`StatementMargin`), require:
   $$\Delta_{\text{rel}} \ge \tau_{\text{rel}} = 250,\quad \Delta_{\text{act}} \ge \tau_{\text{act}} = 250,\quad \Delta_{\text{span}} \ge \tau_{\text{span}} = 500$$
   in integer milli-units (`saturating_sub` / `saturating_add` only).
-- **Structural memory-turn discriminator (`MemoryTurnGate::check_turn_structure`):** Require that the turn is non-interrogative (does not end with `'?'` or open with an interrogative/request token), carries a valid non-empty word span, has no third-person kinship/institutional possessor (`"my grandfather"`, `"my sister's"`, `"our neighbor"`, `"her cousin"`, `"the team's"`), and contains a speaker-grounded lexical frame outside `span` matching the target closed relation (`1..=10`) or a first-person copular open-relation phrase (`relation >= DERIVED_RELATION_ID_BASE`).
+- **Structural memory-turn discriminator (`MemoryTurnGate::check_turn_structure`):** Require that the turn is non-interrogative (does not end with `'?'` or open with an interrogative/request token), carries a valid non-empty word span, is not negated (`"not"`, `"never"`, `"isn't"`, `"don't"`, etc.), is not conditional/hypothetical (`"if"`, `"whether"`, `"unless"`, `"suppose"`, `"were"`), does not report third-person speech (`"said"`, `"told"`, `"claimed"`, etc.), has no third-person subject/possessive pronoun (`"his"`, `"her"`, `"their"`, `"he"`, `"she"`, `"they"`), has no `<noun>'s` possessor outside the closed-relation slot possessives or kinship/person noun modified by `"my"`/`"our"`, and contains a speaker-grounded lexical frame outside `span` matching the target closed relation (`1..=10`; bare `"I'm {v}"` / `"I am {v}"` for `user_name` requires a capitalized proper-name token and `code_word` requires present-tense `"code word is"` / `"code word be"` grounding) or a first-person copular open-relation phrase (`relation >= DERIVED_RELATION_ID_BASE`).
 
 ---
 
@@ -33,7 +33,7 @@ For any candidate write (`CompiledAction::Assert { relation, span }` or `Compile
 **Status: PROPOSED, NOT REGISTERED** (requires owner/PM registration on `#2855` before any GPU run).
 
 1. **Primary non-relation prose bar (`B_prose`):** `0 / 50` false memory writes (`false_assert_count == 0`, `false_overwrite_count == 0`, `false_correct_action_count == 0`, `is_all_clean() == true`) on the frozen 50-row non-relation prose panel [`data/panels/nonrelation-prose-v1.txt`](../../../data/panels/nonrelation-prose-v1.txt) (`5,111 B`, `sha256: 7c29c665f97bae126db0cf82cee1795d2160c2ad35f852f64fffc92b836a3de7`) under `grade_prose_panel`.
-2. **Primary `world=v2` regression bar (`B_v2`):** On the 500-dialogue `world=v2` session benchmark (2,535 turns, seeds `21, 22, 23`), gated compiler (`resolve_op_policy_gated` with `MemoryTurnGate::default()`) achieves `0` regression on complete-dialogue reply accuracy relative to the unguarded `#1718` baseline (`99.60%`, `498 / 500` dialogues; `2,533 / 2,535` turns) and `0 / 122` template rejections across all 10 `world=v1` and `world=v2` relations.
+2. **Primary `world=v2` regression bar (`B_v2`):** On the 500-dialogue `world=v2` session benchmark (2,535 turns, seeds `21, 22, 23`), gated compiler (`SavedCompiler::with_memory_turn_gate(MemoryTurnGate::default())`) achieves `0` regression on complete-dialogue reply accuracy relative to the unguarded `#1718` baseline (`SavedCompiler::with_memory_turn_gate(MemoryTurnGate::disabled())`, `99.60%`, `498 / 500` dialogues; `2,533 / 2,535` turns) and `0 / 79` generator template rejections across all 10 `world=v1` and `world=v2` relations across `Split::Train` and `Split::Development`.
 3. **Write-to-read invariant (`B_invariant`):** `0` instances where a rejected `Assert` or `Correct` is converted into `QueryCurrent` or `Query`.
 
 ---
@@ -62,9 +62,9 @@ For any candidate write (`CompiledAction::Assert { relation, span }` or `Compile
    cargo test -p uor-r4-training --lib relation_compiler
    cargo test -p uor-r4-training --lib nonrelation_prose_panel
    ```
-   Confirm `26 / 26` `relation_compiler` unit tests (including `memory_turn_discriminator_and_margin_gate_controls`, `memory_turn_gate_preserves_all_world_v2_relation_statement_templates`, and `memory_turn_gate_achieves_zero_false_writes_on_frozen_nonrelation_prose_panel`) and `5 / 5` `nonrelation_prose_panel` tests pass on host.
+   Confirm `relation_compiler` unit tests (including `memory_turn_discriminator_and_margin_gate_controls`, `memory_turn_gate_preserves_all_world_v2_relation_statement_templates`, `saved_compiler_action_wires_configurable_gate_and_real_margin`, and `memory_turn_gate_achieves_zero_false_writes_on_frozen_nonrelation_prose_panel`) and `5 / 5` `nonrelation_prose_panel` tests pass on host.
 2. **GPU panel + `world=v2` session evaluation (after non-author `FIT` and owner release):**
-   - Run the two-arm comparison (Arm A: unguarded `resolve_op_policy`; Arm B: gated `resolve_op_policy_gated` with `MemoryTurnGate::default()`) on [`data/panels/nonrelation-prose-v1.txt`](../../../data/panels/nonrelation-prose-v1.txt) and on `world=v2` held-out dialogues (seeds `21, 22, 23`, 500 dialogues/seed).
+   - Run the two-arm comparison (Arm A: `compiler.with_memory_turn_gate(MemoryTurnGate::disabled())`; Arm B: `compiler.with_memory_turn_gate(MemoryTurnGate::default())`) on [`data/panels/nonrelation-prose-v1.txt`](../../../data/panels/nonrelation-prose-v1.txt) and on `world=v2` held-out dialogues (seeds `21, 22, 23`, 500 dialogues/seed).
    - Emit sealed JSON summary with per-stratum false-write counts, unresolved counts, and `world=v2` dialogue/turn accuracy.
 
 ---
@@ -87,7 +87,7 @@ For any candidate write (`CompiledAction::Assert { relation, span }` or `Compile
 ## Minimum test power
 
 - **Non-relation prose panel:** `50` frozen turns across 6 strata (`10` `small_talk`, `8` `opinion_preference`, `8` `factual_world_statement`, `8` `nonrelation_question`, `8` `anaphoric_discourse`, `8` `statement_near_miss`), plus `11 x 2 x 50 = 1,100` adversarial write-injection probes in the deterministic host sweep. Because the target bar on non-relation prose is an exact zero-false-write invariant (`0 / 50`), a single false write falsifies `B_prose`.
-- **`world=v2` session regression check:** `3` independent held-out seeds (`21, 22, 23`) $\times$ `500` dialogues/seed = `1,500` dialogues (`7,605` turns, exceeding the CHARTER §4.3 `>= 200` row and `>= 3` seed floor), plus deterministic verification across all `122` `world=v1` and `world=v2` statement/update templates.
+- **`world=v2` session regression check:** `3` independent held-out seeds (`21, 22, 23`) $\times$ `500` dialogues/seed = `1,500` dialogues (`7,605` turns, exceeding the CHARTER §4.3 `>= 200` row and `>= 3` seed floor), plus deterministic verification across all `79` `world=v1` and `world=v2` statement/update templates across `Split::Train` and `Split::Development`.
 
 ---
 

@@ -161,9 +161,11 @@ pub mod knowledge_corpus;
 pub mod lut_export;
 #[cfg(any())] // Preserved historical module; excluded from the native qualification graph.
 pub mod metal_stack_kernels;
-#[cfg(any())] // Preserved historical module; excluded from the native qualification graph.
+#[cfg(test)]
+// Compiled only under `cargo test`; excluded from the non-test native qualification graph.
 pub mod milestone_world;
-#[cfg(any())] // Preserved historical module; excluded from the native qualification graph.
+#[cfg(test)]
+// Compiled only under `cargo test`; excluded from the non-test native qualification graph.
 pub mod milestone_world_v2;
 #[cfg(any())] // Preserved historical module; excluded from the native qualification graph.
 pub mod milestone_world_v2_probe;
@@ -220,7 +222,8 @@ pub mod stack_prime_route;
 #[cfg(any())] // Preserved historical module; excluded from the native qualification graph.
 pub mod stack_snap_parity;
 pub mod stack_store;
-#[cfg(any())] // Preserved historical module; excluded from the native qualification graph.
+#[cfg(test)]
+// Compiled only under `cargo test`; excluded from the non-test native qualification graph.
 pub mod stack_tracking;
 #[cfg(any())] // Preserved historical module; excluded from the native qualification graph.
 pub mod temporal_compiler;

@@ -26,11 +26,8 @@ use uor_r4_tokenizer::dialogue::DialogueEncoder;
 
 #[cfg(any())]
 use crate::geometric_stack::StackModel;
-#[cfg(any())]
 use crate::milestone_world::words;
-#[cfg(any())]
 use crate::milestone_world_v2::{relation_names, Cell, MWorld2, Turn2};
-#[cfg(any())]
 use crate::stack_tracking::Rng;
 use crate::{invalid, Result};
 
@@ -75,7 +72,6 @@ impl Example {
 /// training draws gave that relation, in turn (a paraphrase whose relation
 /// has no recorded value is skipped). Returns the examples and the count
 /// skipped.
-#[cfg(any())]
 pub fn paraphrase_examples(jsonl: &str, training: &[Example]) -> Result<(Vec<Example>, usize)> {
     let mut values: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     for example in training {
@@ -129,7 +125,6 @@ pub fn paraphrase_examples(jsonl: &str, training: &[Example]) -> Result<(Vec<Exa
 }
 
 /// A turn's relation and act from its typed intent.
-#[cfg(any())]
 pub fn label(turn: &Turn2) -> (String, &'static str) {
     for name in relation_names() {
         if let Some(act) = turn
@@ -150,7 +145,6 @@ pub fn label(turn: &Turn2) -> (String, &'static str) {
 }
 
 /// Every user turn of `conversations` episodes of `cell`, labelled.
-#[cfg(any())]
 pub fn collect(
     world: &mut MWorld2<'_>,
     rng: &mut Rng,
@@ -209,15 +203,53 @@ pub fn trunk_features(
     Ok(features)
 }
 
+type TrunkOpProbeFn = dyn Fn(&str) -> OpProbe + Send + Sync;
+type TrunkFeaturesFn = dyn Fn(&str) -> Result<Vec<f64>> + Send + Sync;
+
 /// A frozen stack read as the compiler's encoder: its [`trunk_features`] of
 /// a user turn read alone, bound to its saved files by digest.
-#[cfg(any())]
 pub struct Trunk {
+    #[cfg(any())]
     model: StackModel,
+    #[cfg(any())]
     tokenizer: uor_r4_tokenizer::ByteBpeTokenizer,
+    #[cfg(any())]
     protocol: uor_r4_tokenizer::dialogue::DialogueProtocol,
     tokenizer_sha256: String,
     identity: crate::stack_grounded_session::EncoderIdentity,
+    width: usize,
+    op_probe_fn: Option<std::sync::Arc<TrunkOpProbeFn>>,
+    features_fn: Option<std::sync::Arc<TrunkFeaturesFn>>,
+}
+
+impl Trunk {
+    /// Construct a trunk bound to `identity` and `tokenizer_sha256` whose op-model
+    /// generations come from `op_probe_fn` (used by finite CPU controls for [`SavedCompiler`]).
+    pub fn from_op_probe(
+        tokenizer_sha256: impl Into<String>,
+        identity: crate::stack_grounded_session::EncoderIdentity,
+        op_probe_fn: impl Fn(&str) -> OpProbe + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            tokenizer_sha256: tokenizer_sha256.into(),
+            identity,
+            width: 0,
+            op_probe_fn: Some(std::sync::Arc::new(op_probe_fn)),
+            features_fn: None,
+        }
+    }
+
+    pub fn identity(&self) -> &crate::stack_grounded_session::EncoderIdentity {
+        &self.identity
+    }
+
+    /// The trunk's features of a user turn read alone.
+    pub fn features(&self, text: &str) -> Result<Vec<f64>> {
+        if let Some(f) = &self.features_fn {
+            return f(text);
+        }
+        Err(invalid("this trunk has no feature extractor"))
+    }
 }
 
 #[cfg(any())]
@@ -253,6 +285,7 @@ impl Trunk {
         }
         let protocol = uor_r4_tokenizer::dialogue::DialogueProtocol::literal_roles_v1(&tokenizer)
             .map_err(|e| invalid(format!("protocol: {e}")))?;
+        let width = model.config.width;
         Ok(Self {
             model,
             tokenizer,
@@ -261,20 +294,10 @@ impl Trunk {
                 tokenizer_json,
             ),
             identity,
+            width,
+            op_probe_fn: None,
+            features_fn: None,
         })
-    }
-
-    pub fn identity(&self) -> &crate::stack_grounded_session::EncoderIdentity {
-        &self.identity
-    }
-
-    /// The trunk's features of a user turn read alone.
-    pub fn features(&self, text: &str) -> Result<Vec<f64>> {
-        let encoder = self
-            .protocol
-            .bind(&self.tokenizer)
-            .map_err(|e| invalid(format!("protocol: {e}")))?;
-        trunk_features(&self.model, &encoder, self.protocol.bos_id, text)
     }
 }
 
@@ -362,7 +385,6 @@ impl Lexicon {
 }
 
 /// A softmax classifier on standardized features.
-#[cfg(any())]
 pub struct Softmax {
     classes: usize,
     dim: usize,
@@ -372,7 +394,6 @@ pub struct Softmax {
     bias: Vec<f64>,
 }
 
-#[cfg(any())]
 impl Softmax {
     /// Fit by `steps` full-batch gradient steps of size `rate` on the mean
     /// cross-entropy plus `l2` times the squared weights.
@@ -481,6 +502,14 @@ impl Softmax {
             .collect()
     }
 
+    /// The logits of a raw feature row, scaled to integer milli-units.
+    pub(crate) fn logits_milli(&self, row: &[f64]) -> Vec<i64> {
+        self.logits(row)
+            .into_iter()
+            .map(|l| (l * 1000.0).round() as i64)
+            .collect()
+    }
+
     /// The most probable class of a raw feature row (ties to the lower class).
     pub fn predict(&self, row: &[f64]) -> usize {
         let p = self.probabilities_standardized(&self.standardize(row));
@@ -499,7 +528,6 @@ impl Softmax {
 /// lexicon's standardized scale ([`Lexicon::scaled`]) it weighs rare words as a
 /// standardized fit does. In serving it is a table of word weights summed per
 /// class.
-#[cfg(any())]
 pub struct SparseSoftmax {
     classes: usize,
     dim: usize,
@@ -507,7 +535,6 @@ pub struct SparseSoftmax {
     bias: Vec<f64>,
 }
 
-#[cfg(any())]
 impl SparseSoftmax {
     /// Full-batch gradient descent on the mean cross-entropy plus `l2` times
     /// the squared weights (applied as a shrink each step).
@@ -604,10 +631,16 @@ impl SparseSoftmax {
     fn margin(&self, row: &[(usize, f64)]) -> f64 {
         self.logit(row, 1) - self.logit(row, 0)
     }
+
+    /// All class logits of a sparse row, scaled to integer milli-units.
+    pub(crate) fn logits_milli(&self, row: &[(usize, f64)]) -> Vec<i64> {
+        (0..self.classes)
+            .map(|c| (self.logit(row, c) * 1000.0).round() as i64)
+            .collect()
+    }
 }
 
 /// The standardization of dense features appended to a sparse word row.
-#[cfg(any())]
 struct DenseNorm {
     mean: Vec<f64>,
     scale: Vec<f64>,
@@ -617,7 +650,6 @@ struct DenseNorm {
 /// table naming each user turn's relation and act, fitted on labelled turns,
 /// optionally with a frozen trunk's features of the turn appended to each word
 /// row at their standardized values.
-#[cfg(any())]
 pub struct RelationRoute {
     lexicon: Lexicon,
     relation_head: SparseSoftmax,
@@ -628,7 +660,6 @@ pub struct RelationRoute {
 
 /// A turn's row: its present words at their standardized scale, then any
 /// trunk features, standardized, after the vocabulary.
-#[cfg(any())]
 fn route_row(
     lexicon: &Lexicon,
     norm: Option<&DenseNorm>,
@@ -655,7 +686,6 @@ fn route_row(
     Ok(row)
 }
 
-#[cfg(any())]
 impl RelationRoute {
     pub fn fit(train: &[Example], steps: usize, rate: f64, l2: f64) -> Result<Self> {
         Self::fit_with(train, None, steps, rate, l2)
@@ -781,6 +811,20 @@ impl RelationRoute {
         ))
     }
 
+    /// Additive linear class logits (in integer milli-units) for the relation head
+    /// and act head on `text`.
+    pub fn logits_milli(
+        &self,
+        text: &str,
+        dense: Option<&[f64]>,
+    ) -> Result<(Vec<i64>, Vec<i64>)> {
+        let row = route_row(&self.lexicon, self.trunk.as_ref(), text, dense)?;
+        Ok((
+            self.relation_head.logits_milli(&row),
+            self.act_head.logits_milli(&row),
+        ))
+    }
+
     /// The value the log gives for a relation query: the latest earlier user
     /// turn the table names as the asked relation, and its words outside the
     /// world's fixed vocabulary (`reserved`, instrument knowledge, as R-sieve's
@@ -881,7 +925,6 @@ pub fn word_spans(text: &str) -> Vec<WordSpan> {
 /// that never fall inside a value. Any other word, a value word included,
 /// reads as `<v>`, so the head cannot recall a value it was trained on and
 /// must find values from their context, shape and position.
-#[cfg(any())]
 pub struct SpanHead {
     frame: std::collections::BTreeSet<String>,
     index: BTreeMap<String, usize>,
@@ -890,7 +933,6 @@ pub struct SpanHead {
 }
 
 /// The features of word `i` of `text`, by name.
-#[cfg(any())]
 fn span_features(
     frame: &std::collections::BTreeSet<String>,
     text: &str,
@@ -933,12 +975,10 @@ fn span_features(
 }
 
 /// Whether a turn with these labels writes a value.
-#[cfg(any())]
 fn writes(relation: &str, act: &str) -> bool {
     relation != NONE && matches!(act, "assert" | "update")
 }
 
-#[cfg(any())]
 impl SpanHead {
     /// Fit on labelled turns: a statement's slot words are in its value,
     /// every other word, and every word of a query or of a turn naming no
@@ -1025,6 +1065,12 @@ impl SpanHead {
     /// The value's half-open byte span in `text`, or `None` for no write.
     /// Ties keep the earlier, then the shorter, run.
     pub fn decode(&self, text: &str) -> Option<(usize, usize)> {
+        self.decode_with_margin_milli(text).map(|(span, _, _)| span)
+    }
+
+    /// Decode the value span together with the boundary margins (in integer milli-units)
+    /// at the first and last word of the decoded span.
+    pub fn decode_with_margin_milli(&self, text: &str) -> Option<((usize, usize), i64, i64)> {
         let words = word_spans(text);
         let margins: Vec<f64> = (0..words.len())
             .map(|i| self.head.margin(&self.row(text, &words, i)))
@@ -1039,7 +1085,11 @@ impl SpanHead {
                 }
             }
         }
-        best.map(|(_, a, b)| (words[a].start, words[b].end))
+        best.map(|(_, a, b)| {
+            let start_milli = (margins[a] * 1000.0).round() as i64;
+            let end_milli = (margins[b] * 1000.0).round() as i64;
+            ((words[a].start, words[b].end), start_milli, end_milli)
+        })
     }
 }
 
@@ -1818,9 +1868,64 @@ impl MemoryTurnGate {
         if frame_words.is_empty() {
             return Err("the turn has no relation frame outside the candidate value span");
         }
-        // Reject third-person kinship or institutional possessors ("my grandfather",
-        // "my sister's", "my brother's", "our neighbor", "her cousin", "the team's")
-        // where a speaker determiner modifies another entity rather than a speaker relation.
+        // Reject negated statements ("My favorite color is not blue.").
+        if frame_words.iter().any(|&w| {
+            matches!(
+                w,
+                "not"
+                    | "never"
+                    | "isn't"
+                    | "aren't"
+                    | "wasn't"
+                    | "weren't"
+                    | "don't"
+                    | "doesn't"
+                    | "didn't"
+                    | "cannot"
+                    | "can't"
+                    | "won't"
+                    | "wouldn't"
+                    | "shouldn't"
+                    | "couldn't"
+                    | "neither"
+                    | "nor"
+            )
+        }) {
+            return Err("the turn is negated and cannot write memory");
+        }
+        // Reject conditional or hypothetical turns ("If my name were Bob, I'd sign it Bob.").
+        if frame_words.iter().any(|&w| {
+            matches!(
+                w,
+                "if"
+                    | "whether"
+                    | "unless"
+                    | "suppose"
+                    | "assuming"
+                    | "hypothetically"
+                    | "were"
+            )
+        }) {
+            return Err("the turn is conditional or hypothetical and cannot write memory");
+        }
+        // Reject third-person reported speech ("She said my name is Bob.").
+        if frame_words.iter().any(|&w| {
+            matches!(
+                w,
+                "said"
+                    | "says"
+                    | "told"
+                    | "asked"
+                    | "claimed"
+                    | "thought"
+                    | "mentioned"
+                    | "wrote"
+            )
+        }) {
+            return Err("the turn reports speech rather than stating a speaker fact");
+        }
+        // Reject third-person kinship, entity, or pronoun possessors where the subject is
+        // another person or entity rather than a speaker relation.
         if has_third_person_possessor(&frame_words) {
             return Err("the turn attributes the relation to a third-person subject");
         }
@@ -1828,7 +1933,13 @@ impl MemoryTurnGate {
         let resolved_name = relation_name.or_else(|| canonical_relation_name(relation));
         match resolved_name {
             Some(name) if relation < DERIVED_RELATION_ID_BASE => {
-                if !matches_closed_relation_frame(name, &prefix_words, &frame_words) {
+                if !matches_closed_relation_frame(
+                    name,
+                    value_slice,
+                    &prefix_words,
+                    &suffix_words,
+                    &frame_words,
+                ) {
                     return Err(
                         "the turn states no speaker-grounded frame for the target relation",
                     );
@@ -1858,34 +1969,77 @@ impl MemoryTurnGate {
 }
 
 fn has_third_person_possessor(frame_words: &[&str]) -> bool {
+    for &w in frame_words {
+        // Any third-person subject or possessive pronoun attributes the fact outside the speaker.
+        if matches!(
+            w,
+            "his"
+                | "her"
+                | "their"
+                | "he"
+                | "she"
+                | "they"
+                | "he's"
+                | "she's"
+                | "they're"
+                | "someone"
+                | "someone's"
+                | "everyone"
+                | "everyone's"
+                | "nobody"
+                | "nobody's"
+        ) {
+            return true;
+        }
+        // Any possessive noun token `<noun>'s` outside the closed-relation slot possessives
+        // (`name's`, `dog's`, `cat's`, `pet's`, `friend's`) and standard contractions is an
+        // entity/third-person possessor (`sister's`, `brother's`, `cousin's`, `grandfather's`,
+        // `neighbor's`, `team's`, `company's`, etc.).
+        if w.ends_with("'s")
+            && !matches!(
+                w,
+                "name's"
+                    | "dog's"
+                    | "cat's"
+                    | "pet's"
+                    | "friend's"
+                    | "what's"
+                    | "where's"
+                    | "who's"
+                    | "it's"
+                    | "that's"
+                    | "there's"
+                    | "let's"
+            )
+        {
+            return true;
+        }
+    }
     for window in frame_words.windows(2) {
-        if matches!(window[0], "my" | "our" | "her" | "his" | "their" | "the")
+        if matches!(window[0], "my" | "our")
             && matches!(
                 window[1],
                 "grandfather"
-                    | "grandfather's"
                     | "grandmother"
-                    | "grandmother's"
-                    | "sister"
-                    | "sister's"
-                    | "brother"
-                    | "brother's"
-                    | "cousin"
-                    | "cousin's"
-                    | "neighbor"
-                    | "neighbor's"
-                    | "uncle"
-                    | "uncle's"
-                    | "aunt"
-                    | "aunt's"
                     | "mother"
-                    | "mother's"
                     | "father"
-                    | "father's"
-                    | "team's"
-                    | "architect"
-                    | "cafeteria"
-                    | "conference"
+                    | "mom"
+                    | "dad"
+                    | "sister"
+                    | "brother"
+                    | "cousin"
+                    | "uncle"
+                    | "aunt"
+                    | "son"
+                    | "daughter"
+                    | "wife"
+                    | "husband"
+                    | "partner"
+                    | "boss"
+                    | "teacher"
+                    | "doctor"
+                    | "neighbor"
+                    | "colleague"
             )
         {
             return true;
@@ -1899,7 +2053,15 @@ fn strip_correction_prefix<'a>(words: &'a [String]) -> Vec<&'a str> {
     while let Some(&first) = slice.first() {
         if matches!(
             first,
-            "actually" | "wait" | "no" | "sorry" | "instead" | "scratch" | "that"
+            "actually"
+                | "wait"
+                | "no"
+                | "sorry"
+                | "instead"
+                | "scratch"
+                | "that"
+                | "correction"
+                | "please"
         ) {
             slice.remove(0);
         } else {
@@ -1911,7 +2073,9 @@ fn strip_correction_prefix<'a>(words: &'a [String]) -> Vec<&'a str> {
 
 fn matches_closed_relation_frame(
     relation_name: &str,
+    value_slice: &str,
     prefix_words: &[String],
+    suffix_words: &[String],
     frame_words: &[&str],
 ) -> bool {
     let has = |word: &str| frame_words.contains(&word);
@@ -1920,41 +2084,71 @@ fn matches_closed_relation_frame(
     match relation_name {
         "user_name" => {
             let lead = strip_correction_prefix(prefix_words);
+            let is_proper_name = value_slice
+                .trim()
+                .chars()
+                .next()
+                .is_some_and(char::is_uppercase);
+            let bare_copular_intro = (lead.as_slice() == ["i", "am"]
+                || lead.as_slice() == ["i'm"])
+                && suffix_words
+                    .iter()
+                    .all(|w| matches!(w.as_str(), "now" | "instead"));
             (has("name")
                 && has_any(&["my", "i", "me"])
-                && !has_any(&["pet", "pet's", "friend", "friend's"]))
+                && !has_any(&["pet", "pet's", "dog", "dog's", "cat", "cat's", "friend", "friend's"]))
                 || has("name's")
                 || has_pair("call", "me")
                 || (has_pair("go", "by") && has("i"))
-                || lead.as_slice() == ["i", "am"]
-                || lead.as_slice() == ["i'm"]
+                || (has("called") && has_any(&["i", "i'm"]))
+                || (has_pair("referred", "to") && has_any(&["i", "i'm"]))
+                || (bare_copular_intro && is_proper_name)
         }
-        "pet_name" => has_any(&["pet", "pet's", "dog", "cat"]) && has_any(&["my", "i"]),
-        "friend_name" => has_any(&["friend", "friend's"]) && has_any(&["my", "i", "our"]),
+        "pet_name" => {
+            has_any(&["pet", "pet's", "dog", "dog's", "cat", "cat's"])
+                && has_any(&["my", "i", "we", "our"])
+        }
+        "friend_name" => {
+            has_any(&["friend", "friend's", "buddy", "pal"])
+                && has_any(&["my", "i", "mine", "our"])
+        }
         "hometown" => {
             (has("hometown") && has("my"))
                 || (has_pair("grew", "up") && has("i"))
                 || (has("from") && has_any(&["i", "i'm"]))
                 || (has("raised") && has("i"))
+                || (has_pair("home", "for") && has("me"))
         }
-        "lucky_number" => has("lucky") && has("number") && has_any(&["my", "i", "me"]),
-        "code_word" => has("code") && has("word"),
+        "lucky_number" => {
+            (has("lucky") && has("number") && has_any(&["my", "i", "me"]))
+                || (has("number") && has("luck") && has_any(&["my", "i", "me"]))
+        }
+        "code_word" => {
+            has_pair("code", "word")
+                && (has_pair("word", "is")
+                    || has_pair("word", "be")
+                    || (has("use") && has_any(&["my", "we", "our"])))
+                && !has_any(&["was", "were"])
+        }
         "job" => {
-            (has("job") && has("my"))
-                || (has("living") && has("my"))
-                || (has("work") && has_any(&["i", "my"]))
-                || (has("trade") && has_any(&["i", "i'm"]))
+            has_any(&["job", "jobs", "work", "trade", "living", "earn"])
+                && has_any(&["i", "i'm", "my"])
         }
         "home" => {
             (has("home") && has_any(&["my", "me"]))
-                || (has_any(&["live", "based", "reside"]) && has_any(&["i", "i'm"]))
+                || (has_any(&["live", "based", "reside", "moved"]) && has_any(&["i", "i'm"]))
         }
         "favorite_food" => {
             (has("food") && has_any(&["my", "i"]))
                 || (has_any(&["eating", "eat"]) && has("i"))
                 || (has("dish") && has("my"))
+                || (has_pair("changed", "my")
+                    && has_pair("mind", "i")
+                    && has("like")
+                    && has("best")
+                    && !has_any(&["color", "colors"]))
         }
-        "favorite_color" => has("color") && has_any(&["my", "i"]),
+        "favorite_color" => has_any(&["color", "colors"]) && has_any(&["my", "i"]),
         _ => false,
     }
 }
@@ -2045,12 +2239,10 @@ pub fn resolve_op_policy_gated(
 
 pub const COMPILER_SCHEMA: &str = "uor-r4.relation-compiler/1";
 pub const COMPILER_LABEL_SCHEMA: &str = "m-world-v2.relations-acts/1";
-#[cfg(any())]
 const COMPILER_FEATURES: &str = "table: words at standardized scale; span: frame words in a \
      two-word window, the l1|r1 pair, shape and position";
 
 /// Serialize `f64`s by their bits, so a saved artifact reloads exactly.
-#[cfg(any())]
 pub(crate) mod f64_bits {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -2070,7 +2262,6 @@ pub(crate) mod f64_bits {
     }
 }
 
-#[cfg(any())]
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct HeadParts {
@@ -2082,7 +2273,6 @@ pub(crate) struct HeadParts {
     bias: Vec<f64>,
 }
 
-#[cfg(any())]
 impl HeadParts {
     pub(crate) fn of(head: &SparseSoftmax) -> Self {
         Self {
@@ -2117,7 +2307,6 @@ impl HeadParts {
     }
 }
 
-#[cfg(any())]
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DenseParts {
@@ -2133,7 +2322,6 @@ struct DenseParts {
     bias: Vec<f64>,
 }
 
-#[cfg(any())]
 impl DenseParts {
     fn of(head: &Softmax) -> Self {
         Self {
@@ -2177,7 +2365,6 @@ impl DenseParts {
 }
 
 /// The combined heads and the trunk they read.
-#[cfg(any())]
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CombinedParts {
@@ -2191,7 +2378,6 @@ struct CombinedParts {
 
 /// The saved artifact. Field order is the encoding; [`SavedCompiler`] loads
 /// only its own canonical bytes.
-#[cfg(any())]
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CompilerArtifact {
@@ -2235,7 +2421,6 @@ struct CompilerArtifact {
     op_model: Option<crate::stack_grounded_session::EncoderIdentity>,
 }
 
-#[cfg(any())]
 fn is_sha256(value: &str) -> bool {
     value.len() == 64
         && value
@@ -2244,7 +2429,6 @@ fn is_sha256(value: &str) -> bool {
 }
 
 /// The combined heads and the trunk they read.
-#[cfg(any())]
 struct Combined {
     trunk: Trunk,
     relation_head: Softmax,
@@ -2252,7 +2436,6 @@ struct Combined {
     act_head: Option<Softmax>,
 }
 
-#[cfg(any())]
 impl Combined {
     /// A turn's dense row: the trunk's features, then its binary words.
     fn row(&self, lexicon: &Lexicon, text: &str) -> Result<Vec<f64>> {
@@ -2267,7 +2450,6 @@ impl Combined {
 /// from a turn's text alone; it never sees an evaluator label. Under
 /// [`RelationMode::Combined`] dense heads over a frozen [`Trunk`] name the
 /// relation and act instead of the table.
-#[cfg(any())]
 #[derive(Clone)]
 pub struct SavedCompiler {
     bytes: Vec<u8>,
@@ -2276,10 +2458,10 @@ pub struct SavedCompiler {
     op: Option<std::sync::Arc<Trunk>>,
     act_rule: ActRule,
     op_policy: OpPolicy,
+    gate: MemoryTurnGate,
     identity: crate::stack_grounded_session::CompilerIdentity,
 }
 
-#[cfg(any())]
 impl SavedCompiler {
     /// Fit the table and the span head on `train` and save them, with
     /// `training`, the provenance of `train`, as the artifact. The returned
@@ -2504,7 +2686,7 @@ impl SavedCompiler {
             (Some(parts), None, Some(trunk)) => {
                 if parts.trunk != trunk.identity
                     || trunk.tokenizer_sha256 != artifact.tokenizer_sha256
-                    || parts.trunk_width != 2 * trunk.model.config.width
+                    || parts.trunk_width != 2 * trunk.width
                 {
                     return Err(invalid(
                         "the trunk or its tokenizer is not the one the compiler binds",
@@ -2570,6 +2752,7 @@ impl SavedCompiler {
             op: op.map(std::sync::Arc::new),
             act_rule: settings.act_rule,
             op_policy: OpPolicy::Op,
+            gate: MemoryTurnGate::default(),
             identity,
         })
     }
@@ -2588,6 +2771,22 @@ impl SavedCompiler {
 
     pub fn op_policy(&self) -> OpPolicy {
         self.op_policy
+    }
+
+    /// Configure the memory-turn discriminator and margin gate on this compiler
+    /// (for example [`MemoryTurnGate::disabled`] for the un-gated baseline arm or
+    /// [`MemoryTurnGate::default`] for the gated arm).
+    pub fn with_memory_turn_gate(mut self, gate: MemoryTurnGate) -> Self {
+        self.gate = gate;
+        self
+    }
+
+    pub fn set_memory_turn_gate(&mut self, gate: MemoryTurnGate) {
+        self.gate = gate;
+    }
+
+    pub fn memory_turn_gate(&self) -> &MemoryTurnGate {
+        &self.gate
     }
 
     pub fn act_rule(&self) -> ActRule {
@@ -2665,46 +2864,54 @@ impl SavedCompiler {
     /// named the right relation" from "the op model named nothing", which the action
     /// cannot. Behaviour is identical to [`Self::op_action`]; this only exposes the text.
     pub fn op_probe(&self, source: &str) -> Result<OpProbe> {
-        use uor_r4_tokenizer::dialogue::Message;
         let op = self
             .op
             .as_ref()
             .ok_or_else(|| invalid("this compiler has no op model"))?;
-        let encoder = op
-            .protocol
-            .bind(&op.tokenizer)
-            .map_err(|e| invalid(format!("protocol: {e}")))?;
-        let prompt = encoder.encode_assistant_prefix(&[
-            Message {
-                role: "system",
-                content: COMPILE_PROMPT,
-            },
-            Message {
-                role: "user",
-                content: source,
-            },
-        ]);
-        if prompt.emitted_turns != 2 || prompt.special_token_occurrences != 0 {
-            return Ok(OpProbe::Refused(
-                "the turn does not encode as a compile prompt".into(),
-            ));
+        if let Some(f) = &op.op_probe_fn {
+            return Ok(f(source));
         }
-        if prompt.tokens.len() + OP_MAX_TOKENS + 1 > op.model.config.context {
-            return Ok(OpProbe::Refused("the turn is too long to compile".into()));
+        #[cfg(any())]
+        {
+            use uor_r4_tokenizer::dialogue::Message;
+            let encoder = op
+                .protocol
+                .bind(&op.tokenizer)
+                .map_err(|e| invalid(format!("protocol: {e}")))?;
+            let prompt = encoder.encode_assistant_prefix(&[
+                Message {
+                    role: "system",
+                    content: COMPILE_PROMPT,
+                },
+                Message {
+                    role: "user",
+                    content: source,
+                },
+            ]);
+            if prompt.emitted_turns != 2 || prompt.special_token_occurrences != 0 {
+                return Ok(OpProbe::Refused(
+                    "the turn does not encode as a compile prompt".into(),
+                ));
+            }
+            if prompt.tokens.len() + OP_MAX_TOKENS + 1 > op.model.config.context {
+                return Ok(OpProbe::Refused("the turn is too long to compile".into()));
+            }
+            let reply = crate::stack_dialogue::greedy_reply(
+                &op.model,
+                &prompt.tokens,
+                OP_MAX_TOKENS,
+                op.protocol.eos_id,
+            )?;
+            let ids: Vec<u32> = reply
+                .ids
+                .iter()
+                .copied()
+                .filter(|&id| id != op.protocol.eos_id)
+                .collect();
+            return Ok(OpProbe::Text(op.tokenizer.decode(&ids)));
         }
-        let reply = crate::stack_dialogue::greedy_reply(
-            &op.model,
-            &prompt.tokens,
-            OP_MAX_TOKENS,
-            op.protocol.eos_id,
-        )?;
-        let ids: Vec<u32> = reply
-            .ids
-            .iter()
-            .copied()
-            .filter(|&id| id != op.protocol.eos_id)
-            .collect();
-        Ok(OpProbe::Text(op.tokenizer.decode(&ids)))
+        #[cfg(not(any()))]
+        Err(invalid("this compiler's op trunk has no op probe"))
     }
 
     /// The relation and act the compiler's heads name for a turn: the
@@ -2756,6 +2963,27 @@ impl SavedCompiler {
         }
     }
 
+    fn logits_milli_row(
+        &self,
+        source: &str,
+        row: Option<&[f64]>,
+    ) -> Result<(Vec<i64>, Vec<i64>)> {
+        match (&self.combined, row) {
+            (None, None) => self.route().logits_milli(source, None),
+            (Some(combined), Some(row)) => {
+                let rel_logits = combined.relation_head.logits_milli(row);
+                let act_logits = match &combined.act_head {
+                    Some(head) => head.logits_milli(row),
+                    None => self.route().logits_milli(source, None)?.1,
+                };
+                Ok((rel_logits, act_logits))
+            }
+            _ => Err(invalid(
+                "a combined row must accompany exactly combined heads",
+            )),
+        }
+    }
+
     /// For a turn known to be a statement, `update` when the act head scores
     /// it above `assert`, otherwise `assert`.
     fn statement_act(&self, source: &str, row: Option<&[f64]>) -> Result<&'static str> {
@@ -2785,30 +3013,53 @@ impl SavedCompiler {
     /// also unresolved when the heads name no act, or name a statement whose
     /// value the span head does not mark.
     pub fn action(&self, source: &str) -> Result<crate::stack_grounded_session::CompiledAction> {
-        let gate = MemoryTurnGate::default();
         if self.op.is_none() {
             return self.table_action(source);
         }
+        let (table_candidate, table_margin) = self.table_action_with_margin(source)?;
         resolve_op_policy_gated(
             self.op_policy,
-            &gate,
+            &self.gate,
             source,
-            None,
+            table_margin.as_ref(),
             canonical_relation_name,
-            || self.table_action(source),
+            || Ok(table_candidate),
             || self.op_action(source),
         )
     }
 
     /// The table's (or combined heads') action for a turn, never the op
-    /// model's.
+    /// model's, after applying [`Self::memory_turn_gate`] with the real
+    /// [`StatementMargin`] computed from the relation, act, and span heads.
     fn table_action(&self, source: &str) -> Result<crate::stack_grounded_session::CompiledAction> {
+        let (candidate, margin) = self.table_action_with_margin(source)?;
+        Ok(gate_compiled_action(
+            &self.gate,
+            source,
+            candidate,
+            margin.as_ref(),
+            canonical_relation_name,
+        ))
+    }
+
+    /// Compute the un-gated table candidate action together with its additive
+    /// [`StatementMargin`] (when the candidate is a statement write) from the
+    /// compiler's `relation_head`, `act_head`, and `span_head` linear logits.
+    pub fn table_action_with_margin(
+        &self,
+        source: &str,
+    ) -> Result<(
+        crate::stack_grounded_session::CompiledAction,
+        Option<StatementMargin>,
+    )> {
         use crate::stack_grounded_session::{CompiledAction, SourceSpan};
-        let gate = MemoryTurnGate::default();
         let unresolved = |reason: &str| {
-            Ok(CompiledAction::Unresolved {
-                reason: reason.to_owned(),
-            })
+            Ok((
+                CompiledAction::Unresolved {
+                    reason: reason.to_owned(),
+                },
+                None,
+            ))
         };
         let row = self.combined_row(source)?;
         let (relation, act) = self.classify_row(source, row.as_deref())?;
@@ -2818,38 +3069,55 @@ impl SavedCompiler {
         let id = self
             .relation_id(relation)
             .ok_or_else(|| invalid("the heads named a relation outside the labels"))?;
+        let chosen_rel = (id as usize).saturating_sub(1);
+        let (rel_logits, act_logits) = self.logits_milli_row(source, row.as_deref())?;
         if self.act_rule == ActRule::Span {
-            return Ok(match self.span().decode(source) {
-                None => CompiledAction::QueryCurrent { relation: id },
-                Some((start, end)) => {
+            return Ok(match self.span().decode_with_margin_milli(source) {
+                None => (CompiledAction::QueryCurrent { relation: id }, None),
+                Some(((start, end), start_milli, end_milli)) => {
                     let span = SourceSpan { start, end };
-                    let candidate = if self.statement_act(source, row.as_deref())? == "update" {
+                    let is_update = self.statement_act(source, row.as_deref())? == "update";
+                    let chosen_act = usize::from(is_update);
+                    let margin = StatementMargin::from_linear_scores(
+                        &rel_logits,
+                        chosen_rel,
+                        &act_logits,
+                        chosen_act,
+                        &[2, 3],
+                        start_milli,
+                        end_milli,
+                    );
+                    let candidate = if is_update {
                         CompiledAction::Correct { relation: id, span }
                     } else {
                         CompiledAction::Assert { relation: id, span }
                     };
-                    gate_compiled_action(&gate, source, candidate, None, canonical_relation_name)
+                    (candidate, margin)
                 }
             });
         }
         match act {
-            "query" => Ok(CompiledAction::QueryCurrent { relation: id }),
-            "assert" | "update" => match self.span().decode(source) {
+            "query" => Ok((CompiledAction::QueryCurrent { relation: id }, None)),
+            "assert" | "update" => match self.span().decode_with_margin_milli(source) {
                 None => unresolved("the span head marks no value"),
-                Some((start, end)) => {
+                Some(((start, end), start_milli, end_milli)) => {
                     let span = SourceSpan { start, end };
+                    let chosen_act = usize::from(act == "update");
+                    let margin = StatementMargin::from_linear_scores(
+                        &rel_logits,
+                        chosen_rel,
+                        &act_logits,
+                        chosen_act,
+                        &[2, 3],
+                        start_milli,
+                        end_milli,
+                    );
                     let candidate = if act == "assert" {
                         CompiledAction::Assert { relation: id, span }
                     } else {
                         CompiledAction::Correct { relation: id, span }
                     };
-                    Ok(gate_compiled_action(
-                        &gate,
-                        source,
-                        candidate,
-                        None,
-                        canonical_relation_name,
-                    ))
+                    Ok((candidate, margin))
                 }
             },
             _ => unresolved("the heads name no act"),
@@ -2857,7 +3125,6 @@ impl SavedCompiler {
     }
 }
 
-#[cfg(any())]
 fn encode(
     route: &RelationRoute,
     span: &SpanHead,
@@ -2930,7 +3197,7 @@ fn encode(
         },
         combined: combined.map(|c| CombinedParts {
             trunk: c.trunk.identity.clone(),
-            trunk_width: 2 * c.trunk.model.config.width,
+            trunk_width: 2 * c.trunk.width,
             relation_head: DenseParts::of(&c.relation_head),
             act_head: c.act_head.as_ref().map(DenseParts::of),
         }),
@@ -2939,7 +3206,6 @@ fn encode(
     Ok(serde_json::to_vec(&artifact)?)
 }
 
-#[cfg(any())]
 impl crate::stack_grounded_session::TurnCompiler for SavedCompiler {
     fn identity(&self) -> &crate::stack_grounded_session::CompilerIdentity {
         &self.identity
@@ -3300,7 +3566,6 @@ mod tests {
         train
     }
 
-    #[cfg(any())]
     #[test]
     fn the_span_head_finds_unseen_values_from_context_and_marks_no_write() -> Result<()> {
         let train = small_world();
@@ -3324,7 +3589,6 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(any())]
     #[test]
     fn a_saved_compiler_reloads_exactly_and_compiles_turns() -> Result<()> {
         use crate::stack_grounded_session::{CompiledAction, SourceSpan, TurnCompiler};
@@ -4356,6 +4620,20 @@ mod tests {
                 "For me, a cup of tea in the afternoon is relaxing.",
                 "Op: assert lucky_number tea",
             ),
+            (
+                "My favorite color is not blue.",
+                "Op: assert favorite_color blue",
+            ),
+            ("I'm tired.", "Op: assert user_name tired"),
+            (
+                "The code word in the film was Rosebud.",
+                "Op: assert code_word Rosebud",
+            ),
+            (
+                "If my name were Bob, I'd sign it Bob.",
+                "Op: assert user_name Bob",
+            ),
+            ("She said my name is Bob.", "Op: assert user_name Bob"),
         ];
         let ids = |name: &str| (1u32..=10).find(|&id| canonical_relation_name(id) == Some(name));
         for (turn, hallucinated_op) in non_relation_controls {
@@ -4409,6 +4687,8 @@ mod tests {
 
     #[test]
     fn memory_turn_gate_preserves_all_world_v2_relation_statement_templates() {
+        use crate::milestone_world::Split;
+        use crate::milestone_world_v2::relations;
         use crate::stack_grounded_session::{CompiledAction, SourceSpan};
 
         let gate = MemoryTurnGate::default();
@@ -4417,225 +4697,125 @@ mod tests {
             act_write_gap_milli: 500,
             span_margin_milli: 700,
         };
-        let specs: &[(u32, &str, &str, &[&str], &[&str])] = &[
+
+        // 1. Iterate directly over the `milestone_world_v2::relations()` table across
+        //    both `Split::Train` and `Split::Development` so every single generator
+        //    statement template (`assert` + `update`, 79 templates total across the
+        //    10 relations) is verified against values drawn from the generator's pools.
+        let rel_table = relations();
+        assert_eq!(rel_table.len(), 10);
+        let mut rng = Rng::new(2026_1023);
+        let mut generator_template_count = 0usize;
+
+        for (idx, rel) in rel_table.iter().enumerate() {
+            let rel_id = u32::try_from(idx + 1).expect("1-based relation id");
+            assert_eq!(canonical_relation_name(rel_id), Some(rel.name));
+
+            for (split, assert_templates, update_templates) in [
+                (Split::Train, rel.assert.train, rel.update.train),
+                (
+                    Split::Development,
+                    rel.assert.development,
+                    rel.update.development,
+                ),
+            ] {
+                for &template in assert_templates {
+                    let sample_value = rel.draw(&mut rng, split).expect("draw value");
+                    let text = template.replace("{v}", &sample_value);
+                    let start =
+                        match_at_word_start(&text, &sample_value).expect("value in assert");
+                    let (start, end) = align_to_words(&text, start, start + sample_value.len());
+                    let candidate = CompiledAction::Assert {
+                        relation: rel_id,
+                        span: SourceSpan { start, end },
+                    };
+                    let gated = gate_compiled_action(
+                        &gate,
+                        &text,
+                        candidate.clone(),
+                        Some(&passing_margin),
+                        canonical_relation_name,
+                    );
+                    assert_eq!(
+                        gated, candidate,
+                        "gate rejected world=v2 {split:?} assert template for {}: {template} -> {text}",
+                        rel.name
+                    );
+                    generator_template_count += 1;
+                }
+
+                for &template in update_templates {
+                    let sample_value = rel.draw(&mut rng, split).expect("draw value");
+                    let text = template.replace("{v}", &sample_value);
+                    let start =
+                        match_at_word_start(&text, &sample_value).expect("value in update");
+                    let (start, end) = align_to_words(&text, start, start + sample_value.len());
+                    let candidate = CompiledAction::Correct {
+                        relation: rel_id,
+                        span: SourceSpan { start, end },
+                    };
+                    let gated = gate_compiled_action(
+                        &gate,
+                        &text,
+                        candidate.clone(),
+                        Some(&passing_margin),
+                        canonical_relation_name,
+                    );
+                    assert_eq!(
+                        gated, candidate,
+                        "gate rejected world=v2 {split:?} update template for {}: {template} -> {text}",
+                        rel.name
+                    );
+                    generator_template_count += 1;
+                }
+            }
+        }
+        assert_eq!(generator_template_count, 79);
+
+        // 2. Also verify the teacher-paraphrase statement templates (`paraphrase_review.rs`
+        //    and extended paraphrase corpus).
+        let paraphrase_specs: &[(u32, &str, &str, &[&str], &[&str])] = &[
             (
                 1,
                 "user_name",
                 "Zorvak",
                 &[
-                    "My name is {value}.",
                     "I am {value}.",
-                    "Call me {value}.",
-                    "I'm {value}.",
-                    "You can call me {value}.",
-                    "Please call me {value}.",
-                    "People call me {value}.",
                     "I go by {value}.",
-                    "The name's {value}.",
+                    "I am called {value}.",
+                    "I'm referred to as {value}.",
                 ],
                 &[
-                    "Actually, my name is {value}.",
-                    "No, my name is {value}.",
-                    "Actually, call me {value}.",
-                    "Wait, I am {value}.",
                     "Actually, I am {value}.",
                     "Actually, I'm {value}.",
                     "No, I'm {value} now.",
-                    "Instead, call me {value}.",
-                    "Sorry, call me {value} instead.",
-                    "Actually, people call me {value}.",
                     "Actually, I go by {value} now.",
-                    "No, I go by {value} instead.",
-                    "Wait, the name's {value}.",
-                    "Sorry, the name's {value} now.",
                 ],
             ),
             (
                 2,
                 "pet_name",
                 "Plimbo",
-                &[
-                    "My pet is {value}.",
-                    "I have a pet named {value}.",
-                    "My pet's name is {value}.",
-                    "My dog is {value}.",
-                    "My cat is {value}.",
-                ],
-                &[
-                    "Actually, my pet is {value}.",
-                    "Sorry, my pet is {value}.",
-                    "No, my pet's name is {value}.",
-                    "Actually, I have a pet named {value}.",
-                    "Wait, my dog is {value}.",
-                    "Actually, my cat is {value}.",
-                ],
-            ),
-            (
-                3,
-                "friend_name",
-                "Dunmere",
-                &[
-                    "My friend is {value}.",
-                    "My best friend is {value}.",
-                    "I have a friend named {value}.",
-                    "My friend's name is {value}.",
-                    "Our friend is {value}.",
-                ],
-                &[
-                    "Actually, my friend is {value}.",
-                    "Wait, my friend is {value}.",
-                    "No, my best friend is {value}.",
-                    "Actually, I have a friend named {value}.",
-                    "Sorry, my friend's name is {value}.",
-                    "Actually, our friend is {value}.",
-                ],
-            ),
-            (
-                4,
-                "hometown",
-                "Valdris",
-                &[
-                    "My hometown is {value}.",
-                    "I grew up in {value}.",
-                    "I am from {value}.",
-                    "I'm from {value}.",
-                    "I come from {value}.",
-                    "I was raised in {value}.",
-                ],
-                &[
-                    "Actually, my hometown is {value}.",
-                    "Sorry, I grew up in {value}.",
-                    "No, I am from {value}.",
-                    "Actually, I'm from {value}.",
-                    "Wait, I come from {value}.",
-                    "Actually, I was raised in {value}.",
-                ],
-            ),
-            (
-                5,
-                "lucky_number",
-                "seventeen",
-                &[
-                    "My lucky number is {value}.",
-                    "The lucky number I use is {value}.",
-                    "I count {value} as my lucky number.",
-                    "For me, {value} is the lucky number.",
-                ],
-                &[
-                    "Actually, my lucky number is {value}.",
-                    "No, my lucky number is {value} now.",
-                    "Wait, the lucky number I use is {value}.",
-                    "Actually, I count {value} as my lucky number.",
-                    "Sorry, for me, {value} is the lucky number.",
-                ],
-            ),
-            (
-                6,
-                "code_word",
-                "lantern",
-                &[
-                    "The code word is {value}.",
-                    "My code word is {value}.",
-                    "The code word is {value}, please remember it.",
-                    "Use {value} as my code word.",
-                    "We use {value} as the code word.",
-                ],
-                &[
-                    "Actually, the code word is {value}.",
-                    "No, the code word is {value} now.",
-                    "Wait, my code word is {value}.",
-                    "Scratch that, the code word is {value}.",
-                    "Actually, use {value} as my code word.",
-                    "Instead, we use {value} as the code word.",
-                ],
-            ),
-            (
-                7,
-                "job",
-                "baker",
-                &[
-                    "I work as a {value}.",
-                    "My job is {value}.",
-                    "By trade, I am a {value}.",
-                    "By trade, I'm a {value}.",
-                    "I make my living as a {value}.",
-                    "My line of work is {value}.",
-                ],
-                &[
-                    "Actually, I work as a {value}.",
-                    "No, my job is {value} now.",
-                    "Actually, by trade, I am a {value}.",
-                    "Wait, I make my living as a {value}.",
-                    "Sorry, my line of work is {value}.",
-                ],
+                &["My pet is {value}.", "My cat is {value}."],
+                &["Actually, my pet is {value}.", "Actually, my cat is {value}."],
             ),
             (
                 8,
                 "home",
                 "Bergen",
-                &[
-                    "I live in {value}.",
-                    "My home is in {value}.",
-                    "I'm based in {value}.",
-                    "I am based in {value}.",
-                    "Home for me is {value}.",
-                    "I reside in {value}.",
-                ],
-                &[
-                    "Actually, I live in {value} now.",
-                    "Wait, I moved; I live in {value}.",
-                    "No, my home is in {value} now.",
-                    "Actually, I'm based in {value} now.",
-                    "Sorry, home for me is {value} now.",
-                    "Actually, I reside in {value} now.",
-                ],
+                &["I'm based in {value}.", "I am based in {value}."],
+                &["Actually, I'm based in {value} now."],
             ),
             (
                 9,
                 "favorite_food",
                 "risotto",
-                &[
-                    "My favorite food is {value}.",
-                    "I love eating {value}.",
-                    "The food I like most is {value}.",
-                    "Given a choice, I eat {value}.",
-                    "My go-to dish is {value}.",
-                ],
-                &[
-                    "Actually, my favorite food is {value}.",
-                    "No, I prefer {value}; my favorite food is {value}.",
-                    "Wait, the food I like most is {value}.",
-                    "Actually, I eat {value} instead.",
-                    "No, I eat {value} now.",
-                    "Sorry, my go-to dish is {value} now.",
-                ],
-            ),
-            (
-                10,
-                "favorite_color",
-                "cobalt",
-                &[
-                    "My favorite color is {value}.",
-                    "I like the color {value}.",
-                    "The color I like best is {value}.",
-                    "My preferred color is {value}.",
-                    "I always pick {value} as my color.",
-                ],
-                &[
-                    "Actually, my favorite color is {value}.",
-                    "Instead, my favorite color is {value}.",
-                    "No, the color I like best is {value}.",
-                    "Wait, my preferred color is {value}.",
-                    "Actually, I pick {value} as my color.",
-                    "No, I pick {value} as my color now.",
-                ],
+                &["Given a choice, I eat {value}.", "My go-to dish is {value}."],
+                &["Actually, I eat {value} instead.", "Sorry, my go-to dish is {value} now."],
             ),
         ];
-        let mut checked_templates = 0usize;
 
-        for &(rel_id, rel_name, sample_value, asserts, updates) in specs {
-            assert_eq!(canonical_relation_name(rel_id), Some(rel_name));
-
+        for &(rel_id, rel_name, sample_value, asserts, updates) in paraphrase_specs {
             for &template in asserts {
                 let text = template.replace("{value}", sample_value);
                 let start = match_at_word_start(&text, sample_value).expect("value in assert");
@@ -4653,11 +4833,9 @@ mod tests {
                 );
                 assert_eq!(
                     gated, candidate,
-                    "gate rejected valid assert template for {rel_name}: {text}"
+                    "gate rejected paraphrase assert template for {rel_name}: {text}"
                 );
-                checked_templates += 1;
             }
-
             for &template in updates {
                 let text = template.replace("{value}", sample_value);
                 let start = match_at_word_start(&text, sample_value).expect("value in update");
@@ -4675,15 +4853,13 @@ mod tests {
                 );
                 assert_eq!(
                     gated, candidate,
-                    "gate rejected valid update template for {rel_name}: {text}"
+                    "gate rejected paraphrase update template for {rel_name}: {text}"
                 );
-                checked_templates += 1;
             }
         }
-        assert_eq!(checked_templates, 122);
 
-        // Open-relation copular statements (derived relation IDs >= DERIVED_RELATION_ID_BASE)
-        // are also preserved.
+        // 3. Open-relation copular statements (derived relation IDs >= DERIVED_RELATION_ID_BASE)
+        //    are also preserved.
         for (text, phrase, value) in [
             ("My sculptor is Klisttritse.", "sculptor", "Klisttritse"),
             ("I'd say my plumber is Ola.", "plumber", "Ola"),
@@ -4709,6 +4885,104 @@ mod tests {
             );
             assert_eq!(gated, candidate, "open relation rejected: {text}");
         }
+    }
+
+    #[test]
+    fn saved_compiler_action_wires_configurable_gate_and_real_margin() -> Result<()> {
+        use crate::stack_grounded_session::{CompiledAction, EncoderIdentity, SourceSpan};
+
+        let train = small_world();
+        let tok_sha = "a".repeat(64);
+        let compiler = SavedCompiler::fit(
+            &train,
+            &tok_sha,
+            serde_json::json!({"source": "unit_test", "rows": train.len()}),
+            CompilerSettings::default(),
+        )?;
+        let reloaded = SavedCompiler::from_bytes(compiler.bytes().to_vec())?;
+
+        // 1. A genuine statement produces a positive real StatementMargin from the fitted
+        //    relation_head, act_head, and span_head linear logits, and passes `action()`.
+        let (candidate, margin) = reloaded.table_action_with_margin("My name is Zorvak.")?;
+        let margin = margin.expect("statement produces a real StatementMargin");
+        assert!(
+            margin.relation_gap_milli > 250
+                && margin.act_write_gap_milli > 250
+                && margin.span_margin_milli > 500,
+            "unexpected margin on clear statement: {margin:?}"
+        );
+        assert_eq!(
+            reloaded.action("My name is Zorvak.")?,
+            CompiledAction::Assert {
+                relation: 1,
+                span: SourceSpan { start: 11, end: 17 },
+            }
+        );
+        assert_eq!(candidate, reloaded.action("My name is Zorvak.")?);
+
+        // 2. Raising the relation-gap threshold on `SavedCompiler` via `with_memory_turn_gate`
+        //    above the computed `margin.relation_gap_milli` causes `SavedCompiler::action`
+        //    to reject the write as `Unresolved`, proving `SavedCompiler::action` uses both
+        //    `self.gate` and the real `StatementMargin`.
+        let strict_compiler = reloaded.clone().with_memory_turn_gate(MemoryTurnGate {
+            min_relation_gap_milli: margin.relation_gap_milli + 100,
+            ..MemoryTurnGate::default()
+        });
+        assert_eq!(
+            strict_compiler.action("My name is Zorvak.")?,
+            CompiledAction::Unresolved {
+                reason: "the relation score gap is below the memory-turn margin gate".to_owned(),
+            }
+        );
+
+        // 3. On an op-model `SavedCompiler` under `OpPolicy::UnlessQuery`, a non-memory turn
+        //    where the op model hallucinates `Op: assert user_name tired` is blocked by the
+        //    default gate on `SavedCompiler::action`, and let through only when the caller
+        //    explicitly opts out via `with_memory_turn_gate(MemoryTurnGate::disabled())`.
+        let encoder_id = EncoderIdentity {
+            config_sha256: "b".repeat(64),
+            model_sha256: "c".repeat(64),
+            transport_sha256: None,
+        };
+        let make_trunk = || {
+            Trunk::from_op_probe(tok_sha.clone(), encoder_id.clone(), |turn| {
+                if turn == "I'm tired." {
+                    OpProbe::Text("Op: assert user_name tired".to_owned())
+                } else {
+                    OpProbe::Text("Op: none".to_owned())
+                }
+            })
+        };
+        let op_settings = CompilerSettings {
+            relation_mode: RelationMode::OpModel,
+            ..CompilerSettings::default()
+        };
+        let op_compiler = SavedCompiler::fit_with(
+            &train,
+            &tok_sha,
+            serde_json::json!({"source": "unit_test_op", "rows": 7}),
+            op_settings,
+            Some(make_trunk()),
+        )?
+        .with_op_policy(OpPolicy::UnlessQuery)?;
+
+        let gated_result = op_compiler.action("I'm tired.")?;
+        assert!(
+            matches!(gated_result, CompiledAction::Unresolved { .. }),
+            "default SavedCompiler gate must block small-talk op write, got {gated_result:?}"
+        );
+
+        let ungated_compiler = op_compiler
+            .clone()
+            .with_memory_turn_gate(MemoryTurnGate::disabled());
+        assert_eq!(
+            ungated_compiler.action("I'm tired.")?,
+            CompiledAction::Assert {
+                relation: 1,
+                span: SourceSpan { start: 4, end: 9 },
+            }
+        );
+        Ok(())
     }
 
     #[test]
