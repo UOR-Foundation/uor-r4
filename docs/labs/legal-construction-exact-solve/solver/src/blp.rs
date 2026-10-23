@@ -67,6 +67,22 @@ pub struct Stats {
     pub d_bits_max: u64,
     pub phase: u8,
     pub objective: BigRational,
+    pub start: Start,
+}
+
+/// How a run began. `Cold` is the all-slack start (with phase 1 when needed);
+/// `Warm` is `solve_from_basis` from the given basis. The `ColdAfter*` values
+/// are `solve_from_basis` falling back to the cold start because the given
+/// basis was malformed (wrong lengths, an index out of range or repeated, a
+/// position its bounds do not allow, or empty bounds), singular, or implied a
+/// point that violates a row or a bound.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Start {
+    Cold,
+    Warm,
+    ColdAfterMalformed,
+    ColdAfterSingular,
+    ColdAfterInfeasible,
 }
 
 type Progress<'a> = Option<&'a mut dyn FnMut(&Stats)>;
@@ -770,6 +786,7 @@ fn solve_inner(
         d_bits_max: 1,
         phase: 1,
         objective: BigRational::zero(),
+        start: Start::Cold,
     };
     if lp.lower.iter().zip(&lp.upper).any(|(l, u)| l > u) {
         return (LpResult::Infeasible, stats, None);
@@ -881,9 +898,23 @@ fn solve_inner(
         }
     }
 
+    finish(sx, lp, c_int, &art_rows, &mut progress)
+}
+
+/// Phase 2 from `sx`'s current basis (primal feasible), the solver's own
+/// certificate, the original rows and bounds, and the final basis in `blp`'s
+/// index space. `art_rows[k]` is the row of artificial `n + m + k`.
+fn finish(
+    mut sx: Simplex,
+    lp: &Lp,
+    c_int: Vec<BigInt>,
+    art_rows: &[usize],
+    progress: &mut Progress,
+) -> (LpResult, Stats, Option<Basis>) {
+    let (n, m) = (sx.n, sx.m);
     let mut cost2 = c_int;
-    cost2.resize(total, BigInt::zero());
-    sx.run(&cost2, 2, &lp.c, &mut progress);
+    cost2.resize(sx.cols.len(), BigInt::zero());
+    sx.run(&cost2, 2, &lp.c, progress);
     sx.certify(&cost2);
 
     let xs: Vec<BigRational> = sx.x[..sx.n].to_vec();
@@ -933,6 +964,190 @@ fn solve_inner(
         sx.stats,
         Some(basis),
     )
+}
+
+pub fn solve_from_basis(lp: &Lp, basis: &Basis) -> LpResult {
+    solve_from_basis_with_stats(lp, basis, None).0
+}
+
+/// `solve`, started from `basis` instead of the all-slack start: `M =
+/// D·B⁻¹` is built exactly by fraction-free Gauss-Jordan elimination, then
+/// phase 2 runs with the same pricing and the same final certificate. When
+/// the basis is malformed, singular or primal infeasible, the run is the cold
+/// start instead, and `Stats::start` says which.
+pub fn solve_from_basis_with_stats(
+    lp: &Lp,
+    basis: &Basis,
+    progress: Option<&mut dyn FnMut(&Stats)>,
+) -> (LpResult, Stats) {
+    let mut progress = progress;
+    match warm(lp, basis) {
+        Ok((sx, c_int)) => {
+            let (result, mut stats, _) = finish(sx, lp, c_int, &[], &mut progress);
+            stats.start = Start::Warm;
+            (result, stats)
+        }
+        Err(why) => {
+            let (result, mut stats, _) = solve_inner(lp, progress);
+            stats.start = why;
+            (result, stats)
+        }
+    }
+}
+
+/// The simplex state at `basis`, or why it cannot start there.
+fn warm(lp: &Lp, basis: &Basis) -> Result<(Simplex, Vec<BigInt>), Start> {
+    let n = lp.c.len();
+    let m = lp.rows.len();
+    let total = n + m;
+    let malformed = lp.lower.len() != n
+        || lp.upper.len() != n
+        || lp.rows.iter().any(|(a, _)| a.len() != n)
+        || lp.lower.iter().zip(&lp.upper).any(|(l, u)| l > u)
+        || basis.basic.len() != m
+        || basis.nonbasic_pos.len() != total;
+    if malformed {
+        return Err(Start::ColdAfterMalformed);
+    }
+    let mut state = vec![State::Lower; total];
+    for &j in &basis.basic {
+        if j >= total || state[j] == State::Basic {
+            return Err(Start::ColdAfterMalformed);
+        }
+        state[j] = State::Basic;
+    }
+    let Scaled { mut cols, b, c } = scaled(lp);
+    for i in 0..m {
+        cols.push(vec![(i, BigInt::one())]);
+    }
+    let mut lower: Vec<BigRational> = lp.lower.clone();
+    lower.resize(total, BigRational::zero());
+    let mut upper: Vec<Option<BigRational>> = lp.upper.iter().cloned().map(Some).collect();
+    upper.resize(total, None);
+
+    // Nonbasic values by position.
+    let mut x = vec![BigRational::zero(); total];
+    for j in 0..total {
+        if state[j] == State::Basic {
+            continue;
+        }
+        let (st, v) = match basis.nonbasic_pos[j] {
+            Pos::Lower => (State::Lower, lower[j].clone()),
+            Pos::Upper => match &upper[j] {
+                Some(u) => (State::Upper, u.clone()),
+                None => return Err(Start::ColdAfterMalformed),
+            },
+            Pos::Interior => {
+                if !(lower[j].is_negative() && upper[j].as_ref().is_some_and(|u| u.is_positive())) {
+                    return Err(Start::ColdAfterMalformed);
+                }
+                (State::Interior, BigRational::zero())
+            }
+        };
+        state[j] = st;
+        x[j] = v;
+    }
+
+    // M = D·B⁻¹ by fraction-free Gauss-Jordan on [B | I]: after step k every
+    // entry is a minor of order k + 1, so each division by the previous
+    // pivot is exact, and at the end the left half is D·I with D = ±det B.
+    let mut a = vec![vec![BigInt::zero(); 2 * m]; m];
+    for (i, &j) in basis.basic.iter().enumerate() {
+        for (k, v) in &cols[j] {
+            a[*k][i] = v.clone();
+        }
+    }
+    for (k, row) in a.iter_mut().enumerate() {
+        row[m + k] = BigInt::one();
+    }
+    let mut prev = BigInt::one();
+    for k in 0..m {
+        let p = (k..m)
+            .find(|&i| !a[i][k].is_zero())
+            .ok_or(Start::ColdAfterSingular)?;
+        a.swap(k, p);
+        let pivot_row = a[k].clone();
+        for (i, row) in a.iter_mut().enumerate() {
+            if i == k {
+                continue;
+            }
+            let aik = std::mem::take(&mut row[k]);
+            for (j, v) in row.iter_mut().enumerate() {
+                if j == k {
+                    continue;
+                }
+                let num = &pivot_row[k] * &*v - &aik * &pivot_row[j];
+                *v = exact_div(num, &prev).expect("fraction-free Gauss-Jordan division is exact");
+            }
+        }
+        prev = pivot_row[k].clone();
+    }
+    let sign_flip = prev.is_negative();
+    let d = prev.abs();
+    let minv: Vec<Vec<BigInt>> = a
+        .into_iter()
+        .map(|row| {
+            row.into_iter()
+                .skip(m)
+                .map(|v| if sign_flip { -v } else { v })
+                .collect()
+        })
+        .collect();
+
+    // x_B = M·(b − N·x_N) / D, and it must satisfy every bound (a basic
+    // slack below 0 is a violated row).
+    let mut rhs: Vec<BigRational> = b.iter().map(rat).collect();
+    for j in (0..total).filter(|&j| state[j] != State::Basic && !x[j].is_zero()) {
+        for (k, v) in &cols[j] {
+            rhs[*k] = &rhs[*k] - rat(v) * &x[j];
+        }
+    }
+    let dr = rat(&d);
+    for (i, &j) in basis.basic.iter().enumerate() {
+        let v = minv[i]
+            .iter()
+            .zip(&rhs)
+            .filter(|(mk, _)| !mk.is_zero())
+            .fold(BigRational::zero(), |s, (mk, r)| s + rat(mk) * r)
+            / &dr;
+        if v < lower[j] || upper[j].as_ref().is_some_and(|u| v > *u) {
+            return Err(Start::ColdAfterInfeasible);
+        }
+        x[j] = v;
+    }
+
+    let threads = if m >= 64 {
+        std::thread::available_parallelism().map_or(1, |t| t.get())
+    } else {
+        1
+    };
+    let bits = d.bits();
+    let stats = Stats {
+        pivots: 0,
+        flips: 0,
+        phase1_pivots: 0,
+        d_bits: bits,
+        d_bits_max: bits,
+        phase: 2,
+        objective: BigRational::zero(),
+        start: Start::Warm,
+    };
+    let sx = Simplex {
+        m,
+        n,
+        cols,
+        b,
+        lower,
+        upper,
+        x,
+        state,
+        basis: basis.basic.clone(),
+        minv,
+        d,
+        threads,
+        stats,
+    };
+    Ok((sx, c))
 }
 
 #[cfg(test)]
@@ -1046,6 +1261,7 @@ mod tests {
             d_bits_max: 1,
             phase: 2,
             objective: BigRational::zero(),
+            start: Start::Cold,
         };
         let sx = Simplex {
             m: 1,

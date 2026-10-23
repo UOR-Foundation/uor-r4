@@ -561,3 +561,56 @@ pub fn solve_search_certify<const P: u32>(lp: &Lp, max_pivots: usize) -> Result<
         .map_err(|e| format!("search: {e}"))?;
     blp::certify_basis(lp, &found.basis).map_err(|e| format!("certificate: {e}"))
 }
+
+/// Which path `solve_search_certify_repair` took.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RepairPath {
+    /// The search's basis passed `certify_basis`.
+    Certified,
+    /// The certificate rejected the search's basis; `blp::solve_from_basis`
+    /// finished from it (or fell back to its cold start, per `exact_start`).
+    Repaired,
+    /// The search proposed no basis; `blp` ran from its cold start.
+    Cold,
+}
+
+/// `search_pivots` counts the search's basis changes; `exact_pivots` those of
+/// the exact simplex (0 when the certificate passed). `exact_start` is how
+/// the exact run began, `None` when it did not run.
+#[derive(Debug, Clone)]
+pub struct RepairStats {
+    pub path: RepairPath,
+    pub search_pivots: u64,
+    pub exact_pivots: u64,
+    pub exact_start: Option<blp::Start>,
+}
+
+/// Search, prove, and repair: a certified search basis is returned as is;
+/// otherwise the exact simplex finishes from the search's basis, or from its
+/// own cold start when the search found none. The answer is always exact.
+pub fn solve_search_certify_repair<const P: u32>(
+    lp: &Lp,
+    max_pivots: usize,
+) -> (LpResult, RepairStats) {
+    let (found, sstats) = search::<P>(lp, max_pivots, None);
+    let mut stats = RepairStats {
+        path: RepairPath::Cold,
+        search_pivots: sstats.pivots,
+        exact_pivots: 0,
+        exact_start: None,
+    };
+    let (result, exact) = match found {
+        Ok(f) => {
+            if let Ok(r) = blp::certify_basis(lp, &f.basis) {
+                stats.path = RepairPath::Certified;
+                return (r, stats);
+            }
+            stats.path = RepairPath::Repaired;
+            blp::solve_from_basis_with_stats(lp, &f.basis, None)
+        }
+        Err(_) => blp::solve_with_stats(lp, None),
+    };
+    stats.exact_pivots = exact.pivots;
+    stats.exact_start = Some(exact.start);
+    (result, stats)
+}

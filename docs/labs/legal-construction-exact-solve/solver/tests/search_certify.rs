@@ -217,3 +217,92 @@ fn p12_never_returns_a_wrong_optimum() {
     let (optimal, _certified, _) = run::<12>();
     assert!(optimal > 500, "only {optimal} optimal LPs");
 }
+
+/// `solve_search_certify_repair` on the whole suite must equal `blp`:
+/// the same exact objective on every optimal LP, `Infeasible` on every
+/// infeasible one. Returns (certified, repaired, cold) path counts.
+fn run_repair<const P: u32>() -> (usize, usize, usize) {
+    let (mut certified, mut repaired, mut cold, mut exact_pivots) = (0, 0, 0, 0u64);
+    for (what, lp) in suite() {
+        let (got, stats) = search::solve_search_certify_repair::<P>(&lp, MAX_PIVOTS);
+        match (blp::solve(&lp), got) {
+            (
+                LpResult::Optimal {
+                    objective: want, ..
+                },
+                LpResult::Optimal { objective, .. },
+            ) => assert_eq!(objective, want, "P={P} {what}: wrong optimum"),
+            (LpResult::Infeasible, LpResult::Infeasible) => {}
+            (want, got) => panic!("P={P} {what}: blp gave {want:?}, repair gave {got:?}"),
+        }
+        exact_pivots += stats.exact_pivots;
+        match stats.path {
+            search::RepairPath::Certified => certified += 1,
+            search::RepairPath::Repaired => repaired += 1,
+            search::RepairPath::Cold => cold += 1,
+        }
+    }
+    eprintln!(
+        "repair P={P}: certified {certified}, repaired {repaired}, cold {cold}; {exact_pivots} exact pivots"
+    );
+    (certified, repaired, cold)
+}
+
+#[test]
+fn repair_p120_equals_blp_on_every_lp() {
+    let (certified, repaired, cold) = run_repair::<120>();
+    assert!(certified + repaired + cold > 500);
+    assert!(certified > 0);
+}
+
+/// Low precision only costs exact pivots: never a wrong answer.
+#[test]
+fn repair_p12_equals_blp_on_every_lp() {
+    let (certified, repaired, cold) = run_repair::<12>();
+    assert!(certified + repaired + cold > 500);
+}
+
+/// Planted: a certified basis with one basic index swapped for a nonbasic
+/// one, so the certificate rejects it. `solve_from_basis` from that basis
+/// must reach `blp`'s exact optimum. Counts the repairs that started warm.
+#[test]
+fn planted_corrupted_basis_is_repaired_exactly() {
+    let (mut planted, mut warm, mut warm_pivots) = (0usize, 0usize, 0u64);
+    for (what, lp) in suite() {
+        let (LpResult::Optimal { objective: want, .. }, Some(good)) = blp::solve_with_basis(&lp)
+        else {
+            continue;
+        };
+        assert!(blp::certify_basis(&lp, &good).is_ok(), "{what}: good basis rejected");
+        let total = good.nonbasic_pos.len();
+        let mut is_basic = vec![false; total];
+        for &j in &good.basic {
+            is_basic[j] = true;
+        }
+        let bad = (0..good.basic.len())
+            .flat_map(|r| (0..total).filter(|&j| !is_basic[j]).map(move |j| (r, j)))
+            .map(|(r, j)| {
+                let mut b = good.clone();
+                b.nonbasic_pos[b.basic[r]] = blp::Pos::Lower;
+                b.basic[r] = j;
+                b
+            })
+            .find(|b| blp::certify_basis(&lp, b).is_err());
+        let Some(bad) = bad else { continue };
+        planted += 1;
+        let (got, stats) = blp::solve_from_basis_with_stats(&lp, &bad, None);
+        match got {
+            LpResult::Optimal { objective, .. } => {
+                assert_eq!(objective, want, "{what}: repair from {bad:?} missed the optimum")
+            }
+            other => panic!("{what}: repair gave {other:?}"),
+        }
+        if stats.start == blp::Start::Warm {
+            warm += 1;
+            warm_pivots += stats.pivots + stats.flips;
+        }
+    }
+    eprintln!("planted: {planted} corrupted bases repaired, {warm} started warm ({warm_pivots} pivots+flips from warm starts)");
+    assert!(planted > 100, "only {planted} planted repairs");
+    assert!(warm > 0 && warm_pivots > 0, "no warm start did any work");
+}
