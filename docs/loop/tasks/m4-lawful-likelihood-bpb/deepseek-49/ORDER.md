@@ -4,7 +4,7 @@ Lab: deepseek. Item: [m4-lawful-likelihood-bpb](../../../../roadmap/items/m4-law
 
 ## Goal
 
-The design (PR #2930) and the host-only lawful-likelihood implementation (PR #2945, `91a689f1b`, `crates/uor-r4-integer/src/lawful_likelihood.rs`) are on main. The item's one missing lab step is the one-page pre-registration (item step 4) that names and hashes the chat held-out stream, fixes the scoring formula, carries the owner's 0.90 bar, and goes to a non-author FIT before any GPU run. The PM has added `docs/harness/prep/m4-lawful-likelihood-bpb*` to the item scope, so the sheet is claimable.
+The design (PR #2940) and the host-only lawful-likelihood implementation (PR #2945, `91a689f1b`, `crates/uor-r4-integer/src/lawful_likelihood.rs`) are on main. The item's one missing lab step is the one-page pre-registration (item step 4) that names and hashes the chat held-out stream, fixes the scoring formula, carries the owner's 0.90 bar, and goes to a non-author FIT before any GPU run. The PM has added `docs/harness/prep/m4-lawful-likelihood-bpb*` to the item scope, so the sheet is claimable.
 
 ## Cancel probe
 
