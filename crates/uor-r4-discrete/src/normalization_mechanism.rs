@@ -68,17 +68,24 @@ impl NormalizationMode {
     }
 
     /// Device spec word `s[12]` of the Flock/Relation read: `0` keeps
-    /// `snap_n`, `1` is the unit `snap_1` control. The un-normalized control
-    /// needs a ℤ⁸ carry the device read does not have, so it is refused.
+    /// `snap_n`, `1` is the unit `snap_1` control, `2` is the `C_raw` control
+    /// whose output block is the unsnapped integer residual in ℤ⁸.
     pub fn device_word(self) -> Result<u32> {
         match self {
             Self::ScaleMatchedSnapV1 => Ok(0),
             Self::UnitSnapControlV1 => Ok(1),
-            Self::UnnormalizedControlV1 => Err(invalid(
-                "unnormalized_control_v1 needs a Z^8 carry; the device read has none",
-            )),
+            Self::UnnormalizedControlV1 => Ok(2),
         }
     }
+}
+
+/// Whether a stored snapshot JSON value carries the default normalization mode.
+/// The key is omitted when default, so a missing key is the default; any other
+/// value (including an unknown one) is not.
+pub(crate) fn stored_mode_is_default(model: &serde_json::Value) -> bool {
+    model
+        .get("normalization_mode")
+        .is_none_or(|value| *value == serde_json::json!(NormalizationMode::default()))
 }
 
 /// Exact per-block integer norm invariants measured on an 8D integer block.
@@ -420,10 +427,11 @@ mod tests {
     }
 
     #[test]
-    fn unit_snap_word_refuses_unnormalized_control() {
-        assert!(NormalizationMode::UnnormalizedControlV1
-            .device_word()
-            .is_err());
+    fn unit_snap_word_maps_unnormalized_control_to_raw() {
+        assert_eq!(
+            NormalizationMode::UnnormalizedControlV1.device_word().ok(),
+            Some(2)
+        );
     }
 
     #[test]
@@ -701,5 +709,20 @@ mod tests {
         let d_raw = endpoint_address_distance(&raw_blocks, 0)?;
         assert!(d_raw > 16);
         Ok(())
+    }
+    #[test]
+    fn stored_mode_missing_key_is_default_and_other_modes_are_not() {
+        use serde_json::json;
+        assert!(stored_mode_is_default(&json!({})));
+        assert!(stored_mode_is_default(
+            &json!({"normalization_mode": "scale_matched_snap_v1"})
+        ));
+        assert!(!stored_mode_is_default(
+            &json!({"normalization_mode": "unit_snap_control_v1"})
+        ));
+        assert!(!stored_mode_is_default(
+            &json!({"normalization_mode": "unnormalized_control_v1"})
+        ));
+        assert!(!stored_mode_is_default(&json!({"normalization_mode": 7})));
     }
 }
