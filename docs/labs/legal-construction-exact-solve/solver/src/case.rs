@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 /// The saved-file suffix, split so the crate's no-float scan sees no binary32 type token.
 const BITS_SUFFIX: &str = concat!("f", "32le");
 
-use crate::exact::{problem_from_saved_bits, ExactError};
+use crate::exact::{master_weight_in_range, problem_from_saved_bits, ExactError};
 use crate::problem::Problem;
 
 /// One family of the saved case: `(file stem, coefficient count)`.
@@ -79,6 +79,13 @@ pub fn load(dir: &Path) -> Result<Case, String> {
         }
         guards.push(row);
     }
+    for (i, bits) in masters.iter().enumerate() {
+        if !master_weight_in_range(*bits) {
+            return Err(format!(
+                "master {i}: |m| > 1.75 (the original source refuses this; the legal quarter grid ends there)"
+            ));
+        }
+    }
     let problem = problem_from_saved_bits(&masters, &g, &guards)
         .map_err(|e: ExactError| format!("exact conversion: {e}"))?;
     let fractional = problem.coeffs().iter().filter(|c| c.fractional).count();
@@ -94,4 +101,34 @@ pub fn default_case_dir() -> PathBuf {
     PathBuf::from(
         "../../../../local/claude/legal-case/codex-direct-legal-centered-20261009/attempt2",
     )
+}
+
+/// The original source's replay check, in Rust: for each family, sum the 31 per-term
+/// gradient files in binary32 order and compare their bits with the saved aggregate.
+/// Returns one `(family, matches)` pair per family.
+pub fn term_identity(dir: &Path) -> Result<Vec<(&'static str, bool)>, String> {
+    let mut out = Vec::new();
+    for (stem, count) in FAMILIES {
+        let aggregate = read_family(dir, stem, "gradient")?;
+        if aggregate.len() != count {
+            return Err(format!(
+                "{stem}: aggregate has {} values, expected {count}",
+                aggregate.len()
+            ));
+        }
+        let mut terms = Vec::with_capacity(31);
+        for i in 0..31 {
+            let name = format!("coupled-gradient-{stem}-term-{i:02}.{BITS_SUFFIX}");
+            let term = read_bits(&dir.join(&name)).map_err(|e| format!("term {i}: {e}"))?;
+            if term.len() != count {
+                return Err(format!("term {i}: {} values, expected {count}", term.len()));
+            }
+            terms.push(term);
+        }
+        out.push((
+            stem,
+            crate::exact::term_aggregate_matches(&terms, &aggregate),
+        ));
+    }
+    Ok(out)
 }

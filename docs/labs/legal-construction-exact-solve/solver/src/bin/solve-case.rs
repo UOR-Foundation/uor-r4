@@ -31,8 +31,8 @@ fn main() -> ExitCode {
         .map(PathBuf::from)
         .unwrap_or_else(case::default_case_dir);
     let stage = arg(&args, "--stage").unwrap_or("all");
-    if !matches!(stage, "load" | "lp" | "bb" | "all") {
-        eprintln!("--stage must be load, lp, bb or all");
+    if !matches!(stage, "load" | "identity" | "lp" | "bb" | "all") {
+        eprintln!("--stage must be load, identity, lp, bb or all");
         return ExitCode::FAILURE;
     }
     let node_cap: usize = arg(&args, "--node-cap")
@@ -76,6 +76,27 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
+    if matches!(stage, "identity" | "all") {
+        let t = Instant::now();
+        match case::term_identity(&dir) {
+            Ok(families) => {
+                for (family, matches) in &families {
+                    println!(
+                        "identity family={family} f32_term_sum_bit_equal={matches} seconds={:.3}",
+                        t.elapsed().as_secs_f64()
+                    );
+                }
+                if families.iter().any(|(_, matches)| !matches) {
+                    eprintln!("the f32 term sum does not reproduce the saved aggregate bits");
+                    return ExitCode::FAILURE;
+                }
+            }
+            Err(e) => {
+                eprintln!("identity failed: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
     if matches!(stage, "lp" | "all") {
         let t = Instant::now();
         let root = lp::solve(&bb::relaxation(&case.problem));
