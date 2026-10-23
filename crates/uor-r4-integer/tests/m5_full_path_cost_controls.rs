@@ -70,7 +70,9 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
             reported_ci95,
             expected_t_ci95,
             relative_error,
-        } if metric == "serving.energy.net_j_per_tok" => {
+        } if metric
+            == "serving.energy.net_j_per_tok (vs reconstructed gross_j_per_tok 3-run SD)" =>
+        {
             Some((*reported_ci95, *expected_t_ci95, *relative_error))
         }
         _ => None,
@@ -279,8 +281,8 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
         "error must identify symbol and instruction, got: {err}"
     );
 
-    // Transitive call-graph reachability into a non-`stack::` callee (`core::num::helper_div`
-    // and compiler-rt `__multi3`).
+    // Transitive call-graph reachability into a non-`stack::` callee (`core::num::helper_div`,
+    // `alloc::vec::Vec::from_iter`, and compiler-rt `__multi3`).
     let poisoned_callee_disasm = concat!(
         "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n",
         "100001000: 94000400 \tbl\t0x100002000 <core::num::helper_div>\n",
@@ -295,18 +297,43 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
         "error must identify reachable callee and udiv, got: {err_callee}"
     );
 
+    let poisoned_alloc_callee_disasm = concat!(
+        "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n",
+        "100001000: 94000400 \tbl\t0x100002000 <<alloc::vec::Vec<i32> as alloc::vec::spec_from_iter::SpecFromIter<i32, I>>::from_iter>\n",
+        "0000000100002000 <<alloc::vec::Vec<i32> as alloc::vec::spec_from_iter::SpecFromIter<i32, I>>::from_iter>:\n",
+        "100002000: 9b027c20 \tmul\tx0, x1, x2\n",
+    );
+    let err_alloc_callee = verify_step_disassembly_text(poisoned_alloc_callee_disasm, false)
+        .expect_err("mul inside reachable alloc::vec::Vec::from_iter callee must fail call-graph disassembly check");
+    assert!(
+        err_alloc_callee.contains("SpecFromIter") && err_alloc_callee.contains("mul"),
+        "error must identify alloc::vec::Vec::from_iter and mul, got: {err_alloc_callee}"
+    );
+
     for bad_instr in [
         "100001000: 9e780000 \tfcvtzs\tx0, d0",
         "100001000: 1e644000 \tfrintn\td0, d0",
         "100001000: 9b22fc20 \tsmnegl\tx0, w1, w2",
+        "100001000: 4f828400 \tsqrdmlah.4s\tv0, v0, v2[0]",
+        "100001000: 4f828c00 \tsqrdmlsh.4s\tv0, v0, v2[0]",
         "100001000: bd400000 \tldr\ts0, [x0]",
+        "100001000: 7d400000 \tldr\th0, [x0]",
+        "100001000: d63f0100 \tblr\tx8",
         "100001000: 48 f7 f1 \tdivq\t%rcx",
         "100001000: c4 e2 e3 f6 c1 \tmulx\t%rcx, %rbx, %rax",
+        "100001000: c4 e2 e3 f6 c1 \tmulxq\t%rcx, %rbx, %rax",
+        "100001000: c4 62 63 f6 c1 \tmulxl\t%ecx, %ebx, %eax",
         "100001000: f2 0f 59 c1 \tmulsd\t%xmm1, %xmm0",
         "100001000: f2 0f 58 c1 \taddsd\t%xmm1, %xmm0",
+        "100001000: f2 0f 51 c1 \tsqrtsd\t%xmm1, %xmm0",
+        "100001000: 66 0f 2e c1 \tucomisd\t%xmm1, %xmm0",
+        "100001000: 0f 5b c1 \tcvtdq2ps\t%xmm1, %xmm0",
         "100001000: f2 48 0f 2a c0 \tcvtsi2sd\t%rax, %xmm0",
         "100001000: 66 0f 38 40 c1 \tpmulld\t%xmm1, %xmm0",
+        "100001000: 62 f2 fd 08 40 c1 \tvpmullq\t%xmm1, %xmm0, %xmm0",
+        "100001000: 62 f2 7d 08 50 c1 \tvpdpbusd\t%xmm1, %xmm0, %xmm0",
         "100001000: c5 f9 59 c1 \tvmulpd\t%xmm1, %xmm0, %xmm0",
+        "100001000: ff d0 \tcallq\t*%rax",
         "100001000: 94000400 \tbl\t0x100002000 <__multi3>",
     ] {
         let snippet = format!(
@@ -317,6 +344,30 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
             "disassembly check must reject `{bad_instr}`"
         );
     }
+
+    // Verify that `ldr x8, [x0]; blr x8` (inlined Mach-O `TLVDescriptor::thunk` for `rayon_core` TLS)
+    // is permitted in `uor_r4_integer::stack::session::*` but unconditionally rejected inside
+    // `uor_r4_integer::stack::kernels::*`.
+    let session_tlv_disasm = concat!(
+        "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n",
+        "100001000: f9400008 \tldr\tx8, [x0]\n",
+        "100001004: d63f0100 \tblr\tx8\n",
+    );
+    assert!(
+        verify_step_disassembly_text(session_tlv_disasm, false).is_ok(),
+        "inlined Mach-O TLVDescriptor::thunk sequence must be permitted in stack::session"
+    );
+    let kernel_tlv_disasm = concat!(
+        "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n",
+        "100001000: 94000400 \tbl\t0x100002000 <uor_r4_integer::stack::kernels::stack_gemv_pairs>\n",
+        "0000000100002000 <uor_r4_integer::stack::kernels::stack_gemv_pairs>:\n",
+        "100002000: f9400008 \tldr\tx8, [x0]\n",
+        "100002004: d63f0100 \tblr\tx8\n",
+    );
+    assert!(
+        verify_step_disassembly_text(kernel_tlv_disasm, false).is_err(),
+        "any blr inside stack::kernels must be rejected unconditionally"
+    );
 
     // 4. Verify the sealed provisional Apple M1 rehearsal receipt in
     // `docs/labs/m5-laptop-full-path-measurement/provisional-synthetic-stack-receipt.json`:
@@ -479,6 +530,9 @@ mod serving_controls {
         let (syms, instrs) =
             verify_step_objdump_zero_mul_zero_float(Path::new(env!("CARGO_BIN_EXE_uor-r4-stack")))
                 .expect("uor-r4-stack step must pass objdump zero-mul/zero-float check");
+        eprintln!(
+            "verify_step_objdump_zero_mul_zero_float(CARGO_BIN_EXE_uor-r4-stack): symbols_checked={syms}, instructions_checked={instrs}"
+        );
         assert!(
             syms >= 80 && instrs > 0,
             "expected full serving call graph (>= 80 reachable/mandatory/closure symbols), got {syms} symbols and {instrs} instructions"

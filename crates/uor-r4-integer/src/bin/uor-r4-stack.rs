@@ -423,7 +423,7 @@ fn estimate_analytical_bytes_per_token(model: &IntegerStackModel) -> u64 {
     let tables_d_bytes = (d * 16 * 4) as u64; // b.tables[..d]
     let pairs_d_bytes = ((d / 2) * 256 * 4) as u64; // b.pairs
 
-    for (_l, kind) in s.pattern.bytes().enumerate() {
+    for kind in s.pattern.bytes() {
         // Mixer block:
         // RMSNorm
         bytes += x_bytes + norm_bytes + scratch_norm_bytes;
@@ -862,7 +862,7 @@ fn cost(args: &[String]) -> Result<(), CliError> {
         },
         "disassembly_audit": {
             "step_objdump_zero_mul_zero_float": true,
-            "scope": "Transitive call graph from IntegerStackSession::step and stack::kernels::stack_argmax across all 43 mandatory uor_r4_integer::stack symbols, stack closure instantiations, and reachable non-formatting core/compiler_builtins callees",
+            "scope": "Transitive call graph from IntegerStackSession::step and stack::kernels::stack_argmax across all 43 mandatory uor_r4_integer::stack symbols, stack closure instantiations, and reachable non-formatting core/alloc/compiler_builtins callees; indirect calls (blr/call *) are rejected; 64-bit d0..d31 loads/stores are permitted solely for AArch64 NEON 2xi32 integer SIMD (sqadd.2s) while h0..h31/s0..s31 scalar float loads/stores and all float/multiply/divide opcodes are banned",
             "legacy_ratchet_note": "stack_exp_neg and stack_sigmoid_q31 are D11 sealed integer-table kernels tracked as legacy sites by the D23 ratchet; this disassembly check certifies zero hardware multiply/divide/float opcodes, not CHARTER §3.2 mechanism compliance",
             "symbols_checked": disasm_symbols_checked,
             "instructions_checked": disasm_instructions_checked,

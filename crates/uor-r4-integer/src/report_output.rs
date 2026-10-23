@@ -483,7 +483,7 @@ pub fn validate_protocol_v3_energy_receipt_with_mode(
                             (net_ci95_j - expected_t_ci95_j).abs() / expected_t_ci95_j.max(1e-12);
                         if rel_err > 0.02 {
                             errors.push(ProtocolV3ValidationError::InvalidStudentTCi95 {
-                                metric: "serving.energy.net_j_per_tok".to_string(),
+                                metric: "serving.energy.net_j_per_tok (vs reconstructed gross_j_per_tok 3-run SD)".to_string(),
                                 reported_ci95: net_ci95_j * 1000.0,
                                 expected_t_ci95: expected_t_ci95_j * 1000.0,
                                 relative_error: rel_err,
@@ -656,10 +656,39 @@ fn is_call_graph_allowlisted(sym: &str) -> bool {
     if is_sched && !own_stack {
         return true;
     }
-    const ALLOW_PATTERNS: &[&str] = &[
-        "alloc",
+    const EXACT_ALLOCATOR_ENTRY_POINTS: &[&str] = &[
+        "__rust_alloc",
+        "___rust_alloc",
+        "__rust_dealloc",
+        "___rust_dealloc",
+        "__rust_realloc",
+        "___rust_realloc",
+        "__rust_alloc_zeroed",
+        "___rust_alloc_zeroed",
+        "__rust_no_alloc_shim_is_unstable",
+        "___rust_no_alloc_shim_is_unstable",
+        "__rust_alloc_error_handler",
+        "___rust_alloc_error_handler",
+        "malloc",
+        "_malloc",
         "free",
+        "_free",
         "realloc",
+        "_realloc",
+        "calloc",
+        "_calloc",
+        "posix_memalign",
+        "_posix_memalign",
+    ];
+    let clean_sym = sym.split('+').next().unwrap_or(sym).trim();
+    if EXACT_ALLOCATOR_ENTRY_POINTS.contains(&clean_sym) {
+        return true;
+    }
+    const ALLOW_PATTERNS: &[&str] = &[
+        "alloc::raw_vec",
+        "5alloc7raw_vec",
+        "handle_alloc_error",
+        "precondition_check",
         "core::fmt",
         "4core3fmt",
         "panic",
@@ -804,9 +833,14 @@ fn extract_call_target(mnemonic: &str, operands: &str, current_sym: &str) -> Opt
     None
 }
 
-fn is_s_float_register_token(tok: &str) -> bool {
+fn is_scalar_float_register_token(tok: &str) -> bool {
     let clean = tok.trim_matches(|c: char| !c.is_ascii_alphanumeric());
-    if let Some(num_str) = clean.strip_prefix('s').or_else(|| clean.strip_prefix('S')) {
+    if let Some(num_str) = clean
+        .strip_prefix('s')
+        .or_else(|| clean.strip_prefix('S'))
+        .or_else(|| clean.strip_prefix('h'))
+        .or_else(|| clean.strip_prefix('H'))
+    {
         if let Ok(reg_num) = num_str.parse::<u32>() {
             return reg_num <= 31;
         }
@@ -815,8 +849,8 @@ fn is_s_float_register_token(tok: &str) -> bool {
 }
 
 /// Check whether `(mnemonic, operands)` is a forbidden Class I (hardware or compiler-rt multiply),
-/// Class II (hardware or compiler-rt divide), or Class III (floating-point / SIMD float transfer)
-/// instruction on AArch64 or x86-64.
+/// Class II (hardware or compiler-rt divide), Class III (floating-point / SIMD float transfer), or
+/// unresolved indirect subroutine call (`blr` / `call *`) on AArch64 or x86-64.
 fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
     const FORBIDDEN_MNEMONICS: &[&str] = &[
         // AArch64 Class I: hardware multipliers
@@ -836,6 +870,10 @@ fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
         "umulh",
         "sqdmulh",
         "sqrdmulh",
+        "sqrdmlah",
+        "sqrdmlsh",
+        "sqrdmlah2",
+        "sqrdmlsh2",
         "mla",
         "mls",
         "pmul",
@@ -928,7 +966,13 @@ fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
         "bfmlal",
         "bfmlalb",
         "bfmlalt",
-        // x86-64 integer multipliers & dividers
+        // AArch64 indirect subroutine calls
+        "blr",
+        "blrda",
+        "blrdb",
+        "blraa",
+        "blrab",
+        // x86-64 integer multipliers & dividers (including AT&T size suffixes)
         "imul",
         "imulb",
         "imulw",
@@ -939,6 +983,8 @@ fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
         "mull",
         "mulq",
         "mulx",
+        "mulxl",
+        "mulxq",
         "idiv",
         "idivb",
         "idivw",
@@ -949,7 +995,7 @@ fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
         "divw",
         "divl",
         "divq",
-        // x86-64 SSE/AVX float & packed integer multipliers
+        // x86-64 SSE/AVX float, comparison, conversion & packed integer multipliers
         "mulss",
         "mulsd",
         "mulps",
@@ -982,6 +1028,38 @@ fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
         "vdivsd",
         "vdivps",
         "vdivpd",
+        "sqrtss",
+        "sqrtsd",
+        "sqrtps",
+        "sqrtpd",
+        "vsqrtss",
+        "vsqrtsd",
+        "vsqrtps",
+        "vsqrtpd",
+        "rsqrtss",
+        "rsqrtps",
+        "vrsqrtss",
+        "vrsqrtps",
+        "rcpss",
+        "rcpps",
+        "vrcpss",
+        "vrcpps",
+        "ucomiss",
+        "ucomisd",
+        "comiss",
+        "comisd",
+        "vucomiss",
+        "vucomisd",
+        "vcomiss",
+        "vcomisd",
+        "cmpss",
+        "cmpsd",
+        "cmpps",
+        "cmppd",
+        "vcmpss",
+        "vcmpsd",
+        "vcmpps",
+        "vcmppd",
         "cvtsi2ss",
         "cvtsi2sd",
         "cvtsi2ssl",
@@ -994,11 +1072,28 @@ fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
         "cvtsd2si",
         "cvtss2sd",
         "cvtsd2ss",
+        "cvtdq2ps",
+        "cvtdq2pd",
+        "cvtps2dq",
+        "cvtpd2dq",
+        "cvttps2dq",
+        "cvttpd2dq",
+        "cvtps2pd",
+        "cvtpd2ps",
         "vcvtsi2ss",
         "vcvtsi2sd",
         "vcvttss2si",
         "vcvttsd2si",
+        "vcvtdq2ps",
+        "vcvtdq2pd",
+        "vcvtps2dq",
+        "vcvtpd2dq",
+        "vcvttps2dq",
+        "vcvttpd2dq",
+        "vcvtps2pd",
+        "vcvtpd2ps",
         "pmulld",
+        "pmullq",
         "pmuludq",
         "pmaddwd",
         "pmullw",
@@ -1007,6 +1102,7 @@ fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
         "pmuldq",
         "pmaddubsw",
         "vpmulld",
+        "vpmullq",
         "vpmuludq",
         "vpmaddwd",
         "vpmullw",
@@ -1014,6 +1110,10 @@ fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
         "vpmulhuw",
         "vpmuldq",
         "vpmaddubsw",
+        "vpdpbusd",
+        "vpdpbusds",
+        "vpdpwssd",
+        "vpdpwssds",
     ];
 
     let base = mnemonic.split('.').next().unwrap_or(mnemonic);
@@ -1022,6 +1122,8 @@ fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
     }
     if base.starts_with("fcvt")
         || base.starts_with("frint")
+        || base.starts_with("cvt")
+        || base.starts_with("vcvt")
         || base.starts_with("vfmadd")
         || base.starts_with("vfmsub")
         || base.starts_with("vfnmadd")
@@ -1032,15 +1134,19 @@ fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
     if (base.starts_with('f') || base.starts_with("bf")) && mnemonic.contains('.') {
         return true;
     }
-    // Check 32-bit scalar float (`s0..s31`) loads/stores. (Note: on AArch64 NEON, 64-bit 2x`i32`
-    // integer SIMD instructions such as `sqadd.2s v0, v0, v1` in `stack_step` use the `d0..d31`
-    // 64-bit register alias for 64-bit integer vector loads/stores, matching
-    // `scripts/audit_zero_matmul_serving.py`.)
+    // Reject x86-64 indirect subroutine calls (`call *%rax` / `callq *(%rdi)`).
+    if matches!(base, "call" | "callq") && operands.trim_start().starts_with('*') {
+        return true;
+    }
+    // Check 16-bit (`h0..h31`) and 32-bit (`s0..s31`) scalar float loads/stores. (Note: on AArch64
+    // NEON, 64-bit 2x`i32` integer SIMD instructions such as `sqadd.2s v0, v0, v1` in `stack_step`
+    // use the `d0..d31` 64-bit register alias for 64-bit integer vector loads/stores, matching
+    // `scripts/audit_zero_matmul_serving.py` and disclosed in `disassembly_audit.scope`.)
     if matches!(base, "ldr" | "str" | "ldur" | "stur" | "ldp" | "stp") {
         let code_operands = operands.split(';').next().unwrap_or(operands);
         if code_operands
             .split(|c: char| c == ',' || c.is_whitespace())
-            .any(is_s_float_register_token)
+            .any(is_scalar_float_register_token)
         {
             return true;
         }
@@ -1164,16 +1270,14 @@ pub fn verify_step_disassembly_text(
     // Include every `uor_r4_integer::stack` closure or rayon/crossbeam scheduler instantiation over
     // a stack closure present in the binary (matching `audit_zero_matmul_serving.py`).
     for sym in functions.keys() {
-        if is_stack_serving_or_closure_symbol(sym)
+        let is_stack_or_closure = is_stack_serving_or_closure_symbol(sym)
             || (!sym.contains("measure_step_phases")
                 && (sym.contains("uor_r4_integer::stack::session::stack_")
                     || sym.contains("uor_r4_integer::stack::kernels::stack_")
                     || sym.contains("14uor_r4_integer5stack7session")
-                    || sym.contains("14uor_r4_integer5stack7kernels")))
-        {
-            if audited_set.insert(sym.clone()) {
-                queue.push_back(sym.clone());
-            }
+                    || sym.contains("14uor_r4_integer5stack7kernels")));
+        if is_stack_or_closure && audited_set.insert(sym.clone()) {
+            queue.push_back(sym.clone());
         }
     }
 
@@ -1198,10 +1302,44 @@ pub fn verify_step_disassembly_text(
     let mut instructions_checked = 0usize;
     let mut violations = Vec::new();
     for sym in &audited_set {
+        let is_rayon_or_tls_wrapper = sym.contains("rayon_core::")
+            || sym.contains("10rayon_core")
+            || sym.contains("LocalKey")
+            || sym.contains("thread_local");
+        let is_stack_session = sym.contains("uor_r4_integer::stack::session")
+            || sym.contains("14uor_r4_integer5stack7session");
         if let Some(lines) = functions.get(sym) {
+            let mut prev_tlv_thunk_reg: Option<String> = None;
             for line in lines {
                 if let Some((mnemonic, operands)) = extract_mnemonic_and_operands(line) {
                     instructions_checked += 1;
+                    let base = mnemonic.split('.').next().unwrap_or(&mnemonic);
+                    let is_indirect_call =
+                        matches!(base, "blr" | "blrda" | "blrdb" | "blraa" | "blrab")
+                            || (matches!(base, "call" | "callq")
+                                && operands.trim_start().starts_with('*'));
+                    let is_inlined_macho_tlv_thunk = is_stack_session
+                        && base == "blr"
+                        && prev_tlv_thunk_reg.as_deref() == Some(operands.trim());
+                    prev_tlv_thunk_reg = if base == "ldr" {
+                        let compact = operands.replace(' ', "");
+                        compact
+                            .strip_suffix(",[x0]")
+                            .filter(|r| r.starts_with('x'))
+                            .map(str::to_string)
+                    } else {
+                        None
+                    };
+                    if is_indirect_call && (is_rayon_or_tls_wrapper || is_inlined_macho_tlv_thunk) {
+                        // Rayon work-stealing and TLS runtime wrappers (`rayon_core::*`,
+                        // `LocalKey::with`, `std::sys::thread_local::*`, and inlined Mach-O
+                        // `TLVDescriptor::thunk` `ldr xN, [x0]; blr xN` sequences in `stack::session`
+                        // for `WORKER_THREAD_STATE`) are permitted; every `uor_r4_integer::stack`
+                        // closure in the binary is seeded directly into `audited_set` above, and
+                        // all `stack::kernels::*`, `core::*`, and `alloc::*` functions forbid
+                        // indirect calls unconditionally.
+                        continue;
+                    }
                     if is_forbidden_instruction(&mnemonic, &operands) {
                         violations.push(format!("{sym}: {mnemonic} in `{line}`"));
                     }
