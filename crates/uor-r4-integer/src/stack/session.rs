@@ -677,14 +677,18 @@ impl IntegerStackModel {
                     routing.total_4bit_weights += w;
                     routing.active_4bit_weight_and_scale_bytes_per_token += b;
                     routing.total_4bit_weight_and_scale_bytes += b;
+                    // Recurrence learned scalars: `conv_taps` (`i16`, 2 B each),
+                    // `conv_bias` (`i32`, 4 B each), `gate_bias` (`i32`, 4 B each),
+                    // and `decay_rate` (`i16` grid code, 2 B each).
                     let scalars = (r.taps.len()
                         + r.conv_bias.len()
                         + r.gate_bias.len()
                         + r.rates.len()) as u64;
-                    let scalar_bytes = (r.taps.len() * 2
-                        + r.conv_bias.len() * 4
-                        + r.gate_bias.len() * 4
-                        + r.rates.len() * 2) as u64;
+                    let scalar_bytes = (r.taps.len() * std::mem::size_of::<i16>()
+                        + r.conv_bias.len() * std::mem::size_of::<i32>()
+                        + r.gate_bias.len() * std::mem::size_of::<i32>()
+                        + r.rates.len() * std::mem::size_of::<i16>())
+                        as u64;
                     routing.learned_scalars_total += scalars;
                     routing.learned_scalar_bytes_total += scalar_bytes;
                 }
@@ -700,16 +704,20 @@ impl IntegerStackModel {
                     memory_lookup.total_4bit_weights += w;
                     memory_lookup.active_4bit_weight_and_scale_bytes_per_token += b;
                     memory_lookup.total_4bit_weight_and_scale_bytes += b;
+                    // Read learned scalars: `null_bias` (`i32`, 4 B each), `age` (`i32`, 4 B each),
+                    // `beta` (`i16` grid code, 2 B each), `offset` (`i32`, 4 B each),
+                    // and `learned_rank` (`i32`, 4 B each).
                     let scalars = (r.null_bias.len()
                         + r.age.len()
                         + r.beta.len()
                         + r.offset.len()
                         + r.learned_rank.len()) as u64;
-                    let scalar_bytes = (r.null_bias.len() * 4
-                        + r.age.len() * 4
-                        + r.beta.len() * 2
-                        + r.offset.len() * 4
-                        + r.learned_rank.len() * 4) as u64;
+                    let scalar_bytes = (r.null_bias.len() * std::mem::size_of::<i32>()
+                        + r.age.len() * std::mem::size_of::<i32>()
+                        + r.beta.len() * std::mem::size_of::<i16>()
+                        + r.offset.len() * std::mem::size_of::<i32>()
+                        + r.learned_rank.len() * std::mem::size_of::<i32>())
+                        as u64;
                     memory_lookup.learned_scalars_total += scalars;
                     memory_lookup.learned_scalar_bytes_total += scalar_bytes;
                 }
@@ -1014,9 +1022,12 @@ pub struct StackParameterBreakdown {
     pub total_learned_scalars: u64,
     /// Total bytes occupied by learned integer / grid-code scalar parameters.
     pub total_learned_scalar_bytes: u64,
-    /// Total learned parameters (`total_4bit_weights + total_learned_scalars`).
+    /// Total learned parameters (`total_4bit_weights + total_learned_scalars`), where each
+    /// 4-bit matrix weight and each `i16`/`i32` scalar table entry counts as 1 parameter.
+    /// For pure 4-bit weight ratios, use `weights_per_token` and `total_4bit_weights`.
     pub total_learned_parameters: u64,
-    /// Active learned parameters per token (`weights_per_token + total_learned_scalars`).
+    /// Active learned parameters per token (`weights_per_token + total_learned_scalars`) at
+    /// full context (all `age` entries counted alongside `weights_per_token`).
     pub active_learned_parameters_per_token: u64,
 }
 
@@ -3348,4 +3359,418 @@ fn stack_pointer(
 fn pointer_coefficient(weight: u64, total: u64) -> u128 {
     let reciprocal = stack_div_u128(1u128 << 93, u128::from(total.max(1)));
     stack_mul_u128(u128::from(weight), reciprocal).wrapping_add(1 << 30) >> 31
+}
+
+/// Two-sided 95% Student-$t$ critical value $t_{0.975, \text{df}}$ for degrees of freedom $\text{df} = n - 1$.
+///
+/// Exact tabulated values for $1 \le \text{df} \le 30$; fourth-order Cornish-Fisher expansion
+/// around $z_{0.975} = 1.959963984540054$ for $\text{df} > 30$.
+pub fn student_t_0975(df: usize) -> f64 {
+    match df {
+        0 => f64::INFINITY,
+        1 => 12.706_204_736_4,
+        2 => 4.302_652_729_91,
+        3 => 3.182_446_305_28,
+        4 => 2.776_445_105_2,
+        5 => 2.570_581_836_61,
+        6 => 2.446_911_851_14,
+        7 => 2.364_624_251_6,
+        8 => 2.306_004_135_2,
+        9 => 2.262_157_162_85,
+        10 => 2.228_138_851_96,
+        11 => 2.200_985_160_08,
+        12 => 2.178_812_829_66,
+        13 => 2.160_368_656_46,
+        14 => 2.144_786_687_92,
+        15 => 2.131_449_545_56,
+        16 => 2.119_905_299_22,
+        17 => 2.109_815_577_83,
+        18 => 2.100_922_040_24,
+        19 => 2.093_024_054_41,
+        20 => 2.085_963_447_27,
+        21 => 2.079_613_844_73,
+        22 => 2.073_873_067_9,
+        23 => 2.068_657_610_42,
+        24 => 2.063_898_561_63,
+        25 => 2.059_538_552_75,
+        26 => 2.055_529_438_64,
+        27 => 2.051_830_516_48,
+        28 => 2.048_407_141_8,
+        29 => 2.045_229_642_13,
+        30 => 2.042_272_456_3,
+        _ => {
+            let z = 1.959_963_984_540_054_f64;
+            let d = df as f64;
+            z + (z.powi(3) + z) / (4.0 * d)
+                + (5.0 * z.powi(5) + 16.0 * z.powi(3) + 3.0 * z) / (96.0 * d * d)
+        }
+    }
+}
+
+/// Alias for [`student_t_0975`].
+pub fn student_t_975(df: usize) -> f64 {
+    student_t_0975(df)
+}
+
+/// Unbiased sample mean, sample standard deviation ($n - 1$ denominator), and two-sided
+/// 95% Student-$t$ confidence interval half-width ($t_{0.975, n-1} \cdot s / \sqrt{n}$).
+pub fn sample_mean_sd_t_ci95(samples: &[f64]) -> Option<(f64, f64, f64)> {
+    let n = samples.len();
+    if n < 2 {
+        return None;
+    }
+    let nf = n as f64;
+    let mean = samples.iter().sum::<f64>() / nf;
+    let var = samples.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / ((n - 1) as f64);
+    let sd = var.sqrt();
+    let sem = sd / nf.sqrt();
+    let ci95 = student_t_0975(n - 1) * sem;
+    Some((mean, sd, ci95))
+}
+
+/// Validation failure returned by [`validate_protocol_v3_energy_receipt`].
+#[derive(Debug, Clone, PartialEq)]
+pub enum ProtocolV3ValidationError {
+    /// `work_rate_w` disagrees with `gross_j_per_tok * tokens_per_s` by more than 2%.
+    PowerThroughputInconsistency {
+        reported_work_rate_w: f64,
+        implied_work_rate_w: f64,
+        relative_error: f64,
+    },
+    /// Reported `ci95` disagrees with Student's $t_{0.975, n-1} \cdot s / \sqrt{n}$ by more than 2%.
+    InvalidStudentTCi95 {
+        metric: String,
+        reported_ci95: f64,
+        expected_t_ci95: f64,
+        relative_error: f64,
+    },
+    /// `work_rate_w <= idle_rate_w` in strict qualification mode (zero or negative net power above idle).
+    NonPositiveNetPower { work_rate_w: f64, idle_rate_w: f64 },
+    /// One or more external inference daemons (`ollama`, `llama-server`, `vllm`, etc.) were running.
+    ExternalInferenceDaemonsDetected(Vec<String>),
+    /// Required Protocol v3 full-path field is missing from the receipt.
+    MissingRequiredV3Field(&'static str),
+}
+
+/// Validate an energy + full-path cost receipt against strict Protocol v3 qualification requirements
+/// (`allow_provisional = false`).
+///
+/// Rejects:
+/// 1. `work_rate_w` disagreeing with `gross_j_per_tok * tokens_per_s` by more than 2%.
+/// 2. `gross_mj_per_tok.ci95`, `net_mj_per_tok.ci95`, or legacy `serving.energy.net_j_per_tok.ci95`
+///    disagreeing with Student's $t_{0.975, n-1} \cdot s / \sqrt{n}$ by more than 2%.
+/// 3. `work_rate_w <= idle_rate_w` (unless `allow_provisional` is enabled via
+///    [`validate_protocol_v3_energy_receipt_with_mode`]).
+/// 4. Non-empty `machine.external_inference_daemons_detected` (unless `allow_provisional` is enabled).
+/// 5. Missing Protocol v3 full-path fields (`parameter_breakdown`, `phase_latency_us`,
+///    `logits_sha256`, `external_inference_daemons_detected`, `kernel_peak_footprint_bytes`).
+pub fn validate_protocol_v3_energy_receipt(
+    receipt: &serde_json::Value,
+) -> Vec<ProtocolV3ValidationError> {
+    validate_protocol_v3_energy_receipt_with_mode(receipt, false)
+}
+
+/// Validate an energy + full-path cost receipt against Protocol v3 requirements, with an explicit
+/// `allow_provisional` toggle for non-quiescent host rehearsals.
+pub fn validate_protocol_v3_energy_receipt_with_mode(
+    receipt: &serde_json::Value,
+    allow_provisional: bool,
+) -> Vec<ProtocolV3ValidationError> {
+    use serde_json::Value;
+    let mut errors = Vec::new();
+
+    let work_rate_w = receipt
+        .pointer("/power/work_rate_w")
+        .or_else(|| receipt.pointer("/serving/energy/work_rate_w"))
+        .and_then(Value::as_f64);
+    let idle_rate_w = receipt
+        .pointer("/power/idle_rate_w")
+        .or_else(|| receipt.pointer("/serving/energy/idle_power_w"))
+        .and_then(Value::as_f64);
+    let gross_j = receipt
+        .pointer("/energy_per_token/gross_j_per_tok")
+        .or_else(|| receipt.pointer("/serving/energy/gross_j_per_tok/mean"))
+        .and_then(Value::as_f64);
+    let tok_s = receipt
+        .pointer("/throughput/tokens_per_s")
+        .or_else(|| receipt.pointer("/serving/tokens_per_s/mean"))
+        .and_then(Value::as_f64);
+
+    if let (Some(work_rate_w), Some(gross_j), Some(tok_s)) = (work_rate_w, gross_j, tok_s) {
+        let implied = gross_j * tok_s;
+        let rel_err = (work_rate_w - implied).abs() / implied.max(1e-12);
+        if rel_err > 0.02 {
+            errors.push(ProtocolV3ValidationError::PowerThroughputInconsistency {
+                reported_work_rate_w: work_rate_w,
+                implied_work_rate_w: implied,
+                relative_error: rel_err,
+            });
+        }
+    } else {
+        errors.push(ProtocolV3ValidationError::MissingRequiredV3Field(
+            "power.work_rate_w / energy_per_token.gross_j_per_tok / throughput.tokens_per_s",
+        ));
+    }
+
+    if !allow_provisional {
+        if let (Some(work_w), Some(idle_w)) = (work_rate_w, idle_rate_w) {
+            if work_w <= idle_w {
+                errors.push(ProtocolV3ValidationError::NonPositiveNetPower {
+                    work_rate_w: work_w,
+                    idle_rate_w: idle_w,
+                });
+            }
+        }
+    }
+
+    for (name, ptr) in [
+        ("gross_mj_per_tok", "/energy_per_token/gross_mj_per_tok"),
+        ("net_mj_per_tok", "/energy_per_token/net_mj_per_tok"),
+    ] {
+        if let Some(block) = receipt.pointer(ptr) {
+            let samples: Option<Vec<f64>> = block
+                .get("samples")
+                .and_then(Value::as_array)
+                .map(|arr| arr.iter().filter_map(Value::as_f64).collect());
+            let reported_ci95 = block.get("ci95").and_then(Value::as_f64);
+            if let (Some(samples), Some(reported)) = (samples, reported_ci95) {
+                if let Some((_mean, _sd, expected_ci95)) = sample_mean_sd_t_ci95(&samples) {
+                    let rel_err = (reported - expected_ci95).abs() / expected_ci95.max(1e-12);
+                    if rel_err > 0.02 {
+                        errors.push(ProtocolV3ValidationError::InvalidStudentTCi95 {
+                            metric: name.to_string(),
+                            reported_ci95: reported,
+                            expected_t_ci95: expected_ci95,
+                            relative_error: rel_err,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Also check legacy /serving/energy/net_j_per_tok/ci95 when min/mean/max of net_j_per_tok or
+    // gross_j_per_tok are present (as in `archive/ops/measurement_report_rnd.json`, where n = 3 runs
+    // have net [0.003128, 0.003165, 0.003192] J/tok and gross [0.003135, 0.003172, 0.003199] J/tok,
+    // both with s = 0.032130 mJ/tok, and net_j_per_tok.ci95 = 3.7e-5 J/tok = 0.037 mJ/tok was
+    // computed with normal z = 1.96 instead of Student's t_{0.975, 2} = 4.302653).
+    let legacy_samples = receipt
+        .pointer("/serving/energy/net_j_per_tok/min")
+        .and_then(Value::as_f64)
+        .zip(
+            receipt
+                .pointer("/serving/energy/net_j_per_tok/mean")
+                .and_then(Value::as_f64),
+        )
+        .zip(
+            receipt
+                .pointer("/serving/energy/net_j_per_tok/max")
+                .and_then(Value::as_f64),
+        )
+        .or_else(|| {
+            receipt
+                .pointer("/serving/energy/gross_j_per_tok/min")
+                .and_then(Value::as_f64)
+                .zip(
+                    receipt
+                        .pointer("/serving/energy/gross_j_per_tok/mean")
+                        .and_then(Value::as_f64),
+                )
+                .zip(
+                    receipt
+                        .pointer("/serving/energy/gross_j_per_tok/max")
+                        .and_then(Value::as_f64),
+                )
+        });
+    if let (Some(((min_j, mean_j), max_j)), Some(net_ci95_j)) = (
+        legacy_samples,
+        receipt
+            .pointer("/serving/energy/net_j_per_tok/ci95")
+            .and_then(Value::as_f64),
+    ) {
+        let samples_j = [min_j, mean_j, max_j];
+        if let Some((_m, _sd, expected_t_ci95_j)) = sample_mean_sd_t_ci95(&samples_j) {
+            let rel_err = (net_ci95_j - expected_t_ci95_j).abs() / expected_t_ci95_j.max(1e-12);
+            if rel_err > 0.02 {
+                errors.push(ProtocolV3ValidationError::InvalidStudentTCi95 {
+                    metric: "serving.energy.net_j_per_tok".to_string(),
+                    reported_ci95: net_ci95_j * 1000.0,
+                    expected_t_ci95: expected_t_ci95_j * 1000.0,
+                    relative_error: rel_err,
+                });
+            }
+        }
+    }
+
+    for required in [
+        "/memory/parameter_breakdown",
+        "/step_latency/phase_latency_us",
+        "/tokens/logits_sha256",
+        "/machine/external_inference_daemons_detected",
+        "/memory/kernel_peak_footprint_bytes",
+    ] {
+        if receipt.pointer(required).is_none() {
+            errors.push(ProtocolV3ValidationError::MissingRequiredV3Field(required));
+        }
+    }
+
+    if !allow_provisional {
+        if let Some(arr) = receipt
+            .pointer("/machine/external_inference_daemons_detected")
+            .and_then(Value::as_array)
+        {
+            let daemons: Vec<String> = arr
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToOwned::to_owned)
+                .collect();
+            if !daemons.is_empty() {
+                errors.push(
+                    ProtocolV3ValidationError::ExternalInferenceDaemonsDetected(daemons),
+                );
+            }
+        }
+    }
+
+    errors
+}
+
+/// Verify that disassembled text from `objdump --demangle -d` or `otool -tV` contains the
+/// `IntegerStackSession::step` symbol (and `stack_step` when `include_stack_step` is true)
+/// with zero Class I (multiply), Class II (divide), or Class III (floating-point / SIMD transfer)
+/// instructions.
+pub fn verify_step_disassembly_text(
+    disasm_text: &str,
+    include_stack_step: bool,
+) -> Result<(usize, usize), String> {
+    const FORBIDDEN_MNEMONICS: &[&str] = &[
+        "mul", "madd", "msub", "mneg", "smull", "umull", "smaddl", "umaddl", "smsubl", "umsubl",
+        "smulh", "umulh", "sqdmulh", "sqrdmulh", "mla", "mls", "pmul", "pmull", "sdot", "udot",
+        "sdiv", "udiv", "imul", "idiv", "fmul", "fmov", "fadd", "fsub", "fdiv", "fmadd", "fmsub",
+        "fnmadd", "fnmsub", "fnmul", "fsqrt", "fcmp", "fcmpe", "scvtf", "ucvtf", "fneg", "fabs",
+        "fmla", "fmls", "fmax", "fmin", "fcsel", "vfmadd", "vmulss", "vmulsd", "vaddps", "vmulps",
+    ];
+
+    let mut current_target_sym: Option<String> = None;
+    let mut symbols_checked = 0usize;
+    let mut instructions_checked = 0usize;
+    let mut violations = Vec::new();
+
+    for raw_line in disasm_text.lines() {
+        let line = raw_line.trim();
+        if line.ends_with(">:") {
+            if let Some(start) = line.find('<') {
+                let sym = &line[start + 1..line.len() - 2];
+                let is_step = sym.contains("IntegerStackSession")
+                    && sym.ends_with("::step")
+                    && !sym.contains("measure_step_phases")
+                    && !sym.contains("closure");
+                let is_stack_step = include_stack_step
+                    && sym.contains("stack")
+                    && sym.ends_with("::stack_step")
+                    && !sym.contains("closure");
+                if is_step || is_stack_step {
+                    current_target_sym = Some(sym.to_string());
+                    symbols_checked += 1;
+                } else {
+                    current_target_sym = None;
+                }
+                continue;
+            }
+        } else if line.ends_with(':') && !line.contains('\t') && !line.contains(' ') {
+            let sym = &line[..line.len() - 1];
+            let is_step = sym.contains("19IntegerStackSession")
+                && sym.ends_with("4step")
+                && !sym.contains("closure");
+            let is_stack_step = include_stack_step
+                && sym.contains("5stack")
+                && sym.ends_with("10stack_step")
+                && !sym.contains("closure");
+            if is_step || is_stack_step {
+                current_target_sym = Some(sym.to_string());
+                symbols_checked += 1;
+            } else {
+                current_target_sym = None;
+            }
+            continue;
+        }
+
+        if let Some(ref sym) = current_target_sym {
+            let mut ws = line.split_whitespace();
+            let Some(first_tok) = ws.next() else {
+                continue;
+            };
+            let addr_clean = first_tok.trim_end_matches(':');
+            if addr_clean.is_empty() || !addr_clean.chars().all(|c| c.is_ascii_hexdigit()) {
+                continue;
+            }
+            // Find the instruction mnemonic: skip raw hex encoding bytes after the address.
+            let mnemonic_opt = if line.contains('\t') {
+                line.split('\t')
+                    .skip(1)
+                    .filter_map(|col| col.split_whitespace().next())
+                    .find(|tok| !tok.chars().all(|c| c.is_ascii_hexdigit()))
+            } else {
+                ws.find(|tok| !tok.chars().all(|c| c.is_ascii_hexdigit()))
+            };
+            if let Some(raw_mnemonic) = mnemonic_opt {
+                let token = raw_mnemonic.to_ascii_lowercase();
+                instructions_checked += 1;
+                let base_mnemonic = token.split('.').next().unwrap_or(&token);
+                if FORBIDDEN_MNEMONICS.contains(&base_mnemonic) {
+                    violations.push(format!("{sym}: {token} in `{line}`"));
+                }
+            }
+        }
+    }
+
+    if symbols_checked == 0 || instructions_checked == 0 {
+        return Err(format!(
+            "IntegerStackSession::step symbol or instructions not found in disassembly (symbols={symbols_checked}, instructions={instructions_checked})"
+        ));
+    }
+    if include_stack_step && symbols_checked < 2 {
+        return Err(format!(
+            "expected both IntegerStackSession::step and stack_step in release disassembly, found {symbols_checked}"
+        ));
+    }
+    if !violations.is_empty() {
+        return Err(format!(
+            "forbidden multiply/divide/float instructions in step disassembly: {}",
+            violations.join("; ")
+        ));
+    }
+    Ok((symbols_checked, instructions_checked))
+}
+
+/// Run `objdump --demangle -d` (falling back to `otool -tV`) on `binary_path` and verify that
+/// `IntegerStackSession::step` (and `stack_step` in release builds) contain zero multiply, divide,
+/// or floating-point instructions.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn verify_step_objdump_zero_mul_zero_float(
+    binary_path: &Path,
+) -> Result<(usize, usize), String> {
+    let disasm = std::process::Command::new("objdump")
+        .args(["--demangle", "-d"])
+        .arg(binary_path)
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .or_else(|| {
+            std::process::Command::new("otool")
+                .args(["-tV"])
+                .arg(binary_path)
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .and_then(|o| String::from_utf8(o.stdout).ok())
+        })
+        .ok_or_else(|| {
+            format!(
+                "failed to disassemble {} with objdump or otool",
+                binary_path.display()
+            )
+        })?;
+    verify_step_disassembly_text(&disasm, !cfg!(debug_assertions))
 }
