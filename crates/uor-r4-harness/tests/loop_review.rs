@@ -1315,16 +1315,21 @@ fn render_gate_fixture_refuses_tampered_branch_only_forks_and_unknown() {
             head_sha = commit(&dir);
         }
         if case == 5 {
-            // The fake renderer must also serve the branch-stamp commit, so disabling only the
-            // views' stamp check would still pass the render comparison and turn the refusal
-            // into exit 1 - which is what the test asserts against.
-            let hstamp = uor_r4_harness::looprender::stamp(&head_sha);
-            let served: Vec<(String, String)> =
-                ["STATE.md", "HANDOFF.md", "docs/harness/LESSONS.md"]
-                    .into_iter()
-                    .map(|p| (p.to_string(), format!("{hstamp}\n# {p}\n")))
-                    .collect();
-            views.insert(head_sha.clone(), served);
+            // The canned renderer must serve the commit the committed views actually stamp, so
+            // that disabling ONLY the views' stamp check still passes the render comparison and
+            // turns the refusal into exit 1 - which the test asserts against.
+            let text = std::fs::read_to_string(dir.join("STATE.md")).unwrap();
+            let stamp_sha = text
+                .lines()
+                .next()
+                .and_then(uor_r4_harness::looprender::parse_stamp)
+                .expect("committed view is stamped")
+                .to_string();
+            let mut served = Vec::new();
+            for p in ["STATE.md", "HANDOFF.md", "docs/harness/LESSONS.md"] {
+                served.push((p.to_string(), std::fs::read_to_string(dir.join(p)).unwrap()));
+            }
+            views.insert(stamp_sha, served);
         }
         git_at(&dir, &["update-ref", "refs/remotes/origin/main", &a]);
         let cross = case == 2;
