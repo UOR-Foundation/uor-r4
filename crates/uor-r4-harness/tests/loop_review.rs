@@ -1012,7 +1012,7 @@ fn a_render_record_counts_with_the_sentinel_order_but_not_on_an_ordinary_pr() {
 
 #[test]
 fn a_follow_up_loop_item_is_ordinary_but_a_build_plan_item_still_needs_its_setup_row() {
-    assert!(!is_setup_item("loop-render-review"));
+    assert!(!is_setup_item("infra-loop-render-review"));
     assert!(is_setup_item("infra-loop-harness"));
     assert!(is_setup_item("infra-loop-pr08-migration"));
     let vendors = render_vendors();
@@ -1029,7 +1029,7 @@ fn a_follow_up_loop_item_is_ordinary_but_a_build_plan_item_still_needs_its_setup
         head: HEAD,
         order_path: ORDER_PATH,
         order_lab: "claude",
-        order_item: "loop-render-review",
+        order_item: "infra-loop-render-review",
         setup_row: None,
         rows: &rows,
         vendors: &vendors,

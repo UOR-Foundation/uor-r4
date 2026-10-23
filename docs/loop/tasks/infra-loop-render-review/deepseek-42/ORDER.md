@@ -1,6 +1,6 @@
-# ORDER: loop-render-review, deepseek-42 (a counted review path for the kimi/render PR)
+# ORDER: infra-loop-render-review, deepseek-42 (a counted review path for the kimi/render PR)
 
-Lab: deepseek. Item: [loop-render-review](../../../../roadmap/items/loop-render-review.md) (#3036; carded from #2904). Base: `8720c5d6d`. `References #3036`; the item stays `ready` until a render PR is reviewed through the path.
+Lab: deepseek. Item: [infra-loop-render-review](../../../../roadmap/items/infra-loop-render-review.md) (#3036; carded from #2904). Base: `8720c5d6d`. `References #3036`; the item stays `ready` until a render PR is reviewed through the path.
 
 ## Goal
 
@@ -29,7 +29,7 @@ Class instrument (harness code; no GPU). At the base: `loop review` on #3031 fai
 
 - AGENTS.md block-gated as in Design 3; roadmap README out of the no-ORDER path (follow-up item needed).
 - Stamp must equal the PR merge base with `origin/main` (kills branch-only/stale/rollback stamps); explicit-sha fetch replaces `FETCH_HEAD`.
-- Forks rejected via `isCrossRepository`; queue fallback added; item renamed `loop-render-review` (file, id, task folder; title unchanged for #3036; roadmap re-rendered).
+- Forks rejected via `isCrossRepository`; queue fallback added. **The item id/task-folder rename is deferred, not done here:** the scope rule reads the item at the PR's base, so renaming `infra-loop-render-review` in this PR fails `scope`; the gate fix (`is_setup_item`, so only the umbrella and `infra-loop-prNN…` rows are setup items) is what makes the current id reviewable. Kimi's rename should land after this merges, when the scope overlap no longer blocks the claim.
 - Still open: a full `context()` fake-git negative-call fixture; roadmap README gating. Both named in the REPORT.
 
 ## Done when
