@@ -7,7 +7,7 @@ status: ready
 open_to: anyone
 needs_gpu: false
 depends_on: []
-scope: [docs/harness/prep/m4-flock-coupling-prereg*, crates/uor-r4-discrete/**, docs/mechanisms/flock-read.md, docs/labs/m4-flock-coupling-prereg/**]
+scope: [docs/harness/prep/m4-flock-coupling-prereg*, docs/harness/prep/m4-c1-flock-coupling*, crates/uor-r4-discrete/**, docs/mechanisms/flock-read.md, docs/labs/m4-flock-coupling-prereg/**]
 ---
 
 ## Why it matters
