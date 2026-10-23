@@ -28,6 +28,10 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2904. Base: `1197255b5`. `Refe
 - `solution-integrity`: a test that cannot fail is not a test; proved the new pin by mutation before claiming it, and caught that a one-line reader was wrong once rustfmt wrapped the value.
 - `scope-guard`: test file only (plus task folder); no behaviour change, no rule change.
 
+## Still open
+
+- None in this unit. Wider loop-tooling follow-ups remain carded on #2028 (render-review rotation, shared-checkout build guard).
+
 ## Plain summary
 
 - The `PR_LIST_FIELDS` pin now reads the constant's real value (through the semicolon) and the call-site usage, and was mutation-tested: removing `isCrossRepository` fails it, restoring it passes; 33 tests green.
