@@ -1,6 +1,6 @@
 # REPORT: r-lawful-pointer-forced-copy-oracle, antigravity-43
 
-## What did not work
+## What did not work, first
 
 - The historical pointer-copy implementation (`crates/uor-r4-training/src/geometric_stack.rs`, `copy_identity.rs`, and `stack_prime_route.rs`) and its 2026-10-12 copy-span oracle (`StackModel::set_copy_span_oracle`, `chat-grade reply copy_oracle=span`) are gated out of the active build under `#[cfg(any())]` and D24/D29/D30 because the historical pointer used two normalized-exponential terms and a dense floating-point inner-product score (`docs/mechanisms/pointer-key.md:40-45`). Re-executing the historical dense float pointer checkpoints (`09e9dd3d…`, `71409eac…`, `70fef0ba…`) is barred by CHARTER §3.2–§3.4 (D23, D30).
 - Static stored outputs from the historical 2026-10-10 runs record only the unforced condition `N` (`23/40`) and cannot answer the counterfactual `O1` (span supplied, learned gate) or `O2` (span supplied, forced gate) interventions. Consequently, the forced-copy oracle requires a lawful integer pointer with an interventional serving-time span-override hook (`CopySpanOracle`).
@@ -25,16 +25,24 @@
 - `CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/local/antigravity/target cargo test -p uor-r4-training --lib lawful_pointer`: `6 passed; 0 failed`.
 - `CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/local/antigravity/target cargo check -p uor-r4-training --bins`: exit `0`.
 - `cargo fmt --check -p uor-r4-training`: exit `0`.
-- `uor-harness loop gates --full`: all 8 gates `PASS` (`R1-charter-ratchet` through `R8-review-integrity`).
+
+## Checks run at the head
+
+- `uor-harness loop gates --full`: all 11 gates `GREEN` (`fmt-claim-wording` through `loop-review-changes-blocks`).
 - `uor-harness loop report --check`: `PASS`.
 - `uor-harness loop pr-check --local`: `PASS`.
+- `uor-harness check --only harness.documented,prep.sheet_shape`: `0 failed (0 error, 0 warn)`.
 
 ## Skills used
 
 - `uor-research-architect`, `scope-guard`, `solution-integrity`, `context-guard`.
 
-## Open items
+## Still open
 
 - Non-author `TEST FITNESS: FIT` review of [`docs/harness/prep/r-lawful-pointer-forced-copy-oracle-DRAFT-2026-10-23.md`](../../../harness/prep/r-lawful-pointer-forced-copy-oracle-DRAFT-2026-10-23.md) (CHARTER §4.5), owner/PM registration of the `N` / `O1` / `O2` diagnostic bar on `#2880` (CHARTER §5.2), a bound discrete memory-answering checkpoint SHA-256, and a typed owner release (CHARTER §5.1) before running the GPU forced-copy oracle evaluation.
+
+## Plain summary
+
+Built the D32 lawful integer pointer (`SlotAddressKey`, `RouteAdmissionMode`, `CanonicalFoldTable`, `CopySpanOracle`, `locate_last_value_span`, and `LawfulPointerHead`) with 6 passing finite host controls in `crates/uor-r4-training/src/lawful_pointer.rs`, published the design note (`docs/labs/r-lawful-pointer-forced-copy-oracle/README.md`), and authored the draft forced-copy oracle pre-registration sheet (`docs/harness/prep/r-lawful-pointer-forced-copy-oracle-DRAFT-2026-10-23.md`) on the sealed 256-row `m2-fresh256` panel.
 
 References #2880
