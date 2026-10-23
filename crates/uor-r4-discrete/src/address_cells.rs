@@ -153,7 +153,7 @@ pub fn token_full_l1(query: &[i32], token_vector: &[i32]) -> Result<u64> {
 
 /// Pure unweighted cell-envelope full-vector distance (`m1-address-key-full-vector`, #2834):
 /// minimum full-vector `B`-block L1 distance over all tokens currently occupying `cell`.
-/// Uses only integer subtraction, absolute value, addition, and minimum (no softmax, no matmul, no float).
+/// Uses only integer subtraction, absolute value, addition, and minimum.
 pub fn cell_envelope_l1(
     query: &[i32],
     table: &[i32],
