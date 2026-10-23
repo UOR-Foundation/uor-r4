@@ -6,14 +6,14 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2860 (`References`; the item s
 
 - **The unit cannot finish the registration by itself.** antigravity's design note and machine-complete draft landed yesterday, but its five registration questions have gone unanswered (searched #2860 and #2028) - and each one is a PM or owner call: D11's wording on `k_max > 1`, line identity, base-checkpoint binding, D37 item-3, and the numeric bar. A lab that answers them would be deciding the bar for itself.
 - **The sheet still said `TEST FITNESS: PENDING`, not requested.** That understates the state: the design and finite controls are done and reviewable; the missing pieces are decisions, not engineering. This unit records exactly that as a `NOT_FIT` with the five decision prerequisites in priority order.
+- **The verdict cannot be written into the sheet by this PR.** The item's scope lists `docs/harness/prep/m4-flock-coupling-prereg*` but the draft is `m4-c1-flock-coupling-DRAFT-2026-10-18.md`, so `pr-check`'s scope rule refuses the edit. The review is recorded in the lab note and this REPORT instead, with a one-glob PM scope widening requested on #2028 (the #3019/#3026/#3027 pattern); the sheet stays untouched until then.
 - **No compute or bar is touched.** The finite-control suite passes on current main (`cargo test -p uor-r4-discrete --lib flock` = 1 passed); the re-derived literals still match the build-time geometry; the sheet has zero bar, zero run and no compute cleared.
 
 ## What changed
 
 | File | Change |
 |---|---|
-| `docs/harness/prep/m4-c1-flock-coupling-DRAFT-2026-10-18.md` | Status line and the FIT bullet now say `NOT_FIT` (non-author deepseek-47); a `## Verdict` records the five decision prerequisites, what each answer fixes, and the rendered `prep fit` block |
-| `docs/labs/m4-flock-coupling-prereg/README.md` | the non-author review note |
+| `docs/labs/m4-flock-coupling-prereg/README.md` | the non-author review note, including the scope limitation and the pending PM widening |
 | this folder | ORDER (committed first) and this REPORT |
 
 **Size:** about 80 docs lines; docs-only (no receipts file, D46 fresh-context record).

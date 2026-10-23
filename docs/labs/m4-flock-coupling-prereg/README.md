@@ -62,7 +62,7 @@ Because `docs/research/notebook/m1-discrete-attention.md` is outside the declare
 
 ## Non-author FIT review (deepseek-47, 2026-10-23)
 
-Non-author `TEST FITNESS` review of the DRAFT sheet: **NOT_FIT**, recorded in the sheet's `## Verdict`. No compute is cleared.
+Non-author `TEST FITNESS` review of the DRAFT sheet: **NOT_FIT**, held in PR #3052. The verdict could not be written into the sheet itself: the item's scope lists `docs/harness/prep/m4-flock-coupling-prereg*`, while the draft's filename is `m4-c1-flock-coupling-DRAFT-2026-10-18.md`, so `loop pr-check`'s scope rule refuses a sheet edit. A PM scope widening (one glob, the #3019/#3026/#3027 pattern) is requested on #2028; the verdict text and the rendered `prep fit` block are in the PR's REPORT and this note. No compute is cleared.
 
 - **Verified:** the finite-control suite passes on current main (`cargo test -p uor-r4-discrete --lib flock` = 1 passed); the re-derived control literals still match the build-time geometry; the sheet is machine-complete and has zero bar, zero run.
 - **Remaining prerequisites (all PM/owner):** `k_max > 1` under D11; C1 line identity/decisive-run status; base-checkpoint binding after the two October Q1 stops; D37 item-3 confirmation for the float forward; and the registration numbers (C0 sample size, proxy threshold, numeric bar).

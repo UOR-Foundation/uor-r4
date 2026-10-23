@@ -1,7 +1,7 @@
 # C1 — float-trained flock coupling, exported as integer Gate weights (DRAFT)
 
-- **Status:** DRAFT design and finite-control specification, `TEST FITNESS: NOT_FIT` (non-author review `deepseek-47`, 2026-10-23; see the Verdict at the end). It is **not registered** and no compute is cleared.
-  - A FIT is **not cleared**: five PM/owner answers are open (see the Verdict); this review only records them.
+- **Status:** DRAFT design and finite-control specification. It is **not registered**.
+  - TEST FITNESS is **not requested**.
   - No compute, no source change, $0.
   - The pre-registration follows the Dose 1 decision (`m1-learned-attention-link-2026-10-17.md`), because C1 starts from that decision's checkpoint.
 - **Line:** M4 starling/murmuration read (#2032); conditional future rung. **Lab:** claude.
@@ -251,25 +251,4 @@ narrower than two-seed noise (§6). No power claim is admitted by this DRAFT.
 
 **Fitness status.** DRAFT, not registered; no FIT is requested and no compute is cleared.
 
-## Verdict
-
-### Why NOT_FIT (prerequisites in priority order; each needs the PM or owner)
-
-1. **`k_max > 1` admissibility under D11.** The construction exports a per-block, per-level integer coupling `K ∈ [-k_max, k_max]` applied by repeated addition, so `|K| > 1` adds no multiply instruction, but D11's wording is the owner's to interpret. Answer: allow `k_max ∈ {2,3}` (keep the restricted arm `A2′`, `k_max = 1`, as the fallback), or restrict the whole sheet to `k_max = 1`.
-2. **Line identity and status.** Confirm C1 is still wanted (the mechanism board lists the Flock read as ACTIVE and the dossier names C1 as the next step) and say whether this is the starling/M4 line's decisive run under D21 or a sub-rung of `m1-discrete-attention`. Answer fixes the milestone the FIT is recorded on.
-3. **Base-checkpoint binding after the two October Q1 stops.** Neither Dose 1 (`rows_v1`) nor the A8 dose produced a promoted Relation KEEP. Choose (a) the post-admission-guard A8 rerun checkpoint once `#2832` and the rerun complete, or (b) the retained A8 `FrozenZero` 16,404-batch / preflight checkpoint (`1,351 / 3,847` admitted) to isolate read coupling now. Answer fixes the sheet's Base-artifact block.
-4. **D37 item-3 confirmation for the §5.2 float forward.** The offline GPU float forward exists only to report the float-minus-integer export gap on the unchanged integer writer; it is never served and never promotes a candidate. The owner/PM must confirm that this is the D37 item-3 instrument.
-5. **Registration numbers.** The C0 tuple-cache sample (`1,024` stratified TRAIN rows, zero disagreements between cached-tuple replay and live `discrete_forward`), the pre-run TRAIN proxy-agreement threshold (recommend `≥ 0.70` top-1 vs the integer writer's `prediction`; below it the run halts as a D31 instrument stop) and the numeric keep bar (recommend exported arm beats `A0`, `Z`, `R` on DEV `P_succ` conditional top-1 (3,847 rows) and full DEV top-1 (14,287 rows), both seeds, by at least `max(24 rows, two-seed range of A0)`, with non-decreasing admission). The bar is the owner's (CHARTER §5.2); the other two are the PM/FIT's.
-
-**Verified by this review (no answer needed):** the draft is machine-complete, its finite-control suite passes on current main (`cargo test -p uor-r4-discrete --lib flock` = 1 passed), the re-derived literals match the build-time geometry at the pinned source, and the sheet has zero bar, zero run and no compute cleared.
-
-### Recorded review
-
-```text
-TEST FITNESS: NOT_FIT - M4 #2032 FlockCoupled
-sheet: docs/harness/prep/m4-c1-flock-coupling-DRAFT-2026-10-18.md
-reviewer: deepseek (non-author FIT review; antigravity authored the draft sheet and design note)
-note: Configuration is not yet registrable: five PM/owner answers are still open (k_max>1 admissibility under D11; C1 line identity/decisive-run status; base checkpoint binding after the two October Q1 stops; D37 item-3 confirmation for the float export-gap forward; and the registration numbers C0 sample size, proxy-agreement threshold and numeric bar). Everything else verifies: the draft is machine-complete, its finite-control suite passes on current main (1/1), the re-derived literals match the build-time geometry, and the sheet has zero bar, zero run and no compute cleared. Re-request FIT once the five answers are recorded and the NOT_REGISTERED blocks are filled from them.
-date: 2026-10-23
-A FIT verdict clears compute for the configuration in that sheet only (D22).
-```
+TEST FITNESS: PENDING
