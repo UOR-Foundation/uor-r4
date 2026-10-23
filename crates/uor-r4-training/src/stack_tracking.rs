@@ -28,6 +28,18 @@
 //! accumulation order as `compose_context_roots`: `state <- state * root`.
 //! Offline training only; nothing here is a serving path.
 
+use std::collections::VecDeque;
+use std::time::Instant;
+
+use candle_core::{DType, Device, Tensor, Var, D};
+use candle_nn::{AdamW, Optimizer, ParamsAdamW};
+use serde::{Deserialize, Serialize};
+use uor_r4_core::native_geometric::learner::embedding::{canonical_h4_roots, PHI};
+use uor_r4_core::native_geometric::learner::{group_table, GROUP_ORDER, ROW_STRIDE};
+
+use crate::geometric_stack::{quaternion_scan, StackConfig, StackModel};
+use crate::{invalid, Result};
+
 /// Number of A5 elements: the 2I elements modulo sign.
 pub const A5_ORDER: usize = 60;
 
@@ -62,33 +74,15 @@ impl Rng {
         (self.next_u64() % bound.max(1) as u64) as usize
     }
 
-    #[allow(dead_code)]
     fn uniform(&mut self) -> f64 {
         ((self.next_u64() >> 11) as f64 + 0.5) / (1u64 << 53) as f64
     }
 
-    #[allow(dead_code)]
     fn normal(&mut self) -> f64 {
         let (u, v) = (self.uniform(), self.uniform());
         (-2.0 * u.ln()).sqrt() * (2.0 * std::f64::consts::PI * v).cos()
     }
 }
-
-#[rustfmt::skip]
-#[cfg(any())]
-mod preserved_stage_a {
-    use super::*;
-    use std::collections::VecDeque;
-    use std::time::Instant;
-
-    use candle_core::{DType, Device, Tensor, Var, D};
-    use candle_nn::{AdamW, Optimizer, ParamsAdamW};
-    use serde::{Deserialize, Serialize};
-    use uor_r4_core::native_geometric::learner::embedding::{canonical_h4_roots, PHI};
-    use uor_r4_core::native_geometric::learner::{group_table, GROUP_ORDER, ROW_STRIDE};
-
-    use crate::geometric_stack::{quaternion_scan, StackConfig, StackModel};
-    use crate::{invalid, Result};
 
 /// The A5 word problem over three generators of orders 2, 3 and 5 in A5
 /// (4, 6 and 10 in 2I). Token `i` is generator `i`; the target at position
@@ -2312,5 +2306,4 @@ mod tests {
         }
         Ok(())
     }
-}
 }

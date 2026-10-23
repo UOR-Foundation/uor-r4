@@ -4708,10 +4708,9 @@ mod tests {
 
     #[test]
     fn memory_turn_gate_preserves_all_world_v2_relation_statement_templates() {
-        use crate::milestone_world::Split;
+        use crate::milestone_world::{Rng, Split};
         use crate::milestone_world_v2::relations;
         use crate::stack_grounded_session::{CompiledAction, SourceSpan};
-        use crate::stack_tracking::Rng;
 
         let gate = MemoryTurnGate::default();
         let passing_margin = StatementMargin {

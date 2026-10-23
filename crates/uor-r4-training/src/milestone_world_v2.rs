@@ -88,9 +88,8 @@ use sha2::{Digest, Sha256};
 use crate::milestone_world::{
     articles, capitalize, closer, contains_phrase, fill, instruction, number, opener, pick,
     responsive, set_train_paraphrases, slots, strings, words, Category, Check, MWorld, Phrasings,
-    Split, TrainParaphrases, Turn, ABSENT_ACCEPT, ABSENT_REPLIES, ACK_WORDS, RELATIONS,
+    Rng, Split, TrainParaphrases, Turn, ABSENT_ACCEPT, ABSENT_REPLIES, ACK_WORDS, RELATIONS,
 };
-use crate::stack_tracking::Rng;
 use crate::{invalid, Result};
 
 /// The model context, in tokens. Every episode fits.
