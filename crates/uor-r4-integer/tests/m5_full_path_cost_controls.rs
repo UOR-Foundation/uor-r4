@@ -16,240 +16,10 @@
 use serde_json::Value;
 use std::path::PathBuf;
 
-#[cfg(feature = "serving-wasm")]
-pub use uor_r4_integer::stack::{
+pub use uor_r4_integer::report_output::{
     sample_mean_sd_t_ci95, student_t_0975, student_t_975, validate_protocol_v3_energy_receipt,
-    validate_protocol_v3_energy_receipt_with_mode, ProtocolV3ValidationError,
-};
-
-#[cfg(not(feature = "serving-wasm"))]
-mod fallback_v3_validator {
-    use serde_json::Value;
-
-    pub fn student_t_0975(df: usize) -> f64 {
-        match df {
-            0 => f64::INFINITY,
-            1 => 12.706_204_736_4,
-            2 => 4.302_652_729_91,
-            3 => 3.182_446_305_28,
-            4 => 2.776_445_105_2,
-            5 => 2.570_581_836_61,
-            6 => 2.446_911_851_14,
-            7 => 2.364_624_251_6,
-            8 => 2.306_004_135_2,
-            9 => 2.262_157_162_85,
-            10 => 2.228_138_851_96,
-            11..=15 => 2.131_449_545_56,
-            16..=20 => 2.085_963_447_27,
-            21..=30 => 2.042_272_456_3,
-            _ => {
-                let z = 1.959_963_984_540_054_f64;
-                let d = df as f64;
-                z + (z.powi(3) + z) / (4.0 * d)
-                    + (5.0 * z.powi(5) + 16.0 * z.powi(3) + 3.0 * z) / (96.0 * d * d)
-            }
-        }
-    }
-
-    pub fn sample_mean_sd_t_ci95(samples: &[f64]) -> Option<(f64, f64, f64)> {
-        let n = samples.len();
-        if n < 2 {
-            return None;
-        }
-        let nf = n as f64;
-        let mean = samples.iter().sum::<f64>() / nf;
-        let var = samples.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / ((n - 1) as f64);
-        let sd = var.sqrt();
-        let sem = sd / nf.sqrt();
-        let ci95 = student_t_0975(n - 1) * sem;
-        Some((mean, sd, ci95))
-    }
-
-    #[derive(Debug, Clone, PartialEq)]
-    pub enum ProtocolV3ValidationError {
-        PowerThroughputInconsistency {
-            reported_work_rate_w: f64,
-            implied_work_rate_w: f64,
-            relative_error: f64,
-        },
-        InvalidStudentTCi95 {
-            metric: String,
-            reported_ci95: f64,
-            expected_t_ci95: f64,
-            relative_error: f64,
-        },
-        NonPositiveNetPower {
-            work_rate_w: f64,
-            idle_rate_w: f64,
-        },
-        ExternalInferenceDaemonsDetected(Vec<String>),
-        MissingRequiredV3Field(&'static str),
-    }
-
-    pub fn validate_protocol_v3_energy_receipt(receipt: &Value) -> Vec<ProtocolV3ValidationError> {
-        validate_protocol_v3_energy_receipt_with_mode(receipt, false)
-    }
-
-    pub fn validate_protocol_v3_energy_receipt_with_mode(
-        receipt: &Value,
-        allow_provisional: bool,
-    ) -> Vec<ProtocolV3ValidationError> {
-        let mut errors = Vec::new();
-        let work_rate_w = receipt
-            .pointer("/power/work_rate_w")
-            .or_else(|| receipt.pointer("/serving/energy/work_rate_w"))
-            .and_then(Value::as_f64);
-        let idle_rate_w = receipt
-            .pointer("/power/idle_rate_w")
-            .or_else(|| receipt.pointer("/serving/energy/idle_power_w"))
-            .and_then(Value::as_f64);
-        let gross_j = receipt
-            .pointer("/energy_per_token/gross_j_per_tok")
-            .or_else(|| receipt.pointer("/serving/energy/gross_j_per_tok/mean"))
-            .and_then(Value::as_f64);
-        let tok_s = receipt
-            .pointer("/throughput/tokens_per_s")
-            .or_else(|| receipt.pointer("/serving/tokens_per_s/mean"))
-            .and_then(Value::as_f64);
-
-        if let (Some(work_rate_w), Some(gross_j), Some(tok_s)) = (work_rate_w, gross_j, tok_s) {
-            let implied = gross_j * tok_s;
-            let rel_err = (work_rate_w - implied).abs() / implied.max(1e-12);
-            if rel_err > 0.02 {
-                errors.push(ProtocolV3ValidationError::PowerThroughputInconsistency {
-                    reported_work_rate_w: work_rate_w,
-                    implied_work_rate_w: implied,
-                    relative_error: rel_err,
-                });
-            }
-        } else {
-            errors.push(ProtocolV3ValidationError::MissingRequiredV3Field(
-                "power.work_rate_w / energy_per_token.gross_j_per_tok / throughput.tokens_per_s",
-            ));
-        }
-
-        if !allow_provisional {
-            if let (Some(work_w), Some(idle_w)) = (work_rate_w, idle_rate_w) {
-                if work_w <= idle_w {
-                    errors.push(ProtocolV3ValidationError::NonPositiveNetPower {
-                        work_rate_w: work_w,
-                        idle_rate_w: idle_w,
-                    });
-                }
-            }
-        }
-
-        for (name, ptr) in [
-            ("gross_mj_per_tok", "/energy_per_token/gross_mj_per_tok"),
-            ("net_mj_per_tok", "/energy_per_token/net_mj_per_tok"),
-        ] {
-            if let Some(block) = receipt.pointer(ptr) {
-                let samples: Option<Vec<f64>> = block
-                    .get("samples")
-                    .and_then(Value::as_array)
-                    .map(|arr| arr.iter().filter_map(Value::as_f64).collect());
-                let reported_ci95 = block.get("ci95").and_then(Value::as_f64);
-                if let (Some(samples), Some(reported)) = (samples, reported_ci95) {
-                    if let Some((_mean, _sd, expected_ci95)) = sample_mean_sd_t_ci95(&samples) {
-                        let rel_err = (reported - expected_ci95).abs() / expected_ci95.max(1e-12);
-                        if rel_err > 0.02 {
-                            errors.push(ProtocolV3ValidationError::InvalidStudentTCi95 {
-                                metric: name.to_string(),
-                                reported_ci95: reported,
-                                expected_t_ci95: expected_ci95,
-                                relative_error: rel_err,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        let legacy_samples = receipt
-            .pointer("/serving/energy/net_j_per_tok/min")
-            .and_then(Value::as_f64)
-            .zip(
-                receipt
-                    .pointer("/serving/energy/net_j_per_tok/mean")
-                    .and_then(Value::as_f64),
-            )
-            .zip(
-                receipt
-                    .pointer("/serving/energy/net_j_per_tok/max")
-                    .and_then(Value::as_f64),
-            )
-            .or_else(|| {
-                receipt
-                    .pointer("/serving/energy/gross_j_per_tok/min")
-                    .and_then(Value::as_f64)
-                    .zip(
-                        receipt
-                            .pointer("/serving/energy/gross_j_per_tok/mean")
-                            .and_then(Value::as_f64),
-                    )
-                    .zip(
-                        receipt
-                            .pointer("/serving/energy/gross_j_per_tok/max")
-                            .and_then(Value::as_f64),
-                    )
-            });
-        if let (Some(((min_j, mean_j), max_j)), Some(net_ci95_j)) = (
-            legacy_samples,
-            receipt
-                .pointer("/serving/energy/net_j_per_tok/ci95")
-                .and_then(Value::as_f64),
-        ) {
-            let samples_j = [min_j, mean_j, max_j];
-            if let Some((_m, _sd, expected_t_ci95_j)) = sample_mean_sd_t_ci95(&samples_j) {
-                let rel_err = (net_ci95_j - expected_t_ci95_j).abs() / expected_t_ci95_j.max(1e-12);
-                if rel_err > 0.02 {
-                    errors.push(ProtocolV3ValidationError::InvalidStudentTCi95 {
-                        metric: "serving.energy.net_j_per_tok".to_string(),
-                        reported_ci95: net_ci95_j * 1000.0,
-                        expected_t_ci95: expected_t_ci95_j * 1000.0,
-                        relative_error: rel_err,
-                    });
-                }
-            }
-        }
-
-        for required in [
-            "/memory/parameter_breakdown",
-            "/step_latency/phase_latency_us",
-            "/tokens/logits_sha256",
-            "/machine/external_inference_daemons_detected",
-            "/memory/kernel_peak_footprint_bytes",
-        ] {
-            if receipt.pointer(required).is_none() {
-                errors.push(ProtocolV3ValidationError::MissingRequiredV3Field(required));
-            }
-        }
-
-        if !allow_provisional {
-            if let Some(arr) = receipt
-                .pointer("/machine/external_inference_daemons_detected")
-                .and_then(Value::as_array)
-            {
-                let daemons: Vec<String> = arr
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .map(ToOwned::to_owned)
-                    .collect();
-                if !daemons.is_empty() {
-                    errors.push(ProtocolV3ValidationError::ExternalInferenceDaemonsDetected(
-                        daemons,
-                    ));
-                }
-            }
-        }
-        errors
-    }
-}
-
-#[cfg(not(feature = "serving-wasm"))]
-use fallback_v3_validator::{
-    sample_mean_sd_t_ci95, validate_protocol_v3_energy_receipt,
-    validate_protocol_v3_energy_receipt_with_mode, ProtocolV3ValidationError,
+    validate_protocol_v3_energy_receipt_with_mode, verify_step_disassembly_text,
+    verify_step_objdump_zero_mul_zero_float, ProtocolV3ValidationError,
 };
 
 #[test]
@@ -281,7 +51,9 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
     assert!((implied_w - 54.526_68).abs() < 1e-4);
     assert!(rel_w > 0.25, "relative error should be ~25.7%, got {rel_w}");
 
-    // 2. Verify Defect 2 (normal z = 1.96 CI95 = 0.037 mJ instead of Student-t_{0.975, 2} = 4.302653 CI95 = 0.079815 mJ) is caught.
+    // 2. Verify Defect 2 (normal z = 1.96 CI95 = 0.037 mJ instead of Student-t_{0.975, 2} = 4.302653 CI95 = 0.079815 mJ
+    // reconstructed from the 3-run gross_j_per_tok min/mean/max [3.135, 3.172, 3.199] mJ, since net_j_per_tok in
+    // measurement_report_rnd.json only records {"mean": 0.00153, "ci95": 0.000037} J with no min/max) is caught.
     let gross_ci_err = errors.iter().find_map(|e| match e {
         ProtocolV3ValidationError::InvalidStudentTCi95 {
             metric,
@@ -302,7 +74,9 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
         "z vs t_2 error should be ~53.6%, got {rel_ci}"
     );
 
-    // 3. Verify that a compliant Protocol v3 receipt passes strict validation with zero errors.
+    // 3. Verify that a synthetic 3-run compliant Protocol v3 receipt passes strict validation with zero errors.
+    // Note: [3.128, 3.165, 3.192] mJ is a synthetic 3-run test fixture (gross_samples minus a 0.007 mJ idle baseline),
+    // NOT a field from archive/ops/measurement_report_rnd.json.
     let gross_samples = [3.135_f64, 3.172_f64, 3.199_f64];
     let net_samples = [3.128_f64, 3.165_f64, 3.192_f64];
     let (gross_mean, gross_sd, gross_t_ci95) = sample_mean_sd_t_ci95(&gross_samples).unwrap();
@@ -312,12 +86,14 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
     let consistent_work_rate_w = gross_j * tok_s;
 
     let valid_v3 = serde_json::json!({
+        "fixture_note": "synthetic 3-run compliant fixture",
         "power": {
             "idle_rate_w": 15.0,
             "work_rate_w": consistent_work_rate_w,
         },
         "throughput": {
             "tokens_per_s": tok_s,
+            "trials": 3,
         },
         "energy_per_token": {
             "gross_j_per_tok": gross_j,
@@ -352,6 +128,94 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
     assert!(
         v3_errors.is_empty(),
         "valid Protocol v3 receipt must pass with 0 errors, got {v3_errors:?}"
+    );
+
+    // 3b. Verify an n = 5 receipt with summary `(sd, n)` and `(min, mean, max)` passes without
+    // triggering the legacy 3-point `[min, mean, max]` reconstruction, and an n = 1 receipt fails
+    // with `InvalidSampleCount`.
+    let five_samples = [3.10_f64, 3.12_f64, 3.15_f64, 3.18_f64, 3.35_f64];
+    let (five_mean, five_sd, five_ci95) = sample_mean_sd_t_ci95(&five_samples).unwrap();
+    let five_gross_j = five_mean / 1000.0;
+    let valid_five_run = serde_json::json!({
+        "power": {
+            "idle_rate_w": 15.0,
+            "work_rate_w": five_gross_j * tok_s,
+        },
+        "throughput": {
+            "tokens_per_s": tok_s,
+            "trials": 5,
+        },
+        "energy_per_token": {
+            "gross_j_per_tok": five_gross_j,
+            "gross_mj_per_tok": {
+                "samples": five_samples,
+                "mean": five_mean,
+                "sd": five_sd,
+                "ci95": five_ci95,
+            },
+            "net_mj_per_tok": {
+                "min": 3.10,
+                "mean": five_mean,
+                "max": 3.35,
+                "sd": five_sd,
+                "ci95": five_ci95,
+            },
+        },
+        "memory": {
+            "parameter_breakdown": {},
+            "kernel_peak_footprint_bytes": 4_194_304,
+        },
+        "step_latency": {
+            "phase_latency_us": {},
+        },
+        "tokens": {
+            "logits_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        },
+        "machine": {
+            "external_inference_daemons_detected": [],
+        },
+    });
+    let five_errors = validate_protocol_v3_energy_receipt(&valid_five_run);
+    assert!(
+        five_errors.is_empty(),
+        "valid 5-run receipt must pass without 3-point legacy misfire, got {five_errors:?}"
+    );
+
+    let mut invalid_one_run = valid_v3.clone();
+    invalid_one_run["energy_per_token"]["gross_mj_per_tok"]["samples"] = serde_json::json!([3.15]);
+    let one_run_errors = validate_protocol_v3_energy_receipt(&invalid_one_run);
+    assert!(
+        one_run_errors.iter().any(|e| matches!(
+            e,
+            ProtocolV3ValidationError::InvalidSampleCount { metric, count: 1 }
+                if metric == "gross_mj_per_tok"
+        )),
+        "validator must reject n=1 sample count with InvalidSampleCount, got {one_run_errors:?}"
+    );
+
+    // 3c. Cancel probe: injecting `mul x0, x1, x2` into `stack::kernels::stack_gemv_pairs`
+    // in disassembly text must fail `verify_step_disassembly_text`.
+    let clean_disasm = concat!(
+        "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n",
+        "100001000:\t910003fd\tadd\tx29, sp, #0\n",
+        "0000000100002000 <uor_r4_integer::stack::kernels::stack_gemv_pairs>:\n",
+        "100002000:\t8b010000\tadd\tx0, x0, x1\n",
+    );
+    assert_eq!(
+        verify_step_disassembly_text(clean_disasm, false).expect("clean disasm must pass"),
+        (2, 2)
+    );
+    let poisoned_kernel_disasm = concat!(
+        "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n",
+        "100001000:\t910003fd\tadd\tx29, sp, #0\n",
+        "0000000100002000 <uor_r4_integer::stack::kernels::stack_gemv_pairs>:\n",
+        "100002000:\t9b027c20\tmul\tx0, x1, x2\n",
+    );
+    let err = verify_step_disassembly_text(poisoned_kernel_disasm, false)
+        .expect_err("mul inside stack_gemv_pairs must fail disassembly check");
+    assert!(
+        err.contains("stack_gemv_pairs") && err.contains("mul"),
+        "error must identify symbol and instruction, got: {err}"
     );
 
     // 4. Verify the sealed provisional Apple M1 rehearsal receipt in
@@ -434,6 +298,7 @@ mod serving_controls {
             pb.routing.active_4bit_weight_and_scale_bytes_per_token,
             3_944
         );
+        assert_eq!(pb.routing.active_learned_scalars_per_token, 208);
         assert_eq!(pb.routing.learned_scalars_total, 208);
         assert_eq!(pb.routing.learned_scalar_bytes_total, 560);
 
@@ -445,6 +310,8 @@ mod serving_controls {
                 .active_4bit_weight_and_scale_bytes_per_token,
             3_842
         );
+        // Active learned scalars per token in memory_lookup: 6 always-active + 65 window-averaged age = 71 (< 134 total).
+        assert_eq!(pb.memory_lookup.active_learned_scalars_per_token, 71);
         assert_eq!(pb.memory_lookup.learned_scalars_total, 134);
         assert_eq!(pb.memory_lookup.learned_scalar_bytes_total, 532);
 
@@ -455,6 +322,7 @@ mod serving_controls {
             pb.emission.active_4bit_weight_and_scale_bytes_per_token,
             680
         );
+        assert_eq!(pb.emission.active_learned_scalars_per_token, 0);
         assert_eq!(pb.emission.learned_scalars_total, 0);
 
         // Totals across all four phases:
@@ -463,10 +331,11 @@ mod serving_controls {
         assert_eq!(pb.total_4bit_weights, 17_216);
         assert_eq!(pb.active_4bit_weight_and_scale_bytes_per_token, 8_483);
         assert_eq!(pb.total_4bit_weight_and_scale_bytes, 9_146);
+        assert_eq!(pb.active_learned_scalars_per_token, 279);
         assert_eq!(pb.total_learned_scalars, 342);
         assert_eq!(pb.total_learned_scalar_bytes, 1_092);
         assert_eq!(pb.total_learned_parameters, 17_558);
-        assert_eq!(pb.active_learned_parameters_per_token, 16_310);
+        assert_eq!(pb.active_learned_parameters_per_token, 16_247);
 
         // Verify `measure_step_phases` produces bit-identical logits and session state to `step`.
         let mut session_std = model.session();
@@ -506,7 +375,10 @@ mod serving_controls {
         let (syms, instrs) =
             verify_step_objdump_zero_mul_zero_float(Path::new(env!("CARGO_BIN_EXE_uor-r4-stack")))
                 .expect("uor-r4-stack step must pass objdump zero-mul/zero-float check");
-        assert!(syms >= 1 && instrs > 0);
+        assert!(
+            syms >= 35 && instrs > 0,
+            "expected full serving call graph (>= 35 symbols), got {syms} symbols and {instrs} instructions"
+        );
         let bad_disasm = "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n100001000:\t1f000000\tfmul\ts0, s1, s2\n";
         assert!(
             verify_step_disassembly_text(bad_disasm, false).is_err(),
@@ -565,6 +437,12 @@ mod serving_controls {
         );
         assert_eq!(
             receipt
+                .pointer("/memory/active_learned_scalars_per_token")
+                .and_then(Value::as_u64),
+            Some(279)
+        );
+        assert_eq!(
+            receipt
                 .pointer("/memory/total_learned_scalars")
                 .and_then(Value::as_u64),
             Some(342)
@@ -579,7 +457,7 @@ mod serving_controls {
             receipt
                 .pointer("/memory/active_learned_parameters_per_token")
                 .and_then(Value::as_u64),
-            Some(16_310)
+            Some(16_247)
         );
         assert_eq!(
             receipt
@@ -634,7 +512,8 @@ mod serving_controls {
             "four phase shares must sum to 1.0, got {share_sum}"
         );
 
-        // Verify `uor-r4-stack cost --energy-receipt` refuses `archive/ops/measurement_report_rnd.json`!
+        // Verify `uor-r4-stack cost --energy-receipt` refuses `archive/ops/measurement_report_rnd.json`
+        // AND does not leave an empty claimed `--out` file behind!
         let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()
@@ -642,6 +521,7 @@ mod serving_controls {
             .unwrap()
             .to_path_buf();
         let rnd_path = repo_root.join("archive/ops/measurement_report_rnd.json");
+        let aborted_out_path = dir.join("should-not-exist.json");
         let rnd_out = Command::new(env!("CARGO_BIN_EXE_uor-r4-stack"))
             .args([
                 "cost",
@@ -649,6 +529,7 @@ mod serving_controls {
                 tokens_path.to_str().unwrap(),
                 "2",
                 "16",
+                aborted_out_path.to_str().unwrap(),
                 "--allow-provisional",
                 "--energy-receipt",
                 rnd_path.to_str().unwrap(),
@@ -658,6 +539,10 @@ mod serving_controls {
         assert!(
             !rnd_out.status.success(),
             "uor-r4-stack cost must refuse archive/ops/measurement_report_rnd.json"
+        );
+        assert!(
+            !aborted_out_path.exists(),
+            "--out file must not be claimed before pre-flight / energy-receipt refusals"
         );
         let rnd_stderr = String::from_utf8_lossy(&rnd_out.stderr);
         assert!(

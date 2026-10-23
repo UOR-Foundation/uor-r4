@@ -575,7 +575,15 @@ fn cost(args: &[String]) -> Result<(), CliError> {
         }
     };
     if let Some(out) = out_dir {
-        uor_r4_integer::report_output::claim(out)?;
+        if out.exists() {
+            return Err(CliError::Io(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!(
+                    "report directory {} already exists; choose a new attempt path instead of reusing or overwriting an existing report",
+                    out.display()
+                ),
+            )));
+        }
     }
 
     // 0. If an external energy receipt is supplied via `--energy-receipt`, validate it against
@@ -597,12 +605,21 @@ fn cost(args: &[String]) -> Result<(), CliError> {
     };
 
     // 0b. Static disassembly gate: verify via `objdump --demangle -d` (or `otool -tV`) on the
-    // running executable that `IntegerStackSession::step` (and `stack_step` in release builds)
-    // contain zero multiply, divide, or floating-point instructions.
+    // running executable that `IntegerStackSession::step`, `stack_step`, and all emitted
+    // `uor_r4_integer::stack` mixer and kernel symbols contain zero multiply, divide, or
+    // floating-point instructions.
     let current_exe = std::env::current_exe()?;
     let (disasm_symbols_checked, disasm_instructions_checked) =
         verify_step_objdump_zero_mul_zero_float(&current_exe)
             .map_err(|e| CliError::Usage(format!("step disassembly audit failed: {e}")))?;
+
+    // 0c. Pre-flight external inference daemon refusal (before model work or claiming out_dir).
+    let external_daemons_before = detect_external_inference_daemons();
+    if !allow_provisional && !external_daemons_before.is_empty() {
+        return Err(CliError::Usage(format!(
+            "refusing cost qualification while external inference daemons are running: {external_daemons_before:?} (pass --allow-provisional for non-qualification rehearsal)"
+        )));
+    }
 
     let started_unix_s = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -629,9 +646,14 @@ fn cost(args: &[String]) -> Result<(), CliError> {
     if let Some(&id) = ids.iter().find(|&&id| id as usize >= vocab) {
         return Err(CliError::Stack(StackError::Token { token: id, vocab }));
     }
-    let _expected_steps = windows
+    let expected_steps = windows
         .checked_mul(context)
         .ok_or_else(|| usage("WINDOWS times the context overflows"))?;
+    if expected_steps < 2 {
+        return Err(usage(
+            "cost requires at least 2 total steps (WINDOWS * context >= 2) for Student-t confidence intervals",
+        ));
+    }
 
     let binary_sha256 = std::fs::read(&current_exe).ok().map(|bytes| {
         let mut hasher = Sha256::new();
@@ -724,14 +746,19 @@ fn cost(args: &[String]) -> Result<(), CliError> {
     .flatten()
     .reduce(f64::max);
     let kernel_peak_bytes = kernel_peak_memory_bytes();
+    if !allow_provisional && kernel_peak_bytes.is_none() {
+        return Err(CliError::Usage(
+            "refusing cost qualification because kernel high-water-mark footprint (vmmap on macOS / VmHWM on Linux) is unavailable; pass --allow-provisional to permit ps RSS fallback".to_owned(),
+        ));
+    }
     let kernel_peak_mb = kernel_peak_bytes.map(|b| (b as f64) / (1024.0 * 1024.0));
-    let peak_rss_mb = match (max_sampled_rss_mb, kernel_peak_mb) {
-        (Some(a), Some(b)) => Some(a.max(b)),
-        (Some(a), None) => Some(a),
-        (None, Some(b)) => Some(b),
-        (None, None) => None,
-    };
-    let external_daemons = detect_external_inference_daemons();
+    let peak_rss_mb = kernel_peak_mb.or(max_sampled_rss_mb);
+    let mut external_daemons = external_daemons_before;
+    for d in detect_external_inference_daemons() {
+        if !external_daemons.contains(&d) {
+            external_daemons.push(d);
+        }
+    }
     if !allow_provisional && !external_daemons.is_empty() {
         return Err(CliError::Usage(format!(
             "refusing cost qualification while external inference daemons are running: {external_daemons:?} (pass --allow-provisional for non-qualification rehearsal)"
@@ -747,25 +774,49 @@ fn cost(args: &[String]) -> Result<(), CliError> {
 
     let df = step_us.len().saturating_sub(1);
     let t_crit = student_t_0975(df);
-    let (mean_us, stddev_us, ci95_us) = sample_mean_sd_t_ci95(&step_us).unwrap_or((0.0, 0.0, 0.0));
+    let (mean_us, stddev_us, ci95_us) = sample_mean_sd_t_ci95(&step_us).ok_or_else(|| {
+        CliError::Usage("insufficient step samples (< 2) for Student-t CI95".to_owned())
+    })?;
     let p50_ms = percentile(&step_us, 50) / 1000.0;
     let p90_ms = percentile(&step_us, 90) / 1000.0;
     let p95_ms = percentile(&step_us, 95) / 1000.0;
     let p99_ms = percentile(&step_us, 99) / 1000.0;
 
     let (ing_mean_us, ing_sd_us, ing_ci95_us) =
-        sample_mean_sd_t_ci95(&ingestion_us).unwrap_or((0.0, 0.0, 0.0));
+        sample_mean_sd_t_ci95(&ingestion_us).ok_or_else(|| {
+            CliError::Usage("insufficient ingestion samples (< 2) for Student-t CI95".to_owned())
+        })?;
     let (rout_mean_us, rout_sd_us, rout_ci95_us) =
-        sample_mean_sd_t_ci95(&routing_us).unwrap_or((0.0, 0.0, 0.0));
-    let (mem_mean_us, mem_sd_us, mem_ci95_us) =
-        sample_mean_sd_t_ci95(&memory_lookup_us).unwrap_or((0.0, 0.0, 0.0));
+        sample_mean_sd_t_ci95(&routing_us).ok_or_else(|| {
+            CliError::Usage("insufficient routing samples (< 2) for Student-t CI95".to_owned())
+        })?;
+    let (mem_mean_us, mem_sd_us, mem_ci95_us) = sample_mean_sd_t_ci95(&memory_lookup_us)
+        .ok_or_else(|| {
+            CliError::Usage(
+                "insufficient memory_lookup samples (< 2) for Student-t CI95".to_owned(),
+            )
+        })?;
     let (em_mean_us, em_sd_us, em_ci95_us) =
-        sample_mean_sd_t_ci95(&emission_us).unwrap_or((0.0, 0.0, 0.0));
+        sample_mean_sd_t_ci95(&emission_us).ok_or_else(|| {
+            CliError::Usage("insufficient emission samples (< 2) for Student-t CI95".to_owned())
+        })?;
     let (phased_total_mean_us, phased_total_sd_us, phased_total_ci95_us) =
-        sample_mean_sd_t_ci95(&phased_total_us).unwrap_or((0.0, 0.0, 0.0));
+        sample_mean_sd_t_ci95(&phased_total_us).ok_or_else(|| {
+            CliError::Usage("insufficient phased_total samples (< 2) for Student-t CI95".to_owned())
+        })?;
     let phase_sum_mean_us = (ing_mean_us + rout_mean_us + mem_mean_us + em_mean_us).max(1e-9);
     let measured_total_denom_us = phased_total_mean_us.max(phase_sum_mean_us);
     let unaccounted_overhead_us = (phased_total_mean_us - phase_sum_mean_us).max(0.0);
+
+    // Always verify the internal step-latency / throughput identity (`step_implied_tok_s * mean_s == 1.0`).
+    let mean_s = (mean_us / 1_000_000.0).max(1e-12);
+    let step_implied_tokens_per_second = 1.0 / mean_s;
+    let work_rate_identity_rel_err = ((step_implied_tokens_per_second * mean_s) - 1.0).abs();
+    if work_rate_identity_rel_err > 1e-6 {
+        return Err(CliError::Usage(format!(
+            "internal step-latency / throughput identity failed: rel_err={work_rate_identity_rel_err}"
+        )));
+    }
 
     let load_avg_after = sysctl_loadavg();
 
@@ -784,13 +835,14 @@ fn cost(args: &[String]) -> Result<(), CliError> {
         0.0
     };
     let weights_notes = format!(
-        "analytical shape-based count: {} 4-bit weights read per token out of {} total 4-bit weights ({:.4}% active; {} bytes active weights/scales out of {} total bytes; {:.2} effective bits per weight; {} learned scalars / {} B)",
+        "analytical shape-based count: {} 4-bit weights read per token out of {} total 4-bit weights ({:.4}% active; {} bytes active weights/scales out of {} total bytes; {:.2} effective bits per weight; {} active / {} total learned scalars, {} B)",
         param_breakdown.weights_per_token,
         param_breakdown.total_4bit_weights,
         active_4bit_ratio * 100.0,
         param_breakdown.active_4bit_weight_and_scale_bytes_per_token,
         param_breakdown.total_4bit_weight_and_scale_bytes,
         D11_EFFECTIVE_BITS_PER_WEIGHT,
+        param_breakdown.active_learned_scalars_per_token,
         param_breakdown.total_learned_scalars,
         param_breakdown.total_learned_scalar_bytes,
     );
@@ -810,6 +862,7 @@ fn cost(args: &[String]) -> Result<(), CliError> {
         },
         "disassembly_audit": {
             "step_objdump_zero_mul_zero_float": true,
+            "scope": "IntegerStackSession::step + stack::session::stack_* + stack::kernels::stack_* call graph",
             "symbols_checked": disasm_symbols_checked,
             "instructions_checked": disasm_instructions_checked,
         },
@@ -841,6 +894,7 @@ fn cost(args: &[String]) -> Result<(), CliError> {
             "analytical_weights_read_per_token": model.weights_per_token(),
             "total_4bit_weights": param_breakdown.total_4bit_weights,
             "weights_read_over_total_4bit_weights": active_4bit_ratio,
+            "active_learned_scalars_per_token": param_breakdown.active_learned_scalars_per_token,
             "total_learned_scalars": param_breakdown.total_learned_scalars,
             "total_learned_parameters": param_breakdown.total_learned_parameters,
             "active_learned_parameters_per_token": param_breakdown.active_learned_parameters_per_token,
@@ -853,7 +907,7 @@ fn cost(args: &[String]) -> Result<(), CliError> {
             "weights_notes": weights_notes,
             "bytes_touched_per_token": bytes_touched_per_token,
             "analytical_bytes_touched_per_token_estimate": bytes_touched_per_token,
-            "rss_notes": "kernel_peak_footprint_bytes / kernel_peak_footprint_mb is the kernel high-water-mark footprint (vmmap Physical footprint (peak) on macOS, /proc/self/status VmHWM on Linux; forbid(unsafe_code) forbids libc::getrusage FFI); max_sampled_rss_mb is the maximum across initial, post-load, post-session-alloc, and post-eval ps -o rss= samples",
+            "rss_notes": "kernel_peak_footprint_bytes / kernel_peak_footprint_mb is the kernel high-water-mark footprint (vmmap Physical footprint (peak) on macOS, /proc/self/status VmHWM on Linux; forbid(unsafe_code) forbids libc::getrusage FFI); strict mode refuses if kernel_peak_footprint_bytes is None; max_sampled_rss_mb is the maximum across initial, post-load, post-session-alloc, and post-eval ps -o rss= samples",
             "traffic_notes": "bytes_touched is an analytical estimate derived from tensor shapes, not hardware-instrumented memory traffic",
         },
         "bits_per_weight": D11_EFFECTIVE_BITS_PER_WEIGHT,
@@ -881,6 +935,8 @@ fn cost(args: &[String]) -> Result<(), CliError> {
             "p99_ms": p99_ms,
             "max_ms": step_us[step_us.len() - 1] / 1000.0,
             "tokens_per_second": input_driven_forward_throughput,
+            "step_implied_tokens_per_second": step_implied_tokens_per_second,
+            "work_rate_identity_verified": true,
             "input_driven_forward_throughput_tokens_per_second": input_driven_forward_throughput,
             "throughput_mode": format!(
                 "input-driven teacher-forced stepping over dataset tokens (1 thread, {} steps across {} windows of context {}), not free-running autoregressive generation",
@@ -943,6 +999,7 @@ fn cost(args: &[String]) -> Result<(), CliError> {
     println!("{}", serde_json::to_string_pretty(&record).unwrap());
 
     if let Some(out) = out_dir {
+        uor_r4_integer::report_output::claim(out)?;
         std::fs::write(out.join("cost.json"), serde_json::to_vec_pretty(&record)?)?;
         uor_r4_integer::report_output::seal(out)?;
         uor_r4_integer::report_output::verify(out)?;

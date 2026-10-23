@@ -22,8 +22,9 @@
     "threads": 1
   },
   "memory": {
-    "active_learned_parameters_per_token": 16310,
-    "active_over_total_learned_parameters": 0.9289212894407108,
+    "active_learned_parameters_per_token": 16247,
+    "active_learned_scalars_per_token": 279,
+    "active_over_total_learned_parameters": 0.9253331814557467,
     "analytical_bytes_touched_per_token_estimate": 341531,
     "analytical_weights_read_per_token": 15968,
     "bits_per_weight": 4.25,
@@ -36,10 +37,12 @@
     "nominal_bits_per_weight": 4.0,
     "parameter_breakdown": {
       "active_4bit_weight_and_scale_bytes_per_token": 8483,
-      "active_learned_parameters_per_token": 16310,
+      "active_learned_parameters_per_token": 16247,
+      "active_learned_scalars_per_token": 279,
       "emission": {
         "active_4bit_weight_and_scale_bytes_per_token": 680,
         "active_4bit_weights_per_token": 1280,
+        "active_learned_scalars_per_token": 0,
         "learned_scalar_bytes_total": 0,
         "learned_scalars_total": 0,
         "total_4bit_weight_and_scale_bytes": 680,
@@ -48,6 +51,7 @@
       "ingestion": {
         "active_4bit_weight_and_scale_bytes_per_token": 17,
         "active_4bit_weights_per_token": 32,
+        "active_learned_scalars_per_token": 0,
         "learned_scalar_bytes_total": 0,
         "learned_scalars_total": 0,
         "total_4bit_weight_and_scale_bytes": 680,
@@ -56,6 +60,7 @@
       "memory_lookup": {
         "active_4bit_weight_and_scale_bytes_per_token": 3842,
         "active_4bit_weights_per_token": 7232,
+        "active_learned_scalars_per_token": 71,
         "learned_scalar_bytes_total": 532,
         "learned_scalars_total": 134,
         "total_4bit_weight_and_scale_bytes": 3842,
@@ -64,6 +69,7 @@
       "routing": {
         "active_4bit_weight_and_scale_bytes_per_token": 3944,
         "active_4bit_weights_per_token": 7424,
+        "active_learned_scalars_per_token": 208,
         "learned_scalar_bytes_total": 560,
         "learned_scalars_total": 208,
         "total_4bit_weight_and_scale_bytes": 3944,
