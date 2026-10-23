@@ -25,8 +25,8 @@ Because `docs/research/notebook/m3-durable-memory.md` is outside `m1-address-as-
 The non-author `NOT_FIT` review (`ee2f61417`) listed five pinned prerequisites before a FIT can clear a run. This unit pins the one that is the lab's and exposes the rest as a checklist:
 
 - **PINNED — consumer commit.** [`crates/uor-r4-object-store/src/address_read.rs`](../../../crates/uor-r4-object-store/src/address_read.rs) and the six controls in [`crates/uor-r4-object-store/tests/address_read.rs`](../../../crates/uor-r4-object-store/tests/address_read.rs) are cited at commit **`86eb68ebb`** (PR `#2950`); re-check with `cargo test -p uor-r4-object-store --test address_read` (6 passed at that commit).
-- **PENDING — PM:** frozen 80-row panel content SHA-256 and the 80-vs-200 reconciliation against D22 §3 (composition is the paper 40/20/20; freeze item `#2853`).
-- **PENDING — owner:** the exact frozen checkpoint SHA-256; `m1-trunk-assembly-and-training` (`#2845`) is HELD, and the sheet invents no checkpoint.
+- **PENDING — PM:** frozen 80-row panel content SHA-256 and the 80-vs-200 reconciliation against D22 §3 (composition is the paper 40/20/20; panel-freeze step `#2858` (in `m3-qualify-memory`)).
+- **PENDING — owner:** the exact frozen checkpoint SHA-256; `m1-trunk-assembly-and-training` (`#2844`) is HELD, and the sheet invents no checkpoint.
 - **PENDING — owner:** the registered bar quoted with an ISO-UTC time and one baseline (`19/40` vs `20/40`; the `54/80` derivation follows from that choice).
 - **PENDING — PM/owner:** the held-out BPB stream (named + hashed) and the source of the `0.01` tolerance.
 

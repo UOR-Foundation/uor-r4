@@ -1,6 +1,6 @@
 # Serving-time address-as-read oracle over `uor-r4-object-store` (DRAFT)
 
-- **Status:** DRAFT pre-registration sheet for `#2833` (`m1-address-as-read`, Step 4). **FIT-reviewed by deepseek (non-author) on 2026-10-22: `NOT_FIT`** (see [Verdict](#verdict)); **no GPU run is cleared or started** until the five prerequisites in the Verdict are pinned and Casey releases the run. **Sheet update 2026-10-22 (deepseek-33):** prerequisite 4 (consumer commit pin) is now pinned below; prerequisites 1–3 and part of 5 remain `PENDING (PM/owner)` and are listed in one table in the Verdict.
+- **Status:** DRAFT pre-registration sheet for `#2833` (`m1-address-as-read`, Step 4). **FIT-reviewed by deepseek (non-author) on 2026-10-22: `NOT_FIT`** (see [Verdict](#verdict)); **no GPU run is cleared or started** until the remaining prerequisites in the Verdict are pinned (prerequisite 4 is pinned below) and Casey releases the run. **Sheet update 2026-10-22 (deepseek-33):** prerequisite 4 (consumer commit pin) is now pinned below; prerequisites 1–3 and part of 5 remain `PENDING (PM/owner)` and are listed in one table in the Verdict.
   - CPU consumer module (`uor_r4_object_store::address_read`) and finite CPU controls were delivered in `#2950` (`$0` GPU spend).
   - GPU evaluation of the serving-time oracle awaits a non-author `TEST FITNESS: FIT` review (CHARTER §4.5) and Casey's approval in chat; any trained form also requires a separate FIT review and a typed owner release (CHARTER §5.1).
 - **Line:** M1/M3 exact addressed memory (`#2029`, `#2031`, item `#2833`). **Lab:** antigravity.
@@ -30,11 +30,11 @@ Evaluated on one frozen checkpoint on RTX 5090 across three deterministic servin
 ## 4. Base artifact
 
 - **Consumer library and controls (PINNED):** commit `86eb68ebb` (PR `#2950`) delivered `crates/uor-r4-object-store/src/address_read.rs` (`PrimeAddress`, `AddressDirectory`, `ObjectTarget`, `AddressReadOutcome`, `VersionSelect`) and the **6** finite controls in `crates/uor-r4-object-store/tests/address_read.rs` (exact hit; exact miss with zero backend fetches; wrong-address/tampered/binding refusal; versioned overwrite `Current`/`Previous` and bounded-capacity `Evicted`; sorted-merge GCD sieve admission/ranking; byte-identical round trip). Re-check before any run: `cargo test -p uor-r4-object-store --test address_read` = 6 passed at that commit.
-- **Candidate model checkpoint (PENDING — owner):** the base artifact is the frozen M1 discrete trunk checkpoint (`m1-trunk-assembly-and-training` `#2845`), which is **HELD** on `main`; the exact checkpoint SHA-256 and where it is stored must be pinned by the owner before FIT can clear a run. This sheet does not invent a checkpoint.
+- **Candidate model checkpoint (PENDING — owner):** the base artifact is the frozen M1 discrete trunk checkpoint (`m1-trunk-assembly-and-training` `#2844`), which is **HELD** on `main`; the exact checkpoint SHA-256 and where it is stored must be pinned by the owner before FIT can clear a run. This sheet does not invent a checkpoint.
 
 ## 5. Data split
 
-- **Frozen panel (composition stated; hash `PENDING — PM`):** the 40 stated-fact / 20 previous-version / 20 abstention composition is the paper design; the frozen panel (or its fixed 80-row evaluation subset) still needs a content **SHA-256** and an explicit 80-vs-200 reconciliation against D22 §3 (`docs/harness/panels/m3-memory.json` gives `>= 200` rows for a decisive run; the freeze item is `m3-memory-panel-freeze` `#2853`). The hash slot is `SHA-256: PENDING` in this sheet until the PM freezes it; no panel is invented here.
+- **Frozen panel (composition stated; hash `PENDING — PM`):** the 40 stated-fact / 20 previous-version / 20 abstention composition is the paper design; the frozen panel (or its fixed 80-row evaluation subset) still needs a content **SHA-256** and an explicit 80-vs-200 reconciliation against D22 §3 (`docs/harness/panels/m3-memory.json` gives `>= 200` rows for a decisive run; the panel-freeze step lives in `m3-qualify-memory` `#2858`). The hash slot is `SHA-256: PENDING` in this sheet until the PM freezes it; no panel is invented here.
 - **Held-out BPB stream and tolerance (`PENDING — PM/owner`):** the sheet still needs the named, hashed held-out text stream and the source of the `0.01` BPB tolerance. Proposed lab definition for the PM: the held-out text stream is the same frozen evaluation stream used by the Arm A baseline, named by path and SHA-256 in the FIT-locked sheet; the `0.01` tolerance is accepted only if the PM sources it to a registered decision. Both remain `PENDING`.
 - **Reported metrics (separated per `exact-memory.md` Step 5):**
   1. **Oracle read accuracy (Arm C vs Arm A):** exact-match `check_pass` on the recalled fact rows when the true `PrimeAddress` is supplied.
@@ -75,17 +75,18 @@ Evaluated on one frozen checkpoint on RTX 5090 across three deterministic servin
 
 | # | Prerequisite | Status | Evidence / slot |
 |---|---|---|---|
-| 1 | Frozen, hashed 80-row panel and 80-vs-200 reconciliation | **PENDING — PM** | composition stated in §5; `SHA-256: PENDING`; freeze item `#2853`; D22 §3 reconciliation required |
-| 2 | Candidate checkpoint SHA-256 | **PENDING — owner** | `m1-trunk-assembly-and-training` `#2845` is HELD; no SHA is invented |
+| 1 | Frozen, hashed 80-row panel and 80-vs-200 reconciliation | **PENDING — PM** | composition stated in §5; `SHA-256: PENDING`; panel-freeze step `#2858`; D22 §3 reconciliation required |
+| 2 | Candidate checkpoint SHA-256 | **PENDING — owner** | `m1-trunk-assembly-and-training` `#2844` is HELD; no SHA is invented |
 | 3 | Owner-registered bar with ISO-UTC time and one baseline | **PENDING — owner** | §3 marked `PROPOSED`; `19/40` vs `20/40` and the `54/80` derivation are open |
 | 4 | Consumer commit pin | **PINNED** | commit `86eb68ebb`; 6 finite controls in `crates/uor-r4-object-store/tests/address_read.rs` |
-| 5 | Measurement definitions | **PARTLY PINNED — rest PENDING (PM/owner)** | BPB stream/tolerance and `54/80` derivation are named in §5 as `PENDING`; bar-miss and negative-closes rules added to §7 |
+| 5 | Measurement definitions | **PARTLY PINNED — rest PENDING (PM/owner)** | BPB stream/tolerance and the `54/80` derivation are `PENDING` in §3/§5 and row 3; bar-miss and negative-closes rules added to §7 |
 
 Re-request FIT only when 1–3 and the rest of 5 have concrete values in this sheet; this table is deliberately a checklist, not a decision: **no owner value, bar, checkpoint or panel is set by the lab here.**
+
 ### Why NOT_FIT (prerequisites in priority order)
 
 1. **Frozen, hashed panel absent.** The 40/20/20 composition is stated, and matches the paper design, but the frozen panel (or its evaluation subset) has no content SHA-256, and the m3-memory milestone entry says `>= 200` rows for a decisive run; state the hash and reconcile 80 vs 200 against D22 §3.
-2. **Candidate checkpoint unpinned.** The base artifact names `m1-trunk-assembly-and-training` (`#2845`), which is **HELD** (verified against the roadmap item on `main`), and carries no SHA-256; pin the exact frozen checkpoint and where it is stored.
+2. **Candidate checkpoint unpinned.** The base artifact names `m1-trunk-assembly-and-training` (`#2844`), which is **HELD** (verified against the roadmap item on `main`), and carries no SHA-256; pin the exact frozen checkpoint and where it is stored.
 3. **Bar is still a proposal.** Quote the owner's registered bar with an ISO-UTC time (CHARTER §5.2), and settle the `19/40` vs `20/40` baseline wording so the `+8` gain has one baseline.
 4. **Consumer not commit-pinned.** "Landed in `#2950`" should be the delivered commit SHA of the `uor-r4-object-store` address-read consumer and its 6 finite tests.
 5. **Measurement definitions unpinned.** The held-out BPB stream is unnamed and unhashed and the `0.01` tolerance is unsourced; `>= 54/80` has no derivation; and the stop rules cover integrity failures only — add a **bar-miss stop** and state which configuration a negative closes (CHARTER §4.1).
@@ -101,4 +102,7 @@ reviewer: deepseek (DeepSeek, non-author; fresh-context FIT review for #2833 on 
 note: Shape and finite controls are in good order: all 8 blocks present, address_read's 6 finite tests pass, the three arms and stop rules are clear, and the cost is bounded. NOT_FIT because the configuration this sheet would clear is not yet pinned: (1) the frozen panel has no hashed artifact - the composition 40/20/20 is stated, but the panel (or eval subset of it) needs its own SHA-256, and 80 rows must be reconciled with the m3-memory milestone's >=200-row decisive-run minimum; (2) the candidate checkpoint m1-trunk-assembly-and-training #2845 is HELD and carries no SHA-256; (3) the bar is a proposal - the owner's registered bar with ISO-UTC time must be quoted, and the 19/40 vs 20/40 baseline settled for the +8 gain; (4) the consumer must be cited by delivered commit SHA, not #2950. Also pin the measurement definitions: the held-out BPB stream is unnamed and unhashed, the 0.01 BPB tolerance is unsourced, >=54/80 has no derivation, and the stop rules cover integrity only - add a bar-miss stop and state which configuration a negative closes (4.1). Re-request FIT once pinned; this verdict clears no compute (D22).
 date: 2026-10-22
 A FIT verdict clears compute for the configuration in that sheet only (D22).
+```
+
+**Correction (2026-10-22, sheet update):** the verbatim review above pairs `m1-trunk-assembly-and-training` with `#2845`. The roadmap maps that item to **`#2844`** (`docs/roadmap/issues.json`, `docs/roadmap/README.md`), while `#2845` is `m1-w2-capacity-capture`. The quote is kept verbatim as the record; the live text in this sheet uses `#2844`.
 ```
