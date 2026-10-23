@@ -813,11 +813,7 @@ impl RelationRoute {
 
     /// Additive linear class logits (in integer milli-units) for the relation head
     /// and act head on `text`.
-    pub fn logits_milli(
-        &self,
-        text: &str,
-        dense: Option<&[f64]>,
-    ) -> Result<(Vec<i64>, Vec<i64>)> {
+    pub fn logits_milli(&self, text: &str, dense: Option<&[f64]>) -> Result<(Vec<i64>, Vec<i64>)> {
         let row = route_row(&self.lexicon, self.trunk.as_ref(), text, dense)?;
         Ok((
             self.relation_head.logits_milli(&row),
@@ -1897,13 +1893,7 @@ impl MemoryTurnGate {
         if frame_words.iter().any(|&w| {
             matches!(
                 w,
-                "if"
-                    | "whether"
-                    | "unless"
-                    | "suppose"
-                    | "assuming"
-                    | "hypothetically"
-                    | "were"
+                "if" | "whether" | "unless" | "suppose" | "assuming" | "hypothetically" | "were"
             )
         }) {
             return Err("the turn is conditional or hypothetical and cannot write memory");
@@ -1912,14 +1902,7 @@ impl MemoryTurnGate {
         if frame_words.iter().any(|&w| {
             matches!(
                 w,
-                "said"
-                    | "says"
-                    | "told"
-                    | "asked"
-                    | "claimed"
-                    | "thought"
-                    | "mentioned"
-                    | "wrote"
+                "said" | "says" | "told" | "asked" | "claimed" | "thought" | "mentioned" | "wrote"
             )
         }) {
             return Err("the turn reports speech rather than stating a speaker fact");
@@ -2089,14 +2072,15 @@ fn matches_closed_relation_frame(
                 .chars()
                 .next()
                 .is_some_and(char::is_uppercase);
-            let bare_copular_intro = (lead.as_slice() == ["i", "am"]
-                || lead.as_slice() == ["i'm"])
+            let bare_copular_intro = (lead.as_slice() == ["i", "am"] || lead.as_slice() == ["i'm"])
                 && suffix_words
                     .iter()
                     .all(|w| matches!(w.as_str(), "now" | "instead"));
             (has("name")
                 && has_any(&["my", "i", "me"])
-                && !has_any(&["pet", "pet's", "dog", "dog's", "cat", "cat's", "friend", "friend's"]))
+                && !has_any(&[
+                    "pet", "pet's", "dog", "dog's", "cat", "cat's", "friend", "friend's",
+                ]))
                 || has("name's")
                 || has_pair("call", "me")
                 || (has_pair("go", "by") && has("i"))
@@ -2109,8 +2093,7 @@ fn matches_closed_relation_frame(
                 && has_any(&["my", "i", "we", "our"])
         }
         "friend_name" => {
-            has_any(&["friend", "friend's", "buddy", "pal"])
-                && has_any(&["my", "i", "mine", "our"])
+            has_any(&["friend", "friend's", "buddy", "pal"]) && has_any(&["my", "i", "mine", "our"])
         }
         "hometown" => {
             (has("hometown") && has("my"))
@@ -2963,11 +2946,7 @@ impl SavedCompiler {
         }
     }
 
-    fn logits_milli_row(
-        &self,
-        source: &str,
-        row: Option<&[f64]>,
-    ) -> Result<(Vec<i64>, Vec<i64>)> {
+    fn logits_milli_row(&self, source: &str, row: Option<&[f64]>) -> Result<(Vec<i64>, Vec<i64>)> {
         match (&self.combined, row) {
             (None, None) => self.route().logits_milli(source, None),
             (Some(combined), Some(row)) => {
@@ -4722,8 +4701,7 @@ mod tests {
                 for &template in assert_templates {
                     let sample_value = rel.draw(&mut rng, split).expect("draw value");
                     let text = template.replace("{v}", &sample_value);
-                    let start =
-                        match_at_word_start(&text, &sample_value).expect("value in assert");
+                    let start = match_at_word_start(&text, &sample_value).expect("value in assert");
                     let (start, end) = align_to_words(&text, start, start + sample_value.len());
                     let candidate = CompiledAction::Assert {
                         relation: rel_id,
@@ -4747,8 +4725,7 @@ mod tests {
                 for &template in update_templates {
                     let sample_value = rel.draw(&mut rng, split).expect("draw value");
                     let text = template.replace("{v}", &sample_value);
-                    let start =
-                        match_at_word_start(&text, &sample_value).expect("value in update");
+                    let start = match_at_word_start(&text, &sample_value).expect("value in update");
                     let (start, end) = align_to_words(&text, start, start + sample_value.len());
                     let candidate = CompiledAction::Correct {
                         relation: rel_id,
@@ -4797,7 +4774,10 @@ mod tests {
                 "pet_name",
                 "Plimbo",
                 &["My pet is {value}.", "My cat is {value}."],
-                &["Actually, my pet is {value}.", "Actually, my cat is {value}."],
+                &[
+                    "Actually, my pet is {value}.",
+                    "Actually, my cat is {value}.",
+                ],
             ),
             (
                 8,
@@ -4810,8 +4790,14 @@ mod tests {
                 9,
                 "favorite_food",
                 "risotto",
-                &["Given a choice, I eat {value}.", "My go-to dish is {value}."],
-                &["Actually, I eat {value} instead.", "Sorry, my go-to dish is {value} now."],
+                &[
+                    "Given a choice, I eat {value}.",
+                    "My go-to dish is {value}.",
+                ],
+                &[
+                    "Actually, I eat {value} instead.",
+                    "Sorry, my go-to dish is {value} now.",
+                ],
             ),
         ];
 

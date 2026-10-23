@@ -74,6 +74,7 @@ impl Rng {
     }
 }
 
+#[rustfmt::skip]
 #[cfg(any())]
 mod preserved_stage_a {
     use super::*;
