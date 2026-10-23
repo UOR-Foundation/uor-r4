@@ -32,6 +32,61 @@ const OWNER_PATHS: &str = r#"{"schema": 1, "paths": [
   {"path": ".github/**", "why": "CI"},
   {"path": "docs/harness/owner-paths.json", "why": "this list"}
 ]}"#;
+/// A base file with one gated item that carries a D23 site and one gated item that carries none.
+/// The banned word is assembled with concat! so this test file adds no ratchet site itself.
+const GATED_BASE: &str = concat!(
+    "#[cfg(any())]\n",
+    "pub struct Soft",
+    "maxHead {\n",
+    "    pub logits: Vec<f64>,\n",
+    "}\n\n",
+    "#[cfg(any())]\n",
+    "pub struct RetiredHelper {\n",
+    "    pub n: u32,\n",
+    "}\n\n",
+    "pub fn a() {}\n"
+);
+
+/// The same file with the banned item's gate removed.
+const GATED_HEAD_UNGATED: &str = concat!(
+    "pub struct Soft",
+    "maxHead {\n",
+    "    pub logits: Vec<f64>,\n",
+    "}\n\n",
+    "#[cfg(any())]\n",
+    "pub struct RetiredHelper {\n",
+    "    pub n: u32,\n",
+    "}\n\n",
+    "pub fn a() {}\n"
+);
+
+/// The same file with the banned item moved to a test-only gate.
+const GATED_HEAD_TEST_ONLY: &str = concat!(
+    "#[cfg(test)]\n",
+    "pub struct Soft",
+    "maxHead {\n",
+    "    pub logits: Vec<f64>,\n",
+    "}\n\n",
+    "#[cfg(any())]\n",
+    "pub struct RetiredHelper {\n",
+    "    pub n: u32,\n",
+    "}\n\n",
+    "pub fn a() {}\n"
+);
+
+/// The same file with only the benign item un-gated.
+const GATED_HEAD_BENIGN: &str = concat!(
+    "#[cfg(any())]\n",
+    "pub struct Soft",
+    "maxHead {\n",
+    "    pub logits: Vec<f64>,\n",
+    "}\n\n",
+    "pub struct RetiredHelper {\n",
+    "    pub n: u32,\n",
+    "}\n\n",
+    "pub fn a() {}\n"
+);
+
 /// A valid REPORT, headings worded as in a real one.
 const REPORT: &str = "# REPORT\n\n## What did not work, first\n\nNothing.\n\n## What changed\n\nA.\n\n## Measurements\n\nNone.\n\n## Checks run at the head\n\n- tests\n\n## Skills used\n\nNone.\n\n## Still open\n\nNothing.\n\n## Plain summary\n\nDone.\n";
 const APPROVAL: &str = "## Owner approval for `.github/**` (an owner path)\n\nRecorded at 2026-10-21T15:25:16Z.\n- \"Approve?\" Casey: \"Approve (Recommended)\".\n";
@@ -90,6 +145,7 @@ impl Repo {
         r.write("docs/research/notebook/a.md", NOTEBOOK);
         r.write("docs/start/FILEMAP.md", FILEMAP);
         r.write("crates/a/src/lib.rs", "pub fn a() {}\n");
+        r.write("crates/a/src/gated.rs", GATED_BASE);
         r.write("docs/a.md", "# a\n");
         r.write("docs/harness/owner-paths.json", OWNER_PATHS);
         r.write(
@@ -1385,4 +1441,56 @@ fn the_d59_switch_is_read_at_the_merge_base() {
     );
     let o = r.check_gh(&h, &fake(vec![record("claude", &h, "APPROVE")]));
     expect(&o, 1, "PASS review-record", "counted");
+}
+
+#[test]
+fn un_gating_a_banned_item_fails_the_presence_rule() {
+    let r = Repo::new();
+    let h = r.green_a(|r| {
+        r.write("crates/a/src/gated.rs", GATED_HEAD_UNGATED);
+    });
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL banned-presence",
+        concat!("Soft", "maxHead"),
+    );
+    expect(&r.check(&h, &[]), 1, "FAIL banned-presence", "gate on item");
+}
+
+#[test]
+fn moving_a_banned_item_to_a_test_only_gate_fails_the_presence_rule() {
+    let r = Repo::new();
+    let h = r.green_a(|r| {
+        r.write("crates/a/src/gated.rs", GATED_HEAD_TEST_ONLY);
+    });
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL banned-presence",
+        "moved to a test-only gate",
+    );
+}
+
+#[test]
+fn un_gating_a_benign_item_passes_the_presence_rule() {
+    let r = Repo::new();
+    let h = r.green_a(|r| {
+        r.write("crates/a/src/gated.rs", GATED_HEAD_BENIGN);
+    });
+    let o = r.check(&h, &[]);
+    expect(&o, 0, "PASS banned-presence", "verdict: PASS");
+}
+
+#[test]
+fn deleting_a_banned_gated_item_passes_the_presence_rule() {
+    let r = Repo::new();
+    let h = r.green_a(|r| {
+        r.write(
+            "crates/a/src/gated.rs",
+            "#[cfg(any())]\npub struct RetiredHelper {\n    pub n: u32,\n}\n",
+        );
+    });
+    let o = r.check(&h, &[]);
+    expect(&o, 0, "PASS banned-presence", "verdict: PASS");
 }

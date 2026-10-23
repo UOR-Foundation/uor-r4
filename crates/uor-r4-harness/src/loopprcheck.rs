@@ -16,6 +16,7 @@ const USAGE: &str =
 const RULES: &[(&str, Rule)] = &[
     ("order", rule_order),
     ("scope", rule_scope),
+    ("banned-presence", rule_banned_presence),
     ("commit-order", rule_commit_order),
     ("report", rule_report),
     ("owner-paths", rule_owner_paths),
@@ -530,6 +531,262 @@ fn commit_changes(pr: &Pr, sha: &str) -> Result<Vec<Change>, String> {
         ],
     )?;
     name_status(&z_fields(&raw))
+}
+
+/// The source suffixes the D23/D25/D32 ratchets scan.
+const BANNED_SUFFIXES: [&str; 4] = ["rs", "cu", "cuh", "wgsl"];
+
+fn is_banned_source(path: &str) -> bool {
+    let Some((_, ext)) = path.rsplit_once('.') else {
+        return false;
+    };
+    BANNED_SUFFIXES.contains(&ext)
+}
+
+/// Whether a line is exactly the repo's cfg(any()) gate (whitespace-insensitive); the gate
+/// compiles an item out of every module, including tests.
+fn is_cfg_any_gate(line: &str) -> bool {
+    line.chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>()
+        == "#[cfg(any())]"
+}
+
+/// The item a line opens, as a stable key to follow it from the merge base to the head:
+/// a struct, fn, mod, trait, union or impl header. None for other lines.
+fn item_key(line: &str) -> Option<String> {
+    let mut t = line.trim_start();
+    loop {
+        let stripped = t
+            .strip_prefix("pub(crate) ")
+            .or_else(|| t.strip_prefix("pub(super) "))
+            .or_else(|| t.strip_prefix("pub "))
+            .or_else(|| t.strip_prefix("unsafe "))
+            .or_else(|| t.strip_prefix("async "));
+        match stripped {
+            Some(n) => t = n,
+            None => break,
+        }
+    }
+    let cut = t
+        .find(|c: char| c.is_whitespace() || matches!(c, '{' | '(' | '<' | ';'))
+        .unwrap_or(t.len());
+    let kw = &t[..cut];
+    let rest = t[cut..].trim_start();
+    if matches!(kw, "struct" | "enum" | "fn" | "mod" | "trait" | "union") {
+        let name_end = rest
+            .find(|c: char| c.is_whitespace() || matches!(c, '<' | '(' | '{' | ';'))
+            .unwrap_or(rest.len());
+        if name_end == 0 {
+            return None;
+        }
+        Some(format!("{kw} {}", &rest[..name_end]))
+    } else if kw == "impl" {
+        let head = rest.split('{').next().unwrap_or(rest).trim();
+        if head.is_empty() {
+            None
+        } else {
+            let words: Vec<&str> = head.split_whitespace().collect();
+            Some(format!("impl {}", words.join(" ")))
+        }
+    } else {
+        None
+    }
+}
+
+/// The text from the item at start through its closing brace, or through its semicolon line when
+/// it declares without a body. The stripped text has comments and strings blanked, one line per
+/// source line, so braces in prose cannot confuse the count.
+fn item_body(stripped: &[String], start: usize, lines: &[&str]) -> String {
+    let mut depth: i64 = 0;
+    let mut opened = false;
+    for i in start..lines.len() {
+        if let Some(line) = stripped.get(i) {
+            for c in line.chars() {
+                if c == '{' {
+                    depth += 1;
+                    opened = true;
+                } else if c == '}' {
+                    depth -= 1;
+                }
+            }
+            if opened && depth <= 0 {
+                return lines[start..=i].join("\n");
+            }
+            if !opened && (line.contains(';') || (i > start && line.trim().is_empty())) {
+                return lines[start..=i].join("\n");
+            }
+        }
+    }
+    lines[start..].join("\n")
+}
+
+struct HeadGate {
+    gated: bool,
+    weakened: bool,
+}
+
+/// Whether the item key is still gated at the head: Some with gated true when a cfg(any()) attribute
+/// still sits in its attribute block, weakened true when it moved to a test-only gate, gated false
+/// when the gate is gone, and None when the item is gone (deleting gated code is lawful).
+fn head_gate(lines: &[&str], key: &str) -> Option<HeadGate> {
+    for (h, line) in lines.iter().enumerate() {
+        if item_key(line).as_deref() != Some(key) {
+            continue;
+        }
+        let mut gated = false;
+        let mut weakened = false;
+        let mut k = h;
+        while k > 0 {
+            k -= 1;
+            let t = lines[k].trim();
+            if t.is_empty() {
+                break;
+            }
+            if t.starts_with("//") {
+                continue;
+            }
+            if !t.starts_with('#') {
+                break;
+            }
+            if is_cfg_any_gate(t) {
+                gated = true;
+            }
+            let squashed: String = t.chars().filter(|c| !c.is_whitespace()).collect();
+            if squashed.contains("cfg(test)") || squashed.contains("cfg(any(test))") {
+                weakened = true;
+            }
+        }
+        return Some(HeadGate { gated, weakened });
+    }
+    None
+}
+
+/// The banned families present in text: the same tokens the ratchets count, assembled so this file
+/// does not add ratchet sites of its own. D32 applies only where its ratchet scans.
+fn banned_kinds(text: &str, path: &str) -> Vec<&'static str> {
+    let mut kinds = Vec::new();
+    let raw = text.to_ascii_lowercase();
+    let code = crate::ratchet::strip_comments_and_strings(text);
+    let code_lower = code.to_ascii_lowercase();
+    let d23 = raw.matches(crate::ratchet::D23_WORD).count() > 0
+        || crate::ratchet::D23_IDENT_FAMILIES
+            .iter()
+            .any(|family| code_lower.contains(family));
+    if d23 {
+        kinds.push("D23");
+    }
+    let dense = [
+        concat!("mat", "mul"),
+        concat!("cu", "blas"),
+        concat!("ge", "mm"),
+    ];
+    let tensor_core = [
+        concat!("w", "mma"),
+        concat!("mma", "_sync"),
+        concat!("wg", "mma"),
+        concat!("tcgen", "05"),
+    ];
+    if dense
+        .iter()
+        .chain(tensor_core.iter())
+        .any(|token| code_lower.contains(token))
+    {
+        kinds.push("D25");
+    }
+    let discrete_scope =
+        path.starts_with("crates/uor-r4-discrete/") || path.starts_with("docs/labs/");
+    if discrete_scope
+        && crate::ratchet::D32_FLOAT_TYPES
+            .iter()
+            .any(|token| code_lower.contains(token))
+    {
+        kinds.push("D32");
+    }
+    kinds
+}
+
+/// Under the ratchets, banned code that is gated out is counted but not compiled; CHARTER section
+/// 3.4 says banned code may not exist in any compiled or loaded module, so removing or weakening a
+/// cfg(any()) gate around such an item is a presence change the ratchets cannot see. This rule fails
+/// when a PR does that to an item whose gated text carries a banned site.
+fn rule_banned_presence(pr: &Pr) -> RuleResult {
+    const RULE: &str = "banned-presence";
+    let mut details = Vec::new();
+    for change in &pr.changes {
+        let old = change.paths.first().map(String::as_str).unwrap_or("");
+        let new = change.paths.last().map(String::as_str).unwrap_or("");
+        if change.status == 'A' || change.status == 'D' || !is_banned_source(new) {
+            continue;
+        }
+        let (Some(base), Some(head)) = (pr.at_base(old), pr.at_head(new)) else {
+            continue;
+        };
+        let base_lines: Vec<&str> = base.lines().collect();
+        let head_lines: Vec<&str> = head.lines().collect();
+        let stripped: Vec<String> = crate::ratchet::strip_comments_and_strings(&base)
+            .lines()
+            .map(str::to_string)
+            .collect();
+        let mut i = 0;
+        while i < base_lines.len() {
+            if !is_cfg_any_gate(base_lines[i]) {
+                i += 1;
+                continue;
+            }
+            let mut j = i + 1;
+            while j < base_lines.len() {
+                let t = base_lines[j].trim();
+                if t.is_empty() || t.starts_with('#') || t.starts_with("//") {
+                    j += 1;
+                } else {
+                    break;
+                }
+            }
+            let Some(key) = base_lines.get(j).and_then(|line| item_key(line)) else {
+                i += 1;
+                continue;
+            };
+            let body = item_body(&stripped, j, &base_lines);
+            if let Some(state) = head_gate(&head_lines, &key) {
+                if state.gated {
+                    i = j;
+                    continue;
+                }
+                let kinds = banned_kinds(&body, new);
+                if !kinds.is_empty() {
+                    let why = if state.weakened {
+                        "moved to a test-only gate"
+                    } else {
+                        "removed"
+                    };
+                    details.push(format!(
+                        "{new}: the cfg(any()) gate on item {key} (merge-base line {}) is {why} at the head, and the gated text carries {} site(s) ({})",
+                        i + 1,
+                        kinds.len(),
+                        kinds.join(", ")
+                    ));
+                }
+            }
+            i = j;
+        }
+    }
+    if details.is_empty() {
+        result(
+            RULE,
+            details,
+            "no gated banned item is un-gated or moved to a test-only gate",
+            "",
+        )
+    } else {
+        let n = details.len();
+        result(
+            RULE,
+            details,
+            "",
+            &format!("{n} gated banned item(s) un-gated or moved to a test-only gate"),
+        )
+    }
 }
 
 /// The first non-merge commit adds the lowest-numbered ORDER, and that commit changes nothing
