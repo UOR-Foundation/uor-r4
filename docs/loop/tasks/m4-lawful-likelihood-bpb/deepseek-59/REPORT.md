@@ -28,7 +28,8 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2861. Base: `1cb89e81a`. `Refe
 ## Checks run at the head
 
 - `loop report --check`: PASS; `loop pr-check --local`: verdict PASS.
-- `loop gates --full`: all 11 gates GREEN at `93079764030186d96a12820773b784ffe32e43e4`.
+- `loop gates --full`: all 11 gates GREEN at `93079764030186d96a12820773b784ffe32e43e4` and again at `fa1076ed6`.
+- `cargo test -p uor-r4-discrete`: every target passes at `fa1076ed6`, including the three binaries that previously expected the stale hash. The omitted historical FIT sentence is restored, and the expected driver hash is re-pinned to `791a555d001c1f7a0c313474d0410f52cf2006fd61faa67410316a52cc401882`.
 - `uor-harness check` on the patched tree: no failure for the sheet; the docs/links gate passes (all changed paths under `docs/`).
 - No GPU, no compute, no training; the patch applies cleanly to the base and `cargo xtask roadmap render --check` is untouched by it.
 
