@@ -377,18 +377,33 @@ TEST FITNESS: FIT
         );
     }
 
-    /// The rendered clearance note is clean plain text (cards #3042): no trailing space on any
-    /// line and no continuation indentation leaked into the pasted block.
+    /// The BLOCK `render_fit` emits is what gets pasted (cards #3042): no trailing space on any
+    /// line and no continuation indentation leaked into it. Testing only the constant would let a
+    /// future edit push the old inline literal back into `render_fit` while the constant stays clean.
     #[test]
-    fn the_fit_clearance_note_has_no_trailing_or_leaked_whitespace() {
-        for line in FIT_CLEARANCE_NOTE.lines() {
+    fn a_rendered_fit_block_has_no_trailing_or_leaked_whitespace() {
+        let milestone = crate::registries::Milestone {
+            id: "M1".into(),
+            issue: 2029,
+            ..Default::default()
+        };
+        let block = render_fit(
+            "NOT_FIT",
+            &milestone,
+            "s.md",
+            "reviewer",
+            "note",
+            "mechanism",
+        );
+        for line in block.lines() {
             assert!(!line.ends_with(' '), "trailing space in {line:?}");
             assert!(!line.starts_with("         "), "leaked indent in {line:?}");
         }
         assert!(
-            !FIT_CLEARANCE_NOTE.contains(" (D22). \n"),
+            !block.contains(" (D22). \n"),
             "trailing space before newline"
         );
+        assert!(!FIT_CLEARANCE_NOTE.contains(" (D22). \n"));
     }
     #[test]
     fn fields_are_read_from_bulleted_and_bare_lines() {
@@ -501,16 +516,16 @@ pub struct NewSheet {
     pub rows: Option<u32>,
 }
 
-/// Render a `TEST FITNESS` review block (Python `prep fit`).
-///
-/// **The verdict clears compute for the configuration in that sheet ONLY** (D22), so the block names
-/// the sheet and the milestone and carries that sentence. A review that does not say what it clears is
-/// a review a lab can over-read.
 /// The paragraph `prep fit` appends after the record. It must be clean plain text: no trailing
 /// space and no leaked continuation indent (a caller pastes it into a sheet and runs
 /// `git diff --check`).
 pub const FIT_CLEARANCE_NOTE: &str = "A FIT verdict clears compute for the configuration in that sheet only (D22).\n\nEvery mechanism pre-registration gets a TEST FITNESS review on its milestone before compute.";
 
+/// Render a `TEST FITNESS` review block (Python `prep fit`).
+///
+/// **The verdict clears compute for the configuration in that sheet only** (D22), so the block names
+/// the sheet and the milestone and carries that sentence. A review that does not say what it clears is
+/// a review a lab can over-read.
 pub fn render_fit(
     verdict: &str,
     milestone: &crate::registries::Milestone,

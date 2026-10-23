@@ -5,7 +5,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item: `infra-loop-harness` (#2904). 
 ## What did not work, first
 
 - **#3041 was live on the exact flow we had just used.** `test_fitness` returned the first anchored verdict (`return verdict` inside the loop), so a sheet that appends a later FIT under an older NOT_FIT still read NOT_FIT - the NOT_FIT→FIT re-review path #3052 exercised. Fixed: the loop records the latest verdict and returns it after scanning.
-- **#3042 made the rendered block unusable in a sheet.** The clearance paragraph ended `(D22). ` with a trailing space and its continuation leaked nine spaces before `Every mechanism...`, so `git diff --check` rejected a pasted block. Fixed: moved to `FIT_CLEARANCE_NOTE` with clean text, and a test holds it to that standard.
+- **#3042 made the rendered block unusable in a sheet.** The clearance paragraph ended `(D22). ` with a trailing space and its continuation leaked nine spaces before `Every mechanism...`, so `git diff --check` rejected a pasted block. Fixed: moved to `FIT_CLEARANCE_NOTE` with clean text, and a test now calls `render_fit` itself and holds the emitted block to that standard (restoring the old inline literal fails the test). The `render_fit` doc comment that the first edit had attached to the const is restored.
 - **Both fixes are additive and local.** No other function changes; no sheet is re-rendered (existing sheets keep their old text until next touched).
 
 ## What changed
