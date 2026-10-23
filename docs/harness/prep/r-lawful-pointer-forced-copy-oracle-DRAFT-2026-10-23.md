@@ -91,7 +91,7 @@ All evaluation rows are drawn from the sealed, zero-overlap held-out memory/repl
 
 ## TEST FITNESS
 
-`TEST FITNESS: PENDING`
+TEST FITNESS: PENDING - M2 #2030 pointer-key
 
 Awaiting:
 1. Owner/PM registration of the `N` / `O1` / `O2` diagnostic bar in `## Bar` on `#2880` (CHARTER §5.2).
