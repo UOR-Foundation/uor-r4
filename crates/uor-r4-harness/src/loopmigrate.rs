@@ -285,6 +285,7 @@ fn migrated_links(root: &Path, failures: &mut Vec<String>) {
     ];
     for view in VIEWS {
         let Some(text) = read(root, view) else {
+            failures.push(format!("{view}: the migrated view is missing"));
             continue;
         };
         let dir = Path::new(view)

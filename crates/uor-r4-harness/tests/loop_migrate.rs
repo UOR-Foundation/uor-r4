@@ -189,3 +189,114 @@ fn broken_link_in_a_migrated_view_fails() {
     assert!(err.contains("broken link"), "name the broken link: {err}");
     assert_eq!(o.status.code(), Some(1));
 }
+
+#[test]
+fn pointer_stub_not_naming_the_archive_copy_fails() {
+    let r = migrated_repo();
+    r.write("STATUS.md", "# STATUS.md is retired\n\nMoved away.\n");
+    let o = r.migrate();
+    assert_eq!(o.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        err.contains("STATUS.md: the pointer does not name archive/STATUS.md"),
+        "name the pointer failure: {err}"
+    );
+}
+
+#[test]
+fn lesson_id_not_matching_the_file_stem_fails() {
+    let r = migrated_repo();
+    r.write(
+        "docs/harness/mistakes/L-002.md",
+        &LESSON.replace("id: L-001", "id: L-003"),
+    );
+    let o = r.migrate();
+    assert_eq!(o.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        err.contains("docs/harness/mistakes/L-002.md: its `id:` is not `L-002`"),
+        "name the id mismatch: {err}"
+    );
+}
+
+#[test]
+fn missing_l001_fails() {
+    let r = migrated_repo();
+    // Keep the mistakes store present (another keyed lesson) so only the L-001 rule fires.
+    r.write(
+        "docs/harness/mistakes/L-002.md",
+        &LESSON.replace("id: L-001", "id: L-002"),
+    );
+    r.git(&["rm", "-q", "docs/harness/mistakes/L-001.md"]);
+    let o = r.migrate();
+    assert_eq!(o.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        err.contains("L-001.md (records drifted) is missing"),
+        "name the missing L-001: {err}"
+    );
+}
+
+#[test]
+fn decisions_table_without_the_new_columns_fails() {
+    let r = migrated_repo();
+    r.write(
+        "docs/integration/DECISIONS.md",
+        "# DECISIONS\n\n## Decisions after the charter (from D43)\n\n| Id | Date | Decision | Reason |\n|---|---|---|---|\n| D43 | 2026-10-20 | x | y |\n",
+    );
+    let o = r.migrate();
+    assert_eq!(o.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        err.contains("lacks the `Alternatives turned down` column")
+            && err.contains("lacks the `Cost to undo` column"),
+        "name both missing columns: {err}"
+    );
+}
+
+#[test]
+fn agents_over_the_80_line_budget_fails() {
+    let r = migrated_repo();
+    let padded = format!(
+        "# AGENTS\n\n## Lessons the project paid for\n\n<!-- loop:lessons-top-ten:start -->\n<!-- loop:lessons-top-ten:end -->\n\nSee [the plan](PLAN.md).\n{}",
+        "pad\n".repeat(80)
+    );
+    r.write("AGENTS.md", &padded);
+    let o = r.migrate();
+    assert_eq!(o.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        err.contains("over the 80-line gate"),
+        "name the read-path budget: {err}"
+    );
+}
+
+#[test]
+fn filemap_row_naming_a_gone_path_fails() {
+    let r = migrated_repo();
+    let text = std::fs::read_to_string(r.root.join("docs/start/FILEMAP.md")).unwrap();
+    r.write(
+        "docs/start/FILEMAP.md",
+        &format!("{text}| `docs/gone` | not there |\n"),
+    );
+    let o = r.migrate();
+    assert_eq!(o.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        err.contains("FILEMAP: row `docs/gone` names a path that is gone"),
+        "name the gone-path row: {err}"
+    );
+}
+
+#[test]
+fn a_missing_view_is_named_not_skipped() {
+    let r = migrated_repo();
+    r.git(&["rm", "-q", "PLAN.md"]);
+    let o = r.migrate();
+    assert_eq!(o.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        err.contains("PLAN.md: the migrated view is missing"),
+        "name the missing view: {err}"
+    );
+}
