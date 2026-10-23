@@ -9,7 +9,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item `infra-loop-render-review` (`#3
 - **The tamper evidence is restricted to the three harness-rendered views** (`STATE.md`, `HANDOFF.md`, `docs/harness/LESSONS.md`): `render_all` produces those, while AGENTS' top-ten block and `docs/roadmap/README.md` are rendered by xtask and are already gated by CI. The views-only predicate still allows all five paths.
 - **The review gate refused to count anything on this PR, for a reason unrelated to the render path.**
   `bad_loop_item` treated every order item whose id starts with `infra-loop-` as a build-plan
-  setup item, so `infra-infra-loop-render-review` (a follow-up item, not a build-plan row) was asked
+  setup item, so `infra-loop-render-review` (a follow-up item, not a build-plan row) was asked
   for a `Setup row:` it cannot have, and every review record — including a correct one — failed
   before the render path was even reached. Fixed in the same PR: `is_setup_item` now names
   only the umbrella and the `infra-loop-prNN…` rows, so a follow-up item is ordinary while a
