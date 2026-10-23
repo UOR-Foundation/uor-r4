@@ -378,7 +378,9 @@ TEST FITNESS: FIT
         let appended_pending = format!("{COMPLETE}\nTEST FITNESS: PENDING\n");
         assert_eq!(test_fitness(&appended_pending), PENDING);
         assert_eq!(
-            test_fitness(&format!("{COMPLETE}\nProse after the verdict, no new line.\n")),
+            test_fitness(&format!(
+                "{COMPLETE}\nProse after the verdict, no new line.\n"
+            )),
             FIT,
             "an unrelated later line does not erase the verdict"
         );
