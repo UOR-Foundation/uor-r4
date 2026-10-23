@@ -43,7 +43,7 @@ Lab: antigravity. Order: [ORDER.md](ORDER.md).
 ## Skills used
 
 - [`uor-research-architect`](../../../../../.agents/skills/uor-research-architect/SKILL.md): used to wire `MemoryTurnGate` and real `StatementMargin` extraction into `SavedCompiler`, replace the panel-specific word list with general syntactic rules, and test all `79` `milestone_world_v2` generator templates directly.
-- [`solution-integrity`](/Users/casey.allard/.gemini/config/skills/solution-integrity/SKILL.md): used to verify that `SavedCompiler::action` exercises the real compiled code path and that all `79` generator templates in `milestone_world_v2.rs` are tested directly rather than via hand-copied proxies.
+- `solution-integrity`: used to verify that `SavedCompiler::action` exercises the real compiled code path and that all `79` generator templates in `milestone_world_v2.rs` are tested directly rather than via hand-copied proxies.
 
 ## Still open
 
