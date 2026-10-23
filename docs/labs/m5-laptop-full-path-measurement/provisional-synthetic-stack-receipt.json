@@ -7,6 +7,13 @@
     "path": "/Users/casey.allard/uor-r4/.worktrees/antigravity-m5-laptop-full-path-measurement/local/antigravity/target/release/uor-r4-stack",
     "sha256": "e59b7a822028c33799303a80da8efe7d8c943b5772ddbbe6efc61e9462c4bf83"
   },
+  "disassembly_audit": {
+    "instructions_checked": 6352,
+    "legacy_ratchet_note": "stack_exp_neg and stack_sigmoid_q31 are D11 sealed integer-table kernels tracked as legacy sites by the D23 ratchet; this disassembly check certifies zero hardware multiply/divide/float opcodes, not CHARTER §3.2 mechanism compliance",
+    "scope": "Transitive call graph from IntegerStackSession::step and stack::kernels::stack_argmax across all 43 mandatory uor_r4_integer::stack symbols, stack closure instantiations, and reachable non-formatting core/compiler_builtins callees",
+    "step_objdump_zero_mul_zero_float": true,
+    "symbols_checked": 82
+  },
   "bits_per_weight": 4.25,
   "cold_load": {
     "ms": 3.426458,

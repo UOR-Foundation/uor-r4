@@ -309,10 +309,17 @@ pub fn validate_protocol_v3_energy_receipt_with_mode(
 
     let top_num_runs = receipt
         .pointer("/num_runs")
+        .or_else(|| receipt.pointer("/throughput/trials"))
         .or_else(|| receipt.pointer("/serving/num_runs"))
         .or_else(|| receipt.pointer("/serving/energy/num_runs"))
         .and_then(Value::as_u64)
-        .map(|n| n as usize);
+        .map(|n| n as usize)
+        .or_else(|| {
+            receipt
+                .pointer("/serving/tokens_per_s/runs")
+                .and_then(Value::as_array)
+                .map(Vec::len)
+        });
     if let Some(n) = top_num_runs {
         if n < 2 {
             errors.push(ProtocolV3ValidationError::InvalidSampleCount {
@@ -361,7 +368,12 @@ pub fn validate_protocol_v3_energy_receipt_with_mode(
             } else if let (Some(sd), Some(n), Some(reported)) =
                 (reported_sd, block_n, reported_ci95)
             {
-                if n >= 2 {
+                if n < 2 {
+                    errors.push(ProtocolV3ValidationError::InvalidSampleCount {
+                        metric: name.to_string(),
+                        count: n,
+                    });
+                } else {
                     let expected_ci95 = student_t_0975(n - 1) * sd / (n as f64).sqrt();
                     let rel_err = (reported - expected_ci95).abs() / expected_ci95.max(1e-12);
                     if rel_err > 0.02 {
@@ -373,18 +385,28 @@ pub fn validate_protocol_v3_energy_receipt_with_mode(
                         });
                     }
                 }
+            } else if reported_ci95.is_some() {
+                // Never fall back to min/mean/max or to another metric, and never silently skip
+                // when `ci95` is reported without `samples` or `(sd, n >= 2)`.
+                errors.push(ProtocolV3ValidationError::InvalidSampleCount {
+                    metric: name.to_string(),
+                    count: block_n.unwrap_or(0),
+                });
             }
         }
     }
 
-    // Check `/serving/energy/net_j_per_tok/ci95`:
+    // Check `/serving/energy/net_j_per_tok/ci95` (legacy v2 schema):
     // 1. If `/serving/energy/net_j_per_tok/samples` is present, validate for any n >= 2.
     // 2. Else if `/serving/energy/net_j_per_tok/sd` and `num_runs >= 2` are present, validate
     //    `ci95 = t_{0.975, n-1} * sd / sqrt(n)` for any n >= 2.
-    // 3. Else ONLY when `num_runs == 3` (or `num_runs` is omitted in a 3-run v2 legacy receipt such
-    //    as `archive/ops/measurement_report_rnd.json`, where `gross_j_per_tok` records
-    //    `min = 0.003135, mean = 0.003172, max = 0.003199` J/tok and `net_j_per_tok` records
-    //    `mean = 0.00153, ci95 = 0.000037` J/tok), check the 3-run Student-t_{0.975, 2} CI95.
+    // 3. Else `/serving/energy/net_j_per_tok` omitted its own `samples` and `sd`, which is always
+    //    flagged via `InvalidSampleCount`; additionally, on a 3-run legacy v2 receipt such as
+    //    `archive/ops/measurement_report_rnd.json` where `gross_j_per_tok` records
+    //    `min = 0.003135, mean = 0.003172, max = 0.003199` J/tok (`n = 3`), reconstruct the exact
+    //    3 gross observations via the 3-element sum identity `x_2 = 3 * mean - min - max`
+    //    (`[3.135, 3.182, 3.199]` mJ) to diagnose the v2 normal-z (`1.96 * SE = 0.0375 mJ`) vs
+    //    Student-t_2 (`4.302653 * SE = 0.08235 mJ`) defect under constant-idle variance reuse.
     if let Some(net_ci95_j) = receipt
         .pointer("/serving/energy/net_j_per_tok/ci95")
         .and_then(Value::as_f64)
@@ -416,7 +438,12 @@ pub fn validate_protocol_v3_energy_receipt_with_mode(
                 .and_then(Value::as_f64),
             top_num_runs,
         ) {
-            if n >= 2 {
+            if n < 2 {
+                errors.push(ProtocolV3ValidationError::InvalidSampleCount {
+                    metric: "serving.energy.net_j_per_tok".to_string(),
+                    count: n,
+                });
+            } else {
                 let expected_t_ci95_j = student_t_0975(n - 1) * sd_j / (n as f64).sqrt();
                 let rel_err = (net_ci95_j - expected_t_ci95_j).abs() / expected_t_ci95_j.max(1e-12);
                 if rel_err > 0.02 {
@@ -428,47 +455,40 @@ pub fn validate_protocol_v3_energy_receipt_with_mode(
                     });
                 }
             }
-        } else if top_num_runs.unwrap_or(3) == 3 {
-            let legacy_3run = receipt
-                .pointer("/serving/energy/net_j_per_tok/min")
-                .and_then(Value::as_f64)
-                .zip(
-                    receipt
-                        .pointer("/serving/energy/net_j_per_tok/mean")
-                        .and_then(Value::as_f64),
-                )
-                .zip(
-                    receipt
-                        .pointer("/serving/energy/net_j_per_tok/max")
-                        .and_then(Value::as_f64),
-                )
-                .or_else(|| {
-                    receipt
-                        .pointer("/serving/energy/gross_j_per_tok/min")
-                        .and_then(Value::as_f64)
-                        .zip(
-                            receipt
-                                .pointer("/serving/energy/gross_j_per_tok/mean")
-                                .and_then(Value::as_f64),
-                        )
-                        .zip(
-                            receipt
-                                .pointer("/serving/energy/gross_j_per_tok/max")
-                                .and_then(Value::as_f64),
-                        )
-                });
-            if let Some(((min_j, mean_j), max_j)) = legacy_3run {
-                let samples_j = [min_j, mean_j, max_j];
-                if let Some((_m, _sd, expected_t_ci95_j)) = sample_mean_sd_t_ci95(&samples_j) {
-                    let rel_err =
-                        (net_ci95_j - expected_t_ci95_j).abs() / expected_t_ci95_j.max(1e-12);
-                    if rel_err > 0.02 {
-                        errors.push(ProtocolV3ValidationError::InvalidStudentTCi95 {
-                            metric: "serving.energy.net_j_per_tok".to_string(),
-                            reported_ci95: net_ci95_j * 1000.0,
-                            expected_t_ci95: expected_t_ci95_j * 1000.0,
-                            relative_error: rel_err,
-                        });
+        } else {
+            errors.push(ProtocolV3ValidationError::InvalidSampleCount {
+                metric: "serving.energy.net_j_per_tok".to_string(),
+                count: 0,
+            });
+            if top_num_runs == Some(3) {
+                if let Some(((min_j, mean_j), max_j)) = receipt
+                    .pointer("/serving/energy/gross_j_per_tok/min")
+                    .and_then(Value::as_f64)
+                    .zip(
+                        receipt
+                            .pointer("/serving/energy/gross_j_per_tok/mean")
+                            .and_then(Value::as_f64),
+                    )
+                    .zip(
+                        receipt
+                            .pointer("/serving/energy/gross_j_per_tok/max")
+                            .and_then(Value::as_f64),
+                    )
+                {
+                    let mid_j = 3.0 * mean_j - min_j - max_j;
+                    let exact_3run_j = [min_j, mid_j, max_j];
+                    if let Some((_m, _sd, expected_t_ci95_j)) = sample_mean_sd_t_ci95(&exact_3run_j)
+                    {
+                        let rel_err =
+                            (net_ci95_j - expected_t_ci95_j).abs() / expected_t_ci95_j.max(1e-12);
+                        if rel_err > 0.02 {
+                            errors.push(ProtocolV3ValidationError::InvalidStudentTCi95 {
+                                metric: "serving.energy.net_j_per_tok".to_string(),
+                                reported_ci95: net_ci95_j * 1000.0,
+                                expected_t_ci95: expected_t_ci95_j * 1000.0,
+                                relative_error: rel_err,
+                            });
+                        }
                     }
                 }
             }
@@ -508,8 +528,16 @@ pub fn validate_protocol_v3_energy_receipt_with_mode(
     errors
 }
 
-/// All 43 `uor_r4_integer::stack` kernel and mixer symbol suffixes in the `step` call graph
-/// (matching `STACK_MANDATORY_SYMBOLS` in `scripts/audit_zero_matmul_serving.py`).
+/// All 42 `#[inline(never)]` `uor_r4_integer::stack` kernel and mixer symbol suffixes in the
+/// `IntegerStackSession::step` call graph (matching `STACK_MANDATORY_SYMBOLS` in
+/// `scripts/audit_zero_matmul_serving.py`; together with `IntegerStackSession::step`, this forms
+/// the 43 mandatory stack serving symbols).
+///
+/// Note on D23 ratchet-tracked legacy kernels:
+/// `stack_exp_neg` and `stack_sigmoid_q31` are D11 sealed integer-table kernels tracked as legacy
+/// sites by the D23 ratchet baseline. Including them here verifies that their compiled machine code
+/// contains zero hardware multiply, divide, or floating-point instructions, not CHARTER §3.2
+/// mechanism compliance.
 const STACK_CALL_GRAPH_KERNELS: &[&str] = &[
     "stack_step",
     "stack_map_pairs",
@@ -517,7 +545,6 @@ const STACK_CALL_GRAPH_KERNELS: &[&str] = &[
     "stack_step_call",
     "stack_map_task",
     "stack_head_task",
-    "stack_row_task",
     "stack_heads",
     "stack_lanes",
     "stack_recurrence",
@@ -557,17 +584,44 @@ const STACK_CALL_GRAPH_KERNELS: &[&str] = &[
     "stack_snap_rotation",
 ];
 
-fn is_stack_serving_symbol(sym: &str) -> bool {
+fn is_step_root_symbol(sym: &str) -> bool {
+    if sym.contains("measure_step_phases") || sym.contains("closure") || sym.contains("drop_glue") {
+        return false;
+    }
+    (sym.contains("IntegerStackSession") && sym.ends_with("::step"))
+        || (sym.contains("19IntegerStackSession") && sym.ends_with("4step"))
+}
+
+fn matches_mandatory_stack_kernel(sym: &str, kernel: &str) -> bool {
+    if sym.contains("measure_step_phases")
+        || sym.contains("closure")
+        || sym.contains("drop_glue")
+        || sym.contains("from_iter")
+        || sym.contains("try_process")
+        || sym.contains("GenericShunt")
+    {
+        return false;
+    }
+    let in_stack_mod = sym.contains("stack::") || sym.contains("5stack");
+    if !in_stack_mod {
+        return false;
+    }
+    let demangled_exact = format!("::{kernel}");
+    let mangled_exact = format!("{}{kernel}", kernel.len());
+    sym.ends_with(&demangled_exact) || sym.ends_with(&mangled_exact)
+}
+
+fn is_stack_serving_or_closure_symbol(sym: &str) -> bool {
     if sym.contains("measure_step_phases") {
         return false;
     }
-    let is_step = (sym.contains("IntegerStackSession")
-        && (sym.ends_with("::step") || sym.contains("::step::")))
-        || (sym.contains("19IntegerStackSession") && sym.contains("4step"));
-    if is_step {
+    if is_step_root_symbol(sym) {
         return true;
     }
-    let in_stack_mod = sym.contains("stack::") || sym.contains("5stack");
+    let in_stack_mod = sym.contains("uor_r4_integer::stack")
+        || sym.contains("14uor_r4_integer5stack")
+        || sym.contains("stack::session::")
+        || sym.contains("stack::kernels::");
     if !in_stack_mod {
         return false;
     }
@@ -577,7 +631,7 @@ fn is_stack_serving_symbol(sym: &str) -> bool {
         let mangled_exact = format!("{}{kernel}", kernel.len());
         if sym.ends_with(&demangled_exact)
             || sym.contains(&demangled_closure)
-            || sym.ends_with(&mangled_exact)
+            || sym.contains(&mangled_exact)
         {
             return true;
         }
@@ -585,110 +639,586 @@ fn is_stack_serving_symbol(sym: &str) -> bool {
     false
 }
 
+/// Non-numerical formatting, panic, I/O, model-loading, and pure work-stealing scheduler symbols
+/// excluded from transitive call-graph descent (matching `allow_patterns` and
+/// `STACK_SCHEDULER_ALLOW` in `scripts/audit_zero_matmul_serving.py`).
+/// Note: any scheduler generic instantiated over `uor_r4_integer::stack` is NOT allowlisted and
+/// IS audited so inlined closure arithmetic cannot hide inside rayon/crossbeam.
+fn is_call_graph_allowlisted(sym: &str) -> bool {
+    const SCHEDULER_PATTERNS: &[&str] = &[
+        "rayon_core",
+        "crossbeam_deque",
+        "crossbeam_epoch",
+        "crossbeam_utils",
+    ];
+    let is_sched = SCHEDULER_PATTERNS.iter().any(|pat| sym.contains(pat));
+    let own_stack = sym.contains("uor_r4_integer::stack") || sym.contains("14uor_r4_integer5stack");
+    if is_sched && !own_stack {
+        return true;
+    }
+    const ALLOW_PATTERNS: &[&str] = &[
+        "alloc",
+        "free",
+        "realloc",
+        "core::fmt",
+        "4core3fmt",
+        "panic",
+        "fmt::Display",
+        "fmt::Debug",
+        "7Display",
+        "5Debug",
+        "unwind",
+        "rust_begin_unwind",
+        "std::io",
+        "3std2io",
+        "std::panicking",
+        "9panicking",
+        "Bundle",
+        "Tokenizer",
+        "tokenizer",
+        "uor_r4_tokenizer",
+        "core::str",
+        "4core3str",
+        "load",
+        "from_file",
+        "from_serialized",
+        "dyld_stub_binder",
+    ];
+    ALLOW_PATTERNS.iter().any(|pat| sym.contains(pat))
+}
+
+/// True when a column or token sequence represents raw instruction encoding bytes in `objdump -d`:
+/// either a single 8-hex-digit 32-bit word (AArch64 `d102c3ff`) or 1..=15 space-separated
+/// 2-hex-digit bytes (x86-64 `48 89 e5`). Never matches any instruction mnemonic such as `fadd`
+/// (4 chars), `fabd` (4 chars), `fcadd` (5 chars), or `add` (3 chars).
+fn is_raw_encoding_column(col: &str) -> bool {
+    let col = col.trim();
+    if col.is_empty() {
+        return false;
+    }
+    if col.len() == 8 && col.chars().all(|c| c.is_ascii_hexdigit()) {
+        return true;
+    }
+    let mut count = 0usize;
+    for tok in col.split_whitespace() {
+        if tok.len() != 2 || !tok.chars().all(|c| c.is_ascii_hexdigit()) {
+            return false;
+        }
+        count += 1;
+    }
+    (1..=15).contains(&count)
+}
+
+/// Extract `(mnemonic, operands)` from a disassembled instruction line by column position after
+/// the hex address and optional raw encoding bytes (never filtering mnemonics by hex characters,
+/// so all-hex mnemonics such as `fadd`, `fabd`, `fcadd`, `add`, and `b` are preserved).
+fn extract_mnemonic_and_operands(line: &str) -> Option<(String, String)> {
+    let mut ws = line.split_whitespace();
+    let first_tok = ws.next()?;
+    let addr_clean = first_tok.trim_end_matches(':');
+    if addr_clean.is_empty() || !addr_clean.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+
+    if line.contains('\t') {
+        let cols: Vec<&str> = line
+            .split('\t')
+            .map(str::trim)
+            .filter(|c| !c.is_empty())
+            .collect();
+        if cols.len() < 2 {
+            return None;
+        }
+        // In `llvm-objdump` (`100000888: d102c3ff\tsub\tsp, sp, #0xb0`) and `otool -tV`
+        // (`0000000100000888\tsub\tsp, sp, #0xb0`), `cols[0]` does not end with `:` (or when
+        // `--no-show-raw-insn` is used, `cols[1]` is not a raw encoding column), so `cols[1]` is
+        // the mnemonic column. In GNU `objdump` or tab-separated lines with a separate encoding
+        // column (`100001000:\t1e612800\tfadd\td0, d0, d1`), `cols[0]` ends with `:` and `cols[1]`
+        // is an 8-hex-digit 32-bit word or 2-hex-digit byte sequence, so `cols[2]` is the mnemonic.
+        let mnemonic_col_idx =
+            if cols[0].ends_with(':') && cols.len() >= 3 && is_raw_encoding_column(cols[1]) {
+                2
+            } else {
+                1
+            };
+        let col = cols.get(mnemonic_col_idx)?;
+        let mut col_ws = col.split_whitespace();
+        let mnemonic = col_ws.next()?.to_ascii_lowercase();
+        let mut operands: Vec<&str> = col_ws.collect();
+        for &extra_col in &cols[mnemonic_col_idx + 1..] {
+            operands.push(extra_col);
+        }
+        Some((mnemonic, operands.join(" ")))
+    } else {
+        let rest: Vec<&str> = ws.collect();
+        if rest.is_empty() {
+            return None;
+        }
+        let mut idx = 0usize;
+        if rest[0].len() == 8 && rest[0].chars().all(|c| c.is_ascii_hexdigit()) {
+            idx = 1;
+        } else {
+            while idx < rest.len()
+                && rest[idx].len() == 2
+                && rest[idx].chars().all(|c| c.is_ascii_hexdigit())
+            {
+                idx += 1;
+            }
+        }
+        let mnemonic = rest.get(idx)?.to_ascii_lowercase();
+        let operands = rest[idx + 1..].join(" ");
+        Some((mnemonic, operands))
+    }
+}
+
+/// Extract a direct call or branch target symbol name from an instruction's `(mnemonic, operands)`
+/// across `objdump --demangle -d` (`bl 0x1000008cc <sym>`) and `otool -tvV` (`bl _sym`).
+fn extract_call_target(mnemonic: &str, operands: &str, current_sym: &str) -> Option<String> {
+    let base = mnemonic.split('.').next().unwrap_or(mnemonic);
+    if !matches!(base, "bl" | "b" | "call" | "callq" | "jmp" | "jmpq") {
+        return None;
+    }
+    if let (Some(start), true) = (operands.find('<'), operands.ends_with('>')) {
+        let mut target = &operands[start + 1..operands.len() - 1];
+        if let Some(plus_idx) = target.rfind("+0x") {
+            target = &target[..plus_idx];
+        }
+        if target != current_sym && !target.is_empty() {
+            return Some(target.to_string());
+        }
+        return None;
+    }
+    // `otool -tvV` format: `bl _symbol` or `bl 0x10018de34 ; symbol stub for: _memcpy`
+    let first_op = operands
+        .split(';')
+        .next()
+        .unwrap_or(operands)
+        .split_whitespace()
+        .next()?;
+    if !first_op.starts_with("0x")
+        && !first_op.chars().all(|c| c.is_ascii_hexdigit())
+        && first_op != current_sym
+    {
+        return Some(first_op.to_string());
+    }
+    None
+}
+
+fn is_s_float_register_token(tok: &str) -> bool {
+    let clean = tok.trim_matches(|c: char| !c.is_ascii_alphanumeric());
+    if let Some(num_str) = clean.strip_prefix('s').or_else(|| clean.strip_prefix('S')) {
+        if let Ok(reg_num) = num_str.parse::<u32>() {
+            return reg_num <= 31;
+        }
+    }
+    false
+}
+
+/// Check whether `(mnemonic, operands)` is a forbidden Class I (hardware or compiler-rt multiply),
+/// Class II (hardware or compiler-rt divide), or Class III (floating-point / SIMD float transfer)
+/// instruction on AArch64 or x86-64.
+fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
+    const FORBIDDEN_MNEMONICS: &[&str] = &[
+        // AArch64 Class I: hardware multipliers
+        "mul",
+        "madd",
+        "msub",
+        "mneg",
+        "smnegl",
+        "umnegl",
+        "smull",
+        "umull",
+        "smaddl",
+        "umaddl",
+        "smsubl",
+        "umsubl",
+        "smulh",
+        "umulh",
+        "sqdmulh",
+        "sqrdmulh",
+        "mla",
+        "mls",
+        "pmul",
+        "pmull",
+        "pmull2",
+        "sdot",
+        "udot",
+        "usdot",
+        "sudot",
+        "smlal",
+        "smlsl",
+        "umlal",
+        "umlsl",
+        "smull2",
+        "umull2",
+        "smlal2",
+        "smlsl2",
+        "umlal2",
+        "umlsl2",
+        "sqdmull",
+        "sqdmull2",
+        "sqdmlal",
+        "sqdmlal2",
+        "sqdmlsl",
+        "sqdmlsl2",
+        "smmla",
+        "ummla",
+        "usmmla",
+        // AArch64 Class II: hardware dividers
+        "sdiv",
+        "udiv",
+        // AArch64 Class III: floating-point & scalar float register transfer
+        "fmul",
+        "fmov",
+        "fadd",
+        "fsub",
+        "fdiv",
+        "fmadd",
+        "fmsub",
+        "fnmadd",
+        "fnmsub",
+        "fnmul",
+        "fsqrt",
+        "fcmp",
+        "fcmpe",
+        "scvtf",
+        "ucvtf",
+        "fneg",
+        "fabs",
+        "fmla",
+        "fmls",
+        "fmax",
+        "fmin",
+        "fmaxnm",
+        "fminnm",
+        "fmaxp",
+        "fminp",
+        "fmaxnmp",
+        "fminnmp",
+        "fmaxv",
+        "fminv",
+        "fmaxnmv",
+        "fminnmv",
+        "fmulx",
+        "fabd",
+        "faddp",
+        "facge",
+        "facgt",
+        "fcmeq",
+        "fcmge",
+        "fcmgt",
+        "fcmle",
+        "fcmlt",
+        "fcsel",
+        "fccmp",
+        "fccmpe",
+        "frecpe",
+        "frecps",
+        "frecpx",
+        "frsqrte",
+        "frsqrts",
+        "fcmla",
+        "fcadd",
+        "fdot",
+        "fmlal",
+        "fmlsl",
+        "fmmla",
+        "bfdot",
+        "bfmmla",
+        "bfmlal",
+        "bfmlalb",
+        "bfmlalt",
+        // x86-64 integer multipliers & dividers
+        "imul",
+        "imulb",
+        "imulw",
+        "imull",
+        "imulq",
+        "mulb",
+        "mulw",
+        "mull",
+        "mulq",
+        "mulx",
+        "idiv",
+        "idivb",
+        "idivw",
+        "idivl",
+        "idivq",
+        "div",
+        "divb",
+        "divw",
+        "divl",
+        "divq",
+        // x86-64 SSE/AVX float & packed integer multipliers
+        "mulss",
+        "mulsd",
+        "mulps",
+        "mulpd",
+        "vmulss",
+        "vmulsd",
+        "vmulps",
+        "vmulpd",
+        "addss",
+        "addsd",
+        "addps",
+        "addpd",
+        "vaddss",
+        "vaddsd",
+        "vaddps",
+        "vaddpd",
+        "subss",
+        "subsd",
+        "subps",
+        "subpd",
+        "vsubss",
+        "vsubsd",
+        "vsubps",
+        "vsubpd",
+        "divss",
+        "divsd",
+        "divps",
+        "divpd",
+        "vdivss",
+        "vdivsd",
+        "vdivps",
+        "vdivpd",
+        "cvtsi2ss",
+        "cvtsi2sd",
+        "cvtsi2ssl",
+        "cvtsi2ssq",
+        "cvtsi2sdl",
+        "cvtsi2sdq",
+        "cvttss2si",
+        "cvttsd2si",
+        "cvtss2si",
+        "cvtsd2si",
+        "cvtss2sd",
+        "cvtsd2ss",
+        "vcvtsi2ss",
+        "vcvtsi2sd",
+        "vcvttss2si",
+        "vcvttsd2si",
+        "pmulld",
+        "pmuludq",
+        "pmaddwd",
+        "pmullw",
+        "pmulhw",
+        "pmulhuw",
+        "pmuldq",
+        "pmaddubsw",
+        "vpmulld",
+        "vpmuludq",
+        "vpmaddwd",
+        "vpmullw",
+        "vpmulhw",
+        "vpmulhuw",
+        "vpmuldq",
+        "vpmaddubsw",
+    ];
+
+    let base = mnemonic.split('.').next().unwrap_or(mnemonic);
+    if FORBIDDEN_MNEMONICS.contains(&base) {
+        return true;
+    }
+    if base.starts_with("fcvt")
+        || base.starts_with("frint")
+        || base.starts_with("vfmadd")
+        || base.starts_with("vfmsub")
+        || base.starts_with("vfnmadd")
+        || base.starts_with("vfnmsub")
+    {
+        return true;
+    }
+    if (base.starts_with('f') || base.starts_with("bf")) && mnemonic.contains('.') {
+        return true;
+    }
+    // Check 32-bit scalar float (`s0..s31`) loads/stores. (Note: on AArch64 NEON, 64-bit 2x`i32`
+    // integer SIMD instructions such as `sqadd.2s v0, v0, v1` in `stack_step` use the `d0..d31`
+    // 64-bit register alias for 64-bit integer vector loads/stores, matching
+    // `scripts/audit_zero_matmul_serving.py`.)
+    if matches!(base, "ldr" | "str" | "ldur" | "stur" | "ldp" | "stp") {
+        let code_operands = operands.split(';').next().unwrap_or(operands);
+        if code_operands
+            .split(|c: char| c == ',' || c.is_whitespace())
+            .any(is_s_float_register_token)
+        {
+            return true;
+        }
+    }
+    // Direct calls to compiler-rt / libgcc software multiply, divide, or float helpers.
+    if matches!(base, "bl" | "b" | "call" | "callq" | "jmp" | "jmpq") {
+        const FORBIDDEN_COMPILER_RT: &[&str] = &[
+            "__multi3",
+            "__muldi3",
+            "__mulodi4",
+            "__udivti3",
+            "__divti3",
+            "__umodti3",
+            "__modti3",
+            "__udivdi3",
+            "__divdi3",
+            "__floatditf",
+            "__floatunditf",
+            "__floattidf",
+            "__floatuntidf",
+            "__addtf3",
+            "__subtf3",
+            "__multf3",
+            "__divtf3",
+        ];
+        if FORBIDDEN_COMPILER_RT.iter().any(|rt| operands.contains(rt)) {
+            return true;
+        }
+    }
+    false
+}
+
 /// Verify that disassembled text from `objdump --demangle -d` or `otool -tV` contains
-/// `IntegerStackSession::step` and its `uor_r4_integer::stack` mixer and kernel callees
-/// (`stack_step`, `stack_recurrence`, `stack_read`, `stack_gemv_pairs`, `stack_rms_norm`,
-/// `stack_dot`, `stack_mix_row`, etc., plus their closures) with zero Class I (multiply),
-/// Class II (divide), or Class III (floating-point / SIMD transfer) instructions.
+/// `IntegerStackSession::step`, its 42 mandatory `uor_r4_integer::stack` mixer and kernel callees,
+/// all `uor_r4_integer::stack` closure instantiations, and all non-allowlisted functions reachable
+/// in the transitive call graph (`core`, `alloc`, `compiler_builtins`, `uor_r4_integer`) with zero
+/// Class I (multiply), Class II (divide), or Class III (floating-point / SIMD transfer) instructions.
 ///
-/// When `require_full_call_graph` is true, requires `IntegerStackSession::step`, `stack_step`,
-/// and at least 20 emitted stack serving symbols across `stack::session` and `stack::kernels`.
+/// When `require_full_call_graph` is true, requires all 43 mandatory symbols
+/// (`IntegerStackSession::step` + all 42 `STACK_CALL_GRAPH_KERNELS`) with zero missing symbols.
 pub fn verify_step_disassembly_text(
     disasm_text: &str,
     require_full_call_graph: bool,
 ) -> Result<(usize, usize), String> {
-    const FORBIDDEN_MNEMONICS: &[&str] = &[
-        "mul", "madd", "msub", "mneg", "smull", "umull", "smaddl", "umaddl", "smsubl", "umsubl",
-        "smulh", "umulh", "sqdmulh", "sqrdmulh", "mla", "mls", "pmul", "pmull", "sdot", "udot",
-        "sdiv", "udiv", "imul", "idiv", "fmul", "fmov", "fadd", "fsub", "fdiv", "fmadd", "fmsub",
-        "fnmadd", "fnmsub", "fnmul", "fsqrt", "fcmp", "fcmpe", "scvtf", "ucvtf", "fneg", "fabs",
-        "fmla", "fmls", "fmax", "fmin", "fcsel", "vfmadd", "vmulss", "vmulsd", "vaddps", "vmulps",
-    ];
+    use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-    let mut current_target_sym: Option<String> = None;
-    let mut symbols_checked = 0usize;
-    let mut saw_step = false;
-    let mut saw_stack_step = false;
-    let mut instructions_checked = 0usize;
-    let mut violations = Vec::new();
+    let mut functions: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut current_sym: Option<String> = None;
 
     for raw_line in disasm_text.lines() {
         let line = raw_line.trim();
         if line.ends_with(">:") {
             if let Some(start) = line.find('<') {
-                let sym = &line[start + 1..line.len() - 2];
-                if is_stack_serving_symbol(sym) {
-                    if sym.contains("IntegerStackSession") && sym.ends_with("::step") {
-                        saw_step = true;
-                    }
-                    if sym.ends_with("::stack_step") {
-                        saw_stack_step = true;
-                    }
-                    current_target_sym = Some(sym.to_string());
-                    symbols_checked += 1;
-                } else {
-                    current_target_sym = None;
-                }
+                let sym = line[start + 1..line.len() - 2].to_string();
+                functions.entry(sym.clone()).or_default();
+                current_sym = Some(sym);
                 continue;
             }
         } else if line.ends_with(':') && !line.contains('\t') && !line.contains(' ') {
-            let sym = &line[..line.len() - 1];
-            if is_stack_serving_symbol(sym) {
-                if sym.contains("19IntegerStackSession") && sym.ends_with("4step") {
-                    saw_step = true;
-                }
-                if sym.ends_with("10stack_step") {
-                    saw_stack_step = true;
-                }
-                current_target_sym = Some(sym.to_string());
-                symbols_checked += 1;
-            } else {
-                current_target_sym = None;
-            }
+            let sym = line[..line.len() - 1].to_string();
+            functions.entry(sym.clone()).or_default();
+            current_sym = Some(sym);
             continue;
         }
 
-        if let Some(ref sym) = current_target_sym {
-            let mut ws = line.split_whitespace();
-            let Some(first_tok) = ws.next() else {
-                continue;
-            };
-            let addr_clean = first_tok.trim_end_matches(':');
-            if addr_clean.is_empty() || !addr_clean.chars().all(|c| c.is_ascii_hexdigit()) {
-                continue;
-            }
-            let mnemonic_opt = if line.contains('\t') {
-                line.split('\t')
-                    .skip(1)
-                    .filter_map(|col| col.split_whitespace().next())
-                    .find(|tok| !tok.chars().all(|c| c.is_ascii_hexdigit()))
-            } else {
-                ws.find(|tok| !tok.chars().all(|c| c.is_ascii_hexdigit()))
-            };
-            if let Some(raw_mnemonic) = mnemonic_opt {
-                let token = raw_mnemonic.to_ascii_lowercase();
-                instructions_checked += 1;
-                let base_mnemonic = token.split('.').next().unwrap_or(&token);
-                if FORBIDDEN_MNEMONICS.contains(&base_mnemonic) {
-                    violations.push(format!("{sym}: {token} in `{line}`"));
+        if let Some(ref sym) = current_sym {
+            if extract_mnemonic_and_operands(line).is_some() {
+                if let Some(lines) = functions.get_mut(sym) {
+                    lines.push(line.to_string());
                 }
             }
         }
     }
 
-    if !saw_step || symbols_checked == 0 || instructions_checked == 0 {
+    let step_syms: Vec<String> = functions
+        .keys()
+        .filter(|s| is_step_root_symbol(s))
+        .cloned()
+        .collect();
+    if step_syms.is_empty() {
+        return Err("IntegerStackSession::step root symbol not found in disassembly".to_string());
+    }
+
+    let mut missing_mandatory = Vec::new();
+    let mut audited_set: BTreeSet<String> = BTreeSet::new();
+    let mut queue: VecDeque<String> = VecDeque::new();
+
+    for s in &step_syms {
+        if audited_set.insert(s.clone()) {
+            queue.push_back(s.clone());
+        }
+    }
+
+    for &kernel in STACK_CALL_GRAPH_KERNELS {
+        let matched: Vec<String> = functions
+            .keys()
+            .filter(|s| matches_mandatory_stack_kernel(s, kernel))
+            .cloned()
+            .collect();
+        if matched.is_empty() {
+            if require_full_call_graph {
+                missing_mandatory.push(kernel);
+            }
+        } else {
+            for m in matched {
+                if audited_set.insert(m.clone()) {
+                    queue.push_back(m);
+                }
+            }
+        }
+    }
+
+    if !missing_mandatory.is_empty() {
         return Err(format!(
-            "IntegerStackSession::step symbol or instructions not found in disassembly (saw_step={saw_step}, symbols={symbols_checked}, instructions={instructions_checked})"
+            "missing {} mandatory stack serving symbol(s) in full call-graph disassembly: {}",
+            missing_mandatory.len(),
+            missing_mandatory.join(", ")
         ));
     }
-    if require_full_call_graph && (!saw_stack_step || symbols_checked < 20) {
+
+    // Include every `uor_r4_integer::stack` closure or rayon/crossbeam scheduler instantiation over
+    // a stack closure present in the binary (matching `audit_zero_matmul_serving.py`).
+    for sym in functions.keys() {
+        if is_stack_serving_or_closure_symbol(sym)
+            || (!sym.contains("measure_step_phases")
+                && (sym.contains("uor_r4_integer::stack::session::stack_")
+                    || sym.contains("uor_r4_integer::stack::kernels::stack_")
+                    || sym.contains("14uor_r4_integer5stack7session")
+                    || sym.contains("14uor_r4_integer5stack7kernels")))
+        {
+            if audited_set.insert(sym.clone()) {
+                queue.push_back(sym.clone());
+            }
+        }
+    }
+
+    // Walk the transitive call graph (BFS) across all non-allowlisted reachable callees in the binary.
+    while let Some(curr) = queue.pop_front() {
+        if let Some(lines) = functions.get(&curr) {
+            for line in lines {
+                if let Some((mnemonic, operands)) = extract_mnemonic_and_operands(line) {
+                    if let Some(callee) = extract_call_target(&mnemonic, &operands, &curr) {
+                        if functions.contains_key(&callee)
+                            && !is_call_graph_allowlisted(&callee)
+                            && audited_set.insert(callee.clone())
+                        {
+                            queue.push_back(callee);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut instructions_checked = 0usize;
+    let mut violations = Vec::new();
+    for sym in &audited_set {
+        if let Some(lines) = functions.get(sym) {
+            for line in lines {
+                if let Some((mnemonic, operands)) = extract_mnemonic_and_operands(line) {
+                    instructions_checked += 1;
+                    if is_forbidden_instruction(&mnemonic, &operands) {
+                        violations.push(format!("{sym}: {mnemonic} in `{line}`"));
+                    }
+                }
+            }
+        }
+    }
+
+    let symbols_checked = audited_set.len();
+    if symbols_checked == 0 || instructions_checked == 0 {
         return Err(format!(
-            "expected IntegerStackSession::step, stack_step, and >=20 stack kernel/mixer symbols in full call-graph disassembly, found symbols={symbols_checked} (saw_stack_step={saw_stack_step})"
+            "no instructions checked in IntegerStackSession::step call graph (symbols={symbols_checked}, instructions={instructions_checked})"
         ));
     }
     if !violations.is_empty() {
         return Err(format!(
-            "forbidden multiply/divide/float instructions in stack serving disassembly: {}",
+            "forbidden multiply/divide/float instructions in stack serving call-graph disassembly: {}",
             violations.join("; ")
         ));
     }
@@ -696,8 +1226,9 @@ pub fn verify_step_disassembly_text(
 }
 
 /// Run `objdump --demangle -d` (falling back to `otool -tV`) on `binary_path` and verify that
-/// `IntegerStackSession::step`, `stack_step`, and all emitted `uor_r4_integer::stack` mixer and
-/// kernel symbols contain zero multiply, divide, or floating-point instructions.
+/// `IntegerStackSession::step`, all 42 mandatory `uor_r4_integer::stack` mixer and kernel symbols,
+/// all stack closure instantiations, and all reachable non-allowlisted callees in the transitive
+/// call graph contain zero multiply, divide, or floating-point instructions.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn verify_step_objdump_zero_mul_zero_float(
     binary_path: &Path,

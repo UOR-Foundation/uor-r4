@@ -589,6 +589,8 @@ fn cost(args: &[String]) -> Result<(), CliError> {
     // 0. If an external energy receipt is supplied via `--energy-receipt`, validate it against
     // Protocol v3 (`work_rate_w == gross_j_per_tok * tokens_per_s`, Student-t CI95, required v3
     // fields, and in strict mode `work_rate_w > idle_rate_w` and empty `external_inference_daemons_detected`).
+    // In strict qualification mode (`!allow_provisional`), `--energy-receipt` is required so the
+    // physical work-rate identity `W = (J/tok) * (tok/s)` is always verified.
     let validated_energy_receipt = if let Some(ref receipt_path) = energy_receipt_path {
         let receipt_bytes = std::fs::read(receipt_path)?;
         let receipt_json: serde_json::Value = serde_json::from_slice(&receipt_bytes)?;
@@ -600,6 +602,10 @@ fn cost(args: &[String]) -> Result<(), CliError> {
             )));
         }
         Some(receipt_json)
+    } else if !allow_provisional {
+        return Err(CliError::Usage(
+            "refusing strict M5 cost qualification without --energy-receipt <PATH> to verify W = (J/tok) * (tok/s) (pass --allow-provisional for latency/memory-only rehearsal)".to_owned(),
+        ));
     } else {
         None
     };
@@ -808,15 +814,9 @@ fn cost(args: &[String]) -> Result<(), CliError> {
     let measured_total_denom_us = phased_total_mean_us.max(phase_sum_mean_us);
     let unaccounted_overhead_us = (phased_total_mean_us - phase_sum_mean_us).max(0.0);
 
-    // Always verify the internal step-latency / throughput identity (`step_implied_tok_s * mean_s == 1.0`).
     let mean_s = (mean_us / 1_000_000.0).max(1e-12);
     let step_implied_tokens_per_second = 1.0 / mean_s;
-    let work_rate_identity_rel_err = ((step_implied_tokens_per_second * mean_s) - 1.0).abs();
-    if work_rate_identity_rel_err > 1e-6 {
-        return Err(CliError::Usage(format!(
-            "internal step-latency / throughput identity failed: rel_err={work_rate_identity_rel_err}"
-        )));
-    }
+    let work_rate_identity_verified = validated_energy_receipt.is_some();
 
     let load_avg_after = sysctl_loadavg();
 
@@ -862,7 +862,8 @@ fn cost(args: &[String]) -> Result<(), CliError> {
         },
         "disassembly_audit": {
             "step_objdump_zero_mul_zero_float": true,
-            "scope": "IntegerStackSession::step + stack::session::stack_* + stack::kernels::stack_* call graph",
+            "scope": "Transitive call graph from IntegerStackSession::step and stack::kernels::stack_argmax across all 43 mandatory uor_r4_integer::stack symbols, stack closure instantiations, and reachable non-formatting core/compiler_builtins callees",
+            "legacy_ratchet_note": "stack_exp_neg and stack_sigmoid_q31 are D11 sealed integer-table kernels tracked as legacy sites by the D23 ratchet; this disassembly check certifies zero hardware multiply/divide/float opcodes, not CHARTER §3.2 mechanism compliance",
             "symbols_checked": disasm_symbols_checked,
             "instructions_checked": disasm_instructions_checked,
         },
@@ -936,7 +937,7 @@ fn cost(args: &[String]) -> Result<(), CliError> {
             "max_ms": step_us[step_us.len() - 1] / 1000.0,
             "tokens_per_second": input_driven_forward_throughput,
             "step_implied_tokens_per_second": step_implied_tokens_per_second,
-            "work_rate_identity_verified": true,
+            "work_rate_identity_verified": work_rate_identity_verified,
             "input_driven_forward_throughput_tokens_per_second": input_driven_forward_throughput,
             "throughput_mode": format!(
                 "input-driven teacher-forced stepping over dataset tokens (1 thread, {} steps across {} windows of context {}), not free-running autoregressive generation",

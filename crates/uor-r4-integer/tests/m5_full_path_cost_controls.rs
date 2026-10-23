@@ -51,9 +51,19 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
     assert!((implied_w - 54.526_68).abs() < 1e-4);
     assert!(rel_w > 0.25, "relative error should be ~25.7%, got {rel_w}");
 
-    // 2. Verify Defect 2 (normal z = 1.96 CI95 = 0.037 mJ instead of Student-t_{0.975, 2} = 4.302653 CI95 = 0.079815 mJ
-    // reconstructed from the 3-run gross_j_per_tok min/mean/max [3.135, 3.172, 3.199] mJ, since net_j_per_tok in
-    // measurement_report_rnd.json only records {"mean": 0.00153, "ci95": 0.000037} J with no min/max) is caught.
+    // 2. Verify Defect 2: `net_j_per_tok` in `archive/ops/measurement_report_rnd.json` omits `samples`
+    // and `sd` (`InvalidSampleCount`), AND its reported `ci95 = 0.037 mJ` was computed with normal
+    // `z = 1.96` (`1.96 * 0.01914 mJ = 0.03751 mJ`) instead of Student's `t_{0.975, 2} = 4.302653`
+    // (`4.302653 * 0.01914 mJ = 0.082352 mJ`) on the 3 gross observations reconstructed via the
+    // exact 3-element sum identity `x_2 = 3 * mean - min - max = 3.182 mJ` (`[3.135, 3.182, 3.199] mJ`).
+    assert!(
+        errors.iter().any(|e| matches!(
+            e,
+            ProtocolV3ValidationError::InvalidSampleCount { metric, count: 0 }
+                if metric == "serving.energy.net_j_per_tok"
+        )),
+        "validator must flag missing net samples/sd on net_j_per_tok, got {errors:?}"
+    );
     let gross_ci_err = errors.iter().find_map(|e| match e {
         ProtocolV3ValidationError::InvalidStudentTCi95 {
             metric,
@@ -68,10 +78,10 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
     let (reported_ci, expected_ci, rel_ci) =
         gross_ci_err.expect("validator must catch z-based ci95 on n=3 samples");
     assert!((reported_ci - 0.037).abs() < 1e-6);
-    assert!((expected_ci - 0.079_815).abs() < 1e-4);
+    assert!((expected_ci - 0.082_352).abs() < 1e-4);
     assert!(
         rel_ci > 0.50,
-        "z vs t_2 error should be ~53.6%, got {rel_ci}"
+        "z vs t_2 error should be ~55.1%, got {rel_ci}"
     );
 
     // 3. Verify that a synthetic 3-run compliant Protocol v3 receipt passes strict validation with zero errors.
@@ -193,8 +203,30 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
         "validator must reject n=1 sample count with InvalidSampleCount, got {one_run_errors:?}"
     );
 
-    // 3c. Cancel probe: injecting `mul x0, x1, x2` into `stack::kernels::stack_gemv_pairs`
-    // in disassembly text must fail `verify_step_disassembly_text`.
+    // Verify that a receipt reporting `ci95` with n != 3 (`trials = 5`) and NO `samples` or `sd`
+    // is never silently skipped and fails with `InvalidSampleCount`.
+    let mut missing_samples_and_sd = valid_five_run.clone();
+    missing_samples_and_sd["energy_per_token"]["net_mj_per_tok"] = serde_json::json!({
+        "min": 3.10,
+        "mean": five_mean,
+        "max": 3.35,
+        "ci95": five_ci95,
+    });
+    let missing_sd_errors = validate_protocol_v3_energy_receipt(&missing_samples_and_sd);
+    assert!(
+        missing_sd_errors.iter().any(|e| matches!(
+            e,
+            ProtocolV3ValidationError::InvalidSampleCount { metric, count: 5 }
+                if metric == "net_mj_per_tok"
+        )),
+        "validator must reject ci95 without samples or sd on n=5, got {missing_sd_errors:?}"
+    );
+
+    // 3c. Cancel probes: planted `fadd` (all-hex mnemonic in GNU objdump, llvm-objdump, and otool
+    // formats), `mul` in `stack_gemv_pairs`, `fmul`, extended opcodes (`fcvtzs`, `frintn`, `smnegl`,
+    // `ldr s0`, `divq`, `mulx`, `mulsd`, `addsd`, `cvtsi2sd`, `pmulld`, `vmulpd`), reachable
+    // non-`stack::` callees (`core::num::helper_div`, `__multi3`), and missing mandatory symbols
+    // when `require_full_call_graph == true`.
     let clean_disasm = concat!(
         "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n",
         "100001000:\t910003fd\tadd\tx29, sp, #0\n",
@@ -205,6 +237,35 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
         verify_step_disassembly_text(clean_disasm, false).expect("clean disasm must pass"),
         (2, 2)
     );
+    let err_missing = verify_step_disassembly_text(clean_disasm, true)
+        .expect_err("require_full_call_graph must reject missing mandatory stack symbols");
+    assert!(
+        err_missing.contains("missing") && err_missing.contains("stack_step"),
+        "missing-mandatory error must name missing symbols, got: {err_missing}"
+    );
+
+    let poisoned_fadd_gnu = concat!(
+        "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n",
+        "100001000:\t1e612800\tfadd\td0, d0, d1\n",
+    );
+    let err_fadd_gnu = verify_step_disassembly_text(poisoned_fadd_gnu, false)
+        .expect_err("all-hex mnemonic fadd (GNU objdump format) must fail disassembly check");
+    assert!(
+        err_fadd_gnu.contains("fadd"),
+        "error must identify fadd, got: {err_fadd_gnu}"
+    );
+
+    let poisoned_fadd_llvm = concat!(
+        "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n",
+        "100001000: 1e612800    \tfadd\td0, d0, d1\n",
+    );
+    let err_fadd_llvm = verify_step_disassembly_text(poisoned_fadd_llvm, false)
+        .expect_err("all-hex mnemonic fadd (llvm-objdump format) must fail disassembly check");
+    assert!(
+        err_fadd_llvm.contains("fadd"),
+        "error must identify fadd, got: {err_fadd_llvm}"
+    );
+
     let poisoned_kernel_disasm = concat!(
         "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n",
         "100001000:\t910003fd\tadd\tx29, sp, #0\n",
@@ -217,6 +278,45 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
         err.contains("stack_gemv_pairs") && err.contains("mul"),
         "error must identify symbol and instruction, got: {err}"
     );
+
+    // Transitive call-graph reachability into a non-`stack::` callee (`core::num::helper_div`
+    // and compiler-rt `__multi3`).
+    let poisoned_callee_disasm = concat!(
+        "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n",
+        "100001000: 94000400 \tbl\t0x100002000 <core::num::helper_div>\n",
+        "0000000100002000 <core::num::helper_div>:\n",
+        "100002000: 9ac20820 \tudiv\tx0, x1, x2\n",
+    );
+    let err_callee = verify_step_disassembly_text(poisoned_callee_disasm, false).expect_err(
+        "udiv inside reachable non-stack callee must fail call-graph disassembly check",
+    );
+    assert!(
+        err_callee.contains("core::num::helper_div") && err_callee.contains("udiv"),
+        "error must identify reachable callee and udiv, got: {err_callee}"
+    );
+
+    for bad_instr in [
+        "100001000: 9e780000 \tfcvtzs\tx0, d0",
+        "100001000: 1e644000 \tfrintn\td0, d0",
+        "100001000: 9b22fc20 \tsmnegl\tx0, w1, w2",
+        "100001000: bd400000 \tldr\ts0, [x0]",
+        "100001000: 48 f7 f1 \tdivq\t%rcx",
+        "100001000: c4 e2 e3 f6 c1 \tmulx\t%rcx, %rbx, %rax",
+        "100001000: f2 0f 59 c1 \tmulsd\t%xmm1, %xmm0",
+        "100001000: f2 0f 58 c1 \taddsd\t%xmm1, %xmm0",
+        "100001000: f2 48 0f 2a c0 \tcvtsi2sd\t%rax, %xmm0",
+        "100001000: 66 0f 38 40 c1 \tpmulld\t%xmm1, %xmm0",
+        "100001000: c5 f9 59 c1 \tvmulpd\t%xmm1, %xmm0, %xmm0",
+        "100001000: 94000400 \tbl\t0x100002000 <__multi3>",
+    ] {
+        let snippet = format!(
+            "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n{bad_instr}\n"
+        );
+        assert!(
+            verify_step_disassembly_text(&snippet, false).is_err(),
+            "disassembly check must reject `{bad_instr}`"
+        );
+    }
 
     // 4. Verify the sealed provisional Apple M1 rehearsal receipt in
     // `docs/labs/m5-laptop-full-path-measurement/provisional-synthetic-stack-receipt.json`:
@@ -372,17 +472,26 @@ mod serving_controls {
         assert!(sum_ing > 0 && sum_rout > 0 && sum_mem > 0 && sum_em > 0);
 
         // Verify `verify_step_objdump_zero_mul_zero_float` and `verify_step_disassembly_text`.
+        // Note: `[profile.test.package.uor-r4-integer] opt-level = 3` in workspace `Cargo.toml`
+        // compiles `uor-r4-integer` with full release-level optimization (`opt-level = 3`),
+        // emitting all 43 mandatory stack symbols plus closure instantiations and ~86 reachable
+        // call-graph functions.
         let (syms, instrs) =
             verify_step_objdump_zero_mul_zero_float(Path::new(env!("CARGO_BIN_EXE_uor-r4-stack")))
                 .expect("uor-r4-stack step must pass objdump zero-mul/zero-float check");
         assert!(
-            syms >= 35 && instrs > 0,
-            "expected full serving call graph (>= 35 symbols), got {syms} symbols and {instrs} instructions"
+            syms >= 80 && instrs > 0,
+            "expected full serving call graph (>= 80 reachable/mandatory/closure symbols), got {syms} symbols and {instrs} instructions"
         );
         let bad_disasm = "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n100001000:\t1f000000\tfmul\ts0, s1, s2\n";
         assert!(
             verify_step_disassembly_text(bad_disasm, false).is_err(),
             "disassembly check must reject fmul inside IntegerStackSession::step"
+        );
+        let bad_fadd = "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n100001000:\t1e612800\tfadd\td0, d0, d1\n";
+        assert!(
+            verify_step_disassembly_text(bad_fadd, false).is_err(),
+            "disassembly check must reject fadd inside IntegerStackSession::step"
         );
 
         let _ = std::fs::remove_dir_all(artifact_path.parent().unwrap());
@@ -422,6 +531,16 @@ mod serving_controls {
         assert_eq!(
             receipt.pointer("/disassembly_audit/step_objdump_zero_mul_zero_float"),
             Some(&Value::Bool(true))
+        );
+        assert!(receipt
+            .pointer("/disassembly_audit/legacy_ratchet_note")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .contains("stack_exp_neg"));
+        assert_eq!(
+            receipt.pointer("/step_latency/work_rate_identity_verified"),
+            Some(&Value::Bool(false)),
+            "without --energy-receipt, work_rate_identity_verified must be false"
         );
         assert_eq!(
             receipt
