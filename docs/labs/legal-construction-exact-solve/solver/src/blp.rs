@@ -516,13 +516,13 @@ pub struct Basis {
 
 /// The integer-scaled LP both the simplex and `certify_basis` read:
 /// structural columns (sparse, by row), right-hand sides and costs.
-struct Scaled {
-    cols: Vec<Vec<(usize, BigInt)>>,
-    b: Vec<BigInt>,
-    c: Vec<BigInt>,
+pub(crate) struct Scaled {
+    pub(crate) cols: Vec<Vec<(usize, BigInt)>>,
+    pub(crate) b: Vec<BigInt>,
+    pub(crate) c: Vec<BigInt>,
 }
 
-fn scaled(lp: &Lp) -> Scaled {
+pub(crate) fn scaled(lp: &Lp) -> Scaled {
     let n = lp.c.len();
     let m = lp.rows.len();
     let mut cols: Vec<Vec<(usize, BigInt)>> = vec![Vec::new(); n];
