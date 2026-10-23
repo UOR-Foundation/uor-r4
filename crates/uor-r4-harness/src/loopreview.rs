@@ -858,6 +858,51 @@ pub fn render_sentinel(head_ref: &str, files: &[String], cross_repository: Optio
     cross_repository == Some(false) && render_pr_without_order(head_ref, files)
 }
 
+/// TEST-ONLY: a JSON file standing in for the renderer at named commits,
+/// `{"renders":{"<sha>":{"STATE.md":"...","AGENTS.md":"<block>"}}}`. Lets the fixture drive
+/// the gate without a repository-wide render input tree; absent in production.
+pub const REVIEW_RENDER_FAKE_ENV: &str = "UOR_LOOP_REVIEW_RENDER_FAKE";
+
+/// The expected text of `path` at commit `at`: the fake file (tests) or the real renderer.
+fn expected_render(path: &str, at: &crate::looprender::AtCommit) -> Result<String, String> {
+    if let Some(p) = std::env::var_os(REVIEW_RENDER_FAKE_ENV) {
+        let text = std::fs::read_to_string(Path::new(&p))
+            .map_err(|e| format!("cannot read {REVIEW_RENDER_FAKE_ENV}: {e}"))?;
+        let v: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|e| format!("{REVIEW_RENDER_FAKE_ENV} is malformed: {e}"))?;
+        if let Some(t) = v
+            .get("renders")
+            .and_then(|r| r.get(&at.sha))
+            .and_then(|m| m.get(path))
+            .and_then(|s| s.as_str())
+        {
+            return Ok(t.to_string());
+        }
+        return Err(format!("no fake render for {path} at {}", at.sha));
+    }
+    match path {
+        "AGENTS.md" => crate::looprender::render_top_ten(at),
+        _ => {
+            let rendered = crate::looprender::render_all(at)?;
+            rendered
+                .into_iter()
+                .find(|(p, _)| p == path)
+                .map(|(_, t)| t)
+                .ok_or_else(|| format!("{path}: the renderer names no such view"))
+        }
+    }
+}
+
+/// The render-gate half of `context()`: sentinel eligibility, then the tamper/stamp gate.
+/// Shared with the fixture so a removed check fails both the CLI and the test.
+pub fn render_gate(root: &Path, gh: &dyn ReviewGh, pr: &ReviewPr) -> Result<(), String> {
+    let paths: Vec<String> = pr.files.clone();
+    if !render_sentinel(&pr.head_ref_name, &paths, Some(pr.cross_repository)) {
+        return Err("the head is not a known same-repository render branch".to_string());
+    }
+    verify_render_views(root, gh, pr)
+}
+
 /// The tamper gate for the render PR: fetch its explicit head, require each view's stamp to be
 /// the PR's merge base with `origin/main`, render the view at that stamp and compare byte for
 /// byte. A hand-edited view keeps its stamp but differs from its render, so it is refused.
@@ -880,12 +925,7 @@ fn verify_render_views(root: &Path, _gh: &dyn ReviewGh, pr: &ReviewPr) -> Result
             ));
         }
         let at = crate::looprender::AtCommit::resolve(root, &stamp)?;
-        let rendered = crate::looprender::render_all(&at)?;
-        let want = rendered
-            .into_iter()
-            .find(|(p, _)| p == path)
-            .map(|(_, t)| t)
-            .ok_or_else(|| format!("{path}: the renderer names no such view"))?;
+        let want = expected_render(path, &at)?;
         expected.push((path.to_string(), want));
         actual.insert(path.to_string(), text);
     }
@@ -914,7 +954,7 @@ fn verify_render_views(root: &Path, _gh: &dyn ReviewGh, pr: &ReviewPr) -> Result
         ));
     }
     let at = crate::looprender::AtCommit::resolve(root, &stamp)?;
-    let want = crate::looprender::render_top_ten(&at)?;
+    let want = expected_render("AGENTS.md", &at)?;
     if block != want {
         return Err(
             "AGENTS.md top-ten block differs from its render (hand-edited view)".to_string(),
@@ -949,7 +989,7 @@ fn context(root: &Path, gh: &dyn ReviewGh, n: u64) -> Result<Context, String> {
         match crate::loopnext::added_order(root, n, &pr.files, &|p| gh.file_at_pr(n, p)) {
             Ok(v) => v,
             Err(crate::loopnext::OrderErr::Missing(_)) if render_pr => {
-                verify_render_views(root, gh, &pr)?;
+                render_gate(root, gh, &pr)?;
                 (RENDER_ORDER.to_string(), String::new(), "kimi".to_string())
             }
             Err(e) => return Err(e.note()),

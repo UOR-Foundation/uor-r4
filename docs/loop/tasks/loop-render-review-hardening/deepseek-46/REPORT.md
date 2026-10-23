@@ -1,6 +1,6 @@
 # REPORT: loop-render-review-hardening, deepseek-46
 
-Lab: deepseek. Order: [ORDER.md](ORDER.md). Item `loop-render-review-hardening`. Base: `0af044c7f`. Status: **in progress (draft PR #3048)**.
+Lab: deepseek. Order: [ORDER.md](ORDER.md). Item `loop-render-review-hardening`. Base: `0af044c7f`. Status: ready for review (PR #3048).
 
 ## What did not work, first
 
@@ -16,14 +16,18 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item `loop-render-review-hardening`.
 | `crates/uor-r4-harness/src/loopreview.rs` | `render_sentinel(head_ref, files, cross)` requires a known same-repository head; the review path uses it |
 | `crates/uor-r4-harness/src/loopprcheck.rs` | `Pr.is_cross_repository`, `PrGh::is_cross_repository` (real + fake), `ReviewContext::of` sentinel via `render_sentinel(pr.is_cross_repository)`, pr-check `--pr` fills the flag |
 | `crates/uor-r4-harness/src/loopqueue.rs` | `QueuePr.is_cross_repository` read from `gh pr view --json ...isCrossRepository` and set on the `Pr` |
-| `crates/uor-r4-harness/tests/loop_review.rs` | offline temp-git test for the merge-base default; sentinel tests (fork, unknown, wrong branch, non-view path) |
+| `crates/uor-r4-harness/tests/loop_review.rs` | offline temp-git test for the merge-base default; sentinel tests (fork, unknown, wrong branch, non-view path); the render-gate fixture with all six refusal/accept cases |
 | `docs/loop/tasks/infra-loop-render-review/deepseek-42/REPORT.md` | fixed the doubled `infra-infra-` prefix nit |
 
-**Still to do for the item:** the `context()` fake-git fixture with its negative gates (the review's one remaining requirement); the roadmap-README decision is recorded here as **exempt with reason** (xtask renders the working tree, the views-only set keeps it out of the no-ORDER path, and the docs job gates it advisably); the loop-page wording is PM-owned and carded on #2028.
+The item's five follow-ups are all closed: the fixture is in, the queue-mirror fork check and the render-at-merge-base default are implemented, the roadmap README is **exempt with a recorded reason** (xtask renders the working tree; the views-only set keeps it out of the no-ORDER path; the docs job gates it advisably), and the REPORT nit is fixed. The loop-page wording is owner-only and carded on #2028.
+
+## The fixture and its negative gates
+
+`tests/loop_review.rs::render_gate_fixture_...` builds a temporary git repository (base commit, `kimi/render` head), a fake gh file and a test-only render stand-in (`UOR_LOOP_REVIEW_RENDER_FAKE`) and drives the same `render_gate` the CLI uses. It asserts: clean passes; a hand-edited STATE is refused by name; a fork is refused; an AGENTS edit outside the top-ten block is refused; a hand-edited block is refused; a branch-only stamp is refused. Removing the render check would let the tampered cases pass, and disabling the stamp rule would let the branch-only case pass, so both negative gates fail the suite.
 
 ## Measurements
 
-- `cargo test -p uor-r4-harness --test loop_review`: **34 passed** (32 existing + merge-base default + sentinel cases). `cargo check -p uor-r4-harness`: clean.
+- `cargo test -p uor-r4-harness --test loop_review`: **35 passed** (32 existing + merge-base default + sentinel + fixture). Full `cargo test -p uor-r4-harness`, clippy `-D warnings`, fmt, `roadmap check`, `report`, `pr-check` and `gates --full` results are recorded after they run.
 - No GPU; every test is offline and uses a temporary git repository or pure functions.
 
 ## Checks run at the head

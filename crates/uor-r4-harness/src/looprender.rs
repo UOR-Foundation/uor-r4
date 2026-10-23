@@ -1136,7 +1136,11 @@ pub fn cli(root: &Path, args: &[String]) -> u8 {
         }
         println!("wrote {} from {}", path.display(), c.sha);
     }
-    if at.is_some() || at_default.is_some() {
+    if at.is_some() {
+        println!("{ROADMAP}: skipped with --at; xtask renders the working tree");
+        return 0;
+    }
+    if at_default.is_some() {
         println!("{ROADMAP}: skipped; xtask renders the working tree, and the render branch stamps the merge base");
         return 0;
     }

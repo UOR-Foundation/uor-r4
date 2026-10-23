@@ -1655,13 +1655,18 @@ impl ReviewContext {
         );
         let rows = crate::loopreview::build_rows(&page);
         let doc_only = crate::loopreview::doc_only(pr.changed_paths().map(|(_, p)| p));
+        // The queue mirror learns fork provenance from the same GitHub handle it already has;
+        // an unreadable source leaves it unknown, which the sentinel path refuses.
+        let cross = pr.is_cross_repository.or_else(|| match &pr.github {
+            Github::Pr(n, gh) => gh.is_cross_repository(*n).ok(),
+            _ => None,
+        });
         let order = match pr.the_order() {
             Ok(o) => o.to_string(),
             Err(e) => {
                 // The render PR carries no ORDER by design; its record uses the sentinel path.
                 let paths: Vec<String> = pr.changed_paths().map(|(_, p)| p.to_string()).collect();
-                if crate::loopreview::render_sentinel(&pr.head_ref, &paths, pr.is_cross_repository)
-                {
+                if crate::loopreview::render_sentinel(&pr.head_ref, &paths, cross) {
                     return Ok(ReviewContext {
                         order: crate::loopreview::RENDER_ORDER.to_string(),
                         order_lab: "kimi".to_string(),
