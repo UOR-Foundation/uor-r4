@@ -10,7 +10,7 @@ The item's done-when reads:
 
 ## Cancel probe (run first)
 
-To fill in.
+Class: doc repair (`#2851`). At `73534ba73` (merged PR #3062), Kimi's exact-head review (`6365383954`) noted that blocker `(c)` in `docs/harness/prep/m2-pin-train-mask-sheet-2026-10-23.md` and `docs/labs/m2-pin-train-mask-sheet/README.md` cites `#2845` for `d11-exporter-float-trunk` and `#2846` for `float-training-module` instead of the live issue numbers `#2820` (`d11-exporter-float-trunk`) and `#2823` (`float-training-module`). Task stands.
 
 ## Files in scope
 
@@ -22,8 +22,9 @@ To fill in.
 
 ## Done when
 
-To fill in.
+- `#2845` is replaced with `#2820` (`d11-exporter-float-trunk`) and `#2846` is replaced with `#2823` (`float-training-module`) in `docs/harness/prep/m2-pin-train-mask-sheet-2026-10-23.md` and `docs/labs/m2-pin-train-mask-sheet/README.md`.
+- `uor-harness loop report --check`, `uor-harness loop pr-check --local`, and `uor-harness loop gates --full` pass (`References #2851, #2030`).
 
 ## Stop and ask if
 
-To fill in.
+- Any file outside the item scope would need to change.
