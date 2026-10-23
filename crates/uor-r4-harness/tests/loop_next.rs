@@ -781,10 +781,15 @@ fn a_lab_at_its_open_pr_limit_waits_naming_its_prs_awaiting_review() {
 
 /// A views-only render refresh PR on `kimi/render`: four rendered files, same repository, no ORDER.
 fn render_pr(n: u64) -> Value {
-    let files: Vec<Value> = ["STATE.md", "HANDOFF.md", "docs/harness/LESSONS.md", "AGENTS.md"]
-        .into_iter()
-        .map(|path| json!({"path": path}))
-        .collect();
+    let files: Vec<Value> = [
+        "STATE.md",
+        "HANDOFF.md",
+        "docs/harness/LESSONS.md",
+        "AGENTS.md",
+    ]
+    .into_iter()
+    .map(|path| json!({"path": path}))
+    .collect();
     json!({"number": n, "headRefName": "kimi/render", "headRefOid": HEAD, "isDraft": false,
            "isCrossRepository": false, "mergeable": "MERGEABLE", "files": files, "checks": []})
 }
@@ -830,7 +835,11 @@ fn a_render_pr_recorded_at_its_head_owes_no_review() {
 #[test]
 fn the_render_owner_lab_is_not_asked_to_review_its_own_render_pr() {
     let r = Repo::new(&[]);
-    let o = r.next_as("kimi", &fake_render(vec![render_pr(30)], json!({})), &json!([]), false);
+    let o = r.next_as(
+        "kimi",
+        &fake_render(vec![render_pr(30)], json!({})),
+        &json!([]),
+        false,
+    );
     assert!(!decision(&o).contains("review #30"), "{o:?}");
 }
-
