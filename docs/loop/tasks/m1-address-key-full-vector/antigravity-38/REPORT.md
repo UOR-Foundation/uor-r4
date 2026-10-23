@@ -31,7 +31,7 @@ Lab: antigravity. Item: [m1-address-key-full-vector](../../../../roadmap/items/m
 - `uor-research-architect` ([SKILL.md](../../../../../.agents/skills/uor-research-architect/SKILL.md)): Verified the D23, D25, and D32 ratchets directly on the branch before requesting re-review.
 - `scope-guard` ([SKILL.md](../../../../../../.gemini/config/skills/scope-guard/SKILL.md)): Kept the repair to the single doc comment line in `crates/uor-r4-discrete/src/address_cells.rs:156` and the `antigravity-38` task folder.
 
-## Open items
+## Still open
 
 - CUDA kernel dispatch for `cell_envelope_l1_v1` / `full_vector_cell_l1_v1` in `crates/uor-r4-discrete/src/discrete.cu` and finite CUDA qualification on a GPU pod, plus non-author `TEST FITNESS: FIT` and owner/PM registration on `#2834` for `docs/harness/prep/m1-address-key-full-vector-DRAFT-2026-10-23.md`. Item `m1-address-key-full-vector` stays `status: ready`. References #2834, #2029.
 
