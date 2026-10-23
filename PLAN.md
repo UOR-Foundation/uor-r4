@@ -18,13 +18,13 @@ A premise row's Status is `open` until its probe has run; `closed` means the pro
 
 | Premise | Probe | Status | Date | Cancel if |
 |---|---|---|---|---|
-| Exact integer/geometric reads can carry a language model at all | the M1 closing-bar run (CHARTER §4 row 8): D11-export integer top-1 beats unigram (1,226/14,287) and T2 (6,300/14,287) on DEV, two seeds, tokens/s reported | open | 2026-10-22 | both seeds fail to beat the T2 table at full registered scale after the instrument class is ruled out |
-| The 16-root E8 orbit with Cl(0,6) frames can carry sequence position | `m1-position-mechanism` (#2843) order test: H_pos vs matched endpoint control + shuffled null, sheet PENDING | open | 2026-10-22 | the parameter-matched endpoint control ties prefix holonomy on the registered panel |
-| Scale-matched orbit-root snapping holds multi-stage residual blocks lawful | `m1-normalization-mechanism` (#2842) trunk test: N_snap vs C_unscaled and C_raw, sheet PENDING | open | 2026-10-22 | the un-scaled or raw control matches N_snap on the registered panel |
-| Exact addressed memory can serve durable conversation facts | the address-as-read oracle sheet's FIT (deepseek, #2979: NOT_FIT until panel/checkpoint/bar/consumer are pinned) then its GPU run (#2833) | open | 2026-10-22 | the true-address oracle gains nothing over the sieve and baseline arms |
-| Number-aware tokenization is decidable and fixable | the 3-arm census (#2872, merged): Digits(false)+ByteLevel forms all 100 two-digit pieces with zero space-prefixed absorption | closed | 2026-10-22 | — (proven on both vocab sizes, digests pinned) |
-| The R14 reply instrument is non-vacuous | constant/copy controls fail, the selective oracle passes, the closest archived run lands just under (PM ruling, #2029 6339245936) | closed | 2026-10-22 | — (ruled non-vacuous; the reply bar stays suspended with no target) |
-| Reasoning comes from intermediate geometry and exact memory, not surface templates | the M6 four-arm ablation (#2863 instrument merged) on the frozen panel (#2866, bar card with the owner): factorial drop vs memorized-template flatness | open | 2026-10-22 | KnockoutBoth leaves panel accuracy at the count-table ceiling |
+| Exact integer/geometric reads can carry a language model at all | `cargo test -p uor-r4-integer --lib discrete_d11` — the D11 integer stack suite; the closing-bar run (CHARTER §4 row 8) on top: D11-export integer top-1 beats unigram (1,226/14,287) and T2 (6,300/14,287) on DEV, two seeds, tokens/s reported | open | 2026-10-22 | both seeds fail to beat the T2 table at full registered scale after the instrument class is ruled out |
+| The 16-root E8 orbit with Cl(0,6) frames can carry sequence position | `cargo test -p uor-r4-discrete --lib position_mechanism` — the merged finite controls; the order test (H_pos vs matched endpoint control + shuffled null) rides sheet PENDING (#2843) | open | 2026-10-22 | the parameter-matched endpoint control ties prefix holonomy on the registered panel |
+| Scale-matched orbit-root snapping holds multi-stage residual blocks lawful | `cargo test -p uor-r4-discrete --lib normalization_mechanism` — the merged N_snap vs C_unscaled/C_raw controls; the trunk test rides sheet PENDING (#2842) | open | 2026-10-22 | the un-scaled or raw control matches N_snap on the registered panel |
+| Exact addressed memory can serve durable conversation facts | `cargo test -p uor-r4-integer --lib m6_exact_arithmetic` — the exact-memory admit/rank/version suite; then the address-as-read oracle sheet's FIT (deepseek, #2979: NOT_FIT until panel/checkpoint/bar/consumer are pinned) and its GPU run (#2833) | open | 2026-10-22 | the true-address oracle gains nothing over the sieve and baseline arms |
+| Number-aware tokenization is decidable and fixable | `cargo test -p uor-r4-tokenizer --test training number_aware_three_arm_comparison_and_digit_piece_census` — the 3-arm census (#2872, merged): Digits(false)+ByteLevel forms all 100 two-digit pieces with zero space-prefixed absorption | closed | 2026-10-22 | — (proven on both vocab sizes, digests pinned) |
+| The R14 reply instrument is non-vacuous | `cargo test -p uor-r4-training --bin chat-grade --features native-rung0` — the v2 grader's constant/copy controls fail, the selective oracle passes, the closest archived run lands just under (PM ruling, #2029 6339245936) | closed | 2026-10-22 | — (ruled non-vacuous; the reply bar stays suspended with no target) |
+| Reasoning comes from intermediate geometry and exact memory, not surface templates | `cargo test -p uor-r4-integer --lib m6_ablation` — the four-arm ablation instrument (#2863, merged); the run rides the frozen panel (#2866, bar card with the owner): factorial drop vs memorized-template flatness | open | 2026-10-22 | KnockoutBoth leaves panel accuracy at the count-table ceiling |
 
 ## Owner directions
 
@@ -43,10 +43,13 @@ cards on #2028 (seven bar cards as of 22 Oct) until he answers in the owning lab
 ## The route, written backwards
 
 M8 (one labelled release on the same native path) needs M7 (the model served through the API,
-WASM and Studio) needs M4 (served evaluation score and tokens/s on the held-out stream, the
-export-gap rule) needs M3 (durable memory qualified: provenance, contradiction/correction,
-abstention, reset, restart, #1718 non-overwrite) needs M2 (complete correct replies on DEV,
-HELD for release) needs M1 (the language base: the §4.8 closing bar) — and M1 needs, in order:
+WASM and Studio), M6 (reasoning and coding qualified on the same native model) and M5 (the
+full-path laptop cost measured on that served model); M7 needs M4 (the accepted UORLUT01
+export, the served evaluation score and tokens/s on the held-out stream, the export-gap rule),
+which M5 measures and M6 ablates; M4 needs M3 (durable memory qualified: provenance,
+contradiction/correction, abstention, reset, restart, #1718 non-overwrite) needs M2 (complete
+correct replies on DEV, HELD for release) needs M1 (the language base: the §4.8 closing bar) —
+and M1 needs, in order:
 the trunk assembled and trained (`m1-trunk-assembly-and-training`, #2845, HELD); the position
 and normalization mechanisms' order/norm tests (sheets PENDING, controls merged); the address
 memory oracle FIT then run (NOT_FIT today, #2979); the number-aware vocabulary registered
