@@ -15,6 +15,10 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2861. Base: `903dbf701`. `Refe
 | `docs/harness/prep/m4-lawful-likelihood-bpb-2026-10-23.md` | header cites the design PR #2940 |
 | this folder | ORDER and REPORT |
 
+## Measurements
+
+- None claimed: this PR corrects three doc sentences; no instrument, stream hash or result changes. The sheet's `TEST FITNESS: PENDING` is unchanged.
+
 ## Checks run at the head
 
 `prep-check` (sheet present/complete/PENDING), `loop report --check`, `loop pr-check --local`, `loop gates --full`; docs-only so a D46 fresh-context record applies.
