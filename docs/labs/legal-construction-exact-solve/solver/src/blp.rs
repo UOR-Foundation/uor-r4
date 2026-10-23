@@ -495,30 +495,36 @@ impl Simplex {
     }
 }
 
-pub fn solve(lp: &Lp) -> LpResult {
-    solve_with_stats(lp, None).0
+/// Where a nonbasic variable sits: its lower bound, its upper bound, or the
+/// start value 0 strictly inside its bounds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pos {
+    Lower,
+    Upper,
+    Interior,
 }
 
-pub fn solve_with_stats(
-    lp: &Lp,
-    mut progress: Option<&mut dyn FnMut(&Stats)>,
-) -> (LpResult, Stats) {
+/// A basis in `blp`'s index space: structurals `0..n`, then the slack of
+/// row `i` at `n + i`. `basic[r]` is the variable of basis row `r` (length
+/// m); `nonbasic_pos` has length `n + m`, and its entries at basic indices
+/// are ignored.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Basis {
+    pub basic: Vec<usize>,
+    pub nonbasic_pos: Vec<Pos>,
+}
+
+/// The integer-scaled LP both the simplex and `certify_basis` read:
+/// structural columns (sparse, by row), right-hand sides and costs.
+struct Scaled {
+    cols: Vec<Vec<(usize, BigInt)>>,
+    b: Vec<BigInt>,
+    c: Vec<BigInt>,
+}
+
+fn scaled(lp: &Lp) -> Scaled {
     let n = lp.c.len();
     let m = lp.rows.len();
-    let stats = Stats {
-        pivots: 0,
-        flips: 0,
-        phase1_pivots: 0,
-        d_bits: 1,
-        d_bits_max: 1,
-        phase: 1,
-        objective: BigRational::zero(),
-    };
-    if lp.lower.iter().zip(&lp.upper).any(|(l, u)| l > u) {
-        return (LpResult::Infeasible, stats);
-    }
-
-    // Integral rows.
     let mut cols: Vec<Vec<(usize, BigInt)>> = vec![Vec::new(); n];
     let mut b = Vec::with_capacity(m);
     for (i, (a, bi)) in lp.rows.iter().enumerate() {
@@ -531,7 +537,250 @@ pub fn solve_with_stats(
             }
         }
     }
-    let c_int = integral(&lp.c.iter().collect::<Vec<_>>());
+    let c = integral(&lp.c.iter().collect::<Vec<_>>());
+    Scaled { cols, b, c }
+}
+
+fn exact_div(num: BigInt, d: &BigInt) -> Result<BigInt, String> {
+    let (q, rem) = num.div_rem(d);
+    if rem.is_zero() {
+        Ok(q)
+    } else {
+        Err("Bareiss division not exact".into())
+    }
+}
+
+/// Solve `a·y = r` exactly: forward Bareiss (fraction-free) elimination with
+/// row exchanges, then back substitution `y_i = (p·r_i − Σ_{j>i} U_ij·y_j) /
+/// U_ii` with `p` the last pivot, and `y / p` returned.
+fn bareiss_solve(mut a: Vec<Vec<BigInt>>, mut r: Vec<BigInt>) -> Result<Vec<BigRational>, String> {
+    let m = r.len();
+    let mut prev = BigInt::one();
+    for k in 0..m {
+        let p = (k..m)
+            .find(|&i| !a[i][k].is_zero())
+            .ok_or("singular basis")?;
+        a.swap(k, p);
+        r.swap(k, p);
+        for i in k + 1..m {
+            for j in k + 1..m {
+                let num = &a[k][k] * &a[i][j] - &a[i][k] * &a[k][j];
+                a[i][j] = exact_div(num, &prev)?;
+            }
+            let num = &a[k][k] * &r[i] - &a[i][k] * &r[k];
+            r[i] = exact_div(num, &prev)?;
+            a[i][k] = BigInt::zero();
+        }
+        prev = a[k][k].clone();
+    }
+    let p = rat(&prev);
+    let mut y = vec![BigRational::zero(); m];
+    for i in (0..m).rev() {
+        let s = (i + 1..m).fold(&p * rat(&r[i]), |s, j| s - rat(&a[i][j]) * &y[j]);
+        y[i] = s / rat(&a[i][i]);
+    }
+    Ok(y.into_iter().map(|v| v / &p).collect())
+}
+
+/// Exact optimality proof for `lp` from `basis` alone. Recomputes `x_B` and
+/// the dual `π` with Bareiss on the scaled basis matrix, then checks every
+/// input row and bound on `x` and each nonbasic reduced cost's sign by
+/// position (Lower ≥ 0, Upper ≤ 0, Interior = 0; fixed variables skipped, as
+/// in the solver's own certificate). Never panics on a bad basis.
+pub fn certify_basis(lp: &Lp, basis: &Basis) -> Result<LpResult, String> {
+    let n = lp.c.len();
+    let m = lp.rows.len();
+    let total = n + m;
+    if lp.lower.len() != n || lp.upper.len() != n || lp.rows.iter().any(|(a, _)| a.len() != n) {
+        return Err("malformed LP: lengths differ".into());
+    }
+    if basis.basic.len() != m {
+        return Err(format!("{} basic indices for {m} rows", basis.basic.len()));
+    }
+    if basis.nonbasic_pos.len() != total {
+        return Err(format!(
+            "{} positions for {total} variables",
+            basis.nonbasic_pos.len()
+        ));
+    }
+    let mut is_basic = vec![false; total];
+    for &j in &basis.basic {
+        if j >= total {
+            return Err(format!("basic index {j} out of range"));
+        }
+        if is_basic[j] {
+            return Err(format!("basic index {j} repeated"));
+        }
+        is_basic[j] = true;
+    }
+    let Scaled { mut cols, b, c } = scaled(lp);
+    for i in 0..m {
+        cols.push(vec![(i, BigInt::one())]);
+    }
+    let mut cost = c;
+    cost.resize(total, BigInt::zero());
+    let bounds = |j: usize| -> (BigRational, Option<BigRational>) {
+        if j < n {
+            (lp.lower[j].clone(), Some(lp.upper[j].clone()))
+        } else {
+            (BigRational::zero(), None)
+        }
+    };
+
+    // Nonbasic values by position.
+    let mut x = vec![BigRational::zero(); total];
+    for j in (0..total).filter(|&j| !is_basic[j]) {
+        let (lo, up) = bounds(j);
+        x[j] = match basis.nonbasic_pos[j] {
+            Pos::Lower => lo,
+            Pos::Upper => up.ok_or_else(|| format!("nonbasic {j} at Upper has no upper bound"))?,
+            Pos::Interior => {
+                if !(lo.is_negative() && up.is_some_and(|u| u.is_positive())) {
+                    return Err(format!(
+                        "nonbasic {j} Interior but 0 is not strictly inside"
+                    ));
+                }
+                BigRational::zero()
+            }
+        };
+    }
+
+    // B·x_B = b − N·x_N, cleared to integers by the lcm of its denominators.
+    let mut rhs: Vec<BigRational> = b.iter().map(rat).collect();
+    for j in (0..total).filter(|&j| !is_basic[j] && !x[j].is_zero()) {
+        for (k, a) in &cols[j] {
+            rhs[*k] = &rhs[*k] - rat(a) * &x[j];
+        }
+    }
+    let l = rhs.iter().fold(BigInt::one(), |l, v| l.lcm(v.denom()));
+    let r: Vec<BigInt> = rhs.iter().map(|v| v.numer() * (&l / v.denom())).collect();
+    let mut bm = vec![vec![BigInt::zero(); m]; m];
+    for (i, &j) in basis.basic.iter().enumerate() {
+        for (k, a) in &cols[j] {
+            bm[*k][i] = a.clone();
+        }
+    }
+    let lr = rat(&l);
+    let xb = bareiss_solve(bm.clone(), r)?;
+    for (i, &j) in basis.basic.iter().enumerate() {
+        x[j] = &xb[i] / &lr;
+    }
+    let mut bt = vec![vec![BigInt::zero(); m]; m];
+    for (k, row) in bm.iter().enumerate() {
+        for (i, v) in row.iter().enumerate() {
+            bt[i][k] = v.clone();
+        }
+    }
+    let cb: Vec<BigInt> = basis.basic.iter().map(|&j| cost[j].clone()).collect();
+    let pi = bareiss_solve(bt, cb)?;
+    let col_pi = |j: usize| {
+        cols[j]
+            .iter()
+            .fold(BigRational::zero(), |s, (k, a)| s + rat(a) * &pi[*k])
+    };
+
+    // Direct checks of both solves.
+    let mut lhs = vec![BigRational::zero(); m];
+    for &j in &basis.basic {
+        for (k, a) in &cols[j] {
+            lhs[*k] = &lhs[*k] + rat(a) * &x[j];
+        }
+    }
+    if lhs != rhs {
+        return Err("B·x_B differs from the right-hand side".into());
+    }
+    for &j in &basis.basic {
+        if col_pi(j) != rat(&cost[j]) {
+            return Err(format!("dual fails on basic column {j}"));
+        }
+    }
+
+    // Every input row and bound, exactly.
+    let xs: Vec<BigRational> = x[..n].to_vec();
+    for (k, (a, bi)) in lp.rows.iter().enumerate() {
+        let v = a
+            .iter()
+            .zip(&xs)
+            .filter(|(ai, _)| !ai.is_zero())
+            .fold(BigRational::zero(), |s, (ai, xi)| s + ai * xi);
+        if v > *bi {
+            return Err(format!("input row {k} violated"));
+        }
+    }
+    for (j, v) in xs.iter().enumerate() {
+        if *v < lp.lower[j] || *v > lp.upper[j] {
+            return Err(format!("bound of {j} violated"));
+        }
+    }
+
+    // Reduced-cost signs by position.
+    for j in (0..total).filter(|&j| !is_basic[j]) {
+        let (lo, up) = bounds(j);
+        if up.as_ref() == Some(&lo) {
+            continue;
+        }
+        let dj = rat(&cost[j]) - col_pi(j);
+        let ok = match basis.nonbasic_pos[j] {
+            Pos::Lower => !dj.is_negative(),
+            Pos::Upper => !dj.is_positive(),
+            Pos::Interior => dj.is_zero(),
+        };
+        if !ok {
+            return Err(format!(
+                "reduced cost of nonbasic {j} ({:?}) has the wrong sign",
+                basis.nonbasic_pos[j]
+            ));
+        }
+    }
+    let objective =
+        lp.c.iter()
+            .zip(&xs)
+            .fold(BigRational::zero(), |s, (c, v)| s + c * v);
+    Ok(LpResult::Optimal { x: xs, objective })
+}
+
+pub fn solve(lp: &Lp) -> LpResult {
+    solve_with_stats(lp, None).0
+}
+
+pub fn solve_with_stats(lp: &Lp, progress: Option<&mut dyn FnMut(&Stats)>) -> (LpResult, Stats) {
+    let (result, stats, _) = solve_inner(lp, progress);
+    (result, stats)
+}
+
+/// `solve`, plus the final basis when the result is `Optimal`. A phase-1
+/// artificial still basic (at 0) is reported as its row's slack, which is
+/// then nonbasic in the solver: same span, same `x`, and the same `π`.
+pub fn solve_with_basis(lp: &Lp) -> (LpResult, Option<Basis>) {
+    let (result, _, basis) = solve_inner(lp, None);
+    (result, basis)
+}
+
+fn solve_inner(
+    lp: &Lp,
+    mut progress: Option<&mut dyn FnMut(&Stats)>,
+) -> (LpResult, Stats, Option<Basis>) {
+    let n = lp.c.len();
+    let m = lp.rows.len();
+    let stats = Stats {
+        pivots: 0,
+        flips: 0,
+        phase1_pivots: 0,
+        d_bits: 1,
+        d_bits_max: 1,
+        phase: 1,
+        objective: BigRational::zero(),
+    };
+    if lp.lower.iter().zip(&lp.upper).any(|(l, u)| l > u) {
+        return (LpResult::Infeasible, stats, None);
+    }
+
+    // Integral rows.
+    let Scaled {
+        mut cols,
+        b,
+        c: c_int,
+    } = scaled(lp);
 
     // Start point: 0 when inside the box, else the bound nearer 0.
     let mut x = Vec::with_capacity(n + m);
@@ -581,6 +830,7 @@ pub fn solve_with_stats(
         }
     }
     let n_art = art.len();
+    let art_rows: Vec<usize> = art.iter().map(|(i, _)| *i).collect();
     for (i, v) in art {
         let j = cols.len();
         cols.push(vec![(i, -BigInt::one())]);
@@ -621,7 +871,7 @@ pub fn solve_with_stats(
         sx.run(&cost1, 1, &lp.c, &mut progress);
         let infeas = sx.certify(&cost1);
         if infeas.is_positive() {
-            return (LpResult::Infeasible, sx.stats);
+            return (LpResult::Infeasible, sx.stats, None);
         }
         for j in n + m..total {
             sx.upper[j] = Some(BigRational::zero());
@@ -657,7 +907,32 @@ pub fn solve_with_stats(
             .fold(BigRational::zero(), |s, (c, v)| s + c * v);
     sx.stats.phase = 2;
     sx.stats.objective = objective.clone();
-    (LpResult::Optimal { x: xs, objective }, sx.stats)
+    let basis = Basis {
+        basic: sx
+            .basis
+            .iter()
+            .map(|&j| {
+                if j >= n + m {
+                    n + art_rows[j - n - m]
+                } else {
+                    j
+                }
+            })
+            .collect(),
+        nonbasic_pos: sx.state[..n + m]
+            .iter()
+            .map(|s| match s {
+                State::Upper => Pos::Upper,
+                State::Interior => Pos::Interior,
+                State::Basic | State::Lower => Pos::Lower,
+            })
+            .collect(),
+    };
+    (
+        LpResult::Optimal { x: xs, objective },
+        sx.stats,
+        Some(basis),
+    )
 }
 
 #[cfg(test)]
