@@ -1,6 +1,6 @@
 # Pre-Registration Sheet: Lawful Pointer Forced-Copy Oracle (`r-lawful-pointer-forced-copy-oracle`)
 
-- **Roadmap item:** [`docs/roadmap/items/r-lawful-pointer-forced-copy-oracle.md`](../roadmap/items/r-lawful-pointer-forced-copy-oracle.md) (Issue `#2880`)
+- **Roadmap item:** [`docs/roadmap/items/r-lawful-pointer-forced-copy-oracle.md`](../../roadmap/items/r-lawful-pointer-forced-copy-oracle.md) (Issue `#2880`)
 - **Mechanism:** [`docs/mechanisms/pointer-key.md`](../../mechanisms/pointer-key.md) (`pointer-key`, status: `PARKED`)
 - **Sheet type:** D32 discrete integer evaluation sheet (CHARTER §3.1–§3.5, §4.3, §4.5)
 - **Design and finite controls:** [`docs/labs/r-lawful-pointer-forced-copy-oracle/README.md`](../../labs/r-lawful-pointer-forced-copy-oracle/README.md), [`crates/uor-r4-training/src/lawful_pointer.rs`](../../../crates/uor-r4-training/src/lawful_pointer.rs)

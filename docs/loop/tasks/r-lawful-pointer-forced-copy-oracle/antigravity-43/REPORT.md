@@ -8,16 +8,16 @@
 
 ## What changed
 
-- [`crates/uor-r4-training/src/lawful_pointer.rs`](../../../../crates/uor-r4-training/src/lawful_pointer.rs) and [`crates/uor-r4-training/src/lib.rs`](../../../../crates/uor-r4-training/src/lib.rs):
+- [`crates/uor-r4-training/src/lawful_pointer.rs`](../../../../../crates/uor-r4-training/src/lawful_pointer.rs) and [`crates/uor-r4-training/src/lib.rs`](../../../../../crates/uor-r4-training/src/lib.rs):
   - Implemented the D32 discrete integer pointer-copy head (`LawfulPointerHead`) and serving-time forced-copy span oracle (`CopySpanOracle::{Off, O1SpanLearnedGate, O2SpanForcedGate}`) with zero floating-point types, zero normalized-exponential terms, and zero dot-product or matrix-multiplication operations:
     - `SlotAddressKey`: exact square-free semiprime key $K_{\text{slot}} = p_{\text{entity}} \cdot p_{\text{attribute}} \in \mathbb{Z}_{>1}$ over distinct primes (`is_prime_u64`), admitting a candidate value span iff $K_{\text{slot}} \mid \pi_c$ ($\gcd(K_{\text{slot}}, \pi_c) = K_{\text{slot}}$).
     - `RouteAdmissionMode::{SlotAddressSemiprime, SharedAtomGcd, OrderedNlet}`: exact slot-address semiprime divisibility, prime-atom divisibility $\gcd(q, \pi_c) > 1$ weighted by Q8 integer bit-rank rarity (`ilog2_gcd_weight_q8`), and ordered $n$-let equality over `CanonicalFoldTable`.
     - `CanonicalFoldTable`: D11-legal token-id fold table (folding ASCII case and at most one leading space `b' '` to the least token ID in the equivalence class for match admission only, leaving emitted token IDs untouched).
     - `locate_last_value_span`: locates the last occurrence of an expected value across token boundaries in the decoded byte stream of `window_tokens`.
     - Six finite host unit tests verifying exact slot-address semiprime admission across multi-token value spans, bit-for-bit oracle-off reproduction of the base margin scorer, `O1` vs `O2` separation of learned vs forced gate margins and bit-for-bit restoration on `clear_copy_span_oracle`, refusal of empty/reversed/out-of-window oracle spans, last-occurrence multi-token span location, and canonical fold-table preservation of emitted tokens.
-- [`docs/labs/r-lawful-pointer-forced-copy-oracle/README.md`](../../../labs/r-lawful-pointer-forced-copy-oracle/README.md):
+- [`docs/labs/r-lawful-pointer-forced-copy-oracle/README.md`](../../../../labs/r-lawful-pointer-forced-copy-oracle/README.md):
   - Published the design note giving the geometric construction of the lawful pointer, settling the source disagreement in favor of the audit synthesis (the forced-copy oracle is interventional on the copy selection step), explaining why D32 discrete integer sheet is chosen over D37 offline float, and documenting the 6 finite host controls.
-- [`docs/harness/prep/r-lawful-pointer-forced-copy-oracle-DRAFT-2026-10-23.md`](../../../harness/prep/r-lawful-pointer-forced-copy-oracle-DRAFT-2026-10-23.md):
+- [`docs/harness/prep/r-lawful-pointer-forced-copy-oracle-DRAFT-2026-10-23.md`](../../../../harness/prep/r-lawful-pointer-forced-copy-oracle-DRAFT-2026-10-23.md):
   - Authored the one-page pre-registration sheet with all 8 required `prep.sheet_shape` blocks (`Bar`, `Base artifact`, `Data split`, `Steps`, `Stop`, `Cost`, `Minimum test power`, `TEST FITNESS: PENDING`), binding the sealed 256-row held-out `m2-fresh256` panel (`plan.json` `sha256:0ed1ab98…`, `inputs.json` `sha256:1de2fc28…`, `labels.json` `sha256:3b5c5477…`, `manifest.json` `sha256:7c33f3f7…`), the `N` / `O1` / `O2` diagnostic branches against the measured 16-block cluster SE (`8.64` rows / `4.32` pairs), and the stop conditions.
 
 ## Measurements
@@ -39,7 +39,7 @@
 
 ## Still open
 
-- Non-author `TEST FITNESS: FIT` review of [`docs/harness/prep/r-lawful-pointer-forced-copy-oracle-DRAFT-2026-10-23.md`](../../../harness/prep/r-lawful-pointer-forced-copy-oracle-DRAFT-2026-10-23.md) (CHARTER §4.5), owner/PM registration of the `N` / `O1` / `O2` diagnostic bar on `#2880` (CHARTER §5.2), a bound discrete memory-answering checkpoint SHA-256, and a typed owner release (CHARTER §5.1) before running the GPU forced-copy oracle evaluation.
+- Non-author `TEST FITNESS: FIT` review of [`docs/harness/prep/r-lawful-pointer-forced-copy-oracle-DRAFT-2026-10-23.md`](../../../../harness/prep/r-lawful-pointer-forced-copy-oracle-DRAFT-2026-10-23.md) (CHARTER §4.5), owner/PM registration of the `N` / `O1` / `O2` diagnostic bar on `#2880` (CHARTER §5.2), a bound discrete memory-answering checkpoint SHA-256, and a typed owner release (CHARTER §5.1) before running the GPU forced-copy oracle evaluation.
 
 ## Plain summary
 
