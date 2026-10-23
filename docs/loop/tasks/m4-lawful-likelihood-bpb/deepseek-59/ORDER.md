@@ -1,32 +1,28 @@
-# ORDER: m4-lawful-likelihood-bpb, deepseek-59
+# ORDER: m4-lawful-likelihood-bpb, deepseek-59 (record the NOT_FIT and make the extension rule resolve)
 
-Lab: deepseek. Item: [m4-lawful-likelihood-bpb](../../../../roadmap/items/m4-lawful-likelihood-bpb.md). Base: `1cb89e81a`.
+Lab: deepseek. Item: [m4-lawful-likelihood-bpb](../../../../roadmap/items/m4-lawful-likelihood-bpb.md) (#2861). Base: `1cb89e81a`. Partial unit: `References #2861`; the item stays `ready` (the M4 bar is not met and no compute is cleared).
 
 ## Goal
 
-The item's done-when reads:
-
-> A likelihood with no softmax or squashing (D23, D25) feeding a registered instrument that scores the chat held-out stream in bits per byte, so the M4 bar "held-out quality at or below 0.90 bits per byte" can be tested. The sources do not say which stream file or byte count is "the chat held-out stream"; naming and hashing it is part of the pre-registration (step 4).
+Fold the non-author `TEST FITNESS: NOT_FIT` (claude, sheet read at `main fb6156b46`, #2861 14:06Z) into the pre-registration sheet without changing the bar, a hold, a status or a result: record the verdict verbatim, state the three prerequisites with their disposition, and fix the one prerequisite a lab can fix now - the extension rule - by scaling the measured standard error by window count (`se_n = 0.014525 * sqrt(512 / n)`; 0.010270 at 1024, 0.007262 at 2048) and stating what an INCONCLUSIVE at 2048 windows decides (a configuration result, no bar claim). Add the REQUIRED export-SHA/training-seeds pin to section 6.
 
 ## Cancel probe (run first)
 
-To fill in.
+At base `1cb89e81a`, `docs/harness/prep/m4-lawful-likelihood-bpb-2026-10-23.md` still reads `TEST FITNESS: PENDING` (status line and section 10) while Claude's `NOT_FIT` exists on #2861, and the extension rule still fixes `se = 0.014525` at every window count, so an INCONCLUSIVE cannot resolve. Task stands; the prepared patch was applied and validated against `uor-harness check`.
 
 ## Files in scope
 
-- `crates/uor-r4-discrete/**`
-- `crates/uor-r4-integer/**`
-- `docs/mechanisms/lut-serving.md`
-- `docs/model/serving-and-export.md`
-- `docs/research/findings.md`
-- `docs/research/open-questions.md`
-- `docs/labs/m4-lawful-likelihood-bpb/**`
 - `docs/harness/prep/m4-lawful-likelihood-bpb*`
+- `docs/labs/m4-lawful-likelihood-bpb/**`
+- this task folder
 
 ## Done when
 
-To fill in.
+- The sheet records claude's `NOT_FIT` block verbatim (reviewer, head, date) and the status line says NOT_FIT; the historical review is not rewritten.
+- Sections 3, 5 and 6 state: the per-window `se_n` and 1024/2048 values; the 2048-INCONCLUSIVE rule; the two owner `CHARTER §5.1` prerequisites as open owner-only FIT prerequisites; the REQUIRED export SHA + training-seeds pin (blocked on #2859).
+- No bar, hold, status, spend or result changes; no FIT or release claimed.
+- `loop report --check`, `loop pr-check --local` and `loop gates --full` pass; a counted review records at the exact head.
 
 ## Stop and ask if
 
-To fill in.
+- A bar/hold/release decision or a file outside the sheet/scope is needed.
