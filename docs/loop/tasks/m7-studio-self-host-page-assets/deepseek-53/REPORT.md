@@ -5,6 +5,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #3075. Base: 22720f207. Referen
 ## What did not work, first
 
 - **A static scan is not the done-when's trap.** The item asks for zero external requests on load checked by an extended trap verification; `verify_studio_page.mjs` sees attributes and inline literals only, not requests a script computes at load time. This unit adds the runtime half.
+- **First runtime version was blind to worker targets and late requests.** Review (Claude) planted an inline fetch (caught), a blob-Web-Worker fetch and a 3s-late fetch (both missed) because the trap attached to the page target only and settled for 1.5s. Fixed: `Target.setAutoAttach` with `waitForDebuggerOnStart` on the page session, `Network.enable` + `Runtime.runIfWaitingForDebugger` for every child session, a settle window that drains child sessions, and the self-test now plants all three channels.
 - **No npm dependency was acceptable**, so the harness drives a local headless Chrome over the DevTools protocol using Node's global WebSocket and a built-in static http server. It fails closed when Chrome is missing; the model worker and the static scan remain the dependency-free checks.
 - **The demo page is worse at runtime than at rest.** The static scan sees three CDN references; the real page load makes **8 external requests** because the CDNs pull further runtime assets (Tailwind build, Font Awesome webfont, three Google font files). That is the measured justification for the open demo-page decision rather than hand-waving.
 
@@ -12,7 +13,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #3075. Base: 22720f207. Referen
 
 | File | Change |
 |---|---|
-| `web/studio/verify_studio_page_load.mjs` | new runtime page-load trap: built-in static server, headless Chrome via CDP, per-page `Network.requestWillBeSent` capture, planted-external self-test, `--strict-router` |
+| `web/studio/verify_studio_page_load.mjs` | runtime page-load trap: built-in static server, headless Chrome via CDP, `Network.requestWillBeSent` capture across the page and auto-attached worker targets, settle window for deferred requests, three-channel planted self-test, `--strict-router` |
 | `web/README.md` | invocation line for the runtime trap |
 | `docs/labs/m7-studio-self-host-page-assets/README.md` | runtime trap implemented note with the measured numbers and limits |
 | `docs/products/web-client.md` | page-load claim now names both the static check and the runtime result |
@@ -20,9 +21,9 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #3075. Base: 22720f207. Referen
 
 ## Measurements
 
-- Trap self-test: a served page with one planted `https://example.invalid/planted.png` -> exactly 1 external request detected (trap fires, not an empty list).
-- `index.html`: loaded, **4 requests, 0 external**.
-- `geometric_prime_router_webapp.html`: loaded, **8 external requests**: cdn.tailwindcss.com (2), cdnjs Font Awesome css + webfont, fonts.googleapis.com css, fonts.gstatic.com Inter + 2 Fira Code files. Non-strict reports them as the legacy residual; `--strict-router` exits 1 with `verdict: RUNTIME PAGE-LOAD TRAP FAILED`.
+- Trap self-test (extended after review): a served page with **three planted channels** - an inline `fetch`, a blob Web Worker `fetch`, and a fetch deferred by `setTimeout(2000)` - -> all three detected (inline + worker-target + late), proving the trap covers worker sessions and deferred requests, not just eager page-html loads.
+- `index.html`: loaded, **6 requests, 0 external**.
+- `geometric_prime_router_webapp.html`: loaded, **9 requests with 8 external URLs**: cdn.tailwindcss.com (2), cdnjs Font Awesome css + webfont, fonts.googleapis.com css, fonts.gstatic.com Inter + 2 Fira Code files. Non-strict reports them as the legacy residual; `--strict-router` exits 1 with `verdict: RUNTIME PAGE-LOAD TRAP FAILED`.
 - Runs in a few seconds per page on the laptop; no GPU, no network egress required for the check itself.
 
 ## Checks run at the head

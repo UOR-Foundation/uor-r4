@@ -60,8 +60,22 @@ async function startServer() {
         try {
             const url = new URL(req.url, 'http://127.0.0.1');
             if (url.pathname === '/__selftest_external.html') {
+                // Planted channels: inline script fetch, a blob Web Worker fetch, and a
+                // late fetch (2s). The trap must report all three, which proves that
+                // worker-target traffic and deferred requests are captured.
+                const planted = [
+                    '<!doctype html><html><body>',
+                    '<img src="https://example.invalid/planted.png" alt="">',
+                    '<script>',
+                    'fetch("https://inline.example.invalid/control").catch(() => {});',
+                    'const wsrc = "self.onmessage=()=>{fetch(\'https://worker.example.invalid/w\').catch(()=>{})};";',
+                    'const blob = new Blob([wsrc], { type: "text/javascript" });',
+                    'const worker = new Worker(URL.createObjectURL(blob)); worker.postMessage(1);',
+                    'setTimeout(() => fetch("https://late.example.invalid/x").catch(() => {}), 2000);',
+                    '</script></body></html>',
+                ].join('');
                 res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-                res.end('<!doctype html><html><body><img src="https://example.invalid/planted.png" alt=""></body></html>');
+                res.end(planted);
                 return;
             }
             const raw = normalize(decodeURIComponent(url.pathname));
@@ -152,15 +166,40 @@ async function trapPageLoad(cdp, origin, path) {
     const sessionId = attached.sessionId;
     await cdp.send('Network.enable', {}, sessionId);
     await cdp.send('Page.enable', {}, sessionId);
+    // Capture dedicated/service worker targets too: auto-attach to every child,
+    // enable Network on its own session and resume it (waitForDebuggerOnStart).
+    await cdp.send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, sessionId);
+    const handledSessions = new Set();
+    const drainChildSessions = async () => {
+        for (const ev of cdp.events) {
+            if (ev.method !== 'Target.attachedToTarget') continue;
+            const child = ev.params.sessionId;
+            if (!child || handledSessions.has(child)) continue;
+            handledSessions.add(child);
+            try {
+                await cdp.send('Network.enable', {}, child);
+                await cdp.send('Runtime.runIfWaitingForDebugger', {}, child);
+            } catch (_e) {
+                // A target that vanished before enabling Network cannot make requests.
+            }
+        }
+    };
     const before = cdp.events.length;
     await cdp.send('Page.navigate', { url: origin + path }, sessionId);
     const deadline = Date.now() + 25000;
     let loaded = false;
     while (Date.now() < deadline) {
+        await drainChildSessions();
         if (cdp.events.slice(before).some((e) => e.method === 'Page.loadEventFired')) { loaded = true; break; }
         await new Promise((r) => setTimeout(r, 100));
     }
-    await new Promise((r) => setTimeout(r, 1500));
+    // Settle window: late/deferred requests (e.g. a 2s timer) and worker-target
+    // requests must land before the count is read.
+    const settleDeadline = Date.now() + 5000;
+    while (Date.now() < settleDeadline) {
+        await drainChildSessions();
+        await new Promise((r) => setTimeout(r, 100));
+    }
     const requested = cdp.events.slice(before)
         .filter((e) => e.method === 'Network.requestWillBeSent')
         .map((e) => e.params.request.url);
@@ -183,14 +222,16 @@ async function main() {
         chrome = await launchChrome(profileDir);
         const cdp = await cdpConnect(chrome.wsUrl);
         const planted = await trapPageLoad(cdp, origin, '/__selftest_external.html');
-        assert(planted.external.length === 1 && planted.external[0].indexOf('example.invalid') >= 0, 'trap self-test failed: expected one planted external request, got ' + JSON.stringify(planted.external));
+        const plantedHits = ['inline.example.invalid', 'worker.example.invalid', 'late.example.invalid']
+            .filter((domain) => planted.external.some((u) => u.indexOf(domain) >= 0));
+        assert(plantedHits.length === 3, 'trap self-test failed: expected inline, worker and late planted requests, got ' + JSON.stringify({ detected: planted.external, hits: plantedHits }));
         const index = await trapPageLoad(cdp, origin, '/studio/index.html');
         assert(index.loaded, 'index.html never fired loadEventFired');
         assert(index.external.length === 0, 'index.html made external load requests: ' + JSON.stringify(index.external));
         const router = await trapPageLoad(cdp, origin, '/studio/geometric_prime_router_webapp.html');
         const report = {
             verdict: 'RUNTIME PAGE-LOAD TRAP PASSED',
-            trapSelfTest: { plantedExternalDetected: true },
+            trapSelfTest: { plantedExternalDetected: true, channels: ['inline', 'blob-worker', 'late'] },
             pages: {
                 'index.html': { loaded: index.loaded, requests: index.requested, external: index.external },
                 'geometric_prime_router_webapp.html': { loaded: router.loaded, requests: router.requested, external: router.external },
