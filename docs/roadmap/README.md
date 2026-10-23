@@ -20,11 +20,11 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 34 |
+| ready | 33 |
 | held | 26 |
 | decision | 4 |
-| done | 24 |
-| total | 88 |
+| done | 27 |
+| total | 90 |
 
 ## Start here
 
@@ -170,9 +170,8 @@ These items are ready and open to anyone.
 | [Create the separate scanned D37 float training module](items/float-training-module.md) | ready | a lab | no | [owner-decision-float-path-scope](items/owner-decision-float-path-scope.md) | [#2823](https://github.com/UOR-Foundation/uor-r4/issues/2823) |
 | [Build the Tauri desktop client against the synthetic stand-in](items/infra-desktop-client-tauri.md) | ready | anyone | no | [m7-studio-connect-wasm-engine](items/m7-studio-connect-wasm-engine.md) | [#2826](https://github.com/UOR-Foundation/uor-r4/issues/2826) |
 | [Build the five-lab loop harness (the loop subcommands of uor-harness)](items/infra-loop-harness.md) | ready | a lab | no | none | [#2904](https://github.com/UOR-Foundation/uor-r4/issues/2904) |
-| [Loop PR 8: migrate the notes to STATE, HANDOFF and PLAN](items/infra-loop-pr08-migration.md) | ready | a lab | no | [infra-loop-pr03-render](items/infra-loop-pr03-render.md) | [#2913](https://github.com/UOR-Foundation/uor-r4/issues/2913) |
 | [Settle the disputed D11 and Hopf observation statuses on the board](items/owner-decision-board-status-disputes.md) | decision | a lab | no | none | [#2874](https://github.com/UOR-Foundation/uor-r4/issues/2874) |
-| [Bench inbox rule: each lab reads the bench messages addressed to it](items/infra-bench-inbox-rule.md) | done | a lab | no | none | not yet synced |
+| [Bench inbox rule: each lab reads the bench messages addressed to it](items/infra-bench-inbox-rule.md) | done | a lab | no | none | [#2955](https://github.com/UOR-Foundation/uor-r4/issues/2955) |
 | [Record K16 normal close and final resource accounting](items/infra-k16-normal-close-accounting.md) | done | a lab | no | none | [#2827](https://github.com/UOR-Foundation/uor-r4/issues/2827) |
 | [Loop PR 2: item keys, Cancel if, done-when class and validator](items/infra-loop-pr02-item-keys.md) | done | a lab | no | none | [#2905](https://github.com/UOR-Foundation/uor-r4/issues/2905) |
 | [Loop PR 3: loop render for every view, with --check at the stamp](items/infra-loop-pr03-render.md) | done | a lab | no | [infra-loop-pr02-item-keys](items/infra-loop-pr02-item-keys.md) | [#2906](https://github.com/UOR-Foundation/uor-r4/issues/2906) |
@@ -182,10 +181,13 @@ These items are ready and open to anyone.
 | [Loop PR 7a: loop claim, suborder and ask](items/infra-loop-pr07a-claim.md) | done | a lab | no | [infra-loop-pr02-item-keys](items/infra-loop-pr02-item-keys.md) | [#2910](https://github.com/UOR-Foundation/uor-r4/issues/2910) |
 | [Loop PR 7b: loop next, arrive, report and close](items/infra-loop-pr07b-session.md) | done | a lab | no | [infra-loop-pr03-render](items/infra-loop-pr03-render.md), [infra-loop-pr07a-claim](items/infra-loop-pr07a-claim.md) | [#2911](https://github.com/UOR-Foundation/uor-r4/issues/2911) |
 | [Loop PR 7c: loop queue and loop board](items/infra-loop-pr07c-queue-board.md) | done | a lab | no | [infra-loop-pr05-policy-check](items/infra-loop-pr05-policy-check.md), [infra-loop-pr06-review-records](items/infra-loop-pr06-review-records.md) | [#2912](https://github.com/UOR-Foundation/uor-r4/issues/2912) |
+| [Loop PR 8: migrate the notes to STATE, HANDOFF and PLAN](items/infra-loop-pr08-migration.md) | done | a lab | no | [infra-loop-pr03-render](items/infra-loop-pr03-render.md) | [#2913](https://github.com/UOR-Foundation/uor-r4/issues/2913) |
 | [Loop PR 9: loop guard, install and onboard for each client](items/infra-loop-pr09-client-adapters.md) | done | a lab | no | [infra-loop-pr07b-session](items/infra-loop-pr07b-session.md) | [#2914](https://github.com/UOR-Foundation/uor-r4/issues/2914) |
 | [Loop PR 10: loop drive, watchers, kill switch and the soft check-in](items/infra-loop-pr10-supervisor.md) | done | a lab | no | [infra-loop-pr07b-session](items/infra-loop-pr07b-session.md), [infra-loop-pr07c-queue-board](items/infra-loop-pr07c-queue-board.md), [infra-loop-pr09-client-adapters](items/infra-loop-pr09-client-adapters.md) | [#2915](https://github.com/UOR-Foundation/uor-r4/issues/2915) |
 | [Loop PR 11: loop gates --watch and warnings raised to errors](items/infra-loop-pr11-progress-window.md) | done | a lab | no | [infra-loop-pr04-gates](items/infra-loop-pr04-gates.md) | [#2916](https://github.com/UOR-Foundation/uor-r4/issues/2916) |
 | [Loop PR 12: git hooks, pr-check before push, Lab and Order trailers](items/infra-loop-pr12-git-hooks.md) | done | a lab | no | [infra-loop-pr05-policy-check](items/infra-loop-pr05-policy-check.md), [infra-loop-pr06-review-records](items/infra-loop-pr06-review-records.md) | [#2917](https://github.com/UOR-Foundation/uor-r4/issues/2917) |
+| [Let loop review count the render PR (or exempt it at the queue)](items/infra-loop-render-review.md) | done | a lab | no | [infra-loop-harness](items/infra-loop-harness.md) | [#3036](https://github.com/UOR-Foundation/uor-r4/issues/3036) |
+| [Harden the render-PR review path](items/loop-render-review-hardening.md) | done | a lab | no | [infra-loop-render-review](items/infra-loop-render-review.md) | [#3044](https://github.com/UOR-Foundation/uor-r4/issues/3044) |
 
 ## Waiting on the owner
 
@@ -208,6 +210,7 @@ flowchart LR
   n_float_training_module["float-training-module"]
   n_hamilton_gate_offline_float_sheet["hamilton-gate-offline-float-sheet"]
   n_infra_desktop_client_tauri["infra-desktop-client-tauri"]
+  n_infra_loop_harness["infra-loop-harness"]
   n_infra_loop_pr02_item_keys["infra-loop-pr02-item-keys"]
   n_infra_loop_pr03_render["infra-loop-pr03-render"]
   n_infra_loop_pr04_gates["infra-loop-pr04-gates"]
@@ -221,6 +224,8 @@ flowchart LR
   n_infra_loop_pr10_supervisor["infra-loop-pr10-supervisor"]
   n_infra_loop_pr11_progress_window["infra-loop-pr11-progress-window"]
   n_infra_loop_pr12_git_hooks["infra-loop-pr12-git-hooks"]
+  n_infra_loop_render_review["infra-loop-render-review"]
+  n_loop_render_review_hardening["loop-render-review-hardening"]
   n_m1_a8_finite_cuda_qualification["m1-a8-finite-cuda-qualification"]
   n_m1_a8_full_dose_rerun["m1-a8-full-dose-rerun"]
   n_m1_a8_registration_and_runbook_staging["m1-a8-registration-and-runbook-staging"]
@@ -271,6 +276,7 @@ flowchart LR
   n_float_training_module --> n_e8_orbit_memory_sigmoid_free_iteration
   n_float_training_module --> n_hamilton_gate_offline_float_sheet
   n_float_training_module --> n_spiralcore_fbs_offline_float_sheet
+  n_infra_loop_harness --> n_infra_loop_render_review
   n_infra_loop_pr02_item_keys --> n_infra_loop_pr03_render
   n_infra_loop_pr02_item_keys --> n_infra_loop_pr05_policy_check
   n_infra_loop_pr02_item_keys --> n_infra_loop_pr07a_claim
@@ -289,6 +295,7 @@ flowchart LR
   n_infra_loop_pr07b_session --> n_infra_loop_pr10_supervisor
   n_infra_loop_pr07c_queue_board --> n_infra_loop_pr10_supervisor
   n_infra_loop_pr09_client_adapters --> n_infra_loop_pr10_supervisor
+  n_infra_loop_render_review --> n_loop_render_review_hardening
   n_m1_a8_finite_cuda_qualification --> n_m1_a8_full_dose_rerun
   n_m1_a8_full_dose_rerun --> n_m1_close_saved_model
   n_m1_a8_full_dose_rerun --> n_r_finite_relational_head

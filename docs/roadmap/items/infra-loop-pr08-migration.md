@@ -3,11 +3,11 @@ id: infra-loop-pr08-migration
 title: Loop PR 8: migrate the notes to STATE, HANDOFF and PLAN
 milestone: infra
 area: docs
-status: ready
+status: done
 open_to: lab
 needs_gpu: false
 depends_on: [infra-loop-pr03-render]
-scope: [crates/uor-r4-harness/src/loopmigrate*.rs, crates/uor-r4-harness/tests/loop_migrate*.rs, AGENTS.md, STATUS.md, STATE.md, HANDOFF.md, PLAN.md, archive/**, docs/harness/LESSONS.md, docs/harness/mistakes/**, docs/harness/pm-rules.md, docs/harness/claims.json, docs/harness/milestones.json, docs/integration/DECISIONS.md, docs/integration/NOW.md, docs/start/FILEMAP.md, docs/roadmap/items/*.md, crates/uor-r4-harness/src/mistakes.rs, crates/uor-r4-harness/src/looprender.rs]
+scope: [crates/uor-r4-harness/src/loopmigrate*.rs, crates/uor-r4-harness/tests/loop_migrate*.rs, crates/uor-r4-harness/tests/loop_prcheck.rs, docs/figures/**, AGENTS.md, STATUS.md, STATE.md, HANDOFF.md, PLAN.md, archive/**, docs/harness/LESSONS.md, docs/harness/mistakes/**, docs/harness/pm-rules.md, docs/harness/claims.json, docs/harness/milestones.json, docs/integration/DECISIONS.md, docs/integration/NOW.md, docs/start/FILEMAP.md, docs/roadmap/items/*.md, crates/uor-r4-harness/src/mistakes.rs, crates/uor-r4-harness/src/looprender.rs]
 ---
 
 ## Why it matters
