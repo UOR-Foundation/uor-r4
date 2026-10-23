@@ -30,7 +30,7 @@ export function tokenizerLabel(artifact, vocabSize) {
     if (!validateTokenizerArtifact(artifact, artifact && artifact.stack_sha256, vocabSize)) {
         return `UTF-8 byte-mod stand-in (rawBytes[i] % vocabSize; unbound - no matching artifact)`;
     }
-    return `stack-bound byte-mod tokenizer (vocab ${vocabSize}, stack sha256 ${artifact.stack_sha256.slice(0, 12)}…)`;
+    return `byte-mod stand-in, bound to stack sha256 ${artifact.stack_sha256.slice(0, 12)}… (vocab ${vocabSize})`;
 }
 
 export function encodeBytesWithArtifact(bytes, vocabSize, artifact) {

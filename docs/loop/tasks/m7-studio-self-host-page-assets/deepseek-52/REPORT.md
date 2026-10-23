@@ -24,7 +24,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #3075 (residual of #2868). Base
 
 - Bundle: wasm-pack build with RUSTFLAGS=-C target-feature=-simd128 (release wasm 381,818 B), synthetic stack seed 5 (469,252 B).
 - Artifact: pkg/tokenizer.json -> vocab_size 40, stack_sha256 d60f88d6e08a… (full digest d60f88d6e08ac60763b35484307f9425f702b9fead4615dd8cbe5fdbbced92df), mode byte-mod, 256-entry table; --check against the stack: TOKENIZER ARTIFACT MATCHES THE STACK.
-- Live worker verification (node web/studio/verify_studio_worker.mjs): ALL STUDIO WORKER CHECKS PASSED; tokenizerLabel = "stack-bound byte-mod tokenizer (vocab 40, stack sha256 d60f88d6e08a…)"; the 32-token trajectory is byte-identical to the previous unbound mapping (same table formula, now stack-bound); save/restore bit-identical; trap self-test 6/6; remoteRequests 0.
+- Live worker verification (node web/studio/verify_studio_worker.mjs): ALL STUDIO WORKER CHECKS PASSED; tokenizerLabel = "byte-mod stand-in, bound to stack sha256 d60f88d6e08a… (vocab 40)"; the 32-token trajectory is byte-identical to the previous unbound mapping (same table formula, now stack-bound); save/restore bit-identical; trap self-test 6/6; remoteRequests 0.
 
 ## Checks run at the head
 
@@ -37,7 +37,8 @@ node web/studio/verify_studio_worker.mjs on a freshly built bundle and synthetic
 
 ## Still open
 
-- A real corpus tokenizer requires a real model export (M4); the runtime page-load trap and the demo-page decision remain on this item (#3075).
+- **This binds the stand-in; it does not replace it:** the item done-when stays open until a real corpus tokenizer exists on a real model (M4 export). The runtime page-load trap and the demo-page decision also remain on this item (#3075).
+- Known limits recorded from review: real D11 exports are uor-r4.lut-discrete/1 with shape.vocabulary (deliberately refused by this tool until an M4-aware mode lands); the worker's dynamic JSON import is cached per worker, so a second stack in one worker revalidates against the first artifact and falls back to the unbound label (safe).
 
 ## Plain summary
 

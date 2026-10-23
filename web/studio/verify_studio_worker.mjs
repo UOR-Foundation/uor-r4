@@ -25,7 +25,7 @@ const stackBytes = readFileSync(stackPath);
 // too, so the unbound path stays covered without a second worker process.
 const tokenizerArtifact = buildArtifact(stackBytes);
 assert(validateTokenizerArtifact(tokenizerArtifact, tokenizerArtifact.stack_sha256, tokenizerArtifact.vocab_size), 'generated tokenizer artifact must validate against the stack');
-assert(tokenizerLabel(tokenizerArtifact, tokenizerArtifact.vocab_size).startsWith('stack-bound byte-mod tokenizer'), 'generated tokenizer artifact must produce the stack-bound label');
+assert(tokenizerLabel(tokenizerArtifact, tokenizerArtifact.vocab_size).includes('stand-in') && tokenizerLabel(tokenizerArtifact, tokenizerArtifact.vocab_size).includes('stack sha256'), 'generated tokenizer artifact must keep the stand-in label and name the stack digest');
 assert(tokenizerLabel(null, 40).includes('unbound'), 'missing artifact must fall back to the explicit unbound label');
 assert(JSON.stringify(encodeBytesWithArtifact(new Uint8Array([0, 1, 41]), 40, tokenizerArtifact)) === JSON.stringify([0, 1, 1]), 'stack-bound byte table encodes 41 mod 40 as 1');
 assert(JSON.stringify(encodeBytesWithArtifact(new Uint8Array([0, 1, 41]), 40, null)) === JSON.stringify([0, 1, 1]), 'unbound fallback encodes identically for the byte-mod stand-in');
@@ -195,7 +195,7 @@ assert(loadedMsg.action === 'model_loaded', `load_model failed: ${JSON.stringify
 assert(loadedMsg.capabilities.schema === 'uor-r4.lut-stack/1', `schema mismatch: ${loadedMsg.capabilities.schema}`);
 assert(loadedMsg.capabilities.synthetic === true, 'expected synthetic === true for mk-synthetic-stack artifact');
 assert(loadedMsg.capabilities.status_label === 'synthetic stand-in', `expected "synthetic stand-in", got "${loadedMsg.capabilities.status_label}"`);
-assert(loadedMsg.capabilities.tokenizer_label.startsWith('stack-bound byte-mod tokenizer'), `expected the stack-bound tokenizer label, got: ${loadedMsg.capabilities.tokenizer_label}`);
+assert(loadedMsg.capabilities.tokenizer_label.includes('stand-in') && loadedMsg.capabilities.tokenizer_label.includes('stack sha256'), `expected a stand-in label naming the stack digest, got: ${loadedMsg.capabilities.tokenizer_label}`);
 assert(loadedMsg.capabilities.weights_per_token === 15968, `expected weights_per_token=15968, got ${loadedMsg.capabilities.weights_per_token}`);
 assert(loadedMsg.capabilities.shape.vocab === 40 && loadedMsg.capabilities.shape.width === 32, 'shape mismatch');
 
