@@ -95,6 +95,9 @@ pub fn sections(text: &str) -> Vec<Section> {
 /// "TEST FITNESS" — a record explaining the gate, for instance — is not read as a verdict. That is
 /// the difference between a sheet being FIT and a document talking about fitness.
 pub fn test_fitness(text: &str) -> &'static str {
+    // The LAST verdict line wins: sheets append a later review below earlier ones (a FIT recorded
+    // under an old NOT_FIT must be readable, and a later NOT_FIT must override an older FIT).
+    let mut latest = ABSENT;
     for line in text.lines() {
         let t = line.trim_start_matches([' ', '\t']);
         let upper = t.to_ascii_uppercase();
@@ -107,12 +110,13 @@ pub fn test_fitness(text: &str) -> &'static str {
                 // `(?![A-Za-z_])`: FIT must not match FITNESS, and NOT_FIT is tried first so it is
                 // not read as FIT.
                 if !tail.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
-                    return verdict;
+                    latest = verdict;
+                    break;
                 }
             }
         }
     }
-    ABSENT
+    latest
 }
 
 /// A `- Label: value` field from anywhere in the sheet.
@@ -360,6 +364,32 @@ TEST FITNESS: FIT
         assert_eq!(test_fitness("\tTEST FITNESS:   NOT_FIT"), NOT_FIT);
     }
 
+    /// A later verdict must win over an earlier one (cards #3041): sheets append reviews.
+    #[test]
+    fn a_later_verdict_wins_over_an_earlier_one() {
+        let appended_fit = "TEST FITNESS: NOT_FIT\n\nprose\n\nTEST FITNESS: FIT\n";
+        assert_eq!(test_fitness(appended_fit), FIT, "an appended FIT must win");
+        let appended_not_fit = "TEST FITNESS: FIT\n\nprose\n\nTEST FITNESS: NOT_FIT\n";
+        assert_eq!(
+            test_fitness(appended_not_fit),
+            NOT_FIT,
+            "a later NOT_FIT must win"
+        );
+    }
+
+    /// The rendered clearance note is clean plain text (cards #3042): no trailing space on any
+    /// line and no continuation indentation leaked into the pasted block.
+    #[test]
+    fn the_fit_clearance_note_has_no_trailing_or_leaked_whitespace() {
+        for line in FIT_CLEARANCE_NOTE.lines() {
+            assert!(!line.ends_with(' '), "trailing space in {line:?}");
+            assert!(!line.starts_with("         "), "leaked indent in {line:?}");
+        }
+        assert!(
+            !FIT_CLEARANCE_NOTE.contains(" (D22). \n"),
+            "trailing space before newline"
+        );
+    }
     #[test]
     fn fields_are_read_from_bulleted_and_bare_lines() {
         assert_eq!(field(COMPLETE, "mechanism"), "rank-margin");
@@ -476,6 +506,11 @@ pub struct NewSheet {
 /// **The verdict clears compute for the configuration in that sheet ONLY** (D22), so the block names
 /// the sheet and the milestone and carries that sentence. A review that does not say what it clears is
 /// a review a lab can over-read.
+/// The paragraph `prep fit` appends after the record. It must be clean plain text: no trailing
+/// space and no leaked continuation indent (a caller pastes it into a sheet and runs
+/// `git diff --check`).
+pub const FIT_CLEARANCE_NOTE: &str = "A FIT verdict clears compute for the configuration in that sheet only (D22).\n\nEvery mechanism pre-registration gets a TEST FITNESS review on its milestone before compute.";
+
 pub fn render_fit(
     verdict: &str,
     milestone: &crate::registries::Milestone,
@@ -506,9 +541,7 @@ pub fn render_fit(
     out.push_str(&format!("reviewer: {}\n", missing(reviewer)));
     out.push_str(&format!("note: {}\n", missing(note)));
     out.push_str(&format!("date: {}\n", today()));
-    out.push_str(
-        "A FIT verdict clears compute for the configuration in that sheet only (D22). \n\n         Every mechanism pre-registration gets a TEST FITNESS review on its milestone before compute.",
-    );
+    out.push_str(FIT_CLEARANCE_NOTE);
     out
 }
 
