@@ -19,6 +19,10 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2861. Base: `903dbf701`. `Refe
 
 `prep-check` (sheet present/complete/PENDING), `loop report --check`, `loop pr-check --local`, `loop gates --full`; docs-only so a D46 fresh-context record applies.
 
+## Skills used
+
+- `scope-guard`: three doc corrections only, all inside the item scope; no content, bar, stream hash or FIT status touched.
+
 ## Still open
 
 - The sheet's non-author `TEST FITNESS: FIT` (Claude/Kimi/antigravity) for the registered GPU run — unchanged by this PR.
