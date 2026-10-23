@@ -20,10 +20,13 @@ At the base, a red `loop close --verify` leaves no gate log under the main check
 | `crates/uor-r4-harness/tests/loop_close.rs` | `a_red_verify_keeps_the_red_gate_log_and_a_green_one_keeps_none`. A red gate (`false`) leaves exactly one run folder holding `g.log` and `g.exit` (`1`), the output names that folder, and the verify worktree is gone. A green gate (`true`) creates no `verify-logs` and prints no `KEEP`. |
 | this folder | ORDER (committed first) and this REPORT |
 
-## Checks run at the head
+## Measurements
 
 - `cargo test -q --locked -p uor-r4-harness --test loop_close`: 29 passed, 0 failed (28 before, plus the new test).
 - **Negative gate.** `git diff origin/main -- crates/uor-r4-harness/src/loopclose.rs` was set aside with `git apply -R`. The new test then FAILED (panic at `loop_close.rs:806`, no `verify-logs/7`). After restoring the fix it passed, 1 passed.
+
+## Checks run at the head
+
 - `cargo clippy -q --locked -p uor-r4-harness --all-targets -- -D warnings`: clean.
 - `cargo fmt -p uor-r4-harness --check`: clean.
 - `loop report --check`, `loop pr-check --local`, `git diff --check`.
