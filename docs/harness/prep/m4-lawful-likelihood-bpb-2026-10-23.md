@@ -16,14 +16,14 @@
 
 **Why lawful (owner Card 1):** a linear ratio of non-negative integer potentials by their sum; no softmax/log-softmax/cross-entropy/sigmoid/tanh/GELU/normalized exponential and no table form of them; no dense matmul; the divide happens in the offline scorer, never in the artifact. `-log2` is used only as a **measurement** of the mass (Card 2 reading).
 
-## 2. Held-out chat stream (named, frozen, hashed)
+## Data split
 
 - **Stream:** the chat held-out token stream of the `chat-v0-p2` recipe — `heldout.u16` (u16 LE tokens after a 64-byte header), tokenizer `chat-data-control-20261008/data/tokenizer.json` (4096 vocab + 3 added, sha256 `d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`).
 - **File:** **12,389,242 bytes**, sha256 **`e5f400b0e676791fd0458ce810163c5d2542adda80dccc8282f37d9ca8904cef`** (recorded and verified on the pod and after transfer in [`criterion2-protocol-pin-2026-10-09`](../../../archive/labs/criterion2-protocol-pin-2026-10-09/README.md)).
 - **Stream byte basis:** 6,194,589 tokens after the header; **17,576,697 stream bytes**; 2.837427 bytes/token; 0 out-of-vocabulary; max id 4095. The scored bytes are the **stream basis** (this is the basis of the archived 0.877/0.933 BPB cells); the tool's target-byte basis is reported as a diagnostic only and never mixed with it.
 - **Freeze rule:** the scoring host must re-verify the file sha256 and token count before scoring; any mismatch halts (typed refusal), it is never re-derived or patched.
 
-## 3. Window construction and targets
+## Steps
 
 - Deterministic window rule from the archived protocol pin: `stride = (tokens - context - 1) / windows`, starts `k * stride`, `384` targets per window.
 - **Primary arm: 512 windows / 196,608 targets** (exceeds the >= 200 fresh-row floor of CHARTER §4.5/D22 §3).
@@ -63,4 +63,4 @@ Any stream-hash or token-count mismatch, any mass below 1 or sum != 2^48, any fl
 
 ## 10. Recorded FIT review
 
-`TEST FITNESS: PENDING` — to be filled by a non-author review. This sheet is authored by deepseek; the FIT must come from Claude, Kimi or antigravity.
+TEST FITNESS: PENDING (non-author review to come; the sheet is authored by deepseek, so the FIT must come from Claude, Kimi or antigravity).
