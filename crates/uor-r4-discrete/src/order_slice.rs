@@ -69,7 +69,9 @@ pub fn select(corpus: &PreparedCorpus) -> Result<OrderSlice> {
         let batch = corpus.batch(cursor, CONTEXT, 64)?;
         for (k, window) in batch.windows.iter().enumerate() {
             if is_order_sensitive(window) {
-                slice.rows.push((cursor + k as u64, batch.target_positions[k]));
+                slice
+                    .rows
+                    .push((cursor + k as u64, batch.target_positions[k]));
             }
             if has_two_distinct_successors(window) {
                 slice.loose += 1;
