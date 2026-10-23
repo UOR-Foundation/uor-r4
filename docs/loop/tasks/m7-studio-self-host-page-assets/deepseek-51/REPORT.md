@@ -12,7 +12,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item `m7-studio-self-host-page-asset
 
 | File | Change |
 |---|---|
-| `web/studio/verify_studio_page.mjs` | new page-load scanner: parses every load-time reference in the Studio HTML pages, fixture self-test with four planted external refs, `index.html` strict by default, `--strict-router` for the demo page |
+| `web/studio/verify_studio_page.mjs` | page-load scanner: load attrs, loading `<link rel>` tokens (incl. `preconnect`/`dns-prefetch`), `<base href>`, inline `<style>` `url()`/`@import` (both forms), fail-closed inline-script external literal scan, one level of on-origin linked stylesheets; fixture self-test with eleven planted refs; `index.html` strict, `--strict-router` for the demo page |
 | `web/README.md` | invocation line for the new check |
 | `docs/products/web-client.md` | page-load status row: `index.html` machine-checked on-origin; demo page tracked as the residual with its decision card |
 | `docs/labs/m7-studio-self-host-page-assets/README.md` | lab record: verified scanner, the demo-page decision card, the stack-bound-tokenizer plan, the GitHub-API position, D36 status |
@@ -22,7 +22,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item `m7-studio-self-host-page-asset
 
 - `node web/studio/verify_studio_page.mjs` → `PAGE-LOAD CHECKS PASSED`; `index.html` clean; demo page's three CDNs reported as legacy residual.
 - `node web/studio/verify_studio_page.mjs --strict-router` → exit 1 with exactly `cdn.tailwindcss.com`, the cdnjs Font Awesome stylesheet and the Google Fonts stylesheet — the failing-before evidence.
-- Scanner self-test: four planted external refs detected exactly; `<a href="https://github.com/…">` ignored.
+- Scanner self-test: eleven planted external refs detected exactly (multi-token `rel`, `preconnect`, `dns-prefetch`, external `<base>`, `//host` script sources, `@import` strings, inline-script literals); `<a href>` navigation ignored; prose fragments starting `//` are not URL literals.
 
 ## Checks run at the head
 
@@ -37,7 +37,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item `m7-studio-self-host-page-asset
 
 - **Demo page decision** (PM/owner): retire (needs archive/scope), declare legacy-exempt for this item (recommended), or fund a follow-up rewrite. `--strict-router` is ready for the day the page is fixed.
 - **Stack-bound tokenizer artifact + worker load path/label** (next unit in this item; design in the lab record §3).
-- Tokenizer and demo page are the only remaining item parts; no compute, no bar.
+- Runtime page-load trap owed; tokenizer artifact; demo-page decision; no compute, no bar.
 
 ## Plain summary
 

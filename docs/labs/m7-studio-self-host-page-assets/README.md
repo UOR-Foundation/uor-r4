@@ -4,7 +4,7 @@ Residual item of `m7-studio-connect-wasm-engine` (#2868); see the closure note i
 
 ## 1. What is verified now (this unit)
 
-`web/studio/verify_studio_page.mjs` scans every **load-time** reference in the Studio HTML pages — `script[src]`, `img[src/srcset]`, `link[href]` for loading `rel`s, `iframe/source/video/audio/object` load attributes, and CSS `url(...)` — and asserts each resolves on-origin. Navigation links (`<a href>`) are not load requests and are deliberately excluded (the GitHub links on the page are navigation). The scanner has a fixture self-test that plants four external references (including a protocol-relative script and a `url()` in inline CSS) and proves it reports exactly those while ignoring an `<a href>` navigation link.
+`web/studio/verify_studio_page.mjs` is a **static** scan of every load-time reference in the Studio HTML pages — `script[src]`, `img[src/srcset]`, `link[href]` for loading `rel`s, `iframe/source/video/audio/object` load attributes, and CSS `url(...)` — and asserts each resolves on-origin. Navigation links (`<a href>`) are not load requests and are deliberately excluded (the GitHub links on the page are navigation). The scanner has a fixture self-test that plants four external references (including a protocol-relative script and a `url()` in inline CSS) and proves it reports exactly those while ignoring an `<a href>` navigation link.
 
 At the current head:
 ```text
@@ -15,6 +15,8 @@ node web/studio/verify_studio_page.mjs --strict-router
   FAIL (by design today): cdn.tailwindcss.com, cdnjs Font Awesome, fonts.googleapis.com
 ```
 The strict failure is the **evidence the claim was asserted-only before**: the demo page still loads three CDNs.
+
+**The runtime page-load trap is still owed.** A static scan cannot see requests a script computes at load time (for example `index.html:2872` assembles `api.github.com` from string pieces). The item's done-when asks for "checked by the extended trap verification", so this unit records the static check as landed and the runtime trap as a remaining part (extend `verify_studio_worker.mjs`'s traps to a page-load harness, or add a headless page harness without a new dependency).
 
 ## 2. Open decision (PM/owner) — demo page
 
