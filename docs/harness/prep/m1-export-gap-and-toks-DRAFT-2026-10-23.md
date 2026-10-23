@@ -87,7 +87,7 @@
 4. **Notebook and roadmap record:**
    - Record one row in [`docs/research/notebook/m4-serving.md`](../../research/notebook/m4-serving.md) with the export gap, the registered band, the separate prompt-reading and reply-writing rates, and the verdict word (`positive`, `negative`, `inconclusive`, or `diagnostic-stop`).
 
-## Stop rule
+## Stop
 
 - **Instrument fault (D31 diagnostic stop, never a mechanism negative):**
   - Any non-zero instruction count in B1 (`float > 0`, `mul > 0`, or `div > 0`), any SHA-256 mismatch on `ft/dev/tokens.u16` or `ft/dev/response_mask.u8`, any non-zero discrepancy (`\Delta > 0`) on a lossless `uor-r4.lut-discrete/1` export, or failure of the planted-fault control B4 stops the run immediately as an instrument fault.
