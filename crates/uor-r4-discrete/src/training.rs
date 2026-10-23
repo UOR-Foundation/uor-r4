@@ -1559,7 +1559,7 @@ mod tests {
             ReadInitialization::RouteBypassV1,
             ReadInitialization::RoutePermutedActionsV1,
         ] {
-            let mut route_control = route_base.clone();
+            let mut route_control = metadata_fixture(1, ReadSpec::Route)?;
             route_control.config.read_initialization = control;
             route_control.config.validate()?;
             route_control.lineage.config = route_control.config.clone();

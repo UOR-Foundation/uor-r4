@@ -6,6 +6,7 @@ Lab: antigravity. Item: [r-read-off-vs-read-on](../../../../roadmap/items/r-read
 
 1. **Calling `PreparedDriver::load` directly in the host `C7` test:** The first draft of `c7_committed_ten_arm_battery_configs_are_valid_and_distinct` in `crates/uor-r4-discrete/tests/read_off_ablation_controls.rs` called `PreparedDriver::load(config)` on the committed pod config files (`docs/labs/r-read-off-vs-read-on/evidence/{a8,p8}-*.json`), which failed on the laptop with `No such file or directory` because `PreparedDriver::load` opens `/workspace/uor-r4/local/driver/data/mw-balp/train/tokens.u16`. We replaced that call in `C7` with `config.validate()` plus distinct `config_sha256` checks across all 10 committed arm configs, and verified `PreparedDriver::lineage_sha256()` separation across `ZeroGatesV1`, `RouteBypassV1`, and `RoutePermutedActionsV1` inside `crates/uor-r4-discrete/src/training.rs` using `metadata_fixture`.
 2. **`attention-dev-b3` rejecting `F-Off` and `Route` arms under `attention_learning::validate_config`:** In `crates/uor-r4-discrete/src/attention_preflight.rs`, `dev_inputs` (called by `attention-dev-b3`) previously called `attention_learning::validate_config(&config)`, which required `Flock8`/`Relation8` with `ActiveLeafV1` and would have rejected the `F-Off` (`ZeroGatesV1`) and `Route` (`ZeroGatesV1`, `RouteBypassV1`, `RoutePermutedActionsV1`) arms in the paired battery. We added `validate_dev_b3_config` in `attention_preflight.rs` so `attention-dev-b3` admits all five paired read-on/read-off/permuted arms while `capture_dev` continues to enforce `attention_learning::validate_config`.
+3. **`PreparedDriver::clone` in `training::tests::initialization_defaults_and_cross_schedule_lineage_refuse` (`E0599`):** Caught by DeepSeek's review on PR `#3097` (`issuecomment-6374960610`), `crates/uor-r4-discrete/src/training.rs:1562` called `route_base.clone()` on `PreparedDriver` (which does not implement `Clone`), added after the initial `--lib` run. We replaced `route_base.clone()` with `metadata_fixture(1, ReadSpec::Route)?`.
 
 ## What changed
 
@@ -18,13 +19,13 @@ Lab: antigravity. Item: [r-read-off-vs-read-on](../../../../roadmap/items/r-read
 ## Measurements
 
 - **`read_off_ablation_controls` (`C1`–`C7`):** `7 passed; 0 failed` (`0.01s`).
-- **`uor-r4-discrete --lib` unit test suite:** `127 passed; 0 failed; 3 ignored` (`1.61s`), including the new `ReadInitialization`, `DriverConfig`/`lineage_sha256`, `validate_dev_b3_config`, and `export_d11` refusal tests.
+- **`uor-r4-discrete --lib` unit test suite:** `229 passed; 0 failed; 1 ignored` (`85.96s`), including the new `ReadInitialization`, `DriverConfig`/`lineage_sha256`, `validate_dev_b3_config`, and `export_d11` refusal tests.
 - **Negative gate check:** Setting `c7_committed_ten_arm_battery_configs_are_valid_and_distinct` to call `PreparedDriver::load` on pod paths failed as recorded in `## What did not work, first`, and altering `RouteBypassV1` schedule/mode in `training.rs` or `attention_preflight.rs` is rejected by `validate()` / `validate_dev_b3_config()`.
 
 ## Checks run at the head
 
 - `~/.cargo/bin/cargo test --locked -p uor-r4-discrete --test read_off_ablation_controls` -> `7 passed; 0 failed`
-- `~/.cargo/bin/cargo test --locked -p uor-r4-discrete --lib` -> `127 passed; 0 failed; 3 ignored`
+- `~/.cargo/bin/cargo test --locked -p uor-r4-discrete --lib` -> `229 passed; 0 failed; 1 ignored`
 - `sh -n docs/labs/r-read-off-vs-read-on/evidence/read-off-battery.sh` -> `PASS` (exit `0`)
 - `uor-harness loop gates --full` -> `11 / 11 GREEN`
 - `uor-harness loop report --check` -> `PASS`
