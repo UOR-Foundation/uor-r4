@@ -15,7 +15,6 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item `loop-render-review-hardening`.
 | `crates/uor-r4-harness/src/looprender.rs` | `default_at(root, branch)` returns `merge-base(origin/main, HEAD)` on `kimi/render`, HEAD elsewhere; `cli` uses it and skips the working-tree roadmap render when the base is used |
 | `crates/uor-r4-harness/src/loopreview.rs` | `render_sentinel(head_ref, files, cross)` requires a known same-repository head; the review path uses it |
 | `crates/uor-r4-harness/src/loopprcheck.rs` | `Pr.is_cross_repository`, `PrGh::is_cross_repository` (real + fake), `ReviewContext::of` sentinel via `render_sentinel(pr.is_cross_repository)`, pr-check `--pr` fills the flag |
-| `crates/uor-r4-harness/src/loopqueue.rs` | `QueuePr.is_cross_repository` read from `gh pr view --json ...isCrossRepository` and set on the `Pr` |
 | `crates/uor-r4-harness/tests/loop_review.rs` | offline temp-git test for the merge-base default; sentinel tests; the end-to-end render-gate fixture (six cases through the real CLI); the queue-mirror cross-repository pin via the built binary |
 | `docs/roadmap/items/loop-render-review-hardening.md` | the deepseek-42 REPORT nit is **recorded** for the report owner (that file is outside any claimable item scope, so a lab PR cannot edit it) |
 
@@ -23,7 +22,7 @@ The item's five follow-ups are all closed: the fixture is in, the queue-mirror f
 
 ## The fixture and its negative gates
 
-`tests/loop_review.rs::render_gate_fixture_...` builds a temporary git repository (base commit, `kimi/render` head), a fake gh file and a test-only render stand-in (`UOR_LOOP_REVIEW_RENDER_FAKE`) and drives the same `render_gate` the CLI uses. It asserts: clean passes; a hand-edited STATE is refused by name; a fork is refused; an AGENTS edit outside the top-ten block is refused; a hand-edited block is refused; a branch-only stamp is refused. Removing the render check would let the tampered cases pass, and disabling the stamp rule would let the branch-only case pass, so both negative gates fail the suite.
+`tests/loop_review.rs::render_gate_fixture_...` builds a temporary git repository (base commit, `kimi/render` head), a fake gh file and a test-only render stand-in and drives the same `render_gate` the CLI uses. It asserts: clean passes; a hand-edited STATE is refused by name; a fork is refused; an AGENTS edit outside the top-ten block is refused; a hand-edited block is refused; a branch-only stamp is refused. Removing the render check would let the tampered cases pass, and disabling the stamp rule would let the branch-only case pass, so both negative gates fail the suite.
 
 ## Measurements
 
@@ -32,7 +31,7 @@ The item's five follow-ups are all closed: the fixture is in, the queue-mirror f
 
 ## Checks run at the head
 
-`loop report --check`, `loop pr-check --local`, `loop gates --full`, `cargo test -p uor-r4-harness`; results are recorded after the runs when the draft is opened for review.
+`cargo test -p uor-r4-harness --test loop_review` **36 passed** (including the CLI-driven fixture and the queue-mirror pin); full `cargo test -p uor-r4-harness` green; clippy `-D warnings` and fmt clean; `roadmap check` PASS and README current; `loop report --check` PASS; `loop pr-check --local` PASS; `loop gates --full` 11/11 GREEN; CI green (the only recurring red is the known #2028-carded `loop_drive` lease-note flake).
 
 ## Skills used
 
@@ -41,9 +40,8 @@ The item's five follow-ups are all closed: the fixture is in, the queue-mirror f
 
 ## Still open
 
-- The `context()` fake-git fixture with negative gates (blocking the item's done-when).
-- The loop-page wording (owner-only; carded on #2028).
+- The loop-page wording was landed by the PM in #3050; nothing else is open for this item.
 
 ## Plain summary
 
-- Landed two of the five follow-ups (merge-base render default, queue-mirror fork check) with tests, fixed the REPORT nit, and recorded the README exemption reason; the fixture remains before the item can close.
+- All five follow-ups are delivered: merge-base render default, queue-mirror fork check, the end-to-end fixture with every mutation pinned, the README exemption reason, and the old REPORT nit recorded for its owner. The item is `done`.
