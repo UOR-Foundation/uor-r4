@@ -1,50 +1,26 @@
-# ORDER: infra-loop-harness, deepseek-45
+# ORDER: infra-loop-harness, deepseek-45 (make the hardening item claimable)
 
-Lab: deepseek. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `7f0f0710c`.
+Lab: deepseek. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Setup row: 6. Base: `7f0f0710c`.
 
 ## Goal
 
-The item's done-when reads:
+`loop claim loop-render-review-hardening` refuses because the item's scope lists `crates/uor-r4-harness/src/loopprcheck.rs`, one of the nine shared registration files (loop page, "Shared registration files": no item scope may list them). Remove it from the scope and say in the item that the queue-mirror fix edits that shared file as an always-allowed path, with its test in the PR's own test file. No code changes.
 
-> Every PR in the build plan on [the loop page](../../loop/README.md#build-plan) is merged, each with its planted fault turning its gate red. The five labs (Kimi, Claude, Codex, DeepSeek, Antigravity) are onboarded, each with a committed onboarding receipt. Each lab has completed one loop task end to end: claim, probe, work, gates, report, review by another vendor, queue, and verify on fresh `main`.
+## Cancel probe
 
-## Cancel probe (run first)
-
-To fill in.
+Class instrument (roadmap metadata only). At the base: the claim above refuses with the shared-file message. Task stands.
 
 ## Files in scope
 
-- `docs/roadmap/items/*.md`
-- `crates/uor-r4-harness/src/loopreview.rs`
-- `crates/uor-r4-harness/src/loopnext.rs`
-- `crates/uor-r4-harness/src/loopreport.rs`
-- `crates/uor-r4-harness/src/loopclose.rs`
-- `crates/uor-r4-harness/src/loopclaim.rs`
-- `crates/uor-r4-harness/tests/loop_review*.rs`
-- `crates/uor-r4-harness/tests/loop_next*.rs`
-- `crates/uor-r4-harness/tests/loop_report*.rs`
-- `crates/uor-r4-harness/tests/loop_close*.rs`
-- `crates/uor-r4-harness/tests/loop_claim*.rs`
-- `crates/uor-r4-harness/tests/loop_repair_orders*.rs`
-- `crates/uor-r4-harness/tests/loop_shared_files*.rs`
-- `crates/uor-r4-harness/tests/loop_prcheck.rs`
-- `crates/uor-r4-harness/src/loopbench.rs`
-- `crates/uor-r4-harness/tests/loop_bench*.rs`
-- `docs/harness/d59.json`
-- `docs/harness/owner-paths.json`
-- `docs/integration/DECISIONS.md`
-- `AGENTS.md`
-- `crates/uor-r4-harness/src/loopdrive.rs`
-- `crates/uor-r4-harness/tests/loop_drive*.rs`
-- `xtask/src/docs_links.rs`
-- `xtask/src/archive_verify.rs`
-- `xtask/src/figures_charts.rs`
-- `docs/figures/**`
+- `docs/roadmap/items/loop-render-review-hardening.md` (scope + wording)
+- this task folder
 
 ## Done when
 
-To fill in.
+- The hardening item's `scope:` no longer lists any of the nine shared registration files, and its text explains that `loopprcheck.rs` is edited as a shared file.
+- `roadmap check`, `roadmap render --check`, `loop report --check`, `loop pr-check --local`, `loop gates --full` pass; a fresh-context record covers this docs-only PR.
+- `loop claim loop-render-review-hardening` succeeds from a fresh `main` worktree (demonstrated after merge).
 
 ## Stop and ask if
 
-To fill in.
+- Any file outside the item file must change.
