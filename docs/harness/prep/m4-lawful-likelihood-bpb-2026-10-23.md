@@ -57,7 +57,7 @@ Nine lib tests in `lawful_likelihood.rs` cover the seven required controls: tiny
 - **Registered scoring run: research compute (GPU, `scripts/pod/uor-pod`, `uor-pod status` first)**; estimated <= 0.5 pod-hour for 512 windows on an existing export (~$0.2 at the $8/h cap), recorded before lease and saved off-pod. It also needs the exported model and the typed owner release.
 - **Power:** 512 windows / 196,608 targets exceeds the >= 200 fresh-row floor; the result is deterministic (no seed sampling in the scorer); the model's own training seeds are reported with the artifact.
 
-## 9. Stop rule
+## 9. Stop conditions
 
 Any stream-hash or token-count mismatch, any mass below 1 or sum != 2^48, any float in the scorer, any nondeterminism between two identical runs, or an unscorable zero-count baseline target halts scoring. A negative result closes this configuration (A0 on this stream), never the lawful-likelihood mechanism; instrument vs mechanism is classified before any conclusion.
 
