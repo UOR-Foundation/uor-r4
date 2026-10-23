@@ -1056,3 +1056,98 @@ fn a_follow_up_loop_item_is_ordinary_but_a_build_plan_item_still_needs_its_setup
         outcome.details
     );
 }
+
+#[test]
+fn default_render_at_is_the_merge_base_on_the_render_branch() {
+    fn run(dir: &std::path::Path, args: &[&str]) -> String {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .expect("git runs");
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+    let dir = std::env::temp_dir().join(format!(
+        "uor-looprender-default-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    run(&dir, &["init", "-q", "-b", "main"]);
+    std::fs::write(dir.join("a"), "a").unwrap();
+    run(&dir, &["add", "."]);
+    run(
+        &dir,
+        &[
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t",
+            "commit",
+            "-q",
+            "-m",
+            "a",
+        ],
+    );
+    let a = run(&dir, &["rev-parse", "HEAD"]);
+    run(&dir, &["update-ref", "refs/remotes/origin/main", &a]);
+    run(&dir, &["checkout", "-q", "-b", "kimi/render"]);
+    std::fs::write(dir.join("b"), "b").unwrap();
+    run(&dir, &["add", "."]);
+    run(
+        &dir,
+        &[
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t",
+            "commit",
+            "-q",
+            "-m",
+            "b",
+        ],
+    );
+    assert_eq!(
+        uor_r4_harness::looprender::default_at(&dir, "kimi/render").unwrap(),
+        a,
+        "the render branch stamps the merge base"
+    );
+    assert_eq!(
+        uor_r4_harness::looprender::default_at(&dir, "feature").unwrap(),
+        "HEAD",
+        "other branches keep HEAD"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn render_sentinel_requires_a_known_same_repository_head() {
+    let views = vec![
+        "STATE.md".to_string(),
+        "docs/harness/LESSONS.md".to_string(),
+    ];
+    assert!(render_sentinel(RENDER_BRANCH, &views, Some(false)));
+    assert!(
+        !render_sentinel(RENDER_BRANCH, &views, Some(true)),
+        "a fork must not take the sentinel path"
+    );
+    assert!(
+        !render_sentinel(RENDER_BRANCH, &views, None),
+        "an unknown repository must not take the sentinel path"
+    );
+    assert!(!render_sentinel("kimi/other", &views, Some(false)));
+    assert!(!render_sentinel(
+        RENDER_BRANCH,
+        &["crates/uor-r4-harness/src/lib.rs".to_string()],
+        Some(false)
+    ));
+}

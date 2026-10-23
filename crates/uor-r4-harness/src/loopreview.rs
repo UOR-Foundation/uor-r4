@@ -851,6 +851,13 @@ struct Context {
     doc_only: bool,
 }
 
+/// The mirror's answer to "may this PR use the render sentinel?": the branch and the views
+/// only, **and** a known same-repository head (`Some(false)`). `None` (the source did not say)
+/// and `Some(true)` (a fork) both refuse.
+pub fn render_sentinel(head_ref: &str, files: &[String], cross_repository: Option<bool>) -> bool {
+    cross_repository == Some(false) && render_pr_without_order(head_ref, files)
+}
+
 /// The tamper gate for the render PR: fetch its explicit head, require each view's stamp to be
 /// the PR's merge base with `origin/main`, render the view at that stamp and compare byte for
 /// byte. A hand-edited view keeps its stamp but differs from its render, so it is refused.
@@ -937,7 +944,7 @@ fn top_ten_markers(text: &str, what: &str) -> Result<(usize, usize), String> {
 fn context(root: &Path, gh: &dyn ReviewGh, n: u64) -> Result<Context, String> {
     git(root, &["fetch", "-q", "origin", "main"])?;
     let pr = gh.pr(n)?;
-    let render_pr = render_pr_without_order(&pr.head_ref_name, &pr.files) && !pr.cross_repository;
+    let render_pr = render_sentinel(&pr.head_ref_name, &pr.files, Some(pr.cross_repository));
     let (order, text, order_lab) =
         match crate::loopnext::added_order(root, n, &pr.files, &|p| gh.file_at_pr(n, p)) {
             Ok(v) => v,
