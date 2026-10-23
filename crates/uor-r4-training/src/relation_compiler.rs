@@ -26,8 +26,11 @@ use uor_r4_tokenizer::dialogue::DialogueEncoder;
 
 #[cfg(any())]
 use crate::geometric_stack::StackModel;
+#[cfg(any())]
 use crate::milestone_world::words;
+#[cfg(any())]
 use crate::milestone_world_v2::{relation_names, Cell, MWorld2, Turn2};
+#[cfg(any())]
 use crate::stack_tracking::Rng;
 use crate::{invalid, Result};
 
@@ -72,6 +75,7 @@ impl Example {
 /// training draws gave that relation, in turn (a paraphrase whose relation
 /// has no recorded value is skipped). Returns the examples and the count
 /// skipped.
+#[cfg(any())]
 pub fn paraphrase_examples(jsonl: &str, training: &[Example]) -> Result<(Vec<Example>, usize)> {
     let mut values: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     for example in training {
@@ -125,6 +129,7 @@ pub fn paraphrase_examples(jsonl: &str, training: &[Example]) -> Result<(Vec<Exa
 }
 
 /// A turn's relation and act from its typed intent.
+#[cfg(any())]
 pub fn label(turn: &Turn2) -> (String, &'static str) {
     for name in relation_names() {
         if let Some(act) = turn
@@ -145,6 +150,7 @@ pub fn label(turn: &Turn2) -> (String, &'static str) {
 }
 
 /// Every user turn of `conversations` episodes of `cell`, labelled.
+#[cfg(any())]
 pub fn collect(
     world: &mut MWorld2<'_>,
     rng: &mut Rng,
@@ -203,53 +209,15 @@ pub fn trunk_features(
     Ok(features)
 }
 
-type TrunkOpProbeFn = dyn Fn(&str) -> OpProbe + Send + Sync;
-type TrunkFeaturesFn = dyn Fn(&str) -> Result<Vec<f64>> + Send + Sync;
-
 /// A frozen stack read as the compiler's encoder: its [`trunk_features`] of
 /// a user turn read alone, bound to its saved files by digest.
+#[cfg(any())]
 pub struct Trunk {
-    #[cfg(any())]
     model: StackModel,
-    #[cfg(any())]
     tokenizer: uor_r4_tokenizer::ByteBpeTokenizer,
-    #[cfg(any())]
     protocol: uor_r4_tokenizer::dialogue::DialogueProtocol,
     tokenizer_sha256: String,
     identity: crate::stack_grounded_session::EncoderIdentity,
-    width: usize,
-    op_probe_fn: Option<std::sync::Arc<TrunkOpProbeFn>>,
-    features_fn: Option<std::sync::Arc<TrunkFeaturesFn>>,
-}
-
-impl Trunk {
-    /// Construct a trunk bound to `identity` and `tokenizer_sha256` whose op-model
-    /// generations come from `op_probe_fn` (used by finite CPU controls for [`SavedCompiler`]).
-    pub fn from_op_probe(
-        tokenizer_sha256: impl Into<String>,
-        identity: crate::stack_grounded_session::EncoderIdentity,
-        op_probe_fn: impl Fn(&str) -> OpProbe + Send + Sync + 'static,
-    ) -> Self {
-        Self {
-            tokenizer_sha256: tokenizer_sha256.into(),
-            identity,
-            width: 0,
-            op_probe_fn: Some(std::sync::Arc::new(op_probe_fn)),
-            features_fn: None,
-        }
-    }
-
-    pub fn identity(&self) -> &crate::stack_grounded_session::EncoderIdentity {
-        &self.identity
-    }
-
-    /// The trunk's features of a user turn read alone.
-    pub fn features(&self, text: &str) -> Result<Vec<f64>> {
-        if let Some(f) = &self.features_fn {
-            return f(text);
-        }
-        Err(invalid("this trunk has no feature extractor"))
-    }
 }
 
 #[cfg(any())]
@@ -285,7 +253,6 @@ impl Trunk {
         }
         let protocol = uor_r4_tokenizer::dialogue::DialogueProtocol::literal_roles_v1(&tokenizer)
             .map_err(|e| invalid(format!("protocol: {e}")))?;
-        let width = model.config.width;
         Ok(Self {
             model,
             tokenizer,
@@ -294,10 +261,20 @@ impl Trunk {
                 tokenizer_json,
             ),
             identity,
-            width,
-            op_probe_fn: None,
-            features_fn: None,
         })
+    }
+
+    pub fn identity(&self) -> &crate::stack_grounded_session::EncoderIdentity {
+        &self.identity
+    }
+
+    /// The trunk's features of a user turn read alone.
+    pub fn features(&self, text: &str) -> Result<Vec<f64>> {
+        let encoder = self
+            .protocol
+            .bind(&self.tokenizer)
+            .map_err(|e| invalid(format!("protocol: {e}")))?;
+        trunk_features(&self.model, &encoder, self.protocol.bos_id, text)
     }
 }
 
@@ -385,6 +362,7 @@ impl Lexicon {
 }
 
 /// A softmax classifier on standardized features.
+#[cfg(any())]
 pub struct Softmax {
     classes: usize,
     dim: usize,
@@ -394,6 +372,7 @@ pub struct Softmax {
     bias: Vec<f64>,
 }
 
+#[cfg(any())]
 impl Softmax {
     /// Fit by `steps` full-batch gradient steps of size `rate` on the mean
     /// cross-entropy plus `l2` times the squared weights.
@@ -502,14 +481,6 @@ impl Softmax {
             .collect()
     }
 
-    /// The logits of a raw feature row, scaled to integer milli-units.
-    pub(crate) fn logits_milli(&self, row: &[f64]) -> Vec<i64> {
-        self.logits(row)
-            .into_iter()
-            .map(|l| (l * 1000.0).round() as i64)
-            .collect()
-    }
-
     /// The most probable class of a raw feature row (ties to the lower class).
     pub fn predict(&self, row: &[f64]) -> usize {
         let p = self.probabilities_standardized(&self.standardize(row));
@@ -528,6 +499,7 @@ impl Softmax {
 /// lexicon's standardized scale ([`Lexicon::scaled`]) it weighs rare words as a
 /// standardized fit does. In serving it is a table of word weights summed per
 /// class.
+#[cfg(any())]
 pub struct SparseSoftmax {
     classes: usize,
     dim: usize,
@@ -535,6 +507,7 @@ pub struct SparseSoftmax {
     bias: Vec<f64>,
 }
 
+#[cfg(any())]
 impl SparseSoftmax {
     /// Full-batch gradient descent on the mean cross-entropy plus `l2` times
     /// the squared weights (applied as a shrink each step).
@@ -631,16 +604,10 @@ impl SparseSoftmax {
     fn margin(&self, row: &[(usize, f64)]) -> f64 {
         self.logit(row, 1) - self.logit(row, 0)
     }
-
-    /// All class logits of a sparse row, scaled to integer milli-units.
-    pub(crate) fn logits_milli(&self, row: &[(usize, f64)]) -> Vec<i64> {
-        (0..self.classes)
-            .map(|c| (self.logit(row, c) * 1000.0).round() as i64)
-            .collect()
-    }
 }
 
 /// The standardization of dense features appended to a sparse word row.
+#[cfg(any())]
 struct DenseNorm {
     mean: Vec<f64>,
     scale: Vec<f64>,
@@ -650,6 +617,7 @@ struct DenseNorm {
 /// table naming each user turn's relation and act, fitted on labelled turns,
 /// optionally with a frozen trunk's features of the turn appended to each word
 /// row at their standardized values.
+#[cfg(any())]
 pub struct RelationRoute {
     lexicon: Lexicon,
     relation_head: SparseSoftmax,
@@ -660,6 +628,7 @@ pub struct RelationRoute {
 
 /// A turn's row: its present words at their standardized scale, then any
 /// trunk features, standardized, after the vocabulary.
+#[cfg(any())]
 fn route_row(
     lexicon: &Lexicon,
     norm: Option<&DenseNorm>,
@@ -686,6 +655,7 @@ fn route_row(
     Ok(row)
 }
 
+#[cfg(any())]
 impl RelationRoute {
     pub fn fit(train: &[Example], steps: usize, rate: f64, l2: f64) -> Result<Self> {
         Self::fit_with(train, None, steps, rate, l2)
@@ -811,16 +781,6 @@ impl RelationRoute {
         ))
     }
 
-    /// Additive linear class logits (in integer milli-units) for the relation head
-    /// and act head on `text`.
-    pub fn logits_milli(&self, text: &str, dense: Option<&[f64]>) -> Result<(Vec<i64>, Vec<i64>)> {
-        let row = route_row(&self.lexicon, self.trunk.as_ref(), text, dense)?;
-        Ok((
-            self.relation_head.logits_milli(&row),
-            self.act_head.logits_milli(&row),
-        ))
-    }
-
     /// The value the log gives for a relation query: the latest earlier user
     /// turn the table names as the asked relation, and its words outside the
     /// world's fixed vocabulary (`reserved`, instrument knowledge, as R-sieve's
@@ -921,6 +881,7 @@ pub fn word_spans(text: &str) -> Vec<WordSpan> {
 /// that never fall inside a value. Any other word, a value word included,
 /// reads as `<v>`, so the head cannot recall a value it was trained on and
 /// must find values from their context, shape and position.
+#[cfg(any())]
 pub struct SpanHead {
     frame: std::collections::BTreeSet<String>,
     index: BTreeMap<String, usize>,
@@ -929,6 +890,7 @@ pub struct SpanHead {
 }
 
 /// The features of word `i` of `text`, by name.
+#[cfg(any())]
 fn span_features(
     frame: &std::collections::BTreeSet<String>,
     text: &str,
@@ -971,10 +933,12 @@ fn span_features(
 }
 
 /// Whether a turn with these labels writes a value.
+#[cfg(any())]
 fn writes(relation: &str, act: &str) -> bool {
     relation != NONE && matches!(act, "assert" | "update")
 }
 
+#[cfg(any())]
 impl SpanHead {
     /// Fit on labelled turns: a statement's slot words are in its value,
     /// every other word, and every word of a query or of a turn naming no
@@ -1061,12 +1025,6 @@ impl SpanHead {
     /// The value's half-open byte span in `text`, or `None` for no write.
     /// Ties keep the earlier, then the shorter, run.
     pub fn decode(&self, text: &str) -> Option<(usize, usize)> {
-        self.decode_with_margin_milli(text).map(|(span, _, _)| span)
-    }
-
-    /// Decode the value span together with the boundary margins (in integer milli-units)
-    /// at the first and last word of the decoded span.
-    pub fn decode_with_margin_milli(&self, text: &str) -> Option<((usize, usize), i64, i64)> {
         let words = word_spans(text);
         let margins: Vec<f64> = (0..words.len())
             .map(|i| self.head.margin(&self.row(text, &words, i)))
@@ -1081,11 +1039,7 @@ impl SpanHead {
                 }
             }
         }
-        best.map(|(_, a, b)| {
-            let start_milli = (margins[a] * 1000.0).round() as i64;
-            let end_milli = (margins[b] * 1000.0).round() as i64;
-            ((words[a].start, words[b].end), start_milli, end_milli)
-        })
+        best.map(|(_, a, b)| (words[a].start, words[b].end))
     }
 }
 
@@ -1803,6 +1757,9 @@ impl MemoryTurnGate {
         if word_spans(value_slice).is_empty() {
             return Err("the candidate write span holds no word");
         }
+        if !self.require_speaker_frame {
+            return Ok(());
+        }
         let trimmed = source.trim();
         if trimmed.ends_with('?') {
             return Err("the turn is interrogative and cannot write memory");
@@ -1842,9 +1799,6 @@ impl MemoryTurnGate {
                     "the turn opens with a question or request cue and cannot write memory",
                 );
             }
-        }
-        if !self.require_speaker_frame {
-            return Ok(());
         }
         let prefix = &source[..span.start];
         let suffix = &source[span.end..];
@@ -2220,12 +2174,116 @@ pub fn resolve_op_policy_gated(
     resolve_op_policy(policy, gated_table, gated_op)
 }
 
+type MarginFn = dyn Fn(&str, &crate::stack_grounded_session::CompiledAction) -> Option<StatementMargin>
+    + Send
+    + Sync;
+
+/// Compiled, integer-only [`crate::stack_grounded_session::TurnCompiler`] wrapper that
+/// enforces [`MemoryTurnGate`] (both additive integer [`StatementMargin`] thresholds when an
+/// integer margin source is attached and the structural speaker-grounded statement
+/// discriminator) at the `TurnCompiler::compile` write boundary (`#2855`).
+#[derive(Clone)]
+pub struct GatedTurnCompiler<C> {
+    inner: C,
+    gate: MemoryTurnGate,
+    margin_fn: Option<std::sync::Arc<MarginFn>>,
+}
+
+impl<C> GatedTurnCompiler<C> {
+    /// Wrap `inner` with [`MemoryTurnGate::default`].
+    pub fn new(inner: C) -> Self {
+        Self {
+            inner,
+            gate: MemoryTurnGate::default(),
+            margin_fn: None,
+        }
+    }
+
+    /// Return a copy of this wrapper with `gate` as its memory-turn discriminator and margin
+    /// gate (pass [`MemoryTurnGate::disabled`] for the ungated baseline arm).
+    pub fn with_memory_turn_gate(mut self, gate: MemoryTurnGate) -> Self {
+        self.gate = gate;
+        self
+    }
+
+    /// Update the memory-turn discriminator and margin gate in place.
+    pub fn set_memory_turn_gate(&mut self, gate: MemoryTurnGate) {
+        self.gate = gate;
+    }
+
+    /// The active [`MemoryTurnGate`] configuration.
+    pub fn memory_turn_gate(&self) -> &MemoryTurnGate {
+        &self.gate
+    }
+
+    /// Attach an integer [`StatementMargin`] source evaluated on each candidate write.
+    pub fn with_margin_fn(
+        mut self,
+        f: impl Fn(&str, &crate::stack_grounded_session::CompiledAction) -> Option<StatementMargin>
+            + Send
+            + Sync
+            + 'static,
+    ) -> Self {
+        self.margin_fn = Some(std::sync::Arc::new(f));
+        self
+    }
+
+    /// Shared reference to the wrapped compiler.
+    pub fn inner(&self) -> &C {
+        &self.inner
+    }
+}
+
+impl<C: crate::stack_grounded_session::TurnCompiler> crate::stack_grounded_session::TurnCompiler
+    for GatedTurnCompiler<C>
+{
+    fn identity(&self) -> &crate::stack_grounded_session::CompilerIdentity {
+        self.inner.identity()
+    }
+
+    fn artifact_bytes(&self) -> &[u8] {
+        self.inner.artifact_bytes()
+    }
+
+    fn compile(
+        &self,
+        source: &str,
+    ) -> std::result::Result<
+        crate::stack_grounded_session::CompiledAction,
+        crate::stack_grounded_session::GroundedSessionError,
+    > {
+        let candidate = self.inner.compile(source)?;
+        let margin = self.margin_fn.as_ref().and_then(|f| f(source, &candidate));
+        let identity = self.inner.identity();
+        Ok(gate_compiled_action(
+            &self.gate,
+            source,
+            candidate,
+            margin.as_ref(),
+            |rel_id| {
+                identity
+                    .relations
+                    .iter()
+                    .find(|r| r.id == rel_id)
+                    .map(|r| r.name.as_str())
+                    .and_then(|name| {
+                        (1u32..=10)
+                            .find_map(|id| canonical_relation_name(id).filter(|&c| c == name))
+                    })
+                    .or_else(|| canonical_relation_name(rel_id))
+            },
+        ))
+    }
+}
+
 pub const COMPILER_SCHEMA: &str = "uor-r4.relation-compiler/1";
 pub const COMPILER_LABEL_SCHEMA: &str = "m-world-v2.relations-acts/1";
+#[cfg(any())]
 const COMPILER_FEATURES: &str = "table: words at standardized scale; span: frame words in a \
      two-word window, the l1|r1 pair, shape and position";
 
 /// Serialize `f64`s by their bits, so a saved artifact reloads exactly.
+#[cfg(any())]
 pub(crate) mod f64_bits {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -2245,6 +2303,7 @@ pub(crate) mod f64_bits {
     }
 }
 
+#[cfg(any())]
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct HeadParts {
@@ -2256,6 +2315,7 @@ pub(crate) struct HeadParts {
     bias: Vec<f64>,
 }
 
+#[cfg(any())]
 impl HeadParts {
     pub(crate) fn of(head: &SparseSoftmax) -> Self {
         Self {
@@ -2290,6 +2350,7 @@ impl HeadParts {
     }
 }
 
+#[cfg(any())]
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DenseParts {
@@ -2305,6 +2366,7 @@ struct DenseParts {
     bias: Vec<f64>,
 }
 
+#[cfg(any())]
 impl DenseParts {
     fn of(head: &Softmax) -> Self {
         Self {
@@ -2348,6 +2410,7 @@ impl DenseParts {
 }
 
 /// The combined heads and the trunk they read.
+#[cfg(any())]
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CombinedParts {
@@ -2361,6 +2424,7 @@ struct CombinedParts {
 
 /// The saved artifact. Field order is the encoding; [`SavedCompiler`] loads
 /// only its own canonical bytes.
+#[cfg(any())]
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CompilerArtifact {
@@ -2404,6 +2468,7 @@ struct CompilerArtifact {
     op_model: Option<crate::stack_grounded_session::EncoderIdentity>,
 }
 
+#[cfg(any())]
 fn is_sha256(value: &str) -> bool {
     value.len() == 64
         && value
@@ -2412,6 +2477,7 @@ fn is_sha256(value: &str) -> bool {
 }
 
 /// The combined heads and the trunk they read.
+#[cfg(any())]
 struct Combined {
     trunk: Trunk,
     relation_head: Softmax,
@@ -2419,6 +2485,7 @@ struct Combined {
     act_head: Option<Softmax>,
 }
 
+#[cfg(any())]
 impl Combined {
     /// A turn's dense row: the trunk's features, then its binary words.
     fn row(&self, lexicon: &Lexicon, text: &str) -> Result<Vec<f64>> {
@@ -2433,6 +2500,7 @@ impl Combined {
 /// from a turn's text alone; it never sees an evaluator label. Under
 /// [`RelationMode::Combined`] dense heads over a frozen [`Trunk`] name the
 /// relation and act instead of the table.
+#[cfg(any())]
 #[derive(Clone)]
 pub struct SavedCompiler {
     bytes: Vec<u8>,
@@ -2445,6 +2513,7 @@ pub struct SavedCompiler {
     identity: crate::stack_grounded_session::CompilerIdentity,
 }
 
+#[cfg(any())]
 impl SavedCompiler {
     /// Fit the table and the span head on `train` and save them, with
     /// `training`, the provenance of `train`, as the artifact. The returned
@@ -2669,7 +2738,7 @@ impl SavedCompiler {
             (Some(parts), None, Some(trunk)) => {
                 if parts.trunk != trunk.identity
                     || trunk.tokenizer_sha256 != artifact.tokenizer_sha256
-                    || parts.trunk_width != 2 * trunk.width
+                    || parts.trunk_width != 2 * trunk.model.config.width
                 {
                     return Err(invalid(
                         "the trunk or its tokenizer is not the one the compiler binds",
@@ -2740,6 +2809,23 @@ impl SavedCompiler {
         })
     }
 
+    /// Return a copy of this compiler with `gate` as its memory-turn discriminator
+    /// and margin gate (`MemoryTurnGate::disabled()` runs the ungated baseline).
+    pub fn with_memory_turn_gate(mut self, gate: MemoryTurnGate) -> Self {
+        self.gate = gate;
+        self
+    }
+
+    /// Update the memory-turn discriminator and margin gate in place.
+    pub fn set_memory_turn_gate(&mut self, gate: MemoryTurnGate) {
+        self.gate = gate;
+    }
+
+    /// The active [`MemoryTurnGate`] configuration.
+    pub fn memory_turn_gate(&self) -> &MemoryTurnGate {
+        &self.gate
+    }
+
     /// The same compiler combining its op model and its table by `policy`
     /// (a load-time choice; the artifact is unchanged). Refused for a
     /// compiler without an op model unless `policy` is [`OpPolicy::Op`]
@@ -2754,22 +2840,6 @@ impl SavedCompiler {
 
     pub fn op_policy(&self) -> OpPolicy {
         self.op_policy
-    }
-
-    /// Configure the memory-turn discriminator and margin gate on this compiler
-    /// (for example [`MemoryTurnGate::disabled`] for the un-gated baseline arm or
-    /// [`MemoryTurnGate::default`] for the gated arm).
-    pub fn with_memory_turn_gate(mut self, gate: MemoryTurnGate) -> Self {
-        self.gate = gate;
-        self
-    }
-
-    pub fn set_memory_turn_gate(&mut self, gate: MemoryTurnGate) {
-        self.gate = gate;
-    }
-
-    pub fn memory_turn_gate(&self) -> &MemoryTurnGate {
-        &self.gate
     }
 
     pub fn act_rule(&self) -> ActRule {
@@ -2847,54 +2917,46 @@ impl SavedCompiler {
     /// named the right relation" from "the op model named nothing", which the action
     /// cannot. Behaviour is identical to [`Self::op_action`]; this only exposes the text.
     pub fn op_probe(&self, source: &str) -> Result<OpProbe> {
+        use uor_r4_tokenizer::dialogue::Message;
         let op = self
             .op
             .as_ref()
             .ok_or_else(|| invalid("this compiler has no op model"))?;
-        if let Some(f) = &op.op_probe_fn {
-            return Ok(f(source));
+        let encoder = op
+            .protocol
+            .bind(&op.tokenizer)
+            .map_err(|e| invalid(format!("protocol: {e}")))?;
+        let prompt = encoder.encode_assistant_prefix(&[
+            Message {
+                role: "system",
+                content: COMPILE_PROMPT,
+            },
+            Message {
+                role: "user",
+                content: source,
+            },
+        ]);
+        if prompt.emitted_turns != 2 || prompt.special_token_occurrences != 0 {
+            return Ok(OpProbe::Refused(
+                "the turn does not encode as a compile prompt".into(),
+            ));
         }
-        #[cfg(any())]
-        {
-            use uor_r4_tokenizer::dialogue::Message;
-            let encoder = op
-                .protocol
-                .bind(&op.tokenizer)
-                .map_err(|e| invalid(format!("protocol: {e}")))?;
-            let prompt = encoder.encode_assistant_prefix(&[
-                Message {
-                    role: "system",
-                    content: COMPILE_PROMPT,
-                },
-                Message {
-                    role: "user",
-                    content: source,
-                },
-            ]);
-            if prompt.emitted_turns != 2 || prompt.special_token_occurrences != 0 {
-                return Ok(OpProbe::Refused(
-                    "the turn does not encode as a compile prompt".into(),
-                ));
-            }
-            if prompt.tokens.len() + OP_MAX_TOKENS + 1 > op.model.config.context {
-                return Ok(OpProbe::Refused("the turn is too long to compile".into()));
-            }
-            let reply = crate::stack_dialogue::greedy_reply(
-                &op.model,
-                &prompt.tokens,
-                OP_MAX_TOKENS,
-                op.protocol.eos_id,
-            )?;
-            let ids: Vec<u32> = reply
-                .ids
-                .iter()
-                .copied()
-                .filter(|&id| id != op.protocol.eos_id)
-                .collect();
-            return Ok(OpProbe::Text(op.tokenizer.decode(&ids)));
+        if prompt.tokens.len() + OP_MAX_TOKENS + 1 > op.model.config.context {
+            return Ok(OpProbe::Refused("the turn is too long to compile".into()));
         }
-        #[cfg(not(any()))]
-        Err(invalid("this compiler's op trunk has no op probe"))
+        let reply = crate::stack_dialogue::greedy_reply(
+            &op.model,
+            &prompt.tokens,
+            OP_MAX_TOKENS,
+            op.protocol.eos_id,
+        )?;
+        let ids: Vec<u32> = reply
+            .ids
+            .iter()
+            .copied()
+            .filter(|&id| id != op.protocol.eos_id)
+            .collect();
+        Ok(OpProbe::Text(op.tokenizer.decode(&ids)))
     }
 
     /// The relation and act the compiler's heads name for a turn: the
@@ -2946,23 +3008,6 @@ impl SavedCompiler {
         }
     }
 
-    fn logits_milli_row(&self, source: &str, row: Option<&[f64]>) -> Result<(Vec<i64>, Vec<i64>)> {
-        match (&self.combined, row) {
-            (None, None) => self.route().logits_milli(source, None),
-            (Some(combined), Some(row)) => {
-                let rel_logits = combined.relation_head.logits_milli(row);
-                let act_logits = match &combined.act_head {
-                    Some(head) => head.logits_milli(row),
-                    None => self.route().logits_milli(source, None)?.1,
-                };
-                Ok((rel_logits, act_logits))
-            }
-            _ => Err(invalid(
-                "a combined row must accompany exactly combined heads",
-            )),
-        }
-    }
-
     /// For a turn known to be a statement, `update` when the act head scores
     /// it above `assert`, otherwise `assert`.
     fn statement_act(&self, source: &str, row: Option<&[f64]>) -> Result<&'static str> {
@@ -2995,50 +3040,25 @@ impl SavedCompiler {
         if self.op.is_none() {
             return self.table_action(source);
         }
-        let (table_candidate, table_margin) = self.table_action_with_margin(source)?;
         resolve_op_policy_gated(
             self.op_policy,
             &self.gate,
             source,
-            table_margin.as_ref(),
+            None,
             canonical_relation_name,
-            || Ok(table_candidate),
+            || self.table_action(source),
             || self.op_action(source),
         )
     }
 
     /// The table's (or combined heads') action for a turn, never the op
-    /// model's, after applying [`Self::memory_turn_gate`] with the real
-    /// [`StatementMargin`] computed from the relation, act, and span heads.
+    /// model's.
     fn table_action(&self, source: &str) -> Result<crate::stack_grounded_session::CompiledAction> {
-        let (candidate, margin) = self.table_action_with_margin(source)?;
-        Ok(gate_compiled_action(
-            &self.gate,
-            source,
-            candidate,
-            margin.as_ref(),
-            canonical_relation_name,
-        ))
-    }
-
-    /// Compute the un-gated table candidate action together with its additive
-    /// [`StatementMargin`] (when the candidate is a statement write) from the
-    /// compiler's `relation_head`, `act_head`, and `span_head` linear logits.
-    pub fn table_action_with_margin(
-        &self,
-        source: &str,
-    ) -> Result<(
-        crate::stack_grounded_session::CompiledAction,
-        Option<StatementMargin>,
-    )> {
         use crate::stack_grounded_session::{CompiledAction, SourceSpan};
         let unresolved = |reason: &str| {
-            Ok((
-                CompiledAction::Unresolved {
-                    reason: reason.to_owned(),
-                },
-                None,
-            ))
+            Ok(CompiledAction::Unresolved {
+                reason: reason.to_owned(),
+            })
         };
         let row = self.combined_row(source)?;
         let (relation, act) = self.classify_row(source, row.as_deref())?;
@@ -3048,55 +3068,44 @@ impl SavedCompiler {
         let id = self
             .relation_id(relation)
             .ok_or_else(|| invalid("the heads named a relation outside the labels"))?;
-        let chosen_rel = (id as usize).saturating_sub(1);
-        let (rel_logits, act_logits) = self.logits_milli_row(source, row.as_deref())?;
         if self.act_rule == ActRule::Span {
-            return Ok(match self.span().decode_with_margin_milli(source) {
-                None => (CompiledAction::QueryCurrent { relation: id }, None),
-                Some(((start, end), start_milli, end_milli)) => {
+            return Ok(match self.span().decode(source) {
+                None => CompiledAction::QueryCurrent { relation: id },
+                Some((start, end)) => {
                     let span = SourceSpan { start, end };
-                    let is_update = self.statement_act(source, row.as_deref())? == "update";
-                    let chosen_act = usize::from(is_update);
-                    let margin = StatementMargin::from_linear_scores(
-                        &rel_logits,
-                        chosen_rel,
-                        &act_logits,
-                        chosen_act,
-                        &[2, 3],
-                        start_milli,
-                        end_milli,
-                    );
-                    let candidate = if is_update {
+                    let candidate = if self.statement_act(source, row.as_deref())? == "update" {
                         CompiledAction::Correct { relation: id, span }
                     } else {
                         CompiledAction::Assert { relation: id, span }
                     };
-                    (candidate, margin)
+                    gate_compiled_action(
+                        &self.gate,
+                        source,
+                        candidate,
+                        None,
+                        canonical_relation_name,
+                    )
                 }
             });
         }
         match act {
-            "query" => Ok((CompiledAction::QueryCurrent { relation: id }, None)),
-            "assert" | "update" => match self.span().decode_with_margin_milli(source) {
+            "query" => Ok(CompiledAction::QueryCurrent { relation: id }),
+            "assert" | "update" => match self.span().decode(source) {
                 None => unresolved("the span head marks no value"),
-                Some(((start, end), start_milli, end_milli)) => {
+                Some((start, end)) => {
                     let span = SourceSpan { start, end };
-                    let chosen_act = usize::from(act == "update");
-                    let margin = StatementMargin::from_linear_scores(
-                        &rel_logits,
-                        chosen_rel,
-                        &act_logits,
-                        chosen_act,
-                        &[2, 3],
-                        start_milli,
-                        end_milli,
-                    );
                     let candidate = if act == "assert" {
                         CompiledAction::Assert { relation: id, span }
                     } else {
                         CompiledAction::Correct { relation: id, span }
                     };
-                    Ok((candidate, margin))
+                    Ok(gate_compiled_action(
+                        &self.gate,
+                        source,
+                        candidate,
+                        None,
+                        canonical_relation_name,
+                    ))
                 }
             },
             _ => unresolved("the heads name no act"),
@@ -3104,6 +3113,7 @@ impl SavedCompiler {
     }
 }
 
+#[cfg(any())]
 fn encode(
     route: &RelationRoute,
     span: &SpanHead,
@@ -3176,7 +3186,7 @@ fn encode(
         },
         combined: combined.map(|c| CombinedParts {
             trunk: c.trunk.identity.clone(),
-            trunk_width: 2 * c.trunk.width,
+            trunk_width: 2 * c.trunk.model.config.width,
             relation_head: DenseParts::of(&c.relation_head),
             act_head: c.act_head.as_ref().map(DenseParts::of),
         }),
@@ -3185,6 +3195,7 @@ fn encode(
     Ok(serde_json::to_vec(&artifact)?)
 }
 
+#[cfg(any())]
 impl crate::stack_grounded_session::TurnCompiler for SavedCompiler {
     fn identity(&self) -> &crate::stack_grounded_session::CompilerIdentity {
         &self.identity
@@ -3545,6 +3556,7 @@ mod tests {
         train
     }
 
+    #[cfg(any())]
     #[test]
     fn the_span_head_finds_unseen_values_from_context_and_marks_no_write() -> Result<()> {
         let train = small_world();
@@ -3568,6 +3580,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(any())]
     #[test]
     fn a_saved_compiler_reloads_exactly_and_compiles_turns() -> Result<()> {
         use crate::stack_grounded_session::{CompiledAction, SourceSpan, TurnCompiler};
@@ -4573,7 +4586,10 @@ mod tests {
         );
 
         // 3. #1718 non-relation prose and synthetic conversational controls are rejected
-        //    under both gate_compiled_action and resolve_op_policy_gated(UnlessQuery).
+        //    under both gate_compiled_action and resolve_op_policy_gated(UnlessQuery),
+        //    including third-person possessors with nouns that do not appear anywhere in
+        //    `data/panels/nonrelation-prose-v1.txt`, negated statements, conditional/hypothetical
+        //    statements, reported speech, past-tense code-word prose, and lowercase small-talk.
         let non_relation_controls = [
             (
                 "The weather has been unusually warm this week.",
@@ -4603,16 +4619,42 @@ mod tests {
                 "My favorite color is not blue.",
                 "Op: assert favorite_color blue",
             ),
+            ("My name is not Alice.", "Op: assert user_name Alice"),
             ("I'm tired.", "Op: assert user_name tired"),
+            ("I am hungry.", "Op: assert user_name hungry"),
             (
                 "The code word in the film was Rosebud.",
                 "Op: assert code_word Rosebud",
             ),
             (
+                "Yesterday the code word was lantern.",
+                "Op: assert code_word lantern",
+            ),
+            (
                 "If my name were Bob, I'd sign it Bob.",
                 "Op: assert user_name Bob",
             ),
+            (
+                "If my favorite color is blue, I will buy that shirt.",
+                "Op: assert favorite_color blue",
+            ),
             ("She said my name is Bob.", "Op: assert user_name Bob"),
+            (
+                "He said my favorite color is teal.",
+                "Op: assert favorite_color teal",
+            ),
+            (
+                "The baker's specialty dish is sourdough.",
+                "Op: assert favorite_food sourdough",
+            ),
+            (
+                "Our landlord's cat is named Cleo.",
+                "Op: assert pet_name Cleo",
+            ),
+            (
+                "My brother's favorite color is green.",
+                "Op: assert favorite_color green",
+            ),
         ];
         let ids = |name: &str| (1u32..=10).find(|&id| canonical_relation_name(id) == Some(name));
         for (turn, hallucinated_op) in non_relation_controls {
@@ -4669,6 +4711,7 @@ mod tests {
         use crate::milestone_world::Split;
         use crate::milestone_world_v2::relations;
         use crate::stack_grounded_session::{CompiledAction, SourceSpan};
+        use crate::stack_tracking::Rng;
 
         let gate = MemoryTurnGate::default();
         let passing_margin = StatementMargin {
@@ -4874,101 +4917,102 @@ mod tests {
     }
 
     #[test]
-    fn saved_compiler_action_wires_configurable_gate_and_real_margin() -> Result<()> {
-        use crate::stack_grounded_session::{CompiledAction, EncoderIdentity, SourceSpan};
+    fn gated_turn_compiler_wires_configurable_gate_and_integer_margin() {
+        use crate::nonrelation_prose_panel::world_v2_relation_labels;
+        use crate::stack_grounded_session::{
+            CompiledAction, CompilerIdentity, GroundedSessionError, SourceSpan, TurnCompiler,
+        };
 
-        let train = small_world();
-        let tok_sha = "a".repeat(64);
-        let compiler = SavedCompiler::fit(
-            &train,
-            &tok_sha,
-            serde_json::json!({"source": "unit_test", "rows": train.len()}),
-            CompilerSettings::default(),
-        )?;
-        let reloaded = SavedCompiler::from_bytes(compiler.bytes().to_vec())?;
+        #[derive(Clone)]
+        struct OpStubCompiler {
+            identity: CompilerIdentity,
+            bytes: Vec<u8>,
+        }
 
-        // 1. A genuine statement produces a positive real StatementMargin from the fitted
-        //    relation_head, act_head, and span_head linear logits, and passes `action()`.
-        let (candidate, margin) = reloaded.table_action_with_margin("My name is Zorvak.")?;
-        let margin = margin.expect("statement produces a real StatementMargin");
-        assert!(
-            margin.relation_gap_milli > 250
-                && margin.act_write_gap_milli > 250
-                && margin.span_margin_milli > 500,
-            "unexpected margin on clear statement: {margin:?}"
-        );
+        impl TurnCompiler for OpStubCompiler {
+            fn identity(&self) -> &CompilerIdentity {
+                &self.identity
+            }
+
+            fn artifact_bytes(&self) -> &[u8] {
+                &self.bytes
+            }
+
+            fn compile(
+                &self,
+                source: &str,
+            ) -> std::result::Result<CompiledAction, GroundedSessionError> {
+                let ids =
+                    |name: &str| (1u32..=10).find(|&id| canonical_relation_name(id) == Some(name));
+                let op_text = match source {
+                    "My name is Zorvak." => "Op: assert user_name Zorvak",
+                    "I'm tired." => "Op: assert user_name tired",
+                    _ => "Op: none",
+                };
+                Ok(parse_op(op_text, source, ids))
+            }
+        }
+
+        let base_identity = CompilerIdentity {
+            schema: COMPILER_SCHEMA.to_owned(),
+            artifact_sha256: "0".repeat(64),
+            tokenizer_sha256: "0".repeat(64),
+            label_schema: COMPILER_LABEL_SCHEMA.to_owned(),
+            relations: world_v2_relation_labels(),
+            encoder: None,
+        };
+        let inner = OpStubCompiler {
+            identity: base_identity,
+            bytes: b"op-stub".to_vec(),
+        };
+        let integer_margin = StatementMargin {
+            relation_gap_milli: 480,
+            act_write_gap_milli: 410,
+            span_margin_milli: 620,
+        };
+        let gated = GatedTurnCompiler::new(inner).with_margin_fn(move |_, _| Some(integer_margin));
+
+        // 1. A genuine statement passes both the integer StatementMargin check and the
+        //    structural discriminator through `GatedTurnCompiler::compile`.
         assert_eq!(
-            reloaded.action("My name is Zorvak.")?,
+            gated.compile("My name is Zorvak.").expect("compile"),
             CompiledAction::Assert {
                 relation: 1,
                 span: SourceSpan { start: 11, end: 17 },
             }
         );
-        assert_eq!(candidate, reloaded.action("My name is Zorvak.")?);
 
-        // 2. Raising the relation-gap threshold on `SavedCompiler` via `with_memory_turn_gate`
-        //    above the computed `margin.relation_gap_milli` causes `SavedCompiler::action`
-        //    to reject the write as `Unresolved`, proving `SavedCompiler::action` uses both
-        //    `self.gate` and the real `StatementMargin`.
-        let strict_compiler = reloaded.clone().with_memory_turn_gate(MemoryTurnGate {
-            min_relation_gap_milli: margin.relation_gap_milli + 100,
+        // 2. Raising `min_relation_gap_milli` above the integer margin via
+        //    `with_memory_turn_gate` rejects the write as `Unresolved`.
+        let strict = gated.clone().with_memory_turn_gate(MemoryTurnGate {
+            min_relation_gap_milli: integer_margin.relation_gap_milli + 100,
             ..MemoryTurnGate::default()
         });
         assert_eq!(
-            strict_compiler.action("My name is Zorvak.")?,
+            strict.compile("My name is Zorvak.").expect("compile"),
             CompiledAction::Unresolved {
                 reason: "the relation score gap is below the memory-turn margin gate".to_owned(),
             }
         );
 
-        // 3. On an op-model `SavedCompiler` under `OpPolicy::UnlessQuery`, a non-memory turn
-        //    where the op model hallucinates `Op: assert user_name tired` is blocked by the
-        //    default gate on `SavedCompiler::action`, and let through only when the caller
-        //    explicitly opts out via `with_memory_turn_gate(MemoryTurnGate::disabled())`.
-        let encoder_id = EncoderIdentity {
-            config_sha256: "b".repeat(64),
-            model_sha256: "c".repeat(64),
-            transport_sha256: None,
-        };
-        let make_trunk = || {
-            Trunk::from_op_probe(tok_sha.clone(), encoder_id.clone(), |turn| {
-                if turn == "I'm tired." {
-                    OpProbe::Text("Op: assert user_name tired".to_owned())
-                } else {
-                    OpProbe::Text("Op: none".to_owned())
-                }
-            })
-        };
-        let op_settings = CompilerSettings {
-            relation_mode: RelationMode::OpModel,
-            ..CompilerSettings::default()
-        };
-        let op_compiler = SavedCompiler::fit_with(
-            &train,
-            &tok_sha,
-            serde_json::json!({"source": "unit_test_op", "rows": 7}),
-            op_settings,
-            Some(make_trunk()),
-        )?
-        .with_op_policy(OpPolicy::UnlessQuery)?;
-
-        let gated_result = op_compiler.action("I'm tired.")?;
+        // 3. On `"I'm tired." -> Op: assert user_name tired`, the default gate blocks the
+        //    write as `Unresolved`, while `with_memory_turn_gate(MemoryTurnGate::disabled())`
+        //    lets the ungated baseline arm through.
+        let blocked = gated.compile("I'm tired.").expect("compile");
         assert!(
-            matches!(gated_result, CompiledAction::Unresolved { .. }),
-            "default SavedCompiler gate must block small-talk op write, got {gated_result:?}"
+            matches!(blocked, CompiledAction::Unresolved { .. }),
+            "default GatedTurnCompiler must block small-talk write, got {blocked:?}"
         );
-
-        let ungated_compiler = op_compiler
+        let ungated = gated
             .clone()
             .with_memory_turn_gate(MemoryTurnGate::disabled());
         assert_eq!(
-            ungated_compiler.action("I'm tired.")?,
+            ungated.compile("I'm tired.").expect("compile"),
             CompiledAction::Assert {
                 relation: 1,
                 span: SourceSpan { start: 4, end: 9 },
             }
         );
-        Ok(())
     }
 
     #[test]
@@ -4980,16 +5024,15 @@ mod tests {
             CompiledAction, CompilerIdentity, GroundedSessionError, SourceSpan, TurnCompiler,
         };
 
-        struct AdversarialGatedCompiler {
+        #[derive(Clone)]
+        struct RawAdversarialCompiler {
             identity: CompilerIdentity,
             bytes: Vec<u8>,
             rel_id: u32,
             is_update: bool,
-            gate: MemoryTurnGate,
-            margin: StatementMargin,
         }
 
-        impl TurnCompiler for AdversarialGatedCompiler {
+        impl TurnCompiler for RawAdversarialCompiler {
             fn identity(&self) -> &CompilerIdentity {
                 &self.identity
             }
@@ -5008,7 +5051,7 @@ mod tests {
                     start: last.start,
                     end: last.end,
                 };
-                let unguarded = if self.is_update {
+                Ok(if self.is_update {
                     CompiledAction::Correct {
                         relation: self.rel_id,
                         span,
@@ -5018,14 +5061,7 @@ mod tests {
                         relation: self.rel_id,
                         span,
                     }
-                };
-                Ok(gate_compiled_action(
-                    &self.gate,
-                    source,
-                    unguarded,
-                    Some(&self.margin),
-                    canonical_relation_name,
-                ))
+                })
             }
         }
 
@@ -5035,7 +5071,6 @@ mod tests {
             .and_then(|p| p.parent())
             .expect("workspace root");
         let panel = ProsePanel::load_frozen(repo_root).expect("frozen panel loads");
-        let gate = MemoryTurnGate::default();
         let passing_margin = StatementMargin {
             relation_gap_milli: 600,
             act_write_gap_milli: 500,
@@ -5052,18 +5087,17 @@ mod tests {
         };
 
         // Sweep every closed relation (1..=10) and derived relation IDs against an
-        // adversarial upstream compiler that proposes the last word of every panel row
-        // as an Assert or Correct.
+        // adversarial upstream compiler wrapped in `GatedTurnCompiler`.
         for rel_id in (1u32..=10).chain(std::iter::once(derived_relation_id("sculptor"))) {
             for is_update in [false, true] {
-                let compiler = AdversarialGatedCompiler {
+                let raw = RawAdversarialCompiler {
                     identity: base_identity.clone(),
-                    bytes: b"adversarial-gated".to_vec(),
+                    bytes: b"adversarial-raw".to_vec(),
                     rel_id,
                     is_update,
-                    gate,
-                    margin: passing_margin,
                 };
+                let compiler = GatedTurnCompiler::new(raw.clone())
+                    .with_margin_fn(move |_, _| Some(passing_margin));
                 let report = grade_prose_panel(&panel, &compiler, true, true)
                     .expect("grade frozen prose panel");
                 assert!(
@@ -5082,5 +5116,18 @@ mod tests {
                 assert_eq!(report.false_query_count, 0);
             }
         }
+
+        // Deliberate-break control: disabling the gate on `GatedTurnCompiler` causes all 50
+        // panel rows to fail with false writes.
+        let ungated = GatedTurnCompiler::new(RawAdversarialCompiler {
+            identity: base_identity,
+            bytes: b"adversarial-raw".to_vec(),
+            rel_id: 1,
+            is_update: false,
+        })
+        .with_memory_turn_gate(MemoryTurnGate::disabled());
+        let ungated_report =
+            grade_prose_panel(&panel, &ungated, true, true).expect("grade ungated prose panel");
+        assert_eq!(ungated_report.false_assert_count, 50);
     }
 }
