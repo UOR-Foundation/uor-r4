@@ -552,164 +552,267 @@ fn is_cfg_any_gate(line: &str) -> bool {
         == "#[cfg(any())]"
 }
 
-/// The item a line opens, as a stable key to follow it from the merge base to the head:
-/// a struct, fn, mod, trait, union or impl header. None for other lines.
-fn item_key(line: &str) -> Option<String> {
-    let mut t = line.trim_start();
-    loop {
-        let stripped = t
-            .strip_prefix("pub(crate) ")
-            .or_else(|| t.strip_prefix("pub(super) "))
-            .or_else(|| t.strip_prefix("pub "))
-            .or_else(|| t.strip_prefix("unsafe "))
-            .or_else(|| t.strip_prefix("async "));
-        match stripped {
-            Some(n) => t = n,
-            None => break,
-        }
+/// The modifiers that may precede an item keyword.
+const ITEM_MODIFIERS: [&str; 7] = [
+    "pub", "unsafe", "async", "const", "extern", "default", "unsized",
+];
+
+/// The first item-keyword token on a line, after visibility and modifiers. Covers struct, enum,
+/// fn, mod, trait, union, impl, type, static, const and macro_rules! so an item never disappears
+/// from the walk just because it is not a struct.
+fn item_keyword(line: &str) -> Option<&'static str> {
+    const KEYWORDS: [&str; 11] = [
+        "struct",
+        "enum",
+        "fn",
+        "mod",
+        "trait",
+        "union",
+        "impl",
+        "type",
+        "static",
+        "const",
+        "macro_rules!",
+    ];
+    let trimmed = line.trim_start();
+    let cut = trimmed
+        .find(|c: char| c.is_whitespace() || matches!(c, '(' | '{' | ';' | '<'))
+        .unwrap_or(trimmed.len());
+    let first = &trimmed[..cut];
+    if let Some(kw) = KEYWORDS.iter().find(|kw| **kw == first) {
+        return Some(kw);
     }
-    let cut = t
-        .find(|c: char| c.is_whitespace() || matches!(c, '{' | '(' | '<' | ';'))
-        .unwrap_or(t.len());
-    let kw = &t[..cut];
-    let rest = t[cut..].trim_start();
-    if matches!(kw, "struct" | "enum" | "fn" | "mod" | "trait" | "union") {
-        let name_end = rest
-            .find(|c: char| c.is_whitespace() || matches!(c, '<' | '(' | '{' | ';'))
-            .unwrap_or(rest.len());
-        if name_end == 0 {
-            return None;
-        }
-        Some(format!("{kw} {}", &rest[..name_end]))
-    } else if kw == "impl" {
-        let head = rest.split('{').next().unwrap_or(rest).trim();
-        if head.is_empty() {
-            None
-        } else {
-            let words: Vec<&str> = head.split_whitespace().collect();
-            Some(format!("impl {}", words.join(" ")))
-        }
-    } else {
-        None
+    if !(first == "pub" || first.starts_with("pub(") || ITEM_MODIFIERS.contains(&first)) {
+        return None;
     }
+    let after = trimmed[first.len()..].trim_start();
+    let after = after
+        .strip_prefix('"')
+        .and_then(|r| r.split_once('"'))
+        .map(|(_, rest)| rest.trim_start())
+        .unwrap_or(after);
+    item_keyword(after)
 }
 
-/// The text from the item at start through its closing brace, or through its semicolon line when
-/// it declares without a body. The stripped text has comments and strings blanked, one line per
-/// source line, so braces in prose cannot confuse the count.
-fn item_body(stripped: &[String], start: usize, lines: &[&str]) -> String {
+/// Whether a stripped line starts an item (the line after a gate).
+fn is_item_line(line: &str) -> bool {
+    item_keyword(line).is_some()
+}
+
+/// The index of the line through the item starting at start: through its closing brace, or
+/// through its semicolon when it declares without a body. The stripped text has comments, plain
+/// strings and character literals blanked, one line per source line, so braces in prose or in a
+/// character literal cannot confuse the count.
+fn item_end(stripped: &[&str], start: usize) -> usize {
     let mut depth: i64 = 0;
     let mut opened = false;
-    for i in start..lines.len() {
-        if let Some(line) = stripped.get(i) {
-            for c in line.chars() {
-                if c == '{' {
+    for (i, line) in stripped.iter().enumerate().skip(start) {
+        for c in line.chars() {
+            match c {
+                '{' => {
                     depth += 1;
                     opened = true;
-                } else if c == '}' {
-                    depth -= 1;
                 }
+                '}' => depth -= 1,
+                _ => {}
             }
-            if opened && depth <= 0 {
-                return lines[start..=i].join("\n");
-            }
-            if !opened && (line.contains(';') || (i > start && line.trim().is_empty())) {
-                return lines[start..=i].join("\n");
-            }
+        }
+        if opened && depth <= 0 {
+            return i;
+        }
+        if !opened && line.contains(';') {
+            return i;
         }
     }
-    lines[start..].join("\n")
+    stripped.len().saturating_sub(1)
 }
 
-struct HeadGate {
-    gated: bool,
-    weakened: bool,
-}
-
-/// Whether the item key is still gated at the head: Some with gated true when a cfg(any()) attribute
-/// still sits in its attribute block, weakened true when it moved to a test-only gate, gated false
-/// when the gate is gone, and None when the item is gone (deleting gated code is lawful).
-fn head_gate(lines: &[&str], key: &str) -> Option<HeadGate> {
-    for (h, line) in lines.iter().enumerate() {
-        if item_key(line).as_deref() != Some(key) {
-            continue;
-        }
-        let mut gated = false;
-        let mut weakened = false;
-        let mut k = h;
-        while k > 0 {
-            k -= 1;
-            let t = lines[k].trim();
-            if t.is_empty() {
-                break;
+/// The gate spans of a source file: every cfg(any()) attribute through the end of the item it
+/// gates. A gate on a module therefore covers the items nested in it, which is how the compiler
+/// sees it.
+fn gated_spans(stripped: &[&str], lines: &[&str]) -> Vec<(usize, usize)> {
+    let mut spans = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        if is_cfg_any_gate(lines[i]) {
+            let mut j = i + 1;
+            while j < lines.len() && !is_item_line(stripped[j]) {
+                j += 1;
             }
-            if t.starts_with("//") {
+            if j < lines.len() {
+                let end = item_end(stripped, j);
+                spans.push((i, end));
+                i = end + 1;
                 continue;
             }
-            if !t.starts_with('#') {
-                break;
-            }
-            if is_cfg_any_gate(t) {
-                gated = true;
-            }
-            let squashed: String = t.chars().filter(|c| !c.is_whitespace()).collect();
-            if squashed.contains("cfg(test)") || squashed.contains("cfg(any(test))") {
-                weakened = true;
-            }
         }
-        return Some(HeadGate { gated, weakened });
+        i += 1;
     }
-    None
+    spans
 }
 
-/// The banned families present in text: the same tokens the ratchets count, assembled so this file
-/// does not add ratchet sites of its own. D32 applies only where its ratchet scans.
-fn banned_kinds(text: &str, path: &str) -> Vec<&'static str> {
-    let mut kinds = Vec::new();
-    let raw = text.to_ascii_lowercase();
-    let code = crate::ratchet::strip_comments_and_strings(text);
-    let code_lower = code.to_ascii_lowercase();
-    let d23 = raw.matches(crate::ratchet::D23_WORD).count() > 0
-        || crate::ratchet::D23_IDENT_FAMILIES
-            .iter()
-            .any(|family| code_lower.contains(family));
-    if d23 {
-        kinds.push("D23");
+/// The file's code (comments, strings and char literals stripped) that compiles: every gated span
+/// blanked. cfg(test) is not blanked, because test builds compile it too.
+fn ungated_code(text: &str) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let stripped_text = crate::ratchet::strip_comments_strings_and_char_literals(text);
+    let stripped: Vec<&str> = stripped_text.lines().collect();
+    let mut live = vec![true; lines.len()];
+    for (start, end) in gated_spans(&stripped, &lines) {
+        for slot in live.iter_mut().take(end + 1).skip(start) {
+            *slot = false;
+        }
     }
-    let dense = [
-        concat!("mat", "mul"),
-        concat!("cu", "blas"),
-        concat!("ge", "mm"),
-    ];
-    let tensor_core = [
+    let mut kept = Vec::with_capacity(lines.len());
+    for (i, line) in lines.iter().enumerate() {
+        kept.push(if live[i] { *line } else { "" });
+    }
+    crate::ratchet::strip_comments_strings_and_char_literals(&kept.join("\n"))
+}
+
+fn ascii_segments(code: &str) -> impl Iterator<Item = &str> {
+    code.split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|seg| !seg.is_empty())
+}
+
+/// Whether an identifier segment matches the D23 families, with the ratchet's rope exception:
+/// rope matches a segment starting with rope or containing Rope/RoPE/ROPE, while the other
+/// families match inside the segment. English property/Proper/Properties stay clear.
+fn is_d23_segment(seg: &str) -> bool {
+    if seg.len() < 4 {
+        return false;
+    }
+    let lower = seg.to_ascii_lowercase();
+    if lower.starts_with(concat!("ro", "pe"))
+        || seg.contains(concat!("Ro", "pe"))
+        || seg.contains(concat!("Ro", "PE"))
+        || seg.contains(concat!("RO", "PE"))
+    {
+        return true;
+    }
+    crate::ratchet::D23_IDENT_FAMILIES.iter().any(|family| {
+        let family: &str = family;
+        family != concat!("ro", "pe") && family != concat!("ro", "pei") && lower.contains(family)
+    })
+}
+
+/// The D23 sites in already-stripped code: the banned word as an identifier segment and every
+/// family identifier segment. Strings and comments are gone, so prose cannot trip it.
+fn d23_sites(code: &str) -> u64 {
+    ascii_segments(code)
+        .filter(|seg| {
+            seg.to_ascii_lowercase().contains(crate::ratchet::D23_WORD) || is_d23_segment(seg)
+        })
+        .count() as u64
+}
+
+/// The D25 dense-product and tensor-core sites in already-stripped code: a segment containing
+/// matmul or cublas, the word gemm, and the four tensor-core intrinsics.
+fn d25_sites(code: &str) -> u64 {
+    let dense = [concat!("mat", "mul"), concat!("cu", "blas")];
+    let word = concat!("ge", "mm");
+    let tensor = [
         concat!("w", "mma"),
         concat!("mma", "_sync"),
         concat!("wg", "mma"),
         concat!("tcgen", "05"),
     ];
-    if dense
-        .iter()
-        .chain(tensor_core.iter())
-        .any(|token| code_lower.contains(token))
-    {
-        kinds.push("D25");
+    ascii_segments(code)
+        .filter(|seg| {
+            let lower = seg.to_ascii_lowercase();
+            dense.iter().any(|token| lower.contains(token))
+                || lower == word
+                || tensor.iter().any(|token| lower.contains(token))
+        })
+        .count() as u64
+}
+
+/// The D32 sites in already-stripped code: float type tokens and floating-point literals.
+fn d32_sites(code: &str) -> u64 {
+    let types = ascii_segments(code)
+        .filter(|seg| {
+            crate::ratchet::D32_FLOAT_TYPES
+                .iter()
+                .any(|token| seg.eq_ignore_ascii_case(token))
+        })
+        .count() as u64;
+    let bytes = code.as_bytes();
+    let mut literals = 0u64;
+    let mut i = 0;
+    while i < bytes.len() {
+        if !bytes[i].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        if i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_') {
+            i += 1;
+            continue;
+        }
+        let mut j = i;
+        while j < bytes.len() && (bytes[j].is_ascii_digit() || bytes[j] == b'_') {
+            j += 1;
+        }
+        let mut float = false;
+        if j + 1 < bytes.len() && bytes[j] == b'.' && bytes[j + 1].is_ascii_digit() {
+            float = true;
+            j += 1;
+            while j < bytes.len() && bytes[j].is_ascii_digit() {
+                j += 1;
+            }
+        } else if j < bytes.len() && matches!(bytes[j], b'e' | b'E') {
+            let mut k = j + 1;
+            if k < bytes.len() && matches!(bytes[k], b'+' | b'-') {
+                k += 1;
+            }
+            if k < bytes.len() && bytes[k].is_ascii_digit() {
+                float = true;
+                j = k;
+                while j < bytes.len() && bytes[j].is_ascii_digit() {
+                    j += 1;
+                }
+            }
+        }
+        if float {
+            literals += 1;
+        }
+        i = j;
     }
-    let discrete_scope =
-        path.starts_with("crates/uor-r4-discrete/") || path.starts_with("docs/labs/");
-    if discrete_scope
-        && crate::ratchet::D32_FLOAT_TYPES
-            .iter()
-            .any(|token| code_lower.contains(token))
-    {
-        kinds.push("D32");
+    types + literals
+}
+
+/// Whether D32 scans this path (the discrete model or a standalone instrument), matching the
+/// ratchet: crates/uor-r4-discrete/ or docs/labs/<lab>/instrument/.
+fn d32_scope(path: &str) -> bool {
+    if path.starts_with("crates/uor-r4-discrete/") {
+        return true;
     }
-    kinds
+    let parts: Vec<&str> = path.split('/').collect();
+    parts.len() >= 4 && parts[0] == "docs" && parts[1] == "labs" && parts[3] == "instrument"
+}
+
+/// Per-kind banned-site counts in one file's compiled code.
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+struct BannedCounts {
+    d23: u64,
+    d25: u64,
+    d32: u64,
+}
+
+fn banned_counts(text: &str, path: &str) -> BannedCounts {
+    let code = ungated_code(text);
+    BannedCounts {
+        d23: d23_sites(&code),
+        d25: d25_sites(&code),
+        d32: if d32_scope(path) { d32_sites(&code) } else { 0 },
+    }
 }
 
 /// Under the ratchets, banned code that is gated out is counted but not compiled; CHARTER section
-/// 3.4 says banned code may not exist in any compiled or loaded module, so removing or weakening a
-/// cfg(any()) gate around such an item is a presence change the ratchets cannot see. This rule fails
-/// when a PR does that to an item whose gated text carries a banned site.
+/// 3.4 says banned code may not exist in any compiled or loaded module, so un-gating it (or moving
+/// it behind a test-only gate) is a presence change the ratchets cannot see. This rule compares the
+/// banned sites that compile per changed file at the merge base and at the head and fails when the
+/// head compiles more of any family. Deleting gated code, keeping the gate, and moving a gate to a
+/// parent module all pass.
 fn rule_banned_presence(pr: &Pr) -> RuleResult {
     const RULE: &str = "banned-presence";
     let mut details = Vec::new();
@@ -722,60 +825,26 @@ fn rule_banned_presence(pr: &Pr) -> RuleResult {
         let (Some(base), Some(head)) = (pr.at_base(old), pr.at_head(new)) else {
             continue;
         };
-        let base_lines: Vec<&str> = base.lines().collect();
-        let head_lines: Vec<&str> = head.lines().collect();
-        let stripped: Vec<String> = crate::ratchet::strip_comments_and_strings(&base)
-            .lines()
-            .map(str::to_string)
-            .collect();
-        let mut i = 0;
-        while i < base_lines.len() {
-            if !is_cfg_any_gate(base_lines[i]) {
-                i += 1;
-                continue;
+        let was = banned_counts(&base, new);
+        let now = banned_counts(&head, new);
+        let pairs = [
+            ("D23", was.d23, now.d23),
+            ("D25", was.d25, now.d25),
+            ("D32", was.d32, now.d32),
+        ];
+        for (kind, before, after) in pairs {
+            if after > before {
+                details.push(format!(
+                    "{new}: {kind} sites in compiled code rise from {before} at the merge base to {after} at the head (a gate was removed, moved to a test-only gate, or the gated code changed); CHARTER section 3.4 forbids banned code in any compiled module"
+                ));
             }
-            let mut j = i + 1;
-            while j < base_lines.len() {
-                let t = base_lines[j].trim();
-                if t.is_empty() || t.starts_with('#') || t.starts_with("//") {
-                    j += 1;
-                } else {
-                    break;
-                }
-            }
-            let Some(key) = base_lines.get(j).and_then(|line| item_key(line)) else {
-                i += 1;
-                continue;
-            };
-            let body = item_body(&stripped, j, &base_lines);
-            if let Some(state) = head_gate(&head_lines, &key) {
-                if state.gated {
-                    i = j;
-                    continue;
-                }
-                let kinds = banned_kinds(&body, new);
-                if !kinds.is_empty() {
-                    let why = if state.weakened {
-                        "moved to a test-only gate"
-                    } else {
-                        "removed"
-                    };
-                    details.push(format!(
-                        "{new}: the cfg(any()) gate on item {key} (merge-base line {}) is {why} at the head, and the gated text carries {} site(s) ({})",
-                        i + 1,
-                        kinds.len(),
-                        kinds.join(", ")
-                    ));
-                }
-            }
-            i = j;
         }
     }
     if details.is_empty() {
         result(
             RULE,
             details,
-            "no gated banned item is un-gated or moved to a test-only gate",
+            "no changed file compiles more banned code than its base",
             "",
         )
     } else {
@@ -784,7 +853,7 @@ fn rule_banned_presence(pr: &Pr) -> RuleResult {
             RULE,
             details,
             "",
-            &format!("{n} gated banned item(s) un-gated or moved to a test-only gate"),
+            &format!("{n} changed file(s) compile more banned code than their base"),
         )
     }
 }
