@@ -29,7 +29,7 @@ Class **instrument** (harness code + tests; no GPU). At the base: `kimi/render` 
 
 Findings accepted and folded into this same branch (no force push; new head):
 
-1. **AGENTS.md / `docs/roadmap/README.md` were admitted by the predicate but outside the tamper gate.** The views-only set is now **only** the three views `render_all` can re-render (STATE, HANDOFF, LESSONS). AGENTS' top-ten block and the xtask-rendered roadmap README are dropped until their own comparisons exist; a render PR touching them needs its ORDER. This narrows the no-ORDER path deliberately rather than leaving an ungated file on it.
+1. **AGENTS.md / `docs/roadmap/README.md` were admitted by the predicate but outside the tamper gate.** AGENTS.md is now **block-gated**: only the bytes between the `loop:lessons-top-ten` markers may differ from the merge base, the block's stamp must equal the merge base, and the block must equal `render_top_ten` at that stamp (a real render PR always re-stamps this block, so it cannot simply be dropped). The xtask-rendered `docs/roadmap/README.md` stays **out** of the no-ORDER path until its own comparison exists; a render PR touching it needs its ORDER.
 2. **The stamp was author-chosen (ancestor of the PR head).** Each view's stamp must now equal the PR's **merge base with `origin/main`**, so a branch-only stamp, a stale-main rollback, or a three-commit input-edit/render/revert bypass refuses.
 3. **Fork branch names counted.** `gh pr view` now reads `isCrossRepository`; a fork PR named `kimi/render` does not qualify.
 4. **`FETCH_HEAD` was shared state.** The gate fetches the explicit `pr.head_sha` and reads each view with `git show <sha>:<path>` instead.

@@ -944,7 +944,7 @@ fn render_pr_without_order_needs_the_render_branch_and_views_only() {
         RENDER_BRANCH,
         &["STATE.md".to_string(), "README.md".to_string()]
     ));
-    assert!(!render_pr_without_order(
+    assert!(render_pr_without_order(
         RENDER_BRANCH,
         &["AGENTS.md".to_string()]
     ));

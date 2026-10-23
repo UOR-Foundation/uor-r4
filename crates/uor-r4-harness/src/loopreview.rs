@@ -801,7 +801,10 @@ pub const RENDER_ORDER: &str = "kimi/render";
 
 /// A path the steady-state render PR is allowed to change: the rendered views only.
 pub fn is_rendered_view(path: &str) -> bool {
-    matches!(path, "STATE.md" | "HANDOFF.md" | "docs/harness/LESSONS.md")
+    matches!(
+        path,
+        "STATE.md" | "HANDOFF.md" | "AGENTS.md" | "docs/harness/LESSONS.md"
+    )
 }
 
 /// True when this is the render branch and every changed path is a rendered view, so no
@@ -879,7 +882,57 @@ fn verify_render_views(root: &Path, _gh: &dyn ReviewGh, pr: &ReviewPr) -> Result
         expected.push((path.to_string(), want));
         actual.insert(path.to_string(), text);
     }
+    // AGENTS.md: only the top-ten block may change, its stamp must be the merge base, and the
+    // block must equal `render_top_ten` at that stamp.
+    let agents_head = git(root, &["show", &format!("{head}:AGENTS.md")])?;
+    let agents_base = git(root, &["show", &format!("{base}:AGENTS.md")])?;
+    let (hs, he) = top_ten_markers(&agents_head, "AGENTS.md at the head")?;
+    let (bs, be) = top_ten_markers(&agents_base, "AGENTS.md at the merge base")?;
+    if agents_head[..hs] != agents_base[..bs] || agents_head[he..] != agents_base[be..] {
+        return Err(
+            "AGENTS.md changes outside the top-ten block (only the rendered block may change)"
+                .to_string(),
+        );
+    }
+    let block = &agents_head[hs..he];
+    let stamp = block
+        .lines()
+        .find(|l| !l.trim().is_empty())
+        .and_then(crate::looprender::parse_stamp)
+        .ok_or_else(|| "AGENTS.md: top-ten block has no render stamp".to_string())?
+        .to_string();
+    if stamp != base {
+        return Err(format!(
+            "AGENTS.md: block stamp {stamp} is not the PR merge base {base}"
+        ));
+    }
+    let at = crate::looprender::AtCommit::resolve(root, &stamp)?;
+    let want = crate::looprender::render_top_ten(&at)?;
+    if block != want {
+        return Err(
+            "AGENTS.md top-ten block differs from its render (hand-edited view)".to_string(),
+        );
+    }
     compare_rendered_views(&expected, &actual)
+}
+
+/// The byte range strictly between the AGENTS top-ten markers, or why it is unusable.
+fn top_ten_markers(text: &str, what: &str) -> Result<(usize, usize), String> {
+    let start = crate::looprender::TOP_TEN_START;
+    let end = crate::looprender::TOP_TEN_END;
+    if text.matches(start).count() != 1 || text.matches(end).count() != 1 {
+        return Err(format!(
+            "{what}: top-ten markers missing, duplicated or malformed"
+        ));
+    }
+    let s = text.find(start).unwrap_or(0) + start.len();
+    let e = text.find(end).unwrap_or(0);
+    if e < s {
+        return Err(format!(
+            "{what}: top-ten end marker precedes the start marker"
+        ));
+    }
+    Ok((s, e))
 }
 fn context(root: &Path, gh: &dyn ReviewGh, n: u64) -> Result<Context, String> {
     git(root, &["fetch", "-q", "origin", "main"])?;
