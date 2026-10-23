@@ -194,7 +194,7 @@ pub fn parse(body: &str) -> Parsed {
     let order = fields["order"].clone();
     if !re(
         &ORDER,
-        r"^docs/loop/tasks/[^/\s]+/[a-z0-9-]+-[0-9]+/ORDER\.md$",
+        r"^docs/loop/tasks/[^/\s]+/[a-z0-9-]+-[0-9]+/ORDER\.md$|^kimi/render$",
     )
     .is_match(&order)
     {
@@ -558,6 +558,8 @@ pub const REVIEW_GH_FAKE_ENV: &str = "UOR_LOOP_REVIEW_GH_FAKE";
 pub struct ReviewPr {
     #[serde(rename = "headRefOid")]
     pub head_sha: String,
+    #[serde(default, rename = "headRefName")]
+    pub head_ref_name: String,
     #[serde(default)]
     pub files: Vec<String>,
 }
@@ -582,7 +584,13 @@ impl ReviewGh for RealReviewGh {
         use crate::loopnext::NextGh as _;
         let text = crate::loopclaim::run_gh(
             &self.root,
-            &["pr", "view", &n.to_string(), "--json", "headRefOid,files"],
+            &[
+                "pr",
+                "view",
+                &n.to_string(),
+                "--json",
+                "headRefOid,files,headRefName",
+            ],
         )?;
         let v: serde_json::Value = serde_json::from_str(&text)
             .map_err(|e| format!("gh pr view printed unreadable JSON: {e}"))?;
@@ -605,7 +613,16 @@ impl ReviewGh for RealReviewGh {
             }
             .pr_files(n)?;
         }
-        Ok(ReviewPr { head_sha, files })
+        let head_ref_name = v
+            .get("headRefName")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string();
+        Ok(ReviewPr {
+            head_sha,
+            head_ref_name,
+            files,
+        })
     }
 
     fn file_at_pr(&self, n: u64, path: &str) -> Result<String, String> {
@@ -763,6 +780,45 @@ pub(crate) fn main_context(root: &Path) -> Result<MainContext, String> {
     })
 }
 
+/// The branch of the steady-state render PR (loop page, "The render PR").
+pub const RENDER_BRANCH: &str = "kimi/render";
+
+/// The sentinel `order:` a render PR's review record uses instead of an ORDER path.
+pub const RENDER_ORDER: &str = "kimi/render";
+
+/// A path the steady-state render PR is allowed to change: the rendered views only.
+pub fn is_rendered_view(path: &str) -> bool {
+    matches!(
+        path,
+        "STATE.md"
+            | "HANDOFF.md"
+            | "AGENTS.md"
+            | "docs/harness/LESSONS.md"
+            | "docs/roadmap/README.md"
+    )
+}
+
+/// True when this is the render branch and every changed path is a rendered view, so no
+/// ORDER is needed: the render comparison and the views-only rule are its gates.
+pub fn render_pr_without_order(head_ref: &str, files: &[String]) -> bool {
+    head_ref == RENDER_BRANCH && !files.is_empty() && files.iter().all(|p| is_rendered_view(p))
+}
+
+/// Compare the harness-rendered views with the PR's texts: the tamper gate for the render
+/// PR. A hand-edited view keeps its stamp but differs from its render, so it names the path.
+pub fn compare_rendered_views(
+    expected: &[(String, String)],
+    actual: &BTreeMap<String, String>,
+) -> Result<(), String> {
+    for (path, want) in expected {
+        match actual.get(path) {
+            Some(got) if got == want => {}
+            Some(_) => return Err(format!("{path} differs from its render (hand-edited view)")),
+            None => return Err(format!("{path} is missing at the head")),
+        }
+    }
+    Ok(())
+}
 /// A doc-only PR: it changes at least one path, and every path is `docs` or `generated`.
 pub fn doc_only<'p>(paths: impl IntoIterator<Item = &'p str>) -> bool {
     let mut any = false;
@@ -786,12 +842,50 @@ struct Context {
     doc_only: bool,
 }
 
+/// The tamper gate for the render PR: fetch its head, render STATE/HANDOFF/LESSONS at each
+/// view's own stamp commit, and require the PR's texts to equal the renders exactly.
+fn verify_render_views(root: &Path, gh: &dyn ReviewGh, n: u64) -> Result<(), String> {
+    let pull = format!("pull/{n}/head");
+    git(root, &["fetch", "-q", "origin", &pull])?;
+    let head = git(root, &["rev-parse", "FETCH_HEAD"])?.trim().to_string();
+    let mut expected = Vec::new();
+    let mut actual = BTreeMap::new();
+    for path in ["STATE.md", "HANDOFF.md", "docs/harness/LESSONS.md"] {
+        let text = gh.file_at_pr(n, path)?;
+        let first = text.lines().next().unwrap_or("");
+        let stamp = crate::looprender::parse_stamp(first)
+            .ok_or_else(|| format!("{path}: first line is not a render stamp"))?
+            .to_string();
+        if git(root, &["merge-base", "--is-ancestor", &stamp, &head]).is_err() {
+            return Err(format!(
+                "{path}: stamp {stamp} is not an ancestor of the PR head"
+            ));
+        }
+        let at = crate::looprender::AtCommit::resolve(root, &stamp)?;
+        let rendered = crate::looprender::render_all(&at)?;
+        let want = rendered
+            .into_iter()
+            .find(|(p, _)| p == path)
+            .map(|(_, t)| t)
+            .ok_or_else(|| format!("{path}: the renderer names no such view"))?;
+        expected.push((path.to_string(), want));
+        actual.insert(path.to_string(), text);
+    }
+    compare_rendered_views(&expected, &actual)
+}
 fn context(root: &Path, gh: &dyn ReviewGh, n: u64) -> Result<Context, String> {
     git(root, &["fetch", "-q", "origin", "main"])?;
     let pr = gh.pr(n)?;
+    let render_pr = render_pr_without_order(&pr.head_ref_name, &pr.files);
     let (order, text, order_lab) =
-        crate::loopnext::added_order(root, n, &pr.files, &|p| gh.file_at_pr(n, p))
-            .map_err(crate::loopnext::OrderErr::note)?;
+        match crate::loopnext::added_order(root, n, &pr.files, &|p| gh.file_at_pr(n, p)) {
+            Ok(v) => v,
+            Err(crate::loopnext::OrderErr::Missing(_)) if render_pr => {
+                verify_render_views(root, gh, n)?;
+                (RENDER_ORDER.to_string(), String::new(), "kimi".to_string())
+            }
+            Err(e) => return Err(e.note()),
+        };
     let main = main_context(root)?;
     let doc_only = doc_only(pr.files.iter().map(String::as_str));
     Ok(Context {
