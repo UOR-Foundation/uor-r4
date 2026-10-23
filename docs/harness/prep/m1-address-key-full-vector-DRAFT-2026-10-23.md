@@ -64,7 +64,7 @@ None (`accepted_updates == 0`). Every arm is initialized at checkpoint 0 (`init-
 
 ---
 
-## Stop rule
+## Stop
 
 - Any failure of `A8-Outer` to reproduce `4,244 / 14,287` full-DEV admission, `1,351 / 3,847` `P_succ` admission, or `top1 == 133`, or any mismatch between host and device full-vector cell distances in finite CUDA qualification, stops immediately as an instrument fault (D31), never as a mechanism negative.
 - If both `FV8-Env` and `FV8-TwoScale` fail to clear `1,351 / 3,847` + $F$ on `P_succ` or fail `full_DEV_admitted_rows > 1,941`, close the `(256-cell outer partition, B=4 full-vector cell metric at K=8)` configuration under D22 and route to `m1-wider-code-carrier` (`#2847`).
