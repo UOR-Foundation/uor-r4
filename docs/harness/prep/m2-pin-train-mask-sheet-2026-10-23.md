@@ -47,7 +47,7 @@ geometric-stack train arch=geometric pattern=rrrrrr width=256 heads=4 stack_mlp=
 - four runs on one leased GPU, sequential: **M1** (hinge, 1 rival) and **M8** (hinge, 8 rivals) at **seed 1 and seed 2**; paired seeds, same initializer and window RNG stream, only the rival count differs.
 - this refresh executes none of it: training and rental remain HELD until the owner releases them (AGENTS.md; CHARTER §4.5/§5.1), and a FIT releases nothing.
 
-## Stop rule
+## Stop conditions
 
 - **fail-closed pre-run:** the native CLI refuses without `train_mask`; the run aborts before loading a checkpoint if the train tar/mask/tokenizer hashes, the 7,512,797-byte mask length, `expected_train_targets=2425925`, the 42,856 DEV token count or `expected_dev_targets=14287` differ from the pins above.
 - **lawful stops:** a hashing/count mismatch, a missing member, a GPU/lease failure, or an owner stop. A self-set wall-clock or budget estimate is not a stop rule; a healthy run is extended and its lease renewed (AGENTS.md).
