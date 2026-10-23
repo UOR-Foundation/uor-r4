@@ -1,41 +1,42 @@
 # REPORT: infra-loop-harness, deepseek-56 (banned-presence pr-check rule)
 
-Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2904. Base: `018954726`. `References #2904`.
+Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2904. Base: `3df3798e4`. `References #2904`.
 
 ## What did not work, first
 
-- **The first design was per-item gating and an independent adversarial review broke it.** It mapped each base `#[cfg(any())]` item to its head counterpart and failed when the gate vanished. A fresh-context reviewer (deepseek subagent, `/tmp` worktrees only) found: `item_key` ignored const/static/type/macro items; renaming or re-headering the gated item bypassed it; duplicate item names made lawful deletion look like removal; a gate moved to a parent module still failed; D32 missed plain float literals and flagged `docs/labs/<x>/src` where the ratchet does not scan; substring matching made `properties` D23 via the rope family and `gemma` D25; char literals (`'{'`) unbalanced brace extraction and swallowed later code; a block comment between gate and item was skipped. Every finding was reproduced in a synthetic repo; the design was replaced rather than patched.
-- **The replacement counts compiled sites instead of mapping items.** It fails when the head has more D23/D25/D32 sites in compiled code than the base for a changed file. That catches rename/re-header/duplicate bypasses by construction, passes lawful deletion and re-gating, and needs no item identity at all.
-- **The rule then failed its own repo's D23 ratchet.** My first regression test constants were named `GATED_HEAD_PROPERTIES`; the canonical ratchet's rope detector treats the uppercase segment `ROPE` inside `PROPERTIES` as the rope family, adding 2 sites and failing `ratchet d23`. Renaming the fixture identifiers fixed it; the rule itself tests clean at baseline. This is the ratchet's known English-word edge, not a defect in the rule, but it is recorded because it is exactly how a real PR can accidentally raise the ratchet.
-- **A fixture edit broke the whole test file** (a write call was concatenated inside a string literal); fixed and superseded by the rewritten fixture.
+- **The first design mapped items and was broken by review twice.** Version 1 followed each base `#[cfg(any())]` item to its head counterpart; an independent subagent review found const/macro items missed, rename/re-header bypass, duplicate-name false positives, parent-gate false failures, D32 literal/scope errors, rope/gemm substring false positives, char-literal brace corruption, and a block comment between gate and item skipped. Version 2 counted compiled sites per file but was still comment-blind (`#[cfg(any())] // note`), did not follow out-of-line `mod x;`, missed `pub(crate)`/`use` items, corrupted spans on raw strings, missed `__half` and float-literal forms, over-counted D25 helper names, and scanned quadratically.
+- **Claude took two of those fixes on the branch** (gate match on the comment-stripped line; following gated out-of-line modules) and added three tests. A second subagent implementation then widened the rule to revision-level gated-file sets and the structure view; the two implementations were merged by adopting the structure-view implementation and keeping Claude's fixes and tests.
+- **Two of Claude's tests had a fixture that is not a ratchet site:** `D25_FN` was `pub fn dense_matmul() {}`, a bare identifier the D25 ratchet does not count, so the expected 0 -> 1 rise could only pass under the old over-counting scanner. The fixture is now a real `.matmul(` call; the tests then fail/pass for the right reason.
 
 ## What changed
 
 | File | Change |
 |---|---|---|
-| `crates/uor-r4-harness/src/loopprcheck.rs` | new `banned-presence` rule: `gated_spans` (gate through item end, parent modules included, comments/strings/char literals stripped), `ungated_code` (blank gated spans; `cfg(test)` not exempt), exact D23 segment matching with the ratchet's rope exception, D25 dense-product/tensor-core segments, D32 float types and literals in the ratchet's scan scope, and a per-kind base-vs-head count comparison |
-| `crates/uor-r4-harness/tests/loop_prcheck.rs` | second item (`item-b`, `crates/uor-r4-discrete/**`) and eight tests: un-gated banned item fails; `cfg(test)` move fails; rename fails; benign/properties/char-literal un-gates pass; deletion passes; parent-module gate passes; D32 float function un-gated fails; kept gated passes |
-| `docs/harness/README.md` | the pr-check rules list documents the compiled-site delta, parent gates, `cfg(test)` not exempt, and comments/strings counted out |
+| `crates/uor-r4-harness/src/loopprcheck.rs` | `banned-presence` rule: `strip_structure` (comments, strings, char literals, raw strings blanked) for gate/item structure; `gate_kind` outer/inner gates; `item_prefix` parser covering visibility groups (`pub(crate)`/`pub(in ...)`), modifiers, `use`, `extern crate`, `extern "C"`, macros; `item_start_indices` + binary search; `inner_gate_end`; `gated_files`/`gated_by_ancestor`/`mark_gated_tree`/`direct_mods` following gated out-of-line modules transitively; ratchet-faithful D23/D25/D32 site counters (D32 types including `__half`/`__nv_bfloat16`, decimal/exponent/suffix/hex floats); per-file base-vs-head rise comparison with deduplicated details |
+| `crates/uor-r4-harness/tests/loop_prcheck.rs` | Claude's three tests (comment gate, gated out-of-line module to `cfg(test)`, module removal) plus regressions: un-gated banned item, `cfg(test)` move, rename, benign/`properties`/char-literal, deletion, parent gate, D32 float/`__half`, `pub(crate)`, inner gate, raw-string brace, D25 helper names; 45 tests |
+| `docs/harness/README.md` | the pr-check rules list documents the compiled-site delta, gate forms, module following, `cfg(test)` not exempt, and comments/strings counted out |
 | this folder | ORDER and REPORT |
 
 ## Measurements
 
-- **Planted fault against real heads:** `loop pr-check --base origin/main --head <old head> --head-ref t --local` on PR #3079's violating head `54de128d` -> `FAIL banned-presence 1 changed file(s) compile more banned code than their base`, detail `relation_compiler.rs: D23 sites in compiled code rise from 0 at the merge base to 19 at the head`; the same command on the re-gated head `8f36239a` -> PASS. The same run at `1ddfa1cb` also fails.
-- **Tests:** `cargo test -p uor-r4-harness --test loop_prcheck` -> 37 passed (29 before this unit; 8 new). `cargo fmt --check` and `cargo clippy --all-targets -D warnings` clean; ratchets d23/d25/d32 at baseline (4451 / 93 / 31).
+- **Real heads:** #3079 `1ddfa1cb`/`54de128d` -> `FAIL banned-presence 1 changed file(s)`, `relation_compiler.rs: D23 sites in compiled code rise from 0 to 19`; re-gated `8f36239a` -> PASS.
+- **Tests:** `cargo test -p uor-r4-harness --test loop_prcheck` -> 45 passed. fmt clean; clippy `-D warnings` clean; ratchets d23/d25/d32 at baseline (4451/93/31); full harness suite green (CI).
+- **Full harness suite:** every group green except one pre-existing timing-flaky loop-drive test (`a_productive_then_silent_client_is_closed_at_the_second_window`, unrelated to this diff); CI's harness job is the authority.
+- **Reviewer cases now pinned:** comment gate, out-of-line module moves both directions, `pub(crate)`/use items, inner gates, raw-string braces, `__half`, D25 helper names.
 
 ## Checks run at the head
 
-`cargo test -p uor-r4-harness` (full suite), fmt, clippy `-D warnings`, `uor-harness ratchet d23/d25/d32`, the real-head pr-check runs above, `loop report --check`, `loop pr-check --local`, `uor-harness check`; counted non-author review needed (code PR).
+`cargo test -p uor-r4-harness --test loop_prcheck`, full harness suite, fmt, clippy `-D warnings`, `uor-harness ratchet d23/d25/d32`, real-head pr-check runs, `loop report --check`, `loop pr-check --local`; recorded review evidence includes two independent subagent reviews (the owner directed using subagents instead of waiting on other labs) and Claude's assist commit `930e74ce7`.
 
 ## Skills used
 
-- `solution-integrity`: the independent review was treated as evidence and the design was replaced after reproduction rather than patched; the delta formulation removes the whole class of identity bypasses; every reviewer case became a regression test.
-- `scope-guard`: shared registration files only where the rule and its docs must live, the test file inside the item's scope, no rule change, no owner path.
+- `solution-integrity`: two designs were disproved by independent review and replaced; each reviewer case became a regression test; the real PR heads are the planted fault.
+- `scope-guard`: shared registration files only where the rule and docs must live; the test file inside item scope; no rule change, no owner path.
 
 ## Still open
 
-- The rule works on source text, so macro-generated banned code and gates hidden behind macro expansion are outside it; D32 literal detection covers decimal/exponent literals and type tokens, not every literal form; the counts are conservative for a presence question, not an exact replacement for the ratchets.
+- The rule reads source; macro-expanded code and gates created by macros stay outside it. D32 counts the literal forms the ratchet sees, not every possible float spelling. Other labs' counted review remains the normal path; this PR carries independent subagent reviews under the owner's 2026-10-23 direction.
 
 ## Plain summary
 
-- Added the PM-accepted diff-level pr-check rule: it counts D23/D25/D32 sites in compiled code per changed file, base vs head, and fails when a gate removal raises them; proven on the real violating #3079 heads (D23 0 -> 19) and the repaired head (pass), with eight regression tests from an independent adversarial review.
+- A diff-level pr-check rule now fails any PR that compiles more D23/D25/D32-banned code than its base: it understands outer/inner/comment/inline/module gates, follows gated out-of-line modules, ignores comments/strings/raw-string structure, and matches the ratchets' site grammar; proven against the real #3079 violating and repaired heads with 45 passing tests.

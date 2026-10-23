@@ -6,6 +6,7 @@
 //! `review-record` and `required-checks` read GitHub, through the read-only [`PrGh`] and only
 //! with `--pr <n>`. A rule is one function plus one entry in [`RULES`].
 
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::process::Command;
 
@@ -543,70 +544,299 @@ fn is_banned_source(path: &str) -> bool {
     BANNED_SUFFIXES.contains(&ext)
 }
 
-/// Whether a line is exactly the repo's cfg(any()) gate (whitespace-insensitive); the gate
-/// compiles an item out of every module, including tests.
-fn is_cfg_any_gate(line: &str) -> bool {
-    line.chars()
-        .filter(|c| !c.is_whitespace())
-        .collect::<String>()
-        == "#[cfg(any())]"
+/// Whether a byte can be part of a Rust identifier or a numeric literal suffix.
+fn is_word_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
 }
 
-/// The modifiers that may precede an item keyword.
-const ITEM_MODIFIERS: [&str; 7] = [
-    "pub", "unsafe", "async", "const", "extern", "default", "unsized",
-];
+fn is_word_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
 
-/// The first item-keyword token on a line, after visibility and modifiers. Covers struct, enum,
-/// fn, mod, trait, union, impl, type, static, const and macro_rules! so an item never disappears
-/// from the walk just because it is not a struct.
-fn item_keyword(line: &str) -> Option<&'static str> {
-    const KEYWORDS: [&str; 11] = [
-        "struct",
-        "enum",
-        "fn",
-        "mod",
-        "trait",
-        "union",
-        "impl",
-        "type",
-        "static",
-        "const",
-        "macro_rules!",
-    ];
-    let trimmed = line.trim_start();
-    let cut = trimmed
-        .find(|c: char| c.is_whitespace() || matches!(c, '(' | '{' | ';' | '<'))
-        .unwrap_or(trimmed.len());
-    let first = &trimmed[..cut];
-    if let Some(kw) = KEYWORDS.iter().find(|kw| **kw == first) {
-        return Some(kw);
+/// Copy `slice` into `out` as spaces, keeping line breaks so line numbers hold.
+fn blank_into(out: &mut String, slice: &str) {
+    for c in slice.chars() {
+        out.push(if c == '\n' { '\n' } else { ' ' });
     }
-    if !(first == "pub" || first.starts_with("pub(") || ITEM_MODIFIERS.contains(&first)) {
+}
+
+/// The byte offset just past the raw string starting at the `r` at `start`, `None` when no raw
+/// string starts there.
+fn raw_string_end(b: &[u8], start: usize) -> Option<usize> {
+    if b.get(start) != Some(&b'r') {
         return None;
     }
-    let after = trimmed[first.len()..].trim_start();
-    let after = after
-        .strip_prefix('"')
-        .and_then(|r| r.split_once('"'))
-        .map(|(_, rest)| rest.trim_start())
-        .unwrap_or(after);
-    item_keyword(after)
+    let mut j = start + 1;
+    let mut hashes = 0usize;
+    while j < b.len() && b[j] == b'#' {
+        hashes += 1;
+        j += 1;
+    }
+    if b.get(j) != Some(&b'"') {
+        return None;
+    }
+    let mut k = j + 1;
+    while k + 1 + hashes <= b.len() {
+        if b[k] == b'"' && b[k + 1..k + 1 + hashes].iter().all(|&x| x == b'#') {
+            return Some(k + 1 + hashes);
+        }
+        k += 1;
+    }
+    Some(b.len())
 }
 
-/// Whether a stripped line starts an item (the line after a gate).
+/// The byte offset just past a raw string (`r"..."`, `r#"..."#`, `br"..."`, `cr#"..."#`) starting
+/// at `i`, `None` if none starts there or the prefix is part of a longer identifier.
+fn raw_prefix_end(b: &[u8], i: usize) -> Option<usize> {
+    if i > 0 && is_word_byte(b[i - 1]) {
+        return None;
+    }
+    match b[i] {
+        b'r' => raw_string_end(b, i),
+        b'b' | b'c' if b.get(i + 1) == Some(&b'r') => raw_string_end(b, i + 1),
+        _ => None,
+    }
+}
+
+/// The byte offset just past a character literal starting at `i`, `None` for a lifetime or a
+/// numeric separator.
+fn char_literal_end(b: &[u8], i: usize) -> Option<usize> {
+    if b.get(i) != Some(&b'\'') {
+        return None;
+    }
+    if i > 0 {
+        let prev = b[i - 1];
+        if is_word_byte(prev) {
+            let is_prefix =
+                matches!(prev, b'b' | b'u' | b'U' | b'L') && (i < 2 || !is_word_byte(b[i - 2]));
+            if !is_prefix {
+                return None;
+            }
+        }
+    }
+    let next = *b.get(i + 1)?;
+    if next == b'\'' || next == b'\n' || next == b'\r' {
+        return None;
+    }
+    if next == b'\\' {
+        let mut j = i + 2;
+        while j < b.len() && b[j] != b'\n' && b[j] != b'\r' && j - i <= 14 {
+            if b[j] == b'\\' {
+                j += 2;
+                continue;
+            }
+            if b[j] == b'\'' {
+                return Some(j + 1);
+            }
+            j += 1;
+        }
+        return None;
+    }
+    let tail = std::str::from_utf8(&b[i + 1..]).ok()?;
+    let ch = tail.chars().next()?;
+    let close = i + 1 + ch.len_utf8();
+    (b.get(close) == Some(&b'\'')).then_some(close + 1)
+}
+
+/// `text` with comments, plain strings, character literals and raw strings replaced by spaces,
+/// line breaks kept. Raw strings are blanked here (unlike the ratchet's site strip) because this
+/// view exists to find structure: a brace or a gate inside a raw string is text, not structure.
+fn strip_structure(text: &str) -> String {
+    let b = text.as_bytes();
+    let n = b.len();
+    let mut out = String::with_capacity(n);
+    let mut copied = 0usize;
+    let mut i = 0usize;
+    while i < n {
+        let c = b[i];
+        if c == b'/' && i + 1 < n && b[i + 1] == b'/' {
+            out.push_str(&text[copied..i]);
+            let mut j = i + 2;
+            while j < n && b[j] != b'\n' {
+                j += 1;
+            }
+            blank_into(&mut out, &text[i..j]);
+            i = j;
+            copied = i;
+        } else if c == b'/' && i + 1 < n && b[i + 1] == b'*' {
+            out.push_str(&text[copied..i]);
+            let mut depth = 0usize;
+            let mut j = i;
+            while j < n {
+                if j + 1 < n && b[j] == b'/' && b[j + 1] == b'*' {
+                    depth += 1;
+                    j += 2;
+                } else if j + 1 < n && b[j] == b'*' && b[j + 1] == b'/' {
+                    depth = depth.saturating_sub(1);
+                    j += 2;
+                    if depth == 0 {
+                        break;
+                    }
+                } else {
+                    j += 1;
+                }
+            }
+            let end = j.min(n);
+            blank_into(&mut out, &text[i..end]);
+            i = end;
+            copied = i;
+        } else if let Some(end) = raw_prefix_end(b, i) {
+            out.push_str(&text[copied..i]);
+            blank_into(&mut out, &text[i..end]);
+            i = end;
+            copied = i;
+        } else if c == b'"' {
+            out.push_str(&text[copied..i]);
+            let mut j = i + 1;
+            while j < n {
+                if b[j] == b'\\' {
+                    j += 1;
+                    if j < n {
+                        j += text[j..].chars().next().map_or(1, char::len_utf8);
+                    }
+                    continue;
+                }
+                if b[j] == b'"' {
+                    j += 1;
+                    break;
+                }
+                j += 1;
+            }
+            let end = j.min(n);
+            blank_into(&mut out, &text[i..end]);
+            i = end;
+            copied = i;
+        } else if c == b'\'' {
+            if let Some(end) = char_literal_end(b, i) {
+                out.push_str(&text[copied..i]);
+                blank_into(&mut out, &text[i..end]);
+                i = end;
+                copied = i;
+            } else {
+                i += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
+    out.push_str(&text[copied..n]);
+    out
+}
+
+/// Skip one attribute (`#[...]` or `#![...]`) at the start of `s`.
+fn skip_attribute(s: &str) -> Option<&str> {
+    let rest = s.strip_prefix("#![").or_else(|| s.strip_prefix("#["))?;
+    let mut depth = 1i64;
+    for (i, c) in rest.char_indices() {
+        match c {
+            '[' => depth += 1,
+            ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(&rest[i + 1..]);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Skip the balanced `open`..`close` group starting at the first character of `s`.
+fn skip_balanced(s: &str, open: char, close: char) -> Option<&str> {
+    let mut depth = 0i64;
+    for (i, c) in s.char_indices() {
+        if c == open {
+            depth += 1;
+        } else if c == close {
+            depth -= 1;
+            if depth == 0 {
+                return Some(&s[i + c.len_utf8()..]);
+            }
+        }
+    }
+    None
+}
+
+/// The next identifier-like token at the start of `s`, and the text after it.
+fn next_word(s: &str) -> (&str, &str) {
+    let s = s.trim_start();
+    let end = s
+        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .unwrap_or(s.len());
+    (&s[..end], &s[end..])
+}
+
+/// The item keyword a line starts (after attributes, visibility and modifiers), and the byte
+/// offset just past that keyword. This is the real item-start parser: it skips balanced
+/// `pub(...)` visibility (including `pub(in path)`), attributes, and the modifiers that may
+/// precede an item, so `use`, `extern crate`, `extern "C" { ... }`, `pub(crate) fn` and their
+/// kind all read as items.
+fn item_prefix(line: &str) -> Option<(&'static str, usize)> {
+    let mut idx = 0usize;
+    loop {
+        let rest = &line[idx..];
+        let s = rest.trim_start();
+        idx += rest.len() - s.len();
+        if s.is_empty() {
+            return None;
+        }
+        if s.starts_with("#[") {
+            let after = skip_attribute(s)?;
+            idx += s.len() - after.len();
+            continue;
+        }
+        let (token, after) = next_word(s);
+        if token.is_empty() {
+            return None;
+        }
+        idx += s.len() - after.len();
+        match token {
+            "pub" => {
+                let rest = &line[idx..];
+                let t = rest.trim_start();
+                if t.starts_with('(') {
+                    let after = skip_balanced(t, '(', ')')?;
+                    idx += rest.len() - after.len();
+                }
+            }
+            "default" | "async" | "unsafe" | "auto" => {}
+            "macro_rules" => {
+                let rest = &line[idx..];
+                if rest.trim_start().starts_with('!') {
+                    return Some(("macro_rules!", idx));
+                }
+                return None;
+            }
+            "use" => return Some(("use", idx)),
+            "struct" => return Some(("struct", idx)),
+            "enum" => return Some(("enum", idx)),
+            "fn" => return Some(("fn", idx)),
+            "mod" => return Some(("mod", idx)),
+            "trait" => return Some(("trait", idx)),
+            "union" => return Some(("union", idx)),
+            "impl" => return Some(("impl", idx)),
+            "type" => return Some(("type", idx)),
+            "static" => return Some(("static", idx)),
+            "const" => return Some(("const", idx)),
+            "extern" => return Some(("extern", idx)),
+            _ => return None,
+        }
+    }
+}
+
+/// Whether a structure-view line starts an item.
 fn is_item_line(line: &str) -> bool {
-    item_keyword(line).is_some()
+    item_prefix(line).is_some()
 }
 
-/// The index of the line through the item starting at start: through its closing brace, or
-/// through its semicolon when it declares without a body. The stripped text has comments, plain
-/// strings and character literals blanked, one line per source line, so braces in prose or in a
-/// character literal cannot confuse the count.
-fn item_end(stripped: &[&str], start: usize) -> usize {
+/// The index of the line through the item starting at `start`: through its closing brace, or
+/// through its semicolon when it declares without a body. The structure view has comments,
+/// strings and raw strings blanked, so braces and semicolons in text cannot confuse the count.
+fn item_end(structure: &[&str], start: usize) -> usize {
     let mut depth: i64 = 0;
     let mut opened = false;
-    for (i, line) in stripped.iter().enumerate().skip(start) {
+    for (i, line) in structure.iter().enumerate().skip(start) {
         for c in line.chars() {
             match c {
                 '{' => {
@@ -624,51 +854,140 @@ fn item_end(stripped: &[&str], start: usize) -> usize {
             return i;
         }
     }
-    stripped.len().saturating_sub(1)
+    structure.len().saturating_sub(1)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum GateKind {
+    Outer,
+    Inner,
+}
+
+/// The cfg(any()) gate a structure-view line starts, if any. Whitespace is ignored, so
+/// `#[cfg( any ( ) )] // note` matches; comments and strings are already blanked, so text that
+/// merely looks like a gate is not one.
+fn gate_kind(line: &str) -> Option<GateKind> {
+    let compact: String = line.chars().filter(|c| !c.is_whitespace()).collect();
+    if compact.starts_with("#![cfg(any())]") {
+        Some(GateKind::Inner)
+    } else if compact.starts_with("#[cfg(any())]") {
+        Some(GateKind::Outer)
+    } else {
+        None
+    }
+}
+
+/// The brace depth before each structure-view line.
+fn line_depths(structure: &[&str]) -> Vec<i64> {
+    let mut depths = Vec::with_capacity(structure.len());
+    let mut depth = 0i64;
+    for line in structure {
+        depths.push(depth);
+        for c in line.chars() {
+            match c {
+                '{' => depth += 1,
+                '}' => depth -= 1,
+                _ => {}
+            }
+        }
+        depth = depth.max(0);
+    }
+    depths
+}
+
+/// The last line of the block that encloses the inner gate on line `i`, or the last line of the
+/// file when the gate is a crate-root inner attribute.
+fn inner_gate_end(structure: &[&str], i: usize, depths: &[i64]) -> usize {
+    let base = depths[i];
+    if base == 0 {
+        return structure.len().saturating_sub(1);
+    }
+    let mut depth = base;
+    for (k, line) in structure.iter().enumerate().skip(i) {
+        for c in line.chars() {
+            match c {
+                '{' => depth += 1,
+                '}' => depth -= 1,
+                _ => {}
+            }
+        }
+        if depth < base {
+            return k;
+        }
+    }
+    structure.len().saturating_sub(1)
+}
+
+/// The lines that start items in the structure view, in order, so a gate can find the next item
+/// with a binary search instead of walking to the end of the file.
+fn item_start_indices(structure: &[&str]) -> Vec<usize> {
+    structure
+        .iter()
+        .enumerate()
+        .filter_map(|(i, line)| is_item_line(line).then_some(i))
+        .collect()
 }
 
 /// The gate spans of a source file: every cfg(any()) attribute through the end of the item it
-/// gates. A gate on a module therefore covers the items nested in it, which is how the compiler
-/// sees it. The gate is matched on the stripped line, so a trailing comment after the attribute
-/// does not hide it.
-fn gated_spans(stripped: &[&str], lines: &[&str]) -> Vec<(usize, usize)> {
+/// gates. An outer gate on a module covers the items nested in it; an inner `#![cfg(any())]`
+/// covers the module (or file) that contains it.
+fn gated_spans(structure: &[&str]) -> Vec<(usize, usize)> {
+    let starts = item_start_indices(structure);
+    let depths = line_depths(structure);
     let mut spans = Vec::new();
     let mut i = 0;
-    while i < lines.len() {
-        if is_cfg_any_gate(stripped[i]) {
-            let mut j = i + 1;
-            while j < lines.len() && !is_item_line(stripped[j]) {
-                j += 1;
+    while i < structure.len() {
+        match gate_kind(structure[i]) {
+            Some(GateKind::Outer) => {
+                let at = starts.partition_point(|&s| s < i);
+                if let Some(&j) = starts.get(at) {
+                    let end = item_end(structure, j);
+                    spans.push((i, end));
+                    i = end + 1;
+                    continue;
+                }
             }
-            if j < lines.len() {
-                let end = item_end(stripped, j);
-                spans.push((i, end));
+            Some(GateKind::Inner) => {
+                let end = inner_gate_end(structure, i, &depths);
+                spans.push((if depths[i] == 0 { 0 } else { i }, end));
                 i = end + 1;
                 continue;
             }
+            None => {}
         }
         i += 1;
     }
     spans
 }
 
-/// The file's code (comments, strings and char literals stripped) that compiles: every gated span
-/// blanked. cfg(test) is not blanked, because test builds compile it too.
+/// The file's code that compiles: every gated span blanked from the ratchet's site view. The
+/// site view keeps raw strings, because a CUDA kernel or query text in a raw string is
+/// executable; the structure view used to find gates and item ends blanks them.
 fn ungated_code(text: &str) -> String {
-    let lines: Vec<&str> = text.lines().collect();
-    let stripped_text = crate::ratchet::strip_comments_strings_and_char_literals(text);
-    let stripped: Vec<&str> = stripped_text.lines().collect();
-    let mut live = vec![true; lines.len()];
-    for (start, end) in gated_spans(&stripped, &lines) {
-        for slot in live.iter_mut().take(end + 1).skip(start) {
+    let structure_text = strip_structure(text);
+    let structure: Vec<&str> = structure_text.split('\n').collect();
+    let code_text = crate::ratchet::strip_comments_strings_and_char_literals(text);
+    let code: Vec<&str> = code_text.split('\n').collect();
+    let n = code.len().min(structure.len());
+    if n == 0 {
+        return String::new();
+    }
+    let mut live = vec![true; n];
+    for (start, end) in gated_spans(&structure[..n]) {
+        for slot in live
+            .iter_mut()
+            .take(end.min(n - 1) + 1)
+            .skip(start.min(n - 1))
+        {
             *slot = false;
         }
     }
-    let mut kept = Vec::with_capacity(lines.len());
-    for (i, line) in lines.iter().enumerate() {
-        kept.push(if live[i] { *line } else { "" });
-    }
-    crate::ratchet::strip_comments_strings_and_char_literals(&kept.join("\n"))
+    code[..n]
+        .iter()
+        .enumerate()
+        .map(|(i, line)| if live[i] { *line } else { "" })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn ascii_segments(code: &str) -> impl Iterator<Item = &str> {
@@ -707,78 +1026,187 @@ fn d23_sites(code: &str) -> u64 {
         .count() as u64
 }
 
-/// The D25 dense-product and tensor-core sites in already-stripped code: a segment containing
-/// matmul or cublas, the word gemm, and the four tensor-core intrinsics.
+/// The D25 dense-product and tensor-core sites in already-stripped code: `.matmul(`, the candle
+/// op `MatMul`, `cublas`, the word `gemm` (word characters are alphanumeric or `_`), and the
+/// tensor-core intrinsics. A bare `matmul` identifier, a `matmul_helper`/ `gemm_helper` name and
+/// raw strings that merely spell `matmul` are not dense-product sites.
 fn d25_sites(code: &str) -> u64 {
-    let dense = [concat!("mat", "mul"), concat!("cu", "blas")];
-    let word = concat!("ge", "mm");
-    let tensor = [
-        concat!("w", "mma"),
-        concat!("mma", "_sync"),
-        concat!("wg", "mma"),
-        concat!("tcgen", "05"),
-    ];
-    ascii_segments(code)
-        .filter(|seg| {
-            let lower = seg.to_ascii_lowercase();
-            dense.iter().any(|token| lower.contains(token))
-                || lower == word
-                || tensor.iter().any(|token| lower.contains(token))
-        })
-        .count() as u64
+    let mut sites = code.match_indices(".matmul(").count() as u64;
+    sites += code.match_indices("MatMul").count() as u64;
+    let lower = code.to_ascii_lowercase();
+    sites += lower.match_indices("cublas").count() as u64;
+    for (at, _) in lower.match_indices("gemm") {
+        let before = if at == 0 {
+            None
+        } else {
+            lower[..at].chars().next_back()
+        };
+        let after = lower[at + 4..].chars().next();
+        if before.is_none_or(|c| !is_word_char(c)) && after.is_none_or(|c| !is_word_char(c)) {
+            sites += 1;
+        }
+    }
+    let patterns: [&[u8]; 4] = [b"wmma", b"mma_sync", b"wgmma", b"tcgen05"];
+    let bytes = lower.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if let Some(pattern) = patterns.iter().find(|p| bytes[i..].starts_with(p)) {
+            sites += 1;
+            i += pattern.len();
+        } else {
+            i += 1;
+        }
+    }
+    sites
 }
 
-/// The D32 sites in already-stripped code: float type tokens and floating-point literals.
-fn d32_sites(code: &str) -> u64 {
-    let types = ascii_segments(code)
-        .filter(|seg| {
-            crate::ratchet::D32_FLOAT_TYPES
-                .iter()
-                .any(|token| seg.eq_ignore_ascii_case(token))
-        })
-        .count() as u64;
-    let bytes = code.as_bytes();
-    let mut literals = 0u64;
-    let mut i = 0;
-    while i < bytes.len() {
-        if !bytes[i].is_ascii_digit() {
-            i += 1;
-            continue;
+/// The exponent and float suffix that may follow a decimal mantissa, and whether either was
+/// found.
+fn decimal_exp_and_suffix(b: &[u8], mut k: usize, is_cuda: bool) -> (usize, bool) {
+    let n = b.len();
+    let mut float = false;
+    if k < n && matches!(b[k], b'e' | b'E') {
+        let mut e = k + 1;
+        if e < n && matches!(b[e], b'+' | b'-') {
+            e += 1;
         }
-        if i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_') {
-            i += 1;
-            continue;
+        let digits = e;
+        let mut q = e;
+        while q < n && (b[q].is_ascii_digit() || b[q] == b'_' || (is_cuda && b[q] == b'\'')) {
+            q += 1;
         }
-        let mut j = i;
-        while j < bytes.len() && (bytes[j].is_ascii_digit() || bytes[j] == b'_') {
-            j += 1;
-        }
-        let mut float = false;
-        if j + 1 < bytes.len() && bytes[j] == b'.' && bytes[j + 1].is_ascii_digit() {
+        if q > digits {
             float = true;
-            j += 1;
-            while j < bytes.len() && bytes[j].is_ascii_digit() {
-                j += 1;
-            }
-        } else if j < bytes.len() && matches!(bytes[j], b'e' | b'E') {
-            let mut k = j + 1;
-            if k < bytes.len() && matches!(bytes[k], b'+' | b'-') {
+            k = q;
+        }
+    }
+    let suffix_start = k;
+    while k < n && is_word_byte(b[k]) {
+        k += 1;
+    }
+    let suffix = &b[suffix_start..k];
+    let suffix_is_float = ["f16", "bf16", "f32", "f64"]
+        .iter()
+        .any(|s| suffix.eq_ignore_ascii_case(s.as_bytes()))
+        || (is_cuda && matches!(suffix, b"f" | b"F" | b"d" | b"D"));
+    (k, float || suffix_is_float)
+}
+
+/// The end of the numeric literal starting at `start`, and whether it is a floating-point
+/// literal. Handles decimal literals, `1.`, `1f64`, `.5` (at its dot), and hex floats such as
+/// `0x1.8p3`; plain integers, radix integers and tuple field accesses are not floats.
+fn number_end(b: &[u8], start: usize, is_cuda: bool) -> (usize, bool) {
+    let n = b.len();
+    if b[start] == b'0' && start + 1 < n && matches!(b[start + 1], b'x' | b'X') {
+        let mut k = start + 2;
+        while k < n && (b[k].is_ascii_hexdigit() || b[k] == b'_') {
+            k += 1;
+        }
+        if k < n && b[k] == b'.' && b.get(k + 1) != Some(&b'.') {
+            k += 1;
+            while k < n && (b[k].is_ascii_hexdigit() || b[k] == b'_') {
                 k += 1;
             }
-            if k < bytes.len() && bytes[k].is_ascii_digit() {
+        }
+        let mut float = false;
+        if k < n && matches!(b[k], b'p' | b'P') {
+            let mut e = k + 1;
+            if e < n && matches!(b[e], b'+' | b'-') {
+                e += 1;
+            }
+            let digits = e;
+            let mut q = e;
+            while q < n && (b[q].is_ascii_digit() || b[q] == b'_') {
+                q += 1;
+            }
+            if q > digits {
                 float = true;
-                j = k;
-                while j < bytes.len() && bytes[j].is_ascii_digit() {
-                    j += 1;
-                }
+                k = q;
             }
         }
-        if float {
-            literals += 1;
+        while k < n && is_word_byte(b[k]) {
+            k += 1;
         }
-        i = j;
+        return (k, float);
     }
-    types + literals
+    if b[start] == b'0' && start + 1 < n && matches!(b[start + 1], b'b' | b'B' | b'o' | b'O') {
+        let mut k = start + 2;
+        while k < n && is_word_byte(b[k]) {
+            k += 1;
+        }
+        return (k, false);
+    }
+    let mut k = start + 1;
+    while k < n && (b[k].is_ascii_digit() || b[k] == b'_') {
+        k += 1;
+    }
+    let mut has_dot = false;
+    if k < n && b[k] == b'.' && b.get(k + 1) != Some(&b'.') {
+        let next = b.get(k + 1).copied();
+        let next_is_ident = next.is_some_and(|c| c.is_ascii_alphabetic() || c == b'_');
+        if !next_is_ident {
+            has_dot = true;
+            k += 1;
+            while k < n && (b[k].is_ascii_digit() || b[k] == b'_' || (is_cuda && b[k] == b'\'')) {
+                k += 1;
+            }
+        }
+    }
+    let (k, tail_float) = decimal_exp_and_suffix(b, k, is_cuda);
+    (k, has_dot || tail_float)
+}
+
+/// The D32 sites in already-stripped code: float type tokens and floating-point literals. `_` is
+/// an identifier character, so `__half` matches and `f32_buffer` does not.
+fn d32_sites(code: &str, is_cuda: bool) -> u64 {
+    let b = code.as_bytes();
+    let n = b.len();
+    let mut sites = 0u64;
+    let mut i = 0usize;
+    while i < n {
+        let c = b[i];
+        let prev_word = i > 0 && is_word_byte(b[i - 1]);
+        let prev_single_dot = i > 0 && b[i - 1] == b'.' && (i < 2 || b[i - 2] != b'.');
+        if (c.is_ascii_alphabetic() || c == b'_') && !prev_word {
+            let mut k = i + 1;
+            while k < n && is_word_byte(b[k]) {
+                k += 1;
+            }
+            let word = &code[i..k];
+            if crate::ratchet::D32_FLOAT_TYPES
+                .iter()
+                .any(|token| word.eq_ignore_ascii_case(token))
+            {
+                sites += 1;
+            }
+            i = k;
+            continue;
+        }
+        if c == b'.'
+            && !prev_word
+            && !(i > 0 && b[i - 1] == b'.')
+            && b.get(i + 1).is_some_and(u8::is_ascii_digit)
+        {
+            let mut k = i + 1;
+            while k < n && (b[k].is_ascii_digit() || b[k] == b'_' || (is_cuda && b[k] == b'\'')) {
+                k += 1;
+            }
+            let (k, _) = decimal_exp_and_suffix(b, k, is_cuda);
+            sites += 1;
+            i = k.max(i + 2);
+            continue;
+        }
+        if c.is_ascii_digit() && !prev_word && !prev_single_dot {
+            let (end, float) = number_end(b, i, is_cuda);
+            if float {
+                sites += 1;
+            }
+            i = end.max(i + 1);
+            continue;
+        }
+        i += 1;
+    }
+    sites
 }
 
 /// Whether D32 scans this path (the discrete model or a standalone instrument), matching the
@@ -801,57 +1229,55 @@ struct BannedCounts {
 
 fn banned_counts(text: &str, path: &str) -> BannedCounts {
     let code = ungated_code(text);
+    counts_in(&code, path)
+}
+
+/// Per-kind counts in already-stripped compiled code.
+fn counts_in(code: &str, path: &str) -> BannedCounts {
     BannedCounts {
-        d23: d23_sites(&code),
-        d25: d25_sites(&code),
-        d32: if d32_scope(path) { d32_sites(&code) } else { 0 },
+        d23: d23_sites(code),
+        d25: d25_sites(code),
+        d32: if d32_scope(path) {
+            d32_sites(code, path.ends_with(".cu") || path.ends_with(".cuh"))
+        } else {
+            0
+        },
     }
 }
 
-/// The module name of a stripped line that declares a file module without a body: `mod NAME;`,
-/// after any visibility or modifiers.
-fn file_mod_name(line: &str) -> Option<&str> {
-    if item_keyword(line) != Some("mod") {
-        return None;
-    }
-    let rest = line.trim().strip_suffix(';')?.trim_end();
-    let name = rest.rsplit(char::is_whitespace).next()?;
-    let before = rest[..rest.len() - name.len()].trim_end();
-    let named = !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
-    (named && (before == "mod" || before.ends_with(" mod") || before.ends_with(")mod")))
-        .then_some(name)
+/// One out-of-line `mod NAME;` declaration, with the inline module names that enclose it and
+/// whether a cfg(any()) gate covers it.
+struct ModDecl {
+    name: String,
+    inline_names: Vec<String>,
+    gated: bool,
+    line: usize,
 }
 
-/// The file modules a source text declares, each with whether its declaration sits inside a
-/// cfg(any()) gated span.
-fn file_modules(text: &str) -> Vec<(String, bool)> {
-    let lines: Vec<&str> = text.lines().collect();
-    let stripped_text = crate::ratchet::strip_comments_strings_and_char_literals(text);
-    let stripped: Vec<&str> = stripped_text.lines().collect();
-    let spans = gated_spans(&stripped, &lines);
-    stripped
-        .iter()
-        .enumerate()
-        .filter_map(|(i, line)| {
-            let name = file_mod_name(line)?;
-            let gated = spans.iter().any(|&(s, e)| s <= i && i <= e);
-            Some((name.to_string(), gated))
-        })
-        .collect()
-}
-
-/// The candidate files of module `name` declared in `declaring`: beside it for lib.rs, main.rs
-/// and mod.rs, otherwise in the declaring file's own folder; as NAME.rs or NAME/mod.rs.
-fn module_file_candidates(declaring: &str, name: &str) -> [String; 2] {
+/// The directory in which `declaring`'s out-of-line child modules live: beside lib.rs, main.rs
+/// and mod.rs, otherwise in the folder named after the declaring file's stem.
+fn module_dir(declaring: &str) -> String {
     let (dir, file) = declaring.rsplit_once('/').unwrap_or(("", declaring));
     let stem = file.strip_suffix(".rs").unwrap_or(file);
-    let owner = if matches!(stem, "lib" | "main" | "mod") {
+    if matches!(stem, "lib" | "main" | "mod") {
         dir.to_string()
     } else if dir.is_empty() {
         stem.to_string()
     } else {
         format!("{dir}/{stem}")
-    };
+    }
+}
+
+/// The two files `mod NAME;` may name under the declaring file's inline module path.
+fn module_file_candidates(declaring: &str, inline_names: &[String], name: &str) -> [String; 2] {
+    let mut owner = module_dir(declaring);
+    for inline in inline_names {
+        owner = if owner.is_empty() {
+            inline.clone()
+        } else {
+            format!("{owner}/{inline}")
+        };
+    }
     let join = |rel: String| {
         if owner.is_empty() {
             rel
@@ -862,49 +1288,296 @@ fn module_file_candidates(declaring: &str, name: &str) -> [String; 2] {
     [join(format!("{name}.rs")), join(format!("{name}/mod.rs"))]
 }
 
-/// The module files a change newly compiles: every `mod NAME;` gated by cfg(any()) at the base
-/// (and nowhere declared ungated there) that the head declares outside any cfg(any()) span, a
-/// move to cfg(test) included. Each comes back with its compiled banned counts at the base; a
-/// module whose file cannot be found at the base is skipped.
-fn newly_compiled_modules(
+/// The out-of-line `mod NAME;` declarations in one structure view, with the inline module names
+/// that enclose each. Inline modules are intervals found through `item_end`, so
+/// `mod outer { mod inner; }` resolves inner under `outer/`.
+fn mod_decls(structure: &[&str], spans: &[(usize, usize)]) -> Vec<ModDecl> {
+    let starts = item_start_indices(structure);
+    let mut raw: Vec<(ModDecl, bool, usize)> = Vec::new();
+    for &line in &starts {
+        let Some((keyword, offset)) = item_prefix(structure[line]) else {
+            continue;
+        };
+        if keyword != "mod" {
+            continue;
+        }
+        let end = (line + 8).min(structure.len());
+        let joined = structure[line..end].join("\n");
+        let (name, after) = next_word(&joined[offset..]);
+        if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            continue;
+        }
+        let rest = after.trim_start();
+        let (inline, span_end) = if rest.starts_with('{') {
+            (true, item_end(structure, line))
+        } else if rest.starts_with(';') {
+            (false, line)
+        } else {
+            continue;
+        };
+        let gated = spans.iter().any(|&(s, e)| s <= line && line <= e);
+        raw.push((
+            ModDecl {
+                name: name.to_string(),
+                inline_names: Vec::new(),
+                gated,
+                line,
+            },
+            inline,
+            span_end,
+        ));
+    }
+    let intervals: Vec<(usize, usize, String)> = raw
+        .iter()
+        .filter(|(_, inline, _)| *inline)
+        .map(|(decl, _, end)| (decl.line, *end, decl.name.clone()))
+        .collect();
+    let mut decls = Vec::new();
+    for (mut decl, inline, _) in raw {
+        if inline {
+            continue;
+        }
+        let mut ancestors: Vec<&(usize, usize, String)> = intervals
+            .iter()
+            .filter(|(start, end, _)| *start < decl.line && decl.line <= *end)
+            .collect();
+        ancestors.sort_by_key(|(start, _, _)| *start);
+        decl.inline_names = ancestors
+            .into_iter()
+            .map(|(_, _, name)| name.clone())
+            .collect();
+        decls.push(decl);
+    }
+    decls
+}
+
+/// The out-of-line module declarations of a source text.
+fn text_mod_decls(text: &str) -> Vec<ModDecl> {
+    let structure_text = strip_structure(text);
+    let structure: Vec<&str> = structure_text.split('\n').collect();
+    let spans = gated_spans(&structure);
+    mod_decls(&structure, &spans)
+}
+
+/// The file a `mod NAME;` names at `rev`, if it exists.
+fn resolve_module(
     pr: &Pr,
-    old: &str,
-    base: &str,
-    head: &str,
-) -> Vec<(String, BannedCounts)> {
-    let was = file_modules(base);
-    let now = file_modules(head);
-    let mut names: Vec<&str> = Vec::new();
-    for (name, gated) in &was {
-        let gated_at_base = *gated && !was.iter().any(|(n, g)| n == name && !*g);
-        let live_at_head = now.iter().any(|(n, g)| n == name && !*g);
-        if gated_at_base && live_at_head && !names.contains(&name.as_str()) {
-            names.push(name);
+    rev: &str,
+    declaring: &str,
+    inline_names: &[String],
+    name: &str,
+) -> Option<String> {
+    module_file_candidates(declaring, inline_names, name)
+        .into_iter()
+        .find(|path| pr.show(rev, path.as_str()).is_some())
+}
+
+/// The out-of-line module files a source file declares at `rev`, mapped to whether every
+/// declaration of that file is gated. A declaration absent from the map is not present.
+fn direct_mods(pr: &Pr, rev: &str, declaring: &str) -> HashMap<String, bool> {
+    let mut mods = HashMap::new();
+    if !declaring.ends_with(".rs") {
+        return mods;
+    }
+    let Some(text) = pr.show(rev, declaring) else {
+        return mods;
+    };
+    for decl in text_mod_decls(&text) {
+        let Some(path) = resolve_module(pr, rev, declaring, &decl.inline_names, &decl.name) else {
+            continue;
+        };
+        mods.entry(path)
+            .and_modify(|gated: &mut bool| *gated = *gated && decl.gated)
+            .or_insert(decl.gated);
+    }
+    mods
+}
+
+/// Mark `path` and every module file it declares as gated out at `rev`.
+fn mark_gated_tree(pr: &Pr, rev: &str, path: &str, gated: &mut HashSet<String>, depth: usize) {
+    if depth > 64 || !gated.insert(path.to_string()) || !path.ends_with(".rs") {
+        return;
+    }
+    let Some(text) = pr.show(rev, path) else {
+        return;
+    };
+    for decl in text_mod_decls(&text) {
+        if let Some(child) = resolve_module(pr, rev, path, &decl.inline_names, &decl.name) {
+            mark_gated_tree(pr, rev, &child, gated, depth + 1);
         }
     }
-    names
-        .into_iter()
-        .filter_map(|name| {
-            module_file_candidates(old, name)
-                .into_iter()
-                .find_map(|path| {
-                    let text = pr.at_base(&path)?;
-                    let counts = banned_counts(&text, &path);
-                    Some((path, counts))
-                })
-        })
-        .collect()
+}
+
+/// Candidate parent module files that could declare `path` as an out-of-line module.
+fn parent_module_candidates(path: &str) -> Vec<String> {
+    let Some((dir, file)) = path.rsplit_once('/') else {
+        return Vec::new();
+    };
+    let stem = file.strip_suffix(".rs").unwrap_or(file);
+    let parent = if stem == "mod" {
+        let Some((grand, _)) = dir.rsplit_once('/') else {
+            return Vec::new();
+        };
+        grand.to_string()
+    } else if matches!(stem, "lib" | "main") {
+        return Vec::new();
+    } else {
+        dir.to_string()
+    };
+    let join = |rel: &str| {
+        if parent.is_empty() {
+            rel.to_string()
+        } else {
+            format!("{parent}/{rel}")
+        }
+    };
+    let beside = if parent.is_empty() {
+        "mod.rs".to_string()
+    } else {
+        format!("{parent}.rs")
+    };
+    vec![beside, join("mod.rs"), join("lib.rs"), join("main.rs")]
+}
+
+/// Whether a parent module file's gated out-of-line `mod` declaration, or a gated parent above
+/// it, keeps `path` out of the compiled tree at `rev`.
+fn gated_by_ancestor(pr: &Pr, rev: &str, path: &str, depth: usize) -> bool {
+    if depth > 64 {
+        return false;
+    }
+    for parent in parent_module_candidates(path) {
+        if parent == path {
+            continue;
+        }
+        let Some(text) = pr.show(rev, &parent) else {
+            continue;
+        };
+        let decls = text_mod_decls(&text);
+        let mut declares = false;
+        let mut directly_gated = false;
+        for decl in decls {
+            let Some(resolved) = resolve_module(pr, rev, &parent, &decl.inline_names, &decl.name)
+            else {
+                continue;
+            };
+            if resolved == path {
+                declares = true;
+                directly_gated |= decl.gated;
+            }
+        }
+        if declares && (directly_gated || gated_by_ancestor(pr, rev, &parent, depth + 1)) {
+            return true;
+        }
+    }
+    false
+}
+
+#[derive(Clone, Copy)]
+enum RevSide {
+    Base,
+    Head,
+}
+
+fn side_rev<'a>(pr: &'a Pr, side: RevSide) -> &'a str {
+    match side {
+        RevSide::Base => &pr.merge_base,
+        RevSide::Head => &pr.head,
+    }
+}
+
+fn side_path(change: &Change, side: RevSide) -> &str {
+    match side {
+        RevSide::Base => change.paths.first().map(String::as_str).unwrap_or(""),
+        RevSide::Head => change.paths.last().map(String::as_str).unwrap_or(""),
+    }
+}
+
+/// Every module file that a changed `mod NAME;` declaration gates out at one revision, including
+/// the files those modules declare. A changed file already gated by an unchanged parent is marked
+/// too, so editing inside a permanently gated tree does not read as newly compiled code.
+fn gated_files(pr: &Pr, side: RevSide) -> HashSet<String> {
+    let rev = side_rev(pr, side);
+    let mut gated = HashSet::new();
+    for change in &pr.changes {
+        let path = side_path(change, side);
+        if !path.ends_with(".rs") {
+            continue;
+        }
+        let Some(text) = pr.show(rev, path) else {
+            continue;
+        };
+        for decl in text_mod_decls(&text) {
+            if !decl.gated {
+                continue;
+            }
+            if let Some(file) = resolve_module(pr, rev, path, &decl.inline_names, &decl.name) {
+                mark_gated_tree(pr, rev, &file, &mut gated, 0);
+            }
+        }
+        if gated_by_ancestor(pr, rev, path, 0) {
+            mark_gated_tree(pr, rev, path, &mut gated, 0);
+        }
+    }
+    gated
+}
+
+/// The banned sites that compile from `path` and every ungated out-of-line module it declares at
+/// `rev`.
+fn compiled_module_counts(pr: &Pr, rev: &str, path: &str, depth: usize) -> BannedCounts {
+    if depth > 64 {
+        return BannedCounts::default();
+    }
+    let Some(text) = pr.show(rev, path) else {
+        return BannedCounts::default();
+    };
+    let mut counts = banned_counts(&text, path);
+    if path.ends_with(".rs") {
+        for decl in text_mod_decls(&text) {
+            if decl.gated {
+                continue;
+            }
+            if let Some(child) = resolve_module(pr, rev, path, &decl.inline_names, &decl.name) {
+                let child_counts = compiled_module_counts(pr, rev, &child, depth + 1);
+                counts.d23 += child_counts.d23;
+                counts.d25 += child_counts.d25;
+                counts.d32 += child_counts.d32;
+            }
+        }
+    }
+    counts
+}
+
+/// Details already emitted, so a module file reached from several changed declaring files is
+/// reported once.
+#[derive(Default)]
+struct DetailSink {
+    details: Vec<String>,
+    seen: HashSet<(String, &'static str, u64, u64)>,
+}
+
+impl DetailSink {
+    fn push(&mut self, file: &str, kind: &'static str, before: u64, after: u64, via: &str) {
+        if after <= before || !self.seen.insert((file.to_string(), kind, before, after)) {
+            return;
+        }
+        self.details.push(format!(
+            "{file}: {kind} sites in compiled code rise from {before} at the merge base to {after} at the head{via} (a gate was removed, moved to a test-only gate, or the gated code changed); CHARTER section 3.4 forbids banned code in any compiled module"
+        ));
+    }
 }
 
 /// Under the ratchets, banned code that is gated out is counted but not compiled; CHARTER section
 /// 3.4 says banned code may not exist in any compiled or loaded module, so un-gating it (or moving
 /// it behind a test-only gate) is a presence change the ratchets cannot see. This rule compares the
 /// banned sites that compile per changed file at the merge base and at the head and fails when the
-/// head compiles more of any family. Deleting gated code, keeping the gate, and moving a gate to a
-/// parent module all pass.
+/// head compiles more of any family. An out-of-line `mod NAME;` gate is followed into NAME's
+/// file, so lifting or adding that gate charges the module file it compiles out. Deleting gated
+/// code, keeping the gate, and moving a gate to a parent module all pass.
 fn rule_banned_presence(pr: &Pr) -> RuleResult {
     const RULE: &str = "banned-presence";
-    let mut details = Vec::new();
+    let base_gated = gated_files(pr, RevSide::Base);
+    let head_gated = gated_files(pr, RevSide::Head);
+    let mut sink = DetailSink::default();
     for change in &pr.changes {
         let old = change.paths.first().map(String::as_str).unwrap_or("");
         let new = change.paths.last().map(String::as_str).unwrap_or("");
@@ -914,50 +1587,78 @@ fn rule_banned_presence(pr: &Pr) -> RuleResult {
         let (Some(base), Some(head)) = (pr.at_base(old), pr.at_head(new)) else {
             continue;
         };
-        let was = banned_counts(&base, new);
+        let mut was = banned_counts(&base, new);
         let mut now = banned_counts(&head, new);
-        // A gate lifted off `mod NAME;` compiles the module's file, which this change need not
-        // touch; its compiled sites count toward the declaring file.
-        let modules = newly_compiled_modules(pr, old, &base, &head);
-        for (_, counts) in &modules {
-            now.d23 += counts.d23;
-            now.d25 += counts.d25;
-            now.d32 += counts.d32;
+        if base_gated.contains(old) {
+            was = BannedCounts::default();
         }
-        let via = if modules.is_empty() {
-            String::new()
-        } else {
-            let files: Vec<&str> = modules.iter().map(|(p, _)| p.as_str()).collect();
-            format!(
-                " (counting the newly compiled module file(s) {})",
-                files.join(", ")
-            )
-        };
-        let pairs = [
+        if head_gated.contains(new) {
+            now = BannedCounts::default();
+        }
+        for (kind, before, after) in [
             ("D23", was.d23, now.d23),
             ("D25", was.d25, now.d25),
             ("D32", was.d32, now.d32),
-        ];
-        for (kind, before, after) in pairs {
-            if after > before {
-                details.push(format!(
-                    "{new}: {kind} sites in compiled code rise from {before} at the merge base to {after} at the head{via} (a gate was removed, moved to a test-only gate, or the gated code changed); CHARTER section 3.4 forbids banned code in any compiled module"
-                ));
+        ] {
+            sink.push(new, kind, before, after, "");
+        }
+        // A gate lifted off `mod NAME;` compiles the module's file, which this change need not
+        // touch; compare that file's compiled sites at the base and the head too.
+        let base_mods = if base_gated.contains(old) {
+            HashMap::new()
+        } else {
+            direct_mods(pr, &pr.merge_base, old)
+        };
+        let head_mods = if head_gated.contains(new) {
+            HashMap::new()
+        } else {
+            direct_mods(pr, &pr.head, new)
+        };
+        let mut modules: Vec<&String> = base_mods.keys().chain(head_mods.keys()).collect();
+        modules.sort();
+        modules.dedup();
+        for module in modules {
+            let base_compiled = matches!(base_mods.get(module), Some(false));
+            let head_compiled = matches!(head_mods.get(module), Some(false));
+            if base_compiled == head_compiled {
+                continue;
+            }
+            let was = if base_compiled {
+                compiled_module_counts(pr, &pr.merge_base, module, 0)
+            } else {
+                BannedCounts::default()
+            };
+            let now = if head_compiled {
+                compiled_module_counts(pr, &pr.head, module, 0)
+            } else {
+                BannedCounts::default()
+            };
+            let via = if head_compiled && !base_compiled {
+                format!(" (counting the newly compiled module file(s) {module})")
+            } else {
+                String::new()
+            };
+            for (kind, before, after) in [
+                ("D23", was.d23, now.d23),
+                ("D25", was.d25, now.d25),
+                ("D32", was.d32, now.d32),
+            ] {
+                sink.push(new, kind, before, after, &via);
             }
         }
     }
-    if details.is_empty() {
+    if sink.details.is_empty() {
         result(
             RULE,
-            details,
+            sink.details,
             "no changed file compiles more banned code than its base",
             "",
         )
     } else {
-        let n = details.len();
+        let n = sink.details.len();
         result(
             RULE,
-            details,
+            sink.details,
             "",
             &format!("{n} changed file(s) compile more banned code than their base"),
         )

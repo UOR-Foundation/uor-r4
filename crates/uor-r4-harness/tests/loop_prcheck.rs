@@ -1711,7 +1711,7 @@ fn moving_the_gate_to_the_parent_module_passes_the_presence_rule() {
 }
 
 /// A function with one D25 site, assembled so this test file adds no ratchet site itself.
-const D25_FN: &str = concat!("pub fn dense_mat", "mul() {}\n");
+const D25_FN: &str = concat!("pub fn dense() {\n    value.mat", "mul(other);\n}\n");
 
 #[test]
 fn removing_a_gate_with_a_trailing_comment_fails_the_presence_rule() {
@@ -1810,6 +1810,113 @@ fn keeping_a_float_function_gated_in_the_d32_scope_passes() {
             GATED_FLOAT_BASE,
         );
         r.write("crates/uor-r4-discrete/src/other.rs", "pub fn c() {}\n");
+    });
+    expect(
+        &r.check(&h, &[]),
+        0,
+        "PASS banned-presence",
+        "verdict: PASS",
+    );
+}
+
+#[test]
+fn un_gating_a_pub_crate_item_fails_the_presence_rule() {
+    let r = Repo::new().with_base(|r| {
+        r.write(
+            "crates/a/src/legacy.rs",
+            &format!(
+                "#[cfg(any())]\npub(crate) fn helper() {{\n    {}\n}}\n",
+                D25_FN
+            ),
+        );
+    });
+    let h = r.green_a(|r| {
+        r.write(
+            "crates/a/src/legacy.rs",
+            &format!("pub(crate) fn helper() {{\n    {}\n}}\n", D25_FN),
+        );
+    });
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL banned-presence",
+        "D25 sites in compiled code rise",
+    );
+}
+
+#[test]
+fn an_inner_gate_is_respected() {
+    let r = Repo::new().with_base(|r| {
+        r.write(
+            "crates/a/src/inner.rs",
+            &format!("#![cfg(any())]\n{D25_FN}"),
+        );
+    });
+    let h = r.green_a(|r| {
+        r.write("crates/a/src/inner.rs", D25_FN);
+    });
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL banned-presence",
+        "D25 sites in compiled code rise",
+    );
+}
+
+#[test]
+fn un_gating_an_half_float_in_the_d32_scope_fails() {
+    let r = Repo::new().with_base(|r| {
+        r.write(
+            "crates/uor-r4-discrete/src/half.rs",
+            "#[cfg(any())]\npub fn half(x: __half) -> __half {\n    x\n}\n",
+        );
+    });
+    let h = r.green_b(|r| {
+        r.write(
+            "crates/uor-r4-discrete/src/half.rs",
+            "pub fn half(x: __half) -> __half {\n    x\n}\n",
+        );
+    });
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL banned-presence",
+        "D32 sites in compiled code rise",
+    );
+}
+
+#[test]
+fn dense_helper_names_are_not_d25_sites() {
+    let r = Repo::new().with_base(|r| {
+        r.write(
+            "crates/a/src/helpers.rs",
+            "#[cfg(any())]\npub fn gemm_helper() {}\n",
+        );
+    });
+    let h = r.green_a(|r| {
+        r.write("crates/a/src/helpers.rs", "pub fn gemm_helper() {}\n");
+    });
+    expect(
+        &r.check(&h, &[]),
+        0,
+        "PASS banned-presence",
+        "verdict: PASS",
+    );
+}
+
+#[test]
+fn a_raw_string_gate_does_not_hide_the_next_item() {
+    let r = Repo::new().with_base(|r| {
+        r.write(
+            "crates/a/src/raw.rs",
+            "pub fn live() {\n    value.matmul(other);\n}\n\n#[cfg(any())]\npub const KERNEL: &str = r\"{ ;\";\n",
+        );
+    });
+    let h = r.green_a(|r| {
+        r.write(
+            "crates/a/src/raw.rs",
+            "pub fn live() {\n    value.matmul(other);\n}\n",
+        );
     });
     expect(
         &r.check(&h, &[]),
