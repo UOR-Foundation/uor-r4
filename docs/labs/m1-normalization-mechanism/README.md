@@ -45,4 +45,7 @@ Verified at the review head: `cargo test -p uor-r4-discrete --lib normalization_
   - Snapshots record `normalization_mode`. The field is omitted when it is the default, so existing snapshots and their hashes are byte-identical.
   - `DriverConfig.normalization_mode` selects the arm (`unit_snap_control_v1`). A checkpoint whose mode differs from the config is refused.
   - `export_d11` refuses a non-default mode, because the integer engine has no unit snap.
-- **Not run yet.** The GPU test `device::unit_snap_device_tests::unit_snap_device_word_runs_and_refuses` (ignored without a GPU) checks the mode, the refusals and the snapshot round trip. It runs with the default-path A8 checkpoint-0 identity check on one pod, once approved.
+- **GPU-verified on 2026-10-23,** on one RTX 5090 with Casey's approval. The run was zero-update: no training.
+  - `device::unit_snap_device_tests::unit_snap_device_word_runs_and_refuses` passed.
+  - At this head, the default path reproduced the A8 checkpoint-0 identity exactly: `b3_psucc` 1,351, `b3_full` 4,244, top-1 133, 256 occupied cells, 4,096 distinct vectors, tie mass 0.
+  - The results are in the HF store at `results/claude/unit-snap-3071-20261023/`, with `SHA256SUMS`. Details are in the claude-61 REPORT.
