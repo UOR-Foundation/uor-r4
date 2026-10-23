@@ -16,7 +16,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item `#2833` (`References`; the item
 | `docs/labs/m1-address-as-read/README.md` | docs | +~15 | the lab record of this pin update and the pending list |
 | this task folder | docs | new | ORDER and REPORT |
 
-**Size:** about 110 changed lines at the reviewed head (107 insertions / 4 deletions; the sheet itself is +20/−4); docs-only (no receipts file, D46 fresh-context record used).
+**Size:** about 115 changed lines at this head (the sheet itself about +25/−5; see the PR diff for the exact numbers); docs-only (no receipts file, D46 fresh-context record used).
 
 ## Measurements
 

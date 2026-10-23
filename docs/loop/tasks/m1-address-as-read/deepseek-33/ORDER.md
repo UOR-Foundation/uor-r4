@@ -21,7 +21,7 @@ Class **instrument** (docs-only, host only, no compute). At the base: the sheet 
 ## Done when
 
 - The sheet pins the consumer: commit `86eb68ebb`, the `address_read.rs` module and the six `tests/address_read.rs` controls, with the re-check command.
-- The remaining prerequisites are exactly one checklist in the Verdict: (1) frozen panel SHA-256 + 80-vs-200 D22 §3 reconciliation — `PENDING (PM)`; (2) checkpoint SHA-256 — `PENDING (owner)`, `#2845` held; (3) owner bar with ISO-UTC time and one baseline — `PENDING (owner)`; (5) BPB stream/tolerance and the `54/80` derivation — `PENDING (PM/owner)`, plus the two new stop rules.
+- The remaining prerequisites are exactly one checklist in the Verdict: (1) frozen panel SHA-256 + 80-vs-200 D22 §3 reconciliation — `PENDING (PM)`; (2) checkpoint SHA-256 — `PENDING (owner)`, `#2844` held; (3) owner bar with ISO-UTC time and one baseline — `PENDING (owner)`; (5) BPB stream/tolerance and the `54/80` derivation — `PENDING (PM/owner)`, plus the two new stop rules.
 - The sheet still says `NOT_FIT` and no compute is cleared; the item stays `ready`.
 - `loop report --check`, `loop pr-check --local`, `loop gates --full` and a fresh-context review record at the head pass (docs-only PR).
 

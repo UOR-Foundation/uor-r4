@@ -88,10 +88,10 @@ Re-request FIT only when 1–3 and the rest of 5 have concrete values in this sh
 1. **Frozen, hashed panel absent.** The 40/20/20 composition is stated, and matches the paper design, but the frozen panel (or its evaluation subset) has no content SHA-256, and the m3-memory milestone entry says `>= 200` rows for a decisive run; state the hash and reconcile 80 vs 200 against D22 §3.
 2. **Candidate checkpoint unpinned.** The base artifact names `m1-trunk-assembly-and-training` (`#2844`), which is **HELD** (verified against the roadmap item on `main`), and carries no SHA-256; pin the exact frozen checkpoint and where it is stored.
 3. **Bar is still a proposal.** Quote the owner's registered bar with an ISO-UTC time (CHARTER §5.2), and settle the `19/40` vs `20/40` baseline wording so the `+8` gain has one baseline.
-4. **Consumer not commit-pinned.** "Landed in `#2950`" should be the delivered commit SHA of the `uor-r4-object-store` address-read consumer and its 6 finite tests.
+4. **Consumer commit-pinned (resolved 2026-10-22).** The delivered commit SHA `86eb68ebb` of the `uor-r4-object-store` address-read consumer and its 6 finite tests is now cited in §4 and in the pin-status table above; this item no longer blocks a FIT re-request.
 5. **Measurement definitions unpinned.** The held-out BPB stream is unnamed and unhashed and the `0.01` tolerance is unsourced; `>= 54/80` has no derivation; and the stop rules cover integrity failures only — add a **bar-miss stop** and state which configuration a negative closes (CHARTER §4.1).
 
-Re-request FIT once 1–5 are pinned; this verdict clears no compute (D22).
+Re-request FIT once 1–3 and the remaining definitions in 5 have concrete values (item 4 is pinned above); this verdict clears no compute (D22).
 
 ### Recorded review
 
@@ -105,4 +105,3 @@ A FIT verdict clears compute for the configuration in that sheet only (D22).
 ```
 
 **Correction (2026-10-22, sheet update):** the verbatim review above pairs `m1-trunk-assembly-and-training` with `#2845`. The roadmap maps that item to **`#2844`** (`docs/roadmap/issues.json`, `docs/roadmap/README.md`), while `#2845` is `m1-w2-capacity-capture`. The quote is kept verbatim as the record; the live text in this sheet uses `#2844`.
-```
