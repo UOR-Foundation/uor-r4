@@ -29,11 +29,11 @@ Host-only, Mac laptop, `rustc 1.97.1`, $0 GPU spend. Initial release build 6 m 5
 ## Checks run at the head
 
 - `uor-harness loop gates --quick`: 3/3 checks GREEN at `a94368d35` before implementation.
-- `uor-harness loop gates --full`: **11/11 GREEN** at `1c3d9e88e58faa9c944da6f30a6032d464333693`, after the scope repair and merge of current main.
+- `uor-harness loop gates --full`: **11/11 GREEN** at `095f7e272536085e2fd3c2e41e7e92e23bd9d149`, after the scope repair and merges of current main.
 - `cargo fmt -p uor-r4-integer -- --check` and `git diff --check`: PASS.
 - `cargo clippy -p uor-r4-integer --features serving-wasm --all-targets -- -D warnings`: 46 library and 55 all-target findings, all in unchanged files; none in `uor-chat.rs` or `discrete_chat_cli.rs`. Fresh `main` independently fails the library check with the same 46 findings. This is inherited lint debt, not a clean-Clippy claim.
 - Early `loop pr-check --local` found the notebook scope and sheet-heading failures; both were repaired and rechecked, leaving only the then-missing REPORT.
-- `loop report --check` and final `loop pr-check --local`: RESULT_PENDING.
+- `loop report --check`: PASS at `095f7e272`. Final `loop pr-check --local`: verdict PASS at `095f7e272`, with every applicable rule green.
 
 ## Skills used
 
