@@ -188,7 +188,10 @@ fn reroot_item_links(text: &str) -> String {
         let has_scheme = target
             .find(':')
             .is_some_and(|c| c < target.find('/').unwrap_or(usize::MAX));
-        if target.starts_with("http") || target.starts_with('#') || target.starts_with('/') || has_scheme
+        if target.starts_with("http")
+            || target.starts_with('#')
+            || target.starts_with('/')
+            || has_scheme
         {
             out.push_str(target);
         } else {
