@@ -892,6 +892,34 @@ fn scope_refuses_a_scopeless_item_a_crossing_glob_and_a_rename_out() {
 }
 
 #[test]
+fn scope_allows_a_new_notebook_introduced_with_its_binding() {
+    let r = Repo::new().with_base(|r| {
+        r.write(
+            "docs/roadmap/items/item-a.md",
+            &ITEM_A
+                .replace("scope: [", "scope: [docs/roadmap/items/*.md, ")
+                .replace("notebook: docs/research/notebook/a.md\n", ""),
+        );
+    });
+    let h = r.green_a(|r| {
+        r.write(
+            "docs/roadmap/items/item-a.md",
+            &ITEM_A
+                .replace("scope: [", "scope: [docs/roadmap/items/*.md, ")
+                .replace(
+                    "docs/research/notebook/a.md",
+                    "docs/research/notebook/m2-grounded-reply.md",
+                ),
+        );
+        r.write(
+            "docs/research/notebook/m2-grounded-reply.md",
+            "# Notebook: grounded reply (M2)\n\n## Results\n\n| Date | What ran | Number | Bar | Verdict | Artifact |\n|---|---|---|---|---|---|\n| | *No result rows yet.* | | | | |\n",
+        );
+    });
+    expect(&r.check(&h, &[]), 0, "PASS scope", "verdict: PASS");
+}
+
+#[test]
 fn scope_always_allows_status_notebook_append_mistakes_and_filemap_rows() {
     let r = Repo::new();
     let pass: Vec<Edit> = vec![

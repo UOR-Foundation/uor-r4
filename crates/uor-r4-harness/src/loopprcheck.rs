@@ -458,6 +458,11 @@ fn rule_scope(pr: &Pr) -> RuleResult {
             details: bad_globs,
         };
     }
+    let head_notebook = pr.at_head(&item_path).and_then(|text| {
+        crate::loopclaim::parse_item(&text)
+            .ok()
+            .and_then(|head_item| head_item.notebook)
+    });
     // The active ORDER's folder and its history ORDERs' folders (loop step 11).
     let folders: Vec<String> = pr
         .the_chain()
@@ -472,6 +477,10 @@ fn rule_scope(pr: &Pr) -> RuleResult {
             || folders.iter().any(|f| path.starts_with(f.as_str()))
             || (path == item_path && status_only_edit(pr, path))
             || (item.notebook.as_deref() == Some(path) && keeps_base_lines(pr, path))
+            || (change.status == 'A'
+                && item.notebook.is_none()
+                && head_notebook.as_deref() == Some(path)
+                && keeps_base_lines(pr, path))
             || (change.status == 'A' && path.starts_with("docs/harness/mistakes/"))
             || (path == "docs/start/FILEMAP.md" && keeps_base_lines(pr, path));
         if !allowed {
