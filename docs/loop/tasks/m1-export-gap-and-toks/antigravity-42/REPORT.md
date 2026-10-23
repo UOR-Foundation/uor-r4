@@ -25,8 +25,9 @@ Lab: antigravity. Order: [ORDER.md](ORDER.md).
 - `uor-harness loop gates --quick` (cancel probe, `SIGINT` after `150 ms`): `rc = -2`.
 - `uor-harness check --only prep`: `0 error` (`docs/harness/prep/m1-export-gap-and-toks-DRAFT-2026-10-23.md` passes `prep.sheet_shape` across all 8 required blocks; expected `warn prep.fit_before_run` on `PENDING`).
 - `uor-harness check --only harness.documented`: `1 rules, 0 failed (0 error, 0 warn)`.
-- `~/.cargo/bin/cargo run -p xtask -- links`: `0 broken links`.
+- `~/.cargo/bin/cargo run -p xtask -- links --baseline /tmp/antigravity-base-links.json --renames-from origin/main`: `new broken: 0`.
 - `uor-harness loop gates --quick`: `fmt-claim-wording GREEN`, `fmt-harness GREEN`, `claim-wording GREEN`.
+- `uor-harness loop gates --full`: `11 / 11 GREEN` (`fmt-claim-wording`, `fmt-harness`, `claim-wording`, `loop-gates-watch`, `loop-drive`, `loop-next-sources`, `loop-next-wait`, `loop-next-owner-direction`, `git-hooks`, `loop-migrate`, `loop-review-changes-blocks`).
 - `uor-harness loop report --check`: `PASS`.
 - `uor-harness loop pr-check --local`: `verdict: PASS`.
 
