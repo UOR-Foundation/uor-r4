@@ -6,13 +6,14 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2851 (`References`; the item s
 
 - **The conflict is real and is not a lab call.** Amendment 7 froze the sheet under D32 (float ban on the learning path), but **D37** later revised that ban: floating point is legal in **offline training only**, with a reported export gap. Whether that revives the Amendment 6 sheet or still wants a new discrete-law sheet is exactly the item's done-when question, and it is the PM's or owner's to record - I did not answer it for them.
 - **The four pins had to be re-verified, not re-quoted.** I checked the source commits exist (`2fd6358bb`, `9e904a834`), the CLI still carries `train_mask`/`expected_train_targets` (`geometric-stack-native.rs`), the mask digest `b5e7352d…` is the current code pin, and the 2,425,925 count is carried by the count-reference archive. The DEV pins are restated from the Amendment 4 record; the DEV tar itself is not in this checkout.
+- **A review caught over-claimed stop behaviour.** My first draft said the run aborts on the train-tar/mask/tokenizer hashes and the DEV count; the CLI does not - it enforces `expected_train_targets` and `train_mask` and reports the DEV denominator. The section now states the enforced behaviour and restores the old sheet's manual pre-run verification instead of promising a check the code lacks. The reviewer also caught a dose-arithmetic typo inherited from the old sheet (`44,957,696`; the true product is `44,998,656`), now corrected with a note.
 - **A refresh must not quietly become a re-registration.** The bars, reference, guards, dev policy and noise floor are restated by pointer to the old sheet's authoritative wording rather than rephrased; changing a bar would need a decision card. `TEST FITNESS: PENDING` is honest: the old sheet's FIT stays in its own record, and this page still needs a non-author FIT plus the PM answer.
 
 ## What changed
 
 | File | Change |
 |---|---|
-| `docs/harness/prep/m2-pin-train-mask-sheet-2026-10-23.md` | the refreshed one-page sheet: D37 legal basis, four re-verified pins, unchanged bars/reference/guards/dev policy (by pointer), steps with the exact CLI, stop rule, cost, power, `TEST FITNESS: PENDING` |
+| `docs/harness/prep/m2-pin-train-mask-sheet-2026-10-23.md` | the refreshed one-page sheet: D37 legal basis, the pins (two re-verified, two restated), unchanged bars/reference/guards/dev policy (by pointer), steps with the exact CLI, stop rule, cost, power, `TEST FITNESS: PENDING` |
 | `docs/labs/m2-pin-train-mask-sheet/README.md` | what was verified, the decision card, and the open prerequisites |
 | this folder | ORDER (committed first) and this REPORT |
 
@@ -21,7 +22,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2851 (`References`; the item s
 ## Measurements
 
 - Pins verified by command: `git cat-file -t 2fd6358bb/9e904a834` -> commit; `expected_train_targets` and `train_mask` present in `crates/uor-r4-training/examples/geometric-stack-native.rs`; `b5e7352d…` in `crates/uor-r4-discrete/src/attention_learning.rs`; `2,425,925` in `archive/labs/count-reference-2026-10-13/README.md`.
-- `prep-check` on the new sheet: completeness recorded below after the run; fitness `PENDING` by design.
+- `prep-check` on the new sheet: **complete=yes**, fitness **`PENDING`** by design; `loop pr-check --local` PASS; CI green at the head.
 
 ## Checks run at the head
 
