@@ -120,13 +120,14 @@ pub fn block_l1(q_block: &[i32], root: usize) -> u64 {
     q_block
         .iter()
         .zip(geometry::ROOTS[root].iter())
-        .map(|(&x, &y)| u64::from((x - i32::from(y)).unsigned_abs()))
+        .map(|(&x, &y)| u64::from(x.abs_diff(i32::from(y))))
         .sum()
 }
 
 /// Endpoint-only 2-block cell address distance (`discrete.cu` `address_distance` at line 274):
 /// compares only `block 0` to `cell / 16` and `block B-1` to `cell % 16`.
 /// For any snapped root query vector `q`, this takes at most 5 distinct values `{0, 4, 8, 12, 16}`.
+/// Host reference oracle and finite-control helper (not a CPU evaluation path; CHARTER §3.5 / D24).
 pub fn cell_outer_l1(query: &[i32], blocks: usize, cell: usize) -> Result<u64> {
     if blocks < 2 || query.len() != blocks * 8 || cell >= CELLS {
         return Err(invalid(
@@ -138,6 +139,7 @@ pub fn cell_outer_l1(query: &[i32], blocks: usize, cell: usize) -> Result<u64> {
 }
 
 /// Full-vector L1 distance across all `B` blocks (`discrete.cu` `token_distance` at line 277).
+/// Host reference oracle and finite-control helper (not a CPU evaluation path; CHARTER §3.5 / D24).
 pub fn token_full_l1(query: &[i32], token_vector: &[i32]) -> Result<u64> {
     if query.is_empty() || !query.len().is_multiple_of(8) || query.len() != token_vector.len() {
         return Err(invalid(
@@ -147,13 +149,14 @@ pub fn token_full_l1(query: &[i32], token_vector: &[i32]) -> Result<u64> {
     Ok(query
         .iter()
         .zip(token_vector.iter())
-        .map(|(&x, &y)| u64::from((x - y).unsigned_abs()))
+        .map(|(&x, &y)| u64::from(x.abs_diff(y)))
         .sum())
 }
 
 /// Pure unweighted cell-envelope full-vector distance (`m1-address-key-full-vector`, #2834):
 /// minimum full-vector `B`-block L1 distance over all tokens currently occupying `cell`.
 /// Uses only integer subtraction, absolute value, addition, and minimum.
+/// Host reference oracle and finite-control helper (not a CPU evaluation path; CHARTER §3.5 / D24).
 pub fn cell_envelope_l1(
     query: &[i32],
     table: &[i32],
@@ -193,6 +196,7 @@ pub fn cell_envelope_l1(
 /// `d_env` is strictly lexicographically primary and `d_sum` breaks within-shell ties
 /// geometrically across all `B` blocks (invariant to token-ID ordering inside the cell)
 /// before `cell_precedes` falls back to `cell < other_cell`.
+/// Host reference oracle and finite-control helper (not a CPU evaluation path; CHARTER §3.5 / D24).
 pub fn full_vector_cell_l1(
     query: &[i32],
     table: &[i32],
@@ -229,8 +233,8 @@ pub fn full_vector_cell_l1(
     }
 }
 
-/// Deterministic Latin-square bijection on `0..256` mapping outer cell `(r0, r3)` to a unique
-/// default interior root pair `(a1, a2)` when a token has zero placed-predecessor mass.
+/// Deterministic starting interior root pair `(a1, a2)` in `0..256` for outer cell `(r0, r3)`
+/// when a token has zero placed-predecessor mass; per-cell uniqueness is enforced by `used_interior`.
 fn latin_interior_anchor(cell: usize) -> usize {
     let r0 = cell / 16;
     let r3 = cell % 16;
@@ -241,6 +245,7 @@ fn latin_interior_anchor(cell: usize) -> usize {
 
 /// Admit the top `k` cells out of `0..256` ordered by `(distances[cell], cell)`,
 /// matching `discrete.cu` `cell_precedes(distance, cell, other_distance, other_cell)`.
+/// Host reference oracle and finite-control helper (not a CPU evaluation path; CHARTER §3.5 / D24).
 pub fn admit_cells_by_distances(distances: &[u64; CELLS], k: usize) -> Vec<usize> {
     let mut order: Vec<usize> = (0..CELLS).collect();
     order.sort_by_key(|&c| (distances[c], c));
