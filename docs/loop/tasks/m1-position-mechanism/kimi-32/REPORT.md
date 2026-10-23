@@ -27,7 +27,7 @@ The current sheet status now records Kimi's non-author `TEST FITNESS: FIT`; a po
 - `uor-harness loop gates --quick`: 3/3 GREEN.
 - `uor-harness loop gates --full`: 11/11 GREEN.
 - `uor-harness loop report --check`: PASS.
-- `uor-harness loop pr-check --local`: the pre-commit run failed only `report` because this REPORT was not yet at the head; every other rule passed. Rerun at the committed head before review.
+- `uor-harness loop pr-check --local`: the pre-commit run failed only `report` because this REPORT was not yet at the head; the committed-head rerun passed every rule.
 
 ## Skills used
 
