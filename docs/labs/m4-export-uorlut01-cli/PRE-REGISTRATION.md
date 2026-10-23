@@ -38,7 +38,7 @@ Register the held-out chat stream before any scoring: path/object identity, SHA-
 - Score the lawful count-table baseline with the same #2861 instrument. A constant or copy control must not pass a non-vacuity check.
 - Flip one nonzero route action or writer cell in an in-memory control; the parity/hash check must detect it.
 
-## Stop rule
+## Stop
 
 - Missing or mismatched checkpoint, panel, scorer, source or artifact identity: **NOT_RUN**, instrument incomplete.
 - Any nonzero forbidden instruction in an audited serving root, any nonzero lossless-export mismatch, or a failed planted-fault control: diagnostic stop and instrument repair, never a mechanism negative.

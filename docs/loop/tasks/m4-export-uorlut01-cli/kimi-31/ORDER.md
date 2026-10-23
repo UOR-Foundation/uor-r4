@@ -31,7 +31,7 @@ At `d0527ed8f`, `d11_export::export_d11` already writes `UORLUT01` with schema `
 1. Post the container/loading design note on #2859. Add `--discrete` with one-shot `--prompt-ids`: direct `IntegerDiscreteModel` greedy predictions, a bounded sliding context, no sampler, and no text REPL or session codec in this PR.
 2. TDD a CLI integration test with a self-contained toy `UORLUT01` fixture, requiring no dependency or `Cargo.lock` change. Compare two fresh processes and direct library predictions; refuse a wrong schema and unsupported modes.
 3. Record the existing native and WebAssembly audit baselines. Their named roots do not cover the new discrete CLI, so no machine-code compliance claim is made for that root.
-4. Update the serving docs, draft the PENDING pre-registration with its missing trained artifact, held-out stream and lawful scorer named as blockers, then write REPORT and one finite-control notebook row.
+4. Update the serving docs, draft the PENDING pre-registration with its missing trained artifact, held-out stream and lawful scorer named as blockers, then write REPORT and the host record. Defer the finite-control notebook row because this item has no `notebook:` metadata and the scope guard refuses it.
 
 ## Done when
 
