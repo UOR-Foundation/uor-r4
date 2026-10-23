@@ -11,9 +11,8 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2861. Base: `903dbf701`. `Refe
 | File | Change |
 |---|---|
 | `docs/labs/m4-lawful-likelihood-bpb/README.md` | control 7 states `MassZero`/not-comparable; the old "infinite and reported as such" wording is gone |
-| `docs/loop/tasks/m4-lawful-likelihood-bpb/deepseek-49/REPORT.md` | "no D40 release exists" -> "no owner release exists (CHARTER §5.1)" |
 | `docs/harness/prep/m4-lawful-likelihood-bpb-2026-10-23.md` | header cites the design PR #2940 |
-| this folder | ORDER and REPORT |
+| this folder | ORDER, this REPORT (the merged `deepseek-49` REPORT keeps its historical "no D40 release exists" sentence; it is superseded by this PR and CHARTER §5.1, and editing another order's report is outside scope) |
 
 ## Measurements
 
