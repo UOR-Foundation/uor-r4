@@ -34,3 +34,12 @@ Non-author `TEST FITNESS` review of the draft sheet: **NOT_FIT**, recorded in th
 2. the full DEV token/mask pin — the sheet must use the authoritative code pin in `attention_learning.rs` (`0919e90f953e…` / `a838bb1a67e9…`; the staging sheet's `0919e90f813b…` / `a838bb1ae20c…` pair appears nowhere else and needs an errata).
 
 Verified at the review head: `cargo test -p uor-r4-discrete --lib normalization_mechanism` = 6 passed; no float, dense matmul or squashing form on the path; `4 × B`-bit norm-table export; the parent A8 sheet is `TEST FITNESS: FIT`; all 8 blocks present.
+
+## `C_unscaled` device wiring (claude-60, PR #3071)
+
+- **What changed.** The GPU read kernel takes the `C_unscaled` control (`NormalizationMode::UnitSnapControlV1`) through spec word `s[12]`.
+  - `1` sets `n := 1` at the three snap sites: tree, consensus and output.
+  - `0` keeps `snap_n`, so the default path is unchanged.
+  - `C_raw` is refused on the device path, because it needs a ℤ⁸ carry.
+- **What still blocks a run.** The snapshot schema has no mode field, so `snapshot()` refuses a non-default mode, and no driver or CLI flag selects one. The next unit adds both. Until then no command runs the `C_unscaled` arm.
+- **Not run yet.** The GPU test `device::unit_snap_device_tests::unit_snap_device_word_runs_and_refuses` (ignored without a GPU) waits for an approved pod.
