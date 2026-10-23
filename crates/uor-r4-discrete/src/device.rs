@@ -1069,13 +1069,6 @@ impl Device {
     }
 
     pub fn snapshot(&self) -> Result<Snapshot> {
-        // The snapshot schema carries no normalization mode: a control-arm model
-        // would reload as snap_n, so it is refused rather than mislabelled.
-        if !self.binding.normalization_mode.is_scale_matched_snap() {
-            return Err(invalid(
-                "snapshot of a non-default normalization mode is refused",
-            ));
-        }
         // This is storage readback, not a CPU reference or a learning update.
         Ok(Snapshot {
             schema: SCHEMA.to_owned(),
@@ -1083,6 +1076,7 @@ impl Device {
             read_spec: self.read_spec(),
             objective_policy: self.objective_policy(),
             read_initialization: self.read_initialization(),
+            normalization_mode: self.normalization_mode(),
             seed: self.binding.seed,
             epoch: self.epoch()?,
             table: self.stream.clone_dtoh(&self.table).map_err(cuda)?,
@@ -1125,11 +1119,12 @@ impl Device {
         }
         // Fresh process identity even for byte-identical reloads. No carried
         // batch/proposal from another model instance becomes valid by loading.
-        let mut model = Self::new_with_initialization(
+        let mut model = Self::new_with_normalization(
             snapshot.spec,
             snapshot.read_spec,
             snapshot.objective_policy,
             snapshot.read_initialization,
+            snapshot.normalization_mode,
             snapshot.seed,
             ordinal,
         )?;
@@ -2078,6 +2073,7 @@ mod snapshot_hash_tests {
             read_spec: ReadSpec::Route,
             objective_policy: ObjectivePolicy::NearestAddressMarginV1,
             read_initialization: ReadInitialization::ZeroGatesV1,
+            normalization_mode: NormalizationMode::ScaleMatchedSnapV1,
             seed: 1,
             epoch: 0,
             table: vec![0; 16],
@@ -2201,7 +2197,18 @@ mod unit_snap_device_tests {
         )
         .is_err());
         assert!(flock_device(NormalizationMode::UnnormalizedControlV1).is_err());
-        assert!(control.snapshot().is_err());
+        // The control mode is stored in the snapshot and survives a reload.
+        let snapshot = control.snapshot()?;
+        assert_eq!(
+            snapshot.normalization_mode,
+            NormalizationMode::UnitSnapControlV1
+        );
+        let reloaded = Device::from_snapshot(snapshot, 0)?;
+        assert_eq!(
+            reloaded.normalization_mode(),
+            NormalizationMode::UnitSnapControlV1
+        );
+        canonical_forward(&reloaded)?;
         Ok(())
     }
 }
