@@ -13,6 +13,7 @@ pub mod blp;
 pub mod brute;
 pub mod case;
 pub mod check;
+pub mod dyadic;
 pub mod exact;
 pub mod lp;
 pub mod problem;
