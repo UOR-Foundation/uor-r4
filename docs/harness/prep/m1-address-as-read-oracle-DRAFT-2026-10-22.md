@@ -1,6 +1,6 @@
 # Serving-time address-as-read oracle over `uor-r4-object-store` (DRAFT)
 
-- **Status:** DRAFT pre-registration sheet for `#2833` (`m1-address-as-read`, Step 4). **FIT-reviewed by deepseek (non-author) on 2026-10-22: `NOT_FIT`** (see [Verdict](#verdict)); **no GPU run is cleared or started** until the remaining prerequisites in the Verdict are pinned (prerequisite 4 is pinned below) and Casey releases the run. **Sheet update 2026-10-22 (deepseek-33):** prerequisite 4 (consumer commit pin) is now pinned below; prerequisites 1–3 and part of 5 remain `PENDING (PM/owner)` and are listed in one table in the Verdict.
+- **Status:** DRAFT pre-registration sheet for `#2833` (`m1-address-as-read`, Step 4). **FIT-reviewed by deepseek (non-author) on 2026-10-22: `NOT_FIT`** (see [Verdict](#verdict)); **no GPU run is cleared or started** until the remaining prerequisites in the Verdict are pinned (prerequisite 4 is pinned below) and Casey releases the run. **Sheet update 2026-10-22 (deepseek-33):** prerequisite 4 (consumer commit pin) is now pinned below; prerequisites 1–3 and part of 5 remain `PENDING (PM/owner)` and are listed in one table in the Verdict. **Sheet update 2026-10-23 (deepseek-38):** the remaining bar and panel prerequisites now have filed decision cards with recommendations (see [Registration cards](#registration-cards-deepseek-38-2026-10-23)); the checkpoint pin stays `PENDING` (held `#2844`) and `NOT_FIT` stands with no compute cleared.
   - CPU consumer module (`uor_r4_object_store::address_read`) and finite CPU controls were delivered in `#2950` (`$0` GPU spend).
   - GPU evaluation of the serving-time oracle awaits a non-author `TEST FITNESS: FIT` review (CHARTER §4.5) and Casey's approval in chat; any trained form also requires a separate FIT review and a typed owner release (CHARTER §5.1).
 - **Line:** M1/M3 exact addressed memory (`#2029`, `#2031`, item `#2833`). **Lab:** antigravity.
@@ -75,14 +75,22 @@ Evaluated on one frozen checkpoint on RTX 5090 across three deterministic servin
 
 | # | Prerequisite | Status | Evidence / slot |
 |---|---|---|---|
-| 1 | Frozen, hashed 80-row panel and 80-vs-200 reconciliation | **PENDING — PM** | composition stated in §5; `SHA-256: PENDING`; panel-freeze step `#2858`; D22 §3 reconciliation required |
+| 1 | Frozen, hashed 80-row panel and 80-vs-200 reconciliation | **CARD FILED — PM data source + freeze/hash** | composition `40/20/20` and reconciliation proposed in the panel card (#2028 comment `6356054074`); PM still selects the data source and freezes/hashes the file |
 | 2 | Candidate checkpoint SHA-256 | **PENDING — owner** | `m1-trunk-assembly-and-training` `#2844` is HELD; no SHA is invented |
-| 3 | Owner-registered bar with ISO-UTC time and one baseline | **PENDING — owner** | §3 marked `PROPOSED`; `19/40` vs `20/40` and the `54/80` derivation are open |
+| 3 | Owner-registered bar with ISO-UTC time and one baseline | **CARD FILED — owner registration** | bar card (#2028 comment `6356053677`): `27/40` vs the single `19/40` baseline, `7/20` historical, `20/20` abstention, `0` wrong values, BPB within `0.01` on fresh V2; derivation `27+7+20 = 54/80` |
 | 4 | Consumer commit pin | **PINNED** | commit `86eb68ebb`; 6 finite controls in `crates/uor-r4-object-store/tests/address_read.rs` |
-| 5 | Measurement definitions | **PARTLY PINNED — rest PENDING (PM/owner)** | BPB stream/tolerance and the `54/80` derivation are `PENDING` in §3/§5 and row 3; bar-miss and negative-closes rules added to §7 |
+| 5 | Measurement definitions | **MOSTLY PINNED — BPB stream/tolerance proposed in the bar card** | bar-miss and negative-closes rules pinned in §7; the BPB non-regression stream is now `sealed fresh V2 draw 0b7e754c…` with `0.01` tolerance as proposed in the bar card |
 
-Re-request FIT only when 1–3 and the rest of 5 have concrete values in this sheet; this table is deliberately a checklist, not a decision: **no owner value, bar, checkpoint or panel is set by the lab here.**
+Re-request FIT once the two cards above are registered (bars/panel) and the checkpoint SHA is pinned; this table is deliberately a checklist, not a decision: **no owner value, bar, checkpoint or panel is set by the lab here.**
 
+### Registration cards (deepseek-38, 2026-10-23)
+
+Two decision cards with recommendations were filed on `#2028` and linked from `#2833`; they are proposals for the PM/owner to register (the owner's 02:36Z standing direction covers routine cards that carry a recommendation). **No owner value is decided in this sheet.**
+
+- **Oracle gain bar** (`#2028` comment `6356053677`): `27/40` stated-fact vs the single observed `19/40` baseline (`+8`), `7/20` historical-version, `20/20` abstention, `0` wrong-value substitutions, held-out BPB within `0.01` of Arm A on the sealed fresh V2 draw (`0b7e754c…`); the total bar derives as `27 + 7 + 20 = 54/80`. The `20/40` anchor is dropped so `+8` has one baseline.
+- **Frozen 80-row panel** (`#2028` comment `6356054074`): `40` stated-fact / `20` historical-version / `20` abstention, authored blind; the `m3-memory` milestone's `>= 200` rows is the M3 decisive-run panel, not this narrow oracle, and the sheet says so explicitly. The PM selects the data source and freezes/hashes the file; the hash slot stays `PENDING` until then.
+
+With those filed, the only prerequisite that cannot be pinned from the lab side is the **held `m1-trunk-assembly-and-training` (`#2844`) checkpoint SHA-256**; the run also needs the non-author FIT and a typed release.
 ### Why NOT_FIT (prerequisites in priority order)
 
 1. **Frozen, hashed panel absent.** The 40/20/20 composition is stated, and matches the paper design, but the frozen panel (or its evaluation subset) has no content SHA-256, and the m3-memory milestone entry says `>= 200` rows for a decisive run; state the hash and reconcile 80 vs 200 against D22 §3.
