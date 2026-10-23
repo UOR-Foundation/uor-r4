@@ -301,11 +301,17 @@ pub fn is_setup_pr(setup_row: Option<&str>, rows: &[String], order_item: &str) -
         || row_item_prefix(row).is_some_and(|p| order_item.starts_with(&p))
 }
 
-/// Why no record counts on this PR: its ORDER's item is a loop setup item (`infra-loop-…`) but
-/// the ORDER names no valid build-plan row for it, so it can be neither a setup PR nor an
-/// ordinary one until the ORDER is fixed.
+/// A build-plan setup item: the umbrella `infra-loop-harness` or one of the PR-row items
+/// (`infra-loop-prNN…`). Other `infra-loop-…` items are ordinary follow-ups, not setup items.
+pub fn is_setup_item(item: &str) -> bool {
+    item == "infra-loop-harness" || item.starts_with("infra-loop-pr")
+}
+
+/// Why no record counts on this PR: its ORDER's item is a build-plan setup item but the ORDER
+/// names no valid build-plan row for it, so it can be neither a setup PR nor an ordinary one
+/// until the ORDER is fixed. A follow-up item such as `infra-loop-render-review` is ordinary.
 fn bad_loop_item(input: &GateInput, setup_pr: bool) -> Option<String> {
-    (!setup_pr && input.order_item.starts_with("infra-loop-")).then(|| {
+    (!setup_pr && is_setup_item(input.order_item)).then(|| {
         format!(
             "fail: a loop setup item's ORDER needs a valid `Setup row:` naming its build-plan row (item {}, row {})",
             input.order_item,
