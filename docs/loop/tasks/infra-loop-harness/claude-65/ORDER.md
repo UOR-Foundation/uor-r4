@@ -1,6 +1,6 @@
 # ORDER: infra-loop-harness, claude-65 (`loop close --verify` keeps a red gate's log)
 
-Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Base: `origin/main`. Casey asked for this unit in Claude's chat on 2026-10-23: "make loop close --verify copy a red gate's log out before it removes the worktree, as a loop unit with ORDER, test and cross-vendor review."
+Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Setup row: 7b. Base: `origin/main`. Casey asked for this unit in Claude's chat on 2026-10-23: "make loop close --verify copy a red gate's log out before it removes the worktree, as a loop unit with ORDER, test and cross-vendor review."
 
 ## Goal
 
