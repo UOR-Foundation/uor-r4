@@ -325,6 +325,16 @@ impl Repo {
         r
     }
 
+    /// The fixture with `edit` committed on top of the base, which becomes the new base.
+    fn with_base(mut self, edit: impl FnOnce(&Repo)) -> Repo {
+        self.git(&["checkout", "-q", "--detach", &self.base]);
+        edit(&self);
+        self.git(&["add", "-A"]);
+        self.git(&["commit", "-q", "-m", "base edit"]);
+        self.base = self.out(&["rev-parse", "HEAD"]);
+        self
+    }
+
     fn cmd_git(&self, args: &[&str]) -> Output {
         clean(&mut Command::new("git"))
             .args(["-c", "user.name=t", "-c", "user.email=t@example.invalid"])
@@ -1691,6 +1701,80 @@ fn moving_the_gate_to_the_parent_module_passes_the_presence_rule() {
     let r = Repo::new();
     let h = r.green_a(|r| {
         r.write("crates/a/src/gated.rs", GATED_HEAD_PARENT_GATE);
+    });
+    expect(
+        &r.check(&h, &[]),
+        0,
+        "PASS banned-presence",
+        "verdict: PASS",
+    );
+}
+
+/// A function with one D25 site, assembled so this test file adds no ratchet site itself.
+const D25_FN: &str = concat!("pub fn dense_mat", "mul() {}\n");
+
+#[test]
+fn removing_a_gate_with_a_trailing_comment_fails_the_presence_rule() {
+    let r = Repo::new().with_base(|r| {
+        r.write(
+            "crates/a/src/legacy.rs",
+            &format!("#[cfg(any())] // note\n{D25_FN}"),
+        );
+    });
+    let h = r.green_a(|r| {
+        r.write("crates/a/src/legacy.rs", D25_FN);
+    });
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL banned-presence",
+        "D25 sites in compiled code rise from 0 at the merge base to 1",
+    );
+}
+
+#[test]
+fn moving_a_gated_file_module_to_test_fails_the_presence_rule() {
+    let r = Repo::new().with_base(|r| {
+        r.write(
+            "crates/a/src/lib.rs",
+            "pub fn a() {}\n\n#[cfg(any())] // note\npub mod m;\n",
+        );
+        r.write("crates/a/src/m.rs", D25_FN);
+    });
+    let h = r.green_a(|r| {
+        r.write(
+            "crates/a/src/lib.rs",
+            "pub fn a() {}\n\n#[cfg(test)]\npub mod m;\n",
+        );
+    });
+    let o = r.check(&h, &[]);
+    expect(
+        &o,
+        1,
+        "FAIL banned-presence",
+        "D25 sites in compiled code rise",
+    );
+    assert!(
+        stdout(&o).contains("newly compiled module file(s) crates/a/src/m.rs"),
+        "{}",
+        stdout(&o)
+    );
+}
+
+#[test]
+fn moving_a_file_module_whose_item_is_gated_inside_passes_the_presence_rule() {
+    let r = Repo::new().with_base(|r| {
+        r.write(
+            "crates/a/src/lib.rs",
+            "pub fn a() {}\n\n#[cfg(any())] // note\npub mod m;\n",
+        );
+        r.write("crates/a/src/m.rs", &format!("#[cfg(any())]\n{D25_FN}"));
+    });
+    let h = r.green_a(|r| {
+        r.write(
+            "crates/a/src/lib.rs",
+            "pub fn a() {}\n\n#[cfg(test)]\npub mod m;\n",
+        );
     });
     expect(
         &r.check(&h, &[]),

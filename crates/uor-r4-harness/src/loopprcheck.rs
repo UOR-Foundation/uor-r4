@@ -629,12 +629,13 @@ fn item_end(stripped: &[&str], start: usize) -> usize {
 
 /// The gate spans of a source file: every cfg(any()) attribute through the end of the item it
 /// gates. A gate on a module therefore covers the items nested in it, which is how the compiler
-/// sees it.
+/// sees it. The gate is matched on the stripped line, so a trailing comment after the attribute
+/// does not hide it.
 fn gated_spans(stripped: &[&str], lines: &[&str]) -> Vec<(usize, usize)> {
     let mut spans = Vec::new();
     let mut i = 0;
     while i < lines.len() {
-        if is_cfg_any_gate(lines[i]) {
+        if is_cfg_any_gate(stripped[i]) {
             let mut j = i + 1;
             while j < lines.len() && !is_item_line(stripped[j]) {
                 j += 1;
@@ -807,6 +808,94 @@ fn banned_counts(text: &str, path: &str) -> BannedCounts {
     }
 }
 
+/// The module name of a stripped line that declares a file module without a body: `mod NAME;`,
+/// after any visibility or modifiers.
+fn file_mod_name(line: &str) -> Option<&str> {
+    if item_keyword(line) != Some("mod") {
+        return None;
+    }
+    let rest = line.trim().strip_suffix(';')?.trim_end();
+    let name = rest.rsplit(char::is_whitespace).next()?;
+    let before = rest[..rest.len() - name.len()].trim_end();
+    let named = !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+    (named && (before == "mod" || before.ends_with(" mod") || before.ends_with(")mod")))
+        .then_some(name)
+}
+
+/// The file modules a source text declares, each with whether its declaration sits inside a
+/// cfg(any()) gated span.
+fn file_modules(text: &str) -> Vec<(String, bool)> {
+    let lines: Vec<&str> = text.lines().collect();
+    let stripped_text = crate::ratchet::strip_comments_strings_and_char_literals(text);
+    let stripped: Vec<&str> = stripped_text.lines().collect();
+    let spans = gated_spans(&stripped, &lines);
+    stripped
+        .iter()
+        .enumerate()
+        .filter_map(|(i, line)| {
+            let name = file_mod_name(line)?;
+            let gated = spans.iter().any(|&(s, e)| s <= i && i <= e);
+            Some((name.to_string(), gated))
+        })
+        .collect()
+}
+
+/// The candidate files of module `name` declared in `declaring`: beside it for lib.rs, main.rs
+/// and mod.rs, otherwise in the declaring file's own folder; as NAME.rs or NAME/mod.rs.
+fn module_file_candidates(declaring: &str, name: &str) -> [String; 2] {
+    let (dir, file) = declaring.rsplit_once('/').unwrap_or(("", declaring));
+    let stem = file.strip_suffix(".rs").unwrap_or(file);
+    let owner = if matches!(stem, "lib" | "main" | "mod") {
+        dir.to_string()
+    } else if dir.is_empty() {
+        stem.to_string()
+    } else {
+        format!("{dir}/{stem}")
+    };
+    let join = |rel: String| {
+        if owner.is_empty() {
+            rel
+        } else {
+            format!("{owner}/{rel}")
+        }
+    };
+    [join(format!("{name}.rs")), join(format!("{name}/mod.rs"))]
+}
+
+/// The module files a change newly compiles: every `mod NAME;` gated by cfg(any()) at the base
+/// (and nowhere declared ungated there) that the head declares outside any cfg(any()) span, a
+/// move to cfg(test) included. Each comes back with its compiled banned counts at the base; a
+/// module whose file cannot be found at the base is skipped.
+fn newly_compiled_modules(
+    pr: &Pr,
+    old: &str,
+    base: &str,
+    head: &str,
+) -> Vec<(String, BannedCounts)> {
+    let was = file_modules(base);
+    let now = file_modules(head);
+    let mut names: Vec<&str> = Vec::new();
+    for (name, gated) in &was {
+        let gated_at_base = *gated && !was.iter().any(|(n, g)| n == name && !*g);
+        let live_at_head = now.iter().any(|(n, g)| n == name && !*g);
+        if gated_at_base && live_at_head && !names.contains(&name.as_str()) {
+            names.push(name);
+        }
+    }
+    names
+        .into_iter()
+        .filter_map(|name| {
+            module_file_candidates(old, name)
+                .into_iter()
+                .find_map(|path| {
+                    let text = pr.at_base(&path)?;
+                    let counts = banned_counts(&text, &path);
+                    Some((path, counts))
+                })
+        })
+        .collect()
+}
+
 /// Under the ratchets, banned code that is gated out is counted but not compiled; CHARTER section
 /// 3.4 says banned code may not exist in any compiled or loaded module, so un-gating it (or moving
 /// it behind a test-only gate) is a presence change the ratchets cannot see. This rule compares the
@@ -826,7 +915,24 @@ fn rule_banned_presence(pr: &Pr) -> RuleResult {
             continue;
         };
         let was = banned_counts(&base, new);
-        let now = banned_counts(&head, new);
+        let mut now = banned_counts(&head, new);
+        // A gate lifted off `mod NAME;` compiles the module's file, which this change need not
+        // touch; its compiled sites count toward the declaring file.
+        let modules = newly_compiled_modules(pr, old, &base, &head);
+        for (_, counts) in &modules {
+            now.d23 += counts.d23;
+            now.d25 += counts.d25;
+            now.d32 += counts.d32;
+        }
+        let via = if modules.is_empty() {
+            String::new()
+        } else {
+            let files: Vec<&str> = modules.iter().map(|(p, _)| p.as_str()).collect();
+            format!(
+                " (counting the newly compiled module file(s) {})",
+                files.join(", ")
+            )
+        };
         let pairs = [
             ("D23", was.d23, now.d23),
             ("D25", was.d25, now.d25),
@@ -835,7 +941,7 @@ fn rule_banned_presence(pr: &Pr) -> RuleResult {
         for (kind, before, after) in pairs {
             if after > before {
                 details.push(format!(
-                    "{new}: {kind} sites in compiled code rise from {before} at the merge base to {after} at the head (a gate was removed, moved to a test-only gate, or the gated code changed); CHARTER section 3.4 forbids banned code in any compiled module"
+                    "{new}: {kind} sites in compiled code rise from {before} at the merge base to {after} at the head{via} (a gate was removed, moved to a test-only gate, or the gated code changed); CHARTER section 3.4 forbids banned code in any compiled module"
                 ));
             }
         }
