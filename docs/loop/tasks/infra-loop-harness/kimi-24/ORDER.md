@@ -1,6 +1,7 @@
 # ORDER: infra-loop-harness, kimi-24 (card #3041: prep::test_fitness must read the LAST verdict)
 
 Lab: kimi. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Card: #3041.
+Setup row: 2 (validator tooling — prep.rs is the sheet validator this row's item keys and done-when class feed).
 Base: `15d5728c7`.
 
 ## Goal
