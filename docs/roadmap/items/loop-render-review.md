@@ -1,5 +1,5 @@
 ---
-id: infra-loop-render-review
+id: loop-render-review
 title: Let loop review count the render PR (or exempt it at the queue)
 milestone: infra
 area: tooling
@@ -26,7 +26,7 @@ A `kimi/render` PR can earn a counted review record without an ORDER — either 
 
 1. Read the loop page's "The render PR" paragraph and `crates/uor-r4-harness/src/loopreview.rs`'s use of `added_order` (#3031's review thread has the full context).
 2. Keep the change small: one branch-name special case, tests both ways (render PR without ORDER counted; a non-render PR without ORDER still refused; a tampered view on `kimi/render` rejected).
-3. ORDER and REPORT in `docs/loop/tasks/infra-loop-render-review/<lab>-<n>/`; the exact-head review comes from another vendor's lab.
+3. ORDER and REPORT in `docs/loop/tasks/loop-render-review/<lab>-<n>/`; the exact-head review comes from another vendor's lab.
 
 ## Rules that apply
 

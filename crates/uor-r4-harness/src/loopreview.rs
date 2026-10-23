@@ -566,6 +566,8 @@ pub struct ReviewPr {
     pub head_sha: String,
     #[serde(default, rename = "headRefName")]
     pub head_ref_name: String,
+    #[serde(default, rename = "isCrossRepository")]
+    pub cross_repository: bool,
     #[serde(default)]
     pub files: Vec<String>,
 }
@@ -595,7 +597,7 @@ impl ReviewGh for RealReviewGh {
                 "view",
                 &n.to_string(),
                 "--json",
-                "headRefOid,files,headRefName",
+                "headRefOid,files,headRefName,isCrossRepository",
             ],
         )?;
         let v: serde_json::Value = serde_json::from_str(&text)
@@ -624,9 +626,14 @@ impl ReviewGh for RealReviewGh {
             .and_then(|s| s.as_str())
             .unwrap_or("")
             .to_string();
+        let cross_repository = v
+            .get("isCrossRepository")
+            .and_then(|b| b.as_bool())
+            .unwrap_or(true);
         Ok(ReviewPr {
             head_sha,
             head_ref_name,
+            cross_repository,
             files,
         })
     }
@@ -794,14 +801,7 @@ pub const RENDER_ORDER: &str = "kimi/render";
 
 /// A path the steady-state render PR is allowed to change: the rendered views only.
 pub fn is_rendered_view(path: &str) -> bool {
-    matches!(
-        path,
-        "STATE.md"
-            | "HANDOFF.md"
-            | "AGENTS.md"
-            | "docs/harness/LESSONS.md"
-            | "docs/roadmap/README.md"
-    )
+    matches!(path, "STATE.md" | "HANDOFF.md" | "docs/harness/LESSONS.md")
 }
 
 /// True when this is the render branch and every changed path is a rendered view, so no
@@ -848,23 +848,25 @@ struct Context {
     doc_only: bool,
 }
 
-/// The tamper gate for the render PR: fetch its head, render STATE/HANDOFF/LESSONS at each
-/// view's own stamp commit, and require the PR's texts to equal the renders exactly.
-fn verify_render_views(root: &Path, gh: &dyn ReviewGh, n: u64) -> Result<(), String> {
-    let pull = format!("pull/{n}/head");
-    git(root, &["fetch", "-q", "origin", &pull])?;
-    let head = git(root, &["rev-parse", "FETCH_HEAD"])?.trim().to_string();
+/// The tamper gate for the render PR: fetch its explicit head, require each view's stamp to be
+/// the PR's merge base with `origin/main`, render the view at that stamp and compare byte for
+/// byte. A hand-edited view keeps its stamp but differs from its render, so it is refused.
+fn verify_render_views(root: &Path, _gh: &dyn ReviewGh, pr: &ReviewPr) -> Result<(), String> {
+    git(root, &["fetch", "-q", "origin", &pr.head_sha])?;
+    let head = pr.head_sha.trim().to_string();
+    let main = git(root, &["rev-parse", "origin/main"])?.trim().to_string();
+    let base = git(root, &["merge-base", &main, &head])?.trim().to_string();
     let mut expected = Vec::new();
     let mut actual = BTreeMap::new();
     for path in ["STATE.md", "HANDOFF.md", "docs/harness/LESSONS.md"] {
-        let text = gh.file_at_pr(n, path)?;
+        let text = git(root, &["show", &format!("{head}:{path}")])?;
         let first = text.lines().next().unwrap_or("");
         let stamp = crate::looprender::parse_stamp(first)
             .ok_or_else(|| format!("{path}: first line is not a render stamp"))?
             .to_string();
-        if git(root, &["merge-base", "--is-ancestor", &stamp, &head]).is_err() {
+        if stamp != base {
             return Err(format!(
-                "{path}: stamp {stamp} is not an ancestor of the PR head"
+                "{path}: stamp {stamp} is not the PR merge base {base}; the render must cover the current base"
             ));
         }
         let at = crate::looprender::AtCommit::resolve(root, &stamp)?;
@@ -882,12 +884,12 @@ fn verify_render_views(root: &Path, gh: &dyn ReviewGh, n: u64) -> Result<(), Str
 fn context(root: &Path, gh: &dyn ReviewGh, n: u64) -> Result<Context, String> {
     git(root, &["fetch", "-q", "origin", "main"])?;
     let pr = gh.pr(n)?;
-    let render_pr = render_pr_without_order(&pr.head_ref_name, &pr.files);
+    let render_pr = render_pr_without_order(&pr.head_ref_name, &pr.files) && !pr.cross_repository;
     let (order, text, order_lab) =
         match crate::loopnext::added_order(root, n, &pr.files, &|p| gh.file_at_pr(n, p)) {
             Ok(v) => v,
             Err(crate::loopnext::OrderErr::Missing(_)) if render_pr => {
-                verify_render_views(root, gh, n)?;
+                verify_render_views(root, gh, &pr)?;
                 (RENDER_ORDER.to_string(), String::new(), "kimi".to_string())
             }
             Err(e) => return Err(e.note()),
