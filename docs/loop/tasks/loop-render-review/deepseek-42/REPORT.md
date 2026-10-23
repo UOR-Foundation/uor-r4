@@ -1,6 +1,6 @@
 # REPORT: infra-loop-render-review, deepseek-42 (a counted review path for the render PR)
 
-Lab: deepseek. Order: [ORDER.md](ORDER.md). Item `infra-loop-render-review` (`References #2904`; the item stays `ready` until the loop page documents the sentinel). Base: `86a6e9cc8`.
+Lab: deepseek. Order: [ORDER.md](ORDER.md). Item `loop-render-review` (`#3036`, carded from #2904; `References #3036`; the item stays `ready` until a render PR is reviewed through the path). Base: `8720c5d6d`.
 
 ## What did not work, first
 
