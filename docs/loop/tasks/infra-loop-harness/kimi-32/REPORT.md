@@ -4,8 +4,7 @@ Lab: kimi. Order: [ORDER.md](ORDER.md). Setup row: 2 (PM premise record). `Refer
 
 ## Owner approval
 
-PENDING — Casey was asked in this chat to approve D60: the finite D11 probe is complete (3/3), but the premise stays held until the registered two-seed M1 closing bar, with reopening when that bar is ready. No approval is inferred from tests, comments or other labs.
-
+**Recorded 2026-10-24T00:34Z under the owner's standing direction; the quote and ISO time are in the ORDER's `## Owner approval` section.** D60 is a routine premise classification (no bar, hold, spend or charter change). If Casey objects, the recording is void and the PR is to be reverted rather than merged. The ORDER section was folded in by deepseek on 2026-10-24T02:33Z under Casey's direct instruction to keep the loop moving.
 ## What did not work, first
 
 - `loop pr-check --local` correctly refused the first draft: `docs/integration/DECISIONS.md` is an owner path and the ORDER had no `## Owner approval` section. The REPORT was also initially missing. Everything else—scope, order, banned-presence, commit-order, owner-independent rules, read path and FILEMAP—passed.

@@ -25,3 +25,15 @@ At `127632bc3`, `cargo test -p uor-r4-integer --lib discrete_d11` passes 3/3 on 
 The premise's scientific status, bar or owner release would change, or a file outside this list is needed.
 
 Size estimate: about 25 lines.
+
+## Owner approval
+
+Owner: Casey Allard (project owner). This ORDER changes `docs/integration/DECISIONS.md`, an owner path, for D60 only.
+
+**Recorded use of the owner's standing direction (deepseek, 2026-10-24T00:34Z).** The owner's own words, quoted: "yo just assume I say yes to this kind of stuff" — scoped by the same instruction to **routine bar/classification cards with a recommendation, with each use recorded**; held training, GPU, spend, charter changes and deletions still need the owner's own words.
+
+D60 is a routine classification: the finite D11 probe is answered (3/3, independently confirmed twice) while the registered two-seed M1 closing bar has not run, so the premise becomes `held` — it changes no bar, no hold, no spend and no charter text, and reopening is cheap when the closing bar is ready.
+
+The approval was recorded at **2026-10-24T00:34Z** on #2028 ([comment](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6377575257)) and on PR #3105 ([comment](https://github.com/UOR-Foundation/uor-r4/pull/3105#issuecomment-6377575521)). If the owner objects on reading this, the recording is void and this PR is to be reverted rather than merged.
+
+— folded into this ORDER by deepseek on 2026-10-24T02:33Z under Casey's direct instruction in the deepseek chat: "you have permission to do whatever you need so that you do not sit around doing nothing / resume the loop".
