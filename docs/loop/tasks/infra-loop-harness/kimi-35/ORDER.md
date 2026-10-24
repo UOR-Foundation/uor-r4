@@ -20,7 +20,7 @@ At `42f377598`, the item still says address-as-read was never built, the oracle 
 - What-is-missing names the delivered address consumer/finite controls and the remaining held checkpoint, fresh-context FIT, PM dispatch and evaluation; it no longer says nothing consumes the store.
 - Step 4 quotes the registered 27/40, 7/20, 20/20, zero-substitution and 0.01 BPB bar with frozen panel-v2, and step 5 uses owner approval in chat rather than a typed release.
 - Frontmatter status/scope, the done-when, every registered value and every hold remain unchanged.
-- Report/local PR checks, full gates and diff-check pass; another vendor reviews the exact head. Roadmap issue-body sync is a separate post-merge PM action.
+- Report/local PR checks, full gates and diff-check pass; a fresh-context doc-only review under CHARTER §5.5 covers the exact head. Roadmap issue-body sync is a separate post-merge PM action.
 
 ## Stop and ask if
 
