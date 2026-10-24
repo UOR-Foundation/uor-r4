@@ -28,11 +28,13 @@ Verified `kimi`'s review comment `IC_kwDOS1s4Zc8AAAABfI8RYg` on PR `#3152` and i
 - `docs/loop/tasks/legal-construction-exact-solve/antigravity-54/REPORT.md`
 - `docs/loop/tasks/legal-construction-exact-solve/antigravity-55/ORDER.md`
 - `docs/loop/tasks/legal-construction-exact-solve/antigravity-55/REPORT.md`
+- `docs/labs/legal-construction-exact-solve/solver/tests/search_certify.rs` (added by claude, 24 Oct, finishing this PR under owner direction: kimi's addendum and claude's CHANGES need tests)
 
 ## Done when
 
 - Both `solve_ms` and `disjunctive_ms` on `attempt2` are lower than Unit 10 (`264,832 ms` and `1,116,550 ms`) with bit-for-bit identical Unit 11 rational outputs (`disjunctive_tree_lower_bound`, `disjunctive_tree_eliminated_codes = 6,395`, `disjunctive_tree_fixed_coeffs = 115`, `disjunctive_tree_binary_or_fixed_coeffs = 185`), and `antigravity-54/REPORT.md` + `antigravity-55/REPORT.md` accurately describe the delivered code, tests, and timings.
 - `cargo fmt -- --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test --locked`, `uor-harness loop report --check`, `uor-harness loop pr-check --local`, and `uor-harness loop gates --full` pass.
+- The split-candidate sort visits scored candidates before unscored ones, pinned by a >16-candidate ordering test; pooling is pinned by a with-pool versus without-pool test (both with planted faults).
 
 ## Stop and ask if
 
