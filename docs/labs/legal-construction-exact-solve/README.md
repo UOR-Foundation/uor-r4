@@ -288,3 +288,26 @@ Unit 10's disjunctive split tree evaluated `cand_splits.iter().take(16)` in arbi
    - Tracks `pi_matches_rc: bool` (`true` iff `leaf.rc` was computed from `extract_y(&leaf.pi)`, `false` when `leaf.rc` came from an upgraded `exact_y` or `ext_y`) and seeds `dual_rc_pool` with `compute_rc(&extract_y(&pi))` when `!root_pi_matches_rc`, so `if parent.pi_matches_rc && c_pi == parent.pi` never skips `extract_y(&c_pi)` when the parent holds an upgraded non-`Dy<P>` root dual.
 3. **Two-stage `arj`-first pricing in `dual_simplex_run::<P>` (`src/search.rs:686-718`)**:
    - Computes `arj = rho · col_j` first and evaluates `paj = pi · col_j` only for nonbasic columns `j` that pass the dual-simplex sign test, cutting `lp_guided_discrete_solve` runtime `solve_ms` on `attempt2` from `264,832 ms` to **`200,929 ms` (`-24.13%`)** while preserving the exact discrete incumbent (`-94674498416698555 / 4503599627370496`).
+
+## Unit 12 — Incremental dyadic pool bounds, and the corrected candidate sort (`antigravity-55`, 2026-10-24)
+
+Unit 11's tree-level sort visited unscored candidates first, the reverse of its stated intent (found by `kimi` in review of #3152). Its pool tightening also slowed `disjunctive_ms` to `1,809,808 ms`, because each of the 24 leaves re-summed all 1,920 `BigRational` terms for every pool dual.
+
+1. **Incremental dyadic pool bounds (`search.rs`, antigravity's work, `2b463ff89`).**
+   - `dyadic_to_rational` builds the result with `BigRational::new_raw` after stripping shared factors of two, so there is no GCD.
+   - `sum_rationals` adds dyadic terms by shift-and-add.
+   - Pool entries cache `root_terms`, `root_lb` and `root_span`. Leaf bounds and `tighten_leaf_mask` update only over the at most 23 split coordinates.
+
+   On `attempt2` this alone reproduces every Unit 11 rational output bit-for-bit, with `solve_ms = 69,140` and `disjunctive_ms = 146,897`. Both timings were taken under machine load.
+2. **Corrected sort (`split_candidate_order`).** Scored candidates now come first, by descending root split score, then unscored ones. On `attempt2`:
+   - the 24-leaf lower bound tightens to **`-4429184874126167436154938361970246199537836886330785620806862298897 / 210624583337114373395836055367340864637790190801098222508621955072`** (`≈ -21.02881252`; tree gain `+0.00045516`, 1.73× Unit 9/10's);
+   - the certified gap narrows to **`≈ 0.00685092` (`0.03259%`)**;
+   - Disjunctive Partition RCBT eliminates **`6,406 / 28,800`** codes (+11), fixes `115` coefficients, and restricts **`186`** coefficients to at most two codes (+1);
+   - `solve_ms = 57,057` and `disjunctive_ms = 148,896`, which against Unit 10 are -78.46% and -86.66%.
+3. **Tests.**
+   - `split_candidate_sort_visits_scored_before_unscored` uses 24 candidates, 16 of them scored.
+   - `dual_pool_strictly_tightens_tree_bound_and_eliminations` compares the certifier with and without the pool through the `certify_disjunctive_split_bound_without_pool` ablation.
+
+   Each test fails with its fault planted.
+
+The item stays `ready`. The remaining certified gap is about `0.00685092`.

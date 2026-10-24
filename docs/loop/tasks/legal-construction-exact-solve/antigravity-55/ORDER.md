@@ -10,11 +10,8 @@ The item's done-when reads:
 
 This repair unit (`antigravity-55`, repairing `kimi`'s `CHANGES` review on PR `#3152` at `953a2312932299d6d223ae1668a8e3d52d7dcd9a`) resolves the `disjunctive_ms` runtime regression (`1,809,808 ms` vs Unit 10's `1,116,550 ms`) and the `REPORT.md` accuracy findings:
 
-1. **Cut `disjunctive_ms` below Unit 10 (`1,116,550 ms`) while preserving bit-for-bit identical Unit 11 rational bounds and RCBT eliminations (`src/search.rs`):**
-   - Use `BigRational::new_raw` in `dyadic_to_rational` after stripping shared factors of two via `trailing_zeros` (eliminating `1,920` redundant `BigInt::gcd` calls per `compute_rc` call) and add dyadic shift-and-add `sum_rationals` for summing $n$-element `BigRational` vectors without per-element GCDs.
-   - Cache `DualPoolEntry { pi, rc, root_terms, root_lb, root_span }` in `dual_rc_pool` so `eval_branch`, cross-branch leaf bound tightening, `eval_rc_mask`, and `tighten_leaf_mask` compute `leaf_lb` incrementally over only the split coordinates `code_bounds[i] != (-7, 7)` ($\le 23$ coordinates instead of $1,920$), and `tighten_leaf_mask` skips any coefficient with `root_span[i] <= leaf_slack` in $O(1)$.
-2. **Repair `antigravity-54/REPORT.md` and record `antigravity-55/REPORT.md`:**
-   - Replace the stale descriptions (`tab.col_s1`, `max_pool_duals = 64`, `seen_pis`, `split_sub`) in `antigravity-54/REPORT.md` with the actual delivered code (`arj`-first pricing in `dual_simplex_run::<P>`, `dual_rc_pool` capped at `160` with `.find(...)` deduplication, and `split66`/`split66_none` assertions in `tests/search_certify.rs`) and explicitly record `disjunctive_ms` and its direction in both reports.
+1. **Cut `disjunctive_ms` below Unit 10 (`1,116,550 ms`), keeping Unit 11's rational outputs bit-for-bit (`src/search.rs`):** reduce `dyadic_to_rational` with `BigRational::new_raw` after stripping shared factors of two. Sum with a dyadic shift-and-add `sum_rationals`. Cache `DualPoolEntry { pi, rc, root_terms, root_lb, root_span }` so leaf bounds and `tighten_leaf_mask` update only over the split coordinates (at most 23 of 1,920).
+2. **Repair `antigravity-54/REPORT.md` and record `antigravity-55/REPORT.md`:** describe the code as delivered (`arj`-first pricing, `dual_rc_pool` capped at `160` with `.find` deduplication, the `split66`/`split66_none` assertions), and record `disjunctive_ms` and its direction in both.
 
 ## Cancel probe (run first)
 
@@ -35,6 +32,12 @@ Verified `kimi`'s review comment `IC_kwDOS1s4Zc8AAAABfI8RYg` on PR `#3152` and i
 - Both `solve_ms` and `disjunctive_ms` on `attempt2` are lower than Unit 10 (`264,832 ms` and `1,116,550 ms`) with bit-for-bit identical Unit 11 rational outputs (`disjunctive_tree_lower_bound`, `disjunctive_tree_eliminated_codes = 6,395`, `disjunctive_tree_fixed_coeffs = 115`, `disjunctive_tree_binary_or_fixed_coeffs = 185`), and `antigravity-54/REPORT.md` + `antigravity-55/REPORT.md` accurately describe the delivered code, tests, and timings.
 - `cargo fmt -- --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test --locked`, `uor-harness loop report --check`, `uor-harness loop pr-check --local`, and `uor-harness loop gates --full` pass.
 - The split-candidate sort visits scored candidates before unscored ones, pinned by a >16-candidate ordering test; pooling is pinned by a with-pool versus without-pool test (both with planted faults).
+
+**Note (claude, 24 Oct, D68 decision review).** The first bullet and the third cannot both hold at the head, because the Unit 11 outputs came from the unscored-first sort. They are met in sequence instead:
+- At `0884462c0`, the speed-up alone gives Unit 11's outputs bit-for-bit.
+- At the head, the sort fix makes them strictly tighter: 6,406 / 115 / 186 and a higher lower bound.
+
+`REPORT.md` records both runs.
 
 ## Stop and ask if
 
