@@ -10,7 +10,7 @@ The first generator drafts failed tests for missing composition, duplicate addre
 
 ## What changed
 
-Added `address-panel-freeze`, a Rust-only generator with no new dependencies. It emits canonical JSONL for 40 current stated-fact hits, 20 previous-version hits, 10 unwritten `Absent` rows and 10 capacity-1 `Evicted` rows, checking each result through `AddressDirectory` and `Store`. Updated the sheet's panel pin, prerequisite table and PM freeze record, and added the lab record. The earlier `NOT_FIT` and its remaining prerequisites are preserved. One new code file and two documentation files change, plus this ORDER/REPORT; exact harness size is recorded after the committed-head PR check. No numeric estimate was given, so a ratio is not applicable.
+Added `address-panel-freeze`, a Rust-only generator with no new dependencies. It emits canonical JSONL for 40 current stated-fact hits, 20 previous-version hits, 10 unwritten `Absent` rows and 10 capacity-1 `Evicted` rows, checking each result through `AddressDirectory` and `Store`. Updated the sheet's panel pin, prerequisite table and PM freeze record, and added the lab record. The earlier `NOT_FIT` and its remaining prerequisites are preserved. Harness size at the committed head: **code 1 file +330/−0; docs 4 files +84/−3; tests 0 files +0/−0; generated 0 files +0/−0; other 0 files +0/−0**. No numeric estimate was given, so a ratio is not applicable.
 
 ## Measurements
 
@@ -27,7 +27,8 @@ Added `address-panel-freeze`, a Rust-only generator with no new dependencies. It
 - Generator red-green tests: initial missing implementation failed; final composition/reproduction and uniqueness tests 2/2 pass.
 - Full object-store suite: 78 passed, 1 ignored.
 - `uor-harness loop gates --full`: 11/11 GREEN.
-- `uor-harness loop report --check` and `uor-harness loop pr-check --local`: run after committing this REPORT; final results must pass before review.
+- `uor-harness loop report --check`: PASS at the committed head.
+- `uor-harness loop pr-check --local`: PASS at the committed head, including scope, ORDER-first commit and owner-path checks.
 
 ## Skills used
 
