@@ -1,30 +1,26 @@
-# ORDER: object-store-consumer-m3, deepseek-63
+# ORDER: object-store-consumer-m3, deepseek-63 (record the owner-registered M3 thresholds)
 
-Lab: deepseek. Item: [object-store-consumer-m3](../../../../roadmap/items/object-store-consumer-m3.md). Base: `690fafc4c`.
+Lab: deepseek. Item: [object-store-consumer-m3](../../../../roadmap/items/object-store-consumer-m3.md) (#2873). Base: `690fafc4c`. Partial unit: `References #2873`; the item stays `ready` (model selection, FIT and typed release still open).
 
 ## Goal
 
-The item's done-when reads:
-
-> A consumer reads and writes through the object store on the model path, and the durable-memory bars run with recorded results. The M3 bar in [`docs/integration/project-track.md`](../../integration/project-track.md) is: on the selected M1/M2 artifact, `m3-memory` passes provenance, contradiction and correction, abstention on unstated or retracted facts, explicit reset and process restart. Saved and restored sessions must continue identically token-for-token (`IntegerStackSession` + `UR4SESS1`), and non-memory prose must not silently overwrite stored facts (#1718). A numeric threshold for each bar is not yet registered. The bars need a selected M1/M2 model, and M1 is not met and M2 is held, so the on-model run cannot start now. Registering the bars and building the consumer behind finite CPU controls can.
+The frozen-panel pre-registration still says it "awaits owner ratification of the CHARTER §5.2 bar decision card", but the owner already registered card `6339008955`: Casey selected "Yes, register all six (Recommended)" at **2026-10-23T02:36:36Z** (owner decisions comment `6356034555`). Repair the record: mark the card registered with the quote, time and link; restate the registered bar text verbatim; keep the sheet **DRAFT** for the remaining prerequisites (M1/M2 model selection, non-author FIT of the frozen configuration, Casey's typed release). No threshold is changed, and registration releases no compute.
 
 ## Cancel probe (run first)
 
-To fill in.
+At base `690fafc4c`: `docs/labs/object-store-consumer-m3/README.md` lists card `6339008955` only as a proposed decision card and its status line says "awaits ... owner ratification", while #2028 comment `6356034555` (2026-10-23T02:36:36Z) registers exactly that card. Task stands (record repair only).
 
 ## Files in scope
 
-- `crates/uor-r4-core/**`
-- `crates/uor-r4-integer/**`
-- `crates/uor-r4-object-store/**`
-- `docs/mechanisms/exact-memory.md`
-- `docs/mechanisms/object-store.md`
 - `docs/labs/object-store-consumer-m3/**`
+- this task folder
 
 ## Done when
 
-To fill in.
+- The README marks the card owner-registered with the owner quote, ISO UTC time and comment link; the registered bar text is reproduced verbatim; the table is labelled as restating the registration (registered text governs).
+- The status remains **DRAFT**, naming the remaining prerequisites (M1/M2 model selection, non-author FIT, typed release), and the stop conditions keep the frozen SHA-256/Manifest pin requirement.
+- No threshold value, bar, hold, item status, code or model change; `loop report --check`, `loop pr-check --local` and `loop gates --full` pass; a counted non-deepseek review records at the exact head.
 
 ## Stop and ask if
 
-To fill in.
+- A threshold value, bar, hold, code or file outside the listed scope would change.
