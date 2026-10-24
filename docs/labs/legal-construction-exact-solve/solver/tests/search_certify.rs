@@ -325,6 +325,19 @@ fn lagrangian_dual_bound_rejects_negative_multiplier_and_wrong_length() {
     assert!(search::certify_lagrangian_dual_bound(p, &[]).is_err());
     let zero_bound = search::certify_lagrangian_dual_bound(p, &[q(0, 1)]).expect("y=0 valid");
     assert!(zero_bound <= BigRational::zero());
+    let full_bounds = vec![(-7, 7); p.n()];
+    assert!(search::certify_domain_dual_bound(p, &[q(-1, 4)], &full_bounds).is_err());
+    assert!(search::certify_domain_dual_bound(p, &[], &full_bounds).is_err());
+    assert!(search::certify_domain_dual_bound(p, &[q(0, 1)], &[(-7, 7)]).is_err());
+    assert!(search::certify_domain_dual_bound(p, &[q(0, 1)], &[(-8, 7), (-7, 7)]).is_err());
+    assert!(search::certify_domain_dual_bound(p, &[q(0, 1)], &[(2, -1), (-7, 7)]).is_err());
+    let dom_zero =
+        search::certify_domain_dual_bound(p, &[q(0, 1)], &full_bounds).expect("full domain valid");
+    assert_eq!(dom_zero, zero_bound);
+    let sub_bounds = vec![(-2, 2); p.n()];
+    let dom_sub =
+        search::certify_domain_dual_bound(p, &[q(0, 1)], &sub_bounds).expect("sub domain valid");
+    assert!(dom_sub >= dom_zero);
 }
 
 #[test]
@@ -336,6 +349,8 @@ fn reduced_cost_fixing_rejects_negative_multiplier_and_invalid_upper_bound() {
     let zero_bound = search::certify_lagrangian_dual_bound(p, &[q(0, 1)]).expect("y=0 valid");
     let invalid_u = &zero_bound - q(1, 4);
     assert!(search::certify_reduced_cost_fixing(p, &[q(0, 1)], &invalid_u).is_err());
+    assert!(search::certify_disjunctive_split_bound::<120>(p, &u, 0).is_err());
+    assert!(search::certify_disjunctive_split_bound::<120>(p, &invalid_u, 4).is_err());
     let valid_rcbt =
         search::certify_reduced_cost_fixing(p, &[q(0, 1)], &u).expect("y=0, u=0 valid");
     assert_eq!(valid_rcbt.lower_bound, zero_bound);
@@ -438,6 +453,31 @@ fn dual_search_and_lp_guided_discrete_solve_respect_exact_bounds() {
             assert_eq!(decomp.gap, rcbt.gap);
             assert!(!decomp.reduced_cost_loss.is_negative());
             assert!(!decomp.complementary_slackness_loss.is_negative());
+            let split_cert = search::certify_disjunctive_split_bound::<120>(p, &disc.objective, 8)
+                .unwrap_or_else(|e| panic!("problem {idx} disjunctive_split: {e}"));
+            assert_eq!(split_cert.root_lower_bound, want_dlp);
+            assert!(split_cert.best_single_split_bound >= split_cert.root_lower_bound);
+            assert!(split_cert.tree_lower_bound >= split_cert.best_single_split_bound);
+            assert!(
+                split_cert.tree_lower_bound <= bb_res.objective,
+                "problem {idx}: disjunctive tree lower bound {} > exact discrete optimum {}",
+                split_cert.tree_lower_bound,
+                bb_res.objective
+            );
+            assert_eq!(
+                split_cert.single_split_gain,
+                &split_cert.best_single_split_bound - &split_cert.root_lower_bound
+            );
+            assert_eq!(
+                split_cert.tree_gain,
+                &split_cert.tree_lower_bound - &split_cert.root_lower_bound
+            );
+            assert_eq!(
+                split_cert.tree_gap,
+                &disc.objective - &split_cert.tree_lower_bound
+            );
+            assert!(split_cert.tree_eliminated_codes >= rcbt.eliminated_codes);
+            assert!(split_cert.tree_fixed_coeffs >= rcbt.fixed_coeffs);
             total_eliminated_codes += rcbt.eliminated_codes;
             let mut opt_deltas = Vec::with_capacity(p.n());
             for (i, c) in p.coeffs().iter().enumerate() {
@@ -447,6 +487,11 @@ fn dual_search_and_lp_guided_discrete_solve_respect_exact_bounds() {
                     rcbt.surviving_codes[i].contains(&opt_q),
                     "problem {idx} coeff {i}: optimal code {opt_q} eliminated by rcbt {:?}",
                     rcbt.surviving_codes[i]
+                );
+                assert!(
+                    split_cert.tree_surviving_codes[i].contains(&opt_q),
+                    "problem {idx} coeff {i}: optimal code {opt_q} eliminated by disjunctive tree rcbt {:?}",
+                    split_cert.tree_surviving_codes[i]
                 );
                 let opt_d = if opt_k == 0 {
                     BigRational::zero()
