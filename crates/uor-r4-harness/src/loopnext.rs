@@ -868,7 +868,7 @@ pub fn run(
                 out.push(source(
                     "gpu-collections",
                     "wait",
-                    &format!(
+                    format!(
                         "{running} GPU collection(s) running; none is finished and uncollected"
                     ),
                 ));
