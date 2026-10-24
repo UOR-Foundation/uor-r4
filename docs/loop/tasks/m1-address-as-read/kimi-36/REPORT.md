@@ -28,7 +28,11 @@ No new measurements or GPU work. Previously verified retained metadata pins rema
 
 ## Checks run at the head
 
-Final size and results are recorded after the final checks: `loop report --check`, `loop pr-check --local`, `loop gates --full`, and `git diff --check`, with output retained locally.
+- Size: tests 0 files +0/−0; code 0 files +0/−0; docs 6 files +191/−18; generated/other 0 files. The ORDER gave no numeric estimate, so no ratio applies.
+- `loop report --check`: PASS.
+- `loop pr-check --local`: PASS, including commit-order on the fresh successor branch.
+- `loop gates --full`: 11/11 GREEN.
+- `git diff --check`: PASS. Output is retained under `local/kimi-address-bpb-status/`.
 
 ## Skills used
 
