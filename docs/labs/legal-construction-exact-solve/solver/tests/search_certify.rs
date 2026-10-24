@@ -325,6 +325,19 @@ fn lagrangian_dual_bound_rejects_negative_multiplier_and_wrong_length() {
     assert!(search::certify_lagrangian_dual_bound(p, &[]).is_err());
     let zero_bound = search::certify_lagrangian_dual_bound(p, &[q(0, 1)]).expect("y=0 valid");
     assert!(zero_bound <= BigRational::zero());
+    let full_bounds = vec![(-7, 7); p.n()];
+    assert!(search::certify_domain_dual_bound(p, &[q(-1, 4)], &full_bounds).is_err());
+    assert!(search::certify_domain_dual_bound(p, &[], &full_bounds).is_err());
+    assert!(search::certify_domain_dual_bound(p, &[q(0, 1)], &[(-7, 7)]).is_err());
+    assert!(search::certify_domain_dual_bound(p, &[q(0, 1)], &[(-8, 7), (-7, 7)]).is_err());
+    assert!(search::certify_domain_dual_bound(p, &[q(0, 1)], &[(2, -1), (-7, 7)]).is_err());
+    let dom_zero =
+        search::certify_domain_dual_bound(p, &[q(0, 1)], &full_bounds).expect("full domain valid");
+    assert_eq!(dom_zero, zero_bound);
+    let sub_bounds = vec![(-2, 2); p.n()];
+    let dom_sub =
+        search::certify_domain_dual_bound(p, &[q(0, 1)], &sub_bounds).expect("sub domain valid");
+    assert!(dom_sub >= dom_zero);
 }
 
 #[test]
@@ -336,8 +349,24 @@ fn reduced_cost_fixing_rejects_negative_multiplier_and_invalid_upper_bound() {
     let zero_bound = search::certify_lagrangian_dual_bound(p, &[q(0, 1)]).expect("y=0 valid");
     let invalid_u = &zero_bound - q(1, 4);
     assert!(search::certify_reduced_cost_fixing(p, &[q(0, 1)], &invalid_u).is_err());
+    assert!(search::certify_disjunctive_split_bound::<120>(p, &u, 0).is_err());
+    assert!(search::certify_disjunctive_split_bound::<120>(p, &invalid_u, 4).is_err());
+    assert!(
+        search::certify_disjunctive_split_bound_with_dual::<120>(p, &u, 4, Some(&[q(-1, 4)]))
+            .is_err()
+    );
+    assert!(search::certify_disjunctive_split_bound_with_dual::<120>(p, &u, 4, Some(&[])).is_err());
     let valid_rcbt =
         search::certify_reduced_cost_fixing(p, &[q(0, 1)], &u).expect("y=0, u=0 valid");
+    let cert1 =
+        search::certify_disjunctive_split_bound_with_dual::<120>(p, &u, 1, Some(&[q(0, 1)]))
+            .expect("max_leaves=1 valid");
+    assert_eq!(cert1.tree_leaves, 1);
+    assert_eq!(cert1.evaluated_splits, 0);
+    assert_eq!(cert1.best_single_split_bound, cert1.root_lower_bound);
+    assert_eq!(cert1.tree_lower_bound, cert1.root_lower_bound);
+    assert_eq!(cert1.best_split_coeff, None);
+    assert_eq!(cert1.best_split_q_down, None);
     assert_eq!(valid_rcbt.lower_bound, zero_bound);
     assert_eq!(valid_rcbt.total_codes, p.n() * 15);
     assert_eq!(valid_rcbt.constrained_guards, 0);
@@ -438,6 +467,56 @@ fn dual_search_and_lp_guided_discrete_solve_respect_exact_bounds() {
             assert_eq!(decomp.gap, rcbt.gap);
             assert!(!decomp.reduced_cost_loss.is_negative());
             assert!(!decomp.complementary_slackness_loss.is_negative());
+            let split_cert = search::certify_disjunctive_split_bound_with_dual::<120>(
+                p,
+                &disc.objective,
+                8,
+                Some(&iter0_y),
+            )
+            .unwrap_or_else(|e| panic!("problem {idx} disjunctive_split: {e}"));
+            let split_cert_default =
+                search::certify_disjunctive_split_bound::<120>(p, &disc.objective, 8)
+                    .unwrap_or_else(|e| panic!("problem {idx} disjunctive_split_default: {e}"));
+            assert_eq!(
+                split_cert.root_lower_bound,
+                split_cert_default.root_lower_bound
+            );
+            assert_eq!(
+                split_cert.tree_lower_bound,
+                split_cert_default.tree_lower_bound
+            );
+            assert_eq!(split_cert.root_lower_bound, want_dlp);
+            assert!(split_cert.best_single_split_bound >= split_cert.root_lower_bound);
+            assert!(split_cert.tree_lower_bound >= split_cert.best_single_split_bound);
+            assert!(
+                split_cert.tree_lower_bound <= bb_res.objective,
+                "problem {idx}: disjunctive tree lower bound {} > exact discrete optimum {}",
+                split_cert.tree_lower_bound,
+                bb_res.objective
+            );
+            assert_eq!(
+                split_cert.single_split_gain,
+                &split_cert.best_single_split_bound - &split_cert.root_lower_bound
+            );
+            assert_eq!(
+                split_cert.tree_gain,
+                &split_cert.tree_lower_bound - &split_cert.root_lower_bound
+            );
+            assert_eq!(
+                split_cert.tree_gap,
+                &disc.objective - &split_cert.tree_lower_bound
+            );
+            assert!(split_cert.tree_eliminated_codes >= rcbt.eliminated_codes);
+            assert!(split_cert.tree_fixed_coeffs >= rcbt.fixed_coeffs);
+            for i in 0..p.n() {
+                for &q_surv in &split_cert.tree_surviving_codes[i] {
+                    assert!(
+                        rcbt.surviving_codes[i].contains(&q_surv),
+                        "problem {idx} coeff {i}: tree surviving code {q_surv} not in root rcbt {:?}",
+                        rcbt.surviving_codes[i]
+                    );
+                }
+            }
             total_eliminated_codes += rcbt.eliminated_codes;
             let mut opt_deltas = Vec::with_capacity(p.n());
             for (i, c) in p.coeffs().iter().enumerate() {
@@ -447,6 +526,11 @@ fn dual_search_and_lp_guided_discrete_solve_respect_exact_bounds() {
                     rcbt.surviving_codes[i].contains(&opt_q),
                     "problem {idx} coeff {i}: optimal code {opt_q} eliminated by rcbt {:?}",
                     rcbt.surviving_codes[i]
+                );
+                assert!(
+                    split_cert.tree_surviving_codes[i].contains(&opt_q),
+                    "problem {idx} coeff {i}: optimal code {opt_q} eliminated by disjunctive tree rcbt {:?}",
+                    split_cert.tree_surviving_codes[i]
                 );
                 let opt_d = if opt_k == 0 {
                     BigRational::zero()
@@ -479,4 +563,166 @@ fn dual_search_and_lp_guided_discrete_solve_respect_exact_bounds() {
         total_eliminated_codes > 0,
         "rcbt eliminated 0 codes across suite"
     );
+
+    // Deterministic m >= 64 large-guard coverage (m = 66, n = 8) with active guards,
+    // non-dyadic exact dual multipliers (denominator 3), fractional basic variables,
+    // and planted-fault-sensitive extra_root_y root upgrade and survival intersection.
+    let n66 = 8usize;
+    let m66 = 66usize;
+    let masters66: Vec<BigRational> = (0..n66)
+        .map(|i| {
+            if i <= 2 {
+                q(0, 1)
+            } else {
+                q(((i as i64 * 5) % 13) - 6, 8)
+            }
+        })
+        .collect();
+    let g66: Vec<BigRational> = (0..n66)
+        .map(|i| match i {
+            0 => q(0, 1),
+            1 => q(-2, 1),
+            2 => q(1, 1),
+            _ if i % 2 == 0 => q(3, 4),
+            _ => q(-2, 4),
+        })
+        .collect();
+    let probe66 = Problem::new(masters66.clone(), g66.clone(), vec![]);
+    let planted66: Vec<BigRational> = probe66
+        .coeffs()
+        .iter()
+        .enumerate()
+        .map(|(i, c)| match i {
+            0..=2 => q(1, 1),
+            _ => {
+                let q_step = if i % 2 == 0 { 2 } else { -2 };
+                q(q_step, 4) + &c.shift
+            }
+        })
+        .collect();
+    let guards66: Vec<Vec<BigRational>> = (0..m66)
+        .map(|r| {
+            let mut row = vec![BigRational::zero(); n66];
+            if r == 0 {
+                // Row 0 constrains only coeff 0 (where g[0] == 0), so exact_y66[0] == 0.
+                row[0] = q(4, 1);
+                return row;
+            }
+            if r == 1 {
+                // Row 1 is the sole constraint on coeff 2: 3 * delta_2 - 2 * delta_1 >= 0.
+                // Since g[2] = 1 and g[1] = -2 drives delta_1 > 0, delta_2 = (2/3)*delta_1
+                // is strictly interior and non-quarter, forcing y[1] = 1/3 (non-dyadic).
+                row[1] = q(-2, 1);
+                row[2] = q(3, 1);
+                return row;
+            }
+            for (i, slot) in row.iter_mut().enumerate().take(n66).skip(3) {
+                let v = ((r * 7 + i * 3 + 1) as i64 % 7) - 3;
+                *slot = q(v, 4);
+            }
+            row[1] = q(1, 4);
+            let dot = row
+                .iter()
+                .zip(&planted66)
+                .fold(BigRational::zero(), |s, (a, b)| s + a * b);
+            if dot.is_negative() {
+                for a in &mut row {
+                    *a = -a.clone();
+                }
+            } else if dot.is_zero() {
+                let idx = 3 + (r % (n66 - 3));
+                row[idx] = if planted66[idx].is_positive() {
+                    q(3, 4)
+                } else {
+                    q(-3, 4)
+                };
+            }
+            row
+        })
+        .collect();
+    let p66 = Problem::new(masters66, g66, guards66);
+    let dlp66 = search::delta_hull_lp(&p66);
+    let disc66 = search::lp_guided_discrete_solve::<120>(&p66).expect("m=66 discrete solve");
+    assert!(disc66.full_guard_vector_matches);
+    assert!(!disc66.guard_min.is_negative());
+    let (cert66, pi66) =
+        blp::certify_basis_with_dual(&dlp66, &disc66.delta_lp_basis).expect("m=66 basis cert");
+    let LpResult::Optimal {
+        objective: want_dlp66,
+        ..
+    } = cert66
+    else {
+        panic!("m=66 delta_hull_lp not optimal");
+    };
+    let exact_y66: Vec<BigRational> = pi66.into_iter().map(|v| -v).collect();
+    let nz_y66 = exact_y66.iter().filter(|v| v.is_positive()).count();
+    assert!(nz_y66 > 0, "m=66 must have active guards with nonzero dual");
+    let rcbt66 = search::certify_reduced_cost_fixing(&p66, &exact_y66, &disc66.objective)
+        .expect("m=66 rcbt");
+    let split66_none = search::certify_disjunctive_split_bound::<120>(&p66, &disc66.objective, 8)
+        .expect("m=66 disjunctive split without extra_root_y");
+    let split66 = search::certify_disjunctive_split_bound_with_dual::<120>(
+        &p66,
+        &disc66.objective,
+        8,
+        Some(&exact_y66),
+    )
+    .expect("m=66 disjunctive split with exact_y66");
+    // Because m = 66 > 64 and exact_y66 has non-dyadic rational entries, Dy<120> root_y
+    // has a strictly weaker bound than exact_y66; Some(&exact_y66) upgrades root_lower_bound.
+    assert!(
+        split66_none.root_lower_bound < want_dlp66,
+        "m=66 Dy<120> root bound must be strictly below non-dyadic want_dlp66"
+    );
+    assert_eq!(split66.root_lower_bound, want_dlp66);
+    assert!(
+        split66.evaluated_splits > 0,
+        "m=66 must evaluate fractional splits"
+    );
+    assert!(split66.tree_leaves > 1, "m=66 must branch into >1 leaves");
+    assert!(split66.best_single_split_bound >= split66.root_lower_bound);
+    assert!(split66.tree_lower_bound >= split66.best_single_split_bound);
+    assert!(split66.tree_eliminated_codes >= rcbt66.eliminated_codes);
+    for i in 0..n66 {
+        assert!(rcbt66.surviving_codes[i].contains(&disc66.codes[i]));
+        assert!(split66.tree_surviving_codes[i].contains(&disc66.codes[i]));
+        for &q_surv in &split66.tree_surviving_codes[i] {
+            assert!(rcbt66.surviving_codes[i].contains(&q_surv));
+        }
+    }
+    // Verify same-dual survival-mask intersection (ext_ok) with a distinct dual y_ext66
+    // whose root bound L(y_ext66) < want_dlp66 (so root_y is not overwritten) and which
+    // activates row 0 (eliminating q = -7 on coeff 0, which survives under exact_y66).
+    assert!(
+        split66.tree_surviving_codes[0].contains(&-7),
+        "coeff 0 code -7 must survive under exact_y66 where y[0] == 0"
+    );
+    let mut y_ext66 = exact_y66.clone();
+    y_ext66[0] = q(1, 2);
+    let rcbt_ext66 = search::certify_reduced_cost_fixing(&p66, &y_ext66, &disc66.objective)
+        .expect("m=66 rcbt with y_ext66");
+    assert!(
+        !rcbt_ext66.surviving_codes[0].contains(&-7),
+        "y_ext66 must eliminate code -7 on coeff 0"
+    );
+    let split66_ext = search::certify_disjunctive_split_bound_with_dual::<120>(
+        &p66,
+        &disc66.objective,
+        8,
+        Some(&y_ext66),
+    )
+    .expect("m=66 disjunctive split with y_ext66");
+    assert_eq!(split66_ext.root_lower_bound, split66_none.root_lower_bound);
+    assert!(
+        !split66_ext.tree_surviving_codes[0].contains(&-7),
+        "ext_ok intersection must eliminate code -7 on coeff 0"
+    );
+    assert!(split66_ext.tree_eliminated_codes >= rcbt_ext66.eliminated_codes);
+    for i in 0..n66 {
+        assert!(rcbt_ext66.surviving_codes[i].contains(&disc66.codes[i]));
+        assert!(split66_ext.tree_surviving_codes[i].contains(&disc66.codes[i]));
+        for &q_surv in &split66_ext.tree_surviving_codes[i] {
+            assert!(rcbt_ext66.surviving_codes[i].contains(&q_surv));
+        }
+    }
 }

@@ -26,3 +26,9 @@ At `f1f55c0c1`, all three PLAN rows remain open despite completed evidence: norm
 ## Stop and ask if
 
 A result would be interpreted as model/trunk/reasoning capability, a bar or hold changes, the owner does not approve the owner-path decision text, or any file outside scope is needed.
+
+## Owner approval
+
+Owner path changed: `docs/integration/DECISIONS.md` (rows D62–D64).
+
+Added by Claude, finishing this PR under the owner's direction while Claude runs solo. Casey, in Claude's chat, received by 2026-10-24T22:03:50Z. Asked how to close out the four other-lab PRs, he selected: "Finish and merge all (Recommended)". The option read: "#3148/#3149: render fix, my review, merge (closes #2849, retires the busywork probe)." Under D68, these decision rows are also the lab's own, approved by a fresh-context decision review.
