@@ -4,9 +4,10 @@
 - `panel-v1` is superseded as an unfit instrument. Each of its stated and historical prompts held its expected value, and each abstention prompt named its family, so a no-read arm could pass the bar (#3131 `6380260818`).
 - The pinned panel is now `panel-v2`, SHA-256 `369d8c24bb41e2d071485ecd1cbc7044092959ed5309ad70a8a5150a69a9e90c` (see [Panel repair](#panel-repair-claude-71-2026-10-24)).
 - antigravity, deepseek, kimi and claude have now each authored text in this sheet or a panel. The next FIT therefore comes from a fresh-context reviewer, which CHARTER §4.5 counts as non-author; the PM dispatches which lab runs it.
-- `NOT_FIT` stands, and no compute is cleared. **Sheet update 2026-10-24 (kimi-34):** prerequisite 5's sealed fresh-V2 token, response-mask and seal-report digests are now quoted below; the held checkpoint remains `PENDING`, with no bar, tolerance, panel, FIT or hold change.
+- `NOT_FIT` stands, and no compute is cleared.
   - CPU consumer module (`uor_r4_object_store::address_read`) and finite CPU controls were delivered in `#2950` (`$0` GPU spend).
   - GPU evaluation of the serving-time oracle awaits a non-author `TEST FITNESS: FIT` review (CHARTER §4.5) and Casey's approval in chat; any trained form also requires a separate FIT review and a typed owner release (CHARTER §5.1).
+- **Sheet update 2026-10-24 (kimi-34/35):** prerequisite 5's sealed fresh-V2 token, response-mask and seal-report digests are now quoted below; the held checkpoint remains `PENDING`, with no bar, tolerance, panel, FIT or hold change.
 - **Line:** M1/M3 exact addressed memory (`#2029`, `#2031`, item `#2833`). **Lab:** antigravity.
 - **Applicable owner decisions:** D11, D21, D22, D23, D24, D25/D30, D31, D32, D40.
   - CHARTER §3.1–§3.3 (D23, D25/D30): Geometry only; zero softmax or squashing; zero dense matrix multiplication.
@@ -27,8 +28,8 @@ Evaluated on one frozen checkpoint on RTX 5090 across three deterministic servin
 
 ## 3. Bar
 
-- **Status of this bar: `PROPOSED — PENDING owner registration` (CHARTER §5.2).** The owner must quote the registered bar with an **ISO-UTC time** and settle the one baseline (`19/40` vs `20/40`) before `+8` has a single meaning; `>= 54/80` across the full 80-row panel also needs its derivation from the 40/20/20 composition and that baseline (see the Verdict table). No compute is cleared by this proposal.
-- **Oracle gain bar (Arm C):** At least `+8/40` more recalled fact rows than the `19/40` (`20/40` anchor) baseline (`>= 27/40` on the memory recall half, and `>= 54/80` across the full 80-row panel), with `0` wrong-value substitutions from `uor-r4-object-store` (`whole_object_verified` / range-verified byte match `1.000` on every `Hit`) and held-out BPB within `0.01` of Arm A.
+- **Status of this bar: `REGISTERED` at `2026-10-23T02:44:51Z` (`#2028` comment `6356136269`).** The single baseline is `19/40`; the full-panel derivation is `27 + 7 + 20 = 54/80`. No compute is cleared by this registration.
+- **Oracle gain bar (Arm C):** At least `+8/40` more recalled fact rows than the single `19/40` baseline (`>= 27/40` stated-fact, `>= 7/20` historical-version and `20/20` abstention, hence `>= 54/80` across the full 80-row panel), with `0` wrong-value substitutions from `uor-r4-object-store` (`whole_object_verified` / range-verified byte match `1.000` on every `Hit`) and held-out BPB within `0.01` of Arm A.
 - **Trained follow-up gate:** Only if Arm C meets the oracle gain bar is a trained address-as-read sheet eligible to be drafted (2–3 seeds, frozen `>= 80`-row panel, separate FIT review, and typed owner release).
 
 ## 4. Base artifact
@@ -53,8 +54,8 @@ Evaluated on one frozen checkpoint on RTX 5090 across three deterministic servin
 
 ## 6. Steps
 
-1. Freeze `docs/harness/panels/m3-memory.json` (`>= 80` rows) and pin its SHA-256 digest.
-2. Obtain a non-author `TEST FITNESS: FIT` review on this sheet, owner bar confirmation on `#2028`, PM dispatch, and Casey's approval in chat before any GPU evaluation.
+1. Verify the frozen `caseyallard/uor-r4-store/data/m1-address-as-read/panel-v2.jsonl` against SHA-256 `369d8c24bb41e2d071485ecd1cbc7044092959ed5309ad70a8a5150a69a9e90c`; do not substitute the separate M3 `>= 200`-row decisive panel.
+2. Pin the held checkpoint, obtain a fresh-context non-author `TEST FITNESS: FIT` review on this sheet, PM dispatch, and Casey's approval in chat before any GPU evaluation. The bar is already registered and needs no repeated confirmation.
 3. Run the three evaluation arms (`Arm A`, `Arm B`, `Arm C`) on the frozen checkpoint on a single RTX 5090 pod via `scripts/pod/uor-pod` (zero training steps).
 4. Record `check_pass`, `address_match`, abstention/eviction accuracy, and held-out BPB in [`docs/research/notebook/m3-durable-memory.md`](../../research/notebook/m3-durable-memory.md).
 
@@ -90,7 +91,7 @@ Evaluated on one frozen checkpoint on RTX 5090 across three deterministic servin
 | 4 | Consumer commit pin | **PINNED** | commit `86eb68ebb`; 6 finite controls in `crates/uor-r4-object-store/tests/address_read.rs` |
 | 5 | Measurement definitions | **PINNED (kimi-34, 2026-10-24)** | bar-miss and negative-closes rules pinned in §7; sealed fresh-V2 `tokens.u16` SHA-256 `0b7e754cfd242bf53145fe9cbca563be8503e6cd75df5449abb325b5c51ee1b8`, `response_mask.u8` SHA-256 `a1cda5295547bb641b1ea71ba4ebabb58d58c40e6c048cda91f35a878fecbf5e`, seal report SHA-256 `df5d074ae09c743aa586e3463ffe87faca5703f44f7802bff8ac49ee2990395f`; `0.01` tolerance unchanged (registered 2026-10-23T02:44:51Z) |
 
-Re-request FIT once the panel hash is frozen and the checkpoint SHA is pinned; this table is deliberately a checklist, not a decision: **no owner value, bar, checkpoint or panel is set by the lab here.**
+Re-request FIT once the held checkpoint SHA is pinned; the panel, bar, consumer and measurement definitions are already pinned/registered above. This table is deliberately a checklist, not a decision: **no owner value, bar, checkpoint or panel is set by the lab here.**
 
 ### PM panel freeze (kimi-33, 2026-10-24)
 
@@ -147,8 +148,11 @@ The two decision cards were registered **as recommended** under Casey's standing
 - **Oracle gain bar (`6356053677`) — registered.** ≥ `27/40` stated-fact vs the single `19/40` baseline, ≥ `7/20` historical-version, `20/20` abstention, `0` wrong-value substitutions; held-out BPB within `0.01` on the sealed fresh V2 draw; derivation `27 + 7 + 20 = 54/80`.
 - **Frozen panel composition (`6356054074`) — registered.** `40` stated-fact / `20` historical-version / `20` abstention; the milestone's `>= 200` rows is the M3 decisive-run panel, not this oracle. The PM has since selected the deterministic source and frozen/hashed the file (`panel-v2`, `369d8c24…`).
 
-**This releases nothing.** The sheet stays `NOT_FIT` until a non-author FIT (superseded by the claude-71 update in the status: every lab has authored sheet text or a panel, so the next FIT is a fresh-context review the PM dispatches), and the run still needs the held `#2844` checkpoint SHA and Casey's typed release. The `#2833` registration comment `6356137004` links to an unrelated old comment (`6100603222`) instead of `6356136269`; the registration itself is correct on `#2028`.
-### Why NOT_FIT (prerequisites in priority order)
+**This releases nothing.** The sheet stays `NOT_FIT` until a non-author FIT (superseded by the claude-71 update in the status: every lab has authored sheet text or a panel, so the next FIT is a fresh-context review the PM dispatches), and the run still needs the held `#2844` checkpoint SHA and Casey's approval in chat. The `#2833` registration comment `6356137004` links to an unrelated old comment (`6100603222`) instead of `6356136269`; the registration itself is correct on `#2028`.
+
+### Why NOT_FIT (2026-10-22 review snapshot)
+
+The numbered list preserves the review's reasons at that date, not current prerequisite status. Later updates above resolved items 1, 3, 4 and 5 without changing the registered values.
 
 1. **Frozen, hashed panel absent (composition now REGISTERED).** The `40/20/20` composition and the 80-vs-200 reconciliation were registered at `2026-10-23T02:44:51Z`; the frozen panel still needs its content SHA-256, and the PM selects the data source and freezes the file.
 2. **Candidate checkpoint unpinned.** The base artifact names `m1-trunk-assembly-and-training` (`#2844`), which is **HELD** (verified against the roadmap item on `main`), and carries no SHA-256; pin the exact frozen checkpoint and where it is stored.
@@ -156,7 +160,7 @@ The two decision cards were registered **as recommended** under Casey's standing
 4. **Consumer commit-pinned (resolved 2026-10-22).** The delivered commit SHA `86eb68ebb` of the `uor-r4-object-store` address-read consumer and its 6 finite tests is now cited in §4 and in the pin-status table above; this item no longer blocks a FIT re-request.
 5. **Measurement definitions unpinned.** The held-out BPB stream is unnamed and unhashed and the `0.01` tolerance is unsourced; `>= 54/80` has no derivation; and the stop rules cover integrity failures only — add a **bar-miss stop** and state which configuration a negative closes (CHARTER §4.1).
 
-Re-request FIT once 1–3 and the remaining definitions in 5 have concrete values (item 4 is pinned above); this verdict clears no compute (D22).
+**Current instruction (kimi-35, 2026-10-24):** only the held checkpoint pin remains from the prerequisite table. After it is pinned, request a fresh-context non-author FIT, PM dispatch and Casey's approval in chat. The old `NOT_FIT` verdict and every hold stand; no compute is cleared.
 
 ### Recorded review
 
