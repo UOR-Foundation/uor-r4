@@ -14,7 +14,7 @@ No kernel change is needed. The Flock/Relation forward already traces, per (row,
 
 This unit adds:
 1. **A pure, un-gated summary over trace words and outputs.** It checks every stage output, meaning each final output root and each level consensus root where `kept > 0`. Each must be a root index in [0, 16) whose vector has L1 = 4, L2² = 8 and L∞ = 2, and each row's endpoint distance to all 256 cells must lie in {0, 4, 8, 12, 16}. It reports counts, failures, the distance histogram and `met = (failures == 0)`.
-2. **`normalization-dev-structure CONFIG CHECKPOINT DEV_EVAL OUT`** (CUDA). It takes the A8-trunk config through `validate_normalization_config`, restores the checkpoint, runs `forward_traced` over the DEV rows, and emits the summary with mode, scope and pins.
+2. **`normalization-dev-structure CONFIG CHECKPOINT OUT`** (CUDA; amended: no eval-report argument, since rows come from the DEV corpus as in `capture_dev`). It takes the A8-trunk config through `validate_normalization_config`, restores the checkpoint, runs `forward_traced` over the DEV rows, and emits the summary with mode, scope and pins.
 
 The bar applies to `N_snap`. The other arms are reported, not judged.
 
