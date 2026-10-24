@@ -4,6 +4,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 
 ## What did not work, first
 
+- The in-unit review at `f8bba8470` found three wording errors in §6, all now fixed. One manifest example, `f85466ff…`, is pinned on main in the A8 verifier (#2783). The two #2029 comment ids are already on main, with different roles than Codex gives them. The 300 s freshness rule still binds under the template approval rather than being replaced by it.
 - Codex's audited-dose runbook (19 Oct) was never committed: it sat uncommitted in Codex's worktree with three doc edits. All three edits are dropped:
   - `NOW.md` and `current-state.md` have since been archived or replaced on main;
   - the `claims.json` edit would have deleted every other lab's claims.
@@ -28,7 +29,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
   - Ownership: covered, plus the gap above.
   - Sheet pin `059037ea…`: superseded. The sheet on main hashes `fcb770e6…` (#2785), re-checked at `204cb0c9f`.
   - Immutable inputs: covered or superseded, plus one gap. The outside packet folder no longer exists.
-  - Phases 0–5: covered by Stages 1–2 and the claude-70 records, plus the gaps above. The 300-second freshness rule is superseded by the template approval (#2842 comment 6379923206).
+  - Phases 0–5: covered by Stages 1–2 and the claude-70 records, plus the gaps above. The 300-second freshness rule is covered by the template approval (#2842 comment 6379923206) and still binds.
   - Lease, custody and close: a gap, now §6.7.
 
 Size: docs 4 files (line counts in pr-check's size line at the top of the PR body).
