@@ -6,6 +6,14 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 
 - One PR for all of phase 0 could not pass. No item scoped `CHARTER.md` or `docs/rules/changes.md`, so pr-check's scope rule would fail, and `loop queue` refuses on any pr-check failure. claude-73 (#3159, merged as `6ecb40c45`) added both paths to this item's scope first, and this branch was merged forward onto it.
 - The first ORDER quoted all of the owner's answers and came to 5,437 B, over the 4,096 B read-path budget (pr-check `read-path` FAIL). The ORDER now quotes only the approval of this record. The answers themselves are quoted verbatim in the change-log entry.
+- The first in-unit review (fresh context, at `5b1071e59`) returned CHANGES. It found five problems:
+  - D67 misquoted the read-back option: lowercased, shortened, and with "Accurate" for "Accurate (Recommended)".
+  - §5.10 still said "stop and ask".
+  - D69's interim `owner log:` form was not marked as Claude's choice.
+  - The §4.1 and §5.2 conflicts were not named.
+  - The D41 wording implied the owner chose to keep that gate.
+
+  All five are fixed at the next head. Its sixth note, that the review gate still refuses a same-lab record on a code PR, is under Still open.
 - Claude's read-back to the owner had kept a 30-minute wait for another lab's review. The owner rejected it, and it is recorded only as a turned-down alternative (D65, D66).
 
 ## What changed
@@ -21,7 +29,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 - `AGENTS.md`: items 5 and 6, the decision-card line and the owner-only lines now match the charter. It is still 80 lines.
 - `docs/rules/changes.md`: a 24 October entry with who decided, the owner's words verbatim and a side-effects table.
 
-Size: docs 6 files, +164/−13 (pr-check's size line); tests, code, generated and other 0. Against the ORDER's five files plus the task folder: 1.0.
+Size: docs 6 files (line counts in pr-check's size line at the top of the PR body); tests, code, generated and other 0. Against the ORDER's five files plus the task folder: 1.0.
 
 ## Measurements
 
@@ -48,7 +56,8 @@ The tooling still enforces the old waits. The next loop units, phases 1–3 of t
 - `loop next` still offers WAIT and already-run premise probes, and does not rank work by unblock value.
 - `loop close` still writes "Await the exact-head review" and only `References #N`.
 - The owner's queue view and the restart-proof supervisor are not built.
-- `docs/loop/README.md` still describes the old review steps. The charter wins where they disagree.
+- `docs/loop/README.md` still describes the old review steps, and the ORDER template still has a "Stop and ask if" heading. The charter wins where they disagree.
+- §4.1 ("Stopping a mechanism needs the owner") and §5.2's owner as the PM seat's last fallback still conflict with D65 and D68. They are named in the change log's side-effects table for the next record unit.
 
 ## Plain summary
 

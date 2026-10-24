@@ -40,7 +40,8 @@ Claude read the rule back, including that the current holds become runnable thro
 | Decision cards to the PM or the owner (§5.2) | Replaced by the lab's own decision review (D68) | `CHARTER.md` §5.2 |
 | Pre-merge review by another vendor's lab (D46) | Replaced by the in-unit review and post-merge audits (D66) | `CHARTER.md` §5.5, §6 |
 | "A pending owner question means wait" | Retired (D65) | `CHARTER.md` §5.1, §6 |
-| D41's donor pass, §3 and the GPU caps | Unchanged: still the owner's | `CHARTER.md` §3.10, §5.4 |
+| D41's donor pass, §3 and the GPU caps | Unchanged: this record does not touch §3 or the caps | `CHARTER.md` §3.10, §5.4 |
+| §4.1 "Stopping a mechanism needs the owner" and §5.2's owner as the PM seat's last fallback | Not changed here (§4 was outside this record's scope), but in conflict with D65 and D68; brought in line by the next record unit | `CHARTER.md` §4.1, §5.2 |
 | The loop page, `loop review`, `loop queue`, `loop next` and `loop close` | Still state or enforce the old waits; brought in line by the next loop units | [docs/loop/README.md](../loop/README.md) |
 
 ## 21 October 2026: Claude builds the loop setup while it runs alone (D52 amended)
