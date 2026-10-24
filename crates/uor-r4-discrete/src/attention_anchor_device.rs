@@ -2,8 +2,8 @@
 //! No Device construction or numerical execution is available here.
 
 use crate::attention_anchor::{AnchorPolicy, AnchorRow, TrainAnchorManifest};
-use crate::attention_audit::{SnapshotPin, StateStamp, MAX_BATCHES};
-use crate::corpus::{sha256, validate_sha256, CorpusBinding, FilePin, PreparedCorpus, Split};
+use crate::attention_audit::{MAX_BATCHES, SnapshotPin, StateStamp};
+use crate::corpus::{CorpusBinding, FilePin, PreparedCorpus, Split, sha256, validate_sha256};
 use crate::training::{DriverCheckpoint, PreparedDriver};
 use crate::{Error, Identity, Result};
 use serde::{Deserialize, Serialize};
@@ -320,7 +320,7 @@ pub(crate) fn evaluate_boundary(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::corpus::{sha256, BosIdentity, CorpusSource, FilePin, Split};
+    use crate::corpus::{BosIdentity, CorpusSource, FilePin, Split, sha256};
 
     fn corpus(split: Split) -> PreparedCorpus {
         let ids: &[u16] = &[0, 1, 2, 1, 2, 3, 0, 4, 5, 4, 5, 4, 5];
@@ -398,13 +398,15 @@ mod tests {
         let (corpus, mut manifest, binding) = fixture();
         manifest.rows[0].original_window.sha256 = sha256(b"wrong");
         assert!(PreparedTrainAnchor::prepare_inner(&corpus, &manifest, &binding, false).is_err());
-        assert!(PreparedTrainAnchor::prepare_inner(
-            &super::tests::corpus(Split::Dev),
-            &manifest,
-            &binding,
-            false
-        )
-        .is_err());
+        assert!(
+            PreparedTrainAnchor::prepare_inner(
+                &super::tests::corpus(Split::Dev),
+                &manifest,
+                &binding,
+                false
+            )
+            .is_err()
+        );
     }
 
     fn boundary_fixture() -> (
@@ -475,6 +477,7 @@ mod tests {
             objective_policy: crate::ObjectivePolicy::default(),
             read_initialization: crate::ReadInitialization::default(),
             normalization_mode: crate::normalization_mechanism::NormalizationMode::default(),
+            position: None,
             relation_learning_policy: RelationLearningPolicy::LearnV1,
             counterfactual_path: CounterfactualPath::LanesV1,
             codebook_initialization: CodebookInitialization::SeededDeviceV1,
@@ -679,9 +682,11 @@ mod tests {
         let prepared =
             PreparedTrainAnchor::prepare_inner(&corpus, &manifest, &expected, false).unwrap();
         assert_eq!(prepared.batches().len(), 61);
-        assert!(prepared.batches()[..60]
-            .iter()
-            .all(|batch| batch.rows().len() == 64));
+        assert!(
+            prepared.batches()[..60]
+                .iter()
+                .all(|batch| batch.rows().len() == 64)
+        );
         assert_eq!(prepared.batches()[60].rows().len(), 7);
         assert_eq!(
             prepared
