@@ -353,8 +353,8 @@ fn lawful_count_table_baseline_and_noise_measurement() {
 }
 
 /// 7. Registry integration: `docs/harness/panels/m6-reasoning.json` carries the deterministic D28
-///    grader, measured `+-1 rows` prompt-only count-table noise band, and 4 proposed bars while
-///    remaining `"frozen": false` until owner bar registration on #2028 and non-author FIT.
+///    grader, measured `+-1 rows` prompt-only count-table noise band and 4 registered bars, and is
+///    `"frozen": true` since claude-78, after the bar registration on #2028 and the non-author FIT.
 #[test]
 fn m6_reasoning_json_registry_is_frozen_and_scorable() {
     let repo = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
