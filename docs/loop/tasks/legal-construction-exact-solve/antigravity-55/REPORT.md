@@ -13,11 +13,11 @@ Written by claude on 24 Oct, finishing #3152 under the owner's close-out directi
 ## What changed
 
 - **Code** (`search.rs`, `+268 / -99` lines from `f455de54f` to the head):
-  - `2b463ff89` is antigravity's speed-up. `dyadic_to_rational` strips shared factors of two with `trailing_zeros` and builds the result with `BigRational::new_raw`, so there is no GCD. `sum_rationals` adds dyadic terms by shift-and-add. `dual_rc_pool` entries are cached as `DualPoolEntry { pi, rc, root_terms, root_lb, root_span }`. Leaf bounds and `tighten_leaf_mask` update incrementally over the split coordinates only, at most 23 of 1,920. `tighten_leaf_mask` skips a coefficient in O(1) when `root_span[i] <= leaf_slack`.
+  - `2b463ff89` is antigravity's speed-up. `dyadic_to_rational` strips shared factors of two with `trailing_zeros` and builds the result with `BigRational::new_raw`, so there is no GCD. `sum_rationals` adds dyadic terms by shift-and-add. `dual_rc_pool` is a `Vec<(Vec<Dy<P>>, Rc<CachedRc>)>`, where a local `struct CachedRc { rc, root_terms, root_lb, root_span }` caches each dual's terms. The ORDER's plan called this `DualPoolEntry`. Leaf bounds and `tighten_leaf_mask` update incrementally over the split coordinates only, at most 23 of 1,920. `tighten_leaf_mask` skips a coefficient in O(1) when `root_span[i] <= leaf_slack`.
   - `0096186e9` adds `pub fn split_candidate_order(score_a, score_b)` and uses it for the tree-level sort: scored candidates first, by descending score, then unscored.
   - `82074e3ec` factors the certifier into `disjunctive_split_bound(.., use_dual_pool)`. It adds a `#[doc(hidden)]` ablation, `certify_disjunctive_split_bound_without_pool`, which skips the pool in both places it is read, so a test can pin the pool's effect.
-- **Tests** (`tests/search_certify.rs`, `+72 / -0` lines). Each test fails when its fault is planted and passes once the fault is restored:
-  - `split_candidate_sort_visits_scored_before_unscored` has 24 candidates, 16 scored and 8 unscored, and asserts that the first 16 visited are exactly the scored ones in descending order. It fails with the old comparator.
+- **Tests** (`tests/search_certify.rs`, `+72 / -0` lines in this unit). The PR's `+74` also includes antigravity-54's two `split66` assertions. Each test fails when its fault is planted and passes once the fault is restored:
+  - `split_candidate_sort_visits_scored_before_unscored` has 24 candidates, 16 scored and 8 unscored, and asserts that the first 16 visited are exactly the scored ones in descending order. It fails with the old comparator. It calls `split_candidate_order` directly, so it pins the comparator, not the call site. Removing the `cand_splits.sort_by(..)` call, or swapping its arguments, would leave it green. Only the `attempt2` replay below exercises the call site: its outputs differ from the speed-up-only run exactly because of the sort.
   - `dual_pool_strictly_tightens_tree_bound_and_eliminations`, on seed 689, asserts that with the pool the tree lower bound is strictly higher and strictly more codes are eliminated than without it. It fails when the pool read is disabled.
 - **Docs:**
   - [`README.md`](../../../../labs/legal-construction-exact-solve/README.md): a Unit 12 section.
@@ -34,7 +34,7 @@ Both runs are of `root-search` on `attempt2` (`local/claude/legal-case/codex-dir
 | Unit 10 | 264,832 | 1,116,550 | 6,254 / 112 / 179 | ≈ -21.02900400 | ≈ 0.00704240 |
 | Unit 11 (`4754c118b`) | 200,929 | 1,809,808 | 6,395 / 115 / 185 | ≈ -21.02883804 | ≈ 0.00687644 |
 | Speed-up only (`0884462c0`) | 69,140 | 146,897 | 6,395 / 115 / 185 | Unit 11's, bit-for-bit | Unit 11's, bit-for-bit |
-| Head (`82074e3ec`, sort fixed) | 57,057 | 148,896 | **6,406 / 115 / 186** | **≈ -21.02881252** | **≈ 0.00685092** |
+| Head code (`82074e3ec`, sort fixed; the PR head `bb04250e7` adds only docs) | 57,057 | 148,896 | **6,406 / 115 / 186** | **≈ -21.02881252** | **≈ 0.00685092** |
 
 - **The speed-up is exact.** At `0884462c0`, every Unit 11 value recorded in `antigravity-54/REPORT.md` matches: the tree counts, the gap, the single-split bound, the root RCBT counts and the tree lower bound `-141734088016952714342525764033724082710340210011323135211531386253129 / 6739986666787659948666753771754907668409286105635143120275902562304`. Against Unit 10, `solve_ms` is down 73.89% and `disjunctive_ms` is down 86.84%.
 - **The sort fix tightens the outputs.** At the head, exactly five fields change from the speed-up-only run:
@@ -63,6 +63,7 @@ All of these ran in `docs/labs/legal-construction-exact-solve/solver` with `CARG
 
 ## Still open
 
+- No unit test pins the sort's call site in the certifier. A small instance where scored-first order gives a different tree from both basis-row order and unscored-first order would close that.
 - The certified discrete gap on `attempt2` is about `0.00685092` (`0.03259%`). #2828 stays `ready` until it is closed, or until an optimal assignment or an infeasibility proof is recorded.
 
 ## Plain summary
