@@ -242,7 +242,7 @@ P-5 is dropped: Codex keeps full access.
 | 3 | `loop render` for every view, `--check` at the stamp, determinism tests | a hand-edited STATE fails |
 | 4 | `loop gates`: runner, `gates.json`, ledger with working-tree hashes, REFUSED and UNKNOWN, breaks | `--break all` turns each gate red for its own reason |
 | 5 | `loop pr-check`; `gate.yml` with the policy job advisory (built) | one fixture PR per rule fails |
-| 6 | `loop review` with tagged review records (built) | an untagged review record, a same-vendor record on a code or model PR outside D59, or a setup-PR record from a lab other than Claude is refused |
+| 6 | `loop review` with tagged review records (built) | an untagged review record, a same-lab record without `context: fresh` (D66), or a setup-PR record from a lab other than Claude is refused |
 | 7a | `claim`, `suborder`, `ask` | an overlapping claim is refused |
 | 7b | `next`, `arrive`, `report`, `close`; templates in our words; per-task receipts (built) | a REPORT missing a section is refused |
 | 7c | `queue`, `board` (built) | a later CHANGES record blocks queueing, unless it comes from a lab other than Claude on a setup PR (D59) |

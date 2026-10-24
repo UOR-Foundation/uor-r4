@@ -17,7 +17,7 @@ At `6ecb40c45`, does the gate already count a fresh same-lab record on a code PR
 ## Files in scope
 
 - `crates/uor-r4-harness/src/loopreview.rs` (`refusal` and the doc comments that state the rule)
-- `crates/uor-r4-harness/tests/loop_review.rs`, `crates/uor-r4-harness/tests/loop_prcheck.rs` (expectations that encode D46)
+- `crates/uor-r4-harness/tests/loop_review.rs`, `crates/uor-r4-harness/tests/loop_prcheck.rs`, `crates/uor-r4-harness/tests/loop_next.rs` (expectations that encode D46)
 - `docs/harness/README.md`, `docs/loop/README.md` (the sentences that state the gate's rule)
 - `docs/loop/tasks/infra-loop-harness/claude-75/**`
 
