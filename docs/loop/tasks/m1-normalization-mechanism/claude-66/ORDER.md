@@ -8,7 +8,7 @@ The normalization sheet (`docs/harness/prep/m1-normalization-mechanism-DRAFT-202
 
 This unit adds a separate entry for the normalization test:
 
-- **Commands.** `normalization` and `normalization-resume <config> <admission> <out>`, and `normalization-build-identity <config>`.
+- **Commands.** `normalization` and `normalization-resume <config> <admission> <out>`, and `normalization-build-identity <config>`. **Amended before the work landed:** also `normalization-check-plan <plan>` and `normalization-owner-release <plan> <out>`. `attention-check-plan` and `attention-owner-release` are bound to the attention scope, so without these a normalization run could never get its admission built, and the later registration would not be one line.
 - **What it admits.** Exactly the A8 proxy-trunk configuration (Relation8 sweep 1, K8, nearest-address objective, active-leaf initialization, interleaved read-every-8, the A8 pinned codebook table, seed 1 or 2) with any of the three modes.
 - **Recording.** The mode is in the scope string, recorded in run state and checked on resume; a mismatch refuses.
 - **The A8 lock stays.** The existing `attention` entry and its registrations still refuse non-default modes, and their scope strings, schemas and behaviour do not change.
