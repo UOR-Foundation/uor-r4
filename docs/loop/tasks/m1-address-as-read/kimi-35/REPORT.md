@@ -30,7 +30,7 @@ No GPU work ran. The held checkpoint, NOT_FIT, panel, bar, tolerance and holds a
 
 ## Checks run at the head
 
-- Size: tests 0 files +0/−0; code 0 files +0/−0; docs 6 files +169/−9; generated/other 0 files. The ORDER gave no numeric estimate, so no ratio applies.
+- Size: tests 0 files +0/−0; code 0 files +0/−0; docs 6 files +173/−9; generated/other 0 files. The ORDER gave no numeric estimate, so no ratio applies.
 - `loop report --check`: PASS.
 - `loop pr-check --local`: PASS (scope, ORDER-first and repair-ORDER checks included).
 - `loop gates --full`: 11/11 GREEN.
