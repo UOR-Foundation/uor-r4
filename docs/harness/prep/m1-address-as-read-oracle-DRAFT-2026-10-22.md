@@ -145,9 +145,9 @@ A planted answer leak, a wrong eviction sequence and a wrong query slot each fai
 The two decision cards were registered **as recommended** under Casey's standing direction (direction `6355948874`, confirmed `6356034555`), recorded at **2026-10-23T02:44:51Z** in `#2028` comment `6356136269`:
 
 - **Oracle gain bar (`6356053677`) — registered.** ≥ `27/40` stated-fact vs the single `19/40` baseline, ≥ `7/20` historical-version, `20/20` abstention, `0` wrong-value substitutions; held-out BPB within `0.01` on the sealed fresh V2 draw; derivation `27 + 7 + 20 = 54/80`.
-- **Frozen panel composition (`6356054074`) — registered.** `40` stated-fact / `20` historical-version / `20` abstention; the milestone's `>= 200` rows is the M3 decisive-run panel, not this oracle. The **PM** still selects the data source and freezes/hashes the file.
+- **Frozen panel composition (`6356054074`) — registered.** `40` stated-fact / `20` historical-version / `20` abstention; the milestone's `>= 200` rows is the M3 decisive-run panel, not this oracle. The PM has since selected the deterministic source and frozen/hashed the file (`panel-v2`, `369d8c24…`).
 
-**This releases nothing.** The sheet stays `NOT_FIT` until a non-author FIT (per the registration, from Claude or Kimi — deepseek has authored text in this sheet), and the run still needs the held `#2844` checkpoint SHA and Casey's typed release. The `#2833` registration comment `6356137004` links to an unrelated old comment (`6100603222`) instead of `6356136269`; the registration itself is correct on `#2028`.
+**This releases nothing.** The sheet stays `NOT_FIT` until a non-author FIT (superseded by the claude-71 update in the status: every lab has authored sheet text or a panel, so the next FIT is a fresh-context review the PM dispatches), and the run still needs the held `#2844` checkpoint SHA and Casey's typed release. The `#2833` registration comment `6356137004` links to an unrelated old comment (`6100603222`) instead of `6356136269`; the registration itself is correct on `#2028`.
 ### Why NOT_FIT (prerequisites in priority order)
 
 1. **Frozen, hashed panel absent (composition now REGISTERED).** The `40/20/20` composition and the 80-vs-200 reconciliation were registered at `2026-10-23T02:44:51Z`; the frozen panel still needs its content SHA-256, and the PM selects the data source and freezes the file.
