@@ -1,6 +1,6 @@
 # ORDER: infra-loop-harness, kimi-35 (reconcile the address roadmap record)
 
-Lab: kimi. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Base: `42f377598`.
+Lab: kimi. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Setup row: 8 (notes/roadmap migration). Base: `42f377598`.
 
 ## Goal
 
