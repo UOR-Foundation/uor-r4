@@ -21,7 +21,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 - `AGENTS.md`: items 5 and 6, the decision-card line and the owner-only lines now match the charter. It is still 80 lines.
 - `docs/rules/changes.md`: a 24 October entry with who decided, the owner's words verbatim and a side-effects table.
 
-Size: docs 6 files, about +150/−13; tests, code, generated and other 0. Against the ORDER's five files plus the task folder: 1.0.
+Size: docs 6 files, +164/−13 (pr-check's size line); tests, code, generated and other 0. Against the ORDER's five files plus the task folder: 1.0.
 
 ## Measurements
 
