@@ -46,7 +46,10 @@ Nothing was measured; this is a rule change in the harness.
 - Narrow: `cargo test -q --locked -p uor-r4-harness --test loop_review --test loop_prcheck --test loop_next` gives 36, 47 and 33 passed, 0 failed.
 - Negative gate: the `loopreview.rs` change was set aside as a patch against `6ecb40c45` (`git diff 6ecb40c45 -- crates/uor-r4-harness/src/loopreview.rs`, 31 lines, then `git apply -R`). Run with `--no-fail-fast`, `loop_review` gives 7 failed, `loop_prcheck` 1 failed (`review_record_counts_exact_head_records_from_allowed_labs`) and `loop_next` 1 failed (`an_own_pr_owes_a_fresh_self_review_doc_only_or_code_d66`). After restoring, all pass again and the working tree is clean.
 - `cargo fmt -p uor-r4-harness -- --check`: clean. `cargo clippy -q --locked -p uor-r4-harness --all-targets --all-features -- -D warnings`: exit 0.
-- The full harness suite (`cargo test -q --locked --no-fail-fast -p uor-r4-harness`), re-run alone after the collision above, plus `loop pr-check --local`, `loop report --check` and the quick gates: results are in the PR's review record at the head.
+- The full harness suite, `cargo test -q --locked --no-fail-fast -p uor-r4-harness`, re-run alone after the collision above, on the branch merged forward onto `8a646977c`, gave 1,136 passed and 1 failed.
+  - The failure was `loop_prcheck`'s `an_inner_gate_is_respected`, an existing test this unit does not touch. git reported "unable to create temporary file: No such file or directory" mid-commit: its temp directory vanished, an environment flake.
+  - Run alone twice, `cargo test -q --locked -p uor-r4-harness --test loop_prcheck` gives 47 passed, 0 failed both times.
+- `loop pr-check --local`, `loop report --check` and the quick gates: results are in the PR's review record at the head.
 
 ## Skills used
 
