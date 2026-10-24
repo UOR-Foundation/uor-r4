@@ -49,7 +49,8 @@ pub const STALE_COLLECTION_SECS: u64 = 6 * 60 * 60;
 /// Whether `record` is a `running` collection older than [`STALE_COLLECTION_SECS`] at `now`.
 /// Exposed so the boundary rule can be tested without a clock race.
 pub fn collection_is_stale(record: &crate::loopdrive::GpuCollection, now: u64) -> bool {
-    record.status == "running" && record.started_unix < now.saturating_sub(STALE_COLLECTION_SECS)
+    let last_liveness = record.last_renewed_unix.unwrap_or(record.started_unix);
+    record.status == "running" && last_liveness < now.saturating_sub(STALE_COLLECTION_SECS)
 }
 
 /// One check at a PR's head: its name and conclusion (`FAILURE`, `SUCCESS`, ...).
