@@ -11,8 +11,8 @@ References #2828.
 
 ## What changed
 
-- **Code (`+639 / -151` lines across 2 files):**
-  - [`docs/labs/legal-construction-exact-solve/solver/src/search.rs`](../../../../labs/legal-construction-exact-solve/solver/src/search.rs) (`+634 / -151` lines):
+- **Code (`+621 / -126` lines across 2 files):**
+  - [`docs/labs/legal-construction-exact-solve/solver/src/search.rs`](../../../../labs/legal-construction-exact-solve/solver/src/search.rs) (`+616 / -126` lines):
     - Added `GapDecomposition` and `certify_gap_decomposition(p, y, codes)` to certify in exact rational arithmetic (`BigRational`) the algebraic split $g \cdot \delta(\text{codes}) - L(y) = \text{reduced\_cost\_loss} + \text{complementary\_slackness\_loss}$ and count `zero_reduced_cost_coeffs`.
     - Upgraded `lp_guided_discrete_solve::<P>` with 12-round Warm-Started Simplex Diving with infeasible-batch rollback across `dive_batch in {25, 30, 45}`, direct greedy single-step guard-violation repair when $1 \le \text{n\_viol} \le 15$, and a two-tier full-guard-scan multi-compensator (`k = 1` pair, `k = 2` triple, `k = 3` quad) exact rational repair polish.
   - [`docs/labs/legal-construction-exact-solve/solver/src/bin/root-search.rs`](../../../../labs/legal-construction-exact-solve/solver/src/bin/root-search.rs) (`+5 / -0` lines):
