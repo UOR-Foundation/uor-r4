@@ -39,7 +39,7 @@ At the base, does the generator still interpolate the expected value into its pr
 3. **Freeze.**
    - `panel-v2.jsonl` is uploaded to `caseyallard/uor-r4-store/data/m1-address-as-read/` and read back identically.
    - The sheet and the lab README pin its SHA-256. panel-v1 stays untouched, marked superseded.
-   - The sheet's FIT line names a lab that authored neither the sheet text nor a panel.
+   - The sheet's FIT line names a lab that authored neither the sheet text nor a panel. *Amended before review:* no such lab exists, because antigravity drafted the sheet (`86eb68ebb`). The line instead names a fresh-context reviewer, which CHARTER §4.5 counts as non-author, with the PM choosing who runs it.
 4. **Checks.** `cargo test -p uor-r4-object-store`, `loop report --check`, `loop pr-check --local` and `git diff --check` pass.
 
 The bar, the 19/40 baseline, the checkpoint, the FIT verdict (`NOT_FIT`) and every hold are unchanged. The bar question is the PM's (#2833 6380260939).
