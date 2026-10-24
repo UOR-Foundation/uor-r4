@@ -857,7 +857,6 @@ pub fn run(
     match crate::loopdrive::read_collections(root, lab) {
         Ok(records) => {
             let now = crate::loopdrive::unix_now();
-            let stale_before = now.saturating_sub(STALE_COLLECTION_SECS);
             let stale =
                 |record: &&crate::loopdrive::GpuCollection| collection_is_stale(record, now);
             let waiting = records
@@ -866,8 +865,14 @@ pub fn run(
             if let Some(record) = waiting {
                 let reason = if stale(&record) {
                     format!(
-                        "GPU collection {} has been {} since epoch {} and is treated as stale; collect it or mark it collected if its watcher is gone",
-                        record.id, record.status, record.started_unix
+                        "GPU collection {} has been {} since epoch {} (last renewal: {}); it is treated as stale; collect it or mark it collected if its watcher is gone",
+                        record.id,
+                        record.status,
+                        record.started_unix,
+                        record
+                            .last_renewed_unix
+                            .map(|tick| tick.to_string())
+                            .unwrap_or_else(|| "none".to_string())
                     )
                 } else {
                     format!(
@@ -887,11 +892,7 @@ pub fn run(
             }
             let running = records
                 .iter()
-                .filter(|record| {
-                    !record.collected
-                        && record.status == "running"
-                        && record.started_unix >= stale_before
-                })
+                .filter(|record| !record.collected && record.status == "running" && !stale(record))
                 .count();
             if running > 0 {
                 out.push(source(

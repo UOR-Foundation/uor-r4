@@ -574,3 +574,35 @@ fn the_stale_boundary_is_strict_and_clock_free() {
         "a record without a heartbeat falls back to its recent start"
     );
 }
+
+#[test]
+fn a_long_running_record_with_a_recent_heartbeat_is_counted_as_running() {
+    use uor_r4_harness::loopdrive::{unix_now, write_collection, GpuCollection};
+
+    let r = Repo::new(&[("docs/harness/labs.json", &labs(None))], &[]);
+    let now = unix_now();
+    let record = GpuCollection {
+        id: "deepseek-live-1".to_string(),
+        lab: "deepseek".to_string(),
+        renew: vec!["uor-pod".to_string()],
+        started_unix: now.saturating_sub(7 * 60 * 60),
+        last_renewed_unix: Some(now.saturating_sub(60 * 60)),
+        ended_unix: None,
+        status: "running".to_string(),
+        collected: false,
+        artifacts: Vec::new(),
+        notes: Vec::new(),
+    };
+    write_collection(&r.root, "deepseek", &record).expect("write the live record");
+    let o = r.next();
+    assert!(
+        !decision(&o).starts_with("GO gpu-collection"),
+        "a live long run must not be offered as stale: {}",
+        decision(&o)
+    );
+    assert!(
+        stdout(&o).contains("1 GPU collection(s) running"),
+        "the live long run must be counted as running, not reported as none: {}",
+        stdout(&o)
+    );
+}
