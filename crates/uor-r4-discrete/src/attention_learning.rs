@@ -2064,26 +2064,22 @@ mod tests {
         assert_eq!(family(&relation, gate(44))?, Family::GateRelation);
         assert!(family(&relation, gate(45)).is_err());
         assert!(family(&config(ReadSpec::Flock { kept: 8 }), gate(20)).is_err());
-        assert!(
-            family(
-                &relation,
-                training::Coordinate {
-                    kind: CoordinateKind::Route,
-                    index: 0
-                }
-            )
-            .is_err()
-        );
-        assert!(
-            family(
-                &relation,
-                training::Coordinate {
-                    kind: CoordinateKind::VectorBlock,
-                    index: 16384
-                }
-            )
-            .is_err()
-        );
+        assert!(family(
+            &relation,
+            training::Coordinate {
+                kind: CoordinateKind::Route,
+                index: 0
+            }
+        )
+        .is_err());
+        assert!(family(
+            &relation,
+            training::Coordinate {
+                kind: CoordinateKind::VectorBlock,
+                index: 16384
+            }
+        )
+        .is_err());
         for n in [0, 64, 16384, 16404] {
             checkpoint_boundary(n)?;
         }

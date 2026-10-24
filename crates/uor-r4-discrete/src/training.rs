@@ -2,16 +2,16 @@
 //! Receipt/cursor arithmetic is metadata; every model evaluation and proposal is CUDA.
 #![forbid(unsafe_code)]
 use crate::{
-    Error, ObjectivePolicy, ReadInitialization, ReadSpec, Result, Spec,
     corpus::{
         self, BosIdentity, CorpusBatch, CorpusBinding, CorpusSource, FilePin, PreparedCorpus, Split,
     },
     metadata::BinderPlan,
     normalization_mechanism::NormalizationMode,
     position_mechanism::PositionConfig,
+    Error, ObjectivePolicy, ReadInitialization, ReadSpec, Result, Spec,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 pub const DRIVER_SCHEMA: &str = "uor-r4.discrete-corpus-driver/1";
 pub const CHECKPOINT_SCHEMA: &str = "uor-r4.discrete-driver-checkpoint/1";
@@ -945,8 +945,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn evaluation_storage_binding_preserves_explicit_default_without_changing_typed_domain()
-    -> Result<()> {
+    fn evaluation_storage_binding_preserves_explicit_default_without_changing_typed_domain(
+    ) -> Result<()> {
         // Metadata serializer fixture, not the CUDA-gated Snapshot type or a
         // model. Both forms decode identically and omit the default in B.
         #[derive(serde::Serialize, serde::Deserialize)]
@@ -1265,11 +1265,9 @@ mod tests {
         // A missing table is no substitute either.
         let mut absent = header(&pinned);
         absent.as_object_mut().map(|m| m.remove("table"));
-        assert!(
-            driver
-                .validate_checkpoint(&checkpoint(absent, Cursor::initial())?)
-                .is_err()
-        );
+        assert!(driver
+            .validate_checkpoint(&checkpoint(absent, Cursor::initial())?)
+            .is_err());
         // A malformed pin hash is refused at config validation.
         let mut config = driver.config.clone();
         config.codebook_initialization = CodebookInitialization::PinnedTableV1 {
@@ -1332,11 +1330,9 @@ mod tests {
         let mut wrong = checkpoint.clone();
         wrong.model_sha256 = "f".repeat(64);
         assert!(driver.validate_checkpoint(&wrong).is_err());
-        assert!(
-            metadata_fixture(2, ReadSpec::Route)?
-                .validate_checkpoint(&checkpoint)
-                .is_err()
-        );
+        assert!(metadata_fixture(2, ReadSpec::Route)?
+            .validate_checkpoint(&checkpoint)
+            .is_err());
         let boundary = Cursor {
             completed_batches: u64::MAX,
             accepted_updates: 0,
@@ -1475,7 +1471,11 @@ mod tests {
                 assert_eq!(
                     *count,
                     if read_count == 45 {
-                        if index < 25 { 46 } else { 45 }
+                        if index < 25 {
+                            46
+                        } else {
+                            45
+                        }
                     } else if index < 10 {
                         103
                     } else {
@@ -1568,7 +1568,8 @@ mod tests {
         );
         interleaved.validate_checkpoint(&checkpoint)?;
         assert_eq!(
-            serde_json::to_value(&interleaved.config).map_err(|e| invalid(e.to_string()))?["read_initialization"],
+            serde_json::to_value(&interleaved.config).map_err(|e| invalid(e.to_string()))?
+                ["read_initialization"],
             "active_leaf_v1"
         );
         let route_base = metadata_fixture(1, ReadSpec::Route)?;
@@ -1715,7 +1716,8 @@ mod tests {
         assert_eq!(explicit, legacy.config);
         let frozen = frozen_relation_metadata_fixture()?;
         assert_eq!(
-            serde_json::to_value(&frozen.config).map_err(|e| invalid(e.to_string()))?["relation_learning_policy"],
+            serde_json::to_value(&frozen.config).map_err(|e| invalid(e.to_string()))?
+                ["relation_learning_policy"],
             "frozen_zero_v1"
         );
         for mode in [ReadSpec::Route, ReadSpec::Flock { kept: 8 }] {
@@ -1884,11 +1886,10 @@ mod tests {
                             let count = seq.iter().filter(|i| u64::from(**i) == index).count();
                             assert_eq!(count as u64, passes + u64::from(index < rest));
                         }
-                        assert!(
-                            seq.iter()
-                                .enumerate()
-                                .all(|(i, index)| u64::from(*index) == i as u64 % size)
-                        );
+                        assert!(seq
+                            .iter()
+                            .enumerate()
+                            .all(|(i, index)| u64::from(*index) == i as u64 % size));
                     }
                     assert!(vector_seq.len() as u64 >= 2 * vectors);
                 }
@@ -2186,11 +2187,9 @@ mod tests {
             SPEC24,
             SchedulePolicy::InterleavedReadEvery8V1,
         )?;
-        assert!(
-            serde_json::to_string(&k4.initial_cursor())
-                .map_err(|e| invalid(e.to_string()))?
-                .ends_with(r#""block":{"o_vec":0,"o_read":0,"committed_moves":0}}"#)
-        );
+        assert!(serde_json::to_string(&k4.initial_cursor())
+            .map_err(|e| invalid(e.to_string()))?
+            .ends_with(r#""block":{"o_vec":0,"o_read":0,"committed_moves":0}}"#));
         Ok(())
     }
     #[test]
@@ -2335,14 +2334,12 @@ mod tests {
         assert_eq!(refused, 1130);
         assert_eq!(cursor.completed_batches, 16404);
         assert_eq!(cursor.accepted_updates, 0);
-        assert!(
-            frozen
-                .apply_refused_by_policy(Coordinate {
-                    kind: CoordinateKind::Gate,
-                    index: 45
-                })
-                .is_err()
-        );
+        assert!(frozen
+            .apply_refused_by_policy(Coordinate {
+                kind: CoordinateKind::Gate,
+                index: 45
+            })
+            .is_err());
         Ok(())
     }
     #[test]
@@ -2411,12 +2408,10 @@ mod tests {
         let mut receipt: StepReceipt =
             serde_json::from_value(value).map_err(|e| invalid(e.to_string()))?;
         assert!(!receipt.apply_refused_by_policy);
-        assert!(
-            serde_json::to_value(&receipt)
-                .map_err(|e| invalid(e.to_string()))?
-                .get("apply_refused_by_policy")
-                .is_none()
-        );
+        assert!(serde_json::to_value(&receipt)
+            .map_err(|e| invalid(e.to_string()))?
+            .get("apply_refused_by_policy")
+            .is_none());
         receipt.apply_refused_by_policy = true;
         let encoded = serde_json::to_value(&receipt).map_err(|e| invalid(e.to_string()))?;
         assert_eq!(encoded["apply_refused_by_policy"], true);

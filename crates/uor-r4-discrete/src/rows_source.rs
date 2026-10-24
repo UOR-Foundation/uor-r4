@@ -189,13 +189,11 @@ mod tests {
     #[test]
     fn a_changed_ordinary_loop_refuses_generation() {
         let source = include_str!("discrete.cu");
-        assert!(
-            generate(&source.replace(
-                "if(cost==~(W)0 || tr==0){sum=~(W)0;break;}",
-                "if(cost==~(W)0){sum=~(W)0;break;}"
-            ))
-            .is_err()
-        );
+        assert!(generate(&source.replace(
+            "if(cost==~(W)0 || tr==0){sum=~(W)0;break;}",
+            "if(cost==~(W)0){sum=~(W)0;break;}"
+        ))
+        .is_err());
         assert!(generate(&source.replace("// Statuses added", "// statuses")).is_err());
     }
 }

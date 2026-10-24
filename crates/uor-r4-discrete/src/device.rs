@@ -4,22 +4,22 @@
 //! Module loading consumes exact AOT cubins assembled from admitted PTX; there
 //! is no PTX-JIT fallback, runtime source compiler, or CPU model.
 
-use crate::proposal_timing::{EventDuration, HOST_SPANS, HostTimings, ProposalTimings};
+use crate::proposal_timing::{EventDuration, HostTimings, ProposalTimings, HOST_SPANS};
 use crate::{
-    Error, Identity, ObjectivePolicy, Parameter, ReadInitialization, ReadSpec, Result, SCHEMA,
-    Spec,
-    metadata::{ABSENT, BinderPlan},
+    metadata::{BinderPlan, ABSENT},
     normalization_mechanism::NormalizationMode,
     objective::{self, ExactRatio, HingeDistribution},
     position_mechanism::PositionConfig,
+    Error, Identity, ObjectivePolicy, Parameter, ReadInitialization, ReadSpec, Result, Spec,
+    SCHEMA,
 };
 use cudarc::driver::{
     CudaContext, CudaEvent, CudaFunction, CudaSlice, CudaStream, LaunchConfig, Ptx, PushKernelArg,
 };
 use sha2::{Digest, Sha256};
 use std::sync::{
-    Arc,
     atomic::{AtomicU64, Ordering},
+    Arc,
 };
 use std::time::Instant;
 
@@ -41,17 +41,17 @@ pub use baseline_reuse_device::BaselineReuseProfiler;
 mod rows_device;
 #[path = "scratch_cache.rs"]
 mod scratch_cache;
-pub use rows_device::{RowsCounterfactual, compiled_rows_image_sha256};
+pub use rows_device::{compiled_rows_image_sha256, RowsCounterfactual};
 #[path = "rowsk_device.rs"]
 mod rowsk_device;
 pub use rowsk_device::{
-    CoordinateScore, MAX_COORDINATE_BLOCK, RowsKScoring, compiled_rowsk_image_sha256,
-    rowsk_extends_rows_source,
+    compiled_rowsk_image_sha256, rowsk_extends_rows_source, CoordinateScore, RowsKScoring,
+    MAX_COORDINATE_BLOCK,
 };
 #[path = "bvgk_device.rs"]
 mod bvgk_device;
 pub use bvgk_device::{
-    BlockProposal, BvgkKernels, bvgk_extends_rowsk_source, compiled_bvgk_image_sha256,
+    bvgk_extends_rowsk_source, compiled_bvgk_image_sha256, BlockProposal, BvgkKernels,
 };
 static NEXT_MODEL: AtomicU64 = AtomicU64::new(1);
 
@@ -397,7 +397,7 @@ pub struct ProposalObservation {
 }
 
 pub use crate::snapshot::{
-    Snapshot, SnapshotHashDomains, snapshot_hash_domains, stored_snapshot_hash_domains,
+    snapshot_hash_domains, stored_snapshot_hash_domains, Snapshot, SnapshotHashDomains,
 };
 
 fn kernel_sha256() -> String {
@@ -2285,30 +2285,26 @@ mod unit_snap_device_tests {
         );
         canonical_forward(&control)?;
         canonical_forward(&flock_device(NormalizationMode::ScaleMatchedSnapV1)?)?;
-        assert!(
-            Device::new_with_normalization(
-                SPEC,
-                ReadSpec::Route,
-                ObjectivePolicy::NearestAddressMarginV1,
-                ReadInitialization::ZeroGatesV1,
-                NormalizationMode::UnitSnapControlV1,
-                7,
-                0,
-            )
-            .is_err()
-        );
-        assert!(
-            Device::new_with_normalization(
-                SPEC,
-                ReadSpec::Route,
-                ObjectivePolicy::NearestAddressMarginV1,
-                ReadInitialization::ZeroGatesV1,
-                NormalizationMode::UnnormalizedControlV1,
-                7,
-                0,
-            )
-            .is_err()
-        );
+        assert!(Device::new_with_normalization(
+            SPEC,
+            ReadSpec::Route,
+            ObjectivePolicy::NearestAddressMarginV1,
+            ReadInitialization::ZeroGatesV1,
+            NormalizationMode::UnitSnapControlV1,
+            7,
+            0,
+        )
+        .is_err());
+        assert!(Device::new_with_normalization(
+            SPEC,
+            ReadSpec::Route,
+            ObjectivePolicy::NearestAddressMarginV1,
+            ReadInitialization::ZeroGatesV1,
+            NormalizationMode::UnnormalizedControlV1,
+            7,
+            0,
+        )
+        .is_err());
         flock_device(NormalizationMode::UnnormalizedControlV1)?;
         // The control mode is stored in the snapshot and survives a reload.
         let snapshot = control.snapshot()?;
@@ -2439,11 +2435,9 @@ mod unit_snap_device_tests {
             assert_eq!(after, ReadInitialization::permuted_route_action(before)?);
             assert_ne!(after, before);
         }
-        assert!(
-            route_off
-                .propose(&route_off.carry(&row)?, &[0], Parameter::Route(0))
-                .is_err()
-        );
+        assert!(route_off
+            .propose(&route_off.carry(&row)?, &[0], Parameter::Route(0))
+            .is_err());
         let off_snap = route_off.snapshot()?;
         assert_eq!(
             off_snap.read_initialization,

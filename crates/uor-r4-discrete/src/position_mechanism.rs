@@ -551,7 +551,9 @@ mod tests {
         assert!(source.contains("row,last[node],b,s,kind,index,candidate,rv"));
         assert_eq!(
             source
-                .matches("positioned_root_cost(s,query_position,g,transport[node],transport_root[node]")
+                .matches(
+                    "positioned_root_cost(s,query_position,g,transport[node],transport_root[node]"
+                )
                 .count(),
             2
         );
@@ -618,11 +620,9 @@ mod tests {
             context: 192,
             kept_cells: 8,
         };
-        assert!(
-            config
-                .validate(spec, ReadSpec::Relation { kept: 8, sweeps: 1 })
-                .is_err()
-        );
+        assert!(config
+            .validate(spec, ReadSpec::Relation { kept: 8, sweeps: 1 })
+            .is_err());
     }
 
     #[test]
@@ -640,16 +640,14 @@ mod tests {
         assert!(prefix_frames(&holonomy_table, 0, &vec![0u8; MAX_CONTEXT + 1]).is_err());
         assert!(prefix_frames(&holonomy_table, 4, &[0u8; 4]).is_err());
         assert!(prefix_frames(&holonomy_table, 0, &[16u8]).is_err());
-        assert!(
-            relative_holonomy(
-                PositionMode::PrefixHolonomyV1,
-                &holonomy_table,
-                0,
-                &[0, 1, 2],
-                2,
-                1
-            )
-            .is_err()
-        );
+        assert!(relative_holonomy(
+            PositionMode::PrefixHolonomyV1,
+            &holonomy_table,
+            0,
+            &[0, 1, 2],
+            2,
+            1
+        )
+        .is_err());
     }
 }

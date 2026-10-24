@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    Error, ObjectivePolicy, ReadInitialization, ReadSpec, Result, SCHEMA, Spec,
-    metadata::BinderPlan, snapshot::Snapshot,
+    metadata::BinderPlan, snapshot::Snapshot, Error, ObjectivePolicy, ReadInitialization, ReadSpec,
+    Result, Spec, SCHEMA,
 };
 
 mod geometry {

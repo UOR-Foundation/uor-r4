@@ -141,13 +141,11 @@ mod tests {
         assert!(!generated.contains("clock64"));
         assert!(!generated.contains("__maxnreg__"));
         assert!(!generated.contains("discrete_apply("));
-        assert!(
-            generate(&source.replace(
-                "if(tr==0)continue;++eligible;",
-                "if (tr == 0) continue; ++eligible;"
-            ))
-            .is_err()
-        );
+        assert!(generate(&source.replace(
+            "if(tr==0)continue;++eligible;",
+            "if (tr == 0) continue; ++eligible;"
+        ))
+        .is_err());
         assert!(
             generate(&source.replace("atomicExch(status,12u);", "atomicExch(status,13u);"))
                 .is_err()
