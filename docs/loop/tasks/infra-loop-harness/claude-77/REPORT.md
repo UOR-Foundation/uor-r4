@@ -17,6 +17,7 @@ closes #2876
   The lab's top session finished the item files, the render and this REPORT, because a hook refuses REPORT files from subagents.
 - The board's family-tree figure (`docs/figures/mechanisms-family.svg`) is a hand-drawn SVG with no generator, so it could not be re-rendered. Its alt text now says it shows the statuses before the 24 Oct rulings.
 - pr-check's `rule-sources` rule refused the PARKED heading once its count changed from 13 to 11: any added heading with the word "rule" outside the rule files fails. The heading now says "broke a constraint", the charter's own word for these limits (§3), with the same meaning.
+- The in-unit review at `6e94247d0` approved, and noted that D72 added "and scored there" (the ruling says only "until a lawful model is exported through it"), that `lut-serving.md` said the engine "becomes ACTIVE" (Claude's reading, not the ruling), and that each item's older "What is missing" text contradicted the new paragraph. All three are fixed: the phrase is gone from D72, the lut-serving line states only READY (D72), and each item's older text is rewritten as the state before the ruling.
 
 ## What changed
 

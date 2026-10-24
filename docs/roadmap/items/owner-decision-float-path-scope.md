@@ -18,7 +18,7 @@ Stages 3–5 cannot start, or count toward a milestone, until this is settled.
 
 Recorded on 24 Oct 2026: D73 in [DECISIONS](../../integration/DECISIONS.md) (the owner's ruling of 2026-10-24T03:41:41Z).
 
-D39 item 1 closes M1 only on one saved discrete rung-0 artifact, so a float trunk cannot close M1 without the owner redefining the milestone. The architect rates the F32 operators 'RETIRE at tested scope for now' and finds no site for E8 memory, while D22 keeps them READY/PARKED, and that disagreement is unresolved. D41 item 2(d) bars a float student for distill-d1 without a new owner decision.
+Before the ruling, D39 item 1 closed M1 only on one saved discrete rung-0 artifact, and the architect's rating of the F32 operators, 'RETIRE at tested scope for now', disagreed with D22's READY/PARKED. D73 records the owner's ruling on the first, and Claude's D68 reading of the second: an architect RETIRE reads as PARKED with its reopen condition. The ruling does not address D41 item 2(d), which bars a float student for distill-d1.
 
 ## Done when
 

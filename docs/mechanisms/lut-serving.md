@@ -88,7 +88,7 @@ Under the [charter](../../CHARTER.md), serving this artifact on client devices (
 
 ## What stays frozen, and what would restore it
 
-This mechanism is READY, so nothing here needs reopening; it becomes ACTIVE when a lawful trained model is exported through it (D72). Two sub-parts are held:
+This mechanism is READY (D72), so nothing here needs reopening. Two sub-parts are held:
 
 1. **The D10 engine and its SIMD crate** stay frozen, non-mission comparators. They return only if an owner decision restores a serving tier that allows multipliers, which D11 withdrew.
 2. **Serving of product-key or addressed memory** needs an integer read kernel. The exporter refuses it today.

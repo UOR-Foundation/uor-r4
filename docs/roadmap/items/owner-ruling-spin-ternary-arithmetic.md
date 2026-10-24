@@ -18,7 +18,7 @@ Both are PARKED replacements for the matrix-arithmetic slot.
 
 Recorded on 24 Oct 2026: D74 in [DECISIONS](../../integration/DECISIONS.md) (the owner's ruling of 2026-10-24T03:41:41Z).
 
-Spin-native weights reached 1.5148 BPB, level with dense, but only through matmul, and the board's next step is an owner architecture decision. Ternary/XOR weights lost on export (7.416 versus 7.171 bits), a dense ternary sum is still dense (D25), and the next step is an owner ruling or a geometric alphabet. Neither ruling exists.
+Before the ruling, spin-native weights had reached 1.5148 BPB, level with dense, but only through matmul. Ternary/XOR weights lost on export (7.416 versus 7.171 bits), and a dense ternary sum is still dense (D25). The owner ruled both READY (D74); those caveats stand.
 
 ## Done when
 
