@@ -24,7 +24,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Item #2904, setup row 10. Base: `99c
 | `loop_next_sources` | 13 passed, 0 failed (12 + new boundary test) |
 | `loop_next` | 33 passed, 0 failed |
 | boundary table | `now-21600` not stale; `now-21601` stale; future not stale; `0` stale without underflow; finished not stale |
-| behavior | stale record still offered with a @`BT@@GO gpu-collection`; recent running still waits; collected records no longer counted as waits |
+| behavior | stale record still offered with a `GO gpu-collection`; recent running still waits; collected records no longer counted as waits |
 
 ## Checks run at the head
 
