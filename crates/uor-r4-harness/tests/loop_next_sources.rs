@@ -385,3 +385,71 @@ fn a_finished_gpu_collection_is_offered_and_a_collected_one_is_not() {
         stdout(&o)
     );
 }
+
+#[test]
+fn the_collect_command_marks_the_record_so_loop_next_stops_offering_it() {
+    use uor_r4_harness::loopdrive::{read_collections, write_collection, GpuCollection};
+
+    let r = Repo::new(&[("docs/harness/labs.json", &labs(None))], &[]);
+    let record = GpuCollection {
+        id: "deepseek-run-2".to_string(),
+        lab: "deepseek".to_string(),
+        renew: vec!["uor-pod".to_string()],
+        started_unix: 1,
+        ended_unix: Some(2),
+        status: "finished".to_string(),
+        collected: false,
+        artifacts: Vec::new(),
+        notes: Vec::new(),
+    };
+    write_collection(&r.root, "deepseek", &record).expect("write the collection record");
+    let o = r.next();
+    assert!(
+        decision(&o).starts_with("GO gpu-collection deepseek-run-2 — "),
+        "the finished collection must be offered: {}",
+        decision(&o)
+    );
+
+    // The CLI path the supervisor uses: only --collect and --artifact, no --client or --model.
+    let mut cmd = Command::new(BIN);
+    clean(&mut cmd);
+    cmd.arg("--repo")
+        .arg(&r.root)
+        .args([
+            "loop",
+            "drive",
+            "--collect",
+            "deepseek-run-2",
+            "--artifact",
+            "bundle/out.sha256",
+        ])
+        .env("UOR_LAB", "deepseek")
+        .current_dir(&r.root);
+    let out = cmd.output().expect("uor-harness runs");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "loop drive --collect must be reachable without --client/--model: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let after = read_collections(&r.root, "deepseek").expect("read after collect");
+    let collected = after
+        .iter()
+        .find(|record| record.id == "deepseek-run-2")
+        .expect("the record stays");
+    assert!(collected.collected);
+    assert_eq!(collected.artifacts, vec!["bundle/out.sha256".to_string()]);
+
+    let o = r.next();
+    assert!(
+        !decision(&o).starts_with("GO gpu-collection"),
+        "a collected record must not be offered: {}",
+        decision(&o)
+    );
+    assert!(
+        stdout(&o).contains("gpu-collections: no GPU collection record is waiting"),
+        "{}",
+        stdout(&o)
+    );
+}

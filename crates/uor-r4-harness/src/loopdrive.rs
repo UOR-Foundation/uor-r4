@@ -528,7 +528,12 @@ pub fn watch_lease_collect(
     ticks: Option<usize>,
 ) -> Result<(PathBuf, Vec<String>)> {
     let started_unix = unix_now();
-    let id = collection_id(lab, renew, started_unix);
+    let mut id = collection_id(lab, renew, started_unix);
+    let mut attempt = 2u32;
+    while collection_path(root, lab, &id).exists() {
+        id = format!("{}-{}", collection_id(lab, renew, started_unix), attempt);
+        attempt += 1;
+    }
     let mut collection = GpuCollection {
         id,
         lab: lab.to_string(),
@@ -541,16 +546,26 @@ pub fn watch_lease_collect(
         notes: Vec::new(),
     };
     let path = write_collection(root, lab, &collection)?;
-    let notes = watch_lease_until_renew_fails(renew, interval_seconds, ticks)?;
+    let outcome = watch_lease_until_renew_fails(renew, interval_seconds, ticks);
     collection.ended_unix = Some(unix_now());
-    collection.notes = notes.clone();
-    collection.status = if notes.iter().any(|note| note.contains("lease ended")) {
-        "finished".to_string()
-    } else {
-        "stopped".to_string()
-    };
-    write_collection_at(&path, &collection)?;
-    Ok((path, notes))
+    match outcome {
+        Ok(notes) => {
+            collection.notes = notes.clone();
+            collection.status = if notes.iter().any(|note| note.contains("lease ended")) {
+                "finished".to_string()
+            } else {
+                "stopped".to_string()
+            };
+            write_collection_at(&path, &collection)?;
+            Ok((path, notes))
+        }
+        Err(error) => {
+            collection.status = "stopped".to_string();
+            collection.notes = vec![format!("watcher error: {error}")];
+            write_collection_at(&path, &collection)?;
+            Err(error)
+        }
+    }
 }
 /// `ps -o <field> -p <pid>`, trimmed; `None` when the process is gone or `ps` fails.
 fn ps_field(pid: u32, field: &str) -> Option<String> {
@@ -1442,6 +1457,18 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
             }
         };
     }
+    if let Some(id) = &collect {
+        return match collect_collection(root, lab, id, &artifacts) {
+            Ok(path) => {
+                println!("collected {id} ({})", path.display());
+                0
+            }
+            Err(error) => {
+                eprintln!("loop drive --collect: {error}");
+                2
+            }
+        };
+    }
     if !cfg!(unix) {
         eprintln!("loop drive signals process groups and is unix-only");
         return 2;
@@ -1484,18 +1511,6 @@ pub fn cli(root: &Path, lab: &str, args: &[String]) -> u8 {
                 return 2;
             }
         }
-    }
-    if let Some(id) = &collect {
-        return match collect_collection(root, lab, id, &artifacts) {
-            Ok(path) => {
-                println!("collected {id} ({})", path.display());
-                0
-            }
-            Err(error) => {
-                eprintln!("loop drive --collect: {error}");
-                2
-            }
-        };
     }
     let lock = match DriveLock::acquire(root, lab) {
         Ok(lock) => lock,

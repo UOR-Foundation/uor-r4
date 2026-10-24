@@ -1093,6 +1093,7 @@ mod gpu_collection_records {
         assert_eq!(collected.artifacts, artifacts);
         collect_collection(&root, "deepseek", &finished.id, &artifacts)
             .expect("a repeated collect is idempotent");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
@@ -1125,5 +1126,29 @@ mod gpu_collection_records {
         };
         write_collection(&root, "deepseek", &record).expect("write");
         assert_eq!(read_collections(&root, "deepseek").unwrap().len(), 1);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+    #[test]
+    fn a_watcher_error_leaves_a_stopped_record_not_a_running_one() {
+        let root = temp_root("error");
+        let missing = vec!["/nonexistent/uor-pod-renew".to_string()];
+        assert!(
+            watch_lease_collect(&root, "deepseek", &missing, 1, Some(1)).is_err(),
+            "a renew program that cannot spawn is an error"
+        );
+        let records = read_collections(&root, "deepseek").expect("read");
+        assert_eq!(records.len(), 1);
+        let record = &records[0];
+        assert_eq!(record.status, "stopped");
+        assert!(
+            record
+                .notes
+                .iter()
+                .any(|note| note.contains("watcher error")),
+            "{:?}",
+            record.notes
+        );
+        assert!(record.ended_unix.is_some());
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
