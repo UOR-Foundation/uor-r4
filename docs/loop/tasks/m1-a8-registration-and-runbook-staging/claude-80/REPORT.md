@@ -8,9 +8,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 - Codex's audited-dose runbook (19 Oct) was never committed: it sat uncommitted in Codex's worktree with three doc edits. All three edits are dropped:
   - `NOW.md` and `current-state.md` have since been archived or replaced on main;
   - the `claims.json` edit would have deleted every other lab's claims.
-- Two things could not be re-checked on main, and the new section says so in place:
-  - the two manifest examples Codex quotes (`9398efac…`, `f85466ff…`);
-  - the #2029 comments it names as the disposition and residual FIT (6242232012, 6241890920).
+- One thing could not be re-checked on main, and the new section says so in place: Codex's first manifest example, `9398efac…`.
 - `loop pr-check --local` failed its report rule until this REPORT existed.
 
 ## What changed
@@ -51,7 +49,7 @@ None.
 
 ## Still open
 
-- Read the two #2029 comments named in §6.3. They may be the sources for two of the four A8 plan inputs claude-70 could not find. Tracked under #2830.
+- Settle whether #2029 comments 6241890920 (Kimi's binding sensitivity interpretation) and 6242232012 (the dispatch), already cited on main, supply two of the four A8 plan inputs claude-70 could not find. Tracked under #2830.
 - The A8 qualification and the dose (#2830, #2831) are unchanged by this record.
 
 ## Plain summary
