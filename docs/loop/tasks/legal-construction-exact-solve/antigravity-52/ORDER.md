@@ -1,6 +1,6 @@
 # ORDER: antigravity-52, legal-construction-exact-solve (repair after counted CHANGES on #3130)
 
-Lab: antigravity. Item: [legal-construction-exact-solve](../../../roadmap/items/legal-construction-exact-solve.md) (#2828). Base: `5844d911c`. Repair for PR #3130.
+Lab: antigravity. Item: [legal-construction-exact-solve](../../../../roadmap/items/legal-construction-exact-solve.md) (#2828). Base: `5844d911c`. Repair for PR #3130.
 
 ## Why this repair
 
