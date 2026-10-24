@@ -2,7 +2,7 @@
 
 Most chat AIs are built from a few standard parts: a way to look back at earlier words (attention), a block that processes each word (a feed-forward layer), big grids of multiplications, and a function that scores every possible next word. UOR-R4 is trying to replace each of those parts with something built from geometry, such as rotations, exact addresses and lookup tables. Each replacement is called a **mechanism**. This page lists 28 rows for them, because Hopf observation is split into its two forms (owner ruling D72), and says where each one stands today. Status here means how far a mechanism has been built and tested. No mechanism has produced a useful conversation yet: the project is pre-alpha, and 0 of its 8 milestones are complete (`STATUS.md`).
 
-![A family tree of the 27 mechanisms, coloured by status, showing which mechanism grew out of which](../figures/mechanisms-family.svg)
+![A family tree of the 27 mechanisms as of 19 October 2026, coloured by their status before the 24 October rulings (D72, D74), showing which mechanism grew out of which](../figures/mechanisms-family.svg)
 
 *The 22 mechanisms with a recorded parent or child, drawn as a family tree. Most of the live ones descend from earlier, parked attempts.*
 
