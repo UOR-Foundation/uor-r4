@@ -688,21 +688,30 @@ fn dual_simplex_run<const P: u32>(
                 continue;
             }
             let mut arj = Dy::<P>::ZERO;
-            let mut paj = Dy::<P>::ZERO;
             for &(i, a) in &cols[j] {
                 if !rho[i].is_zero() {
                     arj = arj + rho[i] * a;
                 }
-                if !pi[i].is_zero() {
-                    paj = paj + pi[i] * a;
-                }
             }
-            let dj = cost[j] - paj;
             let s_arj = if leave_to_upper { -arj } else { arj };
             if st[j] == State::Lower && s_arj < -tol {
+                let mut paj = Dy::<P>::ZERO;
+                for &(i, a) in &cols[j] {
+                    if !pi[i].is_zero() {
+                        paj = paj + pi[i] * a;
+                    }
+                }
+                let dj = cost[j] - paj;
                 let ratio = dj.max(Dy::ZERO) / (-s_arj);
                 cands.push((ratio, j, arj));
             } else if st[j] == State::Upper && s_arj > tol {
+                let mut paj = Dy::<P>::ZERO;
+                for &(i, a) in &cols[j] {
+                    if !pi[i].is_zero() {
+                        paj = paj + pi[i] * a;
+                    }
+                }
+                let dj = cost[j] - paj;
                 let ratio = (-dj).max(Dy::ZERO) / s_arj;
                 cands.push((ratio, j, arj));
             }
@@ -1943,6 +1952,7 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
 
     let mut root_y = extract_y(&pi);
     let mut root_lower_bound = certify_domain_dual_bound(p, &root_y, &root_bounds)?;
+    let mut root_pi_matches_rc = true;
     if m <= 64 {
         let nonbasic_pos0 = (0..(n + m))
             .map(|j| match st[j] {
@@ -1973,6 +1983,7 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
                 if exact_lb > root_lower_bound {
                     root_y = exact_y;
                     root_lower_bound = exact_lb;
+                    root_pi_matches_rc = false;
                 }
             }
         }
@@ -1981,6 +1992,7 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
         if ext_lb > root_lower_bound {
             root_y = ext_y.to_vec();
             root_lower_bound = ext_lb;
+            root_pi_matches_rc = false;
         }
     }
 
@@ -2163,6 +2175,13 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
     };
 
     let root_rc = compute_rc(&root_y);
+    let mut dual_rc_pool: Vec<(Vec<Dy<P>>, Vec<BigRational>)> = Vec::new();
+    if !root_pi_matches_rc {
+        let lp_root_rc = compute_rc(&extract_y(&pi));
+        dual_rc_pool.push((pi.clone(), lp_root_rc));
+    } else {
+        dual_rc_pool.push((pi.clone(), root_rc.clone()));
+    }
 
     #[derive(Clone)]
     struct SplitLeaf<const P: u32> {
@@ -2174,14 +2193,15 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
         x: Vec<Dy<P>>,
         binv: Vec<Vec<Dy<P>>>,
         pi: Vec<Dy<P>>,
+        pi_matches_rc: bool,
         rc: Vec<BigRational>,
         certified_bound: BigRational,
     }
 
-    let eval_branch = |parent: &SplitLeaf<P>,
-                       bv: usize,
-                       new_q_range: (i64, i64),
-                       is_down: bool|
+    let mut eval_branch = |parent: &SplitLeaf<P>,
+                           bv: usize,
+                           new_q_range: (i64, i64),
+                           is_down: bool|
      -> Result<SplitLeaf<P>, String> {
         let mut child_bounds = parent.code_bounds.clone();
         child_bounds[bv] = new_q_range;
@@ -2223,7 +2243,7 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
         )
         .is_ok()
         {
-            if c_pi == parent.pi {
+            if parent.pi_matches_rc && c_pi == parent.pi {
                 return Ok(SplitLeaf {
                     code_bounds: child_bounds,
                     lo: c_lo,
@@ -2233,12 +2253,23 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
                     x: c_x,
                     binv: c_binv,
                     pi: c_pi,
+                    pi_matches_rc: true,
                     rc: parent.rc.clone(),
                     certified_bound: fallback_bound,
                 });
             }
-            let cand_y = extract_y(&c_pi);
-            let cand_rc = compute_rc(&cand_y);
+            let cand_rc = if let Some((_, existing_rc)) =
+                dual_rc_pool.iter().find(|(p_pi, _)| p_pi == &c_pi)
+            {
+                existing_rc.clone()
+            } else {
+                let cand_y = extract_y(&c_pi);
+                let rc_new = compute_rc(&cand_y);
+                if dual_rc_pool.len() < 160 {
+                    dual_rc_pool.push((c_pi.clone(), rc_new.clone()));
+                }
+                rc_new
+            };
             let mut cand_bound = BigRational::zero();
             for i in 0..n {
                 cand_bound += term_best_for(i, &cand_rc[i], child_bounds[i]);
@@ -2253,6 +2284,7 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
                     x: c_x,
                     binv: c_binv,
                     pi: c_pi,
+                    pi_matches_rc: true,
                     rc: cand_rc,
                     certified_bound: cand_bound,
                 });
@@ -2267,6 +2299,7 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
             x: parent.x.clone(),
             binv: parent.binv.clone(),
             pi: parent.pi.clone(),
+            pi_matches_rc: parent.pi_matches_rc,
             rc: parent.rc.clone(),
             certified_bound: fallback_bound,
         })
@@ -2305,6 +2338,7 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
         x,
         binv,
         pi,
+        pi_matches_rc: root_pi_matches_rc,
         rc: root_rc.clone(),
         certified_bound: root_lower_bound.clone(),
     };
@@ -2319,6 +2353,7 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
     let mut best_split_coeff = None;
     let mut best_split_q_down = None;
     let mut best_root_children: Option<(SplitLeaf<P>, SplitLeaf<P>)> = None;
+    let mut root_split_score: Vec<Option<BigRational>> = vec![None; n];
 
     for &(bv, q_down) in &root_splits {
         let (q_lo, q_hi) = root_leaf.code_bounds[bv];
@@ -2328,6 +2363,7 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
             .certified_bound
             .clone()
             .min(up_leaf.certified_bound.clone());
+        root_split_score[bv] = Some(split_lb.clone());
         if split_lb > best_single_split_bound || best_split_coeff.is_none() {
             if split_lb > best_single_split_bound {
                 best_single_split_bound = split_lb;
@@ -2354,10 +2390,18 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
             .min_by(|(_, a), (_, b)| a.certified_bound.cmp(&b.certified_bound))
             .map(|(idx, _)| idx)
             .expect("non-empty leaves");
-        let cand_splits = find_fractional_splits(&leaves[min_idx]);
+        let mut cand_splits = find_fractional_splits(&leaves[min_idx]);
         if cand_splits.is_empty() {
             break;
         }
+        cand_splits.sort_by(|&(bv_a, _), &(bv_b, _)| {
+            match (&root_split_score[bv_b], &root_split_score[bv_a]) {
+                (Some(sb), Some(sa)) => sb.cmp(sa),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal,
+            }
+        });
         let mut best_pair_leaves: Option<(BigRational, SplitLeaf<P>, SplitLeaf<P>)> = None;
         for &(bv, q_down) in cand_splits.iter().take(16) {
             let (q_lo, q_hi) = leaves[min_idx].code_bounds[bv];
@@ -2382,6 +2426,21 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
         leaves.push(ul);
     }
 
+    // Cross-branch dual pool bound tightening: every rc in dual_rc_pool comes from a
+    // verified non-negative dual multiplier vector y >= 0, so L(y, B^(l)) is a valid
+    // exact Weak Duality lower bound on every leaf box B^(l).
+    for leaf in &mut leaves {
+        for (_, pool_rc) in &dual_rc_pool {
+            let mut pool_lb = BigRational::zero();
+            for (i, rc_i) in pool_rc.iter().enumerate() {
+                pool_lb += term_best_for(i, rc_i, leaf.code_bounds[i]);
+            }
+            if pool_lb > leaf.certified_bound {
+                leaf.certified_bound = pool_lb;
+            }
+        }
+    }
+
     let tree_lower_bound = leaves
         .iter()
         .map(|l| &l.certified_bound)
@@ -2401,56 +2460,91 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
     // Disjunctive Partition Reduced-Cost Fixing across the exhaustive leaf partition:
     // a code (i, q) can appear in a guard-feasible discrete assignment with objective <= U
     // only if at least one leaf l in the partition has q in [q_lo_l, q_hi_l] and
-    // L(y, B^(l)) + pen_i(y, B^(l), q) <= U for y = root_y, y = leaf.y, and (if provided)
-    // y = extra_root_y.
+    // L(y, B^(l)) + pen_i(y, B^(l), q) <= U for y = root_y, y = leaf.y, y in dual_rc_pool,
+    // and (if provided) y = extra_root_y.
     let extra_rc = extra_root_y.map(compute_rc);
 
     let eval_rc_mask =
         |rc_vec: &[BigRational], code_bounds: &[(i64, i64)]| -> Option<Vec<[bool; 15]>> {
+            let mut best_terms = Vec::with_capacity(n);
             let mut leaf_lb = BigRational::zero();
-            let mut leaf_penalties: Vec<Vec<(usize, BigRational)>> = Vec::with_capacity(n);
-            for (i, c) in cs.iter().enumerate() {
-                let (q_lo, q_hi) = code_bounds[i];
-                let rc = &rc_vec[i];
-                let mut best_i: Option<BigRational> = None;
-                let mut contribs = Vec::with_capacity((q_hi - q_lo + 1) as usize);
-                for q in q_lo..=q_hi {
-                    let contrib = if q == c.q0 || rc.is_zero() {
-                        BigRational::zero()
-                    } else {
-                        rc * &legal_deltas[i][(q + 7) as usize].1
-                    };
-                    if best_i.as_ref().is_none_or(|b| &contrib < b) {
-                        best_i = Some(contrib.clone());
-                    }
-                    contribs.push(((q + 7) as usize, contrib));
-                }
-                let b_i = best_i.expect("non-empty leaf code range");
+            for (i, rc_i) in rc_vec.iter().enumerate() {
+                let b_i = term_best_for(i, rc_i, code_bounds[i]);
                 leaf_lb += &b_i;
-                let pens = contribs
-                    .into_iter()
-                    .map(|(q_idx, contrib)| (q_idx, contrib - &b_i))
-                    .collect();
-                leaf_penalties.push(pens);
+                best_terms.push(b_i);
             }
             if &leaf_lb > upper_bound {
                 return None;
             }
             let leaf_slack = upper_bound - &leaf_lb;
             let mut mask = vec![[false; 15]; n];
-            for (i, pens) in leaf_penalties.into_iter().enumerate() {
-                for (q_idx, pen) in pens {
-                    if pen <= leaf_slack {
-                        mask[i][q_idx] = true;
+            for (i, c) in cs.iter().enumerate() {
+                let (q_lo, q_hi) = code_bounds[i];
+                let rc = &rc_vec[i];
+                if rc.is_zero() {
+                    for q in q_lo..=q_hi {
+                        mask[i][(q + 7) as usize] = true;
+                    }
+                    continue;
+                }
+                let max_contrib = &best_terms[i] + &leaf_slack;
+                for q in q_lo..=q_hi {
+                    let contrib = if q == c.q0 {
+                        BigRational::zero()
+                    } else {
+                        rc * &legal_deltas[i][(q + 7) as usize].1
+                    };
+                    if contrib <= max_contrib {
+                        mask[i][(q + 7) as usize] = true;
                     }
                 }
             }
             Some(mask)
         };
 
+    let tighten_leaf_mask = |rc_vec: &[BigRational],
+                             code_bounds: &[(i64, i64)],
+                             leaf_mask: &mut [[bool; 15]]|
+     -> bool {
+        let mut best_terms = Vec::with_capacity(n);
+        let mut leaf_lb = BigRational::zero();
+        for (i, rc_i) in rc_vec.iter().enumerate() {
+            let b_i = term_best_for(i, rc_i, code_bounds[i]);
+            leaf_lb += &b_i;
+            best_terms.push(b_i);
+        }
+        if &leaf_lb > upper_bound {
+            return false;
+        }
+        let leaf_slack = upper_bound - &leaf_lb;
+        for (i, c) in cs.iter().enumerate() {
+            let rc = &rc_vec[i];
+            if rc.is_zero() {
+                continue;
+            }
+            let (q_lo, q_hi) = code_bounds[i];
+            let max_contrib = &best_terms[i] + &leaf_slack;
+            for q in q_lo..=q_hi {
+                let q_idx = (q + 7) as usize;
+                if !leaf_mask[i][q_idx] {
+                    continue;
+                }
+                let contrib = if q == c.q0 {
+                    BigRational::zero()
+                } else {
+                    rc * &legal_deltas[i][q_idx].1
+                };
+                if contrib > max_contrib {
+                    leaf_mask[i][q_idx] = false;
+                }
+            }
+        }
+        true
+    };
+
     let mut surviving_mask = vec![[false; 15]; n];
-    for leaf in &leaves {
-        let Some(root_leaf_mask) = eval_rc_mask(&root_rc, &leaf.code_bounds) else {
+    'leaf_loop: for leaf in &leaves {
+        let Some(mut cur_leaf_mask) = eval_rc_mask(&root_rc, &leaf.code_bounds) else {
             continue;
         };
         let Some(leaf_y_mask) = eval_rc_mask(&leaf.rc, &leaf.code_bounds) else {
@@ -2468,7 +2562,18 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
         for i in 0..n {
             for q_idx in 0..15 {
                 let ext_ok = ext_leaf_mask.as_ref().is_none_or(|m_ext| m_ext[i][q_idx]);
-                if root_leaf_mask[i][q_idx] && leaf_y_mask[i][q_idx] && ext_ok {
+                cur_leaf_mask[i][q_idx] =
+                    cur_leaf_mask[i][q_idx] && leaf_y_mask[i][q_idx] && ext_ok;
+            }
+        }
+        for (_, pool_rc) in &dual_rc_pool {
+            if !tighten_leaf_mask(pool_rc, &leaf.code_bounds, &mut cur_leaf_mask) {
+                continue 'leaf_loop;
+            }
+        }
+        for i in 0..n {
+            for q_idx in 0..15 {
+                if cur_leaf_mask[i][q_idx] {
                     surviving_mask[i][q_idx] = true;
                 }
             }

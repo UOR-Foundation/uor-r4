@@ -682,6 +682,8 @@ fn dual_search_and_lp_guided_discrete_solve_respect_exact_bounds() {
     assert!(split66.tree_leaves > 1, "m=66 must branch into >1 leaves");
     assert!(split66.best_single_split_bound >= split66.root_lower_bound);
     assert!(split66.tree_lower_bound >= split66.best_single_split_bound);
+    assert!(split66.tree_lower_bound >= split66_none.tree_lower_bound);
+    assert!(split66.tree_eliminated_codes >= split66_none.tree_eliminated_codes);
     assert!(split66.tree_eliminated_codes >= rcbt66.eliminated_codes);
     for i in 0..n66 {
         assert!(rcbt66.surviving_codes[i].contains(&disc66.codes[i]));
