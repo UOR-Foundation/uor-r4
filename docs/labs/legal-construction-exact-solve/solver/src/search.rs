@@ -1813,6 +1813,23 @@ pub struct DisjunctiveSplitCertificate {
     pub tree_surviving_codes: Vec<Vec<i64>>,
 }
 
+/// Order of two split candidates in the disjunctive tree's candidate sort, from
+/// their exact root split scores `min(L_down, L_up)` (`None` when the candidate
+/// was not a root split): scored candidates come first, in descending score
+/// order, and unscored candidates last, so the first 16 visited are the best
+/// scored ones.
+pub fn split_candidate_order(
+    score_a: Option<&BigRational>,
+    score_b: Option<&BigRational>,
+) -> std::cmp::Ordering {
+    match (score_b, score_a) {
+        (Some(sb), Some(sa)) => sb.cmp(sa),
+        (Some(_), None) => std::cmp::Ordering::Greater,
+        (None, Some(_)) => std::cmp::Ordering::Less,
+        (None, None) => std::cmp::Ordering::Equal,
+    }
+}
+
 /// Certify an exact rational disjunctive-split discrete lower bound `>= L(y_root)`
 /// and Disjunctive Partition Reduced-Cost Fixing by branching on fractional basic
 /// variables of `delta_hull_lp(p)` across their adjacent discrete codes
@@ -2531,12 +2548,10 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
             break;
         }
         cand_splits.sort_by(|&(bv_a, _), &(bv_b, _)| {
-            match (&root_split_score[bv_b], &root_split_score[bv_a]) {
-                (Some(sb), Some(sa)) => sb.cmp(sa),
-                (Some(_), None) => std::cmp::Ordering::Less,
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                (None, None) => std::cmp::Ordering::Equal,
-            }
+            split_candidate_order(
+                root_split_score[bv_a].as_ref(),
+                root_split_score[bv_b].as_ref(),
+            )
         });
         let mut best_pair_leaves: Option<(BigRational, SplitLeaf<P>, SplitLeaf<P>)> = None;
         for &(bv, q_down) in cand_splits.iter().take(16) {
