@@ -19,7 +19,7 @@ Each part of the kit, what it is for, and what takes its place here. "Private sk
 |---|---|---|---|
 | start-here (skill) | A first-run interview that sets up the notes and the plan | Done once, by the owner on 20 Oct 2026; the answers are D43–D58 | Done. Not installed, so it cannot start a second setup |
 | Safe copy of the original | Keeping the starting point recoverable | GitHub `main`, the protected branches, the immutable `archive/` and the HF store | Dropped (D44) |
-| scope-guard (skill) | Giving each task an edge and making it reversible | The ORDER's scope, stop-and-ask, one worktree per task, and the cross-vendor review (§5.5) | The ORDER exists now. `loop scope` and the policy check come in PR 5 |
+| scope-guard (skill) | Giving each task an edge and making it reversible | The ORDER's scope, stop-and-ask, one worktree per task, and the in-unit fresh-context review (§5.5, D66) | The ORDER exists now. `loop scope` and the policy check come in PR 5 |
 | A line budget per task | Catching oversized changes | Size is reported in the REPORT, never capped | Dropped as a cap (D48) |
 | session-close (skill) | Ending a session so the next one loses nothing | The REPORT, the lab's PICKUP, and the rendered STATE and HANDOFF | By hand now. `loop close` comes in PR 7b |
 | holding-the-goal (skill) | Questions to ask before saying no, and before proposing a fix | The opener in every launch prompt, and a stop-and-ask card that names the limiter | Private skill now. `loop ask` is built in loop PR 7a |
@@ -131,7 +131,7 @@ A gate is a check anyone can rerun. Each gate names what it proves, and a plante
 **CI (built, loop PR 5).** One workflow, `gate.yml`, which `ci.yml` calls on every pull request, with no path filters:
 - `tests` runs `loop gates --full` with a read-only token. It takes the lab from the PR's ORDER; a PR with no ORDER is outside the loop and is skipped with a notice.
 - `policy` runs `uor-harness loop pr-check --ci`. It checks order, scope, commit order, REPORT, owner paths, rule sources, the rendered-file lock, read path and FILEMAP. On PR events it builds the base branch's code and reads the PR's commits only as data, never running the PR's code. The review record and the required checks are checked at queue time, because they do not exist yet when the job runs.
-- **The policy gate is advisory on GitHub.** There is no org admin, so there is no GitHub App and no ruleset change. `required-transport` runs after the policy job, always. It records `policy: <verdict> (run <id>)` in each of the five required checks' summaries and leaves them green (owner, 21 Oct 2026: "Record only"). The policy is enforced locally: `loop pr-check --pr <n>` refuses a PR whose required checks lack `policy: pass` from GitHub Actions, or carry a commit status of the same name. A supervisor queues a PR only when that check is green and the review it accepts is at the head: Claude's for a setup PR under D59; otherwise another vendor's.
+- **The policy gate is advisory on GitHub.** There is no org admin, so there is no GitHub App and no ruleset change. `required-transport` runs after the policy job, always. It records `policy: <verdict> (run <id>)` in each of the five required checks' summaries and leaves them green (owner, 21 Oct 2026: "Record only"). The policy is enforced locally: `loop pr-check --pr <n>` refuses a PR whose required checks lack `policy: pass` from GitHub Actions, or carry a commit status of the same name. A supervisor queues a PR only when that check is green and the review it accepts is at the head: Claude's for a setup PR under D59; otherwise the ORDER lab's own fresh-context record or another vendor's (D66).
 
 ## The five labs
 
@@ -212,7 +212,7 @@ Per client: Claude Code fires hooks inside subagents, and a SubagentStart hook i
 
 ## Charter changes
 
-PR A carries the charter changes: the new CHARTER §5.10 "The loop", the §5.5 review rule (code and model PRs need an exact-head review from another vendor's lab), and the decision rows. Later steps, each with owner approval: PLAN and HANDOFF replace NOW.md; labs cannot lift GPU caps; rendered views, notebooks and task folders become the running record, with the old files moved to the archive byte-identical; LESSONS rendered from the mistakes files; duplicate PM rules removed; milestone bars reconciled with §4.8.
+PR A carries the charter changes: the new CHARTER §5.10 "The loop", the §5.5 review rule as it then stood (code and model PRs needed an exact-head review from another vendor's lab; D66 replaced it on 24 Oct 2026), and the decision rows. Later steps, each with owner approval: PLAN and HANDOFF replace NOW.md; labs cannot lift GPU caps; rendered views, notebooks and task folders become the running record, with the old files moved to the archive byte-identical; LESSONS rendered from the mistakes files; duplicate PM rules removed; milestone bars reconciled with §4.8.
 
 ## Build plan
 
