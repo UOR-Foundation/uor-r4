@@ -13,7 +13,7 @@ This unit (`antigravity-54`, Unit 11 on `#2828`) tightens the certified disjunct
 1. **Root-split-ranked candidate branching and Cross-Branch Dual Pool Tightening (`search::certify_disjunctive_split_bound_with_dual`):**
    - Rank each leaf's fractional basic splits by descending root single-split bound `root_split_score[bv]` before `.take(16)` (rather than arbitrary basis-row order `0..m`) so every tree level branches on the highest-impact fractional basic variables first.
    - Collect distinct evaluated branch `rc` vectors into a bounded `dual_rc_pool` to tighten both per-leaf exact Weak Duality lower bounds ($\max_{r \in \text{pool}} L(r, B^{(l)})$) and per-leaf Disjunctive Partition RCBT survival masks ($\bigwedge_{r \in \text{pool}} \text{mask}(r, B^{(l)})$) with zero additional LP solves or `compute_rc` calls.
-2. **Exact equivalence of the `c_pi == parent.pi` shortcut (`claude` review note on `#3151`):**
+2. **Guard on the `c_pi == parent.pi` shortcut (`claude` review note on `#3151`):**
    - Track `pi_matches_rc: bool` on `SplitLeaf<P>` (`true` iff `leaf.rc` was computed from `extract_y(&leaf.pi)`, `false` when `leaf.rc` came from an upgraded `exact_y` or `ext_y`) so `if parent.pi_matches_rc && c_pi == parent.pi` never skips `extract_y(&c_pi)` when the parent holds an upgraded non-`Dy<P>` root dual.
 3. **Two-stage `arj`-first pricing in `dual_simplex_run::<P>` (`src/search.rs:686-709`):**
    - Compute `arj = rho · col_j` first and evaluate `paj = pi · col_j` only for nonbasic columns `j` that pass the dual-simplex sign test (`(st[j] == State::Lower && s_arj < -tol) || (st[j] == State::Upper && s_arj > tol)`), skipping `75–90%` of redundant `Dy<P>` inner products per pivot while preserving bit-for-bit identical `Dy<P>` pivot trajectories.
