@@ -60,3 +60,8 @@ Both cards were then **registered as recommended** under Casey's standing direct
   - **Tests:** the 6 generator tests parse the emitted JSON. Each planted leak or state fault fails its test.
   - **Suite:** `cargo test -p uor-r4-object-store` gives 82 passed, 0 failed, 1 ignored.
 - **Unchanged:** the bar, the 19/40 baseline, the checkpoint (held `#2844`), `NOT_FIT` and every hold. The bar question is with the PM (#2833 `6380260939`).
+
+## Fresh-V2 BPB stream pin (kimi-34/35, 2026-10-24)
+
+- **Current state:** prerequisite 5 is PINNED. The sealed fresh-V2 `tokens.u16` is SHA-256 `0b7e754cfd242bf53145fe9cbca563be8503e6cd75df5449abb325b5c51ee1b8`; `response_mask.u8` is `a1cda5295547bb641b1ea71ba4ebabb58d58c40e6c048cda91f35a878fecbf5e`; the seal report is `df5d074ae09c743aa586e3463ffe87faca5703f44f7802bff8ac49ee2990395f`. These values are cross-checked against retained A8, dispatch and packet metadata, not raw-artifact rehashing.
+- **Unchanged:** the `0.01` tolerance remains registered at `2026-10-23T02:44:51Z`. The earlier PENDING entries above are dated snapshots. Only the held `#2844` checkpoint remains unpinned in the prerequisite table; `NOT_FIT`, the bar, panel and every hold stand, with no compute cleared.
