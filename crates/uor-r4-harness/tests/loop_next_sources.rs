@@ -339,3 +339,213 @@ fn a_missing_plan_table_is_named_not_guessed() {
         stdout(&o)
     );
 }
+
+#[test]
+fn a_finished_gpu_collection_is_offered_and_a_collected_one_is_not() {
+    use uor_r4_harness::loopdrive::{write_collection, GpuCollection};
+
+    let r = Repo::new(&[("docs/harness/labs.json", &labs(None))], &[]);
+    let record = GpuCollection {
+        id: "deepseek-run-1".to_string(),
+        lab: "deepseek".to_string(),
+        renew: vec!["uor-pod".to_string()],
+        started_unix: 1,
+        ended_unix: Some(2),
+        status: "finished".to_string(),
+        collected: false,
+        artifacts: Vec::new(),
+        notes: Vec::new(),
+    };
+    write_collection(&r.root, "deepseek", &record).expect("write the collection record");
+    let o = r.next();
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(
+        stdout(&o).contains("gpu-collections: GPU collection deepseek-run-1 finished"),
+        "a finished uncollected collection must be named: {}",
+        stdout(&o)
+    );
+    assert!(
+        decision(&o).starts_with("GO gpu-collection deepseek-run-1 — "),
+        "the finished collection must be the target: {}",
+        decision(&o)
+    );
+
+    let mut collected = record.clone();
+    collected.collected = true;
+    write_collection(&r.root, "deepseek", &collected).expect("mark collected");
+    let o = r.next();
+    assert!(
+        !decision(&o).starts_with("GO gpu-collection"),
+        "a collected record must not be offered: {}",
+        decision(&o)
+    );
+    assert!(
+        stdout(&o).contains("gpu-collections: no GPU collection record is waiting"),
+        "{}",
+        stdout(&o)
+    );
+}
+
+#[test]
+fn the_collect_command_marks_the_record_so_loop_next_stops_offering_it() {
+    use uor_r4_harness::loopdrive::{read_collections, write_collection, GpuCollection};
+
+    let r = Repo::new(&[("docs/harness/labs.json", &labs(None))], &[]);
+    let record = GpuCollection {
+        id: "deepseek-run-2".to_string(),
+        lab: "deepseek".to_string(),
+        renew: vec!["uor-pod".to_string()],
+        started_unix: 1,
+        ended_unix: Some(2),
+        status: "finished".to_string(),
+        collected: false,
+        artifacts: Vec::new(),
+        notes: Vec::new(),
+    };
+    write_collection(&r.root, "deepseek", &record).expect("write the collection record");
+    let o = r.next();
+    assert!(
+        decision(&o).starts_with("GO gpu-collection deepseek-run-2 — "),
+        "the finished collection must be offered: {}",
+        decision(&o)
+    );
+
+    // The CLI path the supervisor uses: only --collect and --artifact, no --client or --model.
+    let mut cmd = Command::new(BIN);
+    clean(&mut cmd);
+    cmd.arg("--repo")
+        .arg(&r.root)
+        .args([
+            "loop",
+            "drive",
+            "--collect",
+            "deepseek-run-2",
+            "--artifact",
+            "bundle/out.sha256",
+        ])
+        .env("UOR_LAB", "deepseek")
+        .current_dir(&r.root);
+    let out = cmd.output().expect("uor-harness runs");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "loop drive --collect must be reachable without --client/--model: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let after = read_collections(&r.root, "deepseek").expect("read after collect");
+    let collected = after
+        .iter()
+        .find(|record| record.id == "deepseek-run-2")
+        .expect("the record stays");
+    assert!(collected.collected);
+    assert_eq!(collected.artifacts, vec!["bundle/out.sha256".to_string()]);
+
+    let o = r.next();
+    assert!(
+        !decision(&o).starts_with("GO gpu-collection"),
+        "a collected record must not be offered: {}",
+        decision(&o)
+    );
+    assert!(
+        stdout(&o).contains("gpu-collections: no GPU collection record is waiting"),
+        "{}",
+        stdout(&o)
+    );
+}
+
+#[test]
+fn a_stale_running_record_is_offered_not_waited_on_forever() {
+    use uor_r4_harness::loopdrive::{collection_path, unix_now, write_collection, GpuCollection};
+    use uor_r4_harness::loopnext::STALE_COLLECTION_SECS;
+
+    let r = Repo::new(&[("docs/harness/labs.json", &labs(None))], &[]);
+    let now = unix_now();
+    let stale = GpuCollection {
+        id: "deepseek-stale-1".to_string(),
+        lab: "deepseek".to_string(),
+        renew: vec!["uor-pod".to_string()],
+        started_unix: now.saturating_sub(STALE_COLLECTION_SECS + 60),
+        ended_unix: None,
+        status: "running".to_string(),
+        collected: false,
+        artifacts: Vec::new(),
+        notes: Vec::new(),
+    };
+    write_collection(&r.root, "deepseek", &stale).expect("write the stale record");
+    let o = r.next();
+    assert!(
+        decision(&o).starts_with("GO gpu-collection deepseek-stale-1 — "),
+        "a stale running record must be offered, not waited on forever: {}",
+        decision(&o)
+    );
+    assert!(
+        stdout(&o).contains("is treated as stale"),
+        "the reason must name staleness: {}",
+        stdout(&o)
+    );
+
+    std::fs::remove_file(collection_path(&r.root, "deepseek", "deepseek-stale-1"))
+        .expect("remove the stale record");
+    let fresh = GpuCollection {
+        id: "deepseek-fresh-1".to_string(),
+        started_unix: now,
+        ..stale
+    };
+    write_collection(&r.root, "deepseek", &fresh).expect("write the fresh record");
+    let o = r.next();
+    assert!(
+        !decision(&o).starts_with("GO gpu-collection"),
+        "a recently-running record must still wait: {}",
+        decision(&o)
+    );
+    assert!(
+        stdout(&o).contains("GPU collection(s) running"),
+        "{}",
+        stdout(&o)
+    );
+}
+
+#[test]
+fn the_stale_boundary_is_strict_and_clock_free() {
+    use uor_r4_harness::loopdrive::GpuCollection;
+    use uor_r4_harness::loopnext::{collection_is_stale, STALE_COLLECTION_SECS};
+
+    let now = 1_000_000u64;
+    let mut record = GpuCollection {
+        id: "deepseek-boundary-1".to_string(),
+        lab: "deepseek".to_string(),
+        renew: Vec::new(),
+        started_unix: now - STALE_COLLECTION_SECS,
+        ended_unix: None,
+        status: "running".to_string(),
+        collected: false,
+        artifacts: Vec::new(),
+        notes: Vec::new(),
+    };
+    assert!(
+        !collection_is_stale(&record, now),
+        "exactly six hours old is not stale (strict <)"
+    );
+    record.started_unix = now - STALE_COLLECTION_SECS - 1;
+    assert!(
+        collection_is_stale(&record, now),
+        "one second past six hours is stale"
+    );
+    record.started_unix = now + 60;
+    assert!(
+        !collection_is_stale(&record, now),
+        "a future start is not stale"
+    );
+    record.started_unix = 0;
+    assert!(
+        collection_is_stale(&record, now),
+        "epoch 0 is stale and must not underflow"
+    );
+    record.started_unix = now - STALE_COLLECTION_SECS - 1;
+    record.status = "finished".to_string();
+    assert!(
+        !collection_is_stale(&record, now),
+        "only running records are stale"
+    );
+}

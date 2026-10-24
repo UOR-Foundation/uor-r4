@@ -40,6 +40,18 @@ const PAUSE_LABEL: &str = "loop:pause";
 /// Seconds before a lab told WAIT looks again.
 pub const RECHECK_SECS: u64 = 600;
 
+/// A GPU collection record still marked `running` for longer than this is **treated as stale** by
+/// `loop next` and offered as work. A live watcher normally updates the record when its lease ends;
+/// a killed watcher leaves no note, so age is the only signal the supervisor has. Six hours is
+/// longer than any check-in interval and short enough to collect before a pod is usually reclaimed.
+pub const STALE_COLLECTION_SECS: u64 = 6 * 60 * 60;
+
+/// Whether `record` is a `running` collection older than [`STALE_COLLECTION_SECS`] at `now`.
+/// Exposed so the boundary rule can be tested without a clock race.
+pub fn collection_is_stale(record: &crate::loopdrive::GpuCollection, now: u64) -> bool {
+    record.status == "running" && record.started_unix < now.saturating_sub(STALE_COLLECTION_SECS)
+}
+
 /// One check at a PR's head: its name and conclusion (`FAILURE`, `SUCCESS`, ...).
 #[derive(Debug, Clone, Deserialize)]
 pub struct PrCheck {
@@ -836,13 +848,71 @@ pub fn run(
         detail.push_str(&format!(" (skipped: {})", skipped.join(", ")));
     }
     out.push(source("reviews", "none", detail));
-    // 5. GPU collections: a run needs a collection record. PR 10 built the watcher that
-    // notes a leased run, but no collection record is defined yet, so this source names the
-    // gap instead of guessing (it is a separate unit; the watcher file is outside this item).
-    out.push(not_built(
-        "gpu-collections",
-        "a GPU run needs a collection record the watcher (loop PR 10) does not write yet",
-    ));
+    // 5. GPU collections: the lease watcher keeps one record per leased GPU run under
+    // `local/<lab>/gpu-collections/`. A finished uncollected record is work: its artifacts must be
+    // saved off the pod before it is down. A record still `running` waits while it is recent, and
+    // is offered as stale after `STALE_COLLECTION_SECS` (a killed watcher writes no note). No
+    // records is none, not an error.
+    match crate::loopdrive::read_collections(root, lab) {
+        Ok(records) => {
+            let now = crate::loopdrive::unix_now();
+            let stale_before = now.saturating_sub(STALE_COLLECTION_SECS);
+            let stale =
+                |record: &&crate::loopdrive::GpuCollection| collection_is_stale(record, now);
+            let waiting = records
+                .iter()
+                .find(|record| !record.collected && (record.status != "running" || stale(record)));
+            if let Some(record) = waiting {
+                let reason = if stale(&record) {
+                    format!(
+                        "GPU collection {} has been {} since epoch {} and is treated as stale; collect it or mark it collected if its watcher is gone",
+                        record.id, record.status, record.started_unix
+                    )
+                } else {
+                    format!(
+                        "GPU collection {} {}; save its artifacts before the pod is down",
+                        record.id, record.status
+                    )
+                };
+                out.push(source("gpu-collections", "work", reason.clone()));
+                return Ok((
+                    out,
+                    Decision::Go {
+                        kind: "gpu-collection",
+                        target: record.id.clone(),
+                        reason,
+                    },
+                ));
+            }
+            let running = records
+                .iter()
+                .filter(|record| {
+                    !record.collected
+                        && record.status == "running"
+                        && record.started_unix >= stale_before
+                })
+                .count();
+            if running > 0 {
+                out.push(source(
+                    "gpu-collections",
+                    "wait",
+                    format!(
+                        "{running} GPU collection(s) running; none is finished and uncollected"
+                    ),
+                ));
+            } else {
+                out.push(source(
+                    "gpu-collections",
+                    "none",
+                    "no GPU collection record is waiting",
+                ));
+            }
+        }
+        Err(error) => out.push(not_built(
+            "gpu-collections",
+            &format!("cannot read GPU collection records: {error}"),
+        )),
+    }
     // 6. premise probes: the first open row of PLAN.md's `## Premises` table. The probe cell
     // holds the command in backticks; a row is offered only when its status cell reads `open`.
     match premise_probe(root) {

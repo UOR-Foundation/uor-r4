@@ -7,6 +7,7 @@ References #2843
 ## What did not work, first
 
 - **Actual CUDA/PTX and GPU behavior are NOT_RUN.** This Mac has no `nvcc`. `cargo check -p uor-r4-discrete --features cuda` first refused the missing explicit architecture and then failed to find `nvcc` with `UOR_NVCC_ARCH=compute_120`. An earlier progress note incorrectly said PTX admission had run; only default host builds and the build-script self-test had run. The ORDER's PTX and finite-device requirements remain open, so this PR stays a draft and no merge is requested.
+- Merging `c27a5ced8` conflicted in the non-CUDA owner-release API and the driver identity assertion. The resolution retains the generic owner wrapper with main's shared registration function and centralized pin. The first compile caught a redundant wrapper; the merged source identity is repinned below.
 - Independent DeepSeek architecture review found real defects in the first implementation: an invalid `self` argument in `from_snapshot`, a duplicate position argument that made validation fail open, a wrong `root_cost` API call, a missing CUDA-only `DriverConfig` field, accidental formatting outside scope, ambiguous payload/span anchors, and a gate-mutated query alias. These were repaired with focused controls; a later review found only the driver pin, which was updated after the final source/test text change.
 - Existing internal BFS aggregation is unchanged. The new action is only the final block-`b` transport anchored at `last[node]`, ranked against an immutable copy of the block-`b` query. The pre-registration must pin that definition before any experiment; this PR does not run one.
 - The position table is frozen configuration, not a learned parameter. `Parameter` has no position variant and choose/apply never writes `position_steps`, so the registered learned `H_pos`/`C_match` experiment is not runnable yet. Identity initialization collapses all three position modes to identity.
@@ -21,10 +22,10 @@ Harness size: **code 15 files +556/−162; docs 2 files +80/−0; generated 0 fi
 
 ## Measurements
 
-- `cargo test -p uor-r4-discrete`: **237 lib passed, 1 ignored; 19 binary passed; 20 integration passed; 0 doc-test failures**.
+- `cargo test -p uor-r4-discrete` after merging `c27a5ced8`: **249 lib passed, 1 ignored; 13 binary passed; 33 integration passed; 0 doc-test failures**.
 - Position-focused controls: **22 passed**. These include constructor/deserialization validation, optional snapshot and driver round trips, mismatch refusal, raw-root legacy ranking, immutable payload query, last-position span anchors, one-position-argument snapshot ABI, and D11 export refusal.
 - Red-green checks: missing config/snapshot types failed before implementation; positioned D11 export succeeded before the refusal was added; the raw-ranking, query-alias and launch-ABI controls failed on the reviewed defects; removing table revalidation allowed a full 64-entry table with candidate `16` before the guard was restored.
-- `driver_source_sha256`: `0fc786d38fbebe7075702c53f706b5a93287daf2a4a35db24501937b768d1706`, verified by all three binary targets that carry the identity test.
+- `driver_source_sha256` after merging `c27a5ced8`: `9419fba7c61630bdc4f06ca5963be64ce399644f9e2b5ac3b4e3d64266705c7d`, checked by the shared library pin and all three binary targets that carry the identity test.
 - GPU training/evaluation, position learning, order-effect measurements, mechanism verdicts and owner releases: **NOT_RUN**.
 
 ## Checks run at the head
