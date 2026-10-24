@@ -22,10 +22,10 @@ Harness size: **code 15 files +556/−162; docs 2 files +80/−0; generated 0 fi
 
 ## Measurements
 
-- `cargo test -p uor-r4-discrete` after merging `c27a5ced8`: **249 lib passed, 1 ignored; 13 binary passed; 33 integration passed; 0 doc-test failures**.
+- `cargo test -p uor-r4-discrete` after merging `5844d911c`: **250 lib passed, 1 ignored; 13 binary passed; 33 integration passed; 0 doc-test failures**.
 - Position-focused controls: **22 passed**. These include constructor/deserialization validation, optional snapshot and driver round trips, mismatch refusal, raw-root legacy ranking, immutable payload query, last-position span anchors, one-position-argument snapshot ABI, and D11 export refusal.
 - Red-green checks: missing config/snapshot types failed before implementation; positioned D11 export succeeded before the refusal was added; the raw-ranking, query-alias and launch-ABI controls failed on the reviewed defects; removing table revalidation allowed a full 64-entry table with candidate `16` before the guard was restored.
-- `driver_source_sha256` after merging `c27a5ced8`: `9419fba7c61630bdc4f06ca5963be64ce399644f9e2b5ac3b4e3d64266705c7d`, checked by the shared library pin and all three binary targets that carry the identity test.
+- `driver_source_sha256` after merging `5844d911c`: `1a3de704089076196fcdf73c3705d68f13903b373b66b2ba981bf85d3f128455`, checked by the shared library pin and all three binary targets that carry the identity test.
 - GPU training/evaluation, position learning, order-effect measurements, mechanism verdicts and owner releases: **NOT_RUN**.
 
 ## Checks run at the head
