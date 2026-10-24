@@ -27,7 +27,7 @@ At the base, does Step 1.1 still pin `compiled_identity.source_sha256 == 177f1b3
 
 1. **Erratum.** Step 1.1 and the sheet pin the deterministic digests and the saved binary, with the reason and the evidence. The sheet's FIT block is untouched.
 2. **Procedure.** The runbook's Steps 1.3–1.4 describe the template-approval procedure, citing 6379923206.
-3. **Evidence.** The 16 records and the plan template are under the lab folder's `evidence/`. Every file pin resolves to a file and hash in the HF tar, or is listed as produced on pod 2.
+3. **Evidence.** The 16 records are under the lab folder's `evidence/inherited/`, and every file pin resolves to a file and hash in the HF tar. *Amended before review:* the plan template moves to the next unit. Four plan inputs (`anchor_manifest`, `accepted_initlock_disposition`, `residual_fit`, `g_init_comparison_or_waiver`) exist nowhere, so the stop rule below applies. They are named on #2842 (6379986044).
 4. **Checks pass:** `loop report --check`, `loop pr-check --local` and `git diff --check`.
 
 ## Stop and ask if
