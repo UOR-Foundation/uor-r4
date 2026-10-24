@@ -1769,23 +1769,24 @@ pub struct DisjunctiveSplitCertificate {
     /// Exact rational root Lagrangian dual bound `L(y_root)` over `[-7, 7]^n`.
     pub root_lower_bound: BigRational,
     /// Tightest certified 1-variable disjunctive split lower bound
-    /// `max_i min(L_down(i), L_up(i)) >= root_lower_bound`.
+    /// `max_i min(L_down(i), L_up(i)) >= root_lower_bound` when `max_leaves >= 2`
+    /// (`== root_lower_bound` when `max_leaves == 1` or no fractional basic var exists).
     pub best_single_split_bound: BigRational,
     /// Exact rational improvement `best_single_split_bound - root_lower_bound >= 0`.
     pub single_split_gain: BigRational,
-    /// Coefficient index `i` achieving `best_single_split_bound` (`None` if no fractional basic var).
+    /// Coefficient index `i` achieving `best_single_split_bound` (`None` if `max_leaves == 1` or no fractional basic var).
     pub best_split_coeff: Option<usize>,
     /// Split threshold `q_mid` (`q <= q_mid` vs `q >= q_mid + 1`) for `best_split_coeff`.
     pub best_split_q_down: Option<i64>,
     /// Certified multi-leaf disjunctive branch-and-bound tree lower bound `>= best_single_split_bound`.
     pub tree_lower_bound: BigRational,
-    /// Exact rational improvement `tree_lower_bound - root_lower_bound >= 0`.
+    /// Exact rational improvement `tree_gain = tree_lower_bound - root_lower_bound >= 0`.
     pub tree_gain: BigRational,
     /// Exact rational remaining optimality gap `upper_bound - tree_lower_bound`.
     pub tree_gap: BigRational,
-    /// Number of exhaustive disjoint leaves certified in the disjunctive split tree.
+    /// Number of exhaustive disjoint leaves certified in the disjunctive split tree (`1..=max_leaves`).
     pub tree_leaves: usize,
-    /// Number of fractional basic coefficients whose disjunctive split was evaluated.
+    /// Number of fractional basic coefficients whose disjunctive split was evaluated (`0` when `max_leaves == 1`).
     pub evaluated_splits: usize,
     /// Total `(i, q)` destination codes provably eliminated across all disjunctive tree leaves.
     pub tree_eliminated_codes: usize,
@@ -1808,11 +1809,37 @@ pub fn certify_disjunctive_split_bound<const P: u32>(
     upper_bound: &BigRational,
     max_leaves: usize,
 ) -> Result<DisjunctiveSplitCertificate, String> {
+    certify_disjunctive_split_bound_with_dual::<P>(p, upper_bound, max_leaves, None)
+}
+
+/// Same as [`certify_disjunctive_split_bound`], additionally accepting an optional
+/// non-negative root dual multiplier slice `extra_root_y` (e.g. from
+/// `blp::certify_basis_with_dual`). When `extra_root_y` is provided, `root_lower_bound`
+/// and `root_y` are upgraded if `extra_root_y` certifies a tighter root bound, and
+/// every leaf's domain reduced-cost survival mask is also intersected with `extra_root_y`,
+/// guaranteeing `tree_surviving_codes[i] \subseteq rcbt(extra_root_y).surviving_codes[i]`
+/// and `tree_eliminated_codes >= rcbt(extra_root_y).eliminated_codes` for any `m`.
+pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
+    p: &Problem,
+    upper_bound: &BigRational,
+    max_leaves: usize,
+    extra_root_y: Option<&[BigRational]>,
+) -> Result<DisjunctiveSplitCertificate, String> {
     if max_leaves == 0 {
         return Err("max_leaves must be >= 1".into());
     }
     let n = p.n();
     let m = p.guards.len();
+    if let Some(ext_y) = extra_root_y {
+        if ext_y.len() != m {
+            return Err(format!("extra_root_y len {} != guards {m}", ext_y.len()));
+        }
+        for (r, yr) in ext_y.iter().enumerate() {
+            if yr.is_negative() {
+                return Err(format!("negative extra_root_y at row {r}"));
+            }
+        }
+    }
     let cs = p.coeffs();
     let dy = |v: &BigRational| Dy::<P>::from_rational(v);
 
@@ -1950,6 +1977,13 @@ pub fn certify_disjunctive_split_bound<const P: u32>(
             }
         }
     }
+    if let Some(ext_y) = extra_root_y {
+        let ext_lb = certify_domain_dual_bound(p, ext_y, &root_bounds)?;
+        if ext_lb > root_lower_bound {
+            root_y = ext_y.to_vec();
+            root_lower_bound = ext_lb;
+        }
+    }
 
     #[derive(Clone)]
     struct SplitLeaf<const P: u32> {
@@ -2077,7 +2111,11 @@ pub fn certify_disjunctive_split_bound<const P: u32>(
         certified_bound: root_lower_bound.clone(),
     };
 
-    let root_splits = find_fractional_splits(&root_leaf);
+    let root_splits = if max_leaves >= 2 {
+        find_fractional_splits(&root_leaf)
+    } else {
+        Vec::new()
+    };
     let evaluated_splits = root_splits.len();
     let mut best_single_split_bound = root_lower_bound.clone();
     let mut best_split_coeff = None;
@@ -2104,12 +2142,8 @@ pub fn certify_disjunctive_split_bound<const P: u32>(
 
     let mut leaves = Vec::new();
     if let Some((dl, ul)) = best_root_children {
-        if max_leaves >= 2 {
-            leaves.push(dl);
-            leaves.push(ul);
-        } else {
-            leaves.push(root_leaf);
-        }
+        leaves.push(dl);
+        leaves.push(ul);
     } else {
         leaves.push(root_leaf);
     }
@@ -2169,17 +2203,23 @@ pub fn certify_disjunctive_split_bound<const P: u32>(
     // Disjunctive Partition Reduced-Cost Fixing across the exhaustive leaf partition:
     // a code (i, q) can appear in a guard-feasible discrete assignment with objective <= U
     // only if at least one leaf l in the partition has q in [q_lo_l, q_hi_l] and
-    // L(y, B^(l)) + pen_i(y, B^(l), q) <= U for both y = root_y and y = leaf.y.
-    let mut root_rc = Vec::with_capacity(n);
-    for i in 0..n {
-        let mut rc = p.g[i].clone();
-        for (r, yr) in root_y.iter().enumerate() {
-            if !yr.is_zero() && !p.guards[r][i].is_zero() {
-                rc -= yr * &p.guards[r][i];
+    // L(y, B^(l)) + pen_i(y, B^(l), q) <= U for y = root_y, y = leaf.y, and (if provided)
+    // y = extra_root_y.
+    let compute_rc = |y_slice: &[BigRational]| -> Vec<BigRational> {
+        let mut rc_vec = Vec::with_capacity(n);
+        for i in 0..n {
+            let mut rc = p.g[i].clone();
+            for (r, yr) in y_slice.iter().enumerate() {
+                if !yr.is_zero() && !p.guards[r][i].is_zero() {
+                    rc -= yr * &p.guards[r][i];
+                }
             }
+            rc_vec.push(rc);
         }
-        root_rc.push(rc);
-    }
+        rc_vec
+    };
+    let root_rc = compute_rc(&root_y);
+    let extra_rc = extra_root_y.map(compute_rc);
 
     let eval_rc_mask =
         |rc_vec: &[BigRational], code_bounds: &[(i64, i64)]| -> Option<Vec<[bool; 15]>> {
@@ -2231,22 +2271,23 @@ pub fn certify_disjunctive_split_bound<const P: u32>(
         let Some(root_leaf_mask) = eval_rc_mask(&root_rc, &leaf.code_bounds) else {
             continue;
         };
-        let mut leaf_rc = Vec::with_capacity(n);
-        for i in 0..n {
-            let mut rc = p.g[i].clone();
-            for (r, yr) in leaf.y.iter().enumerate() {
-                if !yr.is_zero() && !p.guards[r][i].is_zero() {
-                    rc -= yr * &p.guards[r][i];
-                }
-            }
-            leaf_rc.push(rc);
-        }
+        let leaf_rc = compute_rc(&leaf.y);
         let Some(leaf_y_mask) = eval_rc_mask(&leaf_rc, &leaf.code_bounds) else {
             continue;
         };
+        let ext_leaf_mask = match &extra_rc {
+            Some(erc) => {
+                let Some(m_ext) = eval_rc_mask(erc, &leaf.code_bounds) else {
+                    continue;
+                };
+                Some(m_ext)
+            }
+            None => None,
+        };
         for i in 0..n {
             for q_idx in 0..15 {
-                if root_leaf_mask[i][q_idx] && leaf_y_mask[i][q_idx] {
+                let ext_ok = ext_leaf_mask.as_ref().is_none_or(|m_ext| m_ext[i][q_idx]);
+                if root_leaf_mask[i][q_idx] && leaf_y_mask[i][q_idx] && ext_ok {
                     surviving_mask[i][q_idx] = true;
                 }
             }
@@ -3489,6 +3530,20 @@ pub fn lp_guided_discrete_solve<const P: u32>(p: &Problem) -> Result<DiscreteLpR
     };
 
     // Independent from-scratch recomputation over BigRational.
+    for (i, c) in cs.iter().enumerate() {
+        let q = cur_q[i];
+        if !(-7..=7).contains(&q) {
+            return Err(format!("discrete code out of range at {i}: {q}"));
+        }
+        let want_delta = if q == c.q0 {
+            BigRational::zero()
+        } else {
+            BigRational::new(BigInt::from(q - c.q0), BigInt::from(4)) + &c.shift
+        };
+        if disc_rat[i] != want_delta {
+            return Err(format!("independent delta check failed at {i}"));
+        }
+    }
     let mut recomputed_guards = vec![BigRational::zero(); m];
     for (r, row) in p.guards.iter().enumerate() {
         let mut s = BigRational::zero();

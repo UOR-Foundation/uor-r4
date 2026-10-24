@@ -110,8 +110,13 @@ fn main() -> ExitCode {
                 .ok()
                 .map(|b| b.to_string());
             let gap_decomp = search::certify_gap_decomposition(&p, dual_y_ref, &d.codes).ok();
-            let disj_split =
-                search::certify_disjunctive_split_bound::<120>(&p, &d.objective, 24).ok();
+            let disj_split = search::certify_disjunctive_split_bound_with_dual::<120>(
+                &p,
+                &d.objective,
+                24,
+                Some(dual_y_ref),
+            )
+            .ok();
             let rcbt = match search::certify_reduced_cost_fixing(&p, dual_y_ref, &d.objective) {
                 Ok(r) => json!({
                     "fixed_coeffs": r.fixed_coeffs,
