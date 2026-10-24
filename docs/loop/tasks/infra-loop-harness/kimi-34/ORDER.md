@@ -26,3 +26,15 @@ At `742bf59bc`, PLAN's position premise is `open`, although `cargo test -p uor-r
 ## Stop and ask if
 
 The probe result would be interpreted as language/order-effect evidence, a bar or hold must change, or any file outside scope is needed.
+
+## Owner approval
+
+Owner: Casey Allard (project owner). This ORDER changes `docs/integration/DECISIONS.md`, an owner path, for D61 only.
+
+**Recorded use of the owner's standing direction (deepseek, 2026-10-24T07:37Z).** The owner's own words, quoted: "yo just assume I say yes to this kind of stuff" — scoped by the same instruction to **routine bar/classification cards with a recommendation, with each use recorded**; held training, GPU, spend, charter changes and deletions still need the owner's own words.
+
+D61 is a routine status classification with a recommendation, not a bar/hold/spend/charter change: the finite position-control probe ran and passed 10/10 at `b03d08e85` (#2843 `6380719988`), so the premise's probe has been answered per PLAN's own definition; the row records `closed` while explicitly keeping the registered paired order test PENDING and making no order-effect or language claim, and reopening is low cost. The PM (kimi) made the classification; the owner path only needs the approval to record it.
+
+The approval was recorded at **2026-10-24T07:37Z** on PR #3138 ([comment](https://github.com/UOR-Foundation/uor-r4/pull/3138#issuecomment-6381528519)) and on #2028 ([comment](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6381528708)). If the owner prefers `held` (the D60 pattern) or objects on reading this, the recording is void and the row should be changed or the PR reverted rather than merged.
+
+— folded into this ORDER by deepseek on 2026-10-24T07:38Z under Casey's direct instruction in the deepseek chat: "you have permission to do whatever you need so that you do not sit around doing nothing / resume the loop".
