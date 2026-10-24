@@ -4,12 +4,13 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 
 ## What did not work, first
 
+- The first head edited `archive/history/branch-archive/INDEX.md`. CI's archive-immutability gate refused it: files under `archive/` may be added but never modified. The record is now a new file beside the index, and the index is unchanged.
 - These branches cannot be merged. Each sits on the history from before `main` was re-rooted on 13 Oct 2026 and shares no commit with it; a merge would bring the whole old tree back. Each was compared with `main` file by file instead.
 - The branch-archive index named none of them, and the router-prep branch's one unique file was nowhere on `main`. Without this record, deleting them would have lost the ledger and left no trace of where the rest went.
 
 ## What changed
 
-- `archive/history/branch-archive/INDEX.md`: a new 24 October section with one row per branch, giving its tip, the PR that delivered it and where its content lives on `main`:
+- `archive/history/branch-archive/pre-reroot-branches-closed-2026-10-24.md` (new): the 24 October record with one row per branch, giving its tip, the PR that delivered it and where its content lives on `main`:
   - `inference-fix`: PR #2128.
   - `pcopy-accessor`: PR #2131; main holds a superset.
   - `repro-fix`: PRs #2122 and #2123.

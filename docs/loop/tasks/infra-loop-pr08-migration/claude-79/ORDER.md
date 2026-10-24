@@ -18,13 +18,13 @@ The unit stands. Class: instrument (records).
 
 ## Files in scope
 
-- `archive/history/branch-archive/INDEX.md` (one new section)
+- `archive/history/branch-archive/pre-reroot-branches-closed-2026-10-24.md` (new; `archive/` is append-only, so the existing `INDEX.md` is not edited)
 - `archive/history/branch-archive/peer-audit-ledger-2026-10-12.md` (new, byte-identical to blob `9378a7a86`)
 - `docs/loop/tasks/infra-loop-pr08-migration/claude-79/**`
 
 ## Done when
 
-- The index has a 24 Oct section with one row per branch: its tip, the PR(s) that delivered it, and where its content lives on `main`.
+- A new 24 Oct record beside the index has one row per branch: its tip, the PR(s) that delivered it, and where its content lives on `main`.
 - The ledger file's blob is `9378a7a86dad9c983009d9a815177dc87e8e77d2`.
 - `loop report --check`, `loop pr-check --local`, `git diff --check` and the links check (no new broken link) pass.
 - The exact-head review is Claude's own fresh-context review (D66). References #3165.
