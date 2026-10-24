@@ -11,6 +11,11 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
   - `cli::a_same_lab_approve_on_a_code_pr_is_refused`;
   - `cli::a_fresh_context_self_review_counts_on_a_doc_only_pr_only`.
 - The first negative-gate run stopped at the first failing test binary, so only `loop_next` was shown failing. It was re-run with `--no-fail-fast` (below).
+- The first full suite gave 1,134 passed and 2 failed. The two failures were `loop_review`'s CLI tests, which printed the old "(D46)" message. Cause: Claude's own `loop close --verify --pr 3160` ran `loop gates --full` on `origin/main` into the same `CARGO_TARGET_DIR` at 21:25Z, mid-suite, and rebuilt the `uor-harness` binary from the pre-change source. This was an instrument collision, not a defect: the same two tests had passed in the narrow run just before. The suite was re-run alone (below).
+- The in-unit review round 1, at `9a007ef0a`, returned CHANGES.
+  - Blocking: `docs/loop/README.md` still stated D46 in the review-record paragraph. The same page's statements of the rule (the opening principle, and the setup-era teams line) were updated too.
+  - Not blocking: no test pinned that another lab of the ORDER lab's vendor is still refused. Added `another_lab_of_the_order_labs_vendor_is_still_refused_d66`. With the condition widened from "same lab" to "same vendor" it fails, and it passes on the fix.
+  - Also noted: `loop next` offers the self-review only once a PR is non-draft, so after ready rather than before. That stays for the `loop next` unit.
 
 ## What changed
 
@@ -40,8 +45,8 @@ Nothing was measured; this is a rule change in the harness.
 
 - Narrow: `cargo test -q --locked -p uor-r4-harness --test loop_review --test loop_prcheck --test loop_next` gives 36, 47 and 33 passed, 0 failed.
 - Negative gate: the `loopreview.rs` change was set aside as a patch against `6ecb40c45` (`git diff 6ecb40c45 -- crates/uor-r4-harness/src/loopreview.rs`, 31 lines, then `git apply -R`). Run with `--no-fail-fast`, `loop_review` gives 7 failed, `loop_prcheck` 1 failed (`review_record_counts_exact_head_records_from_allowed_labs`) and `loop_next` 1 failed (`an_own_pr_owes_a_fresh_self_review_doc_only_or_code_d66`). After restoring, all pass again and the working tree is clean.
-- `cargo fmt -p uor-r4-harness -- --check`: clean.
-- The full harness suite, clippy with `-D warnings`, `loop pr-check --local`, `loop report --check` and the quick gates: results are in the PR's review record at the head.
+- `cargo fmt -p uor-r4-harness -- --check`: clean. `cargo clippy -q --locked -p uor-r4-harness --all-targets --all-features -- -D warnings`: exit 0.
+- The full harness suite (`cargo test -q --locked --no-fail-fast -p uor-r4-harness`), re-run alone after the collision above, plus `loop pr-check --local`, `loop report --check` and the quick gates: results are in the PR's review record at the head.
 
 ## Skills used
 

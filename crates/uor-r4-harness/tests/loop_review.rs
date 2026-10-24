@@ -141,6 +141,37 @@ fn planted_fault_a_same_lab_record_without_fresh_context_is_refused() {
 }
 
 #[test]
+fn another_lab_of_the_order_labs_vendor_is_still_refused_d66() {
+    // D66 counts the ORDER lab's own fresh record, not every lab of its vendor.
+    let rows = rows();
+    let mut vendors = vendors();
+    vendors.insert("anthro".to_string(), "anthropic".to_string());
+    let comments = [fresh("anthro", Verdict::Approve)];
+    let out = gate(&GateInput {
+        pr: PR,
+        head: HEAD,
+        order_path: ORDER_PATH,
+        order_lab: CODE_PR.order_lab,
+        order_item: CODE_PR.item,
+        setup_row: CODE_PR.setup_row,
+        rows: &rows,
+        vendors: &vendors,
+        d59_in_force: CODE_PR.d59,
+        doc_only: CODE_PR.doc_only,
+        comments: &comments,
+    });
+    assert!(!out.pass);
+    assert!(
+        has(
+            &out,
+            "is neither the ORDER lab claude nor of another vendor"
+        ),
+        "{:?}",
+        out.details
+    );
+}
+
+#[test]
 fn planted_fault_a_non_claude_record_on_a_setup_pr_is_refused() {
     let out = run(&SETUP_PR, &[body("codex", Verdict::Approve)]);
     assert!(out.setup_pr);
