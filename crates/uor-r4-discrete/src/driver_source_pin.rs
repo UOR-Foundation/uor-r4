@@ -11,7 +11,7 @@
 
 /// SHA-256 over the driver sources, in `driver_source_sha256`'s `include_bytes!` order.
 pub const DRIVER_SOURCE_SHA256: &str =
-    "826c7854f0d9a88e8a1203791aef7e177b3e011ab8f80f2dcbc6dba6ca9f2e49";
+    "1a3de704089076196fcdf73c3705d68f13903b373b66b2ba981bf85d3f128455";
 
 #[cfg(test)]
 mod tests {
