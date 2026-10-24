@@ -356,7 +356,7 @@ fn lawful_count_table_baseline_and_noise_measurement() {
 ///    grader, measured `+-1 rows` prompt-only count-table noise band, and 4 proposed bars while
 ///    remaining `"frozen": false` until owner bar registration on #2028 and non-author FIT.
 #[test]
-fn m6_reasoning_json_registry_is_staged_and_scorable() {
+fn m6_reasoning_json_registry_is_frozen_and_scorable() {
     let repo = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(|p| p.parent())
@@ -368,8 +368,8 @@ fn m6_reasoning_json_registry_is_staged_and_scorable() {
         .expect("m6-reasoning panel in registry");
 
     assert!(
-        !panel.frozen,
-        "m6-reasoning remains frozen=false until owner registers bars on #2028 and non-author FIT lands"
+        panel.frozen,
+        "m6-reasoning must be frozen after the owner bar registration and non-author FIT"
     );
     assert!(
         uor_r4_harness::preprules::panel_grader_permitted(&paths).is_empty(),
