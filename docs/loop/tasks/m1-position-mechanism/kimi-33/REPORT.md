@@ -17,7 +17,7 @@ References #2843
 
 Optional `PositionConfig { mode, steps }` now flows through `DriverConfig`, `Device::Binding` and `Snapshot`, with constructor and deserialization validation, checkpoint mismatch refusal, and default-omitted JSON. `s[14]` selects legacy BFS (`0`), prefix holonomy (`1`), matched endpoint control (`2`) or identity (`3`). The table reaches ordinary and generated CUDA entries and launchers. Nonzero modes use payload-block roots at `last[node]` and an immutable query; legacy ranking and BFS payload behavior remain on the original frame path. Validation covers every position word. D11 export refuses positioned snapshots. Driver and compiled source identities include the position module.
 
-Sixteen `crates/uor-r4-discrete` source files change, plus this ORDER/REPORT. There are no dependency, corpus, roadmap-status, hold, bar or generated-document changes. The ORDER gave no numeric size estimate, so a ratio is not applicable.
+Harness size: **code 15 files +556/−162; docs 2 files +80/−0; generated 0 files +0/−0; other 1 file +68/−18; tests 0 files +0/−0** (the Rust unit controls live inside source files). There are no dependency, corpus, roadmap-status, hold, bar or generated-document changes. The ORDER gave no numeric size estimate, so a ratio is not applicable.
 
 ## Measurements
 
