@@ -1857,6 +1857,31 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
     max_leaves: usize,
     extra_root_y: Option<&[BigRational]>,
 ) -> Result<DisjunctiveSplitCertificate, String> {
+    disjunctive_split_bound::<P>(p, upper_bound, max_leaves, extra_root_y, true)
+}
+
+/// Ablation of [`certify_disjunctive_split_bound_with_dual`] that skips the
+/// cross-branch dual pool in both places it is read: the leaf-bound lift and
+/// the per-leaf reduced-cost mask tightening. Every leaf bound and mask is still
+/// exactly certified, only from fewer duals. Exists so tests can pin that the
+/// pool tightens the result.
+#[doc(hidden)]
+pub fn certify_disjunctive_split_bound_without_pool<const P: u32>(
+    p: &Problem,
+    upper_bound: &BigRational,
+    max_leaves: usize,
+    extra_root_y: Option<&[BigRational]>,
+) -> Result<DisjunctiveSplitCertificate, String> {
+    disjunctive_split_bound::<P>(p, upper_bound, max_leaves, extra_root_y, false)
+}
+
+fn disjunctive_split_bound<const P: u32>(
+    p: &Problem,
+    upper_bound: &BigRational,
+    max_leaves: usize,
+    extra_root_y: Option<&[BigRational]>,
+    use_dual_pool: bool,
+) -> Result<DisjunctiveSplitCertificate, String> {
     if max_leaves == 0 {
         return Err("max_leaves must be >= 1".into());
     }
@@ -2264,31 +2289,30 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
         }
     };
 
-    let term_worst_for =
-        |i: usize, rc_i: &BigRational, (q_lo, q_hi): (i64, i64)| -> BigRational {
-            if rc_i.is_zero() {
-                return BigRational::zero();
-            }
-            let slice = &legal_deltas[i][((q_lo + 7) as usize)..=((q_hi + 7) as usize)];
-            let extreme_delta = if rc_i.is_positive() {
-                slice
-                    .iter()
-                    .map(|(_, d, _)| d)
-                    .max()
-                    .expect("non-empty code interval")
-            } else {
-                slice
-                    .iter()
-                    .map(|(_, d, _)| d)
-                    .min()
-                    .expect("non-empty code interval")
-            };
-            if extreme_delta.is_zero() {
-                BigRational::zero()
-            } else {
-                mul_dyadic_or_rational(rc_i, extreme_delta)
-            }
+    let term_worst_for = |i: usize, rc_i: &BigRational, (q_lo, q_hi): (i64, i64)| -> BigRational {
+        if rc_i.is_zero() {
+            return BigRational::zero();
+        }
+        let slice = &legal_deltas[i][((q_lo + 7) as usize)..=((q_hi + 7) as usize)];
+        let extreme_delta = if rc_i.is_positive() {
+            slice
+                .iter()
+                .map(|(_, d, _)| d)
+                .max()
+                .expect("non-empty code interval")
+        } else {
+            slice
+                .iter()
+                .map(|(_, d, _)| d)
+                .min()
+                .expect("non-empty code interval")
         };
+        if extreme_delta.is_zero() {
+            BigRational::zero()
+        } else {
+            mul_dyadic_or_rational(rc_i, extreme_delta)
+        }
+    };
 
     struct CachedRc {
         rc: Vec<BigRational>,
@@ -2580,8 +2604,10 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
     // Cross-branch dual pool bound tightening: every rc in dual_rc_pool comes from a
     // verified non-negative dual multiplier vector y >= 0, so L(y, B^(l)) is a valid
     // exact Weak Duality lower bound on every leaf box B^(l).
+    let dual_pool: &[(Vec<Dy<P>>, std::rc::Rc<CachedRc>)] =
+        if use_dual_pool { &dual_rc_pool } else { &[] };
     for leaf in &mut leaves {
-        for (_, pool_cached) in &dual_rc_pool {
+        for (_, pool_cached) in dual_pool {
             let pool_lb = bound_from_cached(pool_cached, &leaf.code_bounds);
             if pool_lb > leaf.certified_bound {
                 leaf.certified_bound = pool_lb;
@@ -2612,58 +2638,22 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
     // and (if provided) y = extra_root_y.
     let extra_cached_rc = extra_root_y.map(|ey| make_cached_rc(compute_rc(ey)));
 
-    let eval_rc_mask =
-        |cached: &CachedRc, code_bounds: &[(i64, i64)]| -> Option<Vec<[bool; 15]>> {
-            let leaf_lb = bound_from_cached(cached, code_bounds);
-            if &leaf_lb > upper_bound {
-                return None;
-            }
-            let leaf_slack = sub_dyadic_or_rational(upper_bound, &leaf_lb);
-            let mut mask = vec![[false; 15]; n];
-            for (i, c) in cs.iter().enumerate() {
-                let (q_lo, q_hi) = code_bounds[i];
-                let rc = &cached.rc[i];
-                if rc.is_zero() || cached.root_span[i] <= leaf_slack {
-                    for q in q_lo..=q_hi {
-                        mask[i][(q + 7) as usize] = true;
-                    }
-                    continue;
-                }
-                let b_i = if (q_lo, q_hi) == (-7, 7) {
-                    cached.root_terms[i].clone()
-                } else {
-                    term_best_for(i, rc, (q_lo, q_hi))
-                };
-                let max_contrib = add_dyadic_or_rational(&b_i, &leaf_slack);
-                for q in q_lo..=q_hi {
-                    let contrib = if q == c.q0 {
-                        BigRational::zero()
-                    } else {
-                        mul_dyadic_or_rational(rc, &legal_deltas[i][(q + 7) as usize].1)
-                    };
-                    if contrib <= max_contrib {
-                        mask[i][(q + 7) as usize] = true;
-                    }
-                }
-            }
-            Some(mask)
-        };
-
-    let tighten_leaf_mask = |cached: &CachedRc,
-                             code_bounds: &[(i64, i64)],
-                             leaf_mask: &mut [[bool; 15]]|
-     -> bool {
+    let eval_rc_mask = |cached: &CachedRc, code_bounds: &[(i64, i64)]| -> Option<Vec<[bool; 15]>> {
         let leaf_lb = bound_from_cached(cached, code_bounds);
         if &leaf_lb > upper_bound {
-            return false;
+            return None;
         }
         let leaf_slack = sub_dyadic_or_rational(upper_bound, &leaf_lb);
+        let mut mask = vec![[false; 15]; n];
         for (i, c) in cs.iter().enumerate() {
+            let (q_lo, q_hi) = code_bounds[i];
             let rc = &cached.rc[i];
             if rc.is_zero() || cached.root_span[i] <= leaf_slack {
+                for q in q_lo..=q_hi {
+                    mask[i][(q + 7) as usize] = true;
+                }
                 continue;
             }
-            let (q_lo, q_hi) = code_bounds[i];
             let b_i = if (q_lo, q_hi) == (-7, 7) {
                 cached.root_terms[i].clone()
             } else {
@@ -2671,22 +2661,55 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
             };
             let max_contrib = add_dyadic_or_rational(&b_i, &leaf_slack);
             for q in q_lo..=q_hi {
-                let q_idx = (q + 7) as usize;
-                if !leaf_mask[i][q_idx] {
-                    continue;
-                }
                 let contrib = if q == c.q0 {
                     BigRational::zero()
                 } else {
-                    mul_dyadic_or_rational(rc, &legal_deltas[i][q_idx].1)
+                    mul_dyadic_or_rational(rc, &legal_deltas[i][(q + 7) as usize].1)
                 };
-                if contrib > max_contrib {
-                    leaf_mask[i][q_idx] = false;
+                if contrib <= max_contrib {
+                    mask[i][(q + 7) as usize] = true;
                 }
             }
         }
-        true
+        Some(mask)
     };
+
+    let tighten_leaf_mask =
+        |cached: &CachedRc, code_bounds: &[(i64, i64)], leaf_mask: &mut [[bool; 15]]| -> bool {
+            let leaf_lb = bound_from_cached(cached, code_bounds);
+            if &leaf_lb > upper_bound {
+                return false;
+            }
+            let leaf_slack = sub_dyadic_or_rational(upper_bound, &leaf_lb);
+            for (i, c) in cs.iter().enumerate() {
+                let rc = &cached.rc[i];
+                if rc.is_zero() || cached.root_span[i] <= leaf_slack {
+                    continue;
+                }
+                let (q_lo, q_hi) = code_bounds[i];
+                let b_i = if (q_lo, q_hi) == (-7, 7) {
+                    cached.root_terms[i].clone()
+                } else {
+                    term_best_for(i, rc, (q_lo, q_hi))
+                };
+                let max_contrib = add_dyadic_or_rational(&b_i, &leaf_slack);
+                for q in q_lo..=q_hi {
+                    let q_idx = (q + 7) as usize;
+                    if !leaf_mask[i][q_idx] {
+                        continue;
+                    }
+                    let contrib = if q == c.q0 {
+                        BigRational::zero()
+                    } else {
+                        mul_dyadic_or_rational(rc, &legal_deltas[i][q_idx].1)
+                    };
+                    if contrib > max_contrib {
+                        leaf_mask[i][q_idx] = false;
+                    }
+                }
+            }
+            true
+        };
 
     let mut surviving_mask = vec![[false; 15]; n];
     'leaf_loop: for leaf in &leaves {
@@ -2712,7 +2735,7 @@ pub fn certify_disjunctive_split_bound_with_dual<const P: u32>(
                     cur_leaf_mask[i][q_idx] && leaf_y_mask[i][q_idx] && ext_ok;
             }
         }
-        for (_, pool_cached) in &dual_rc_pool {
+        for (_, pool_cached) in dual_pool {
             if !tighten_leaf_mask(pool_cached, &leaf.code_bounds, &mut cur_leaf_mask) {
                 continue 'leaf_loop;
             }
