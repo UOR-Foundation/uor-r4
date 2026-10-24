@@ -339,3 +339,49 @@ fn a_missing_plan_table_is_named_not_guessed() {
         stdout(&o)
     );
 }
+
+#[test]
+fn a_finished_gpu_collection_is_offered_and_a_collected_one_is_not() {
+    use uor_r4_harness::loopdrive::{write_collection, GpuCollection};
+
+    let r = Repo::new(&[("docs/harness/labs.json", &labs(None))], &[]);
+    let record = GpuCollection {
+        id: "deepseek-run-1".to_string(),
+        lab: "deepseek".to_string(),
+        renew: vec!["uor-pod".to_string()],
+        started_unix: 1,
+        ended_unix: Some(2),
+        status: "finished".to_string(),
+        collected: false,
+        artifacts: Vec::new(),
+        notes: Vec::new(),
+    };
+    write_collection(&r.root, "deepseek", &record).expect("write the collection record");
+    let o = r.next();
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(
+        stdout(&o).contains("gpu-collections: GPU collection deepseek-run-1 finished"),
+        "a finished uncollected collection must be named: {}",
+        stdout(&o)
+    );
+    assert!(
+        decision(&o).starts_with("GO gpu-collection deepseek-run-1 — "),
+        "the finished collection must be the target: {}",
+        decision(&o)
+    );
+
+    let mut collected = record.clone();
+    collected.collected = true;
+    write_collection(&r.root, "deepseek", &collected).expect("mark collected");
+    let o = r.next();
+    assert!(
+        !decision(&o).starts_with("GO gpu-collection"),
+        "a collected record must not be offered: {}",
+        decision(&o)
+    );
+    assert!(
+        stdout(&o).contains("gpu-collections: no GPU collection record is waiting"),
+        "{}",
+        stdout(&o)
+    );
+}
