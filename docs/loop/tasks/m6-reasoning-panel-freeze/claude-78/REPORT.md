@@ -2,6 +2,8 @@
 
 Lab: claude. Order: [ORDER.md](ORDER.md).
 
+closes #2866
+
 ## What did not work, first
 
 - The freeze waited from 24 Oct 13:04Z on `loop claim`. It refused the item because the open #3152 claimed `docs/reference/storage.md`, which this item's scope also lists. pr-check does not read claims, and this unit changes no file #3152 touches, so it was done by hand. Claude runs solo (owner, 24 Oct).
