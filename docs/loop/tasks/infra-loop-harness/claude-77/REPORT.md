@@ -16,6 +16,7 @@ closes #2876
 
   The lab's top session finished the item files, the render and this REPORT, because a hook refuses REPORT files from subagents.
 - The board's family-tree figure (`docs/figures/mechanisms-family.svg`) is a hand-drawn SVG with no generator, so it could not be re-rendered. Its alt text now says it shows the statuses before the 24 Oct rulings.
+- pr-check's `rule-sources` rule refused the PARKED heading once its count changed from 13 to 11: any added heading with the word "rule" outside the rule files fails. The heading now says "broke a constraint", the charter's own word for these limits (§3), with the same meaning.
 
 ## What changed
 

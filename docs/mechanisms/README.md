@@ -106,7 +106,7 @@ Five mechanisms have no recorded parent or child, so they are not drawn: admissi
 | [Spin-native weights](spin-weights.md) | Each 4-by-4 weight block is one quaternion, snapped to 120 icosian rotations. | arithmetic (matmul) | Reached 1.5148 BPB, level with dense, but only through matmul ([record](../../archive/labs/icosian-mantissa-2026-10-11/README.md)). READY by owner ruling D74. | A lawful Hamilton-block trunk without dense multiplication |
 | [Ternary/XOR](ternary-xor.md) | Weights of -1, 0 or +1, with similarity by counting differing bits. | arithmetic (matmul) | A dense ternary sum is still dense (D25). Export lost: 7.416 versus 7.171 bits. Its parts run inside discrete learning. READY by owner ruling D74. | A geometric alphabet without a dense sum |
 
-## PARKED: tested forms failed or broke a rule, still open (11)
+## PARKED: tested forms failed or broke a constraint, still open (11)
 
 | Mechanism | In plain words | Replaces | Why this status | Next step |
 |---|---|---|---|---|
