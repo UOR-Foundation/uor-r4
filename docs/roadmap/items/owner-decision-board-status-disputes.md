@@ -3,7 +3,7 @@ id: owner-decision-board-status-disputes
 title: Settle the disputed D11 and Hopf observation statuses on the board
 milestone: infra
 area: docs
-status: decision
+status: done
 open_to: lab
 needs_gpu: false
 depends_on: []
@@ -15,6 +15,8 @@ assignee: Casey-allard
 It keeps the board and its counts (10 ACTIVE, 4 READY, 13 PARKED) accurate.
 
 ## What is missing
+
+Recorded on 24 Oct 2026: D72 in [DECISIONS](../../integration/DECISIONS.md) (the owner's ruling of 2026-10-24T03:41:41Z).
 
 The board keeps D11 integer serving ACTIVE, as its own page says, but the audit would call it READY because no lawful model has been exported through it. Hopf observation is PARKED, yet its kept-fibre map is built and unit-tested and only sector routing failed, so splitting the two forms may be more accurate. A status change is the owner's call.
 
