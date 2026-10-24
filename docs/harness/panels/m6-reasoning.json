@@ -20,7 +20,7 @@
           "of": 240,
           "unit": "rows",
           "direction": "open",
-          "note": "current (12/240, 5.00%) is the maximum score across 8 full seeded draws of the prompt-only M6CountTableBaseline (scores 10..=12/240 with +-1 rows noise; family-conditioned modal ceiling is 10/240 on the 10 unsatisfiable feasibility rows, and numeric-only count table scores 1..=3/240). Proposed target 168/240 (70.0%, +156 rows above the count-table ceiling, 156x the +-1 row noise band) was submitted via decision card #2028 comment `6344266280` and approved under Casey's standing direction recorded 2026-10-24T13:01Z (#2028 `6384497995`, #2866 `6384498201`); a non-author `TEST FITNESS: FIT` by deepseek was recorded 2026-10-24 (#2866 `6384549808`), so the bar is registered and the panel is frozen."
+          "note": "current (12/240, 5.00%) is the context-table baseline: the maximum score across 8 full seeded draws of the prompt-only M6CountTableBaseline (scores 10..=12/240 with +-1 rows noise; family-conditioned modal ceiling is 10/240 on the 10 unsatisfiable feasibility rows, and numeric-only count table scores 1..=3/240). The per-family current values below (0 + 10 + 0 = 10) are the family-modal baseline, a different table, so they do not sum to this overall 12. Proposed target 168/240 (70.0%, +156 rows above the count-table ceiling, 156x the +-1 row noise band) was submitted via decision card #2028 comment `6344266280` and approved under Casey's standing direction recorded 2026-10-24T13:01Z (#2028 `6384497995`, #2866 `6384498201`); a non-author `TEST FITNESS: FIT` by deepseek was recorded 2026-10-24 (#2866 `6384549808`), so the bar is registered and the panel is frozen."
         },
         {
           "id": "compositions-80",
@@ -30,7 +30,7 @@
           "of": 80,
           "unit": "rows",
           "direction": "open",
-          "note": "requires exact canonical integer match on both intermediate addressed-memory/register state (INT) and final output (OUT) across 40 3-step register chains and 40 versioned-slot chains with >= 2 decimal carries, >= 1 decimal borrow on the subtracted operand, zero target-numeral leakage in the prompt, and zero overlap with the 18 pairs and 30 triples in m6_exact_arithmetic.rs; count-table baseline scores 0/80 across all 8 seeds."
+          "note": "current (0/80) is the family-modal count-table baseline, not the overall context-table baseline. Requires exact canonical integer match on both intermediate addressed-memory/register state (INT) and final output (OUT) across 40 3-step register chains and 40 versioned-slot chains with >= 2 decimal carries, >= 1 decimal borrow on the subtracted operand, zero target-numeral leakage in the prompt, and zero overlap with the 18 pairs and 30 triples in m6_exact_arithmetic.rs; count-table baseline scores 0/80 across all 8 seeds."
         },
         {
           "id": "altered-constraints-80",
@@ -40,7 +40,7 @@
           "of": 80,
           "unit": "rows",
           "direction": "open",
-          "note": "70 satisfiable rows (20 non-decimal radix in {7,8,9,11,12,13,16}, 20 rebound [+] over [*] precedence, 20 modular forbidden-residue step cap balanced 10 taken / 10 not-taken, and 10 satisfiable feasibility rows) plus 10 unsatisfiable feasibility rows requiring ABSTAIN:UNSATISFIABLE with identical prompt wording so surface keyword rules score only 10/20 on feasibility; reaching 56/80 requires at least 46/70 on satisfiable altered-constraint rows in addition to abstention discrimination."
+          "note": "current (10/80) is the family-modal count-table baseline (the 10 unsatisfiable feasibility rows answered ABSTAIN:UNSATISFIABLE), not the overall context-table baseline. 70 satisfiable rows (20 non-decimal radix in {7,8,9,11,12,13,16}, 20 rebound [+] over [*] precedence, 20 modular forbidden-residue step cap balanced 10 taken / 10 not-taken, and 10 satisfiable feasibility rows) plus 10 unsatisfiable feasibility rows requiring ABSTAIN:UNSATISFIABLE with identical prompt wording so surface keyword rules score only 10/20 on feasibility; reaching 56/80 requires at least 46/70 on satisfiable altered-constraint rows in addition to abstention discrimination."
         },
         {
           "id": "code-tasks-80",
@@ -50,7 +50,7 @@
           "of": 80,
           "unit": "rows",
           "direction": "open",
-          "note": "80 parameterized integer algorithm tasks (20 AffinelyScaledClampLoop, 20 RadixDigitWeightedSum, 20 BoundedRingStep, 20 PiecewiseParityRecurrence), each graded on 4 held-out (input, expected_output) test vectors in the 256-step zero-I/O SandboxProgram machine and standalone rustc --test verifier; count-table baseline scores 0/80 across all 8 seeds."
+          "note": "current (0/80) is the family-modal count-table baseline, not the overall context-table baseline. 80 parameterized integer algorithm tasks (20 AffinelyScaledClampLoop, 20 RadixDigitWeightedSum, 20 BoundedRingStep, 20 PiecewiseParityRecurrence), each graded on 4 held-out (input, expected_output) test vectors in the 256-step zero-I/O SandboxProgram machine and standalone rustc --test verifier; count-table baseline scores 0/80 across all 8 seeds."
         }
       ],
       "note": "Frozen 2026-10-24 under m6-reasoning-panel-freeze (#2866), before any M6 evaluation run (D21/D22): the owner bar registration is recorded under the standing direction at 2026-10-24T13:01Z (#2028 `6384497995`, #2866 `6384498201`) and the non-author `TEST FITNESS: FIT` by deepseek at 2026-10-24 (#2866 `6384549808`). Byte-exact rows and deterministic oracles are generated in-process by uor_r4_harness::panels::m6_reasoning::generate_frozen_m6_panel() from seed 0x004D365F52454153 without committing bulk corpus files to git (CHARTER section 3.13). This releases no training or run: M6 qualification remains HELD pending M1 trunk training (#2845) and Casey's typed D40 release."
