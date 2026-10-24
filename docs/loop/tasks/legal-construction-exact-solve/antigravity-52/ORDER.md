@@ -4,11 +4,11 @@ Lab: antigravity. Item: [legal-construction-exact-solve](../../../roadmap/items/
 
 ## Why this repair
 
-Independent fresh-context review by `kimi` at `c8ec27bc154501c7ace905040583e086af5a75f9` on PR #3130 returned a counted `CHANGES` identifying two blocking claim/documentation issues and three non-blocking hardening items:
+Independent fresh-context review by `kimi` at `c8ec27bc154501c7ace905040583e086af5a75f9` on PR #3130 returned a counted `CHANGES` with two blocking claim/doc findings and three follow-up items:
 
-1. **Same-dual scope for `tree_eliminated_codes >= root_eliminated_codes`:** `antigravity-51/REPORT.md` line 10 stated that intersecting each leaf's domain reduced-cost test under $y_{\text{root}}$ and $y^{(l)}$ guarantees `tree_eliminated_codes >= root_eliminated_codes` on every instance, whereas at $m > 64$ `certify_disjunctive_split_bound` used its `Dy<P>` search `root_y` while `root-search` passed `dual_y_ref` (from `blp::certify_basis_with_dual`) to `certify_reduced_cost_fixing`. Count inclusion across different root duals is not implied unless both operators share the same root dual.
-2. **README `n_viol` threshold wording:** `docs/labs/legal-construction-exact-solve/README.md` line 255 stated $1 \le \text{n\_viol} \le 25$, whereas `search.rs` caps direct greedy guard-violation repair at $1 \le \text{n\_viol} \le 5$ when $m \ge 64$ ($1 \le \text{n\_viol} \le 25$ when $m < 64$).
-3. **Follow-ups:** (a) add an explicit `deltas == delta(codes)` check in the final independent rational verification of `lp_guided_discrete_solve`; (b) add $m \ge 64$ test coverage in `tests/search_certify.rs` verifying code-level survival subset inclusion and count monotonicity; and (c) document `max_leaves = 1` vs `max_leaves >= 2` field semantics on `DisjunctiveSplitCertificate`.
+1. **Same-dual scope for `tree_eliminated_codes >= root_eliminated_codes`:** `antigravity-51/REPORT.md` line 10 stated that intersecting each leaf's domain reduced-cost test under $y_{\text{root}}$ and $y^{(l)}$ guarantees `tree_eliminated_codes >= root_eliminated_codes` on every instance, whereas at $m > 64$ `certify_disjunctive_split_bound` used its `Dy<P>` search `root_y` while `root-search` passed `dual_y_ref` to `certify_reduced_cost_fixing`. Count inclusion across different root duals requires sharing the same root dual.
+2. **README `n_viol` threshold wording:** `docs/labs/legal-construction-exact-solve/README.md` line 255 stated $1 \le \text{n\_viol} \le 25$, whereas `search.rs` caps greedy guard-violation repair at $1 \le \text{n\_viol} \le 5$ when $m \ge 64$ ($1 \le \text{n\_viol} \le 25$ when $m < 64$).
+3. **Follow-ups:** (a) add an explicit `deltas == delta(codes)` check in `lp_guided_discrete_solve`; (b) add $m \ge 64$ test coverage in `tests/search_certify.rs`; and (c) document `max_leaves = 1` vs `max_leaves >= 2` semantics on `DisjunctiveSplitCertificate`.
 
 ## Cancel probe (run first)
 
