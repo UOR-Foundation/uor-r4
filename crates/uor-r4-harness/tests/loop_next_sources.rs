@@ -607,6 +607,61 @@ fn a_long_running_record_with_a_recent_heartbeat_is_counted_as_running() {
     );
 }
 
+/// The milestone key outranks the unblock count, and a done dependent lends no rank: an M1
+/// item that unblocks nothing comes before an infra item that unblocks three, and an infra item
+/// whose only M1 dependent is done ranks as infra (claude-83 review).
+#[test]
+fn any_puts_the_milestone_key_before_the_unblock_count() {
+    let owned: Vec<(String, String)> = vec![
+        ("aa-infra-hub".into(), item("ready", "milestone: infra\n")),
+        (
+            "ab-infra-a".into(),
+            item("held", "milestone: infra\ndepends_on: [aa-infra-hub]\n"),
+        ),
+        (
+            "ab-infra-b".into(),
+            item("held", "milestone: infra\ndepends_on: [aa-infra-hub]\n"),
+        ),
+        (
+            "ab-infra-c".into(),
+            item("held", "milestone: infra\ndepends_on: [aa-infra-hub]\n"),
+        ),
+        ("zz-m1-leaf".into(), item("ready", "milestone: M1\n")),
+    ];
+    let pairs: Vec<(&str, &str)> = owned
+        .iter()
+        .map(|(a, b)| (a.as_str(), b.as_str()))
+        .collect();
+    let labs_json = labs(None);
+    let o = Repo::new(&[("docs/harness/labs.json", &labs_json)], &pairs).next();
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(
+        decision(&o).starts_with("GO item zz-m1-leaf — "),
+        "an M1 item must come before an infra item however much the infra item unblocks: {}",
+        decision(&o)
+    );
+
+    // The infra item's only M1 dependent is done, so it ranks as infra, not M1.
+    let owned: Vec<(String, String)> = vec![
+        ("aa-infra-old".into(), item("ready", "milestone: infra\n")),
+        (
+            "ab-m1-done".into(),
+            item("done", "milestone: M1\ndepends_on: [aa-infra-old]\n"),
+        ),
+    ];
+    let pairs: Vec<(&str, &str)> = owned
+        .iter()
+        .map(|(a, b)| (a.as_str(), b.as_str()))
+        .collect();
+    let o = Repo::new(&[("docs/harness/labs.json", &labs_json)], &pairs).next();
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(
+        decision(&o).contains("(infra path, unblocks 0)"),
+        "a done dependent must lend no rank: {}",
+        decision(&o)
+    );
+}
+
 /// `any` ranks ready items by effective milestone, then unblock count, then id (claude-83).
 #[test]
 fn any_offers_the_milestone_path_item_that_unblocks_most_first() {

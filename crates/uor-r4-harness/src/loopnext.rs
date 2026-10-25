@@ -735,9 +735,11 @@ fn ready_items(root: &Path) -> Result<(usize, Vec<ReadyItem>, Vec<String>), Stri
             while let Some(cur) = stack.pop() {
                 for d in dependents.get(&cur).into_iter().flatten() {
                     if seen.insert(d.clone()) {
+                        // A done dependent is walked through but lends no rank: an item whose
+                        // only milestone dependent has already closed ranks by its own milestone.
                         if let Some(&(r, done)) = nodes.get(d) {
-                            rank = rank.min(r);
                             if !done {
+                                rank = rank.min(r);
                                 unblocks += 1;
                             }
                         }
