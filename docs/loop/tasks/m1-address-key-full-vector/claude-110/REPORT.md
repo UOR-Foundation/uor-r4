@@ -35,31 +35,6 @@ Closes #2834.
   - Training under a full-vector metric. It is not registered: every update capability refuses a non-outer metric.
   - Serving: the D11 exporter refuses one too.
 
-## Measurements
-
-The run was on one RTX 5090 (`vast-57698566`, GPU 0), at source `77123dd995be44d5b0a5f482c8b82e270dd9aa42`, with job `docs/labs/m1-address-key-full-vector/address-key-job.sh` (sha256 `73d45cb5…`). The outputs are in the HF store under `results/claude/address-key-2026-10-25/run/`, 30 files, and the SHA256SUMS were verified after download. Each zero-update `eval-corpus` took 30–37 s.
-
-**Instrument gates, all passed before any treatment eval ran:**
-- **G-Q:** `device_admission_matches_the_host_oracles_for_each_metric` passed.
-- **G-Exact:** A8-Outer reproduced 4,244 of 14,287 full-DEV admitted rows, 1,351 of 3,847 P_succ, and top-1 133, exactly.
-- **G-Occ:** both pinned tables gave 4,096 distinct vectors, 256 occupied cells, 0 alias tokens, 0 non-representative rows, and an alias ceiling of 14,287.
-
-**Starting reach on the 3,847 P_succ rows.** The paired floor is F = max(24, 2√(b+c)).
-
-| Arm | P_succ admitted | Against A8-Outer, b / c | Against its same-metric shuffled arm, b / c | Full-DEV admitted | Top-1 | Top-8 |
-|---|---:|---:|---:|---:|---:|---:|
-| A8-Outer | 1,351 | — | — | 4,244 | 133 | 513 |
-| **FV8-Env** | **1,980** | **730 / 101** | **1,726 / 391** (FVS8-Env admits 645) | 5,709 | 118 | 1,126 |
-| FV8-TwoScale | 1,802 | 562 / 111 | 1,555 / 416 (FVS8-TwoScale admits 663) | 5,666 | 118 | 1,179 |
-| FV16-TwoScale (bracket only) | — | — | — | 7,207 (A16: 6,023) | 118 | 1,185 |
-
-- **Outcome: PASS.** Both treatments have reach, geometry and capacity. The grade is `address-key-grade` → `docs/labs/m1-address-key-full-vector/grade.json`.
-  - The shuffled packings admit about half of A8. So the gain is the predecessor-pulled full-vector placement read by a full-vector metric, not packing balance.
-- **Stage 1 bar:**
-  - "a starting reach above the address-cell model's 1,351 of 3,847": met, 1,980 (FV8-Env);
-  - "winnable positions clear 1,941": met, min(14,287, 5,709) = 5,709;
-  - within-cell tie mass: 0.
-
 ## What changed
 
 **Code** (`crates/uor-r4-discrete`):
@@ -94,6 +69,31 @@ The run was on one RTX 5090 (`vast-57698566`, GPU 0), at source `77123dd995be44d
 **The notebook row is not in this PR.** The installed `uor-harness` loop guard refuses the item's own notebook page (`docs/research/notebook/m1-discrete-attention.md`). That is the gap #3189 closed on `main`, but the installed binary predates the fix. The row's text is in the lab README's GPU section. It goes into the notebook in the carrier-credit results unit, whose scope holds that page since claude-108 (#3227).
 
 The tables (`full-vector` `2c886736…`, `full-vector-shuffled-20261019` `5e5abf33…`, and A8's `6600bdb1…` rebuilt byte for byte) were built on the host from TRAIN and are sealed in the HF store under `results/claude/address-key-2026-10-25/tables/`.
+
+## Measurements
+
+The run was on one RTX 5090 (`vast-57698566`, GPU 0), at source `77123dd995be44d5b0a5f482c8b82e270dd9aa42`, with job `docs/labs/m1-address-key-full-vector/address-key-job.sh` (sha256 `73d45cb5…`). The outputs are in the HF store under `results/claude/address-key-2026-10-25/run/`, 30 files, and the SHA256SUMS were verified after download. Each zero-update `eval-corpus` took 30–37 s.
+
+**Instrument gates, all passed before any treatment eval ran:**
+- **G-Q:** `device_admission_matches_the_host_oracles_for_each_metric` passed.
+- **G-Exact:** A8-Outer reproduced 4,244 of 14,287 full-DEV admitted rows, 1,351 of 3,847 P_succ, and top-1 133, exactly.
+- **G-Occ:** both pinned tables gave 4,096 distinct vectors, 256 occupied cells, 0 alias tokens, 0 non-representative rows, and an alias ceiling of 14,287.
+
+**Starting reach on the 3,847 P_succ rows.** The paired floor is F = max(24, 2√(b+c)).
+
+| Arm | P_succ admitted | Against A8-Outer, b / c | Against its same-metric shuffled arm, b / c | Full-DEV admitted | Top-1 | Top-8 |
+|---|---:|---:|---:|---:|---:|---:|
+| A8-Outer | 1,351 | — | — | 4,244 | 133 | 513 |
+| **FV8-Env** | **1,980** | **730 / 101** | **1,726 / 391** (FVS8-Env admits 645) | 5,709 | 118 | 1,126 |
+| FV8-TwoScale | 1,802 | 562 / 111 | 1,555 / 416 (FVS8-TwoScale admits 663) | 5,666 | 118 | 1,179 |
+| FV16-TwoScale (bracket only) | — | — | — | 7,207 (A16: 6,023) | 118 | 1,185 |
+
+- **Outcome: PASS.** Both treatments have reach, geometry and capacity. The grade is `address-key-grade` → `docs/labs/m1-address-key-full-vector/grade.json`.
+  - The shuffled packings admit about half of A8. So the gain is the predecessor-pulled full-vector placement read by a full-vector metric, not packing balance.
+- **Stage 1 bar:**
+  - "a starting reach above the address-cell model's 1,351 of 3,847": met, 1,980 (FV8-Env);
+  - "winnable positions clear 1,941": met, min(14,287, 5,709) = 5,709;
+  - within-cell tie mass: 0.
 
 ## Checks run at the head
 
