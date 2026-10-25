@@ -7,7 +7,7 @@ Closes #3248.
 
 - **The first route fixture could not catch a wrong composition order.** I swapped the order of `compose` in the route read as a planted bug, and the parity tests still passed. The reason: `BRANCH[r][0] == r` and `BFS` is the identity on its diagonal, so most route steps compose with the identity, and the order never shows. I widened the route fixture to 16 roots, 4 blocks and 256 rows, and that bug now fails the tests (`route: row 2 (length 80): read vector differs`).
 - **cudarc's safe module loader exists only with its `nvrtc` feature.** Turning that feature on would compile NVRTC bindings into the binary, which CHARTER §3 bans. So the scorer loads its cubin through the raw driver API instead: `cuModuleLoadData`, `cuModuleGetFunction` and `cuLaunchKernel`, from `cudarc::driver::result`. `cargo tree` shows cudarc built with `std`, `driver`, `cuda-12080` and `dynamic-linking` only.
-- **The kernel first built the row plan itself, per row.** The ORDER says the host precomputes it. I moved it to a host table (`kernel::row_plans`, one `D11Plan` per prefix length), which also cut the scratch memory per row from 37,000 to 22,528 bytes.
+- **The kernel first built the row plan itself, per row.** The ORDER says the host precomputes it. I moved it to a host table (`kernel::row_plans`, one `D11Plan` per prefix length), which also cut the scratch memory per row from 37,000 bytes to 22,528. The old record held nodes, frontier and counts besides the per-node arrays: 9,250 words. The new one holds 5,632 words.
 - **The FIT found the 14,287-row panel test could pass without running:** with `UOR_DEV_CONFIG` unset, it printed "skipped". It now fails instead.
 - **The work stayed one PR,** so the stop rule for splitting it was not needed.
 
@@ -29,7 +29,7 @@ All of it is in `docs/labs/m1-d11-artifact-scorer/instrument/`, a detached `[wor
 
 ## Measurements
 
-**GPU qualification (stage 4): parity on all 14,287 of 14,287 rows.** It ran on one RTX 5090 (`vast-57733465`, compute capability 12.0, nvcc 12.8.93), at `932779e32d1fedee85a6343ca06cf64bc0d2b136`, on 25 Oct. The job took 35 s of wall time, from 23:06:00Z to 23:06:35Z. The pod was up for about 6 minutes, at about $1.1/h. The decision row of [the sheet](../../../../harness/prep/m1-d11-artifact-scorer-2026-10-25.md) reads **qualified**.
+**GPU qualification (stage 4): parity on all 14,287 of 14,287 rows.** It ran on one RTX 5090 (`vast-57733465`, compute capability 12.0, nvcc 12.8.93), at `932779e32d1fedee85a6343ca06cf64bc0d2b136`, on 25 Oct. The job took 35 s of wall time, from 23:06:00Z to 23:06:35Z. The pod was up for 288 s (from `up` at 23:03:40Z to `down` at 23:08:31Z) at $0.975/h, about $0.08 (compute ledger). The decision row of [the sheet](../../../../harness/prep/m1-d11-artifact-scorer-2026-10-25.md) reads **qualified**.
 
 | Check | Result |
 |---|---|
@@ -53,8 +53,8 @@ The totals on this stand-in artifact are top-1 741, top-8 1,345 and admitted 4,2
 Every one of the 21 decode runs wrote the same reply (sha256 `203768f9…`). The timed decode also includes sliding the window: one prompt copy per run and one `Vec::remove(0)` per step. That cost is small next to 64 `evaluate_prefix` calls.
 
 **Host checks.**
-- 15 tests pass and 1 is ignored off the pod. On the laptop, the ignored panel test also passes against the store's DEV files: 14,287 rows, `rows_sha256` `d933c533…`.
-- Nine planted bugs each fail the tests:
+- 15 tests pass and 1 is ignored off the pod. On the laptop, the ignored panel test also passes against the store's DEV files: 14,287 rows, `rows_sha256` `d933c533…`. These laptop runs and the planted bugs below ran in this session's terminal; their logs are not sealed. The sealed test log is the pod's `tests.log`.
+- Nine planted bugs each fail the tests. Each was set aside, run and restored, with `cmp` confirming the restore:
   - the route's composition order;
   - relation edge 3 and relation edge 4;
   - the tie in the level top-k;
@@ -68,7 +68,16 @@ Every one of the 21 decode runs wrote the same reply (sha256 `203768f9…`). The
 
 ## Checks run at the head
 
-CHECKS
+- **The GPU qualification** at `932779e32` passed every check in the sheet's pass row (see Measurements; evidence in the store, `pod/SHA256SUMS` sha256 `fb6ffc53…`). The fixes since then (`ffc02ee09` and the final commit) touch only the host side. `kernel_core.h`, `scorer.cu` and `build.rs` are byte-identical to the qualified head.
+- **Instrument tests on the laptop** (`cargo test --release --target aarch64-apple-darwin --no-fail-fast`) at the final head: 15 pass and 1 is ignored. Two review fixes had their own negative gates: the refusal-reason check, and the host row-length check, each set aside so that `rows_the_reference_refuses_are_refused` fails.
+- **Lint and ratchets:** clippy with `-D warnings` exits 0 with and without `cuda` (stub nvcc). `cargo fmt --check` is clean. `uor-harness ratchet d23`, `d25` and `d32` are OK, with no softmax, dense matrix product or discrete-path float site added.
+- **Harness:** `uor-harness check` reports 0 errors once the sheet carries the `prep.sheet_shape` blocks. `loop report --check` passes, and `loop pr-check --local` passes with two advisory warnings: a "stop rule" heading in the sheet, and the ORDER's size.
+- **Fresh reviews (D66), all from non-authors with fresh context:**
+  - The kernel port: APPROVE.
+  - The build and driver: APPROVE, with one should-fix, the row-length check, now fixed.
+  - The reader and the CLI, in two passes, both cut short by the context budget: no defect found; their notes are fixed (refusal reasons, paired outputs). Their open items were settled from the code: the `training.rs` epoch check, the eval-corpus walk, the plan bounds, and the host check call.
+  - The tests and `toks`: APPROVE, with two should-fix: the GPU test must show as `ok`, which the pod log does, and the decode reply must not be one repeated token, now asserted.
+  - The claims check of this REPORT, the notebook rows and the #2839 note: CHANGES, now fixed. It found the pod time and price, this section, a verdict word and a sheet line number.
 
 ## Skills used
 
@@ -87,4 +96,4 @@ Step 6 of the plan has to measure the exported integer model on its own: how oft
 - `score` grades that file on a GPU. It uses a new integer CUDA kernel that copies the reference evaluator exactly.
 - `toks` times the file on the laptop by the step-6 protocol.
 
-I qualified them on a stand-in checkpoint from the A8 run, using one rented RTX 5090 for about six minutes. On every one of the 14,287 rows, the GPU kernel gave the same read vector, admitted cells, top-8 list and prediction as the reference evaluator. The laptop served the same file at about 13,000 tokens per second while writing a reply. These numbers check the tools; step 6 will measure its own model with them.
+I qualified them on a stand-in checkpoint from the A8 run, using one rented RTX 5090 for under five minutes (about 8 cents). On every one of the 14,287 rows, the GPU kernel gave the same read vector, admitted cells, top-8 list and prediction as the reference evaluator. The laptop served the same file at about 13,000 tokens per second while writing a reply. These numbers check the tools; step 6 will measure its own model with them.

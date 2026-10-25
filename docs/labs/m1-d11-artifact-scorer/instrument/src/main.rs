@@ -35,6 +35,15 @@ fn write_new(path: &str, bytes: &[u8]) -> Result<(), String> {
     file.write_all(bytes).map_err(|e| format!("{path}: {e}"))
 }
 
+/// Refuses before any work when an output exists, so a command that writes two
+/// files never leaves one without its partner.
+fn refuse_existing(paths: &[&str]) -> Result<(), String> {
+    match paths.iter().find(|path| Path::new(path).exists()) {
+        Some(path) => Err(format!("{path} exists (outputs are never overwritten)")),
+        None => Ok(()),
+    }
+}
+
 fn json_bytes(value: &Value) -> Result<Vec<u8>, String> {
     let mut text = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
     text.push('\n');
@@ -44,6 +53,7 @@ fn json_bytes(value: &Value) -> Result<Vec<u8>, String> {
 fn run(args: &[String]) -> Result<(), String> {
     match args {
         [command, checkpoint, out, report] if command == "export" => {
+            refuse_existing(&[out, report])?;
             let exported = inst::export_checkpoint(&read_json(checkpoint)?)?;
             write_new(out, &exported.bytes)?;
             write_new(report, &json_bytes(&exported.report)?)?;
@@ -119,6 +129,7 @@ fn score(
 ) -> Result<(), String> {
     use inst::artifact::ArtifactTables;
     use inst::device::{self, DeviceScorer};
+    refuse_existing(&[report, row_records])?;
     let bytes = std::fs::read(artifact).map_err(|e| format!("{artifact}: {e}"))?;
     let (tables, model) = ArtifactTables::from_bytes(&bytes)?;
     let config: DriverConfig =

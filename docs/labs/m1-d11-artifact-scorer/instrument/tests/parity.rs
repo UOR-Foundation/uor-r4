@@ -373,7 +373,7 @@ fn rows_the_reference_refuses_are_refused() {
         .contains("different reasons"));
     // A hand-built row longer than its stride is refused before scoring.
     let mut overlong = pack_rows(&views).expect("pack");
-    overlong.lengths[3] = overlong.stride + 1;
+    overlong.lengths[0] = overlong.stride + 1;
     assert!(host_score(&tables, &overlong)
         .expect_err("refused")
         .contains("0..=stride"));

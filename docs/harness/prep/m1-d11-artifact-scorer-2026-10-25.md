@@ -6,7 +6,7 @@ Item [m1-d11-artifact-scorer](../../roadmap/items/m1-d11-artifact-scorer.md) (#3
 
 On one RTX 5090, does the D11 artifact scorer's ahead-of-time CUDA build (`docs/labs/m1-d11-artifact-scorer/instrument`, `--features cuda`) score every row of the registered 14,287-row DEV panel bit-identically to `IntegerDiscreteModel::evaluate_prefix`, on a real exported checkpoint?
 
-## The one arm
+## The one arm: base artifact and data split
 
 - **Instrument:** the PR head pushed before the pod, built on the pod with nvcc (`UOR_NVCC_ARCH=compute_120`, cubin `sm_120`, PTX admitted by the discrete crate's integer rules).
 - **Checkpoint:** A8 FrozenZero `a8-dose/run-state-frozen-zero/continuation-05248.json`, inside the store's `results/antigravity/a8-full-dose-rerun-2026-10-25/a8-full-dose-rerun-20261025.tar.gz`. Relation read (kept 8, 1 sweep), vocabulary 4,096, 4 blocks, context 192, 8 kept cells, epoch 274 = 274 accepted updates.
@@ -30,7 +30,7 @@ The pod: `scripts/pod/uor-pod up --lab claude --session claude-116 --gpu 5090 --
    - `d11-scorer rows CONFIG ROWS.json`, then check its `rows_sha256`.
    - `d11-scorer score A8.lut CONFIG SCORE.json SCORE-ROWS.jsonl --reference`, then check the pass row's fields in `SCORE.json`.
 
-## Decision table
+## Bar and decision table
 
 | Outcome | Meaning | Unlocks |
 |---|---|---|
@@ -62,3 +62,15 @@ The pod: `scripts/pod/uor-pod up --lab claude --session claude-116 --gpu 5090 --
 ## Cost and stop rule
 
 One RTX 5090 through `scripts/pod/uor-pod` (Vast, about $1.11/h at the time of writing), a 2-hour lease, at most about $2.50. One other session's pod ran at $2.17/h when this was written, inside the caps of 4 pods and $8/h. Stop at once and classify on the first parity mismatch. The outputs go off the pod to the store's `results/claude/d11-artifact-scorer-2026-10-25/` with a `SHA256SUMS` before `release` and `down`, and the pod never stays up after the job.
+
+## Minimum test power
+
+The comparison is exhaustive, not sampled. Every one of the 14,287 rows is checked field by field: the read vector, the admitted cells, the top-8 and the prediction. So any port fault that changes the output of even one panel row fails the run with certainty.
+
+A fault that changes no panel row is covered only by the finite tests. Those tests ran on the GPU in step (a). On the laptop, each of nine planted bugs made them fail.
+
+## Test fitness
+
+TEST FITNESS: FIT. A fresh-context, non-author reviewer passed this sheet at `d2089be9c47b71a7669f2b67362e2fc30a8d0433` (#3248 comment `6404635561`), with four should-fix findings, all fixed in `932779e32d1fedee85a6343ca06cf64bc0d2b136`. The D67 pre-run review returned GO (#3248 comment `6404635800`). The run used the sheet as it stood at `932779e32`.
+
+After the run, this section and the one above were added, and two headings were renamed to the blocks `prep.sheet_shape` requires. Neither change touches the test.
