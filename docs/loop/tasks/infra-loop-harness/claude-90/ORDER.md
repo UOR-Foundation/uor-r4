@@ -13,7 +13,7 @@ Two item files block or mislead `loop next`.
 2. **`m1-address-as-read` (#2833).** `loop next` offers it as ready with no dependencies. But its done-when needs a registered three-arm GPU evaluation on the held #2844 checkpoint, which is the trunk (`m1-trunk-assembly-and-training`, M2 under D79).
    - Declare that dependency, so `loop next` stops sending labs to an item they cannot finish.
 
-Record both as D80, the next free number. D75 is reserved for Codex's #3169.
+Record the decision as a `[claude] owner log:` note on #2835 and #2833, with its review record (D69). `DECISIONS.md` is an owner path, so a lab's own decision never goes there.
 
 ## Cancel probe (run first)
 
@@ -21,7 +21,7 @@ At `a4eaaf238`:
 - `UOR_LAB=claude uor-harness loop next` skipped #2835 and went GO on `m1-address-as-read`. Its item file has `depends_on: []`, and its "What is missing" names the #2844 checkpoint.
 - `m1-bvg-k-block-apply-c2.md` has `scope: [crates/uor-r4-discrete/**, …]`. Antigravity's #3180 holds `m1-a8-finite-cuda-qualification`, whose scope is the same glob.
 - `uor-harness loop claim infra-loop-harness` refused: "already claimed by PR #3169 (codex-1)". #3169 is Codex's draft, idle since 01:07Z and conflicting with main. Its files are `PLAN.md`, `DECISIONS.md` and its own task folder.
-  - This unit's only shared file is `DECISIONS.md`, where both PRs append one row. So this ORDER is written by hand, as claude-88's was.
+  - This unit shares no file with #3169. So this ORDER is written by hand, as claude-88's was.
   - The umbrella item acting as a single lock for every harness unit is recorded under Still open.
 
 The unit stands. Class: instrument (roadmap bookkeeping).
@@ -31,7 +31,6 @@ The unit stands. Class: instrument (roadmap bookkeeping).
 - `docs/roadmap/items/m1-bvg-k-block-apply-c2.md`
 - `docs/roadmap/items/m1-address-as-read.md`
 - `docs/roadmap/README.md` (rendered by `cargo run -p xtask -- roadmap render`)
-- `docs/integration/DECISIONS.md` (the D80 row)
 - `docs/loop/tasks/infra-loop-harness/claude-90/**`
 
 ## Done when

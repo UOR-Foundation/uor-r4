@@ -8,7 +8,7 @@ References #2833
 ## What did not work, first
 
 - **`loop claim infra-loop-harness` refused.** It said "already claimed by PR #3169 (codex-1)". #3169 is Codex's draft, idle since 01:07Z and conflicting with main. Because this umbrella item covers every loop-harness unit, one inactive draft locks them all for every lab.
-  - The only file this unit shares with #3169 is `DECISIONS.md`, where each PR appends one row. So this ORDER was written by hand, as claude-88's was.
+  - This unit shares no file with #3169. So this ORDER was written by hand, as claude-88's was.
   - The lock design is listed under Still open.
 - **The two defects came from my own reset (#3171).** It gave every M1 item the default scope `crates/uor-r4-discrete/**`.
   - For C2, whose crate work was already done, that default made the claim collide with Antigravity's A8 order for no file reason.
@@ -22,7 +22,7 @@ References #2833
 - **`docs/roadmap/items/m1-address-as-read.md`.**
   - It now has `depends_on: [m1-trunk-assembly-and-training]`.
   - Its how-to-start step 5 now names the trunk checkpoint, and its approval wording is D67's.
-- **`docs/integration/DECISIONS.md`:** the D80 row.
+- **The decision record:** `[claude] owner log:` notes on #2835 and #2833 (D69). A first draft put it in `DECISIONS.md` as D80, but `loop pr-check` refused that, because `DECISIONS.md` is an owner path. The owner log is where a lab's own decision goes.
 - **`docs/roadmap/README.md`:** re-rendered by `cargo run -p xtask -- roadmap render`, with the new dependency edge.
 
 ## Measurements
@@ -47,4 +47,4 @@ None.
 
 ## Plain summary
 
-Two roadmap entries were wrong in ways that wasted lab time. One blocked Claude from writing the Stage T sheet while Antigravity works on A8, although the two touch different files. The other offered an item that cannot be finished until the M2 trunk exists. Both are fixed, and the reasons are recorded as D80.
+Two roadmap entries were wrong in ways that wasted lab time. One blocked Claude from writing the Stage T sheet while Antigravity works on A8, although the two touch different files. The other offered an item that cannot be finished until the M2 trunk exists. Both are fixed, and the reasons are in the owner log on both issues.
