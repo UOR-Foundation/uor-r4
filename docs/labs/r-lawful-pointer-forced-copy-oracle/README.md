@@ -105,7 +105,7 @@ All thirteen finite host unit tests in `crates/uor-r4-training` pass on CPU (`ca
 
 ## 5. RTX 5090 Finite CUDA Qualification and `m2-fresh256` Span/Control Verification (`antigravity-69`)
 
-Executed on an NVIDIA GeForce RTX 5090 (`vast-57659950`, CUDA 12.8 `V12.8.61`, `UOR_NVCC_ARCH=compute_120`, sealed at `hf://datasets/caseyallard/uor-r4-store/results/antigravity/lawful-pointer-oracle-2026-10-25/`):
+Executed on an NVIDIA GeForce RTX 5090 (`vast-57659950`, CUDA 12.8 `V12.8.93`, `UOR_NVCC_ARCH=compute_120`, sealed at `hf://datasets/caseyallard/uor-r4-store/results/antigravity/lawful-pointer-oracle-2026-10-25/`):
 
 | Check / Artifact | Build 1 (`--no-default-features --features sieve-cuda`) | Build 2 (`--features cuda,sieve-cuda`) | Verdict |
 |---|---|---|---|

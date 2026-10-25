@@ -285,14 +285,15 @@ fn controls(device: &PointerDevice) -> Result<Value> {
         },
     ];
 
-    // 1. SlotAddressSemiprime controls (8 items):
+    // 1. SlotAddressSemiprime controls (10 items):
     //    - step 0 and step 1 admitted copy for Ana's locker (55)
     //    - gate closed (40 < 100) falls back to base_top_token (7)
     //    - unadmitted query (Bob's pin = 91) falls back to base_top_token (7)
     //    - base-margin block in N (base 1500 >= copy 1474)
     //    - base-margin block in O1 (base 1500 >= copy 1474)
     //    - O1 blocked by learned gate (25 < 100) while selecting span (9, 11)
-    //    - O2 forced gate (250 >= 100) emitting Bob's locker token 10 (" 9") and token 11 ("2")
+    //    - O2 forced gate (250 >= 100) emitting Bob's locker token 10 (" 9") and token 11 ("2") (2 steps)
+    //    - W wrong-span distractor control under O2ForcedGate
     let head_semi =
         LawfulPointerHead::new(RouteAdmissionMode::SlotAddressSemiprime, fold.clone(), 100);
     let semi_items = vec![
