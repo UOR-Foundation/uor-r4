@@ -4,7 +4,7 @@ Item `m1-w2-code-utilization` (#3179). Lab: claude. Order: [claude-95](../../loo
 
 **Result.** All three registered questions resolve. No precedence-0 fault, and none of the three underpowered.
 - **QA = A1a.** A rule keyed on the read code would admit the target's cell far more often than the writer's address key. That holds even against a fixed list of the most frequent cells.
-- **QB = B2.** More TRAIN data would not lift the code table to W2's H_law line, so the full-TRAIN GPU capture (G1) is declined.
+- **QB = B2.** The registered data-scaling projection of the code table (3,552) is below W2's H_law line (about 6,435), so the full-TRAIN GPU capture (G1) is declined.
 - **QC = C1.** A table keyed by the code and the previous token together beats the previous-token table, so the code carries next-token information the last token does not.
 
 **Scope.** One checkpoint (seed-1 Q4, epoch 407), one DEV panel (14,287 rows), the model-matched TRAIN stream (1,049,856 targets).
@@ -61,11 +61,11 @@ Here b counts rows where the second arm hits and the first misses, and c the rev
 ### QC: beyond the last token
 
 - **The result.** J beats G: 7,262 against 6,300, with (b, c) = (571, 1,533).
-- **The coverage guard holds.** 11,727 DEV rows (82.0%) have a seen joint key, well above the guard of 1,429.
+- **The coverage guard holds.** 11,727 DEV rows (82.1%) have a seen joint key, well above the guard of 1,429.
 - **Under the stricter rule,** using the joint key only when it was seen at least twice, J_m2 is 7,251.
 
 Per the sheet, C1 is one input favouring a read that keeps both the code and the query token's identity; J is the reference number for that card. The descriptive arms show why the code adds and does not replace:
-- **Query determinacy.** On TRAIN, 443,216 rows (42.2%) have their code's most common query token; on DEV, 9,696 (67.8%). The code mixes query tokens rather than preserving the last token.
+- **Query determinacy.** On TRAIN, 443,216 rows (42.2%) have their code's most common query token; on DEV, 9,696 (67.9%). The DEV figure is higher because many DEV codes occur on a single row (4,020 single-row code keys), and a single-row key trivially has one query token. On TRAIN, the code mixes query tokens rather than preserving the last token.
 - **At a matched key count, the query token carries far more.**
   - At 12 bits, the code with one block dropped scores 2,333, 2,433, 2,594 and 2,413 (dropping block 0, 1, 2 or 3). The query token, also 4,096 keys, scores 6,300.
   - At 8 bits, the best block pair (blocks 0 and 1) scores 1,816, against 3,564 for the query token's own cell.
@@ -81,13 +81,13 @@ Per the sheet, C1 is one input favouring a read that keeps both the code and the
 | Collision effective code count N₀² / Σ n(c)² | 1,102,197,620,736 / 526,975,734 (about 2,092) |
 | DEV oracle top-1, Ω: code / query / joint | 8,182 / 6,759 / 12,191 |
 | Single-row DEV keys: code / query / joint | 4,020 / 140 / 8,518 |
-| TRAIN leave-one-out top-1: U / T / G / J | 92,195 / 245,540 / 492,570 / 538,071 (8.7% / 23.3% / 46.9% / 51.2%) |
+| TRAIN leave-one-out top-1: U / T / G / J | 92,195 / 245,540 / 492,570 / 538,071 (8.8% / 23.4% / 46.9% / 51.3%) |
 | TRAIN resubstitution top-1: U / T / G / J | 92,195 / 297,925 / 493,985 / 711,581 |
-| Collision agreement (two rows sharing a key share a target): unigram / code / joint / query | 1.9% / 10.4% / 25.6% / 36.3% (exact fractions in the record) |
+| Collision agreement (two rows sharing a key share a target): unigram / code / joint / query | 1.9% / 10.4% / 25.7% / 36.3% (exact fractions in the record) |
 
 - **The code is used, but unevenly.** All 16 roots appear in every block and 80% of the 65,536 codes occur. But the collision count shows the TRAIN mass behaves like only about 2,092 equally used codes.
 - **Two exact information forms rank the same way.** The leave-one-out top-1 and the collision agreement both put the code's target information above the unigram's and below the query token's, with the joint key between, or above, depending on the form.
-- **Arm R is NOT_RUN** as a missing input: the Q1–Q3 checkpoints (`a5a22dce…`, `dde889aa…`, `102beed4…`) are in neither the HF store's `local-archive/2026-10-20` file list nor `archive/storage/`. Per the sheet, nothing substitutes.
+- **Arm R is NOT_RUN** and was not attempted: the lab searched the HF store's `local-archive/2026-10-20` file list and `archive/storage/` for the Q1–Q3 checkpoints (`a5a22dce…`, `dde889aa…`, `102beed4…`) and found none. The tool does not probe for them. Per the sheet, nothing substitutes.
 
 ## What it unlocks (per the sheet; the decisions themselves are decision reviews)
 
@@ -119,7 +119,19 @@ All 11 checks and all 6 row comparisons pass, with 0 differing rows:
 - Σk_r = 114,296, and F² = 18,288.
 - The count tables are conserved on every subsample.
 - Every leave-one-out hit implies a resubstitution hit, and T ≤ Ω_code.
+- A_T ≤ A_Ω holds within every code whose rows share one k_r.
+- No DEV row repeats an admitted cell.
 - The run is computed twice and must be byte-identical.
+
+**What the unit tests pin:**
+- the floor boundary and the precedence-1 rule;
+- every band, including A1u and the decisive-pair scope;
+- the table tie rule and leave-one-out, including the edge cases;
+- the cell ranking (`ranked_for`) and the row-matched admission size (`in_top`);
+- the joint-key fallback (`joint_prediction`);
+- the spread and projection rules.
+
+A planted fault, `in_top` taking k − 1 cells, makes `in_top_respects_the_row_k` fail.
 
 ## Artifacts
 
@@ -127,13 +139,14 @@ In the HF store `caseyallard/uor-r4-store`, under `results/claude/w2-utilization
 
 | File | sha256 |
 |---|---|
-| `record.json` (`uor-r4.w2-code-utilization/1`) | `a0af69ae4fef30dcc24c05dcdb79b35b41dd6ec92cc7140ca3cbb623ff2f45e2` |
+| `record.json` (`uor-r4.w2-code-utilization/1`) | `d9aa6cd1a9a46876d4e50f1143d481e810fdcfb216beeccf6422ce1b7d70db90` |
 
-The record carries per-row DEV hit flags for every arm and the `uor-r4-discrete` commit it was built against (`8443edfa6ed048bd2bb985a6222e8438b25a3fa0`).
+The record carries per-row DEV hit flags for every arm and the `uor-r4-discrete` commit it was built against (`9d509310be5aa8bb59e8909cefa8a2d24e173789`, from `git rev-parse HEAD`). It replaces the first run's `a0af69ae…`. Every number is identical; only the recorded commit and arm R's reason text differ, the latter reworded after review to say R was not attempted.
 
 Inputs, authenticated before any count:
-- `run-b.tar` `6aa0a766…` → `w2-out-b/train-stream.bin` `70a58767…`, `w2-out-b/query-sidecar.bin` `6d5d4f5d…` and `w2-out-b/capture.json` `d22a4eb2…`;
-- W2's `record.json` `69717971…`.
+- `run-b.tar` `6aa0a766…` was authenticated with `shasum -a 256` before extraction, outside the tool. The tool then pins what it reads: `w2-out-b/train-stream.bin` `70a58767…` (4,199,424 B), `w2-out-b/query-sidecar.bin` `6d5d4f5d…` (2,099,712 B) and `w2-out-b/capture.json` `d22a4eb2…`.
+- W2's `record.json` `69717971…`, pinned by the tool.
+- The `w2-inputs/2026-10-25/` corpora and `SHA256SUMS` are not read by this diagnostic.
 
 ## Check it yourself
 
