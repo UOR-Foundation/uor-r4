@@ -86,7 +86,8 @@ Exported via `prime-zeta-codebook` on [`evidence/spec-v4096-b4-c192-k8.json`](ev
 
 **Run:**
 - One pod, `vast-57710234` (2×5090, one GPU used), about 9 minutes at $2.176/h, about $0.33. A 2×5090 was what the provider gave.
-- The outputs are in the HF store at `results/claude/prime-zeta-nulls-2026-10-25/run/`, 68 files. All 68 verified against SHA256SUMS after download, before the pod came down.
+- The outputs are in the HF store at `results/claude/prime-zeta-nulls-2026-10-25/run/`. All 68 checksummed files verified against SHA256SUMS after download, before the pod came down. The folder holds 70 files, counting `SHA256SUMS` and `job.log`.
+- The pod was leased at 19:06Z and deleted at 19:15Z.
 
 **Instrument gates, all passed in the job:**
 - G-Rebuild: all 7 tables equal their pins.
@@ -120,10 +121,9 @@ Every arm has 4,096 distinct vectors, alias ceiling 14,287, zero tie mass and 25
 **Matched-seed crowding, reported only:** Q0 against R0 is 169 / 174 (tie), Q1 against R1 is 159 / 163 (tie), and Q2 against R2 is 122 / 92 (win for Q2).
 
 **Read with care. These points are descriptive and decide nothing.**
-- **The admitted rows of different tables barely overlap.** P8 shares 2 to 8 of its 127 admitted rows with any null. If admission were independent of the table, the expected overlap would be about 3 to 6 (127 × the null's P_succ count / 3,847).
-- **The spread across null seeds is wide.** It runs from 126 to 184 for Q and from 96 to 188 for R. P8's 127 sits at its low end. The K = 8 of 256 cells chance rate is about 120.
-- **The loss holds under the registered rule,** but it rests on nulls that landed high: P8 ties Q2 and beats R2.
-- **One hypothesis, untested here:** at checkpoint 0, which targets are admitted depends on each table's particular placement more than on its construction family.
+- **P8 sits near chance, below four of the six nulls.** The K = 8 of 256 cells chance rate is about 120. P8 admits 127. Q0, Q1, R0 and R1 admit 178 to 188, about 1.5 times chance. Only Q2 (126) and R2 (96) are at or below P8.
+- **Both losses to Q clear the floor by a wide margin:** 51 and 57 rows, against F of about 34. The one win, against R2, clears it by about 1.4.
+- **The overlap of admitted rows** is at the level expected if admission were independent of the table. P8 shares 2 to 8 of its 127 admitted rows with any null, against about 3 to 6 expected (127 × the null's P_succ count / 3,847).
 
 **Filled notebook row.** The installed loop guard refuses `docs/research/notebook/m1-prime-zeta.md`. That page is outside this item's scope, and the fix that admits an item's own notebook page (#3189) is not in the installed binary. The row below is the one to add there.
 
