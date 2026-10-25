@@ -72,6 +72,33 @@ fn identities() -> (Vec<Identity>, Vec<u32>) {
     (ids, targets)
 }
 
+/// A model on a patterned table: token `t` sits in cell `(t % 16, (t / 16) % 16)`,
+/// so all 256 cells hold 4 tokens, and the 4 differ in their interior blocks.
+/// The seeded device table gives same-cell tokens one vector, so a cell's sum
+/// is a fixed multiple of its envelope and the two-scale order cannot differ
+/// from the envelope's (G-Q's first pod run, 25 Oct: an instrument fault).
+fn patterned_model(metric: AddressMetric) -> Result<Device> {
+    let mut snapshot = Device::new(SPEC, 7, 0)?.snapshot()?;
+    let width = SPEC.blocks as usize * 8;
+    for t in 0..SPEC.vocabulary as usize {
+        let k = t / 256;
+        let roots = [
+            t % 16,
+            (t % 16 + 3 * k) % 16,
+            ((t / 16) % 16 + 5 * k + 1) % 16,
+            (t / 16) % 16,
+        ];
+        for (block, &root) in roots.iter().enumerate() {
+            for d in 0..8 {
+                snapshot.table[t * width + block * 8 + d] = i32::from(geometry::ROOTS[root][d]);
+            }
+        }
+    }
+    let mut model = Device::from_snapshot(snapshot, 0)?;
+    model.set_address_metric(metric);
+    Ok(model)
+}
+
 #[test]
 #[ignore = "requires a CUDA GPU"]
 fn device_admission_matches_the_host_oracles_for_each_metric() -> Result<()> {
@@ -83,8 +110,7 @@ fn device_admission_matches_the_host_oracles_for_each_metric() -> Result<()> {
         AddressMetric::CellEnvelopeL1V1,
         AddressMetric::FullVectorCellL1V1,
     ] {
-        let mut model = Device::new(SPEC, 7, 0)?;
-        model.set_address_metric(metric);
+        let model = patterned_model(metric)?;
         let forward = model.forward(&model.carry(&ids)?, &targets)?;
         let table = model.snapshot()?.table;
         let queries = forward.vectors()?;
