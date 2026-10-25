@@ -9,7 +9,7 @@ export CARGO_TARGET_DIR=/root/build/target-sm120 UOR_NVCC_ARCH=compute_120 PATH=
 B=$CARGO_TARGET_DIR/release
 D=/workspace/uor-r4/local/driver/data
 EV=$SRC/docs/labs/r-read-off-vs-read-on/evidence
-R=/workspace/uor-r4/runs/antigravity/r-read-off-vs-read-on-20261025
+R=${R_OUT:-/workspace/uor-r4/runs/antigravity/r-read-off-vs-read-on-20261025-r2}
 PZ=$D/injective/prime-zeta-v4096-b4-c192-k8.json
 A8T=$D/address-cells/address-structured-v1.json
 PZ_SPEC=$SRC/docs/labs/r-prime-zeta-vs-nulls/evidence/spec-v4096-b4-c192-k8.json
@@ -66,10 +66,10 @@ done
 mark "G-Repro: verify a8-f-on (4244/1351/133) and p8-f-on (427/127/38)"
 a8_full=$(jq -r '.b3.full.target_admitted' "$R/a8-f-on/b3/report.json")
 a8_psucc=$(jq -r '.b3.psucc.target_admitted' "$R/a8-f-on/b3/report.json")
-a8_top1=$(jq -r '.aggregate.top1_hits' "$R/a8-f-on/eval/report.json")
+a8_top1=$(jq -r '.aggregate.top1_correct' "$R/a8-f-on/eval/report.json")
 p8_full=$(jq -r '.b3.full.target_admitted' "$R/p8-f-on/b3/report.json")
 p8_psucc=$(jq -r '.b3.psucc.target_admitted' "$R/p8-f-on/b3/report.json")
-p8_top1=$(jq -r '.aggregate.top1_hits' "$R/p8-f-on/eval/report.json")
+p8_top1=$(jq -r '.aggregate.top1_correct' "$R/p8-f-on/eval/report.json")
 echo "a8-f-on=$a8_full/$a8_psucc/$a8_top1 p8-f-on=$p8_full/$p8_psucc/$p8_top1"
 [ "$a8_full" = 4244 ] && [ "$a8_psucc" = 1351 ] && [ "$a8_top1" = 133 ] && [ "$p8_full" = 427 ] && [ "$p8_psucc" = 127 ] && [ "$p8_top1" = 38 ] \
   && echo "G_REPRO: PASS" || { echo "G_REPRO: FAIL"; exit 8; }
