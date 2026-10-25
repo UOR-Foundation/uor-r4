@@ -1,6 +1,6 @@
 # REPORT: infra-loop-harness, antigravity-83
 
-- Item: `infra-loop-harness` ([docs/roadmap/items/infra-loop-harness.md](../../../roadmap/items/infra-loop-harness.md), issue #2926)
+- Item: `infra-loop-harness` ([docs/roadmap/items/infra-loop-harness.md](../../../roadmap/items/infra-loop-harness.md), issue #2904)
 - Lab: `antigravity`
 - Branch: `antigravity/unblock-m1-m4-sheet-scopes`
 - Order: [ORDER.md](ORDER.md)
@@ -20,10 +20,10 @@
 | `docs/roadmap/items/m4-flock-coupling-prereg.md` | docs | +4 / -1 | Remove `crates/uor-r4-discrete/**` from `scope:` and add `notebook:` + task folder glob for the sheet/`TEST FITNESS: FIT` close unit |
 | `docs/roadmap/items/r-prime-zeta-vs-nulls.md` | docs | +4 / -1 | Remove `crates/uor-r4-discrete/**` from `scope:` and add `notebook:` + task folder glob for the sheet/`TEST FITNESS: FIT` and evaluation unit |
 | `docs/roadmap/items/r-read-off-vs-read-on.md` | docs | +4 / -1 | Remove `crates/uor-r4-discrete/**` from `scope:` and add `notebook:` + task folder glob for the sheet/`TEST FITNESS: FIT` and evaluation unit |
-| `docs/loop/tasks/infra-loop-harness/antigravity-83/ORDER.md` | docs | +45 / -0 | Task order and cancel probe |
+| `docs/loop/tasks/infra-loop-harness/antigravity-83/ORDER.md` | docs | +35 / -0 | Task order and cancel probe |
 | `docs/loop/tasks/infra-loop-harness/antigravity-83/REPORT.md` | docs | +61 / -0 | Task report |
 
-- **Size:** 6 files changed (0 code, 0 tests, 6 docs, 0 generated), +121 / -4 lines. Ratio to estimate: within single-unit scope-narrowing budget (following `claude-105` `#3223`, `claude-108` `#3229`, and `antigravity-80` `#3232`).
+- **Size:** 6 files changed (0 code, 0 tests, 6 docs, 0 generated), +111 / -4 lines. Ratio to estimate: within single-unit scope-narrowing budget (following `claude-105` `#3223`, `claude-108` `#3229`, and `antigravity-80` `#3232`).
 
 ## Measurements
 
@@ -34,7 +34,7 @@
   - Command: `~/.cargo/bin/cargo run --quiet -p xtask -- roadmap check && uor-harness check`
   - Result: `roadmap check: 92 items OK`, `uor-harness check` `0 error`.
 - **D68 Decision Review (`CHARTER.md` §5.1, §5.2):**
-  - Reviewed in a fresh context against `CHARTER.md`, `PLAN.md`, `docs/integration/DECISIONS.md` (D68, D77), and the four item files (`DECISION REVIEW: APPROVE`, logged for Casey on `#2926`).
+  - Reviewed in a fresh context against `CHARTER.md`, `PLAN.md`, `docs/integration/DECISIONS.md` (D68, D77), and the four item files (`DECISION REVIEW: APPROVE`, logged for Casey on `#2904`, `#2842`, `#2860`, `#2881`, and `#2885`).
 
 ## Checks run at the head
 
@@ -52,10 +52,14 @@
 ## Still open
 
 - Claim `m1-normalization-mechanism` (`#2842`), `m4-flock-coupling-prereg` (`#2860`), `r-prime-zeta-vs-nulls` (`#2881`), and `r-read-off-vs-read-on` (`#2885`) to complete their pre-registration sheet `TEST FITNESS: FIT` reviews and close/evaluate them.
-- The umbrella item `infra-loop-harness` (`#2926`) remains `status: ready`.
+- The umbrella item `infra-loop-harness` (`#2904`) remains `status: ready`.
 
 ## Plain summary
 
 Four ready roadmap items (`m1-normalization-mechanism`, `m4-flock-coupling-prereg`, `r-prime-zeta-vs-nulls`, and `r-read-off-vs-read-on`) already have their Rust code and finite host controls merged on `main`, and their next work units only update their pre-registration sheets (`docs/harness/prep/`), obtain non-author `TEST FITNESS: FIT` reviews, or run zero-update evaluations. Because their item `scope:` lists still included `docs/mechanisms/hamilton-gate.md` (held by `PR #3231`) or `crates/uor-r4-discrete/**` (held by `PR #3230`), `uor-harness loop claim` refused claims on them due to scope overlap. Following the `claude-105`/`claude-108` and `antigravity-80` precedent and under a fresh-context D68 decision review, this unit narrows the four items' scopes to their documentation, pre-registration, lab, and task directories so they can be claimed and closed immediately.
 
-References #2926
+References #2904
+References #2842
+References #2860
+References #2881
+References #2885
