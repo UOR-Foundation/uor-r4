@@ -63,7 +63,7 @@ Can the lawful prime-sieve compiler compile `Split::Development` wordings (`R2 >
 | `sieve_frame.ptx` | recorded by `prose-panel-gate controls`, then passed as required `--expect-ptx` |
 | Binaries and job script | recorded in `SHA256SUMS` beside the outputs |
 
-## 7. Cost and stop rule
+## 7. Cost and stops
 
 - One RTX 5090 on Vast, at most 1 hour of lease, budget cap $1.50 (expected wall time ~5 minutes).
 - **Probe ladder:** (a) `prose-panel-sieve controls` (12/12), `prose-panel-gate controls` (16/16), and D29 PTX checks; (b) `prose-panel-gate run` under `sieve-cuda`; (c) `prose-panel-gate run` under `cuda,sieve-cuda` and byte-identical `decisions.json` comparison.
