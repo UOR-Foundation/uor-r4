@@ -187,9 +187,8 @@ impl CoreCofactorTable {
                 {
                     let m_pre = f.prefix[..f.prefix.len() - g.prefix.len()].to_vec();
                     let m_suf = f.suffix[g.suffix.len()..].to_vec();
-                    let pre_is_neutral = marker_map
-                        .iter()
-                        .any(|(k, &u)| !u && k.starts_with(&m_pre));
+                    let pre_is_neutral =
+                        marker_map.iter().any(|(k, &u)| !u && k.starts_with(&m_pre));
                     marker_map.entry(m_pre).or_insert(!pre_is_neutral);
                     if f.act == Act::Update {
                         suffix_markers.insert(m_suf.clone());
@@ -319,7 +318,13 @@ impl CoreCofactorTable {
                             for base_a in [&a1, &a2] {
                                 let mut p = rl.clone();
                                 p.extend(base_a);
-                                raw_derived.insert((f_a.relation, Act::Update, true, p, Vec::new()));
+                                raw_derived.insert((
+                                    f_a.relation,
+                                    Act::Update,
+                                    true,
+                                    p,
+                                    Vec::new(),
+                                ));
                             }
                             for g_a in slots().filter(|g| {
                                 g.relation == f_a.relation
@@ -328,7 +333,13 @@ impl CoreCofactorTable {
                             }) {
                                 let mut p = rl.clone();
                                 p.extend(&g_a.prefix);
-                                raw_derived.insert((f_a.relation, Act::Update, true, p, Vec::new()));
+                                raw_derived.insert((
+                                    f_a.relation,
+                                    Act::Update,
+                                    true,
+                                    p,
+                                    Vec::new(),
+                                ));
                             }
                         }
                     }
@@ -472,7 +483,11 @@ impl CoreCofactorTable {
                     nominal_cores.insert((*r1, vec![c1[1]]));
                 }
                 for (r2, c2) in &core_snap {
-                    if r1 == r2 && c1.len() == 2 && c2.len() == 2 && c1[0] != c2[0] && c1[1] != c2[1]
+                    if r1 == r2
+                        && c1.len() == 2
+                        && c2.len() == 2
+                        && c1[0] != c2[0]
+                        && c1[1] != c2[1]
                     {
                         nominal_cores.insert((*r1, vec![c1[0], c2[0], c2[1]]));
                     }
@@ -584,7 +599,9 @@ impl CoreCofactorTable {
                 if f.prefix.len() == 4
                     && f.prefix[0] == det_my
                     && f.prefix[3] == tok_is
-                    && entity_cores.iter().any(|(r, c)| *r == f.relation && c == &[f.prefix[2]])
+                    && entity_cores
+                        .iter()
+                        .any(|(r, c)| *r == f.relation && c == &[f.prefix[2]])
                 {
                     entity_cores.insert((f.relation, f.prefix[1..3].to_vec()));
                 }
@@ -704,7 +721,11 @@ impl CoreCofactorTable {
         let mut cat_cores: BTreeSet<(u32, u32)> = BTreeSet::new();
         let mut wh_words: BTreeSet<u32> = BTreeSet::new();
         let mut pref_tails: BTreeSet<Vec<u32>> = BTreeSet::new();
-        for q1 in table.frames.iter().filter(|f| !f.slot && f.prefix.len() >= 5) {
+        for q1 in table
+            .frames
+            .iter()
+            .filter(|f| !f.slot && f.prefix.len() >= 5)
+        {
             for q2 in table.frames.iter().filter(|f| {
                 !f.slot
                     && f.relation != q1.relation
@@ -807,7 +828,11 @@ impl CoreCofactorTable {
                             raw_derived.insert((f1.relation, Act::Assert, true, p, Vec::new()));
                         }
                     }
-                    for q in table.frames.iter().filter(|f| !f.slot && f.prefix.len() >= 3) {
+                    for q in table
+                        .frames
+                        .iter()
+                        .filter(|f| !f.slot && f.prefix.len() >= 3)
+                    {
                         if let Some((det_my, _)) = det_pair {
                             if q.prefix[2] == det_my {
                                 let tok_who = q.prefix[0];
@@ -840,7 +865,11 @@ impl CoreCofactorTable {
             }
         }
         // `[52] i work as a {v}` + `[59] what do i work as` -> `i work as {v}`
-        for q in table.frames.iter().filter(|f| !f.slot && f.prefix.len() >= 5) {
+        for q in table
+            .frames
+            .iter()
+            .filter(|f| !f.slot && f.prefix.len() >= 5)
+        {
             let tail2 = &q.prefix[q.prefix.len() - 2..];
             for f in slots().filter(|f| {
                 f.relation == q.relation
@@ -859,7 +888,11 @@ impl CoreCofactorTable {
             }
         }
         // Location query `[where, ...]` <-> `[what, city, ...]` (from `[65]` vs `[66]`)
-        for q1 in table.frames.iter().filter(|f| !f.slot && f.prefix.len() == 4) {
+        for q1 in table
+            .frames
+            .iter()
+            .filter(|f| !f.slot && f.prefix.len() == 4)
+        {
             for q2 in table.frames.iter().filter(|f| {
                 !f.slot
                     && f.relation == q1.relation
@@ -887,7 +920,11 @@ impl CoreCofactorTable {
             }
         }
         // Location `[61] my home is in` vs `[27] my hometown is` + `[67] where is my home`:
-        for q in table.frames.iter().filter(|f| !f.slot && f.prefix.len() == 4) {
+        for q in table
+            .frames
+            .iter()
+            .filter(|f| !f.slot && f.prefix.len() == 4)
+        {
             if let Some((det_my, _)) = det_pair {
                 if q.prefix[2] == det_my {
                     // `[where, is, my, home]` -> apply `[where, is, my]` to `[hometown]` (`rel=04`)
@@ -896,10 +933,9 @@ impl CoreCofactorTable {
                         f.act == Act::Assert
                             && f.prefix.len() == 3
                             && f.prefix[0] == det_my
-                            && table
-                                .frames
-                                .iter()
-                                .any(|g| !g.slot && g.relation == f.relation && g.prefix[0] == q.prefix[0])
+                            && table.frames.iter().any(|g| {
+                                !g.slot && g.relation == f.relation && g.prefix[0] == q.prefix[0]
+                            })
                     }) {
                         let mut pq = where_is_my.to_vec();
                         pq.push(f.prefix[1]);
@@ -1059,11 +1095,7 @@ impl CoreCofactorTable {
             let act_prime = table.act_primes[act_code as usize];
             frames.expert.push(rel_prime * act_prime);
             frame_act.push(act_code);
-            frame_expert_update.push(if df.slot {
-                rel_prime * update_prime
-            } else {
-                0
-            });
+            frame_expert_update.push(if df.slot { rel_prime * update_prime } else { 0 });
             frame_base.push(df.base_frame);
         }
         Ok(GateFrameSet {
@@ -1136,7 +1168,9 @@ pub fn decode_gated(
     match (decision.act, frame.act) {
         (ACT_QUERY, Act::Query) => {
             if decision.hole_start != 0 || decision.hole_len != 0 {
-                return Err(invalid("a compiled query decision has a non-empty value hole"));
+                return Err(invalid(
+                    "a compiled query decision has a non-empty value hole",
+                ));
             }
             return Ok(CompiledAction::QueryCurrent { relation });
         }

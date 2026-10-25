@@ -1,6 +1,6 @@
 # Core-cofactor marker gate on the lawful sieve compiler (`m3-memory-turn-discriminator-gate`, #2855, antigravity-63)
 
-- **Status:** pre-registration, written before any GPU execution of this configuration. A fresh-context FIT review and a fresh-context D67 pre-run review follow on #2855 before any pod is leased. Lab: antigravity.
+- **Status:** executed on GPU (`vast-57652110`, 1x RTX 5090, ref `67852848263f7df71362efaa411b2e7f50ebc6b7`) after fresh-context `TEST FITNESS: FIT` (`#2855` comment `6396634979`) and fresh-context `D67 PRE-RUN REVIEW: GO` (`#2855` comment `6396643627`). Registered bar met (`0/50`, `0/50`, `50/50`, `R1 = 462/462`, `R2 = 8/220`; `record.json` sha256 `6b9b7dd4704e5596cb2597aeed16a9b11ed9baa2b76f7b5c39e7f985ddb69c22`, HF `results/antigravity/prose-panel-gate-2026-10-25/`). Lab: antigravity.
 - **Extends** [`preregistration-marker-gate-2026-10-25.md`](preregistration-marker-gate-2026-10-25.md) (`claude-102`) after the cancel probe showed that one-sided prefix markers alone (`MarkerTable`, 6 markers) leave every `Split::Development` phrasing (`R2`) uncompiled because development phrasings recombine two-sided markers (`please ... now`, `i meant`, `really`), shared cross-relation update prefixes (`i changed my mind`), contraction pairs (`what's` / `what is`, `i'm` / `i am`), and nominal/entity/preference shells across relations that already appear within `Split::Train`.
 
 ## 1. Question
