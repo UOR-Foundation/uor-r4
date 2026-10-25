@@ -49,7 +49,7 @@ Let $\text{top1}_{\text{int}}^{(a,s)}$, $\text{top8}_{\text{int}}^{(a,s)}$, and 
   - `ft/dev/response_mask.u8`: SHA-256 `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` (`42,856` B, `14,287` eligible response targets).
   - `tokenizer.json`: SHA-256 `d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89` (`vocab_size = 4096`, `<|bos|> = 0`).
 
-## 6. Cost, stop rule, and dispatch gate
+## 6. Cost and run bounds
 
 - **Cost:** 1 leased `uor-pod` RTX 5090 instance (`--count 1 --gpu 5090`) inside the global `<= 4` pods and `<= $8.00/h` cap (`CHARTER.md` §5.4), `8` runs (`4` arms $\times$ `2` seeds $\times$ `256` steps) + `14,287`-row float and integer DEV evaluations replicated across two independent `nvcc` builds, `<= 25` minutes total wall time, target `~$0.60` (`<= $1.20` hard stop).
 - **Stop rule:** Stop immediately if `I-Finite-CUDA`, `I-DEV-Denominator`, `I-Icosian-Closure`, or `I-Q12-Int-Parity` fails, or if projected wall time exceeds `45` minutes.

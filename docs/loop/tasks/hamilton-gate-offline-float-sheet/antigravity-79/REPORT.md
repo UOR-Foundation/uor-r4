@@ -12,19 +12,18 @@
 
 ## What changed
 
-- **Files changed:** 15 files (`+4,660 / -16` lines against `origin/main`):
-  - **Code (`5` files, `+928 / -6` lines):**
+- **Size (`uor-harness loop pr-check --local`):** `tests 0 file(s) +0/-0, code 5 file(s) +2583/-4, docs 7 file(s) +322/-9, generated 1 file(s) +3/-3, other 4 file(s) +3644/-0` (`17` changed paths against `origin/main`):
+  - **Code (`5` files, `+2583 / -4` lines, including `8` in-module `#[cfg(test)]` tests in `hamilton_sheet.rs`):**
     - `crates/uor-r4-float-train/src/lib.rs` (`+2 / -0`): exported `pub mod hamilton_sheet`.
     - `crates/uor-r4-float-train/src/geometric_stack_native.rs` (`+13 / -1`): wired optional `hamilton_sheet::try_intercept_hamilton_gate` hook into `hamilton_gate` so all 4 arms and suppression telemetry execute through the live `StackModel` forward/backward path without altering default `Gate::Hamilton` behavior.
-    - `crates/uor-r4-float-train/src/geometric_stack_native_cuda.rs` (`+16 / -5`): added `hamilton_sheet::try_intercept_cuda_bwd` hook in `HamiltonGateOp::bwd` and `check_cuda_err_hook` in `check_err`.
-    - `crates/uor-r4-float-train/src/hamilton_sheet.rs` (`+820 / -0`): implemented the 4-arm (`Hamilton_Active`, `Hamilton_IcosianHard`, `IdentityGate_Control`, `RandomGate_Null`) CUDA runner, 120-root `H4_UNIT_ICOSIAN_COEFFICIENTS_Q1` closure & `signed_h4_code_i32` self-recovery verifier, `UORT` loader and document-bounded `14,287`-target DEV window partitioner, `TrainUnigram_CountTable` reference (`1,226 / 14,287` top-1), GPU + `pure_i32_q12_writer_oracle` (`NativeVectorWriter`) integer export evaluator, McNemar paired discordance, and per-block + downstream `SpiralcoreFbs` suppression telemetry.
-    - `crates/uor-r4-float-train/src/bin/hamilton-gate-sheet.rs` (`+77 / -0`): CLI entrypoint supporting `--mode synthetic-probe | throughput-probe | full`.
-  - **Tests (`1` file inside `crates/uor-r4-float-train/src/hamilton_sheet.rs`, `+196 / -0` lines):** 8 unit tests verifying 120-icosian norm/closure/self-recovery, `14,287`-target document window partitioning, unigram count table scoring, Q12 `i32` `NativeVectorWriter` parity, paired discordance, and all 4 arms' forward/backward/export/suppression invariants.
-  - **Docs (`9` files, `+3,536 / -10` lines):**
+    - `crates/uor-r4-float-train/src/geometric_stack_native_cuda.rs` (`+16 / -3`): added `hamilton_sheet::try_intercept_cuda_bwd` hook in `HamiltonGateOp::bwd` and `check_cuda_err_hook` in `check_err`.
+    - `crates/uor-r4-float-train/src/hamilton_sheet.rs` (`+2432 / -0`): implemented the 4-arm (`Hamilton_Active`, `Hamilton_IcosianHard`, `IdentityGate_Control`, `RandomGate_Null`) CUDA runner, 120-root `H4_UNIT_ICOSIAN_COEFFICIENTS_Q1` closure & `signed_h4_code_i32` self-recovery verifier, `UORT` loader and document-bounded `14,287`-target DEV window partitioner, `TrainUnigram_CountTable` reference (`1,226 / 14,287` top-1), GPU + `pure_i32_q12_writer_oracle` (`NativeVectorWriter`) integer export evaluator, McNemar paired discordance, per-block + downstream `SpiralcoreFbs` suppression telemetry, and 8 unit tests.
+    - `crates/uor-r4-float-train/src/bin/hamilton-gate-sheet.rs` (`+120 / -0`): CLI entrypoint supporting `--mode synthetic-probe | throughput-probe | full`.
+  - **Docs (`7` files, `+322 / -9` lines) + Generated (`1` file, `+3 / -3` lines) + Other (`4` JSON receipt files, `+3644 / -0` lines):**
     - `docs/harness/prep/hamilton-gate-offline-float-sheet-2026-10-25.md`: pre-registration sheet with non-author `TEST FITNESS: FIT`, `D68 DECISION REVIEW: APPROVE`, and `D67 PRE-RUN REVIEW: APPROVE` (`f9fe6674-84f8-4c79-895b-d07cfbe8c4b3`).
     - `docs/labs/hamilton-gate-offline-float-sheet/README.md`, `receipt.json` (`ac82937195856ef136b98c57158254337fcd76fdcae30a7603de9d78696c432f`), `receipt-build-b.json` (`033b87db772f78505e75aebe69942aa11a709a2110bb59ae064482b443eac81a`), `synthetic-probe.json`, `throughput-probe.json`.
     - `docs/mechanisms/hamilton-gate.md`, `docs/research/notebook/float-training.md`, `docs/roadmap/items/hamilton-gate-offline-float-sheet.md` (`status: done`), `docs/roadmap/README.md`, and `docs/loop/tasks/hamilton-gate-offline-float-sheet/antigravity-79/{ORDER.md,REPORT.md}`.
-- **Ratio to estimate:** Estimate was ~650 lines (`~380` code, `~90` tests, `~180` docs) plus the JSON receipts (`~3,580` lines across `receipt.json` and `receipt-build-b.json`). Excluding the machine-generated JSON receipts, the hand-written code, tests, and docs total `~1,080` lines (`1.66x` estimate, within the `2x` guard).
+- **Ratio to estimate:** Estimate in `ORDER.md` was ~650 lines (`~380` code, `~90` tests, `~180` docs). Actual code + docs is `+2,905 / -13` lines (`4.47x` estimate) plus `+3,644` lines of machine-generated JSON receipts (`receipt.json`, `receipt-build-b.json`, `synthetic-probe.json`, `throughput-probe.json`) because `hamilton_sheet.rs` includes the full 120-root `H4_UNIT_ICOSIAN_COEFFICIENTS_Q1` closure verifier, `UORT` loader, document-bounded `14,287`-row DEV window partitioner, `TrainUnigram_CountTable` reference, GPU + `pure_i32_q12_writer_oracle` `NativeVectorWriter` evaluator, McNemar paired discordance, and both per-block and downstream `SpiralcoreFbs` suppression telemetry in one self-contained module with zero `uor-r4-training` dependency edges.
 
 ## Measurements
 
