@@ -47,4 +47,4 @@ None.
 
 ## Plain summary
 
-The next M1 step looked like "write the Stage T sheet", but the W2 result says the learning rule is not the first thing to change. And the base model for Stage T still loses its shortlist during training. So the sheet waits for the code-utilization diagnostic, and for a base model that keeps its shortlist through training: the A8 full dose, which follows Antigravity's A8 qualification. This unit records that, and claude-92 makes the roadmap say it.
+The next M1 step looked like "write the Stage T sheet", but there is no base model yet that keeps its shortlist through training, so the sheet could not name its base, margin or cost. The W2 result also says the learning rule is not the first thing to change. So the sheet waits for a base that holds (the A8 full dose, which follows Antigravity's A8 qualification) and for the code-utilization diagnostic. This unit records that, and claude-92 makes the roadmap say it.
