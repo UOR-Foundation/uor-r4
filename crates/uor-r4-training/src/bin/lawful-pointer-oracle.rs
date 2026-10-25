@@ -812,7 +812,7 @@ fn qualify_m2_fresh256(
                     .ok_or_else(|| {
                         format!("missing target span in raw dialogue window at {expected_id}")
                     })?;
-            let raw_d_span =
+            let _raw_d_span =
                 locate_last_value_span(&raw_dialogue_window, &pieces, distractor_lit.as_bytes())
                     .map_err(|e| e.to_string())?
                     .ok_or_else(|| {
