@@ -88,7 +88,7 @@ None is trained. Each arm is `init-corpus` at checkpoint 0 from its pinned table
 1. **Done:**
    - the host metric (antigravity-37);
    - the kernel dispatch, the zero-update gate (one guarded capability constructor), the CUDA control, the configs and the grader (claude-110).
-2. **Source commit:** the run builds `c0ab129c776ac4153f9bbbf9c1659d74d21ca691`, which fixes all code. A later commit that touches `crates/` re-pins this line before the run.
+2. **Source commit:** the run builds `bfbe20c5aaf2ef5751a64407a315f2291c1e65ab`, which fixes all code. A later commit that touches `crates/` re-pins this line before the run.
 3. This sheet's non-author FIT, then the D67 pre-run review.
 4. **On one leased RTX 5090, in this order** (the job is `local/claude/address-key-job.sh`; it stops at the first miss, so no treatment number exists unless every instrument check passed):
    1. Check that free disk is at least 30 GiB. Stage the data and tables, and check every sha above.
@@ -98,7 +98,16 @@ None is trained. Each arm is `init-corpus` at checkpoint 0 from its pinned table
    5. **G-Occ:** for the FV and FVS tables, run `attention-export-token-cells`, then `coverage-census --token-cells … --bar-rows 1941`, and check G-Occ on the pod.
    6. Only then the treatments: `eval-corpus` for every other arm, and `attention-dev-b3` for the K8 arms.
 5. Archive everything, with SHA256SUMS, to `results/claude/address-key-2026-10-25/run/` before `uor-pod down`.
-6. Grade on the Mac with `address-key-grade`, then record one notebook row.
+6. Grade on the Mac with `address-key-grade manifest.json grade.json`, run from inside the downloaded run folder (the manifest's paths are relative to it), then record one notebook row.
+
+**Changed after the FIT, by its reviews, before any run:**
+- the source commit was re-pinned for the grader's review fixes and rustfmt;
+- the grader now binds each arm to its pinned config and requires G-Q's log;
+- G-Q's fixture is 1,024 tokens, so its separation check cannot trip on a correct kernel;
+- the job (`docs/labs/m1-address-key-full-vector/address-key-job.sh`) copies itself into the run folder;
+- the cost is re-priced.
+
+None of these changes an arm, a bar or a pin of data.
 
 ## Stop rule
 
@@ -108,7 +117,7 @@ None is trained. Each arm is `init-corpus` at checkpoint 0 from its pinned table
 
 ## Cost
 
-One RTX 5090, about $0.60/h, for under 45 minutes: about 15 minutes to build and qualify, then a few minutes for each of 6 arms. That is **about $0.45**, with a cap of $1.
+One RTX 5090, under 45 minutes: about 15 minutes to build and qualify, then a few minutes for each of 6 arms. At the cheapest verified 5090, $0.989/h (D67 review, 25 Oct), that is **about $0.75**, with a cap of $1.
 
 ## Minimum test power
 
