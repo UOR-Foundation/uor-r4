@@ -7,7 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: false
 depends_on: [m1-w2-capacity-capture]
-scope: [crates/uor-r4-discrete/src/w2_*.rs, crates/uor-r4-discrete/src/bin/w2-*.rs, crates/uor-r4-discrete/src/lib.rs, docs/harness/prep/m1-w2-code-utilization*, docs/labs/m1-w2-code-utilization/**, docs/loop/tasks/m1-w2-code-utilization/**]
+scope: [crates/uor-r4-discrete/src/w2_*.rs, crates/uor-r4-discrete/src/bin/w2-*.rs, crates/uor-r4-discrete/src/lib.rs, crates/uor-r4-discrete/Cargo.toml, crates/uor-r4-discrete/tests/w2_*.rs, docs/harness/prep/m1-w2-code-utilization*, docs/labs/m1-w2-code-utilization/**, docs/loop/tasks/m1-w2-code-utilization/**]
 notebook: docs/research/notebook/m1-discrete-attention.md
 done_class: host
 ---
@@ -15,7 +15,7 @@ done_class: host
 ## Why it matters
 
 W2 classified the seed-1 Q4 read code as H_mixed, the third row of its registered sheet's decision table (`docs/harness/prep/m1-read-code-capacity-2026-10-17.md` §4.7). The sheet's next step for that row is "Code-utilization/capacity diagnostic; do not change the learning law yet". The M1 bar needs the exported model to beat the T2 successor table (6,300 of 14,287 on DEV). The trained model's prediction is a function of its 16-bit read code alone. So where the code loses target information decides the next M1 spend:
-- in admission: the full-vector address key, `m1-address-key-full-vector` (#2834);
+- in admission: the candidate is the full-vector address key, `m1-address-key-full-vector` (#2834). Its item says the 5-value address key leaves "which cells open" largely to "arbitrary numbering", and the open cells are the writer's admitted cells;
 - in the code itself: a change to what the read encodes;
 - in too little TRAIN data: the full-TRAIN capture that W2 skipped.
 
@@ -33,7 +33,7 @@ All of these are host post-processing of the stored W2 capture. That capture is 
 - `results/claude/w2-capacity-2026-10-25/run-b.tar`, sha256 `6aa0a766…`;
 - its inputs, under `w2-inputs/2026-10-25/`.
 
-No new GPU run is needed. The full-TRAIN capture is the one arm that would need one, and the sheet registers it only conditionally.
+No new GPU run is needed. The full-TRAIN capture is the one arm that would need one, and the sheet will register it only conditionally.
 
 ## Done when
 
@@ -53,7 +53,8 @@ Open these first:
 
 ## Rules that apply
 
-- **Geometry only** (CHARTER §3.1–§3.3): no softmax or squashing anywhere, including information measures; no dense matrix multiplication. Count tables are lawful diagnostic comparators (§4.4); every quantity is an exact integer or an exact integer ratio.
+- **Geometry only** (CHARTER §3.1–§3.3): no softmax or squashing anywhere; no dense matrix multiplication. Count tables are lawful diagnostic comparators (§4.4).
+- **Exact integers (this item's choice, not a charter rule):** every quantity is an exact integer or an exact integer ratio. The W2 sheet's "code–target mutual information" (§4.7 row 4) is measured in exact forms such as leave-one-out top-1 and collision agreement. Information in bits would need logarithms and float types, and the discrete crate's banned-presence gate counts float types.
 - **Host post-processing only** (§3.5, the W2 sheet's D24 classification): counting and scoring stored GPU observations on the host is allowed; any model forward, init or apply is GPU work and needs its own sheet and pre-run review.
 - **Pre-registration first** (§4.5): the sheet and its non-author FIT come before the run, because the result routes M1 spend.
 - **Rust first** (§3.11): the host tool is Rust; no new Python.
@@ -62,7 +63,7 @@ Open these first:
 ## Sources
 
 - [`docs/labs/m1-w2-capacity-capture/README.md`](../../../docs/labs/m1-w2-capacity-capture/README.md)
-- [`docs/harness/prep/m1-read-code-capacity-2026-10-17.md:132-142`](../../../docs/harness/prep/m1-read-code-capacity-2026-10-17.md)
+- [`docs/harness/prep/m1-read-code-capacity-2026-10-17.md:132-145`](../../../docs/harness/prep/m1-read-code-capacity-2026-10-17.md)
 - [`docs/roadmap/items/m1-bvg-k-stage-t-training.md`](../../../docs/roadmap/items/m1-bvg-k-stage-t-training.md)
 
 ## Cancel if

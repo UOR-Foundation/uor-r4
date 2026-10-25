@@ -12,14 +12,18 @@ References #2904. References #3179 (the new item's issue stays open; the sheet a
   - add the child to the #2029 checklist.
 
   If this PR were abandoned, #3179 would be an orphan to close by hand.
+- **The first item text overreached twice; the fresh review at `276bd12b4` caught both.**
+  - It credited CHARTER §3.2 with an exact-integer rule for information measures. The charter has no such rule, and the W2 sheet lists "code–target mutual information" as a diagnostic. The rule is now labelled as this item's own choice, with the reason given, and the measure is kept in exact forms.
+  - It sent admission losses to #2834 without a source. The link now quotes #2834's own "which cells open" text.
+  - The scope also gained `Cargo.toml` and `tests/w2_*.rs`, because W2's bins are declared in `Cargo.toml`.
 
 ## What changed
 
-Size: 1 new item file (70 lines), plus 1 line in `issues.json` and 7 changed lines in the rendered page, plus this task folder. No code.
+Size: 1 new item file (71 lines), plus 1 line in `issues.json` and 7 changed lines in the rendered page, plus this task folder. No code.
 
 - `docs/roadmap/items/m1-w2-code-utilization.md` (new).
   - `status: ready`, `needs_gpu: false`, `done_class: host`, `depends_on: [m1-w2-capacity-capture]`.
-  - **Scope:** the W2 host modules and bins (`crates/uor-r4-discrete/src/w2_*.rs`, `src/bin/w2-*.rs`, `src/lib.rs`), its prep sheet, its lab folder and its task folder. This is narrower than the `crates/uor-r4-discrete/**` that the other M1 items hold, so a claim on it does not block them.
+  - **Scope:** the W2 host modules and bins (`crates/uor-r4-discrete/src/w2_*.rs`, `src/bin/w2-*.rs`, `src/lib.rs`, `Cargo.toml`, `tests/w2_*.rs`), its prep sheet, its lab folder and its task folder. This is narrower than the `crates/uor-r4-discrete/**` that the other M1 items hold, so a claim on it does not block them.
   - `notebook: docs/research/notebook/m1-discrete-attention.md`.
   - A `Cancel if` section, which names the stored capture's pins.
 - `docs/roadmap/issues.json`: `"m1-w2-code-utilization": 3179`.
