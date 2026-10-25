@@ -7,7 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: false
 depends_on: [m1-w2-capacity-capture]
-scope: [crates/uor-r4-discrete/src/w2_*.rs, crates/uor-r4-discrete/src/bin/w2-*.rs, crates/uor-r4-discrete/src/lib.rs, crates/uor-r4-discrete/Cargo.toml, crates/uor-r4-discrete/tests/w2_*.rs, docs/harness/prep/m1-w2-code-utilization*, docs/labs/m1-w2-code-utilization/**, docs/loop/tasks/m1-w2-code-utilization/**]
+scope: [docs/harness/prep/m1-w2-code-utilization*, docs/labs/m1-w2-code-utilization/**, docs/loop/tasks/m1-w2-code-utilization/**]
 notebook: docs/research/notebook/m1-discrete-attention.md
 done_class: host
 ---
@@ -48,7 +48,8 @@ Open these first:
 
 - `docs/labs/m1-w2-capacity-capture/README.md` (the numbers, the artifacts and how to reproduce them)
 - `docs/harness/prep/m1-read-code-capacity-2026-10-17.md` (§4.3 per-row fields, §4.7 rows 3–4)
-- `crates/uor-r4-discrete/src/w2_capacity.rs` and `crates/uor-r4-discrete/src/bin/w2-assemble.rs` (the host tables, tie rules and floors to reuse)
+- `crates/uor-r4-discrete/src/w2_capacity.rs` and `crates/uor-r4-discrete/src/bin/w2-assemble.rs` (the host tables, tie rules and floors to reuse, read-only)
+- `docs/labs/m2-fresh-heldout-panel/instrument/Cargo.toml` (the standalone-instrument pattern: a detached `[workspace]` and path dependencies on workspace crates)
 - `docs/roadmap/items/m1-address-key-full-vector.md` and `docs/roadmap/items/m1-bvg-k-stage-t-training.md` (what the outcomes feed)
 
 ## Rules that apply
@@ -58,6 +59,11 @@ Open these first:
 - **Host post-processing only** (§3.5, the W2 sheet's D24 classification): counting and scoring stored GPU observations on the host is allowed; any model forward, init or apply is GPU work and needs its own sheet and pre-run review.
 - **Pre-registration first** (§4.5): the sheet and its non-author FIT come before the run, because the result routes M1 spend.
 - **Rust first** (§3.11): the host tool is Rust; no new Python.
+- **A standalone instrument, never a crate edit:**
+  - **Where it lives:** the tool is the crate `docs/labs/m1-w2-code-utilization/instrument/`, with its own `Cargo.lock`.
+  - **Its dependencies:** a detached `[workspace]` and a read-only path dependency on `uor-r4-discrete`, built without the `cuda` feature.
+  - **The crate is not edited:** if the tool seems to need a change in `uor-r4-discrete`, that change is a separate item, not part of this one. This keeps the item off the crate scope that other M1 items hold, so `loop claim` can serialize them.
+  - **Float:** the exact-integer rule applies to the instrument too.
 - **Records** (§4.1, §5.6): one notebook row; a negative closes this configuration (seed-1 Q4, epoch 407, model-matched TRAIN), never a mechanism.
 
 ## Sources
