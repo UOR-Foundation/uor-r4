@@ -45,7 +45,7 @@ A held item turns out to need the owner for a reason other than the retired rele
 
 ## Owner approval
 
-Owner paths changed: `CHARTER.md` and `docs/integration/DECISIONS.md`.
+Owner paths changed: `CHARTER.md`, `docs/rules/changes.md` and `docs/integration/DECISIONS.md`.
 
 Casey, in Claude's chat by 2026-10-25T00:03:59Z:
 - "please reign in the project sprawl and get us back to a workable central source of truth we can run off of".
