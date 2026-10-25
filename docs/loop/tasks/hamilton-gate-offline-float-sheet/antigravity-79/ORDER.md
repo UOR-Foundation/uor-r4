@@ -34,5 +34,5 @@ Inspected `docs/roadmap/items/hamilton-gate-offline-float-sheet.md`, `docs/mecha
 
 ## Stop and ask if
 
-- Any instrument check (`I-Finite-CUDA`, `I-DEV-Denominator`, `I-Icosian-Closure`) fails and cannot be repaired inside `crates/uor-r4-float-train`.
+- Any instrument check (`I-Finite-CUDA`, `I-DEV-Denominator`, `I-Icosian-Closure`, `I-Q12-Int-Parity`) fails and cannot be repaired inside `crates/uor-r4-float-train`.
 - Any edit outside declared scope or any `CHARTER.md` §3 / GPU cap change is required.
