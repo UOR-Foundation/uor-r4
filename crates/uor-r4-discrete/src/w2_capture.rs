@@ -19,6 +19,7 @@ pub const TRAIN_STREAM_FILE: &str = "train-stream.bin";
 pub const QUERY_SIDECAR_FILE: &str = "query-sidecar.bin";
 pub const GATE_R_FILE: &str = "gate-r.json";
 pub const CAPTURE_FILE: &str = "capture.json";
+pub const DEV_CAPTURE_FILE: &str = "dev-capture.json";
 pub const FAULT_FILE: &str = "fault.json";
 /// Device ABSENT cell slot, and its u16 form in `admitted_cell_slots`.
 pub const ABSENT_CELL: u32 = u32::MAX;
@@ -27,7 +28,7 @@ pub const CELL_SLOTS: usize = 16;
 pub const DETERMINISM_BATCHES: usize = 16;
 
 /// Every key at every path in `sealed` must exist in `new` with an equal value.
-/// Arrays need equal length and are compared element-wise; numbers compare as integers.
+/// Arrays need equal length and are compared element-wise; JSON numbers must be strictly equal (an integer never equals a float).
 /// Keys present only in `new` are allowed. Returns the mismatching paths.
 pub fn sealed_subset_mismatches(sealed: &Value, new: &Value) -> Vec<String> {
     let mut out = Vec::new();
@@ -64,6 +65,8 @@ fn walk(path: &str, sealed: &Value, new: &Value, out: &mut Vec<String>) {
             }
         }
         (Value::Number(s), Value::Number(n)) => {
+            // Strict: an integer never equals a float (as_u64/as_i64 are None for floats,
+            // so a float pair falls through to exact Number equality).
             let equal = match (s.as_u64(), n.as_u64(), s.as_i64(), n.as_i64()) {
                 (Some(a), Some(b), _, _) => a == b,
                 (_, _, Some(a), Some(b)) => a == b,
@@ -321,6 +324,16 @@ pub struct Capture {
     pub wall_seconds: WallSeconds,
 }
 
+/// DEV-phase results, written before TRAIN so a late failure does not lose them.
+#[derive(Debug, Serialize)]
+pub struct DevCapture<'a> {
+    pub schema: &'static str,
+    pub gate_r: &'a GateR,
+    pub dev_rows: &'a [DevCaptureRow],
+    pub root_round_trip: EqualCount,
+    pub determinism: EqualCount,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Fault {
     pub phase: &'static str,
@@ -329,13 +342,36 @@ pub struct Fault {
     pub message: String,
 }
 
-/// Creates `out_dir`, which must not exist yet.
+/// Creates `out_dir`, which must not exist yet: the parent is created if needed, then
+/// `create_dir` refuses an existing directory atomically.
 pub fn create_out_dir(out_dir: &Path) -> Result<PathBuf, String> {
-    if out_dir.exists() {
-        return Err(format!("{} already exists; refusing", out_dir.display()));
+    if let Some(parent) = out_dir.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     }
-    std::fs::create_dir_all(out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
+    std::fs::create_dir(out_dir).map_err(|e| {
+        format!(
+            "{}: {e} (refusing an existing or uncreatable out dir)",
+            out_dir.display()
+        )
+    })?;
     Ok(out_dir.to_path_buf())
+}
+
+/// Byte length of the sealed Q4 evaluation file this capture replays.
+pub const SEALED_LEN: usize = 2_906_559;
+/// SHA-256 of the sealed Q4 evaluation file this capture replays.
+pub const SEALED_SHA256: &str = "4fff1d3c04ff6107666b2b8281ef2bbedf3019eeff6bff682bbbb8687bf888c8";
+
+/// Refuses any sealed-evaluation bytes other than the pinned file.
+pub fn check_sealed_pin(bytes: &[u8]) -> Result<(), String> {
+    let sha = sha256_hex(bytes);
+    if bytes.len() != SEALED_LEN || sha != SEALED_SHA256 {
+        return Err(format!(
+            "sealed evaluation is not the pinned file: {} bytes sha256 {sha} (want {SEALED_LEN} bytes sha256 {SEALED_SHA256})",
+            bytes.len()
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(feature = "cuda")]
@@ -353,6 +389,16 @@ mod gpu {
 
     fn s<E: std::fmt::Display>(e: E) -> String {
         e.to_string()
+    }
+
+    /// `map_err` adapter: any error becomes a `fault.json` record, then its message.
+    fn faulted<'a, E: std::fmt::Display>(
+        dir: &'a Path,
+        phase: &'static str,
+        batch: Option<u64>,
+        row: Option<u64>,
+    ) -> impl FnOnce(E) -> String + 'a {
+        move |e| fault(dir, phase, batch, row, e.to_string())
     }
 
     fn fault(
@@ -383,6 +429,10 @@ mod gpu {
     /// Runs the whole capture. Writes `gate-r.json` first; nothing else runs unless
     /// Gate R passes. Any instrument fault writes `fault.json` and stops.
     pub fn run(checkpoint: &Path, sealed: &Path, out_dir: &Path) -> Result<Capture, String> {
+        // The sealed file is pinned before the out dir exists or any GPU work starts.
+        let sealed_bytes =
+            std::fs::read(sealed).map_err(|e| format!("{}: {e}", sealed.display()))?;
+        check_sealed_pin(&sealed_bytes)?;
         let dir = create_out_dir(out_dir)?;
         let mut wall = WallSeconds::default();
         let clock = Instant::now();
@@ -390,8 +440,6 @@ mod gpu {
         // 1. Import and driver inputs.
         let checkpoint_bytes =
             std::fs::read(checkpoint).map_err(|e| format!("{}: {e}", checkpoint.display()))?;
-        let sealed_bytes =
-            std::fs::read(sealed).map_err(|e| format!("{}: {e}", sealed.display()))?;
         let inputs = Inputs {
             checkpoint: InputFile {
                 path: checkpoint.display().to_string(),
@@ -527,10 +575,17 @@ mod gpu {
         };
         let mut first = 0u64;
         for (b, evaluation) in evaluations.iter().enumerate() {
-            let batch = dev.batch(first, spec.context, batch_rows).map_err(s)?;
-            let carried = model.carry_windows(&batch.windows).map_err(s)?;
-            let forward = model.forward(&carried, &batch.targets).map_err(s)?;
-            let vectors = forward.vectors().map_err(s)?;
+            let at = |phase: &'static str| faulted(&dir, phase, Some(b as u64), None);
+            let batch = dev
+                .batch(first, spec.context, batch_rows)
+                .map_err(at("dev_forward"))?;
+            let carried = model
+                .carry_windows(&batch.windows)
+                .map_err(at("dev_forward"))?;
+            let forward = model
+                .forward(&carried, &batch.targets)
+                .map_err(at("dev_forward"))?;
+            let vectors = forward.vectors().map_err(at("dev_forward"))?;
             let rows = batch.targets.len();
             if vectors.len() != rows * READ_WIDTH
                 || forward.predictions.len() != rows
@@ -589,6 +644,8 @@ mod gpu {
                         ),
                     ));
                 }
+                // Checks code packing/unpacking against the captured vector; decode is an
+                // exact-match decode, so this is a packing check, not a read-quality check.
                 round_trip.rows += 1;
                 if root_vector(unpack_code(code)) == *q {
                     round_trip.equal += 1;
@@ -627,10 +684,11 @@ mod gpu {
         let mut determinism = EqualCount::default();
         let mut first = 0u64;
         for b in 0..kept.vectors.len() {
-            let batch = dev.batch(first, spec.context, batch_rows).map_err(s)?;
-            let carried = model.carry_windows(&batch.windows).map_err(s)?;
-            let forward = model.forward(&carried, &batch.targets).map_err(s)?;
-            let vectors = forward.vectors().map_err(s)?;
+            let at = || faulted(&dir, "determinism", Some(b as u64), None);
+            let batch = dev.batch(first, spec.context, batch_rows).map_err(at())?;
+            let carried = model.carry_windows(&batch.windows).map_err(at())?;
+            let forward = model.forward(&carried, &batch.targets).map_err(at())?;
+            let vectors = forward.vectors().map_err(at())?;
             for i in 0..batch.targets.len() {
                 determinism.rows += 1;
                 let same = vectors[i * READ_WIDTH..(i + 1) * READ_WIDTH]
@@ -653,49 +711,87 @@ mod gpu {
             determinism.equal,
             determinism.rows
         );
+        write_json_new(
+            &dir,
+            DEV_CAPTURE_FILE,
+            &DevCapture {
+                schema: SCHEMA,
+                gate_r: &gate_r,
+                dev_rows: &dev_rows,
+                root_round_trip: round_trip,
+                determinism,
+            },
+        )
+        .map_err(|e| fault(&dir, "dev_capture", None, None, e))?;
+        if determinism.equal != determinism.rows || determinism.rows < 1_000 {
+            return Err(fault(
+                &dir,
+                "determinism",
+                None,
+                None,
+                format!(
+                    "INSTRUMENT_FAULT: determinism {}/{} rows equal (need all, and at least 1000 rows)",
+                    determinism.equal, determinism.rows
+                ),
+            ));
+        }
+        if round_trip.equal != round_trip.rows {
+            return Err(fault(
+                &dir,
+                "root_round_trip",
+                None,
+                None,
+                format!(
+                    "INSTRUMENT_FAULT: root round-trip {}/{} rows equal",
+                    round_trip.equal, round_trip.rows
+                ),
+            ));
+        }
 
         // 4. TRAIN production forward over exactly 16,404 batches from target 0.
         let clock = Instant::now();
         let train = driver.train();
         let train_tokens = train.tokens();
-        let mut stream = TrainStreamWriter::create(&dir)?;
-        let mut sidecar = QuerySidecarWriter::create(&dir)?;
+        let mut stream =
+            TrainStreamWriter::create(&dir).map_err(faulted(&dir, "train_forward", None, None))?;
+        let mut sidecar =
+            QuerySidecarWriter::create(&dir).map_err(faulted(&dir, "train_forward", None, None))?;
         let mut first = 0u64;
+        let mut done_rows = 0u64;
         for b in 0..TRAIN_BATCHES {
-            let batch = train.batch(first, spec.context, batch_rows).map_err(s)?;
-            let carried = model.carry_windows(&batch.windows).map_err(s)?;
-            let forward = model.forward(&carried, &batch.targets).map_err(s)?;
-            let vectors = forward.vectors().map_err(s)?;
+            let at = || faulted(&dir, "train_forward", Some(b), Some(done_rows));
+            let batch = train.batch(first, spec.context, batch_rows).map_err(at())?;
+            let carried = model.carry_windows(&batch.windows).map_err(at())?;
+            let forward = model.forward(&carried, &batch.targets).map_err(at())?;
+            let vectors = forward.vectors().map_err(at())?;
             if vectors.len() != batch.targets.len() * READ_WIDTH {
                 return Err(fault(
                     &dir,
                     "train_forward",
                     Some(b),
-                    None,
+                    Some(done_rows),
                     "INSTRUMENT_FAULT: vector shape".into(),
                 ));
             }
             for (i, &target) in batch.targets.iter().enumerate() {
+                let row = Some(done_rows + i as u64);
                 let q: &[i32; READ_WIDTH] = vectors[i * READ_WIDTH..(i + 1) * READ_WIDTH]
                     .try_into()
                     .unwrap();
-                let code = decode_read_vector(q).map_err(|e| {
-                    fault(
-                        &dir,
-                        "train_forward",
-                        Some(b),
-                        Some(i as u64),
-                        e.to_string(),
-                    )
-                })?;
-                stream
-                    .write_row(code, target)
-                    .map_err(|e| fault(&dir, "train_forward", Some(b), Some(i as u64), e))?;
+                let code =
+                    decode_read_vector(q).map_err(faulted(&dir, "train_forward", Some(b), row))?;
+                stream.write_row(code, target).map_err(faulted(
+                    &dir,
+                    "train_forward",
+                    Some(b),
+                    row,
+                ))?;
                 let query = train_tokens[batch.target_positions[i] as usize - 1];
                 sidecar
                     .write_row(query)
-                    .map_err(|e| fault(&dir, "train_forward", Some(b), Some(i as u64), e))?;
+                    .map_err(faulted(&dir, "train_forward", Some(b), row))?;
             }
+            done_rows += batch.targets.len() as u64;
             first = batch.next_target;
             if (b + 1) % 1000 == 0 {
                 eprintln!(
@@ -705,8 +801,14 @@ mod gpu {
                 );
             }
         }
-        let train_stream = stream.finish()?;
-        let query_sidecar = sidecar.finish()?;
+        let train_stream =
+            stream
+                .finish()
+                .map_err(faulted(&dir, "train_forward", None, Some(done_rows)))?;
+        let query_sidecar =
+            sidecar
+                .finish()
+                .map_err(faulted(&dir, "train_forward", None, Some(done_rows)))?;
         if train_stream.rows != crate::w2_capacity::MATCHED_TRAIN_ROWS as u64
             || first != expected_next
         {
@@ -720,7 +822,10 @@ mod gpu {
 
         // 5. Token cells.
         let clock = Instant::now();
-        let token_cells = model.export_token_cells().map_err(s)?;
+        let token_cells =
+            model
+                .export_token_cells()
+                .map_err(faulted(&dir, "token_cells", None, None))?;
         if token_cells.len() != spec.vocabulary as usize {
             return Err(fault(
                 &dir,
@@ -733,8 +838,10 @@ mod gpu {
         wall.token_cells = clock.elapsed().as_secs_f64();
 
         // 6. capture.json.
-        let exe = std::env::current_exe().map_err(s)?;
-        let exe_bytes = std::fs::read(&exe).map_err(|e| format!("{}: {e}", exe.display()))?;
+        let exe = std::env::current_exe().map_err(faulted(&dir, "capture_json", None, None))?;
+        let exe_bytes = std::fs::read(&exe)
+            .map_err(|e| format!("{}: {e}", exe.display()))
+            .map_err(faulted(&dir, "capture_json", None, None))?;
         let capture = Capture {
             schema: SCHEMA,
             capture_mode: FALLBACK_CAPTURE_MODE,
@@ -751,7 +858,12 @@ mod gpu {
             query_sidecar,
             wall_seconds: wall,
         };
-        write_json_new(&dir, CAPTURE_FILE, &capture)?;
+        write_json_new(&dir, CAPTURE_FILE, &capture).map_err(faulted(
+            &dir,
+            "capture_json",
+            None,
+            None,
+        ))?;
         Ok(capture)
     }
 }
@@ -851,6 +963,35 @@ mod tests {
         assert_eq!(slots[5], 15);
         assert_eq!(slots[1], ABSENT_SLOT);
         assert!(cell_slots(&cells[..15]).is_err());
+    }
+
+    #[test]
+    fn create_out_dir_refuses_existing_dir() {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../local/test-scratch")
+            .join(format!("w2-capture-outdir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let dir = base.join("nested").join("out");
+        assert_eq!(create_out_dir(&dir).unwrap(), dir);
+        assert!(create_out_dir(&dir).is_err());
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn sealed_pin_refuses_a_changed_copy_and_accepts_the_real_file() {
+        let Some(inputs) = std::env::var_os("UOR_W2_Q4") else {
+            eprintln!("UOR_W2_Q4 unset; skipped");
+            return;
+        };
+        let mut bytes =
+            std::fs::read(PathBuf::from(inputs).join("q4-evaluation-16404.json")).unwrap();
+        check_sealed_pin(&bytes).unwrap();
+        bytes[0] ^= 1;
+        assert!(check_sealed_pin(&bytes).is_err());
+        bytes[0] ^= 1;
+        bytes.pop();
+        assert!(check_sealed_pin(&bytes).is_err());
+        assert!(check_sealed_pin(b"").is_err());
     }
 
     /// G3 host config check; runs only with UOR_W2_Q4 set to the w2-inputs folder.
