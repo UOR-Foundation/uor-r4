@@ -772,12 +772,30 @@ mod tests {
         let table = FrameTable::world_v2()?;
         let flat = table.device_frames()?;
         let n = table.frames.len();
-        assert_eq!(flat.signature.len(), n * table.sig_words());
+        let w = table.sig_words();
+        assert_eq!(flat.signature.len(), n * w);
         for (f, frame) in table.frames.iter().enumerate() {
             let at = flat.offset[f] as usize;
             let len = (flat.prefix[f] + flat.suffix[f]) as usize;
             let ids: Vec<u32> = frame.prefix.iter().chain(&frame.suffix).copied().collect();
             assert_eq!(&flat.tokens[at..at + len], ids.as_slice());
+            assert_eq!(
+                flat.prefix[f] as usize,
+                frame.prefix.len(),
+                "{}",
+                frame.template
+            );
+            assert_eq!(
+                flat.suffix[f] as usize,
+                frame.suffix.len(),
+                "{}",
+                frame.template
+            );
+            assert_eq!(flat.slot[f], u32::from(frame.slot), "{}", frame.template);
+            assert_eq!(
+                &flat.signature[f * w..(f + 1) * w],
+                table.signature(&ids).as_slice()
+            );
             assert_eq!(flat.expert[f], frame.expert);
         }
         let sources = vec!["My name is Ruby.".to_string(), String::new()];

@@ -4,10 +4,10 @@
 //! `controls --out DIR` runs the finite CUDA controls: hand-built frames and
 //! turns with literal expected decisions. Any mismatch exits 1.
 //!
-//! `run --repo-root R --out DIR --expect-table SHA [--expect-ptx SHA]
+//! `run --repo-root R --out DIR --expect-table SHA --expect-ptx SHA
 //! [--seed N] [--values-per-phrasing N] [--device N]` compiles the frozen
 //! panel and both recall controls in one launch, twice, and writes
-//! `record.json`. A pin mismatch, a nondeterministic launch or a malformed
+//! `record.json` and `decisions.json`. A pin mismatch, a nondeterministic launch or a malformed
 //! decision exits 1; the rates themselves never change the exit code.
 
 use std::collections::BTreeMap;
