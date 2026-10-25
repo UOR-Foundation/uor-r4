@@ -1,4 +1,4 @@
-<!-- rendered by uor-harness loop render from 17d7bc876ff93a8c5cb3cc0e53ed782f1e3b0c79; do not edit -->
+<!-- rendered by uor-harness loop render from 9ac274a8766789501e12f082ee6cfd0bb4f6cc44; do not edit -->
 # STATE
 
 Rendered from committed inputs at the commit in the stamp above.
@@ -9,7 +9,7 @@ Source: `docs/harness/milestones.json`.
 
 | Milestone | Status | Headline bar | Training hold |
 |---|---|---|---|
-| M1 Language base: a geometric stack language model good enough to carry chat | in-progress | beat T2 6,300/14,287 and unigram 1,226/14,287: not measured yet; target above both tables on each of two seeds, tokens/s reported (CHARTER §4.8, D39) | released |
+| M1 Language base: a geometric stack language model good enough to carry chat | in-progress | reply acceptable: 37 of target 116 (out of 232 acceptable replies) (suspended) | released |
 | M2 Grounded reply from exact memory: the native learner completes correct replies | blocked-on-owner | complete correct replies (dev): 437 of target 256 (out of 512 replies) (direction: open) | HELD |
 | M3 Durable conversation memory: provenance, conflict, abstention, reset and restart | paused | typed outcomes qualified on the saved model: 0 of target 1 (out of 1 qualified milestone) (vacuous) | not recorded |
 | M4 One served model: the chosen model through D11 integer serving and a CLI | not-started | softmax at runtime: yes; target no (D23 prohibits softmax project-wide) | released |
