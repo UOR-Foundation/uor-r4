@@ -24,7 +24,8 @@ None. This is a records unit, so there is no run, no GPU and no model.
 ## Checks run at the head
 
 - `cargo run -p xtask -- roadmap check`: 92 items OK. `roadmap render` changed no file.
-- `loop report --check` and `loop pr-check --local`: see the review record on the PR.
+- `loop report --check`: PASS. `loop pr-check --local`: PASS (the review-record and required-checks rules report N/A in a local run).
+- A fresh decision review (D68) and exact-head review: APPROVE, no Required findings. It confirmed that the overlap test is a literal prefix (`loopclaim.rs:617-634`), so removing the glob ends the overlap with claude-107. It also confirmed that `counts()` skips notebook paths (`loopclaim.rs:637-638`), so the added notebook page cannot lock anything.
 
 ## Skills used
 

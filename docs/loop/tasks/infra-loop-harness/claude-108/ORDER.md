@@ -17,7 +17,9 @@ One item-file fix, a scope decision under D68, in `carrier-credit-hard-selection
 - `loop claim` checks a new claim's scope against every open order's item scope on `origin/main` (`crates/uor-r4-harness/src/loopclaim.rs`, 680–725).
   - With the glob, the results order would lock every discrete item against every lab until the controls finish, about 18:30Z.
   - claude-107 (#3226) now holds `m1-bvg-k-stage-t-training`, whose scope holds the crate. So the results claim would be refused against claude's own Stage T order.
-- The two added pages are held by no ready item's scope. Only `m1-bvg-k-block-apply-c2` (done) holds the notebook, so adding them locks nothing.
+- The two added pages lock nothing:
+  - `loop claim` skips notebook paths when it counts overlap (`loopclaim.rs:637-638`), and only `m1-bvg-k-block-apply-c2` (done) holds that notebook anyway;
+  - no other item's scope holds `docs/mechanisms/carrier-credit.md`, or a glob that covers it.
 
 **Rejected alternatives.**
 - **Claim the results unit with the glob:** that locks the crate for hours, and `loop claim` refuses it against claude-107.
