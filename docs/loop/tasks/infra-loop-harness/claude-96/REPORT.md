@@ -23,6 +23,8 @@ None. This is a docs unit.
 
 - `cargo xtask roadmap check`: 92 items OK.
 - `cargo xtask roadmap render --check`: current.
+- `loop report --check`: PASS. `loop pr-check --local`: PASS (review-record and required-checks are N/A in a local run).
+- The first fresh review (at `1f1b23e8e`) returned CHANGES with three wording faults, all fixed. The note now points at every `SavedCompiler` reference (above, How to start step 1, Sources). It says the baseline "is to be measured", because the compiler is still in draft #3188. Its last sentence now uses the item's own failure, refusing true statements.
 - The cancel probe held: the scope line lacked the notebook; no open PR other than #3188 lists the three files; the discriminator item had no superseding note.
 - The fresh review, which is also the decision review for the one-file scope addition, is in the PR's review record.
 
