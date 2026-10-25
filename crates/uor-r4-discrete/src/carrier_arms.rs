@@ -671,6 +671,12 @@ mod tests {
         let g = grade(&scores, &audits()).expect("grade");
         assert_eq!(g["credit"], "tie_or_loss");
         assert_eq!(g["credit_label"], "panel_fit");
+        // A vacuous ON arm voids the label too, not only the verdict.
+        let mut faulty = audits();
+        faulty[1].on_zero_credit = 60;
+        let g = grade(&scores, &faulty).expect("grade");
+        assert_eq!(g["credit"], "instrument");
+        assert_eq!(g["credit_label"], "none");
     }
 
     fn release() -> CarrierRelease {

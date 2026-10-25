@@ -6,7 +6,7 @@
   - decision card [`DECISION.md`](../../loop/tasks/carrier-credit-hard-selection/claude-103/DECISION.md), D68, approved in round 4;
   - prep sheet [`carrier-credit-hard-selection-2026-10-25.md`](../../harness/prep/carrier-credit-hard-selection-2026-10-25.md), FIT in round 2 (#2819 `6395832768`);
   - D67 pre-run review (#2819 `6395854890`);
-  - release [`release.json`](release.json), sha256 `695f4205…`;
+  - release [`release.json`](release.json), sha256 `695f4205…` over the file; each arm record's `release_sha256` is `3296f7a1…`, the sha256 of the release's compact JSON, which is what `run_arm` hashes;
   - plan [`plan.json`](plan.json);
   - fresh-slice manifest [`fresh-slice-manifest.json`](fresh-slice-manifest.json);
   - base config [`base-config.json`](base-config.json), the A8 dose config byte for byte.
@@ -30,8 +30,8 @@ Every arm uses V 4,096, B 4, C 192, K 8, the Relation read, `rows_v1`, 64 rows p
 - Solo probes: ON 318, controls 326, OFF 521–532 targets/s at batches 0–164.
 
 **Full doses.** Per-batch cost grew as each arm trained:
-- ON fell to 55–89 batches/min and OFF to about 100, with GPU memory flat and both GPUs at 100%.
-- The A8 dose, from a pinned codebook, held 0.12 s per batch, so the growth tracks the seeded-device start.
+- Over the full dose, ON averaged 62–70 batches/min (66 and 75 targets/s in the records) and OFF 112–116 (119 and 124 targets/s), with GPU memory flat and both GPUs at 100%.
+- The A8 dose, from a pinned codebook, held 0.12 s per batch. The seeded-device start is the likeliest cause of the growth here; no run has tested it.
 
 **Pods.** The arms were spread across three pods (owner log #2819 `6396426933`):
 - `vast-57642427`: ON, both seeds;
