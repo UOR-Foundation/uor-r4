@@ -112,7 +112,7 @@ Compacting `prefix[243]`, `transport_root[364]`, and `transport[364]` in `flock_
 
 | Kernel entry (`sm_120`) | Pre-`#3111` (`5844d911c`) | `#3111` 32-bit `U` (`dc5f409b0`) | Compacted `unsigned char` (`77d7cb568`) | Delta vs `#3111` (`dc5f409b0`) | Delta vs Pre-`#3111` (`5844d911c`) | Spill stores / loads |
 |---|---:|---:|---:|---:|---:|---:|
-| `discrete_forward` | 21,056 B (80 regs) | 24,976 B (87 regs) | **22,080 B** (87 regs) | **-2,896 B (-11.60%)** | +1,024 B (+4.86%) | 0 B / 0 B |
+| `discrete_forward` | 21,056 B (80 regs) | 24,976 B (80 regs) | **22,080 B** (87 regs) | **-2,896 B (-11.60%)** | +1,024 B (+4.86%) | 0 B / 0 B |
 | `discrete_counterfactual` | 21,536 B (88 regs) | 25,456 B (96 regs) | **22,560 B** (96 regs) | **-2,896 B (-11.38%)** | +1,024 B (+4.75%) | 0 B / 0 B |
 | `discrete_evaluate` | 21,184 B (80 regs) | 25,104 B (93 regs) | **22,208 B** (93 regs) | **-2,896 B (-11.54%)** | +1,024 B (+4.83%) | 0 B / 0 B |
 
