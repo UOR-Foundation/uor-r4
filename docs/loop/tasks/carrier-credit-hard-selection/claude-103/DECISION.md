@@ -1,6 +1,6 @@
 # Decision card (D68): a new sheet for carrier credit on the live learner, and this item's scope
 
-Lab: claude, claude-103. Item: [`carrier-credit-hard-selection`](../../../../roadmap/items/carrier-credit-hard-selection.md) (#2819). Status: round 4, revised after decision review rounds 1–3 (all CHANGES).
+Lab: claude, claude-103. Item: [`carrier-credit-hard-selection`](../../../../roadmap/items/carrier-credit-hard-selection.md) (#2819). Status: **approved**. The fresh decision review returned CHANGES in rounds 1–3 and APPROVE in round 4. Round 4's three wording advisories are applied.
 
 ## Why this test, and why now
 
@@ -71,7 +71,7 @@ Lab: claude, claude-103. Item: [`carrier-credit-hard-selection`](../../../../roa
 - **The bar** is fixed in the prep sheet before any run, and reviewed for FIT.
   - The two pre-named comparisons are read on fresh rows (§4.3), with a margin no narrower than the measured seed noise.
   - The count-table reference (§4.4) is computed on the fresh slice as well as DEV, and is reported beside every arm.
-  - Wall time and tokens/s are reported, because ON and the controls pay one extra evaluation per batch.
+  - Wall time and tokens/s are reported. ON and both controls run the same CUDA evaluation and selection kernel every batch: the controls' draw is a mode of that kernel and ignores its scores. Compute is therefore matched among the three, and only OFF skips the kernel.
 
 ## What each outcome unlocks
 
@@ -79,7 +79,7 @@ An instrument failure is classified first (§4.2). It gets a repair and a rerun,
 
 Otherwise there are two pre-named comparisons. Fresh rows decide both. DEV is reported, and a comparison that wins on DEV but not on fresh rows is labelled "panel fit" in the REPORT, without changing its verdict. Each comparison is a **win** (at both seeds, by more than the seed noise), a **tie or loss**, or **split** (the seeds disagree). The verdict is the pair of results, and each half sets its own decision, so every combination maps to exactly one pair of decisions.
 
-**Credit: ON against both controls.** ON must beat CONTROL-U and CONTROL-F to win.
+**Credit: ON against both controls.** This is decided per seed. A seed counts for ON only if ON beats both CONTROL-U and CONTROL-F at that seed, by more than the seed noise. **Win** means both seeds count, **tie or loss** means neither does, and **split** means one does. Selection is read per seed in the same way.
 
 | Result | Meaning | Decision |
 |---|---|---|
@@ -92,7 +92,7 @@ Otherwise there are two pre-named comparisons. Fresh rows decide both. DEV is re
 | Result | Meaning | Decision |
 |---|---|---|
 | win | in-batch selection beats the sweep at this dose | CONTROL-F's rule becomes a candidate arm for #2831 and #2836 |
-| tie or loss | the sweep is not the bottleneck at this dose | #2831 and #2836 keep their schedule |
+| tie or loss | model-blind in-batch selection does not beat the sweep at this dose | #2831 and #2836 keep their schedule. ON against OFF is reported beside any ON candidacy, so a credit win that still loses to the sweep is visible |
 | split | inconclusive at this power | #2831 and #2836 unchanged; the next configuration adds seeds |
 
 A pass still leaves reopen condition 2 (one typed binding and frame) and the "all 4,096 choices scored with physical copy aliases" part of condition 4 open, and they are named in the REPORT. Condition 3 asks for a panel that is not component-only, two seeds, and at least 128 fresh rows. It is met by the corpus, both seeds and the fresh slice of at least 200 targets. Condition 6, the M2 hold, is superseded by D67.
