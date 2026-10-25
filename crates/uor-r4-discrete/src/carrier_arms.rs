@@ -202,15 +202,83 @@ pub fn count_tables(
     }))
 }
 
-/// Sheet §5: `a` beats `b` on the same `n` rows when `a > b` and
-/// `(a − b)²·n > 4·h·(n − h)` with `h = ⌊(a + b)/2⌋`, an exact two-sigma test.
-pub fn beats(a: u64, b: u64, n: u64) -> bool {
-    if a <= b || n == 0 {
+/// Sheet §5: `a` beats `b` on the same `n` rows when `a − b` exceeds the
+/// registered seed noise `margin` and `(a − b)²·n > 8·h·(n − h)` with
+/// `h = ⌊(a + b)/2⌋`: two sigma of the difference of two binomial counts at the
+/// pooled rate. Treating the arms as independent is conservative for arms
+/// scored on the same rows.
+pub fn beats(a: u64, b: u64, n: u64, margin: u64) -> bool {
+    if a <= b || n == 0 || a - b <= margin {
         return false;
     }
     let (a, b, n) = (u128::from(a), u128::from(b), u128::from(n));
     let h = (a + b) / 2;
-    (a - b) * (a - b) * n > 4 * h * n.saturating_sub(h)
+    (a - b) * (a - b) * n > 8 * h * n.saturating_sub(h)
+}
+
+/// Sheet §6 check 6: whether ON's selections are informative. Read from the
+/// receipts of one seed's ON and control arms, which see the same batch at
+/// each ordinal.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SelectionAudit {
+    pub seed: u32,
+    pub vector_batches: u64,
+    /// ON batches whose credit was zero, so the lowest-target fallback chose.
+    pub on_zero_credit: u64,
+    pub on_equals_control_u: u64,
+    pub on_equals_control_f: u64,
+}
+
+impl SelectionAudit {
+    /// The pre-stated instrument bound: ON is vacuous when more than half its
+    /// selections fell back, or more than 90% equal either control's.
+    pub fn is_instrument_fault(&self) -> bool {
+        let v = u128::from(self.vector_batches);
+        v == 0
+            || u128::from(self.on_zero_credit) * 2 > v
+            || u128::from(self.on_equals_control_u) * 10 > v * 9
+            || u128::from(self.on_equals_control_f) * 10 > v * 9
+    }
+}
+
+/// Compare one seed's ON, CONTROL-U and CONTROL-F receipts batch by batch.
+pub fn audit_selections(
+    seed: u32,
+    on: &[crate::training::StepReceipt],
+    control_u: &[crate::training::StepReceipt],
+    control_f: &[crate::training::StepReceipt],
+) -> Result<SelectionAudit> {
+    if on.len() != control_u.len() || on.len() != control_f.len() || on.is_empty() {
+        return Err(invalid("the audited arms ran different doses"));
+    }
+    let mut audit = SelectionAudit {
+        seed,
+        vector_batches: 0,
+        on_zero_credit: 0,
+        on_equals_control_u: 0,
+        on_equals_control_f: 0,
+    };
+    for ((a, u), f) in on.iter().zip(control_u).zip(control_f) {
+        let n = a.cursor_before.completed_batches;
+        if u.cursor_before.completed_batches != n
+            || f.cursor_before.completed_batches != n
+            || u.target_positions != a.target_positions
+            || f.target_positions != a.target_positions
+        {
+            return Err(invalid("audited receipts are not aligned batch by batch"));
+        }
+        match (a.carrier, u.carrier, f.carrier) {
+            (Some(a), Some(u), Some(f)) => {
+                audit.vector_batches += 1;
+                audit.on_zero_credit += u64::from(a.value == 0);
+                audit.on_equals_control_u += u64::from(a.token == u.token);
+                audit.on_equals_control_f += u64::from(a.token == f.token);
+            }
+            (None, None, None) => {}
+            _ => return Err(invalid("a batch is a vector batch in one arm only")),
+        }
+    }
+    Ok(audit)
 }
 
 /// One arm's stored fresh and DEV top-1 counts.
@@ -233,8 +301,11 @@ fn outcome(per_seed: &[bool]) -> &'static str {
 }
 
 /// The two pre-named comparisons of sheet §5, per seed on fresh rows, with the
-/// same comparisons on DEV reported for the panel-fit label.
-pub fn grade(scores: &[ArmScore]) -> Result<Value> {
+/// same comparisons on DEV reported for the panel-fit label. The seed noise is
+/// OFF's spread across the two seeds, on each scored set. A selection audit
+/// that finds ON vacuous at either seed makes the credit outcome an instrument
+/// fault (§4.2), with no verdict.
+pub fn grade(scores: &[ArmScore], audits: &[SelectionAudit]) -> Result<Value> {
     let find = |schedule: SchedulePolicy, seed: u32| {
         scores
             .iter()
@@ -244,6 +315,13 @@ pub fn grade(scores: &[ArmScore]) -> Result<Value> {
     if scores.len() != SCHEDULES.len() * SEEDS.len() {
         return Err(invalid("grading needs exactly the eight registered arms"));
     }
+    if audits.len() != SEEDS.len() || SEEDS.iter().any(|s| !audits.iter().any(|a| a.seed == *s)) {
+        return Err(invalid("grading needs one selection audit per seed"));
+    }
+    let off_a = find(SchedulePolicy::InterleavedReadEvery8V1, SEEDS[0])?;
+    let off_b = find(SchedulePolicy::InterleavedReadEvery8V1, SEEDS[1])?;
+    let noise = off_a.fresh_top1.abs_diff(off_b.fresh_top1);
+    let noise_dev = off_a.dev_top1.abs_diff(off_b.dev_top1);
     let (mut credit, mut selection, mut credit_dev, mut selection_dev) =
         (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     let mut seeds = Vec::new();
@@ -258,10 +336,12 @@ pub fn grade(scores: &[ArmScore]) -> Result<Value> {
             return Err(invalid("arms of one seed were scored on different rows"));
         }
         let (n, d) = (rows[0], dev_rows[0]);
-        let c = beats(on.fresh_top1, cu.fresh_top1, n) && beats(on.fresh_top1, cf.fresh_top1, n);
-        let s = beats(cf.fresh_top1, off.fresh_top1, n);
-        let cd = beats(on.dev_top1, cu.dev_top1, d) && beats(on.dev_top1, cf.dev_top1, d);
-        let sd = beats(cf.dev_top1, off.dev_top1, d);
+        let c = beats(on.fresh_top1, cu.fresh_top1, n, noise)
+            && beats(on.fresh_top1, cf.fresh_top1, n, noise);
+        let s = beats(cf.fresh_top1, off.fresh_top1, n, noise);
+        let cd = beats(on.dev_top1, cu.dev_top1, d, noise_dev)
+            && beats(on.dev_top1, cf.dev_top1, d, noise_dev);
+        let sd = beats(cf.dev_top1, off.dev_top1, d, noise_dev);
         credit.push(c);
         selection.push(s);
         credit_dev.push(cd);
@@ -272,7 +352,7 @@ pub fn grade(scores: &[ArmScore]) -> Result<Value> {
             "fresh_top1": {"on": on.fresh_top1, "control_u": cu.fresh_top1, "control_f": cf.fresh_top1, "off": off.fresh_top1},
             "credit_counts": c,
             "selection_counts": s,
-            "on_beats_off": beats(on.fresh_top1, off.fresh_top1, n),
+            "on_beats_off": beats(on.fresh_top1, off.fresh_top1, n, noise),
             "dev_credit_counts": cd,
             "dev_selection_counts": sd,
         }));
@@ -284,11 +364,14 @@ pub fn grade(scores: &[ArmScore]) -> Result<Value> {
             "none"
         }
     };
+    let vacuous = audits.iter().any(SelectionAudit::is_instrument_fault);
     Ok(json!({
         "schema": "uor-r4.carrier-arms-grade/1",
-        "rule": "a beats b when a > b and (a-b)^2*n > 4*h*(n-h), h = floor((a+b)/2); fresh rows decide",
+        "rule": "a beats b when a - b > seed noise and (a-b)^2*n > 8*h*(n-h), h = floor((a+b)/2); seed noise = |OFF(1001) - OFF(2001)| on the same set; fresh rows decide",
+        "seed_noise": {"fresh": noise, "dev": noise_dev},
+        "selection_audits": audits,
         "seeds": seeds,
-        "credit": outcome(&credit),
+        "credit": if vacuous { "instrument" } else { outcome(&credit) },
         "selection": outcome(&selection),
         "credit_label": label(&credit, &credit_dev),
         "selection_label": label(&selection, &selection_dev),
@@ -369,17 +452,111 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_win_rule_is_an_exact_two_sigma_test() {
-        // n = 65,536, near a 2% hit rate: two sigma is about 2*sqrt(1300) = 72.
-        assert!(beats(1400, 1300, 65_536));
-        assert!(!beats(1340, 1300, 65_536));
-        assert!(!beats(1300, 1300, 65_536));
-        assert!(!beats(1300, 1400, 65_536));
-        assert!(!beats(5, 0, 0));
-        // At h = 1350, 4*h*(n-h) = 346,604,400: a gap of 73 gives 349,241,344
-        // and clears it; a gap of 72 gives 339,738,624 and does not.
-        assert!(beats(1350 + 37, 1350 - 36, 65_536));
-        assert!(!beats(1350 + 36, 1350 - 36, 65_536));
+    fn the_win_rule_is_two_sigma_of_a_difference_above_the_seed_noise() {
+        assert!(beats(1500, 1300, 65_536, 0));
+        assert!(!beats(1340, 1300, 65_536, 0));
+        assert!(!beats(1300, 1300, 65_536, 0));
+        assert!(!beats(1300, 1500, 65_536, 0));
+        assert!(!beats(5, 0, 0, 0));
+        // At h = 1350, 8*h*(n-h) = 693,208,800: a gap of 103 gives 695,271,424
+        // and clears it; a gap of 102 gives 681,836,544 and does not.
+        assert!(beats(1350 + 52, 1350 - 51, 65_536, 0));
+        assert!(!beats(1350 + 51, 1350 - 51, 65_536, 0));
+        // The seed noise is a strict floor on the gap.
+        assert!(!beats(1500, 1300, 65_536, 200));
+        assert!(beats(1500, 1300, 65_536, 199));
+    }
+
+    fn audit(seed: u32, zero: u64, same_u: u64, same_f: u64) -> SelectionAudit {
+        SelectionAudit {
+            seed,
+            vector_batches: 100,
+            on_zero_credit: zero,
+            on_equals_control_u: same_u,
+            on_equals_control_f: same_f,
+        }
+    }
+
+    fn audits() -> Vec<SelectionAudit> {
+        SEEDS.iter().map(|&s| audit(s, 10, 5, 5)).collect()
+    }
+
+    #[test]
+    fn a_vacuous_on_arm_is_an_instrument_fault() {
+        assert!(!audit(1001, 50, 90, 90).is_instrument_fault());
+        assert!(audit(1001, 51, 0, 0).is_instrument_fault());
+        assert!(audit(1001, 0, 91, 0).is_instrument_fault());
+        assert!(audit(1001, 0, 0, 91).is_instrument_fault());
+    }
+
+    fn receipt(
+        n: u64,
+        selection: Option<(u32, u64)>,
+        mode: crate::carrier::CarrierMode,
+    ) -> crate::training::StepReceipt {
+        use crate::training::{Coordinate, CoordinateKind, Cursor, StepReceipt};
+        let mut cursor = Cursor::initial();
+        cursor.completed_batches = n;
+        StepReceipt {
+            lineage_sha256: String::new(),
+            cursor_before: cursor,
+            cursor_after: cursor,
+            coordinate: Coordinate {
+                kind: CoordinateKind::VectorBlock,
+                index: 0,
+            },
+            target_positions: vec![n],
+            candidate: 0,
+            loss_before: 0,
+            loss_after: 0,
+            model_epoch: 0,
+            applied: false,
+            apply_refused_by_policy: false,
+            any_candidate_cost_differs_from_identity: false,
+            carrier: selection.map(|(token, value)| crate::carrier::CarrierSelection {
+                mode,
+                token,
+                value,
+            }),
+        }
+    }
+
+    #[test]
+    fn the_audit_compares_selections_batch_by_batch() {
+        use crate::carrier::CarrierMode::*;
+        let arm = |picks: [Option<(u32, u64)>; 4], mode| -> Vec<_> {
+            picks
+                .iter()
+                .enumerate()
+                .map(|(n, p)| receipt(n as u64, *p, mode))
+                .collect()
+        };
+        let on = arm([Some((5, 3)), Some((5, 0)), Some((7, 2)), None], CreditV1);
+        let cu = arm(
+            [Some((5, 3)), Some((9, 3)), Some((1, 3)), None],
+            UniformTargetV1,
+        );
+        let cf = arm(
+            [Some((2, 0)), Some((5, 1)), Some((7, 2)), None],
+            UniformRowV1,
+        );
+        let a = audit_selections(1001, &on, &cu, &cf).expect("audit");
+        assert_eq!(
+            (
+                a.vector_batches,
+                a.on_zero_credit,
+                a.on_equals_control_u,
+                a.on_equals_control_f
+            ),
+            (3, 1, 1, 2)
+        );
+        assert!(!a.is_instrument_fault());
+        let mut shifted = cf.clone();
+        shifted[0].target_positions = vec![99];
+        assert!(audit_selections(1001, &on, &cu, &shifted).is_err());
+        let mut lopsided = cf;
+        lopsided[3].carrier = lopsided[2].carrier;
+        assert!(audit_selections(1001, &on, &cu, &lopsided).is_err());
     }
 
     fn arm(schedule: SchedulePolicy, seed: u32, fresh: u64, dev: u64) -> ArmScore {
@@ -403,17 +580,37 @@ mod tests {
             scores.push(arm(
                 CarrierUniformRowV1,
                 seed,
-                if seed == 1001 { 1600 } else { 1500 },
+                if seed == 1001 { 1700 } else { 1500 },
                 400,
             ));
             scores.push(arm(InterleavedReadEvery8V1, seed, 1500, 400));
         }
-        let g = grade(&scores).expect("grade");
+        let g = grade(&scores, &audits()).expect("grade");
         assert_eq!(g["credit"], "win");
         // CONTROL-F beats OFF at seed 1001 only: a split.
         assert_eq!(g["selection"], "split");
         assert_eq!(g["credit_label"], "none");
-        assert!(grade(&scores[..7]).is_err());
+        assert!(grade(&scores[..7], &audits()).is_err());
+        assert!(grade(&scores, &audits()[..1]).is_err());
+        // A vacuous ON at either seed turns the credit verdict into an instrument fault.
+        let mut faulty = audits();
+        faulty[1].on_zero_credit = 60;
+        assert_eq!(
+            grade(&scores, &faulty).expect("grade")["credit"],
+            "instrument"
+        );
+        // OFF's seed spread is the noise floor: 500 here equals ON's 500-hit lead
+        // over CONTROL-U at both seeds, so neither seed counts.
+        let mut noisy = scores.clone();
+        for s in noisy
+            .iter_mut()
+            .filter(|s| s.schedule == InterleavedReadEvery8V1 && s.seed == 2001)
+        {
+            s.fresh_top1 = 1000;
+        }
+        let g = grade(&noisy, &audits()).expect("grade");
+        assert_eq!(g["seed_noise"]["fresh"], 500);
+        assert_eq!(g["credit"], "tie_or_loss");
     }
 
     #[test]
@@ -426,7 +623,7 @@ mod tests {
             scores.push(arm(CarrierUniformRowV1, seed, 1500, 400));
             scores.push(arm(InterleavedReadEvery8V1, seed, 1500, 400));
         }
-        let g = grade(&scores).expect("grade");
+        let g = grade(&scores, &audits()).expect("grade");
         assert_eq!(g["credit"], "tie_or_loss");
         assert_eq!(g["credit_label"], "panel_fit");
     }

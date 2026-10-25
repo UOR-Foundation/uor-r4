@@ -54,15 +54,19 @@ Here `n` is `completed_batches`. ON and both controls run the same CUDA evaluati
 ## 5. Bars and decision (card D/E, fixed here)
 
 - **Metric:** integer top-1 hits on FRESH (N = 65,536). Top-8 hits and the token and address hinge sums are reported alongside. DEV is reported, and a DEV-only gain is labelled panel fit.
-- **Win rule, per seed.** Arm A beats arm B when `a > b` and `(a − b)²·N > 4·h·(N − h)`, where `h = ⌊(a + b)/2⌋`. This is an exact integer two-sigma test.
+- **The registered noise:** OFF's spread across the two seeds on the same scored set, `|OFF(1001) − OFF(2001)|`, computed for FRESH and for DEV separately.
+- **Win rule, per seed.** Arm A beats arm B when `a − b` exceeds the registered noise and `(a − b)²·N > 8·h·(N − h)`, where `h = ⌊(a + b)/2⌋`.
+  - The second condition is two sigma of the difference of two binomial counts at the pooled rate, in exact integers.
+  - It treats the arms as independent. Arms scored on the same rows are positively correlated, so this is conservative.
+  - At N = 65,536 and h = 1,350, a gap of 103 hits is needed.
   - **Credit:** a seed counts when ON beats both CONTROL-U and CONTROL-F.
   - **Selection:** a seed counts when CONTROL-F beats OFF.
   - Each comparison is a **win** (both seeds count), a **tie or loss** (neither does) or a **split** (one does).
 - **Decisions:** as tabulated in the card.
-  - A credit win: reopen conditions 1 and 5 are met, the mechanism goes READY, and ON becomes a candidate arm for #2831 and #2836.
-  - A credit tie or loss: configuration negative (D22). A split: no change, and the next configuration adds seeds.
-  - A selection win: CONTROL-F's rule becomes a candidate arm. A selection tie or loss or split: #2831 and #2836 are unchanged.
-  - ON against OFF is reported beside any ON candidacy.
+  - **A credit win:** reopen conditions 1 and 5 are met, and the mechanism goes READY. ON becomes a candidate arm for #2831 and #2836 only if it also beats OFF at both seeds by the same rule. Otherwise the credit win is recorded, and ON is not proposed as a schedule.
+  - **A credit tie or loss:** configuration negative (D22). **A split:** no status change, and the next configuration adds seeds.
+  - **A credit "instrument"** (§6 check 6): no verdict, and the selector is repaired.
+  - **A selection win:** CONTROL-F's rule becomes a candidate arm. **A selection tie or loss:** #2831 and #2836 keep their schedule. **A selection split:** #2831 and #2836 are unchanged, and the next configuration adds seeds.
 - **Count tables (§4.4):** the unigram table and the previous-token next-word table, both built from the visited TRAIN targets 0 to 1,049,855, are scored on FRESH and on DEV beside every arm.
 
 ## 6. Instrument checks (an instrument failure is repaired, never read as a verdict)
@@ -71,7 +75,13 @@ Here `n` is `completed_batches`. ON and both controls run the same CUDA evaluati
 2. **Default bytes:** the config bytes of both existing schedules, and their lineage bytes with a fixed driver-source string, are unchanged.
 3. **The selection downloads only its 2 words** (source-scan test, shown to fail when broken).
 4. **The full host suite and the stub-nvcc CUDA type-check pass,** `ratchet d23` and `d25` are at baseline, and the driver-source pin is updated.
-5. **On the pod:** the discrete crate's own CUDA suite passes. Each arm's receipts show the selection on every non-read batch. A second launch of the first 64 batches of ON at seed 1001 gives identical receipts.
+5. **On the pod:** the discrete crate's CUDA lib suite and the 9 selector controls pass. Each arm's receipts show the selection on every non-read batch.
+   - The evaluation the selector runs cannot change the model, because `discrete_evaluate` takes the table, routes and gates as `const` pointers (`discrete.cu`). OFF skipping that launch therefore changes no model state.
+6. **The selection audit,** per seed, read from ON's and the controls' receipts. They see the same batch at each ordinal (`carrier_arms::audit_selections`). It counts ON's zero-credit fallbacks and how often ON's token equals CONTROL-U's and CONTROL-F's.
+   - ON is vacuous, and the credit outcome is "instrument" with no verdict, if at either seed more than 50% of ON's vector batches fell back, or ON equals either control on more than 90% of them.
+   - Credit is graded only when ON's choices are informative.
+
+No D11 export is needed: no milestone claim rests on this run.
 
 ## 7. Cost, probes and stops
 

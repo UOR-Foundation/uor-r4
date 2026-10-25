@@ -4,16 +4,19 @@
 //!     Host: each arm's lineage SHA-256 and the sheet's, for the D67 release.
 //! carrier-arms run BASE_CONFIG SHEET RELEASE FRESH_DIR SCHEDULE SEED BATCHES OUT_DIR
 //!     CUDA: train one released arm and score it on DEV and the fresh slice.
-//! carrier-arms grade OUT RECORD...
-//!     Host: the sheet's two comparisons over the eight stored arm records.
+//! carrier-arms grade OUT ARM_DIR...
+//!     Host: the selection audit over each seed's receipts, then the sheet's two
+//!     comparisons over the eight stored arm records.
 //! Every output path must not exist; outputs are written once.
 
 use std::fs;
 use std::path::Path;
 use std::process::ExitCode;
-use uor_r4_discrete::carrier_arms::{arm_config, grade, ArmScore, SCHEDULES, SEEDS};
+use uor_r4_discrete::carrier_arms::{
+    arm_config, audit_selections, grade, ArmScore, SCHEDULES, SEEDS,
+};
 use uor_r4_discrete::corpus;
-use uor_r4_discrete::training::{DriverConfig, PreparedDriver, SchedulePolicy};
+use uor_r4_discrete::training::{DriverConfig, PreparedDriver, SchedulePolicy, StepReceipt};
 
 fn read(path: &str) -> Result<Vec<u8>, String> {
     fs::read(path).map_err(|e| format!("{path}: {e}"))
@@ -139,25 +142,53 @@ fn run(_: &[String]) -> Result<(), String> {
     Err("carrier-arms run needs the cuda feature".into())
 }
 
+fn receipts(dir: &str) -> Result<Vec<StepReceipt>, String> {
+    let text =
+        String::from_utf8(read(&format!("{dir}/receipts.jsonl"))?).map_err(|e| e.to_string())?;
+    text.lines()
+        .map(|line| serde_json::from_str(line).map_err(|e| format!("{dir}/receipts.jsonl: {e}")))
+        .collect()
+}
+
 fn grade_records(args: &[String]) -> Result<(), String> {
-    let (out, records) = args
+    let (out, dirs) = args
         .split_first()
-        .ok_or("usage: carrier-arms grade OUT RECORD...")?;
+        .ok_or("usage: carrier-arms grade OUT ARM_DIR...")?;
     let mut scores = Vec::new();
-    for path in records {
+    for dir in dirs {
+        let path = format!("{dir}/record.json");
         let r: serde_json::Value =
-            serde_json::from_slice(&read(path)?).map_err(|e| format!("{path}: {e}"))?;
+            serde_json::from_slice(&read(&path)?).map_err(|e| format!("{path}: {e}"))?;
         let number = |v: &serde_json::Value| v.as_u64().ok_or(format!("{path}: missing count"));
-        scores.push(ArmScore {
-            schedule: serde_json::from_value(r["schedule"].clone()).map_err(|e| e.to_string())?,
-            seed: u32::try_from(number(&r["seed"])?).map_err(|e| e.to_string())?,
-            fresh_top1: number(&r["fresh"]["top1_correct"])?,
-            fresh_rows: number(&r["fresh"]["scored_rows"])?,
-            dev_top1: number(&r["dev"]["top1_correct"])?,
-            dev_rows: number(&r["dev"]["scored_rows"])?,
-        });
+        scores.push((
+            dir.clone(),
+            ArmScore {
+                schedule: serde_json::from_value(r["schedule"].clone())
+                    .map_err(|e| e.to_string())?,
+                seed: u32::try_from(number(&r["seed"])?).map_err(|e| e.to_string())?,
+                fresh_top1: number(&r["fresh"]["top1_correct"])?,
+                fresh_rows: number(&r["fresh"]["scored_rows"])?,
+                dev_top1: number(&r["dev"]["top1_correct"])?,
+                dev_rows: number(&r["dev"]["scored_rows"])?,
+            },
+        ));
     }
-    let verdict = grade(&scores).map_err(|e| format!("{e:?}"))?;
+    let dir_of = |schedule: SchedulePolicy, seed: u32| {
+        scores
+            .iter()
+            .find(|(_, s)| s.schedule == schedule && s.seed == seed)
+            .map(|(d, _)| d.clone())
+            .ok_or(format!("no arm {schedule:?} seed {seed}"))
+    };
+    let mut audits = Vec::new();
+    for seed in SEEDS {
+        let on = receipts(&dir_of(SchedulePolicy::CarrierCreditV1, seed)?)?;
+        let cu = receipts(&dir_of(SchedulePolicy::CarrierUniformTargetV1, seed)?)?;
+        let cf = receipts(&dir_of(SchedulePolicy::CarrierUniformRowV1, seed)?)?;
+        audits.push(audit_selections(seed, &on, &cu, &cf).map_err(|e| format!("{e:?}"))?);
+    }
+    let scores: Vec<ArmScore> = scores.into_iter().map(|(_, s)| s).collect();
+    let verdict = grade(&scores, &audits).map_err(|e| format!("{e:?}"))?;
     let bytes = serde_json::to_vec_pretty(&verdict).map_err(|e| e.to_string())?;
     write_once(Path::new(out), &bytes)?;
     println!("{verdict}");
