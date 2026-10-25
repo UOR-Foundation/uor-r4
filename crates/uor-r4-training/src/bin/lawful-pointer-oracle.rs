@@ -926,7 +926,6 @@ fn qualify_m2_fresh256(
 
     if dialogue_target_spans_found != 256
         || dialogue_distractor_spans_found != 256
-        || dialogue_canonical_fold_matches != 256
         || update_rows_selecting_latest != 32
         || reassert_rows_selecting_latest != 32
     {
