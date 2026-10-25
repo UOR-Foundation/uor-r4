@@ -52,10 +52,10 @@ Let $L_t^{(a,s)}$ be the 256-row `MarginHinge(rivals=64)` loss of arm $a$ on see
 - **Training slice:** First `256` rows (`64` batches of `4` rows, `context = 192`) of `ft/train/tokens.u16` (SHA-256 `61f2d987b33a7dbac9ebfc15c99f24a25e947110dc7883a6703ab66389566bd6`) and `ft/train/response_mask.u8` (SHA-256 `e85b832a8531b606794cb0f2d904259516368952408c0949fb89f4e935721087`), tokenized with `d36d3e8707d6338641512926780299c2f0c4132833c708e882b1518d718b2798` (`vocab_size = 4096`).
 - **Source module:** Must run inside `crates/uor-r4-float-train` (#2823) with its own scanned allowlist entry (`CHARTER.md` §3.7, D37 item 6) and `cargo tree -p uor-r4-float-train` verified free of `uor-r4-training`.
 
-## 6. Cost, stop rule, and dispatch gate
+## 6. Cost, abort criteria, and dispatch gate
 
 - **Cost:** 1 leased `uor-pod` RTX 5090 instance (`--count 1 --gpu 5090`) inside the global `<= 4` pods and `<= $8.00/h` cap (`CHARTER.md` §5.4), `12` runs (`6` arms $\times$ `2` seeds $\times$ `256` steps at micro-probe shape), `<= 25` minutes total wall time, target `~$0.60` (`<= $1.20` hard stop).
-- **Stop rule:** Stop immediately if `I-Finite-CUDA` fails (`error != 0` or `NaN`/`Inf`), or if after one learning-rate calibration pass `I-Boundary-Crossings` remains $< 1.0\%$.
+- **Abort criteria:** Stop immediately if `I-Finite-CUDA` fails (`error != 0` or `NaN`/`Inf`), or if after one learning-rate calibration pass `I-Boundary-Crossings` remains $< 1.0\%$.
 - **Dispatch gate:** Held on [`float-training-module`](../../roadmap/items/float-training-module.md) (#2823). Runs on the lab's own D67 pre-run review as soon as `#2823` merges to `main`.
 
 ## 7. Non-author `TEST FITNESS` review (`CHARTER.md` §4.5)
