@@ -1579,10 +1579,13 @@ fn run_verify_dose(args: &[String]) -> Result<(), String> {
             return Err(format!("{arm} training_other_scopes != HELD"));
         }
     }
-    if fz_rep["counters"][2]["accepted"].as_u64() != Some(0) {
+    if fz_rep["counters"][2]["committed_applied"].as_u64() != Some(0)
+        || fz_rep["counters"][2]["provisional_applied"].as_u64() != Some(0)
+        || fz_rep["counters"][2]["rejected_applied"].as_u64() != Some(0)
+    {
         return Err(format!(
-            "frozen_zero accepted relation updates must be 0, got {}",
-            fz_rep["counters"][2]["accepted"]
+            "frozen_zero relation applied updates must be 0, got {}",
+            fz_rep["counters"][2]
         ));
     }
 
@@ -1596,9 +1599,10 @@ fn run_verify_dose(args: &[String]) -> Result<(), String> {
                     .filter(|r| {
                         read_json::<Value>(Path::new(r["path"].as_str().unwrap_or("")))
                             .ok()
-                            .and_then(|v| v["outcome"]["kind"].as_str().map(String::from))
-                            .as_deref()
-                            == Some("rejected_whole_interval")
+                            .is_some_and(|v| {
+                                v["kind"]["kind"] == "interval"
+                                    && v["kind"]["record"]["rejected"] == true
+                            })
                     })
                     .count()
             })
