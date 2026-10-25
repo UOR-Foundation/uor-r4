@@ -28,7 +28,7 @@ These are the A8 dose settings (#2831), except for the codebook start and the sc
 
 Here `n` is `completed_batches`. ON and both controls run the same CUDA evaluation and selection kernel (`discrete_carrier_select`, integer only) every batch. The host receives 2 words. Credit and draws read the training batch only.
 
-## 3. Data
+## 3. Data split and base artifact
 
 | Object | Pin |
 |---|---|
@@ -83,7 +83,7 @@ Here `n` is `completed_batches`. ON and both controls run the same CUDA evaluati
 
 No D11 export is needed: no milestone claim rests on this run.
 
-## 7. Cost, probes and stops
+## 7. Cost, steps (the probe ladder) and stop rule
 
 - **Probes:** (a) the controls and the CUDA suite; (b) 164 batches per schedule, to project wall time; (c) the eight arms, four at a time on each of two RTX 5090 pods.
 - **Throughput:** 0.12 s per batch was measured on A8 (16,404 batches in 1,967 s). The selection adds one evaluation per batch, which probe (b) measures.
@@ -95,6 +95,14 @@ No D11 export is needed: no milestone claim rests on this run.
   - Outputs go to the HF store under `results/claude/carrier-credit-2026-10-25/`, with a SHA256SUMS, before any pod comes down.
 - **Lead metric:** tokens per second through the dose, reported per arm.
 
+## Minimum test power
+
+This section restates §2 and §5 and adds no bar.
+- **Seeds and rows (§4.3):** two seeds per arm, and 65,536 fresh targets, against the floors of at least 2 seeds or at least 200 fresh rows.
+- **The 2σ gap:** at N = 65,536 and a pooled h = 1,350, a gap of 103 hits is needed, and it must also exceed OFF's two-seed spread on the same set.
+
 ## Test fitness
+
+The section headings "Data split and base artifact" and "Cost, steps (the probe ladder) and stop rule", and the section above, were added after the FIT so that the sheet meets the harness's sheet-shape rule. None of them changes the test.
 
 TEST FITNESS: FIT. A fresh-context reviewer passed this sheet in round 2 (#2819 comment `6395832768`), after round 1 returned NOT FIT with two Required findings (the win rule's factor and the measured noise; the selection audit), both fixed in `100cd518a`. The D67 pre-run review passed (#2819 comment `6395854890`). The release record pins this sheet's bytes as they stood before this section was added (sha256 `b2561a85ea9c4fa0ce5ec6f4ac1edff2104a28eb34b070608800301c09e303af`, run commit `4aac77aa6`). This section adds no content to the test.
