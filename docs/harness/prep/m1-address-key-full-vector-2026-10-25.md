@@ -88,7 +88,7 @@ None is trained. Each arm is `init-corpus` at checkpoint 0 from its pinned table
 1. **Done:**
    - the host metric (antigravity-37);
    - the kernel dispatch, the zero-update gate (one guarded capability constructor), the CUDA control, the configs and the grader (claude-110).
-2. **Source commit:** the run builds `bfbe20c5aaf2ef5751a64407a315f2291c1e65ab`, which fixes all code. A later commit that touches `crates/` re-pins this line before the run.
+2. **Source commit:** the run builds `6ece5d8013b3240f6cb5dffc7c7fd4b8f4c829c1`, which fixes all code. A later commit that touches `crates/` re-pins this line before the run.
 3. This sheet's non-author FIT, then the D67 pre-run review.
 4. **On one leased RTX 5090, in this order** (the job is `local/claude/address-key-job.sh`; it stops at the first miss, so no treatment number exists unless every instrument check passed):
    1. Check that free disk is at least 30 GiB. Stage the data and tables, and check every sha above.
@@ -108,6 +108,11 @@ None is trained. Each arm is `init-corpus` at checkpoint 0 from its pinned table
 - the cost is re-priced.
 
 None of these changes an arm, a bar or a pin of data.
+
+**G-Q's first pod run (25 Oct, 17:27Z, `vast-57698566`) stopped as an instrument fault, as the stop rule requires; no arm ran.**
+- The device matched the host oracle for all three metrics on every row.
+- The separation check then found envelope and two-scale admitting identical cells: the seeded device table gives same-cell tokens one vector, so the two orders cannot differ.
+- The fixture is now a patterned table, with 4 tokens of distinct interior blocks in every cell, and the source is re-pinned. The output is kept as `address-key-2026-10-25-fault1`.
 
 ## Stop rule
 
