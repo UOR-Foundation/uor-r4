@@ -51,7 +51,7 @@ All four model arms run on the GPU (`discrete-stack`, `crates/uor-r4-discrete`, 
 | **`NULL_EQUIVALENT_TO_SUCCESSOR_OR_FLOCK`** | Instrument gates pass, and `H_relation` stays within $\pm F_{\text{full}}$ of `C_frozen_zero` (or `C_successor_only`) on both seeds | Closes `#2877` as `done` on its registered report; closes the 25-trit `sweeps = 1` config (`CHARTER.md` §4.1) in favor of simpler winner |
 | **`INSTRUMENT_STOP`** | Any of `Gate C1–C5`, `Gate D40`, or `Gate S` fails, or `STOP_FOR_DIAGNOSIS` fires before full dose | Classified **instrument** (`CHARTER.md` §4.2); repair schedule/cadence coupling before calling any mechanism result |
 
-## 4. Cost and Stop Rule
+## 4. Cost and Stop Conditions
 
 - **Cost:** `1` pod (`2 x RTX 5090`, `~$2.02/h` via `scripts/pod/uor-pod`), `~2.5 hours` wall-clock (`8` arm-seed runs at `~30 min` per pair), estimated spend **`~$5.05`** (inside `<= 4` pods and `<= $8.00/h` fleet caps).
 - **Stop rule:** (1) Immediate stop if any of `Gate C1–C5`, `Gate D40`, or `Gate S` fails (`0` mechanism claims). (2) Do not evaluate `fresh_panel_v2.bin` before `Final` (`16,404` batches). (3) Hold pod launch until `#2836` (`m1-bvg-k-stage-t-training`, Step 4 of `PLAN.md`) completes.
