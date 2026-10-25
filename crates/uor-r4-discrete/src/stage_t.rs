@@ -187,10 +187,13 @@ pub fn block_eligibility(config: &DriverConfig, block: &Block) -> Result<Vec<boo
     let mut eligible = Vec::with_capacity(block.coordinates.len());
     for &param in &block.coordinates {
         let fam = classify_parameter(config, param)?;
-        let is_eligible = match (fam, config.relation_learning_policy) {
-            (CoordinateFamily::Relation, RelationLearningPolicy::FrozenZeroV1) => false,
-            _ => true,
-        };
+        let is_eligible = !matches!(
+            (fam, config.relation_learning_policy),
+            (
+                CoordinateFamily::Relation,
+                RelationLearningPolicy::FrozenZeroV1
+            )
+        );
         eligible.push(is_eligible);
     }
     Ok(eligible)
@@ -2407,7 +2410,7 @@ mod tests {
             beats_w2_baseline_bigram_restr: top1 > 1_482,
             beats_checkpoint_t_restr_aw: top1 > 1_150,
             beats_checkpoint_g_restr_aw: top1 > 1_480,
-            b_adm_table_pass: top1 > 1_482 && top1 > 1_150,
+            b_adm_table_pass: top1 > 1_482,
             b_block_gain_pass: top1.saturating_sub(871) >= 286,
             beats_full_panel_t2: top1 > 6_300,
         };
