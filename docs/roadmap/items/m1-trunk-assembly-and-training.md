@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [m1-position-mechanism, m1-normalization-mechanism, m1-bvg-k-stage-t-training, m1-d11-exporter-discrete]
+scope: [crates/uor-r4-discrete/**, docs/harness/prep/m1-trunk-assembly-and-training*, docs/labs/m1-trunk-assembly-and-training/**, docs/loop/tasks/m1-trunk-assembly-and-training/**]
 ---
 
 ## Why it matters

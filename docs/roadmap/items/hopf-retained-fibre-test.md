@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: []
+scope: [docs/harness/prep/hopf-retained-fibre-test*, docs/labs/hopf-retained-fibre-test/**, docs/loop/tasks/hopf-retained-fibre-test/**]
 ---
 
 ## Why it matters

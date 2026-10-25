@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [float-training-module]
+scope: [docs/harness/prep/e8-orbit-memory-sigmoid-free-iteration*, docs/labs/e8-orbit-memory-sigmoid-free-iteration/**, docs/loop/tasks/e8-orbit-memory-sigmoid-free-iteration/**]
 ---
 
 ## Why it matters

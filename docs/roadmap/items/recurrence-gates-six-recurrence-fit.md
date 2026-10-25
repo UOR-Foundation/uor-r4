@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [r-secant-surrogate-descent]
+scope: [docs/harness/prep/recurrence-gates-six-recurrence-fit*, docs/labs/recurrence-gates-six-recurrence-fit/**, docs/loop/tasks/recurrence-gates-six-recurrence-fit/**]
 ---
 
 ## Why it matters

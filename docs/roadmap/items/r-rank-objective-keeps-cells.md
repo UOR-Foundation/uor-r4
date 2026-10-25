@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [m1-a8-full-dose-rerun]
+scope: [docs/harness/prep/r-rank-objective-keeps-cells*, docs/labs/r-rank-objective-keeps-cells/**, docs/loop/tasks/r-rank-objective-keeps-cells/**]
 ---
 
 ## Why it matters

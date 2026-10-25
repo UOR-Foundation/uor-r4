@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [m1-a8-full-dose-rerun, m1-bvg-k-stage-t-training, m1-export-gap-and-toks, m1-fresh-panel-transfer]
+scope: [crates/uor-r4-discrete/**, docs/harness/prep/m1-close-saved-model*, docs/labs/m1-close-saved-model/**, docs/loop/tasks/m1-close-saved-model/**]
 notebook: docs/research/notebook/m1-discrete-attention.md
 ---
 

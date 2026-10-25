@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: []
+scope: [docs/harness/prep/r-secant-surrogate-descent*, docs/labs/r-secant-surrogate-descent/**, docs/loop/tasks/r-secant-surrogate-descent/**]
 ---
 
 ## Why it matters

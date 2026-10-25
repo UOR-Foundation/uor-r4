@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: []
+scope: [crates/uor-r4-discrete/**, docs/harness/prep/m1-w2-capacity-capture*, docs/labs/m1-w2-capacity-capture/**, docs/loop/tasks/m1-w2-capacity-capture/**]
 ---
 
 ## Why it matters

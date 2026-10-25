@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: []
+scope: [docs/harness/prep/r-vsa-hamming-binding*, docs/labs/r-vsa-hamming-binding/**, docs/loop/tasks/r-vsa-hamming-binding/**]
 ---
 
 ## Why it matters

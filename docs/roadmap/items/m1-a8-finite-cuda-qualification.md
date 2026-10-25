@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [m1-a8-registration-and-runbook-staging]
+scope: [crates/uor-r4-discrete/**, docs/harness/prep/m1-a8-finite-cuda-qualification*, docs/labs/m1-a8-finite-cuda-qualification/**, docs/loop/tasks/m1-a8-finite-cuda-qualification/**]
 ---
 
 ## Why it matters

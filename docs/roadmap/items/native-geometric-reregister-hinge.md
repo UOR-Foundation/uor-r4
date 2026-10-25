@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: []
+scope: [docs/harness/prep/native-geometric-reregister-hinge*, docs/labs/native-geometric-reregister-hinge/**, docs/loop/tasks/native-geometric-reregister-hinge/**]
 ---
 
 ## Why it matters

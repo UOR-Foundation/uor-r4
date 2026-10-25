@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [m1-a8-full-dose-rerun]
+scope: [docs/harness/prep/r-ranking-with-admission-intact*, docs/labs/r-ranking-with-admission-intact/**, docs/loop/tasks/r-ranking-with-admission-intact/**]
 ---
 
 ## Why it matters

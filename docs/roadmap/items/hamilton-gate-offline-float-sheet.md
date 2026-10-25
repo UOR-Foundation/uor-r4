@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [float-training-module, r-secant-surrogate-descent]
+scope: [docs/harness/prep/hamilton-gate-offline-float-sheet*, docs/labs/hamilton-gate-offline-float-sheet/**, docs/loop/tasks/hamilton-gate-offline-float-sheet/**]
 ---
 
 ## Why it matters

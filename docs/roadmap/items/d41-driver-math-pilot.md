@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: []
+scope: [docs/harness/prep/d41-driver-math-pilot*, docs/labs/d41-driver-math-pilot/**, docs/loop/tasks/d41-driver-math-pilot/**]
 ---
 
 ## Why it matters

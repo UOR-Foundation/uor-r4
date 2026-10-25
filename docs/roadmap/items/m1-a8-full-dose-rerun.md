@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [m1-a8-finite-cuda-qualification]
+scope: [crates/uor-r4-discrete/**, docs/harness/prep/m1-a8-full-dose-rerun*, docs/labs/m1-a8-full-dose-rerun/**, docs/loop/tasks/m1-a8-full-dose-rerun/**]
 ---
 
 ## Why it matters

@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [m2-donor-corpus-generation, m2-fresh-heldout-panel, m2-pin-train-mask-sheet, m1-close-saved-model, m1-d11-exporter-discrete]
+scope: [crates/uor-r4-discrete/**, docs/harness/prep/m2-train-grounded-replies*, docs/labs/m2-train-grounded-replies/**, docs/loop/tasks/m2-train-grounded-replies/**]
 ---
 
 ## Why it matters

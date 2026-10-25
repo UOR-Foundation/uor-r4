@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [m1-position-mechanism]
+scope: [docs/harness/prep/r-quaternion-transport-order*, docs/labs/r-quaternion-transport-order/**, docs/loop/tasks/r-quaternion-transport-order/**]
 ---
 
 ## Why it matters
