@@ -31,7 +31,7 @@ References #2889
   - Confirmed `0` occurrences of `read_binding` or `bind_spans` in `crates/uor-r4-discrete`.
 - **No GPU compute was run in this unit:** per `CHARTER §4.5` and `§5.1`, this unit is zero-compute design, pre-registration (`TEST FITNESS: FIT`), and `D68` status classification (`status: held`).
 
-## Checks run
+## Checks run at the head
 
 - `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo run -p xtask -- roadmap render`: PASS
 - `uor-harness loop report --check --order docs/loop/tasks/read-binding-on-lawful-read/antigravity-70/ORDER.md`: PASS
@@ -43,7 +43,7 @@ References #2889
 - `scope-guard`: Kept all changes strictly within `read-binding-on-lawful-read`'s declared scope (`docs/harness/prep/read-binding-on-lawful-read*`, `docs/labs/read-binding-on-lawful-read/**`, `docs/loop/tasks/read-binding-on-lawful-read/**`) and always-allowed roadmap files.
 - `solution-integrity`: Constructed `DiscreteReadBindingHingeV1` directly from the existing integer quantities in `flock_vector` (`rel[i]` and `positioned_root_cost` `distance`) so that training-time read-binding supervision requires zero extra serving operations (`D11`).
 
-## What is still open
+## Still open
 
 - Kernel implementation of `bind_hinge_cost` in `crates/uor-r4-discrete` and execution of the 4-arm $\times$ 3-seed RTX 5090 GPU run (`docs/harness/prep/read-binding-on-lawful-read-2026-10-25.md`) once `m1-bvg-k-stage-t-training` (`#2836`) and `m1-trunk-assembly-and-training` (`#2844`) complete and `crates/uor-r4-discrete/**` is free.
 
