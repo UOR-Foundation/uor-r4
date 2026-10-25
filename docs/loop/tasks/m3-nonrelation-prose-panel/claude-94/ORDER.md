@@ -52,8 +52,7 @@ A lawful compiler for the world=v2 schema, built from world=v2's own training ph
 
 - `crates/uor-r4-training/**`
 - `data/**`
-- `docs/labs/m3-nonrelation-prose-panel/**`
-- `docs/harness/prep/m3-nonrelation-prose-panel*`
+- `docs/labs/m3-nonrelation-prose-panel/**` (the prep sheet is `preregistration-sieve-2026-10-25.md` here)
 - `docs/loop/tasks/m3-nonrelation-prose-panel/**`
 - `docs/research/notebook/m3-durable-memory.md`
 - `docs/roadmap/items/m3-nonrelation-prose-panel.md` and the rendered roadmap files
@@ -63,7 +62,7 @@ A lawful compiler for the world=v2 schema, built from world=v2's own training ph
 
 1. The session's action types and the grader are in the non-test build, moved without change of behaviour.
 2. `sieve_frame_compiler` is in the non-test build, with finite host tests for the frame table, tokenizer and decoding, and finite CUDA controls that pass on a pod.
-3. A prep sheet registers the run, with its own fresh FIT and pre-run review posted on `#2856`.
+3. The prep sheet `docs/labs/m3-nonrelation-prose-panel/preregistration-sieve-2026-10-25.md` registers the run, with its own fresh FIT and pre-run review posted on `#2856`.
 4. The panel is graded on the GPU through the sieve compiler, and the record holds the three counts, both recall controls, tokens/s, the panel digest, the frame-table digest and the PTX digest. The outputs are saved in the HF store with a SHA256SUMS.
 5. One row in `docs/research/notebook/m3-durable-memory.md`, the item set to `status: done`, and the REPORT says `Closes #2856`.
 

@@ -39,6 +39,11 @@ characters and apostrophes (' and U+2019, the latter read as '), lowercased; eve
 separates words";
 /// The longest value a slot accepts, in words.
 pub const MAX_VALUE_WORDS: u32 = 4;
+/// The SHA-256 of [`FrameTable::world_v2`]'s bytes, registered in the prep
+/// sheet before the panel ran. A change to the phrasings, the word rule or the
+/// table layout moves it, and its test fails.
+pub const WORLD_V2_FRAME_TABLE_SHA256: &str =
+    "379c2ecc4f1d04b49168d76e43ac93f3d07730e1016e0a281608740efb46604f";
 /// The slot marker in a world=v2 phrasing.
 const SLOT: &str = "{v}";
 
@@ -690,6 +695,16 @@ mod tests {
             assert_eq!(expert, p * q);
             assert!(!table.relation_primes.contains(&q) && !table.act_primes.contains(&p));
         }
+        Ok(())
+    }
+
+    #[test]
+    fn the_world_v2_frame_table_matches_its_registered_digest() -> Result<()> {
+        let table = FrameTable::world_v2()?;
+        assert_eq!(
+            table.identity()?.artifact_sha256,
+            WORLD_V2_FRAME_TABLE_SHA256
+        );
         Ok(())
     }
 
