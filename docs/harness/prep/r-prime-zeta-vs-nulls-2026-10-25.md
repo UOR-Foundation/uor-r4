@@ -135,6 +135,10 @@ It exits 2 on an instrument fault, with no paired reading. Its 11 tests include 
 
 ## Test fitness
 
-- **FIT round 1: NOT FIT.** One Required finding: the grader's update refusal read two fields that the crate always writes as 0. It is fixed in `f5155fe17`, with a negative gate.
-  - Its advisories were applied: the G-Init null guard, the save on fault, stale markers, the job-bytes check, the binding of eval and census reports, and the provenance of top-1 38.
-- Round 2, then the D67 pre-run review, both recorded on #2881.
+TEST FITNESS: FIT. A fresh-context non-author reviewer passed this sheet in round 2 (#2881 comment `6401883120`). The D67 pre-run review passed in the same record.
+
+- **Round 1: NOT FIT,** on one Required finding: the grader's update refusal read two fields that the crate always writes as 0.
+  - It was fixed in `f5155fe17`, with a negative gate.
+  - Round 1's advisories were applied: the G-Init null guard, the save on fault, stale markers, the job-bytes check, the binding of eval and census reports, and the provenance of top-1 38.
+- **Round 2's advisory A1,** that `.table` is a flat 131,072-word array, holds on the host for all seven rebuilt tables.
+- **The reviewed bytes** of this sheet, before this section was rewritten, have sha256 `fa294ca228facf435917b0d0b95fce7045b8ad0f4f5bc2b21b5e198f13f98bd6` (commit `3a42da29f`). This section adds nothing to the test.
