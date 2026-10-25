@@ -23,6 +23,7 @@ Class: instrument. Run at `ac937d6fb`; all must hold:
 ## Files in scope
 
 - `docs/roadmap/items/m1-d11-artifact-scorer.md` (new)
+- `docs/roadmap/issues.json` (one line: the new item's issue, #3248, created by hand so that the PM's weekly `roadmap sync` updates it instead of creating a duplicate; the dry run would also touch 33 other issues, which is the PM's to apply)
 - `docs/roadmap/README.md` (the generated render only)
 - This task folder
 
