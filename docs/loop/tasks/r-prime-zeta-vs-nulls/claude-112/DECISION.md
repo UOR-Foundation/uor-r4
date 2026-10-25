@@ -1,6 +1,6 @@
 # Decision card (D68): register the zero-update bar for prime-zeta against injective nulls
 
-Lab: claude, claude-112. Item: [`r-prime-zeta-vs-nulls`](../../../../roadmap/items/r-prime-zeta-vs-nulls.md) (#2881). Status: **proposed**; a fresh decision review is pending.
+Lab: claude, claude-112. Item: [`r-prime-zeta-vs-nulls`](../../../../roadmap/items/r-prime-zeta-vs-nulls.md) (#2881). Status: **approved**. The fresh decision review returned CHANGES in round 1 and APPROVE in round 2. Round 2's five advisories are applied.
 
 ## Why this test, and why now
 
@@ -66,13 +66,16 @@ Lab: claude, claude-112. Item: [`r-prime-zeta-vs-nulls`](../../../../roadmap/ite
 
 **C. Instrument gates run first, and a failure is a fault, never a reading (D31).**
 - **G-Rebuild:** each table rebuilt on the pod equals its pin.
-- **G-Init:** each arm's checkpoint 0 loads its pinned table. The driver checks the table sha256 that `pinned_table_v1` carries, and init reports 0 accepted updates.
+- **G-Init:** each arm's checkpoint 0 loads its pinned table. The driver checks the table sha256 that `pinned_table_v1` carries, and init reports 0 accepted updates. The seven checkpoints carry identical routes and gates (the draft's G-Init), so the arms differ only in the table.
 - **P8 exactness:** P8 reproduces 427 / 127 / 38, and is checked before any null arm runs.
-- **G-Occ:** every arm has 4,096 distinct vectors, ceiling 14,287, zero tokens in alias groups, and zero DEV rows targeting a non-representative. P8 and Q0–Q2 have 256 cells, at most 16 per cell, and 30,720 collision pairs. R0–R2 have more than 30,720.
+- **G-Occ:**
+  - Every arm has 4,096 distinct vectors, ceiling 14,287, zero tokens in alias groups, zero DEV rows targeting a non-representative, and 256 occupied cells.
+  - P8 and Q0–Q2 also have at most 16 tokens per cell and 30,720 collision pairs.
+  - R0–R2 have more than 30,720 collision pairs.
 - **Arm binding:** each `attention-dev-b3` report's `config_file.sha256` must equal its arm's pinned config sha256, as `ARM_CONFIGS` does in `address_key_grade.rs`:141. A manifest that swaps two arms is refused.
 
 **D. The run uses a new pinned job,** `docs/labs/r-prime-zeta-vs-nulls/pz-nulls-job.sh`, modelled on the address-key job.
-- It pins a source commit, and the sha256 of each of the seven `docs/labs/r-prime-zeta-vs-nulls/evidence/` configs. The draft also cites an older P8 config under `address-cells-preflight-configs-2026-10-19/`, which this run does not use.
+- It pins a source commit, and the sha256 of each of the seven `docs/labs/r-prime-zeta-vs-nulls/evidence/` configs. The draft also cites a P8 config under `address-cells-preflight-configs-2026-10-19/`, which is byte-identical to this one.
 - It takes the data from the store and checks it against its pins.
 - It runs the C gates in that order.
 - It ends on FAULT/EXIT markers, and saves its own outputs to `results/claude/prime-zeta-nulls-2026-10-25/` before anyone brings the pod down.
@@ -80,7 +83,7 @@ Lab: claude, claude-112. Item: [`r-prime-zeta-vs-nulls`](../../../../roadmap/ite
 
 **E. The grader is a detached host instrument** at `docs/labs/r-prime-zeta-vs-nulls/instrument/`.
 - Like the W2 instrument, it is its own `[workspace]` and reads `uor-r4-discrete` by path.
-- It reuses `paired_psucc` and `clears`.
+- It reuses `paired_psucc` and `clears`. It copies `check_panel`, which the crate keeps private, so it refuses a report that does not score the registered panel, or whose counts differ from its rows.
 - It is placed outside the crate, so this item's scope holds no crate path and locks no discrete item.
 
 **F. The spend.** One RTX 5090 on Vast for at most one hour, an estimated $0.20–$0.60, inside the 4-pod / $8/h caps. A D67 pre-run review releases it after the sheet's FIT.
@@ -90,7 +93,7 @@ Lab: claude, claude-112. Item: [`r-prime-zeta-vs-nulls`](../../../../roadmap/ite
 | Result | Meaning | Decision |
 |---|---|---|
 | instrument fault | a C gate failed | repair and rerun; no reading |
-| positive | zeta-phase placement raises zero-update admission at K = 8 over quota-matched and unconstrained injective codes | a "positive" row on the mechanism page; PrimeZeta stays the start table with an attribution; the held trained comparison gains a measured reason to run |
+| positive | prime and zeta-phase placement raises zero-update admission at K = 8 over quota-matched and unconstrained injective codes | a "positive" row on the mechanism page; PrimeZeta stays the start table with an attribution; the held trained comparison gains a measured reason to run |
 | negative, tie | at checkpoint 0 and K = 8, zeta phases add no admission gain above the paired floor F over a quota-matched seeded shuffle | this configuration is closed at this power (D22); the mechanism stays ACTIVE, and a higher-power configuration stays open; the quota-only null becomes a candidate pure-integer start table for a new lineage's sheet |
 | negative, loss | as for a tie, and a quota-matched shuffle admits more than P8, by more than F, at one or more Q seeds | as for a tie |
 | residual | the seeds disagree, or quota and crowding pull apart | a descriptive row with no status change; the next configuration adds seeds |
@@ -102,3 +105,9 @@ Lab: claude, claude-112. Item: [`r-prime-zeta-vs-nulls`](../../../../roadmap/ite
   - It asked for `clears` to be written with its one `Paired` argument.
   - Its advisories were applied: the tie and loss mix is labelled, G-Occ also requires zero non-representative DEV rows, arms are bound by config sha256, and the job pins the configs it reads.
   - Fact 8's P8-gate sentence was corrected. The battery never checks that gate.
+- **Round 2: APPROVE.** Every round-1 item is resolved, and the partition is total. Its five advisories are applied:
+  - G-Init keeps the draft's identical routes and gates;
+  - the instrument copies `check_panel`;
+  - the two P8 configs are byte-identical;
+  - the positive reading credits prime and zeta-phase placement;
+  - every arm must occupy 256 cells.
