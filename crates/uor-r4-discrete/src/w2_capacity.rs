@@ -578,11 +578,36 @@ pub fn decide(a: &Aggregates) -> Decision {
     }
 }
 
+/// Outputs of the kernel's signed-permutation `action()` (`discrete.cu`) over
+/// every action × root that are not exactly one of the 16 roots. The root set
+/// is closed under the 64 actions iff this is 0.
+pub fn symmetry_action_non_roots() -> u64 {
+    let mut misses = 0u64;
+    for a in 0..geometry::AXES.len() / BLOCK_WIDTH {
+        for x in &geometry::ROOTS {
+            let mut y = [0i8; BLOCK_WIDTH];
+            for (d, out) in y.iter_mut().enumerate() {
+                let axis = geometry::AXES[a * BLOCK_WIDTH + d];
+                let v = x[usize::from(axis & 7)];
+                *out = if axis & 8 != 0 { -v } else { v };
+            }
+            misses += u64::from(!geometry::ROOTS.contains(&y));
+        }
+    }
+    misses
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     const W: u64 = 149;
+
+    #[test]
+    fn w2_symmetry_actions_keep_every_root_a_root() {
+        assert_eq!(geometry::AXES.len() / BLOCK_WIDTH, 64);
+        assert_eq!(symmetry_action_non_roots(), 0);
+    }
 
     #[test]
     fn every_root_round_trips_and_absent_is_an_error() {
