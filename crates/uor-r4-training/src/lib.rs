@@ -190,6 +190,7 @@ pub mod relation_compiler;
 #[cfg(any())] // Preserved historical module; excluded from the native qualification graph.
 pub mod s8_panel_count;
 pub mod sieve_frame_compiler;
+pub mod sieve_marker_gate;
 pub mod spiralcore_fbs;
 #[cfg(any())] // Preserved historical module; excluded from the native qualification graph.
 pub mod stack_address;
