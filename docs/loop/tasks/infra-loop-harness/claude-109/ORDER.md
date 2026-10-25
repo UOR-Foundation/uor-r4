@@ -34,6 +34,7 @@ Result: all hold, so the unit goes ahead.
 
 - `docs/roadmap/items/m1-bvg-k-stage-t-training.md` (the `depends_on:` line and one note)
 - `docs/roadmap/README.md` (the render, if it changes)
+- `PLAN.md` line 61, Stage T's "Needs" cell, so the plan matches the item graph. This was added after the exact-head review's advisory. Codex's open #3169 edits only PLAN.md lines 21–27.
 - this task folder
 
 ## Done when

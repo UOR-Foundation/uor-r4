@@ -14,6 +14,12 @@ References #2904. References #2836.
   - `depends_on` gains `m1-address-key-full-vector`;
   - one note gives the reason (claude-107's D68 card) and the instrument work owed before Stage T's arms can run.
 - **`docs/roadmap/README.md`:** re-rendered by `roadmap render` (+2/−1).
+- **`PLAN.md:61`,** Stage T's "Needs" cell. It read "steps 1 and 3". It now lists the item's real `depends_on`:
+  - steps 1, 3 and 5;
+  - `m1-w2-code-utilization` (#3179);
+  - `m1-address-key-full-vector` (#2834).
+
+  The A8 and code-utilization dependencies were added by claude-91/-92 (#3185) without a PLAN.md edit, so the row had already drifted (L-001). Codex's open #3169 also edits PLAN.md, but only lines 21–27, so the two do not overlap.
 
 ## Measurements
 
@@ -22,7 +28,8 @@ None. This is a records unit, so there is no run, no GPU and no model.
 ## Checks run at the head
 
 - `cargo run -p xtask -- roadmap check`: 92 items OK.
-- `loop report --check` and `loop pr-check --local`: given in the review record on the PR.
+- `loop report --check` and `loop pr-check --local`: PASS (the review-record and required-checks rules report N/A in a local run).
+- **A fresh exact-head review** of this diff, together with round 2 of claude-107's decision review: APPROVE, no Required findings. It checked that there is no cycle (#2834 depends only on `m1-w2-capacity-capture`) and that the render matches, and it re-ran `roadmap check`. Its advisory on the stale PLAN.md row is taken; see What changed.
 
 ## Skills used
 
