@@ -597,6 +597,204 @@ pub fn symmetry_action_non_roots() -> u64 {
     misses
 }
 
+/// `act[a][r]`: the root the kernel's action `a` maps root `r` to. Any action
+/// output that is not an exact root is an instrument fault (sheet §4.3 item 6).
+pub fn symmetry_root_actions() -> Result<Vec<[u8; ROOT_COUNT]>, String> {
+    (0..geometry::AXES.len() / BLOCK_WIDTH)
+        .map(|a| {
+            let mut row = [0u8; ROOT_COUNT];
+            for (r, x) in geometry::ROOTS.iter().enumerate() {
+                let mut y = [0i8; BLOCK_WIDTH];
+                for (d, out) in y.iter_mut().enumerate() {
+                    let axis = geometry::AXES[a * BLOCK_WIDTH + d];
+                    let v = x[usize::from(axis & 7)];
+                    *out = if axis & 8 != 0 { -v } else { v };
+                }
+                row[r] = geometry::ROOTS
+                    .iter()
+                    .position(|root| *root == y)
+                    .ok_or_else(|| format!("action {a} maps root {r} to a non-root"))?
+                    as u8;
+            }
+            Ok(row)
+        })
+        .collect()
+}
+
+/// Canonical symmetry key of every code: the minimum packed code over the
+/// orbit under the actions applied uniformly to all four root blocks.
+pub fn symmetry_keys(actions: &[[u8; ROOT_COUNT]]) -> Vec<u16> {
+    (0..=u16::MAX)
+        .map(|code| {
+            let roots = unpack_code(code);
+            actions
+                .iter()
+                .map(|act| pack_code(roots.map(|r| act[usize::from(r)])))
+                .min()
+                .unwrap_or(code)
+        })
+        .collect()
+}
+
+/// `table_sym`: counts pooled over each code's symmetry orbit.
+pub fn build_sym_table(train: &[TrainRow], keys: &[u16]) -> KeyedTable {
+    let mut t = KeyedTable::default();
+    for row in train {
+        t.add(keys[usize::from(row.code)], row.target_token);
+    }
+    t
+}
+
+impl Unigram {
+    /// Every seen token in the tie rule's order (no `TOP_K` cut).
+    fn ranked_all(&self) -> Vec<u16> {
+        let mut v: Vec<(u16, u64)> = (0..VOCABULARY as u16)
+            .map(|t| (t, self.counts[usize::from(t)]))
+            .filter(|&(_, c)| c > 0)
+            .collect();
+        v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        v.into_iter().map(|(t, _)| t).collect()
+    }
+}
+
+/// A row's admitted token set: `t` is admitted iff `token_cells[t]` is one of
+/// the row's present `admitted_cell_slots` (the GPU export; no host recomputation).
+pub struct Admission<'a> {
+    pub token_cells: &'a [u16],
+    pub slots: &'a [u16],
+}
+
+impl Admission<'_> {
+    pub fn admits(&self, token: u16) -> bool {
+        let cell = self.token_cells[usize::from(token)];
+        cell != crate::w2_capture::ABSENT_SLOT && self.slots.contains(&cell)
+    }
+}
+
+/// Admission-matched prediction (sheet §4.3 item 4): the key's admitted tokens
+/// by (count desc, token asc), then the admitted unigram ranking, skipping
+/// duplicates, to `TOP_K`. With no admitted token seen under the key, the
+/// admitted unigram gives the whole prediction (`fallback_used`).
+pub fn predict_admitted(
+    table: &KeyedTable,
+    key: u16,
+    unigram_all: &[u16],
+    admission: &Admission,
+) -> Prediction {
+    let own = table.counts.get(&key).map_or_else(Vec::new, |m| {
+        rank(
+            m.iter()
+                .filter(|&(&t, _)| admission.admits(t))
+                .map(|(&t, &c)| (t, c)),
+        )
+    });
+    let fallback_used = own.is_empty();
+    let mut top8 = own;
+    for &t in unigram_all.iter().filter(|&&t| admission.admits(t)) {
+        if top8.len() == TOP_K {
+            break;
+        }
+        if !top8.contains(&t) {
+            top8.push(t);
+        }
+    }
+    Prediction {
+        top8,
+        fallback_used,
+    }
+}
+
+/// The admission-matched arms of one DEV row, plus the full-panel `table_sym`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdmittedScore {
+    pub table: Prediction,
+    pub unigram: Prediction,
+    pub bigram: Prediction,
+    pub table_sym: Prediction,
+    pub table_sym_full: Prediction,
+    pub target_admitted: bool,
+    pub writer_hit1: bool,
+    pub writer_hit8: bool,
+}
+
+/// Score the admission-matched and symmetry-pooled arms; `slots[i]` is DEV row
+/// `i`'s `admitted_cell_slots`. The writer arm is restricted by requiring the
+/// target to be admitted. Descriptive only: it cannot move the verdict.
+pub fn score_admitted(
+    tables: &Tables,
+    table_sym: &KeyedTable,
+    sym_keys: &[u16],
+    dev: &[DevRow],
+    token_cells: &[u16],
+    slots: &[Vec<u16>],
+) -> Vec<AdmittedScore> {
+    let unigram_all = tables.unigram.ranked_all();
+    let empty = KeyedTable::default();
+    dev.iter()
+        .zip(slots)
+        .map(|(row, slots)| {
+            let adm = Admission { token_cells, slots };
+            let sym_key = sym_keys[usize::from(row.code)];
+            let target_admitted = adm.admits(row.target_token);
+            AdmittedScore {
+                table: predict_admitted(&tables.code, row.code, &unigram_all, &adm),
+                unigram: predict_admitted(&empty, 0, &unigram_all, &adm),
+                bigram: predict_admitted(&tables.bigram, row.query_token, &unigram_all, &adm),
+                table_sym: predict_admitted(table_sym, sym_key, &unigram_all, &adm),
+                table_sym_full: predict(table_sym, sym_key, &tables.unigram),
+                target_admitted,
+                writer_hit1: row.writer_hit1 && target_admitted,
+                writer_hit8: row.writer_hit8 && target_admitted,
+            }
+        })
+        .collect()
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ArmCounts {
+    pub hit1: u64,
+    pub hit8: u64,
+}
+
+/// Restricted hit counts per arm (`table, unigram, bigram, table_sym, writer`),
+/// over all rows and over the target-admitted rows, plus full-panel `table_sym` top-1.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AdmissionMatched {
+    pub rows: u64,
+    pub target_admitted_rows: u64,
+    pub all: [ArmCounts; 5],
+    pub target_admitted: [ArmCounts; 5],
+    pub table_sym_top1_full: u64,
+}
+
+pub const ADMITTED_ARMS: [&str; 5] = ["table", "unigram", "bigram", "table_sym", "writer"];
+
+pub fn admission_matched(scores: &[AdmittedScore], dev: &[DevRow]) -> AdmissionMatched {
+    let mut m = AdmissionMatched::default();
+    for (s, row) in scores.iter().zip(dev) {
+        let t = row.target_token;
+        let hits = [
+            (s.table.hit1(t), s.table.hit8(t)),
+            (s.unigram.hit1(t), s.unigram.hit8(t)),
+            (s.bigram.hit1(t), s.bigram.hit8(t)),
+            (s.table_sym.hit1(t), s.table_sym.hit8(t)),
+            (s.writer_hit1, s.writer_hit8),
+        ];
+        m.rows += 1;
+        m.target_admitted_rows += u64::from(s.target_admitted);
+        m.table_sym_top1_full += u64::from(s.table_sym_full.hit1(t));
+        for (k, (h1, h8)) in hits.into_iter().enumerate() {
+            m.all[k].hit1 += u64::from(h1);
+            m.all[k].hit8 += u64::from(h8);
+            if s.target_admitted {
+                m.target_admitted[k].hit1 += u64::from(h1);
+                m.target_admitted[k].hit8 += u64::from(h8);
+            }
+        }
+    }
+    m
+}
+
 /// BOS token id; a document starts at each occurrence.
 pub const BOS_ID: u16 = 0;
 /// Causal window of the DEV panel (the sealed relation-subpanel context).
@@ -741,6 +939,131 @@ mod tests {
     fn w2_symmetry_actions_keep_every_root_a_root() {
         assert_eq!(geometry::AXES.len() / BLOCK_WIDTH, 64);
         assert_eq!(symmetry_action_non_roots(), 0);
+    }
+
+    const NO: u16 = crate::w2_capture::ABSENT_SLOT;
+
+    fn rows(spec: &[(u16, u16, u64)]) -> Vec<TrainRow> {
+        let mut v = Vec::new();
+        for &(code, target, n) in spec {
+            for _ in 0..n {
+                v.push(TrainRow {
+                    code,
+                    query_token: 1,
+                    target_token: target,
+                });
+            }
+        }
+        v
+    }
+
+    fn cells(spec: &[(u16, u16)]) -> Vec<u16> {
+        let mut c = vec![NO; VOCABULARY];
+        for &(token, cell) in spec {
+            c[usize::from(token)] = cell;
+        }
+        c
+    }
+
+    #[test]
+    fn w2_admitted_prediction_differs_from_unrestricted() {
+        let t = build_tables(&rows(&[(1, 10, 3), (1, 20, 1)])).unwrap();
+        let token_cells = cells(&[(10, 5), (20, 6)]);
+        let slots = [6, NO];
+        let adm = Admission {
+            token_cells: &token_cells,
+            slots: &slots,
+        };
+        let full = predict(&t.code, 1, &t.unigram);
+        let restricted = predict_admitted(&t.code, 1, &t.unigram.ranked_all(), &adm);
+        assert_eq!(full.top1(), Some(10));
+        assert_eq!(restricted.top1(), Some(20));
+        assert_eq!(restricted.top8, vec![20]);
+        assert!(!restricted.fallback_used);
+    }
+
+    #[test]
+    fn w2_admitted_ties_break_to_lowest_token() {
+        let t = build_tables(&rows(&[(1, 30, 2), (1, 25, 2), (1, 10, 5)])).unwrap();
+        let token_cells = cells(&[(30, 1), (25, 2), (10, 3)]);
+        let slots = [1, 2];
+        let adm = Admission {
+            token_cells: &token_cells,
+            slots: &slots,
+        };
+        let restricted = predict_admitted(&t.code, 1, &t.unigram.ranked_all(), &adm);
+        assert_eq!(restricted.top8, vec![25, 30]);
+    }
+
+    #[test]
+    fn w2_admitted_falls_back_to_the_admitted_unigram() {
+        let t = build_tables(&rows(&[(2, 10, 4), (3, 40, 1), (3, 41, 2)])).unwrap();
+        let token_cells = cells(&[(10, 3), (40, 7), (41, 8)]);
+        let slots = [7, NO, NO];
+        let adm = Admission {
+            token_cells: &token_cells,
+            slots: &slots,
+        };
+        let p = predict_admitted(&t.code, 2, &t.unigram.ranked_all(), &adm);
+        assert!(p.fallback_used);
+        assert_eq!(p.top8, vec![40]);
+        let none = Admission {
+            token_cells: &token_cells,
+            slots: &[NO],
+        };
+        let q = predict_admitted(&t.code, 2, &t.unigram.ranked_all(), &none);
+        assert_eq!(q.top1(), None);
+    }
+
+    #[test]
+    fn w2_admitted_hit1_is_bounded_by_target_admitted_rows() {
+        let train = rows(&[(1, 10, 3), (1, 20, 1), (2, 30, 2), (2, 10, 1)]);
+        let t = build_tables(&train).unwrap();
+        let token_cells = cells(&[(10, 1), (20, 2), (30, 3)]);
+        let dev_row = |code, target, w| DevRow {
+            code,
+            query_token: 1,
+            target_token: target,
+            writer_hit1: w,
+            writer_hit8: w,
+        };
+        let dev = [
+            dev_row(1, 10, true),
+            dev_row(1, 20, true),
+            dev_row(2, 30, false),
+            dev_row(2, 10, true),
+        ];
+        let slots = vec![vec![2], vec![2], vec![1, 3], vec![3]];
+        let actions = symmetry_root_actions().unwrap();
+        let keys = symmetry_keys(&actions);
+        let sym = build_sym_table(&train, &keys);
+        let scores = score_admitted(&t, &sym, &keys, &dev, &token_cells, &slots);
+        let m = admission_matched(&scores, &dev);
+        assert_eq!((m.rows, m.target_admitted_rows), (4, 2));
+        for k in 0..ADMITTED_ARMS.len() {
+            assert!(m.all[k].hit1 <= m.target_admitted_rows);
+            assert_eq!(m.all[k], m.target_admitted[k]);
+        }
+        // Row 0's target 10 is not admitted; row 1's 20 is, and the restricted table finds it.
+        assert_eq!(scores[1].table.top1(), Some(20));
+        assert_eq!(m.all[4].hit1, 1);
+    }
+
+    #[test]
+    fn w2_symmetry_key_is_constant_on_an_orbit() {
+        let actions = symmetry_root_actions().unwrap();
+        assert_eq!(actions.len(), 64);
+        let identity: [u8; ROOT_COUNT] = core::array::from_fn(|r| r as u8);
+        assert!(actions.contains(&identity));
+        let keys = symmetry_keys(&actions);
+        for code in [pack_code([1, 5, 9, 14]), pack_code([0, 0, 3, 15])] {
+            let roots = unpack_code(code);
+            assert!(keys[usize::from(code)] <= code);
+            for act in &actions {
+                let image = pack_code(roots.map(|r| act[usize::from(r)]));
+                assert_eq!(keys[usize::from(image)], keys[usize::from(code)]);
+            }
+        }
     }
 
     #[test]

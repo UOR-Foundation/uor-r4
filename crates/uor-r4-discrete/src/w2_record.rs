@@ -8,9 +8,10 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::w2_capacity::{
-    aggregate, build_tables, decide, dev_panel, ordered_row_binding_sha256, parse_uort_tokens,
-    score_dev, symmetry_action_non_roots, DevRow, TrainRow, BOS_ID, DEV_ROWS,
-    FALLBACK_CAPTURE_MODE, MATCHED_TRAIN_ROWS, TOP_K, VOCABULARY,
+    admission_matched, aggregate, build_sym_table, build_tables, decide, dev_panel,
+    ordered_row_binding_sha256, parse_uort_tokens, score_admitted, score_dev,
+    symmetry_action_non_roots, symmetry_keys, symmetry_root_actions, DevRow, TrainRow,
+    ADMITTED_ARMS, BOS_ID, DEV_ROWS, FALLBACK_CAPTURE_MODE, MATCHED_TRAIN_ROWS, TOP_K, VOCABULARY,
 };
 use crate::w2_capture::{ABSENT_SLOT, CELL_SLOTS, SEALED_SHA256};
 
@@ -415,10 +416,24 @@ fn assemble_with(
         "INSTRUMENT_FAULT"
     };
 
+    // Descriptive arms (sheet §4.3 items 4 and 6), never inputs to the verdict.
+    let sym_keys = symmetry_keys(&symmetry_root_actions()?);
+    let table_sym = build_sym_table(&train, &sym_keys);
+    let slots: Vec<Vec<u16>> = captured.iter().map(|c| c.slots.clone()).collect();
+    let admitted = score_admitted(&tables, &table_sym, &sym_keys, &dev, &token_cells, &slots);
+    let am = admission_matched(&admitted, &dev);
+    let arms = |counts: &[crate::w2_capacity::ArmCounts; 5]| {
+        let mut m = serde_json::Map::new();
+        for (name, k) in ADMITTED_ARMS.iter().zip(counts) {
+            m.insert(name.to_string(), json!({ "hit1": k.hit1, "hit8": k.hit8 }));
+        }
+        Value::Object(m)
+    };
+
     let unigram = tables.unigram.ranked();
     let unigram_top1 = *unigram.first().ok_or("unigram is empty")?;
     let mut rows = Vec::with_capacity(ex.dev_rows);
-    for ((p, c), s) in panel.iter().zip(&captured).zip(&scores) {
+    for (((p, c), s), r) in panel.iter().zip(&captured).zip(&scores).zip(&admitted) {
         let target = p.target_token;
         let table_top8 = padded_top8(&s.table.top8, &unigram);
         let table_top1 = table_top8[0];
@@ -450,6 +465,11 @@ fn assemble_with(
             "unigram_1049856_hit1": unigram_top1 == target,
             "bigram_hit1": bigram_top1 == target,
             "seen_code": s.seen_code,
+            "table_prediction_admitted": r.table.top1(),
+            "table_hit1_admitted": r.table.hit1(target),
+            "table_hit8_admitted": r.table.hit8(target),
+            "table_sym_top1": r.table_sym_full.top1(),
+            "table_sym_hit1": r.table_sym_full.hit1(target),
         }));
     }
 
@@ -467,6 +487,13 @@ fn assemble_with(
         "target_binary_sha256": target_binary,
     });
     let manifest_sha = sha256_hex(&runtime_manifest_bytes(&manifest)?);
+    let admission = json!({
+        "rows": am.rows,
+        "target_admitted_rows": am.target_admitted_rows,
+        "all_rows": arms(&am.all),
+        "target_admitted": arms(&am.target_admitted),
+        "table_sym_top1": am.table_sym_top1_full,
+    });
     let disc = |d: crate::w2_capacity::Discordance| json!({ "b": d.b, "c": d.c });
 
     let record = json!({
@@ -552,6 +579,7 @@ fn assemble_with(
                 "decision_precedence": decision.precedence,
                 "pathological_ordering": decision.pathological_ordering,
                 "underpowered_reasons": decision.underpowered_reasons,
+                "admission_matched": admission,
             },
         },
         "rows": rows,
