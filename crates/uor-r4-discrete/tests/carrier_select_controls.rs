@@ -105,7 +105,7 @@ fn c7_uniform_row_takes_the_drawn_row() {
     ];
     let key = schedule_key(2001, 10);
     let row = splitmix64(key) % 4;
-    let expected = rows[row as usize].0;
+    let Row(expected, ..) = rows[row as usize];
     let s = select(&rows, CarrierMode::UniformRowV1, key).expect("uniform row");
     assert_eq!((s.token, s.value), (expected, row));
 }
