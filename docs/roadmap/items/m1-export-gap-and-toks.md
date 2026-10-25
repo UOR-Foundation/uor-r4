@@ -21,7 +21,7 @@ Tokens per second for a model trained under today's rules has never been measure
 
 **Both inputs now exist** (25 Oct; the D68 card in `docs/loop/tasks/infra-loop-harness/claude-113/DECISION.md`):
 - the exporter, `m1-d11-exporter-discrete`, is done;
-- the A8 rerun, `m1-a8-full-dose-rerun`, is done. It saved restored passing checkpoints, Relation `continuation-01600.json` and FrozenZero `continuation-05248.json`, in the store under `results/antigravity/a8-full-dose-rerun-2026-10-25/`.
+- the A8 rerun, `m1-a8-full-dose-rerun`, is done. It saved restored passing checkpoints in the store: Relation `continuation-01600.json`, which passed the TRAIN anchor floor only, and FrozenZero `continuation-05248.json`, which passed Q1 at batch 4,096. Both are under `results/antigravity/a8-full-dose-rerun-2026-10-25/`.
 
 The sheet, the instrument and the FIT can be prepared now.
 

@@ -1,6 +1,6 @@
 # Decision card (D68): set m1-export-gap-and-toks `ready` for preparation, with its measured run still on step 4's model
 
-Lab: claude, claude-113. Item: [`m1-export-gap-and-toks`](../../../../roadmap/items/m1-export-gap-and-toks.md) (#2839). Status: **proposed**; a fresh decision review is pending.
+Lab: claude, claude-113. Item: [`m1-export-gap-and-toks`](../../../../roadmap/items/m1-export-gap-and-toks.md) (#2839). Status: **approved**. The fresh decision review returned APPROVE in round 1.
 
 ## Why, and why now
 
@@ -52,4 +52,10 @@ Nothing here changes a bar, a sequence, a stop rule or the caps. Only one item's
 
 ## The fresh decision review
 
-Pending.
+- **Round 1: APPROVE**, together with an exact-head APPROVE of the diff at `4327d6a1e`.
+  - It checked every fact against PLAN.md:61–65, the two items' status lines, the A8 README, CHARTER.md:51–52 (D68) and the scope of `infra-loop-harness`.
+  - It confirmed that no open PR overlaps (#3242, #3239, #3169), and that `roadmap check` passes (ready 25, held 15).
+- **Its advisories:**
+  1. **The step-4 condition.** The claiming lab's sheet should repeat that the run waits on step 4's model, so that a FIT reviewer refuses an A8-only measurement.
+  2. **The Relation checkpoint** passed only the TRAIN anchor floor (1,232 ≥ 1,187), not Q1. This is applied in the item text.
+  3. **The citations** of D79 (PLAN.md:54) and of `m4-serving.md` (the item's step 6) were checked separately.
