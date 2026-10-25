@@ -181,7 +181,7 @@ impl Repo {
     }
 
     /// Pushes a new commit to `origin` from a second clone, so this checkout's `origin/main` is
-    /// stale until a fetch. Returns the new commit.
+    /// stale until a fetch. Returns the new commit; each call makes another.
     fn advance_origin(&self) -> String {
         let tmp = self.tmp.path().canonicalize().unwrap();
         let other = tmp.join("other");
@@ -194,11 +194,16 @@ impl Repo {
             assert!(o.status.success(), "git {args:?}: {o:?}");
             String::from_utf8_lossy(&o.stdout).trim().to_string()
         };
-        run(&tmp, &["clone", "-q", "remote.git", "other"]);
-        assert!(other.starts_with(&tmp));
-        run(&other, &["config", "user.email", "t@example.invalid"]);
-        run(&other, &["config", "user.name", "t"]);
-        std::fs::write(other.join("NEW.md"), "new on main\n").unwrap();
+        if !other.exists() {
+            run(&tmp, &["clone", "-q", "remote.git", "other"]);
+            assert!(other.starts_with(&tmp));
+            run(&other, &["config", "user.email", "t@example.invalid"]);
+            run(&other, &["config", "user.name", "t"]);
+        }
+        // Each call adds a line, so each call makes a new commit.
+        let new = other.join("NEW.md");
+        let text = std::fs::read_to_string(&new).unwrap_or_default();
+        std::fs::write(&new, format!("{text}main moves\n")).unwrap();
         run(&other, &["add", "NEW.md"]);
         run(&other, &["commit", "-q", "-m", "main moves"]);
         run(&other, &["push", "-q", "origin", "HEAD:main"]);
@@ -716,15 +721,17 @@ fn every_cycle_moves_a_clean_detached_checkout_to_the_fetched_origin_main() {
     let r = Repo::new();
     let old = r.git_out(&["rev-parse", "HEAD"]);
     r.git(&["checkout", "-q", "--detach"]);
-    let new = r.advance_origin();
-    assert_eq!(
-        r.git_out(&["rev-parse", "origin/main"]),
-        old,
-        "not fetched yet"
-    );
-    // A single run never moves the checkout.
+    r.advance_origin();
+    // A single run fetches, but never moves the checkout.
     r.run_ok();
     assert_eq!(r.git_out(&["rev-parse", "HEAD"]), old);
+    // Main moves again; only the cycle's own fetch can see the new commit.
+    let new = r.advance_origin();
+    assert_ne!(
+        r.git_out(&["rev-parse", "origin/main"]),
+        new,
+        "not fetched yet"
+    );
     let out = r.cycle();
     assert_eq!(r.git_out(&["rev-parse", "HEAD"]), new, "{out}");
     assert_eq!(
@@ -821,4 +828,31 @@ fn every_cycle_leaves_a_checkout_mid_bisect() {
     let out = r.cycle();
     assert_eq!(r.git_out(&["rev-parse", "HEAD"]), old, "{out}");
     assert!(out.contains("a bisect is in progress"), "{out}");
+}
+
+#[test]
+fn every_cycle_reports_a_move_that_a_failing_hook_follows() {
+    let r = Repo::new();
+    let old = r.git_out(&["rev-parse", "HEAD"]);
+    r.git(&["checkout", "-q", "--detach"]);
+    // git runs post-checkout after HEAD has moved, and its exit code becomes checkout's.
+    let hook = r.root.join(".git/hooks/post-checkout");
+    assert!(hook.starts_with(&r.root));
+    std::fs::create_dir_all(hook.parent().unwrap()).unwrap();
+    std::fs::write(&hook, "#!/bin/sh\nexit 2\n").unwrap();
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let new = r.advance_origin();
+    let out = r.cycle();
+    assert_eq!(r.git_out(&["rev-parse", "HEAD"]), new, "{out}");
+    assert!(
+        out.contains(&format!(
+            "checkout moved from {} to origin/main",
+            &old[..12]
+        )),
+        "{out}"
+    );
+    assert_ne!(r.first_state_row()[0], "bench checkout");
 }

@@ -618,7 +618,13 @@ fn sync_checkout(root: &Path, main: &str) -> Result<Checkout, String> {
         return left(format!("{ahead} commit{} not on origin/main", s(ahead)));
     }
     // A plain checkout, never forced: git itself refuses to overwrite a change made since the check.
-    git(root, &["checkout", "-q", "--detach", main])?;
+    // A failing post-checkout hook fails the command after HEAD has moved, so HEAD is read again.
+    if let Err(e) = git(root, &["checkout", "-q", "--detach", main]) {
+        if git(root, &["rev-parse", "HEAD"])?.trim() != main {
+            return Err(e);
+        }
+        eprintln!("uor-harness: loop board: bench feed: the checkout moved, but {e}");
+    }
     Ok(Checkout::Moved(short))
 }
 
@@ -651,7 +657,11 @@ fn refresh(
     // A failed step leaves the checkout as it was; the pages are still written.
     let checkout = sync.then(|| {
         sync_checkout(root, &sha).unwrap_or_else(|e| {
-            Checkout::Left("?".into(), format!("the checkout step failed: {e}"))
+            let head = git(root, &["rev-parse", "HEAD"])
+                .ok()
+                .and_then(|h| h.trim().get(..12).map(str::to_string))
+                .unwrap_or_else(|| "?".into());
+            Checkout::Left(head, format!("the checkout step failed: {e}"))
         })
     });
     let date = git(root, &["show", "-s", "--format=%cs", "origin/main"])?
