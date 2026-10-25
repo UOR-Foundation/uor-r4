@@ -72,8 +72,8 @@ Verified via `~/.cargo/bin/cargo test -p uor-r4-discrete --lib address_cells`:
 | A8-Outer (outer key) | 1,351 | 4,244 | 133 | 513 |
 | FV8-Env (cell envelope) | 1,980 | 5,709 | 118 | 1,126 |
 | FV8-TwoScale | 1,802 | 5,666 | 118 | 1,179 |
-| FVS8-Env (shuffled control) | 645 | 1,998 | 34 | — |
-| FVS8-TwoScale (shuffled control) | 663 | 2,028 | 34 | — |
+| FVS8-Env (shuffled control) | 645 | 1,998 | 34 | 856 |
+| FVS8-TwoScale (shuffled control) | 663 | 2,028 | 34 | 865 |
 | FV16-TwoScale (bracket) | — | 7,207 | 118 | 1,185 |
 
 Paired on P_succ, the rule is that b − c must exceed max(24, 2√(b+c)):
@@ -86,5 +86,5 @@ Paired on P_succ, the rule is that b − c must exceed max(24, 2√(b+c)):
 | FV8-TwoScale against FVS8-TwoScale | 1,555 / 416 |
 
 - **Instrument gates:** G-Q passed. A8-Outer reproduced 4,244 / 1,351 / 133 exactly. Both tables show 4,096 distinct vectors, 256 occupied cells, zero tie mass, and an alias ceiling of 14,287.
-- **What it means:** a full-vector metric on a predecessor-pulled full-vector placement admits the target's cell for 1,980 of 3,847 P_succ rows at checkpoint 0, against A8's 1,351. The same metrics on a shuffled placement admit about half of A8, so the gain is the geometry, not packing balance.
+- **What it means:** a full-vector metric on a predecessor-pulled full-vector placement admits the target's cell for 1,980 of 3,847 P_succ rows at checkpoint 0, against A8's 1,351. The shuffled arms keep the metric and change only the placement, and they admit about half of A8. So the predecessor-pulled placement matters under a full-vector metric, beyond packing balance. No arm reads the full-vector table with the outer key, so the metric's own share of the gain over A8 is not separated here.
 - **What it does not establish:** top-1 falls at checkpoint 0, from 133 to 118. Training and serving under a full-vector metric are not registered: update capabilities and the D11 exporter refuse it.

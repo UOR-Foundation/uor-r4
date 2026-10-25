@@ -43,7 +43,9 @@ The two tests that pin the arms:
    - 1,351 of 3,847 P_succ admitted;
    - full-DEV `top1_correct` 133.
 2. **G-Q (instrument):** `device::address_metric_device_tests::device_admission_matches_the_host_oracles_for_each_metric` passes on the pod.
-   - The device's admitted cells on 16 rows of a seeded table equal the `address_cells.rs` oracles, recomputed on the device's own table and query vectors, for all three metrics.
+   - The device's admitted cells on 16 rows equal the `address_cells.rs` oracles, recomputed on the device's own table and query vectors, for all three metrics.
+   - The table is a patterned 1,024-token one, with 4 tokens of distinct interior blocks in every cell. It replaced the seeded table after run 1; see below.
+   - G-Q also runs each metric through the device's evaluation path (row metrics and aggregation), which it added after run 2.
    - The three metrics must also admit different cells, so no metric is computed as another.
 3. **G-Occ (instrument):** each pinned table's `coverage-census --token-cells … --bar-rows 1941` reports:
    - 4,096 distinct vectors and 256 occupied cells;
@@ -100,12 +102,18 @@ None is trained. Each arm is `init-corpus` at checkpoint 0 from its pinned table
 5. Archive everything, with SHA256SUMS, to `results/claude/address-key-2026-10-25/run/` before `uor-pod down`.
 6. Grade on the Mac with `address-key-grade manifest.json grade.json`, run from inside the downloaded run folder (the manifest's paths are relative to it), then record one notebook row.
 
-**Changed after the FIT, by its reviews, before any run:**
+**Changed after the FIT.**
+
+By its reviews, before any run:
 - the source commit was re-pinned for the grader's review fixes and rustfmt;
 - the grader now binds each arm to its pinned config and requires G-Q's log;
-- G-Q's fixture is 1,024 tokens, so its separation check cannot trip on a correct kernel;
+- G-Q's fixture grew to 1,024 tokens;
 - the job (`docs/labs/m1-address-key-full-vector/address-key-job.sh`) copies itself into the run folder;
 - the cost is re-priced.
+
+By its two instrument-fault runs (below):
+- after run 1, G-Q's fixture became the patterned table, because the 1,024-token seeded table still could not separate the envelope from two-scale;
+- after run 2, the two-scale hinge keeps the envelope's scale, and G-Q runs the evaluation path.
 
 None of these changes an arm, a bar or a pin of data.
 

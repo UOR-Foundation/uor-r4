@@ -18,17 +18,20 @@ Closes #2834.
      - This was a defect in this unit's kernel change. G-Q had not exercised the evaluation path.
      - The fix: the two-scale hinge keeps the envelope's scale, and admission and rank keep the two-scale order. G-Q now runs the evaluation path for every metric.
   - Both faulted outputs are archived (`fault1/`, `fault2/`).
-- **The sheet changed after its FIT, before the scored run.** Its "Changed after the FIT" list names each change:
-  - re-pins of the source commit;
-  - the grader's config binding and G-Q input;
-  - G-Q's fixture;
-  - the hinge scale;
-  - the cost.
+- **The sheet changed after its FIT, before the scored run.** Its "Changed after the FIT" list names each change.
+  - By the reviews:
+    - re-pins of the source commit;
+    - the grader's config binding and G-Q input;
+    - G-Q's fixture size;
+    - the cost.
+  - By the two fault runs:
+    - the patterned fixture;
+    - the two-scale hinge's scale.
 
   None changes an arm, a bar or a data pin.
 - **The writer's stack frame grows on every path.** The `U env[256]` and `W sum[256]` arrays add about 3 KiB to `writer`'s frame, outer default included, even though outer mode never touches them.
   - The position unit (#2843) had just cut the frame by 2,896 B, to 22,080 B on forward.
-  - This unit did not measure the new frame with `ptxas`, or the default path's tokens/s. The A8-Outer eval took 30 s, the same as each treatment.
+  - This unit did not measure the new frame with `ptxas`, or the default path's tokens/s. The A8-Outer eval took 30 s, the same as the K8 treatments (30–31 s). FV16 took 37 s.
   - The cost is device local-memory reservation, not speed. A separate kernel for the full-vector metrics would remove it.
 - **The pod landed on a 2×5090 offer.** Only GPU 0 ran, for about 27 minutes in all. At the 2×5090 rate the D67 review quoted (about $1.98/h), that is roughly $0.90, inside the $1 cap. I did not read the billed amount before the pod was deleted.
 - **What is not established here:**
@@ -89,7 +92,8 @@ The run was on one RTX 5090 (`vast-57698566`, GPU 0), at source `77123dd995be44d
 | FV16-TwoScale (bracket only) | — | — | — | 7,207 (A16: 6,023) | 118 | 1,185 |
 
 - **Outcome: PASS.** Both treatments have reach, geometry and capacity. The grade is `address-key-grade` → `docs/labs/m1-address-key-full-vector/grade.json`.
-  - The shuffled packings admit about half of A8. So the gain is the predecessor-pulled full-vector placement read by a full-vector metric, not packing balance.
+  - The shuffled arms keep the metric and change only the placement, and they admit about half of A8. So the predecessor-pulled placement matters under a full-vector metric, beyond packing balance.
+  - No arm reads the full-vector table with the outer key, so the metric's own share of the gain over A8 is not separated here.
 - **Stage 1 bar:**
   - "a starting reach above the address-cell model's 1,351 of 3,847": met, 1,980 (FV8-Env);
   - "winnable positions clear 1,941": met, min(14,287, 5,709) = 5,709;
@@ -97,7 +101,7 @@ The run was on one RTX 5090 (`vast-57698566`, GPU 0), at source `77123dd995be44d
 
 ## Checks run at the head
 
-- The discrete host suite (see the review record), stub-nvcc `--features cuda --all-targets`, and `cargo fmt --check`: clean for this crate.
+- The discrete host suite at `826ebc9ed` (the code is unchanged since): 369 passed, 0 failed. Stub-nvcc `--features cuda --all-targets` and `cargo fmt --check` are clean for this crate.
 - **Negative gates shown failing:**
   - `zero_update_only` set aside;
   - a bypassing capability literal (the source scan);
@@ -105,7 +109,13 @@ The run was on one RTX 5090 (`vast-57698566`, GPU 0), at source `77123dd995be44d
 - **Reviews:**
   - **FIT:** round 1 NOT FIT, round 2 FIT (#2834 `6400663507`).
   - **D67 pre-run review:** PASS (#2834 `6400724408`). The first reviewer ran out of context, and a second finished checks 1, 2 and 5.
-  - **Code reviews:** round 1 CHANGES, then fixed. Round 2: the grader slice was APPROVE; the kernel slice was CHANGES for rustfmt, then fixed. The final exact-head review is recorded on the PR.
+  - **Code reviews:** round 1 CHANGES, then fixed. Round 2: the grader slice was APPROVE; the kernel slice was CHANGES for rustfmt, then fixed. The final review of every code change since then (the hinge, the patterned fixture and the grader's refusals) was APPROVE, with no Required findings.
+  - **The claims check of this REPORT and the lab README** returned CHANGES. Every number and the PASS label checked out (about 45 claims). It flagged five wordings, all now fixed:
+    - the post-FIT list omitted the fault-run changes;
+    - a fixture line overclaimed;
+    - "the gain is the geometry" is now scoped to the placement;
+    - a timing nit;
+    - the shuffled arms' top-8 was missing.
 
 ## Skills used
 
@@ -116,6 +126,12 @@ The run was on one RTX 5090 (`vast-57698566`, GPU 0), at source `77123dd995be44d
 - **`m1-wider-code-carrier` (#2847)** and **Stage T's decision review (#2836)** take this result as input. Stage T now has its dependency met.
 - **Training under the envelope metric** needs its own sheet. The hinge and the update gate are both calibrated for zero-update use only.
 - **The top-1 drop at checkpoint 0** (133 → 118) is the first thing a training sheet should explain.
+- **The metric's own share of the gain.** An arm with the full-vector table under the outer key would separate the metric's contribution from the placement's.
+- **Review advisories not taken:**
+  - Bind each `eval-corpus` report to its arm the way `dev-b3` reports are bound.
+  - Pin G-Q's log by its sha256.
+  - Under two-scale, the hinge does not see the sum term. That matters only once a learning arm uses two-scale.
+  - Measure the writer's stack frame with `ptxas`.
 
 ## Plain summary
 
