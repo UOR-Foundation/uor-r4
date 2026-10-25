@@ -78,8 +78,10 @@ Pod A's `seed-*-seq` jobs end with EXIT 1 and `FAULT: arm run` by design: the jo
 
 ## Checks run at the head
 
-- `loop report --check` and `loop pr-check --local`: see the review record on the PR.
-- A fresh claims check of this REPORT, the lab README, the tried row and the notebook rows: see the review record.
+- `loop report --check` and `loop pr-check --local`: PASS.
+- **A fresh claims check** of this REPORT, the lab README, the tried row and both notebook rows: CHANGES, now fixed.
+  - It re-verified all three pods' SHA256SUMS and every number in the eight records. It recomputed the decision and the audit from the records.
+  - It found two wrong facts (the control counts, and a cost figure) and three overclaims ("beats" for ungraded leads; "narrows top-8"; frequency as a fact rather than a hypothesis). It also asked for pod A's by-design FAULT to be explained.
 
 ## Skills used
 
