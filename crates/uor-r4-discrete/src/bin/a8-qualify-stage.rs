@@ -843,6 +843,14 @@ mod tests {
         );
         assert_eq!(rel_exec.sheet_sha256, FIT_SHEET_SHA256);
         assert_eq!(fz_exec.executable_sha256, rel_exec.executable_sha256);
+        assert_eq!(
+            sha256(&serde_json::to_vec(&rel_cfg).expect("encode rel_cfg")),
+            rel_exec.config_sha256
+        );
+        assert_eq!(
+            sha256(&serde_json::to_vec(&fz_cfg).expect("encode fz_cfg")),
+            fz_exec.config_sha256
+        );
 
         let dummy_pin = pins[0].clone();
         let plan = QualificationPlan {
@@ -877,6 +885,100 @@ mod tests {
         };
         let digest = payload_sha256(&plan).expect("payload_sha256");
         assert_eq!(digest.len(), 64);
+        fs::remove_dir_all(&tmp).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn verify_arm_qualification_enforces_stage_pass_and_readiness_bar() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let inh_dir =
+            root.join("docs/labs/m1-a8-registration-and-runbook-staging/evidence/inherited");
+        let obs: InheritedObservation =
+            read_json(&inh_dir.join("relation-canonical_initlock_c2.json"))
+                .expect("read inherited");
+        let tmp =
+            std::env::temp_dir().join(format!("a8-qualify-verify-test-{}", std::process::id()));
+        ensure_dir_mode(&tmp, 0o700).expect("temp dir");
+
+        let mut checks = Vec::new();
+        for name in STAGE_NAMES {
+            let pin = write_json_pin(
+                &tmp.join(format!("{name}.json")),
+                &json!({
+                    "schema": "uor-r4.attention-audit-qualified-stage/1",
+                    "name": name,
+                    "execution": obs.execution,
+                    "status": "PASS",
+                    "observations": [],
+                    "facts": {"ok": true},
+                }),
+                0o600,
+            )
+            .expect("stage pin");
+            checks.push(
+                uor_r4_discrete::controller::attention_audited::QualifiedCheck {
+                    name: name.into(),
+                    status: "PASS".into(),
+                    artifact: pin,
+                },
+            );
+        }
+        let dummy = checks[0].artifact.clone();
+        let qual = Qualification {
+            schema: "uor-r4.attention-audit-qualification/1".into(),
+            execution: obs.execution.clone(),
+            checks,
+            g_init_comparison_or_waiver: dummy.clone(),
+            accepted_initlock_disposition: dummy.clone(),
+            residual_fit: dummy.clone(),
+            b3_psucc: 1351,
+            b3_full: 4244,
+            top1: 133,
+            bar_i: 86,
+            epoch: 0,
+            updates_applied: 0,
+            reference_capture_scope: "DEFERRED_TO_DOSE".into(),
+            full_rows: 14287,
+            psucc_rows: 3847,
+            psucc_reference_top1: 412,
+            occupied_cells: 256,
+            distinct_vectors: 4096,
+            tie_mass: 0,
+            negative_native_exits: [2, 2],
+            sensitivity_predicate: "both_probes_any_active_candidate_cost_differs_v1".into(),
+            combine_sensitive: 1,
+            relation_sensitive: 1,
+        };
+        let qual_pin = write_json_pin(&tmp.join("qualification.json"), &qual, 0o600).expect("qual");
+
+        let mut cal = Calibration {
+            schema: "uor-r4.attention-audit-calibration/1".into(),
+            execution: obs.execution,
+            projected_added_gate_ns: 15,
+            ungated_two_arm_dose_ns: 100,
+            denominator_provenance: "same_hardware_qualified_throughput_extrapolation".into(),
+            audits_both_arms: 516,
+            complete_gate_io_included: true,
+            shared_setup_excluded_from_ratio: true,
+            rate_usd_micros_per_hour: 1_816_000,
+            gpu_count: 2,
+            all_in_resource_seconds: 1_800,
+            staging_archive_reserve_bytes: 2 * 1024 * 1024 * 1024,
+            host_available_bytes: 45 * 1024 * 1024 * 1024,
+            measurement_artifacts: vec![dummy.clone()],
+            measurement_protocol: dummy.clone(),
+            resource_admission: dummy,
+        };
+        let cal_pin = write_json_pin(&tmp.join("calibration.json"), &cal, 0o600).expect("cal");
+        let (_, cal_summary) =
+            verify_arm_qualification("relation", &qual_pin, &cal_pin).expect("15% boundary passes");
+        assert_eq!(cal_summary["readiness_ratio_bps_ceil"], 1500);
+
+        cal.projected_added_gate_ns = 16;
+        let bad_cal_pin =
+            write_json_pin(&tmp.join("calibration-bad.json"), &cal, 0o600).expect("bad cal");
+        assert!(verify_arm_qualification("relation", &qual_pin, &bad_cal_pin).is_err());
+
         fs::remove_dir_all(&tmp).expect("cleanup temp dir");
     }
 }
