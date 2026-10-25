@@ -39,6 +39,15 @@ A lawful compiler for the world=v2 schema, built from world=v2's own training ph
 - Recall on true statements, so that a compiler that refuses everything cannot pass: training phrasings filled with development values (expected near complete), and development phrasings (unseen wordings, reported as they come, no bar).
 - Finite CUDA controls with hand-built frames and literal expected answers, run on the pod first.
 
+## Fixed before the run (decision review, 25 Oct)
+
+- **Recall floor.** At least 95% of the training phrasings filled with development values must compile to exactly the expected act, relation and value span. The panel bar counts as met only together with this floor.
+- **No panel leakage.** The frame table is built only from the world=v2 training phrasings. Its digest goes in the prep sheet before the panel runs. No edit to the frames, the tokenizer or the alignment rule may be informed by panel output. The panel text is not read while building.
+- **Tokenizer, fixed now.** A word is a maximal run of alphanumeric characters and apostrophes (`'` and `’`), lowercased. Everything else separates words. Each word keeps its source byte span, and a value span runs from its first word's first byte to its last word's last byte. A value is 1 to 4 words.
+- **Scope of the claim.** The result is a baseline for the sieve compiler on the world=v2 schema. It is never reported as closing or passing `m3-memory-turn-discriminator-gate`, whose own gate and bar stay open.
+- **Notes.** The discriminator-gate item gets a note that its `SavedCompiler` references are superseded by this decision. The draft pre-registration gets a note that its v25 pins are replaced by the frame-table and PTX digests.
+- **Host steps.** Tokenizing and building the frame table are data preparation, and grading reads the GPU's stored decisions. No compile decision runs on the host (CHARTER §3.5).
+
 ## Files in scope
 
 - `crates/uor-r4-training/**`
@@ -48,6 +57,7 @@ A lawful compiler for the world=v2 schema, built from world=v2's own training ph
 - `docs/loop/tasks/m3-nonrelation-prose-panel/**`
 - `docs/research/notebook/m3-durable-memory.md`
 - `docs/roadmap/items/m3-nonrelation-prose-panel.md` and the rendered roadmap files
+- `docs/roadmap/items/m3-memory-turn-discriminator-gate.md` (the superseding note only)
 
 ## Done when
 
