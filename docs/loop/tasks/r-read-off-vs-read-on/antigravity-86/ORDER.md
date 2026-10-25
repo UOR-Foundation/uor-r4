@@ -29,6 +29,7 @@ Ran on base `db2770a2d`:
 ## Files in scope
 
 - `docs/harness/prep/r-read-off-vs-read-on*`
+- `docs/harness/prep/hamilton-gate-offline-float-sheet-2026-10-25.md`
 - `docs/labs/r-read-off-vs-read-on/**`
 - `docs/loop/tasks/r-read-off-vs-read-on/**`
 - `docs/research/notebook/m1-discrete-attention.md`
