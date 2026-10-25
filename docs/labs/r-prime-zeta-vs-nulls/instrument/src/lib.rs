@@ -38,22 +38,49 @@ pub struct Arm {
 }
 
 /// Builds an arm from its three reports, refusing a report that is not this
-/// arm's or that applied an update.
+/// arm's or whose model carries an update. The update state is read from the
+/// checkpoint's own counters (`model_epoch`, `completed_batches`,
+/// `accepted_updates_in_model`), never from a field the writer fixes at 0. The
+/// three reports are bound to one model by its storage hash, which is the
+/// checkpoint's `model_sha256` in all three.
 pub fn arm_from_reports(name: &str, dev_b3: &Value, eval: &Value, census: Value) -> Result<Arm, String> {
     let pinned = ARMS
         .iter()
         .find(|(key, _)| *key == name)
         .map(|(_, sha)| *sha)
         .ok_or_else(|| format!("{name}: not a registered arm"))?;
-    if dev_b3["schema"] != "uor-r4.attention-preflight-dev-b3/1" || dev_b3["updates_applied"] != 0 {
-        return Err(format!("{name}: not a zero-update attention-dev-b3 report"));
+    if dev_b3["schema"] != "uor-r4.attention-preflight-dev-b3/1"
+        || dev_b3["model_epoch"] != 0
+        || dev_b3["completed_batches"] != 0
+    {
+        return Err(format!("{name}: not a checkpoint-0 attention-dev-b3 report"));
     }
     if dev_b3["config_file"]["sha256"] != pinned {
         return Err(format!("{name}: its dev-b3 report read another config"));
     }
     let b3 = serde_json::from_value(dev_b3["b3"].clone()).map_err(|e| format!("{name} b3: {e}"))?;
-    if eval["schema"] != "uor-r4.discrete-corpus-driver/1" || eval["updates_applied_by_evaluation"] != 0 {
-        return Err(format!("{name}: not a zero-update eval-corpus report"));
+    if eval["schema"] != "uor-r4.discrete-corpus-driver/1"
+        || eval["model_epoch"] != 0
+        || eval["accepted_updates_in_model"] != 0
+    {
+        return Err(format!("{name}: not a checkpoint-0 eval-corpus report"));
+    }
+    // A missing hash is refused, so two absent fields never compare equal.
+    let hash = |report: &Value, key: &str, what: &str| {
+        report[key]
+            .as_str()
+            .filter(|h| h.len() == 64)
+            .map(str::to_owned)
+            .ok_or_else(|| format!("{name}: its {what} report lacks {key}"))
+    };
+    let storage = hash(dev_b3, "model_storage_sha256", "dev-b3")?;
+    if hash(eval, "model_storage_sha256", "eval")? != storage
+        || hash(eval, "model_snapshot_sha256", "eval")? != hash(dev_b3, "model_snapshot_sha256", "dev-b3")?
+    {
+        return Err(format!("{name}: its eval report scored another model"));
+    }
+    if hash(&census, "model_sha256", "census")? != storage {
+        return Err(format!("{name}: its census read another model"));
     }
     let total = |key: &str| {
         eval["aggregate"][key]
@@ -437,19 +464,49 @@ mod tests {
     }
 
     #[test]
-    fn a_report_for_another_arm_or_with_updates_is_refused() {
-        let b3 = serde_json::to_value(&p8().b3).unwrap();
+    fn a_report_for_another_arm_model_or_a_trained_checkpoint_is_refused() {
+        let storage = "a".repeat(64);
+        let snapshot = "b".repeat(64);
+        // The fields as the crate writes them: `updates_applied` and
+        // `updates_applied_by_evaluation` are literal zeros, so only the
+        // checkpoint counters can carry an update.
+        let dev = json!({"schema": "uor-r4.attention-preflight-dev-b3/1", "updates_applied": 0,
+            "model_epoch": 0, "completed_batches": 0, "config_file": {"sha256": ARMS[0].1},
+            "model_storage_sha256": storage, "model_snapshot_sha256": snapshot,
+            "b3": serde_json::to_value(&p8().b3).unwrap()});
         let eval = json!({"schema": "uor-r4.discrete-corpus-driver/1", "updates_applied_by_evaluation": 0,
-                          "aggregate": {"top1_correct": 38, "top8_correct": 120}});
-        let dev = |sha: &str, updates: u64| {
-            json!({"schema": "uor-r4.attention-preflight-dev-b3/1", "updates_applied": updates,
-                   "config_file": {"sha256": sha}, "b3": b3})
-        };
-        let census = p8().census;
-        assert!(arm_from_reports("p8", &dev(ARMS[0].1, 0), &eval, census.clone()).is_ok());
-        let swapped = arm_from_reports("p8", &dev(ARMS[1].1, 0), &eval, census.clone());
-        assert!(swapped.err().unwrap().contains("read another config"));
-        let trained = arm_from_reports("p8", &dev(ARMS[0].1, 1), &eval, census);
-        assert!(trained.err().unwrap().contains("not a zero-update"));
+            "model_epoch": 0, "accepted_updates_in_model": 0,
+            "model_storage_sha256": storage, "model_snapshot_sha256": snapshot,
+            "aggregate": {"top1_correct": 38, "top8_correct": 120}});
+        let mut census = p8().census;
+        census["model_sha256"] = json!(storage);
+        let refused = |d: &Value, e: &Value, c: &Value| arm_from_reports("p8", d, e, c.clone()).err().unwrap();
+        assert!(arm_from_reports("p8", &dev, &eval, census.clone()).is_ok());
+
+        let mut swapped = dev.clone();
+        swapped["config_file"]["sha256"] = json!(ARMS[1].1);
+        assert!(refused(&swapped, &eval, &census).contains("read another config"));
+        for key in ["model_epoch", "completed_batches"] {
+            let mut trained = dev.clone();
+            trained[key] = json!(16_404);
+            assert!(refused(&trained, &eval, &census).contains("not a checkpoint-0 attention-dev-b3"), "{key}");
+        }
+        for key in ["model_epoch", "accepted_updates_in_model"] {
+            let mut trained = eval.clone();
+            trained[key] = json!(1_410);
+            assert!(refused(&dev, &trained, &census).contains("not a checkpoint-0 eval-corpus"), "{key}");
+        }
+        let mut other = eval.clone();
+        other["model_storage_sha256"] = json!("c".repeat(64));
+        assert!(refused(&dev, &other, &census).contains("eval report scored another model"));
+        let mut other = census.clone();
+        other["model_sha256"] = json!("c".repeat(64));
+        assert!(refused(&dev, &eval, &other).contains("census read another model"));
+        // Absent hashes on both sides are refused, never read as equal.
+        let mut bare_dev = dev.clone();
+        bare_dev.as_object_mut().unwrap().remove("model_storage_sha256");
+        let mut bare_eval = eval.clone();
+        bare_eval.as_object_mut().unwrap().remove("model_storage_sha256");
+        assert!(refused(&bare_dev, &bare_eval, &census).contains("lacks model_storage_sha256"));
     }
 }

@@ -10,10 +10,17 @@ SRC=/root/build/src-$SHA
 OUT=/workspace/prime-zeta-nulls-2026-10-25
 DATA=/workspace/uor-r4/local/driver/data
 DL=/workspace/dl
+# A rerun never reads an earlier run's markers: the earlier folder is kept, aside.
+[ -e "$OUT" ] && mv "$OUT" "$OUT.prev-$(date +%s)"
 mkdir -p "$OUT" "$DATA/injective" "$DL"
 exec > >(tee -a "$OUT/job.log") 2>&1
-cp "$0" "$OUT/job.sh"
-fail() { echo "FAULT: $*" | tee "$OUT/FAULT"; echo 1 > "$OUT/EXIT"; exit 1; }
+# A fault saves what ran to the store too, before anyone brings the pod down.
+fail() {
+  echo "FAULT: $*" | tee "$OUT/FAULT"; echo 1 > "$OUT/EXIT"
+  [ -x /root/uor-store ] && /root/uor-store put "$OUT" "results/claude/prime-zeta-nulls-2026-10-25/fault-$(date +%s)"
+  exit 1
+}
+cp "$0" "$OUT/job.sh" || fail "job bytes not saved"
 free_gib=$(df -BG --output=avail /workspace | tail -1 | tr -dc '0-9')
 [ "${free_gib:-0}" -ge 30 ] || fail "free disk ${free_gib} GiB is under 30"
 export PATH=/usr/local/cuda/bin:$HOME/.cargo/bin:$PATH
@@ -79,6 +86,10 @@ for a in $ARMS; do
   "$B/discrete-stack" init-corpus "$E/$a.json" "$OUT/arm-$a/init" || fail "$a init-corpus"
   ck="$OUT/arm-$a/init/report.json"
   [ "$(jq -c '[.cursor.accepted_updates, .cursor.completed_batches]' "$ck")" = "[0,0]" ] || fail "G-Init: $a is not checkpoint 0"
+  # Absent fields would compare equal as null: require them, and the table's exact size.
+  jq -e '(.model.table | length) == 131072 and (.model.routes | type) == "array" and (.model.gates | type) == "array"' "$ck" > /dev/null \
+    || fail "G-Init: $a checkpoint lacks a 4096x4x8 table, routes or gates"
+  jq -e '(.table | length) == 131072' "$OUT/tables/$a.json" > /dev/null || fail "G-Init: $a rebuilt table is not 4096x4x8"
   [ "$(jq -c '.model.table' "$ck" | sha256sum)" = "$(jq -c '.table' "$OUT/tables/$a.json" | sha256sum)" ] \
     || fail "G-Init: $a checkpoint table differs from its pinned table"
   jq -c '[.model.routes, .model.gates]' "$ck" | sha256sum | cut -c1-64 > "$OUT/arm-$a/routes-gates.sha256"
