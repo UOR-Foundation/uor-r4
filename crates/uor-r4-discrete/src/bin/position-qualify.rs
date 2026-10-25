@@ -17,32 +17,13 @@ mod cuda_run {
     };
     use uor_r4_discrete::normalization_mechanism::NormalizationMode;
     use uor_r4_discrete::position_mechanism::{
-        apply_frame_to_root, relative_holonomy, PositionConfig, PositionMode, PositionStepTable,
-        ORBIT_ROOTS,
+        apply_frame_to_root, candidate_to_frame, relative_holonomy, PositionConfig, PositionMode,
+        PositionStepTable, ORBIT_ROOTS,
     };
     use uor_r4_discrete::{
         driver_source_pin::DRIVER_SOURCE_SHA256, Error, Identity, ObjectivePolicy, Parameter,
         ReadInitialization, ReadSpec, Result, Spec,
     };
-
-    const ROOTS: [[i8; 8]; 16] = [
-        [2, 2, 0, 0, 0, 0, 0, 0],
-        [-2, -2, 0, 0, 0, 0, 0, 0],
-        [-2, 0, 0, -2, 0, 0, 0, 0],
-        [-2, 0, 0, 0, 0, 0, -2, 0],
-        [0, -2, 0, 0, 0, -2, 0, 0],
-        [0, 0, -2, 0, -2, 0, 0, 0],
-        [0, 0, -2, 0, 2, 0, 0, 0],
-        [0, 0, 0, -2, 0, 0, 2, 0],
-        [0, 0, 0, 0, -2, 0, 0, -2],
-        [0, 0, 0, 0, 0, -2, 0, 2],
-        [0, 0, 0, 0, 0, 2, 0, -2],
-        [0, 0, 0, 0, 2, 0, 0, 2],
-        [0, 0, 0, 2, 0, 0, -2, 0],
-        [0, 0, 2, 0, -2, 0, 0, 0],
-        [0, 0, 2, 0, 2, 0, 0, 0],
-        [0, 2, 0, 0, 0, 2, 0, 0],
-    ];
 
     fn invalid(msg: impl Into<String>) -> Error {
         Error::Invalid(msg.into())
@@ -58,6 +39,11 @@ mod cuda_run {
         PositionStepTable::new(blocks, candidates)
     }
 
+    fn root_coords(r: u8) -> Result<[i8; 8]> {
+        let (_, coords) = apply_frame_to_root(candidate_to_frame(0), r)?;
+        Ok(coords)
+    }
+
     fn root_index_of(coords: &[i32]) -> Result<u8> {
         let target: [i8; 8] = coords
             .iter()
@@ -65,11 +51,12 @@ mod cuda_run {
             .collect::<Result<Vec<i8>>>()?
             .try_into()
             .map_err(|_| invalid("block slice is not 8 coordinates"))?;
-        ROOTS
-            .iter()
-            .position(|&candidate| candidate == target)
-            .map(|idx| idx as u8)
-            .ok_or_else(|| invalid("table block is not one of the 16 orbit roots"))
+        for r in 0..ORBIT_ROOTS as u8 {
+            if root_coords(r)? == target {
+                return Ok(r);
+            }
+        }
+        Err(invalid("table block is not one of the 16 orbit roots"))
     }
 
     fn row_identities(tokens: &[u32], base_occ: u64) -> Vec<Identity> {
@@ -318,7 +305,7 @@ mod cuda_run {
         )?;
         let mut hol_snap = base_dev.snapshot()?;
         for (tok, &root) in chosen_roots.iter().enumerate() {
-            let coords = ROOTS[usize::from(root)];
+            let coords = root_coords(root)?;
             for b in 0..swap_spec.blocks as usize {
                 let start = (tok * swap_spec.blocks as usize + b) * 8;
                 for d in 0..8 {
