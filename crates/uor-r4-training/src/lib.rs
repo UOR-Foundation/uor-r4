@@ -7,7 +7,8 @@
 
 // Without a GPU feature (`cuda` or `sieve-cuda`) the crate forbids unsafe code.
 // With one, only the CUDA kernel launchers (`cuda_stack_kernels::cuda`,
-// `native_geometric_cuda_kernels` and `sieve_frame_compiler::device`) opt in.
+// `native_geometric_cuda_kernels`, `sieve_frame_compiler::device` and
+// `sieve_marker_gate::device`) opt in.
 #![cfg_attr(
     not(any(feature = "cuda", feature = "sieve-cuda")),
     forbid(unsafe_code)

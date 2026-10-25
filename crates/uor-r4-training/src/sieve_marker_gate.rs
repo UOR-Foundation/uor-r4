@@ -201,6 +201,196 @@ pub fn decode_gated(
     })
 }
 
+/// Per-frame act codes and correction experts (`p_relation · q_update`),
+/// which the gated kernel reads beside the sieve's frame layout.
+pub fn gate_frames(table: &FrameTable) -> (Vec<u32>, Vec<u64>) {
+    let update_prime = table.act_primes[1];
+    table
+        .frames
+        .iter()
+        .map(|f| {
+            let act = match f.act {
+                Act::Assert => ACT_ASSERT,
+                Act::Update => ACT_UPDATE,
+                Act::Query => ACT_QUERY,
+            };
+            let corrected = if f.slot {
+                table.relation_primes[f.relation as usize - 1] * update_prime
+            } else {
+                0
+            };
+            (act, corrected)
+        })
+        .unzip()
+}
+
+#[cfg(feature = "sieve-cuda")]
+pub mod device {
+    //! The gated kernel's launcher.
+
+    use cudarc::driver::{CudaContext, CudaFunction, CudaStream, LaunchConfig, Ptx, PushKernelArg};
+    use std::sync::Arc;
+    use std::time::Instant;
+
+    use super::{DeviceMarkers, GatedDecision};
+    use crate::sieve_frame_compiler::device::PTX;
+    use crate::sieve_frame_compiler::{DeviceFrames, DeviceTurns};
+    use crate::{invalid, Result};
+
+    fn cuda(error: impl std::fmt::Display) -> crate::TrainingError {
+        invalid(format!("CUDA: {error}"))
+    }
+
+    fn len_u32(len: usize) -> Result<u32> {
+        u32::try_from(len).map_err(|_| invalid("device array too large"))
+    }
+
+    /// A device allocation cannot be empty.
+    fn nonempty<T: Copy + Default>(values: &[T]) -> Vec<T> {
+        if values.is_empty() {
+            vec![T::default()]
+        } else {
+            values.to_vec()
+        }
+    }
+
+    pub struct GateDevice {
+        stream: Arc<CudaStream>,
+        kernel: CudaFunction,
+    }
+
+    /// Everything the gated launch reads besides the turns.
+    pub struct GateTables<'a> {
+        pub frames: &'a DeviceFrames,
+        pub frame_act: &'a [u32],
+        pub frame_expert_update: &'a [u64],
+        pub markers: &'a DeviceMarkers,
+        pub max_value_words: u32,
+        pub max_markers: u32,
+    }
+
+    impl GateDevice {
+        pub fn new(ordinal: usize) -> Result<Self> {
+            let context = CudaContext::new(ordinal).map_err(cuda)?;
+            let stream = context.default_stream();
+            let module = context.load_module(Ptx::from_src(PTX)).map_err(cuda)?;
+            let kernel = module
+                .load_function("sieve_frame_compile_marked")
+                .map_err(cuda)?;
+            Ok(Self { stream, kernel })
+        }
+
+        /// Compile every turn in one launch. Returns the decisions and the
+        /// launch's wall time in microseconds (upload to download).
+        #[allow(unsafe_code)]
+        pub fn compile(
+            &self,
+            tables: &GateTables<'_>,
+            turns: &DeviceTurns,
+        ) -> Result<(Vec<GatedDecision>, u64)> {
+            let f = tables.frames;
+            let n_turns = len_u32(turns.length.len())?;
+            let n_frames = len_u32(f.prefix.len())?;
+            let n_markers = len_u32(tables.markers.length.len())?;
+            if n_turns == 0
+                || n_frames == 0
+                || tables.frame_act.len() != f.prefix.len()
+                || tables.frame_expert_update.len() != f.prefix.len()
+                || f.sig_words > 8
+            {
+                return Err(invalid(
+                    "the gated launch needs turns, frames and matching tables",
+                ));
+            }
+            let s = &self.stream;
+            let started = Instant::now();
+            let turn_tokens = s.clone_htod(&nonempty(&turns.tokens)).map_err(cuda)?;
+            let turn_off = s.clone_htod(&turns.offset).map_err(cuda)?;
+            let turn_len = s.clone_htod(&turns.length).map_err(cuda)?;
+            let frame_sig = s.clone_htod(&f.signature).map_err(cuda)?;
+            let frame_tokens = s.clone_htod(&nonempty(&f.tokens)).map_err(cuda)?;
+            let frame_off = s.clone_htod(&f.offset).map_err(cuda)?;
+            let frame_prefix = s.clone_htod(&f.prefix).map_err(cuda)?;
+            let frame_suffix = s.clone_htod(&f.suffix).map_err(cuda)?;
+            let frame_slot = s.clone_htod(&f.slot).map_err(cuda)?;
+            let frame_act = s.clone_htod(tables.frame_act).map_err(cuda)?;
+            let frame_expert = s.clone_htod(&f.expert).map_err(cuda)?;
+            let frame_expert_update = s.clone_htod(tables.frame_expert_update).map_err(cuda)?;
+            let m = tables.markers;
+            let marker_tokens = s.clone_htod(&nonempty(&m.tokens)).map_err(cuda)?;
+            let marker_off = s.clone_htod(&nonempty(&m.offset)).map_err(cuda)?;
+            let marker_len = s.clone_htod(&nonempty(&m.length)).map_err(cuda)?;
+            let marker_update = s.clone_htod(&nonempty(&m.update)).map_err(cuda)?;
+            let n = n_turns as usize;
+            let mut status = s.alloc_zeros::<u32>(n).map_err(cuda)?;
+            let mut frame = s.alloc_zeros::<u32>(n).map_err(cuda)?;
+            let mut act = s.alloc_zeros::<u32>(n).map_err(cuda)?;
+            let mut hole_start = s.alloc_zeros::<u32>(n).map_err(cuda)?;
+            let mut hole_len = s.alloc_zeros::<u32>(n).map_err(cuda)?;
+            let mut survivors = s.alloc_zeros::<u32>(n).map_err(cuda)?;
+            let mut launch = s.launch_builder(&self.kernel);
+            launch
+                .arg(&turn_tokens)
+                .arg(&turn_off)
+                .arg(&turn_len)
+                .arg(&n_turns)
+                .arg(&frame_sig)
+                .arg(&frame_tokens)
+                .arg(&frame_off)
+                .arg(&frame_prefix)
+                .arg(&frame_suffix)
+                .arg(&frame_slot)
+                .arg(&frame_act)
+                .arg(&frame_expert)
+                .arg(&frame_expert_update)
+                .arg(&n_frames)
+                .arg(&f.sig_words)
+                .arg(&tables.max_value_words)
+                .arg(&marker_tokens)
+                .arg(&marker_off)
+                .arg(&marker_len)
+                .arg(&marker_update)
+                .arg(&n_markers)
+                .arg(&tables.max_markers)
+                .arg(&mut status)
+                .arg(&mut frame)
+                .arg(&mut act)
+                .arg(&mut hole_start)
+                .arg(&mut hole_len)
+                .arg(&mut survivors);
+            let threads = n_turns.clamp(1, 128);
+            let config = LaunchConfig {
+                grid_dim: (n_turns.div_ceil(threads), 1, 1),
+                block_dim: (threads, 1, 1),
+                shared_mem_bytes: 0,
+            };
+            // SAFETY: the argument list is exactly sieve_frame_compile_marked's
+            // ABI; every input is a device copy of a checked host array (marker
+            // arrays padded to one element when empty, with n_markers = 0), and
+            // every output holds one u32 per turn, the kernel's only writes.
+            unsafe { launch.launch(config) }.map_err(cuda)?;
+            let status = s.clone_dtoh(&status).map_err(cuda)?;
+            let frame = s.clone_dtoh(&frame).map_err(cuda)?;
+            let act = s.clone_dtoh(&act).map_err(cuda)?;
+            let hole_start = s.clone_dtoh(&hole_start).map_err(cuda)?;
+            let hole_len = s.clone_dtoh(&hole_len).map_err(cuda)?;
+            let survivors = s.clone_dtoh(&survivors).map_err(cuda)?;
+            let micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+            let decisions = (0..n)
+                .map(|t| GatedDecision {
+                    status: status[t],
+                    frame: frame[t],
+                    act: act[t],
+                    hole_start: hole_start[t],
+                    hole_len: hole_len[t],
+                    survivors: survivors[t],
+                })
+                .collect();
+            Ok((decisions, micros))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
