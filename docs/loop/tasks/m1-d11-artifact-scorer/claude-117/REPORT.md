@@ -9,7 +9,10 @@ References #3248.
   - antigravity's #3245 (merged first as `d60adcda6`) and #3249 each re-rendered the status counts from the same base, 24 ready and 52 done. Each changed them to 23 and 53.
   - The squash took the two identical edits as one, so main read 23 and 53 where a render gives 22 and 54.
   - Every other file #3249 changed is identical on main.
-- **A generated file shared by parallel PRs can lose an edit silently.** Antigravity's draft #3239 makes the same count edit (23 → 22, 53 → 54) for its own item. Had it landed on stale main, it would have applied cleanly and left 22 and 54 where three items made 21 and 55. With this repair on main, #3239's count lines conflict instead, and its re-render gives the right totals.
+- **A generated file shared by parallel PRs can lose an edit silently, and this repair does not stop it happening again.** Antigravity's draft #3239 makes the same count edit (23 → 22, 53 → 54) for its own item, which is the same edit this repair makes.
+  - The fresh review merged #3239's README onto this head with `git merge-tree`. Its count lines still merge cleanly, because the two identical edits collapse into one again. That leaves 22 and 54 where three newly done items make 21 and 55.
+  - #3239's conflict is elsewhere: both sides add a row after the `#2835` row of the done table.
+  - So #3239 must re-render after it resolves that conflict, and the note on #2028 asks for exactly that.
 
 ## What changed
 
