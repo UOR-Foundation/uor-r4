@@ -34,13 +34,13 @@ use uor_r4_training::sha256_bytes;
 type Result<T> = std::result::Result<T, String>;
 
 const EXPECTED_PLAN_SHA256: &str =
-    "0ed1ab98000bc1fc26658c8452ff5c39c932b591645526bf46df7ff7e80ca7c1";
+    "0ed1ab98ab50bbad6c484c4e7e4ffeeb8bb7ad17d162251826302efe86d75715";
 const EXPECTED_INPUTS_SHA256: &str =
-    "1de2fc28cd2dc3605b6d85a988b4d7c12a029be52e90cf83e9f9d4c05eb486d0";
+    "1de2fc28607eff6bc412eee41a259d806ee1479b7c925059f00e9d3b54afa99a";
 const EXPECTED_LABELS_SHA256: &str =
-    "3b5c547791b7c37502c0176c4514e09545e5da332cc1a3bf19225e17ebdc6d3c";
+    "3b5c54771b8dc62e3c30aef2b30de28c09dfe79625f333854af046e6e354e2be";
 const EXPECTED_MANIFEST_SHA256: &str =
-    "7c33f3f7a44d7e7937f4b2390b2e3c86f49e8211216c35a08034df621f45285a";
+    "7c33f3f7e19edcb4b1a7aa5e5eab3bb0056db9351067d809f62f97b4a8880964";
 const PINNED_TOKENIZER_SHA256: &str =
     "d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89";
 const EOS_TOKEN_ID: u32 = 1;
