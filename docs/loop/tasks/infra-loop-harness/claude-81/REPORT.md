@@ -21,7 +21,7 @@ References #2904.
   - The new `the_project_owner_paths_still_cover_agents_charter_decisions_and_ci_d76` reads the real `docs/harness/owner-paths.json`. It confirms that `AGENTS.md`, `CHARTER.md`, `DECISIONS.md` and `.github/**` stay under the hard `owner-paths` rule now that `rendered-lock` and `read-path` are warnings.
   - Six test names that said "fails" or "refuses" for a demoted rule now say "warns".
 - **`banned-presence`:** an added file is now counted against an empty base instead of being skipped.
-- **`.github/workflows/docs.yml`:** the Links, Claim-wording and Generated catalog/figures steps get `continue-on-error: true`. Archive verify stays hard.
+- **`.github/workflows/docs.yml`:** the Links, Claim-wording and Generated catalog/figures steps get `continue-on-error: true`. Archive verify stays hard. **Moved to a follow-up PR**: under main's pre-D76 rules, CI's policy job would fail these two files on scope. Once D76 is on main, scope only warns.
 - **`.github/workflows/relative-query-check.yml`:** deleted.
 - **`docs/integration/DECISIONS.md`:** D76, with the owner's words. **`docs/loop/README.md`:** the policy line names the split.
 - **Ruleset `19597522`:** after merge, set `strict_required_status_checks_policy: false` and the merge queue's minimum wait to 0. That is recorded on #2904.
