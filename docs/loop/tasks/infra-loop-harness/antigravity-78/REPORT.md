@@ -15,8 +15,8 @@ References #2904. References #2889.
 - [`docs/harness/prep/read-binding-on-lawful-read-2026-10-25.md`](../../../harness/prep/read-binding-on-lawful-read-2026-10-25.md) (`+3 / -3` lines, docs): updated section headings (`## 1. Mechanism Under Test, Base Artifact, and Data Split`, `### Four Matched Arms, Steps, and Minimum Test Power (Across 3 Seeds: 20261009, 20261010, 20261011)`, `## 5. Cost and Stop Rule`) to satisfy all 8 `REQUIRED_BLOCKS` in `crates/uor-r4-harness/src/prep.rs:30-39` with zero change to any registered arm, bar, control, or stop rule.
 - [`crates/uor-r4-harness/src/prep.rs`](../../../../crates/uor-r4-harness/src/prep.rs) (`+24 / -15` lines: `+17 / -15` code, `+7 / -0` tests): replaced `heading_needle` with `heading_needles`, accepting `"stop"` or `"abort"` for the `"stop"` block, and added unit test `abort_heading_satisfies_stop_block`.
 - [`crates/uor-r4-harness/src/preprules.rs`](../../../../crates/uor-r4-harness/src/preprules.rs) (`+11 / -0` lines, tests): added unit test `the_real_sheets_pass_the_shape_rule` asserting `sheet_shape(&p).is_empty()` across all committed sheets in `docs/harness/prep/`.
-- [`docs/loop/tasks/infra-loop-harness/antigravity-78/ORDER.md`](ORDER.md) and [`REPORT.md`](REPORT.md) (`+86 / -0` lines, task records).
-- Total diff size across 6 files: `+125 / -19` lines (`+17 / -15` code, `+18 / -0` tests, `+90 / -4` docs/records; ratio `0.72` against a 200-line unit estimate).
+- [`docs/loop/tasks/infra-loop-harness/antigravity-78/ORDER.md`](ORDER.md) and [`REPORT.md`](REPORT.md) (`+83 / -0` lines, task records).
+- Total diff size across 6 files: `+122 / -19` lines (`+17 / -15` code, `+18 / -0` tests, `+87 / -4` docs/records; ratio `0.71` against a 200-line unit estimate).
 
 ## Measurements
 
