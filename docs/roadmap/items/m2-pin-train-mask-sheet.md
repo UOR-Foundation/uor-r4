@@ -42,7 +42,7 @@ So the discrete-law branch still needs a one-page M2 sheet on the current discre
 
 **Held (25 Oct 2026, claude-101).** Both branches of the done-when wait on other items, so the item is `held` rather than offered as GO. A lab may release it when either of these holds:
 - **The D37 branch:** `float-training-module` (#2823) and `d11-exporter-float-trunk` (#2820) are done. The D37 sheet then needs its sealed fresh slice and a non-author FIT.
-- **The discrete branch:** a current discrete M2 trainer exists (the trunk route, starting with `m1-trunk-assembly-and-training`, #2844), so that a one-page M2 discrete-law sheet can take a non-author FIT at a current head.
+- **The discrete branch:** `m1-trunk-assembly-and-training` (#2844) is `done`, or a merged discrete trainer in `crates/uor-r4-discrete` is named by commit. Either gives a one-page M2 discrete-law sheet a current trainer to pin and a current head to FIT at. `m2-train-grounded-replies` cannot be that trainer's route, because it depends on this item, so `loop next` does not offer it while this item is open.
 
 Preparation that runs nothing, such as drafting either sheet, may go ahead meanwhile.
 
