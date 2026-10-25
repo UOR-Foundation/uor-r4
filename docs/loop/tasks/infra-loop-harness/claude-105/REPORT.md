@@ -23,7 +23,7 @@ None. This is a records unit, so there is no run, no GPU and no model.
 ## Checks run at the head
 
 - `cargo run -p xtask -- roadmap check`: 92 items OK. `roadmap render` changed no file.
-- `loop report --check` and `loop pr-check --local`: recorded below once run.
+- `loop report --check`: PASS. `loop pr-check --local`: PASS (the review-record and required-checks rules report N/A in a local run).
 
 ## Skills used
 
