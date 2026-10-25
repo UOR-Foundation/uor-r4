@@ -14,7 +14,7 @@ The item's done-when reads:
 - **The owner's answer is recorded.** On 24 Oct (#2028 comment `6379430093`, item 3) Casey said: "I want both because we do not know which we will ultimately need." So the D37-basis sheet `docs/harness/prep/m2-pin-train-mask-sheet-2026-10-23.md` goes ahead as the successor to Amendment 6, and a discrete-law rung-0 sheet is also wanted.
 - **The refreshed sheet exists, but its FIT is NOT_FIT** (`antigravity-33`), on four prerequisites:
   - (a) the owner's answer, now given;
-  - (b) the export-gap statistic and band, which must be fixed in the sheet itself;
+  - (b) the export-gap statistic and band, which must be fixed in the sheet itself. On reading line 29 after the first ORDER commit, this turns out to be done already: the PM cover (deepseek) registered it on 24 Oct (`G_top1`, `G_recall8`, band `max(0.83 pp, two-seed spread)`);
   - (c) the separate D29-scanned float module (`float-training-module`, #2823) and the D11 float-trunk exporter (`d11-exporter-float-trunk`, #2820), neither built;
   - (d) the literal source SHAs (now pinned, lines 73-76) and a sealed fresh-transfer slice, which the sheet itself defers as a KEEP gate.
 - **The pins re-verify today.**
@@ -25,8 +25,8 @@ The item's done-when reads:
 
 ## What this unit does
 
-1. **Register prerequisite (b) in the sheet.** The statistic and band follow CHARTER §3.7's own words ("a gap above the two-seed noise band disqualifies it"), so no new bar is invented. This is a lab decision (D68), with a fresh decision review.
-2. **Record the 25 Oct pin re-verification** in the sheet, and state which prerequisites are cleared.
+1. **(b) needs no work:** it is already registered at the sheet's line 29.
+2. **Record the 25 Oct pin re-verification** in the sheet, and state which prerequisites are cleared: (a), (b) and the SHAs in (d). (c) and the fresh slice remain.
 3. **Give the item `depends_on: [float-training-module, d11-exporter-float-trunk]`.** Its FIT cannot happen before (c), so `loop next` should offer the unblocker, not this sheet. This is a lab decision (D68), with the same decision review. The item text and `docs/harness/milestones.json`'s M2 `next` text are refreshed to match.
 
 ## Files in scope
@@ -39,7 +39,7 @@ The item's done-when reads:
 ## Done when
 
 This unit does not meet the item's done-when: the FIT waits on (c). It is done when:
-- the sheet carries (b) and the 25 Oct re-verification;
+- the sheet carries the 25 Oct re-verification and says which prerequisites are cleared;
 - the item depends on the two blocking items and its text says why;
 - the decision review passed and is logged on #2851;
 - `loop report --check` and `loop pr-check --local` pass, and a fresh-context review counts at the exact head;
@@ -47,5 +47,5 @@ This unit does not meet the item's done-when: the FIT waits on (c). It is done w
 
 ## Stop and ask if
 
-- The band would need a number not derivable from §3.7's two-seed rule.
+- The sheet's registered band (line 29) turns out not to match §3.7.
 - The decision review finds that another lawful path would let the sheet reach FIT without (c).

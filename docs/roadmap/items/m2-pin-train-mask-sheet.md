@@ -6,7 +6,7 @@ area: tooling
 status: ready
 open_to: anyone
 needs_gpu: false
-depends_on: []
+depends_on: [float-training-module, d11-exporter-float-trunk]
 scope: [crates/uor-r4-training/**, data/**, docs/harness/prep/m2-pin-train-mask-sheet*, docs/harness/milestones.json, docs/labs/m2-pin-train-mask-sheet/**]
 ---
 
@@ -15,6 +15,13 @@ scope: [crates/uor-r4-training/**, data/**, docs/harness/prep/m2-pin-train-mask-
 M2 is the first simple conversation: at least 256 of 512 saved questions and at least 40% of fresh ones, graded by fixed deterministic checks ([where we are going](../../start/where-were-going.md), Stage 5). Before any GPU training or fresh-transfer evaluation, the charter requires a one-page pre-registration sheet with a non-author FIT (CHARTER §4.5). The masked TRAIN count reference is built and tested, and the Rung 0 sheet already carries its pins (see below). What no record settles is whether that sheet is still the live one. A sheet that is ready for FIT shortens the path once the owner decides on the M2 hold. See also [the transformer-to-geometry map](../../start/transformer-vs-geometry.md).
 
 ## What is missing
+
+**State on 25 Oct 2026 (claude-99, #3196).** The question below is answered, and the sheet is written. What remains is outside this item.
+- **The owner's answer** (24 Oct, #2028 comment `6379430093`): "I want both because we do not know which we will ultimately need." The D37-basis sheet `docs/harness/prep/m2-pin-train-mask-sheet-2026-10-23.md` is the successor to the Amendment 6 record, and a discrete-law rung-0 sheet is also wanted. That second sheet is not yet filed as an item.
+- **The sheet** pins the mask, the count and both source SHAs, re-verified on 25 Oct at `53b40ecd6`. It also registers the export-gap statistic and band (line 29). Its FIT is `NOT_FIT` (`antigravity-33`) until the separate D29-scanned float module and the D11 float-trunk exporter exist and are wired into its steps, and until its fresh-transfer slice is sealed.
+- **So this item now depends on** `float-training-module` (#2823) and `d11-exporter-float-trunk` (#2820). The non-author FIT follows them.
+
+The text below is the item as first written.
 
 The record of the count reference (`archive/labs/count-reference-2026-10-13/README.md`) and the `next` text in `docs/harness/milestones.json` still say the physical sheet verdict is PENDING until the sheet adds four pins: the mechanical TRAIN-mask path and checksum, the expected count, the CLI, and the new source. **That text is stale on the pins.** Amendment 6 of the sheet (`docs/harness/prep/m1-rank-margin-rung0-2026-10-13.md`, commit `be5d8cd6e`, #2330) added them and restored the verdict to `TEST FITNESS: FIT` (independent Claude review, `#2029` comment 6146716704, at `9e904a834` plus Amendments 5 and 6). The sheet pins:
 

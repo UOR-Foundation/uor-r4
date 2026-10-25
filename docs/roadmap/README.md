@@ -75,7 +75,7 @@ These items are ready and open to anyone.
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
 | [Assemble and train the full lawful trunk (Stage 3)](items/m1-trunk-assembly-and-training.md) | ready | a lab | yes | [m1-position-mechanism](items/m1-position-mechanism.md), [m1-normalization-mechanism](items/m1-normalization-mechanism.md), [m1-bvg-k-stage-t-training](items/m1-bvg-k-stage-t-training.md), [m1-d11-exporter-discrete](items/m1-d11-exporter-discrete.md) | [#2844](https://github.com/UOR-Foundation/uor-r4/issues/2844) |
-| [Settle whether the pinned M2 TRAIN-mask sheet is live after D37, and re-pin it](items/m2-pin-train-mask-sheet.md) | ready | anyone | no | none | [#2851](https://github.com/UOR-Foundation/uor-r4/issues/2851) |
+| [Settle whether the pinned M2 TRAIN-mask sheet is live after D37, and re-pin it](items/m2-pin-train-mask-sheet.md) | ready | anyone | no | [float-training-module](items/float-training-module.md), [d11-exporter-float-trunk](items/d11-exporter-float-trunk.md) | [#2851](https://github.com/UOR-Foundation/uor-r4/issues/2851) |
 | [Train the student for grounded replies from exact memory](items/m2-train-grounded-replies.md) | ready | a lab | yes | [m2-donor-corpus-generation](items/m2-donor-corpus-generation.md), [m2-fresh-heldout-panel](items/m2-fresh-heldout-panel.md), [m2-pin-train-mask-sheet](items/m2-pin-train-mask-sheet.md), [m1-close-saved-model](items/m1-close-saved-model.md), [m1-d11-exporter-discrete](items/m1-d11-exporter-discrete.md) | [#2853](https://github.com/UOR-Foundation/uor-r4/issues/2853) |
 | [Optimize the driver math and run the ~1M-token pilot (D41 item 3)](items/d41-driver-math-pilot.md) | held | a lab | yes | none | [#2821](https://github.com/UOR-Foundation/uor-r4/issues/2821) |
 | [Generate the one-time offline donor answer corpus (distill-d1)](items/m2-donor-corpus-generation.md) | held | a lab | yes | [d41-driver-math-pilot](items/d41-driver-math-pilot.md) | [#2848](https://github.com/UOR-Foundation/uor-r4/issues/2848) |
@@ -267,10 +267,12 @@ flowchart LR
   n_r_vocab_4096_vs_16384["r-vocab-4096-vs-16384"]
   n_recurrence_gates_six_recurrence_fit["recurrence-gates-six-recurrence-fit"]
   n_spiralcore_fbs_offline_float_sheet["spiralcore-fbs-offline-float-sheet"]
+  n_d11_exporter_float_trunk --> n_m2_pin_train_mask_sheet
   n_d41_driver_math_pilot --> n_m2_donor_corpus_generation
   n_float_training_module --> n_d11_exporter_float_trunk
   n_float_training_module --> n_e8_orbit_memory_sigmoid_free_iteration
   n_float_training_module --> n_hamilton_gate_offline_float_sheet
+  n_float_training_module --> n_m2_pin_train_mask_sheet
   n_float_training_module --> n_spiralcore_fbs_offline_float_sheet
   n_infra_loop_harness --> n_infra_loop_render_review
   n_infra_loop_pr02_item_keys --> n_infra_loop_pr03_render
