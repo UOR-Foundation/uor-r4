@@ -3,7 +3,7 @@ id: m7-studio-self-host-page-assets
 title: Verify the Studio's offline claim, retire the demo CDNs, bundle tokenizer
 milestone: M7
 area: serving
-status: ready
+status: done
 open_to: anyone
 needs_gpu: false
 depends_on: []
@@ -12,12 +12,13 @@ scope: [web/**, docs/products/**, docs/labs/m7-studio-self-host-page-assets/**]
 
 ## Why it matters
 
-The Studio's model worker is fully client-side (m7-studio-connect-wasm-engine, PR #2978), and #2990 (merged `9baf8452c`) already replaced the main page's CDN assets with offline shims (`web/studio/assets/css/uor_offline_fonts.css`, `web/studio/assets/js/uor_offline_vendor.js`). What remains is proving that claim at page load, three leftover CDN loads on the router demo page, and the stand-in prompt tokenizer.
+The Studio's model worker is fully client-side (m7-studio-connect-wasm-engine, PR #2978), and #2990 (merged `9baf8452c`) already replaced the main page's CDN assets with offline shims (`web/studio/assets/css/uor_offline_fonts.css`, `web/studio/assets/js/uor_offline_vendor.js`). What remained was proving that claim at page load, three leftover CDN loads on the router demo page, and replacing the worker's byte-mod stand-in prompt tokenizer with a stack-bound `ByteLevel` BPE tokenizer artifact.
 
 ## What is missing
 
-1. **Verification and both pages are done.** The page-load claim is machine-checked statically (`#3073`) and at runtime in headless Chrome (`#3080`), and the router demo page's three CDN loads are self-hosted behind the same traps (`#3110`, `0d5d6791d`). The tokenizer leg remains.
-2. **The tokenizer.** The byte-mod stand-in is real (`web/studio/assets/js/uor_model_worker.js:140`, `rawBytes[i] % vocabSize`); bundle the stack-bound tokenizer artifact in its place.
+Nothing for this item — all four legs are delivered:
+1. **Verification and both pages are done.** The page-load claim is machine-checked statically (`#3073`) and at runtime in headless Chrome (`#3080`), and the router demo page's three CDN loads are self-hosted behind the same traps (`#3110`, `0d5d6791d`).
+2. **The tokenizer (`#3198`).** The byte-mod stand-in (`rawBytes[i] % vocabSize`) is replaced by the stack-bound `ByteLevel` BPE tokenizer artifact (`uor-r4.studio-tokenizer/1`, `mode: "byte-bpe"`, bundled as `DEFAULT_STACK_TOKENIZER_ARTIFACT` in `web/studio/assets/js/uor_tokenizer_artifact.js` and generated into `pkg/tokenizer.json` by `web/studio/tools/make_tokenizer.mjs` for both `uor-r4.lut-stack/1` and `uor-r4.lut-discrete/1` headers, with `--source-tokenizer` support for trained BPE vocabularies). `web/studio/verify_studio_worker.mjs` auto-builds the WASM bundle and synthetic stack on a clean checkout and verifies bound BPE encoding, piece decoding, rank-ordered merges, and reload re-binding with zero network calls (`remoteRequests = 0`).
 3. **GitHub API calls, recorded.** `web/studio/index.html:2866-2872` calls `api.github.com`; the calls are user-initiated and refused under Tauri/offline. The privacy model in `docs/products/web-client.md` records them as user-initiated, **not** page-load requests, and therefore outside the "on load" bar (`#3074`); no change to the calls is needed.
 
 Website deploys stay paused (D36) regardless; this item changes assets and verification, not the deploy.
