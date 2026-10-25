@@ -17,7 +17,7 @@ References #2904. References #2839.
   - `notebook: docs/research/notebook/m4-serving.md` is added;
   - `scope:` adds `docs/loop/tasks/m1-export-gap-and-toks/**` and `docs/research/notebook/m4-serving.md`;
   - "What is missing" now says that both inputs exist (the exporter, and the A8 checkpoints with what each passed), and that the measured run waits on step 4's model, with an A8 checkpoint usable only to qualify the instrument.
-- **`docs/roadmap/README.md`:** the generated render (ready 25, held 15).
+- **`docs/roadmap/README.md`:** the generated render. It was re-rendered after merging `main` at #3242, whose generated render conflicted with this one.
 - **This task folder:** the ORDER, the D68 card and this REPORT.
 
 ## Measurements
@@ -31,7 +31,7 @@ References #2904. References #2839.
   - It checked every fact against PLAN.md:61–65, both items' status lines, the A8 README, CHARTER.md:51–52 (D68) and the `infra-loop-harness` scope.
   - It confirmed that no open PR overlaps (#3242, #3239, #3169).
 - **The fresh exact-head review** at `4327d6a1e`: APPROVE. Its advisory 2 (Relation passed only the TRAIN anchor floor) is applied in the item text.
-- **`xtask roadmap check`:** 92 items OK. Ready 25, held 15, decision 1, done 51.
+- **`xtask roadmap check`:** 92 items OK. After the merge of `main` at #3242 (which set its own item done), the counts are ready 24, held 15, decision 1, done 52.
 
 ## Skills used
 
