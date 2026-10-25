@@ -49,6 +49,7 @@ One RTX 5090, about 6 minutes, run ref `3e99a0d63912e4dfd7b8a7043c1274d13137e250
 - `sieve-cuda` stub-nvcc type-check of the lib, the binary and the tests: clean. The real build, and D29 on both features, ran on the pod.
 - `uor-harness loop gates --full`: 11 of 11 GREEN. `loop gates --quick`: GREEN.
 - `cargo xtask roadmap check`: 92 items OK. `roadmap render`: re-rendered for `status: done`.
+- After review, `device_layout_matches_the_frames` checks `prefix`, `suffix`, `slot` and each signature one by one. **Negative gate:** with the two count pushes in `device_frames` swapped, the rebuilt test fails (it panics at its `prefix` assert). Restored, the lib passes 72 after a rebuild. This change is to the test only.
 - The fresh in-unit review is in the PR's review record: three slices (the wiring and kernel, the host compiler and binary, and a claims check of this write-up against the run record).
 
 ## Skills used
@@ -59,6 +60,9 @@ One RTX 5090, about 6 minutes, run ref `3e99a0d63912e4dfd7b8a7043c1274d13137e250
 ## Still open
 
 - **Review note, minor, not changed after the run.** The launcher uploads `frames.tokens` without the empty-array guard it gives the turn tokens (`sieve_frame_compiler.rs`, `device::compile`). A frame table whose every frame has no words would fail at allocation. The world=v2 table cannot do that: its test asserts every frame has a word. Wrap it the same way when the compiler first gets another table.
+- **Review notes, minor, not changed after the run.**
+  - `decode` trusts the hole the kernel reports. It does not re-check `hole_start == prefix length`, the suffix fit or the value cap, so a wrong but in-range hole would show as a recall miss, not exit 1. The 12 CUDA controls pin the exact holes, and R1's 462/462 exact spans show the kernel's holes are right.
+  - The binary ignores unknown flags. A typo falls back to the registered default, and the record stores the seed and values per phrasing it used.
 
 - `m3-memory-turn-discriminator-gate` (#2855) stays open. The sieve compiler's abstention is not that gate. Its work is a compiler that also compiles unseen phrasings and keeps the panel clean.
 
