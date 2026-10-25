@@ -13,10 +13,12 @@
       "lab": "deepseek",
       "status": "in-progress",
       "headline": {
-        "label": "integer top-1 through the D11 export, DEV, two seeds",
-        "text": "beat T2 6,300/14,287 and unigram 1,226/14,287: not measured yet",
-        "target_display": "above both tables on each of two seeds, tokens/s reported (CHARTER §4.8, D39)",
-        "note": "the reply count (37/116) is not the closing bar; M1 closes on the saved-model path (D79)"
+        "label": "reply acceptable",
+        "current": 37,
+        "target": 116,
+        "of": 232,
+        "unit": "acceptable replies",
+        "suspended": true
       },
       "secondary": [
         {
