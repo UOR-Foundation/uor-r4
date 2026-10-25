@@ -1,6 +1,10 @@
 //! `d11-scorer export CHECKPOINT_JSON OUT_LUT REPORT_JSON`
 //! `d11-scorer rows CONFIG_JSON OUT_JSON`
 //! `d11-scorer score ARTIFACT_LUT CONFIG_JSON REPORT_JSON ROWS_JSONL [--reference]`
+//! `d11-scorer toks ARTIFACT_LUT REPORT_JSON [--prompt TOKENS_JSON]`
+//!
+//! `toks` times `IntegerDiscreteModel` serving on this machine by the step-6
+//! protocol (1 warmup, 20 runs, 192-token prefill, 64-token decode).
 //!
 //! `m1-d11-artifact-scorer` (#3248). `score` runs on the GPU (`cuda` feature)
 //! over the config's DEV rows; `--reference` also checks every row against
@@ -15,6 +19,7 @@ use std::process::ExitCode;
 use m1_d11_artifact_scorer_instrument as inst;
 use serde_json::Value;
 use uor_r4_discrete::training::DriverConfig;
+use uor_r4_integer::discrete_d11::IntegerDiscreteModel;
 
 fn read_json(path: &str) -> Result<Value, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
@@ -62,8 +67,39 @@ fn run(args: &[String]) -> Result<(), String> {
             };
             score(artifact, config, report, row_records, reference)
         }
+        [command, artifact, report, flags @ ..] if command == "toks" => {
+            let bytes = std::fs::read(artifact).map_err(|e| format!("{artifact}: {e}"))?;
+            let model = IntegerDiscreteModel::from_bytes(&bytes)
+                .map_err(|e| format!("the integer reader refused the artifact: {e}"))?;
+            let protocol = inst::toks::STEP6;
+            let (prompt, source) = match flags {
+                [] => (
+                    inst::toks::default_prompt(model.shape().vocabulary, protocol.prompt_tokens),
+                    "default: token i = (7919 i + 13) mod vocabulary".to_owned(),
+                ),
+                [flag, path] if flag == "--prompt" => {
+                    let tokens: Vec<u32> = serde_json::from_value(read_json(path)?)
+                        .map_err(|e| format!("{path}: a JSON array of token ids: {e}"))?;
+                    (tokens, format!("--prompt {path}"))
+                }
+                _ => return Err("toks takes only --prompt TOKENS_JSON after its paths".into()),
+            };
+            let mut timing = inst::toks::time_serving(&model, &prompt, protocol)?;
+            timing["prompt_source"] = serde_json::json!(source);
+            timing["hardware"] = inst::toks::hardware_profile();
+            write_new(report, &json_bytes(&timing)?)?;
+            println!(
+                "prefill median {} tok/s (p95 {}), decode median {} tok/s (p95 {})",
+                timing["prefill"]["median_tokens_per_s"],
+                timing["prefill"]["p95_tokens_per_s"],
+                timing["decode"]["median_tokens_per_s"],
+                timing["decode"]["p95_tokens_per_s"]
+            );
+            Ok(())
+        }
         _ => Err("usage: d11-scorer export CHECKPOINT_JSON OUT_LUT REPORT_JSON | rows CONFIG_JSON OUT_JSON \
-                  | score ARTIFACT_LUT CONFIG_JSON REPORT_JSON ROWS_JSONL [--reference]"
+                  | score ARTIFACT_LUT CONFIG_JSON REPORT_JSON ROWS_JSONL [--reference] \
+                  | toks ARTIFACT_LUT REPORT_JSON [--prompt TOKENS_JSON]"
             .into()),
     }
 }

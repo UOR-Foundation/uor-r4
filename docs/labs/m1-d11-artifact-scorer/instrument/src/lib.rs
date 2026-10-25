@@ -18,6 +18,7 @@ pub mod artifact;
 #[cfg(feature = "cuda")]
 pub mod device;
 pub mod kernel;
+pub mod toks;
 
 use serde_json::{json, Value};
 use uor_r4_discrete::corpus::{sha256, PreparedCorpus};
