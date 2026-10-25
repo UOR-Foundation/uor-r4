@@ -5,7 +5,7 @@
 # read by the grader before any treatment. Each eval is capped at 10 minutes.
 # Terminal markers: $OUT/EXIT (0 or 1), and $OUT/FAULT on any failure.
 set -uo pipefail
-SHA=6ece5d8013b3240f6cb5dffc7c7fd4b8f4c829c1
+SHA=77123dd995be44d5b0a5f482c8b82e270dd9aa42
 SRC=/root/build/src-$SHA
 OUT=/workspace/address-key-2026-10-25
 DATA=/workspace/uor-r4/local/driver/data
