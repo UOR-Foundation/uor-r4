@@ -23,12 +23,12 @@ One RTX 5090 (Vast, driver 590.48.01, nvcc 12.8), pod `vast-57621556`, about 6 m
 | Panel false_assert | **0 / 50** |
 | Panel false_overwrite | **0 / 50** |
 | Panel clean_unresolved | **50 / 50** |
-| R1: training phrasings with development values, exact | **462 / 462** (floor ≥ 95%: met) |
+| R1: training phrasings with development values, plus each query phrasing once, exact | **462 / 462** (floor ≥ 95%: met) |
 | R2: development phrasings, exact | **0 / 220** (no bar) |
 | Registered bar (owner bar with the floor) | **met** |
 | Finite CUDA controls | 12 / 12 on both builds |
 | Second build (`cuda` against `sieve-cuda`) | `decisions.json` byte-identical, sha256 `d3f05ecf7d26058dac0c43f82069f7409a2eed240352eff90cb95aad4228f645` |
-| D29 interlock | passed in the bootstrap (`cuda`, 5 tests) and on the lean build |
+| D29 interlock | passed on both features, 5 tests each: the bootstrap ran it under `cuda` (`d29.log` in the HF store's `bin/3e99a0d63912e4dfd7b8a7043c1274d13137e250-sm120.tar`, sha256 `0cf7dba482606ed1d2fe774ecfe11c6e5e19aa0d1bbbaa4865689793dab6db5f`), and the job ran it on the lean build (`d29-lean.log`) |
 
 **Pins.**
 - panel `7c29c665…a3de7`;

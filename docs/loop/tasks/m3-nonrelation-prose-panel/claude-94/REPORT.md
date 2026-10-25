@@ -38,14 +38,18 @@ One RTX 5090, about 6 minutes, run ref `3e99a0d63912e4dfd7b8a7043c1274d13137e250
 
 - **896,898 tokens/s** (lean build; 732 turns, 4,280 words, 4,772 µs from upload to download). The `cuda` build gives 811,682.
 - **Panel:** false_assert **0/50**, false_overwrite **0/50**, clean **50/50**.
-- **R1** (training phrasings with development values): **462/462** exact, so the 95% floor is met. **R2** (development phrasings): **0/220**.
+- **R1** (training phrasings with development values, plus each query phrasing once): **462/462** exact, so the 95% floor is met. **R2** (development phrasings): **0/220**.
 - **Registered bar met**, together with the floor.
-- **Instrument:** finite CUDA controls 12/12 on both builds. The second build's `decisions.json` is byte-identical (`d3f05ecf…f645`). D29 passed in the bootstrap and on the lean build. The pins held: table `379c2ecc…`, PTX `b80f96c4…`, panel `7c29c665…`.
+- **Instrument:** finite CUDA controls 12/12 on both builds. The second build's `decisions.json` is byte-identical (`d3f05ecf…f645`). D29 passed on both features, 5 tests each: under `cuda` in the bootstrap (`d29.log` inside the HF store's `bin/3e99a0d63912e4dfd7b8a7043c1274d13137e250-sm120.tar`, sha256 `0cf7dba4…db5f`), and on the lean build (`d29-lean.log`). The pins held: table `379c2ecc…`, PTX `b80f96c4…`, panel `7c29c665…`.
 - **Notebook:** one row in `docs/research/notebook/m3-durable-memory.md`, verdict positive at this scope.
 
 ## Checks run at the head
 
-RESULT_CHECKS
+- `cargo test -p uor-r4-training --no-fail-fast`: lib 72, chat-grade 26 and doc-tests 0 passed, none failed.
+- `sieve-cuda` stub-nvcc type-check of the lib, the binary and the tests: clean. The real build, and D29 on both features, ran on the pod.
+- `uor-harness loop gates --full`: 11 of 11 GREEN. `loop gates --quick`: GREEN.
+- `cargo xtask roadmap check`: 92 items OK. `roadmap render`: re-rendered for `status: done`.
+- The fresh in-unit review is in the PR's review record: three slices (the wiring and kernel, the host compiler and binary, and a claims check of this write-up against the run record).
 
 ## Skills used
 
@@ -53,6 +57,8 @@ RESULT_CHECKS
 - scope-guard: the notebook scope went through claude-96 on `main` rather than around the guard.
 
 ## Still open
+
+- **Review note, minor, not changed after the run.** The launcher uploads `frames.tokens` without the empty-array guard it gives the turn tokens (`sieve_frame_compiler.rs`, `device::compile`). A frame table whose every frame has no words would fail at allocation. The world=v2 table cannot do that: its test asserts every frame has a word. Wrap it the same way when the compiler first gets another table.
 
 - `m3-memory-turn-discriminator-gate` (#2855) stays open. The sieve compiler's abstention is not that gate. Its work is a compiler that also compiles unseen phrasings and keeps the panel clean.
 
