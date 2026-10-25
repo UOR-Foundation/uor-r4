@@ -76,10 +76,31 @@ pub fn clears(p: Paired) -> bool {
     d > u128::from(FLOOR) && d * d > 4 * u128::from(p.b + p.c)
 }
 
+/// The registered panel, with summary counts that equal the rows they summarize
+/// and no repeated row ordinal: the reach bar reads the counts, the paired bar
+/// reads the rows, so the two must agree.
 fn check_panel(name: &str, arm: &Arm) -> Result<()> {
-    if arm.b3.full.rows != DEV_ROWS || arm.b3.psucc.rows != PSUCC_ROWS {
+    let b3 = &arm.b3;
+    if b3.full.rows != DEV_ROWS || b3.psucc.rows != PSUCC_ROWS {
         return Err(invalid(format!(
             "{name} does not score the registered 14,287-row DEV panel with 3,847 P_succ rows"
+        )));
+    }
+    let ordinals: std::collections::BTreeSet<u64> = b3.rows.iter().map(|r| r.row_ordinal).collect();
+    let count = |psucc: Option<bool>, admitted: bool| {
+        b3.rows
+            .iter()
+            .filter(|r| psucc.is_none_or(|p| r.is_psucc == p) && (!admitted || r.target_admitted))
+            .count() as u64
+    };
+    if ordinals.len() as u64 != DEV_ROWS
+        || b3.rows.len() as u64 != DEV_ROWS
+        || count(Some(true), false) != b3.psucc.rows
+        || count(None, true) != b3.full.target_admitted
+        || count(Some(true), true) != b3.psucc.target_admitted
+    {
+        return Err(invalid(format!(
+            "{name}'s B3 summary counts differ from its rows, or a row ordinal repeats"
         )));
     }
     Ok(())
@@ -254,5 +275,13 @@ mod tests {
         let mut short = arm(1_800, 3_000, 400);
         short.b3.full.rows -= 1;
         assert!(grade(&a8, &short, &shuffled, &c, &c, "FV8-TwoScale").is_err());
+        // A summary that disagrees with its rows, or a repeated treatment
+        // ordinal, is refused: reach reads counts, the paired bar reads rows.
+        let mut inflated = arm(1_800, 3_000, 400);
+        inflated.b3.psucc.target_admitted += 100;
+        assert!(grade(&a8, &inflated, &shuffled, &c, &c, "FV8-TwoScale").is_err());
+        let mut repeated = arm(1_800, 3_000, 400);
+        repeated.b3.rows[1].row_ordinal = 0;
+        assert!(grade(&a8, &repeated, &shuffled, &c, &c, "FV8-TwoScale").is_err());
     }
 }
