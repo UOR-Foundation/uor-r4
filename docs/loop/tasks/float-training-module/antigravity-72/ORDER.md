@@ -36,7 +36,7 @@ Deliver the standalone scanned D37 offline float training crate `crates/uor-r4-f
 
 1. Design note posted on `#2823` and committed at `docs/labs/float-training-module/README.md` naming the crate (`uor-r4-float-train`), all 24 kernels in the extract, the zero-dependency-on-`uor-r4-training` invariant, and the `ratchet.rs` D37 scanned entry.
 2. `crates/uor-r4-float-train` builds CPU-only (`cargo build -p uor-r4-float-train`) and type-checks with stub `nvcc` under `--features cuda`, passes finite CPU control tests across all 24 kernels plus the `cargo tree -p uor-r4-float-train` exclusion test and D29 PTX scan, and passes `uor-harness ratchet d23`, `uor-harness ratchet d25 --list`, and `uor-harness ratchet d32 --list`.
-3. `docs/research/notebook/float-training.md` records the finite qualification row, `docs/roadmap/items/float-training-module.md` adds `notebook: docs/research/notebook/float-training.md` and `status: done` (`Closes #2823`), and `docs/start/FILEMAP.md` adds `crates/uor-r4-float-train` and `docs/labs/float-training-module`.
+3. `docs/research/notebook/float-training.md` records the finite qualification row, `docs/roadmap/items/float-training-module.md` adds `notebook: docs/research/notebook/float-training.md` and `status: done` (`Closes #2823`), and `docs/start/FILEMAP.md` adds `crates/uor-r4-float-train/`.
 
 ## Stop and ask if
 
