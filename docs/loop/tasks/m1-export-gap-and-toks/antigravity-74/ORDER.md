@@ -8,7 +8,7 @@ The item's done-when reads:
 
 > Stage 4 bar: 'the integer audits stay green, the gap stays within the noise band, and tokens per second is reported for both reading the prompt and writing the reply.' Decode and context rates are reported separately.
 
-Complete Step 3 of `docs/roadmap/items/m1-export-gap-and-toks.md` (`How to start`: non-author `TEST FITNESS: FIT` review of `docs/harness/prep/m1-export-gap-and-toks-DRAFT-2026-10-23.md` under `CHARTER.md` §4.5 and D67/D68), update `docs/labs/m1-export-gap-and-toks/README.md`, and complete a D68 decision review (`CHARTER.md` §5.1) aligning `docs/roadmap/items/m1-export-gap-and-toks.md`'s `depends_on:` (`[m1-d11-exporter-discrete, m1-bvg-k-stage-t-training]`) with `PLAN.md` Step 6 and narrowing its `scope:` to remove the already-updated `docs/mechanisms/lut-serving.md` umbrella overlap.
+Complete Step 3 of `docs/roadmap/items/m1-export-gap-and-toks.md` (`How to start`: non-author `TEST FITNESS: FIT` review of `docs/harness/prep/m1-export-gap-and-toks-DRAFT-2026-10-23.md` under `CHARTER.md` §4.5 and D67/D68), update `docs/labs/m1-export-gap-and-toks/README.md`, and complete a D68 decision review (`CHARTER.md` §5.1) registering the Stage 4 bar/noise band and setting `status: held` on `docs/roadmap/items/m1-export-gap-and-toks.md` (`status_only_edit` per `crates/uor-r4-harness/src/loopprcheck.rs:488`) until `m1-bvg-k-stage-t-training` (`#2836`, `PLAN.md` Step 4) produces the trained checkpoint input.
 
 ## Cancel probe (run first)
 
@@ -31,7 +31,7 @@ Complete Step 3 of `docs/roadmap/items/m1-export-gap-and-toks.md` (`How to start
 ## Done when
 
 - `docs/harness/prep/m1-export-gap-and-toks-DRAFT-2026-10-23.md` passes a fresh-context non-author `TEST FITNESS: FIT` review (`CHARTER.md` §4.5) and is updated to `TEST FITNESS: FIT`;
-- A fresh-context D68 decision review (`CHARTER.md` §5.1) approves updating `docs/roadmap/items/m1-export-gap-and-toks.md` (`depends_on: [m1-d11-exporter-discrete, m1-bvg-k-stage-t-training]`, matching `PLAN.md` Step 6, and narrowing `scope:` to remove `docs/mechanisms/lut-serving.md`), logged on `#2839`;
+- A fresh-context D68 decision review (`CHARTER.md` §5.1) approves registering the Stage 4 bar (`B1..B4`) and two-seed export-gap noise band and setting `status: held` on `docs/roadmap/items/m1-export-gap-and-toks.md` until `m1-bvg-k-stage-t-training` (`#2836`) produces the trained checkpoint, logged on `#2839`;
 - `uor-harness loop pr-check --local` and `uor-harness loop gates --full` pass at the head (`References #2839`).
 
 ## Stop and ask if
