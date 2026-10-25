@@ -13,6 +13,7 @@ Can the lawful sieve compiler compile wordings it was not built from, by composi
   - It is an update marker when it turns an assert frame into an update frame, and neutral when it never changes the act.
   - A sequence that would erase a correction, or that plays both roles, is dropped.
   - Found from the training phrasings only: `actually`, `sorry`, `sorry i meant` (update); `remember`, `please note that`, `people` (neutral). Marker table sha256 `cd79399490c0abcfc14253b5680a282fc840672c5932e925d62a3b95375a125d`, pinned by a test.
+- **Markers are relation-independent once derived.** A marker found on one relation's frames may precede any relation's slot frame.
 - **Compile.** Each reading strips at most 2 markers from the front, then runs claude-94's sieve and exact alignment on the rest.
   - Markers never precede a query frame.
   - An update marker reads the frame as a correction: its expert becomes `p_relation · q_update`.
@@ -42,6 +43,9 @@ Can the lawful sieve compiler compile wordings it was not built from, by composi
 | Panel false count above 0 | the marker rule lets prose write | negative for this configuration (D22); the next configuration narrows the markers |
 | Panel clean, R1 ≥ 95%, R2 above 0 | bar met for this configuration | `Closes #2855` |
 | Panel clean, R2 still 0 | no generalization from markers | negative for this configuration; the gate stays open |
+| R1 below 95%, whatever the panel and R2 show | the marker readings break training frames, for example through overlapping markers such as `sorry` and `sorry i meant` disagreeing | negative for this configuration (D22); the next configuration narrows the marker set or the agreement rule |
+
+A pass is claimed at the reported R2 level only: "compiles R2 x of 220", never "generalizes". R2 is deterministic from the text, but it was not computed on the host before this sheet. Its only computation is the registered GPU run.
 
 ## 5. Instrument checks
 
