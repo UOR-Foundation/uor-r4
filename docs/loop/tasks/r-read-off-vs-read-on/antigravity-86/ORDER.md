@@ -9,16 +9,16 @@ The item's done-when reads:
 > Paired read-on versus read-off results on the same retained checkpoints are recorded as notebook rows, with the classification instrument versus mechanism stated. The bar for a "read adds something" verdict is not yet registered; registering it, with the score it is read on, is part of How to start. For scale only: on the 14,287 development rows a context-free successor table scores 6,300 top-1, and the trained read scored 149.
 
 In this unit (`antigravity-86`):
-1. Register Option A (zero-update checkpoint-0 paired battery on `A8` cp0 and `P8` cp0, preserving `eval-corpus` at `main.rs:108-110`) and the 3-branch paired McNemar bar $F = \max(24, 2\sqrt{b+c})$ in `docs/harness/prep/r-read-off-vs-read-on-DRAFT-2026-10-23.md` via a fresh-context D68 decision review (`CHARTER.md` §5.1, `D65`, `D68`, `D69`), and obtain a fresh-context non-author `TEST FITNESS: FIT` review (`CHARTER.md` §4.5) and D67 pre-run review (`CHARTER.md` §5.10, `D67`).
-2. Lease 1x RTX 5090 pod via `scripts/pod/uor-pod` inside global caps (`<= 4` pods, `<= $8.00/h`), execute `docs/labs/r-read-off-vs-read-on/evidence/read-off-battery.sh` (`{a8, p8} x {r-on, r-off, r-perm, f-on, f-off}`) plus row-by-row paired McNemar discordances $(b, c)$ on the `14,287` full DEV rows and `3,847` `P_succ` rows, upload sealed artifacts to `caseyallard/uor-r4-store`, and bring the pod down.
-3. Record the paired `Route` and `Flock` read-on vs read-off vs permuted-control results and instrument-vs-mechanism classification in `docs/labs/r-read-off-vs-read-on/README.md` and `docs/research/notebook/m1-discrete-attention.md`, set `status: done` on `docs/roadmap/items/r-read-off-vs-read-on.md` (`Closes #2885`), and re-render `docs/roadmap/README.md`.
+1. Register Option A (zero-update checkpoint-0 paired battery on `A8` cp0 and `P8` cp0, preserving `eval-corpus` at `main.rs:108-110`) and the 3-branch paired McNemar bar $F = \max(24, 2\sqrt{b+c})$ in `docs/harness/prep/r-read-off-vs-read-on-DRAFT-2026-10-23.md` via fresh-context D68 decision review (`CHARTER.md` §5.1, `D65`, `D68`, `D69`), non-author `TEST FITNESS: FIT` (`CHARTER.md` §4.5), and D67 pre-run review (`CHARTER.md` §5.10, `D67`).
+2. Lease 1x RTX 5090 pod via `scripts/pod/uor-pod` inside global caps (`<= 4` pods, `<= $8.00/h`), execute `docs/labs/r-read-off-vs-read-on/evidence/read-off-battery.sh` (`{a8, p8} x {r-on, r-off, r-perm, f-on, f-off}`) plus row-by-row paired McNemar discordances $(b, c)$ on the `14,287` full DEV and `3,847` `P_succ` rows, upload sealed artifacts to `caseyallard/uor-r4-store`, and bring the pod down.
+3. Record the paired `Route` and `Flock` read-on vs read-off vs permuted results in `docs/labs/r-read-off-vs-read-on/README.md` and `docs/research/notebook/m1-discrete-attention.md`, set `status: done` on `docs/roadmap/items/r-read-off-vs-read-on.md` (`Closes #2885`), and re-render `docs/roadmap/README.md`.
 
 ## Cancel probe (run first)
 
 Ran on base `db2770a2d`:
-1. `uor-harness prep list | grep r-read-off-vs-read-on` -> `PENDING docs/harness/prep/r-read-off-vs-read-on-DRAFT-2026-10-23.md` (**classification: `instrument`**, pre-registration sheet awaits D68 registration, non-author `TEST FITNESS: FIT`, and D67 pre-run review).
-2. `CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/target/antigravity ~/.cargo/bin/cargo test --no-fail-fast --locked -p uor-r4-discrete --test read_off_ablation_controls` -> `7 passed; 0 failed` (`C1`–`C7`, **classification: `instrument`**, all 7 host controls and 10 zero-update configs pass).
-3. `scripts/pod/uor-pod status` -> `Running: 0 pod(s) (0 of 4), $0/h of $8.00/h; 5090: 4 offers, cheapest $0.908/h` (**classification: `instrument`**, fleet caps clear).
+1. `uor-harness prep list | grep r-read-off-vs-read-on` -> `PENDING` (**classification: `instrument`**, sheet awaits D68 registration, non-author `FIT`, and D67 pre-run review).
+2. `CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/target/antigravity ~/.cargo/bin/cargo test --no-fail-fast --locked -p uor-r4-discrete --test read_off_ablation_controls` -> `7 passed; 0 failed` (`C1`–`C7`, **classification: `instrument`**).
+3. `scripts/pod/uor-pod status` -> `0/4 pods, $0/h of $8.00/h; 5090: 4 offers from $0.908/h` (**classification: `instrument`**).
 
 ## Plan (more than 3 files expected)
 
