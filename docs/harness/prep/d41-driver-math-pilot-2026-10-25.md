@@ -12,7 +12,7 @@ Does one local, offline execution of the owner-confirmed open-weight donor `open
 3. binds a complete cryptographic generation receipt (donor repo, commit revision, MXFP4 shard SHA-256s, engine version, prompt-set SHA-256, seed, sampling parameters, pod ID, UTC window, per-shard SHA-256s, and Merkle root) verified by round-trip readback from `caseyallard/uor-r4-store` before pod teardown (D41 item 2(b)); and
 4. measures end-to-end generation throughput (`tokens/s`) and cost (`<= $2.50` for `1,048,576` tokens) so the full `distill-d1` corpus (#2857) is sized before production dispatch?
 
-## 2. Arms (defined exactly)
+## 2. Arms, steps, and minimum test power (defined exactly)
 
 | Arm | Definition | Target tokens | Output contract |
 |---|---|---:|---|
@@ -39,7 +39,7 @@ Does one local, offline execution of the owner-confirmed open-weight donor `open
 3. **`C-Tamper` (negative control):** Flip 1 bit in shard 0 of a synthetic bundle; round-trip Merkle verification must exit non-zero.
 4. **`DeterminismCanary_64`:** Verify `pass_a` and `pass_b` produce valid `u16` token IDs in `0..4096` and record exact token-ID match rate (`>= 99.0%` required at `temperature = 0`).
 
-## 5. Data, qualified driver-math prerequisites, and pins
+## 5. Base artifact, data split, qualified driver-math prerequisites, and pins
 
 - **Qualified driver-math parity baseline (first half of D41 item 3, PASS on CUDA):**
   - Row-parallel counterfactual parity (`docs/labs/counterfactual-rows-parity-2026-10-18/evidence/attempt3/rows-parity.json`, SHA-256 `be44d32ec5009055b5ad5dbc9a6f4de0e172e7b0be0d67ede90f32f08b33d70d`; `attempt4/rows-parity.json`, SHA-256 `fedd5c6fde77326e3152c924e88d71c2d80d911ff55254921eb188a57e3df340`).
