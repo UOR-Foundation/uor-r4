@@ -8,7 +8,7 @@
 
 Do the two declared geometric secant surrogates — (A) `rate_select_bwd` on the 16-entry dyadic fade/keep table (`crates/uor-r4-training/src/cuda_stack.cu:259-291`, `geometric_stack_native.rs:1469-1555`) for `RecGates::Geometric`, and (B) `spiralcore_fbs_bwd` on the 16-root $E_8$ anchor orbit and base-3 FBS binder tree (`crates/uor-r4-training/src/spiralcore_fbs.cu:124-183`, `spiralcore_fbs.rs`) for `QuaternionWeights::SpiralcoreFbs` — produce genuine loss descent under `Objective::MarginHinge { rivals: 64 }` across two seeds (`seed in {1, 2}`), beating both a zero-credit frozen-gate/query control and a matched-norm random-sign surrogate control once step-size and table-plateau instrument faults are ruled out?
 
-## 2. Mechanisms and arms (defined exactly)
+## 2. Mechanisms, arms, steps, and minimum test power (defined exactly)
 
 Both tests run on a leased `uor-pod` RTX 5090 inside the separate scanned D37 module `crates/uor-r4-float-train` (#2823) at the rung-0 micro-probe shape (`width = 256`, `batch = 4`, `context = 192`, `vocab = 4096`, `Objective::MarginHinge { rivals: 64 }`, `Gate::Hamilton`, `256` optimizer steps on the pinned 64-batch / 256-row diagnostic slice of `ft/train/tokens.u16`, seeds `1` and `2`, zero softmax/squashing/matmul):
 
@@ -47,7 +47,7 @@ Let $L_t^{(a,s)}$ be the 256-row `MarginHinge(rivals=64)` loss of arm $a$ on see
 | `G-Rec-Descent` | On both seeds $s \in \{1, 2\}$: $L_{256}^{(\text{RecSecant},s)} < L_0^{(\text{RecSecant},s)}$ AND $L_{256}^{(\text{RecSecant},s)} \le \min\big(L_{256}^{(\text{RecZero},s)}, L_{256}^{(\text{RecRand},s)}\big) - \Delta_{\text{noise,Rec}}$ | Unblocks [`recurrence-gates-six-recurrence-fit`](../../roadmap/items/recurrence-gates-six-recurrence-fit.md) (#2890) and [`hamilton-gate-offline-float-sheet`](../../roadmap/items/hamilton-gate-offline-float-sheet.md) (#2824). | Closes the 1-step ($1/16$) neighbour secant configuration (`CHARTER.md` §4.1); holds `#2890` and `#2824` until a multi-step secant or discrete counterfactual rate selector is substituted. |
 | `G-Fbs-Descent` | On both seeds $s \in \{1, 2\}$: $L_{256}^{(\text{FbsSecant},s)} < L_0^{(\text{FbsSecant},s)}$ AND $L_{256}^{(\text{FbsSecant},s)} \le \min\big(L_{256}^{(\text{FbsZero},s)}, L_{256}^{(\text{FbsRand},s)}\big) - \Delta_{\text{noise,Fbs}}$, with step-256 route flip rate $< 0.50$ | Unblocks [`spiralcore-fbs-offline-float-sheet`](../../roadmap/items/spiralcore-fbs-offline-float-sheet.md) (#2891). | Closes the unnormalized root-edge secant configuration (`CHARTER.md` §4.1); holds `#2891` and keeps SpiralCore/FBS on the ACTIVE discrete counterfactual path (`crates/uor-r4-discrete`). |
 
-## 5. Data, checkpoints, and pins
+## 5. Base artifact, data split, checkpoints, and pins
 
 - **Training slice:** First `256` rows (`64` batches of `4` rows, `context = 192`) of `ft/train/tokens.u16` (SHA-256 `61f2d987b33a7dbac9ebfc15c99f24a25e947110dc7883a6703ab66389566bd6`) and `ft/train/response_mask.u8` (SHA-256 `e85b832a8531b606794cb0f2d904259516368952408c0949fb89f4e935721087`), tokenized with `d36d3e8707d6338641512926780299c2f0c4132833c708e882b1518d718b2798` (`vocab_size = 4096`).
 - **Source module:** Must run inside `crates/uor-r4-float-train` (#2823) with its own scanned allowlist entry (`CHARTER.md` §3.7, D37 item 6) and `cargo tree -p uor-r4-float-train` verified free of `uor-r4-training`.
