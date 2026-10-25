@@ -8,7 +8,7 @@ The item's done-when reads:
 
 > Read binding trained on a Flock or Relation read reports wrong-value errors on the same 120-item panel against the unbound read over 3 seeds.
 
-This unit prepares the lawful discrete formulation (`DiscreteReadBindingHingeV1`) porting read-binding supervision (`docs/mechanisms/read-binding.md`, `archive/labs/read-binding-powered-2026-10-11/README.md`) to `Flock` (`MODE_FLOCK = 1`, `s[8] = 1`) and `Relation` (`MODE_RELATION = 2`, `s[8] = 2`) in `crates/uor-r4-discrete/src/discrete.cu`, authors the pre-registration sheet (`docs/harness/prep/read-binding-on-lawful-read-2026-10-25.md`) and mechanism specification (`docs/labs/read-binding-on-lawful-read/README.md`), runs a fresh-context `TEST FITNESS: FIT` review (CHARTER §4.5) and `D68` decision review (CHARTER §5.1) to classify the item (`status: held` until `#2836` `m1-bvg-k-stage-t-training` and `#2844` `m1-trunk-assembly-and-training` complete and `crates/uor-r4-discrete/**` is free), and logs the owner review on `#2889`.
+This unit prepares `DiscreteReadBindingHingeV1` porting read-binding supervision (`docs/mechanisms/read-binding.md`, `archive/labs/read-binding-powered-2026-10-11/README.md`) to `Flock` (`MODE_FLOCK = 1`, `s[8] = 1`) and `Relation` (`MODE_RELATION = 2`, `s[8] = 2`) in `crates/uor-r4-discrete/src/discrete.cu`, authors `docs/harness/prep/read-binding-on-lawful-read-2026-10-25.md` and `docs/labs/read-binding-on-lawful-read/README.md`, runs a fresh-context `TEST FITNESS: FIT` review (CHARTER §4.5) and `D68` decision review (CHARTER §5.1) to set `status: held` until `#2836` (`m1-bvg-k-stage-t-training`) and `#2844` (`m1-trunk-assembly-and-training`) complete, and logs the owner review on `#2889`.
 
 ## Cancel probe (run first)
 
