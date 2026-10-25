@@ -8,6 +8,7 @@ References #2851. References #2030.
 - **The item could not reach its done-when in this unit.** Its last clause, a non-author FIT, waits on two other items. The sheet's `NOT_FIT` (`antigravity-33`) needs the separate D29-scanned float module (`float-training-module`, #2823) and the D11 float-trunk exporter (`d11-exporter-float-trunk`, #2820) wired into its steps. Neither exists. So this unit gives the item those two dependencies rather than a FIT that would be NOT_FIT again.
 - **`loop next` kept offering this item as GO,** ranked by how many items it unblocks (8). But its `depends_on: []` hid the blockers, so every lab that took it would reach the same wall.
 - **My first ORDER listed the export-gap band as still to register.** It was already registered at the sheet's line 29 by the PM cover on 24 Oct. The ORDER is corrected, and this unit adds no band.
+- **An advisory scope WARN (D76).** `loop pr-check` allows only an item's status line by default, and this unit also edits the item's `depends_on` and text and re-renders the roadmap page. Earlier units (claude-91, claude-93) routed such edits through the umbrella item. Here they ride with the unit whose finding they record, and the decision review covers them.
 - **No notebook row.** This unit re-verifies pins and changes a dependency. It measures nothing, and the item names no `notebook:` page.
 
 ## What changed
