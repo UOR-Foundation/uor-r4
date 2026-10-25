@@ -1,0 +1,73 @@
+name: branch cleanup
+
+# Deletes merged PR branches, because the repository keeps them (delete_branch_on_merge is off and
+# nobody here can change it). A branch is deleted only when its tip still equals the merged PR's
+# final head, so a push made after the merge is never lost. Unmerged branches are listed, never
+# deleted. (#3175, owner 25 Oct 2026)
+
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  merged-head:
+    name: delete the merged PR's branch
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete the head branch if it is still at the merged head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -uo pipefail
+          case "$BRANCH" in main|gh-pages|gh-pages-preview) echo "kept: $BRANCH is protected"; exit 0;; esac
+          tip=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${BRANCH}" --jq .object.sha 2>/dev/null || true)
+          if [ -z "$tip" ]; then echo "already gone: $BRANCH"; exit 0; fi
+          if [ "$tip" != "$HEAD_SHA" ]; then
+            echo "::warning::kept $BRANCH: its tip $tip moved after the merged head $HEAD_SHA"
+            exit 0
+          fi
+          gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${BRANCH}" && echo "deleted: $BRANCH"
+
+  sweep:
+    name: sweep merged branches, list the rest
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete merged PR branches still on the remote; list every other branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          {
+            echo "### Branch sweep"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/branches?per_page=100" --jq '.[] | "\(.name) \(.commit.sha)"' > branches.txt
+          gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 500 --json headRefName --jq '.[].headRefName' | sort -u > open-heads.txt
+          gh pr list --repo "$GITHUB_REPOSITORY" --state merged --limit 1000 \
+            --json headRefName,headRefOid,isCrossRepository \
+            --jq '.[] | select(.isCrossRepository | not) | "\(.headRefName) \(.headRefOid)"' > merged-heads.txt
+          deleted=0; kept=0
+          while read -r name sha; do
+            case "$name" in main|gh-pages|gh-pages-preview) continue;; esac
+            grep -Fqx -- "$name" open-heads.txt && continue
+            if grep -Fqx -- "$name $sha" merged-heads.txt; then
+              if gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${name}"; then
+                echo "- deleted \`$name\` (merged PR head)" >> "$GITHUB_STEP_SUMMARY"; deleted=$((deleted + 1))
+              fi
+            else
+              echo "- kept \`$name\` (no open PR, not at a merged PR head): review it" >> "$GITHUB_STEP_SUMMARY"; kept=$((kept + 1))
+            fi
+          done < branches.txt
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "deleted $deleted, kept $kept for review" | tee -a "$GITHUB_STEP_SUMMARY"
