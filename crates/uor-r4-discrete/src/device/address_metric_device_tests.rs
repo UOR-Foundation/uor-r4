@@ -111,6 +111,10 @@ fn device_admission_matches_the_host_oracles_for_each_metric() -> Result<()> {
         AddressMetric::FullVectorCellL1V1,
     ] {
         let model = patterned_model(metric)?;
+        // The evaluation path (row metrics and aggregation, with its hinge range
+        // contract) accepts every metric: G-Q's second pod run found two-scale's
+        // raw hinge refused there with status 12.
+        model.evaluate(&model.carry(&ids)?, &targets)?;
         let forward = model.forward(&model.carry(&ids)?, &targets)?;
         let table = model.snapshot()?.table;
         let queries = forward.vectors()?;
