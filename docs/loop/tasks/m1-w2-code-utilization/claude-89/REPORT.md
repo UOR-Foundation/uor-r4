@@ -22,11 +22,16 @@ References #3179 (the item stays `ready`; the diagnostic's run is the next unit)
   - A2 is reworded as a failure to detect.
   - C1 is softened to "one input favouring".
   - An underpowered A_T-against-A_U pair gives "A1, unsplit" instead of making all of QA UNDERPOWERED.
+- **The exact-head review at `776b2d8c1` found that the post-FIT "unsplit" reading was itself ambiguous** (APPROVE, two should-fix items).
+  - That reading had no row and no "Next". It is now row A1u, and A1a and A1b say "powered", so the four A1 rows stay disjoint.
+  - Read literally, precedence 1 could void QA through the A_T-against-A_U pair even when A2 or A3 fired. That pair is now decisive only when A_T beats A_W.
+  - Its two nits are also in: the resubstitution top-1 is defined, which the leave-one-out bound needed, and the sidecar's path is given as `w2-out-b/`.
+  - None of this changes a threshold or any outcome's routing.
 - **`loop next` does not name this item first today.** It offers one item per call, ranked by milestone, then unblock count, then id. This item and `m1-address-as-read` are both M1 with 0 unblocks, so `m1-address-as-read` wins on id. The item is in the claimable set (ready, scoped, its only dependency done, read from `origin/main`). It is offered once the items ranked above it are taken, or sooner if a later decision makes another item depend on it.
 
 ## What changed
 
-Size: docs 3 files (+303/−0: the sheet 185, the ORDER 43, this REPORT 75); code 0; tests 0. The one advisory WARN on the first push (rule-sources, D76, on the heading `## Stop rule`) is cleared by naming that block `## Stop conditions`; the prep shape rule needs only "stop" in the heading.
+Size: docs 3 files (+309/−0: the sheet 186, the ORDER 43, this REPORT 80); code 0; tests 0. The one advisory WARN on the first push (rule-sources, D76, on the heading `## Stop rule`) is cleared by naming that block `## Stop conditions`; the prep shape rule needs only "stop" in the heading.
 
 - `docs/harness/prep/m1-w2-code-utilization-2026-10-25.md` (new, 185 lines). It contains:
   - the question, and QA, QB and QC;
