@@ -1,4 +1,4 @@
-# ORDER: m1-w2-code-utilization, claude-94 (build and run the code-utilization instrument)
+# ORDER: m1-w2-code-utilization, claude-95 (build and run the code-utilization instrument)
 
 Lab: claude. Item: [m1-w2-code-utilization](../../../../roadmap/items/m1-w2-code-utilization.md) (#3179). Base: `61d6cb0f3`.
 deps: the new standalone `docs/labs/m1-w2-code-utilization/instrument/Cargo.lock`. Its dependencies are the path crate `uor-r4-discrete` and the `serde`, `serde_json` and `sha2` crates the workspace already uses. This follows the item rule from claude-93 (#3184, review record of 0915d3ed6) and the precedent `docs/labs/m2-fresh-heldout-panel/instrument/`.
