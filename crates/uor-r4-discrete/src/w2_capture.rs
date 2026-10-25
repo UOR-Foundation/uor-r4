@@ -564,7 +564,7 @@ mod gpu {
         }
         wall.gate_r = elapsed_ms(&clock);
         eprintln!(
-            "w2-capacity: Gate R passed over {rows_compared} rows in {:.1}s",
+            "w2-capacity: Gate R passed over {rows_compared} rows in {} ms",
             wall.gate_r
         );
 
