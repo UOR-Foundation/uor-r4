@@ -3,6 +3,7 @@
 //! the pinned `fd409fcdf3bc43d607e768bae6f8cf403aa75901` `discrete-stack` binary.
 
 #![forbid(unsafe_code)]
+#![deny(warnings, clippy::all)]
 
 use serde_json::{json, Value};
 use std::fs::{self, OpenOptions};
