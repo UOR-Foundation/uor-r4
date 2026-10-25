@@ -15,7 +15,7 @@
   - `driver_source_sha256`: `31789abea8b955cb0e137257fc9e8b3e5eb42865fec7728396fa377c9d4228ea`
 - **Pod & Spend:** `vast-57627077` (`2 x NVIDIA GeForce RTX 5090`, driver `580.95.05`, CUDA `12.8`, `$2.021/h`, leased `2026-10-25T06:59:51Z` to `2026-10-25T07:47:56Z`, `~48 min`, cost proxy `~$1.62`, `0` pods left running)
 - **HF Store Custody:** `caseyallard/uor-r4-store:results/antigravity/a8-full-dose-rerun-2026-10-25/`
-  - `a8-full-dose-rerun-20261025.tar.gz`: SHA-256 `4a744188f14c934f89e57a1be83ecc8f2cb211620290a6539217837f809bae55` (`34,897,077` B, commit `8618073cc44138aa823ad82314916c7624d72722`)
+  - `a8-full-dose-rerun-20261025.tar.gz`: SHA-256 `4a744188f14c934f89e57a1be83ecc8f2cb211620290a6539217837f809bae55` (`34,667,622` B, commit `8618073cc44138aa823ad82314916c7624d72722`)
   - `SHA256SUMS`: SHA-256 `ae90a8191475e3d0b77db484b658f6a3de6e6cd9facf03b8c354cbdef14cd119` (commit `dc22e9dbf664d49c35ba5ececc5b7ad1e434dd81`)
 - **Committed Verification Summary:** [`dose-summary.json`](dose-summary.json) (SHA-256 `daad45e0c165472465823c7e22b0ba8e7832a7570fa4b1fea9ff8b03d9fec3c2`, generated and verified by `a8-qualify-stage verify-dose`)
 
@@ -40,7 +40,7 @@ Both arms ran in parallel (`CUDA_VISIBLE_DEVICES=0` for `Relation`, `CUDA_VISIBL
 | **Q1 DEV `b_3(P_succ)` / `b_3(Full)`** | — | **`1,106 / 3,847`** (`>= 676 = ceil(1,351 / 2)` and `>= 500`; vs `857` in ungated `#2831` parent), **`4,292 / 14,287`** (`+48` over initial `4,244`) |
 | **Q1 DEV `top1_correct` / `top8_correct`** | — | **`871 / 14,287`** (`+738` over initial `133`, `6.55x`), **`1,455 / 14,287`** |
 | **Terminal Status & Reason** | `STOP_FOR_DIAGNOSIS` (`["consecutive_rejections"]`) | `STOP_FOR_DIAGNOSIS` (`["consecutive_rejections"]`) |
-| **Completed Attempted Batches** | `1,600 / 16,404` (`25` intervals audited, `5` rejected) | `5,248 / 16,404` (`82` intervals audited, `15` rejected) |
+| **Completed Attempted Batches** | `1,600 / 16,404` (`25` interval audits, `audits_count = 26`, `5` rejected) | `5,248 / 16,404` (`82` interval audits, `audits_count = 83`, `15` rejected) |
 | **Committed Accepted Updates (`epoch`)** | `132` (`82` vector, `28` combine, `22` relation) | `274` (`190` vector, `84` combine, `0` relation; `356` policy-refused) |
 | **Rejected Provisional Updates (Rolled Back)** | `33` (`12` vector, `14` combine, `7` relation) across `5` intervals | `74` (`31` vector, `43` combine, `0` relation) across `15` intervals |
 | **Sensitive Proposals (`[vector, combine, relation]`)** | `[202, 99, 42]` | `[478, 300, 182]` |
@@ -52,7 +52,7 @@ Both arms ran in parallel (`CUDA_VISIBLE_DEVICES=0` for `Relation`, `CUDA_VISIBL
 
 ## 2. Q1 (`4,096` Batches) Proof on `FrozenZero`
 
-In the ungated A8 run of 19 October (`docs/labs/a8-dose-2026-10-19/README.md`), `b_3(P_succ)` eroded from `1,351 / 3,847` to `551` (`Relation`) and `857` (`FrozenZero`) by `Q1` (`4,096` batches). Under the active whole-interval rejection gate (`D40`), `FrozenZero` reached `Q1` (`4,096` batches, `epoch = 258`, after rolling back `7` individual breaching intervals between batches `1,472` and `3,776`) with:
+In the ungated A8 run of 19 October (`docs/labs/a8-dose-2026-10-19/README.md`), `b_3(P_succ)` eroded from `1,351 / 3,847` to `551` (`Relation`) and `857` (`FrozenZero`) by `Q1` (`4,096` batches). Under the active whole-interval rejection gate (`D40`), `FrozenZero` reached `Q1` (`4,096` batches, `epoch = 258`, after rolling back `8` individual breaching intervals between batches `1,472` and `3,776`) with:
 
 - **TRAIN anchor `b_3(P_succ)` at batch `4,096`:** `1,258 / 3,847` (`+47` rows above the initial `1,211 / 3,847` baseline, `+71` rows above the `1,187` floor).
 - **DEV `b_3(P_succ)` at batch `4,096` (`q1-dev.json`, SHA-256 `6b924afa04103467814b6c71773f7df2c7e6df342f045d83434d3dafe8372943`):** **`1,106 / 3,847`** (`+249` rows above the ungated `FrozenZero` Q1 score of `857`, and well above both Q1 bars `ceil(1,351 / 2) = 676` and `500`).

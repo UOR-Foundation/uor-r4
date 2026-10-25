@@ -1545,6 +1545,95 @@ fn run_stage_dose(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+fn read_dose_pinned_or_rebased(pin: &FilePin, arm_out_dir: &Path) -> Result<Vec<u8>, String> {
+    let dose_root = arm_out_dir.parent().unwrap_or(arm_out_dir);
+    let candidate = if pin.path.exists() {
+        pin.path.clone()
+    } else if let Ok(rel) = pin.path.strip_prefix("/workspace/a8-dose") {
+        let stripped = dose_root.join(rel);
+        if stripped.exists() {
+            stripped
+        } else {
+            let in_arm = arm_out_dir.join(rel);
+            if in_arm.exists() {
+                in_arm
+            } else if let Some(name) = pin.path.file_name() {
+                arm_out_dir.join(name)
+            } else {
+                stripped
+            }
+        }
+    } else if let Some(name) = pin.path.file_name() {
+        arm_out_dir.join(name)
+    } else {
+        pin.path.clone()
+    };
+    let bytes = read_bytes(&candidate)?;
+    let actual = sha256(&bytes);
+    if actual != pin.sha256 {
+        return Err(format!(
+            "{}: sha256 {actual} != expected {}",
+            candidate.display(),
+            pin.sha256
+        ));
+    }
+    Ok(bytes)
+}
+
+fn summarize_dose_arm(
+    arm: &str,
+    rep: &Value,
+    pin: &FilePin,
+    arm_dir: &Path,
+) -> Result<Value, String> {
+    let audit_arr = rep["audits"]
+        .as_array()
+        .ok_or_else(|| format!("{arm} report missing audits array"))?;
+    for item in audit_arr {
+        let audit_pin: FilePin =
+            serde_json::from_value(item.clone()).map_err(|e| format!("{arm} audit pin: {e}"))?;
+        read_dose_pinned_or_rebased(&audit_pin, arm_dir)
+            .map_err(|e| format!("{arm} audit file: {e}"))?;
+    }
+    let record_arr = rep["records"]
+        .as_array()
+        .ok_or_else(|| format!("{arm} report missing records array"))?;
+    let mut rejected_intervals = 0usize;
+    for item in record_arr {
+        let rec_pin: FilePin =
+            serde_json::from_value(item.clone()).map_err(|e| format!("{arm} record pin: {e}"))?;
+        let rec_bytes = read_dose_pinned_or_rebased(&rec_pin, arm_dir)
+            .map_err(|e| format!("{arm} record file: {e}"))?;
+        let rec_val: Value = serde_json::from_slice(&rec_bytes)
+            .map_err(|e| format!("{arm} record json {}: {e}", rec_pin.path.display()))?;
+        if rec_val["kind"]["kind"] == "interval" && rec_val["kind"]["record"]["rejected"] == true {
+            rejected_intervals += 1;
+        }
+    }
+    Ok(json!({
+        "report_sha256": pin.sha256,
+        "status": rep["status"],
+        "scope": rep["scope"],
+        "admission_sha256": rep["admission_sha256"],
+        "completed_batches": rep["completed_batches"],
+        "committed_accepted_updates": rep["committed_accepted_updates"],
+        "counters": rep["counters"],
+        "stop_reasons": rep["stop_reasons"],
+        "records_count": record_arr.len(),
+        "audits_count": audit_arr.len(),
+        "rejected_intervals": rejected_intervals,
+        "baseline_b3": rep["baseline_b3"]["psucc"],
+        "baseline_full_b3": rep["baseline_b3"]["full"],
+        "q1_decision": rep["q1"]["decision"],
+        "final_dev_psucc": rep["final_dev"]["b3"]["psucc"],
+        "final_dev_full": rep["final_dev"]["b3"]["full"],
+        "relation_off_psucc": rep["relation_off"]["b3"]["psucc"],
+        "relation_off_full": rep["relation_off"]["b3"]["full"],
+        "fresh_transfer": rep["fresh_transfer"],
+        "elapsed_ns": rep["elapsed_ns"],
+    }))
+}
+
 fn run_verify_dose(args: &[String]) -> Result<(), String> {
     let [f1, rel_out, f2, fz_out, f3, summary_out] = args else {
         return Err(
@@ -1589,50 +1678,8 @@ fn run_verify_dose(args: &[String]) -> Result<(), String> {
         ));
     }
 
-    let summarize_arm = |rep: &Value, pin: &FilePin| -> Value {
-        let records = rep["records"].as_array().map(Vec::len).unwrap_or(0);
-        let audits = rep["audits"].as_array().map(Vec::len).unwrap_or(0);
-        let rejected_intervals = rep["records"]
-            .as_array()
-            .map(|arr| {
-                arr.iter()
-                    .filter(|r| {
-                        read_json::<Value>(Path::new(r["path"].as_str().unwrap_or("")))
-                            .ok()
-                            .is_some_and(|v| {
-                                v["kind"]["kind"] == "interval"
-                                    && v["kind"]["record"]["rejected"] == true
-                            })
-                    })
-                    .count()
-            })
-            .unwrap_or(0);
-        json!({
-            "report_sha256": pin.sha256,
-            "status": rep["status"],
-            "scope": rep["scope"],
-            "admission_sha256": rep["admission_sha256"],
-            "completed_batches": rep["completed_batches"],
-            "committed_accepted_updates": rep["committed_accepted_updates"],
-            "counters": rep["counters"],
-            "stop_reasons": rep["stop_reasons"],
-            "records_count": records,
-            "audits_count": audits,
-            "rejected_intervals": rejected_intervals,
-            "baseline_b3": rep["baseline_b3"]["psucc"],
-            "baseline_full_b3": rep["baseline_b3"]["full"],
-            "q1_decision": rep["q1"]["decision"],
-            "final_dev_psucc": rep["final_dev"]["b3"]["psucc"],
-            "final_dev_full": rep["final_dev"]["b3"]["full"],
-            "relation_off_psucc": rep["relation_off"]["b3"]["psucc"],
-            "relation_off_full": rep["relation_off"]["b3"]["full"],
-            "fresh_transfer": rep["fresh_transfer"],
-            "elapsed_ns": rep["elapsed_ns"],
-        })
-    };
-
-    let rel_sum = summarize_arm(&rel_rep, &rel_report_pin);
-    let fz_sum = summarize_arm(&fz_rep, &fz_report_pin);
+    let rel_sum = summarize_dose_arm("relation", &rel_rep, &rel_report_pin, rel_dir)?;
+    let fz_sum = summarize_dose_arm("frozen_zero", &fz_rep, &fz_report_pin, fz_dir)?;
 
     let both_complete = rel_rep["status"] == "COMPLETE_PENDING_REGISTERED_DISCRIMINATOR"
         && fz_rep["status"] == "COMPLETE_PENDING_REGISTERED_DISCRIMINATOR";
@@ -1989,5 +2036,69 @@ mod tests {
             fz["fresh_transfer"]["status"],
             "SEALED_PENDING_PAIRED_DEV_DECISION"
         );
+    }
+
+    #[test]
+    fn verify_dose_rebases_pod_paths_and_fails_on_missing_or_tampered_records() {
+        let tmp =
+            std::env::temp_dir().join(format!("a8-verify-dose-rebase-test-{}", std::process::id()));
+        let rel_out = tmp.join("relation-out");
+        let run_state = tmp.join("run-state-relation");
+        ensure_dir_mode(&rel_out, 0o700).expect("rel_out");
+        ensure_dir_mode(&run_state, 0o700).expect("run_state");
+
+        let audit_pin = write_json_pin(
+            &run_state.join("anchor-00064.json"),
+            &json!({"evaluation": {"aggregate": {"target_admitted_rows": 1186}}}),
+            0o600,
+        )
+        .expect("audit_pin");
+        let rec_pin = write_json_pin(
+            &run_state.join("interval-00064.json"),
+            &json!({"kind": {"kind": "interval", "record": {"rejected": true}}}),
+            0o600,
+        )
+        .expect("rec_pin");
+
+        let rep = json!({
+            "schema": "uor-r4.attention-audit-report/1",
+            "status": "STOP_FOR_DIAGNOSIS",
+            "scope": "relation",
+            "admission_sha256": "abc",
+            "completed_batches": 64,
+            "committed_accepted_updates": 0,
+            "counters": [
+                {"committed_applied": 0, "provisional_applied": 0, "rejected_applied": 0, "policy_refused": 0},
+                {"committed_applied": 0, "provisional_applied": 0, "rejected_applied": 0, "policy_refused": 0},
+                {"committed_applied": 0, "provisional_applied": 0, "rejected_applied": 0, "policy_refused": 0}
+            ],
+            "stop_reasons": ["consecutive_rejections"],
+            "audits": [{
+                "path": "/workspace/a8-dose/run-state-relation/anchor-00064.json",
+                "sha256": audit_pin.sha256
+            }],
+            "records": [{
+                "path": "/workspace/a8-dose/run-state-relation/interval-00064.json",
+                "sha256": rec_pin.sha256
+            }],
+            "baseline_b3": {"psucc": {"rows": 3847, "target_admitted": 1351}, "full": {"rows": 14287, "target_admitted": 4244}},
+            "q1": null,
+            "final_dev": null,
+            "relation_off": null,
+            "fresh_transfer": {"evaluations": 0, "status": "SEALED_PENDING_PAIRED_DEV_DECISION"},
+            "training_other_scopes": "HELD",
+            "elapsed_ns": "1000"
+        });
+        let rep_pin = write_json_pin(&rel_out.join("report.json"), &rep, 0o600).expect("rep_pin");
+        let sum = summarize_dose_arm("relation", &rep, &rep_pin, &rel_out)
+            .expect("rebased summarize_dose_arm passes");
+        assert_eq!(sum["rejected_intervals"], 1);
+        assert_eq!(sum["audits_count"], 1);
+        assert_eq!(sum["records_count"], 1);
+
+        fs::remove_file(run_state.join("interval-00064.json")).expect("remove interval");
+        assert!(summarize_dose_arm("relation", &rep, &rep_pin, &rel_out).is_err());
+
+        fs::remove_dir_all(&tmp).expect("cleanup temp dir");
     }
 }

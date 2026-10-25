@@ -6,7 +6,7 @@
 - **Base Sheet**: `docs/harness/prep/m1-attention-admission-preserving-DRAFT-2026-10-19.md` (`FIT_SHEET_SHA256 = fcb770e66d38f607d25e16dade14ac7a6223dd8af0ccc9ec22c80db71f2c3450`)
 - **Stage 1 Qualification Evidence**: `docs/labs/m1-a8-finite-cuda-qualification/qualification-summary.json` (`#2830`, PR `#3180`, merged as `98424f353dd9c4bc733f781fda4e0603092b0764`; HF store `caseyallard/uor-r4-store:results/antigravity/a8-finite-cuda-qual-2026-10-25/a8-finite-cuda-qual-20261025.tar.gz`, `sha256 = a9c1228bc508eb12f61a82b35dd2f18722edee64bb1da4270a1fe37a01a2b2b6`)
 
-## 1. Question
+## 1. Question and Base Artifact
 
 Does the registered 64-batch whole-interval admission-preserving rejection controller (`AuditPolicy::registered()`: `cadence = 64`, `margin = 24`, `minimum_baseline = 500`, `reject_whole_interval = true`, `consecutive_full_rejections = 3`, `audits_per_arm = 258`, `max_batches = 16,404`) evaluated on the frozen `3,847`-row TRAIN admission anchor (`A_train`) preserve `target_admitted_rows(DEV)` (`G-Adm`, M1 bar (b): `>= 4,220 / 14,287`) and yield a paired DEV verdict on the registered active-leaf `Relation` (`LearnV1`, seed 1) versus `FrozenZero` (`FrozenZeroV1`, seed 1) comparison, or trigger a registered diagnostic stop (`RULE_EFFECTIVELY_NOOP` or `Q1_STOP_FOR_DIAGNOSIS`) while keeping the fresh V2 transfer slice sealed (`fresh_evaluations == 0`)?
 
@@ -19,7 +19,7 @@ In `#2830`, all 5 Stage 1 CUDA finite qualification controls (`canonical_initloc
 
 The 19 Oct `15%` relative ratio was calibrated before the `rows_v1` device-resident batch table (`D30`), when two-arm ungated training took `~43,000 s` (`~$11.40`) and `15%` gate overhead was `~6,450 s` (`~$1.71`). Because `rows_v1` sped up ungated training `6.8x` (`6,309.72 s`), the **entire worst-case audited two-arm workload (`6,309.72 s + 4,947.75 s = 11,257.47 s = 3.13 GPU-hours`, `~$2.84` on RTX 5090)** is smaller than the 19 Oct sheet's `$1.71` (`6,450 s`) gate allowance alone and `4x` below its `$11.40` budget. Lowering `cadence` from `64` to `512` would test a weaker controller (`8x` longer un-audited drift windows), whereas replanning the post-`rows_v1` readiness bound to `projected_added_gate_ns <= 5,500,000,000,000 ns` (`5,500 s`) and `R <= 85%` (`8,500 bps`) tests the exact registered `64`-batch scientific law (`AuditPolicy::registered()`) unchanged.
 
-## 3. Arms (Unchanged from Base Sheet)
+## 3. Arms, Data Split, and Steps (Unchanged from Base Sheet)
 
 | Arm | Config Path & SHA-256 | Policy | Seed | Schedule |
 |---|---|---|---|---|
@@ -27,7 +27,7 @@ The 19 Oct `15%` relative ratio was calibrated before the `rows_v1` device-resid
 | `A_fz_adm` (`FrozenZero`) | `docs/labs/a8-training-configs-2026-10-19/evidence/a8-frozen-zero-seed1.json` (file `cf7ebcc85d2e463ae8f6691b63d90a0e005701cb38b8249a8d0d5460d8508479`, `config_sha256 = c3fbffe08d13008b8b7ab400a4ef946f2c49632906d88e431d5e80314b9f5536`, `lineage_sha256 = e4c3efc99f51bc3eb4c13844cc3e7dc12e9e42d32a2cde39603e6052d649e79a`) | `ReadSpec::Relation { active_leaves: 8, candidates_per_leaf: 8 }`, `RelationLearningPolicy::FrozenZeroV1`, `AuditPolicy::registered()` | `1` | Identical data order, parameter schedule, and `AuditPolicy::registered()` |
 | Count-table baselines | `CHARTER §4.8` on `14,287` DEV rows | Unigram: `1,226 / 14,287`; `T2` successor: `6,300 / 14,287`; `P_succ` (`3,847` rows) reference top-1: `194 / 3,847` (`G-Cap = 1,351 - 194 = 1,157 > 500`) | Deterministic | Zero-parameter count-table comparators |
 
-## 4. Bars, Instrument Checks, and Decision Table
+## 4. Bars, Minimum Test Power, Instrument Checks, and Decision Table
 
 - **Noise Floor & Paired Contrast Bar**: McNemar `SE = 24` rows on `3,847`-row `A_train` / `P_succ`. Paired DEV win requires `top1_correct(A_rel_adm) - top1_correct(A_fz_adm) >= max(77, ceil(2 * sqrt(n_10 + n_01)))` on `P_succ` (`3,847` rows) or `>= max(286, ceil(2 * sqrt(n_10 + n_01)))` on full DEV (`14,287` rows).
 - **Admission Preservation Bars (`G-Adm`, M1 bar (b))**:
@@ -63,8 +63,19 @@ The 19 Oct `15%` relative ratio was calibrated before the `rows_v1` device-resid
   - `host-metadata-bookkeeping/measurement.json`: `95c64e51c67504cb1c2d1382b698fd5df5d249c07439cb20068754c311b8d301`
   - `synthetic-control.json`: `69eb5866e3e66d658602a463ff236a2f59647347764a97e569ada86b17f762ea`
 
-## 6. Compute Cost & Stop Rule
+## 6. Compute Cost and Stop Conditions
 
 - **Pod**: `2x NVIDIA GeForce RTX 5090` (or `1x RTX 5090`) leased via `scripts/pod/uor-pod` inside the 4-pod and `$8/h` fleet caps (`~$0.91–$1.82/h`).
 - **Expected Duration & Spend**: `~3 min` (`<$0.15`) if `RULE_EFFECTIVELY_NOOP` stops at batch `192`; `~25 min` (`~$0.80`) if `Q1_STOP_FOR_DIAGNOSIS` stops at batch `4,096`; `~1.6–3.1 GPU-hours` (`~$1.50–$2.84`, hard cap `$6.00`) for full `16,404`-batch completion of both arms.
-- **Stop Rule**: Stop immediately on `RULE_EFFECTIVELY_NOOP`, `Q1_STOP_FOR_DIAGNOSIS`, or completion of both arms (`16,404` batches), verify all pins, archive to HF store `caseyallard/uor-r4-store`, and tear down the pod (`uor-pod down`).
+- **Stop Conditions**: Stop immediately on `RULE_EFFECTIVELY_NOOP`, `Q1_STOP_FOR_DIAGNOSIS`, or completion of both arms (`16,404` batches), verify all pins, archive to HF store `caseyallard/uor-r4-store`, and tear down the pod (`uor-pod down`).
+
+## 7. Review Verdict
+
+TEST FITNESS: FIT - M1 #2029 m1-a8-full-dose-rerun
+sheet: docs/harness/prep/m1-a8-full-dose-rerun-2026-10-25.md
+reviewer: antigravity (fresh-context non-author reviewer 93d74061-c2dc-4e78-b317-958f1b362160)
+note: https://github.com/UOR-Foundation/uor-r4/issues/2831#issuecomment-6394635218
+date: 2026-10-25
+A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+Every mechanism pre-registration gets a TEST FITNESS review on its milestone before compute.
