@@ -42,7 +42,7 @@ This is one checkpoint (seed-1 Q4, epoch 407), one DEV panel (14,287 rows) and t
   | Unigram | 754 | 1,586 |
   | Writer | 149 | 747 |
 
-  So when the target's cell is admitted, the code alone ranks the target first in 1,138 rows, against 149 for the trained writer.
+  So when the target's cell is admitted, the code table restricted to the admitted cells ranks the target first in 1,138 rows, against 149 for the trained writer.
 - **Secondary, descriptive arms.** These cannot fire a band.
   - Address-only table: 1,675.
   - Interior-only table: 1,628.
@@ -53,7 +53,12 @@ This is one checkpoint (seed-1 Q4, epoch 407), one DEV panel (14,287 rows) and t
 
 Per the sheet, T did not cross M + F. So the next work is a code-utilization and capacity diagnostic, not a change to the learning law. The W4 float-credit sheet runs only on H_law, so it does not run.
 
-The admission-matched rows localize the gap the sheet asked about. When the target's cell is admitted, the read code already carries enough to choose the target 1,138 times out of 1,920. The trained writer chooses it 149 times. On these rows, the output map is the immediate bottleneck, more than the admission channel.
+The sheet asks the admission-matched comparison to localize the gap between the output map and the admission channel. Both lose hits the code could make, and on these counts admission loses more:
+
+- **Output map.** On the 1,920 admitted rows, the code table restricted to admitted cells ranks the target first 1,138 times; the writer does so 149 times. That is 989 rows lost after admission.
+- **Admission.** On an admitted row, restricting the table to admitted tokens can only keep or gain a hit, so at most 1,138 of the unrestricted table's 3,414 hits fall on admitted rows. At least 2,276 fall on the 12,367 rows where the writer never admitted the target's cell, and the writer cannot get those right at all.
+
+So on this checkpoint the larger measured loss is admission, and the output map loses most of what survives it. These are bounds from one artifact, not a decomposition of the mechanism.
 
 ## How it ran
 
@@ -123,4 +128,6 @@ The GPU capture itself is `w2-capacity CHECKPOINT SEALED_EVALUATION NEW_OUT_DIR`
 - **Fallback regime.** It uses the model-matched TRAIN table only, with no full-TRAIN arm. The sheet says this biases against H_law (a smaller table is a weaker comparator). The record says so (`smaller_table_bias_disclosed: true`). T sits 3,021 rows below M + F.
 - **Code table top-8.** It is padded from the unigram ranking when a code has seen fewer than 8 tokens, because the verifier requires 8 distinct tokens. The unpadded count is 7,558.
 - **Capture binary and assembler head differ.** The capture binary is from `db25268ba`. The record was assembled at the later head, which adds only the host-side descriptive arms and a log-text fix; neither changes T, U, G, W or the band.
+- **Restricted top-8.** The admission-matched arms pad a key's admitted ranking from the admitted unigram, so their top-8 counts are not comparable with the unpadded full-panel 7,558. A row whose admitted tokens were never seen in TRAIN gets no restricted prediction.
+- **Pathological-ordering guard.** If M + F < W − H, the code returns H_rep for every T < W − H. That is the pinned verifier's reading. The sheet's text can be read as overriding only H_law. The case cannot arise here (W − M = −6,151).
 - **One checkpoint.** It is one seed at one dose. The band classifies this artifact, not the mechanism.

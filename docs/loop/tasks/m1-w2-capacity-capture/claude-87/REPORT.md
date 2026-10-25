@@ -16,6 +16,15 @@ Closes #2845
 - **The first row-binding attempt used the wrong recipe.** The harness reference scorer's nine-field text lines gave `1144080a…`, not the pin `e4ef44fb…`. The pin was made by the 14 Oct `relation-subpanel-audit` (`ee047cb88`) with a binary format: u64 ordinal, u64 position, u32 query, u32 target, a copy-successor byte and a bucket byte. With that format the hash matches.
 - **Three builder rounds handed back early on their context budget.** One round delivered only the symmetry check, one only the row binding, and one only the core library. Each later round started from what the previous one had learned.
 - **Run B's Gate R log line printed "7695s" for 7.7 s.** It used the new millisecond field with the old "s" suffix. This is log text only and is fixed in `aa76619d9`.
+- **The first write-up overclaimed where the loss sits.** It said the output map was "the immediate bottleneck, more than the admission channel". The fresh review showed the record's own counts point the other way. At least 2,276 of the table's 3,414 hits are on rows the writer never admitted, against 989 lost after admission. The lab page, this REPORT and the notebook now state both losses as bounds.
+- **The review found code nits, fixed before merge.**
+  - A Gate R mismatch count was read but not required to be 0.
+  - The writer's top-8 was copied from the capture unchecked.
+  - The McNemar helper's bound allowed n up to 127, where its binomial can overflow.
+  - An arm zipped rows with slots without a length check.
+  - The importer's real-file test read `UOR_W2_Q4` as a file, while the W2 tests read it as a directory. With the directory form set, the full suite failed that one test.
+  - The 64 actions' closure under composition was untested.
+- **The pathological-ordering guard follows the verifier, not the narrowest reading of the sheet.** If M + F < W − H, the code returns H_rep for every T < W − H, as the pinned verifier does. The sheet's text can be read as overriding only H_law. The case cannot arise on this data (W − M = −6,151).
 - **`uor-pod down` could not archive the pod** (an internal `uor-r4/pods: Is a directory` error, then no SSH). Both runs were already in the HF store, so it ran with `--confirm-archived`.
 
 ## What changed
@@ -81,4 +90,4 @@ None.
 
 The old Q4 model was loaded into today's code and proved to behave exactly as it did on 15 October. It was then asked one question: does the model's internal read code already know the next word better than the model's own output says?
 
-It does. A simple table keyed by that code gets 3,414 right, against the model's 149. But it does not beat a plain table keyed by the previous word (6,300). So the read is useful but not exceptional, and the place it is lost is the output map. The registered next step is a code-utilization diagnostic, not a new learning rule.
+It does. A simple table keyed by that code gets 3,414 right, against the model's 149. But it does not beat a plain table keyed by the previous word (6,300). So the read is useful but not exceptional. The model loses what it carries in two places. The shortlist (admission) excludes the right word in most rows the table gets right: at least 2,276 of its 3,414. And when the right word is on the shortlist, the output map still misses it in 989 of the 1,138 rows the restricted table gets. The registered next step is a code-utilization diagnostic, not a new learning rule.
