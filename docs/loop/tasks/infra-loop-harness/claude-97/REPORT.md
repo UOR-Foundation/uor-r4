@@ -9,6 +9,8 @@ Closes #3189. References #2904.
 - **The first version of the new test passed for the wrong reason.** It committed the fixture's ORDER to `origin/main`, where the guard treats an ORDER as closed history, so no ORDER was active and every write was allowed. The test now keeps the ORDER on the branch, as a real unit does, and its "another page is refused" assert proves an ORDER is active.
 - **One guard test fails in this checkout, with or without this change.** `each_clients_canary_write_is_refused` runs against the real repository. Inside a `.worktrees/claude-*` checkout, the antigravity canary meets the cross-worktree refusal first ("belongs to another lab"), so the reason it expects never appears. It fails identically with the fix set aside. It depends on where the checkout lives, not on the guard's scope code. CI's checkout is not under `.worktrees/claude-*`.
 
+- **The two changed source files are outside the umbrella item's scope (advisory WARN under D76).** `infra-loop-harness`'s `scope:` on `origin/main` lists other harness files but not `loopguard.rs` or `tests/loop_guard.rs`. The only item that ever scoped them, `infra-loop-pr09-client-adapters`, is done. I made both edits before this ORDER existed in the worktree. With no ORDER active, the guard did not refuse them. Once the ORDER was committed, the guard refused a later test edit, so the reviewer's optional hardening was not made (see Still open). `loop pr-check` reports this as an advisory scope WARN, not a FAIL.
+
 ## What changed
 
 - **`crates/uor-r4-harness/src/loopguard.rs`:** the scope check reads the item once from `origin/main` (as before, for its `scope:`). It also allows that item's `notebook:` page. A `notebook:` line written only on the branch grants nothing, because only `origin/main` is read. `loop pr-check` still enforces that the edit only appends.
@@ -36,6 +38,9 @@ None. This is an instrument fix.
 - scope-guard: the guard now matches the documented rule, so later units need no scope workaround for their notebook rows.
 
 ## Still open
+
+- **Optional test hardening from the review.** Assert 3 rewrites the item in the working tree but does not commit it. So a future guard that read the item at `HEAD`, not `origin/main`, would still pass it. Committing that rewrite on the test's branch closes the gap. It is not done here, because the guard (rightly) refuses `tests/loop_guard.rs` under this ORDER. The guard should get an item that scopes `loopguard.rs` and its tests.
+- **The guard's own git calls keep `GIT_*` (pre-existing, from the review).** If the suite ran from a git hook with `GIT_DIR` set, the guard's read-only git calls would read the outer repository.
 
 - **The installed guard binary.** The fix acts once the shared `~/.cargo/bin/uor-harness` is rebuilt from `main`. That binary is not this lab's to overwrite (run file, Part 2).
 - **claude-95's pending row** for `docs/research/notebook/m1-discrete-attention.md` (its text is in #3189 and in claude-95's REPORT). It can be added once the guard is current.
