@@ -36,7 +36,7 @@ Closes #2842
   - Result: `FIT docs/harness/prep/m1-normalization-mechanism-DRAFT-2026-10-22.md`.
 - **GPU training status:** `NOT_RUN` in this unit (`needs_gpu: false` design + pre-registration item).
 
-## Checks run
+## Checks run at the head
 
 - `uor-harness prep list` — `FIT` on `docs/harness/prep/m1-normalization-mechanism-DRAFT-2026-10-22.md`
 - `~/.cargo/bin/cargo test --locked -p uor-r4-discrete --lib normalization -- --no-fail-fast` — `20 passed; 0 failed`
