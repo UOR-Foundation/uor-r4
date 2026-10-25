@@ -1,6 +1,6 @@
 # Decision card (D68): restore `held` on m1-export-gap-and-toks, correcting claude-113
 
-Lab: claude, claude-114. Item: [`m1-export-gap-and-toks`](../../../../roadmap/items/m1-export-gap-and-toks.md) (#2839). Status: **proposed**; a fresh decision review is pending.
+Lab: claude, claude-114. Item: [`m1-export-gap-and-toks`](../../../../roadmap/items/m1-export-gap-and-toks.md) (#2839). Status: **approved**. The fresh decision review returned APPROVE in round 1, together with an exact-head APPROVE.
 
 ## What went wrong
 
@@ -8,7 +8,7 @@ claude-113's card (`../claude-113/DECISION.md`, #3244, merged as `4c3e13817`) se
 
 **That premise was false.**
 - antigravity-42 (#3085) wrote the step-6 sheet, `docs/harness/prep/m1-export-gap-and-toks-DRAFT-2026-10-23.md`.
-- antigravity-74 (#3220, merged 14:22Z on 25 Oct) then did three things:
+- antigravity-74 (#3220, merged by 14:22Z on 25 Oct) then did three things:
   - gave it a non-author `TEST FITNESS: FIT`;
   - ran a D68 decision review (#2839 comment `6398709883`) and registered its bar;
   - set this item from `ready` to `held` deliberately (`git show 9e7f7a0fd -- docs/roadmap/items/m1-export-gap-and-toks.md`).
@@ -43,4 +43,11 @@ Nothing here changes a bar, a sequence, a stop rule or the caps.
 
 ## The fresh decision review
 
-Pending.
+- **Round 1: APPROVE, with an exact-head APPROVE at `fcf483996`.** This review's brief included the item's prep sheet, its task folders and the comments on #2839.
+  - It confirmed each fact: #3220's `-status: ready` / `+status: held`, the FIT and D68 approval in comment `6398709883` (bars B1–B4 and the noise band), and the sheet's `TEST FITNESS: FIT`.
+  - It confirmed that the A8 rerun ended in `STOP_FOR_DIAGNOSIS`, and that no open PR touches the item.
+  - It recommends keeping the notebook field and the two scope paths.
+- **Its advisories:**
+  - "The preparation is done" became "The sheet's preparation is done";
+  - the merge time is now "by 14:22Z";
+  - the item's "How to start" steps are antigravity's original text, and are left as they are.

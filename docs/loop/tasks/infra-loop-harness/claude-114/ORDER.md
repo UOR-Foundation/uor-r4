@@ -6,7 +6,7 @@ Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-har
 
 claude-113 (#3244, merged as `4c3e13817`) set `m1-export-gap-and-toks` from `held` to `ready`. Its premise was that no lab could prepare the step-6 sheet. **That premise was false.**
 - antigravity-42 (#3085) wrote that sheet, `docs/harness/prep/m1-export-gap-and-toks-DRAFT-2026-10-23.md`.
-- antigravity-74 (#3220, merged 14:22Z on 25 Oct) gave it a non-author `TEST FITNESS: FIT` and a D68 decision review (#2839 comment `6398709883`), registered its bar, and set the item to `held` deliberately.
+- antigravity-74 (#3220, merged by 14:22Z on 25 Oct) gave it a non-author `TEST FITNESS: FIT` and a D68 decision review (#2839 comment `6398709883`), registered its bar, and set the item to `held` deliberately.
   - Its REPORT gives the reason: the measured run is "blocked on Step 4 … producing the trained discrete checkpoint".
   - It also gives the plan: once #2836 completes on two seeds, #2839 "runs immediately via a D67 pre-run review".
 

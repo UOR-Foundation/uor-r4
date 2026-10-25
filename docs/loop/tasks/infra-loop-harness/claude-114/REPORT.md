@@ -27,7 +27,10 @@ References #2904. References #2839.
 
 ## Checks run at the head
 
-- **Fresh D68 decision review and exact-head review:** pending. This time the brief includes the item's prep sheets, task folder and issue comments.
+- **Fresh D68 decision review and exact-head review:** both APPROVE at `fcf483996`.
+  - This time the brief included the item's prep sheet, its task folders and the comments on #2839.
+  - The review confirmed every fact, and recommended keeping the scope additions.
+  - Its wording advisories are applied.
 - **`xtask roadmap check`:** 92 items OK.
 
 ## Skills used
