@@ -892,7 +892,10 @@ mod tests {
     /// M + F = 1024, W + H = 173, W − H = 125.
     #[test]
     fn band_boundaries_are_strict_as_registered() {
-        let band = |t| decide_band(t, 1000, W, 100, 100).1;
+        let band = |t| {
+            let (_, band, _) = decide_band(t, 1000, W, 100, 100);
+            band
+        };
         assert_eq!(band(1025), Band::HLaw);
         assert_eq!(band(1024), Band::HMixed, "T = M + F is never H_law");
         assert_eq!(band(174), Band::HMixed);
@@ -908,7 +911,10 @@ mod tests {
     /// Irrational floors: F = 2·sqrt(401) ≈ 40.05, H = 2·sqrt(401).
     #[test]
     fn band_boundaries_with_paired_sqrt_floors() {
-        let band = |t| decide_band(t, 1000, W, 401, 401).1;
+        let band = |t| {
+            let (_, band, _) = decide_band(t, 1000, W, 401, 401);
+            band
+        };
         assert_eq!(band(1041), Band::HLaw);
         assert_eq!(band(1040), Band::HMixed);
         assert_eq!(band(190), Band::HMixed);
@@ -916,8 +922,10 @@ mod tests {
         assert_eq!(band(109), Band::HRep);
         assert_eq!(band(108), Band::WriterDominates);
         // F = 40 exactly (n = 400): T = M + 40 is not H_law.
-        assert_eq!(decide_band(1040, 1000, W, 400, 100).1, Band::HMixed);
-        assert_eq!(decide_band(1041, 1000, W, 400, 100).1, Band::HLaw);
+        let (_, mixed, _) = decide_band(1040, 1000, W, 400, 100);
+        assert_eq!(mixed, Band::HMixed);
+        let (_, law, _) = decide_band(1041, 1000, W, 400, 100);
+        assert_eq!(law, Band::HLaw);
     }
 
     #[test]

@@ -297,13 +297,13 @@ pub struct Inputs {
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize)]
-pub struct WallSeconds {
-    pub import: f64,
-    pub gate_r: f64,
-    pub dev_forward: f64,
-    pub determinism: f64,
-    pub train_forward: f64,
-    pub token_cells: f64,
+pub struct WallMillis {
+    pub import: u64,
+    pub gate_r: u64,
+    pub dev_forward: u64,
+    pub determinism: u64,
+    pub train_forward: u64,
+    pub token_cells: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -321,7 +321,7 @@ pub struct Capture {
     pub token_cells: Vec<u16>,
     pub train_stream: StreamRecord,
     pub query_sidecar: StreamRecord,
-    pub wall_seconds: WallSeconds,
+    pub wall_ms: WallMillis,
 }
 
 /// DEV-phase results, written before TRAIN so a late failure does not lose them.
@@ -385,6 +385,11 @@ mod gpu {
     use crate::w2_capacity::{decode_read_vector, root_vector, unpack_code, FALLBACK_CAPTURE_MODE};
     use std::time::Instant;
 
+    /// Wall time in whole milliseconds (D32: no float types, even for timing).
+    fn elapsed_ms(clock: &Instant) -> u64 {
+        u64::try_from(clock.elapsed().as_millis()).unwrap_or(u64::MAX)
+    }
+
     const READ_WIDTH: usize = 32;
 
     fn s<E: std::fmt::Display>(e: E) -> String {
@@ -434,7 +439,7 @@ mod gpu {
             std::fs::read(sealed).map_err(|e| format!("{}: {e}", sealed.display()))?;
         check_sealed_pin(&sealed_bytes)?;
         let dir = create_out_dir(out_dir)?;
-        let mut wall = WallSeconds::default();
+        let mut wall = WallMillis::default();
         let clock = Instant::now();
 
         // 1. Import and driver inputs.
@@ -477,7 +482,7 @@ mod gpu {
         let sealed_eval = sealed_value
             .get("evaluation")
             .ok_or("sealed file lacks .evaluation")?;
-        wall.import = clock.elapsed().as_secs_f64();
+        wall.import = elapsed_ms(&clock);
 
         // 2. Gate R: the sealed evaluator loop over DEV with the imported device.
         let clock = Instant::now();
@@ -557,7 +562,7 @@ mod gpu {
                 gate_r.first_50_mismatches.first()
             ));
         }
-        wall.gate_r = clock.elapsed().as_secs_f64();
+        wall.gate_r = elapsed_ms(&clock);
         eprintln!(
             "w2-capacity: Gate R passed over {rows_compared} rows in {:.1}s",
             wall.gate_r
@@ -677,7 +682,7 @@ mod gpu {
             }
             first = batch.next_target;
         }
-        wall.dev_forward = clock.elapsed().as_secs_f64();
+        wall.dev_forward = elapsed_ms(&clock);
 
         // Determinism: re-run forward on the first 16 batches.
         let clock = Instant::now();
@@ -702,7 +707,7 @@ mod gpu {
             }
             first = batch.next_target;
         }
-        wall.determinism = clock.elapsed().as_secs_f64();
+        wall.determinism = elapsed_ms(&clock);
         eprintln!(
             "w2-capacity: DEV rows {} round-trip {}/{} determinism {}/{}",
             dev_rows.len(),
@@ -795,9 +800,9 @@ mod gpu {
             first = batch.next_target;
             if (b + 1) % 1000 == 0 {
                 eprintln!(
-                    "w2-capacity: TRAIN batch {} / {TRAIN_BATCHES}, {:.1}s",
+                    "w2-capacity: TRAIN batch {} / {TRAIN_BATCHES}, {} ms",
                     b + 1,
-                    clock.elapsed().as_secs_f64()
+                    elapsed_ms(&clock)
                 );
             }
         }
@@ -818,7 +823,7 @@ mod gpu {
                 crate::w2_capacity::MATCHED_TRAIN_ROWS
             )));
         }
-        wall.train_forward = clock.elapsed().as_secs_f64();
+        wall.train_forward = elapsed_ms(&clock);
 
         // 5. Token cells.
         let clock = Instant::now();
@@ -835,7 +840,7 @@ mod gpu {
                 format!("INSTRUMENT_FAULT: {} token cells", token_cells.len()),
             ));
         }
-        wall.token_cells = clock.elapsed().as_secs_f64();
+        wall.token_cells = elapsed_ms(&clock);
 
         // 6. capture.json.
         let exe = std::env::current_exe().map_err(faulted(&dir, "capture_json", None, None))?;
@@ -856,7 +861,7 @@ mod gpu {
             token_cells,
             train_stream,
             query_sidecar,
-            wall_seconds: wall,
+            wall_ms: wall,
         };
         write_json_new(&dir, CAPTURE_FILE, &capture).map_err(faulted(
             &dir,
