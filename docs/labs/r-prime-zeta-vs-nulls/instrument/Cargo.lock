@@ -165,6 +165,7 @@ name = "r-prime-zeta-vs-nulls-instrument"
 version = "0.1.0"
 dependencies = [
  "serde_json",
+ "sha2",
  "uor-r4-discrete",
 ]
 
