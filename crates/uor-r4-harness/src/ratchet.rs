@@ -843,6 +843,7 @@ pub fn render_baseline(counts: &BTreeMap<String, u64>) -> String {
 }
 
 /// Files whose count rose above the baseline: (path, baseline, current).
+/// Paths inside `D37_SCANNED_FLOAT_CRATES` always enforce a strict zero ceiling (base = 0).
 pub fn growth(
     current: &BTreeMap<String, u64>,
     baseline: &BTreeMap<String, u64>,
@@ -850,7 +851,11 @@ pub fn growth(
     current
         .iter()
         .filter_map(|(p, &n)| {
-            let base = baseline.get(p).copied().unwrap_or(0);
+            let base = if is_d37_float_scope(p) {
+                0
+            } else {
+                baseline.get(p).copied().unwrap_or(0)
+            };
             (n > base).then(|| (p.clone(), base, n))
         })
         .collect()
@@ -1194,5 +1199,11 @@ mod tests {
             ),
             other => panic!("D37 crate must refuse any D23 baseline site, got {other:?}"),
         }
+        let mut forged_baseline = BTreeMap::new();
+        forged_baseline.insert("crates/uor-r4-float-train/src/lib.rs".to_string(), 5u64);
+        assert_eq!(
+            growth(&d23_hit.counts, &forged_baseline),
+            vec![("crates/uor-r4-float-train/src/lib.rs".to_string(), 0, 1)]
+        );
     }
 }

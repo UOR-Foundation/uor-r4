@@ -14,24 +14,24 @@ Closes #2823
 
 ## What changed
 
-Size: **23 files changed, 8,283 insertions, 6 deletions** across the PR (no size estimate declared on the item file; full 24-kernel extract moved into its own crate as required by `#2823`):
-- **Code (14 files, 7,448 insertions, 2 deletions):**
-  - `Cargo.toml` (`+1/-0`) and `Cargo.lock` (`+15/-0`): registered `"crates/uor-r4-float-train"` in `[workspace] members` without altering any other crate's dependency entries.
+Size: **24 files changed, 8,274 insertions, 7 deletions** across the PR (`pr-check` class breakdown: `tests 2 file(s) +552/-0, code 12 file(s) +6447/-3, docs 6 file(s) +215/-1, generated 2 file(s) +18/-3, other 2 file(s) +1042/-0`; no size estimate declared on the item file):
+- **Code & CUDA sources (15 files, 7,490 insertions, 3 deletions):**
+  - `Cargo.toml` (`+1/-0`): registered `"crates/uor-r4-float-train"` in `[workspace] members` without altering any other crate's dependency entries.
   - `crates/uor-r4-float-train/Cargo.toml` (`22` lines) and `crates/uor-r4-float-train/build.rs` (`102` lines): standalone crate manifest (zero dependency on `uor-r4-training` or `candle-nn`) and ahead-of-time `nvcc` PTX build script (`cuda_stack_f32.ptx`, `cuda_stack_bf16.ptx`) under `--features cuda`.
   - `crates/uor-r4-float-train/src/lib.rs` (`108` lines), `src/cuda_stack.cu` (`859` lines, `22` `__global__` kernels), `src/spiralcore_fbs.cu` (`183` lines, `2` `__global__` kernels), `src/cuda_stack_kernels.rs` (`429` lines), `src/geometric_stack_native.rs` (`2,110` lines), `src/geometric_stack_native_cuda.rs` (`613` lines), `src/spiralcore_fbs.rs` (`808` lines), `src/native_vector_writer.rs` (`1,014` lines), `src/native_starling_spec.rs` (`127` lines), and `src/kernel_controls.rs` (`1,029` lines, finite CPU reference implementations for all 24 kernels).
-  - `crates/uor-r4-harness/src/ratchet.rs` (`+44/-2` code lines): added `pub const D37_SCANNED_FLOAT_CRATES: [&str; 1] = ["crates/uor-r4-float-train/"];` and `pub fn is_d37_float_scope(rel: &str) -> bool`, registered `D37_SCANNED_FLOAT_CRATES` in `scan_roots` (deduplicated in `source_files`), excluded `is_d37_float_scope` from `is_discrete_scope` (`d32`), and refused any nonzero `NormExp`/`Matmul` baseline update inside `is_d37_float_scope`.
-- **Tests (3 files in `uor-r4-float-train` + 1 test in `ratchet.rs`, 582 insertions):**
+  - `crates/uor-r4-harness/src/ratchet.rs` (`+84/-3` lines total: `+39/-3` code lines and `+45` test lines): added `pub const D37_SCANNED_FLOAT_CRATES: [&str; 1] = ["crates/uor-r4-float-train/"];` and `pub fn is_d37_float_scope(rel: &str) -> bool`, registered `D37_SCANNED_FLOAT_CRATES` in `scan_roots` (deduplicated in `source_files`), excluded `is_d37_float_scope` from `is_discrete_scope` (`d32`), clamped `base = 0` in `growth()` for `is_d37_float_scope`, and refused any nonzero `NormExp`/`Matmul` baseline update inside `is_d37_float_scope`.
+- **Integration tests (2 files in `uor-r4-float-train/tests/`, 552 insertions; plus 1 unit test in `ratchet.rs`):**
   - `crates/uor-r4-float-train/tests/no_training_crate_dep.rs` (`126` lines): verifies via `cargo tree --offline -p uor-r4-float-train` that `uor-r4-training` and `candle-nn` are absent from the dependency graph, and verifies that all 24 `__global__` kernel entry points in `src/cuda_stack.cu` (`22`) and `src/spiralcore_fbs.cu` (`2`) match `KERNEL_ENTRY_POINTS` with zero banned D29 tokens.
   - `crates/uor-r4-float-train/tests/twenty_four_kernel_controls.rs` (`426` lines): 12 finite CPU arithmetic and finite-difference adjoint control tests covering all 24 kernels in the extract.
-  - `crates/uor-r4-harness/src/ratchet.rs` (`+30` test lines): added unit test `d37_scanned_float_crate_is_scanned_for_d23_d25_with_zero_ceiling_and_allowlisted_from_d32`.
-- **Docs & records (6 files, 247 insertions, 1 deletion):**
+  - `crates/uor-r4-harness/src/ratchet.rs` (`+45` test lines, counted in `ratchet.rs` above): added unit test `d37_scanned_float_crate_is_scanned_for_d23_d25_with_zero_ceiling_and_allowlisted_from_d32`.
+- **Docs & records (6 files, 215 insertions, 1 deletion):**
   - `docs/labs/float-training-module/README.md` (`73` lines): design note (also posted on `#2823` at comment `6397939619`) documenting the crate name, the 24-kernel provenance table, zero dependency edge on `uor-r4-training`, D23/D25 compliance, and `ratchet.rs` D37 scanned entry.
   - `docs/research/notebook/float-training.md` (`13` lines): new research notebook for the `float-training` line with one finite-control row.
   - `docs/roadmap/items/float-training-module.md` (`+2/-1`): added `notebook: docs/research/notebook/float-training.md` and updated `status: done`.
   - `docs/start/FILEMAP.md` (`+1/-0`): added `crates/uor-r4-float-train/`.
-  - `docs/loop/tasks/float-training-module/antigravity-72/ORDER.md` (`44` lines) and `REPORT.md` (`114` lines).
-- **Generated (1 file, 6 insertions, 3 deletions):**
-  - `docs/roadmap/README.md` (`+6/-3`): re-rendered via `cargo run --offline -p xtask -- roadmap render`.
+  - `docs/loop/tasks/float-training-module/antigravity-72/ORDER.md` (`42` lines) and `REPORT.md` (`84` lines).
+- **Generated (2 files, 18 insertions, 3 deletions):**
+  - `Cargo.lock` (`+15/-0`) and `docs/roadmap/README.md` (`+3/-3`, re-rendered via `cargo run --offline -p xtask -- roadmap render`).
 
 ## Measurements
 
@@ -39,7 +39,7 @@ All measurements are deterministic host CPU checks and static ratchet scans on t
 
 1. **CPU build and 24-kernel finite control suite (`uor-r4-float-train`):**
    - Command: `CARGO_TARGET_DIR=local/antigravity/target ~/.cargo/bin/cargo test --offline --no-fail-fast -p uor-r4-float-train`
-   - Result: **19 passed; 0 failed** (`5` unit tests in `src/lib.rs` / `src/geometric_stack_native.rs`, `2` dependency-tree and 24-symbol D29 guards in `tests/no_training_crate_dep.rs`, and `12` finite CPU arithmetic and finite-difference adjoint control tests in `tests/twenty_four_kernel_controls.rs` covering all 24 kernels: `straight_through_fwd`, `hamilton_gate_fwd`, `hamilton_gate_bwd`, `rate_select_fwd`, `rate_select_bwd`, `rms_norm_fwd`, `rms_norm_bwd_dx`, `rms_norm_dw_partial`, `rms_norm_dw_reduce`, `quaternion_scan_fwd`, `quaternion_scan_bwd`, `margin_rank_rows`, `margin_rank_grad`, `recurrence_scan_fwd`, `recurrence_tile_fold`, `recurrence_tile_carry`, `recurrence_tile_expand`, `recurrence_bwd_params`, `poison_words`, `adam_update`, `sq_lanes`, `sq_tree`, `spiralcore_fbs_fwd`, `spiralcore_fbs_bwd`).
+   - Result: **19 passed; 0 failed** (`5` `--lib` unit tests in `src/geometric_stack_native.rs` (1), `src/native_vector_writer.rs` (1), and `src/spiralcore_fbs.rs` (3); `2` dependency-tree and 24-symbol D29 guards in `tests/no_training_crate_dep.rs`; and `12` finite CPU arithmetic and finite-difference adjoint control tests in `tests/twenty_four_kernel_controls.rs` covering all 24 kernels: `straight_through_fwd`, `hamilton_gate_fwd`, `hamilton_gate_bwd`, `rate_select_fwd`, `rate_select_bwd`, `rms_norm_fwd`, `rms_norm_bwd_dx`, `rms_norm_dw_partial`, `rms_norm_dw_reduce`, `quaternion_scan_fwd`, `quaternion_scan_bwd`, `margin_rank_rows`, `margin_rank_grad`, `recurrence_scan_fwd`, `recurrence_tile_fold`, `recurrence_tile_carry`, `recurrence_tile_expand`, `recurrence_bwd_params`, `poison_words`, `adam_update`, `sq_lanes`, `sq_tree`, `spiralcore_fbs_fwd`, `spiralcore_fbs_bwd`).
 2. **Stub-`nvcc` `--features cuda --all-targets` type and clippy check on the laptop:**
    - Command: `PATH="/Users/casey.allard/uor-r4/.worktrees/antigravity-float-training-module/local/antigravity/fake-nvcc:$PATH" NVCC=/Users/casey.allard/uor-r4/.worktrees/antigravity-float-training-module/local/antigravity/fake-nvcc/nvcc UOR_NVCC_ARCH=compute_120 CARGO_TARGET_DIR=local/antigravity/target ~/.cargo/bin/cargo clippy --offline -p uor-r4-float-train --no-deps --features cuda --all-targets -- -D warnings`
    - Result: **exit 0, 0 warnings** (`build.rs` invokes stub `nvcc` for `cuda_stack_f32.ptx` and `cuda_stack_bf16.ptx`, verifies all 24 `.entry` symbols and zero banned PTX instructions, and compiles `src/cuda_stack_kernels.rs` and `src/geometric_stack_native_cuda.rs`).
