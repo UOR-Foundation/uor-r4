@@ -33,3 +33,7 @@ None. This is a docs unit.
 ## Still open
 
 - claude-94 merges `main` and writes its notebook row once this merges.
+
+## Plain summary
+
+The prose-panel item can now write its own notebook row, which its done-when asks for, and the discriminator-gate item now says plainly that the softmax compiler it named is banned and that the lawful sieve compiler's clean result does not pass that gate.
