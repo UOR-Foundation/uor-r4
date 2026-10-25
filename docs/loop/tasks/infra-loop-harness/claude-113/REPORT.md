@@ -20,6 +20,11 @@ References #2904. References #2839.
 - **`docs/roadmap/README.md`:** the generated render (ready 25, held 15).
 - **This task folder:** the ORDER, the D68 card and this REPORT.
 
+## Measurements
+
+- **Roadmap status counts:** before, ready 24 and held 16; after, ready 25 and held 15 (`xtask roadmap check`, 92 items). Decision 1 and done 51 are unchanged.
+- No compute ran. This unit changes one item file and the generated render.
+
 ## Checks run at the head
 
 - **The fresh D68 decision review:** APPROVE.
