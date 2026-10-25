@@ -13,7 +13,7 @@ Two item-file fixes. Each keeps `loop next` from sending labs to work that canno
 2. **`float-training-module` (#2823) gets its own crate in `scope:`.** Its done-when asks for "a new module" with "no dependency on `crates/uor-r4-training`", and its text warns that reusing that crate is the likeliest mistake. But its `scope:` lists only `crates/uor-r4-training/**`, `ratchet.rs` and docs, so `loop guard`, which reads scope from `origin/main`, would refuse the new crate. The scope adds:
    - `crates/uor-r4-float-train/**`;
    - the root `Cargo.toml` (workspace members) and `Cargo.lock`;
-   - a `notebook:` page, `docs/research/notebook/float-training.md`, for the row its step 6 asks for.
+   - its future notebook page, `docs/research/notebook/float-training.md`, for the row its step 6 asks for. `roadmap check` refuses a `notebook:` line for a page that does not exist, so the unit that creates the page also binds it.
 
 **Why the infra-loop-harness item.** Its scope holds `docs/roadmap/items/*.md`. `loop claim` refuses it while Codex's idle #3169 holds an order on it, so this ORDER is written by hand.
 
@@ -27,7 +27,7 @@ Class: records. At `b1cc33d03`, all must hold, or the unit is cancelled:
 ## Files in scope
 
 - `docs/roadmap/items/m2-pin-train-mask-sheet.md` (status line and one note)
-- `docs/roadmap/items/float-training-module.md` (`scope:` and `notebook:` lines and one note)
+- `docs/roadmap/items/float-training-module.md` (the `scope:` line and one note)
 - `docs/roadmap/README.md` (re-rendered; shared file)
 - this task folder
 
