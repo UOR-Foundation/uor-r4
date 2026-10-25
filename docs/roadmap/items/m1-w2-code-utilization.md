@@ -54,7 +54,7 @@ Open these first:
 ## Rules that apply
 
 - **Geometry only** (CHARTER §3.1–§3.3): no softmax or squashing anywhere; no dense matrix multiplication. Count tables are lawful diagnostic comparators (§4.4).
-- **Exact integers (this item's choice, not a charter rule):** every quantity is an exact integer or an exact integer ratio. The W2 sheet's "code–target mutual information" (§4.7 row 4) is measured in exact forms such as leave-one-out top-1 and collision agreement. Information in bits would need logarithms and float types, and the discrete crate's banned-presence gate counts float types.
+- **Exact integers (this item's choice):** every quantity is an exact integer or an exact integer ratio. The W2 sheet's "code–target mutual information" (§4.7 row 4) is measured in exact forms such as leave-one-out top-1 and collision agreement. Information in bits would need logarithms and float types. CHARTER §3.7 keeps float out of the discrete crate, and its banned-presence gate counts float types.
 - **Host post-processing only** (§3.5, the W2 sheet's D24 classification): counting and scoring stored GPU observations on the host is allowed; any model forward, init or apply is GPU work and needs its own sheet and pre-run review.
 - **Pre-registration first** (§4.5): the sheet and its non-author FIT come before the run, because the result routes M1 spend.
 - **Rust first** (§3.11): the host tool is Rust; no new Python.
@@ -64,6 +64,7 @@ Open these first:
 
 - [`docs/labs/m1-w2-capacity-capture/README.md`](../../../docs/labs/m1-w2-capacity-capture/README.md)
 - [`docs/harness/prep/m1-read-code-capacity-2026-10-17.md:132-145`](../../../docs/harness/prep/m1-read-code-capacity-2026-10-17.md)
+- [`docs/roadmap/items/m1-address-key-full-vector.md:19`](../../../docs/roadmap/items/m1-address-key-full-vector.md)
 - [`docs/roadmap/items/m1-bvg-k-stage-t-training.md`](../../../docs/roadmap/items/m1-bvg-k-stage-t-training.md)
 
 ## Cancel if

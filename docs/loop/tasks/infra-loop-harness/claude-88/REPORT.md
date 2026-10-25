@@ -12,14 +12,16 @@ References #2904. References #3179 (the new item's issue stays open; the sheet a
   - add the child to the #2029 checklist.
 
   If this PR were abandoned, #3179 would be an orphan to close by hand.
-- **The first item text overreached twice; the fresh review at `276bd12b4` caught both.**
-  - It credited CHARTER §3.2 with an exact-integer rule for information measures. The charter has no such rule, and the W2 sheet lists "code–target mutual information" as a diagnostic. The rule is now labelled as this item's own choice, with the reason given, and the measure is kept in exact forms.
-  - It sent admission losses to #2834 without a source. The link now quotes #2834's own "which cells open" text.
-  - The scope also gained `Cargo.toml` and `tests/w2_*.rs`, because W2's bins are declared in `Cargo.toml`.
+- **The first item text had five faults; the fresh review at `276bd12b4` found them, and the re-review at `47dfdd572` confirmed the fixes.**
+  - It credited CHARTER §3.1–§3.3 with an exact-integer rule for information measures. Those sections have no such rule, and the W2 sheet lists "code–target mutual information" as a diagnostic. The rule is now labelled as this item's own choice. The reason given is CHARTER §3.7 and the banned-presence gate, and the measure is kept in exact forms.
+  - It sent admission losses to #2834 without a source. The link now quotes #2834's own "which cells open" text, and Sources lists that file.
+  - It spoke of the not-yet-written sheet in the present tense ("registers"). It now says "will register".
+  - The scope lacked `Cargo.toml` and `tests/w2_*.rs`, though W2's bins are declared in `Cargo.toml`. It has both now.
+  - The source range for the W2 sheet stopped before row 5. It now runs to line 145.
 
 ## What changed
 
-Size: 1 new item file (71 lines), plus 1 line in `issues.json` and 7 changed lines in the rendered page, plus this task folder. No code.
+Size: 1 new item file (72 lines), plus 1 line in `issues.json` and 7 changed lines in the rendered page, plus this task folder. No code.
 
 - `docs/roadmap/items/m1-w2-code-utilization.md` (new).
   - `status: ready`, `needs_gpu: false`, `done_class: host`, `depends_on: [m1-w2-capacity-capture]`.
