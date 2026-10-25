@@ -1945,4 +1945,49 @@ mod tests {
         );
         assert_eq!(summary["timing_protocol"]["readiness_ratio_bps_ceil"], 7842);
     }
+
+    #[test]
+    fn committed_audited_dose_summary_records_paired_dev_verdict_and_sealed_fresh_slice() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let summary_path = root.join("docs/labs/m1-a8-full-dose-rerun/dose-summary.json");
+        let summary: Value = read_json(&summary_path).expect("read dose-summary.json");
+        assert_eq!(summary["schema"], "uor-r4.a8-audited-dose-summary/1");
+        assert_eq!(summary["both_arms_completed_16404"], false);
+        assert_eq!(summary["fresh_slice_sealed"], true);
+        assert_eq!(summary["fresh_evaluations_total"], 0);
+
+        let rel = &summary["relation"];
+        assert_eq!(rel["status"], "STOP_FOR_DIAGNOSIS");
+        assert_eq!(rel["stop_reasons"], json!(["consecutive_rejections"]));
+        assert_eq!(rel["completed_batches"], 1600);
+        assert_eq!(rel["committed_accepted_updates"], 132);
+        assert_eq!(rel["audits_count"], 26);
+        assert_eq!(rel["rejected_intervals"], 5);
+        assert_eq!(rel["baseline_b3"]["target_admitted"], 1351);
+        assert_eq!(rel["baseline_full_b3"]["target_admitted"], 4244);
+        assert_eq!(rel["fresh_transfer"]["evaluations"], 0);
+        assert_eq!(
+            rel["fresh_transfer"]["status"],
+            "SEALED_PENDING_PAIRED_DEV_DECISION"
+        );
+
+        let fz = &summary["frozen_zero"];
+        assert_eq!(fz["status"], "STOP_FOR_DIAGNOSIS");
+        assert_eq!(fz["stop_reasons"], json!(["consecutive_rejections"]));
+        assert_eq!(fz["completed_batches"], 5248);
+        assert_eq!(fz["committed_accepted_updates"], 274);
+        assert_eq!(fz["audits_count"], 83);
+        assert_eq!(fz["rejected_intervals"], 15);
+        assert_eq!(fz["counters"][2]["committed_applied"], 0);
+        assert_eq!(fz["counters"][2]["provisional_applied"], 0);
+        assert_eq!(fz["counters"][2]["rejected_applied"], 0);
+        assert_eq!(fz["counters"][2]["policy_refused"], 356);
+        assert_eq!(fz["q1_decision"]["diagnostic_stop"], false);
+        assert_eq!(fz["q1_decision"]["q1_psucc_target_admitted"], 1106);
+        assert_eq!(fz["fresh_transfer"]["evaluations"], 0);
+        assert_eq!(
+            fz["fresh_transfer"]["status"],
+            "SEALED_PENDING_PAIRED_DEV_DECISION"
+        );
+    }
 }
