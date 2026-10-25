@@ -118,7 +118,7 @@ fn census_ok(census: &Value) -> Result<(bool, u64)> {
     let ceiling = word("/dev_alias_ceiling_rows")
         .ok_or_else(|| invalid("census lacks dev_alias_ceiling_rows"))?;
     let ok = word("/distinct_vectors") == Some(4_096)
-        && word("/occupied_cells") == Some(256)
+        && word("/cells/occupied_cells") == Some(256)
         && word("/within_cell_tie_mass/tokens_in_alias_groups") == Some(0)
         && word("/within_cell_tie_mass/dev_rows_targeting_non_representative") == Some(0)
         && ceiling == DEV_ROWS;
@@ -212,7 +212,7 @@ mod tests {
     }
 
     fn census() -> Value {
-        json!({"distinct_vectors": 4096, "occupied_cells": 256, "dev_alias_ceiling_rows": 14287,
+        json!({"distinct_vectors": 4096, "cells": {"occupied_cells": 256}, "dev_alias_ceiling_rows": 14287,
             "within_cell_tie_mass": {"tokens_in_alias_groups": 0, "dev_rows_targeting_non_representative": 0}})
     }
 
