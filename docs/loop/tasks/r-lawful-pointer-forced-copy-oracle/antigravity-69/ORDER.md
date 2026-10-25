@@ -13,9 +13,9 @@ Deliver the ahead-of-time `nvcc` CUDA kernel (`lawful_pointer.cu` -> `lawful_poi
 ## Cancel probe (run first)
 
 Ran `CARGO_TARGET_DIR=local/antigravity/target ~/.cargo/bin/cargo test --no-fail-fast -p uor-r4-training --lib lawful_pointer` at `75c04dab3` (`9 passed; 0 failed`) and inspected `lawful_pointer.rs`, `build.rs`, `tests/d29_compiled_modules.rs`, and `docs/harness/prep/r-lawful-pointer-forced-copy-oracle-DRAFT-2026-10-23.md`. Class: **`instrument`** (task stands):
-1. `lawful_pointer.rs` is CPU-only (`select_step`), with no `nvcc` CUDA kernel (`lawful_pointer.cu` -> `lawful_pointer.ptx`), no D29 PTX scan entry, no batch `N`/`O1`/`O2`/`W` evaluator (`evaluate_forced_copy_oracle_batch`, 16-block paired cluster $\text{SE}_{\Delta}$, 4-branch partition `Branches A/B/C/D`, and `N`/`W`/span-coverage stops), and no GPU binary (`lawful-pointer-oracle`).
+1. `lawful_pointer.rs` is CPU-only (`select_step`), with no `nvcc` CUDA kernel (`lawful_pointer.cu` -> `lawful_pointer.ptx`), no D29 PTX scan entry, no batch `N`/`O1`/`O2`/`W` evaluator (`evaluate_forced_copy_oracle_batch`, 16-block paired cluster $\text{SE}_{\Delta}$, 4-branch partition, and `N`/`W`/span-coverage stops), and no GPU binary (`lawful-pointer-oracle`).
 2. `docs/harness/prep/r-lawful-pointer-forced-copy-oracle-DRAFT-2026-10-23.md` has `## Bar` marked `PROPOSED, NOT REGISTERED`, stale pre-D67/D68 wait clauses, and no pinned `lawful_pointer.ptx` SHA-256 or `m2-fresh256` 256-row span-coverage check.
-3. The bound discrete memory-answering checkpoint (`m1-trunk-assembly-and-training`, `#2844`) is not yet trained (`PLAN.md`), so on-checkpoint evaluation awaits `#2844` while the CUDA kernel, batch oracle evaluator, RTX 5090 GPU qualification + `m2-fresh256` span/control verification, and `D68` bar registration complete in this unit.
+3. Bound checkpoint `m1-trunk-assembly-and-training` (`#2844`) is not yet trained (`PLAN.md`).
 
 ## Files in scope
 
@@ -26,7 +26,7 @@ Ran `CARGO_TARGET_DIR=local/antigravity/target ~/.cargo/bin/cargo test --no-fail
 ## Done when
 
 1. `crates/uor-r4-training/src/lawful_pointer.cu` (`lawful_pointer.ptx` under `sieve-cuda`, verified by `tests/d29_compiled_modules.rs`), `lawful_pointer::device`, `evaluate_forced_copy_oracle_batch`, and `src/bin/lawful-pointer-oracle.rs` pass all host and GPU finite controls.
-2. On an RTX 5090 pod (`scripts/pod/uor-pod`), `lawful-pointer-oracle` passes finite CUDA device-vs-host parity controls across all 3 `RouteAdmissionMode`s and all 4 oracle conditions (`N`, `O1`, `O2`, `W`), verifies `256/256` target and distractor spans and `0/128` `W` pair hits on `m2-fresh256` (`1de2fc28…`, `3b5c5477…`), measures `tokens/s` across two deterministic builds (`sieve-cuda` and `cuda,sieve-cuda`), passes `d29_compiled_modules` (`5/5`), and archives sealed artifacts to `caseyallard/uor-r4-store`.
+2. On an RTX 5090 pod (`scripts/pod/uor-pod`), `lawful-pointer-oracle` passes finite CUDA device-vs-host parity controls across all 3 `RouteAdmissionMode`s and all 4 oracle conditions (`N`, `O1`, `O2`, `W`), verifies `256/256` target and distractor spans and `0/128` `W` pair hits on `m2-fresh256`, measures `tokens/s` across two deterministic builds, passes `d29_compiled_modules` (`5/5`), and archives sealed artifacts to `caseyallard/uor-r4-store`.
 3. Fresh-context `D68` decision review registers the `N`/`O1`/`O2`/`W` diagnostic bar on `#2880` and updates the prep sheet and lab README with the pinned `lawful_pointer.ptx` SHA-256 and GPU qualification numbers (`References #2880`).
 
 ## Stop and ask if
