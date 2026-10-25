@@ -1452,7 +1452,7 @@ fn run_stage_dose(args: &[String]) -> Result<(), String> {
             parent_sheet: parent_sheet_pin.clone(),
             sheet: dose_sheet_pin.clone(),
             anchor_manifest: anchor_manifest_pin.clone(),
-            anchor_manifest_sha256: anchor_manifest_pin.sha256.clone(),
+            anchor_manifest_sha256: qual_plan.anchor_manifest_sha256.clone(),
             anchor_policy: default_anchor_policy(),
             anchor_csv_sha256: REGISTERED_CSV_SHA256.into(),
             policy: AuditPolicy::registered(),
