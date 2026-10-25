@@ -29,9 +29,9 @@ References #2825.
   - `docs/harness/prep/hopf-retained-fibre-test-2026-10-25.md`: `0` `prep.sheet_shape` errors and `0` `prep.fit_before_run` warnings under `uor-harness check`.
   - `cargo run -p xtask -- links --json local/antigravity/links.json`: `0` broken links in `hopf-retained-fibre-test` files.
 
-## Checks run
+## Checks run at the head
 
-- `uor-harness loop gates --full` (`PASS`: `loop-gates-fmt`, `loop-gates-claim-wording`, `loop-gates-watch`, `loop-gates-d32-no-float-discrete`)
+- `uor-harness loop gates --full` (`PASS`: all 11 gates green)
 - `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo run -p xtask -- roadmap check` (`92 items OK: ready 44, held 6, decision 1, done 41`)
 - `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo run -p xtask -- docs-catalog --check` (`1175 records, 20 lines, 0 paths not found`)
 - `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo run -p xtask -- links --json local/antigravity/links.json` (`0` broken links in touched files)
