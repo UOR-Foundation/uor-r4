@@ -26,8 +26,8 @@ The item's done-when reads:
 
 | Check | Result |
 |---|---|
-| The null modes and CLI are on `main`, and `prime-zeta-codebook` bin tests pass | to run |
-| The draft's 7 pinned tables rebuild bit-exact on the host | to run |
+| The null modes and CLI are on `main`, and `prime-zeta-codebook` bin tests pass | **Holds:** 7 passed, 0 failed |
+| The draft's 7 pinned tables rebuild bit-exact on the host | **Holds:** `83c1380a`, `33b4e459`, `57225bbb`, `e03d6aef`, `229e93f5`, `36fec632` and `25ec9bd2` match the draft's `file_sha256` pins |
 | The reach measure the draft uses (`attention-dev-b3` per-row `target_admitted`) can be graded with `paired_psucc` | **Holds:** `B3Summary` rows; `address_key_grade` is on `main` |
 | No open PR holds this item | **Holds:** `loop claim` passed |
 
