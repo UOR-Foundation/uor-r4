@@ -227,6 +227,10 @@ pub struct SelectionAudit {
     pub on_zero_credit: u64,
     pub on_equals_control_u: u64,
     pub on_equals_control_f: u64,
+    /// Descriptive: how many distinct tokens ON chose, and how often its most
+    /// chosen token won (an ON stuck on one token passes the bounds above).
+    pub on_distinct_tokens: u64,
+    pub on_top_token_batches: u64,
 }
 
 impl SelectionAudit {
@@ -257,7 +261,10 @@ pub fn audit_selections(
         on_zero_credit: 0,
         on_equals_control_u: 0,
         on_equals_control_f: 0,
+        on_distinct_tokens: 0,
+        on_top_token_batches: 0,
     };
+    let mut chosen = std::collections::BTreeMap::<u32, u64>::new();
     for ((a, u), f) in on.iter().zip(control_u).zip(control_f) {
         let n = a.cursor_before.completed_batches;
         if u.cursor_before.completed_batches != n
@@ -269,15 +276,22 @@ pub fn audit_selections(
         }
         match (a.carrier, u.carrier, f.carrier) {
             (Some(a), Some(u), Some(f)) => {
+                use crate::carrier::CarrierMode::*;
+                if (a.mode, u.mode, f.mode) != (CreditV1, UniformTargetV1, UniformRowV1) {
+                    return Err(invalid("audited receipts come from the wrong arms"));
+                }
                 audit.vector_batches += 1;
                 audit.on_zero_credit += u64::from(a.value == 0);
                 audit.on_equals_control_u += u64::from(a.token == u.token);
                 audit.on_equals_control_f += u64::from(a.token == f.token);
+                *chosen.entry(a.token).or_default() += 1;
             }
             (None, None, None) => {}
             _ => return Err(invalid("a batch is a vector batch in one arm only")),
         }
     }
+    audit.on_distinct_tokens = chosen.len() as u64;
+    audit.on_top_token_batches = chosen.values().copied().max().unwrap_or(0);
     Ok(audit)
 }
 
@@ -350,6 +364,17 @@ pub fn grade(scores: &[ArmScore], audits: &[SelectionAudit]) -> Result<Value> {
             "seed": seed,
             "fresh_rows": n,
             "fresh_top1": {"on": on.fresh_top1, "control_u": cu.fresh_top1, "control_f": cf.fresh_top1, "off": off.fresh_top1},
+            "fresh_gaps": {
+                "on_minus_control_u": i128::from(on.fresh_top1) - i128::from(cu.fresh_top1),
+                "on_minus_control_f": i128::from(on.fresh_top1) - i128::from(cf.fresh_top1),
+                "control_f_minus_off": i128::from(cf.fresh_top1) - i128::from(off.fresh_top1),
+                "on_minus_off": i128::from(on.fresh_top1) - i128::from(off.fresh_top1),
+                "binomial_only": {
+                    "on_beats_control_u": beats(on.fresh_top1, cu.fresh_top1, n, 0),
+                    "on_beats_control_f": beats(on.fresh_top1, cf.fresh_top1, n, 0),
+                    "control_f_beats_off": beats(cf.fresh_top1, off.fresh_top1, n, 0),
+                },
+            },
             "credit_counts": c,
             "selection_counts": s,
             "on_beats_off": beats(on.fresh_top1, off.fresh_top1, n, noise),
@@ -474,6 +499,8 @@ mod tests {
             on_zero_credit: zero,
             on_equals_control_u: same_u,
             on_equals_control_f: same_f,
+            on_distinct_tokens: 40,
+            on_top_token_batches: 9,
         }
     }
 
@@ -550,7 +577,10 @@ mod tests {
             ),
             (3, 1, 1, 2)
         );
+        assert_eq!((a.on_distinct_tokens, a.on_top_token_batches), (2, 2));
         assert!(!a.is_instrument_fault());
+        // Receipts from the wrong arm are refused, not audited.
+        assert!(audit_selections(1001, &on, &cf, &cu).is_err());
         let mut shifted = cf.clone();
         shifted[0].target_positions = vec![99];
         assert!(audit_selections(1001, &on, &cu, &shifted).is_err());
