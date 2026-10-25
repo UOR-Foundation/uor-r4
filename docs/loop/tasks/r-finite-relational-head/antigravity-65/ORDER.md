@@ -11,18 +11,18 @@ Author and FIT-review the one-page pre-registration sheet (`docs/harness/prep/r-
 Ran on `origin/main` at `8cc6d7964cc6350eecba47d25576138eadcdf902`:
 
 1. `ls docs/harness/prep/r-finite-relational-head* docs/labs/r-finite-relational-head` -> no pre-registration sheet or lab directory exists (`instrument` missing).
-2. `docs/labs/m1-a8-full-dose-rerun/README.md` (`#2831`, PR `#3192`): the paired A8 admission-preserving rerun under `K = 1` single-coordinate greedy proposals (`rows_v1`) + 64-batch whole-interval rollback (`cadence = 64`, `margin = 24`, `floor = 1,187 / 3,847`) halted with `STOP_FOR_DIAGNOSIS: consecutive_rejections` at batch `1,600` on `Relation` (`25` audits, `132` committed updates = `82` vector + `28` combine + `22` relation, restored `TRAIN anchor = 1,232 / 3,847`, peak `1,607 / 3,847` at batch `64` and `1,600 / 3,847` at batch `256`) and at batch `5,248` on `FrozenZero` (`82` audits, `274` committed updates, restored `TRAIN anchor = 1,249 / 3,847`, after `FrozenZero` passed `Q1` at batch `4,096` with `DEV b_3(P_succ) = 1,106 / 3,847`, `b_3(Full) = 4,292 / 14,287`, and `DEV top1_correct = 871 / 14,287`).
-3. Why `#2831` did not settle the finite relational head's full-dose comparison against `FrozenZero`, `Route`, and the count tables: under `K = 1` greedy updates, each 64-batch window bundles `4–11` local 64-row updates before a global 3,847-row `TRAIN` anchor check runs, so a single admission-eroding coordinate move rolls back the entire 64-batch window (`instrument` cadence-granularity coupling, `mechanism_negative: false`). Replacing `K = 1` with the `BVG-K` (`K = 16`) batched-coordinate Stage T law is `#2836` (`m1-bvg-k-stage-t-training`, Step 4 of `PLAN.md`).
+2. `docs/labs/m1-a8-full-dose-rerun/README.md` (`#2831`, PR `#3192`): the paired A8 admission-preserving rerun under `K = 1` greedy single-coordinate updates + 64-batch whole-interval rollback (`cadence = 64`, `margin = 24`, `floor = 1,187 / 3,847`) hit `STOP_FOR_DIAGNOSIS: consecutive_rejections` at batch `1,600` on `Relation` (`25` audits, `132` committed updates = `82` vector + `28` combine + `22` relation, restored `TRAIN anchor = 1,232 / 3,847`, peak `1,607 / 3,847` at batch `64` and `1,600 / 3,847` at batch `256`) and at batch `5,248` on `FrozenZero` (`82` audits, `274` committed updates, restored `TRAIN anchor = 1,249 / 3,847`, after `FrozenZero` passed `Q1` at batch `4,096` with `DEV b_3(P_succ) = 1,106 / 3,847`, `b_3(Full) = 4,292 / 14,287`, and `DEV top1_correct = 871 / 14,287`).
+3. Under `K = 1`, each 64-batch window bundles `4–11` local 64-row updates before a global 3,847-row `TRAIN` anchor check runs, so one admission-eroding coordinate move rolls back the entire 64-batch window (`instrument` cadence-granularity coupling, `mechanism_negative: false`). Moving to `BVG-K` (`K = 16`) batched-coordinate Stage T updates is `#2836` (`m1-bvg-k-stage-t-training`, Step 4 of `PLAN.md`).
 4. `docs/roadmap/items/r-finite-relational-head.md` line 10 restricts `scope:` to `[docs/harness/prep/r-finite-relational-head*, docs/labs/r-finite-relational-head/**, docs/loop/tasks/r-finite-relational-head/**]`, excluding `crates/uor-r4-discrete/**`.
 
-- **Classification:** **`instrument`** (pre-registration sheet `docs/harness/prep/r-finite-relational-head-2026-10-25.md` and lab directory `docs/labs/r-finite-relational-head/` are not yet authored; the `BVG-K` Stage T training law `#2836` is still open on `PLAN.md` Step 4; item scope excludes `crates/uor-r4-discrete/**`).
+- **Classification:** **`instrument`** (pre-registration sheet and lab directory not yet authored; `#2836` Stage T still open; scope excludes `crates/uor-r4-discrete/**`).
 
 ## Files in scope
 
 - `docs/harness/prep/r-finite-relational-head*`
 - `docs/labs/r-finite-relational-head/**`
 - `docs/loop/tasks/r-finite-relational-head/**`
-- Always-allowed shared/item paths (`docs/loop/README.md` lines 103, 190–194): `docs/roadmap/items/r-finite-relational-head.md` (`status:` line only) and `docs/roadmap/README.md` (via `cargo xtask roadmap render`).
+- Always-allowed paths (`docs/loop/README.md` lines 103, 190–194): `docs/roadmap/items/r-finite-relational-head.md` (`status:` line only) and `docs/roadmap/README.md`.
 
 ## Done when
 
