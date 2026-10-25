@@ -116,4 +116,9 @@ Every arm is scored on all 14,287 DEV rows and all 3,847 P_succ rows (at least 2
 
 ## Test fitness
 
-TEST FITNESS: PENDING - M1 #2029 m1-address-key-full-vector
+TEST FITNESS: FIT - M1 #2029 m1-address-key-full-vector
+sheet: docs/harness/prep/m1-address-key-full-vector-2026-10-25.md
+reviewer: claude, fresh-context non-author review (round 1 NOT FIT at 1cb179f92; round 2 FIT)
+note: https://github.com/UOR-Foundation/uor-r4/issues/2834#issuecomment-6400663507
+date: 2026-10-25
+A FIT verdict clears compute for the configuration in that sheet only (D22).
