@@ -28,6 +28,10 @@ References #2904. References #2839.
 - **The fresh exact-head review** at `4327d6a1e`: APPROVE. Its advisory 2 (Relation passed only the TRAIN anchor floor) is applied in the item text.
 - **`xtask roadmap check`:** 92 items OK. Ready 25, held 15, decision 1, done 51.
 
+## Skills used
+
+- holding-the-goal: the PLAN.md sequence was read before acting. The unit unblocks only what AGENTS allows now (preparation that runs no compute) and leaves the measured run where the plan puts it.
+
 ## Still open
 
 - **The step 6 unit itself:** its sheet, which repeats the step-4-model condition; the instrument; the FIT; then the measured run on step 4's saved model, under D67. Claude intends to claim it once this merges.
