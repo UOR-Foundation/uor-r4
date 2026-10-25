@@ -24,9 +24,9 @@ cargo build -q --release --locked -p uor-r4-discrete --features cuda 2>&1 | grep
 "$B/discrete-stack" build-identity > "$R/build-identity.json" 2>&1; echo "build_identity_rc=$?"
 
 mark "G-Qual: CUDA device test route_read_off_and_permuted_controls_run_and_refuse"
-cargo test -q --release --locked -p uor-r4-discrete --features cuda --lib route_read_off_and_permuted_controls_run_and_refuse -- --ignored --exact > "$R/g-qual-device-test.stdout" 2>&1
+cargo test -q --release --locked -p uor-r4-discrete --features cuda --lib device::unit_snap_device_tests::route_read_off_and_permuted_controls_run_and_refuse -- --ignored --exact > "$R/g-qual-device-test.stdout" 2>&1
 rc=$?; echo "g_qual_rc=$rc"
-[ $rc -eq 0 ] && echo "G_QUAL: PASS" || { echo "G_QUAL: FAIL"; cat "$R/g-qual-device-test.stdout"; exit 2; }
+[ $rc -eq 0 ] && grep -q '1 passed; 0 failed' "$R/g-qual-device-test.stdout" && echo "G_QUAL: PASS" || { echo "G_QUAL: FAIL"; cat "$R/g-qual-device-test.stdout"; exit 2; }
 
 mark "verify or rebuild P8 and A8 tables if missing"
 mkdir -p "$D/injective" "$D/address-cells" "$R/tables"
