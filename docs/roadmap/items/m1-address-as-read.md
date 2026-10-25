@@ -16,7 +16,7 @@ The model has no exact way to read stored content back by address. Building this
 
 ## What is missing
 
-The address consumer is delivered: `address_read` resolves exact and sieve queries to verified object-store content, with finite controls (`86eb68ebb`, #2950). Panel-v2 and the sealed fresh-V2 BPB stream are frozen and pinned. Still missing are the held #2844 checkpoint SHA, a fresh-context non-author FIT, PM dispatch, Casey's approval in chat, and the registered three-arm GPU evaluation. No oracle gain or language capability is established.
+The address consumer is delivered: `address_read` resolves exact and sieve queries to verified object-store content, with finite controls (`86eb68ebb`, #2950). Panel-v2 and the sealed fresh-V2 BPB stream are frozen and pinned. Still missing are the trunk's #2844 checkpoint SHA (`m1-trunk-assembly-and-training`, M2 under D79), a fresh-context non-author FIT, the lab's own pre-run review (D67), and the registered three-arm GPU evaluation. No oracle gain or language capability is established.
 
 ## Done when
 

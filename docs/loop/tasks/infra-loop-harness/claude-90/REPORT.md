@@ -17,7 +17,7 @@ References #2833
 ## What changed
 
 - **`docs/roadmap/items/m1-bvg-k-block-apply-c2.md`.**
-  - The scope is now its docs only: `docs/harness/prep/m1-bvg-k-block-apply-c2*`, `docs/harness/prep/m1-bvgk-staget*`, `docs/labs/m1-bvg-k-block-apply-c2/**` and `docs/loop/tasks/m1-bvg-k-block-apply-c2/**`.
+  - The scope is now its docs only: the C2 and Stage T prep sheets (`m1-bvgk-stage-t*`, the name its step 4 gives, and `m1-bvgk-staget*`, the existing draft), its lab and task folders, and the M1 notebook page. The fresh review caught that the first glob missed the sheet name and the notebook row, and that two older owner-release phrases remained; all three are fixed.
   - Two sentences change from "typed owner release, training hold" to the current rule: a FIT, then the lab's own pre-run review (D67, D77).
 - **`docs/roadmap/items/m1-address-as-read.md`.**
   - It now has `depends_on: [m1-trunk-assembly-and-training]`.
