@@ -66,7 +66,7 @@ Lab: claude, claude-103. Item: [`carrier-credit-hard-selection`](../../../../roa
   - The trainer never reads it. The arms are scored on it once, at the end.
   - It is not the M1 fresh panel (binding `4bd108ad…`, the fresh V2 seal `df5d074a…`), which stays sealed for M1 bar (e), and it is not frozen `ft/dev`.
   - It is cut at document boundaries. Windows that duplicate a TRAIN window exactly are removed. It holds at least 200 scored targets (§4.3), with the exact count fixed in the sheet.
-  - Every arm trains on the same reduced train binding, and the dose stays at 16,404 batches. Because that binding differs from the one #2831 and #2836 use, a finding enters their next sheets as a candidate arm, tested on their own binding.
+  - Refined in the prep sheet (§4), before any FIT. Batches walk TRAIN's eligible targets in order, so a 16,404 × 64 dose reads only indices 0 to 1,049,855 of 2,425,925. The slice is taken from documents past that point, the TRAIN binding stays byte-identical to the one #2831 and #2836 use, and a driver check refuses any cursor that reaches the slice. A finding still enters their next sheets only as a candidate arm.
   - The build adds the `Split::Fresh` binding and its evaluation entry point. `corpus.rs`:56 defines the split, but `training.rs` loads and evaluates only Train and Dev (:272–273, :453–454, :3036, :3068).
 - **The bar** is fixed in the prep sheet before any run, and reviewed for FIT.
   - The two pre-named comparisons are read on fresh rows (§4.3), with a margin no narrower than the measured seed noise.
