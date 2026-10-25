@@ -18,6 +18,10 @@ pub const SCOPE: &str = "m1-attention-active-whole-interval-rejection-v1";
 pub const OWNER_DECISION: &str = "RELEASE_D40_AUDITED_WHOLE_INTERVAL_ARM_ONLY";
 pub const REVIEW_VERDICT: &str = "APPROVE_ACTIVE_WHOLE_INTERVAL_ADMISSION_PLAN";
 pub(crate) const QUALIFIED_STAGE1_COMMIT: &str = "fd409fcdf3bc43d607e768bae6f8cf403aa75901";
+pub(crate) const QUALIFIED_STAGE1_SOURCE_SHA256: &str =
+    "81651081145fd4712046a8158a26c3bd6940ff5a60e5cdddf666057cb9fc0084";
+pub(crate) const QUALIFIED_STAGE1_KERNEL_SHA256: &str =
+    "5cd0e73241fd895f2dd0004c83af3d1eb9f89e00ec2e933c1acc44fc7127bfd6";
 pub(crate) const QUALIFIED_STAGE1_DRIVER_SOURCE_SHA256: &str =
     "0f8ce4061996acdcce3ad4ae01d9e267f280703a77536eb6ecc24bfdc6e6df1d";
 
@@ -27,8 +31,9 @@ pub(crate) fn matches_qualified_execution(
 ) -> bool {
     qual_exec == plan_exec
         || (qual_exec.reviewed_source_commit == QUALIFIED_STAGE1_COMMIT
+            && qual_exec.source_sha256 == QUALIFIED_STAGE1_SOURCE_SHA256
+            && qual_exec.kernel_sha256 == QUALIFIED_STAGE1_KERNEL_SHA256
             && qual_exec.driver_source_sha256 == QUALIFIED_STAGE1_DRIVER_SOURCE_SHA256
-            && qual_exec.kernel_sha256 == plan_exec.kernel_sha256
             && qual_exec.geometry_sha256 == plan_exec.geometry_sha256
             && qual_exec.config_sha256 == plan_exec.config_sha256
             && qual_exec.sheet_sha256 == plan_exec.sheet_sha256)
@@ -1736,5 +1741,23 @@ mod tests {
         bad = report;
         bad["controls"][8]["details"]["init_locks"] = json!("INIT LOCK PASS");
         assert!(validate_relation_qualification(&bad).is_err());
+    }
+    #[test]
+    fn matches_qualified_execution_binds_stage1_pinned_identity_and_rejects_mismatched_config_or_kernel(
+    ) {
+        let plan_exec = fixture().execution;
+        assert!(matches_qualified_execution(&plan_exec, &plan_exec));
+        let mut stage1 = plan_exec.clone();
+        stage1.reviewed_source_commit = QUALIFIED_STAGE1_COMMIT.into();
+        stage1.source_sha256 = QUALIFIED_STAGE1_SOURCE_SHA256.into();
+        stage1.kernel_sha256 = QUALIFIED_STAGE1_KERNEL_SHA256.into();
+        stage1.driver_source_sha256 = QUALIFIED_STAGE1_DRIVER_SOURCE_SHA256.into();
+        assert!(matches_qualified_execution(&plan_exec, &stage1));
+        let mut wrong_kernel = stage1.clone();
+        wrong_kernel.kernel_sha256 = "f".repeat(64);
+        assert!(!matches_qualified_execution(&plan_exec, &wrong_kernel));
+        let mut wrong_config = stage1;
+        wrong_config.config_sha256 = "f".repeat(64);
+        assert!(!matches_qualified_execution(&plan_exec, &wrong_config));
     }
 }
