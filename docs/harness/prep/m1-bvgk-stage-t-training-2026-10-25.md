@@ -3,9 +3,9 @@
 - **Date**: 2026-10-25
 - **Lab**: `antigravity`
 - **Roadmap Items**: prepared in `m1-bvg-k-block-apply-c2` ([`#2835`](https://github.com/UOR-Foundation/uor-r4/issues/2835), Step 3 in `PLAN.md`); executed in `m1-bvg-k-stage-t-training` ([`#2836`](https://github.com/UOR-Foundation/uor-r4/issues/2836), Step 4 in `PLAN.md`)
-- **Predecessor Draft**: supersedes `docs/harness/prep/m1-bvgk-staget-learning-law-DRAFT-2026-10-19.md` (`sha256 = 7ef4eb5c8d2ffaa730d62df5d1601a0b75d523934bc8d08475a66f6c5360c369`) by binding the resolved `#2831` A8 base lineage and `#3179` W2 admission-matched comparators
+- **Predecessor Draft**: supersedes `docs/harness/prep/m1-bvgk-staget-learning-law-DRAFT-2026-10-19.md` (`sha256 = 0d2775e1aa197f0cff577f01f00fc80ae9072cd7cbe11bb79558e35fb0f32e32`) by binding the resolved `#2831` A8 base lineage and `#3179` W2 admission-matched comparators
 - **Stage C1 & C2 Qualification Receipts**:
-  - Stage C1 (`K = 16` scoring parity): `docs/labs/bvgk-rowsk-scoring-2026-10-18/evidence/bvgk-c1-20261018/report/rowsk-qualification.json` (`sha256 = ebdf0ef4ddccfdce80758c9c7d9185ca66bb7689897d22503e63727d8779ef5b`, `5,130 / 5,130` parity across 4 cells, `16.25x` scoring speedup)
+  - Stage C1 (`K = 16` scoring parity): `docs/labs/bvgk-rowsk-scoring-2026-10-18/evidence/run1/clean/rowsk-qualification.json` (`sha256 = d5ec5348d64e2abd74a334319d4f78e6ed7b174b5a2fc0bb381505dc46e09e56`, `5,130 / 5,130` parity across 4 cells, `16.25x` scoring speedup)
   - Stage C2 (`propose_block` + `apply_block` exactness): `docs/labs/injective-preflight-and-c2-qualify-2026-10-19/evidence/bvgk-c2-qualify-20261019/report/bvgk-qualification.json` (`sha256 = 2fff942fa2b802e180c9bd87336692730d6beaf22f2c0bac8867afb0dea345f3`, `8 / 8` controls `V0`, `RC`, `UT`, `JR`, `DC`, `V3`, `RF`, `C1R` pass across `3,419` fixture updates, `~8x` effective throughput with joint verify)
 
 ## 1. Question, Geometric Construction, and Base Artifact
@@ -71,16 +71,16 @@ Stage C2 (`2fff942fa2b802e180c9bd87336692730d6beaf22f2c0bac8867afb0dea345f3`) le
 
 ## 5. Data, Checkpoints, and Qualification SHA-256 Pins
 
-- **Base Codebook (`A8` address-structured cells)**: `docs/labs/m1-a8-registration-and-runbook-staging/evidence/inherited/address-structured-v1.json` (`sha256 = 6600bdb1306dbaea4d77f5bf021e717a6bef791e44c1ec7d7c9bb9f0e8cd3cd1`, `B3_init(P_succ) = 1,351 / 3,847`, `B3_init(Full) = 4,244 / 14,287`, `TRAIN anchor = 1,211 / 3,847`).
+- **Base Codebook (`A8` address-structured cells)**: `address-structured-v1.json` (built deterministically from TRAIN via `address-cells-codebook` and pinned in `crates/uor-r4-discrete/src/attention_learning.rs` and `docs/labs/m1-a8-registration-and-runbook-staging/README.md`; `file_sha256 = 6600bdb1306dbaea4d77f5bf021e717a6bef791e44c1ec7d7c9bb9f0e8cd3cd1`, `table_sha256 = 4122cbab44bd88658743984fc1ab79059bf032c3e2fe526ffcf4ea5f95d9cd74`, `B3_init(P_succ) = 1,351 / 3,847`, `B3_init(Full) = 4,244 / 14,287`, `TRAIN anchor = 1,211 / 3,847`).
 - **Train & DEV Corpora**:
   - TRAIN tokens (`mw-balp/train/tokens.u16`): `3dee858f84b750f507ceb3dc3f393711741950954735efaaf61bf704c017a4c8`; TRAIN mask (`response_mask.u8`): `b5e7352d67d6883a833155a5fd397a03f6d4f1b2649e3d4ec3e2ea7d95b949e3`.
   - DEV tokens (`ft/dev/tokens.u16`): `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b`; DEV mask (`response_mask.u8`): `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` (`14,287` rows, `3,847` `P_succ` rows).
   - Tokenizer (`tokenizer.json`): `d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`.
-- **TRAIN Admission Anchor (`3,847` rows)**: `docs/labs/admission-anchor-controller-2026-10-19/evidence/train-anchor-3847-v1.csv` (`row_csv_sha256 = 8c1b80e9b15e4e2bcc765037afa7800b785418be3e20b8cc80ce13ee2e32b3c1`, `manifest_sha256 = f85466ff339d8fb848fb1151a7d672fba5687296b81b1ad6fb39c36ddaca27de`).
+- **TRAIN Admission Anchor (`3,847` rows)**: Canonical `uor-r4.train-copy-successor-anchor/v1` (`crates/uor-r4-discrete/src/attention_anchor.rs` and `docs/labs/admission-anchor-controller-2026-10-19/README.md`; `row_csv_sha256 = 8c1b80e9b15e4e2bcc765037afa7800b785418be3e20b8cc80ce13ee2e32b3c1`, `manifest_sha256 = f85466ff339d8fb848fb1151a7d672fba5687296b81b1ad6fb39c36ddaca27de`).
 - **Inherited `#2831` `K = 1` Seed-1 Baselines & Checkpoints**:
   - `Relation` seed-1 config `f223d78f45fe26dee4080ae7ca9a5b9ff12d9ef0df847375671d52db733fbecd`, initial checkpoint `b5b7af6ebedc1272dc61c84c61248a52838d01db5c29dc7304190caaa392c107`, `#2831` report `eb02da3b46c72591e062025a7f1ecb0fecc8e493947d8efc7fd4e3e1e92ecbc1`.
   - `FrozenZero` seed-1 config `c3fbffe08d13008b8b7ab400a4ef946f2c49632906d88e431d5e80314b9f5536`, initial checkpoint `8465057c88157a4928806eb05ab61d39d0ec6a81000011644914c1d26161e35b`, `#2831` `q1-dev.json` (`top1 = 871 / 14,287`) `6b924afa04103467814b6c71773f7df2c7e6df342f045d83434d3dafe8372943`, `#2831` report `ca5f946945763142fa45e461014a7cc765cb4b53b5850143013a61ed8049a421`.
-- **W2 Capacity & Utilization Baselines (`#2845` / `#3179`)**: HF store `caseyallard/uor-r4-store:results/claude/w2-capacity-2026-10-25/record.json` (`sha256 = 6971797111a08414596f32050d08a427f3e4f9595826a75587966086986b6928`, summarized in `docs/labs/m1-w2-capacity-capture/README.md`) and `caseyallard/uor-r4-store:results/claude/w2-utilization-2026-10-25/record.json` (`sha256 = d9aa6cd1a9a46876d4e50f1143d481e810fdcfb216beeccf6422ce1b7d70db90`, summarized in `docs/labs/m1-w2-code-utilization/README.md`).
+- **W2 Capacity & Utilization Baselines (`#2845` / `#3179`)**: HF store `caseyallard/uor-r4-store:results/claude/w2-capacity-2026-10-25/record.json` (`sha256 = 69717971a6f4e6f4a6dede6ad5eee630c4abdbda13e4c8dd434ef126a74c1abc`, summarized in `docs/labs/m1-w2-capacity-capture/README.md`) and `caseyallard/uor-r4-store:results/claude/w2-utilization-2026-10-25/record.json` (`sha256 = d9aa6cd1a9a46876d4e50f1143d481e810fdcfb216beeccf6422ce1b7d70db90`, summarized in `docs/labs/m1-w2-code-utilization/README.md`).
 - **Fresh V2 Transfer Slice**: Remains sealed (`fresh_evaluations == 0`) throughout Stage T.
 
 ## 6. Compute Cost and Stop Conditions

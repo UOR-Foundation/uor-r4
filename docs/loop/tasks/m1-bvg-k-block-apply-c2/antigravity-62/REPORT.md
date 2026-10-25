@@ -12,16 +12,16 @@ Lab: antigravity. Item: [m1-bvg-k-block-apply-c2](../../../../roadmap/items/m1-b
 
 Closes #2835.
 
-- **Size**: `6` files changed (`0` code, `0` test, `6` docs, `0` generated), `+316 / -4` lines (`320` lines touched vs a `~250`-line estimate for the one-page Stage T sheet, lab summary, notebook row, item status, ORDER, and REPORT; ratio `1.28x`).
+- **Size**: `6` files changed (`0` code, `0` test, `6` docs, `0` generated), `+285 / -4` lines (`289` lines touched vs a `~250`-line estimate for the one-page Stage T sheet, lab summary, notebook row, item status, ORDER, and REPORT; ratio `1.16x`).
 - **Files modified / added**:
   - [`docs/harness/prep/m1-bvgk-stage-t-training-2026-10-25.md`](../../../harness/prep/m1-bvgk-stage-t-training-2026-10-25.md): One-page Stage T pre-registration sheet binding:
     - Geometric construction (`K = 16` coordinates scored per GPU launch via `score_rows_k` in `rowsk.cu` / `bvgk.cu`, `S_t` chosen via `discrete_bvgk_choose`, scratch-clone `L(S_t)` verified when `|S_t| >= 2`, `S_t` committed iff `L(S_t) < L({best})` else `{best}` via `discrete_bvgk_apply` in one epoch increment; integer rank-margin hinge loss, E8 orbit / SpiralCore table actions, and integer L1/Hamming additions; zero softmax/squashing §3.2 and zero matmul §3.3).
-    - Passed C1 (`ebdf0ef4ddccfdce80758c9c7d9185ca66bb7689897d22503e63727d8779ef5b`) and C2 (`2fff942fa2b802e180c9bd87336692730d6beaf22f2c0bac8867afb0dea345f3`) qualification receipts.
+    - Passed C1 (`d5ec5348d64e2abd74a334319d4f78e6ed7b174b5a2fc0bb381505dc46e09e56`) and C2 (`2fff942fa2b802e180c9bd87336692730d6beaf22f2c0bac8867afb0dea345f3`) qualification receipts.
     - Mandatory Step 0 GPU controls (`AKd`, `V1d`, `KId`, `V8d`, `V9d`) covering all three items left outside Stage C2 before any training result is read.
     - Qualified A8 address-structured base codebook (`address-structured-v1.json`, `6600bdb1306dbaea4d77f5bf021e717a6bef791e44c1ec7d7c9bb9f0e8cd3cd1`) and active D40 64-batch whole-interval admission-preserving rollback (`AuditPolicy::registered()`) from `#2831`.
     - Stage 2 bar across two seeds (`seed 1`, `seed 2`): keep DEV admission (`>= 4,220 / 14,287`), beat `T1` (`K = 1`), and beat the unigram table (`1,226 / 14,287`), then the admission-matched next-word table produced by W2 (`#2845` / `#3179`: `1,138 / 14,287` restricted code table and `1,482 / 14,287` restricted bigram on baseline, plus checkpoint-matched `T_restr(A_W)` / `G_restr(A_W)` on the checkpoint's admitted rows `A_W`, not the `6,300` full-panel `T2` table).
     - Compute budget (`~$12` carried estimate, hard cap `$15.00`, on `2x RTX 5090` inside `<= 4` pods and `<= $8/h` fleet caps), stop conditions, uncovered scope, and stamped `TEST FITNESS: FIT` (`#2835` comment `6395412609`).
-  - [`docs/labs/m1-bvg-k-block-apply-c2/README.md`](../../../labs/m1-bvg-k-block-apply-c2/README.md): Lab summary documenting Stage C2 qualification (`8 / 8` controls PASS), the resolved `#2831` and `#3179` prerequisites, and the Stage T pre-registration and Step 0 controls.
+  - [`docs/labs/m1-bvg-k-block-apply-c2/README.md`](../../../labs/m1-bvg-k-block-apply-c2/README.md): Preserved the 2026-10-22 `deepseek` historical section intact (`CHARTER §4.7`) and appended the 2026-10-25 Stage C2 qualification (`8 / 8` controls PASS) and Stage T pre-registration summary.
   - [`docs/research/notebook/m1-discrete-attention.md`](../../../research/notebook/m1-discrete-attention.md): Appended one row for `2026-10-25` recording the Stage C2 receipt verification and Stage T pre-registration (`positive (qualification and Stage T pre-registration complete; unlocks #2836 Stage T GPU training; no training run in #2835)`).
   - [`docs/roadmap/items/m1-bvg-k-block-apply-c2.md`](../../../roadmap/items/m1-bvg-k-block-apply-c2.md): Updated `status: ready` to `status: done`.
   - [`docs/loop/tasks/m1-bvg-k-block-apply-c2/antigravity-62/ORDER.md`](ORDER.md) and [`REPORT.md`](REPORT.md): Task order and report.
@@ -30,7 +30,7 @@ Closes #2835.
 
 - **Stage C2 Qualification Receipt Verification (host check)**:
   - Command: `shasum -a 256 docs/labs/injective-preflight-and-c2-qualify-2026-10-19/evidence/bvgk-c2-qualify-20261019/report/bvgk-qualification.json`
-  - Result: `2fff942fa2b802e180c9bd87336692730d6beaf22f2c0bac8867afb0dea345f3` (`overall_pass = true`, `8 / 8` controls `V0`, `RC`, `UT`, `JR`, `DC`, `V3` `64/64` block commits = `50` joint, `RF` `12/12`, `C1R` `5,130/5,130`, `3,419` fixture updates on RTX 5090).
+  - Result: `2fff942fa2b802e180c9bd87336692730d6beaf22f2c0bac8867afb0dea345f3` (`status = "PASS"`, `8 / 8` controls `V0`, `RC` `64` cases / `14,080` lanes, `UT`/`JR`/`DC` `804` proposals = `260` joint wins + `59` fallback-to-best + `345` single + `140` empty with `319/319` multi-coordinate JR parity, `V3` `664/664` block commits = `260` joint, `RF` `9/9`, `C1R` `5,130/5,130` across `2,028` blocks, `3,419` fixture updates on RTX 5090).
 - **Discrete Crate Host Check**:
   - Command: `~/.cargo/bin/cargo check -p uor-r4-discrete`
   - Result: `exit 0` (`Finished dev profile` in `14.34s` on host without `cuda`).
