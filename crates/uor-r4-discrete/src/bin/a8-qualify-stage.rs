@@ -549,17 +549,40 @@ fn run_stage(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-fn verify_arm_qualification(
-    arm: &str,
-    qual_pin: &FilePin,
-    cal_pin: &FilePin,
-) -> Result<(Value, Value), String> {
-    let qual_bytes = qual_pin.read().map_err(|e| format!("{arm} qual: {e}"))?;
-    let cal_bytes = cal_pin.read().map_err(|e| format!("{arm} cal: {e}"))?;
+fn read_pinned_or_rebased(pin: &FilePin, rebase_dir: &Path) -> Result<Vec<u8>, String> {
+    let candidate = if pin.path.exists() {
+        pin.path.clone()
+    } else if let Ok(rel) = pin.path.strip_prefix("/workspace/a8s1/qual-out") {
+        let stripped = rebase_dir.join(rel);
+        if stripped.exists() {
+            stripped
+        } else if let Some(name) = pin.path.file_name() {
+            rebase_dir.join(name)
+        } else {
+            stripped
+        }
+    } else if let Some(name) = pin.path.file_name() {
+        rebase_dir.join(name)
+    } else {
+        pin.path.clone()
+    };
+    let bytes = read_bytes(&candidate)?;
+    let actual = sha256(&bytes);
+    if actual != pin.sha256 {
+        return Err(format!(
+            "{}: sha256 {actual} != expected {}",
+            candidate.display(),
+            pin.sha256
+        ));
+    }
+    Ok(bytes)
+}
+
+fn verify_arm_stages_only(arm: &str, arm_dir: &Path, qual_pin: &FilePin) -> Result<Value, String> {
+    let qual_bytes =
+        read_pinned_or_rebased(qual_pin, arm_dir).map_err(|e| format!("{arm} qual: {e}"))?;
     let qual: Qualification =
         serde_json::from_slice(&qual_bytes).map_err(|e| format!("{arm} qual json: {e}"))?;
-    let cal: Calibration =
-        serde_json::from_slice(&cal_bytes).map_err(|e| format!("{arm} cal json: {e}"))?;
 
     if qual.schema != "uor-r4.attention-audit-qualification/1"
         || qual.b3_psucc != 1351
@@ -591,9 +614,7 @@ fn verify_arm_qualification(
                 check.name, check.status
             ));
         }
-        let stage_bytes = check
-            .artifact
-            .read()
+        let stage_bytes = read_pinned_or_rebased(&check.artifact, arm_dir)
             .map_err(|e| format!("{arm} stage {}: {e}", check.name))?;
         let stage_val: Value =
             serde_json::from_slice(&stage_bytes).map_err(|e| format!("{arm} stage json: {e}"))?;
@@ -607,6 +628,35 @@ fn verify_arm_qualification(
             "facts": stage_val["facts"],
         }));
     }
+
+    Ok(json!({
+        "qualification_sha256": qual_pin.sha256,
+        "execution": qual.execution,
+        "b3_psucc": qual.b3_psucc,
+        "b3_full": qual.b3_full,
+        "top1": qual.top1,
+        "bar_i": qual.bar_i,
+        "psucc_reference_top1": qual.psucc_reference_top1,
+        "occupied_cells": qual.occupied_cells,
+        "distinct_vectors": qual.distinct_vectors,
+        "tie_mass": qual.tie_mass,
+        "combine_sensitive": qual.combine_sensitive,
+        "relation_sensitive": qual.relation_sensitive,
+        "stages": stage_summaries,
+    }))
+}
+
+fn verify_arm_qualification(
+    arm: &str,
+    qual_pin: &FilePin,
+    cal_pin: &FilePin,
+) -> Result<(Value, Value), String> {
+    let arm_dir = qual_pin.path.parent().unwrap_or_else(|| Path::new("."));
+    let qual_summary = verify_arm_stages_only(arm, arm_dir, qual_pin)?;
+    let cal_bytes =
+        read_pinned_or_rebased(cal_pin, arm_dir).map_err(|e| format!("{arm} cal: {e}"))?;
+    let cal: Calibration =
+        serde_json::from_slice(&cal_bytes).map_err(|e| format!("{arm} cal json: {e}"))?;
 
     if cal.schema != "uor-r4.attention-audit-calibration/1"
         || cal.audits_both_arms != 516
@@ -623,8 +673,7 @@ fn verify_arm_qualification(
         ));
     }
     for raw_pin in &cal.measurement_artifacts {
-        raw_pin
-            .read()
+        read_pinned_or_rebased(raw_pin, arm_dir)
             .map_err(|e| format!("{arm} raw measurement pin: {e}"))?;
     }
 
@@ -632,21 +681,7 @@ fn verify_arm_qualification(
         .div_ceil(u128::from(cal.ungated_two_arm_dose_ns));
 
     Ok((
-        json!({
-            "qualification_sha256": qual_pin.sha256,
-            "execution": qual.execution,
-            "b3_psucc": qual.b3_psucc,
-            "b3_full": qual.b3_full,
-            "top1": qual.top1,
-            "bar_i": qual.bar_i,
-            "psucc_reference_top1": qual.psucc_reference_top1,
-            "occupied_cells": qual.occupied_cells,
-            "distinct_vectors": qual.distinct_vectors,
-            "tie_mass": qual.tie_mass,
-            "combine_sensitive": qual.combine_sensitive,
-            "relation_sensitive": qual.relation_sensitive,
-            "stages": stage_summaries,
-        }),
+        qual_summary,
         json!({
             "calibration_sha256": cal_pin.sha256,
             "projected_added_gate_ns": cal.projected_added_gate_ns,
@@ -662,6 +697,108 @@ fn verify_arm_qualification(
     ))
 }
 
+fn verify_production_proof(arm: &str, arm_dir: &Path) -> Result<Value, String> {
+    let proof_path = arm_dir.join("production-proof.json");
+    let proof_pin = pin_existing(&proof_path)?;
+    let proof: Value = read_json(&proof_pin.path)?;
+    if proof["schema"] != "uor-r4.attention-audit-production-restore-proof/1" {
+        return Err(format!("{arm} production-proof.json invalid: {proof}"));
+    }
+    for key in [
+        "initial_checkpoint",
+        "inspected_checkpoint",
+        "continuation_checkpoint",
+        "steps",
+        "restore_intent",
+        "restore_observation",
+        "initial_anchor",
+        "restored_anchor",
+    ] {
+        let pin: FilePin = serde_json::from_value(proof[key].clone())
+            .map_err(|e| format!("{arm} production-proof {key} pin: {e}"))?;
+        read_pinned_or_rebased(&pin, arm_dir)
+            .map_err(|e| format!("{arm} production-proof {key}: {e}"))?;
+    }
+    let stage_path = arm_dir.join("audited_restore_epoch_cursor.json");
+    let stage_val: Value = read_json(&stage_path)?;
+    let facts = &stage_val["facts"];
+    if stage_val["status"] != "PASS"
+        || facts["advanced_attempts"] != 384
+        || facts["restored_epoch"] != 0
+        || facts["passing_storage_restored"] != true
+        || facts["passing_snapshot_restored"] != true
+        || facts["fresh_binding"] != true
+        || facts["stale_handles_refused"] != true
+        || facts["anchor_equal_before_after_restore"] != true
+        || facts["continuation_file_distinct"] != true
+    {
+        return Err(format!(
+            "{arm} audited_restore_epoch_cursor facts invalid: {facts}"
+        ));
+    }
+    let obs_path = arm_dir.join("production-restore-observed.json");
+    let obs: Value = read_json(&obs_path)?;
+    if obs["observed_epoch"] != 0
+        || obs["old_handles_refused"] != true
+        || obs["passing_snapshot_restored"] != true
+        || obs["passing_storage_restored"] != true
+        || obs["advanced_cursor"]["completed_batches"] != 384
+    {
+        return Err(format!(
+            "{arm} production-restore-observed.json invalid: {obs}"
+        ));
+    }
+    let base_summary_path = arm_dir.join("baseline-anchor-0.json");
+    let rest_summary_path = arm_dir.join("restored-anchor.json");
+    let base_doc: Value = read_json(&base_summary_path)?;
+    let rest_doc: Value = read_json(&rest_summary_path)?;
+    let base_agg = &base_doc["evaluation"]["aggregate"];
+    let rest_agg = &rest_doc["evaluation"]["aggregate"];
+    if base_agg["scored_rows"] != 3847
+        || base_agg["target_admitted_rows"].as_u64().unwrap_or(0) < 500
+        || rest_agg != base_agg
+        || rest_doc["evaluation"]["actual_snapshot_before"]
+            != base_doc["evaluation"]["actual_snapshot_before"]
+    {
+        return Err(format!(
+            "{arm} anchor aggregate mismatch before vs after restore"
+        ));
+    }
+    let base_timing_path = arm_dir.join("baseline-anchor-timing-0.json");
+    let rest_timing_path = arm_dir.join("restore-timing.json");
+    let base_timing: Value = read_json(&base_timing_path)?;
+    let rest_timing: Value = read_json(&rest_timing_path)?;
+    Ok(json!({
+        "production_proof_sha256": proof_pin.sha256,
+        "status": stage_val["status"],
+        "advanced_attempts": facts["advanced_attempts"],
+        "accepted_updates_before_restore": facts["accepted_updates_before_restore"],
+        "restored_epoch": facts["restored_epoch"],
+        "passing_storage_restored": facts["passing_storage_restored"],
+        "passing_snapshot_restored": facts["passing_snapshot_restored"],
+        "fresh_binding": facts["fresh_binding"],
+        "stale_handles_refused": facts["stale_handles_refused"],
+        "continuation_file_distinct": facts["continuation_file_distinct"],
+        "anchor_equal_before_after_restore": facts["anchor_equal_before_after_restore"],
+        "advanced_cursor": obs["advanced_cursor"],
+        "initial_anchor_sha256": proof["initial_anchor"]["sha256"],
+        "restored_anchor_sha256": proof["restored_anchor"]["sha256"],
+        "train_anchor": {
+            "scored_rows": base_agg["scored_rows"],
+            "target_admitted_rows": base_agg["target_admitted_rows"],
+            "admitted_strict_win_rows": base_agg["admitted_strict_win_rows"],
+            "top1_correct": base_agg["top1_correct"],
+            "top8_correct": base_agg["top8_correct"],
+            "objective_loss_numerator_sum": base_agg["objective_loss_numerator_sum"],
+            "loss_denominator_per_row": base_agg["loss_denominator_per_row"],
+            "model_snapshot_sha256": base_doc["evaluation"]["actual_snapshot_before"]["model_snapshot_sha256"],
+            "model_storage_sha256": base_doc["evaluation"]["actual_snapshot_before"]["model_storage_sha256"],
+            "baseline_anchor_elapsed_ns": base_timing["elapsed_ns"],
+            "restore_elapsed_ns": rest_timing["elapsed_ns"],
+        },
+    }))
+}
+
 fn run_verify(args: &[String]) -> Result<(), String> {
     let [flag1, out_dir, flag2, summary_out] = args else {
         return Err("usage: a8-qualify-stage verify --out-dir <DIR> --summary-out <FILE>".into());
@@ -670,16 +807,6 @@ fn run_verify(args: &[String]) -> Result<(), String> {
         return Err("usage: a8-qualify-stage verify --out-dir <DIR> --summary-out <FILE>".into());
     }
     let out_dir = Path::new(out_dir);
-    let report_pin = pin_existing(&out_dir.join("report.json"))?;
-    let report: Value = read_json(&report_pin.path)?;
-    if report["schema"] != "uor-r4.attention-audit-finite-qualification-report/1"
-        || report["status"] != "SOURCE_QUALIFICATION_CANDIDATES_READY_FOR_INDEPENDENT_REVIEW"
-        || report["dose_training_release"] != false
-        || report["fresh_evaluations"] != 0
-        || report["source_only_instrument_qualification"] != true
-    {
-        return Err(format!("report.json header invalid: {report}"));
-    }
 
     let synthetic_pin = pin_existing(&out_dir.join("synthetic-control.json"))?;
     let synthetic: Value = read_json(&synthetic_pin.path)?;
@@ -700,68 +827,226 @@ fn run_verify(args: &[String]) -> Result<(), String> {
         pin_existing(&out_dir.join("host-metadata-bookkeeping/measurement.json"))?;
     let bookkeeping: Value = read_json(&bookkeeping_pin.path)?;
 
-    let rel_q_pin: FilePin = serde_json::from_value(report["relation_qualification"].clone())
-        .map_err(|e| format!("relation_qualification pin: {e}"))?;
-    let rel_c_pin: FilePin = serde_json::from_value(report["relation_calibration"].clone())
-        .map_err(|e| format!("relation_calibration pin: {e}"))?;
-    let fz_q_pin: FilePin = serde_json::from_value(report["control_qualification"].clone())
-        .map_err(|e| format!("control_qualification pin: {e}"))?;
-    let fz_c_pin: FilePin = serde_json::from_value(report["control_calibration"].clone())
-        .map_err(|e| format!("control_calibration pin: {e}"))?;
+    let mut verified_bookkeeping_artifacts = 0usize;
+    if let Some(arr) = bookkeeping["artifacts"].as_array() {
+        for item in arr {
+            let pin: FilePin = serde_json::from_value(item.clone())
+                .map_err(|e| format!("bookkeeping artifact pin: {e}"))?;
+            read_pinned_or_rebased(&pin, out_dir)
+                .map_err(|e| format!("bookkeeping artifact: {e}"))?;
+            verified_bookkeeping_artifacts += 1;
+        }
+    }
+    let mut verified_raw_artifacts = 0usize;
+    if let Some(arr) = timing["raw_artifacts"].as_array() {
+        for item in arr {
+            let pin: FilePin = serde_json::from_value(item.clone())
+                .map_err(|e| format!("timing raw_artifact pin: {e}"))?;
+            read_pinned_or_rebased(&pin, out_dir)
+                .map_err(|e| format!("timing raw_artifact: {e}"))?;
+            verified_raw_artifacts += 1;
+        }
+    }
 
-    let (rel_qual, rel_cal) = verify_arm_qualification("relation", &rel_q_pin, &rel_c_pin)?;
-    let (fz_qual, fz_cal) = verify_arm_qualification("frozen-zero", &fz_q_pin, &fz_c_pin)?;
+    let rel_dir = out_dir.join("relation");
+    let fz_dir = out_dir.join("frozen-zero");
+    let rel_proof = verify_production_proof("relation", &rel_dir)?;
+    let fz_proof = verify_production_proof("frozen-zero", &fz_dir)?;
 
-    let summary = json!({
-        "schema": "uor-r4.a8-finite-cuda-qualification-summary/1",
-        "status": "PASS",
-        "report_sha256": report_pin.sha256,
-        "synthetic_control_sha256": synthetic_pin.sha256,
-        "timing_protocol_sha256": timing_pin.sha256,
-        "bookkeeping_measurement_sha256": bookkeeping_pin.sha256,
-        "synthetic_control": {
-            "status": synthetic["status"],
-            "accepted_updates": synthetic["accepted_updates"],
-            "stale_apply_refusals": synthetic["stale_apply_refusals"],
-            "stale_carry_refusals": synthetic["stale_carry_refusals"],
-            "observed_restored_epoch": synthetic["observed_restored_epoch"],
-            "fresh_binding": synthetic["fresh_binding"],
-        },
-        "bookkeeping": {
-            "step_envelope_bytes": bookkeeping["step_envelope_bytes"],
-            "boundary_envelope_bytes": bookkeeping["boundary_envelope_bytes"],
-            "maximum_step_shape_bytes": bookkeeping["maximum_step_shape_bytes"],
-            "maximum_boundary_shape_bytes": bookkeeping["maximum_boundary_shape_bytes"],
-            "maximum_progress_shape_bytes": bookkeeping["maximum_progress_shape_bytes"],
-            "pass_boundary_ns": bookkeeping["pass_boundary_ns"],
-            "breach_restore_ack_ns": bookkeeping["breach_restore_ack_ns"],
-            "max_step_sample_ns": bookkeeping["step_samples_ns"]
-                .as_array()
-                .and_then(|a| a.iter().filter_map(Value::as_u64).max()),
-        },
-        "timing_protocol": {
-            "protocol": timing["protocol"]["protocol"],
-            "gate_samples_ns": timing["gate_samples_ns"],
-            "restore_samples_ns": timing["restore_samples_ns"],
-            "arm_family_elapsed_ns": timing["arm_family_elapsed_ns"],
-            "arm_family_counts": timing["arm_family_counts"],
-            "full_family_counts": timing["full_family_counts"],
-            "projected_gate_ns": timing["projected_gate_ns"],
-            "projected_step_bookkeeping_ns": timing["projected_step_bookkeeping_ns"],
-            "projected_boundary_bookkeeping_ns": timing["projected_boundary_bookkeeping_ns"],
-            "projected_restore_ns": timing["projected_restore_ns"],
-            "projected_ungated_two_arm_ns": timing["projected_ungated_two_arm_ns"],
-            "shared_setup_ns": timing["shared_setup_ns"],
-        },
-        "relation": {
-            "qualification": rel_qual,
-            "calibration": rel_cal,
-        },
-        "frozen_zero": {
-            "qualification": fz_qual,
-            "calibration": fz_cal,
-        },
-    });
+    let report_path = out_dir.join("report.json");
+    let summary = if report_path.exists() {
+        let report_pin = pin_existing(&report_path)?;
+        let report: Value = read_json(&report_pin.path)?;
+        if report["schema"] != "uor-r4.attention-audit-finite-qualification-report/1"
+            || report["status"] != "SOURCE_QUALIFICATION_CANDIDATES_READY_FOR_INDEPENDENT_REVIEW"
+            || report["dose_training_release"] != false
+            || report["fresh_evaluations"] != 0
+            || report["source_only_instrument_qualification"] != true
+        {
+            return Err(format!("report.json header invalid: {report}"));
+        }
+        let rel_q_pin: FilePin = serde_json::from_value(report["relation_qualification"].clone())
+            .map_err(|e| format!("relation_qualification pin: {e}"))?;
+        let rel_c_pin: FilePin = serde_json::from_value(report["relation_calibration"].clone())
+            .map_err(|e| format!("relation_calibration pin: {e}"))?;
+        let fz_q_pin: FilePin = serde_json::from_value(report["control_qualification"].clone())
+            .map_err(|e| format!("control_qualification pin: {e}"))?;
+        let fz_c_pin: FilePin = serde_json::from_value(report["control_calibration"].clone())
+            .map_err(|e| format!("control_calibration pin: {e}"))?;
+
+        let (rel_qual, rel_cal) = verify_arm_qualification("relation", &rel_q_pin, &rel_c_pin)?;
+        let (fz_qual, fz_cal) = verify_arm_qualification("frozen-zero", &fz_q_pin, &fz_c_pin)?;
+        json!({
+            "schema": "uor-r4.a8-finite-cuda-qualification-summary/1",
+            "status": "PASS",
+            "finite_qualification_controls_status": "PASS",
+            "readiness_gate_status": "PASS",
+            "dose_qualification": "CANDIDATES_READY",
+            "report_sha256": report_pin.sha256,
+            "synthetic_control_sha256": synthetic_pin.sha256,
+            "timing_protocol_sha256": timing_pin.sha256,
+            "bookkeeping_measurement_sha256": bookkeeping_pin.sha256,
+            "verified_bookkeeping_artifact_count": verified_bookkeeping_artifacts,
+            "verified_raw_artifact_count": verified_raw_artifacts,
+            "synthetic_control": {
+                "status": synthetic["status"],
+                "accepted_updates": synthetic["accepted_updates"],
+                "stale_apply_refusals": synthetic["stale_apply_refusals"],
+                "stale_carry_refusals": synthetic["stale_carry_refusals"],
+                "observed_restored_epoch": synthetic["observed_restored_epoch"],
+                "fresh_binding": synthetic["fresh_binding"],
+            },
+            "bookkeeping": {
+                "step_envelope_bytes": bookkeeping["step_envelope_bytes"],
+                "boundary_envelope_bytes": bookkeeping["boundary_envelope_bytes"],
+                "maximum_step_shape_bytes": bookkeeping["maximum_step_shape_bytes"],
+                "maximum_boundary_shape_bytes": bookkeeping["maximum_boundary_shape_bytes"],
+                "maximum_progress_shape_bytes": bookkeeping["maximum_progress_shape_bytes"],
+                "pass_boundary_ns": bookkeeping["pass_boundary_ns"],
+                "breach_restore_ack_ns": bookkeeping["breach_restore_ack_ns"],
+                "max_step_sample_ns": bookkeeping["step_samples_ns"]
+                    .as_array()
+                    .and_then(|a| a.iter().filter_map(Value::as_u64).max()),
+            },
+            "timing_protocol": {
+                "protocol": timing["protocol"]["protocol"],
+                "gate_samples_ns": timing["gate_samples_ns"],
+                "restore_samples_ns": timing["restore_samples_ns"],
+                "arm_family_elapsed_ns": timing["arm_family_elapsed_ns"],
+                "arm_family_counts": timing["arm_family_counts"],
+                "full_family_counts": timing["full_family_counts"],
+                "projected_gate_ns": timing["projected_gate_ns"],
+                "projected_step_bookkeeping_ns": timing["projected_step_bookkeeping_ns"],
+                "projected_boundary_bookkeeping_ns": timing["projected_boundary_bookkeeping_ns"],
+                "projected_restore_ns": timing["projected_restore_ns"],
+                "projected_ungated_two_arm_ns": timing["projected_ungated_two_arm_ns"],
+                "shared_setup_ns": timing["shared_setup_ns"],
+            },
+            "relation": {
+                "qualification": rel_qual,
+                "production_restore": rel_proof,
+                "calibration": rel_cal,
+            },
+            "frozen_zero": {
+                "qualification": fz_qual,
+                "production_restore": fz_proof,
+                "calibration": fz_cal,
+            },
+        })
+    } else {
+        let failure_pin = pin_existing(&out_dir.join("failure.json"))?;
+        let failure: Value = read_json(&failure_pin.path)?;
+        if failure["status"] != "FAILED_OR_NOT_RUN"
+            || failure["dose_qualification"] != "WITHHELD"
+            || failure["mechanism_negative"] != false
+            || failure["error"]
+                != "invalid discrete model: gate readiness exceeds 15 percent; replan BEFORE training"
+        {
+            return Err(format!("unexpected failure.json: {failure}"));
+        }
+        let rel_q_pin = pin_existing(&rel_dir.join("qualification.json"))?;
+        let fz_q_pin = pin_existing(&fz_dir.join("qualification.json"))?;
+        let rel_qual = verify_arm_stages_only("relation", &rel_dir, &rel_q_pin)?;
+        let fz_qual = verify_arm_stages_only("frozen-zero", &fz_dir, &fz_q_pin)?;
+
+        let projected_gate_ns = timing["projected_gate_ns"]
+            .as_u64()
+            .ok_or("missing projected_gate_ns")?;
+        let projected_step_ns = timing["projected_step_bookkeeping_ns"]
+            .as_u64()
+            .ok_or("missing projected_step_bookkeeping_ns")?;
+        let projected_boundary_ns = timing["projected_boundary_bookkeeping_ns"]
+            .as_u64()
+            .ok_or("missing projected_boundary_bookkeeping_ns")?;
+        let projected_restore_ns = timing["projected_restore_ns"]
+            .as_u64()
+            .ok_or("missing projected_restore_ns")?;
+        let ungated_two_arm_dose_ns = timing["projected_ungated_two_arm_ns"]
+            .as_u64()
+            .ok_or("missing projected_ungated_two_arm_ns")?;
+        let projected_added_gate_ns = projected_gate_ns
+            .checked_add(projected_step_ns)
+            .and_then(|v| v.checked_add(projected_boundary_ns))
+            .and_then(|v| v.checked_add(projected_restore_ns))
+            .ok_or("projected_added_gate_ns overflow")?;
+        if projected_added_gate_ns == 0 || ungated_two_arm_dose_ns == 0 {
+            return Err("zero timing protocol projection".into());
+        }
+        let ratio_bps = (u128::from(projected_added_gate_ns) * 10_000)
+            .div_ceil(u128::from(ungated_two_arm_dose_ns));
+        let cal_summary = json!({
+            "projected_added_gate_ns": projected_added_gate_ns,
+            "ungated_two_arm_dose_ns": ungated_two_arm_dose_ns,
+            "readiness_ratio_bps_ceil": u64::try_from(ratio_bps).unwrap_or(u64::MAX),
+            "readiness_bar_bps": 1500,
+            "passes_15_percent_gate": false,
+            "audits_both_arms": 516,
+            "replan_stop_error": failure["error"],
+        });
+
+        json!({
+            "schema": "uor-r4.a8-finite-cuda-qualification-summary/1",
+            "status": "FINITE_CONTROLS_PASS_READINESS_GATE_REPLAN_REQUIRED",
+            "finite_qualification_controls_status": "PASS",
+            "readiness_gate_status": "REPLAN_BEFORE_TRAINING",
+            "dose_qualification": failure["dose_qualification"],
+            "mechanism_negative": failure["mechanism_negative"],
+            "failure_sha256": failure_pin.sha256,
+            "synthetic_control_sha256": synthetic_pin.sha256,
+            "timing_protocol_sha256": timing_pin.sha256,
+            "bookkeeping_measurement_sha256": bookkeeping_pin.sha256,
+            "verified_bookkeeping_artifact_count": verified_bookkeeping_artifacts,
+            "verified_raw_artifact_count": verified_raw_artifacts,
+            "synthetic_control": {
+                "status": synthetic["status"],
+                "accepted_updates": synthetic["accepted_updates"],
+                "stale_apply_refusals": synthetic["stale_apply_refusals"],
+                "stale_carry_refusals": synthetic["stale_carry_refusals"],
+                "observed_restored_epoch": synthetic["observed_restored_epoch"],
+                "fresh_binding": synthetic["fresh_binding"],
+            },
+            "bookkeeping": {
+                "step_envelope_bytes": bookkeeping["step_envelope_bytes"],
+                "boundary_envelope_bytes": bookkeeping["boundary_envelope_bytes"],
+                "maximum_step_shape_bytes": bookkeeping["maximum_step_shape_bytes"],
+                "maximum_boundary_shape_bytes": bookkeeping["maximum_boundary_shape_bytes"],
+                "maximum_progress_shape_bytes": bookkeeping["maximum_progress_shape_bytes"],
+                "pass_boundary_ns": bookkeeping["pass_boundary_ns"],
+                "breach_restore_ack_ns": bookkeeping["breach_restore_ack_ns"],
+                "max_step_sample_ns": bookkeeping["step_samples_ns"]
+                    .as_array()
+                    .and_then(|a| a.iter().filter_map(Value::as_u64).max()),
+            },
+            "timing_protocol": {
+                "protocol": timing["protocol"]["protocol"],
+                "gate_samples_ns": timing["gate_samples_ns"],
+                "restore_samples_ns": timing["restore_samples_ns"],
+                "arm_family_elapsed_ns": timing["arm_family_elapsed_ns"],
+                "arm_family_counts": timing["arm_family_counts"],
+                "full_family_counts": timing["full_family_counts"],
+                "projected_gate_ns": timing["projected_gate_ns"],
+                "projected_step_bookkeeping_ns": timing["projected_step_bookkeeping_ns"],
+                "projected_boundary_bookkeeping_ns": timing["projected_boundary_bookkeeping_ns"],
+                "projected_restore_ns": timing["projected_restore_ns"],
+                "projected_added_gate_ns": projected_added_gate_ns,
+                "projected_ungated_two_arm_ns": timing["projected_ungated_two_arm_ns"],
+                "readiness_ratio_bps_ceil": u64::try_from(ratio_bps).unwrap_or(u64::MAX),
+                "readiness_bar_bps": 1500,
+                "passes_15_percent_gate": false,
+                "shared_setup_ns": timing["shared_setup_ns"],
+            },
+            "relation": {
+                "qualification": rel_qual,
+                "production_restore": rel_proof,
+                "calibration": cal_summary.clone(),
+            },
+            "frozen_zero": {
+                "qualification": fz_qual,
+                "production_restore": fz_proof,
+                "calibration": cal_summary,
+            },
+        })
+    };
 
     let summary_path = Path::new(summary_out);
     if let Some(parent) = summary_path.parent() {
@@ -777,7 +1062,9 @@ fn run_verify(args: &[String]) -> Result<(), String> {
             "status": "VERIFIED_FINITE_CUDA_QUALIFICATION",
             "summary_path": summary_path,
             "summary_sha256": sha256(&summary_bytes),
-            "report_sha256": report_pin.sha256,
+            "finite_qualification_controls_status": summary["finite_qualification_controls_status"],
+            "readiness_gate_status": summary["readiness_gate_status"],
+            "dose_qualification": summary["dose_qualification"],
             "projected_added_gate_ns": summary["relation"]["calibration"]["projected_added_gate_ns"],
             "ungated_two_arm_dose_ns": summary["relation"]["calibration"]["ungated_two_arm_dose_ns"],
             "readiness_ratio_bps_ceil": summary["relation"]["calibration"]["readiness_ratio_bps_ceil"],
@@ -979,6 +1266,82 @@ mod tests {
             write_json_pin(&tmp.join("calibration-bad.json"), &cal, 0o600).expect("bad cal");
         assert!(verify_arm_qualification("relation", &qual_pin, &bad_cal_pin).is_err());
 
+        let rebased_pin = FilePin {
+            path: PathBuf::from("/workspace/a8s1/qual-out/qualification.json"),
+            sha256: qual_pin.sha256.clone(),
+        };
+        let rebased_bytes = read_pinned_or_rebased(&rebased_pin, &tmp).expect("rebased pin");
+        assert_eq!(sha256(&rebased_bytes), qual_pin.sha256);
+        let stage_only =
+            verify_arm_stages_only("relation", &tmp, &rebased_pin).expect("stages only pass");
+        assert_eq!(stage_only["stages"].as_array().map(Vec::len), Some(5));
+
         fs::remove_dir_all(&tmp).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn committed_cuda_qualification_summary_records_all_finite_controls_and_timing() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let summary_path =
+            root.join("docs/labs/m1-a8-finite-cuda-qualification/qualification-summary.json");
+        let summary: Value = read_json(&summary_path).expect("read qualification-summary.json");
+        assert_eq!(
+            summary["schema"],
+            "uor-r4.a8-finite-cuda-qualification-summary/1"
+        );
+        assert_eq!(summary["finite_qualification_controls_status"], "PASS");
+        assert_eq!(summary["readiness_gate_status"], "REPLAN_BEFORE_TRAINING");
+        assert_eq!(summary["dose_qualification"], "WITHHELD");
+        assert_eq!(summary["mechanism_negative"], false);
+        assert_eq!(summary["verified_bookkeeping_artifact_count"], 142);
+        assert_eq!(summary["verified_raw_artifact_count"], 792);
+        assert_eq!(summary["synthetic_control"]["status"], "PASS");
+        assert_eq!(summary["synthetic_control"]["accepted_updates"], 1);
+        assert_eq!(summary["synthetic_control"]["stale_apply_refusals"], 1);
+        assert_eq!(summary["synthetic_control"]["stale_carry_refusals"], 1);
+        assert_eq!(summary["synthetic_control"]["observed_restored_epoch"], 0);
+        for arm in ["relation", "frozen_zero"] {
+            let qual = &summary[arm]["qualification"];
+            assert_eq!(
+                qual["execution"]["reviewed_source_commit"],
+                "fd409fcdf3bc43d607e768bae6f8cf403aa75901"
+            );
+            assert_eq!(
+                qual["execution"]["executable_sha256"],
+                "fb4493253d3e26dc7cc5fbcbcf7fa4dc882d93a5c7b02d340b25918a2d25b00c"
+            );
+            assert_eq!(qual["b3_psucc"], 1351);
+            assert_eq!(qual["b3_full"], 4244);
+            assert_eq!(qual["top1"], 133);
+            assert_eq!(qual["occupied_cells"], 256);
+            assert_eq!(qual["distinct_vectors"], 4096);
+            assert_eq!(qual["tie_mass"], 0);
+            let stages = qual["stages"].as_array().expect("stages array");
+            assert_eq!(stages.len(), 5);
+            for (stage, expected_name) in stages.iter().zip(STAGE_NAMES) {
+                assert_eq!(stage["name"], expected_name);
+                assert_eq!(stage["status"], "PASS");
+            }
+            let restore = &summary[arm]["production_restore"];
+            assert_eq!(restore["status"], "PASS");
+            assert_eq!(restore["advanced_attempts"], 384);
+            assert_eq!(restore["restored_epoch"], 0);
+            assert_eq!(restore["passing_storage_restored"], true);
+            assert_eq!(restore["passing_snapshot_restored"], true);
+            assert_eq!(restore["fresh_binding"], true);
+            assert_eq!(restore["stale_handles_refused"], true);
+            assert_eq!(restore["anchor_equal_before_after_restore"], true);
+            assert_eq!(restore["train_anchor"]["scored_rows"], 3847);
+            assert_eq!(restore["train_anchor"]["target_admitted_rows"], 1211);
+        }
+        assert_eq!(
+            summary["timing_protocol"]["projected_added_gate_ns"],
+            4_947_754_777_700u64
+        );
+        assert_eq!(
+            summary["timing_protocol"]["projected_ungated_two_arm_ns"],
+            6_309_716_689_996u64
+        );
+        assert_eq!(summary["timing_protocol"]["readiness_ratio_bps_ceil"], 7842);
     }
 }

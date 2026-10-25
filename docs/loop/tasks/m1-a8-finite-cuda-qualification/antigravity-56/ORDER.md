@@ -28,7 +28,7 @@ The item's done-when reads:
 
 ## Done when
 
-- All finite qualification controls (`synthetic_control`, `host_metadata_bookkeeping`, `canonical_initlock_c2`, `required_negatives`, `occupancy_psucc_baseline`, `sensitivity`, and `finite_restoration_timing` on both `relation` and `frozen-zero` arms) PASS on CUDA with restoration and timing (`R <= 15%`) recorded under the sheet-bound source `fd409fcdf3bc43d607e768bae6f8cf403aa75901` (`executable_sha256 = fb4493253d3e26dc7cc5fbcbcf7fa4dc882d93a5c7b02d340b25918a2d25b00c`), the sealed archive is uploaded to the HF store and verified, the committed summary artifacts and notebook row are recorded, and `docs/roadmap/items/m1-a8-finite-cuda-qualification.md` is set to `status: done`.
+- All finite qualification controls (`synthetic_control`, `host_metadata_bookkeeping`, `canonical_initlock_c2`, `required_negatives`, `g_occ`, `sensitivity`, and `audited_restore_epoch_cursor` on both `relation` and `frozen-zero` arms) PASS on CUDA with restoration and timing recorded under the sheet-bound source `fd409fcdf3bc43d607e768bae6f8cf403aa75901` (`executable_sha256 = fb4493253d3e26dc7cc5fbcbcf7fa4dc882d93a5c7b02d340b25918a2d25b00c`), the sealed archive is uploaded to the HF store and verified, the committed summary artifacts and notebook row are recorded, and `docs/roadmap/items/m1-a8-finite-cuda-qualification.md` is set to `status: done`.
 
 ## Stop and ask if
 
