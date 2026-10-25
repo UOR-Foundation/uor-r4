@@ -904,6 +904,9 @@ fn qualify_m2_fresh256(
                 (Some(user_home), user_home.semiprime())
             };
 
+            let mut accepted_step_tokens = unprefixed_target_ids;
+            accepted_step_tokens.resize(step_count, PERIOD_TOKEN_ID);
+
             oracle_rows.push(OracleRowInput {
                 row_id: packet.id.clone(),
                 pair_id: label.pair_id.clone(),
@@ -915,7 +918,7 @@ fn qualify_m2_fresh256(
                 candidates,
                 expected_value_bytes: expected_lit.as_bytes().to_vec(),
                 distractor_value_bytes: distractor_lit.as_bytes().to_vec(),
-                accepted_reply_tokens: vec![unprefixed_target_ids],
+                accepted_reply_tokens: vec![accepted_step_tokens],
                 step_base_margins,
                 step_learned_gate_margins,
                 recorded_baseline_tokens,
