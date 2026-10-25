@@ -37,6 +37,7 @@ pub mod snapshot;
 pub use objective::ObjectivePolicy;
 pub mod training;
 pub mod w2_capacity;
+pub mod w2_capture;
 
 pub const SCHEMA: &str = "uor-r4.discrete-spiralcore-fbs/2";
 #[derive(Debug)]
