@@ -174,7 +174,7 @@ Any other failure is an instrument fault. It is repaired; it is never a reading.
 - Host: the downloads (`run-b.tar` and, for R, the checkpoints) and one run of a Rust host tool taking minutes. Building the tool is one loop unit, reusing `w2_capacity.rs`'s tables, tie rules, floors and McNemar test. The record is under 10 MB. `df` must show at least 30 GiB free before the downloads.
 - Conditional: G1, about $1.11 inside a 1-hour lease, only on B1 and only after its own pre-run review.
 
-## Stop rule
+## Stop conditions
 
 - stop: any precedence-0 check stops the run for repair, with no band read. The rules above are fixed before any number is seen, so a band is never re-read under changed rules. The GPU caps and the disk floor are hard stops. Self-set time budgets are estimates, not stop rules.
 

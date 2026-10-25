@@ -26,7 +26,7 @@ References #3179 (the item stays `ready`; the diagnostic's run is the next unit)
 
 ## What changed
 
-Size: docs 3 files (+262/−0); code 0; tests 0.
+Size: docs 3 files (+303/−0: the sheet 185, the ORDER 43, this REPORT 75); code 0; tests 0. The one advisory WARN on the first push (rule-sources, D76, on the heading `## Stop rule`) is cleared by naming that block `## Stop conditions`; the prep shape rule needs only "stop" in the heading.
 
 - `docs/harness/prep/m1-w2-code-utilization-2026-10-25.md` (new, 185 lines). It contains:
   - the question, and QA, QB and QC;
