@@ -1,6 +1,6 @@
 # ORDER: infra-loop-harness, claude-113 (unhold m1-export-gap-and-toks for preparation)
 
-Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Base: `020a449cc`.
+Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Setup row: 2 (item-file maintenance, as in kimi-27, claude-101, claude-104 and antigravity-76). Base: `020a449cc`.
 
 ## Goal
 
