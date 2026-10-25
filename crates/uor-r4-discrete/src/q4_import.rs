@@ -186,6 +186,24 @@ impl ImportedDevice {
     ) -> crate::Result<crate::device::Evaluation> {
         self.device.evaluate(batch, targets)
     }
+    /// Read-only: the accepted-update epoch the imported model carries.
+    pub fn epoch(&self) -> crate::Result<u64> {
+        self.device.epoch()
+    }
+    pub fn ordinal(&self) -> usize {
+        self.device.ordinal()
+    }
+    /// Read-only CUDA aggregation of completed evaluation receipts.
+    pub fn aggregate_evaluations(
+        &self,
+        evaluations: &[crate::device::Evaluation],
+    ) -> crate::Result<crate::device::EvaluationAggregate> {
+        self.device.aggregate_evaluations(evaluations)
+    }
+    /// Read-only CUDA export of each token's cell, indexed by token id.
+    pub fn export_token_cells(&self) -> crate::Result<Vec<u16>> {
+        self.device.export_token_cells()
+    }
 }
 
 #[derive(Deserialize)]
@@ -568,7 +586,11 @@ mod tests {
                 "carry",
                 "carry_windows",
                 "forward",
-                "evaluate"
+                "evaluate",
+                "epoch",
+                "ordinal",
+                "aggregate_evaluations",
+                "export_token_cells"
             ]
         );
         let imported_q4 = source.find("impl ImportedQ4 {").unwrap();
