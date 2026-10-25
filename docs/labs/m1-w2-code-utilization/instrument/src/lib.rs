@@ -236,6 +236,12 @@ pub fn load(capture_dir: &Path, record_path: &Path) -> Res<(Inputs, Value)> {
         {
             problems.push(format!("DEV row {i}: admitted cell >= {CELLS}"));
         }
+        let mut present: Vec<u16> = slots.iter().copied().filter(|&s| s != ABSENT).collect();
+        present.sort_unstable();
+        present.dedup();
+        if present.len() != k {
+            problems.push(format!("DEV row {i}: admitted cells repeat"));
+        }
         if k as u64 != row.admitted_cells {
             problems.push(format!("DEV row {i}: {k} slots != admitted_cells"));
         }
@@ -549,6 +555,50 @@ pub fn rank_cells(score: &[u64; CELLS], mass: &[u64; CELLS]) -> Vec<u16> {
             .then(a.cmp(&b))
     });
     idx
+}
+
+/// Rank cells for one key of a TRAIN table: its target counts summed per cell
+/// (A_T for a code table, A_G for the bigram), ties by unigram cell mass, then id.
+/// An unseen key ranks by mass alone.
+pub fn ranked_for(table: &Table, key: u32, cells: &[u16], mass: &[u64; CELLS]) -> Vec<u16> {
+    let mut s = [0u64; CELLS];
+    if let Some(r) = table.keys.get(&key) {
+        for e in &r.entries {
+            s[usize::from(cells[usize::from(e.token)])] += e.count;
+        }
+    }
+    rank_cells(&s, mass)
+}
+
+/// Whether `cell` is among the first `k` ranked cells (k = the row's admitted count).
+pub fn in_top(ranked: &[u16], k: usize, cell: u16) -> bool {
+    ranked.iter().take(k).any(|&c| c == cell)
+}
+
+/// J's prediction: the joint (code, query) key when it was seen at least `min_count`
+/// times, else G's prediction for the query, else the unigram's.
+pub fn joint_prediction(
+    joint: &Table,
+    bigram: &Table,
+    uni_top: u16,
+    code: u16,
+    query: u16,
+    min_count: u64,
+) -> u16 {
+    let key = joint_key(code, query);
+    if joint.key_total(key) >= min_count {
+        if let Some(t) = joint.argmax(key) {
+            return t;
+        }
+    }
+    bigram.argmax(u32::from(query)).unwrap_or(uni_top)
+}
+
+struct CodeGroup {
+    k: usize,
+    same_k: bool,
+    a_t: u64,
+    a_omega: u64,
 }
 
 /// Minimum, quartiles and maximum by the lower nearest rank: index ⌊n·j/4⌋, capped at n − 1.
@@ -1049,35 +1099,26 @@ pub fn run(inputs: &Inputs, record: &Value, discrete_commit: &str) -> Res<Record
         tokens_in_cell[usize::from(c)] += 1;
     }
     let ranked_u = rank_cells(&[0u64; CELLS], &mass);
-    let ranked_for = |table: &Table, key: u32| -> Vec<u16> {
-        let mut s = [0u64; CELLS];
-        if let Some(r) = table.keys.get(&key) {
-            for e in &r.entries {
-                s[usize::from(cell_of(e.token))] += e.count;
-            }
-        }
-        rank_cells(&s, &mass)
-    };
     let mut by_code: BTreeMap<u16, Vec<u16>> = BTreeMap::new();
     let mut by_query: BTreeMap<u16, Vec<u16>> = BTreeMap::new();
     let mut dev_code_cells: BTreeMap<u16, [u64; CELLS]> = BTreeMap::new();
     for d in dev {
         by_code
             .entry(d.code)
-            .or_insert_with(|| ranked_for(&b0.code, u32::from(d.code)));
+            .or_insert_with(|| ranked_for(&b0.code, u32::from(d.code), cells, &mass));
         by_query
             .entry(d.query)
-            .or_insert_with(|| ranked_for(&b0.bigram, u32::from(d.query)));
+            .or_insert_with(|| ranked_for(&b0.bigram, u32::from(d.query), cells, &mass));
         dev_code_cells.entry(d.code).or_insert([0u64; CELLS])[usize::from(cell_of(d.target))] += 1;
     }
     let by_omega: BTreeMap<u16, Vec<u16>> = dev_code_cells
         .iter()
         .map(|(&c, s)| (c, rank_cells(s, &mass)))
         .collect();
-    let in_top = |ranked: &[u16], k: usize, cell: u16| ranked[..k].contains(&cell);
     let load = |ranked: &[u16], k: usize| -> u64 {
-        ranked[..k]
+        ranked
             .iter()
+            .take(k)
             .map(|&c| tokens_in_cell[usize::from(c)])
             .sum()
     };
@@ -1125,8 +1166,25 @@ pub fn run(inputs: &Inputs, record: &Value, discrete_commit: &str) -> Res<Record
     }
     let a_t = hits(&at_hits);
     let a_omega = hits(&ao_adm_hits);
-    if dev.iter().all(|d| d.k == dev[0].k) && a_t > a_omega {
-        problems.push(format!("A_T {a_t} > A_Omega {a_omega}"));
+    // A_T ≤ A_Ω holds per code wherever k_r is constant within that code.
+    let mut groups: BTreeMap<u16, CodeGroup> = BTreeMap::new();
+    for ((d, &at), &ao) in dev.iter().zip(&at_hits).zip(&ao_adm_hits) {
+        let g = groups.entry(d.code).or_insert(CodeGroup {
+            k: d.k,
+            same_k: true,
+            a_t: 0,
+            a_omega: 0,
+        });
+        g.same_k &= g.k == d.k;
+        g.a_t += u64::from(at);
+        g.a_omega += u64::from(ao);
+    }
+    let broken = groups
+        .values()
+        .filter(|g| g.same_k && g.a_t > g.a_omega)
+        .count();
+    if broken != 0 {
+        problems.push(format!("A_T > A_Omega within {broken} codes"));
     }
     let table_pred = |d: &Dev| b0.code.argmax(u32::from(d.code)).unwrap_or(b0.uni_top);
     let cell_split = CellSplit {
@@ -1212,22 +1270,15 @@ pub fn run(inputs: &Inputs, record: &Value, discrete_commit: &str) -> Res<Record
             .iter()
             .map(|r| [joint_key(r.code, r.query), u32::from(r.target)]),
     );
-    let g_pred = |q: u16| b0.bigram.argmax(u32::from(q)).unwrap_or(b0.uni_top);
     let mut j_hits = Vec::with_capacity(dev.len());
     let mut jm2_hits = Vec::with_capacity(dev.len());
     let mut joint_seen_rows = 0u64;
     for d in dev {
-        let key = joint_key(d.code, d.query);
-        let n = joint.key_total(key);
-        if n > 0 {
+        if joint.key_total(joint_key(d.code, d.query)) > 0 {
             joint_seen_rows += 1;
         }
-        let j = joint.argmax(key).unwrap_or_else(|| g_pred(d.query));
-        let jm2 = if n >= 2 {
-            joint.argmax(key).unwrap_or_else(|| g_pred(d.query))
-        } else {
-            g_pred(d.query)
-        };
+        let j = joint_prediction(&joint, &b0.bigram, b0.uni_top, d.code, d.query, 1);
+        let jm2 = joint_prediction(&joint, &b0.bigram, b0.uni_top, d.code, d.query, 2);
         j_hits.push(j == d.target);
         jm2_hits.push(jm2 == d.target);
     }
@@ -1416,7 +1467,7 @@ pub fn run(inputs: &Inputs, record: &Value, discrete_commit: &str) -> Res<Record
         descriptive,
         arm_r: ArmR {
             status: "NOT_RUN",
-            reason: "missing input: the Q1-Q3 checkpoints (a5a22dce.., dde889aa.., 102beed4..) are in neither the HF store's local-archive/2026-10-20 file list nor archive/storage; the sheet makes R NOT_RUN, never a substitute",
+            reason: "not attempted by this tool: its inputs, the Q1-Q3 checkpoints (a5a22dce.., dde889aa.., 102beed4..), were not found by the lab's search of the HF store's local-archive/2026-10-20 file list and archive/storage (claude-95 REPORT); the sheet makes R NOT_RUN without its inputs, never a substitute",
         },
         dev_hits,
     })
@@ -1512,6 +1563,58 @@ mod tests {
         assert_eq!(u.oracle(), 3);
         let c = u.collision();
         assert_eq!((c.num, c.den), (6, 12));
+    }
+
+    #[test]
+    fn leave_one_out_edge_cases() {
+        // y is the only token, total 2: still wins after removal.
+        let only = Table::build([[1, 4], [1, 4]].iter().copied());
+        assert_eq!(only.loo(1, 4), Some(true));
+        // After removal y ties the runner-up: the lower id wins.
+        let low = Table::build([[1, 2], [1, 2], [1, 5]].iter().copied());
+        assert_eq!(low.loo(1, 2), Some(true));
+        let high = Table::build([[1, 5], [1, 5], [1, 2]].iter().copied());
+        assert_eq!(high.loo(1, 5), Some(false));
+    }
+
+    #[test]
+    fn in_top_respects_the_row_k() {
+        let mut ranked: Vec<u16> = vec![5, 9, 2];
+        ranked.extend((0..CELLS as u16).filter(|c| ![5, 9, 2].contains(c)));
+        assert!(in_top(&ranked, 2, 9));
+        assert!(!in_top(&ranked, 2, 2));
+        assert!(!in_top(&ranked, 1, 9));
+        assert!(!in_top(&ranked, 0, 5));
+        assert!(in_top(&ranked, 3, 2));
+    }
+
+    #[test]
+    fn ranked_for_sums_targets_per_cell_and_breaks_ties_by_mass() {
+        let mut cells = vec![0u16; VOCAB];
+        cells[10] = 7;
+        cells[11] = 7;
+        cells[12] = 3;
+        // Key 42: cell 7 gets 1 + 1, cell 3 gets 2: a score tie.
+        let t = Table::build([[42, 10], [42, 11], [42, 12], [42, 12]].iter().copied());
+        let mut mass = [0u64; CELLS];
+        mass[7] = 5;
+        mass[3] = 1;
+        assert_eq!(&ranked_for(&t, 42, &cells, &mass)[..2], &[7, 3]);
+        mass[3] = 9;
+        assert_eq!(&ranked_for(&t, 42, &cells, &mass)[..2], &[3, 7]);
+        // An unseen key ranks by mass alone.
+        mass[200] = 50;
+        assert_eq!(ranked_for(&t, 99, &cells, &mass)[0], 200);
+    }
+
+    #[test]
+    fn joint_prediction_falls_back_by_min_count() {
+        let key = joint_key(3, 8);
+        let joint = Table::build([[key, 77]].iter().copied());
+        let bigram = Table::build([[8, 55], [8, 55]].iter().copied());
+        assert_eq!(joint_prediction(&joint, &bigram, 1, 3, 8, 1), 77);
+        assert_eq!(joint_prediction(&joint, &bigram, 1, 3, 8, 2), 55);
+        assert_eq!(joint_prediction(&joint, &bigram, 1, 4, 9, 1), 1);
     }
 
     #[test]
