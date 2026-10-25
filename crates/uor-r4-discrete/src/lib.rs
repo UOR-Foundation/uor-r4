@@ -30,6 +30,7 @@ pub mod objective;
 pub mod order_slice;
 pub mod position_mechanism;
 pub mod proposal_timing;
+pub mod q4_import;
 pub mod rows_source;
 pub mod rowsk_source;
 pub mod snapshot;
