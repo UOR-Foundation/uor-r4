@@ -285,9 +285,10 @@ pub fn grade(arms: &[Arm; 7]) -> Result<Value, String> {
     let mut outcomes = [Outcome::Tie; 6];
     let mut pairs = serde_json::Map::new();
     for i in 1..7 {
-        let p = paired_psucc(&p8.b3, &arms[i].b3).map_err(|e| format!("p8 vs {}: {e}", ARMS[i].0))?;
+        let (name, _) = ARMS[i];
+        let p = paired_psucc(&p8.b3, &arms[i].b3).map_err(|e| format!("p8 vs {name}: {e}"))?;
         outcomes[i - 1] = outcome(p);
-        pairs.insert(format!("p8_vs_{}", ARMS[i].0), paired_json(p, outcomes[i - 1]));
+        pairs.insert(format!("p8_vs_{name}"), paired_json(p, outcomes[i - 1]));
     }
     // Descriptive only: matched-seed quota against crowding.
     let mut crowding = serde_json::Map::new();
@@ -467,11 +468,12 @@ mod tests {
     fn a_report_for_another_arm_model_or_a_trained_checkpoint_is_refused() {
         let storage = "a".repeat(64);
         let snapshot = "b".repeat(64);
+        let [(_, p8_config), (_, q0_config), ..] = ARMS;
         // The fields as the crate writes them: `updates_applied` and
         // `updates_applied_by_evaluation` are literal zeros, so only the
         // checkpoint counters can carry an update.
         let dev = json!({"schema": "uor-r4.attention-preflight-dev-b3/1", "updates_applied": 0,
-            "model_epoch": 0, "completed_batches": 0, "config_file": {"sha256": ARMS[0].1},
+            "model_epoch": 0, "completed_batches": 0, "config_file": {"sha256": p8_config},
             "model_storage_sha256": storage, "model_snapshot_sha256": snapshot,
             "b3": serde_json::to_value(&p8().b3).unwrap()});
         let eval = json!({"schema": "uor-r4.discrete-corpus-driver/1", "updates_applied_by_evaluation": 0,
@@ -484,7 +486,7 @@ mod tests {
         assert!(arm_from_reports("p8", &dev, &eval, census.clone()).is_ok());
 
         let mut swapped = dev.clone();
-        swapped["config_file"]["sha256"] = json!(ARMS[1].1);
+        swapped["config_file"]["sha256"] = json!(q0_config);
         assert!(refused(&swapped, &eval, &census).contains("read another config"));
         for key in ["model_epoch", "completed_batches"] {
             let mut trained = dev.clone();

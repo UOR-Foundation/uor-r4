@@ -71,7 +71,10 @@ Docs and a detached instrument only. This item's scope holds no crate path.
   - The fix reads the checkpoint counters, binds each eval and census report to its dev-b3 report by the model storage hash, and refuses absent hashes.
   - Round 2 was FIT, and the D67 pre-run review passed (#2881 `6401883120`).
 - **`xtask roadmap check`:** 92 items OK.
-- **Still to come:** `loop report --check`, `loop pr-check --local`, a fresh claims check of this REPORT and the README §5, and the exact-head review record.
+- **`loop pr-check --local`:** the first run failed on `banned-presence`. Its D32 scanner reads tuple fields such as `ARMS[i].0` as float literals, and found 4 sites in the grader.
+  - They were renamed by destructuring after the grade was written, so the grade comes from the FIT-reviewed `f5155fe17`.
+  - The renamed grader passes its 11 tests and reproduces `grade.json` byte-identical.
+- **Still to come:** a fresh claims check of this REPORT and the README §5, and the exact-head review record.
 
 ## Skills used
 
