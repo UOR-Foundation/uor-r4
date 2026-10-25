@@ -1,6 +1,6 @@
 # Decision card (D68): a new sheet for carrier credit on the live learner, and this item's scope
 
-Lab: claude, claude-103. Item: [`carrier-credit-hard-selection`](../../../../roadmap/items/carrier-credit-hard-selection.md) (#2819). Status: round 3, revised after decision review rounds 1 and 2 (both CHANGES).
+Lab: claude, claude-103. Item: [`carrier-credit-hard-selection`](../../../../roadmap/items/carrier-credit-hard-selection.md) (#2819). Status: round 4, revised after decision review rounds 1–3 (all CHANGES).
 
 ## Why this test, and why now
 
@@ -32,7 +32,7 @@ Lab: claude, claude-103. Item: [`carrier-credit-hard-selection`](../../../../roa
 **A. A new sheet, honestly named.**
 - The done-when is met by a new pre-registered sheet with its own FIT (§4.5: archived float sheets "return only as new sheets"). It tests the discrete counterpart of carrier credit (reopen condition 5).
 - It reruns the archived sheet's ON/OFF × two-seed design, not its objective, start state or carriers.
-- The archived design was 2 schedules × 2 seeds, and three of its four arms ran. The new design is 3 schedules × 2 seeds, six arms, all registered and all run.
+- The archived design was 2 schedules × 2 seeds, and three of its four arms ran. The new design is 4 schedules × 2 seeds, eight arms, all registered and all run.
 - The item's done-when text is replaced by the exact line in D.
 
 **B. The hard-selection credit step.** It replaces the sampled choice.
@@ -43,10 +43,11 @@ Lab: claude, claude-103. Item: [`carrier-credit-hard-selection`](../../../../roa
 
 **C. Arms.** Every arm uses the same objective, 16-state counterfactual kernel, commit rule, batch order, corpus, start state and dose. Each arm runs at seeds 1001 and 2001.
 - **ON:** the credit selection in B.
-- **CONTROL:** one of the batch's distinct target tokens, drawn uniformly by an integer hash of `(seed, completed_batches)`, with the same block rule.
-  - It never reads model state, so it is a schedule choice, not sampled credit.
-  - The draw is over distinct tokens rather than rows, so it carries no frequency information. It separates credit from "any in-batch schedule".
-- **OFF:** the canonical sweep, which visits a token's B blocks back to back. ON and CONTROL share the `mod B` block rule, so their comparison carries no block-order confound. An ON–OFF gap alone is never read as credit.
+- **Two model-blind controls.** Both use the same block rule. They draw by a named integer hash of `(seed, completed_batches)`, fixed in the sheet. They never read model state, so each is a schedule choice, not sampled credit.
+  - **CONTROL-U** draws uniformly over the batch's distinct target tokens. It carries no frequency information.
+  - **CONTROL-F** draws uniformly over the batch's rows, then takes that row's target. It carries frequency but not credit.
+  - ON's credit sums over rows, so it leans toward frequent tokens. CONTROL-F separates credit from frequency, and CONTROL-U separates both from "any in-batch schedule".
+- **OFF:** the canonical sweep, which visits a token's B blocks back to back. ON and both controls share the `mod B` block rule, so their comparisons carry no block-order confound. An ON–OFF gap alone is never read as credit.
 - **Leakage.** Credit and draws come from the training batch only, never from DEV or fresh rows.
 - **Start state:** a fresh model (seeded-device init) on the registered discrete spec and corpus, at the full 16,404-batch dose that #2831 and #2836 also run. The schedule finding then becomes a candidate arm in their next sheets, tested at their own configuration.
 
@@ -54,7 +55,7 @@ Lab: claude, claude-103. Item: [`carrier-credit-hard-selection`](../../../../roa
 - The scope is `crates/uor-r4-discrete/**`. It is the convention of 18 items, and the pin updates reach tests across the crate. A narrower list would force another umbrella unit the first time the guard refuses a pinned test.
 - `notebook: docs/research/notebook/m1-discrete-attention.md` is bound.
 - The done-when line becomes, exactly:
-  > A hard-selection credit step replaces the sampled choice with no softmax, on CUDA and integer-only, and the archived three-arm sheet's ON/OFF × two-seed design is rerun as a new pre-registered sheet on the live discrete learner (CHARTER §4.5; carrier-credit reopen condition 5), with an in-batch control, every registered arm run, and the result recorded on fresh rows.
+  > A hard-selection credit step replaces the sampled choice with no softmax, on CUDA and integer-only, and the archived three-arm sheet's ON/OFF × two-seed design is rerun as a new pre-registered sheet with a fresh FIT on the live discrete learner (CHARTER §4.5; carrier-credit reopen condition 5), with model-blind in-batch controls, every registered arm run, and the result recorded on fresh rows.
 
   It still requires the step, every arm and the recorded result. It changes only what can lawfully be rerun.
 - This is this item's own scope fix (D68), following the `023910c63` precedent. It is not a new infrastructure item under D77.
@@ -64,31 +65,37 @@ Lab: claude, claude-103. Item: [`carrier-credit-hard-selection`](../../../../roa
   - Fresh rows are a held-out slice of the registered TRAIN corpus. The slice is cut out of the train binding before any arm runs, as a separate `Split::Fresh` tokens/mask pair, sealed by its hashes, and kept in the HF store. It is data preparation on the host.
   - The trainer never reads it. The arms are scored on it once, at the end.
   - It is not the M1 fresh panel (binding `4bd108ad…`, the fresh V2 seal `df5d074a…`), which stays sealed for M1 bar (e), and it is not frozen `ft/dev`.
+  - It is cut at document boundaries. Windows that duplicate a TRAIN window exactly are removed. It holds at least 200 scored targets (§4.3), with the exact count fixed in the sheet.
+  - Every arm trains on the same reduced train binding, and the dose stays at 16,404 batches. Because that binding differs from the one #2831 and #2836 use, a finding enters their next sheets as a candidate arm, tested on their own binding.
   - The build adds the `Split::Fresh` binding and its evaluation entry point. `corpus.rs`:56 defines the split, but `training.rs` loads and evaluates only Train and Dev (:272–273, :453–454, :3036, :3068).
 - **The bar** is fixed in the prep sheet before any run, and reviewed for FIT.
-  - It is ON against CONTROL at both seeds, on fresh rows (§4.3), with a margin no narrower than the measured seed noise.
+  - The two pre-named comparisons are read on fresh rows (§4.3), with a margin no narrower than the measured seed noise.
   - The count-table reference (§4.4) is computed on the fresh slice as well as DEV, and is reported beside every arm.
-  - Wall time and tokens/s are reported, because ON and CONTROL pay one extra evaluation per batch. OFF is reported as the reference.
+  - Wall time and tokens/s are reported, because ON and the controls pay one extra evaluation per batch.
 
 ## What each outcome unlocks
 
-Two comparisons are read separately, each on fresh rows at both seeds:
-- **credit:** ON against CONTROL;
-- **selection:** the better in-batch arm against OFF.
-
 An instrument failure is classified first (§4.2). It gets a repair and a rerun, and no verdict.
 
-| Credit (ON vs CONTROL) | Selection (best in-batch vs OFF) | Meaning | Unlocks |
-|---|---|---|---|
-| ON wins at both seeds | in-batch wins | carrier credit adds over an uninformed in-batch choice | reopen conditions 1 and 5 met; mechanism PARKED → READY; ON as a candidate arm for #2831 and #2836 |
-| ON wins at both seeds | OFF wins or ties | credit beats the uninformed in-batch choice, but neither in-batch arm beats the sweep | mechanism stays PARKED, with the credit gap recorded; #2831 and #2836 keep their schedule |
-| tie (inside seed noise) | in-batch wins | a schedule effect, not credit | mechanism stays PARKED; CONTROL's rule goes to #2831 and #2836 as a candidate arm |
-| CONTROL wins at both seeds | in-batch wins | credit selection is worse than uninformed choice | configuration negative for credit (D22); CONTROL's rule goes to #2831 and #2836 |
-| CONTROL wins or tie | OFF wins or ties | neither credit nor in-batch selection helps at this dose | configuration negative (D22); #2831 and #2836 keep their schedule |
-| the seeds disagree | — | inconclusive at this power | no pass and no negative; the next configuration adds seeds; #2831 and #2836 are unchanged |
-| any win on DEV that fails on fresh rows | — | panel fit | no pass; configuration negative (D22) |
+Otherwise there are two pre-named comparisons. Fresh rows decide both. DEV is reported, and a comparison that wins on DEV but not on fresh rows is labelled "panel fit" in the REPORT, without changing its verdict. Each comparison is a **win** (at both seeds, by more than the seed noise), a **tie or loss**, or **split** (the seeds disagree). The verdict is the pair of results, and each half sets its own decision, so every combination maps to exactly one pair of decisions.
 
-A pass still leaves reopen condition 2 (one typed binding and frame) and the "all 4,096 choices scored with physical copy aliases" part of condition 4 open, and they are named in the REPORT. Condition 3 is met by the corpus and the fresh rows. Condition 6, the M2 hold, is superseded by D67.
+**Credit: ON against both controls.** ON must beat CONTROL-U and CONTROL-F to win.
+
+| Result | Meaning | Decision |
+|---|---|---|
+| win | credit adds over frequency and over an uninformed in-batch choice | reopen conditions 1 and 5 met; mechanism PARKED → READY; ON becomes a candidate arm for #2831 and #2836 |
+| tie or loss | credit adds nothing over a model-blind choice | configuration negative for credit (D22); mechanism stays PARKED |
+| split | inconclusive at this power | no status change; the next configuration adds seeds |
+
+**Selection: CONTROL-F against OFF.** Pre-named: CONTROL-F is the model-blind schedule a dose would adopt. CONTROL-U against OFF is reported only.
+
+| Result | Meaning | Decision |
+|---|---|---|
+| win | in-batch selection beats the sweep at this dose | CONTROL-F's rule becomes a candidate arm for #2831 and #2836 |
+| tie or loss | the sweep is not the bottleneck at this dose | #2831 and #2836 keep their schedule |
+| split | inconclusive at this power | #2831 and #2836 unchanged; the next configuration adds seeds |
+
+A pass still leaves reopen condition 2 (one typed binding and frame) and the "all 4,096 choices scored with physical copy aliases" part of condition 4 open, and they are named in the REPORT. Condition 3 asks for a panel that is not component-only, two seeds, and at least 128 fresh rows. It is met by the corpus, both seeds and the fresh slice of at least 200 targets. Condition 6, the M2 hold, is superseded by D67.
 
 ## Rejected
 
