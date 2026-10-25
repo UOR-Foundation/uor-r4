@@ -1,6 +1,6 @@
 # ORDER: infra-loop-harness, antigravity-76 (unhold r-secant-surrogate-descent after #2823 and add float-train crate scopes)
 
-Lab: antigravity. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Base: `77c241c709814200f5e4541605d37b57c3a0af66`.
+Lab: antigravity. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Setup row: 2 (item-file maintenance, as in claude-101 and claude-104). Base: `77c241c709814200f5e4541605d37b57c3a0af66`.
 
 ## Goal
 
