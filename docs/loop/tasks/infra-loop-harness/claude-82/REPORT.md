@@ -43,7 +43,7 @@ Closes #2828. References #2904.
   - `docs/rules/changes.md` has the 25 Oct entry.
   - The legal-construction mechanism page notes the closure.
 - **`docs/harness/milestones.json`:**
-  - M1's headline is the §4.8 bar, marked not measured yet, instead of the suspended reply count.
+  - M1's headline was first changed to the §4.8 bar, then restored, because the harness's `prgates` headline gate and its test read M1's numeric registry headline (`reply acceptable 37/232`). Moving M1's registry headline to the §4.8 bar needs that gate changed too, which is its own unit. `PLAN.md` states the bar.
   - M1 and M4 `training_hold` are false.
   - M4 is `not-started` instead of `blocked-on-owner`.
   - M2 keeps its hold for the donor pass.
