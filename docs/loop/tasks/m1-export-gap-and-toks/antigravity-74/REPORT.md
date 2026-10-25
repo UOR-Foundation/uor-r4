@@ -13,7 +13,7 @@ References #2839.
 
 ## What changed
 
-- **Size (`uor-harness loop pr-check --local` / `git diff --stat origin/main...HEAD`):** 6 files changed (`tests 0 file(s) +0/-0, code 0 file(s) +0/-0, docs 5 file(s) +116/-14, generated 1 file(s) +3/-3` across `ORDER.md`, `REPORT.md`, `docs/harness/prep/m1-export-gap-and-toks-DRAFT-2026-10-23.md`, `docs/labs/m1-export-gap-and-toks/README.md`, `docs/roadmap/items/m1-export-gap-and-toks.md`, and `docs/roadmap/README.md`).
+- **Size (`uor-harness loop pr-check --local` / `git diff --stat origin/main...HEAD`):** 6 files changed (`tests 0 file(s) +0/-0, code 0 file(s) +0/-0, docs 5 file(s) +114/-16, generated 1 file(s) +3/-3` across `ORDER.md`, `REPORT.md`, `docs/harness/prep/m1-export-gap-and-toks-DRAFT-2026-10-23.md`, `docs/labs/m1-export-gap-and-toks/README.md`, `docs/roadmap/items/m1-export-gap-and-toks.md`, and `docs/roadmap/README.md`).
 - **Pre-registration sheet (`docs/harness/prep/m1-export-gap-and-toks-DRAFT-2026-10-23.md`):**
   - Updated for D67/D68 (`CHARTER.md` §5.1, §6) and `PLAN.md` Step 4 -> Step 6 dependency (`m1-bvg-k-stage-t-training`, `#2836`), added `- **Run:** m1-export-gap-and-toks-stage4`, and stamped `TEST FITNESS: FIT` after fresh-context non-author review (`8a915285-22c1-4fcf-b336-9f292d2a5b7d`, [`#2839#issuecomment-6398709883`](https://github.com/UOR-Foundation/uor-r4/issues/2839#issuecomment-6398709883)).
 - **Stage 4 lab record (`docs/labs/m1-export-gap-and-toks/README.md`):**
