@@ -3,7 +3,7 @@ id: m2-pin-train-mask-sheet
 title: Settle whether the pinned M2 TRAIN-mask sheet is live after D37, and re-pin it
 milestone: M2
 area: tooling
-status: done
+status: ready
 open_to: anyone
 needs_gpu: false
 depends_on: []
@@ -32,17 +32,13 @@ The record of the count reference (`archive/labs/count-reference-2026-10-13/READ
 
 What is not settled is what that sheet is today. Amendment 7 (D32, 13 October) froze it as a design record that is not executable, because its training law is a floating-point optimizer, and it called for a new pre-registration on a discrete learning law. D37 (18 October, `docs/integration/DECISIONS.md`) later revised D32's learning-path float ban: floating point is legal in offline training with a reported export gap. No record says whether D37 makes the Amendment 6 sheet live again or whether a new sheet is still wanted. M2 training and rental stay HELD until the owner releases them, and a FIT releases nothing.
 
-**Done (25 Oct 2026, claude-100, #3199): met on the done-when's discrete-law branch.**
-- **The owner's answer is recorded** (24 Oct, #2028 comment `6379430093`).
-- **The discrete-law sheet `docs/harness/prep/m1-discrete-rung0-training-2026-10-13.md`** supersedes the Amendment 6 record and carries its pins:
-  - `data/ft-balp.tar` sha256 `b1d22113…473f`;
-  - `mw-balp/train/response_mask.u8`, 7,512,797 bytes, sha256 `b5e7352d…49e3`;
-  - 2,425,925 response-masked targets;
-  - its own discrete executable source;
-  - its own CLI.
+**Note (25 Oct 2026, claude-100, #3199): the 13 Oct discrete rung-0 sheet does not meet the discrete-law branch.** `docs/harness/prep/m1-discrete-rung0-training-2026-10-13.md` names itself the successor to the Amendment 6 record, and it carries the tar, mask and count pins. A decision review found it is not the sheet this done-when asks for:
+- **Gates 1-3 are not on record as done.** Its Verdict puts three gates before any release: qualify the admission diff, review it, and bind the identities. No record shows them done, and it says "Today's source still refuses corpus training".
+- **Its FIT is stale.** It is a design FIT from 14 Oct on source `e7d926fbe`, and the sheet marks fresh transfer unavailable, though `m2-fresh-heldout-panel` is now done.
+- **It is the wrong shape.** It is a 392-line M1 dev-panel sheet with no M2 bar, and it does not carry the count-reference source `2fd6358bb`.
+- **The owner relay still counts it as work to file.** On 24 Oct it said a discrete-law sheet "is also wanted" and is to be filed as an item.
 
-  It carries `TEST FITNESS: FIT (design), Amendment 2`, from two non-author reviews. It runs nothing, and its Verdict lists the execution gates that a hold-release decision acts on.
-- **The D37 sheet goes on separately, since the owner wants both.** Its FIT follows `float-training-module` (#2823), `d11-exporter-float-trunk` (#2820) and its sealed fresh-transfer slice.
+So the discrete-law branch still needs a one-page M2 sheet on the current discrete law. It should carry the mask, count and source pins, the M2 bar and the sealed fresh panel, with a non-author FIT at a current head.
 
 ## Done when
 

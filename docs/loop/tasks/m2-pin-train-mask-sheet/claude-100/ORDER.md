@@ -44,3 +44,7 @@ claude-99 (#3196) recorded the owner's answer and left the discrete-law branch o
 ## Stop and ask if
 
 - The decision review finds the discrete sheet does not meet the done-when as written: it is not a one-page sheet ready for a hold-release decision, or its FIT is stale.
+
+## Outcome (after the decision review)
+
+The fresh decision review REJECTED the close. The 13 Oct sheet's own Verdict gates (qualify the admission diff, review it, bind the identities) are not on record as done. Its 14 Oct FIT is stale, and it is an M1 sheet with no M2 bar. The item stays `status: ready`. This unit now records that finding in the item, so the next lab starts from it. The done-when above is replaced by: the item note records the finding; the decision review passes on that; the checks pass; and the REPORT says `References #2851`.
