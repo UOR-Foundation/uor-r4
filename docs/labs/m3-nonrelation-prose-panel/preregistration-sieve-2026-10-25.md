@@ -25,7 +25,7 @@ Does ordinary prose compile to a store write in the world=v2 schema when the com
 | Arm | Turns | Scored as |
 |---|---|---|
 | **P, the panel** | the 50 frozen turns | `grade_prose_panel`, a fresh seeded store per turn, writes on |
-| **R1, training phrasings** | every training phrasing filled with 8 development values (`Rel::draw`, seed 2856), and each query phrasing once | the exact act, relation and value span |
+| **R1, training phrasings** | every training phrasing filled with 8 development values (`Rel::draw`, seed 2856, the constants `REGISTERED_VALUES_PER_PHRASING` and `REGISTERED_SEED`, passed explicitly by the job), and each query phrasing once | the exact act, relation and value span |
 | **R2, development phrasings** | the same, on the unseen development phrasings | the same |
 
 ## 4. Bars and what each outcome means
@@ -38,7 +38,7 @@ Does ordinary prose compile to a store write in the world=v2 schema when the com
 |---|---|---|
 | An instrument check fails | an instrument fault, never a result | repair, then rerun |
 | R1 below 95% | the compiler refuses true statements, so the panel reading proves nothing | fix the frames or alignment from R1's misses alone, then re-register |
-| Floor met, panel 0/0/50 | the bar is met for the sieve compiler on world=v2 | close #2856 with the rates; `m3-memory-turn-discriminator-gate` stays open (a broader compiler must keep 0) |
+| Floor met, panel 0/0/50 | the bar is met for the sieve compiler on world=v2, reported beside R2 (the floor replays the training frames, so only R2 shows how far the compiler reaches beyond them) | close #2856 with the rates; `m3-memory-turn-discriminator-gate` stays open (a broader compiler must keep 0) |
 | Floor met, false counts above 0 | the baseline is the counts | close #2856 with the rates; they are the discriminator gate's target |
 
 Any result is scoped to this configuration (D22). It is never a mechanism verdict, and never a pass of the discriminator gate.
@@ -46,7 +46,7 @@ Any result is scoped to this configuration (D22). It is never a mechanism verdic
 ## 5. Instrument checks
 
 1. **Finite CUDA controls (`prose-panel-sieve controls`):** 12 hand-built turns over 6 hand-built frames, each with a literal expected decision. They cover the value cap, an empty value, a sieve reject, an order fail, a query exact and over-long, agreeing duplicates, disagreeing experts, frame words inside a value, and the empty turn. All 12 must match.
-2. **Determinism:** the run launches twice in-process, and the decisions must be identical. A second build (the bootstrap `cuda` build against the lean `sieve-cuda` build) must give byte-identical decisions.
+2. **Determinism:** the run launches twice in-process, and the decisions must be identical. The run also writes `decisions.json`: every turn's source and decision, in launch order, with no timings. Its sha256 is the record's `headline.decisions_sha256`. A second build (the bootstrap `cuda` build against the lean `sieve-cuda` build) must write a byte-identical `decisions.json`.
 3. **D29 interlock:** `cargo test --features sieve-cuda --test d29_compiled_modules` on the pod. The built `sieve_frame.ptx` must carry no `ex2`, `lg2`, `tanh`, `mma` or `wmma` instruction.
 4. **Host tests:** `cargo test -p uor-r4-training --lib` (72 at this sheet's commit), including the digest pin and the squarefree-signature identity.
 
@@ -56,7 +56,8 @@ Any result is scoped to this configuration (D22). It is never a mechanism verdic
 |---|---|
 | Panel `data/panels/nonrelation-prose-v1.txt` | `7c29c665f97bae126db0cf82cee1795d2160c2ad35f852f64fffc92b836a3de7` (checked by `load_frozen`) |
 | Frame table (`FrameTable::world_v2`, the compiler artifact) | `379c2ecc4f1d04b49168d76e43ac93f3d07730e1016e0a281608740efb46604f` (pinned by a test, and passed as `--expect-table`) |
-| `sieve_frame.ptx` | recorded by the controls step, then passed as `--expect-ptx` to the run |
+| `sieve_frame.ptx` | recorded by the controls step, then passed as `--expect-ptx`, which the run requires (it refuses to start without it) |
+| Control draw | seed 2856 and 8 values per phrasing. The host test `the_registered_controls_carry_exact_spans_and_fit_the_slot` checks exactly these controls: every value is 1 to 4 words and starts and ends on a word |
 | Binaries | their sha256s are recorded beside the outputs |
 
 ## 7. Cost and stop rule

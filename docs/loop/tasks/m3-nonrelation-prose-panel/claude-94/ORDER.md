@@ -56,7 +56,7 @@ A lawful compiler for the world=v2 schema, built from world=v2's own training ph
 - `docs/loop/tasks/m3-nonrelation-prose-panel/**`
 - `docs/research/notebook/m3-durable-memory.md`
 - `docs/roadmap/items/m3-nonrelation-prose-panel.md` and the rendered roadmap files
-- `docs/roadmap/items/m3-memory-turn-discriminator-gate.md` (the superseding note only)
+- The discriminator-gate note and this item's notebook scope land first on `main`, in claude-96 (#3191), because `loop guard` reads item scope from `origin/main`.
 
 ## Done when
 

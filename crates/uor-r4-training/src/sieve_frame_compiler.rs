@@ -39,6 +39,10 @@ characters and apostrophes (' and U+2019, the latter read as '), lowercased; eve
 separates words";
 /// The longest value a slot accepts, in words.
 pub const MAX_VALUE_WORDS: u32 = 4;
+/// The registered control draw (prep sheet §3): the seed and the development
+/// values per phrasing.
+pub const REGISTERED_SEED: u64 = 2856;
+pub const REGISTERED_VALUES_PER_PHRASING: usize = 8;
 /// The SHA-256 of [`FrameTable::world_v2`]'s bytes, registered in the prep
 /// sheet before the panel ran. A change to the phrasings, the word rule or the
 /// table layout moves it, and its test fails.
@@ -843,9 +847,10 @@ mod tests {
     }
 
     #[test]
-    fn controls_carry_exact_spans_and_fit_the_slot() -> Result<()> {
+    fn the_registered_controls_carry_exact_spans_and_fit_the_slot() -> Result<()> {
         for split in [Split::Train, Split::Development] {
-            let controls = world_v2_controls(split, 3, 7)?;
+            let controls =
+                world_v2_controls(split, REGISTERED_VALUES_PER_PHRASING, REGISTERED_SEED)?;
             assert!(!controls.is_empty());
             for control in &controls {
                 if let CompiledAction::Assert { span, .. } | CompiledAction::Correct { span, .. } =
@@ -864,7 +869,10 @@ mod tests {
                     );
                 }
             }
-            assert_eq!(world_v2_controls(split, 3, 7)?, controls);
+            assert_eq!(
+                world_v2_controls(split, REGISTERED_VALUES_PER_PHRASING, REGISTERED_SEED)?,
+                controls
+            );
         }
         Ok(())
     }

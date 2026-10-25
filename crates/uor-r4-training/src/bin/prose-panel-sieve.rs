@@ -22,7 +22,7 @@ use uor_r4_training::nonrelation_prose_panel::{
 use uor_r4_training::sieve_frame_compiler::device::{ptx_sha256, SieveDevice};
 use uor_r4_training::sieve_frame_compiler::{
     world_v2_controls, ControlTurn, DecidedCompiler, Decision, DeviceFrames, DeviceTurns,
-    FrameTable, MAX_VALUE_WORDS,
+    FrameTable, MAX_VALUE_WORDS, REGISTERED_SEED, REGISTERED_VALUES_PER_PHRASING,
 };
 use uor_r4_training::{sha256_bytes, turn_action::CompiledAction};
 
@@ -59,14 +59,19 @@ fn run(args: Vec<String>) -> Result<()> {
     let device = SieveDevice::new(number("device", 0)? as usize).map_err(|e| e.to_string())?;
     let record = match mode.as_str() {
         "controls" => controls(&device)?,
-        "run" => measure(
-            &device,
-            PathBuf::from(get("repo-root").ok_or("--repo-root is required")?),
-            &get("expect-table").ok_or("--expect-table is required")?,
-            get("expect-ptx"),
-            number("seed", 2856)?,
-            number("values-per-phrasing", 8)? as usize,
-        )?,
+        "run" => {
+            let (record, decisions) = measure(
+                &device,
+                PathBuf::from(get("repo-root").ok_or("--repo-root is required")?),
+                &get("expect-table").ok_or("--expect-table is required")?,
+                &get("expect-ptx").ok_or("--expect-ptx is required")?,
+                number("seed", REGISTERED_SEED)?,
+                number("values-per-phrasing", REGISTERED_VALUES_PER_PHRASING as u64)? as usize,
+            )?;
+            fs::write(out.join("decisions.json"), decisions)
+                .map_err(|e| format!("decisions.json: {e}"))?;
+            record
+        }
         other => return Err(format!("unknown mode {other:?}")),
     };
     let name = if mode == "run" {
@@ -238,23 +243,23 @@ fn measure(
     device: &SieveDevice,
     repo_root: PathBuf,
     expect_table: &str,
-    expect_ptx: Option<String>,
+    expect_ptx: &str,
     seed: u64,
     values_per_phrasing: usize,
-) -> Result<Value> {
+) -> Result<(Value, Vec<u8>)> {
     let err = |e: &dyn std::fmt::Display| e.to_string();
     let table = FrameTable::world_v2().map_err(|e| err(&e))?;
     let artifact = table.canonical_bytes().map_err(|e| err(&e))?;
     let table_sha = sha256_bytes(&artifact);
     let ptx_sha = ptx_sha256();
-    let mut pins = vec![("frame_table_sha256", table_sha == expect_table)];
-    if let Some(want) = &expect_ptx {
-        pins.push(("ptx_sha256", &ptx_sha == want));
-    }
-    pins.push((
-        "relation_labels",
-        table.relations == world_v2_relation_labels(),
-    ));
+    let pins = [
+        ("frame_table_sha256", table_sha == expect_table),
+        ("ptx_sha256", ptx_sha == expect_ptx),
+        (
+            "relation_labels",
+            table.relations == world_v2_relation_labels(),
+        ),
+    ];
     if let Some((name, _)) = pins.iter().find(|(_, ok)| !ok) {
         return Err(format!("pin {name} does not match; nothing was run"));
     }
@@ -277,6 +282,15 @@ fn measure(
         .compile(&frames, &turns, table.max_value_words)
         .map_err(|e| err(&e))?;
     let deterministic = first == second;
+    // Every turn's decision, in launch order: the artifact a second build is
+    // compared on (timings excluded).
+    let decision_rows: Vec<Value> = sources
+        .iter()
+        .zip(&first)
+        .map(|(source, decision)| json!({"source": source, "decision": decision}))
+        .collect();
+    let decisions = serde_json::to_vec(&decision_rows).map_err(|e| err(&e))?;
+    let decisions_sha = sha256_bytes(&decisions);
     let mut actions = Vec::with_capacity(sources.len());
     for (words, decision) in split.iter().zip(&first) {
         actions.push(table.decode(words, *decision).map_err(|e| err(&e))?);
@@ -318,10 +332,11 @@ fn measure(
         && report.false_assert_count == 0
         && report.clean_unresolved_count == n
         && floor_met;
-    Ok(json!({
+    let record = json!({
         "schema": "uor-r4.prose-panel-sieve.record/1",
         "instrument_ok": deterministic,
         "headline": {
+            "decisions_sha256": decisions_sha,
             "tokens_per_second": tokens_per_second,
             "turns": sources.len(),
             "tokens": tokens,
@@ -339,7 +354,6 @@ fn measure(
             "frame_table_sha256": table_sha,
             "compiler_artifact_sha256": report.compiler_artifact_sha256,
             "ptx_sha256": ptx_sha,
-            "expect_ptx": expect_ptx,
             "frames": table.frames.len(),
             "lexicon_words": table.lexicon.len(),
             "max_value_words": table.max_value_words,
@@ -361,7 +375,8 @@ fn measure(
         },
         "recall_train_phrasings": train_score.detail,
         "recall_development_phrasings": development_score.detail,
-    }))
+    });
+    Ok((record, decisions))
 }
 
 /// A count map as a JSON object keyed by each key's name.
