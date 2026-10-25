@@ -3,7 +3,7 @@ id: recurrence-gates-six-recurrence-fit
 title: Run the six-recurrence fit for the recurrence gates
 milestone: research
 area: mechanism
-status: held
+status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [r-secant-surrogate-descent]

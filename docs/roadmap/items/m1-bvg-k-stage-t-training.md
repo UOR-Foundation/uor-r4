@@ -3,7 +3,7 @@ id: m1-bvg-k-stage-t-training
 title: Train the BVG-K batched-coordinate law on two seeds
 milestone: M1
 area: training
-status: held
+status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [m1-w2-capacity-capture, m1-bvg-k-block-apply-c2]

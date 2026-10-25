@@ -3,7 +3,7 @@ id: m1-close-saved-model
 title: Close M1 with one saved discrete model passing all five bars
 milestone: M1
 area: training
-status: held
+status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [m1-a8-full-dose-rerun, m1-bvg-k-stage-t-training, m1-export-gap-and-toks, m1-fresh-panel-transfer]

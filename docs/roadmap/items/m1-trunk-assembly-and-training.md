@@ -1,9 +1,9 @@
 ---
 id: m1-trunk-assembly-and-training
 title: Assemble and train the full lawful trunk (Stage 3)
-milestone: M1
+milestone: M2
 area: architecture
-status: held
+status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [m1-position-mechanism, m1-normalization-mechanism, m1-bvg-k-stage-t-training, m1-d11-exporter-discrete]
