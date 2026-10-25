@@ -3,7 +3,7 @@ id: m2-pin-train-mask-sheet
 title: Settle whether the pinned M2 TRAIN-mask sheet is live after D37, and re-pin it
 milestone: M2
 area: tooling
-status: ready
+status: done
 open_to: anyone
 needs_gpu: false
 depends_on: []
@@ -31,6 +31,18 @@ The record of the count reference (`archive/labs/count-reference-2026-10-13/READ
 - the source: the reference is frozen at `2fd6358bbc52d2a202a872ad0954ebb12894606f`, which passes 11 finite controls (9 metadata, 2 CUDA), and protected PR #2328 merged at `9e904a83448c451f738d5c1d45224dfdf73eb84e`.
 
 What is not settled is what that sheet is today. Amendment 7 (D32, 13 October) froze it as a design record that is not executable, because its training law is a floating-point optimizer, and it called for a new pre-registration on a discrete learning law. D37 (18 October, `docs/integration/DECISIONS.md`) later revised D32's learning-path float ban: floating point is legal in offline training with a reported export gap. No record says whether D37 makes the Amendment 6 sheet live again or whether a new sheet is still wanted. M2 training and rental stay HELD until the owner releases them, and a FIT releases nothing.
+
+**Done (25 Oct 2026, claude-100, #3199): met on the done-when's discrete-law branch.**
+- **The owner's answer is recorded** (24 Oct, #2028 comment `6379430093`).
+- **The discrete-law sheet `docs/harness/prep/m1-discrete-rung0-training-2026-10-13.md`** supersedes the Amendment 6 record and carries its pins:
+  - `data/ft-balp.tar` sha256 `b1d22113…473f`;
+  - `mw-balp/train/response_mask.u8`, 7,512,797 bytes, sha256 `b5e7352d…49e3`;
+  - 2,425,925 response-masked targets;
+  - its own discrete executable source;
+  - its own CLI.
+
+  It carries `TEST FITNESS: FIT (design), Amendment 2`, from two non-author reviews. It runs nothing, and its Verdict lists the execution gates that a hold-release decision acts on.
+- **The D37 sheet goes on separately, since the owner wants both.** Its FIT follows `float-training-module` (#2823), `d11-exporter-float-trunk` (#2820) and its sealed fresh-transfer slice.
 
 ## Done when
 
