@@ -10,7 +10,7 @@ References #2904. References #3179.
 
 ## What changed
 
-Size: 1 item file (+8/−2), the re-rendered page if it changed, and this task folder. No code.
+Size: 1 item file (+8/−2) and this task folder (ORDER 51, REPORT 40 lines). The rendered roadmap page is unchanged by this edit (`render --check` current). No code.
 
 - **Scope:** `docs/roadmap/items/m1-w2-code-utilization.md` now has `[docs/harness/prep/m1-w2-code-utilization*, docs/labs/m1-w2-code-utilization/**, docs/loop/tasks/m1-w2-code-utilization/**]`, with no crate glob.
 - **"How to start":** it now names `docs/labs/m2-fresh-heldout-panel/instrument/Cargo.toml` as the pattern, and marks `w2_capacity.rs` and `w2-assemble.rs` as read-only references.
