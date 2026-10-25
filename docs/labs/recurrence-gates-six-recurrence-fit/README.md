@@ -33,10 +33,10 @@ Measured on 1 $\times$ NVIDIA GeForce RTX 5090 (`sm_120`, Vast.ai pod `vast-5771
 
 | Arm | Build A Train `tok/s` (Seed 1 / Seed 2) | Build B Train `tok/s` (Seed 1 / Seed 2) | Build A Float DEV `tok/s` (Seed 1 / Seed 2) | Build A D11 Int DEV `tok/s` (Seed 1 / Seed 2) | Build B D11 Int DEV `tok/s` (Seed 1 / Seed 2) |
 |---|---:|---:|---:|---:|---:|
-| `Rec_Geometric_S3_Active` | `22,140.6` / `22,126.9` | `20,354.9` / `20,975.8` | `128,448.8` / `127,821.0` | `107,011.6` / `106,427.3` | `106,660.1` / `106,154.9` |
-| `Rec_Geometric_U1_AbelianControl` | `22,431.4` / `22,429.9` | `21,499.4` / `21,366.6` | `129,438.4` / `129,221.3` | `106,636.6` / `106,574.0` | `106,496.3` / `106,421.7` |
-| `Rec_Geometric_IdentityTransport_Control` | `23,855.7` / `23,865.2` | `22,607.8` / `22,571.6` | `132,753.5` / `132,570.6` | `112,803.5` / `112,731.7` | `108,732.3` / `108,650.2` |
-| `Rec_FrozenRates_Null` | `21,622.6` / `21,566.8` | `20,906.8` / `20,918.2` | `128,539.7` / `128,601.1` | `106,818.6` / `106,969.2` | `106,419.1` / `106,488.5` |
+| `Rec_Geometric_S3_Active` | `22,140.6` / `21,878.7` | `20,354.9` / `20,975.8` | `130,875.6` / `127,821.0` | `111,841.3` / `106,427.3` | `106,660.1` / `106,154.9` |
+| `Rec_Geometric_U1_AbelianControl` | `21,996.2` / `21,566.8` | `21,499.4` / `21,366.6` | `129,356.9` / `129,058.5` | `110,411.3` / `109,851.6` | `106,496.3` / `106,421.7` |
+| `Rec_Geometric_IdentityTransport_Control` | `22,668.3` / `22,593.0` | `22,607.8` / `22,571.6` | `131,857.9` / `132,753.5` | `112,803.5` / `112,051.4` | `108,732.3` / `108,650.2` |
+| `Rec_FrozenRates_Null` | `23,812.0` / `23,865.2` | `20,906.8` / `20,918.2` | `130,275.9` / `129,937.8` | `110,288.2` / `108,572.4` | `106,419.1` / `106,488.5` |
 
 ---
 
@@ -47,7 +47,7 @@ Measured on 1 $\times$ NVIDIA GeForce RTX 5090 (`sm_120`, Vast.ai pod `vast-5771
 | `I-Standalone-CUDA-Parity` | Rate error $\le 5\times 10^{-13}$, keep error $\le 4.6\times 10^{-10}$, secant error $\le 5.5\times 10^{-8}$, scan fwd/bwd error $\le 10^{-5}$, stack grad diff $\le 10^{-5}$, nonzero step-0 $\|ds_l\|_2$ on all 6 layers | Rate `0.0`, keep `0.0`, secant `0.0`, scan fwd `5.00e-8`, scan bwd `4.68e-8`, stack hidden diff `0.0`, stack grad diff `3.81e-6`, $\|ds_l\|_2 \in [0.0470, 0.9581]$ on all 6 layers (`0.0` on `FrozenRates`) | Identical (`0.0`, `0.0`, `0.0`, `5.00e-8`, `4.68e-8`, `0.0`, `3.81e-6`) | **PASS** |
 | `I-DEV-Denominator` | `400` documents, `428` windows, `14,287` eligible response targets scored in every float and D11 integer evaluation | `400` docs, `428` windows, `14,287 / 14,287` targets across all 16 float & D11 evaluations | `400` docs, `428` windows, `14,287 / 14,287` targets across all 16 float & D11 evaluations | **PASS** |
 | `I-Rate-Mobility-And-Plateau` | Active arms shift rate bins on $\ge 5.0\%$ (`19/384`) of lanes while $< 80\%$ of lane-tokens occupy plateau bins `12..15` | `49.74%–56.77%` (`191–218 / 384`) lane crossings; plateau `12..15` fraction `40.12%–43.15%` (`0 / 384` crossings on `FrozenRates`) | `49.22%–57.29%` (`189–220 / 384`) lane crossings; plateau `12..15` fraction `40.09%–43.15%` (`0 / 384` crossings on `FrozenRates`) | **PASS** |
-| `I-Export-Exactness` | `16/16` exact 3-term CSD Q12 keep entries, `77/77` exact shift-add Q8 pairs, `max_scan_lsb_diff == 0` on synthetic fixtures, `0 / 14,287` Q12 `i32` writer mismatches | `16/16` CSD entries, `77/77` Q8 pairs, `max_scan_lsb_diff = 0`, `d11_layer0_oracle_max_lsb_diff = 4..6` Q12 LSBs, `0 / 228,592` Q12 `i32` writer mismatches | `16/16` CSD entries, `77/77` Q8 pairs, `max_scan_lsb_diff = 0`, `d11_layer0_oracle_max_lsb_diff = 4..6` Q12 LSBs, `0 / 228,592` Q12 `i32` writer mismatches | **PASS** |
+| `I-Export-Exactness` | `16/16` exact 3-term CSD Q12 keep entries, `77/77` exact shift-add Q8 pairs, `max_scan_lsb_diff == 0` on synthetic fixtures, `0 / 517` Q12 `i32` writer mismatches per eval (`0 / 16,544` across all `32` D11 evals) | `16/16` CSD entries, `77/77` Q8 pairs, `max_scan_lsb_diff = 0`, `d11_layer0_oracle_max_lsb_diff = 4..6` Q12 LSBs, `0 / 16,544` (`517` $\times$ `32` evals) Q12 `i32` writer mismatches | `16/16` CSD entries, `77/77` Q8 pairs, `max_scan_lsb_diff = 0`, `d11_layer0_oracle_max_lsb_diff = 4..6` Q12 LSBs, `0 / 16,544` (`517` $\times$ `32` evals) Q12 `i32` writer mismatches | **PASS** |
 
 ---
 
@@ -60,14 +60,14 @@ Measured on 1 $\times$ NVIDIA GeForce RTX 5090 (`sm_120`, Vast.ai pod `vast-5771
 | Arm | Seed | Train Loss (`0 -> 1024`) | Lane Bin Crossings (`/ 384`) | Float DEV Loss (`0 -> 1024`) | Float DEV Top-1 (`/ 14,287`) | Float DEV Top-8 (`/ 14,287`) | D11 Int DEV Loss | D11 Int DEV Top-1 (`/ 14,287`) | D11 Int DEV Top-8 (`/ 14,287`) | Export Gap $\Delta L$ / $\Delta_{\text{top1}}$ | Float-Int Row Agreement |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | `TrainSplit_CountTable_Ref` | — | — | — | — | `1,226` (`8.58%`) | `4,060` (`28.42%`) | — | **`1,226` (`8.58%`)** | `4,060` (`28.42%`) | — | — |
-| `Rec_Geometric_S3_Active` | `1` | `2.8033 -> 1.8605` | `201` (`52.34%`) | `1.0024 -> 0.8664` | `299` (`2.09%`) | `493` (`3.45%`) | `0.8792` | **`352` (`2.46%`)** | `630` (`4.41%`) | `+0.0128` / `53` | `66.85%` |
-| `Rec_Geometric_S3_Active` | `2` | `2.7332 -> 1.8547` | `218` (`56.77%`) | `1.0022 -> 0.8632` | `2,126` (`14.88%`) | `2,543` (`17.80%`) | `0.8693` | **`1,999` (`13.99%`)** | `2,419` (`16.93%`) | `+0.0061` / `127` | `83.07%` |
-| `Rec_Geometric_U1_AbelianControl` | `1` | `2.7971 -> 1.8280` | `191` (`49.74%`) | `1.0024 -> 0.8566` | `3,988` (`27.91%`) | `5,063` (`35.44%`) | `0.8652` | **`2,805` (`19.63%`)** | `3,635` (`25.44%`) | `+0.0086` / `1,183` | `59.47%` |
-| `Rec_Geometric_U1_AbelianControl` | `2` | `2.7442 -> 1.8975` | `199` (`51.82%`) | `1.0023 -> 0.9089` | `2,740` (`19.18%`) | `3,092` (`21.64%`) | `0.9238` | **`1,921` (`13.45%`)** | `2,332` (`16.32%`) | `+0.0149` / `819` | `68.22%` |
-| `Rec_Geometric_IdentityTransport_Control` | `1` | `2.8108 -> 1.8468` | `204` (`53.12%`) | `1.0025 -> 0.8941` | `4,484` (`31.39%`) | `5,572` (`39.00%`) | `0.9245` | **`2,570` (`17.99%`)** | `3,319` (`23.23%`) | `+0.0304` / `1,914` | `48.20%` |
-| `Rec_Geometric_IdentityTransport_Control` | `2` | `2.7437 -> 1.8859` | `204` (`53.12%`) | `1.0023 -> 0.9084` | `2,443` (`17.10%`) | `3,078` (`21.54%`) | `0.9159` | **`2,222` (`15.55%`)** | `2,840` (`19.88%`) | `+0.0075` / `221` | `58.96%` |
-| `Rec_FrozenRates_Null` | `1` | `2.8033 -> 1.8695` | `0` (`0.00%`) | `1.0024 -> 0.8747` | `1,463` (`10.24%`) | `1,704` (`11.93%`) | `0.8851` | **`1,443` (`10.10%`)** | `1,676` (`11.73%`) | `+0.0104` / `20` | `83.75%` |
-| `Rec_FrozenRates_Null` | `2` | `2.7332 -> 1.8712` | `0` (`0.00%`) | `1.0022 -> 0.8770` | `830` (`5.81%`) | `1,093` (`7.65%`) | `0.8836` | **`1,446` (`10.12%`)** | `1,724` (`12.07%`) | `+0.0066` / `616` | `76.50%` |
+| `Rec_Geometric_S3_Active` | `1` | `2.8033 -> 1.8605` | `201` (`52.34%`) | `1.0024 -> 0.8664` | `299` (`2.09%`) | `493` (`3.45%`) | `0.8792` | **`352` (`2.46%`)** | `630` (`4.41%`) | `+0.0128` / `53` | `33.79%` (`4,828`) |
+| `Rec_Geometric_S3_Active` | `2` | `2.7332 -> 1.8547` | `208` (`54.17%`) | `1.0022 -> 0.8632` | `2,126` (`14.88%`) | `2,543` (`17.80%`) | `0.8693` | **`1,999` (`13.99%`)** | `2,419` (`16.93%`) | `+0.0061` / `127` | `44.75%` (`6,393`) |
+| `Rec_Geometric_U1_AbelianControl` | `1` | `2.7971 -> 1.8280` | `199` (`51.82%`) | `1.0024 -> 0.8566` | `3,988` (`27.91%`) | `5,063` (`35.44%`) | `0.8652` | **`2,805` (`19.63%`)** | `3,635` (`25.44%`) | `+0.0086` / `1,183` | `34.30%` (`4,901`) |
+| `Rec_Geometric_U1_AbelianControl` | `2` | `2.7442 -> 1.8975` | `213` (`55.47%`) | `1.0023 -> 0.9089` | `2,740` (`19.18%`) | `3,092` (`21.64%`) | `0.9238` | **`1,921` (`13.45%`)** | `2,332` (`16.32%`) | `+0.0149` / `819` | `32.70%` (`4,672`) |
+| `Rec_Geometric_IdentityTransport_Control` | `1` | `2.8108 -> 1.8468` | `191` (`49.74%`) | `1.0025 -> 0.8941` | `4,484` (`31.39%`) | `5,572` (`39.00%`) | `0.9245` | **`2,570` (`17.99%`)** | `3,319` (`23.23%`) | `+0.0304` / `1,914` | `22.11%` (`3,159`) |
+| `Rec_Geometric_IdentityTransport_Control` | `2` | `2.7437 -> 1.8859` | `218` (`56.77%`) | `1.0023 -> 0.9084` | `2,443` (`17.10%`) | `3,078` (`21.54%`) | `0.9159` | **`2,222` (`15.55%`)** | `2,840` (`19.88%`) | `+0.0075` / `221` | `40.72%` (`5,817`) |
+| `Rec_FrozenRates_Null` | `1` | `2.8033 -> 1.8695` | `0` (`0.00%`) | `1.0024 -> 0.8747` | `1,463` (`10.24%`) | `1,669` (`11.68%`) | `0.8851` | **`1,443` (`10.10%`)** | `1,676` (`11.73%`) | `+0.0104` / `20` | `34.65%` (`4,950`) |
+| `Rec_FrozenRates_Null` | `2` | `2.7332 -> 1.8712` | `0` (`0.00%`) | `1.0022 -> 0.8770` | `830` (`5.81%`) | `1,089` (`7.62%`) | `0.8836` | **`1,446` (`10.12%`)** | `1,724` (`12.07%`) | `+0.0066` / `616` | `31.08%` (`4,440`) |
 
 ### 4.2 Build B (`receipt-build-b.json` `04b9c409d783f8fa77443a86975adaa6583cc9cfbb05d8ca9042bfb41c43eef9`)
 
