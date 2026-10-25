@@ -56,7 +56,7 @@ Closes #2835.
 - `solution-integrity`: Bound the Stage T pre-registration sheet to the exact SHA-256 artifacts from `#2831` (A8 address-structured codebook and D40 rollback controller) and `#3179` (W2 admission-matched count-table comparators), and turned all three items left outside Stage C2 (`AKd`, `V1d`, `KId`/`V8d`/`V9d`) into mandatory Step 0 GPU controls before any Stage T training result is read.
 - `gates`: Verified `prep::tests::the_real_sheets_are_readable`, `uor-harness loop report --check`, `uor-harness loop pr-check --local`, and `uor-harness loop gates --full`.
 
-## What is still open
+## Still open
 
 - **Step 4 (`m1-bvg-k-stage-t-training`, `#2836`)**: Now unblocked by `#2835` and `#3179`. Executes the registered Stage T two-seed GPU run (`~$12` budget) under `#2836`'s own D67 pre-run review.
 - **Steps 6–8 (`#2839`, `#2841`, `#2837`)**: Downstream M1 export gap, fresh-panel transfer (`fresh_v2` remains sealed with `0` evaluations), and M1 closing bar (`CHARTER §4.8`).
