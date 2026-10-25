@@ -9,15 +9,15 @@ References #2904. References #2886.
 
 ## What changed
 
-- **Files changed:** 8 files (`+112 / -12` lines total across 5 item files `+19 / -8`, 1 rendered roadmap index `+6 / -4`, and `ORDER.md` + `REPORT.md` `+87 / -0`):
+- **Files changed:** 8 files (`+101 / -12` lines total across 5 item files `+19 / -8`, 1 rendered roadmap index `+6 / -4`, and `ORDER.md` + `REPORT.md` `+76 / -0`):
   - `docs/roadmap/items/r-secant-surrogate-descent.md` (`+5 / -2` lines, `#2886`): transitioned `status: held` -> `status: ready` now that `float-training-module` (`#2823`, `crates/uor-r4-float-train`) is `status: done` (`d9dfbdb40`), recorded `depends_on: [float-training-module]`, bound `notebook: docs/research/notebook/float-training.md`, and widened `scope:` to `[crates/uor-r4-float-train/**, docs/mechanisms/recurrence-gates.md, docs/mechanisms/spiralcore-fbs.md, docs/harness/prep/r-secant-surrogate-descent*, docs/labs/r-secant-surrogate-descent/**, docs/loop/tasks/r-secant-surrogate-descent/**]`.
   - `docs/roadmap/items/hamilton-gate-offline-float-sheet.md` (`+2 / -1` lines, `#2824`): bound `notebook: docs/research/notebook/float-training.md` and widened `scope:` to include `crates/uor-r4-float-train/**`, `crates/uor-r4-integer/**`, and `docs/mechanisms/hamilton-gate.md`.
   - `docs/roadmap/items/recurrence-gates-six-recurrence-fit.md` (`+3 / -2` lines, `#2890`): added `float-training-module` to `depends_on:`, bound `notebook: docs/research/notebook/float-training.md`, and widened `scope:` to include `crates/uor-r4-float-train/**`, `crates/uor-r4-integer/**`, and `docs/mechanisms/recurrence-gates.md`.
   - `docs/roadmap/items/spiralcore-fbs-offline-float-sheet.md` (`+2 / -1` lines, `#2891`): bound `notebook: docs/research/notebook/float-training.md` and widened `scope:` to include `crates/uor-r4-float-train/**`, `crates/uor-r4-integer/**`, and `docs/mechanisms/spiralcore-fbs.md`.
   - `docs/roadmap/items/e8-orbit-memory-sigmoid-free-iteration.md` (`+2 / -1` lines, `#2822`): bound `notebook: docs/research/notebook/float-training.md` and widened `scope:` to include `crates/uor-r4-float-train/**`, `crates/uor-r4-integer/**`, and `docs/mechanisms/e8-orbit-memory.md` (keeping `status: held` until `#2886` completes).
   - `docs/roadmap/README.md` (`+6 / -4` lines): re-rendered via `cargo run --offline -p xtask -- roadmap render` (`ready: 31`, `held: 16`, `decision: 1`, `done: 44`).
-  - `docs/loop/tasks/infra-loop-harness/antigravity-76/ORDER.md` (`+35 / -0` lines) and `REPORT.md` (`+52 / -0` lines).
-- **Size ratio to estimate:** `112` added lines against `infra-loop-harness` (`estimate_lines: 300`, `0.37x`).
+  - `docs/loop/tasks/infra-loop-harness/antigravity-76/ORDER.md` (`+35 / -0` lines) and `REPORT.md` (`+41 / -0` lines).
+- **Size ratio to estimate:** `101` added lines against `infra-loop-harness` (`estimate_lines: 300`, `0.34x`).
 
 ## Measurements
 
