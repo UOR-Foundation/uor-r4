@@ -86,6 +86,26 @@ pub struct PackedRows {
     pub stride: i32,
 }
 
+impl PackedRows {
+    /// The layout both scorers rely on: a positive stride, `rows x stride`
+    /// tokens, and every length within `0..=stride`, so no row reads past its
+    /// own slots. A length of 0 is kept: the kernel refuses that row.
+    pub fn check(&self) -> Result<(), String> {
+        let stride = usize::try_from(self.stride).map_err(|_| "negative stride")?;
+        if stride == 0 || self.prefixes.len() != self.lengths.len() * stride {
+            return Err("packed rows have the wrong length".into());
+        }
+        if self
+            .lengths
+            .iter()
+            .any(|&length| !(0..=self.stride).contains(&length))
+        {
+            return Err("a packed row's length is outside 0..=stride".into());
+        }
+        Ok(())
+    }
+}
+
 pub fn pack_rows(prefixes: &[&[u32]]) -> Result<PackedRows, String> {
     let stride = prefixes.iter().map(|p| p.len()).max().unwrap_or(1).max(1);
     let mut packed = vec![0u32; prefixes.len() * stride];
@@ -172,7 +192,17 @@ pub fn compare_row(
             }
             Ok(())
         }
-        Err(_) if score.status != 0 => Ok(()),
+        // Both refuse: they agree only when they refuse for the same reason.
+        Err(e) if score.status != 0 => {
+            if e.to_string().contains(status_name(score.status)) {
+                Ok(())
+            } else {
+                Err(format!(
+                    "both refused, for different reasons: kernel {}, reference {e}",
+                    status_name(score.status)
+                ))
+            }
+        }
         Err(e) => Err(format!("kernel scored a row the reference refuses: {e}")),
     }
 }
@@ -224,9 +254,7 @@ pub fn host_record_sizes() -> (i64, i64, i64) {
 pub fn host_score(tables: &ArtifactTables, rows: &PackedRows) -> Result<Vec<RowScore>, String> {
     let count = rows.lengths.len();
     let rows_i32 = i32::try_from(count).map_err(|_| "too many rows")?;
-    if rows.prefixes.len() != count * rows.stride as usize {
-        return Err("packed rows have the wrong length".into());
-    }
+    rows.check()?;
     if tables.plans.len() != tables.shape[2] as usize * PLAN_WORDS {
         return Err("row plans do not cover the context".into());
     }

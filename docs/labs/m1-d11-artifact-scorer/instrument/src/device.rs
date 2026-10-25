@@ -9,7 +9,7 @@
 //! driver API directly: `cuModuleLoadData`, `cuModuleGetFunction`,
 //! `cuLaunchKernel`. Nothing here compiles source at run time.
 use crate::artifact::ArtifactTables;
-use crate::kernel::{decode_rows, PackedRows, RowScore, ROW_OUT_WORDS, SCRATCH_WORDS};
+use crate::kernel::{decode_rows, PackedRows, RowScore, PLAN_WORDS, ROW_OUT_WORDS, SCRATCH_WORDS};
 use cudarc::driver::{result, sys, CudaContext, CudaSlice, CudaStream, DevicePtr, DevicePtrMut};
 use std::ffi::{c_void, CString};
 use std::sync::Arc;
@@ -82,6 +82,9 @@ impl DeviceScorer {
                 "cubin target {IMAGE_TARGET} differs from device capability {major}.{minor}; no PTX fallback"
             ));
         }
+        if tables.plans.len() != tables.shape[2] as usize * PLAN_WORDS {
+            return Err("row plans do not cover the context".into());
+        }
         context.bind_to_thread().map_err(cuda)?;
         let image = CUBIN.to_vec();
         // SAFETY: `image` is the complete ELF cubin nvcc assembled from the
@@ -113,11 +116,9 @@ impl DeviceScorer {
 
     /// Scores every packed row on the device.
     pub fn score(&self, rows: &PackedRows) -> Result<Vec<RowScore>, String> {
+        rows.check()?;
         let count = rows.lengths.len();
         let stride = rows.stride as usize;
-        if rows.prefixes.len() != count * stride {
-            return Err("packed rows have the wrong length".into());
-        }
         self.module.context.bind_to_thread().map_err(cuda)?;
         let mut scores = Vec::with_capacity(count);
         let mut start = 0;
@@ -173,9 +174,11 @@ impl DeviceScorer {
                 // SAFETY: the twelve parameters point at values of the types
                 // d11_score_rows takes, in its order, and outlive the launch;
                 // the model sections and plans come from a reader-checked
-                // artifact; prefixes holds n x stride tokens and lengths n
-                // words; scratch holds n D11Scratch and out n D11RowOut
-                // records; each thread with row < n touches only its own.
+                // artifact, and plans covers every length up to the context
+                // (checked in new); prefixes holds n x stride tokens and
+                // lengths n words, each within 0..=stride (rows.check above);
+                // scratch holds n D11Scratch and out n D11RowOut records; each
+                // thread with row < n touches only its own.
                 unsafe {
                     result::launch_kernel(
                         self.function,

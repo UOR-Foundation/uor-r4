@@ -48,6 +48,9 @@ pub fn duration_stats(tokens: usize, samples_ns: &[u64]) -> Result<Value, String
     if samples_ns.is_empty() {
         return Err("no timed samples".into());
     }
+    if samples_ns.contains(&0) {
+        return Err("a timed sample of 0 ns: the clock did not advance".into());
+    }
     let mut sorted = samples_ns.to_vec();
     sorted.sort_unstable();
     let n = sorted.len();
@@ -58,13 +61,7 @@ pub fn duration_stats(tokens: usize, samples_ns: &[u64]) -> Result<Value, String
     };
     let rank = (95 * n).div_ceil(100);
     let p95_ns = sorted[rank - 1];
-    let rate = |ns: u64| -> u128 {
-        if ns == 0 {
-            0
-        } else {
-            tokens as u128 * 1_000_000_000 / u128::from(ns)
-        }
-    };
+    let rate = |ns: u64| -> u128 { tokens as u128 * 1_000_000_000 / u128::from(ns) };
     Ok(json!({
         "tokens": tokens,
         "runs": n,

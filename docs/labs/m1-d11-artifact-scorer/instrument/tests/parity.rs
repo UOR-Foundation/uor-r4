@@ -365,6 +365,18 @@ fn rows_the_reference_refuses_are_refused() {
     for (prefix, score) in rows.iter().zip(&scores) {
         compare_row(&model, prefix, score).expect("kernel and reference agree");
     }
+    // A refusal for another reason than the reference's is not agreement.
+    let mut wrong_reason = scores[1].clone();
+    wrong_reason.status = 1;
+    assert!(compare_row(&model, &rows[1], &wrong_reason)
+        .expect_err("a different refusal")
+        .contains("different reasons"));
+    // A hand-built row longer than its stride is refused before scoring.
+    let mut overlong = pack_rows(&views).expect("pack");
+    overlong.lengths[3] = overlong.stride + 1;
+    assert!(host_score(&tables, &overlong)
+        .expect_err("refused")
+        .contains("0..=stride"));
 }
 
 #[test]

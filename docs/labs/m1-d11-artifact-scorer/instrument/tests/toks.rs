@@ -80,6 +80,10 @@ fn statistics_follow_the_registered_definitions() {
     assert_eq!(stats["raw_ns"].as_array().map(Vec::len), Some(20));
     assert_eq!(stats["raw_us"][0], 7_000);
     assert!(duration_stats(1, &[]).is_err());
+    assert!(
+        duration_stats(1, &[5, 0, 7]).is_err(),
+        "a 0 ns sample is refused"
+    );
 }
 
 #[test]
@@ -104,6 +108,12 @@ fn the_decode_loop_appends_predictions_and_slides_the_window() {
         assert_eq!(window.len(), 192);
     }
     assert_eq!(timing["reply"], serde_json::json!(expected));
+    // The reply is not one token repeated, so appending a constant instead of
+    // each prediction would fail the comparison above.
+    assert!(
+        expected.iter().any(|&t| t != expected[0]),
+        "the fixture writes more than one distinct token"
+    );
     assert_eq!(timing["prefill"]["runs"], 3);
     assert_eq!(timing["decode"]["runs"], 3);
     assert_eq!(timing["decode"]["tokens"], 8);
