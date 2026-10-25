@@ -23,7 +23,7 @@ References #2822.
   - Carries all 8 required `prep.rs` blocks (`Bar`, `Base artifact`, `Data split`, `Steps`, `Stop rule`, `Cost`, `Minimum test power`, `TEST FITNESS: FIT`) and passed fresh-context non-author review (`c5fc78f4-35da-4fa3-b450-d6316fc72d3c`, [`#2822#issuecomment-6398487538`](https://github.com/UOR-Foundation/uor-r4/issues/2822#issuecomment-6398487538)).
 - **Companion design & CUDA specification (`docs/labs/e8-orbit-memory-sigmoid-free-iteration/README.md`, `92` lines):** Documents the cancel-probe audit, exact forward/backward equations, CUDA kernel signatures (`e8_select_fwd_k8_f32`, `e8_select_fwd_k16_f32`, `e8_memory_gather_fwd_f32`, `e8_memory_scatter_bwd_f32`), and D11 `UORLUT01` integer export layout.
 - **D68 status transition (`docs/roadmap/items/e8-orbit-memory-sigmoid-free-iteration.md`, `docs/roadmap/README.md`):** Following fresh-context D68 decision review (`c5fc78f4-35da-4fa3-b450-d6316fc72d3c`, `DECISION REVIEW: APPROVE`, logged at [`#2822#issuecomment-6398487538`](https://github.com/UOR-Foundation/uor-r4/issues/2822#issuecomment-6398487538)), set `status: held` and re-rendered `docs/roadmap/README.md`.
-- **Suborders issued:** `local/antigravity/antigravity-73/orders/1.md` (read-only fresh-context non-author `TEST FITNESS` and D68 decision review by subagent `c5fc78f4-35da-4fa3-b450-d6316fc72d3c`).
+- **Suborders issued:** `local/antigravity/antigravity-73/orders/1.md` (read-only fresh-context non-author `TEST FITNESS` and D68 decision review by subagent `c5fc78f4-35da-4fa3-b450-d6316fc72d3c`) and `local/antigravity/antigravity-73/orders/2.md` (fresh-context D66 exact-head review of PR `#3219`).
 
 ## Measurements
 
