@@ -9,7 +9,7 @@ References #2884
 
 ## What changed
 
-- **Files changed:** `6` files (`+251 / -4` lines across `docs/`; `0` code lines, `0` test lines, `248` doc lines, `3` generated roadmap lines; within the `docs/**` scope of `r-ranking-with-admission-intact`).
+- **Files changed:** `6` files (`+243 / -4` lines across `docs/`; `0` code lines, `0` test lines, `240` doc lines, `3` generated roadmap lines; within the `docs/**` scope of `r-ranking-with-admission-intact`).
   - `docs/loop/tasks/r-ranking-with-admission-intact/antigravity-68/ORDER.md`: Recorded the cancel probe (`instrument`) and exact scope/done-when contract.
   - `docs/harness/prep/r-ranking-with-admission-intact-2026-10-25.md`: Authored the one-page pre-registration sheet (`TEST FITNESS: FIT`) for the 3-arm (`Arm-FZ-K8`, `Arm-Rel-K8`, `Arm-Rel-K16`) $\times$ 2-seed full `16,404`-batch admission-intact ranking experiment.
   - `docs/labs/r-ranking-with-admission-intact/README.md`: Authored the lab record reporting the exact `#2831` `Q1` (`4,096`-batch) admission-intact ranking decomposition (`871 / 4,292` conditional `top-1`, `1,455 / 4,292` conditional `top-8`, `256 / 256` cells, $\bar{n} = 126.49$) against the `#2845` (`W2`) full-panel and admission-matched count tables (`Unigram`, `W2 Code Table`, `T2 Bigram`).
