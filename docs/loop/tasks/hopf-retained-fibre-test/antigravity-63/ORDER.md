@@ -8,20 +8,36 @@ The item's done-when reads:
 
 > A retained-fibre test is run on the integer DEV metrics against a control and recorded.
 
+Because `hopf-retained-fibre-test` (`#2825`) has no pre-registration sheet (`docs/harness/prep/hopf-retained-fibre-test*`), no discrete/integer consumer for `HopfFiberPointQ30` (`crates/uor-r4-discrete` has `0` Hopf references and `crates/uor-r4-integer/src/model.rs:4023-4041` marks `hopf_state` and `cumulative_holonomy_q30` `TELEMETRY-ONLY`), and its item `scope:` (`[docs/harness/prep/hopf-retained-fibre-test*, docs/labs/hopf-retained-fibre-test/**, docs/loop/tasks/hopf-retained-fibre-test/**]`) excludes `crates/uor-r4-discrete/**` and `crates/uor-r4-integer/**`, this unit:
+1. Authors and FIT-reviews the one-page pre-registration sheet `docs/harness/prep/hopf-retained-fibre-test-2026-10-25.md` (`CHARTER.md` §4.5, `docs/mechanisms/hopf-observation.md:73-74`) specifying the equal-byte retained-fibre language test (`H_base_fibre` vs `C_base_only`, `C_bank_tag`, `C_fibre_perm`, and `C_no_hopf`) across two seeds on the 14,287-row DEV panel, the six finite algebraic/instrument controls (`I-1..I-6`), and the exact discrete/integer multiplier-free Hopf table construction.
+2. Documents the mathematical specification, codebase audit, and execution prerequisites in `docs/labs/hopf-retained-fibre-test/README.md`.
+3. Transitions `hopf-retained-fibre-test` (`#2825`) to `status: held` under a fresh-context D68 decision review until `crates/uor-r4-discrete/**` and `crates/uor-r4-integer/**` are added to scope (or a discrete Hopf consumer item lands) and the M1 Stage T base (`#2836`) is complete.
+
 ## Cancel probe (run first)
 
-To fill in.
+Ran the repository probe on `hopf-retained-fibre-test` at base `e6b34e332`:
+1. `ls docs/harness/prep/hopf-retained-fibre-test* docs/labs/hopf-retained-fibre-test 2>/dev/null` -> no pre-registration sheet or lab directory exists (`instrument`).
+2. `command grep -rn -i -e "hopf" -e "fiber" -e "fibre" crates/uor-r4-discrete/` -> `0` matches (`instrument`: no discrete Hopf map or kept-fibre consumer is wired into `crates/uor-r4-discrete`, matching `docs/geometry/hopf-observation.md:28`).
+3. `command grep -n -C 3 "TELEMETRY-ONLY" crates/uor-r4-integer/src/model.rs` -> lines `4023-4041` confirm `hopf_state` (`UnitS3Q30::hopf_fiber_project()`) and `cumulative_holonomy_q30` are `TELEMETRY-ONLY STATE (does NOT affect model outputs, logits, or probabilities)` inside the parked pre-D32 `IntegerModel` bridge (`instrument`).
+4. `docs/roadmap/items/hopf-retained-fibre-test.md` line 10 restricts `scope:` to `[docs/harness/prep/hopf-retained-fibre-test*, docs/labs/hopf-retained-fibre-test/**, docs/loop/tasks/hopf-retained-fibre-test/**]`, excluding all Rust crates (`instrument`).
+
+Classification: **`instrument`** (missing pre-registration sheet, missing discrete/integer consumer wiring, and docs-only item scope). Staging the FIT-reviewed pre-registration sheet, lab specification, and D68 `status: held` transition proceeds inside scope.
 
 ## Files in scope
 
 - `docs/harness/prep/hopf-retained-fibre-test*`
 - `docs/labs/hopf-retained-fibre-test/**`
 - `docs/loop/tasks/hopf-retained-fibre-test/**`
+- `docs/roadmap/items/hopf-retained-fibre-test.md` (status line, always allowed)
+- `docs/roadmap/README.md` (shared registration file)
 
 ## Done when
 
-To fill in.
+- `docs/harness/prep/hopf-retained-fibre-test-2026-10-25.md` is written and passes a fresh-context non-author `TEST FITNESS: FIT` review posted on `#2825`.
+- `docs/labs/hopf-retained-fibre-test/README.md` documents the exact discrete/integer Hopf decomposition, the 30-base $\times$ 4-fibre icosian / 16-root E8 structure, the six finite controls `I-1..I-6`, the equal-byte 5-arm comparison (`H_base_fibre`, `C_base_only`, `C_bank_tag`, `C_fibre_perm`, `C_no_hopf`), and the execution dependencies.
+- `docs/roadmap/items/hopf-retained-fibre-test.md` is set to `status: held` after a fresh-context D68 decision review posted on `#2825`, with `docs/roadmap/README.md` re-rendered and all `uor-harness check` and `uor-harness loop gates --full` checks green.
 
 ## Stop and ask if
 
-To fill in.
+- Any proposed design requires softmax, squashing, dense matmul, or floating-point operations in the discrete crate (`CHARTER.md` §3.1–§3.6).
+- Any change outside the declared scope is needed (`stop and decide` via D68 decision review, never wait).
