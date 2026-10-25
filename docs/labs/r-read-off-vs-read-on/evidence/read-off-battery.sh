@@ -2,16 +2,17 @@
 # Read-off vs read-on paired evaluation battery (zero updates, #2885).
 # Sheet: docs/harness/prep/r-read-off-vs-read-on-DRAFT-2026-10-23.md
 # Ten arms: {a8, p8} x {r-on, r-off, r-perm, f-on, f-off} at checkpoint 0.
-# No training, no apply, no owner phrase. Requires non-author FIT + Casey chat GO before pod execution.
+# No training, no apply, no owner phrase. Cleared by non-author FIT + D68 + D67 pre-run review.
 set -u
 SRC=$(ls -d /root/build/src-* | head -1)
 export CARGO_TARGET_DIR=/root/build/target-sm120 UOR_NVCC_ARCH=compute_120 PATH=/root/.cargo/bin:/usr/local/cuda/bin:$PATH
 B=$CARGO_TARGET_DIR/release
 D=/workspace/uor-r4/local/driver/data
 EV=$SRC/docs/labs/r-read-off-vs-read-on/evidence
-R=/workspace/uor-r4/runs/antigravity/r-read-off-vs-read-on-20261023
+R=/workspace/uor-r4/runs/antigravity/r-read-off-vs-read-on-20261025
 PZ=$D/injective/prime-zeta-v4096-b4-c192-k8.json
 A8T=$D/address-cells/address-structured-v1.json
+PZ_SPEC=$SRC/docs/labs/r-prime-zeta-vs-nulls/evidence/spec-v4096-b4-c192-k8.json
 mark() { echo "## $(date -u +%FT%TZ) $*"; }
 mkdir -p "$(dirname "$R")"
 mkdir "$R" || { echo "results dir not created exclusively: FAIL"; exit 1; }
@@ -27,9 +28,13 @@ cargo test -q --release --locked -p uor-r4-discrete --features cuda --lib route_
 rc=$?; echo "g_qual_rc=$rc"
 [ $rc -eq 0 ] && echo "G_QUAL: PASS" || { echo "G_QUAL: FAIL"; cat "$R/g-qual-device-test.stdout"; exit 2; }
 
-mark "verify or rebuild A8 table from TRAIN if missing"
+mark "verify or rebuild P8 and A8 tables if missing"
+mkdir -p "$D/injective" "$D/address-cells" "$R/tables"
+if [ ! -e "$PZ" ]; then
+  "$B/prime-zeta-codebook" "$PZ_SPEC" 0 "$R/tables/p8-rebuilt.json" "prime_zeta" > "$R/tables/p8.stdout" 2> "$R/tables/p8.stderr"
+  cp "$R/tables/p8-rebuilt.json" "$PZ"
+fi
 if [ ! -e "$A8T" ]; then
-  mkdir -p "$D/address-cells" "$R/tables"
   "$B/address-cells-codebook" "$EV/p8-f-on.json" "$R/tables/a8-rebuilt.json" structured > "$R/tables/a8.stdout" 2> "$R/tables/a8.stderr"
   cp "$R/tables/a8-rebuilt.json" "$A8T"
 fi
