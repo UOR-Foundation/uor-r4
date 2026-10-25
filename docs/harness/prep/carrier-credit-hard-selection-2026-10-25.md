@@ -35,15 +35,21 @@ Here `n` is `completed_batches`. ON and both controls run the same CUDA evaluati
 | TRAIN | `data/ft-balp.tar` (HF store), sha256 `b1d2211377a2e99d5977cc95d46875027023b08867488b1372185b3f62a1473f`, member `mw-balp/train/`: tokens `3dee858f…a4c8` (7,512,797 u16), mask `b5e7352d…49e3`, 2,425,925 eligible targets |
 | DEV | `data/ft-dev.tar`, tokens `0919e90f…555b`, mask `a838bb1a…b078`, 14,287 targets |
 | Tokenizer | `d36d3e87…0f89` |
-| FRESH | see §4, sealed before any arm |
+| FRESH | tokens `4d9ead83…ef61`, mask `557131bc…5e9b`, 65,536 targets (§4) |
+| Base config | [`base-config.json`](../../labs/carrier-credit-hard-selection/base-config.json): the A8 dose config (#2831) byte for byte. `carrier-arms` sets each arm's schedule, seed and a seeded-device codebook (`carrier_arms::arm_config`) |
 
 ## 4. Fresh rows
 
 - Batches walk TRAIN's eligible targets in order from cursor 0 (`corpus.rs`:254–279), and each window stays inside its document. A 16,404 × 64 dose reads eligible indices 0 to 1,049,855 only.
-- **The FRESH slice** is the first 65,536 eligible TRAIN targets in documents that begin after the document holding index 1,049,855, less any target whose 192-token window and target exactly match a visited row's.
-- It is written as a `Split::Fresh` mask over the same token file. Its sha256 is recorded here and in the HF store before any arm runs, and it is scored once, after the dose.
+- **The FRESH slice** is the first 65,536 eligible TRAIN targets in documents that begin after the document holding index 1,049,855, less any target whose in-document window (at most 192 tokens) and target exactly match a visited row's.
+- **How it is stored.** `carrier-fresh-slice` copies those whole documents into a separate, pinned `Split::Fresh` corpus, so each window equals its TRAIN window (fixture test, `carrier_fresh.rs`). The slice is scored once, after the dose, through `evaluate_transfer`.
+- **The slice as cut and sealed, 25 Oct, before any arm** (HF `results/claude/carrier-credit-2026-10-25/fresh/`, with SHA256SUMS; manifest in [`docs/labs/carrier-credit-hard-selection/fresh-slice-manifest.json`](../../labs/carrier-credit-hard-selection/fresh-slice-manifest.json)):
+  - the last visited TRAIN position is 3,251,164, and the first fresh document starts at 3,251,242;
+  - 68,773 candidates were scanned, 3,237 dropped as exact repeats, and 65,536 kept;
+  - the slice is 211,846 tokens;
+  - tokens `4d9ead83fa05f959502c6d4b1a176cc34b7134b9adef41e13d1bf7f4ba9eef61`, mask `557131bca30514b6728e00e66bc945b43abbcbf6b7a96ed9ec3e817057915e9b`.
 - The TRAIN binding stays byte-identical to #2831's. The M1 sealed fresh panel (`4bd108ad…`, `df5d074a…`) and frozen `ft/dev` stay unopened as FRESH.
-- A driver check refuses any cursor that reaches the slice's first index.
+- `run_arm` refuses any batch that would read past TRAIN index 1,049,855. The D67 release pins `visited_targets` = 16,404 × 64.
 
 ## 5. Bars and decision (card D/E, fixed here)
 
