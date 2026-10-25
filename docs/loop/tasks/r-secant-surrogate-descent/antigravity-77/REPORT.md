@@ -5,7 +5,11 @@
 - Lab: `antigravity`
 - Session: `antigravity-77`
 - ORDER: `docs/loop/tasks/r-secant-surrogate-descent/antigravity-77/ORDER.md`
-- Suborders: `local/antigravity/antigravity-77/orders/1.md` (subagent `7fc3f78d-b0dd-46f9-82ce-25406b4cf28c`: fresh-context `TEST FITNESS: FIT`, D68 `DECISION REVIEW: APPROVE`, and D67 `PRE-RUN REVIEW: PASS`)
+- Suborders:
+  - `local/antigravity/antigravity-77/orders/1.md` (subagent `7fc3f78d-b0dd-46f9-82ce-25406b4cf28c`: fresh-context `TEST FITNESS: FIT`, D68 `DECISION REVIEW: APPROVE`, and D67 `PRE-RUN REVIEW: PASS`)
+  - `local/antigravity/antigravity-77/orders/2.md` (fresh-context D66 exact-head review slice 1: `crates/uor-r4-float-train/src/secant_descent.rs` lines 1–700)
+  - `local/antigravity/antigravity-77/orders/3.md` (fresh-context D66 exact-head review slice 2: `crates/uor-r4-float-train/src/secant_descent.rs` lines 701–1292, `src/bin/secant-surrogate-descent.rs`, `src/geometric_stack_native.rs`, `src/geometric_stack_native_cuda.rs`, `src/lib.rs`)
+  - `local/antigravity/antigravity-77/orders/4.md` (fresh-context D66 exact-head review slice 3 & claims check: `docs/labs/r-secant-surrogate-descent/**`, `docs/mechanisms/**`, `docs/harness/prep/r-secant-surrogate-descent-2026-10-25.md`, `docs/research/notebook/float-training.md`, `docs/roadmap/**`, `ORDER.md`, `REPORT.md`)
 - Sealed GPU artifact: `docs/labs/r-secant-surrogate-descent/receipt.json` (`c5e7909dcaf88a7e2338eff6d5c1121a4f1abe751e56ec6d0dc70c3e0b0f5fb3`)
 - HF store archive: `caseyallard/uor-r4-store:results/antigravity/r-secant-surrogate-descent-2026-10-25/`
 
@@ -27,7 +31,7 @@
 
 ## What changed
 
-- **Size:** `13` files changed, `3,589` insertions, `42` deletions (`+3,547` net lines):
+- **Size (`loop pr-check`):** `tests 0 file(s) +0/-0, code 5 file(s) +1679/-7, docs 8 file(s) +271/-62, generated 1 file(s) +3/-3, other 1 file(s) +1553/-0` (`15` files changed):
   - **Code & tests (`crates/uor-r4-float-train`):** `5` files (`src/lib.rs`, `src/geometric_stack_native.rs`, `src/geometric_stack_native_cuda.rs`, `src/secant_descent.rs`, `src/bin/secant-surrogate-descent.rs`), `+1,683 / -9` lines (including 5 new unit tests in `src/secant_descent.rs`).
   - **Documentation, prep sheet, roadmap, and task records:** `7` markdown files (`docs/harness/prep/r-secant-surrogate-descent-2026-10-25.md`, `docs/labs/r-secant-surrogate-descent/README.md`, `docs/mechanisms/recurrence-gates.md`, `docs/mechanisms/spiralcore-fbs.md`, `docs/research/notebook/float-training.md`, `docs/roadmap/items/r-secant-surrogate-descent.md`, `docs/roadmap/README.md`, plus `ORDER.md` and `REPORT.md`), `+353 / -33` lines.
   - **Sealed JSON receipt:** `docs/labs/r-secant-surrogate-descent/receipt.json` (`1,553` lines, SHA-256 `c5e7909dcaf88a7e2338eff6d5c1121a4f1abe751e56ec6d0dc70c3e0b0f5fb3`).
