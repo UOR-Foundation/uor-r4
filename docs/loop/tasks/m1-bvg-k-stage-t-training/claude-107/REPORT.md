@@ -24,10 +24,10 @@ None. There was no run, no GPU and no model.
 
 ## Checks run at the head
 
-- `loop report --check` and `loop pr-check --local`: see the review record on the PR.
+- `loop report --check` and `loop pr-check --local`: PASS (the review-record and required-checks rules report N/A in a local run).
 - **Fresh decision reviews of the card:**
   - round 1, CHANGES (on the "runs now" version);
-  - round 2, recorded on the PR.
+  - round 2, APPROVE, no Required findings. Its advisories are taken; the stale PLAN.md:61 row is fixed in claude-109 (#3228).
 
 ## Skills used
 
