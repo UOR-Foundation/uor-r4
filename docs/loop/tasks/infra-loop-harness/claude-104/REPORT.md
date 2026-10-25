@@ -23,7 +23,9 @@ The decision was approved after a fresh-context decision review: CHANGES in roun
 
 ## Measurements
 
-This is a records unit, so there is no run, no GPU and no model. These checks were run at the head:
+None. This is a records unit, so there is no run, no GPU and no model.
+
+## Checks run at the head
 
 - `cargo run -p xtask -- roadmap check`: 92 items OK.
 - `cargo run -p xtask -- roadmap render`: wrote only `docs/roadmap/README.md`.
