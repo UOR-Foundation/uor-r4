@@ -26,7 +26,7 @@ Ran on `dc5f409b0`:
 ## Done when
 
 1. `Device::from_snapshot` checks `position` shape/mode inventory on the host and uploads `position_steps` before launching `discrete_validate`, so a deserialized `Snapshot` with step candidate `16` is refused on the GPU with CUDA status `10` while `Device::new_with_position` continues to validate `PositionConfig` on the host.
-2. GPU tests in `crates/uor-r4-discrete/src/device.rs` (`position_device_tests`) and a CUDA qualification binary `qualify-position` verify on an RTX 5090:
+2. GPU tests in `crates/uor-r4-discrete/src/device.rs` (`position_device_tests`) and a CUDA qualification binary `position-qualify` verify on an RTX 5090:
    - exact match between GPU traced actions, carried roots, and output vectors and the finite algebraic reference (`relative_holonomy`, `apply_frame_to_root`) across `PrefixHolonomyV1` (`s[14]=1`), `EndpointControlV1` (`s[14]=2`), and `IdentityControlV1` (`s[14]=3`) in both `Flock` and `Relation`;
    - interior-order sensitivity (`PrefixHolonomyV1` changes under an interior token swap while `EndpointControlV1` is invariant and `IdentityControlV1` matches an all-zero step table);
    - GPU `Device::from_snapshot` refusal (`status 10`) of a deserialized `Snapshot` with step candidate `16` and of `Route` with a position table;
