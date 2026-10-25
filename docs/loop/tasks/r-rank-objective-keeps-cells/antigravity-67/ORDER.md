@@ -8,7 +8,7 @@ The item's done-when reads:
 
 > A rank objective that passes G-Occ (more than 16 of 256 cells, plus the D39 condition) and is evaluated against the count tables.
 
-Under the item's `docs/**` scope, this unit runs the cancel probe first, authors the one-page pre-registration sheet (`docs/harness/prep/r-rank-objective-keeps-cells-2026-10-25.md`) and lab design record (`docs/labs/r-rank-objective-keeps-cells/README.md`) for the occupancy-preserving rank objective (`OccupiedCellRankCrowdHingeV1`, `R_occ`), obtains the fresh-context non-author `TEST FITNESS: FIT` review (CHARTER §4.5) and `D68` decision review (`status: ready -> status: held` until `#2836` `m1-bvg-k-stage-t-training` completes and scope includes `crates/uor-r4-discrete/**`), posts the review on `#2883`, and records the synthesis row in `docs/research/notebook/training.md`.
+Under the item's `docs/**` scope, this unit runs the cancel probe first, authors the one-page pre-registration sheet (`docs/harness/prep/r-rank-objective-keeps-cells-2026-10-25.md`) and lab design record (`docs/labs/r-rank-objective-keeps-cells/README.md`) for the occupancy-preserving rank objective (`OccupiedCellRankCrowdHingeV1`, `R_occ`), obtains the fresh-context non-author `TEST FITNESS: FIT` review (CHARTER §4.5) and `D68` decision review (`status: ready -> status: held` until `#2836` `m1-bvg-k-stage-t-training` completes and scope includes `crates/uor-r4-discrete/**`), and posts the review on `#2883`.
 
 ## Cancel probe (run first)
 
@@ -25,7 +25,7 @@ Under the item's `docs/**` scope, this unit runs the cancel probe first, authors
 - `docs/harness/prep/r-rank-objective-keeps-cells*`
 - `docs/labs/r-rank-objective-keeps-cells/**`
 - `docs/loop/tasks/r-rank-objective-keeps-cells/**`
-- Always-allowed paths: `docs/roadmap/items/r-rank-objective-keeps-cells.md`, `docs/roadmap/README.md`, `docs/research/notebook/training.md`, `docs/start/FILEMAP.md`
+- Always-allowed paths: `docs/roadmap/items/r-rank-objective-keeps-cells.md`, `docs/roadmap/README.md`
 
 ## Done when
 
