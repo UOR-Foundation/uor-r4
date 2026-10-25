@@ -116,7 +116,7 @@ fn run(args: &[String]) -> Result<(), String> {
     let fresh = PreparedCorpus::load(&source, config.spec.vocabulary, &config.bos)
         .map_err(|e| format!("fresh: {e:?}"))?;
     let driver = PreparedDriver::load(config).map_err(|e| format!("{e:?}"))?;
-    fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    fs::create_dir(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let mut receipts = std::io::BufWriter::new(
         fs::File::create(out.join("receipts.jsonl")).map_err(|e| e.to_string())?,
     );
@@ -130,7 +130,13 @@ fn run(args: &[String]) -> Result<(), String> {
         &mut receipts,
     )
     .map_err(|e| format!("{e:?}"))?;
-    drop(receipts);
+    // A short receipts file would starve the selection audit, so a flush or
+    // sync failure is an error, not a silent drop.
+    receipts
+        .into_inner()
+        .map_err(|e| format!("receipts.jsonl: {e}"))?
+        .sync_all()
+        .map_err(|e| format!("receipts.jsonl: {e}"))?;
     let bytes = serde_json::to_vec_pretty(&record).map_err(|e| e.to_string())?;
     write_once(&out.join("record.json"), &bytes)?;
     println!("{record}");
@@ -159,6 +165,11 @@ fn grade_records(args: &[String]) -> Result<(), String> {
         let path = format!("{dir}/record.json");
         let r: serde_json::Value =
             serde_json::from_slice(&read(&path)?).map_err(|e| format!("{path}: {e}"))?;
+        if r["scored"] != serde_json::Value::Bool(true) {
+            return Err(format!(
+                "{path}: not a scored full-dose record (a probe scores nothing)"
+            ));
+        }
         let number = |v: &serde_json::Value| v.as_u64().ok_or(format!("{path}: missing count"));
         scores.push((
             dir.clone(),

@@ -101,9 +101,16 @@ mod tests {
         let device = include_str!("device.rs");
         let method = body(device, "pub fn carrier_select(");
         let selector = body(device, "fn select_carrier(");
+        let evaluate = body(device, "fn launch_evaluate(");
         assert!(
             !method.contains("clone_dtoh"),
             "carrier_select must not download rows"
+        );
+        // The shared evaluate launch keeps its rows on the device too; its only
+        // host read is the one-word status inside check_status.
+        assert!(
+            !evaluate.contains("clone_dtoh"),
+            "launch_evaluate must not download rows"
         );
         assert_eq!(
             selector.matches("clone_dtoh(").count(),

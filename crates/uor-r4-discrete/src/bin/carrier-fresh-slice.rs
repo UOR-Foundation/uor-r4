@@ -35,7 +35,7 @@ fn run(args: &[String]) -> Result<(), String> {
         .map_err(|e| format!("TRAIN: {e:?}"))?;
     let slice = cut_fresh_slice(&train, config.spec.context, visited, fresh)
         .map_err(|e| format!("slice: {e:?}"))?;
-    fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    fs::create_dir(out).map_err(|e| format!("{}: {e}", out.display()))?;
     fs::write(out.join("tokens.uort"), &slice.tokens).map_err(|e| e.to_string())?;
     fs::write(out.join("mask.u8"), &slice.mask).map_err(|e| e.to_string())?;
     let manifest = serde_json::to_vec_pretty(&slice.manifest).map_err(|e| e.to_string())?;

@@ -15,6 +15,15 @@ const ABSENT: u32 = u32::MAX;
 struct Row(u32, u64, u64, bool, u32);
 
 fn select(rows: &[Row], mode: CarrierMode, key: u64) -> uor_r4_discrete::Result<CarrierSelection> {
+    select_in(VOCABULARY, rows, mode, key)
+}
+
+fn select_in(
+    vocabulary: u32,
+    rows: &[Row],
+    mode: CarrierMode,
+    key: u64,
+) -> uor_r4_discrete::Result<CarrierSelection> {
     let targets: Vec<u32> = rows.iter().map(|r| r.0).collect();
     let mut top8 = vec![ABSENT; rows.len() * 8];
     let mut metrics = vec![0u64; rows.len() * ROW_WORDS];
@@ -24,7 +33,7 @@ fn select(rows: &[Row], mode: CarrierMode, key: u64) -> uor_r4_discrete::Result<
         metrics[i * ROW_WORDS + 1] = r.2;
         metrics[i * ROW_WORDS + 5] = u64::from(r.3);
     }
-    Device::carrier_select_rows(VOCABULARY, &targets, &top8, &metrics, mode, key, 0)
+    Device::carrier_select_rows(vocabulary, &targets, &top8, &metrics, mode, key, 0)
 }
 
 fn credit(rows: &[Row]) -> (u32, u64) {
@@ -122,4 +131,24 @@ fn c8_two_launches_are_identical() {
 fn c9_a_target_outside_the_vocabulary_is_refused() {
     let rows = [Row(VOCABULARY, 1, 0, true, 1)];
     assert!(select(&rows, CarrierMode::CreditV1, 0).is_err());
+}
+
+#[test]
+fn c10_ties_and_walks_inside_a_multi_id_chunk() {
+    // V = 1000 gives 4-id chunks: [4, 8) holds ids 4 and 5, and [996, 1000) is
+    // the last partial chunk. A within-chunk `>=` would hand the tie to 5.
+    let rows = [
+        Row(5, 3, 0, true, 5),
+        Row(4, 2, 1, true, 4),
+        Row(999, 1, 0, true, 999),
+        Row(997, 0, 0, true, 997),
+    ];
+    let credit = select_in(1000, &rows, CarrierMode::CreditV1, 0).expect("credit");
+    assert_eq!((credit.token, credit.value), (4, 3));
+    // Distinct targets ascending: 4, 5, 997, 999; the walk crosses into chunks.
+    let key = schedule_key(2001, 77);
+    let distinct = [4u32, 5, 997, 999];
+    let expected = distinct[(splitmix64(key) % 4) as usize];
+    let uniform = select_in(1000, &rows, CarrierMode::UniformTargetV1, key).expect("uniform");
+    assert_eq!((uniform.token, uniform.value), (expected, 4));
 }

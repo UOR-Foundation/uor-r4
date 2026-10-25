@@ -125,7 +125,15 @@ impl CarrierRelease {
             .collect();
         pairs.sort();
         pairs.dedup();
-        if self.arms.len() != SCHEDULES.len() * SEEDS.len() || pairs.len() != self.arms.len() {
+        let registered = self
+            .arms
+            .iter()
+            .all(|a| SCHEDULES.contains(&a.schedule) && SEEDS.contains(&a.seed));
+        // Registered, distinct and eight: exactly the registered arms, no others.
+        if !registered
+            || self.arms.len() != SCHEDULES.len() * SEEDS.len()
+            || pairs.len() != self.arms.len()
+        {
             return Err(invalid(
                 "release must list each registered arm exactly once",
             ));
