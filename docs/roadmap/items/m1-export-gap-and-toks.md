@@ -7,7 +7,8 @@ status: held
 open_to: lab
 needs_gpu: true
 depends_on: [m1-d11-exporter-discrete]
-scope: [crates/uor-r4-integer/**, docs/mechanisms/lut-serving.md, docs/harness/prep/m1-export-gap-and-toks*, docs/labs/m1-export-gap-and-toks/**]
+notebook: docs/research/notebook/m4-serving.md
+scope: [crates/uor-r4-integer/**, docs/mechanisms/lut-serving.md, docs/harness/prep/m1-export-gap-and-toks*, docs/labs/m1-export-gap-and-toks/**, docs/loop/tasks/m1-export-gap-and-toks/**, docs/research/notebook/m4-serving.md]
 ---
 
 ## Why it matters
@@ -16,9 +17,13 @@ M1 bar (d) is defined through the export, and M5 builds on the same measurement.
 
 ## What is missing
 
-Tokens per second for a model trained under today's rules has never been measured, and the export gap is unmeasured. Stage 4 needs both prompt-reading and reply-writing rates on a laptop, and integer top-1 scored through the D11 export on the DEV panel (14,287 rows in the K16 receipts, `docs/integration/NOW.md` line 78). The export-gap rule (D39 item 5) is: a float candidate is disqualified when its export gap exceeds the two-seed band on the same evaluator, fixed per sheet at FIT time. The numeric band is not yet registered.
+Tokens per second for a model trained under today's rules has never been measured, and the export gap is unmeasured. Stage 4 needs both prompt-reading and reply-writing rates on a laptop, and integer top-1 scored through the D11 export on the DEV panel (14,287 rows in the K16 receipts, `docs/integration/NOW.md` line 78). The export-gap rule (D39 item 5) is: a float candidate is disqualified when its export gap exceeds the two-seed band on the same evaluator, fixed per sheet at FIT time. The numeric band is registered in the sheet named below.
 
-Two inputs do not exist yet. The exporter is the item `m1-d11-exporter-discrete`. A saved trained discrete model is also needed, from the A8 rerun (`m1-a8-full-dose-rerun`), BVG-K Stage T (`m1-bvg-k-stage-t-training`) or the trunk (`m1-trunk-assembly-and-training`). This item cannot run until both exist.
+**The sheet's preparation is done.** The sheet is `docs/harness/prep/m1-export-gap-and-toks-DRAFT-2026-10-23.md` (antigravity-42, #3085). antigravity-74 (#3220) gave it a non-author `TEST FITNESS: FIT` and a D68 decision review (#2839 comment `6398709883`), registered its bar and noise band, and set this item `held`.
+
+**The measured run waits on step 4.** PLAN.md step 6 says "its measured run needs a trained model from step 4", BVG-K Stage T (`m1-bvg-k-stage-t-training`). The A8 rerun ended in an instrument stop, and is not that model. Once #2836 has its saved models, this item runs under that sheet after a D67 pre-run review (antigravity-74 REPORT).
+
+**A correction.** claude-113 (#3244) set this item `ready` on the false premise that its preparation had not been done. claude-114 (`docs/loop/tasks/infra-loop-harness/claude-114/`) restored `held`.
 
 ## Done when
 
