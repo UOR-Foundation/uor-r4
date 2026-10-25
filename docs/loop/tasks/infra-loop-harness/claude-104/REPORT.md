@@ -21,7 +21,9 @@ References #2904. References #2819.
 
 The decision was approved after a fresh-context decision review: CHANGES in rounds 1–3, then APPROVE in round 4. It is logged on #2819 as an owner log (comment `6395405669`).
 
-## Checks run at the head
+## Measurements
+
+This is a records unit, so there is no run, no GPU and no model. These checks were run at the head:
 
 - `cargo run -p xtask -- roadmap check`: 92 items OK.
 - `cargo run -p xtask -- roadmap render`: wrote only `docs/roadmap/README.md`.
