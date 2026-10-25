@@ -2397,6 +2397,18 @@ fn float_trunk_validation_threads_and_session_roundtrip() {
     let snap = synthetic_float_trunk(20261027, "lorentz");
     let bytes = super::export_float_trunk_uorlut01(&snap).expect("export float trunk");
 
+    // Unquantized raw float reference (`quantized_weights = false`) runs cleanly and
+    // stays positively correlated with the quantized float reference.
+    let raw_f32 = snap.forward_f32(&[0], false).expect("raw float forward");
+    let q_f32 = snap.forward_f32(&[0], true).expect("quantized float forward");
+    assert_eq!(raw_f32.len(), 1);
+    assert_eq!(raw_f32[0].len(), snap.vocab);
+    assert!(raw_f32[0].iter().all(|v| v.is_finite()));
+    assert!(
+        cosine_similarity(&raw_f32[0], &q_f32[0]) > 0.5,
+        "raw f32 and 4-bit quantized f32 forward must stay positively correlated"
+    );
+
     // Multi-threaded serving and session save/restore produce bit-identical integers.
     let model_1 = IntegerStackModel::parse(&bytes).expect("parse 1-thread");
     let mut model_2 = IntegerStackModel::parse(&bytes).expect("parse 2-thread");
@@ -2421,6 +2433,12 @@ fn float_trunk_validation_threads_and_session_roundtrip() {
     for &t in &seq[3..] {
         s_restored.step(t).expect("step restored second half");
     }
+    assert!(
+        !s_full
+            .snap_trace()
+            .expect("snap trace enabled")
+            .is_empty()
+    );
     assert_eq!(s_full.logits(), s_restored.logits());
     assert_eq!(s_full.snap_trace(), s_restored.snap_trace());
 
