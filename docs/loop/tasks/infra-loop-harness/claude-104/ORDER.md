@@ -9,17 +9,17 @@ This unit makes one item-file fix, the scope fix that claude-103's approved D68 
 1. **`scope:` gains `crates/uor-r4-discrete/**`.**
    - The hard-selection schedule has to live inside the discrete crate. `Device::apply` is `pub(crate)`, and a move commits only through `PreparedDriver::transition` with a controller admission.
    - `loop guard` reads scope from `origin/main`, so it would refuse every edit there.
-   - Eighteen items already carry this scope.
+   - Nineteen items on `origin/main` already carry this scope.
 2. **`notebook: docs/research/notebook/m1-discrete-attention.md`** is bound. That page is the live learner's notebook, and it already exists.
 3. **The done-when line is replaced** by the exact text the card approved. The archived sheet cannot be replayed lawfully: its objective is banned (§3.2), its modules are compiled out, and saved437 is only in cold storage. §4.5 lets archived float sheets "return only as new sheets with a fresh FIT". The new line still requires the hard-selection step, every registered arm and the recorded result. It adds CUDA integer-only selection, model-blind controls and fresh rows.
 
-**Why the infra-loop-harness item.** Its scope holds `docs/roadmap/items/*.md`. `loop claim infra-loop-harness` refused: "item infra-loop-harness is already claimed by PR #3169 (docs/loop/tasks/infra-loop-harness/codex-1/ORDER.md)". #3169 is Codex's draft, idle since 01:07Z. Its five files are `PLAN.md` and its own task folder, and none of them overlaps this unit's files. So this ORDER is written by hand, under the umbrella exception in the run file.
+**Why the infra-loop-harness item.** Its scope holds `docs/roadmap/items/*.md`. `loop claim infra-loop-harness` refused: "item infra-loop-harness is already claimed by PR #3169 (docs/loop/tasks/infra-loop-harness/codex-1/ORDER.md)". #3169 is Codex's draft, idle since 01:07Z. Its five files are `PLAN.md`, `docs/integration/DECISIONS.md` and three files in its own task folder, and none of them overlaps this unit's files. So this ORDER is written by hand, under the umbrella exception in the run file.
 
 ## Cancel probe (run first)
 
 Class: records. Run at `dc5f409b0`; all must hold, or the unit is cancelled:
 - `carrier-credit-hard-selection`'s `scope:` holds no `crates/` path. **Holds:** it lists only its prep, lab and task globs.
-- No open PR touches `docs/roadmap/items/carrier-credit-hard-selection.md` or `docs/roadmap/README.md`. **Holds:** the open PRs are #3169 (`PLAN.md`, its task folder) and #3203 (claude-103's task folder).
+- No open PR touches `docs/roadmap/items/carrier-credit-hard-selection.md` or `docs/roadmap/README.md`. **Holds:** the open PRs are #3169 (`PLAN.md`, `docs/integration/DECISIONS.md`, its task folder) and #3203 (claude-103's task folder).
 - The decision card is approved. **Holds:** round 4 APPROVE, owner log `6395405669`.
 
 ## Files in scope
