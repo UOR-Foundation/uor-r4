@@ -63,6 +63,12 @@ Open these first:
   - **Where it lives:** the tool is the crate `docs/labs/m1-w2-code-utilization/instrument/`, with its own `Cargo.lock`.
   - **Its dependencies:** a detached `[workspace]` and a read-only path dependency on `uor-r4-discrete`, built without the `cuda` feature.
   - **The crate is not edited:** if the tool seems to need a change in `uor-r4-discrete`, that change is a separate item, not part of this one. This keeps the item off the crate scope that other M1 items hold, so `loop claim` can serialize them.
+  - **What it reuses, and what it reimplements:**
+    - Reused, as public API: `w2_capacity`'s `decode_read_vector`, `unpack_code`, `build_tables`, `predict`, `score_dev` and `exact_mcnemar_rejects_005`.
+    - Reimplemented in the instrument, because it is private in the crate: the tie rule (`rank`), the floor helpers, the keyed-count internals, and the new leave-one-out, joint-key and candidate-load counts.
+    - The guard against divergence is the sheet's precedence 0: every W2 number (T 3,414, G 6,300, U 1,226, W 149, A_W 1,920 and the rest) must be recomputed exactly before any band is read.
+  - **Drift risk:** the instrument sits outside the workspace, so the workspace build and CI never compile it. A later change to `w2_capacity` (Stage T's scope covers the crate) could break it unnoticed. So the instrument pins the API at the `uor-r4-discrete` commit it builds against, and its record carries that commit; precedence 0 catches any change in behaviour. This is acceptable for a tool that runs once, for minutes.
+  - **Dependencies:** the implementing unit's ORDER carries a `deps:` line for the instrument's new `Cargo.lock` (`docs/loop/README.md`, "Scope, without a line cap"), as in `docs/labs/m2-fresh-heldout-panel/instrument/`.
   - **Float:** the exact-integer rule applies to the instrument too.
 - **Records** (§4.1, §5.6): one notebook row; a negative closes this configuration (seed-1 Q4, epoch 407, model-matched TRAIN), never a mechanism.
 
