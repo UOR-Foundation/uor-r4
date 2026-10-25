@@ -85,22 +85,30 @@ In the job, in this order. Each one stops the job with `FAULT`.
 2. **G-Rebuild.** Each table rebuilt on the pod equals its config's table sha256. That table is the one the arm loads.
 3. **G-Init.** Each checkpoint:
    - has `accepted_updates = 0` and `completed_batches = 0`;
-   - has `model.table` equal, word for word, to its rebuilt table's `table`;
-   - carries the same routes and gates as the other six.
+   - has a 131,072-word (4,096 × 4 × 8) `model.table`, equal word for word to its rebuilt table's `table`;
+   - carries array `routes` and `gates`, the same as the other six.
 4. **G-Occ.**
    - Every arm: 4,096 distinct vectors, ceiling 14,287, zero alias tokens, zero non-representative DEV rows, and 256 occupied cells.
    - P8 and Q0–Q2: at most 16 per cell and 30,720 collision pairs.
    - R0–R2: more than 30,720 collision pairs.
 5. **G-Exact.** P8 is evaluated first. It must give `B3_full` 427, `B3_init(P_succ)` 127 and top-1 38 (19 Oct receipt), before any null is evaluated.
+   - Top-1 38 is that receipt's checkpoint-0 full-panel top-1. Both of its arms ran on the same model (`134fd663…`), so it is P8's number.
+   - A mismatch is a G-Exact fault, and the job stops after P8 alone.
 
-**The grader** (`docs/labs/r-prime-zeta-vs-nulls/instrument/`, `pz-nulls-grade MANIFEST OUTPUT`, a detached workspace at commit `62cf6b9e89d41f4f7fac58af48d20a4503db8e6a`) re-checks gates 4 and 5. It also refuses:
-- a report whose `config_file.sha256` is not its arm's;
-- any update;
+**On any fault,** the job saves its folder to `results/claude/prime-zeta-nulls-2026-10-25/fault-<time>` before exiting. A rerun moves an earlier folder aside, so it never reads that folder's markers.
+
+**The grader** (`docs/labs/r-prime-zeta-vs-nulls/instrument/`, `pz-nulls-grade MANIFEST OUTPUT`, a detached workspace at commit `f5155fe17869c2d0ca56772cf612b464ca8df719`) re-checks gates 4 and 5. It also refuses:
+- a dev-b3 report whose `config_file.sha256` is not its arm's;
+- an update, read from the checkpoint's own counters: dev-b3 `model_epoch` and `completed_batches`, and eval `model_epoch` and `accepted_updates_in_model`;
+- an eval or census report whose model storage hash differs from its dev-b3 report's, or is absent;
 - a panel other than 14,287 / 3,847;
 - summary counts that differ from the rows;
 - a missing census field.
 
-It exits 2 on an instrument fault, with no paired reading. Its 11 tests include negative gates: setting aside the loss branch fails 2 tests, and setting aside the R-arm 256-cell check fails 1.
+It exits 2 on an instrument fault, with no paired reading. Its 11 tests include negative gates:
+- setting aside the loss branch fails 2 tests;
+- setting aside the R-arm 256-cell check fails 1;
+- setting aside the `accepted_updates_in_model` check fails 1.
 
 ## 7. Cost, steps and stop rule
 
@@ -108,7 +116,7 @@ It exits 2 on an instrument fault, with no paired reading. Its 11 tests include 
 - **Steps:**
   1. FIT, then the D67 pre-run review.
   2. Run `uor-pod up --lab claude --session claude-112 --gpu 5090 --hours 1`.
-  3. Ship `pz-nulls-job.sh` (sha256 `c073426b72eb7764f7db03bb689918ad629c4da2bc2d6df51f28a386f8696641`) over stdin, and start it detached. A watcher waits for `EXIT`.
+  3. Ship `pz-nulls-job.sh` (sha256 `820ee91645dcb3541a212304f0fb1a518f2e7834b074a4498a909c79b4c5e80e`) over stdin into a file, and start that file detached. A watcher waits for `EXIT`.
   4. The job saves `results/claude/prime-zeta-nulls-2026-10-25/run` to the store itself.
   5. `release`, then `down`.
   6. Fetch the outputs and check SHA256SUMS. Then `pz-nulls-grade` writes `docs/labs/r-prime-zeta-vs-nulls/grade.json`.
@@ -127,4 +135,6 @@ It exits 2 on an instrument fault, with no paired reading. Its 11 tests include 
 
 ## Test fitness
 
-Pending: a fresh non-author FIT, then the D67 pre-run review, both recorded on #2881.
+- **FIT round 1: NOT FIT.** One Required finding: the grader's update refusal read two fields that the crate always writes as 0. It is fixed in `f5155fe17`, with a negative gate.
+  - Its advisories were applied: the G-Init null guard, the save on fault, stale markers, the job-bytes check, the binding of eval and census reports, and the provenance of top-1 38.
+- Round 2, then the D67 pre-run review, both recorded on #2881.
