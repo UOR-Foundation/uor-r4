@@ -8,6 +8,17 @@
 //! `discrete-stack eval-corpus` scores on a config's DEV split, by the same
 //! public batch walk. Both are host data preparation (D24): neither computes a
 //! model quantity.
+//!
+//! Stage 2 adds `score`: the artifact's integer sections ([`artifact`]) scored
+//! row by row by an integer CUDA kernel (`src/scorer.cu`, driven by `device`
+//! under the `cuda` feature), whose row body (`src/kernel_core.h`) is also
+//! built for the host so finite tests can check it against
+//! `IntegerDiscreteModel::evaluate_prefix` ([`kernel`]).
+pub mod artifact;
+#[cfg(feature = "cuda")]
+pub mod device;
+pub mod kernel;
+
 use serde_json::{json, Value};
 use uor_r4_discrete::corpus::{sha256, PreparedCorpus};
 use uor_r4_discrete::d11_export::export_d11;
@@ -139,6 +150,82 @@ pub fn rows_sha256(rows: &[DevRow]) -> String {
         }
     }
     sha256(&bytes)
+}
+
+/// A scored panel's integer totals and its per-row records (one JSON line per
+/// row: prediction, top-8 and admitted cells). The totals count rows whose
+/// target is the prediction (top-1), is in the top-8, and has its cell
+/// admitted; every count is an integer, out of `rows`.
+pub fn score_summary(
+    tables: &artifact::ArtifactTables,
+    rows: &[DevRow],
+    scores: &[kernel::RowScore],
+) -> Result<(Value, Vec<u8>), String> {
+    if rows.len() != scores.len() {
+        return Err("scores do not cover the rows".into());
+    }
+    let (mut top1, mut top8, mut admitted, mut refused) = (0u64, 0u64, 0u64, 0u64);
+    let mut lines = Vec::new();
+    let mut digest = Vec::new();
+    for (row, score) in rows.iter().zip(scores) {
+        let cell = *tables
+            .cells
+            .get(row.target_token as usize)
+            .ok_or("a target is outside the artifact vocabulary")?;
+        if score.status != 0 {
+            refused += 1;
+        }
+        top1 += u64::from(score.status == 0 && score.prediction == row.target_token);
+        top8 += u64::from(score.top8.contains(&row.target_token));
+        admitted += u64::from(score.admitted_cells.contains(&cell));
+        let line = json!({"ordinal": row.ordinal, "target": row.target_token,
+                          "status": score.status, "prediction": score.prediction,
+                          "top8": score.top8, "admitted": score.admitted_cells});
+        lines.extend(serde_json::to_vec(&line).map_err(|e| e.to_string())?);
+        lines.push(b'\n');
+        digest.extend_from_slice(&row.ordinal.to_le_bytes());
+        digest.extend_from_slice(&score.status.to_le_bytes());
+        digest.extend_from_slice(&score.prediction.to_le_bytes());
+        for list in [&score.top8, &score.admitted_cells] {
+            digest.extend_from_slice(&(list.len() as u32).to_le_bytes());
+            for value in list {
+                digest.extend_from_slice(&value.to_le_bytes());
+            }
+        }
+    }
+    let summary = json!({
+        "schema": "uor-r4.d11-scorer-score/1",
+        "artifact_sha256": tables.artifact_sha256,
+        "rows": rows.len(),
+        "rows_sha256": rows_sha256(rows),
+        "refused": refused,
+        "top1": top1,
+        "top8": top8,
+        "admitted": admitted,
+        "scores_sha256": sha256(&digest),
+        "row_records_sha256": sha256(&lines),
+    });
+    Ok((summary, lines))
+}
+
+/// Checks every scored row against `IntegerDiscreteModel::evaluate_prefix`.
+pub fn reference_check(
+    model: &IntegerDiscreteModel,
+    rows: &[DevRow],
+    scores: &[kernel::RowScore],
+) -> Value {
+    let mut agreed = 0u64;
+    let mut first_mismatch = Value::Null;
+    for (row, score) in rows.iter().zip(scores) {
+        match kernel::compare_row(model, &row.prefix, score) {
+            Ok(()) => agreed += 1,
+            Err(e) if first_mismatch.is_null() => {
+                first_mismatch = json!({"ordinal": row.ordinal, "reason": e});
+            }
+            Err(_) => {}
+        }
+    }
+    json!({"checked": rows.len().min(scores.len()), "agreed": agreed, "first_mismatch": first_mismatch})
 }
 
 /// The row report: the count, the hash, and per-row metadata (not prefixes).

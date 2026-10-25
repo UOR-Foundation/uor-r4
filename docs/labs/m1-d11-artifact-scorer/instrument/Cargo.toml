@@ -24,7 +24,16 @@ publish = false
 name = "d11-scorer"
 path = "src/main.rs"
 
+[features]
+default = []
+# The GPU scorer: nvcc builds src/scorer.cu ahead of time (UOR_NVCC_ARCH).
+cuda = ["dep:cudarc"]
+
 [dependencies]
+cudarc = { version = "=0.19.10", default-features = false, features = ["std", "driver", "cuda-12080", "dynamic-linking"], optional = true }
 serde_json = "1"
 uor-r4-discrete = { path = "../../../../crates/uor-r4-discrete" }
 uor-r4-integer = { path = "../../../../crates/uor-r4-integer" }
+
+[build-dependencies]
+cc = "1"
