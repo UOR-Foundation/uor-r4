@@ -105,7 +105,11 @@ Stage C2 (`2fff942fa2b802e180c9bd87336692730d6beaf22f2c0bac8867afb0dea345f3`) le
 
 ## 8. Review Verdict
 
-TEST FITNESS: PENDING - M1 #2029 m1-bvg-k-stage-t-training
+TEST FITNESS: FIT - M1 #2029 m1-bvg-k-stage-t-training
 sheet: docs/harness/prep/m1-bvg-k-stage-t-training-2026-10-25.md
+reviewer: antigravity (fresh-context non-author reviewer f96e37ea-4794-4e07-b3f4-2ad7b21a5f3c)
+note: https://github.com/UOR-Foundation/uor-r4/issues/2836#issuecomment-6401853483
+date: 2026-10-25
+A FIT verdict clears compute for the configuration in that sheet only (D22).
 
 Every mechanism pre-registration gets a TEST FITNESS review on its milestone before compute.

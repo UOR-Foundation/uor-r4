@@ -59,3 +59,12 @@ Now that `m1-address-key-full-vector` (`#2834`) is `done` (`claude-110`, PR `#32
 ## 5. Cost to Reverse
 
 Reversible by git revert of the sheet/instrument commits or by re-running under a future full-vector-metric training sheet; no existing `crates/uor-r4-discrete` behavior or `driver_source_sha256` pin is altered.
+
+## 6. Review Record (D68, D67, and `TEST FITNESS: FIT`)
+
+- **Reviewer:** `antigravity` fresh-context non-author reviewer (`f96e37ea-4794-4e07-b3f4-2ad7b21a5f3c`) at `6d19043f746a6e2824c6363fa72ed13eca211469`
+- **Verdicts:**
+  - `TEST FITNESS: FIT` on `docs/harness/prep/m1-bvg-k-stage-t-training-2026-10-25.md`
+  - `D68 DECISION REVIEW: PASS`
+  - `D67 PRE-RUN REVIEW: PASS`
+- **Owner Log Receipt:** [`#2836` comment `6401853483`](https://github.com/UOR-Foundation/uor-r4/issues/2836#issuecomment-6401853483)
