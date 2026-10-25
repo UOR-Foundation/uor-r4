@@ -61,3 +61,11 @@ path = "src/bin/w2-assemble.rs"
 [[bin]]
 name = "a8-qualify-stage"
 path = "src/bin/a8-qualify-stage.rs"
+
+[[bin]]
+name = "carrier-fresh-slice"
+path = "src/bin/carrier-fresh-slice.rs"
+
+[[bin]]
+name = "carrier-arms"
+path = "src/bin/carrier-arms.rs"

@@ -2842,6 +2842,25 @@ pub(crate) fn issue_corpus_update_admission(
     })
 }
 
+/// The carrier arms' D67 capability (#2819). Its one caller,
+/// `carrier_arms::run_arm`, validates the release record against the sheet
+/// bytes, this lineage and the dose first; the bound is that released dose.
+#[cfg(feature = "cuda")]
+pub(crate) fn issue_carrier_arm_admission(
+    driver: &PreparedDriver,
+    max_completed_batches: u64,
+) -> Result<CorpusUpdateAdmission> {
+    if driver.config.schedule.carrier_mode().is_none()
+        && driver.config.schedule != SchedulePolicy::InterleavedReadEvery8V1
+    {
+        return Err(invalid("carrier arms run only the registered schedules"));
+    }
+    Ok(CorpusUpdateAdmission {
+        lineage_sha256: driver.lineage_sha256()?,
+        max_completed_batches,
+    })
+}
+
 /// Finite qualification has a separate opaque release; it cannot inherit a
 /// full-dose capability or enlarge the approved source protocol's bound.
 #[cfg(feature = "cuda")]
@@ -3270,7 +3289,7 @@ impl PreparedDriver {
     }
     fn validate_transfer_content(&self, transfer: &PreparedCorpus) -> Result<()> {
         let binding = transfer.binding();
-        if binding.source.split != Split::Dev
+        if !matches!(binding.source.split, Split::Dev | Split::Fresh)
             || binding.vocabulary != self.config.spec.vocabulary
             || binding.bos != self.config.bos
             || binding.source.tokens.sha256 == self.config.train.tokens.sha256

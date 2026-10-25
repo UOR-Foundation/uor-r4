@@ -11,6 +11,8 @@ mod baseline_reuse_source;
 pub mod bvgk_block;
 pub mod bvgk_source;
 pub mod carrier;
+pub mod carrier_arms;
+pub mod carrier_fresh;
 pub mod controller;
 pub mod corpus;
 pub mod coverage_census;
