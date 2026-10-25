@@ -49,7 +49,7 @@
 - `scope-guard`: Kept changes strictly to the four roadmap item files and the `antigravity-83` task folder.
 - `solution-integrity`: Verified that all discrete code and host controls for the four items are already merged on `main` and that the narrowed scopes pass `roadmap check` and `uor-harness check`.
 
-## What is still open
+## Still open
 
 - Claim `m1-normalization-mechanism` (`#2842`), `m4-flock-coupling-prereg` (`#2860`), `r-prime-zeta-vs-nulls` (`#2881`), and `r-read-off-vs-read-on` (`#2885`) to complete their pre-registration sheet `TEST FITNESS: FIT` reviews and close/evaluate them.
 - The umbrella item `infra-loop-harness` (`#2926`) remains `status: ready`.
