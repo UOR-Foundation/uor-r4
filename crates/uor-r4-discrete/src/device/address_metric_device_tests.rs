@@ -10,7 +10,7 @@ const SPEC: Spec = Spec {
     context: 4,
     kept_cells: 8,
 };
-const ROWS: usize = 6;
+const ROWS: usize = 16;
 
 fn root_of(block: &[i32]) -> Result<usize> {
     geometry::ROOTS[..16]
@@ -103,10 +103,10 @@ fn device_admission_matches_the_host_oracles_for_each_metric() -> Result<()> {
         let reloaded = Device::from_snapshot(model.snapshot()?, 0)?;
         assert_eq!(reloaded.address_metric(), metric);
     }
-    // The fixture separates the metrics, so a dropped s[15] fails above.
-    assert_ne!(
-        admitted[0], admitted[2],
-        "outer and two-scale admit the same cells on every row"
-    );
+    // The fixture separates all three metrics, so a dropped s[15], or one
+    // metric computed as another, fails here even where the oracles agree.
+    for (a, b) in [(0, 1), (0, 2), (1, 2)] {
+        assert_ne!(admitted[a], admitted[b], "metrics {a} and {b} admit the same cells on every row");
+    }
     Ok(())
 }

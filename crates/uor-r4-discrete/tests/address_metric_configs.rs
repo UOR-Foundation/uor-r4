@@ -1,5 +1,5 @@
 //! Host controls for the address-metric pre-flight configs (#2834, claude-110):
-//! the five arms of `docs/harness/prep/m1-address-key-full-vector-2026-10-25.md`.
+//! the six arms of `docs/harness/prep/m1-address-key-full-vector-2026-10-25.md`.
 //! A8-Outer is the committed A8 seed-1 config byte for byte. Each treatment
 //! differs from it only in its pinned table, its address metric and (FV16) K.
 //! Every arm validates for the attention pre-flight scope (K8 arms) or the
@@ -16,6 +16,8 @@ const FV8_ENV: &[u8] =
     include_bytes!("../../../docs/labs/m1-address-key-full-vector/configs/fv8-env.json");
 const FV8_TWO: &[u8] =
     include_bytes!("../../../docs/labs/m1-address-key-full-vector/configs/fv8-two-scale.json");
+const FVS8_ENV: &[u8] =
+    include_bytes!("../../../docs/labs/m1-address-key-full-vector/configs/fvs8-env.json");
 const FVS8_TWO: &[u8] =
     include_bytes!("../../../docs/labs/m1-address-key-full-vector/configs/fvs8-two-scale.json");
 const FV16_TWO: &[u8] =
@@ -43,11 +45,12 @@ fn common(bytes: &[u8]) -> Value {
 }
 
 #[test]
-fn the_five_pre_flight_arms_differ_only_in_table_metric_and_k() {
-    let arms: [(&str, &[u8], &str, AddressMetric, u32); 5] = [
+fn the_six_pre_flight_arms_differ_only_in_table_metric_and_k() {
+    let arms: [(&str, &[u8], &str, AddressMetric, u32); 6] = [
         ("a8-outer", A8, A8_TABLE, AddressMetric::OuterL1V1, 8),
         ("fv8-env", FV8_ENV, FV_TABLE, AddressMetric::CellEnvelopeL1V1, 8),
         ("fv8-two-scale", FV8_TWO, FV_TABLE, AddressMetric::FullVectorCellL1V1, 8),
+        ("fvs8-env", FVS8_ENV, FVS_TABLE, AddressMetric::CellEnvelopeL1V1, 8),
         ("fvs8-two-scale", FVS8_TWO, FVS_TABLE, AddressMetric::FullVectorCellL1V1, 8),
         ("fv16-two-scale", FV16_TWO, FV_TABLE, AddressMetric::FullVectorCellL1V1, 16),
     ];
@@ -67,5 +70,5 @@ fn the_five_pre_flight_arms_differ_only_in_table_metric_and_k() {
             assert!(scopes.insert(attention_learning::scope(&config).unwrap()), "{name} scope repeats");
         }
     }
-    assert_eq!(scopes.len(), 4);
+    assert_eq!(scopes.len(), 5);
 }

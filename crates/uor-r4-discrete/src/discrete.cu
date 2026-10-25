@@ -360,9 +360,9 @@ __device__ bool cell_precedes(U distance,U cell,U other_distance,U other_cell) {
 // 2 the two-scale (envelope << 8) + the sum of the cell's token distances.
 // env and sum are filled only when s[15] != 0. Host oracles: address_cells.rs
 // cell_outer_l1, cell_envelope_l1 and full_vector_cell_l1.
-__device__ W cell_distance(const int* q,const U* g,const U* s,U cell,const W* env,const W* sum) {
+__device__ W cell_distance(const int* q,const U* g,const U* s,U cell,const U* env,const W* sum) {
     if(s[15]==0u)return address_distance(q,g,s,cell);
-    return s[15]==1u?env[cell]:(env[cell]<<8)+sum[cell];
+    return s[15]==1u?(W)env[cell]:((W)env[cell]<<8)+sum[cell];
 }
 __device__ bool cell_precedes_w(W distance,U cell,W other_distance,U other_cell) {
     return distance<other_distance || (distance==other_distance && cell<other_cell);
@@ -372,10 +372,10 @@ __device__ bool cell_precedes_w(W distance,U cell,W other_distance,U other_cell)
 // An absent comparison has zero hinge and an explicit eligibility count.
 __device__ W writer(const int* q,const int* table,const U* g,const U* s,U target,U kind,U index,U candidate,U* prediction,U* token_rivals,U* address_rivals,U* admitted,W* token_hinge=0,W* address_hinge=0,W* telemetry=0,U* arithmetic_status=0) {
     if(s[15]>2u){if(arithmetic_status)*arithmetic_status=13;return ~(W)0;}
-    bool occupied[256],used[256];W env[256],sum[256];for(U i=0;i<256;++i){occupied[i]=false;used[i]=false;}
-    if(s[15]!=0u)for(U i=0;i<256;++i){env[i]=~(W)0;sum[i]=0;}
+    bool occupied[256],used[256];U env[256];W sum[256];for(U i=0;i<256;++i){occupied[i]=false;used[i]=false;}
+    if(s[15]!=0u)for(U i=0;i<256;++i){env[i]=ABSENT;sum[i]=0;}
     for(U token=0;token<s[0];++token){U c=token_cell(table,g,s,token,kind,index,candidate);if(c==ABSENT)return ~(W)0;occupied[c]=true;
-        if(s[15]!=0u){W d=token_distance(q,table,g,s,token,kind,index,candidate);if(d<env[c])env[c]=d;sum[c]+=d;}}
+        if(s[15]!=0u){U e=token_distance(q,table,g,s,token,kind,index,candidate);if(e<env[c])env[c]=e;sum[c]+=e;}}
     U best_token=ABSENT,best_distance=ABSENT,rival_distance=ABSENT;W rival_address=~(W)0;
     U target_cell=token_cell(table,g,s,target,kind,index,candidate);
     *token_rivals=0;*address_rivals=0;if(admitted)for(U i=0;i<16;++i)admitted[i]=ABSENT;

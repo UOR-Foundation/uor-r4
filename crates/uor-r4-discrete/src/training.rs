@@ -1784,7 +1784,21 @@ mod tests {
                 serde_json::from_value(value).map_err(|e| invalid(e.to_string()))?;
             assert_eq!(back.address_metric, metric);
             assert!(zero_update_only(&driver).is_err(), "{metric:?} must not learn");
+            assert!(CorpusUpdateAdmission::guarded(&driver, 1).is_err());
         }
+        driver.config.address_metric = AddressMetric::OuterL1V1;
+        assert!(CorpusUpdateAdmission::guarded(&driver, 1).is_ok());
+        // The guarded constructor is the only way to build a capability: no
+        // line but the struct's definition and its impl header names it with
+        // a brace (guarded() itself writes `Self {`).
+        let source = include_str!("training.rs");
+        let literal = concat!("CorpusUpdate", "Admission {");
+        let bypasses = source
+            .lines()
+            .map(str::trim_start)
+            .filter(|l| l.contains(literal) && !l.starts_with("pub struct") && !l.starts_with("impl "))
+            .count();
+        assert_eq!(bypasses, 0, "a capability is built without guarded()");
         Ok(())
     }
 
@@ -2869,22 +2883,31 @@ fn zero_update_only(driver: &PreparedDriver) -> Result<()> {
     Ok(())
 }
 
+impl CorpusUpdateAdmission {
+    /// The one constructor of an update capability. Every issuer goes through
+    /// it, so none can skip the zero-update gate; a source-scan test pins that
+    /// no other `CorpusUpdateAdmission` literal exists.
+    fn guarded(driver: &PreparedDriver, max_completed_batches: u64) -> Result<Self> {
+        zero_update_only(driver)?;
+        Ok(Self {
+            lineage_sha256: driver.lineage_sha256()?,
+            max_completed_batches,
+        })
+    }
+}
+
 pub(crate) fn issue_corpus_update_admission(
     driver: &PreparedDriver,
     release: &crate::controller::ValidatedRelease,
 ) -> Result<CorpusUpdateAdmission> {
-    zero_update_only(driver)?;
-    let lineage_sha256 = driver.lineage_sha256()?;
-    if release.lineage_sha256() != lineage_sha256 || !matches!(release.max_batches(), 1640 | 16404)
+    if release.lineage_sha256() != driver.lineage_sha256()?
+        || !matches!(release.max_batches(), 1640 | 16404)
     {
         return Err(invalid(
             "release differs from the admitted pilot lineage/dose",
         ));
     }
-    Ok(CorpusUpdateAdmission {
-        lineage_sha256,
-        max_completed_batches: release.max_batches(),
-    })
+    CorpusUpdateAdmission::guarded(driver, release.max_batches())
 }
 
 /// The carrier arms' D67 capability (#2819). Its one caller,
@@ -2895,16 +2918,12 @@ pub(crate) fn issue_carrier_arm_admission(
     driver: &PreparedDriver,
     max_completed_batches: u64,
 ) -> Result<CorpusUpdateAdmission> {
-    zero_update_only(driver)?;
     if driver.config.schedule.carrier_mode().is_none()
         && driver.config.schedule != SchedulePolicy::InterleavedReadEvery8V1
     {
         return Err(invalid("carrier arms run only the registered schedules"));
     }
-    Ok(CorpusUpdateAdmission {
-        lineage_sha256: driver.lineage_sha256()?,
-        max_completed_batches,
-    })
+    CorpusUpdateAdmission::guarded(driver, max_completed_batches)
 }
 
 /// Finite qualification has a separate opaque release; it cannot inherit a
@@ -2914,12 +2933,8 @@ pub(crate) fn issue_audit_qualification_admission(
     driver: &PreparedDriver,
     release: &crate::controller::attention_audited::qualification::ValidatedQualificationRelease,
 ) -> Result<CorpusUpdateAdmission> {
-    zero_update_only(driver)?;
     let max_completed_batches = release.finite_bound(driver)?;
-    Ok(CorpusUpdateAdmission {
-        lineage_sha256: driver.lineage_sha256()?,
-        max_completed_batches,
-    })
+    CorpusUpdateAdmission::guarded(driver, max_completed_batches)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
