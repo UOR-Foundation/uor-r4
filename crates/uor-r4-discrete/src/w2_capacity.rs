@@ -1339,4 +1339,11 @@ mod tests {
         assert!(!exact_mcnemar_rejects_005(Discordance { b: 0, c: 5 }));
         assert!(exact_mcnemar_rejects_005(Discordance { b: 0, c: 6 }));
     }
+
+    #[test]
+    #[should_panic(expected = "exact test is only applied below")]
+    fn exact_mcnemar_refuses_the_powered_range() {
+        // b+c = 100 is at the power bar, where the u128 binomial is no longer used.
+        exact_mcnemar_rejects_005(Discordance { b: 50, c: 50 });
+    }
 }

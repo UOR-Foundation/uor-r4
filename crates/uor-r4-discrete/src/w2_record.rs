@@ -845,6 +845,28 @@ mod tests {
     }
 
     #[test]
+    fn w2_record_refuses_top8_correct_contradicting_top8() {
+        let mut f = fixture();
+        let hit = u64_at(&f.capture["dev_rows"][0], "top8_correct").unwrap();
+        f.capture["dev_rows"][0]["top8_correct"] = json!(1 - hit);
+        let err = run(&f).unwrap_err();
+        assert!(
+            err.contains("dev row 0: top1/top8_correct contradict"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn w2_record_refuses_a_repeated_top8_token() {
+        let mut f = fixture();
+        let first = f.capture["dev_rows"][0]["top8"][0].clone();
+        f.capture["dev_rows"][0]["top8"][1] = first;
+        let err = run(&f).unwrap_err();
+        assert!(err.contains("dev row 0: top8[1]"), "{err}");
+        assert!(err.contains("repeats"), "{err}");
+    }
+
+    #[test]
     fn w2_record_refuses_a_changed_file_pin() {
         let mut f = fixture();
         f.pins.train_mask_sha256 = "changed".into();

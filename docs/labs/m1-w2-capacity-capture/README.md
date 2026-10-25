@@ -55,7 +55,7 @@ Per the sheet, T did not cross M + F. So the next work is a code-utilization and
 
 The sheet asks the admission-matched comparison to localize the gap between the output map and the admission channel. Both lose hits the code could make, and on these counts admission loses more:
 
-- **Output map.** On the 1,920 admitted rows, the code table restricted to admitted cells ranks the target first 1,138 times; the writer does so 149 times. That is 989 rows lost after admission.
+- **Output map.** On the 1,920 admitted rows, the code table restricted to admitted cells ranks the target first 1,138 times; the writer does so 149 times. That is at least 989 rows lost after admission (1,138 − 149; the two hit sets need not nest).
 - **Admission.** On an admitted row, restricting the table to admitted tokens can only keep or gain a hit, so at most 1,138 of the unrestricted table's 3,414 hits fall on admitted rows. At least 2,276 fall on the 12,367 rows where the writer never admitted the target's cell, and the writer cannot get those right at all.
 
 So on this checkpoint the larger measured loss is admission, and the output map loses most of what survives it. These are bounds from one artifact, not a decomposition of the mechanism.
