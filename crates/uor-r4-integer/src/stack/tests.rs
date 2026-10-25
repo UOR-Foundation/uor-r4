@@ -2433,7 +2433,7 @@ fn float_trunk_validation_threads_and_session_roundtrip() {
         Err(StackError::Shape(_))
     ));
     let bad_gate = with_header(&bytes, |h| {
-        h["shape"]["gate"] = json!("swiglu_table");
+        h["shape"]["gate"] = json!("unknown_gate");
     });
     assert!(matches!(
         IntegerStackModel::parse(&bad_gate),

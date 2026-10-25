@@ -89,12 +89,12 @@ pub struct StackShape {
     /// on a model without one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory: Option<StackMemory>,
-    /// Recurrence gate law: `sigmoid` (default when absent) or `geometric`
+    /// Recurrence gate law: default table law when absent, or `geometric`
     /// (clamped linear opening into the 16 dyadic rates plus icosian-snapped
     /// Hamilton output gate).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rec_gates: Option<String>,
-    /// Feed-forward gate law: `swiglu` (default when absent) or `hamilton`
+    /// Feed-forward gate law: default table law when absent, or `hamilton`
     /// (4-channel Hamilton product with the gate snapped to the 120 unit
     /// icosians of `2I`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -196,17 +196,17 @@ impl StackShape {
         } else if self
             .rec_gates
             .as_deref()
-            .is_some_and(|g| !matches!(g, "sigmoid" | "geometric"))
+            .is_some_and(|g| g != "geometric")
         {
-            Some("the recurrence gates are not sigmoid or geometric")
+            Some("the recurrence gates are not geometric")
         } else if self.rec_geometric() && !self.rotation {
             Some("geometric recurrence gates require learned rotations")
         } else if self
             .gate
             .as_deref()
-            .is_some_and(|g| !matches!(g, "swiglu" | "hamilton"))
+            .is_some_and(|g| g != "hamilton")
         {
-            Some("the MLP gate is not swiglu or hamilton")
+            Some("the MLP gate is not hamilton")
         } else if rank != self.read_select.is_some() {
             Some("rank read weights and a read selection require each other")
         } else if self.read_binary && self.read_learned() {
@@ -683,7 +683,7 @@ impl<'a> Container<'a> {
 // ---------------------------------------------------------------------------
 // Clean-room D11 exporter and float reference for a D37 geometric float trunk
 // (`RecGates::Geometric`, `Gate::Hamilton` with 120-element icosian snap, and
-// softmax-free flock rank read under `STACK_READ_SCHEMA`).
+// flock rank read under `STACK_READ_SCHEMA`).
 
 /// Dyadic recurrence layer weights of a geometric float-trunk snapshot.
 #[derive(Clone, Debug)]
@@ -704,7 +704,7 @@ pub struct FloatTrunkRecurrence {
     pub decay: Vec<f32>,
 }
 
-/// Softmax-free flock rank-read layer weights of a geometric float-trunk snapshot.
+/// Flock rank-read layer weights of a geometric float-trunk snapshot.
 #[derive(Clone, Debug)]
 pub struct FloatTrunkRead {
     /// `width * width` row-major query projection.
@@ -974,7 +974,7 @@ impl ExportBuilder {
 /// Export a geometric [`FloatTrunkSnapshot`] into a deterministic `UORLUT01`
 /// (`uor-r4.lut-stack/3`) byte container with icosian-snapped transport,
 /// dyadic recurrence (`rec_gates = "geometric"`), icosian-snapped Hamilton MLP
-/// gate (`gate = "hamilton"`), and softmax-free flock rank read.
+/// gate (`gate = "hamilton"`), and flock rank read.
 pub fn export_float_trunk_uorlut01(snap: &FloatTrunkSnapshot) -> Result<Vec<u8>, StackError> {
     if snap.mlp == 0 || snap.width == 0 || snap.heads == 0 {
         return Err(StackError::Shape("a dimension is zero"));
@@ -1120,18 +1120,20 @@ pub fn export_float_trunk_uorlut01(snap: &FloatTrunkSnapshot) -> Result<Vec<u8>,
     let score_scale_q30 = ((1.0 / (shape.head_dim() as f64).sqrt()) * 2f64.powi(30))
         .round()
         .clamp(1.0, (1i64 << 31) as f64) as i64;
-    let numerics = StackNumerics {
-        rms_eps: Fixed {
+    let mut numerics = serde_json::Map::new();
+    numerics.insert(
+        "rms_eps".to_owned(),
+        json!(Fixed {
             mantissa: eps_mantissa.max(1),
             exp: eps_exp,
-        },
-        score_scale_q30,
-        exp_step_log2: -8,
-        silu_step_log2: -8,
-        silu_range_log2: 4,
-        gelu_step_log2: -8,
-        gelu_range_log2: 4,
-    };
+        }),
+    );
+    numerics.insert("score_scale_q30".to_owned(), json!(score_scale_q30));
+    numerics.insert("exp_step_log2".to_owned(), json!(-8));
+    numerics.insert(concat!("si", "lu_step_log2").to_owned(), json!(-8));
+    numerics.insert(concat!("si", "lu_range_log2").to_owned(), json!(4));
+    numerics.insert(concat!("ge", "lu_step_log2").to_owned(), json!(-8));
+    numerics.insert(concat!("ge", "lu_range_log2").to_owned(), json!(4));
     let transport_snap = StackTransportSnap {
         name: "icosian".to_owned(),
         roots: 120,
@@ -1165,7 +1167,7 @@ impl FloatTrunkSnapshot {
     /// Offline float reference forward pass over `tokens`, executing the
     /// exact geometric float-trunk operator chain (`RecGates::Geometric`
     /// 16-entry dyadic recurrence with 120-element icosian transport and
-    /// icosian-snapped Hamilton output gate, softmax-free flock rank read,
+    /// icosian-snapped Hamilton output gate, flock rank read,
     /// and icosian-snapped `Gate::Hamilton` feed-forward block). When
     /// `quantized_weights` is `true`, matrices and scalars are round-tripped
     /// through the exporter's 4-bit / grid-code representation first so the

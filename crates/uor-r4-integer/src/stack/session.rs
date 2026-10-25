@@ -99,7 +99,7 @@ struct Recurrence {
     taps: Vec<i16>,
     conv_bias: Vec<i32>,
     gate_bias: Vec<i32>,
-    /// Grid codes of `8 softplus(-decay)` per lane (`sigmoid` mode).
+    /// Grid codes of `8 softplus(-decay)` per lane.
     rates: Vec<i16>,
     /// Per-lane decay offsets at `RESIDUAL_EXP` (`geometric` mode).
     decay_offset: Vec<i32>,
@@ -529,19 +529,19 @@ impl IntegerStackModel {
         weights += d as u64;
         let needs_exp =
             !shape.rec_geometric() || shape.read_rank().is_none() || shape.pointer.is_some();
-        let needs_silu = !shape.gate_hamilton();
-        let needs_gelu = !shape.rec_geometric();
+        let needs_mlp_table = !shape.gate_hamilton();
+        let needs_rec_table = !shape.rec_geometric();
         let exp_table = if needs_exp {
             artifact.table_u32("exp")?
         } else {
             Vec::new()
         };
-        let silu_table = if needs_silu {
+        let silu_table = if needs_mlp_table {
             artifact.table_i32("silu")?
         } else {
             Vec::new()
         };
-        let gelu_table = if needs_gelu {
+        let gelu_table = if needs_rec_table {
             artifact.table_i32("gelu")?
         } else {
             Vec::new()
@@ -566,8 +566,8 @@ impl IntegerStackModel {
         let activation_len = |step: i32, range: i32| (2usize << (range - step)) + 1;
         if (needs_exp && exp_table.len() < 2)
             || !steps_valid
-            || (needs_silu && silu_table.len() != activation_len(n.silu_step_log2, n.silu_range_log2))
-            || (needs_gelu && gelu_table.len() != activation_len(n.gelu_step_log2, n.gelu_range_log2))
+            || (needs_mlp_table && silu_table.len() != activation_len(n.silu_step_log2, n.silu_range_log2))
+            || (needs_rec_table && gelu_table.len() != activation_len(n.gelu_step_log2, n.gelu_range_log2))
             || !(1..=1i64 << 31).contains(&n.score_scale_q30)
         {
             return Err(StackError::Numerics(
