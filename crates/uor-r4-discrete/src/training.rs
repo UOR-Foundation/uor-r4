@@ -1777,13 +1777,15 @@ mod tests {
             (AddressMetric::FullVectorCellL1V1, "full_vector_cell_l1_v1"),
         ] {
             driver.config.address_metric = metric;
-            let value =
-                serde_json::to_value(&driver.config).map_err(|e| invalid(e.to_string()))?;
+            let value = serde_json::to_value(&driver.config).map_err(|e| invalid(e.to_string()))?;
             assert_eq!(value["address_metric"], serde_json::json!(word));
             let back: DriverConfig =
                 serde_json::from_value(value).map_err(|e| invalid(e.to_string()))?;
             assert_eq!(back.address_metric, metric);
-            assert!(zero_update_only(&driver).is_err(), "{metric:?} must not learn");
+            assert!(
+                zero_update_only(&driver).is_err(),
+                "{metric:?} must not learn"
+            );
             assert!(CorpusUpdateAdmission::guarded(&driver, 1).is_err());
         }
         driver.config.address_metric = AddressMetric::OuterL1V1;
@@ -1796,7 +1798,9 @@ mod tests {
         let bypasses = source
             .lines()
             .map(str::trim_start)
-            .filter(|l| l.contains(literal) && !l.starts_with("pub struct") && !l.starts_with("impl "))
+            .filter(|l| {
+                l.contains(literal) && !l.starts_with("pub struct") && !l.starts_with("impl ")
+            })
             .count();
         assert_eq!(bypasses, 0, "a capability is built without guarded()");
         Ok(())

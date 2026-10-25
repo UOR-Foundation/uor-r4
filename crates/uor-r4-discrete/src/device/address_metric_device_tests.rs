@@ -5,7 +5,7 @@ use super::*;
 use crate::address_cells::{self, AddressMetric};
 
 const SPEC: Spec = Spec {
-    vocabulary: 64,
+    vocabulary: 1024,
     blocks: 4,
     context: 4,
     kept_cells: 8,
@@ -61,13 +61,13 @@ fn identities() -> (Vec<Identity>, Vec<u32>) {
     for row in 0..ROWS {
         for position in 0..SPEC.context as usize {
             ids.push(Identity {
-                token: ((row * 11 + position * 7) % 64) as u32,
+                token: ((row * 131 + position * 37) % 1024) as u32,
                 occurrence: (row * 16 + position) as u64,
                 record: 17,
                 version: 9,
             });
         }
-        targets.push(((row * 13 + 5) % 64) as u32);
+        targets.push(((row * 61 + 5) % 1024) as u32);
     }
     (ids, targets)
 }
@@ -106,7 +106,10 @@ fn device_admission_matches_the_host_oracles_for_each_metric() -> Result<()> {
     // The fixture separates all three metrics, so a dropped s[15], or one
     // metric computed as another, fails here even where the oracles agree.
     for (a, b) in [(0, 1), (0, 2), (1, 2)] {
-        assert_ne!(admitted[a], admitted[b], "metrics {a} and {b} admit the same cells on every row");
+        assert_ne!(
+            admitted[a], admitted[b],
+            "metrics {a} and {b} admit the same cells on every row"
+        );
     }
     Ok(())
 }

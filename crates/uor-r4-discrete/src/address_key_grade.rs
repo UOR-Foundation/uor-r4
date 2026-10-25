@@ -41,8 +41,10 @@ pub fn paired_psucc(treatment: &B3Summary, control: &B3Summary) -> Result<Paired
     if treatment.rows.len() != control.rows.len() {
         return Err(invalid("paired arms score different DEV row counts"));
     }
-    let by_ordinal: std::collections::BTreeMap<u64, &crate::controller::attention_learning::evidence::AdmissionRow> =
-        control.rows.iter().map(|r| (r.row_ordinal, r)).collect();
+    let by_ordinal: std::collections::BTreeMap<
+        u64,
+        &crate::controller::attention_learning::evidence::AdmissionRow,
+    > = control.rows.iter().map(|r| (r.row_ordinal, r)).collect();
     if by_ordinal.len() != control.rows.len() {
         return Err(invalid("a DEV row ordinal repeats"));
     }
@@ -114,16 +116,50 @@ fn paired_json(p: Paired) -> Value {
 /// no alias group, and every DEV row's target its cell's representative.
 /// Returns that, and the alias ceiling.
 fn census_ok(census: &Value) -> Result<(bool, u64)> {
-    let word = |key: &str| census.pointer(key).and_then(Value::as_u64);
-    let ceiling = word("/dev_alias_ceiling_rows")
-        .ok_or_else(|| invalid("census lacks dev_alias_ceiling_rows"))?;
-    let ok = word("/distinct_vectors") == Some(4_096)
-        && word("/cells/occupied_cells") == Some(256)
-        && word("/within_cell_tie_mass/tokens_in_alias_groups") == Some(0)
-        && word("/within_cell_tie_mass/dev_rows_targeting_non_representative") == Some(0)
+    if census["schema"] != "uor-r4.coverage-census/1" {
+        return Err(invalid("not a uor-r4.coverage-census/1 report"));
+    }
+    // A missing or renamed field is refused, never read as a gate miss.
+    let word = |key: &str| {
+        census
+            .pointer(key)
+            .and_then(Value::as_u64)
+            .ok_or_else(|| invalid(format!("census lacks {key}")))
+    };
+    let ceiling = word("/dev_alias_ceiling_rows")?;
+    let ok = word("/distinct_vectors")? == 4_096
+        && word("/cells/occupied_cells")? == 256
+        && word("/within_cell_tie_mass/tokens_in_alias_groups")? == 0
+        && word("/within_cell_tie_mass/dev_rows_targeting_non_representative")? == 0
         && ceiling == DEV_ROWS;
     Ok((ok, ceiling))
 }
+
+/// The sheet's pinned config file sha256s, by manifest key. Each arm's
+/// `attention-dev-b3` report records the bytes it read (`config_file.sha256`),
+/// so a manifest that swaps two arms is refused.
+pub const ARM_CONFIGS: [(&str, &str); 5] = [
+    (
+        "a8",
+        "469a2ff0fe17a6a80f5875a077b3e6a9436553efdf1c6e7884541220553e9d5e",
+    ),
+    (
+        "fv8_env",
+        "56c3fafe0b8cdb7800f57d0a6ba577b2964356de5765b350a701546cace6e534",
+    ),
+    (
+        "fv8_two_scale",
+        "1cdb80615d1467bbe062bc1a70804630b3f69af5c580ce3b0d2b5d7407a89a28",
+    ),
+    (
+        "fvs8_env",
+        "b3b5fb60a904eaecb17d36f3ff5263ff4f83d6846612380df5ce8a5aef20830e",
+    ),
+    (
+        "fvs8_two_scale",
+        "05d907d0d6e2d3526642b32ead7edf7a9db422c02334ff3ed9aa03939950c834",
+    ),
+];
 
 /// The sheet's decision table for one treatment, against A8-Outer and against
 /// the shuffled arm with the same metric. G-Exact and G-Occ on either pinned
@@ -188,7 +224,11 @@ mod tests {
         let rows: Vec<AdmissionRow> = (0..DEV_ROWS)
             .map(|i| {
                 let is_psucc = i < PSUCC_ROWS;
-                let admitted = if is_psucc { i < psucc } else { i - PSUCC_ROWS < rest };
+                let admitted = if is_psucc {
+                    i < psucc
+                } else {
+                    i - PSUCC_ROWS < rest
+                };
                 AdmissionRow {
                     row_ordinal: i,
                     target_position: i + 1,
@@ -212,18 +252,24 @@ mod tests {
     }
 
     fn census() -> Value {
-        json!({"distinct_vectors": 4096, "cells": {"occupied_cells": 256}, "dev_alias_ceiling_rows": 14287,
+        json!({"schema": "uor-r4.coverage-census/1", "distinct_vectors": 4096, "cells": {"occupied_cells": 256}, "dev_alias_ceiling_rows": 14287,
             "within_cell_tie_mass": {"tokens_in_alias_groups": 0, "dev_rows_targeting_non_representative": 0}})
     }
 
     #[test]
     fn the_paired_floor_is_exact_in_integers() {
         assert!(!clears(Paired { b: 10, c: 10 }));
-        assert!(!clears(Paired { b: 24, c: 0 }), "d = 24 is not above the floor");
+        assert!(
+            !clears(Paired { b: 24, c: 0 }),
+            "d = 24 is not above the floor"
+        );
         assert!(clears(Paired { b: 25, c: 0 }), "d = 25 > 24 and 625 > 100");
         assert!(clears(Paired { b: 200, c: 100 }), "10,000 > 1,200");
         assert!(!clears(Paired { b: 1_000, c: 950 }), "2,500 <= 7,800");
         assert!(!clears(Paired { b: 0, c: 30 }));
+        // The square-root boundary itself: 28² = 784 = 4·196 does not clear.
+        assert!(!clears(Paired { b: 112, c: 84 }));
+        assert!(clears(Paired { b: 113, c: 84 }), "29² = 841 > 788");
     }
 
     #[test]
@@ -237,7 +283,10 @@ mod tests {
         // File order does not matter: rows join by ordinal.
         let mut reversed = arm(1_351, 2_893, 133);
         reversed.b3.rows.reverse();
-        assert_eq!(paired_psucc(&a.b3, &reversed.b3).unwrap(), Paired { b: 49, c: 0 });
+        assert_eq!(
+            paired_psucc(&a.b3, &reversed.b3).unwrap(),
+            Paired { b: 49, c: 0 }
+        );
         let mut repeated = arm(1_351, 2_893, 133);
         repeated.b3.rows[1].row_ordinal = 0;
         assert!(paired_psucc(&a.b3, &repeated.b3).is_err());
@@ -245,7 +294,11 @@ mod tests {
 
     #[test]
     fn the_decision_table() {
-        let a8 = arm(A8_PSUCC_ADMITTED, A8_FULL_ADMITTED - A8_PSUCC_ADMITTED, A8_TOP1);
+        let a8 = arm(
+            A8_PSUCC_ADMITTED,
+            A8_FULL_ADMITTED - A8_PSUCC_ADMITTED,
+            A8_TOP1,
+        );
         let strong = arm(1_800, 3_000, 400);
         let shuffled = arm(1_500, 3_000, 300);
         let c = census();
@@ -261,16 +314,37 @@ mod tests {
         // No reach over A8 + F.
         let flat = arm(1_360, 3_000, 140);
         assert_eq!(outcome(&a8, &flat, &shuffled, &c, &c), "FAIL");
+        // Reach and geometry without capacity: 1,800 full-DEV admitted <= 1,941.
+        let narrow = arm(1_800, 0, 400);
+        assert_eq!(outcome(&a8, &narrow, &shuffled, &c, &c), "FAIL");
+        // A census missing a field, or of another schema, is refused, not graded.
+        let mut renamed = census();
+        renamed.as_object_mut().unwrap().remove("distinct_vectors");
+        assert!(grade(&a8, &strong, &shuffled, &renamed, &c, "FV8-TwoScale").is_err());
+        let mut foreign = census();
+        foreign["schema"] = json!("uor-r4.something-else/1");
+        assert!(grade(&a8, &strong, &shuffled, &c, &foreign, "FV8-TwoScale").is_err());
         // G-Occ on either pinned table is an instrument check, never a FAIL.
         let mut aliased = census();
         aliased["within_cell_tie_mass"]["tokens_in_alias_groups"] = json!(2);
         assert_eq!(outcome(&a8, &strong, &shuffled, &aliased, &c), "INSTRUMENT");
         assert_eq!(outcome(&a8, &strong, &shuffled, &c, &aliased), "INSTRUMENT");
         // A8 off by one row is an instrument fault, read before any treatment.
-        let off = arm(A8_PSUCC_ADMITTED - 1, A8_FULL_ADMITTED - A8_PSUCC_ADMITTED, A8_TOP1);
+        let off = arm(
+            A8_PSUCC_ADMITTED - 1,
+            A8_FULL_ADMITTED - A8_PSUCC_ADMITTED,
+            A8_TOP1,
+        );
         assert_eq!(outcome(&off, &strong, &shuffled, &c, &c), "INSTRUMENT");
-        let wrong_top1 = arm(A8_PSUCC_ADMITTED, A8_FULL_ADMITTED - A8_PSUCC_ADMITTED, A8_TOP1 + 1);
-        assert_eq!(outcome(&wrong_top1, &strong, &shuffled, &c, &c), "INSTRUMENT");
+        let wrong_top1 = arm(
+            A8_PSUCC_ADMITTED,
+            A8_FULL_ADMITTED - A8_PSUCC_ADMITTED,
+            A8_TOP1 + 1,
+        );
+        assert_eq!(
+            outcome(&wrong_top1, &strong, &shuffled, &c, &c),
+            "INSTRUMENT"
+        );
         // A panel of another size is refused, not graded.
         let mut short = arm(1_800, 3_000, 400);
         short.b3.full.rows -= 1;

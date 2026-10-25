@@ -1005,11 +1005,17 @@ mod tests {
     #[test]
     fn the_dev_b3_lock_admits_every_k8_address_metric_arm() -> Result<()> {
         for bytes in [
-            &include_bytes!("../../../docs/labs/a8-training-configs-2026-10-19/evidence/a8-relation-seed1.json")[..],
+            &include_bytes!(
+                "../../../docs/labs/a8-training-configs-2026-10-19/evidence/a8-relation-seed1.json"
+            )[..],
             include_bytes!("../../../docs/labs/m1-address-key-full-vector/configs/fv8-env.json"),
-            include_bytes!("../../../docs/labs/m1-address-key-full-vector/configs/fv8-two-scale.json"),
+            include_bytes!(
+                "../../../docs/labs/m1-address-key-full-vector/configs/fv8-two-scale.json"
+            ),
             include_bytes!("../../../docs/labs/m1-address-key-full-vector/configs/fvs8-env.json"),
-            include_bytes!("../../../docs/labs/m1-address-key-full-vector/configs/fvs8-two-scale.json"),
+            include_bytes!(
+                "../../../docs/labs/m1-address-key-full-vector/configs/fvs8-two-scale.json"
+            ),
         ] {
             let config: DriverConfig =
                 serde_json::from_slice(bytes).map_err(|e| invalid(e.to_string()))?;

@@ -10,8 +10,9 @@ use uor_r4_discrete::address_cells::AddressMetric;
 use uor_r4_discrete::controller::attention_learning;
 use uor_r4_discrete::training::{CodebookInitialization, DriverConfig};
 
-const A8: &[u8] =
-    include_bytes!("../../../docs/labs/a8-training-configs-2026-10-19/evidence/a8-relation-seed1.json");
+const A8: &[u8] = include_bytes!(
+    "../../../docs/labs/a8-training-configs-2026-10-19/evidence/a8-relation-seed1.json"
+);
 const FV8_ENV: &[u8] =
     include_bytes!("../../../docs/labs/m1-address-key-full-vector/configs/fv8-env.json");
 const FV8_TWO: &[u8] =
@@ -48,15 +49,48 @@ fn common(bytes: &[u8]) -> Value {
 fn the_six_pre_flight_arms_differ_only_in_table_metric_and_k() {
     let arms: [(&str, &[u8], &str, AddressMetric, u32); 6] = [
         ("a8-outer", A8, A8_TABLE, AddressMetric::OuterL1V1, 8),
-        ("fv8-env", FV8_ENV, FV_TABLE, AddressMetric::CellEnvelopeL1V1, 8),
-        ("fv8-two-scale", FV8_TWO, FV_TABLE, AddressMetric::FullVectorCellL1V1, 8),
-        ("fvs8-env", FVS8_ENV, FVS_TABLE, AddressMetric::CellEnvelopeL1V1, 8),
-        ("fvs8-two-scale", FVS8_TWO, FVS_TABLE, AddressMetric::FullVectorCellL1V1, 8),
-        ("fv16-two-scale", FV16_TWO, FV_TABLE, AddressMetric::FullVectorCellL1V1, 16),
+        (
+            "fv8-env",
+            FV8_ENV,
+            FV_TABLE,
+            AddressMetric::CellEnvelopeL1V1,
+            8,
+        ),
+        (
+            "fv8-two-scale",
+            FV8_TWO,
+            FV_TABLE,
+            AddressMetric::FullVectorCellL1V1,
+            8,
+        ),
+        (
+            "fvs8-env",
+            FVS8_ENV,
+            FVS_TABLE,
+            AddressMetric::CellEnvelopeL1V1,
+            8,
+        ),
+        (
+            "fvs8-two-scale",
+            FVS8_TWO,
+            FVS_TABLE,
+            AddressMetric::FullVectorCellL1V1,
+            8,
+        ),
+        (
+            "fv16-two-scale",
+            FV16_TWO,
+            FV_TABLE,
+            AddressMetric::FullVectorCellL1V1,
+            16,
+        ),
     ];
     let base = common(A8);
     let raw: Value = serde_json::from_slice(A8).unwrap();
-    assert!(raw.get("address_metric").is_none(), "A8-Outer is the default key");
+    assert!(
+        raw.get("address_metric").is_none(),
+        "A8-Outer is the default key"
+    );
     let mut scopes = BTreeSet::new();
     for (name, bytes, sha, metric, k) in arms {
         let config: DriverConfig = serde_json::from_slice(bytes).unwrap();
@@ -64,10 +98,17 @@ fn the_six_pre_flight_arms_differ_only_in_table_metric_and_k() {
         assert_eq!(table(&config), sha, "{name}");
         assert_eq!(config.address_metric, metric, "{name}");
         assert_eq!(config.spec.kept_cells, k, "{name}");
-        assert_eq!(common(bytes), base, "{name} differs from A8 beyond table/metric/K");
+        assert_eq!(
+            common(bytes),
+            base,
+            "{name} differs from A8 beyond table/metric/K"
+        );
         if k == 8 {
             attention_learning::validate_config(&config).unwrap_or_else(|e| panic!("{name}: {e}"));
-            assert!(scopes.insert(attention_learning::scope(&config).unwrap()), "{name} scope repeats");
+            assert!(
+                scopes.insert(attention_learning::scope(&config).unwrap()),
+                "{name} scope repeats"
+            );
         }
     }
     assert_eq!(scopes.len(), 5);

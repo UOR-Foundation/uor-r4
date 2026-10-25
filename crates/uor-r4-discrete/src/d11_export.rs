@@ -645,7 +645,10 @@ mod tests {
             ReadInitialization::ActiveLeafV1,
         );
         let bytes = export_d11(&default).unwrap();
-        for metric in [AddressMetric::CellEnvelopeL1V1, AddressMetric::FullVectorCellL1V1] {
+        for metric in [
+            AddressMetric::CellEnvelopeL1V1,
+            AddressMetric::FullVectorCellL1V1,
+        ] {
             let mut full = default.clone();
             full.address_metric = metric;
             let error = export_d11(&full).unwrap_err().to_string();
