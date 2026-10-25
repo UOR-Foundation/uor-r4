@@ -9,7 +9,7 @@ References #2851. References #2030.
   - `m2-train-grounded-replies` depends on this item and keeps the student on the discrete path (D41). So the edge would have made discrete M2 wait on the float path, and on float training too: `d11-exporter-float-trunk` needs a trained float trunk.
   - That misreads Casey's "I want both because we do not know which we will ultimately need". It is a hedge across both routes, not a float-first order.
   - My ORDER's own stop rule (a lawful path to FIT without (c)) should have caught this. The edge is dropped, and the state note now names both routes.
-- **The item's done-when is not met in this unit.** Neither sheet has a FIT yet. The D37 sheet waits on the float module and exporter. The discrete-law sheet is not yet written, and no item asks for it.
+- **The item's done-when is not met in this unit.** Neither sheet has a FIT yet. The D37 sheet waits on the float module and exporter. The discrete-law sheet, which this item's done-when allows instead, is not yet written.
 - **My first ORDER listed the export-gap band as still to register.** It was already registered at the D37 sheet's line 29 by the PM cover on 24 Oct, so no band is added.
 - **The ORDER promised a `milestones.json` refresh that was not needed.** The M2 `next` text already names the remaining blockers, so the file is unchanged.
 - **An advisory scope WARN (D76).** `loop pr-check` allows only an item's status line by default, and this unit adds a dated note to the item's text and re-renders the roadmap page.
