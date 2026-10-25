@@ -7,6 +7,7 @@ References #2904.
 
 - **The first plan was to replace the five required "acknowledgement" checks with one real check. That was wrong, and I dropped it.** The acknowledgements are not empty: `required-transport` waits for the CI `policy` job (`loop pr-check --ci`) and writes its verdict into each summary. `loop pr-check --pr` and `loop queue` accept a PR only when that says `policy: pass`. That wait is the real merge gate, so it stays. What costs time is the rules inside it, which this unit addresses.
 - **I didn't plan to touch `release.yml` or `deploy.yml`, and didn't.** #2870's release work will repoint `release.yml`, so deleting it now would cost that issue a rebuild. Only `relative-query-check.yml` is deleted; it is tied to a September branch.
+- **The fresh review found a gap in a hard rule that is older than this PR.** `banned-presence` skipped added files (`status == 'A'`), so a new `.rs` file could bring banned code in unseen. This unit fixes it: an added file is counted against an empty base.
 - **One harness test fails in a worktree, unrelated to this change.** `loop_guard::each_clients_canary_write_is_refused` gets the refusal reason "cross-worktree write refused: .worktrees/claude-gates-reset belongs to another lab" instead of the owner-only reason it expects. The guard infers the owning lab from the worktree path. It is environmental and comes from main.
 
 ## What changed
@@ -16,6 +17,10 @@ References #2904.
   - The 26 assertions of `FAIL <rule>` for the six rules now expect `WARN <rule>`.
   - Where a demoted rule was the fixture's only failure, the expected exit code goes from 1 to 0. That covers the three commit-order tests, the read-path and filemap tests, and the filemap test's first check. Every other exit code stays 1, because its fixture still fails a hard rule (`order` or `report`).
   - The new `an_out_of_scope_change_warns_but_passes_d76` checks a green PR with one out-of-scope file: it gets `WARN scope`, `advisory (D76)` and `verdict: PASS`.
+  - The new `a_new_file_with_banned_code_fails_the_presence_rule`: an added file containing banned code fails `banned-presence`.
+  - The new `the_project_owner_paths_still_cover_agents_charter_decisions_and_ci_d76` reads the real `docs/harness/owner-paths.json`. It confirms that `AGENTS.md`, `CHARTER.md`, `DECISIONS.md` and `.github/**` stay under the hard `owner-paths` rule now that `rendered-lock` and `read-path` are warnings.
+  - Six test names that said "fails" or "refuses" for a demoted rule now say "warns".
+- **`banned-presence`:** an added file is now counted against an empty base instead of being skipped.
 - **`.github/workflows/docs.yml`:** the Links, Claim-wording and Generated catalog/figures steps get `continue-on-error: true`. Archive verify stays hard.
 - **`.github/workflows/relative-query-check.yml`:** deleted.
 - **`docs/integration/DECISIONS.md`:** D76, with the owner's words. **`docs/loop/README.md`:** the policy line names the split.
@@ -23,8 +28,10 @@ References #2904.
 
 ## Measurements
 
-- `cargo test --locked -p uor-r4-harness --test loop_prcheck`: 48 passed, 0 failed.
-- **Negative gate:** with the `loopprcheck.rs` change set aside from `origin/main`, `an_out_of_scope_change_warns_but_passes_d76` FAILS. Restored, it passes. The existing `owner_paths_need_the_entry_a_quoted_answer_and_a_time` still passes, so owner paths still fail a PR.
+- `cargo test --locked -p uor-r4-harness --test loop_prcheck`: 50 passed, 0 failed.
+- **Negative gates.** Each was set aside from the branch, run, then restored:
+  - With the advisory change set aside from `origin/main`, `an_out_of_scope_change_warns_but_passes_d76` FAILS. Restored, it passes.
+  - With the added-file change set aside, `a_new_file_with_banned_code_fails_the_presence_rule` FAILS. Restored, it passes. The existing `owner_paths_need_the_entry_a_quoted_answer_and_a_time` still passes, so owner paths still fail a PR.
 - The full harness suite passed except the one environmental `loop_guard` test above.
 
 ## Checks run at the head

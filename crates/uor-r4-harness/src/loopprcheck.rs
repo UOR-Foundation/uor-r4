@@ -1599,10 +1599,17 @@ fn rule_banned_presence(pr: &Pr) -> RuleResult {
     for change in &pr.changes {
         let old = change.paths.first().map(String::as_str).unwrap_or("");
         let new = change.paths.last().map(String::as_str).unwrap_or("");
-        if change.status == 'A' || change.status == 'D' || !is_banned_source(new) {
+        if change.status == 'D' || !is_banned_source(new) {
             continue;
         }
-        let (Some(base), Some(head)) = (pr.at_base(old), pr.at_head(new)) else {
+        // An added file has no base, so every banned site it compiles is new (D76: the hard
+        // rules must see new files, not only edits).
+        let base = if change.status == 'A' {
+            Some(String::new())
+        } else {
+            pr.at_base(old)
+        };
+        let (Some(base), Some(head)) = (base, pr.at_head(new)) else {
             continue;
         };
         let mut was = banned_counts(&base, new);

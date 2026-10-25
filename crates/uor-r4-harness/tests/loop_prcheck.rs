@@ -526,7 +526,7 @@ fn commit_order_skips_a_merge_of_main_after_the_order_commit() {
 }
 
 #[test]
-fn commit_order_fails_an_evil_merge_before_the_order_commit() {
+fn commit_order_warns_on_an_evil_merge_before_the_order_commit() {
     let r = Repo::new();
     // E: an empty commit on the base.
     let e = r.commits(vec![Box::new(|_: &Repo| {})]);
@@ -554,7 +554,7 @@ fn commit_order_fails_an_evil_merge_before_the_order_commit() {
 }
 
 #[test]
-fn commit_order_fails_an_order_re_pointed_after_its_commit() {
+fn commit_order_warns_on_an_order_re_pointed_after_its_commit() {
     let r = Repo::new();
     let h = r.green_a(|r| {
         r.write(
@@ -839,7 +839,7 @@ fn order_fails_for_each_broken_condition() {
 }
 
 #[test]
-fn an_out_of_scope_change_fails_scope() {
+fn an_out_of_scope_change_warns_scope() {
     let r = Repo::new();
     let h = r.head(|r| {
         r.order_a();
@@ -871,7 +871,7 @@ fn an_out_of_scope_change_warns_but_passes_d76() {
 }
 
 #[test]
-fn scope_refuses_a_scopeless_item_a_crossing_glob_and_a_rename_out() {
+fn scope_warns_on_a_scopeless_item_a_crossing_glob_and_a_rename_out() {
     let r = Repo::new();
     let h = r.head(|r| {
         r.write(
@@ -1136,7 +1136,7 @@ fn a_bad_rev_exits_2_and_json_carries_the_verdict() {
 /// `rule-sources`: rule files and rule headings outside the base list fail; listed files and the
 /// exempt folders pass, and a PR cannot list its own new file.
 #[test]
-fn rule_sources_refuses_rules_outside_the_list() {
+fn rule_sources_warns_on_rules_outside_the_list() {
     let r = Repo::new();
     r.git(&["checkout", "-q", "--detach", &r.base]);
     r.write(
@@ -1322,7 +1322,7 @@ fn rendered_lock_passes_the_views_first_commit_only() {
 /// `read-path`: every over-budget item fails, grown or not, and so does a whole path above the
 /// 76,800 B line (the former warnings, raised to errors in loop PR 11).
 #[test]
-fn read_path_fails_every_over_budget_item_and_the_warning_line() {
+fn read_path_warns_on_every_over_budget_item_and_the_warning_line() {
     let lines = |n: usize| "x\n".repeat(n);
     let r = Repo::new();
     r.git(&["checkout", "-q", "--detach", &r.base]);
@@ -1709,6 +1709,47 @@ fn the_d59_switch_is_read_at_the_merge_base() {
     );
     let o = r.check_gh(&h, &fake(vec![record("claude", &h, "APPROVE")]));
     expect(&o, 1, "PASS review-record", "counted");
+}
+
+/// D76: a new file that compiles banned code fails, like an edit does. Before D76 the rule
+/// skipped added files, so this exited 0.
+#[test]
+fn a_new_file_with_banned_code_fails_the_presence_rule() {
+    let r = Repo::new();
+    let h = r.green_a(|r| {
+        r.write("crates/a/src/fresh.rs", GATED_HEAD_UNGATED);
+    });
+    expect(
+        &r.check(&h, &[]),
+        1,
+        "FAIL banned-presence",
+        "D23 sites in compiled code rise",
+    );
+}
+
+/// D76 made `rendered-lock` and `read-path` advisory, and both used to catch some AGENTS.md
+/// edits. The project's own owner-path list must keep AGENTS.md (and the other owner files)
+/// under the hard `owner-paths` rule.
+#[test]
+fn the_project_owner_paths_still_cover_agents_charter_decisions_and_ci_d76() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../docs/harness/owner-paths.json");
+    let text = std::fs::read_to_string(&path).expect("read docs/harness/owner-paths.json");
+    let v: serde_json::Value = serde_json::from_str(&text).expect("owner-paths.json is JSON");
+    let listed: Vec<&str> = v["paths"]
+        .as_array()
+        .expect("paths array")
+        .iter()
+        .filter_map(|p| p["path"].as_str())
+        .collect();
+    for want in [
+        "AGENTS.md",
+        "CHARTER.md",
+        "docs/integration/DECISIONS.md",
+        ".github/**",
+    ] {
+        assert!(listed.contains(&want), "{want} missing from {listed:?}");
+    }
 }
 
 #[test]
