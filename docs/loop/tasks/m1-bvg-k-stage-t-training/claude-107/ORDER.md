@@ -26,7 +26,7 @@ Run at `cada129ea`. Class: instrument (the runner lacks the block path), not mec
 | The sheet is unchanged since its FIT: one commit, `14fc2cbe4` (#3204) | **Holds** |
 | Its inputs are in the HF store: the A8 dose archive `results/antigravity/a8-full-dose-rerun-2026-10-25/` and the W2 records `results/claude/w2-capacity-2026-10-25/` and `w2-utilization-2026-10-25/` | **Holds** |
 | The audited runner can run a T16 arm today | **Fails:** `validate_config` refuses `coordinate_block != ONE` and `seed != 1`. Instrument gap, so the goal's four pieces are built. |
-| Stage T is still warranted after W2 and the code-utilization diagnostic | **Decided in [DECISION.md](DECISION.md) (D68):** it runs. |
+| Stage T is still warranted after W2 and the code-utilization diagnostic | **Fails.** Decided in [DECISION.md](DECISION.md) (D68): W2's row 3 says "do not change the learning law yet", and the diagnostic routes A1a to #2834. Stage T waits on #2834. **The unit is cancelled here, before any build.** |
 
 ## Files in scope
 
