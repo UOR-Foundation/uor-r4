@@ -32,7 +32,8 @@ References #2904.
 - **Negative gates.** Each was set aside from the branch, run, then restored:
   - With the advisory change set aside from `origin/main`, `an_out_of_scope_change_warns_but_passes_d76` FAILS. Restored, it passes.
   - With the added-file change set aside, `a_new_file_with_banned_code_fails_the_presence_rule` FAILS. Restored, it passes. The existing `owner_paths_need_the_entry_a_quoted_answer_and_a_time` still passes, so owner paths still fail a PR.
-- The full harness suite passed except the one environmental `loop_guard` test above.
+- **The full harness suite, run with `--no-fail-fast`.** Plain `cargo test` stops at the first failing target, so CI's first run on this PR found two more test files asserting `FAIL commit-order` and `FAIL scope`: `loop_repair_orders.rs` and `loop_shared_files.rs`. Both now expect WARN, and in the one test whose only failure was commit-order the expected exit code goes to 0.
+- **What is left failing.** The environmental `loop_guard` test fails, and `read_path_warns_on_every_over_budget_item_and_the_warning_line` failed once under the parallel full run. That test passes alone and in its own target (50/50), so it is load-sensitive, not a regression.
 
 ## Checks run at the head
 
