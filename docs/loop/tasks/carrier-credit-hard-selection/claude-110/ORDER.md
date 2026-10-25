@@ -16,9 +16,24 @@ The item's done-when reads:
 >
 > **Removed again on 25 Oct (claude-108), after #3203 merged as `cada129ea`.** The results unit is docs only: it grades the eight arms with the merged `carrier-arms grade` and writes the REPORT, the notebook row, the mechanism page's tried table and the lab README. So `scope:` now holds those docs, and no crate path. If grading finds a defect in the crate, the fix goes to its own unit.
 
+**This unit:** grade the eight registered arms with the merged `carrier-arms grade` (#3203, `cada129ea`). Then record the result:
+- the REPORT, negatives first;
+- the notebook row;
+- the tried table in `docs/mechanisms/carrier-credit.md`;
+- the lab README's Results.
+
+It also carries `m1-address-key-full-vector`'s notebook row (claude-110 on #3230). The installed loop guard refuses that item's own notebook page (the gap #3189 fixed on `main`), and this item's scope holds the same page.
+
 ## Cancel probe (run first)
 
-To fill in.
+Run at `12facdf94`. Class: records.
+
+| Check | Result |
+|---|---|
+| The code delivery is merged | **Holds:** #3203 as `cada129ea` |
+| Pods A and B are archived and verified | **Holds:** `results/claude/carrier-credit-2026-10-25/podA/` (79 files) and `podB/` (31 files), each verified after download |
+| The selector's 10 CUDA controls passed on a GPU, c10 included | **Holds:** pod B, at merged `main` (`C10 PASS`) |
+| Pod C's last arm (CONTROL-F, seed 2001) | **Running:** 14,801 of 16,404 batches at 17:51Z. Pod C is archived and verified the same way before grading. |
 
 ## Files in scope
 
@@ -30,8 +45,14 @@ To fill in.
 
 ## Done when
 
-To fill in.
+- `carrier-arms grade` grades all eight arm folders. Its record is committed in the lab folder.
+- The REPORT states the outcome per the sheet's decision table, negatives first, with every claim checked by a fresh claims reviewer.
+- One notebook row records this result, and the address-key row from #3230 is also added.
+- The tried table and the lab README are updated.
+- The item is set `done` and the REPORT says `Closes #2819`. The done-when ("every registered arm run, and the result recorded on fresh rows") holds for any graded outcome.
 
 ## Stop and ask if
 
-To fill in.
+Stop and decide, never stop and wait.
+
+- `grade` refuses an arm. That is an instrument fault: record it, and fix the crate in its own unit, since this scope holds no crate path.
