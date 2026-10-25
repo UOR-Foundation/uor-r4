@@ -25,12 +25,12 @@ The writer's two-block outer key has 5 distance levels. Suppose it is replaced b
 
 | Arm | Config (sha256) | Pinned table (file sha256) | Metric (`s[15]`) | K | Role |
 |---|---|---|---|---:|---|
-| A8-Outer | `docs/labs/a8-training-configs-2026-10-19/evidence/a8-relation-seed1.json` (`469a2ff0…9d5e`) | `address_structured_v1` (`6600bdb1306dbaea4d77f5bf021e717a6bef791e44c1ec7d7c9bb9f0e8cd3cd1`) | `outer_l1_v1` (0) | 8 | exactness control |
-| FV8-Env | `docs/labs/m1-address-key-full-vector/configs/fv8-env.json` (`56c3fafe…e534`) | `address_full_vector_v1` (`2c886736c858778677d6a7b87253af188d8787cedc5fe5acd9b3c899a10a90e2`) | `cell_envelope_l1_v1` (1) | 8 | treatment 1 |
-| FV8-TwoScale | `…/configs/fv8-two-scale.json` (`1cdb8061…9a28`) | `2c886736…` | `full_vector_cell_l1_v1` (2) | 8 | treatment 2, the prior primary |
-| FVS8-Env | `…/configs/fvs8-env.json` (`b3b5fb60…830e`) | `address_full_vector_shuffled_v1_seed_20261019` (`5e5abf336bfb039d6c3bde336cf5d03f207ae9ff7bc8cfb21e71691c622313c4`) | (1) | 8 | treatment 1's shuffled control |
-| FVS8-TwoScale | `…/configs/fvs8-two-scale.json` (`05d907d0…c834`) | `5e5abf33…` | (2) | 8 | treatment 2's shuffled control |
-| FV16-TwoScale | `…/configs/fv16-two-scale.json` (`1590e52d…20a5`) | `2c886736…` | (2) | 16 | bracket only, against A16's 6,023 / 14,287 and 2,178 / 3,847; decides nothing |
+| A8-Outer | `docs/labs/a8-training-configs-2026-10-19/evidence/a8-relation-seed1.json` (`469a2ff0fe17a6a80f5875a077b3e6a9436553efdf1c6e7884541220553e9d5e`) | `address_structured_v1` (`6600bdb1306dbaea4d77f5bf021e717a6bef791e44c1ec7d7c9bb9f0e8cd3cd1`) | `outer_l1_v1` (0) | 8 | exactness control |
+| FV8-Env | `docs/labs/m1-address-key-full-vector/configs/fv8-env.json` (`56c3fafe0b8cdb7800f57d0a6ba577b2964356de5765b350a701546cace6e534`) | `address_full_vector_v1` (`2c886736c858778677d6a7b87253af188d8787cedc5fe5acd9b3c899a10a90e2`) | `cell_envelope_l1_v1` (1) | 8 | treatment 1 |
+| FV8-TwoScale | `…/configs/fv8-two-scale.json` (`1cdb80615d1467bbe062bc1a70804630b3f69af5c580ce3b0d2b5d7407a89a28`) | `2c886736…` | `full_vector_cell_l1_v1` (2) | 8 | treatment 2, the prior primary |
+| FVS8-Env | `…/configs/fvs8-env.json` (`b3b5fb60a904eaecb17d36f3ff5263ff4f83d6846612380df5ce8a5aef20830e`) | `address_full_vector_shuffled_v1_seed_20261019` (`5e5abf336bfb039d6c3bde336cf5d03f207ae9ff7bc8cfb21e71691c622313c4`) | (1) | 8 | treatment 1's shuffled control |
+| FVS8-TwoScale | `…/configs/fvs8-two-scale.json` (`05d907d0d6e2d3526642b32ead7edf7a9db422c02334ff3ed9aa03939950c834`) | `5e5abf33…` | (2) | 8 | treatment 2's shuffled control |
+| FV16-TwoScale | `…/configs/fv16-two-scale.json` (`1590e52d9d663ef27725bdeec55be7e3968c65060becd5bd02191e24fd2220a5`) | `2c886736…` | (2) | 16 | bracket only, against A16's 6,023 / 14,287 and 2,178 / 3,847; decides nothing |
 
 The two tests that pin the arms:
 - `tests/address_metric_configs.rs`: each config equals A8's except for its table, its metric and (FV16) K, and every K8 arm has its own scope.
@@ -45,7 +45,7 @@ The two tests that pin the arms:
 2. **G-Q (instrument):** `device::address_metric_device_tests::device_admission_matches_the_host_oracles_for_each_metric` passes on the pod.
    - The device's admitted cells on 16 rows of a seeded table equal the `address_cells.rs` oracles, recomputed on the device's own table and query vectors, for all three metrics.
    - The three metrics must also admit different cells, so no metric is computed as another.
-3. **G-Occ (instrument):** each pinned table's `coverage-census --token-cells --bar 1941` reports:
+3. **G-Occ (instrument):** each pinned table's `coverage-census --token-cells … --bar-rows 1941` reports:
    - 4,096 distinct vectors and 256 occupied cells;
    - zero tokens in alias groups, and zero DEV rows targeting a non-representative;
    - alias ceiling 14,287.
@@ -88,14 +88,15 @@ None is trained. Each arm is `init-corpus` at checkpoint 0 from its pinned table
 1. **Done:**
    - the host metric (antigravity-37);
    - the kernel dispatch, the zero-update gate (one guarded capability constructor), the CUDA control, the configs and the grader (claude-110).
-2. **Source commit:** the run builds `f50af58a28ccd054fa190347a9477a31a37ceba3`, which fixes all code. A later commit that touches `crates/` re-pins this line before the run.
+2. **Source commit:** the run builds `c0ab129c776ac4153f9bbbf9c1659d74d21ca691`, which fixes all code. A later commit that touches `crates/` re-pins this line before the run.
 3. This sheet's non-author FIT, then the D67 pre-run review.
-4. **On one leased RTX 5090:**
-   - stage the data and tables, and check every sha above;
-   - **G-Q:** `cargo test --release --locked -p uor-r4-discrete --features cuda --lib address_metric_device_tests -- --ignored`;
-   - **per arm:** `init-corpus`, then `eval-corpus`;
-   - **per K8 arm:** `attention-dev-b3`;
-   - **per table** (FV and FVS): `attention-export-token-cells`, then `coverage-census --token-cells --bar 1941`.
+4. **On one leased RTX 5090, in this order** (the job is `local/claude/address-key-job.sh`; it stops at the first miss, so no treatment number exists unless every instrument check passed):
+   1. Check that free disk is at least 30 GiB. Stage the data and tables, and check every sha above.
+   2. **G-Q:** `cargo test --release --locked -p uor-r4-discrete --features cuda --lib address_metric_device_tests -- --ignored`.
+   3. `init-corpus` for every arm.
+   4. **G-Exact:** run `eval-corpus` and `attention-dev-b3` on A8-Outer, and check 4,244 / 1,351 / 133 on the pod.
+   5. **G-Occ:** for the FV and FVS tables, run `attention-export-token-cells`, then `coverage-census --token-cells … --bar-rows 1941`, and check G-Occ on the pod.
+   6. Only then the treatments: `eval-corpus` for every other arm, and `attention-dev-b3` for the K8 arms.
 5. Archive everything, with SHA256SUMS, to `results/claude/address-key-2026-10-25/run/` before `uor-pod down`.
 6. Grade on the Mac with `address-key-grade`, then record one notebook row.
 
@@ -103,7 +104,7 @@ None is trained. Each arm is `init-corpus` at checkpoint 0 from its pinned table
 
 - **G-Exact, G-Q or G-Occ fails:** stop as an instrument fault (D31), never a mechanism negative.
 - **Projection:** stop if `eval-corpus` on any arm projects past 10 minutes.
-- **Hard ceiling:** 45 minutes wall clock on the pod, and free disk of at least 30 GiB.
+- **Hard ceiling:** 45 minutes wall clock on the pod. Free disk under 30 GiB stops the job before it stages anything.
 
 ## Cost
 
