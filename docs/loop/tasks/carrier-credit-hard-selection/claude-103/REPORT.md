@@ -38,7 +38,7 @@ References #2819.
 - `carrier_fresh.rs` and the `carrier-fresh-slice` bin: the sealed fresh slice.
 - `carrier_arms.rs` and the `carrier-arms` bin: `plan`, `run` and `grade`; the D67 release record; the W2-rule count tables over visited TRAIN only; the exact integer two-sigma grader with its seed-noise floor; and the selection audit.
 - `tests/carrier_select_controls.rs`: 10 CUDA controls.
-- The driver-source pin moves to `a75b0716…`.
+- The driver-source pin moves to `cb686691…`. `carrier.rs` is a driver source.
 
 **Docs:**
 - the D68 card (approved in round 4);

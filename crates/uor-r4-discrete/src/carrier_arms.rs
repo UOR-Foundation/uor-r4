@@ -406,7 +406,7 @@ pub fn grade(scores: &[ArmScore], audits: &[SelectionAudit]) -> Result<Value> {
         "seeds": seeds,
         "credit": if vacuous { "instrument" } else { outcome(&credit) },
         "selection": outcome(&selection),
-        "credit_label": label(&credit, &credit_dev),
+        "credit_label": if vacuous { "none" } else { label(&credit, &credit_dev) },
         "selection_label": label(&selection, &selection_dev),
     }))
 }
@@ -725,9 +725,13 @@ mod tests {
         let mut missing = r.clone();
         missing.arms.pop();
         assert!(!ok(&missing, b"sheet", "CarrierCreditV1-1001", 64));
-        let mut doubled = r;
+        let mut doubled = r.clone();
         let first = doubled.arms[0].clone();
         doubled.arms[7] = first;
         assert!(!ok(&doubled, b"sheet", "CarrierCreditV1-1001", 64));
+        // Eight distinct arms, one unregistered: refused (exact-head review, slice 4).
+        let mut stranger = r;
+        stranger.arms[7].seed = 3001;
+        assert!(!ok(&stranger, b"sheet", "CarrierCreditV1-1001", 64));
     }
 }
