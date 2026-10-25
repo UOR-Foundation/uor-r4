@@ -12,7 +12,7 @@ Lab: antigravity. Item: [m1-bvg-k-block-apply-c2](../../../../roadmap/items/m1-b
 
 Closes #2835.
 
-- **Size**: `6` files changed (`0` code, `0` test, `6` docs, `0` generated), `+285 / -4` lines (`289` lines touched vs a `~250`-line estimate for the one-page Stage T sheet, lab summary, notebook row, item status, ORDER, and REPORT; ratio `1.16x`).
+- **Size**: `6` files changed (`0` code, `0` test, `6` docs, `0` generated), `+261 / -2` lines (`263` lines touched vs a `~250`-line estimate for the one-page Stage T sheet, lab summary, notebook row, item status, ORDER, and REPORT; ratio `1.05x`).
 - **Files modified / added**:
   - [`docs/harness/prep/m1-bvgk-stage-t-training-2026-10-25.md`](../../../harness/prep/m1-bvgk-stage-t-training-2026-10-25.md): One-page Stage T pre-registration sheet binding:
     - Geometric construction (`K = 16` coordinates scored per GPU launch via `score_rows_k` in `rowsk.cu` / `bvgk.cu`, `S_t` chosen via `discrete_bvgk_choose`, scratch-clone `L(S_t)` verified when `|S_t| >= 2`, `S_t` committed iff `L(S_t) < L({best})` else `{best}` via `discrete_bvgk_apply` in one epoch increment; integer rank-margin hinge loss, E8 orbit / SpiralCore table actions, and integer L1/Hamming additions; zero softmax/squashing §3.2 and zero matmul §3.3).
