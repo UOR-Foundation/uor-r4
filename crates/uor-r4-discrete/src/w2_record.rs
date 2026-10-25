@@ -206,6 +206,9 @@ fn assemble_with(
         return Err("gate_r did not pass".into());
     }
     let gate_r_mismatches = u64_at(capture, "gate_r.mismatch_count")?;
+    if gate_r_mismatches != 0 {
+        return Err(format!("gate_r.mismatch_count {gate_r_mismatches} != 0"));
+    }
     let (rt_rows, rt_equal) = (
         u64_at(capture, "root_round_trip.rows")?,
         u64_at(capture, "root_round_trip.equal")?,
@@ -359,6 +362,28 @@ fn assemble_with(
         let (top1_correct, top8_correct) = (get("top1_correct")?, get("top8_correct")?);
         if top1_correct > 1 || top8_correct > 1 {
             return Err(format!("dev row {i}: top1/top8_correct not in {{0,1}}"));
+        }
+        let top8 = u16_array(row, "top8")?;
+        if top8.len() != TOP_K {
+            return Err(format!(
+                "dev row {i}: top8 has {} entries, need {TOP_K}",
+                top8.len()
+            ));
+        }
+        for (j, &t) in top8.iter().enumerate() {
+            if usize::from(t) >= VOCABULARY {
+                return Err(format!("dev row {i}: top8[{j}] {t} >= {VOCABULARY}"));
+            }
+            if top8[..j].contains(&t) {
+                return Err(format!("dev row {i}: top8[{j}] {t} repeats"));
+            }
+        }
+        if (top1_correct == 1) != (top8[0] == target)
+            || (top8_correct == 1) != top8.contains(&target)
+        {
+            return Err(format!(
+                "dev row {i}: top1/top8_correct contradict top8 and target {target}"
+            ));
         }
         sum_top1 += top1_correct;
         sum_top8 += top8_correct;
@@ -520,6 +545,8 @@ fn assemble_with(
             "root_round_trip": {
                 "sample_rows": rt_rows,
                 "mismatches": rt_rows - rt_equal,
+                // Holds by construction, not by measurement here: a capture with an ABSENT
+                // block writes fault.json and no capture.json.
                 "absent_roots": 0,
             },
             "train_capture": { "mode": mode, "smaller_table_bias_disclosed": true },
@@ -535,10 +562,13 @@ fn assemble_with(
                 "matched_train_total": a.matched_train_total,
                 "bigram_train_total": a.bigram_train_total,
                 "invalid_tokens": invalid_tokens,
+                // Holds by construction: counts are unsigned.
                 "negative_counts": 0,
             },
             "determinism": { "repeat_rows": det_rows, "byte_identical": det_equal == det_rows },
             "symmetry_action_non_roots": symmetry_action_non_roots(),
+            // Holds by construction, not by measurement here: a CUDA or status error
+            // writes fault.json and no capture.json.
             "cuda_or_status_fault": false,
             "d23_d25_d32_ratchets_pass": ratchets_pass,
         },
@@ -649,6 +679,14 @@ mod tests {
             .map(|p| {
                 let i = p.ordinal;
                 let admitted = ADMITTED.contains(&i);
+                let hit1 = WRITER_HITS.contains(&i);
+                let others: Vec<u16> = [1u16, 2, 3, 4, 8, 9, 10, 11]
+                    .into_iter()
+                    .filter(|&t| t != p.target_token)
+                    .take(7)
+                    .collect();
+                let mut top8 = others.clone();
+                top8.insert(if hit1 { 0 } else { 7 }, p.target_token);
                 let mut slots = vec![ABSENT_SLOT; CELL_SLOTS];
                 slots[0] = 3000;
                 if admitted {
@@ -661,8 +699,8 @@ mod tests {
                     "target_token": p.target_token,
                     "code": code_of(i),
                     "admitted_cell_slots": slots,
-                    "top8": [p.target_token, 1, 2, 3, 4, 8, 9, 10],
-                    "top1_correct": u64::from(WRITER_HITS.contains(&i)),
+                    "top8": top8,
+                    "top1_correct": u64::from(hit1),
                     "top8_correct": 1,
                     "admitted_cells": 1 + u64::from(admitted),
                     "address_rivals": 1,
@@ -776,6 +814,34 @@ mod tests {
         f.capture["token_cells"][target] = json!(3001);
         let err = run(&f).unwrap_err();
         assert!(err.contains("dev row 0: token_cells"), "{err}");
+    }
+
+    #[test]
+    fn w2_record_refuses_gate_r_mismatch() {
+        let mut f = fixture();
+        f.capture["gate_r"]["mismatch_count"] = json!(1);
+        let err = run(&f).unwrap_err();
+        assert!(err.contains("gate_r.mismatch_count 1 != 0"), "{err}");
+    }
+
+    #[test]
+    fn w2_record_refuses_top8_token_out_of_vocabulary() {
+        let mut f = fixture();
+        f.capture["dev_rows"][0]["top8"][3] = json!(VOCABULARY);
+        let err = run(&f).unwrap_err();
+        assert!(err.contains("dev row 0: top8[3] 4096 >= 4096"), "{err}");
+    }
+
+    #[test]
+    fn w2_record_refuses_top1_contradicting_top8() {
+        let mut f = fixture();
+        let hit = u64_at(&f.capture["dev_rows"][0], "top1_correct").unwrap();
+        f.capture["dev_rows"][0]["top1_correct"] = json!(1 - hit);
+        let err = run(&f).unwrap_err();
+        assert!(
+            err.contains("dev row 0: top1/top8_correct contradict"),
+            "{err}"
+        );
     }
 
     #[test]

@@ -427,7 +427,10 @@ pub fn exact_mcnemar_rejects_005(d: Discordance) -> bool {
     if n == 0 {
         return false;
     }
-    assert!(n < 128, "exact test is only applied below the b+c=100 bar");
+    assert!(
+        n < MIN_POWERED_DISCORDANCE,
+        "exact test is only applied below the b+c=100 bar"
+    );
     let k = d.b.min(d.c);
     let (mut tail, mut binom) = (0u128, 1u128);
     for i in 0..=k {
@@ -728,6 +731,11 @@ pub fn score_admitted(
     token_cells: &[u16],
     slots: &[Vec<u16>],
 ) -> Vec<AdmittedScore> {
+    assert_eq!(
+        slots.len(),
+        dev.len(),
+        "score_admitted: one slot list per DEV row"
+    );
     let unigram_all = tables.unigram.ranked_all();
     let empty = KeyedTable::default();
     dev.iter()
@@ -1062,6 +1070,18 @@ mod tests {
             for act in &actions {
                 let image = pack_code(roots.map(|r| act[usize::from(r)]));
                 assert_eq!(keys[usize::from(image)], keys[usize::from(code)]);
+            }
+        }
+    }
+
+    #[test]
+    fn w2_symmetry_actions_are_closed_under_composition() {
+        let actions = symmetry_root_actions().unwrap();
+        for act_a in &actions {
+            for act_b in &actions {
+                let composed: [u8; ROOT_COUNT] =
+                    core::array::from_fn(|r| act_a[usize::from(act_b[r])]);
+                assert!(actions.contains(&composed));
             }
         }
     }

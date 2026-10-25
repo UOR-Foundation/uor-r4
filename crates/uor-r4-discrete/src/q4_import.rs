@@ -408,6 +408,12 @@ mod tests {
             eprintln!("SKIP q4_import_real_file_maps: set UOR_W2_Q4 to the staged q4-checkpoint-16404.json");
             return;
         };
+        let path = std::path::PathBuf::from(path);
+        let path = if path.is_dir() {
+            path.join("q4-checkpoint-16404.json")
+        } else {
+            path
+        };
         let bytes = std::fs::read(&path).unwrap();
         let imported = prepare(&bytes, &target()).unwrap();
         let receipt = imported.receipt();
