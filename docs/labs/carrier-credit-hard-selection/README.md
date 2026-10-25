@@ -57,13 +57,13 @@ A second 2×5090 was refused by the $8/h cap guard.
 | Unigram / next-word tables | 5,711 / 30,815 | — | 1,226 / 6,300 | — | — |
 
 - **The registered noise**, |OFF(1001) − OFF(2001)|, is 1,989 on FRESH and 456 on DEV.
-  - ON beats CONTROL-U by 103 and CONTROL-F by 130 to 131 at both seeds. That passes the binomial condition, but not the noise, so neither seed counts for credit.
+  - ON leads CONTROL-U by 103 and CONTROL-F by 130 to 131 at both seeds. That passes the binomial condition, but not the noise, so neither seed counts for credit and the leads are ungraded.
   - CONTROL-F trails OFF at both seeds, so selection does not count.
-- **OFF at seed 2001 sets the noise.** It scores high on both DEV and FRESH, and it accepted about a ninth as many updates as the carrier arms. The likeliest reading, untested here, is a good seeded start that OFF barely moved.
+- **OFF at seed 2001 sets the noise.** It scores high on both DEV and FRESH, and it accepted about a ninth as many updates as the carrier arms. One reading, untested here, is a good seeded start that OFF barely moved. DEV and FRESH agree, so it is not a scoring fault; a fault in that training run is not ruled out.
 - **The audit** found ON informative:
   - 0 zero-credit fallbacks;
   - ON matched CONTROL-F on 7.1% and 6.8% of vector batches;
   - but only 183 and 173 distinct tokens, with about 40% of batches on its top token.
-- **ON narrows top-8** below CONTROL-U, and every arm is below the unigram table.
+- **ON's top-8 is below CONTROL-U's** at both seeds. This is ungraded, and it is not below CONTROL-F's at seed 1001. Every arm is below the unigram table.
 
-Outputs: HF store `results/claude/carrier-credit-2026-10-25/` (`podA/`, `podB/`, `podC/`), each verified after download. The selector's 10 CUDA controls passed on the GPU on pods B and C.
+Outputs: HF store `results/claude/carrier-credit-2026-10-25/` (`podA/`, `podB/`, `podC/`), each verified after download. The selector's CUDA controls passed 9 of 9 (c1–c9) in phase 1 on all three pods, and all 10, c10 included, on pods B and C at merged `main`. Pod A's `seed-*-seq` jobs end with `FAULT: arm run` by design (the CONTROL-U folders moved to pod B). Its ON records are complete.

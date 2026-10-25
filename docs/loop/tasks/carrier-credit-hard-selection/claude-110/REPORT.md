@@ -6,19 +6,21 @@ Closes #2819.
 ## What did not work, first
 
 - **Credit: tie or loss, so this configuration is negative (D22).**
-  - ON beats both model-blind controls on FRESH at both seeds, but only by 103 to 131 hits out of 65,536. The registered noise floor is 1,989, so neither seed counts.
+  - On FRESH, ON leads both model-blind controls at both seeds by 103 to 131 hits out of 65,536. Those leads are ungraded: the registered noise floor is 1,989, so neither seed counts. Under the sheet's rule, ON does not beat either control.
   - The configuration closed is hard-selection carrier credit by summed integer hinge: 16,404 batches, the seeded-device codebook, and K = 8 Relation reads.
   - A negative closes a configuration, not the mechanism. Carrier credit stays PARKED.
 - **Selection: tie or loss.** CONTROL-F trails OFF at both seeds (−41 and −2,034 on FRESH). #2831 and #2836 keep their schedule.
 - **The noise floor rests on one arm.** OFF at seed 2001 scores 2,173 on FRESH and 493 on DEV. Every other arm, OFF at seed 1001 included, scores 139 to 274 and 32 to 54.
-  - It is a property of that model, not a measurement fault: DEV and FRESH are scored independently and agree.
+  - It is not a scoring fault: DEV and FRESH are scored independently and agree. A fault in that training run is not ruled out.
   - OFF accepts only 1,410 to 1,471 updates in 16,404 batches. Every carrier and control arm accepts 11,770 to 13,273.
-  - Each seed starts from its own seeded codebook. The likeliest reading is that seed 2001's start was already good and OFF barely moved it, while the update-heavy schedules wore it down.
-  - That reading is untested. No arm scored checkpoint 0 per seed.
-- **ON sharpens top-1 and narrows top-8.**
-  - ON's FRESH top-8 (848 and 864) is below CONTROL-U's (1,009 and 1,008) at both seeds, though its top-1 is higher.
-  - The audit agrees with this. ON chose only 183 and 173 distinct tokens, and its single most-chosen token took about 40% of its vector batches.
-  - Credit by summed hinge goes to frequent tokens. That points to a frequency-normalized credit as the next configuration.
+  - Each seed starts from its own seeded codebook. One reading, untested, is that seed 2001's start was already good and OFF barely moved it, while the update-heavy schedules wore it down. No arm scored checkpoint 0 per seed.
+- **ON's top-8 is below CONTROL-U's.** On FRESH it is 848 and 864, against 1,009 and 1,008, at both seeds, though ON's top-1 is higher.
+  - This is ungraded, and far inside OFF's own top-8 seed spread (897 against 5,123).
+  - It is not below CONTROL-F's at seed 1001 (848 against 795).
+- **ON's choices concentrate.** The audit shows only 183 and 173 distinct tokens, and the most-chosen token (id 1 at both seeds) took about 40% of ON's vector batches.
+  - One hypothesis, untested here, is that crediting by summed hinge favors frequent tokens.
+  - The run did not measure the chosen tokens' frequency, or link the training-time choices to evaluation top-8.
+  - A frequency-normalized credit is one next configuration that would test it.
 - **Every learned arm loses to the count tables.**
   - On FRESH, the unigram table scores 5,711 and the next-word table 30,815. On DEV they score 1,226 and 6,300.
   - The best learned arm is OFF at seed 2001, with 2,173 on FRESH and 493 on DEV.
@@ -42,7 +44,11 @@ The grader is the merged `carrier-arms grade` (#3203). It applies the registered
 - `podB/`, 31 files;
 - `podC/`, 28 files.
 
-Each folder was verified after download. The selector's 10 CUDA controls passed on the GPU, on pods B and C, at merged `main`.
+Each folder was verified after download. The selector's CUDA controls passed on the GPU twice:
+- 9 of 9 (c1–c9) in phase 1 on all three pods, at the run commit;
+- all 10, c10 included, on pods B and C at merged `main`, run after their arms finished.
+
+Pod A's `seed-*-seq` jobs end with EXIT 1 and `FAULT: arm run` by design: the job stopped there, because the CONTROL-U folders had moved to pod B (owner log #2819 `6396426933`). Its ON records are complete, at 16,404 batches each, under the same release as pods B and C.
 
 | Arm (seed 1001 / seed 2001) | FRESH top-1 (of 65,536) | FRESH top-8 | DEV top-1 (of 14,287) | DEV top-8 | Accepted updates |
 |---|---:|---:|---:|---:|---:|
@@ -87,4 +93,4 @@ Each folder was verified after download. The selector's 10 CUDA controls passed 
 
 ## Plain summary
 
-I tested a rule that picks which word's vector to adjust next from the errors the model just made, against two blind rules and the old fixed order, at two seeds. The new rule beat the blind rules by about a hundred correct answers out of 65,536. But one run of the old fixed order happened to score ten times higher than anything else, and the pre-registered test counts that spread as noise, so the result is a tie. The rule also narrowed the model's top-eight guesses. This version is closed. A version that weights rare words fairly is the next try.
+I tested a rule that picks which word's vector to adjust next from the errors the model just made, against two blind rules and the old fixed order, at two seeds. The new rule led the blind rules by about a hundred correct answers out of 65,536. But one run of the old fixed order happened to score ten times higher than anything else, and the pre-registered test counts that spread as noise, so the result is a tie: the lead does not count. The new rule's top-eight guesses were also below one blind rule's. This version is closed. A version that weights rare words fairly is one next try.
