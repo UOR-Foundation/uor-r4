@@ -43,7 +43,7 @@ References #2820.
   - `python3 scripts/audit_zero_matmul_serving.py local/target/release/libuor_r4_integer.rlib --stack`: `44/44` mandatory symbol ranges checked, `68` reachable call-graph functions checked, `0` Class I (multiplier), `0` Class II (divider), `0` Class III (float/SIMD) violations (`FULL PASS`).
   - `python3 scripts/audit_zero_matmul_serving.py local/target/release/uor-r4-stack --stack`: `44/44` mandatory symbol ranges checked, `87` reachable call-graph functions checked, `0` Class I (multiplier), `0` Class II (divider), `0` Class III (float/SIMD) violations (`FULL PASS`).
 
-## Checks run
+## Checks run at the head
 
 - `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo test --offline -p uor-r4-integer --features serving-wasm --lib --test memory_shape --no-fail-fast`: `305 passed; 0 failed` (`--lib`) and `3 passed; 0 failed` (`--test memory_shape`).
 - `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo build --release --offline -p uor-r4-integer --features serving-wasm`: exit `0`.
@@ -62,7 +62,7 @@ References #2820.
   - `local/antigravity/antigravity-75/orders/1.md`: fresh-context `research` subagent (`f09bcc96-d318-4a8d-a14e-4394989b466b`) for non-author `TEST FITNESS: FIT` review (`CHARTER.md` §4.5) of the Stage 4 export-gap pre-registration and D68 decision review (`CHARTER.md` §5.1) for setting `#2820` to `status: held`.
   - `local/antigravity/antigravity-75/orders/2.md`: fresh-context `research` subagent for D66 exact-head adversarial review of PR #3221.
 
-## What is still open
+## Still open
 
 - **Training Stage 3 float trunks (`#2886` -> `#2890` -> `#2824` -> `#2891`) and executing the Stage 4 held-out export-gap run:** Once the Stage 3 float-trunk training items produce two-seed checkpoints (`seed = 1`, `seed = 2`), `#2820` (`d11-exporter-float-trunk`) runs via a D67 pre-run review (`CHARTER.md` §5.1) under the FIT-cleared Stage 4 pre-registration on `#2820` (comment `6398915445` / FIT & D68 log `6399222146`) to export both seeds to `UORLUT01`, verify the `14,287`-row DEV export gap within the two-seed noise band (`B2`) and planted-fault control (`B4`), and report separate client prompt-reading (`192`-token prefill) and reply-writing (`64`-token decode) `tokens/s` (`B3`).
 
