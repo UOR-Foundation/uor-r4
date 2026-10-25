@@ -1538,6 +1538,7 @@ mod tests {
             normalization_mode:
                 crate::normalization_mechanism::NormalizationMode::ScaleMatchedSnapV1,
             position: None,
+            address_metric: Default::default(),
             relation_learning_policy: training::RelationLearningPolicy::LearnV1,
             counterfactual_path: training::CounterfactualPath::LanesV1,
             codebook_initialization: training::CodebookInitialization::SeededDeviceV1,

@@ -223,6 +223,13 @@ pub struct DriverConfig {
     pub normalization_mode: NormalizationMode,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub position: Option<PositionConfig>,
+    /// The writer's cell address metric (#2834). Only the outer default may
+    /// learn: the full-vector metrics are registered for zero-update pre-flight.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::address_cells::AddressMetric::is_outer"
+    )]
+    pub address_metric: crate::address_cells::AddressMetric,
     #[serde(default, skip_serializing_if = "RelationLearningPolicy::is_learn")]
     pub relation_learning_policy: RelationLearningPolicy,
     #[serde(default, skip_serializing_if = "CounterfactualPath::is_lanes")]
@@ -1166,6 +1173,7 @@ mod tests {
             read_initialization: ReadInitialization::ZeroGatesV1,
             normalization_mode: NormalizationMode::ScaleMatchedSnapV1,
             position: None,
+            address_metric: Default::default(),
             relation_learning_policy: RelationLearningPolicy::LearnV1,
             counterfactual_path: CounterfactualPath::LanesV1,
             codebook_initialization: CodebookInitialization::SeededDeviceV1,
@@ -1753,6 +1761,30 @@ mod tests {
                 .get("position"),
             None
         );
+        Ok(())
+    }
+
+    #[test]
+    fn a_full_vector_address_metric_is_zero_update_only_and_omitted_when_default() -> Result<()> {
+        use crate::address_cells::AddressMetric;
+        let mut driver = metadata_fixture(1, ReadSpec::Route)?;
+        let outer = serde_json::to_value(&driver.config).map_err(|e| invalid(e.to_string()))?;
+        // Omitted when default, so every existing config and lineage keeps its bytes.
+        assert!(outer.get("address_metric").is_none());
+        assert!(zero_update_only(&driver).is_ok());
+        for (metric, word) in [
+            (AddressMetric::CellEnvelopeL1V1, "cell_envelope_l1_v1"),
+            (AddressMetric::FullVectorCellL1V1, "full_vector_cell_l1_v1"),
+        ] {
+            driver.config.address_metric = metric;
+            let value =
+                serde_json::to_value(&driver.config).map_err(|e| invalid(e.to_string()))?;
+            assert_eq!(value["address_metric"], serde_json::json!(word));
+            let back: DriverConfig =
+                serde_json::from_value(value).map_err(|e| invalid(e.to_string()))?;
+            assert_eq!(back.address_metric, metric);
+            assert!(zero_update_only(&driver).is_err(), "{metric:?} must not learn");
+        }
         Ok(())
     }
 
@@ -2825,10 +2857,23 @@ pub fn snapshot_metadata(snapshot: &Value) -> Result<Value> {
         "source":"exact stored full vectors and endpoint block pairs; host metadata only"}))
 }
 
+/// Every update capability is refused for a non-outer address metric: its
+/// sheet (#2834) registers zero updates, and the writer's address hinge is
+/// calibrated on the outer key's scale.
+fn zero_update_only(driver: &PreparedDriver) -> Result<()> {
+    if !driver.config.address_metric.is_outer() {
+        return Err(invalid(
+            "the full-vector address metrics are registered for zero-update pre-flight only",
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn issue_corpus_update_admission(
     driver: &PreparedDriver,
     release: &crate::controller::ValidatedRelease,
 ) -> Result<CorpusUpdateAdmission> {
+    zero_update_only(driver)?;
     let lineage_sha256 = driver.lineage_sha256()?;
     if release.lineage_sha256() != lineage_sha256 || !matches!(release.max_batches(), 1640 | 16404)
     {
@@ -2850,6 +2895,7 @@ pub(crate) fn issue_carrier_arm_admission(
     driver: &PreparedDriver,
     max_completed_batches: u64,
 ) -> Result<CorpusUpdateAdmission> {
+    zero_update_only(driver)?;
     if driver.config.schedule.carrier_mode().is_none()
         && driver.config.schedule != SchedulePolicy::InterleavedReadEvery8V1
     {
@@ -2868,6 +2914,7 @@ pub(crate) fn issue_audit_qualification_admission(
     driver: &PreparedDriver,
     release: &crate::controller::attention_audited::qualification::ValidatedQualificationRelease,
 ) -> Result<CorpusUpdateAdmission> {
+    zero_update_only(driver)?;
     let max_completed_batches = release.finite_bound(driver)?;
     Ok(CorpusUpdateAdmission {
         lineage_sha256: driver.lineage_sha256()?,
@@ -2938,6 +2985,7 @@ impl PreparedDriver {
             || model.read_initialization() != self.config.read_initialization
             || model.normalization_mode() != self.config.normalization_mode
             || model.position() != self.config.position.as_ref()
+            || model.address_metric() != self.config.address_metric
             || model.binding().seed != self.config.seed
             || model.epoch()? != cursor.accepted_updates
         {
@@ -2951,7 +2999,7 @@ impl PreparedDriver {
         Ok(())
     }
     pub fn new_model(&self, ordinal: usize) -> Result<crate::device::Device> {
-        let model = crate::device::Device::new_with_position(
+        let mut model = crate::device::Device::new_with_position(
             self.config.spec,
             self.config.read_spec,
             self.config.objective_policy,
@@ -2961,6 +3009,8 @@ impl PreparedDriver {
             self.config.seed,
             ordinal,
         )?;
+        // Before any snapshot or carry, so a pinned-table reload keeps it.
+        model.set_address_metric(self.config.address_metric);
         let Some(table) = &self.initial_table else {
             return Ok(model);
         };
