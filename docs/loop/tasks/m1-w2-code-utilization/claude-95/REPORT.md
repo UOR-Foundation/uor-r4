@@ -18,7 +18,7 @@ Closes #3179
 
   Item `status: done` is set anyway: everything else in the done-when is met, and leaving the item `ready` would re-offer a finished run.
 - **The first builder subagent wrote nothing.** The guard makes subagents read-only without a suborder in `local/claude/<unit>/orders/`. The builder also reported starting at about 150k tokens of context, at its hand-back mark, so this session built the instrument itself.
-- **This unit was first numbered claude-94.** `loop claim` gave the same number to `m3-nonrelation-prose-panel` (#3187), so this unit is claude-95: `0f9ae0647` renames the folder, and `efe524657` retitles the ORDER.
+- **This unit was first numbered claude-94.** `loop claim` gave the same number to `m3-nonrelation-prose-panel` (#3187), so this unit is claude-95: `0f9ae0647` renames the folder, and `efe524657` retitles the ORDER. Because the claude-95 ORDER came in by rename, not as a first commit of its own, `loop pr-check` gives one advisory WARN (`commit-order`, D76).
 - **Arm R is NOT_RUN**, as registered. The Q1–Q3 checkpoints are in neither the HF store's `local-archive/2026-10-20/uor-r4-local.files.txt` (no `checkpoint-4101`, `8202` or `12303`, padded or not) nor `archive/storage/`.
 - **QA's admission sets are not load-matched,** as the FIT reviewer foresaw. A_T admits a median of 988 candidate tokens against the writer's 255, so part of its gain is a larger candidate set. The README reports the load quartiles beside the band.
 
