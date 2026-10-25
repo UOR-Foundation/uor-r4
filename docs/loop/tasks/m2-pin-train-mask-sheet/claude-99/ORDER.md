@@ -27,7 +27,7 @@ The item's done-when reads:
 
 1. **(b) needs no work:** it is already registered at the sheet's line 29.
 2. **Record the 25 Oct pin re-verification** in the sheet, and state which prerequisites are cleared: (a), (b) and the SHAs in (d). (c) and the fresh slice remain.
-3. **Give the item `depends_on: [float-training-module, d11-exporter-float-trunk]`.** Its FIT cannot happen before (c), so `loop next` should offer the unblocker, not this sheet. This is a lab decision (D68), with the same decision review. The item text and `docs/harness/milestones.json`'s M2 `next` text are refreshed to match.
+3. **(Rejected by the decision review, and not done.)** Give the item `depends_on: [float-training-module, d11-exporter-float-trunk]`. The review found the done-when's discrete-law route needs neither, so the edge would gate discrete M2 behind the float path. The item keeps `depends_on: []`, and its note names both routes. Its FIT cannot happen before (c), so `loop next` should offer the unblocker, not this sheet. This is a lab decision (D68), with the same decision review. The item text and `docs/harness/milestones.json`'s M2 `next` text are refreshed to match.
 
 ## Files in scope
 
@@ -40,7 +40,7 @@ The item's done-when reads:
 
 This unit does not meet the item's done-when: the FIT waits on (c). It is done when:
 - the sheet carries the 25 Oct re-verification and says which prerequisites are cleared;
-- the item depends on the two blocking items and its text says why;
+- the item's text records the state and both routes;
 - the decision review passed and is logged on #2851;
 - `loop report --check` and `loop pr-check --local` pass, and a fresh-context review counts at the exact head;
 - the REPORT says `References #2851` (not Closes).
