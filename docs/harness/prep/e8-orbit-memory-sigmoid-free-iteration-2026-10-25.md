@@ -100,7 +100,7 @@ Let $\sigma_{\text{seed}}$ be the two-seed pooled standard deviation across seed
 - **Hardware & budget**: `1x NVIDIA GeForce RTX 5090` via `scripts/pod/uor-pod` inside the global fleet cap (`<= 4` pods, `<= $8.00/h`, `CHARTER.md` §5.4).
 - **Projected wall time & spend**: Step 0 + Step 1 probe ladder takes `~5 min` (`~$0.05`). Step 2 (`5` arms $\times$ `2` seeds $\times$ `2,000` steps at `width = 256`, `batch = 16`, with on-device CUDA `e8_select` and `e8_memory_read`) takes `~6–8 min` per run (`~70 min` total $\approx 1.2$ GPU-hours), plus `~10 min` for Step 3 D11 export and DEV scoring $\approx$ **`$0.75–$1.10` total** at `$0.563/GPU/h` (hard cost ceiling `$2.50`).
 
-## Stop rule
+## Stop conditions
 
 1. **Immediate instrument stop**: Halt at Step 0 or Step 1 if any of `I-1..I-6` fails, if CUDA `e8_select` mismatches brute-force selection, or if Step 1 throughput projects $> 30$ minutes per 2,000-step arm (`CHARTER.md` §4.2).
 2. **Mid-run divergence / collapse stop (`step = 500`)**: Halt any arm at step 500 if `NaN`/`Inf` appears or if orbit entropy drops below `2.50` bits while step-size calibration is already within bounds.
