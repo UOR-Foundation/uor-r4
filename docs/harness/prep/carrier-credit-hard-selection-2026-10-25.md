@@ -94,3 +94,7 @@ No D11 export is needed: no milestone claim rests on this run.
   - If probe (b) projects more than 90 minutes per arm, the code is fixed before (c).
   - Outputs go to the HF store under `results/claude/carrier-credit-2026-10-25/`, with a SHA256SUMS, before any pod comes down.
 - **Lead metric:** tokens per second through the dose, reported per arm.
+
+## Test fitness
+
+TEST FITNESS: FIT. A fresh-context reviewer passed this sheet in round 2 (#2819 comment `6395832768`), after round 1 returned NOT FIT with two Required findings (the win rule's factor and the measured noise; the selection audit), both fixed in `100cd518a`. The D67 pre-run review passed (#2819 comment `6395854890`). The release record pins this sheet's bytes as they stood before this section was added (sha256 `b2561a85ea9c4fa0ce5ec6f4ac1edff2104a28eb34b070608800301c09e303af`, run commit `4aac77aa6`). This section adds no content to the test.
