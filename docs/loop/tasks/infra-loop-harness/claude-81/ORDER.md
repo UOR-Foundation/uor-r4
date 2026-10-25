@@ -1,6 +1,6 @@
 # ORDER: infra-loop-harness, claude-81 (trim the merge gates to what protects the project)
 
-Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Base: `460d1e413`.
+Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Setup row: 5. Base: `460d1e413`.
 
 ## Goal
 
