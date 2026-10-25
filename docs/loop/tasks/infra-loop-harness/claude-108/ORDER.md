@@ -28,10 +28,12 @@ One item-file fix, a scope decision under D68, in `carrier-credit-hard-selection
 ## Cancel probe (run first)
 
 Class: records. Run at `cada129ea`; all must hold, or the unit is cancelled:
-- The item's `scope:` holds `crates/uor-r4-discrete/**`.
-- #3203 is merged, and claude-103's worktree is removed.
-- The item's results are still owed: the item `status:` is not `done`.
-- No open PR touches the item file.
+- The item's `scope:` holds `crates/uor-r4-discrete/**`. **Holds** (line 11).
+- #3203 is merged, and claude-103's worktree is removed. **Holds:** MERGED as `cada129ea`; the worktree path no longer exists.
+- The item's results are still owed: the item `status:` is not `done`. **Holds:** `status: ready`.
+- No open PR touches the item file. **Holds:** the open-PR file search returns `[]`.
+
+Result: all hold, so the unit goes ahead.
 
 ## Files in scope
 
