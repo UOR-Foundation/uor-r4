@@ -23,10 +23,12 @@ One item-file fix that carries out a D68 sequence decision: add `m1-address-key-
 ## Cancel probe (run first)
 
 Class: records. Run at `d48ef7887`; all must hold, or the unit is cancelled:
-- Stage T's `depends_on` does not hold `m1-address-key-full-vector`.
-- `m1-address-key-full-vector` exists and is not `done`, so the dependency is live.
-- The dependency makes no cycle: #2834's own `depends_on` chain does not reach Stage T.
-- No open PR other than #3226 touches the Stage T item file.
+- Stage T's `depends_on` does not hold `m1-address-key-full-vector`. **Holds** (line 9 lists the four done items).
+- `m1-address-key-full-vector` exists and is not `done`, so the dependency is live. **Holds:** `status: ready`.
+- The dependency makes no cycle: #2834's own `depends_on` chain does not reach Stage T. **Holds:** it is `[m1-w2-capacity-capture]` (done).
+- No open PR other than #3226 touches the Stage T item file. **Holds:** none does (#3226 does not touch it either).
+
+Result: all hold, so the unit goes ahead.
 
 ## Files in scope
 
