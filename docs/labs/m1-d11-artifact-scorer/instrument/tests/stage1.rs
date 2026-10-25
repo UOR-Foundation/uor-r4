@@ -179,14 +179,13 @@ fn rows_follow_the_eval_walk_and_do_not_depend_on_the_batch_size() {
 }
 
 /// The registered DEV panel: 14,287 rows. Set `UOR_DEV_CONFIG` to a driver
-/// config whose DEV files exist (for example on a pod).
+/// config whose DEV files exist (for example on a pod). Run without it, the
+/// test fails: an ignored test that was asked for never passes by skipping.
 #[test]
-#[ignore]
+#[ignore = "needs the DEV files: set UOR_DEV_CONFIG"]
 fn the_registered_dev_panel_has_14287_rows() {
-    let Ok(path) = std::env::var("UOR_DEV_CONFIG") else {
-        eprintln!("skipped: set UOR_DEV_CONFIG to a driver config whose DEV files exist");
-        return;
-    };
+    let path = std::env::var("UOR_DEV_CONFIG")
+        .expect("set UOR_DEV_CONFIG to a driver config whose DEV files exist");
     let bytes = std::fs::read(&path).expect("config");
     let config = serde_json::from_slice(&bytes).expect("driver config");
     let rows = inst::dev_rows(&config).expect("dev rows");

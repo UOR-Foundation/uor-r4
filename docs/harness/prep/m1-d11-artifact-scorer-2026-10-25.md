@@ -14,18 +14,32 @@ On one RTX 5090, does the D11 artifact scorer's ahead-of-time CUDA build (`docs/
 
 ## Steps (the probe ladder)
 
-1. **(a) Finite GPU test**, minutes: `cargo test --release --features cuda -- --ignored` runs `gpu_scores_are_bit_identical_to_the_reference_and_the_host_build` (Route, Flock, Relation, the 16-block 243-context bound, and 4,100 rows across a launch-chunk boundary) and the 14,287-row panel test.
-2. **(b) Throughput**, seconds: `score` times its own GPU pass (`score_elapsed_us`). The laptop's `evaluate_prefix` runs about 64 µs per 192-token row, so the reference check over 14,287 rows projects to about 1 s. Nothing here approaches an hour.
-3. **(c) The qualification:** `export` the checkpoint, then `score ARTIFACT CONFIG REPORT ROWS --reference`.
+The pod: `scripts/pod/uor-pod up --lab claude --session claude-116 --gpu 5090 --count 1 --hours 2 --ref <full pushed sha> --card <#3248>`. A single job script runs every step and stops at the first failed check. Its literal commands are below. It is uploaded with the results.
+
+0. **Inputs, pinned.**
+   - `/root/uor-store get` the tarball, then check its sha256.
+   - Untar only `a8-dose/run-state-frozen-zero/continuation-05248.json`, then check its sha256.
+   - `/root/uor-store get` the DEV folder. Copy its two files to the config's own paths, `/workspace/uor-r4/local/driver/data/ft/dev/{tokens.u16,response_mask.u8}`, so the config is used unmodified, and check both sha256s and the config's.
+   - Build in `docs/labs/m1-d11-artifact-scorer/instrument` with `UOR_NVCC_ARCH=compute_120 CARGO_TARGET_DIR=/root/build/target-d11 cargo build --release --locked --features cuda --target x86_64-unknown-linux-gnu`. Copy the binary to `/workspace/d11-bin/` with its sha256.
+1. **(a) Finite GPU test**, minutes: `UOR_DEV_CONFIG=<the config> cargo test --release --locked --features cuda --target x86_64-unknown-linux-gnu --no-fail-fast -- --include-ignored`. Without `UOR_DEV_CONFIG`, the panel test fails rather than skips. The log must show both of these as `ok`:
+   - `gpu_scores_are_bit_identical_to_the_reference_and_the_host_build`: Route, Flock and Relation, the 16-block 243-context bound, and 4,100 rows across a launch-chunk boundary.
+   - `the_registered_dev_panel_has_14287_rows`.
+2. **(b) Throughput**, seconds: `score` times its own GPU pass (`score_elapsed_us`). The laptop's `evaluate_prefix` takes about 64 µs per 192-token row, so the reference check over 14,287 rows projects to about 1 s. Nothing here approaches an hour.
+3. **(c) The qualification**, from the copied binary:
+   - `d11-scorer export continuation-05248.json A8.lut EXPORT.json`, then check `A8.lut`'s sha256.
+   - `d11-scorer rows CONFIG ROWS.json`, then check its `rows_sha256`.
+   - `d11-scorer score A8.lut CONFIG SCORE.json SCORE-ROWS.jsonl --reference`, then check the pass row's fields in `SCORE.json`.
 
 ## Decision table
 
 | Outcome | Meaning | Unlocks |
 |---|---|---|
-| (a) passes, and (c) reports `reference.agreed = 14,287 = checked`, `refused = 0` | the instrument is qualified | stage 4 of the done-when; the #2839 note maps sheet lines `:32`, `:81`, `:82` to `export`, `score`, `toks`; the step-6 unit scores its own checkpoint with them |
+| (a) passes, and `SCORE.json` shows `rows` = 14,287, `rows_sha256` `d933c533…`, `artifact_sha256` `42671d44…` (the sha256 of the file it scored), `refused` = 0, and `reference.checked` = `reference.agreed` = 14,287 with no `first_mismatch` | the instrument is qualified | stage 4 of the done-when; the #2839 note maps sheet lines `:32`, `:81` and `:82` to `export`, `score` and `toks`; the step-6 unit scores its own checkpoint with them |
 | any row differs, in (a) or (c) | an instrument fault (D31) | fix the port and re-run; parity is never relaxed |
-| nvcc, PTX admission or the cubin target fails | an instrument fault | fix the kernel source, re-run |
-| the pod, driver or store fails | infrastructure | a new pod; nothing is counted |
+| `agreed` = `checked` but `refused` > 0 | an instrument or data fault: the scored rows are not the panel's (both engines refused them) | never counted; find why rows were refused, re-run |
+| a pin, the rows hash or the artifact hash differs | wrong inputs | never counted; fix the inputs, re-run |
+| cargo, the link, nvcc, PTX admission or the cubin target fails | an instrument or tooling fault | fix the build or the kernel source, re-run |
+| the pod, the driver or the store fails | infrastructure | a new pod; nothing is counted |
 
 ## Instrument checks (each must hold before (c) counts)
 
