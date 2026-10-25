@@ -33,6 +33,10 @@ Closes #3175. References #2904.
 
 ## Checks run at the head
 
+- **Round-2 review: APPROVE, with two small fixes taken.**
+  - A failed delete that is not a lease mismatch (`(stale info)`) now fails the job with git's message, so a missing permission cannot hide as "kept".
+  - The auth string is masked.
+- **Not taken.** The sweep reads the newest 1,000 merged PRs. Older merged branches are only listed, which fails safe.
 - **Local test of the compare-and-delete** on a scratch bare repository: with a stale expected sha the push is refused and the branch stays (`37a776e`); with the right sha it is deleted.
 - `ruby -ryaml` parses the workflow (jobs `merged-head` and `sweep`; triggers `pull_request`, `schedule` and `workflow_dispatch`).
 - `loop report --check` and `loop pr-check --local`: run before queue.
