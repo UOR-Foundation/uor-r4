@@ -597,9 +597,143 @@ pub fn symmetry_action_non_roots() -> u64 {
     misses
 }
 
+/// BOS token id; a document starts at each occurrence.
+pub const BOS_ID: u16 = 0;
+/// Causal window of the DEV panel (the sealed relation-subpanel context).
+pub const DEV_CONTEXT: usize = 192;
+
+/// Parse a UORT token file: 64-byte header (`UORT`, u32 version 1, u64 count,
+/// u32 vocab 4096, zeros) then `count` u16 LE tokens.
+pub fn parse_uort_tokens(bytes: &[u8]) -> Result<Vec<u16>, String> {
+    if bytes.len() < 64 || &bytes[0..4] != b"UORT" {
+        return Err("tokens: missing UORT header".into());
+    }
+    let version = u32::from_le_bytes(bytes[4..8].try_into().expect("4"));
+    let count = u64::from_le_bytes(bytes[8..16].try_into().expect("8"));
+    let vocab = u32::from_le_bytes(bytes[16..20].try_into().expect("4"));
+    if version != 1 || vocab as usize != VOCABULARY || bytes[20..64].iter().any(|&b| b != 0) {
+        return Err(format!("tokens: header version {version} vocab {vocab}"));
+    }
+    let body = &bytes[64..];
+    if body.len() as u64 != 2 * count {
+        return Err(format!(
+            "tokens: {} body bytes for count {count}",
+            body.len()
+        ));
+    }
+    Ok(body
+        .chunks_exact(2)
+        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .collect())
+}
+
+/// One eligible DEV row of the sealed relation subpanel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PanelRow {
+    pub ordinal: usize,
+    pub position: usize,
+    pub document_id: usize,
+    pub query_token: u16,
+    pub target_token: u16,
+    /// The most recent earlier `query` in the window is followed by `target`.
+    pub copy_successor: bool,
+    /// Distance bucket (0: 1..=8, 1: 9..=32, 2: 33..=96, 3: 97..=192), only
+    /// when `copy_successor`.
+    pub bucket: Option<u8>,
+}
+
+/// Eligible DEV rows (`p>0`, token≠BOS, mask==1) classified exactly as the
+/// sealed relation-subpanel audit (`ee047cb88`) classifies them.
+pub fn dev_panel(tokens: &[u16], mask: &[u8]) -> Result<Vec<PanelRow>, String> {
+    if tokens.len() != mask.len() {
+        return Err(format!("tokens {} != mask {}", tokens.len(), mask.len()));
+    }
+    let documents: Vec<usize> = (0..tokens.len()).filter(|&p| tokens[p] == BOS_ID).collect();
+    let eligible = (1..tokens.len()).filter(|&p| tokens[p] != BOS_ID && mask[p] == 1);
+    let mut rows = Vec::new();
+    for (ordinal, p) in eligible.enumerate() {
+        let doc = documents
+            .partition_point(|&d| d <= p)
+            .checked_sub(1)
+            .ok_or_else(|| format!("row {ordinal} at {p} precedes the first BOS"))?;
+        let start = p.saturating_sub(DEV_CONTEXT).max(documents[doc]);
+        let (query, target) = (tokens[p - 1], tokens[p]);
+        let most_recent = (start..p - 1).rev().find(|&j| tokens[j] == query);
+        let copy_successor = most_recent.is_some_and(|j| tokens[j + 1] == target);
+        let bucket = most_recent
+            .filter(|_| copy_successor)
+            .map(|j| match (p - 1) - j {
+                0..=8 => 0,
+                9..=32 => 1,
+                33..=96 => 2,
+                _ => 3,
+            });
+        rows.push(PanelRow {
+            ordinal,
+            position: p,
+            document_id: doc,
+            query_token: query,
+            target_token: target,
+            copy_successor,
+            bucket,
+        });
+    }
+    Ok(rows)
+}
+
+/// The sealed binary ordered-row binding: per row in order, ordinal and
+/// position as u64 LE, query and target as u32 LE, the copy-successor byte and
+/// the bucket byte (`bucket + 1`, or 0).
+pub fn ordered_row_binding_sha256(rows: &[PanelRow]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    for r in rows {
+        h.update((r.ordinal as u64).to_le_bytes());
+        h.update((r.position as u64).to_le_bytes());
+        h.update(u32::from(r.query_token).to_le_bytes());
+        h.update(u32::from(r.target_token).to_le_bytes());
+        h.update([u8::from(r.copy_successor)]);
+        h.update([r.bucket.map(|b| b + 1).unwrap_or(0)]);
+    }
+    format!("{:x}", h.finalize())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn w2_panel_buckets_the_most_recent_copy() {
+        // doc 0: BOS 5 6 5 6 | doc 1: BOS 5 7
+        let tokens = [0u16, 5, 6, 5, 6, 0, 5, 7];
+        let rows = dev_panel(&tokens, &[1; 8]).unwrap();
+        assert_eq!(rows.len(), 6);
+        assert_eq!(rows[3].position, 4);
+        assert!(rows[3].copy_successor);
+        assert_eq!(rows[3].bucket, Some(0));
+        assert_eq!((rows[5].document_id, rows[5].copy_successor), (1, false));
+    }
+
+    /// Gated on `UOR_W2_Q4` (the W2 input folder); skipped when unset.
+    #[test]
+    fn w2_row_binding_matches_the_sealed_panel() {
+        let Ok(root) = std::env::var("UOR_W2_Q4") else {
+            eprintln!("UOR_W2_Q4 unset: row-binding check skipped");
+            return;
+        };
+        let dir = std::path::Path::new(&root).join("driver-data/ft/dev");
+        let tokens =
+            parse_uort_tokens(&std::fs::read(dir.join("tokens.u16")).expect("tokens")).unwrap();
+        let mask = std::fs::read(dir.join("response_mask.u8")).expect("mask");
+        let rows = dev_panel(&tokens, &mask).unwrap();
+        let sha = ordered_row_binding_sha256(&rows);
+        eprintln!("rows {} binding {sha}", rows.len());
+        assert_eq!(rows.len(), DEV_ROWS);
+        assert_eq!(
+            sha,
+            "e4ef44fb81d6c3a833212e4857117db71cafb8259b81c286e5b1391129d74446"
+        );
+    }
 
     const W: u64 = 149;
 
