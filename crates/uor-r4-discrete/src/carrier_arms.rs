@@ -449,12 +449,7 @@ pub fn run_arm(
     }
     let train_ns = started.elapsed().as_nanos();
     let targets = cursor.next_target;
-    let dev = driver.evaluate(&model)?;
-    let fresh_eval = driver.evaluate_transfer(&model, fresh)?;
-    let visited_now = usize::try_from(targets).map_err(|_| invalid("target count"))?;
-    let tables_dev = count_tables(driver.train(), visited_now, driver.dev())?;
-    let tables_fresh = count_tables(driver.train(), visited_now, fresh)?;
-    Ok(json!({
+    let mut record = json!({
         "schema": RECORD_SCHEMA,
         "schedule": config.schedule,
         "seed": config.seed,
@@ -466,10 +461,22 @@ pub fn run_arm(
         "carrier_selected_batches": selected,
         "train_wall_ns": train_ns.to_string(),
         "train_targets_per_second": (u128::from(targets) * 1_000_000_000 / train_ns.max(1)).to_string(),
-        "dev": dev["aggregate"],
-        "fresh": fresh_eval["aggregate"],
-        "count_tables": {"dev": tables_dev, "fresh": tables_fresh},
-    }))
+        "scored": false,
+    });
+    // Sheet §4: the fresh slice is scored once, after the released dose. A
+    // shorter run is a throughput probe and scores nothing.
+    if cursor.completed_batches == release.max_completed_batches {
+        let dev = driver.evaluate(&model)?;
+        let fresh_eval = driver.evaluate_transfer(&model, fresh)?;
+        let visited_now = usize::try_from(targets).map_err(|_| invalid("target count"))?;
+        let tables_dev = count_tables(driver.train(), visited_now, driver.dev())?;
+        let tables_fresh = count_tables(driver.train(), visited_now, fresh)?;
+        record["scored"] = json!(true);
+        record["dev"] = dev["aggregate"].clone();
+        record["fresh"] = fresh_eval["aggregate"].clone();
+        record["count_tables"] = json!({"dev": tables_dev, "fresh": tables_fresh});
+    }
+    Ok(record)
 }
 
 #[cfg(test)]
