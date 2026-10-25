@@ -606,3 +606,73 @@ fn a_long_running_record_with_a_recent_heartbeat_is_counted_as_running() {
         stdout(&o)
     );
 }
+
+/// `any` ranks ready items by effective milestone, then unblock count, then id (claude-83).
+#[test]
+fn any_offers_the_milestone_path_item_that_unblocks_most_first() {
+    let (infra, m1) = ("milestone: infra\n", "milestone: M1\n");
+    let core_users: [(&str, String); 3] = [
+        (
+            "zz-m1-next",
+            item("ready", "milestone: M1\ndepends_on: [zz-m1-core]\n"),
+        ),
+        (
+            "zz-m1-close",
+            item("held", "milestone: M1\ndepends_on: [zz-m1-core]\n"),
+        ),
+        (
+            "bb-m1-user",
+            item("held", "milestone: M1\ndepends_on: [bb-infra-needed]\n"),
+        ),
+    ];
+    let mut items: Vec<(&str, String)> = vec![
+        ("aa-infra-unneeded", item("ready", infra)),
+        ("bb-infra-needed", item("ready", infra)),
+        ("zz-m1-core", item("ready", m1)),
+    ];
+    items.extend(core_users.iter().cloned());
+    let refs = |v: &[(&str, String)]| -> Vec<(String, String)> {
+        v.iter().map(|(a, b)| (a.to_string(), b.clone())).collect()
+    };
+    let owned = refs(&items);
+    let pairs: Vec<(&str, &str)> = owned
+        .iter()
+        .map(|(a, b)| (a.as_str(), b.as_str()))
+        .collect();
+    let labs_json = labs(None);
+    let o = Repo::new(&[("docs/harness/labs.json", &labs_json)], &pairs).next();
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(
+        decision(&o).starts_with("GO item zz-m1-core — "),
+        "the M1 item two others need must come before alphabetically earlier infra items: {}",
+        decision(&o)
+    );
+    assert!(
+        decision(&o).contains("(M1 path, unblocks 2)"),
+        "{}",
+        decision(&o)
+    );
+
+    // Without the M1 core item, the infra item an M1 item needs ranks with M1 and comes before
+    // the infra item nothing needs.
+    let owned: Vec<(String, String)> = refs(&items)
+        .into_iter()
+        .filter(|(id, _)| id != "zz-m1-core")
+        .collect();
+    let pairs: Vec<(&str, &str)> = owned
+        .iter()
+        .map(|(a, b)| (a.as_str(), b.as_str()))
+        .collect();
+    let o = Repo::new(&[("docs/harness/labs.json", &labs_json)], &pairs).next();
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(
+        decision(&o).starts_with("GO item bb-infra-needed — "),
+        "the needed infra item must come before the unneeded one: {}",
+        decision(&o)
+    );
+    assert!(
+        decision(&o).contains("(M1 path, unblocks 1)"),
+        "{}",
+        decision(&o)
+    );
+}
