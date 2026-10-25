@@ -14,7 +14,7 @@ Does the registered 64-batch whole-interval admission-preserving rejection contr
 
 In `#2830`, all 5 Stage 1 CUDA finite qualification controls (`canonical_initlock_c2`, `required_negatives`, `g_occ`, `sensitivity`, `audited_restore_epoch_cursor`) and `synthetic-control.json` passed on `2x NVIDIA GeForce RTX 5090`, and Stage 2 measured:
 - `projected_added_gate_ns = 4,947,754,777,700 ns` (`4,947.75 s`: `2,292.89 s` for `516` `A_train` evaluations + `2,546.26 s` for `514` worst-case full restores + `108.60 s` step/boundary bookkeeping),
-- `ungated_two_arm_dose_ns = 6,309,716,689,996 ns` (`6,309.72 s`: `4,527.19 s` on `Relation` + `1,782.52 s` on `FrozenZero`),
+- `ungated_two_arm_dose_ns = 6,309,716,689,996 ns` (`6,309.72 s`: `4,545.14 s` on `Relation` + `1,764.57 s` on `FrozenZero`),
 - `R = projected_added_gate_ns / ungated_two_arm_dose_ns = 78.41%` (`7,842 bps`), which tripped the pre-`rows_v1` `R <= 15%` check (`validate_ratio`).
 
 The 19 Oct `15%` relative ratio was calibrated before the `rows_v1` device-resident batch table (`D30`), when two-arm ungated training took `~43,000 s` (`~$11.40`) and `15%` gate overhead was `~6,450 s` (`~$1.71`). Because `rows_v1` sped up ungated training `6.8x` (`6,309.72 s`), the **entire worst-case audited two-arm workload (`6,309.72 s + 4,947.75 s = 11,257.47 s = 3.13 GPU-hours`, `~$2.84` on RTX 5090)** is smaller than the 19 Oct sheet's `$1.71` (`6,450 s`) gate allowance alone and `4x` below its `$11.40` budget. Lowering `cadence` from `64` to `512` would test a weaker controller (`8x` longer un-audited drift windows), whereas replanning the post-`rows_v1` readiness bound to `projected_added_gate_ns <= 5,500,000,000,000 ns` (`5,500 s`) and `R <= 85%` (`8,500 bps`) tests the exact registered `64`-batch scientific law (`AuditPolicy::registered()`) unchanged.
@@ -25,7 +25,7 @@ The 19 Oct `15%` relative ratio was calibrated before the `rows_v1` device-resid
 |---|---|---|---|---|
 | `A_rel_adm` (`Relation`) | `docs/labs/a8-training-configs-2026-10-19/evidence/a8-relation-seed1.json` (file `469a2ff0fe17a6a80f5875a077b3e6a9436553efdf1c6e7884541220553e9d5e`, `config_sha256 = f223d78f45fe26dee4080ae7ca9a5b9ff12d9ef0df847375671d52db733fbecd`, `lineage_sha256 = f22ebd7129f194c7b3089a3b647b3d174d8c0c95fb18395611bba77036fa3cf3`) | `ReadSpec::Relation { active_leaves: 8, candidates_per_leaf: 8 }`, `RelationLearningPolicy::LearnV1`, `AuditPolicy::registered()` | `1` | `16,404` batch attempts (`64` rows/batch, `context = 192`), `258` audits (`256 × 64` + Q1 at `4,096` + final tail `20` at `16,404`) |
 | `A_fz_adm` (`FrozenZero`) | `docs/labs/a8-training-configs-2026-10-19/evidence/a8-frozen-zero-seed1.json` (file `cf7ebcc85d2e463ae8f6691b63d90a0e005701cb38b8249a8d0d5460d8508479`, `config_sha256 = c3fbffe08d13008b8b7ab400a4ef946f2c49632906d88e431d5e80314b9f5536`, `lineage_sha256 = e4c3efc99f51bc3eb4c13844cc3e7dc12e9e42d32a2cde39603e6052d649e79a`) | `ReadSpec::Relation { active_leaves: 8, candidates_per_leaf: 8 }`, `RelationLearningPolicy::FrozenZeroV1`, `AuditPolicy::registered()` | `1` | Identical data order, parameter schedule, and `AuditPolicy::registered()` |
-| Count-table baselines | `CHARTER §4.8` on `14,287` DEV rows | Unigram: `1,226 / 14,287`; `T2` successor: `6,300 / 14,287`; `P_succ` (`3,847` rows) reference top-1: `412 / 3,847` | Deterministic | Zero-parameter count-table comparators |
+| Count-table baselines | `CHARTER §4.8` on `14,287` DEV rows | Unigram: `1,226 / 14,287`; `T2` successor: `6,300 / 14,287`; `P_succ` (`3,847` rows) reference top-1: `194 / 3,847` (`G-Cap = 1,351 - 194 = 1,157 > 500`) | Deterministic | Zero-parameter count-table comparators |
 
 ## 4. Bars, Instrument Checks, and Decision Table
 
@@ -48,7 +48,7 @@ The 19 Oct `15%` relative ratio was calibrated before the `rows_v1` device-resid
 
 ## 5. Data, Checkpoints, and Qualification SHA-256 Pins
 
-- **Train Anchor (`3,847` rows)**: `docs/labs/admission-anchor-controller-2026-10-19/evidence/train-anchor-3847-v1.csv` (`row_csv_sha256 = ddac33ab3b59decf37de1be05b9e79faedbb2720da917440f926707c3e4f1db3`, `manifest_sha256 = f85466ff339d8fb848fb1151a7d672fba5687296b81b1ad6fb39c36ddaca27de`).
+- **Train Anchor (`3,847` rows)**: `docs/labs/admission-anchor-controller-2026-10-19/evidence/train-anchor-3847-v1.csv` (`row_csv_sha256 = 8c1b80e9b15e4e2bcc765037afa7800b785418be3e20b8cc80ce13ee2e32b3c1`, `manifest_sha256 = f85466ff339d8fb848fb1151a7d672fba5687296b81b1ad6fb39c36ddaca27de`).
 - **Corpora & Codebook (`a8-relation-seed1.json` / `a8-frozen-zero-seed1.json`)**:
   - Train tokens (`mw-balp/train/tokens.u16`): `3dee858f84b750f507ceb3dc3f393711741950954735efaaf61bf704c017a4c8`; Train mask (`response_mask.u8`): `b5e7352d67d6883a833155a5fd397a03f6d4f1b2649e3d4ec3e2ea7d95b949e3`.
   - DEV tokens (`ft/dev/tokens.u16`): `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b`; DEV mask (`response_mask.u8`): `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078`.
@@ -57,11 +57,11 @@ The 19 Oct `15%` relative ratio was calibrated before the `rows_v1` device-resid
   - `Relation`: initial checkpoint `b5b7af6ebedc1272dc61c84c61248a52838d01db5c29dc7304190caaa392c107`, initial DEV eval `ba84cf86bbfadc72fca2abeed19c989791392ebb51df6b9023aa6b112d3096b7`, lineage `f22ebd7129f194c7b3089a3b647b3d174d8c0c95fb18395611bba77036fa3cf3`.
   - `FrozenZero`: initial checkpoint `8465057c88157a4928806eb05ab61d39d0ec6a81000011644914c1d26161e35b`, initial DEV eval `28e8408b7bc16fd1e50be3b7413709c25888f4471590e427f5bc6941ce854798`, lineage `e4c3efc99f51bc3eb4c13844cc3e7dc12e9e42d32a2cde39603e6052d649e79a`.
 - **Stage 1 CUDA Qualification Artifacts (`#2830`)**:
-  - `relation/qualification.json`: `d0651cf639a7d20b6bd22e25cd99ebefab2f823fb76971110128f2196cd33c95`
-  - `frozen-zero/qualification.json`: `4fb360623ef7ff1e0eb5f07788e9b5169b3a7da7b0cf298b6be003bd8e7aa0a2`
-  - `timing-protocol.json`: `dcaad15984314f441f86c25b8db5da4bc1fd31e191de8fd75c1d88bc0a04569e`
-  - `host-metadata-bookkeeping/measurement.json`: `813d426c0c7e987b33a9746818625836ef9f26fa06760d9ddbf7e45779964cc0`
-  - `synthetic-control.json`: `d122d10a6f6d4a49bf10e305fb8f147c8733610857380f2367c7ebad931c3d38`
+  - `relation/qualification.json`: `73876b488bdb2123457d46fd28b0e4b1296cc398a930db5542b67f72cc9fc2d4`
+  - `frozen-zero/qualification.json`: `312b5370522afddbf46675220ba5e05a93e1eab5e0cf75a2f448aeb59032badc`
+  - `timing-protocol.json`: `d97bb13a8f30b24c2c4ad99c63308adbd4f537e31d776f697eeb5036aa651f86`
+  - `host-metadata-bookkeeping/measurement.json`: `95c64e51c67504cb1c2d1382b698fd5df5d249c07439cb20068754c311b8d301`
+  - `synthetic-control.json`: `69eb5866e3e66d658602a463ff236a2f59647347764a97e569ada86b17f762ea`
 
 ## 6. Compute Cost & Stop Rule
 
