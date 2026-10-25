@@ -49,7 +49,7 @@ All GPU measurements ran on `vast-57638243` (`1 x NVIDIA GeForce RTX 5090`, driv
    - `endpoint_control_interior_swap_invariant = true` and `prefix_holonomy_interior_swap_sensitive = true`.
    - `snapshot_roundtrip_modes_verified = 3`, `route_position_refused = true`, and `step_16_cuda_refusal_message = "discrete CUDA snapshot validation refused with status 10"`.
 
-## Checks run
+## Checks run at the head
 
 - On RTX 5090 pod `vast-57638243` (`UOR_NVCC_ARCH=compute_120`):
   - `cargo test --release --locked -p uor-r4-discrete --features cuda --lib position_device_tests -- --include-ignored`: `3 passed; 0 failed` (`0.33s`)
@@ -69,7 +69,7 @@ All GPU measurements ran on `vast-57638243` (`1 x NVIDIA GeForce RTX 5090`, driv
 - `solution-integrity`: Verified that `Device::from_snapshot` actually reaches `discrete_validate` (`status 10`) on the GPU for out-of-range `position_steps` entries instead of short-circuiting on the host.
 - `scope-guard`: Kept all changes strictly within `m1-position-mechanism`'s declared scope.
 
-## What is still open
+## Still open
 
 - The registered two-seed GPU order test (`H_pos` vs `C_match` and `C_shuf` on the frozen 1,620-row order-sensitive DEV slice, `#2843`) remains open for a subsequent unit (`m1-position-mechanism` stays `status: ready`; `References #2843`).
 
