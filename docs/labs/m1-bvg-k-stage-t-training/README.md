@@ -48,8 +48,9 @@ We built the four Stage T instrument components required by [`docs/roadmap/items
 | `T16_fz` Seed 1 `report.json` & `w2-summary.json` | HF store & [`t16-frozen-zero-seed1/w2-summary.json`](t16-frozen-zero-seed1/w2-summary.json) | `127d9044a9d83eb4d889762cfa7e6488f4368b364dd04bf46d83ea51af767325` / `19009681fc7f81cd3af581b77b10e418d57d1437eb07f7ecd139cfcd5187f22c` |
 | `T16_fz` Seed 2 `report.json` & `w2-summary.json` | HF store & [`t16-frozen-zero-seed2/w2-summary.json`](t16-frozen-zero-seed2/w2-summary.json) | `28c0d58e90ba306cc413dc2e2f2b1d0877cacdbe711f2cf2c9a51846b67cb1d7` / `d2067572cf746b8b2585f170548ca02c253dc51c8373339594d1825afc50c6e0` |
 | `T16_rel` Seed 1 `report.json` & `w2-summary.json` | HF store & [`t16-relation-seed1/w2-summary.json`](t16-relation-seed1/w2-summary.json) | `756e76db88b3dce7a2ca42580e97f07244b444e35c0ebb16a0556cb4888afde5` / `565e0aa10c6ec93fdaa8b70e510f23dfd612d2602826ff9176b3986861089e10` |
-| `T16_rel` Seed 2 `report.json` & `w2-summary.json` | HF store & [`t16-relation-seed2/w2-summary.json`](t16-relation-seed2/w2-summary.json) | `TBD_REL_SEED2_REPORT_SHA256` / `TBD_REL_SEED2_W2_SHA256` |
-| Stage 2 two-seed grade receipt | [`grade.json`](grade.json) | `TBD_GRADE_SHA256` |
+| `T16_rel` Seed 2 `report.json` & `w2-summary.json` | HF store & [`t16-relation-seed2/w2-summary.json`](t16-relation-seed2/w2-summary.json) | `c0bf457d3267378efe64a99dfa4217b514ad3fb4da04210372fe7ed1681c1326` / `b7f6e7e76835e091e55304ea4a503ac8b4a522700a0bc67ec29e7289451ffe62` |
+| Stage 2 two-seed grade receipt | [`grade.json`](grade.json) | `7917ec85941d919db14ab67567fe824c87d6d2edf18bbd54138bf320b6ea4c81` |
+| HF store archive (`stage-t-20261025.tar.gz`) | `caseyallard/uor-r4-store:results/antigravity/m1-bvg-k-stage-t-training-2026-10-25/stage-t-20261025.tar.gz` | `c004db506bf64903231c5c225a07e9969d5e3344c51a67eaec9429265e5f44b6` |
 
 ---
 
@@ -98,8 +99,8 @@ Because `CodebookInit::PinnedTableV1` (`address-structured-v1.json`) and `ReadIn
 | **Final DEV `P_succ` writer `top8` (`/ 3,847`)** | `318` (`8.27%`) | `318` (`8.27%`) | `243` (`6.32%`) | `243` (`6.32%`) | — | `202` (cp0) |
 | **Final DEV `admitted_strict_win_rows`** | `93` | `93` | `172` | `172` | `325` (at Q1) | `133` (cp0) |
 | **`relation_off` DEV (`admitted / top1 / top8 / strict`)** | — | — | `3,753 / 327 / 1,063 / 123` | `3,753 / 327 / 1,063 / 123` | — | — |
-| **Training wall time (`s` / context `tok/s`)** | `726.1 s` (`50,910 tok/s`) | `726.8 s` (`50,860 tok/s`) | `4,353.1 s` (`11,572 tok/s`) | `TBD_REL_SEED2_TRAIN_S` | `~660 s` | `~450 s` |
-| **Total wall time incl. `w2-eval` (`s`)** | `2,016.3 s` | `2,018.7 s` | `10,079.3 s` | `TBD_REL_SEED2_TOTAL_S` | — | — |
+| **Training wall time (`s` / context `tok/s`)** | `726.1 s` (`50,910 tok/s`) | `726.8 s` (`50,860 tok/s`) | `4,353.1 s` (`11,562 tok/s`) | `4,493.7 s` (`11,201 tok/s`) | `~660 s` | `~450 s` |
+| **Total wall time incl. `w2-eval` (`s`)** | `2,016.3 s` | `2,018.7 s` | `10,079.3 s` | `10,405.3 s` | — | — |
 
 ---
 

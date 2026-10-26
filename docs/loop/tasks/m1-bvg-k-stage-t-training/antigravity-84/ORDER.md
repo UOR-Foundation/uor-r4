@@ -12,7 +12,7 @@ Complete the D68 decision review weighing `#2834` and dropping the unmet `W4` (`
 
 ## Cancel probe (run first)
 
-1. **Dependencies & `#2834` weighed ([`DECISION.md`](DECISION.md)):** All five `depends_on` items (`#2845`, `#2835`, `#2831`, `#3179`, `#2834`) are `done`. In `#2834`, `FV8-Env` passed zero-update reach (`1,980 / 3,847` `P_succ`, `5,709 / 14,287` full-DEV admitted), while checkpoint-0 `top-1` fell (`133 -> 118`) and non-outer training/D11 serving are refused (`zero_update_only`). Meanwhile `A8-Outer` admits `4,244–4,292 / 14,287` DEV rows (`~3x` the Stage 2 bars `U = 1,226`, `T_restr(Q4) = 1,138`, `G_restr(Q4) = 1,482`), so Stage T (`K = 16` on `A8-Outer`) tests whether `16x` broader per-batch coordinate coverage clears the Stage 2 bars on two seeds.
+1. **Dependencies & `#2834` weighed ([`DECISION.md`](DECISION.md)):** All five `depends_on` items (`#2845`, `#2835`, `#2831`, `#3179`, `#2834`) are `done`. In `#2834`, `FV8-Env` passed zero-update reach (`1,980 / 3,847` `P_succ`, `5,709 / 14,287` full-DEV), while cp0 `top-1` fell (`133 -> 118`) and non-outer training/D11 serving are refused (`zero_update_only`). Meanwhile `A8-Outer` admits `4,244–4,292 / 14,287` DEV rows (`~3x` the Stage 2 bars `U = 1,226`, `T_restr(Q4) = 1,138`, `G_restr(Q4) = 1,482`), so Stage T (`K = 16` on `A8-Outer`) tests whether `16x` broader coordinate coverage clears the Stage 2 bars on two seeds.
 2. **Host `bvgk_block` and `attention_audited` check:**
    - Command: `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo test --locked -p uor-r4-discrete --lib bvgk_block` -> `8 passed; 0 failed`.
    - `attention_audited::validate_config` rejects `coordinate_block != 1` and `seed != 1`, and `expected_family` assumes `K = 1` read indexing (`(completed / 8) % 45 < 20`), whereas at `K = 16` `o_read % 45 == 16` straddles `Combine` (`0..20`) and `Relation` (`20..45`).
@@ -37,7 +37,7 @@ Complete the D68 decision review weighing `#2834` and dropping the unmet `W4` (`
 
 ## Done when
 
-Stage 2 bar (`docs/roadmap/items/m1-bvg-k-stage-t-training.md:32`): the D68 decision review, updated sheet with fresh-context `TEST FITNESS: FIT`, D67 pre-run review, four Stage T instrument pieces, and two-seed GPU execution on RTX 5090 are completed, sealed to `caseyallard/uor-r4-store` with `SHA256SUMS`, and graded against the Stage 2 bar on two seeds, with `uor-harness loop gates --full` and `uor-harness loop pr-check --local` passing.
+Stage 2 bar (`docs/roadmap/items/m1-bvg-k-stage-t-training.md:32`): the D68 decision review, updated sheet with fresh-context `TEST FITNESS: FIT`, D67 pre-run review, four Stage T instrument pieces, and two-seed GPU execution on RTX 5090 are completed, sealed to `caseyallard/uor-r4-store` with `SHA256SUMS`, and graded against the Stage 2 bar on two seeds, with `loop gates --full` and `loop pr-check --local` passing.
 
 ## Stop and ask if
 

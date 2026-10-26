@@ -47,7 +47,8 @@ All GPU measurements ran on `vast-57710022` (`2x NVIDIA GeForce RTX 5090`, CUDA 
 3. **Efficiency (`CHARTER.md` §3.9, D5-a residency)**:
    - Model state is `4,096 x 32` `i32` token vectors (`524,288` B) + `65` `i32` ternary gates (`260` B) + `2,048` `u32` routes (`8,192` B) = `532,740` B resident in GPU L2/global memory.
    - Candidate scoring is bounded to `K_admit = 8` cells (`<= 128` rival tokens out of `4,096`, `3.125%` of vocabulary) and multiplier-free integer L1/Hamming + SpiralCore lookup tables.
-   - Synchronized CUDA training throughput on 1 RTX 5090: `57,155.6 context tok/s` (`215.0 ms/batch`) in Step 0; `50,910.4` / `50,860.1 context tok/s` (`726.1 s` / `726.8 s` for `3,008` batches incl. `48` 3,847-row D40 anchor audits) on `T16_fz` Seeds 1 & 2; `11,572.3 context tok/s` (`4,353.1 s` for `4,096` batches incl. `65` anchor audits and `425` active relation moves) on `T16_rel`.
+   - Synchronized CUDA training throughput on 1 RTX 5090: `57,155.6 context tok/s` (`215.0 ms/batch`) in Step 0; `50,910.4` / `50,860.1 context tok/s` (`726.1 s` / `726.8 s` for `3,008` batches incl. `48` 3,847-row D40 anchor audits) on `T16_fz` Seeds 1 & 2; `11,562.2` / `11,200.5 context tok/s` (`4,353.1 s` / `4,493.7 s` for `4,096` batches incl. `65` anchor audits and `425` active relation moves) on `T16_rel` Seeds 1 & 2.
+   - Sealed HF store archive: `caseyallard/uor-r4-store:results/antigravity/m1-bvg-k-stage-t-training-2026-10-25/stage-t-20261025.tar.gz` (`sha256 = c004db506bf64903231c5c225a07e9969d5e3344c51a67eaec9429265e5f44b6`), `grade.json` (`sha256 = 7917ec85941d919db14ab67567fe824c87d6d2edf18bbd54138bf320b6ea4c81`).
 
 ## Checks run at the head
 
