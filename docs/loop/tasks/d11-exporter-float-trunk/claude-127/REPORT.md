@@ -6,22 +6,26 @@ References #2820.
 
 ## What did not work, first
 
-- **`G-D11-ExportGap` stays blocked, and `I-D11-Artifact-Agreement` was not re-run (NOT_RUN, not FAIL).** Even after the repair below, the integer artifact still disagrees with its f64 specification on about 1% of tokens at 6 layers. That projects to a P of about 110 to 140 rows, against claude-126's bar of 6.
+- **`G-D11-ExportGap` stays blocked, and `I-D11-Artifact-Agreement` was not re-run (NOT_RUN, not FAIL).** Even after the repair below, the integer artifact still disagrees with its f64 specification on about 1% of single tokens at 6 layers. From single tokens alone, that projects to a P of at least about 110 to 140 rows (the bar's P takes the larger of the single-token and window rates), against claude-126's bar of 6.
   - The pod re-run (ORDER done-when 3) could not pass or change the next step. So by decision D2 it was skipped, with no GPU spent.
   - These are host diagnostics on the laptop, on the stored Stage 4b snapshots. They decide spend only. None counts toward a bar, and no negative is recorded.
 - **The residual's cause is inferred, not tested.** At 6 layers, after the repair:
 
-  | Seed | Positions sampled (every 8th token) | Kept-cell sets differ | Tokens differ |
+  | Seed | Positions sampled (every 8th token) | Differ in token or kept cells | Differ in token |
   |---|---|---|---|
   | 1 | 512 | 9 | 5 |
-  | 2 | 512 | 17 | 4 |
+  | 2 | 512 | 17, all in their kept cells | 4 |
 
-  - **Not near-ties.** At seed 2's differing positions, the reference's margin between its 8th and 9th cells runs from 2 to 156 LSB, against a median of 44 over all 512. Their Hamilton-gate snap margins rank anywhere from 18th to 490th of 512.
-  - **Not a bias.** The mean query difference is −0.0066 LSB, and the per-channel spread at 6 layers is a roughly symmetric ±3 LSB.
+  - **On seed 2, not cell-ranking near-ties.** At the 17 positions, the reference's margin between its 8th and 9th cells runs from 2 to 156 LSB, against a median of 44 over all 512 (10th percentile 6).
+  - **Gate-snap near-ties contribute on seed 2 but do not explain most.** The 17 positions' Hamilton-gate snap margins rank from 15 to 490 of 512. Four fall among the 30 smallest.
+  - **On seed 1, ties cannot be ruled out.** The reference's own 8th-to-9th cell margin is 0 LSB at the median: the address collapse below leaves the cell ranking exactly tied on most positions.
+  - **No systematic bias.** These are per-channel query differences at 6 layers, every 32nd token, binned with anything beyond ±3 LSB in the end buckets.
+    - The binned counts are symmetric. Their mean is +0.007 LSB on seed 1 and −0.016 on seed 2.
+    - The full means are −1.64 and +3.07 LSB, of opposite sign. Values beyond ±3 LSB pull them.
   - **The likely cause:** the artifact's Q16 fixed-point residual stream, accumulating over 6 layers against f64. A second, unlocalized defect is not excluded. The control that would test it is the f64 reference with its residual rounded to Q16 at the same points; it was not built here.
 - **ORDER done-when 2 holds in part.**
-  - At 1 layer, the repaired session matches the reference on every token and every kept-cell set sampled.
-  - At 6 layers, kept cells differ at about 3% of positions, with margins well above near-tie. Those are not the near-tie exceptions the done-when allows.
+  - At 1 layer, every 32nd token, seed 1 matches the reference on 128 of 128 tokens and kept-cell sets. Seed 2 matches on 128 of 128 tokens and 127 of 128 kept-cell sets.
+  - At 6 layers, positions differ at about 2 to 3% of positions. On seed 2 their cell margins are well above near-tie, so they are not the near-tie exceptions the done-when allows.
   - The two synthetic controls pass (below).
 - **The dense path still uses the truncating norm.** Only the FBS step was repaired. The dense step is outside this ORDER and is unchanged.
 
