@@ -27,3 +27,16 @@ The sheet no longer presents a non-executable chain as FIT. Record the exact CLI
 
 - Compare `docs/harness/prep/m2-pin-train-mask-sheet-discrete-2026-10-26.md` with `crates/uor-r4-discrete/src/bin/stage-t-run.rs` and `trunk-run.rs`.
 - Preserve the valid data pins and bars; do not change the milestone bar or run a model.
+
+## Rules that apply
+
+- **Pre-registration first** (CHARTER §4.5): a FIT must describe a configuration that can actually run; this host-only repair needs no GPU sheet or pod.
+- **Instrument first** (§4.2): classify the invalid recipe as an instrument defect, never as a model or mechanism negative.
+- **GPU only** (§3.5): do not execute model training, evaluation or parity on the host while repairing the record.
+- **Records** (§5.6): preserve the original finding and add one notebook row with exact negative scope.
+
+## Sources
+
+- [`docs/harness/prep/m2-pin-train-mask-sheet-discrete-2026-10-26.md`](../../../docs/harness/prep/m2-pin-train-mask-sheet-discrete-2026-10-26.md)
+- [`crates/uor-r4-discrete/src/bin/stage-t-run.rs`](../../../crates/uor-r4-discrete/src/bin/stage-t-run.rs)
+- [`crates/uor-r4-discrete/src/bin/trunk-run.rs`](../../../crates/uor-r4-discrete/src/bin/trunk-run.rs)
