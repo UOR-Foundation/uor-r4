@@ -53,6 +53,8 @@ References #2820.
   - The GPU snap maps an all-zero 4-vector to root index 1 of its own order; the integer reference maps it to index 0 of `H4_ROOT_COEFFICIENTS`. It did not occur here (0 of 320 positions), and it is still unpinned.
   - `with_d11_mode` restores the hook on an error, not on a panic, as `with_d11_export_gates` does.
   - The GPU test's mode-difference check does not isolate the transition snap; the run's set-aside 2 does. Its comment now says so.
+  - The tie trace counts a gate's margin even where the block it multiplies is zero. There the snap cannot change the output, so such a margin can only look nearer than it matters. Only the transition skips a zero state.
+  - `fbs-compare` writes an infinite margin as `null`. An infinite margin means a switch never met, such as the transition at a single token.
 - **Still a random-init trunk.** No trained model ran, and no export gap was measured. That is Stage 4b.
 
 ## What changed
@@ -114,9 +116,9 @@ On an RTX 5090, at `c1bfd1b78897f1eb4084743ee7e351ce044d1a36`, on a random-init 
 | Suites | float-train 33; integer serving-build library 322; no-feature library 55; `m5_full_path_cost_controls` 3/3; `memory_shape` 3/3; `fbs-compare`'s own test |
 | CUDA type-check | `cargo check --features cuda --all-targets` of float-train with a stub nvcc: exit 0 |
 | Zero-multiply audit | `FULL PASS`: rlib 56 symbol ranges and 40 functions; `uor-r4-stack` 44 and 90 |
-| GPU cost | one RTX 5090 for about 2 minutes of job time; `vast-57777264` deleted |
+| GPU cost | one RTX 5090 for 59 s of job time (`job.log`, 06:48:20Z to 06:49:19Z); `vast-57777264` deleted |
 
-Evidence is in the HF store under `results/claude/d11-fbs-d11mode-2026-10-26/`, each folder with a `SHA256SUMS`:
+Evidence is in the HF store under `results/claude/d11-fbs-d11mode-2026-10-26/`. `fbs-d11/` and `ties/` each have a `SHA256SUMS`, and the folder's top-level `SHA256SUMS` covers `traced/`:
 - `fbs-d11/` holds the run;
 - `traced/` holds the traced comparisons, run on the laptop from the stored outputs;
 - `ties/` holds the tie margins, with the code commit and the binary's sha256 in `COMMAND.txt`.
