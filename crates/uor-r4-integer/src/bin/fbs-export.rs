@@ -9,13 +9,14 @@
 //! fbs-export SNAPSHOT_JSON OUT_PATH
 //! ```
 //!
-//! It never overwrites `OUT_PATH`. It parses the artifact back before writing
-//! it, and prints its sha256.
+//! It parses the artifact back before writing it, never replaces or leaves a
+//! partial `OUT_PATH` (`fbs_snapshot::write_new_file`), and prints its sha256.
 
-use std::io::Write;
+use std::path::Path;
 use std::process::ExitCode;
 
 use sha2::{Digest, Sha256};
+use uor_r4_integer::fbs_snapshot::write_new_file;
 use uor_r4_integer::stack::{export_fbs_trunk_uorlut01, FbsTrunkSnapshot, IntegerStackModel};
 
 fn run() -> Result<(), String> {
@@ -29,14 +30,7 @@ fn run() -> Result<(), String> {
     let artifact = export_fbs_trunk_uorlut01(&snap).map_err(|e| format!("export: {e}"))?;
     IntegerStackModel::parse(&artifact)
         .map_err(|e| format!("the exported artifact does not parse: {e}"))?;
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(out)
-        .map_err(|e| format!("{out}: {e}"))?;
-    file.write_all(&artifact)
-        .and_then(|()| file.sync_all())
-        .map_err(|e| format!("{out}: {e}"))?;
+    write_new_file(Path::new(out), &artifact).map_err(|e| format!("{out}: {e}"))?;
     println!("{}  {out}", hex::encode(Sha256::digest(&artifact)));
     Ok(())
 }

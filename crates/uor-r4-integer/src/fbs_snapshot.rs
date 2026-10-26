@@ -7,7 +7,30 @@
 //! the handoff between the two builds; `serde_json` writes each `f32` so that
 //! it reads back exactly.
 
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+
 use serde::{Deserialize, Serialize};
+
+/// Write `bytes` to a new file at `path`, never leaving a partial file there
+/// and never replacing one. The bytes go to `<path>.partial` first, which is
+/// linked into place only when complete (the link refuses an existing
+/// `path`); the partial file is removed either way. For the handoff bins.
+pub fn write_new_file(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let mut partial = path.as_os_str().to_owned();
+    partial.push(".partial");
+    let partial = PathBuf::from(partial);
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&partial)?;
+    let written = file.write_all(bytes).and_then(|()| file.sync_all());
+    drop(file);
+    let linked = written.and_then(|()| std::fs::hard_link(&partial, path));
+    let removed = std::fs::remove_file(&partial);
+    linked.and(removed)
+}
 
 /// SpiralCore/FBS routes of one projection: one `(atom, state)` per output 8-block.
 ///
@@ -61,6 +84,29 @@ pub struct FbsTrunkLayer {
     pub decay: Vec<f32>,
 }
 
+/// The float GPU trunk's own output at one single-token position: the
+/// comparison side of `fbs-compare`, written by the float converter.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FbsFloatPosition {
+    /// The input token.
+    pub token: u32,
+    /// The float native writer's next token.
+    pub next: u32,
+    /// `width` final hidden values, after the final RMSNorm gain.
+    pub hidden: Vec<f32>,
+}
+
+/// The float GPU trunk's single-token outputs, for comparison with its
+/// converted snapshot's reference and integer session.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FbsFloatReadout {
+    pub vocab: usize,
+    pub width: usize,
+    pub positions: Vec<FbsFloatPosition>,
+}
+
 /// Offline SpiralCore/FBS trunk snapshot handed to `stack::export_fbs_trunk_uorlut01`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -77,4 +123,69 @@ pub struct FbsTrunkSnapshot {
     /// `width` final RMSNorm gain.
     pub final_norm: Vec<f32>,
     pub layers: Vec<FbsTrunkLayer>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn write_new_file_never_replaces_and_never_leaves_a_partial_file() {
+        let dir = std::env::temp_dir().join(format!("uor-fbs-write-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let path = dir.join("out.json");
+        let partial = dir.join("out.json.partial");
+        let _ = std::fs::remove_file(&path);
+        write_new_file(&path, b"first").expect("a new file is written");
+        assert_eq!(std::fs::read(&path).expect("read"), b"first");
+        assert!(!partial.exists());
+        // An existing file is refused and kept as it was.
+        assert!(write_new_file(&path, b"second").is_err());
+        assert_eq!(std::fs::read(&path).expect("read"), b"first");
+        assert!(!partial.exists());
+        std::fs::remove_dir_all(&dir).expect("clean up");
+    }
+
+    #[test]
+    fn json_f32_round_trips_bit_exactly() {
+        // The snapshot hands every f32 over as JSON; each must read back to
+        // the same bits, signed zeros, subnormals and the extremes included.
+        let mut values = vec![
+            0.0f32,
+            -0.0,
+            f32::MIN_POSITIVE,
+            -f32::MIN_POSITIVE,
+            f32::from_bits(1),
+            f32::from_bits(0x8000_0001),
+            f32::from_bits(0x007f_ffff),
+            f32::MAX,
+            f32::MIN,
+            f32::EPSILON,
+            1.0 / 3.0,
+            0.1,
+        ];
+        let mut state = 0x2026_1026_u64;
+        while values.len() < 200_000 {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let v = f32::from_bits((state >> 32) as u32);
+            if v.is_finite() {
+                values.push(v);
+            }
+        }
+        let json = serde_json::to_vec(&values).expect("serialize");
+        let back: Vec<f32> = serde_json::from_slice(&json).expect("deserialize");
+        let changed = values
+            .iter()
+            .zip(&back)
+            .filter(|(a, b)| a.to_bits() != b.to_bits())
+            .count();
+        assert_eq!(
+            changed,
+            0,
+            "{changed} of {} values changed bits",
+            values.len()
+        );
+    }
 }

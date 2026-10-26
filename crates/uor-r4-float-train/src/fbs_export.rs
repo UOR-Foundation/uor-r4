@@ -15,7 +15,9 @@
 
 use candle_core::Tensor;
 use uor_r4_integer::discrete_d11::{spiralcore_orbit_roots, spiralcore_signed_axes};
-use uor_r4_integer::fbs_snapshot::{FbsRoutes, FbsTrunkLayer, FbsTrunkSnapshot};
+use uor_r4_integer::fbs_snapshot::{
+    FbsFloatPosition, FbsFloatReadout, FbsRoutes, FbsTrunkLayer, FbsTrunkSnapshot,
+};
 
 use crate::geometric_stack::{
     Gate, QuaternionWeights, RecGates, RotationGroup, StackArch, StackConfig, StackModel,
@@ -190,24 +192,49 @@ fn read_routes(
         .map_err(|e| invalid(format!("{name}: {e}")))
 }
 
+/// Refuse a copied table that holds a value that is not finite, naming it: a
+/// diverged trunk must not reach the JSON handoff, which would write `null`.
+pub fn finite_table(name: &str, values: Vec<f32>) -> Result<Vec<f32>> {
+    match values.iter().position(|v| !v.is_finite()) {
+        Some(i) => Err(invalid(format!(
+            "{name}[{i}] = {} is not finite",
+            values[i]
+        ))),
+        None => Ok(values),
+    }
+}
+
+/// Refuse to read a trunk on a thread with a SpiralCore/FBS sheet arm set:
+/// `linear` would route through the arm, and the snapshot would not say so.
+fn check_no_sheet_arm() -> Result<()> {
+    match crate::spiralcore_fbs_arms::fbs_arm() {
+        Some(arm) => Err(invalid(format!(
+            "a SpiralCore/FBS sheet arm ({arm:?}) is set on this thread; clear it before export"
+        ))),
+        None => Ok(()),
+    }
+}
+
 /// Convert a SpiralCore/FBS float trunk to the integer crate's snapshot. GPU
 /// only: the routes are read back through the model's CUDA projection.
 pub fn fbs_trunk_snapshot(model: &StackModel) -> Result<FbsTrunkSnapshot> {
     let config = &model.config;
     let head = model.native_vector_head_spec();
+    check_no_sheet_arm()?;
     check_fbs_export_config(config, model.quaternion_weights(), head)?;
     check_geometry_tables()?;
     model.validate_native_learning_path()?;
     let kept_cells = head.map_or(0, |h| h.kept_cells);
     let (d, m) = (config.width, config.mlp_hidden);
     let values = |name: &str| -> Result<Vec<f32>> {
-        Ok(model
+        let values = model
             .variables()
             .get(name)
             .ok_or_else(|| invalid(format!("the trunk lacks {name}")))?
             .as_tensor()
             .flatten_all()?
-            .to_vec1::<f32>()?)
+            .to_vec1::<f32>()?;
+        finite_table(name, values)
     };
     let mut layers = Vec::with_capacity(config.layers());
     for layer in 0..config.layers() {
@@ -251,6 +278,38 @@ pub fn fbs_trunk_snapshot(model: &StackModel) -> Result<FbsTrunkSnapshot> {
         embed: values("embedding.weight")?,
         final_norm: values("final_norm.weight")?,
         layers,
+    })
+}
+
+/// The float GPU trunk's own output for every single-token input: its final
+/// hidden vector and its native writer's next token. `fbs-compare` holds the
+/// converted snapshot against it. GPU only.
+pub fn fbs_float_readout(model: &StackModel) -> Result<FbsFloatReadout> {
+    check_no_sheet_arm()?;
+    let (vocab, width) = (model.config.vocab_size, model.config.width);
+    let mut positions = Vec::with_capacity(vocab);
+    for token in 0..vocab as u32 {
+        let hidden = model
+            .hidden(&[token], 1, 1)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let next = model
+            .native_next_token_ids(&[token], 1, 1)?
+            .flatten_all()?
+            .to_vec1::<u32>()?;
+        let [next] = next.as_slice() else {
+            return Err(invalid("the native writer returned other than one token"));
+        };
+        positions.push(FbsFloatPosition {
+            token,
+            next: *next,
+            hidden: finite_table("hidden", hidden)?,
+        });
+    }
+    Ok(FbsFloatReadout {
+        vocab,
+        width,
+        positions,
     })
 }
 
@@ -402,6 +461,18 @@ mod tests {
     }
 
     #[test]
+    fn copied_tables_refuse_non_finite_values() {
+        assert_eq!(
+            finite_table("t", vec![1.0, -2.5]).expect("finite"),
+            vec![1.0, -2.5]
+        );
+        for bad in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            let e = finite_table("layers.01.rec.decay", vec![0.5, bad]).expect_err("refused");
+            assert!(e.to_string().contains("layers.01.rec.decay[1]"), "{e}");
+        }
+    }
+
+    #[test]
     fn export_config_refuses_what_the_integer_session_cannot_serve() {
         let head = small_head();
         let fbs = QuaternionWeights::SpiralcoreFbs;
@@ -489,14 +560,13 @@ mod tests {
     }
 
     /// On one GPU: the read-back routes reproduce the model's projection bit for
-    /// bit, and the converted trunk exports, parses and serves. The float GPU
-    /// against the converted trunk's reference and integer session is printed
-    /// as a reading, not held to a bar.
+    /// bit, and the trunk converts and reads out. With `UOR_FBS_CONVERTER_OUT`
+    /// set to a directory, it writes `snapshot.json` and `readout.json` there for
+    /// the serving build's `fbs-compare` (export, parse, serve, and a reading).
+    /// The serving build is never a dependency of this crate (D29).
     #[cfg(feature = "cuda")]
     #[test]
-    fn gpu_converted_trunk_reproduces_the_projection_and_serves() -> Result<()> {
-        use uor_r4_integer::stack::{export_fbs_trunk_uorlut01, IntegerStackModel};
-
+    fn gpu_converted_trunk_reproduces_the_projection() -> Result<()> {
         let device = candle_core::Device::new_cuda(0)?;
         let mut model = StackModel::new(small_config(20261026), &device)?;
         model.set_quaternion_weights(QuaternionWeights::SpiralcoreFbs)?;
@@ -529,6 +599,7 @@ mod tests {
                         .flatten_all()?
                         .to_vec1::<f32>()?;
                     let host = host_gather(routes, &x);
+                    assert_eq!(gpu.len(), host.len(), "{name}: output width");
                     assert!(
                         gpu.iter()
                             .zip(&host)
@@ -539,40 +610,28 @@ mod tests {
             }
         }
 
-        // The converted trunk exports, parses and serves every single token.
-        let bytes = export_fbs_trunk_uorlut01(&snap).map_err(|e| invalid(e.to_string()))?;
-        let served = IntegerStackModel::parse(&bytes).map_err(|e| invalid(e.to_string()))?;
-        let (mut gpu_vs_reference, mut integer_vs_quantized) = (0usize, 0usize);
-        let mut max_query_gap = 0f64;
-        for tok in 0..snap.vocab as u32 {
-            let integer = served
-                .session()
-                .step_native(tok)
-                .map_err(|e| invalid(e.to_string()))?;
-            let plain = snap
-                .forward_f32(&[tok], false)
-                .map_err(|e| invalid(e.to_string()))?;
-            let quantized = snap
-                .forward_f32(&[tok], true)
-                .map_err(|e| invalid(e.to_string()))?;
-            let hidden = model
-                .hidden(&[tok], 1, 1)?
-                .flatten_all()?
-                .to_vec1::<f32>()?;
-            let token = model
-                .native_next_token_ids(&[tok], 1, 1)?
-                .flatten_all()?
-                .to_vec1::<u32>()?;
-            gpu_vs_reference += usize::from(token.first() == Some(&plain[0].token));
-            integer_vs_quantized += usize::from(integer.token == quantized[0].token);
-            for (h, q) in hidden.iter().zip(&plain[0].query) {
-                max_query_gap = max_query_gap.max((f64::from(*h) - q).abs());
+        // The trunk reads out, and an active sheet arm is refused.
+        let readout = fbs_float_readout(&model)?;
+        assert_eq!(readout.positions.len(), snap.vocab);
+        crate::spiralcore_fbs_arms::set_fbs_arm(Some(
+            crate::spiralcore_fbs_arms::FbsArm::OneAtomActive,
+        ));
+        let armed = fbs_trunk_snapshot(&model);
+        crate::spiralcore_fbs_arms::set_fbs_arm(None);
+        assert!(armed.is_err_and(|e| e.to_string().contains("sheet arm")));
+        if let Ok(dir) = std::env::var("UOR_FBS_CONVERTER_OUT") {
+            let dir = std::path::Path::new(&dir);
+            for (name, json) in [
+                ("snapshot.json", serde_json::to_vec(&snap)?),
+                ("readout.json", serde_json::to_vec(&readout)?),
+            ] {
+                uor_r4_integer::fbs_snapshot::write_new_file(&dir.join(name), &json)?;
             }
+            eprintln!(
+                "fbs converter: wrote snapshot.json and readout.json to {}",
+                dir.display()
+            );
         }
-        eprintln!(
-            "fbs converter reading over {} single tokens: float GPU token = reference token {gpu_vs_reference}; integer token = quantized reference token {integer_vs_quantized}; max |GPU hidden - reference query| {max_query_gap:.3e}",
-            snap.vocab
-        );
         Ok(())
     }
 }
