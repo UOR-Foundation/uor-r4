@@ -15,11 +15,17 @@ References #2833; this unit does not close the item or claim an oracle gain.
 - Added `address_stage0` manifest generation and a GPU-only runner behind `stage0-lab`: pinned artifact/config/receipt validation, corpus-leak scan, two D11 parity passes, sealed `final-dev.json` comparison, teacher-forced and free-running copy, identity and aggregate-preserving stop reports.
 - Added the 40-row manifest (`ea360118…`), protocol and pure parity tests, and the root workspace exclude required by the nested D11 instrument.
 - Recorded the scoped result in `docs/mechanisms/exact-memory.md`, the lab README and `docs/research/notebook/m3-durable-memory.md`.
-- Size at the REPORT commit: 17 files, 8,208 additions and 8 deletions. Code and unit tests 2,750 lines, documentation 204, generated manifest 5,212, dependency/workspace metadata 42. No numeric estimate was set; most additions are the generated manifest and the GPU runner.
+- Size at the REPORT commit: 17 files, 8,214 additions and 8 deletions. Code and unit tests 2,750 lines, documentation 210, generated manifest 5,212, dependency/workspace metadata 42. No numeric estimate was set; most additions are the generated manifest and the GPU runner.
 
 ## Measurements
 
-**Verification repeat, registered before dispatch:** the repeat verifies the repaired instrument at its exact pushed commit, with unchanged arms, bars, inputs and stop rules. It cannot reopen or alter the registered `COPY_GATE_FAIL`; any different result is a nondeterminism or instrument discrepancy. The first result tar (`2be4f5ef…`) remains untouched, the new output root is `address-stage0-out-v2`, and its receipt will use a separate HF result path. The live 5090 offer was about `$1.10/h`; actual create-to-down uptime and cost will be recorded below.
+**Repaired GPU verification, one RTX 5090 (`vast-57818697`) at `11624e808cba656ba9b068f338f5ad71c5699f80`:**
+
+- Parity reproduced: **14,287/14,287** rows, status 0, no mismatches, aggregate `455 / 1,484 / 5,009`, all position-strip deltas `0`. Both records are byte-identical (`2346306589f327a751d510b574147512178ef9334c7e45ff329648760fd38bec`). The new parity report names no ordinal check and explicitly records row-order join.
+- Copy reproduced: exact/no-hint/random-hint **0/40 exact matches**, normalized emissions **12 / 0 / 9**, teacher-forced counts `3/15`, `4/17`, `5/18` out of 275, and `b = c = 0` on both primary comparisons. Planted-wrong held on 9/9 normalized rows; `COPY_GATE_FAIL` stands.
+- Identity: NVIDIA driver **13.2** (`cuDriverGetVersion` raw `13020`), CUDA toolkit 12.8, original/staged/normalized config hashes `77d614… / 43a316… / e6f85c…`, executable `d43ff1f7082d585cb3a74018ce3550061fa885d51a8ce82e313265cf8752f46b`, cubin `17dd4184…`, PTX `e8ee1c12…`.
+- Cost: ledger create-to-down uptime `511 s` at `$1.106/h` = **$0.157**. The receipt was pulled and its HF listing verified before release/down. The first down refused its local archive step; deletion used `--confirm-archived` only after the separate HF upload succeeded. No energy claim.
+- Artifacts: `results/kimi/m1-address-stage0-2026-10-26/results-v2/stage0-result-v2.tar`, SHA-256 `cb72cdf4eef5316c56d3c732eb5bc523ff55918ddc4725252afe7dfc52108395`. The pre-repair tar below remains preserved unchanged.
 
 **Pre-repair GPU receipt, one RTX 5090 (`vast-57806658`) at `97354145ecaf7ea70908ef25922ea3c57dec55fe`:**
 
@@ -37,11 +43,11 @@ References #2833; this unit does not close the item or claim an oracle gain.
 - `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo test -p uor-r4-object-store --features stage0-lab --no-fail-fast`: **112 passed, 0 failed, 1 ignored** after the repair.
 - `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo check -p uor-r4-object-store` and the same check with `--features stage0-lab`: PASS after the repair.
 - `NVCC=/Users/casey.allard/uor-r4/local/fake-nvcc/nvcc UOR_NVCC_ARCH=compute_120 CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo check -p uor-r4-object-store --features cuda`: PASS.
-- `uor-harness loop gates --full`: see final head.
-- `uor-harness loop report --check --order docs/loop/tasks/m1-address-as-read/kimi-40/ORDER.md`: see final head.
-- `uor-harness loop pr-check --local`: see final head.
+- `uor-harness loop gates --full`: all 11 gates GREEN at `11624e808`.
+- `uor-harness loop report --check --order docs/loop/tasks/m1-address-as-read/kimi-40/ORDER.md`: final result below after this receipt commit.
+- `uor-harness loop pr-check --local`: final result below after this receipt commit.
 - D68 review: REJECT old plan; Stage 0 accepted as the required next measurement.
-- FIT: FIT at `97354145e` (agent-32). D67: PASS at `97354145e` (agent-34), with full-HEAD, pod-build, input and cost corrections applied.
+- FIT: FIT at `97354145e` and confirmed again for the repaired instrument (agent-32). D67: PASS at `97354145e`; delta PASS at `11624e808` after the staging and repeat-registration corrections (agent-34).
 
 ## Skills used
 
