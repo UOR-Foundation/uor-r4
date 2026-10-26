@@ -1947,9 +1947,16 @@ pub fn run_d11_residual(
             return Err(invalid("the Stage 4b receipt and evaluation steps differ"));
         }
     }
-    let stored_loss = stage4b
-        .as_ref()
-        .and_then(|identity| identity.loss_float_by_seed.get(&seed).copied());
+    let stored_loss = match &stage4b {
+        Some(identity) => Some(
+            identity
+                .loss_float_by_seed
+                .get(&seed)
+                .copied()
+                .ok_or_else(|| invalid("the Stage 4b receipt has no float loss for this seed"))?,
+        ),
+        None => None,
+    };
     let stored_d11: Option<Vec<u32>> = match stored_d11_preds {
         Some(path) => Some(serde_json::from_slice(&fs::read(path)?)?),
         None => None,
