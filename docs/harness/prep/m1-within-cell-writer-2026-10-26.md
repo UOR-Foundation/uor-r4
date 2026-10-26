@@ -67,7 +67,7 @@ Every negative gate is proven failing when its check is set aside (`bypass_refus
 2. Run `within-cell-writer-run decompose-stage-t` on the sealed `T16_fz` (`epoch = 420`) and `T16_rel` (`epoch = 678`) artifacts, verifying exact Gate R reproduction (`5,009 / 455 / 1,484` and `3,827 / 371 / 1,124`) and decomposing the `455` vs `2,140` gap into admission, `top-8` coverage, within-cell vs cross-cell L1 ranking, DEV read-code coverage, and TRAIN-only within-cell reranker controls.
 3. Run `within-cell-writer-run b0` on the re-derived epoch-0 `FullVectorV1` (`2c886736...`) table under `OuterL1V1` across all 21 writer, frame-ablation, lookup, and within-cell reranker arms on both builds, archive receipts to `caseyallard/uor-r4-store:results/antigravity/m1-within-cell-writer-2026-10-26/`, and tear down the pod.
 
-## 8. Stop rule and Decision Table
+## 8. Stop conditions and Decision Table
 
 - **Stop rule**: Terminate immediately if any negative gate or `C1–C6` control fails, if Gate R fails to reproduce the sealed Stage T `final-dev.json` / `w2-summary.json` numbers (`5,009 / 455 / 1,484` and `3,827 / 371 / 1,124`), or if `G-Occ` fails on `FullVectorV1`.
 - **Decision Table**:
