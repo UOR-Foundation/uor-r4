@@ -1613,6 +1613,11 @@ mod cuda_impl {
             FrameSourceMode::TwoPassEndpointOutputV1,
             TransportMode::RelativeFrameTransportV1,
         );
+        let cfg_c5_two_global = default_wc_cfg(
+            ReadLawVersion::ReadLawV2,
+            FrameSourceMode::TwoPassEndpointOutputV1,
+            TransportMode::GlobalWriterFrameV1,
+        );
         let res_c5_cur = dev_c5.evaluate_within_cell_writer_batch(
             &carried_c5,
             &[2u32],
@@ -1637,9 +1642,18 @@ mod cuda_impl {
             false,
             &k_c5,
         )?;
+        let res_c5_two_global = dev_c5.evaluate_within_cell_writer_batch(
+            &carried_c5,
+            &[2u32],
+            &cfg_c5_two_global,
+            &remap_id,
+            false,
+            &k_c5,
+        )?;
         let (_, _, int_cur) = decode_q_keys(&res_c5_cur.rows[0].query)?;
         let (_, _, int_near) = decode_q_keys(&res_c5_near.rows[0].query)?;
         let (_, _, int_two) = decode_q_keys(&res_c5_two.rows[0].query)?;
+        let (_, _, int_two_global) = decode_q_keys(&res_c5_two_global.rows[0].query)?;
         let target_int_b = (3u16 << 4) | 4u16;
 
         // Also check 16-token single-cell slice separation (`FullVectorV1` vs `StructuredV1`)
@@ -1676,20 +1690,21 @@ mod cuda_impl {
         let mut fv_cell0_pairs: Vec<u16> = (0..16usize).map(|t| fv_int[t]).collect();
         fv_cell0_pairs.sort_unstable();
         fv_cell0_pairs.dedup();
-        let c5_ok = int_cur != target_int_b
-            && int_near != target_int_b
-            && int_two == target_int_b
-            && res_c5_two.rows[0].top1_correct
-            && res_c5_two.rows[0].within_cell_rivals == 0
-            && res_c5_two.rows[0].cross_cell_rivals == 0
+        let c5_ok = (int_cur >> 4) != 3
+            && (int_near >> 4) != 3
+            && (int_two >> 4) == 3
+            && int_two_global == target_int_b
+            && res_c5_two_global.rows[0].top1_correct
+            && res_c5_two_global.rows[0].within_cell_rivals == 0
+            && res_c5_two_global.rows[0].cross_cell_rivals == 0
             && struct_diag_count == 16
             && fv_cell0_pairs.len() == 16;
         if !c5_ok {
             return Err(invalid(format!(
-                "Control C5 failed: int_cur={int_cur} int_near={int_near} int_two={int_two} target={target_int_b} top1={} wc_rivals={} cc_rivals={} diag={struct_diag_count} fv={}",
-                res_c5_two.rows[0].top1_correct,
-                res_c5_two.rows[0].within_cell_rivals,
-                res_c5_two.rows[0].cross_cell_rivals,
+                "Control C5 failed: int_cur={int_cur} int_near={int_near} int_two={int_two} int_two_global={int_two_global} target={target_int_b} top1={} wc_rivals={} cc_rivals={} diag={struct_diag_count} fv={}",
+                res_c5_two_global.rows[0].top1_correct,
+                res_c5_two_global.rows[0].within_cell_rivals,
+                res_c5_two_global.rows[0].cross_cell_rivals,
                 fv_cell0_pairs.len()
             )));
         }
@@ -1777,14 +1792,15 @@ mod cuda_impl {
             c3_detail: "SnapScale::UnitSnap1 decodes to valid orbit roots; SnapScale::RawResidual preserves unsnapped Z^8 residual".to_owned(),
             c4_bounded_rel_and_copy_succession_verified: c4_ok,
             c4_detail: format!(
-                "ReadLawV1 copy top1={} vs ReadLawV2 copy top1={} (rivals={}), recent-8 cap rel_node10={rel_node10}",
+                "ReadLawV1 copy top1={} vs ReadLawV2 copy top1={} (wc_rivals={}, cc_rivals={}), recent-8 cap rel_node10={rel_node10}",
                 res_v1_copy.rows[0].top1_correct,
                 res_v2_copy.rows[0].top1_correct,
-                res_v2_copy.rows[0].token_rivals
+                res_v2_copy.rows[0].within_cell_rivals,
+                res_v2_copy.rows[0].cross_cell_rivals
             ),
             c5_frame_aligned_twopass_and_single_cell_verified: c5_ok,
             c5_detail: format!(
-                "interior_pair(cur={int_cur}, near={int_near}, twopass={int_two}, target={target_int_b}); FullVectorV1 cell0 distinct pairs={}/16",
+                "interior_pair(cur={int_cur}, near={int_near}, twopass_rel={int_two}, twopass_global={int_two_global}, target={target_int_b}); FullVectorV1 cell0 distinct pairs={}/16",
                 fv_cell0_pairs.len()
             ),
             c6_frame_remap_and_old_lineage_parity_verified: c6_ok,
