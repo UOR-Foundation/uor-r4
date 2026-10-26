@@ -86,3 +86,40 @@ fn host_twin_equals_the_session_over_sequences() {
         &sequences(long.vocab, 8, 64, 11),
     );
 }
+
+/// The snap trace (claude-134) changes no output, has `trace_stride` bytes per
+/// position (per layer: 2 × width/4 + mlp/4), names only the 120 icosian
+/// roots, repeats exactly, and is not one root everywhere.
+#[test]
+fn the_snap_trace_leaves_the_outputs_unchanged_and_names_roots() {
+    use d11_fbs_evaluator::host_trace_sequences;
+    for (name, snap) in [
+        ("small", synthetic_fbs_trunk(20261025)),
+        ("non-square", fbs_synthetic_non_square(20261026)),
+    ] {
+        let model = model_of(&snap);
+        let shape = model.shape();
+        let len = shape.context.min(8);
+        let seqs = sequences(snap.vocab, 4, len, 7);
+        let plain = host_sequences(&model, &seqs).expect("host twin");
+        let (traced, trace) = host_trace_sequences(&model, &seqs).expect("traced host twin");
+        assert_eq!(traced, plain, "{name}: tracing changed an output");
+        let layers = model.fbs_image().expect("an FBS stack").layers.len();
+        let stride = layers * (2 * (shape.width / 4) + shape.mlp / 4);
+        assert_eq!(
+            trace.len(),
+            seqs.len() * len * stride,
+            "{name}: trace length"
+        );
+        assert!(
+            trace.iter().all(|&r| r < 120),
+            "{name}: an index past the 120 roots"
+        );
+        let (_, again) = host_trace_sequences(&model, &seqs).expect("traced host twin");
+        assert_eq!(trace, again, "{name}: the trace does not repeat");
+        assert!(
+            trace.iter().any(|&r| r != trace[0]),
+            "{name}: one root everywhere"
+        );
+    }
+}
