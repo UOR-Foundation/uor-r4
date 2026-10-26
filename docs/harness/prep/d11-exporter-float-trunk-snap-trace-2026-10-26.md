@@ -11,45 +11,61 @@ No training.
 
 ## 1. Question
 
-**Where do the D11 forward (D) and the artifact (A) first part, and do their token differences follow icosian snaps that flip on near-ties?**
+**Where do the D11 forward (D) and the artifact (A) first part, and how does each parting start?**
 - claude-132 left four of six models indeterminate: D and A differ on 3.4% to 4.9% of tokens.
 - claude-133 found no gross signature beyond the faithful models' envelope.
 - The untested hypothesis: a snap whose two best roots nearly tie flips between the float and integer forwards, and the recurrence carries the flip to later positions.
-- If the token differences follow near-tie snap flips, the residual is the D11 forward's own sensitivity at its discrete choices, which the integer path computes as designed. If they follow snaps the float forward chose decisively, or no snap at all, something upstream of the snap differs.
+- Three conventions could also start a parting, and the comparison separates them:
+  - **Zero blocks.** A zero block is a raw that is zero in all four channels. The float forward snaps it to the identity (root 1), the integer path to root 0, which is −1.
+  - **Tie-breaks.** On an exact tie the integer path takes the lowest index; the float forward takes its argmax's choice.
+  - **Continuous drift.** Drift in the final norm, the Q12 query or the writer can part the tokens with no snap disagreement at all.
 
-## 2. Arms
+## 2. Arms and readings
 
 There is one model per (configuration, seed), as in claude-132: plain-c126, d11-c130 and dual-c131, two seeds each. All are compared on **the first 32 DEV windows**: 6,144 positions and about 1,060 scored rows.
-- **D's snap choices** come from `with_snap_capture` over the D11 forward on those windows. That gives, per position and layer, the root chosen at:
+- **D's tokens and snap choices** come from one forward: the D11 panel (`evaluate_dev_panel_d11`) run under `with_snap_capture`. Its chunks of 16 windows are joined per snap call. That gives, per position and layer, the root chosen at:
   - the transition, one per lane (64);
   - the output gate, one per lane (64);
   - the feed-forward gate, one per 4 MLP channels (96).
 
-  With each choice comes its relative margin, (best − second) / best.
-- **A's snap choices** come from `d11-fbs-eval trace`, the traced kernel, at the same sites in the same layout.
-- **The comparison** (`--mode d11-snap-trace`) gives:
-  - the disagreements per layer and site;
-  - zero blocks, counted apart: the float forward snaps them to the identity, the integer path to root 0;
-  - per window, the first position with a disagreement;
-  - for each row where D and A differ, whether a snap disagreement precedes it in its window (at or before its position) and whether one sits at its position;
-  - D's relative margins at every disagreement.
+  With each choice comes its relative margin, (best − second) / best, and 255 marks a zero block.
+- **A's tokens and snap choices** come from `d11-fbs-eval trace`, the traced kernel, at the same sites in the same layout, with 255 for a zero raw.
+- **A disagreement** is a site where the two forwards apply different roots, a zero block counting as the root its side applies. Each has a class:
+  - **root:** both blocks non-zero;
+  - **zero both, zero float only, zero integer only:** the zero-block classes.
+- **A window's first flip** is its first disagreeing snap call in causal order: position, then layer, then the transition, the output gate and the feed-forward gate. That call's disagreements are the window's **primaries**. Every later disagreement in the window comes after one of them and may be carried.
+- **The readings** (`--mode d11-snap-trace`, which also applies the bar):
+  - **R:** the scored rows where D and A differ.
+  - **P:** the share of R with a disagreement in its window at or before its position.
+  - **B:** the same share over the rows where D and A agree. This is P's base rate, since every row after a window's first flip counts as preceded.
+  - **L:** over the windows with a row in R, the share whose first flip is at or before their first row in R.
+  - Over those windows' primaries:
+    - the root primaries;
+    - the root primaries at an exact tie (margin 0);
+    - the zero-block primaries;
+    - **m,** D's median margin at the root primaries off a tie.
 
 ## 3. Bar and decision table
 
-The bar is per model. Every instrument check of section 4 must be green first. Let R be the rows where D and A differ in the 32 windows, P the rows of R preceded by a snap disagreement, and m the median of D's relative margin at the disagreements.
+The bar is per model, over its 32 windows. Every instrument check of section 4 must be green first, or the model is unclassified. Each model takes **the first outcome that applies, in this order**:
 
-| Outcome | It means | It decides |
-|---|---|---|
-| **Snap-flip arithmetic.** On each of the four indeterminate models: P ≥ 90% of R, and m < 1e-3. | The token differences follow snap flips where D's two best roots nearly tie. The integer path, computing the same forward at integer precision, falls on the other side. | The residual is the D11 forward's sensitivity at its discrete choices. The four indeterminate models are settled as faithful, so the residual check's "faithful on all six" follows: the exporter is cleared, the three FAILs stand as mechanism results, and the item parks behind the owner's reading of §3.7 (#2028). |
-| **Localise upstream.** On any indeterminate model, m ≥ 1e-2: D chose decisively where A chose differently. | A's input to the snap differs from D's by more than rounding. | An instrument localisation of the pre-snap values on that model: the gate and transition raws, layer by layer. It is not a ruling. A departure is called only when that localisation finds the defect. |
-| **Not snap-carried.** On any indeterminate model, P < 50% of R. | Most token differences come with no snap disagreement before them. | The residual is in the continuous arithmetic: the final norm, the Q12 query, or the writer's kept cells. The next control compares A's and D's queries at those rows. It is never a mechanism result. |
-| **Indeterminate.** Anything else. | — | The readings are reported. The next step is a decision review, and the item does not park. |
+| # | Outcome | Applies when | It means | It decides |
+|---|---|---|---|---|
+| 1 | **Not snap-carried** | P < 50% or L < 50% | Most partings start with no snap disagreement before them. | The residual is in the continuous arithmetic: the final norm, the Q12 query or the writer's kept cells. The next control compares A's and D's queries at those rows. It is never a mechanism result. |
+| 2 | **Zero convention** | zero-block primaries ≥ root primaries (and > 0) | Partings start at zero blocks, where D applies the identity and A applies −1. | D is not A's twin there: an instrument repair. D's zero convention is aligned with the integer path's, the twin is requalified, and the residual check is re-run. It is not a mechanism or trunk result. |
+| 3 | **Tie-break** | exact ties ≥ half the root primaries (and > 0) | Partings start where D's raw scores two roots exactly alike, and the two tie-break rules part. | The same kind of instrument repair: D's argmax tie rule is aligned with the integer path's lowest index. |
+| 4 | **Localise upstream** | m ≥ 1e-2 | D chose decisively where A chose differently, so A's input to the snap differs from D's by more than rounding. | An instrument localisation of the pre-snap values on that model: the gate and transition raws, layer by layer. It is not a ruling. A departure is called only when that localisation finds the defect. |
+| 5 | **Snap-flip near-tie** | P ≥ 90%, P − B ≥ 20 points, L ≥ 90%, and m < 1e-3 | Partings start at snaps whose two best roots nearly tie, and the recurrence carries them. | The residual is consistent with D's own sensitivity at its discrete choices. **It does not clear the exporter.** The next control compares A's pre-snap raws with D's at the primaries. Only if they agree within claude-133's measured drift (median 1 to 3 codes) does the next unit settle the four models as faithful, so that the residual check's "faithful on all six" follows. |
+| 6 | **Indeterminate** | anything else | — | The readings are reported. The next step is a decision review, and the item does not park. |
 
-**Readings, with no bar:**
-- the same readings on the two faithful models, as the comparison;
-- the disagreements per layer and site, and the zero-block count;
-- the first-disagreement positions;
-- the margin counts below 1e-6, 1e-4 and 1e-2.
+- If B ≥ 80%, the lift P − B cannot reach 20 points. Outcome 5 then cannot apply: the flips are too common for this panel to place the rows, and the model reads as Indeterminate.
+- **The item's reading:** if all four indeterminate models take one outcome, it is the item's. If they split, each model's outcome is reported, and the next step is a decision review.
+- **Readings, with no bar:**
+  - the same readings on the two faithful models, as the comparison;
+  - every disagreement by class, layer and site;
+  - each window's first flip and first row in R;
+  - the primaries over all 32 windows;
+  - the root-disagreement margins below 1e-6, 1e-4, 1e-3 and 1e-2.
 
 ## 4. Instrument checks (each must be green before the bar counts)
 
@@ -62,7 +78,8 @@ The bar is per model. Every instrument check of section 4 must be green first. L
 3. **`I-Trace`.** For each artifact, the traced run's outputs and trace equal the host twin's (G = H), and the trace fits the trunk's shape.
 4. **`I-Old-Run`.** For each artifact, the traced build's tokens on the 32 windows equal the stored, qualified run's: claude-129's, claude-130's or claude-131's.
 5. **`I-Inputs`.** Each artifact's, the windows' and each model's sha256 equal their pins (section 5).
-6. **`I-Fetch` and `I-Finite`,** as in claude-132: every fetched file against its folder's `SHA256SUMS`, every step exiting 0, and the log written before `SHA256SUMS`.
+6. **`I-Capture`.** The D panel's snap calls cover its two chunks, three per layer each. A miscount is refused, not read.
+7. **`I-Fetch` and `I-Finite`,** as in claude-132: every fetched file against its folder's `SHA256SUMS`, every step exiting 0, and the log written before `SHA256SUMS`.
 
 ## 5. Base artifact and data split
 
@@ -87,9 +104,10 @@ The bar is per model. Every instrument check of section 4 must be green first. L
 7. Save the run folder to the store at `results/claude/d11-fbs-snap-trace-2026-10-26/`, with a `SHA256SUMS`, from the laptop, confirmed before `down`.
 
 **Minimum test power:**
-- six models;
-- 32 windows each, 6,144 positions, and 224 snap sites per layer per position;
-- about 1,060 scored rows per model, about 20 to 50 of them in R on the indeterminate models.
+- Each model has about 1,060 scored rows, about 35 to 50 of them in R on the indeterminate models (3.4% to 4.9%), in perhaps 15 to 25 of its 32 windows.
+- P's 95% interval on 40 rows is about ±9 points near 90% and about ±16 near 50%. L's on 20 windows is about ±13 near 90% and about ±22 near 50%.
+- So the bars are coarse by design. They separate "nearly all" from "most" from "few", not finer shades. A model near a threshold reads on whichever side its count falls, and the REPORT gives its counts.
+- The primaries number at least one per window with a flip, so m rests on roughly 15 to 25 or more values per model.
 
 ## 7. Cost and stop rule
 
