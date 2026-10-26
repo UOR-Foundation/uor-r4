@@ -23,8 +23,8 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 | ready | 13 |
 | held | 12 |
 | decision | 1 |
-| done | 68 |
-| total | 94 |
+| done | 69 |
+| total | 95 |
 
 ## Start here
 
@@ -69,6 +69,7 @@ These items are ready and open to anyone.
 
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
+| [Repair the discrete M2 sheet's non-executable FIT](items/m2-pin-train-mask-sheet-cli-repair.md) | ready | a lab | no | [m2-pin-train-mask-sheet](items/m2-pin-train-mask-sheet.md) | [#3303](https://github.com/UOR-Foundation/uor-r4/issues/3303) |
 | [Train the student for grounded replies from exact memory](items/m2-train-grounded-replies.md) | ready | a lab | yes | [m2-donor-corpus-generation](items/m2-donor-corpus-generation.md), [m2-fresh-heldout-panel](items/m2-fresh-heldout-panel.md), [m2-pin-train-mask-sheet](items/m2-pin-train-mask-sheet.md), [m1-close-saved-model](items/m1-close-saved-model.md), [m1-d11-exporter-discrete](items/m1-d11-exporter-discrete.md) | [#2853](https://github.com/UOR-Foundation/uor-r4/issues/2853) |
 | [Optimize the driver math and run the ~1M-token pilot (D41 item 3)](items/d41-driver-math-pilot.md) | held | a lab | yes | none | [#2821](https://github.com/UOR-Foundation/uor-r4/issues/2821) |
 | [Generate the one-time offline donor answer corpus (distill-d1)](items/m2-donor-corpus-generation.md) | held | a lab | yes | [d41-driver-math-pilot](items/d41-driver-math-pilot.md) | [#2848](https://github.com/UOR-Foundation/uor-r4/issues/2848) |
@@ -238,6 +239,7 @@ flowchart LR
   n_m2_donor_corpus_generation["m2-donor-corpus-generation"]
   n_m2_fresh_heldout_panel["m2-fresh-heldout-panel"]
   n_m2_pin_train_mask_sheet["m2-pin-train-mask-sheet"]
+  n_m2_pin_train_mask_sheet_cli_repair["m2-pin-train-mask-sheet-cli-repair"]
   n_m2_train_grounded_replies["m2-train-grounded-replies"]
   n_m3_memory_turn_discriminator_gate["m3-memory-turn-discriminator-gate"]
   n_m3_nonrelation_prose_panel["m3-nonrelation-prose-panel"]
@@ -335,6 +337,7 @@ flowchart LR
   n_m2_donor_corpus_generation --> n_m2_train_grounded_replies
   n_m2_fresh_heldout_panel --> n_m2_pin_train_mask_sheet
   n_m2_fresh_heldout_panel --> n_m2_train_grounded_replies
+  n_m2_pin_train_mask_sheet --> n_m2_pin_train_mask_sheet_cli_repair
   n_m2_pin_train_mask_sheet --> n_m2_train_grounded_replies
   n_m2_train_grounded_replies --> n_m3_qualify_memory
   n_m3_memory_turn_discriminator_gate --> n_m3_qualify_memory
