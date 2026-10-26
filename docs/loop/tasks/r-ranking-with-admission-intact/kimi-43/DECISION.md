@@ -4,9 +4,9 @@
 
 #2884 is a research diagnostic, not an M1-close-path item. Its unchanged done-when asks for one admission-intact run with conditional ranking reported against count tables. The later FIT registered a stronger three-arm, two-seed, full-dose experiment after #2836. Stage T did not qualify that full-dose ladder: its FrozenZero arm stopped at batch 3,008, Relation stopped at Q1, and its two seed bindings produce identical table/gate trajectories.
 
-D67 fresh review `agent-44` at `8fdc3f9778c2f990a91f6e281ad53e37d265f9be` failed dispatch: the A16 arm is rejected by the A8-only trainer, measured Relation throughput violates the 35-minute gate, the current trainer has Q1/consecutive-rejection stops, the three-arm grading outputs are absent, and local disk was below the ORDER margin. No pod launched. Record: #2884 comment `6424741498`.
+D67 fresh review `agent-44` at `8fdc3f9778c2f990a91f6e281ad53e37d265f9be` failed dispatch: `Arm-Rel-K16` is rejected by the A8-only validator and baseline, prior measured Relation throughput projects above the 35-minute gate, the current trainer has Q1/consecutive-rejection stops, the three-arm grading outputs are absent, and local disk was below the ORDER margin. No pod launched. Record: #2884 comment `6424741498`.
 
-D68 fresh review `agent-45` then returned **D68 DECISION REVIEW: PASS**, conditional on a negative diagnostic close with exact scope and no full-dose, independent-seed, fresh-panel, above-unigram or M1 claim.
+D68 fresh review `agent-45` at decision head `de79c3df67d52304a1f894efd0b848a941673953` returned **D68 DECISION REVIEW: PASS**, conditional on a negative diagnostic close with exact scope and no full-dose, independent-seed, fresh-panel, above-unigram or M1 claim. Owner log: #2884 comment `6424978255`.
 
 ## Decision
 
@@ -26,4 +26,4 @@ This is a negative close, not a model success. The deferred full-dose question r
 
 ## Close conditions
 
-The REPORT leads with the matched-unigram loss and includes all evidence limits above. The item's stale “What is missing” receives a dated correction while its done-when stays unchanged. The notebook records one negative result. Exact-head review verifies the sealed artifact checksum and claims; no host model evaluation or GPU rerun is part of this close.
+The REPORT leads with the ordinary same-admitted-row unigram loss and includes all evidence limits above. The item's stale “What is missing” receives a dated correction while its done-when stays unchanged. The notebook records one negative result. Exact-head review verifies the sealed artifact checksum and claims; no host model evaluation or GPU rerun is part of this close.
