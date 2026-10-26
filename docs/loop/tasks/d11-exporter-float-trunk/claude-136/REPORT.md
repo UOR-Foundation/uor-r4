@@ -43,8 +43,8 @@ Docs only: the ORDER, this REPORT and the notebook row. No code.
 | dual-c131 s2 | 3,128 / 2,903 / 2,897 | 231 (70) | 225 (70) | outside, by 155 | +6 |
 
 - **Why the bound holds.** For each model, net(F,A) = net(F,D) + net(D,A), and every row agrees with the receipt (for example 81 = 77 + 4, and −332 = −340 + 8).
-- **What it shows.** F against D is what the export gap would read with an exporter that computed the D11 forward exactly. It is outside its own F_I on all six, by 17 to 287 rows. So no correction of the exporter, however complete, turns any FAIL into a pass.
-- **The leftover's size.** It moves each FAIL's net by at most 8 rows (D vs A, +8 to −6), against F_I of 58 to 73 and FAIL nets of 81 to 353 rows (F vs A).
+- **What it shows.** F against D is what the export gap would read with an exporter that computed the D11 forward exactly. It is outside its own F_I on all six, by 17 to 287 rows. So no exporter that computes the D11 forward exactly, or with no more net error than now, turns any FAIL into a pass. The reason: |net(F,A′)| ≥ |net(F,D)| − |net(D,A′)|, and that is at least 77 − 8 = 69 > 60 even on the closest model.
+- **The leftover's size.** It moves each FAIL's net by at most 8 rows (D vs A, +8 to −6). That is against F_I of 59 to 73 for F vs A (58 to 72 for F vs D), and FAIL nets of |81| to |353| rows (F vs A).
 - **After claude-135's forcing,** 5 to 139 rows still differ. Most are rows where unforced D and A already differed; 1 to 26 per model are new to forcing.
 
 ## Checks run at the head
@@ -72,6 +72,6 @@ See the exact-head review record on the PR.
 ## Plain summary
 
 - **The question:** whether a perfect version of the integer exporter could turn the three failed results into passes.
-- **The answer: it could not.** Even if the integer file computed the reference exactly, all six models would still miss the bar. The gap comes from the integer-precision forward itself, not from the export.
+- **The answer: it could not.** Even if the integer file computed the reference exactly, all six models would still miss the bar. The gap comes almost entirely from the integer-precision forward itself; the export adds at most 8 words of net.
 - **So the long check of the exporter ends here,** with the exporter not cleared but no longer able to change the verdict.
 - **The next step** is the one decisive training run the plan set aside, with a single change.
