@@ -3326,6 +3326,42 @@ fn fbs_trunk_export_matches_float_reference_across_full_vocabulary() {
 }
 
 #[test]
+fn fbs_writer_matches_reference_when_its_address_gains_are_tiny() {
+    // claude-127: a trained trunk shrank the final gains of the 16 channels
+    // the writer scores its cells from (the query's first and last 8-blocks)
+    // to about 6e-4, so those blocks sit at a few Q12 steps and one LSB
+    // reorders the cells. The query must then be rounded to Q12 once, from an
+    // unbiased norm, as the reference rounds it: a truncated 2^-14 norm,
+    // rounded a second time, chose different cells on 30% of tokens.
+    let s = FbsSynth {
+        vocab: 512,
+        d: 64,
+        mlp: 64,
+        layers: 1,
+        context: 8,
+        kept: 8,
+        ..FBS_SYNTH_SMALL
+    };
+    let mut snap = synthetic_fbs_trunk_with(20261026, s);
+    let d = snap.width;
+    for (i, g) in (0..8).chain(d - 8..d).enumerate() {
+        snap.final_norm[g] = 6e-4 * (1.0 + i as f32 / 16.0);
+    }
+    let model = IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&snap).expect("export"))
+        .expect("parse");
+    let (mut tokens, mut cells) = (0usize, 0usize);
+    for tok in 0..snap.vocab as u32 {
+        let got = model.session().step_native(tok).expect("integer step");
+        let want = &snap.forward_f32(&[tok], true).expect("reference")[0];
+        tokens += usize::from(got.token == want.token);
+        cells += usize::from(got.kept_cells == want.kept_cells);
+    }
+    eprintln!("fbs tiny-address control: tokens {tokens}/512, kept cells {cells}/512");
+    assert!(cells >= 500, "kept cells agree on only {cells} of 512");
+    assert!(tokens >= 500, "tokens agree on only {tokens} of 512");
+}
+
+#[test]
 fn fbs_trunk_matches_reference_at_a_non_square_multi_token_shape() {
     // claude-127: the small control is square (MLP = width), holds one token
     // per writer cell and keeps 2 cells. This one is non-square (MLP 96, width
