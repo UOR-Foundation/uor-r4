@@ -17,7 +17,7 @@ Closes #3303. References #2851.
 - Preserved the rejected recipe and old FIT block in `docs/labs/m2-pin-train-mask-sheet/superseded-recipe-2026-10-26.md`; zero-diff verification against the #3300 base-blob sections passed.
 - Corrected #2853, declared stale registry FIT/hold text non-authoritative, recorded D68 and fresh NOT_FIT reviews, and added lab and notebook records plus the new roadmap item.
 - Bound remaining student/evaluator/bridge implementation to #2853 under its own ORDER and scope; did not change source, bars, holds, panels or mechanisms.
-- Size: 10 files, `+246 / -46`; 0 code and 0 test lines, documentation `+237 / -41`, generated roadmap `+9 / -5`. The ORDER gave no numeric estimate, so the ratio is not applicable.
+- Size: 10 files, `+242 / -42`; 0 code and 0 test lines, documentation `+235 / -39`, generated roadmap `+6 / -3`, other `+1 / -0`. The ORDER gave no numeric estimate, so the ratio is not applicable.
 
 ## Measurements
 
