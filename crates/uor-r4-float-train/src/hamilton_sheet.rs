@@ -759,7 +759,8 @@ pub fn self_forced(roots: &[u8]) -> Vec<u8> {
 /// applies `calls[k]`, one byte per 4-block ([`forced_root`]). The scores, and any capture's
 /// choice and margin, stay D's own. A call with the wrong block count or a byte naming no root,
 /// a snap beyond the calls, and calls left over are all refused. It restores the prior state on
-/// every exit, a panic included.
+/// every exit, a panic included. Evaluation forwards only: a backward through the hard icosian
+/// gate also snaps, and would take forward calls.
 pub fn with_snap_override<T>(calls: Vec<Vec<u8>>, f: impl FnOnce() -> Result<T>) -> Result<T> {
     struct Restore(Option<VecDeque<Vec<u8>>>);
     impl Drop for Restore {

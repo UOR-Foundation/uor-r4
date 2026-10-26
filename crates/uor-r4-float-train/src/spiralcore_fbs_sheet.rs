@@ -2695,6 +2695,19 @@ pub fn summarize_forced(
     let readings = |r: &serde_json::Value| -> Result<ForcedReadings> {
         Ok(serde_json::from_value(r["readings"].clone())?)
     };
+    // One receipt per model, every one over the same windows.
+    let mut keys: Vec<_> = receipts.iter().map(key).collect();
+    keys.sort();
+    keys.dedup();
+    if keys.len() != receipts.len() {
+        return Err(invalid("two receipts for one model"));
+    }
+    if receipts
+        .iter()
+        .any(|r| r["windows"] != receipts[0]["windows"])
+    {
+        return Err(invalid("the receipts are not over the same windows"));
+    }
     let mut envelope = WOULD_FLIP_ENVELOPE_FLOOR;
     for (label, seed) in faithful {
         let r = receipts
@@ -2765,7 +2778,9 @@ pub fn run_d11_forced_snaps(
         .ok_or_else(|| invalid("fewer DEV windows than asked for"))?;
     let trace: EvaluatorTrace = serde_json::from_slice(&fs::read(trace_path)?)?;
     let old: EvaluatorRun = serde_json::from_slice(&fs::read(stored_run)?)?;
+    // The stored run is over the same windows as the trace, and agrees with it at every position.
     let i_old_run = old.artifact_sha256 == trace.artifact_sha256
+        && old.sequences_sha256 == trace.sequences_sha256
         && old.len == SHEET_CONTEXT
         && old.tokens.get(..windows_count * SHEET_CONTEXT) == Some(&trace.tokens[..]);
     let loaded = StackModel::load(model_dir, device)?;
@@ -4089,6 +4104,22 @@ mod tests {
         // Twice the envelope is 8e-4 of the sites.
         assert_eq!(with(|r| r.would_flips = 900), "localise-upstream");
         assert_eq!(with(|r| r.would_flips = 790), "faithful");
+        // The margin and envelope boundaries: m = 1e-2 is decisive, m = 1e-3 is no near-tie, and
+        // a rate of exactly twice the envelope is inside it (2^-11 of 2^20 sites, exact in f64).
+        assert_eq!(
+            with(|r| r.would_flip_median_margin = Some(1e-2)),
+            "localise-upstream"
+        );
+        assert_eq!(
+            with(|r| r.would_flip_median_margin = Some(1e-3)),
+            "indeterminate"
+        );
+        let mut exact = faithful;
+        exact.sites = 1 << 20;
+        exact.would_flips = 512;
+        assert_eq!(classify_forced(&exact, 1.0 / 4096.0), "faithful");
+        exact.would_flips = 513;
+        assert_eq!(classify_forced(&exact, 1.0 / 4096.0), "localise-upstream");
         assert_eq!(
             with(|r| r.would_flip_median_margin = Some(5e-3)),
             "indeterminate"
@@ -4109,6 +4140,7 @@ mod tests {
             serde_json::json!({
                 "label": label,
                 "seed": seed,
+                "windows": 428,
                 "instruments_pass": pass,
                 "readings": ForcedReadings {
                     rows: 14_287,
@@ -4151,6 +4183,13 @@ mod tests {
         // A faithful model that is missing, or that failed its instruments, is refused.
         assert!(summarize_forced(&receipts, &[("z".to_owned(), 1)]).is_err());
         assert!(summarize_forced(&receipts, &[("d".to_owned(), 1)]).is_err());
+        // Two receipts for one model, or receipts over different windows, are refused.
+        let mut twice = receipts.clone();
+        twice.push(receipt("c", 2, 500, true));
+        assert!(summarize_forced(&twice, &faithful).is_err());
+        let mut fewer = receipts.clone();
+        fewer[2]["windows"] = serde_json::json!(32);
+        assert!(summarize_forced(&fewer, &faithful).is_err());
         // Faithful models with no would-flips leave the envelope at its floor.
         let none = vec![receipt("a", 1, 0, true), receipt("b", 1, 0, true)];
         assert_eq!(

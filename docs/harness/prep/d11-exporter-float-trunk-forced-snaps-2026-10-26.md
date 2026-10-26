@@ -120,7 +120,7 @@ The bar is per model, over its 14,287 rows. Every instrument check of section 4 
 - one RTX 5090, about $1.1/h, under a 2 h lease;
 - builds about 3 minutes;
 - the qualify check about 1 minute;
-- per model, a 14 s trace and four D11 panels over 428 windows. claude-133 ran six such panels per model in about a minute.
+- per model, a 14 s trace and five D11 panels over 428 windows: unforced, self-forced, forced, and the two wrong-root gates. claude-133 ran six such panels per model in about a minute.
 - In all, about 30 minutes, about $0.60.
 
 **Stop rule:**
