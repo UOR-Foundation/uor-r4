@@ -10,7 +10,7 @@ The item's done-when reads:
 
 ## Cancel probe (run first)
 
-claude-136's stored-output bound shows a perfect exporter cannot change any of the six verdicts, so continuous localisation is not the next informative run. The pivot's remaining single-variable test is longer dual-forward training: both claude-131 losses were still falling at step 1,024. Source inspection finds `run_fbs_arm_with` already accepts a step count, but `run_d11_train_probe`/`run_d11_train_export` hard-code `STEPS = 1,024`, `TRAIN_BATCHES`, and `EVAL_STEPS`, and the CLI has no `--steps`. Repeating claude-131 would add no information. `classification: instrument`. **Not cancelled: add the narrow step-count binding, then run the 2,048-step dual configuration.**
+claude-136's stored-output bound shows a perfect exporter cannot change any of the six verdicts, so continuous localisation is not the next informative run. The pivot's remaining test is a dose-plus-coverage change to 2,048 dual-forward steps: both claude-131 losses were still falling at step 1,024, and the next 1,024 deterministic batches are new windows from the same corpus, so this is not a pure optimizer-step isolation. Source inspection finds `run_fbs_arm_with` already accepts a step count, but `run_d11_train_probe`/`run_d11_train_export` hard-code `STEPS = 1,024`, `TRAIN_BATCHES`, and `EVAL_STEPS`, and the CLI has no `--steps`. Repeating claude-131 would add no information. `classification: instrument`. **Not cancelled: add the narrow step-count binding, then run the 2,048-step dual configuration.**
 
 ## Files in scope
 
@@ -37,5 +37,5 @@ Prefer changes limited to `spiralcore_fbs_sheet.rs` and its existing CLI. Keep `
 - Any change besides dose and its evaluation/projection plumbing is needed, or the 1:1 loss, learning rates, bridges, data, seed definitions or bar would change; re-scope with a new ORDER/sheet.
 - Probe shows non-finite loss, no learning, identity mismatch or projection over one hour/seed; classify instrument versus mechanism before the full run.
 - Any host model/parity fallback, dense matmul, softmax/squashing, non-geometric surrogate, or unverified restored path appears.
-- A seed falls outside F_I by no more than |net(D,A)|, or an unflagged PASS would be read without the artifact floors; use the sheet's continuous-localisation or flagged-PASS branch instead of declaring victory.
+- Apply the sheet's exact precedence: A failing while the perfect-exporter counterfactual D passes is exporter-unresolved; A and D both failing is configuration FAIL, including mixed outcomes. Never substitute the retired coarse |net(D,A)| branch, and never read an unflagged PASS without the artifact floors.
 - Fleet/disk caps fail, or another lab's files, pod, lease or scope would be touched.

@@ -742,6 +742,7 @@ fn load_dev(data_root: &Path) -> Result<(Vec<CausalWindow>, usize)> {
 #[derive(Clone, Debug, Serialize)]
 pub struct BatchInfo {
     pub batch_count: usize,
+    pub used_windows: usize,
     pub usable_windows: usize,
     pub total_windows: usize,
     pub train_tokens: usize,
@@ -799,6 +800,7 @@ fn load_inputs(
     )?;
     let info = BatchInfo {
         batch_count: train.len(),
+        used_windows: train.len() * SHEET_TRAIN_BATCH,
         usable_windows,
         total_windows,
         train_tokens: train_tokens.len(),
@@ -1520,7 +1522,11 @@ pub fn run_d11_artifact_gap(
     let trained_steps = receipt["steps"]
         .as_u64()
         .map(|value| value as usize)
-        .unwrap_or(steps);
+        .ok_or_else(|| invalid("the Stage 4b receipt has no steps"))?;
+    if trained_steps != steps {
+        return Err(invalid("the Stage 4b receipt and evaluation steps differ"));
+    }
+    validate_longer_train_receipt(&receipt, trained_steps)?;
     let stage4b_seed = receipt["seeds"]
         .as_array()
         .and_then(|s| s.iter().find(|v| v["seed"].as_u64() == Some(seed)))
@@ -1815,24 +1821,76 @@ fn classify_residual(
     }
 }
 
+fn validate_longer_train_receipt(receipt: &serde_json::Value, steps: usize) -> Result<()> {
+    if steps == STEPS {
+        return Ok(());
+    }
+    if steps != 2_048 {
+        return Err(invalid(
+            "only the 1024 and 2048 training receipts are registered",
+        ));
+    }
+    let expected_sheet = "docs/harness/prep/d11-exporter-float-trunk-longer-dual-2026-10-26.md";
+    let expected_eval = serde_json::json!([0, 256, 512, 1_024, 2_048]);
+    for (field, expected) in [
+        ("steps", serde_json::json!(2_048)),
+        ("train_forward", serde_json::json!("dual")),
+        ("train_batches", serde_json::json!(2_048)),
+        ("eval_steps", expected_eval),
+        ("sheet", serde_json::json!(expected_sheet)),
+    ] {
+        if receipt.get(field) != Some(&expected) {
+            return Err(invalid(format!(
+                "the longer training receipt has the wrong or missing {field}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn reloaded_loss_matches(stored: Option<f64>, actual: f64) -> bool {
+    stored.is_none_or(|expected| (actual - expected).abs() <= 1e-6)
+}
+
 /// The Stage 4b training receipt's identity and readings, when a residual check is given one.
 struct Stage4bIdentity {
     sha256: String,
     noise_band_dev_loss: f64,
     training_sheet: Option<String>,
-    trained_steps: Option<usize>,
+    trained_steps: usize,
+    loss_float_by_seed: BTreeMap<u64, f64>,
 }
 
 fn read_stage4b_identity(path: &Path) -> Result<Stage4bIdentity> {
     let bytes = fs::read(path)?;
     let receipt: serde_json::Value = serde_json::from_slice(&bytes)?;
+    let trained_steps = receipt["steps"]
+        .as_u64()
+        .map(|value| value as usize)
+        .ok_or_else(|| invalid("the Stage 4b receipt has no steps"))?;
+    validate_longer_train_receipt(&receipt, trained_steps)?;
+    let mut loss_float_by_seed = BTreeMap::new();
+    for seed in receipt["seeds"]
+        .as_array()
+        .ok_or_else(|| invalid("the Stage 4b receipt has no seeds"))?
+    {
+        loss_float_by_seed.insert(
+            seed["seed"]
+                .as_u64()
+                .ok_or_else(|| invalid("a Stage 4b seed has no id"))?,
+            seed["loss_float"]
+                .as_f64()
+                .ok_or_else(|| invalid("a Stage 4b seed has no float loss"))?,
+        );
+    }
     Ok(Stage4bIdentity {
         sha256: sha256_bytes(&bytes),
         noise_band_dev_loss: receipt["noise_band_dev_loss"]
             .as_f64()
             .ok_or_else(|| invalid("the Stage 4b receipt has no noise band"))?,
         training_sheet: receipt["sheet"].as_str().map(str::to_owned),
-        trained_steps: receipt["steps"].as_u64().map(|value| value as usize),
+        trained_steps,
+        loss_float_by_seed,
     })
 }
 
@@ -1884,6 +1942,14 @@ pub fn run_d11_residual(
         Some(path) => Some(read_stage4b_identity(path)?),
         None => None,
     };
+    if let Some(identity) = &stage4b {
+        if identity.trained_steps != steps {
+            return Err(invalid("the Stage 4b receipt and evaluation steps differ"));
+        }
+    }
+    let stored_loss = stage4b
+        .as_ref()
+        .and_then(|identity| identity.loss_float_by_seed.get(&seed).copied());
     let stored_d11: Option<Vec<u32>> = match stored_d11_preds {
         Some(path) => Some(serde_json::from_slice(&fs::read(path)?)?),
         None => None,
@@ -1911,7 +1977,7 @@ pub fn run_d11_residual(
     let (e_metrics, e_preds) = panel(true)?;
     let loss_float = panel_loss(&loaded, &dev_windows, seed, steps, false)?;
     hs::clear_active_arm();
-    let i_save_load = f_preds == stored;
+    let i_save_load = f_preds == stored && reloaded_loss_matches(stored_loss, loss_float);
 
     let run: EvaluatorRun = serde_json::from_slice(&fs::read(evaluator)?)?;
     let width = loaded.config.width;
@@ -2083,9 +2149,11 @@ pub fn run_d11_residual(
             .ok_or_else(|| invalid("the residual receipt is not an object"))?;
         object.insert(
             "trained_steps".to_owned(),
-            serde_json::json!(stage4b
-                .as_ref()
-                .map(|stage4b| stage4b.trained_steps.unwrap_or(steps))),
+            serde_json::json!(stage4b.as_ref().map(|stage4b| stage4b.trained_steps)),
+        );
+        object.insert(
+            "stored_loss_float".to_owned(),
+            serde_json::json!(stored_loss),
         );
         object.insert(
             "eval_step".to_owned(),
@@ -3852,20 +3920,62 @@ mod tests {
     fn the_batch_preflight_serializes_every_field() -> Result<()> {
         let info = BatchInfo {
             batch_count: 2_048,
-            usable_windows: 8_192,
-            total_windows: 9_000,
+            used_windows: 8_192,
+            usable_windows: 20_000,
+            total_windows: 21_000,
             train_tokens: 1_500_000,
             scored_targets: 100_000,
             peak_host_rss_bytes: None,
         };
         let value = serde_json::to_value(&info)?;
         assert_eq!(value["batch_count"], serde_json::json!(2_048));
-        assert_eq!(value["usable_windows"], serde_json::json!(8_192));
-        assert_eq!(value["total_windows"], serde_json::json!(9_000));
+        assert_eq!(value["used_windows"], serde_json::json!(8_192));
+        assert_eq!(value["usable_windows"], serde_json::json!(20_000));
+        assert_eq!(value["total_windows"], serde_json::json!(21_000));
         assert_eq!(value["train_tokens"], serde_json::json!(1_500_000));
         assert_eq!(value["scored_targets"], serde_json::json!(100_000));
         assert_eq!(value["peak_host_rss_bytes"], serde_json::Value::Null);
         Ok(())
+    }
+
+    #[test]
+    fn the_longer_receipt_identity_is_exact() {
+        let valid = serde_json::json!({
+            "steps": 2_048,
+            "train_forward": "dual",
+            "train_batches": 2_048,
+            "eval_steps": [0, 256, 512, 1_024, 2_048],
+            "sheet": "docs/harness/prep/d11-exporter-float-trunk-longer-dual-2026-10-26.md"
+        });
+        assert!(validate_longer_train_receipt(&valid, 2_048).is_ok());
+        assert!(validate_longer_train_receipt(&valid, 1_024).is_ok());
+        for (label, key, value) in [
+            ("steps", "steps", serde_json::json!(1_024)),
+            ("train_forward", "train_forward", serde_json::json!("d11")),
+            ("train_batches", "train_batches", serde_json::json!(1_024)),
+            ("eval_steps", "eval_steps", serde_json::json!([0, 2_048])),
+            ("sheet", "sheet", serde_json::json!("other")),
+        ] {
+            let mut changed = valid.clone();
+            changed[key] = value;
+            assert!(
+                validate_longer_train_receipt(&changed, 2_048).is_err(),
+                "{label}"
+            );
+            let mut missing = valid.clone();
+            missing.as_object_mut().unwrap().remove(key);
+            assert!(
+                validate_longer_train_receipt(&missing, 2_048).is_err(),
+                "missing {label}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_residual_loss_is_checked_when_a_training_receipt_is_supplied() {
+        assert!(reloaded_loss_matches(None, 1.25));
+        assert!(reloaded_loss_matches(Some(1.25), 1.25));
+        assert!(!reloaded_loss_matches(Some(1.0), 1.25));
     }
 
     #[test]

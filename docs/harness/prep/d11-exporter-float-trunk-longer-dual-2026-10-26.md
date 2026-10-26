@@ -32,7 +32,7 @@ At claude-131's discordance, a pass requires roughly 79% (seed 1) and 70% (seed 
 
 1. **I-Bridges:** `cargo test --release --locked -p uor-r4-float-train --features cuda --lib` passes, including dual gradient sum, tangent bridge, Q12 clamp and all prior D11 tests.
 2. **I-Probe:** `--mode d11-train-probe --train-forward dual --steps 2048` has finite losses, falling training/DEV loss and `under_one_hour_per_seed=true`; its receipt distinguishes 32 probe steps from the 2,048 target and projected evaluation points.
-3. **I-Batch-Preflight:** the real loader returns exactly 2,048 batches (8,192 usable windows), total windows, train tokens, scored targets, peak host RSS, and exact projected eval points `[0,256,512,1024,2048]`. `train.json` repeats steps, batch count and eval points.
+3. **I-Batch-Preflight:** the real loader returns exactly 2,048 batches and `used_windows=8,192`, with `usable_windows>=8,192`, plus total windows, train tokens, loaded-batch scored targets, peak host RSS, and exact projected eval points `[0,256,512,1024,2048]`. `train.json` repeats steps, batch count and eval points.
 4. **I-Prefix:** at step 1,024, both seeds reproduce claude-131's stored top-1/export-mode/admitted counts exactly and full-precision losses within `1e-6`. A mismatch is source/data/device drift, not a dose result; stop and diagnose before interpreting step 2,048.
 5. **I-Save-Load:** each reloaded model reproduces its plain predictions and loss exactly at step 2,048.
 6. **I-Verify-All:** `d11-fbs-eval run --verify` gives G = H = R at all 82,176 positions per seed.
