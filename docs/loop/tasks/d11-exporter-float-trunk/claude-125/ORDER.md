@@ -16,7 +16,7 @@ The item puts the export gap on the GPU (CHARTER §3.5, §3.6): a panel-scored e
 
 **The design:**
 - **Transition snap.** The float trunk's D11 mode also snaps the recurrence transition's rotation to the 120 icosians, as the integer path does (`format.rs` `RefRecurrence::step`, `FbsQuatMode::Icosian`).
-- **Gates.** The gates keep the sheets' export form: Q12, then the icosian snap.
+- **Gates.** The gates are snapped to the 120 icosians directly, as the integer path snaps its own fixed-point gate, and as `HamiltonArm::HamiltonIcosianHard` does. They are not rounded to Q12 first, as the sheets' export mode rounds them. This was corrected before the run: the integer reference's `INTEGER` snaps do not round, and claude-124's attribution shows that the Q12 rounding alone moves queries by up to 0.536.
 - **Rounded tables.** The trunk's tables are read rounded exactly as `export_fbs_trunk_uorlut01` writes them: grid-coded gains and taps, Q16 biases and decay offsets, and the Q12 embedding, which is also the writer table. Every value is rounded on the host once, and the GPU forward then runs on the rounded copy.
 - **Parity proof.** On claude-124's random-init trunk:
   - the GPU in D11 mode against the converted trunk's quantized, fully snapped reference (`forward_f32_with(INTEGER, quantized = true)`);

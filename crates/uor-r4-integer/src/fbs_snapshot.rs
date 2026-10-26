@@ -183,9 +183,10 @@ pub enum FbsReadoutMode {
     /// The float sheets' D11 export mode: Q12-rounded, icosian-snapped
     /// Hamilton gates; the transition and the tables as in `Plain`.
     Export,
-    /// The D11 mode: the gates as in `Export`, the transition snapped as well,
-    /// the tables rounded as exported and the final query rounded to Q12, so
-    /// the float trunk computes what the artifact computes.
+    /// The D11 mode: the gates and the transition snapped to the 120 icosians
+    /// directly (no Q12 rounding of the gates, as the integer path), the
+    /// tables rounded as exported and the final query rounded to Q12, so the
+    /// float trunk computes what the artifact computes.
     D11,
 }
 

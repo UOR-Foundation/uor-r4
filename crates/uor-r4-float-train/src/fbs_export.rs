@@ -327,9 +327,10 @@ pub fn round_tables_as_exported(model: &StackModel) -> Result<()> {
 /// converted snapshot against it. GPU only.
 /// - [`FbsReadoutMode::Export`]: both Hamilton gates in the float sheets' D11
 ///   export mode (Q12-rounded, then snapped to the 120 icosians).
-/// - [`FbsReadoutMode::D11`]: the gates as in export mode, the transition
-///   snapped too, and the final hidden vector rounded to Q12 before the
-///   writer. The caller rounds the tables first ([`round_tables_as_exported`]).
+/// - [`FbsReadoutMode::D11`]: the gates and the transition snapped to the 120
+///   icosians directly, as the integer path does, and the final hidden
+///   vector rounded to Q12 before the writer. The caller rounds the tables
+///   first ([`round_tables_as_exported`]).
 pub fn fbs_float_readout(model: &StackModel, mode: FbsReadoutMode) -> Result<FbsFloatReadout> {
     check_no_sheet_arm()?;
     let read = || read_float_outputs(model, mode == FbsReadoutMode::D11);

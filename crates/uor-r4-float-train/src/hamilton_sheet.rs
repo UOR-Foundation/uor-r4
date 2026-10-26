@@ -1739,19 +1739,43 @@ pub fn with_d11_export_gates<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
     out
 }
 
-/// Runs `f` in the D11 mode: both Hamilton gates as in [`with_d11_export_gates`]
-/// and the recurrence transition snapped to the 120 icosians as well, as the
-/// integer path serves it. It restores the gate hook exactly as it was
-/// (claude-125). With the trunk's tables rounded as exported
-/// (`fbs_export::round_tables_as_exported`), a forward in this mode computes
-/// what the exported artifact computes, in float.
+/// Runs `f` in the D11 mode, as the integer path serves the trunk (claude-125):
+/// - both Hamilton gates snapped to the 120 icosians directly, as
+///   `HamiltonArm::HamiltonIcosianHard` does, without the export mode's Q12
+///   rounding, because the integer path snaps its own fixed-point gate;
+/// - the recurrence transition snapped as well.
+///
+/// It restores the gate hook exactly as it was. With the trunk's tables
+/// rounded as exported (`fbs_export::round_tables_as_exported`), a forward in
+/// this mode computes what the exported artifact computes, in float.
 pub fn with_d11_mode<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
     let prior = GATE_HOOK.with(|cell| {
         let mut st = cell.borrow_mut();
-        std::mem::replace(&mut st.snap_transition, true)
+        let prior = (
+            st.active_arm,
+            st.fwd_call_idx,
+            st.icosian_export_mode,
+            st.snap_transition,
+            st.capture_telemetry,
+        );
+        st.active_arm = Some(HamiltonArm::HamiltonIcosianHard);
+        st.fwd_call_idx = 0;
+        st.icosian_export_mode = false;
+        st.snap_transition = true;
+        st.capture_telemetry = false;
+        prior
     });
-    let out = with_d11_export_gates(f);
-    GATE_HOOK.with(|cell| cell.borrow_mut().snap_transition = prior);
+    let out = f();
+    GATE_HOOK.with(|cell| {
+        let mut st = cell.borrow_mut();
+        (
+            st.active_arm,
+            st.fwd_call_idx,
+            st.icosian_export_mode,
+            st.snap_transition,
+            st.capture_telemetry,
+        ) = prior;
+    });
     out
 }
 
