@@ -1535,26 +1535,36 @@ pub fn run_d11_train_probe(data_root: &Path, device: &Device) -> Result<serde_js
         32,
         &batches,
         &dev_windows,
-        &[0, 32],
+        &[0, 1, 32],
         device,
     )?;
     let first = &out.run.eval[0];
+    // The evaluation after step 1 carries step 0's D11-mode training loss.
+    let after_first = &out.run.eval[1];
     let last = out.run.final_point()?;
     let per_step = out.run.train_wall_seconds / 32.0;
     let eval_seconds = last.dev_float.eval_wall_seconds + last.dev_int.eval_wall_seconds;
     let projected_seed = per_step * STEPS as f64 + eval_seconds * 2.0 * EVAL_STEPS.len() as f64;
+    let train_learns = match (after_first.train_loss, last.train_loss) {
+        (Some(a), Some(b)) => b < a,
+        _ => false,
+    };
     Ok(serde_json::json!({
         "probe": "d11-train-probe",
         "kernels": kernel_identity(),
         "dev_documents": dev_docs,
         "dev_windows": dev_windows.len(),
-        "train_loss_step_32": last.train_loss,
+        "train_loss_step_0": after_first.train_loss,
+        "train_loss_step_31": last.train_loss,
+        "train_learns": train_learns,
         "dev_loss_float_step_0": first.dev_loss_float,
         "dev_loss_float_step_32": last.dev_loss_float,
         "learns": last.dev_loss_float < first.dev_loss_float,
+        "step0_query_credit_l2": out.run.step0_query_credit_l2,
         "seconds_per_step": per_step,
         "projected_seconds_per_seed": projected_seed,
         "projected_full_seconds": projected_seed * SEEDS.len() as f64,
+        "under_one_hour_per_seed": projected_seed < 3600.0,
         "run": out.run,
     }))
 }

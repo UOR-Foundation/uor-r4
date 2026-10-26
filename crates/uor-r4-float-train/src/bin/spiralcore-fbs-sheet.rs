@@ -175,12 +175,16 @@ fn main() -> Result<()> {
         "d11-train-probe" => {
             let value = run_d11_train_probe(&data_root, &device)?;
             println!(
-                "[d11-train-probe] learns={} dev_loss_0={} dev_loss_32={} s_per_step={} projected_full_s={}",
+                "[d11-train-probe] train_learns={} learns={} train_loss_0={} train_loss_31={} dev_loss_0={} dev_loss_32={} s_per_step={} projected_full_s={} under_one_hour_per_seed={}",
+                value["train_learns"],
                 value["learns"],
+                value["train_loss_step_0"],
+                value["train_loss_step_31"],
                 value["dev_loss_float_step_0"],
                 value["dev_loss_float_step_32"],
                 value["seconds_per_step"],
                 value["projected_full_seconds"],
+                value["under_one_hour_per_seed"],
             );
             write_receipt(&out, &value)
         }

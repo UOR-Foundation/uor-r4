@@ -40,17 +40,30 @@ There is no softmax, sigmoid or smooth relaxation. The exported tables are round
 |---|---|---|---|
 | `G-D11-ExportGap` | On **both** seeds, \|b − c\| ≤ F_I **and** \|L_A − L_F\| ≤ Δ_noise,L, with every instrument check of section 4 green | The trunk's D11 export is inside the band. With the audits and the tokens per second of these artifacts on the laptop (`fbs-toks`), the item's done-when is met, and #2820 closes. | D11-mode training by this recipe (the bridges, Stage 4b's steps and data) does not bring the gap inside the band. That closes this configuration. The next step is chosen by a decision review; it is not fixed here. |
 
+**The direction of the gap, read this way, pre-registered.**
+- F is the plain-float panel of a model trained under the snaps, so A may beat F (c > b).
+- The bar is two-sided. A FAIL with c ≫ b means the float model, not the artifact, is the one that is off: the weights have adapted to the D11 forward. The decision review reads it so; it is not a failure of export.
+- F stays the comparator, because CHARTER §3.7's gap is the float candidate against its artifact.
+
 **Readings, with no bar:**
-- F's top-1 and loss, against the plain-trained trunk's (claude-126: 1,988 and 2,643; 1.8546 and 1.8316). This shows how much the D11 forward costs the float model itself.
-- The training loss curve.
-- The export-mode panel.
+- per seed, A's top-1 hits and the sign of b − c;
+- F's top-1 and loss, against the plain-trained trunk's (claude-126: 1,988 and 2,643; 1.8546 and 1.8316), to show how much the D11 forward costs the float model itself;
+- this arm's own two-seed loss band, |L_F(1) − L_F(2)|;
+- the training losses at the evaluation points, and the export-mode panel;
+- the probe's step-0 query credit (`step0_query_credit_l2`), which shows a gradient reaches the routes.
 
 ## 4. Instrument checks (each must be green before the bar counts)
 
 1. **`I-Bridges`,** before any training. On the pod, `cargo test --release --locked -p uor-r4-float-train --features cuda --lib` passes:
    - `gpu_d11_bridges_pass_the_tangent_and_straight_gradients`, where the bridged forwards equal the snaps and the gradients are the normalization's and the identity;
    - claude-125's and claude-126's GPU D11 tests, so the evaluation's D11 mode is unchanged.
-2. **`I-Probe`.** `d11-train-probe` gives finite losses, and the DEV float loss at step 32 is below step 0's (`learns`). It projects the full run at under an hour per seed.
+2. **`I-Probe`.** `d11-train-probe` must show all of these:
+   - finite losses;
+   - the D11-mode training loss falling from step 0 to step 31 (`train_learns`);
+   - the DEV float loss at step 32 below step 0's (`learns`);
+   - a projected full run under an hour per seed (`under_one_hour_per_seed`).
+
+   Any one false is a stop.
 3. **`I-Save-Load`.** Each saved model reproduces its own float panel and loss exactly.
 4. **`I-Verify-All`.** `d11-fbs-eval run --verify` gives G = H = R at all 82,176 window positions on each seed.
 5. **`I-Inputs`.**
@@ -87,6 +100,12 @@ The noise band comes from claude-126's `d11-gap.json`, sha256 `88b6a5f988fe14467
    - `d11-fbs-eval run artifact-seed-<s>.uorlut windows.json run-seed-<s>.json --verify`, with `windows.json` from `d11-artifact-windows`;
    - `spiralcore-fbs-sheet --mode d11-artifact-gap … --model-dir save/seed-<s>/model --evaluator run-seed-<s>.json --windows-sha256 <sha> --artifact-sha256 <sha> --stage4b train.json --stored-preds save/seed-<s>/preds-float.json --seed <s> --out gap-seed-<s>.json`.
 8. Save the run folder to the store at `results/claude/d11-fbs-d11-train-2026-10-26/`, with a `SHA256SUMS`.
+9. **On a PASS only,** for the item's done-when:
+   - `fbs-toks` on each seed's artifact on the laptop, reporting decode and context tokens per second separately (the step-6 protocol of claude-126);
+   - the zero-multiply audit, `scripts/audit_zero_matmul_serving.py <release rlib and uor-r4-stack> --stack`, at the head;
+   - the integer serving library's FBS tests.
+
+   The closing REPORT says `Closes #2820` only with all three.
 
 **Minimum test power:**
 - 2 seeds;
@@ -101,7 +120,7 @@ The noise band comes from claude-126's `d11-gap.json`, sha256 `88b6a5f988fe14467
 - about 10 minutes of builds;
 - training projected by the probe; the plain arm took about 3 minutes per seed in Stage 4b, and the D11 forward adds the snaps;
 - about 19 minutes per seed of verified evaluation (claude-129);
-- in all, under $3.
+- in all, under $3 when training takes about 10 minutes per seed. If the probe projects nearer its one-hour stop, the lease is renewed, and the total could reach about $4. That is still inside the caps.
 
 **Stop rule:**
 - Stop and save on a failed `I-Bridges` or `I-Probe`, a non-finite loss, or any nonzero exit. Classify each as instrument or mechanism before calling it anything; a non-learning probe is a negative of this recipe only.
@@ -110,4 +129,20 @@ The noise band comes from claude-126's `d11-gap.json`, sha256 `88b6a5f988fe14467
 
 ## 8. Non-author TEST FITNESS review
 
-TEST FITNESS: PENDING
+**Round 1 (fresh non-author reviewer, 2026-10-26): FIT, with two required text changes, both made.**
+1. **The direction of the gap.** The sheet now says how to read it: a FAIL with c ≫ b means the float model is off. A's top-1 and the sign of b − c are readings.
+2. **The PASS-only steps.** `fbs-toks` (decode and context), the zero-multiply audit, and the integer FBS tests are now listed.
+
+**Also taken from its recommendations:**
+- this arm's own two-seed loss band, as a reading;
+- `I-Probe` now records step 0's D11-mode training loss (`train_learns`) and stops on a projection over an hour per seed;
+- the cost line now covers a lease renewal;
+- the step-0 query credit is a reading.
+
+**What it confirmed:**
+- The training signal is lawful. The transition bridge is the gate's own straight-through S³ pattern, the Q12 rounding has no smooth part, and the loss stays MarginHinge.
+- The backward runs inside `with_d11_training`.
+- With the flag off, the evaluation's D11 forward is unchanged.
+- The scorer reads `train.json`.
+
+TEST FITNESS: FIT
