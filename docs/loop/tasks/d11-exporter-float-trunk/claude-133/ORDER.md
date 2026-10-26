@@ -35,7 +35,7 @@ Cancel if a GPU Q16 control or the extended drift readings exist or are in progr
 
 Result (26 Oct):
 - No commit after `ccd4e8fec` touches those paths.
-- The other open PRs are #3283 (kimi), #3280 (antigravity) and #3169 (codex). None touches float-train or this item.
+- The other open PRs are #3283 (kimi) and #3169 (codex). None touches float-train or this item.
 - The float trunk's `hidden` has no residual rounding.
 
 **Not cancelled (instrument: none needed).**
