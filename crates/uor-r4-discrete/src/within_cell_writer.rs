@@ -1333,16 +1333,29 @@ mod cuda_impl {
 
         // ---- Control C2: Multi-Level Active Carry & Negative Gates ----
         let stages = snap4.gates.len() / 9;
-        let win_long = vec![synthetic_window(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 1])];
+        let set_tok_roots = |tbl: &mut [i32], tok: usize, r: [usize; 4]| {
+            for b in 0..4usize {
+                for d in 0..8usize {
+                    tbl[(tok * 4 + b) * 8 + d] = i32::from(geometry::ROOTS[r[b]][d]);
+                }
+            }
+        };
+        let mut table_c2 = snap4.table.clone();
+        set_tok_roots(&mut table_c2, 1, [0, 0, 0, 0]);
+        set_tok_roots(&mut table_c2, 2, [1, 2, 3, 4]);
+        let win_long = vec![synthetic_window(&[2, 2, 2, 2, 2, 2, 2, 2, 2, 1])];
         let mut gates_pos = vec![0i32; 4 * stages + 5 * stages];
         let mut gates_neg = vec![0i32; 4 * stages + 5 * stages];
         let mut gates_multi = vec![0i32; 4 * stages + 5 * stages];
+        let mut gates_both_pos = vec![0i32; 4 * stages + 5 * stages];
         for b in 0..4usize {
             gates_pos[b * stages] = 1;
             gates_neg[b * stages] = -1;
             gates_multi[b * stages] = 1;
+            gates_both_pos[b * stages] = 1;
             if stages > 1 {
                 gates_multi[b * stages + 1] = -1;
+                gates_both_pos[b * stages + 1] = 1;
             }
         }
         let dev_pos = make_device(
@@ -1351,7 +1364,7 @@ mod cuda_impl {
             ReadInitialization::ActiveLeafV1,
             NormalizationMode::ScaleMatchedSnapV1,
             7,
-            None,
+            Some(table_c2.clone()),
             Some(gates_pos),
         )?;
         let dev_neg = make_device(
@@ -1360,7 +1373,7 @@ mod cuda_impl {
             ReadInitialization::ActiveLeafV1,
             NormalizationMode::ScaleMatchedSnapV1,
             7,
-            None,
+            Some(table_c2.clone()),
             Some(gates_neg),
         )?;
         let dev_multi = make_device(
@@ -1369,8 +1382,8 @@ mod cuda_impl {
             ReadInitialization::ActiveLeafV1,
             NormalizationMode::ScaleMatchedSnapV1,
             7,
-            None,
-            Some(gates_multi.clone()),
+            Some(table_c2.clone()),
+            Some(gates_multi),
         )?;
         let k_pos = dev_pos.within_cell_writer_kernels()?;
         let k_neg = dev_neg.within_cell_writer_kernels()?;
@@ -1427,20 +1440,29 @@ mod cuda_impl {
             && antipodal_blocks == 4
             && eval_pos.rows[0].query != eval_multi.rows[0].query;
         if !c2_ok {
-            return Err(invalid(
-                "Control C2 multi-level & negative gates check failed",
-            ));
+            return Err(invalid(format!(
+                "Control C2 multi-level & negative gates check failed: terms=({terms_pos},{terms_neg},{terms_multi}) antipodal={antipodal_blocks}"
+            )));
         }
 
-        // ---- Control C3: s[12] = 1 (UnitSnapControlV1) and s[12] = 2 (RawResidualControlV1) ----
+        // ---- Control C3: s[12] = 1 (UnitSnapControlV1) and s[12] = 2 (UnnormalizedControlV1) ----
+        let dev_s0 = make_device(
+            spec4,
+            read_rel,
+            ReadInitialization::ActiveLeafV1,
+            NormalizationMode::ScaleMatchedSnapV1,
+            7,
+            Some(table_c2.clone()),
+            Some(gates_both_pos.clone()),
+        )?;
         let dev_s1 = make_device(
             spec4,
             read_rel,
             ReadInitialization::ActiveLeafV1,
             NormalizationMode::UnitSnapControlV1,
             7,
-            None,
-            Some(gates_multi.clone()),
+            Some(table_c2.clone()),
+            Some(gates_both_pos.clone()),
         )?;
         let dev_s2 = make_device(
             spec4,
@@ -1448,16 +1470,16 @@ mod cuda_impl {
             ReadInitialization::ActiveLeafV1,
             NormalizationMode::UnnormalizedControlV1,
             7,
-            None,
-            Some(gates_multi),
+            Some(table_c2),
+            Some(gates_both_pos),
         )?;
-        let fwd_scale0 = dev_multi.forward(&dev_multi.carry_windows(&win_long)?, &[2u32])?;
+        let fwd_scale0 = dev_s0.forward(&dev_s0.carry_windows(&win_long)?, &[2u32])?;
         let fwd_scale1 = dev_s1.forward(&dev_s1.carry_windows(&win_long)?, &[2u32])?;
         let fwd_scale2 = dev_s2.forward(&dev_s2.carry_windows(&win_long)?, &[2u32])?;
         let v_s0 = fwd_scale0.vectors()?;
         let v_s1 = fwd_scale1.vectors()?;
         let v_s2 = fwd_scale2.vectors()?;
-        // In UnitSnapControlV1, each 8-int block is a valid orbit root; in RawResidualControlV1, unsnapped sum differs from root norm.
+        // In UnitSnapControlV1, each 8-int block is a valid orbit root; in UnnormalizedControlV1, unsnapped sum differs from root norm.
         let s1_decodes = w2_capacity::decode_read_vector((&v_s1[..32]).try_into().unwrap()).is_ok();
         let s0_decodes = w2_capacity::decode_read_vector((&v_s0[..32]).try_into().unwrap()).is_ok();
         let c3_ok = s0_decodes && s1_decodes && v_s2 != v_s0;
@@ -1468,16 +1490,6 @@ mod cuda_impl {
         // ---- Control C4: Bounded Recent-8 Relation Cap, Per-Sweep Reset, and Single-Copy Succession ----
         // Build a 16-token table where tokens 1, 2, 3, 4 have distinct antipodal/orthogonal codes
         let mut table_c4 = snap4.table.clone();
-        // Token 1 (A): roots (0, 0, 0, 0)
-        // Token 2 (B): roots (15, 15, 15, 15) (antipodal to Token 1 so ReadLawV1 snap_2(r_A + r_B) = snap_2(0) = root 0 != root 15!)
-        // Token 3 (C): roots (5, 6, 7, 8)
-        let set_tok_roots = |tbl: &mut [i32], tok: usize, r: [usize; 4]| {
-            for b in 0..4usize {
-                for d in 0..8usize {
-                    tbl[(tok * 4 + b) * 8 + d] = i32::from(geometry::ROOTS[r[b]][d]);
-                }
-            }
-        };
         set_tok_roots(&mut table_c4, 1, [0, 0, 0, 0]);
         set_tok_roots(&mut table_c4, 2, [15, 15, 15, 15]);
         set_tok_roots(&mut table_c4, 3, [5, 6, 7, 8]);
