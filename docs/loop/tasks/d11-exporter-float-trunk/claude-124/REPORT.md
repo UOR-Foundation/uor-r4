@@ -25,7 +25,7 @@ References #2820.
 
 ## What changed
 
-Size against `origin/main`: code +590/−93 in 7 files, including the two in-file test modules; tests +50 in `stack/tests.rs`; docs: the ORDER, this REPORT and the notebook row.
+Size against `origin/main`: code +602/−97 in 7 files, including the two in-file test modules; tests +118 in `stack/tests.rs`; docs: the ORDER, this REPORT and the notebook row.
 
 - **`uor-r4-integer`:**
   - `FbsTrunkSnapshot::forward_f32_with(tokens, quantized, FbsReferenceSnaps)` adds snap switches for the transition and the gates (`FbsQuatMode::{Icosian, Q12Icosian, Normalize}`). The constants are `INTEGER`, `FLOAT` and `FLOAT_EXPORT`.
