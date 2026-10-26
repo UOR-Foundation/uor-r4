@@ -33,17 +33,19 @@ There is one model per (configuration, seed), as in claude-132: plain-c126, d11-
 - **A disagreement** is a site where the two forwards apply different roots, a zero block counting as the root its side applies. Each has a class:
   - **root:** both blocks non-zero;
   - **zero both, zero float only, zero integer only:** the zero-block classes.
-- **A window's first flip** is its first disagreeing snap call in causal order: position, then layer, then the transition, the output gate and the feed-forward gate. That call's disagreements are the window's **primaries**. Every later disagreement in the window comes after one of them and may be carried.
+- **Inert sites.** A transition at position 0 rotates a state that is still zero on both sides: the float scan starts from h = 0, and the integer path zeroes its state per sequence. Its disagreements change nothing, so they are counted apart and enter no reading.
+- **Two masks.** The root disagreements and the zero-block disagreements are placed separately. A zero block that multiplies nothing could otherwise sit everywhere and make every reading mechanical.
+- **A window's first flip** is its first root disagreement in causal order: position, then layer, then the transition, the output gate and the feed-forward gate. That call's root disagreements are the window's **primaries**. Every later root disagreement in the window comes after them and may be carried. Each window's first zero block is recorded too.
 - **The readings** (`--mode d11-snap-trace`, which also applies the bar):
   - **R:** the scored rows where D and A differ.
-  - **P:** the share of R with a disagreement in its window at or before its position.
-  - **B:** the same share over the rows where D and A agree. This is P's base rate, since every row after a window's first flip counts as preceded.
-  - **L:** over the windows with a row in R, the share whose first flip is at or before their first row in R.
+  - **Per mask (root, zero):**
+    - **P:** the share of R with a disagreement of that kind in its window at or before its position;
+    - **B:** the same share over the rows where D and A agree. This is P's base rate, since every row after a window's first such disagreement counts as preceded;
+    - **L:** over the windows with a row in R, the share whose first such disagreement is at or before their first row in R.
   - Over those windows' primaries:
-    - the root primaries;
-    - the root primaries at an exact tie (margin 0);
-    - the zero-block primaries;
-    - **m,** D's median margin at the root primaries off a tie.
+    - their count;
+    - those at an exact tie: D's margin 0, where D's raw scores two roots exactly alike. Only D's side is read, since the trace holds A's choice but not its scores;
+    - **m,** D's upper median margin at the others.
 
 ## 3. Bar and decision table
 
@@ -51,19 +53,22 @@ The bar is per model, over its 32 windows. Every instrument check of section 4 m
 
 | # | Outcome | Applies when | It means | It decides |
 |---|---|---|---|---|
-| 1 | **Not snap-carried** | P < 50% or L < 50% | Most partings start with no snap disagreement before them. | The residual is in the continuous arithmetic: the final norm, the Q12 query or the writer's kept cells. The next control compares A's and D's queries at those rows. It is never a mechanism result. |
-| 2 | **Zero convention** | zero-block primaries ≥ root primaries (and > 0) | Partings start at zero blocks, where D applies the identity and A applies −1. | D is not A's twin there: an instrument repair. D's zero convention is aligned with the integer path's, the twin is requalified, and the residual check is re-run. It is not a mechanism or trunk result. |
-| 3 | **Tie-break** | exact ties ≥ half the root primaries (and > 0) | Partings start where D's raw scores two roots exactly alike, and the two tie-break rules part. | The same kind of instrument repair: D's argmax tie rule is aligned with the integer path's lowest index. |
-| 4 | **Localise upstream** | m ≥ 1e-2 | D chose decisively where A chose differently, so A's input to the snap differs from D's by more than rounding. | An instrument localisation of the pre-snap values on that model: the gate and transition raws, layer by layer. It is not a ruling. A departure is called only when that localisation finds the defect. |
-| 5 | **Snap-flip near-tie** | P ≥ 90%, P − B ≥ 20 points, L ≥ 90%, and m < 1e-3 | Partings start at snaps whose two best roots nearly tie, and the recurrence carries them. | The residual is consistent with D's own sensitivity at its discrete choices. **It does not clear the exporter.** The next control compares A's pre-snap raws with D's at the primaries. Only if they agree within claude-133's measured drift (median 1 to 3 codes) does the next unit settle the four models as faithful, so that the residual check's "faithful on all six" follows. |
+| 0 | **No rows differ** | R is empty | D and A agree on every scored row of the 32 windows. | Nothing to place. The readings are reported (the faithful models may land here). |
+| 1 | **Zero convention** | zero mask: P ≥ 50%, L ≥ 50%, and P − B ≥ 20 points | Zero blocks sit before most partings, well above their base rate. There, D applies the identity and A applies −1. | D is not A's twin there: an instrument repair. D's zero convention is aligned with the integer path's, the twin is requalified, and the residual check is re-run. It is not a mechanism or trunk result. |
+| 2 | **Not snap-carried** | root mask: P < 50% or L < 50% | Most partings start with no root disagreement before them. | The residual is in the continuous arithmetic: the final norm, the Q12 query or the writer's kept cells. The next control compares A's and D's queries at those rows. It is never a mechanism result. |
+| 3 | **Tie-break** | exact ties ≥ half the primaries (and > 0) | Partings start where D's raw scores two roots exactly alike, and D's tie rule parts from the integer path's lowest index. | The same kind of instrument repair: D's argmax tie rule is aligned with the integer path's lowest index. |
+| 4 | **Localise upstream** | m ≥ 1e-2 | D chose decisively where A chose differently, so A's input to the snap differs from D's by more than rounding. | An instrument localisation of the pre-snap values on that model: the gate and transition raws, layer by layer. It needs no lift, because it decides a localisation, not a ruling. A departure is called only when that localisation finds the defect. |
+| 5 | **Snap-flip near-tie** | root mask: P ≥ 90%, P − B ≥ 20 points, L ≥ 90%; and m < 1e-3 | Partings start at snaps whose two best roots nearly tie, and the recurrence carries them. | The residual is consistent with D's own sensitivity at its discrete choices. **It does not clear the exporter.** The next control compares A's pre-snap raws with D's at the primaries. Only if they agree within claude-133's measured drift (median 1 to 3 codes) does the next unit settle the four models as faithful, so that the residual check's "faithful on all six" follows. |
 | 6 | **Indeterminate** | anything else | — | The readings are reported. The next step is a decision review, and the item does not park. |
 
-- If B ≥ 80%, the lift P − B cannot reach 20 points. Outcome 5 then cannot apply: the flips are too common for this panel to place the rows, and the model reads as Indeterminate.
+- **The lift guards against structural sites.** Zero blocks that sit before every row, partings or not (a structurally zero lane, say), have P ≈ B, so outcome 1 cannot fire on them.
+- Likewise, if the root mask's B ≥ 80%, its lift cannot reach 20 points. Outcome 5 then cannot apply: the flips are too common for this panel to place the rows, and the model reads as Indeterminate.
+- **The zero convention comes first** because it is a repair to the instrument. Readings of the root mask are taken only once the twin computes the same rotations as A.
 - **The item's reading:** if all four indeterminate models take one outcome, it is the item's. If they split, each model's outcome is reported, and the next step is a decision review.
 - **Readings, with no bar:**
   - the same readings on the two faithful models, as the comparison;
-  - every disagreement by class, layer and site;
-  - each window's first flip and first row in R;
+  - every disagreement by class, layer and site, and the inert count;
+  - each window's first flip, first zero block and first row in R;
   - the primaries over all 32 windows;
   - the root-disagreement margins below 1e-6, 1e-4, 1e-3 and 1e-2.
 
@@ -107,6 +112,7 @@ The bar is per model, over its 32 windows. Every instrument check of section 4 m
 - Each model has about 1,060 scored rows, about 35 to 50 of them in R on the indeterminate models (3.4% to 4.9%), in perhaps 15 to 25 of its 32 windows.
 - P's 95% interval on 40 rows is about ±9 points near 90% and about ±16 near 50%. L's on 20 windows is about ±13 near 90% and about ±22 near 50%.
 - So the bars are coarse by design. They separate "nearly all" from "most" from "few", not finer shades. A model near a threshold reads on whichever side its count falls, and the REPORT gives its counts.
+- If R gathers in fewer windows, L's interval widens past ±22, so the REPORT gives each model's window count beside its L.
 - The primaries number at least one per window with a flip, so m rests on roughly 15 to 25 or more values per model.
 
 ## 7. Cost and stop rule
