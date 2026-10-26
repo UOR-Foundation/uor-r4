@@ -999,6 +999,30 @@ fn hard_gate_requires_exact_40_20_20_and_10_10() -> TestResult {
 
     let gate = hard_gates(&panel, &records.true_records)?;
     assert!(gate.passed());
+
+    let evicted_index = panel
+        .rows
+        .iter()
+        .position(|row| row.expected_abstention() == Some(AbstentionKind::Evicted))
+        .ok_or("missing evicted row")?;
+    let wrong_address = PrimeAddress::new(&[101, 103])?;
+    let wrong_eviction = score_store_read(
+        &panel.rows[evicted_index],
+        Arm::TrueAddress,
+        AddressReadOutcome::Evicted {
+            address: wrong_address.clone(),
+            evicted_at_sequence: 1,
+        },
+        None,
+    )?;
+    assert_eq!(
+        wrong_eviction.address,
+        Some(AddressSpec::from(&wrong_address))
+    );
+    let mut wrong_evicted = records.true_records.clone();
+    wrong_evicted[evicted_index] = wrong_eviction;
+    assert!(!hard_gates(&panel, &wrong_evicted)?.passed());
+
     assert_eq!(gate.rows, PANEL_ROWS as u64);
     assert_eq!(gate.current_pass, CURRENT_ROWS as u64);
     assert_eq!(gate.current_total, CURRENT_ROWS as u64);

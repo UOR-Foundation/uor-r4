@@ -18,7 +18,7 @@ Delivers Steps 1–4 of [`m1-address-as-read`](../../roadmap/items/m1-address-as
 
 ## Object-store oracle result (kimi-42, 2026-10-26)
 
-- **True address:** 40/40 current, 20/20 previous and 20/20 typed abstention (10 Absent + 10 Evicted), zero substitutions. **No-memory/no-address:** 0/80 and byte-identical. **Sieve:** formed-query match 60/80, selected-address match 40/80, exact value 20/80.
+- **True address:** 40/40 current, 20/20 previous and 20/20 typed abstention (10 Absent + 10 Evicted), zero substitutions. **No-memory/no-address:** 0/80; generated token vectors and arm-excluded emission records were identical. **Sieve:** formed-query match 60/80, selected-address match 40/80, exact value 20/80.
 - **Contrasts:** true-vs-no-memory `40/0` current, `20/0` previous, `20/0` abstention; true-vs-sieve `20/0` current and `20/0` abstention. Previous sieve is excluded as current-value fallback. The meaningful next question is address formation on 20 current sieve misses, not storage or default serving.
 - **Parity and controls:** 14,287/14,287 rows exact, status 0, repeat records byte-identical; random binding held on 80/80; composed gate PASS.
 - **Cost and evidence:** final pre-registered v3 at `590ace9e`, 439 s and `$0.135`; earlier failed/unregistered costs are separate. HF `results/kimi/m1-address-oracle-2026-10-26/results-v3/address-oracle-result-v3.tar.gz` (`3682dd7a80a8d994955b5b64131fceecc29be7ecdf49034276f744807154bb55`). See `docs/loop/tasks/m1-address-as-read/kimi-42/REPORT.md`.
@@ -29,7 +29,7 @@ Delivers Steps 1–4 of [`m1-address-as-read`](../../roadmap/items/m1-address-as
 
 ## Notebook row (in-scope record for `m3-durable-memory`)
 
-Because `docs/research/notebook/m3-durable-memory.md` is outside `m1-address-as-read.md`'s frontmatter `scope:`, the notebook row is recorded here in the in-scope lab README:
+The oracle result is also recorded in `docs/research/notebook/m3-durable-memory.md`; the earlier Steps 1–4 row remains here for continuity:
 
 | Date | Item | Change / Finding | Verification |
 |---|---|---|---|

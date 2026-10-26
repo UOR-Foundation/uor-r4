@@ -1210,6 +1210,9 @@ pub fn score_store_read(
             Some(hex32(object_version)),
             *whole_object_verified,
         ),
+        AddressReadOutcome::Evicted { address, .. } => {
+            (Some(AddressSpec::from(address)), None, None, false)
+        }
         _ => (None, None, None, false),
     };
     let abstention = match &outcome {
@@ -1510,7 +1513,9 @@ pub fn hard_gates(
                 let pass = record.typed_abstention_pass
                     && record.abstention == row.expected_abstention()
                     && record.emitted_text.is_none()
-                    && record.source == EmissionSource::ExactStore;
+                    && record.source == EmissionSource::ExactStore
+                    && (record.abstention != Some(AbstentionKind::Evicted)
+                        || record.address.as_ref() == Some(&row.address));
                 if pass {
                     report.abstention_pass += 1;
                 }

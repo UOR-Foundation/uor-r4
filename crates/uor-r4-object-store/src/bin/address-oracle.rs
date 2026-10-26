@@ -337,7 +337,11 @@ fn run_oracle(
                 "slots": slots,
                 "backend_fetches": fetches,
                 "candidate_counts": candidate_counts,
-                "candidates": candidate_counts.active_admitted + candidate_counts.evicted_admitted,
+                "candidates": match arm {
+                    Arm::TrueAddress | Arm::RandomAddress => 1,
+                    Arm::Sieve => candidate_counts.active_admitted + candidate_counts.evicted_admitted,
+                    Arm::NoMemory | Arm::NoAddress => 0,
+                },
                 "value_bytes": record.emitted_text.as_ref().map_or(0, String::len),
             });
             per_arm.insert(format!("{arm:?}"), value);
