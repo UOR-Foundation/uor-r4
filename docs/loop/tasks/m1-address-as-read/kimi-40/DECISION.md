@@ -22,7 +22,7 @@ The top session accepts that required next measurement rather than the rejected 
 
 - `store_check_pass` and model `emission_check_pass` are separate metrics. Store replay never counts as an oracle gain.
 - Stage 0 uses T16_fz Seed 1 D11 `cd88b6b7b950e7f4672ca645adfeccf37c5560c45831377b54a3c772ce28defd`, not a Level 3 claim. Its position-strip effect is measured rather than assumed to match retained 455/1,484.
-- Copy non-vacuity requires both no-hint and random-hint primary comparisons to satisfy `d > 24 && d^2 > 4(b+c)` on 40 fixed pairs. This is the existing strict paired floor, not a new threshold chosen after seeing results.
+- Copy non-vacuity requires both no-hint and random-hint primary comparisons to satisfy `d > 24 && d^2 > 4(b+c)` on 40 fixed pairs. This is a conservative absolute margin of at least 25 net wins, not a 2-SE estimate; a control winning at least 8 rows intentionally blocks panel spend.
 - BPB is removed from this sheet only, under CHARTER §4.8's lawful-likelihood sequencing. No BPB number is reported.
 - Raw `read_sieve` is not repaired in this unit. Selected address+version is distinct from query-address derivation.
 - The roadmap frontmatter mismatch (`needs_gpu: false` versus GPU model evaluation) is a separate metadata follow-up; the sheet distinguishes host preparation from GPU evaluation.
