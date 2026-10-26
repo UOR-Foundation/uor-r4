@@ -6,15 +6,19 @@
 //! geometric recurrence gates, MarginHinge with 8 rivals, SpiralCore/FBS projections, an 8-cell
 //! native vector head). The four arms are `spiralcore_fbs_arms::FbsArm`. Each arm and seed trains
 //! for 1,024 `StackAdamW` steps on `mw-balp/train`, one fresh 4 x 192 batch per step, and is scored
-//! on the 14,287-row `ft/dev` panel at steps 0, 256, 512 and 1,024, in float and in the D11-
-//! compatible export mode (Q12 gate, icosian snap, Q12 writer; the SpiralCore/FBS route itself is
-//! an exact (atom, action) table). No softmax, squashing or dense matrix product occurs.
+//! on the 14,287-row `ft/dev` panel at steps 0, 256, 512 and 1,024, in float and in the Hamilton
+//! sheet's D11-compatible export mode. That mode snaps the Hamilton gates to the 120 icosians in
+//! both the loss and the top-1 evaluation; only the top-1 evaluation also rounds the writer table
+//! and the scored hidden state to Q12. The rest of the stack stays float, and the SpiralCore/FBS
+//! route itself is an exact (atom, action) gather. No softmax, squashing or dense matrix product
+//! occurs.
 //!
 //! Learning rates, weight decay and clip are the Hamilton sheet's (the FBS sheet registers none of
 //! its own); the frozen-query arm keeps its queries out of both updates.
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
@@ -366,6 +370,8 @@ pub fn run_fbs_arm(
             hs::SHEET_BASE_LR * hs::SHEET_DECAY_LR_MULT,
             |name| name.ends_with("rec.decay"),
         )?;
+        // The step's backward and updates are queued on the GPU; wait for them before timing.
+        device.synchronize()?;
         train_wall += started.elapsed().as_secs_f64();
         if eval_steps.contains(&(step + 1)) {
             evaluate(&model, step + 1, Some(value))?;
@@ -408,10 +414,13 @@ pub fn run_fbs_arm(
     })
 }
 
-/// `I-Export-Exactness` on a synthetic plan: the trained route's `(atom, action)` table, read back
-/// from a coded-carrier forward, must hold one atom and one lawful Cl(0,6) signed-axis action per
-/// output block (a row of the geometry's integer `axes` table), and the integer evaluation of that
-/// table must equal the F32 kernel exactly on integer root-aligned carriers.
+/// `I-Export-Exactness` on a synthetic plan with random (untrained) queries, for the one-atom
+/// standard forward only: the route's `(atom, action)` table, read back from a coded-carrier
+/// forward, must hold one atom and one lawful Cl(0,6) signed-axis action per output block (a row
+/// of the pinned geometry's integer `axes` table), and the integer evaluation of that table must
+/// equal the F32 kernel exactly on integer root-aligned carriers. The identity and two-atom arms'
+/// integer forms are not exercised here, and the Q12 writer's top-1 is checked separately, by the
+/// pure-`i32` writer oracle inside every export-mode DEV evaluation.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExportExactness {
     pub output_blocks: usize,
@@ -674,28 +683,194 @@ fn f_i(b: usize, c: usize) -> usize {
     bound.max(F_I_FLOOR)
 }
 
-/// Whether `active` beats `control` on one seed: lower final DEV loss by at least the noise band,
-/// or a paired top-1 advantage of at least `F_I`.
-fn beats(
-    active: &FbsArmOutput,
-    control: &FbsArmOutput,
-    targets: &[u32],
-    noise: f64,
-    seed: u64,
-) -> Result<(bool, PairedDiscordance)> {
-    let la = active.run.final_point()?.dev_loss_float;
-    let lc = control.run.final_point()?.dev_loss_float;
-    let paired = hs::compute_paired_discordance(
-        &active.run.arm,
-        &active.preds_float,
-        &control.run.arm,
-        &control.preds_float,
-        targets,
-        seed,
-    );
+/// Whether arm `a` beats arm `c` on one seed: a strictly lower final DEV loss by at least the
+/// noise band, or a paired top-1 advantage (rows `a` hits and `c` misses, less the reverse) of at
+/// least `F_I`.
+fn wins(loss_a: f64, loss_c: f64, noise: f64, paired: &PairedDiscordance) -> bool {
     let advantage = paired.a_hit_b_miss_c as isize - paired.a_miss_b_hit_b as isize;
     let threshold = f_i(paired.a_hit_b_miss_c, paired.a_miss_b_hit_b) as isize;
-    Ok((lc - la >= noise || advantage >= threshold, paired))
+    (loss_c - loss_a >= noise && loss_c > loss_a) || advantage >= threshold
+}
+
+/// What the gates read from one arm and seed: the step-0 and final float DEV loss, the final
+/// export-mode DEV loss, and the final float and export-mode top-1 predictions.
+pub struct GateRun<'a> {
+    pub loss0: f64,
+    pub loss_float: f64,
+    pub loss_int: f64,
+    pub preds_float: &'a [u32],
+    pub preds_int: &'a [u32],
+}
+
+/// The sheet's section 4 verdicts on DEV, computed from the final numbers alone.
+#[derive(Clone, Debug)]
+pub struct GateVerdicts {
+    pub noise: f64,
+    /// Active arm against each control, float top-1, per seed (G-Fbs-Sheet-Fit).
+    pub paired: Vec<PairedDiscordance>,
+    /// The exported arm's float against export-mode top-1, per seed (G-Fbs-ExportGap).
+    pub export_paired: Vec<PairedDiscordance>,
+    pub fit_arm: Option<FbsArm>,
+    pub capacity_winner: FbsArm,
+    pub export_arm: FbsArm,
+    pub export_ok: bool,
+}
+
+/// `G-Fbs-Sheet-Fit`, `G-Fbs-Capacity` and `G-Fbs-ExportGap` over every arm and seed.
+pub fn evaluate_gates(
+    runs: &BTreeMap<(FbsArm, u64), GateRun<'_>>,
+    targets: &[u32],
+) -> Result<GateVerdicts> {
+    let run = |arm: FbsArm, seed: u64| {
+        runs.get(&(arm, seed))
+            .ok_or_else(|| invalid(format!("no run for {} seed {seed}", arm.name())))
+    };
+    // The two-seed noise band: the largest seed-to-seed gap in final float DEV loss, over arms.
+    let mut noise = 0.0f64;
+    for arm in FbsArm::ALL {
+        let gap = run(arm, SEEDS[0])?.loss_float - run(arm, SEEDS[1])?.loss_float;
+        noise = noise.max(gap.abs());
+    }
+    // G-Fbs-Sheet-Fit: an active arm descends and beats both controls on both seeds.
+    let mut paired = Vec::new();
+    let mut fitting = Vec::new();
+    for active in [FbsArm::OneAtomActive, FbsArm::TwoAtomMix] {
+        let mut all = true;
+        for seed in SEEDS {
+            let a = run(active, seed)?;
+            let mut ok = a.loss_float < a.loss0;
+            for control in [FbsArm::FrozenQueries, FbsArm::IdentityTransport] {
+                let c = run(control, seed)?;
+                let p = hs::compute_paired_discordance(
+                    active.name(),
+                    a.preds_float,
+                    control.name(),
+                    c.preds_float,
+                    targets,
+                    seed,
+                );
+                ok &= wins(a.loss_float, c.loss_float, noise, &p);
+                paired.push(p);
+            }
+            all &= ok;
+        }
+        if all {
+            fitting.push(active);
+        }
+    }
+    // G-Fbs-Capacity: two paths win only by the noise band on both seeds.
+    let mut two_wins = true;
+    for seed in SEEDS {
+        let one = run(FbsArm::OneAtomActive, seed)?.loss_float;
+        two_wins &= run(FbsArm::TwoAtomMix, seed)?.loss_float <= one - noise;
+    }
+    let capacity_winner = if two_wins {
+        FbsArm::TwoAtomMix
+    } else {
+        FbsArm::OneAtomActive
+    };
+    // The exported arm is the one fitting arm when exactly one fits, else the capacity winner.
+    let export_arm = match fitting.as_slice() {
+        [only] => *only,
+        _ => capacity_winner,
+    };
+    // G-Fbs-ExportGap: the exported arm's integer export within the noise band on both seeds.
+    let mut export_paired = Vec::new();
+    let mut export_ok = true;
+    for seed in SEEDS {
+        let r = run(export_arm, seed)?;
+        let gap = hs::compute_paired_discordance(
+            "float",
+            r.preds_float,
+            "int",
+            r.preds_int,
+            targets,
+            seed,
+        );
+        let net = (gap.a_hit_b_miss_c as isize - gap.a_miss_b_hit_b as isize).unsigned_abs();
+        export_ok &= (r.loss_int - r.loss_float).abs() <= noise
+            && net <= f_i(gap.a_hit_b_miss_c, gap.a_miss_b_hit_b);
+        export_paired.push(gap);
+    }
+    Ok(GateVerdicts {
+        noise,
+        paired,
+        export_paired,
+        fit_arm: fitting.first().copied(),
+        capacity_winner,
+        export_arm,
+        export_ok,
+    })
+}
+
+/// `G-Fbs-Transfer` on the sealed `fresh_v2` draw: the exported arm against the frozen null on
+/// both seeds. Every failure, a missing draw included, comes back as an error for the caller to
+/// record as blocked.
+fn score_fresh_v2(
+    data_root: &Path,
+    outputs: &BTreeMap<(FbsArm, u64), FbsArmOutput>,
+    arm: FbsArm,
+    noise: f64,
+) -> Result<(bool, serde_json::Value)> {
+    let (fresh_tokens, fresh_mask) = hs::load_pinned_uort_split(
+        &data_root.join("fresh_v2/tokens.u16"),
+        &data_root.join("fresh_v2/response_mask.u8"),
+        PINNED_FRESH_TOKENS_SHA256,
+        PINNED_FRESH_MASK_SHA256,
+        EXPECTED_FRESH_TOKENS,
+        EXPECTED_FRESH_TARGETS,
+        hs::SHEET_VOCAB,
+        hs::SHEET_BOS_ID,
+    )?;
+    let (fresh_windows, _) =
+        hs::build_document_windows(&fresh_tokens, &fresh_mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
+    let fresh_targets: Vec<u32> = fresh_windows
+        .iter()
+        .flat_map(|w| w.scored_targets.iter().copied())
+        .collect();
+    let mut rows = Vec::new();
+    let mut all = true;
+    for seed in SEEDS {
+        let mut scored = BTreeMap::new();
+        for which in [arm, FbsArm::FrozenQueries] {
+            let out = outputs
+                .get(&(which, seed))
+                .ok_or_else(|| invalid(format!("no run for {} seed {seed}", which.name())))?;
+            let _guard = ArmGuard::set(which);
+            let (metrics, preds) = hs::evaluate_dev_panel(
+                &out.model,
+                &fresh_windows,
+                HamiltonArm::HamiltonActive,
+                seed,
+                STEPS,
+                false,
+                false,
+            )?;
+            let l = panel_loss(&out.model, &fresh_windows, seed, STEPS, false)?;
+            scored.insert(which, (metrics, preds, l));
+        }
+        let (wm, wp, wl) = &scored[&arm];
+        let (fm, fp, fl) = &scored[&FbsArm::FrozenQueries];
+        let p = hs::compute_paired_discordance(
+            arm.name(),
+            wp,
+            FbsArm::FrozenQueries.name(),
+            fp,
+            &fresh_targets,
+            seed,
+        );
+        let won = wins(*wl, *fl, noise, &p);
+        all &= won;
+        rows.push(serde_json::json!({
+            "seed": seed, "winner_loss": wl, "frozen_loss": fl,
+            "winner_top1": wm.top1_hits, "frozen_top1": fm.top1_hits,
+            "paired": p, "winner_beats_frozen": won,
+        }));
+    }
+    Ok((
+        all,
+        serde_json::json!({"targets": fresh_targets.len(), "seeds": rows}),
+    ))
 }
 
 /// The receipt of the full run.
@@ -717,6 +892,9 @@ pub struct FbsSheetReceipt {
     pub runs: Vec<FbsArmRun>,
     pub noise_band_dev_loss: f64,
     pub paired: Vec<PairedDiscordance>,
+    /// The exported arm's float against export-mode top-1 discordance, per seed.
+    #[serde(default)]
+    pub export_paired: Vec<PairedDiscordance>,
     pub i_finite_cuda_pass: bool,
     pub i_dev_denominator_pass: bool,
     pub i_route_mobility_pass: bool,
@@ -724,6 +902,9 @@ pub struct FbsSheetReceipt {
     pub g_sheet_fit: bool,
     pub g_sheet_fit_arm: Option<String>,
     pub g_capacity_winner: String,
+    /// The arm `G-Fbs-ExportGap` and `G-Fbs-Transfer` score.
+    #[serde(default)]
+    pub g_export_gap_arm: String,
     pub g_export_gap: bool,
     pub g_transfer: Option<bool>,
     pub fresh_v2: Option<serde_json::Value>,
@@ -754,13 +935,21 @@ pub fn run_full_sheet(data_root: &Path, device: &Device) -> Result<FbsSheetRecei
             outputs.insert((arm, seed), out);
         }
     }
-    let loss = |arm: FbsArm, seed: u64| -> Result<f64> {
-        Ok(outputs[&(arm, seed)].run.final_point()?.dev_loss_float)
-    };
-    let mut noise = 0.0f64;
-    for arm in FbsArm::ALL {
-        noise = noise.max((loss(arm, 1)? - loss(arm, 2)?).abs());
+    let mut gate_runs = BTreeMap::new();
+    for (&key, out) in &outputs {
+        let last = out.run.final_point()?;
+        gate_runs.insert(
+            key,
+            GateRun {
+                loss0: out.run.eval[0].dev_loss_float,
+                loss_float: last.dev_loss_float,
+                loss_int: last.dev_loss_int,
+                preds_float: &out.preds_float,
+                preds_int: &out.preds_int,
+            },
+        );
     }
+    let gates = evaluate_gates(&gate_runs, &targets)?;
     let runs: Vec<FbsArmRun> = outputs.values().map(|o| o.run.clone()).collect();
     let i_dev = runs.iter().all(|run| {
         run.eval.iter().all(|p| {
@@ -781,142 +970,19 @@ pub fn run_full_sheet(data_root: &Path, device: &Device) -> Result<FbsSheetRecei
             run.route_mobility_fraction >= ROUTE_MOBILITY_FLOOR
                 && run.route_churn_last_step < ROUTE_CHURN_CEILING
         });
-    // G-Fbs-Sheet-Fit: an active arm descends and beats both controls on both seeds.
-    let mut paired = Vec::new();
-    let mut fit_arm = None;
-    for active in [FbsArm::OneAtomActive, FbsArm::TwoAtomMix] {
-        let mut all = true;
-        for seed in SEEDS {
-            let point0 = outputs[&(active, seed)].run.eval[0].dev_loss_float;
-            let descends = loss(active, seed)? < point0;
-            let (b1, p1) = beats(
-                &outputs[&(active, seed)],
-                &outputs[&(FbsArm::FrozenQueries, seed)],
-                &targets,
-                noise,
-                seed,
-            )?;
-            let (b2, p2) = beats(
-                &outputs[&(active, seed)],
-                &outputs[&(FbsArm::IdentityTransport, seed)],
-                &targets,
-                noise,
-                seed,
-            )?;
-            paired.push(p1);
-            paired.push(p2);
-            all &= descends && b1 && b2;
+    // Any failure on the sealed draw blocks G-Fbs-Transfer: it is recorded, never a negative, and
+    // never discards the DEV results above.
+    let (transfer, fresh) = if gates.fit_arm.is_some() && gates.export_ok {
+        match score_fresh_v2(data_root, &outputs, gates.export_arm, gates.noise) {
+            Ok((won, value)) => (Some(won), Some(value)),
+            Err(error) => (
+                None,
+                Some(serde_json::json!({
+                    "status": "blocked: G-Fbs-Transfer could not be scored on the sealed fresh_v2 draw",
+                    "error": error.to_string(),
+                })),
+            ),
         }
-        if all && fit_arm.is_none() {
-            fit_arm = Some(active);
-        }
-    }
-    // G-Fbs-Capacity: two paths win only by the noise band on both seeds.
-    let two_wins = SEEDS
-        .iter()
-        .map(|&s| Ok(loss(FbsArm::TwoAtomMix, s)? <= loss(FbsArm::OneAtomActive, s)? - noise))
-        .collect::<Result<Vec<bool>>>()?
-        .into_iter()
-        .all(|b| b);
-    let winner = if two_wins {
-        FbsArm::TwoAtomMix
-    } else {
-        FbsArm::OneAtomActive
-    };
-    // G-Fbs-ExportGap: the winner's integer export within the noise band on both seeds.
-    let mut export_ok = true;
-    for seed in SEEDS {
-        let out = &outputs[&(winner, seed)];
-        let point = out.run.final_point()?;
-        let gap = hs::compute_paired_discordance(
-            "float",
-            &out.preds_float,
-            "int",
-            &out.preds_int,
-            &targets,
-            seed,
-        );
-        let advantage = (gap.a_hit_b_miss_c as isize - gap.a_miss_b_hit_b as isize).unsigned_abs();
-        export_ok &= (point.dev_loss_int - point.dev_loss_float).abs() <= noise
-            && advantage <= f_i(gap.a_hit_b_miss_c, gap.a_miss_b_hit_b);
-    }
-    let fit = fit_arm.is_some();
-    let loaded = (fit && export_ok).then(|| {
-        hs::load_pinned_uort_split(
-            &data_root.join("fresh_v2/tokens.u16"),
-            &data_root.join("fresh_v2/response_mask.u8"),
-            PINNED_FRESH_TOKENS_SHA256,
-            PINNED_FRESH_MASK_SHA256,
-            EXPECTED_FRESH_TOKENS,
-            EXPECTED_FRESH_TARGETS,
-            hs::SHEET_VOCAB,
-            hs::SHEET_BOS_ID,
-        )
-    });
-    // A missing or mismatched sealed draw blocks G-Fbs-Transfer; it is recorded, never a negative,
-    // and never discards the DEV results above.
-    let (transfer, fresh) = if let Some(Err(error)) = &loaded {
-        (
-            None,
-            Some(serde_json::json!({
-                "status": "blocked: the sealed fresh_v2 draw is not available under the data root",
-                "error": error.to_string(),
-            })),
-        )
-    } else if let Some(Ok((fresh_tokens, fresh_mask))) = loaded {
-        let (fresh_windows, _) = hs::build_document_windows(
-            &fresh_tokens,
-            &fresh_mask,
-            SHEET_CONTEXT,
-            hs::SHEET_BOS_ID,
-        )?;
-        let fresh_targets: Vec<u32> = fresh_windows
-            .iter()
-            .flat_map(|w| w.scored_targets.iter().copied())
-            .collect();
-        let mut rows = Vec::new();
-        let mut all = true;
-        for seed in SEEDS {
-            let mut scored = BTreeMap::new();
-            for arm in [winner, FbsArm::FrozenQueries] {
-                let out = &outputs[&(arm, seed)];
-                let _guard = ArmGuard::set(arm);
-                let (metrics, preds) = hs::evaluate_dev_panel(
-                    &out.model,
-                    &fresh_windows,
-                    HamiltonArm::HamiltonActive,
-                    seed,
-                    STEPS,
-                    false,
-                    false,
-                )?;
-                let l = panel_loss(&out.model, &fresh_windows, seed, STEPS, false)?;
-                scored.insert(arm, (metrics, preds, l));
-            }
-            let (wm, wp, wl) = &scored[&winner];
-            let (fm, fp, fl) = &scored[&FbsArm::FrozenQueries];
-            let p = hs::compute_paired_discordance(
-                winner.name(),
-                wp,
-                FbsArm::FrozenQueries.name(),
-                fp,
-                &fresh_targets,
-                seed,
-            );
-            let advantage = p.a_hit_b_miss_c as isize - p.a_miss_b_hit_b as isize;
-            let won =
-                fl - wl >= noise || advantage >= f_i(p.a_hit_b_miss_c, p.a_miss_b_hit_b) as isize;
-            all &= won;
-            rows.push(serde_json::json!({
-                "seed": seed, "winner_loss": wl, "frozen_loss": fl,
-                "winner_top1": wm.top1_hits, "frozen_top1": fm.top1_hits,
-                "paired": p, "winner_beats_frozen": won,
-            }));
-        }
-        (
-            Some(all),
-            Some(serde_json::json!({"targets": fresh_targets.len(), "seeds": rows})),
-        )
     } else {
         (None, None)
     };
@@ -946,16 +1012,18 @@ pub fn run_full_sheet(data_root: &Path, device: &Device) -> Result<FbsSheetRecei
         dev_documents: dev_docs,
         dev_windows: dev_windows.len(),
         runs,
-        noise_band_dev_loss: noise,
-        paired,
+        noise_band_dev_loss: gates.noise,
+        paired: gates.paired,
+        export_paired: gates.export_paired,
         i_finite_cuda_pass: i_finite,
         i_dev_denominator_pass: i_dev,
         i_route_mobility_pass: i_mobility,
         i_export_exactness: exactness,
-        g_sheet_fit: fit,
-        g_sheet_fit_arm: fit_arm.map(|a| a.name().to_string()),
-        g_capacity_winner: winner.name().to_string(),
-        g_export_gap: export_ok,
+        g_sheet_fit: gates.fit_arm.is_some(),
+        g_sheet_fit_arm: gates.fit_arm.map(|a| a.name().to_string()),
+        g_capacity_winner: gates.capacity_winner.name().to_string(),
+        g_export_gap_arm: gates.export_arm.name().to_string(),
+        g_export_gap: gates.export_ok,
         g_transfer: transfer,
         fresh_v2: fresh,
         results_sha256: sha256_bytes(&digest),
@@ -963,17 +1031,22 @@ pub fn run_full_sheet(data_root: &Path, device: &Device) -> Result<FbsSheetRecei
     Ok(receipt)
 }
 
-/// Writes `value` as pretty JSON to `path`, never over an existing file.
+/// Writes `value` as pretty JSON to `path`, never over an existing file (the file is created
+/// exclusively, so a concurrent writer cannot be overwritten either).
 pub fn write_receipt(path: &Path, value: &serde_json::Value) -> Result<()> {
-    if path.exists() {
-        return Err(invalid(format!(
-            "{} exists; receipts are never overwritten",
-            path.display()
-        )));
-    }
     let mut text = serde_json::to_string_pretty(value).map_err(|e| invalid(e.to_string()))?;
     text.push('\n');
-    fs::write(path, text)?;
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|e| {
+            invalid(format!(
+                "{}: {e}; receipts are never overwritten",
+                path.display()
+            ))
+        })?;
+    file.write_all(text.as_bytes())?;
     Ok(())
 }
 
@@ -986,6 +1059,176 @@ mod tests {
         assert_eq!(f_i(0, 0), 24);
         assert_eq!(f_i(100, 100), 29); // ceil(2 sqrt 200) = ceil(28.28)
         assert_eq!(f_i(50, 50), 24); // ceil(2 sqrt 100) = 20, floored at 24
+    }
+
+    const ROWS: usize = 2_000;
+
+    /// Predictions over targets `0..ROWS` that hit the first `hits` rows and miss the rest.
+    fn hitting(hits: usize) -> Vec<u32> {
+        (0..ROWS as u32)
+            .map(|t| if (t as usize) < hits { t } else { u32::MAX })
+            .collect()
+    }
+
+    /// The gates over a table where every arm and seed starts at loss 3.0 and ends at
+    /// `cell(arm, seed) = (float loss, export loss, float hits, export hits)`.
+    fn gates_for(cell: impl Fn(FbsArm, u64) -> (f64, f64, usize, usize)) -> GateVerdicts {
+        let targets: Vec<u32> = (0..ROWS as u32).collect();
+        let mut table = BTreeMap::new();
+        for seed in SEEDS {
+            for arm in FbsArm::ALL {
+                let (loss, loss_int, hits, hits_int) = cell(arm, seed);
+                table.insert(
+                    (arm, seed),
+                    (loss, loss_int, hitting(hits), hitting(hits_int)),
+                );
+            }
+        }
+        let runs = table
+            .iter()
+            .map(|(&key, (loss, loss_int, float, int))| {
+                let run = GateRun {
+                    loss0: 3.0,
+                    loss_float: *loss,
+                    loss_int: *loss_int,
+                    preds_float: float,
+                    preds_int: int,
+                };
+                (key, run)
+            })
+            .collect();
+        evaluate_gates(&runs, &targets).expect("gates")
+    }
+
+    fn is_active(arm: FbsArm) -> bool {
+        matches!(arm, FbsArm::OneAtomActive | FbsArm::TwoAtomMix)
+    }
+
+    #[test]
+    fn the_fit_gate_needs_both_controls_on_both_seeds() {
+        // Equal losses (noise 0); the active arms hit 500 rows, the controls 100.
+        let base = |arm: FbsArm, _seed: u64| {
+            let hits = if is_active(arm) { 500 } else { 100 };
+            (2.0, 2.0, hits, hits)
+        };
+        let gates = gates_for(base);
+        assert_eq!(gates.fit_arm, Some(FbsArm::OneAtomActive));
+        assert_eq!(
+            gates.paired.len(),
+            8,
+            "2 active arms x 2 seeds x 2 controls"
+        );
+        // One control out-hits both active arms on one seed: no arm fits.
+        let gates = gates_for(|arm, seed| match (arm, seed) {
+            (FbsArm::IdentityTransport, 2) => (2.0, 2.0, 600, 600),
+            _ => base(arm, seed),
+        });
+        assert_eq!(gates.fit_arm, None);
+    }
+
+    #[test]
+    fn the_fit_gate_counts_top1_in_the_active_arms_favour_only() {
+        // The identity control loses on loss either way. Against the frozen null only top-1 can
+        // decide, and the active arms hit fewer rows: a reversed count would pass the gate.
+        let gates = gates_for(|arm, _| match arm {
+            FbsArm::FrozenQueries => (2.0, 2.0, 500, 500),
+            FbsArm::IdentityTransport => (2.5, 2.5, 100, 100),
+            _ => (2.0, 2.0, 100, 100),
+        });
+        assert_eq!(gates.fit_arm, None);
+    }
+
+    #[test]
+    fn a_loss_win_needs_the_full_noise_band_and_a_strict_gap() {
+        // Seed 2 runs 0.1 above seed 1 on every arm, so the noise band is 0.1; top-1 is tied.
+        let offset = |seed: u64| if seed == 2 { 0.1 } else { 0.0 };
+        let gates = gates_for(|arm, seed| {
+            let loss = if is_active(arm) { 1.85 } else { 2.0 } + offset(seed);
+            (loss, loss, 300, 300)
+        });
+        assert!((gates.noise - 0.1).abs() < 1e-9);
+        assert_eq!(
+            gates.fit_arm,
+            Some(FbsArm::OneAtomActive),
+            "0.15 below both controls"
+        );
+        let gates = gates_for(|arm, seed| {
+            let loss = if is_active(arm) { 1.95 } else { 2.0 } + offset(seed);
+            (loss, loss, 300, 300)
+        });
+        assert_eq!(gates.fit_arm, None, "0.05 is inside the band");
+        // A zero band never turns a tie into a win.
+        let gates = gates_for(|_, _| (2.0, 2.0, 300, 300));
+        assert_eq!(gates.noise, 0.0);
+        assert_eq!(gates.fit_arm, None);
+    }
+
+    #[test]
+    fn capacity_picks_two_paths_only_by_the_band_and_a_lone_fitting_arm_is_exported() {
+        // Two paths 0.2 below one path on both seeds (band 0.1): capacity picks two paths.
+        let offset = |seed: u64| if seed == 2 { 0.1 } else { 0.0 };
+        let cell = |arm: FbsArm, seed: u64| {
+            let loss = match arm {
+                FbsArm::TwoAtomMix => 1.6,
+                FbsArm::OneAtomActive => 1.8,
+                _ => 2.0,
+            } + offset(seed);
+            // Only the one-atom arm out-hits the controls.
+            let hits = if arm == FbsArm::OneAtomActive {
+                900
+            } else {
+                100
+            };
+            (loss, loss, hits, hits)
+        };
+        let gates = gates_for(cell);
+        assert_eq!(gates.capacity_winner, FbsArm::TwoAtomMix);
+        // Both arms beat the controls on loss, so both fit and the capacity winner is exported.
+        assert_eq!(gates.export_arm, FbsArm::TwoAtomMix);
+        // Give the frozen null the lowest loss: the two-path arm (100 hits, like the controls) no
+        // longer fits, while the one-atom arm still fits on top-1. Capacity still picks two paths
+        // on loss, but the lone fitting one-atom arm is the one exported.
+        let gates = gates_for(|arm, seed| match arm {
+            FbsArm::FrozenQueries => (1.55 + offset(seed), 1.55 + offset(seed), 100, 100),
+            _ => cell(arm, seed),
+        });
+        assert_eq!(gates.fit_arm, Some(FbsArm::OneAtomActive));
+        assert_eq!(gates.capacity_winner, FbsArm::TwoAtomMix);
+        assert_eq!(gates.export_arm, FbsArm::OneAtomActive);
+    }
+
+    #[test]
+    fn the_export_gap_reads_the_loss_gap_and_the_paired_top1_gap() {
+        let offset = |seed: u64| if seed == 2 { 0.1 } else { 0.0 };
+        let cell = |arm: FbsArm, seed: u64, int_loss_gap: f64, int_hits: usize| {
+            let loss = if arm == FbsArm::OneAtomActive {
+                1.8
+            } else {
+                2.0
+            } + offset(seed);
+            let hits = if arm == FbsArm::OneAtomActive {
+                900
+            } else {
+                100
+            };
+            let hits_int = if arm == FbsArm::OneAtomActive {
+                int_hits
+            } else {
+                hits
+            };
+            (loss, loss + int_loss_gap, hits, hits_int)
+        };
+        let gates = gates_for(|arm, seed| cell(arm, seed, 0.05, 890));
+        assert!(
+            gates.export_ok,
+            "a 0.05 loss gap and 10 rows are inside the band and F_I"
+        );
+        assert_eq!(gates.export_paired.len(), 2);
+        assert_eq!(gates.export_paired[0].a_hit_b_miss_c, 10);
+        let gates = gates_for(|arm, seed| cell(arm, seed, 0.05, 500));
+        assert!(!gates.export_ok, "400 rows exceed F_I = 40");
+        let gates = gates_for(|arm, seed| cell(arm, seed, 0.2, 900));
+        assert!(!gates.export_ok, "a 0.2 loss gap exceeds the 0.1 band");
     }
 
     #[test]

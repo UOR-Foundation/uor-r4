@@ -1669,18 +1669,23 @@ pub fn with_gate_mode<T>(
     export_mode: bool,
     f: impl FnOnce() -> Result<T>,
 ) -> Result<T> {
-    GATE_HOOK.with(|cell| {
+    // The arm, seed and step stay set afterwards, as `evaluate_dev_panel` leaves them; the two
+    // flags this call changes only for its own duration are restored.
+    let prior = GATE_HOOK.with(|cell| {
         let mut st = cell.borrow_mut();
+        let prior = (st.icosian_export_mode, st.capture_telemetry);
         st.active_arm = Some(arm);
         st.seed = seed;
         st.step = step;
         st.fwd_call_idx = 0;
         st.icosian_export_mode = export_mode;
         st.capture_telemetry = false;
+        prior
     });
     let out = f();
     GATE_HOOK.with(|cell| {
-        cell.borrow_mut().icosian_export_mode = false;
+        let mut st = cell.borrow_mut();
+        (st.icosian_export_mode, st.capture_telemetry) = prior;
     });
     out
 }

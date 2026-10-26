@@ -375,6 +375,65 @@ mod gpu_tests {
         }
     }
 
+    /// Distinct paths pin each path's own query slot: the mix is the 1/√2 sum of the two standard
+    /// projections, its input adjoint the 1/√2 sum of theirs, and each path's query credit its own
+    /// standard credit times 1/√2.
+    #[test]
+    #[ignore = "needs a CUDA device; run on the pod"]
+    fn two_distinct_paths_give_the_scaled_sum_and_each_their_own_query_credit() {
+        let (plan, qa, x, device) = setup(1, 51);
+        let [outputs, stages, eight] = plan.query_shape();
+        let row = stages * eight;
+        let qb = Var::from_tensor(
+            &Tensor::from_vec(values(52, outputs * row), (outputs, stages, eight), &device)
+                .unwrap(),
+        )
+        .unwrap();
+        let host = |q: &Var| {
+            q.as_tensor()
+                .flatten_all()
+                .unwrap()
+                .to_vec1::<f32>()
+                .unwrap()
+        };
+        let (a, b) = (host(&qa), host(&qb));
+        let mixed: Vec<f32> = (0..outputs)
+            .flat_map(|o| {
+                let first = &a[o * row..(o + 1) * row];
+                let second = &b[o * row..(o + 1) * row];
+                first.iter().chain(second).copied().collect::<Vec<_>>()
+            })
+            .collect();
+        let qm = Var::from_tensor(
+            &Tensor::from_vec(mixed, (outputs, 2 * stages, eight), &device).unwrap(),
+        )
+        .unwrap();
+        let dy = dy_for(&device, 13);
+        let (ya, dqa, dxa) = run(&plan, &qa, &x, FbsArm::OneAtomActive, &dy);
+        let (yb, dqb, dxb) = run(&plan, &qb, &x, FbsArm::OneAtomActive, &dy);
+        let (ym, dqm, dxm) = run(&plan, &qm, &x, FbsArm::TwoAtomMix, &dy);
+        assert_ne!(ya, yb, "the fixture's two paths route differently");
+        let inv = std::f32::consts::FRAC_1_SQRT_2;
+        let scaled_sum = |p: &[f32], q: &[f32]| {
+            p.iter()
+                .zip(q)
+                .map(|(u, v)| (u + v) * inv)
+                .collect::<Vec<_>>()
+        };
+        close(&ym, &scaled_sum(&ya, &yb), "forward");
+        close(&dxm, &scaled_sum(&dxa, &dxb), "input adjoint");
+        for o in 0..outputs {
+            for (path, own) in [(0, &dqa), (1, &dqb)] {
+                let got = &dqm[(o * 2 + path) * row..(o * 2 + path + 1) * row];
+                let want: Vec<f32> = own[o * row..(o + 1) * row]
+                    .iter()
+                    .map(|v| v * inv)
+                    .collect();
+                close(got, &want, "query credit");
+            }
+        }
+    }
+
     #[test]
     #[ignore = "needs a CUDA device; run on the pod"]
     fn frozen_queries_get_no_credit_and_the_exact_input_adjoint() {
