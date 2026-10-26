@@ -1,4 +1,4 @@
-//! `spiralcore-fbs-sheet --mode synthetic-probe|throughput-probe|full|d11-export-gap|d11-artifact-windows|d11-artifact-gap|d11-train-probe|d11-train-export --data-root DIR --out FILE [--save-dir DIR] [options below]`
+//! `spiralcore-fbs-sheet --mode synthetic-probe|throughput-probe|full|d11-export-gap|d11-artifact-windows|d11-artifact-gap|d11-train-probe|d11-train-export|d11-residual --data-root DIR --out FILE [--save-dir DIR] [options below]`
 //!
 //! The runner of `docs/harness/prep/spiralcore-fbs-offline-float-sheet-2026-10-25.md`
 //! (spiralcore-fbs-offline-float-sheet, #2891). GPU only. `--data-root` holds `mw-balp/train/`,
@@ -23,6 +23,12 @@
 //! `docs/harness/prep/d11-exporter-float-trunk-d11-train-2026-10-26.md`) or `dual`, the plain
 //! loss plus the D11-mode loss (claude-131,
 //! `docs/harness/prep/d11-exporter-float-trunk-dual-train-2026-10-26.md`).
+//!
+//! `d11-residual` is the residual check (claude-132,
+//! `docs/harness/prep/d11-exporter-float-trunk-residual-2026-10-26.md`): one saved model's D11
+//! panel, plain and export-mode panels, and head on the artifact's queries, paired against the
+//! artifact's stored evaluator run. It takes `--model-dir`, `--evaluator`, `--windows-sha256`,
+//! `--artifact-sha256`, `--stored-preds`, `--seed` and `--label` (the configuration's name).
 
 use std::collections::BTreeMap;
 use std::env;
@@ -30,14 +36,14 @@ use std::path::PathBuf;
 
 use candle_core::Device;
 use uor_r4_float_train::spiralcore_fbs_sheet::{
-    d11_artifact_windows, run_d11_artifact_gap, run_d11_export_gap, run_d11_train_export,
-    run_d11_train_probe, run_full_sheet, run_synthetic_probe, run_throughput_probe, write_receipt,
-    TrainForward,
+    d11_artifact_windows, run_d11_artifact_gap, run_d11_export_gap, run_d11_residual,
+    run_d11_train_export, run_d11_train_probe, run_full_sheet, run_synthetic_probe,
+    run_throughput_probe, write_receipt, TrainForward,
 };
 use uor_r4_float_train::{FloatTrainError, Result};
 
-/// The options of `d11-artifact-gap`, `d11-train-probe` and `d11-train-export`.
-const GAP_OPTIONS: [&str; 8] = [
+/// The options of `d11-artifact-gap`, `d11-train-probe`, `d11-train-export` and `d11-residual`.
+const GAP_OPTIONS: [&str; 9] = [
     "--model-dir",
     "--evaluator",
     "--windows-sha256",
@@ -46,6 +52,7 @@ const GAP_OPTIONS: [&str; 8] = [
     "--stored-preds",
     "--seed",
     "--train-forward",
+    "--label",
 ];
 
 type Args = (
@@ -261,6 +268,43 @@ fn main() -> Result<()> {
                 value["i_verify_all"],
                 value["i_dev_denominator"],
                 value["gap_inside_band"],
+            );
+            write_receipt(&out, &value)
+        }
+        "d11-residual" => {
+            let seed: u64 = option("--seed")?
+                .parse()
+                .map_err(|_| FloatTrainError::Invalid("--seed must be an integer".to_owned()))?;
+            let value = run_d11_residual(
+                &data_root,
+                &PathBuf::from(option("--model-dir")?),
+                &PathBuf::from(option("--evaluator")?),
+                &option("--windows-sha256")?,
+                &option("--artifact-sha256")?,
+                &PathBuf::from(option("--stored-preds")?),
+                seed,
+                &option("--label")?,
+                &device,
+            )?;
+            let p = &value["pairs"]["d11_vs_artifact"];
+            println!(
+                "[d11-residual] label={} seed={} top1_float={} top1_export_mode={} top1_d11={} top1_head={} top1_artifact={} d11_vs_artifact_b={} c={} net={} F_I={} differ={} head_vs_artifact_differ={} max_drift={} instruments={} faithful={}",
+                value["label"],
+                value["seed"],
+                value["top1"]["float"],
+                value["top1"]["export_mode"],
+                value["top1"]["d11"],
+                value["top1"]["head_on_artifact_queries"],
+                value["top1"]["artifact"],
+                p["b"],
+                p["c"],
+                p["net"],
+                p["f_i"],
+                p["rows_differ"],
+                value["pairs"]["head_vs_artifact"]["rows_differ"],
+                value["q12_drift_d11_vs_artifact"]["all"]["max_codes"],
+                value["instruments_pass"],
+                value["faithful"],
             );
             write_receipt(&out, &value)
         }
