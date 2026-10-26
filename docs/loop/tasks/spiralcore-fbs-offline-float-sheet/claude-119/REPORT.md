@@ -60,7 +60,7 @@ Closes #2891.
 
 ## What changed
 
-- **Code (about 1,580 lines, `crates/uor-r4-float-train`):**
+- **Code (about 1,600 lines, `crates/uor-r4-float-train`):**
   - **Arm kernels.** `src/spiralcore_fbs_arms.cu` and `src/spiralcore_fbs_arms_prelude.cu`, built as their own nvcc PTX module (`spiralcore_fbs_arms_f32.ptx`, `build.rs`). They provide identity transport, and two paths combined with a constant 1/√2.
   - **Arm hook.** `src/spiralcore_fbs_arms.rs`: the arm hook and the projection op. The frozen arm uses the standard kernel with `dq = 0`.
   - **Stack changes.** `StackModel::linear` dispatches through the hook. `widen_fbs_queries_two_path` builds the two-path queries.
@@ -70,7 +70,7 @@ Closes #2891.
   - The three §5-pinned files are byte-identical, and were re-hashed on the pod.
   - The receipt records the arm kernel, prelude and PTX sha256.
   - There are no new dependencies and no softmax, squashing or matmul. The kernels are built ahead of time by nvcc.
-- **Tests (about 330 lines).**
+- **Tests (about 560 lines).**
   - Four `#[ignore]`d CUDA tests pin each arm against a reference or an exact invariant: identity selection, √2 × standard on equal paths, frozen credit 0 with the standard input adjoint, and adjoint-transpose on every arm.
   - The review round added a fifth GPU test: distinct paths give the 1/√2 sum of two standard projections, with each path's own query credit.
   - The host tests cover arm names and codes, the per-thread hook, the kernel inventory, F_I, the schedule, the pins and synthetic batches.
