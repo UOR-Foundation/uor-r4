@@ -96,7 +96,7 @@ fn main() -> Result<()> {
             .ok_or_else(|| FloatTrainError::Invalid(format!("{mode} needs {name}")))
     };
     let train_forward =
-        || TrainForward::parse(extra.get("--train-forward").map_or("d11", String::as_str));
+        TrainForward::parse(extra.get("--train-forward").map_or("d11", String::as_str))?;
     let device = Device::new_cuda(0)?;
     match mode.as_str() {
         "synthetic-probe" => {
@@ -180,7 +180,7 @@ fn main() -> Result<()> {
             write_receipt(&out, &value)
         }
         "d11-train-probe" => {
-            let value = run_d11_train_probe(&data_root, train_forward()?, &device)?;
+            let value = run_d11_train_probe(&data_root, train_forward, &device)?;
             println!(
                 "[d11-train-probe] forward={} train_learns={} learns={} train_loss_0={} train_loss_31={} dev_loss_0={} dev_loss_32={} s_per_step={} projected_full_s={} under_one_hour_per_seed={}",
                 value["train_forward"],
@@ -204,7 +204,7 @@ fn main() -> Result<()> {
                 &data_root,
                 &save_dir,
                 &PathBuf::from(option("--stage4b")?),
-                train_forward()?,
+                train_forward,
                 &device,
             )?;
             for s in value["seeds"].as_array().into_iter().flatten() {

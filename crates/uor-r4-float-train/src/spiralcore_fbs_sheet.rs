@@ -372,6 +372,27 @@ fn sum_grads(mut a: GradStore, b: &GradStore) -> Result<GradStore> {
     Ok(a)
 }
 
+/// One training step's loss and gradients as `forward` says, from `loss_and_grads(q12)`: the
+/// batch's loss and its backward, the scored query at Q12 when `q12`.
+fn train_step(
+    forward: TrainForward,
+    seed: u64,
+    step: usize,
+    loss_and_grads: impl Fn(bool) -> Result<(f64, GradStore)>,
+) -> Result<(f64, GradStore)> {
+    match forward {
+        TrainForward::Plain => loss_and_grads(false),
+        TrainForward::D11 => hs::with_d11_training(seed, step, || loss_and_grads(true)),
+        TrainForward::Dual => {
+            // claude-131: each forward's backward runs under its own gate mode (the icosian
+            // gate's backward reads the hook), and the gradients are summed 1:1.
+            let (plain, plain_grads) = loss_and_grads(false)?;
+            let (d11, d11_grads) = hs::with_d11_training(seed, step, || loss_and_grads(true))?;
+            Ok((plain + d11, sum_grads(plain_grads, &d11_grads)?))
+        }
+    }
+}
+
 /// [`run_fbs_arm`], with its training steps' loss as `forward` says. In the D11 mode the loss is
 /// the D11 forward's, its scored query at Q12, through `hamilton_sheet::with_d11_training`'s
 /// bridges, with the step's backward inside the same mode (claude-130). In the dual mode it is
@@ -451,17 +472,7 @@ pub fn run_fbs_arm_with(
             }
             Ok((value, loss.backward()?))
         };
-        let (value, grads) = match forward {
-            TrainForward::Plain => loss_and_grads(false)?,
-            TrainForward::D11 => hs::with_d11_training(seed, step, || loss_and_grads(true))?,
-            TrainForward::Dual => {
-                // claude-131: each forward's backward runs under its own gate mode (the icosian
-                // gate's backward reads the hook), and the gradients are summed 1:1.
-                let (plain, plain_grads) = loss_and_grads(false)?;
-                let (d11, d11_grads) = hs::with_d11_training(seed, step, || loss_and_grads(true))?;
-                (plain + d11, sum_grads(plain_grads, &d11_grads)?)
-            }
-        };
+        let (value, grads) = train_step(forward, seed, step, loss_and_grads)?;
         if step == 0 {
             step0_credit = query_credit_l2(&model, &grads)?;
         }
@@ -2205,6 +2216,55 @@ mod tests {
         assert_eq!(grad(&shared)?, vec![5.0, 5.0, 5.0]);
         assert_eq!(grad(&plain_only)?, vec![1.0, 1.0]);
         assert_eq!(grad(&d11_only)?, vec![5.0]);
+        Ok(())
+    }
+
+    /// On one GPU (claude-131): a dual step of the export arm is a plain step plus a D11 step,
+    /// each taken on its own, loss and gradient. So the plain half's backward runs outside the D11
+    /// mode and the D11 half's inside it; with either half in the other's mode the sum differs.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn gpu_a_dual_step_is_a_plain_step_plus_a_d11_step() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let _guard = ArmGuard::set(D11_EXPORT_ARM);
+        let model = build_fbs_model(D11_EXPORT_ARM, 1, &device)?;
+        let batches = synthetic_batches(1, 3);
+        let (ids, scored, targets) = &batches[0];
+        let loss_and_grads = |q12: bool| -> Result<(f64, GradStore)> {
+            let loss = batch_loss(&model, ids, scored, targets, SHEET_TRAIN_BATCH, q12)?;
+            Ok((f64::from(loss.to_scalar::<f32>()?), loss.backward()?))
+        };
+        let (plain, plain_grads) = train_step(TrainForward::Plain, 1, 0, loss_and_grads)?;
+        let (d11, d11_grads) = train_step(TrainForward::D11, 1, 0, loss_and_grads)?;
+        let (dual, dual_grads) = train_step(TrainForward::Dual, 1, 0, loss_and_grads)?;
+        assert!(plain.is_finite() && d11.is_finite());
+        assert_eq!(dual, plain + d11);
+        let max_abs =
+            |t: &Tensor| -> Result<f32> { Ok(t.abs()?.flatten_all()?.max(0)?.to_scalar::<f32>()?) };
+        let mut differs = false;
+        for (name, var) in model.variables() {
+            let get = |store: &GradStore| store.get(var.as_tensor()).cloned();
+            let want = match (get(&plain_grads), get(&d11_grads)) {
+                (Some(p), Some(d)) => {
+                    differs |= max_abs(&(&p - &d)?)? > 0.0;
+                    Some((&p + &d)?)
+                }
+                (Some(g), None) | (None, Some(g)) => Some(g),
+                (None, None) => None,
+            };
+            match (get(&dual_grads), want) {
+                (Some(s), Some(w)) => {
+                    let gap = max_abs(&(&s - &w)?)?;
+                    let tol = 1e-5 * (1.0 + max_abs(&w)?);
+                    assert!(gap <= tol, "{name}: dual differs from plain + d11 by {gap}");
+                }
+                (None, None) => {}
+                _ => panic!("{name}: dual and plain + d11 disagree on having a gradient"),
+            }
+        }
+        // The two halves are different gradients, so the test can tell them apart.
+        assert!(differs);
+        hs::clear_active_arm();
         Ok(())
     }
 }
