@@ -8,6 +8,7 @@ References #2904, #3128 and #3129; this PR closes none of them.
 - `loop claim infra-loop-harness --lab-topic within-cell-item` refused because #3169 holds the umbrella. The probe confirmed no file overlap, so the run file's narrow hand-written-ORDER exception was used. No active scope was bypassed.
 - The first roadmap check failed on two item-format errors: an 85-character title and a missing `## Sources` section. The title was shortened and the sources added; the next check passed.
 - The first writer design failed independent builder and architecture review: it had an identity/loadability contradiction, an unbounded relation accumulation, an under-specified frame-source hypothesis and confounded controls. The roadmap item now requires bounded arithmetic, legacy replay, a zero-update B0, simpler frame controls and a strict paired floor before any training.
+- The first exact-head PR review found that the ORDER lacked a setup row, four claim boundaries were missing from the item, the probe lacked idle-draft evidence, and the sync stop rule omitted the expected checklist update. `loop review` reproduced the setup-row refusal before the fix; all four findings were repaired for re-review.
 - No GPU run or mechanism code was started, and #3128/#3129 are not closed by this bookkeeping unit.
 
 ## What changed
@@ -15,7 +16,7 @@ References #2904, #3128 and #3129; this PR closes none of them.
 - Added `m1-within-cell-writer` as a ready M1 mechanism item. Its discrete scope remains unavailable while #3258 is open.
 - The item requires error decomposition, a zero-update frame-source comparison, capped relation arithmetic, identity-safe replay, matched lookup/reranker controls and the strict paired floor before training.
 - Regenerated `docs/roadmap/README.md`; added the ORDER, cancel probe and this REPORT.
-- Size at the REPORT commit: 5 files, 183 additions and 2 deletions. Task documentation (ORDER/probe/REPORT) 120 lines, roadmap item 58, generated view 7 additions and 2 deletions; no code or test files. The ORDER set no numeric estimate, so an estimate ratio is not applicable.
+- Size at the review-repair commit: 5 files, 189 additions and 2 deletions. Task documentation (ORDER/probe/REPORT) 124 lines, roadmap item 60, generated view 5 additions and 2 deletions; no code or test files. The ORDER set no numeric estimate, so an estimate ratio is not applicable.
 
 ## Measurements
 

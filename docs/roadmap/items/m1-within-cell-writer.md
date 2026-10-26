@@ -23,6 +23,8 @@ The decisive work starts with error decomposition and a zero-update read experim
 
 ReadLawV2 caps SameToken/SameFrame accumulation at the most recent eight matches per edge type per node, resets relation scores per sweep, and checks its integer bound. The 256/256 weighted-snap enumeration is only an arithmetic sanity check; multi-level, negative-gate, residual-mode, entropy and code-coverage controls are required. Old artifacts use retained legacy binaries or deterministic old-law replay; stored hashes are never edited and re-derived snapshots are not called the same checkpoint.
 
+Two passes add no target information, and a four-bit endpoint output cannot recover an eight-bit interior key; a fixture that merely asserts recovery is vacuous. Exactly zero non-inertness refuses the two-pass configuration. T16_fz evidences snap/transport only, while T16_rel is required for relation evaluation; old-checkpoint V2 evaluation is out-of-distribution and fresh training is required for a relation-trained claim. Promotion requires beating both the matched current law and the absolute `G`/T2 comparison on the same population, not merely beating 455.
+
 ## Done when
 
 - Saved Stage T outputs decompose the 455 versus 2,140 gap into admission, top-8 candidate coverage, within-cell L1 ranking and DEV read-code coverage, including a TRAIN-only within-cell reranker control.

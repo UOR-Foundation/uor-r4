@@ -18,7 +18,7 @@ uor-harness: loop claim: refused: item infra-loop-harness is already claimed by 
 
 ## No-overlap check
 
-`gh pr view 3169 --json files` returned only:
+`gh pr view 3169 --json isDraft,updatedAt,files` returned `isDraft: true` and `updatedAt: 2026-10-25T01:07:47Z`, evidencing the idle draft, with only these changed paths:
 
 - `PLAN.md`
 - `docs/integration/DECISIONS.md`

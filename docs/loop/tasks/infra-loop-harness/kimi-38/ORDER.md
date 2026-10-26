@@ -1,6 +1,7 @@
 # ORDER: infra-loop-harness, kimi-38 (within-cell writer roadmap item)
 
 Lab: kimi. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904).
+Setup row: 2 (item-file maintenance: a new gap item).
 Base: `7670779dd41cfa863a6b232a0273b4b98a64084f`.
 
 ## Goal
@@ -31,4 +32,4 @@ Stage T's 455/14,287 writer top-1 against 5,009 admitted cells, against 2,140/3,
 - #3169 or another open ORDER overlaps the new item or this task folder.
 - The new item would become claimable while #3258 still holds `crates/uor-r4-discrete/**`.
 - The evidence no longer supports a within-cell unit, or a required change falls outside the declared scope.
-- The roadmap sync dry run proposes anything beyond the one expected new issue; do not apply it.
+- The roadmap sync dry run proposes anything beyond the one expected new issue and the expected #2029 checklist update; do not apply it.
