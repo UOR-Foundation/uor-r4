@@ -26,7 +26,7 @@ Closes #2887.
 - **D68 Decision Card (`docs/loop/tasks/r-vocab-4096-vs-16384/antigravity-91/DECISION.md`):** Recorded the whole-project D68 decision retaining `V = 4,096` for M1–M3 and closing `#2887` on the matched `V = 4,096` vs `V = 16,384` GPU writer (`#2840`), BPE tokenizer (`#2872`), and discrete-carrier capacity (`B3`) evidence.
 - **Lab Record (`docs/labs/r-vocab-4096-vs-16384/README.md`):** Tabulated the complete matched `V = 4,096` vs `V = 16,384` results (leading with `tokens/s`), the 5-site `B = 4` discrete capacity checklist, and the notebook records (`docs/research/notebook/m1-discrete-attention.md` row 79 and the `docs/research/notebook/data-tokenizer.md` row specification).
 - **Roadmap (`docs/roadmap/items/r-vocab-4096-vs-16384.md` & `docs/roadmap/README.md`):** Set `r-vocab-4096-vs-16384` to `status: done` and re-rendered `docs/roadmap/README.md`.
-- **Size (`uor-harness loop pr-check --local`):** `tests 0 file(s) +0/-0, code 0 file(s) +0/-0, docs 5 file(s) +332/-1, generated 1 file(s) +3/-3, other 0 file(s) +0/-0` (no size estimate declared on `r-vocab-4096-vs-16384.md`).
+- **Size (`uor-harness loop pr-check --local`):** `tests 0 file(s) +0/-0, code 0 file(s) +0/-0, docs 6 file(s) +335/-1, generated 1 file(s) +3/-3, other 0 file(s) +0/-0` (no size estimate declared on `r-vocab-4096-vs-16384.md`).
 
 ## Measurements
 
@@ -59,8 +59,8 @@ Closes #2887.
 - `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo run --locked -p xtask -- links`: `PASS`
 - `uor-harness check`: `42 rules, 0 failed (0 error, 0 warn)`
 - `uor-harness loop report --check --order docs/loop/tasks/r-vocab-4096-vs-16384/antigravity-91/ORDER.md`: `PASS`
-- `uor-harness loop pr-check --local`: `verdict: PASS`
-- `uor-harness loop gates --full`: `4/4 PASS`
+- `uor-harness loop pr-check --local`: `verdict: PASS` (`10 / 10` local rules `PASS`, `0` warnings)
+- `uor-harness loop gates --full`: `11 / 11 GREEN` (`fmt-claim-wording`, `fmt-harness`, `claim-wording`, `loop-gates-watch`, `loop-drive`, `loop-next-sources`, `loop-next-wait`, `loop-next-owner-direction`, `git-hooks`, `loop-migrate`, `loop-review-changes-blocks`)
 
 ## Skills used
 
