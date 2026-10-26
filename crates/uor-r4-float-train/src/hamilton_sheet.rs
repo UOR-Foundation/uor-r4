@@ -464,6 +464,9 @@ struct GateHookState {
     fwd_call_idx: usize,
     bwd_call_idx: usize,
     icosian_export_mode: bool,
+    /// The D11 mode also snaps the recurrence transition to the 120 icosians
+    /// (`with_d11_mode`, claude-125).
+    snap_transition: bool,
     capture_telemetry: bool,
     cuda_error_checks_passed: u64,
     // Intrinsic per-4-block suppression telemetry
@@ -502,6 +505,7 @@ impl Default for GateHookState {
             fwd_call_idx: 0,
             bwd_call_idx: 0,
             icosian_export_mode: false,
+            snap_transition: false,
             capture_telemetry: false,
             cuda_error_checks_passed: 0,
             total_blocks_observed: 0,
@@ -1733,6 +1737,39 @@ pub fn with_d11_export_gates<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
         ) = prior;
     });
     out
+}
+
+/// Runs `f` in the D11 mode: both Hamilton gates as in [`with_d11_export_gates`]
+/// and the recurrence transition snapped to the 120 icosians as well, as the
+/// integer path serves it. It restores the gate hook exactly as it was
+/// (claude-125). With the trunk's tables rounded as exported
+/// (`fbs_export::round_tables_as_exported`), a forward in this mode computes
+/// what the exported artifact computes, in float.
+pub fn with_d11_mode<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
+    let prior = GATE_HOOK.with(|cell| {
+        let mut st = cell.borrow_mut();
+        std::mem::replace(&mut st.snap_transition, true)
+    });
+    let out = with_d11_export_gates(f);
+    GATE_HOOK.with(|cell| cell.borrow_mut().snap_transition = prior);
+    out
+}
+
+/// Whether the D11 mode snaps the recurrence transition on this thread.
+pub(crate) fn is_snapping_transition() -> bool {
+    GATE_HOOK.with(|cell| cell.borrow().snap_transition)
+}
+
+/// The nearest of the 120 icosians to each 4-vector of `raw` (last axis 4):
+/// the D11 mode's transition snap. CUDA only.
+pub(crate) fn icosian_snap_quaternions(raw: &Tensor) -> Result<Tensor> {
+    #[cfg(feature = "cuda")]
+    if let Device::Cuda(device) = raw.device() {
+        let shape = raw.shape().clone();
+        return Ok(icosian_snap_cuda_tensor(device, &raw.contiguous()?)?.reshape(shape)?);
+    }
+    let _ = raw;
+    Err(invalid("the D11 transition snap is CUDA-only"))
 }
 
 /// Computes the response-masked margin loss for one training batch on CUDA.

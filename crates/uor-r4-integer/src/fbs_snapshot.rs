@@ -174,6 +174,21 @@ pub struct FbsFloatSequence {
     pub hidden: Vec<Vec<f32>>,
 }
 
+/// How the float GPU trunk was read (claude-124, claude-125).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FbsReadoutMode {
+    /// Plain float: nothing snapped, tables at full precision.
+    Plain,
+    /// The float sheets' D11 export mode: Q12-rounded, icosian-snapped
+    /// Hamilton gates; the transition and the tables as in `Plain`.
+    Export,
+    /// The D11 mode: the gates as in `Export`, the transition snapped as well,
+    /// the tables rounded as exported and the final query rounded to Q12, so
+    /// the float trunk computes what the artifact computes.
+    D11,
+}
+
 /// The float GPU trunk's single-token and sequence outputs, for comparison
 /// with its converted snapshot's reference and integer session.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -181,9 +196,8 @@ pub struct FbsFloatSequence {
 pub struct FbsFloatReadout {
     pub vocab: usize,
     pub width: usize,
-    /// Read in the float sheets' D11 export mode (Q12-rounded, icosian-snapped
-    /// Hamilton gates), or plain.
-    pub export_mode: bool,
+    /// The mode the trunk was read in.
+    pub mode: FbsReadoutMode,
     /// One position per token, in token order.
     pub positions: Vec<FbsFloatPosition>,
     /// Token sequences read position by position.
@@ -200,7 +214,7 @@ impl FbsFloatReadout {
         vocab: usize,
         width: usize,
         context: usize,
-        export_mode: bool,
+        mode: FbsReadoutMode,
     ) -> Result<(), String> {
         if self.sequences.is_empty() {
             return Err("the readout holds no sequences".to_owned());
@@ -222,11 +236,8 @@ impl FbsFloatReadout {
         if self.vocab != vocab || self.width != width {
             return Err("the readout's vocabulary or width differs from the trunk's".to_owned());
         }
-        if self.export_mode != export_mode {
-            return Err(format!(
-                "the readout was read with export_mode = {}",
-                self.export_mode
-            ));
+        if self.mode != mode {
+            return Err(format!("the readout was read in mode {:?}", self.mode));
         }
         if self.positions.len() != vocab {
             return Err(format!(
@@ -287,10 +298,10 @@ mod tests {
 
     #[test]
     fn float_readout_check_refuses_an_incomplete_or_misordered_readout() {
-        let readout = |tokens: &[u32], export_mode: bool| FbsFloatReadout {
+        let readout = |tokens: &[u32], mode: FbsReadoutMode| FbsFloatReadout {
             vocab: 3,
             width: 2,
-            export_mode,
+            mode,
             positions: tokens
                 .iter()
                 .map(|&token| FbsFloatPosition {
@@ -305,42 +316,52 @@ mod tests {
                 hidden: vec![vec![0.0; 2]; 2],
             }],
         };
-        assert!(readout(&[0, 1, 2], false).check(3, 2, 4, false).is_ok());
-        assert!(readout(&[0, 1, 2], true).check(3, 2, 4, true).is_ok());
+        assert!(readout(&[0, 1, 2], FbsReadoutMode::Plain)
+            .check(3, 2, 4, FbsReadoutMode::Plain)
+            .is_ok());
+        assert!(readout(&[0, 1, 2], FbsReadoutMode::Export)
+            .check(3, 2, 4, FbsReadoutMode::Export)
+            .is_ok());
         for (what, r, reason) in [
-            ("empty", readout(&[], false), "0 positions"),
-            ("a token missing", readout(&[0, 1], false), "2 positions"),
+            ("empty", readout(&[], FbsReadoutMode::Plain), "0 positions"),
+            (
+                "a token missing",
+                readout(&[0, 1], FbsReadoutMode::Plain),
+                "2 positions",
+            ),
             (
                 "a token repeated",
-                readout(&[0, 1, 1], false),
+                readout(&[0, 1, 1], FbsReadoutMode::Plain),
                 "position 2 is not token 2",
             ),
             (
                 "out of order",
-                readout(&[1, 0, 2], false),
+                readout(&[1, 0, 2], FbsReadoutMode::Plain),
                 "position 0 is not token 0",
             ),
             (
                 "the other mode",
-                readout(&[0, 1, 2], true),
-                "export_mode = true",
+                readout(&[0, 1, 2], FbsReadoutMode::Export),
+                "mode Export",
             ),
         ] {
-            match r.check(3, 2, 4, false) {
+            match r.check(3, 2, 4, FbsReadoutMode::Plain) {
                 Err(e) => assert!(e.contains(reason), "{what}: {e}"),
                 Ok(()) => panic!("{what} must be refused"),
             }
         }
-        let mut short = readout(&[0, 1, 2], false);
+        let mut short = readout(&[0, 1, 2], FbsReadoutMode::Plain);
         short.positions[1].hidden.pop();
         assert!(short
-            .check(3, 2, 4, false)
+            .check(3, 2, 4, FbsReadoutMode::Plain)
             .is_err_and(|e| e.contains("position 1")));
-        assert!(readout(&[0, 1, 2], false).check(4, 2, 4, false).is_err());
-        let mut none = readout(&[0, 1, 2], false);
+        assert!(readout(&[0, 1, 2], FbsReadoutMode::Plain)
+            .check(4, 2, 4, FbsReadoutMode::Plain)
+            .is_err());
+        let mut none = readout(&[0, 1, 2], FbsReadoutMode::Plain);
         none.sequences.clear();
         assert!(none
-            .check(3, 2, 4, false)
+            .check(3, 2, 4, FbsReadoutMode::Plain)
             .is_err_and(|e| e.contains("no sequences")));
         // A sequence must be 1 to `context` in-vocabulary tokens, each read.
         type Seq = fn(&mut FbsFloatSequence);
@@ -364,9 +385,9 @@ mod tests {
             }),
         ];
         for (what, mutate) in bad {
-            let mut r = readout(&[0, 1, 2], false);
+            let mut r = readout(&[0, 1, 2], FbsReadoutMode::Plain);
             mutate(&mut r.sequences[0]);
-            match r.check(3, 2, 4, false) {
+            match r.check(3, 2, 4, FbsReadoutMode::Plain) {
                 Err(e) => assert!(e.contains("sequence 0"), "{what}: {e}"),
                 Ok(()) => panic!("{what} must be refused"),
             }
