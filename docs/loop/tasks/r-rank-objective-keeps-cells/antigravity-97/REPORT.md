@@ -19,7 +19,7 @@ Closes #2883
 
 ## What changed
 
-- **Size Summary (12 files changed, `+1,849 / -46` lines across code, tests, data receipt, and docs; item had no numeric line estimate, ratio `N/A`, reported per D48):**
+- **Size Summary (`12` files changed: `code 3 file(s) +1344/-3, docs 7 file(s) +284/-40, generated 1 file(s) +3/-3, other 1 file(s) +188/-0, tests 0 file(s) +0/-0`; item had no numeric line estimate, ratio `N/A`, reported per D48):**
   - **Code & Unit Tests (`3` Rust files, `+1,347 / -1` lines):**
     - [`crates/uor-r4-discrete/src/objective.rs`](../../../../../crates/uor-r4-discrete/src/objective.rs) (`+620 / -0` lines): Added `RankOccupancyPolicy` (`NearestAddressMarginV1` `word = 0`, `OccupiedCellRankHingeV1` `word = 1`, `FixedGridRankHingeV1` `word = 2`, `OccupiedCellRankCrowdHingeV1` `word = 3`), `cell_precedes`, `occupied_cell_rank`, `fixed_grid_cell_rank`, `rank_hinge`, `admitted_cells_k`, `cell_crowding_hinge`, `move_time_g_occ_allowed`, `checked_row_loss_numerator`, `evaluate_g_occ_contract`, `RankOccupancyControlReceipt`, `verify_rank_occupancy_controls()` (`C-R1..C-R6`, `C-R7a..C-R7d`), and TDD unit test `rank_occupancy_policies_and_finite_controls_c_r1_to_c_r7d_pass`.
     - [`crates/uor-r4-discrete/src/stage_t.rs`](../../../../../crates/uor-r4-discrete/src/stage_t.rs) (`+514 / -0` lines): Added `RANK_OBJECTIVE_GRADE_SCHEMA` (`uor-r4.rank-objective-keeps-cells-grade/v1`), `RankObjectiveVerdict`, `K16OccupancyCollapseBaseline`, `RankObjectiveWithinCellSummary`, `RankObjectiveSeedSummary`, `RankObjectiveGradeReport`, `grade_rank_objective(...)`, and TDD unit test `grade_rank_objective_verifies_g_occ_g_adm_and_count_tables`.
