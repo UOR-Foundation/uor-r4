@@ -1,4 +1,4 @@
-<!-- rendered by uor-harness loop render from c695ad21a72c5b91def22458eebbe796e07d5392; do not edit -->
+<!-- rendered by uor-harness loop render from ea373090854f4f8ee46b87460d876563c69590ed; do not edit -->
 # HANDOFF
 
 Rendered from `docs/roadmap/items/*.md` at the commit in the stamp above. Each open-item row gives the first sentence of the item's `Done when` and `Cancel if` sections; blocked items are listed once, in the blocked table, with their owner; `not recorded` means the item has no such section or key yet.
@@ -7,7 +7,7 @@ Rendered from `docs/roadmap/items/*.md` at the commit in the stamp above. Each o
 
 Items not `held`, `decision` or `done`. Held and decision items are listed once, in the blocked table below.
 
-### ready (21)
+### ready (20)
 
 | Item | Title | Done when | Cancel if | Size | Stands |
 |---|---|---|---|---|---|
@@ -17,7 +17,6 @@ Items not `held`, `decision` or `done`. Held and decision items are listed once,
 | m1-close-saved-model | Close M1 with one saved discrete model passing all five bars | One saved discrete model: (a) starting reach at no fewer than 4,894 of 14,287; (b) reach kept on both seeds (G-Adm); (c) more than 16 of 256 cells in use plus the D39 occupancy condition (G-Occ); (d) integer top-1 through the integer export beats the unigram table (1,226) and the next-word table (6,300) on each of two seeds, with tokens per second reported; (e) the gain holds on a fresh sealed panel. | not recorded | not recorded | ready; after m1-a8-full-dose-rerun, m1-bvg-k-stage-t-training, m1-export-gap-and-toks, m1-fresh-panel-transfer |
 | m1-faster-writer | Replace the full-vocabulary writer scan | A writer whose measured per-row comparison count is below the full-vocabulary scan (about 5×10⁶ today), with finite controls that match the full-scan writer, and a CUDA qualification. | not recorded | not recorded | ready |
 | m1-fresh-panel-transfer | Evaluate the gain on the fresh sealed panel | '(e) Fresh transfer. | not recorded | not recorded | ready; after m1-export-gap-and-toks |
-| m1-position-mechanism | Design a lawful position mechanism | A position mechanism with finite controls that obeys CHARTER §3 (geometry only, no softmax or squashing, no matmul), plus a pre-registered test that it helps order. | not recorded | not recorded | ready |
 | m1-trunk-assembly-and-training | Assemble and train the full lawful trunk (Stage 3) | Stage 3 bar: 'beat Stage 2's best by more than the seed-to-seed noise, with a fresh-panel number.' | not recorded | not recorded | ready; after m1-position-mechanism, m1-normalization-mechanism, m1-bvg-k-stage-t-training, m1-d11-exporter-discrete |
 | m1-w4-float-credit-sheet | Register and run one float-credit training sheet (W4) | Sheet FIT'd and run once; integer top-1 through the D11 export reported against both count tables; export gap within the two-seed band on the same evaluator. | not recorded | not recorded | ready; after m1-w2-capacity-capture, m1-bvg-k-stage-t-training |
 | m1-wider-code-carrier | Prototype a wider code carrier (more roots or blocks) | A wider-carrier build passes finite CUDA qualification and a zero-training capacity measurement against the Stage 1 bar: the alias ceiling clears Bar (i) 1,941 net of admission (G-Cap), and admission at checkpoint 0 is above A8's 1,351 of 3,847 on the same panel. | not recorded | not recorded | ready; after m1-address-key-full-vector |
