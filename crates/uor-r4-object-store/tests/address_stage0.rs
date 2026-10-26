@@ -3,10 +3,10 @@ use sha2::{Digest, Sha256};
 use std::error::Error;
 use std::path::PathBuf;
 use uor_r4_object_store::address_stage0::{
-    build_manifest, clears_primary, collect_original_rows, corpus_value_leaks, normalize_emission,
-    parse_manifest, planted_wrong_holds, primary_pass, u16_le_tokens, validate_head,
-    validate_manifest, values_missing_from_corpus, OriginalRow, PairedWins, MANIFEST_SHA256,
-    RETAINED_RECEIPT_SHA256, STAGE0_SCHEMA, STAGE_T_ARCHIVE_SHA256,
+    build_manifest, clears_primary, collect_original_rows, corpus_value_leaks, mark_parity_stop,
+    normalize_emission, parse_manifest, planted_wrong_holds, primary_pass, set_parity_aggregates,
+    u16_le_tokens, validate_head, validate_manifest, values_missing_from_corpus, OriginalRow,
+    PairedWins, MANIFEST_SHA256, RETAINED_RECEIPT_SHA256, STAGE0_SCHEMA, STAGE_T_ARCHIVE_SHA256,
 };
 use uor_r4_tokenizer::ByteBpeTokenizer;
 
@@ -196,6 +196,75 @@ fn primary_margin_uses_the_registered_strict_floor() {
         PairedWins { b: 25, c: 0 },
         PairedWins { b: 24, c: 0 }
     ));
+}
+
+#[test]
+fn mismatch_stop_report_carries_all_three_aggregates_and_the_delta() {
+    let mut report = json!({
+        "schema": "uor-r4.address-stage0-parity/1",
+        "rows": 14_287,
+        "comparison": {"mismatched_rows": 3, "first_mismatches": []},
+    });
+    // The runner calls this immediately after the D11 aggregate and before
+    // its mismatch, top-1/top-8 and admission stops.
+    let admission_delta = set_parity_aggregates(
+        &mut report,
+        (460, 1_500, 5_010),
+        (455, 1_484, 5_009),
+        14_287,
+    );
+    // The runner's stop_parity uses this same transition.
+    mark_parity_stop(&mut report, "3 per-row parity mismatches");
+
+    assert_eq!(report["pass"].as_bool(), Some(false));
+    assert_eq!(
+        report["instrument_stop"].as_str(),
+        Some("3 per-row parity mismatches")
+    );
+    assert_eq!(report["comparison"]["mismatched_rows"].as_u64(), Some(3));
+    assert_eq!(report["d11_aggregate"]["rows"].as_u64(), Some(14_287));
+    assert_eq!(report["d11_aggregate"]["top1"].as_u64(), Some(460));
+    assert_eq!(report["d11_aggregate"]["top8"].as_u64(), Some(1_500));
+    assert_eq!(
+        report["d11_aggregate"]["target_admitted"].as_u64(),
+        Some(5_010)
+    );
+    assert_eq!(report["original_aggregate"]["rows"].as_u64(), Some(14_287));
+    assert_eq!(report["original_aggregate"]["top1"].as_u64(), Some(455));
+    assert_eq!(report["original_aggregate"]["top8"].as_u64(), Some(1_484));
+    assert_eq!(
+        report["original_aggregate"]["target_admitted"].as_u64(),
+        Some(5_009)
+    );
+    assert_eq!(report["position_strip"]["d11_top1"].as_u64(), Some(460));
+    assert_eq!(
+        report["position_strip"]["retained_top1"].as_u64(),
+        Some(455)
+    );
+    assert_eq!(report["position_strip"]["top1_delta"].as_i64(), Some(5));
+    assert_eq!(report["position_strip"]["d11_top8"].as_u64(), Some(1_500));
+    assert_eq!(
+        report["position_strip"]["retained_top8"].as_u64(),
+        Some(1_484)
+    );
+    assert_eq!(report["position_strip"]["top8_delta"].as_i64(), Some(16));
+    assert_eq!(
+        report["position_strip"]["d11_target_admitted"].as_u64(),
+        Some(5_010)
+    );
+    assert_eq!(
+        report["position_strip"]["original_target_admitted"].as_u64(),
+        Some(5_009)
+    );
+    assert_eq!(
+        report["position_strip"]["admission_delta"].as_i64(),
+        Some(1)
+    );
+    assert_eq!(
+        report["position_strip"]["admission_aggregate_matches"].as_bool(),
+        Some(false)
+    );
+    assert_eq!(admission_delta, 1);
 }
 
 #[test]

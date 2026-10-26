@@ -136,6 +136,57 @@ pub fn primary_pass(exact_vs_no_hint: PairedWins, exact_vs_random_hint: PairedWi
         && clears_primary(exact_vs_random_hint.b, exact_vs_random_hint.c)
 }
 
+/// Populates the three parity aggregate fields once the D11 aggregate exists.
+/// The runner calls this before its per-row mismatch and top-1/top-8 stops, so
+/// those reports cannot lose the aggregates. Returns the admission delta.
+pub fn set_parity_aggregates(
+    report: &mut serde_json::Value,
+    d11: (u64, u64, u64),
+    original: (u64, u64, u64),
+    original_rows: u64,
+) -> i64 {
+    let (d11_top1, d11_top8, d11_admitted) = d11;
+    let (original_top1, original_top8, original_admitted) = original;
+    let d11_rows = report
+        .get("rows")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let admission_delta = d11_admitted as i64 - original_admitted as i64;
+    report["d11_aggregate"] = serde_json::json!({
+        "rows": d11_rows,
+        "top1": d11_top1,
+        "top8": d11_top8,
+        "target_admitted": d11_admitted,
+    });
+    report["original_aggregate"] = serde_json::json!({
+        "rows": original_rows,
+        "top1": original_top1,
+        "top8": original_top8,
+        "target_admitted": original_admitted,
+    });
+    report["position_strip"] = serde_json::json!({
+        "d11_top1": d11_top1,
+        "retained_top1": RETAINED_TOP1,
+        "top1_delta": d11_top1 as i64 - RETAINED_TOP1 as i64,
+        "d11_top8": d11_top8,
+        "retained_top8": RETAINED_TOP8,
+        "top8_delta": d11_top8 as i64 - RETAINED_TOP8 as i64,
+        "d11_target_admitted": d11_admitted,
+        "original_target_admitted": original_admitted,
+        "admission_delta": admission_delta,
+        "admission_aggregate_matches": admission_delta == 0,
+        "note": "Aggregates only; no row-level baseline is assumed. A position-strip difference is recorded before copy results are interpreted.",
+    });
+    admission_delta
+}
+
+/// Writes the stop fields of a parity report. The runner's `stop_parity` and
+/// the mismatch regression test use this one transition.
+pub fn mark_parity_stop(report: &mut serde_json::Value, reason: &str) {
+    report["pass"] = serde_json::json!(false);
+    report["instrument_stop"] = serde_json::json!(reason);
+}
+
 /// A planted wrong answer holds only when at least one row is applicable and
 /// every applicable random-hint emission differs from the exact value.
 pub fn planted_wrong_holds(
@@ -914,6 +965,14 @@ pub mod runner {
             Ok(values) => values,
             Err(e) => return stop_parity(&mut parity, &paths.out_dir, e),
         };
+        // Every subsequent mismatch, top-1/top-8 or admission stop must carry
+        // the aggregates, so populate them before the first comparison stop.
+        let admission_delta = super::set_parity_aggregates(
+            &mut parity,
+            (d11_top1, d11_top8, d11_admitted),
+            (original_top1, original_top8, original_admitted),
+            original_rows.len() as u64,
+        );
 
         if original_rows.len() != rows.len() {
             return stop_parity(
@@ -948,32 +1007,6 @@ pub mod runner {
                 ),
             );
         }
-        let admission_delta = d11_admitted as i64 - original_admitted as i64;
-        parity["d11_aggregate"] = json!({
-            "rows": rows.len(),
-            "top1": d11_top1,
-            "top8": d11_top8,
-            "target_admitted": d11_admitted,
-        });
-        parity["original_aggregate"] = json!({
-            "rows": original_rows.len(),
-            "top1": original_top1,
-            "top8": original_top8,
-            "target_admitted": original_admitted,
-        });
-        parity["position_strip"] = json!({
-            "d11_top1": d11_top1,
-            "retained_top1": RETAINED_TOP1,
-            "top1_delta": d11_top1 as i64 - RETAINED_TOP1 as i64,
-            "d11_top8": d11_top8,
-            "retained_top8": RETAINED_TOP8,
-            "top8_delta": d11_top8 as i64 - RETAINED_TOP8 as i64,
-            "d11_target_admitted": d11_admitted,
-            "original_target_admitted": original_admitted,
-            "admission_delta": admission_delta,
-            "admission_aggregate_matches": admission_delta == 0,
-            "note": "Aggregates only; no row-level baseline is assumed. A position-strip difference is recorded before copy results are interpreted.",
-        });
         if admission_delta != 0 {
             return stop_parity(
                 &mut parity,
@@ -1036,8 +1069,7 @@ pub mod runner {
     }
 
     fn stop_parity<T>(report: &mut Value, out_dir: &Path, reason: String) -> Result<T, String> {
-        report["pass"] = json!(false);
-        report["instrument_stop"] = json!(reason);
+        super::mark_parity_stop(report, &reason);
         write_json(&out_dir.join("parity-report.json"), report)?;
         Err(reason)
     }
