@@ -33,6 +33,9 @@ use uor_r4_integer::stack::{
     IntegerStackModel,
 };
 
+/// One position's writer token and query.
+type Output = (u32, Vec<f64>);
+
 fn read_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
     serde_json::from_slice(&bytes).map_err(|e| format!("{path}: {e}"))
@@ -50,7 +53,7 @@ fn check_readout(
 }
 
 /// Token agreement and the largest query gap between two sets of outputs.
-fn pair(a: &[(u32, Vec<f64>)], b: &[(u32, Vec<f64>)]) -> Value {
+fn pair(a: &[Output], b: &[Output]) -> Value {
     let tokens = a.iter().zip(b).filter(|(x, y)| x.0 == y.0).count();
     let gap = a
         .iter()
@@ -66,7 +69,7 @@ fn reference(
     inputs: &[Vec<u32>],
     quantized: bool,
     snaps: FbsReferenceSnaps,
-) -> Result<Vec<(u32, Vec<f64>)>, String> {
+) -> Result<Vec<Output>, String> {
     let mut all = Vec::new();
     for tokens in inputs {
         let out: Vec<FbsWriterOutput> = snap
@@ -95,7 +98,7 @@ fn served(model: &IntegerStackModel, inputs: &[Vec<u32>]) -> Result<Vec<u32>, St
 
 /// A readout's single-token outputs, then its sequence outputs, as the
 /// reference lays them out for `singles` and the readout's own sequences.
-fn floats(readout: &FbsFloatReadout) -> (Vec<(u32, Vec<f64>)>, Vec<(u32, Vec<f64>)>) {
+fn floats(readout: &FbsFloatReadout) -> (Vec<Output>, Vec<Output>) {
     let widen = |h: &[f32]| h.iter().map(|&v| f64::from(v)).collect::<Vec<f64>>();
     let singles = readout
         .positions
@@ -116,8 +119,8 @@ fn section(
     snap: &FbsTrunkSnapshot,
     model: &IntegerStackModel,
     inputs: &[Vec<u32>],
-    plain_gpu: &[(u32, Vec<f64>)],
-    export_gpu: Option<&[(u32, Vec<f64>)]>,
+    plain_gpu: &[Output],
+    export_gpu: Option<&[Output]>,
 ) -> Result<Value, String> {
     let float_ref = reference(snap, inputs, false, FbsReferenceSnaps::FLOAT)?;
     let export_ref = reference(snap, inputs, false, FbsReferenceSnaps::FLOAT_EXPORT)?;
