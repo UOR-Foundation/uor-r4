@@ -646,42 +646,71 @@ pub fn score_within_cell_reranker_row(
 
     // 1. Strictly within the writer's rank-1 cell `slots[0]`
     let c0 = slots[0];
-    let mut c0_best: Option<(u64, u64, u16)> = None;
+    let mut c0_best: Option<(bool, u64, u64, u16)> = None;
     for t in 0..w2_capacity::VOCABULARY as u16 {
         if token_cells[usize::from(t)] != c0 {
             continue;
         }
         let kc = key_map.and_then(|m| m.get(&t).copied()).unwrap_or(0);
         let uc = unigram_counts[usize::from(t)];
-        let cand = (kc, uc, t);
-        if let Some((bkc, buc, bt)) = c0_best {
-            if kc > bkc || (kc == bkc && (uc > buc || (uc == buc && t < bt))) {
+        let has_kc = kc > 0;
+        let cand = (has_kc, kc, uc, t);
+        if let Some((bh, bkc, buc, bt)) = c0_best {
+            let better = if has_kc != bh {
+                has_kc
+            } else if has_kc {
+                kc > bkc || (kc == bkc && t < bt)
+            } else {
+                (uc > 0 && buc == 0) || (uc > buc) || (uc == buc && t < bt)
+            };
+            if better {
                 c0_best = Some(cand);
             }
         } else {
             c0_best = Some(cand);
         }
     }
-    let top1_cell_only_hit = c0_best.is_some_and(|(_, _, bt)| bt == target_token);
+    let top1_cell_only_hit = c0_best.is_some_and(|(_, _, _, bt)| bt == target_token);
 
-    // 2. Pooled across the 8 admitted cells `slots`, ranking by `(key_count desc, unigram desc, token asc)`
-    let mut pooled: Vec<(u64, u64, u16)> = Vec::with_capacity(128);
+    // 2. Pooled across the admitted cells `slots` using `w2_capacity::predict_admitted` semantics:
+    // own tokens (`kc > 0`) sorted by `(kc desc, t asc)` (up to 8), then padded from seen unigram (`uc > 0`) by `(uc desc, t asc)`.
+    let mut own: Vec<(u64, u16)> = Vec::new();
+    let mut fallback_uni: Vec<(u64, u16)> = Vec::new();
     // 3. Lexicographic `(has_key_count > 0 desc, key_count desc, cell_shortlist_rank asc, unigram desc, token asc)`
     let mut cell_prioritized: Vec<(bool, u64, usize, u64, u16)> = Vec::with_capacity(128);
     for (slot_rank, &cell) in slots.iter().enumerate() {
+        if cell == u16::MAX {
+            continue;
+        }
         for t in 0..w2_capacity::VOCABULARY as u16 {
             if token_cells[usize::from(t)] != cell {
                 continue;
             }
             let kc = key_map.and_then(|m| m.get(&t).copied()).unwrap_or(0);
             let uc = unigram_counts[usize::from(t)];
-            pooled.push((kc, uc, t));
+            if kc > 0 {
+                own.push((kc, t));
+            } else if uc > 0 {
+                fallback_uni.push((uc, t));
+            }
             cell_prioritized.push((kc > 0, kc, slot_rank, uc, t));
         }
     }
-    pooled.sort_by(|&(kc_a, uc_a, t_a), &(kc_b, uc_b, t_b)| {
-        kc_b.cmp(&kc_a).then(uc_b.cmp(&uc_a)).then(t_a.cmp(&t_b))
-    });
+    own.sort_by(|&(kc_a, t_a), &(kc_b, t_b)| kc_b.cmp(&kc_a).then(t_a.cmp(&t_b)));
+    fallback_uni.sort_by(|&(uc_a, t_a), &(uc_b, t_b)| uc_b.cmp(&uc_a).then(t_a.cmp(&t_b)));
+    let mut pooled_top8: Vec<u16> = own
+        .into_iter()
+        .take(w2_capacity::TOP_K)
+        .map(|(_, t)| t)
+        .collect();
+    for (_, t) in fallback_uni {
+        if pooled_top8.len() == w2_capacity::TOP_K {
+            break;
+        }
+        if !pooled_top8.contains(&t) {
+            pooled_top8.push(t);
+        }
+    }
     cell_prioritized.sort_by(
         |&(has_a, kc_a, sr_a, uc_a, t_a), &(has_b, kc_b, sr_b, uc_b, t_b)| {
             has_b
@@ -693,8 +722,8 @@ pub fn score_within_cell_reranker_row(
         },
     );
 
-    let pooled_hit1 = pooled.first().is_some_and(|&(_, _, t)| t == target_token);
-    let pooled_hit8 = pooled.iter().take(8).any(|&(_, _, t)| t == target_token);
+    let pooled_hit1 = pooled_top8.first().copied() == Some(target_token);
+    let pooled_hit8 = pooled_top8.contains(&target_token);
     let cell_prio_hit1 = cell_prioritized
         .first()
         .is_some_and(|&(_, _, _, _, t)| t == target_token);
@@ -2202,7 +2231,17 @@ mod cuda_impl {
             || dev_codes.len() != w2_sum.distinct_dev_read_codes
         {
             return Err(invalid(format!(
-                "{arm_label} Gate R mismatch against sealed w2-summary.json"
+                "{arm_label} Gate R mismatch: adm={dev_admitted_rows}/{} psucc={dev_psucc_admitted_rows}/{} w1={writer_top1_hits}/{} w8={writer_top8_hits}/{} t1={t_restr_aw_top1_hits}/{} t8={t_restr_aw_top8_hits}/{} tr_codes={}/{} dev_codes={}/{}",
+                w2_sum.dev_target_admitted_rows,
+                w2_sum.dev_psucc_admitted_rows,
+                w2_sum.writer_top1_correct_all,
+                w2_sum.writer_top8_correct_all,
+                w2_sum.checkpoint_t_restr_aw_hit1_all,
+                w2_sum.checkpoint_t_restr_aw_hit8_all,
+                train_codes.len(),
+                w2_sum.distinct_train_read_codes,
+                dev_codes.len(),
+                w2_sum.distinct_dev_read_codes
             )));
         }
 
