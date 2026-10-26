@@ -580,10 +580,15 @@ pub const Q16_SCALE: f32 = 65536.0;
 /// sublayer add, where the integer session holds it (claude-133, the Q16 control). It restores
 /// the flag as it was. An evaluation control: it has no backward bridge.
 pub fn with_q16_residual<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
-    let prior = ROUND_RESIDUAL_Q16.with(|c| c.replace(true));
-    let out = f();
-    ROUND_RESIDUAL_Q16.with(|c| c.set(prior));
-    out
+    /// Restores the flag on every exit, a panic included (claude-133 code review).
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            ROUND_RESIDUAL_Q16.with(|c| c.set(self.0));
+        }
+    }
+    let _restore = Restore(ROUND_RESIDUAL_Q16.with(|c| c.replace(true)));
+    f()
 }
 
 /// Whether the trunk rounds its residual stream to 2^-16 on this thread.
@@ -2705,6 +2710,11 @@ mod tests {
         )))?);
         assert!(!with_d11_mode(|| Ok(is_rounding_residual_q16()))?);
         assert!(with_q16_residual(|| -> Result<()> { Err(invalid("inside")) }).is_err());
+        assert!(!is_rounding_residual_q16());
+        // A panic inside restores it too.
+        let panicked =
+            std::panic::catch_unwind(|| with_q16_residual(|| -> Result<()> { panic!("inside") }));
+        assert!(panicked.is_err());
         assert!(!is_rounding_residual_q16());
         Ok(())
     }

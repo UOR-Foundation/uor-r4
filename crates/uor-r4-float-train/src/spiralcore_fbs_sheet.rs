@@ -1634,9 +1634,13 @@ const SIGN_FLIP_MIN_CODES: i64 = 64;
 
 /// The drift readings the claude-132 code review asked for (claude-133), in Q12 codes, of the
 /// queries `a` against the reference `r` (rows × `width`):
-/// - the median, mean, 99th-percentile and largest absolute difference over every entry;
-/// - the three columns that hold the most per-row maxima;
-/// - the largest per-channel mean signed difference, and its channel;
+/// - the median, mean, 99th-percentile and largest absolute difference over every entry (by
+///   nearest rank: the upper middle value when the count is even);
+/// - the three columns that hold the most per-row maxima (a row whose largest difference is in
+///   two columns counts toward the lower one), and the rows with no difference at all, which
+///   count toward no column;
+/// - the largest per-channel mean signed difference in size, and its channel (the higher one on a
+///   tie);
 /// - the entries saturated at the i16 ends on each side;
 /// - the entries of opposite sign where both sides are at least [`SIGN_FLIP_MIN_CODES`] in size,
 ///   so that a sign flip shows;
@@ -1654,6 +1658,7 @@ fn drift_readings(a: &[f32], r: &[f32], width: usize) -> Result<serde_json::Valu
     let mut max_column = vec![0usize; width];
     let (mut saturated_a, mut saturated_r) = (0usize, 0usize);
     let mut sign_flips = 0usize;
+    let mut rows_no_gap = 0usize;
     let mut scales = Vec::with_capacity(rows);
     for (ra, rr) in a.chunks(width).zip(r.chunks(width)) {
         let (mut best, mut best_col) = (0u64, 0usize);
@@ -1674,7 +1679,12 @@ fn drift_readings(a: &[f32], r: &[f32], width: usize) -> Result<serde_json::Valu
             l1_a += cx.unsigned_abs();
             l1_r += cy.unsigned_abs();
         }
-        max_column[best_col] += 1;
+        // A row with no difference has no column of its largest one (claude-133 code review).
+        if best > 0 {
+            max_column[best_col] += 1;
+        } else {
+            rows_no_gap += 1;
+        }
         if l1_r > 0 {
             scales.push(l1_a as f64 / l1_r as f64);
         }
@@ -1698,6 +1708,7 @@ fn drift_readings(a: &[f32], r: &[f32], width: usize) -> Result<serde_json::Valu
         "p99_abs_codes": abs[at(abs.len(), 0.99)],
         "max_abs_codes": abs[abs.len() - 1],
         "top_max_columns": columns.iter().take(3).map(|&(j, n)| [j, n]).collect::<Vec<_>>(),
+        "rows_no_gap": rows_no_gap,
         "max_abs_channel_mean_codes": worst_mean,
         "max_abs_channel_mean_channel": worst_channel,
         "saturated_entries": {"queries": saturated_a, "reference": saturated_r},
@@ -1873,8 +1884,9 @@ pub fn run_d11_residual(
         && i_dev
         && d_preds == d_again
         && i_head
-        && i_head_q16
         && i_d_stored.unwrap_or(true);
+    // The Q16 control's own head check gates only its own classification (claude-133 code review).
+    let instruments_q16_ok = instruments_ok && i_head_q16;
     let classification = classify_residual(
         instruments_ok,
         rows_differ(&h_preds, &a_preds),
@@ -1885,7 +1897,7 @@ pub fn run_d11_residual(
     // The same rule with the Q16 control as the reference (claude-133).
     let d16_vs_a = pair("d11_q16", &d16_preds, "artifact", &a_preds);
     let classification_q16 = classify_residual(
-        instruments_ok,
+        instruments_q16_ok,
         rows_differ(&h_preds, &a_preds),
         rows_differ(&d16_preds, &a_preds),
         a_preds.len(),
@@ -1941,6 +1953,7 @@ pub fn run_d11_residual(
         "i_head": i_head,
         "i_d_stored": i_d_stored,
         "instruments_pass": instruments_ok,
+        "instruments_pass_q16": instruments_q16_ok,
         "rule": {
             "faithful_percent": RESIDUAL_FAITHFUL_PERCENT,
             "departure_percent": RESIDUAL_DEPARTURE_PERCENT,
@@ -2718,6 +2731,17 @@ mod tests {
         let v = drift_readings(&a, &r, 3)?;
         // No entry is a sign flip: the opposite-sign pairs are all below 64 codes or absent.
         assert_eq!(v["sign_flip_entries"], serde_json::json!(0));
+        // A third row with no difference counts toward no column (claude-133 code review).
+        let with_equal_row = drift_readings(
+            &q(&[20, 40, 60, 32767, 0, -50, 7, 7, 7]),
+            &q(&[10, 20, 30, 100, 0, -50, 7, 7, 7]),
+            3,
+        )?;
+        assert_eq!(with_equal_row["rows_no_gap"], serde_json::json!(1));
+        assert_eq!(
+            with_equal_row["top_max_columns"],
+            serde_json::json!([[0, 1], [2, 1], [1, 0]])
+        );
         let flipped = drift_readings(&q(&[-100, 63, 5, 64]), &q(&[100, -64, -5, -64]), 4)?;
         // The first and last entries are flips: both sides at least 64 codes, of opposite sign.
         assert_eq!(flipped["sign_flip_entries"], serde_json::json!(2));

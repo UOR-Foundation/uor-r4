@@ -44,6 +44,12 @@ Size against `origin/main`: float-train, in `hamilton_sheet.rs`, `geometric_stac
 - **Tests:**
   - the host tests `the_q16_control_sets_and_restores_its_flag` and `the_drift_readings_count_codes_columns_saturation_and_scale`, the latter including the 64-code sign-flip boundary;
   - the GPU test `gpu_the_q16_control_holds_the_residual_on_its_grid_and_is_off_by_default`.
+- **After the run, from the code review:**
+  - **`drift_readings` no longer credits a row with no difference to column 0.** It counts such rows as `rows_no_gap`. The test fails with this fix set aside (`rows_no_gap` 0 against 1) and passes with it restored.
+    - In the stored receipts, made before the fix, `top_max_columns` is inflated at column 0 by the exactly equal rows. That affects only the comparisons that have such rows, D16 against D.
+    - The A-against-D readings this REPORT cites are unaffected, because every one of their rows differs (`rows_exact` 0).
+  - **The Q16 head check now gates only `classification_q16`** (`instruments_pass_q16`). It was true on every model in the run.
+  - **`with_q16_residual` restores its flag on a panic too,** and the flag test checks that.
 
 ## Measurements
 
@@ -81,7 +87,7 @@ No model has `classification_q16` = departure.
 
 **Readings, with no bar** (A against D, in Q12 codes):
 - **The median difference** is 1 to 3 codes on every model. The mean is 14.6 to 105.2, pulled by tails. The largest single difference is 34,694 to 63,162.
-- **About 1% of entries saturate at the i16 ends** (5,228 to 52,999 of 3,657,472), equally on both sides to within 330. The per-row maxima cluster in a few channels: for example, 1,241 rows in channel 56 on plain-c126 s1, and 1,321 rows in channel 127 on d11-c130 s1.
+- **0.1% to 1.5% of entries saturate at the i16 ends** (5,228 to 53,016 per side, of 3,657,472), equally on both sides to within 330. The per-row maxima cluster in a few channels: for example, 1,241 rows in channel 56 on plain-c126 s1, and 1,321 rows in channel 127 on d11-c130 s1.
   - That fits a saturating channel whose value sits near ±8 and flips sign: one code of difference at the clamp becomes a jump of up to 65,535.
   - It also fits the sign-flip counts (0.08% to 0.5% of entries).
   - This is a hypothesis about the tails, not a measurement of them.
@@ -114,6 +120,6 @@ See the exact-head review record on the PR.
 ## Plain summary
 
 This looked for signs that the shipped integer files compute something different from what they should.
-- **None of the obvious signs of a defect showed up** on any of the six models: no scale error, no sign errors beyond the normal ones, no lopsided clipping. In those respects the four uncertain models look like the two that passed.
+- **None of the obvious signs of a defect showed up** on any of the six models: no scale error, no sign errors beyond the normal ones, no lopsided clipping. In those respects the four uncertain models fall within the agreed tolerance of the two that passed, although their raw readings are larger (up to about twice the sign flips).
 - **A small adjustment to make the reference match the integer arithmetic more closely changed almost nothing,** as expected. So the leftover differences are not explained yet.
-- **The leading suspect** is a rounding decision that flips at a tipping point and then carries forward. Checking that needs the integer evaluator to report those decisions, which is the next step.
+- **An untested hypothesis** is a rounding decision that flips at a tipping point and then carries forward. Checking that needs the integer evaluator to report those decisions, which is the next step.
