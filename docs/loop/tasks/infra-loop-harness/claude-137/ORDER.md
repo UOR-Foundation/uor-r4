@@ -1,6 +1,6 @@
 # ORDER: infra-loop-harness, claude-137 (widen the item's scope to take codex out of the registry)
 
-Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `1b9b87b39`.
+Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Setup row: 2 (item-file maintenance, as in claude-106, -108 and -121). Base: `1b9b87b39`.
 
 ## Goal
 
