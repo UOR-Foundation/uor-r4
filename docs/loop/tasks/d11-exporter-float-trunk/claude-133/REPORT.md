@@ -120,6 +120,6 @@ See the exact-head review record on the PR.
 ## Plain summary
 
 This looked for signs that the shipped integer files compute something different from what they should.
-- **None of the obvious signs of a defect showed up** on any of the six models: no scale error, no sign errors beyond the normal ones, no lopsided clipping. In those respects the four uncertain models fall within the agreed tolerance of the two that passed, although their raw readings are larger (up to about twice the sign flips).
+- **None of the obvious signs of a defect showed up** on any of the six models: no scale error, no sign errors beyond the normal ones, no lopsided clipping. In those respects the four uncertain models fall within the agreed tolerance of the two that passed, although some raw readings are larger, up to about twice the sign flips (18,558 against 10,100), and others are smaller.
 - **A small adjustment to make the reference match the integer arithmetic more closely changed almost nothing,** as expected. So the leftover differences are not explained yet.
 - **An untested hypothesis** is a rounding decision that flips at a tipping point and then carries forward. Checking that needs the integer evaluator to report those decisions, which is the next step.
