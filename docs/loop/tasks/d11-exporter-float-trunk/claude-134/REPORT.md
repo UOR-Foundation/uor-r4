@@ -22,8 +22,8 @@ References #2820.
   - The sheet's rule for B ≥ 80% applies: the flips are too common for this panel to place the rows.
   - **What it decides:** a decision review, and the item does not park.
 - **Why B saturates: the panel, not the mechanism (instrument).**
-  - **A shared prefix.** 30 of the 32 windows share their first 4 tokens, so the computation at positions 0 to 3 is the same in all 30.
-  - **Early flips everywhere.** Every window has a root disagreement, at a median position of 0 to 8, and the first differing row comes a median 43 to 63 positions later. So almost every scored row follows a flip.
+  - **The cause is early flips in every window.** On every model, faithful ones included, every window has a root disagreement, at a median position of 0 to 8. The first differing row comes a median 43 to 63 positions later, so almost every scored row follows a flip.
+  - **A shared prefix adds to it.** 30 of the 32 windows share their first 4 tokens, `[0, 55, 2728, 28]`, so the computation at positions 0 to 3 is the same in all 30. The 32-window file is in the store at `windows/`. Its sha256, `d5f8ef23…`, equals the receipts' pin, and it is rebuilt from the pinned `gap/windows.json`.
   - The FIT did not check the windows' prefixes, and the run file's FIT step has no such check.
 - **Four models' first flips are effectively one event each.** In the windows where D and A differ, the first flip falls in the shared prefix on:
   - plain-c126 s1: 20 of 21, at position 0, layer 2's output gate;
@@ -31,7 +31,11 @@ References #2820.
   - d11-c130 s1: 13 of 13, at position 0, layer 4's output gate;
   - dual-c131 s2: 18 of 18, at position 2, layer 4's transition.
 
-  On those four, m rests on essentially one near-tie snap. Only d11-c130 s2 (17 windows) and dual-c131 s1 (15 windows) give independent first flips, all after the prefix.
+  On those four, m rests on essentially one near-tie snap.
+- **Only d11-c130 s2 (17 windows) and dual-c131 s1 (15 windows) flip after the prefix, and those flips are mostly distinct, not independent.**
+  - On d11-c130 s2, 5 windows flip at (position 4, layer 4, feed-forward gate).
+  - On dual-c131 s1, 4 flip at (position 5, layer 0, feed-forward gate).
+  - The windows also share longer prefixes in small groups: 5 windows share their first 5 tokens, and two groups of 4 do. So each of those repeats may be one event.
 - **The ORDER's plan asked for the windows with the most D-against-A differences.** The sheet took the first 32 DEV windows instead, a choice made before seeing data. Its FIT accepted that. It is a deviation from the ORDER's plan, recorded here.
 - **The first second-build attempt stopped at its first step (instrument).** The pod's checkout has no git remote. The retry fetched the commit by URL into a fresh folder (`snap3/`), and the stopped attempt is kept in `snap2/` with its own `EXIT` 128. No GPU time was lost.
 - **The run's binaries predate the code review's fixes.** The first job ran at `3cb4d3dec`. The second build at `d75b525e4` carries every fix and the `I-Layout` check, and it reproduced the first byte for byte (Measurements).
@@ -79,7 +83,7 @@ Against `origin/main`: the evaluator instrument and the float-train crate. Docs:
 
 **Per model,** over the first 32 DEV windows (996 scored rows each). P, B and L read the root mask. The two models that claude-132 found faithful are d11-c130 s1 and dual-c131 s1.
 
-| Model | Rows differ (R) | P | B | Lift | L | Primaries (windows) | Largest primary margin | Upper median | Root disagreements (of 8,257,536 sites) | Worst site's disagreement |
+| Model | Rows differ (R) | P | B | Lift | L | Primaries (windows) | Largest primary margin (windows with rows differ) | Upper median | Root disagreements (of 8,257,536 sites) | Worst site's disagreement |
 |---|---|---|---|---|---|---|---|---|---|---|
 | plain-c126 s1 | 51 (5.1%) | 100% | 100% | 0 | 21/21 | 121 (21) | 5.4e-5 | 5.4e-5 | 47,230 (0.57%) | 2.3% |
 | plain-c126 s2 | 34 (3.4%) | 100% | 100% | 0 | 21/21 | 79 (21) | 4.1e-5 | 1.7e-6 | 17,376 (0.21%) | 0.7% |
@@ -89,7 +93,11 @@ Against `origin/main`: the evaluator instrument and the float-train crate. Docs:
 | dual-c131 s2 | 37 (3.7%) | 100% | 100% | 0 | 18/18 | 18 (18) | 2.2e-5 | 2.2e-5 | 24,560 (0.30%) | 1.5% |
 
 **Readings, with no bar:**
-- **Every primary on every model is a near-tie.** The largest primary margin is 1.7e-4. None is an exact tie, and none is a zero block. The windows with independent first flips (d11-c130 s2 and dual-c131 s1) read the same.
+- **Every primary on every model is a near-tie.**
+  - In the windows where D and A differ, the largest primary margin is 1.7e-4.
+  - Over all 32 windows it is 6.8e-4, on dual-c131 s1.
+  - All are below 1e-3. None is an exact tie, and none is a zero block.
+  - The two models whose first flips come after the prefix (d11-c130 s2 and dual-c131 s1) read the same.
 - **Later disagreements are decisive.** Over all root disagreements, the upper median margin is 0.009 to 0.020, and 6,174 to 18,602 per model are below 1e-2. That fits a state that has already parted, and makes the first flip the only place a near-tie reading means anything.
 - **No zero blocks at all,** on either side, on any model. So the zero convention, root 1 against −1, never arises on this panel.
 - **The faithful models read like the others.** d11-c130 s1 and dual-c131 s1 have the same near-tie primaries, flips in every window and saturated B. So how a parting starts does not separate the faithful models from the indeterminate ones.
@@ -116,6 +124,7 @@ Against `origin/main`: the evaluator instrument and the float-train crate. Docs:
 - `snap3/`: the second build, the same layout;
 - `snap2/`: the stopped attempt;
 - `snap-bin/` and `snap2-bin/`: the binaries run. `spiralcore-fbs-sheet` is `7f405aeb…` and then `9b2de6d4…`; `d11-fbs-eval` is `99aadfbe…` and then `258c8ba0…`.
+- `windows/`: the 32-window file, `d5f8ef23…`.
 
 ## Checks run at the head
 
@@ -128,18 +137,29 @@ See the exact-head review record on the PR.
 
 ## Still open
 
-- **The decision review that Indeterminate calls for.** It is recorded on #2820 as an owner log, with its review. The candidate next control is an intervention, not a placement: run D with each snap forced to A's traced choice, and count the rows where forced-D and A still differ.
-  - If they vanish, the snaps carry the residual. Every first flip is a near-tie, so the residual is then D's sensitivity at its discrete choices.
-  - If they remain, the continuous arithmetic does. This control does not depend on window prefixes or base rates.
+- **The decision review that Indeterminate calls for has passed.** It is recorded on #2820 as an owner log. It confirms that the classification stands as pre-registered and that the item does not park. The next unit is an intervention, not a placement, and it gets its own sheet, FIT and D67 review:
+  - **Force D to A's traced snap choices on the full panel:** all 428 DEV windows re-traced (about 14 s) and all 14,287 rows. A 32-window trace cannot reclassify a 14,287-row residual.
+  - **Would-flips.** At every forced site, record D's own choice and its margin. With the states held together, each site where D would choose another root is a flip on its own, not a carried one. That sidesteps the base-rate and shared-prefix limits here.
+  - **Instrument gates:**
+    - D forced to its own captured choices reproduces D exactly;
+    - forcing a wrong root changes the tokens, as a negative gate.
+  - **Numeric bars fixed before the run,** with an intermediate outcome between "forced-D ≈ A" and "a few percent remain". Each outcome either ends the investigation or names exactly one more control.
+  - **What clears the exporter:**
+    - forced-D ≈ A shows the residual is carried by snap choices, but not that A's choices come from rounding;
+    - the exporter is settled faithful only if forced-D ≈ A, the would-flips are near-ties (m < 1e-3), and their rate is inside the faithful models' own.
+  - **Wording.** If the exporter is cleared, the three FAILs stand as configuration results, never a mechanism result (§4.1).
+- **The pivot note's order is unchanged:** the investigation settles, then the decisive run. That run goes ahead under Stage 4b's unchanged bar unless Casey reads §3.7 otherwise (#2028), so nothing waits on the owner (§5.1).
+- **Code-review notes on `I-Layout`, both MINOR:**
+  - a zero block on both sides counts against it, though it is evidence for the layout. No zero blocks occurred here.
+  - its host test has one layer and as many lanes as feed-forward blocks, so it would not catch a check that read only layer 0, or `lanes` for the feed-forward site.
 - **A future window panel should differ from position 0,** or should read only flips after the shared prefix.
-- **The pivot note's order is unchanged:** first the investigation settles, then the owner's reading of §3.7 (#2028), then one decisive run. The item parks only once the investigation settles.
 
 ## Plain summary
 
 - **What it looked at:** the exact points where the float reference and the shipped integer file first part ways.
-- **Where they part:** every time, at a rounding choice that sat almost exactly on a knife-edge between two options (within about one part in 6,000). After that, the two sides drift apart as expected.
+- **Where they part:** every time, at a rounding choice that sat almost exactly on a knife-edge between two options. That is within about one part in 1,500 everywhere, and one part in 6,000 in the texts whose words differ. After that, the two sides drift apart as expected.
 - **What it could not show:** that those knife-edge choices cause the word-level differences.
   - Such choices happen early in every text, so they come before both the differing and the matching words.
   - Most of the texts tested begin with the same four words, so many "first partings" were really one event.
 - **The two models that had already passed look the same,** so this reading does not separate them from the four uncertain ones.
-- **The next step** forces the reference to make the integer file's choices, and sees whether the differences disappear.
+- **The next step** forces the reference to make the integer file's choices, and sees whether the differences disappear. At each choice it also records what the reference would have picked on its own.
