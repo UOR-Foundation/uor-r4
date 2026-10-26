@@ -1482,7 +1482,7 @@ fn ref_fixed(v: f32, exp: i32, quantized: bool) -> f64 {
 }
 
 /// The nearest of the 120 icosian units to `raw` (largest dot product, ties to the first).
-fn ref_snap_icosian(raw: [f64; 4]) -> [f64; 4] {
+pub(super) fn ref_snap_icosian(raw: [f64; 4]) -> [f64; 4] {
     use crate::h4_classifier::H4_ROOT_COEFFICIENTS;
     let phi = 0.5 * (1.0 + 5.0f64.sqrt());
     let mut best = 0usize;
@@ -1527,11 +1527,72 @@ fn ref_rms_norm(x: &[f64], eps: f64) -> Vec<f64> {
     x.iter().map(|&v| v * inv).collect()
 }
 
-/// The Hamilton feed-forward gate: `hamilton(snap(g), up)` per 4-block.
-fn ref_hamilton_feed_forward(g: &[f64], up: &[f64]) -> Vec<f64> {
+/// How a float reference treats a quaternion the integer path snaps to the
+/// 120 icosians (d11-exporter-float-trunk, claude-124).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FbsQuatMode {
+    /// Snap to the nearest icosian, as the integer path does.
+    Icosian,
+    /// Round to Q12 steps, then snap: the float sheets' D11 export mode for
+    /// the Hamilton gates (`hamilton_sheet.rs`, `try_hamilton_gate_fwd_cuda`).
+    Q12Icosian,
+    /// Normalize as the float CUDA path does, `q / sqrt(|q|^2 + eps)`.
+    Normalize,
+}
+
+/// Which quaternions [`FbsTrunkSnapshot::forward_f32_with`] snaps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FbsReferenceSnaps {
+    /// The recurrence transition's rotation (normalized with `eps = 1e-6`).
+    pub transition: FbsQuatMode,
+    /// The recurrence output gate and the feed-forward gate (`eps = 1e-12`).
+    pub gates: FbsQuatMode,
+}
+
+impl FbsReferenceSnaps {
+    /// Everything snapped, as the integer path serves it.
+    pub const INTEGER: Self = Self {
+        transition: FbsQuatMode::Icosian,
+        gates: FbsQuatMode::Icosian,
+    };
+    /// Nothing snapped, as the plain float GPU trunk computes.
+    pub const FLOAT: Self = Self {
+        transition: FbsQuatMode::Normalize,
+        gates: FbsQuatMode::Normalize,
+    };
+    /// The float sheets' D11 export mode: Q12-rounded, snapped gates, and a
+    /// continuous transition.
+    pub const FLOAT_EXPORT: Self = Self {
+        transition: FbsQuatMode::Normalize,
+        gates: FbsQuatMode::Q12Icosian,
+    };
+}
+
+/// The epsilon the float CUDA path normalizes the transition with.
+const TRANSITION_EPS: f64 = 1e-6;
+/// The epsilon the float CUDA Hamilton gate normalizes with.
+const GATE_EPS: f64 = 1e-12;
+
+/// A quaternion the integer path snaps, under `mode`.
+pub(super) fn ref_quat_mode(q: [f64; 4], mode: FbsQuatMode, eps: f64) -> [f64; 4] {
+    match mode {
+        FbsQuatMode::Icosian => ref_snap_icosian(q),
+        FbsQuatMode::Q12Icosian => {
+            ref_snap_icosian(q.map(|v| (v * 4096.0).round().clamp(-32768.0, 32767.0)))
+        }
+        FbsQuatMode::Normalize => {
+            let r = (q.iter().map(|v| v * v).sum::<f64>() + eps).sqrt();
+            q.map(|v| v / r)
+        }
+    }
+}
+
+/// The Hamilton feed-forward gate: `hamilton(gate(g), up)` per 4-block, the
+/// gate snapped (or normalized) under `mode`.
+fn ref_hamilton_feed_forward(g: &[f64], up: &[f64], mode: FbsQuatMode) -> Vec<f64> {
     let mut h = vec![0.0f64; g.len()];
     for blk in 0..(g.len() / 4) {
-        let prod = ref_hamilton(ref_snap_icosian(ref_quat(g, blk)), ref_quat(up, blk));
+        let prod = ref_hamilton(ref_quat_mode(ref_quat(g, blk), mode, GATE_EPS), ref_quat(up, blk));
         h[4 * blk..4 * blk + 4].copy_from_slice(&prod);
     }
     h
@@ -1571,6 +1632,7 @@ impl RefRecurrence {
         gate_out: &[f64],
         hist: &mut [f64],
         state: &mut [f64],
+        snaps: FbsReferenceSnaps,
     ) -> Vec<f64> {
         let d = drive.len();
         let lanes = self.decay.len();
@@ -1591,7 +1653,7 @@ impl RefRecurrence {
             let idx = ((s * 16.0).floor() as usize).min(15);
             let lambda = 2.0f64.powi(-((idx as i32) + 1));
             let keep = (1.0 - lambda * lambda).sqrt();
-            let q_rot = ref_snap_icosian(ref_quat(rotations, u));
+            let q_rot = ref_quat_mode(ref_quat(rotations, u), snaps.transition, TRANSITION_EPS);
             let trans = [
                 lambda * q_rot[0],
                 lambda * q_rot[1],
@@ -1605,7 +1667,10 @@ impl RefRecurrence {
         }
         let mut gated = vec![0.0f64; d];
         for u in 0..lanes {
-            let prod = ref_hamilton(ref_snap_icosian(ref_quat(out_gate, u)), ref_quat(state, u));
+            let prod = ref_hamilton(
+                ref_quat_mode(ref_quat(out_gate, u), snaps.gates, GATE_EPS),
+                ref_quat(state, u),
+            );
             gated[4 * u..4 * u + 4].copy_from_slice(&prod);
         }
         gated
@@ -1725,6 +1790,7 @@ impl FloatTrunkSnapshot {
                             &gate_out,
                             &mut rec_histories[l],
                             &mut rec_states[l],
+                            FbsReferenceSnaps::INTEGER,
                         );
                         matvec(&rec_out, d, d, &gated)
                     }
@@ -1839,7 +1905,7 @@ impl FloatTrunkSnapshot {
 
                 let g_vec = matvec(&gate_mat, padded_mlp, d, &norm_mlp);
                 let u_vec = matvec(&up_mat, padded_mlp, d, &norm_mlp);
-                let h_mlp = ref_hamilton_feed_forward(&g_vec, &u_vec);
+                let h_mlp = ref_hamilton_feed_forward(&g_vec, &u_vec, FbsQuatMode::Icosian);
                 let down_proj = matvec(&down_mat, d, padded_mlp, &h_mlp);
                 for (xi, di) in x.iter_mut().zip(&down_proj) {
                     *xi += di;
@@ -1951,6 +2017,19 @@ impl FbsTrunkSnapshot {
         tokens: &[u32],
         quantized: bool,
     ) -> Result<Vec<FbsWriterOutput>, StackError> {
+        self.forward_f32_with(tokens, quantized, FbsReferenceSnaps::INTEGER)
+    }
+
+    /// [`Self::forward_f32`] with chosen snaps: [`FbsReferenceSnaps::INTEGER`]
+    /// is the integer path's, [`FbsReferenceSnaps::FLOAT`] the plain float GPU
+    /// trunk's and [`FbsReferenceSnaps::FLOAT_EXPORT`] the float sheets' D11
+    /// export mode, so each float readout has a reference to match.
+    pub fn forward_f32_with(
+        &self,
+        tokens: &[u32],
+        quantized: bool,
+        snaps: FbsReferenceSnaps,
+    ) -> Result<Vec<FbsWriterOutput>, StackError> {
         // Refuse whatever the exporter refuses: the reference only runs
         // snapshots the served path can load.
         export_fbs_trunk_uorlut01(self)?;
@@ -2021,15 +2100,21 @@ impl FbsTrunkSnapshot {
                 let mut gate_out = fbs_reference_gather(&layer.rec_gate, &u);
                 add(&mut gate_out, &p.gate_bias);
                 let (drive, out_gate) = branches.split_at(d);
-                let gated = p
-                    .rec
-                    .step(drive, out_gate, &gate_out, &mut histories[l], &mut states[l]);
+                let gated = p.rec.step(
+                    drive,
+                    out_gate,
+                    &gate_out,
+                    &mut histories[l],
+                    &mut states[l],
+                    snaps,
+                );
                 add(&mut x, &fbs_reference_gather(&layer.rec_out, &gated));
 
                 let u = norm(&x, &p.mlp_norm);
                 let h = ref_hamilton_feed_forward(
                     &fbs_reference_gather(&layer.mlp_gate, &u),
                     &fbs_reference_gather(&layer.mlp_up, &u),
+                    snaps.gates,
                 );
                 add(&mut x, &fbs_reference_gather(&layer.mlp_down, &h));
             }

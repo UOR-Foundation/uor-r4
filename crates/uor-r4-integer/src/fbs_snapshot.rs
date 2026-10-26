@@ -104,7 +104,43 @@ pub struct FbsFloatPosition {
 pub struct FbsFloatReadout {
     pub vocab: usize,
     pub width: usize,
+    /// Read in the float sheets' D11 export mode (Q12-rounded, icosian-snapped
+    /// Hamilton gates), or plain.
+    pub export_mode: bool,
+    /// One position per token, in token order.
     pub positions: Vec<FbsFloatPosition>,
+}
+
+impl FbsFloatReadout {
+    /// Refuse a readout that does not hold every token of a `vocab`-token,
+    /// `width`-wide trunk once, in token order, with a full hidden vector, or
+    /// that was read in the other mode.
+    pub fn check(&self, vocab: usize, width: usize, export_mode: bool) -> Result<(), String> {
+        if self.vocab != vocab || self.width != width {
+            return Err("the readout's vocabulary or width differs from the trunk's".to_owned());
+        }
+        if self.export_mode != export_mode {
+            return Err(format!(
+                "the readout was read with export_mode = {}",
+                self.export_mode
+            ));
+        }
+        if self.positions.len() != vocab {
+            return Err(format!(
+                "{} positions for a vocabulary of {vocab}",
+                self.positions.len()
+            ));
+        }
+        match self
+            .positions
+            .iter()
+            .enumerate()
+            .find(|(i, p)| p.token as usize != *i || p.hidden.len() != width)
+        {
+            Some((i, _)) => Err(format!("position {i} is not token {i} with {width} values")),
+            None => Ok(()),
+        }
+    }
 }
 
 /// Offline SpiralCore/FBS trunk snapshot handed to `stack::export_fbs_trunk_uorlut01`.
@@ -144,6 +180,55 @@ mod tests {
         assert_eq!(std::fs::read(&path).expect("read"), b"first");
         assert!(!partial.exists());
         std::fs::remove_dir_all(&dir).expect("clean up");
+    }
+
+    #[test]
+    fn float_readout_check_refuses_an_incomplete_or_misordered_readout() {
+        let readout = |tokens: &[u32], export_mode: bool| FbsFloatReadout {
+            vocab: 3,
+            width: 2,
+            export_mode,
+            positions: tokens
+                .iter()
+                .map(|&token| FbsFloatPosition {
+                    token,
+                    next: 0,
+                    hidden: vec![0.0; 2],
+                })
+                .collect(),
+        };
+        assert!(readout(&[0, 1, 2], false).check(3, 2, false).is_ok());
+        assert!(readout(&[0, 1, 2], true).check(3, 2, true).is_ok());
+        for (what, r, reason) in [
+            ("empty", readout(&[], false), "0 positions"),
+            ("a token missing", readout(&[0, 1], false), "2 positions"),
+            (
+                "a token repeated",
+                readout(&[0, 1, 1], false),
+                "position 2 is not token 2",
+            ),
+            (
+                "out of order",
+                readout(&[1, 0, 2], false),
+                "position 0 is not token 0",
+            ),
+            (
+                "the other mode",
+                readout(&[0, 1, 2], true),
+                "export_mode = true",
+            ),
+        ] {
+            match r.check(3, 2, false) {
+                Err(e) => assert!(e.contains(reason), "{what}: {e}"),
+                Ok(()) => panic!("{what} must be refused"),
+            }
+        }
+        let mut short = readout(&[0, 1, 2], false);
+        short.positions[1].hidden.pop();
+        assert!(short
+            .check(3, 2, false)
+            .is_err_and(|e| e.contains("position 1")));
+        assert!(readout(&[0, 1, 2], false).check(4, 2, false).is_err());
     }
 
     #[test]

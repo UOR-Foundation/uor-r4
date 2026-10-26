@@ -2706,6 +2706,56 @@ fn fbs_trunk_export_is_deterministic_and_parses() {
 }
 
 #[test]
+fn fbs_reference_quat_modes_match_their_definitions() {
+    use super::format::{ref_quat_mode, ref_snap_icosian, FbsQuatMode};
+    // Normalize: the float CUDA path's `q / sqrt(|q|^2 + eps)`.
+    let n = ref_quat_mode([3.0, 0.0, 4.0, 0.0], FbsQuatMode::Normalize, 1e-12);
+    for (got, want) in n.iter().zip([0.6, 0.0, 0.8, 0.0]) {
+        assert!((got - want).abs() < 1e-12, "{n:?}");
+    }
+    let tiny = ref_quat_mode([1e-6, 0.0, 0.0, 0.0], FbsQuatMode::Normalize, 1e-12);
+    assert!((tiny[0] - 1e-6 / (1e-12f64 + 1e-12).sqrt()).abs() < 1e-12, "{tiny:?}");
+    // Icosian: a unit icosian, and the identity snaps to itself.
+    assert_eq!(ref_quat_mode([1.0, 0.0, 0.0, 0.0], FbsQuatMode::Icosian, 1e-12), [1.0, 0.0, 0.0, 0.0]);
+    let s = ref_quat_mode([0.3, -0.2, 0.9, 0.1], FbsQuatMode::Icosian, 1e-12);
+    assert!((s.iter().map(|v| v * v).sum::<f64>() - 1.0).abs() < 1e-12, "{s:?}");
+    // Q12Icosian rounds to Q12 steps first: a gate below half a step rounds
+    // to zero and snaps as the zero vector does, not as its direction does.
+    let small = [1e-5, 0.0, 0.0, 0.0];
+    assert_eq!(ref_quat_mode(small, FbsQuatMode::Q12Icosian, 1e-12), ref_snap_icosian([0.0; 4]));
+    assert_eq!(ref_quat_mode(small, FbsQuatMode::Icosian, 1e-12), [1.0, 0.0, 0.0, 0.0]);
+    assert_ne!(ref_snap_icosian([0.0; 4]), [1.0, 0.0, 0.0, 0.0]);
+}
+
+#[test]
+fn fbs_reference_snaps_default_to_the_integer_path_and_each_switch_is_live() {
+    use super::format::FbsReferenceSnaps;
+    let snap = synthetic_fbs_trunk(20261026);
+    let sequence = [0u32, 5, 11, 19, 3, 27, 14, 31];
+    for quantized in [false, true] {
+        let default = snap.forward_f32(&sequence, quantized).expect("reference");
+        let integer = snap
+            .forward_f32_with(&sequence, quantized, FbsReferenceSnaps::INTEGER)
+            .expect("reference");
+        assert_eq!(default, integer, "quantized {quantized}");
+    }
+    // Each variant changes some query: the switches reach the forward.
+    let base = snap.forward_f32(&sequence, false).expect("reference");
+    for snaps in [FbsReferenceSnaps::FLOAT, FbsReferenceSnaps::FLOAT_EXPORT] {
+        let other = snap.forward_f32_with(&sequence, false, snaps).expect("reference");
+        assert!(
+            base.iter().zip(&other).any(|(a, b)| a.query != b.query),
+            "{snaps:?} leaves every query unchanged"
+        );
+    }
+    let float = snap.forward_f32_with(&sequence, false, FbsReferenceSnaps::FLOAT).expect("reference");
+    let export = snap
+        .forward_f32_with(&sequence, false, FbsReferenceSnaps::FLOAT_EXPORT)
+        .expect("reference");
+    assert!(float.iter().zip(&export).any(|(a, b)| a.query != b.query));
+}
+
+#[test]
 fn fbs_trunk_snapshot_json_round_trips_exactly() {
     // The float converter hands the snapshot over as JSON (`fbs-export`); every
     // f32 must read back to the same bits, so the export is the same bytes.

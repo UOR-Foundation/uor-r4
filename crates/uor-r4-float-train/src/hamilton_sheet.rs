@@ -1690,6 +1690,39 @@ pub fn with_gate_mode<T>(
     out
 }
 
+/// Runs `f` with both Hamilton gates in the D11 export mode (Q12-rounded,
+/// then snapped to the 120 icosians, as [`with_gate_mode`] with
+/// `HamiltonArm::HamiltonActive`), then restores the gate hook exactly as it
+/// was, the arm included. The FBS converter's export-mode readout uses it
+/// (`fbs_export`, claude-124).
+pub fn with_d11_export_gates<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
+    let prior = GATE_HOOK.with(|cell| {
+        let mut st = cell.borrow_mut();
+        let prior = (
+            st.active_arm,
+            st.fwd_call_idx,
+            st.icosian_export_mode,
+            st.capture_telemetry,
+        );
+        st.active_arm = Some(HamiltonArm::HamiltonActive);
+        st.fwd_call_idx = 0;
+        st.icosian_export_mode = true;
+        st.capture_telemetry = false;
+        prior
+    });
+    let out = f();
+    GATE_HOOK.with(|cell| {
+        let mut st = cell.borrow_mut();
+        (
+            st.active_arm,
+            st.fwd_call_idx,
+            st.icosian_export_mode,
+            st.capture_telemetry,
+        ) = prior;
+    });
+    out
+}
+
 /// Computes the response-masked margin loss for one training batch on CUDA.
 fn response_masked_batch_loss(
     model: &StackModel,

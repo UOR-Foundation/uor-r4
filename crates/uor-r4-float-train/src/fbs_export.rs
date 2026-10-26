@@ -282,10 +282,19 @@ pub fn fbs_trunk_snapshot(model: &StackModel) -> Result<FbsTrunkSnapshot> {
 }
 
 /// The float GPU trunk's own output for every single-token input: its final
-/// hidden vector and its native writer's next token. `fbs-compare` holds the
-/// converted snapshot against it. GPU only.
-pub fn fbs_float_readout(model: &StackModel) -> Result<FbsFloatReadout> {
+/// hidden vector and its native writer's next token. With `export_mode`, both
+/// Hamilton gates run in the float sheets' D11 export mode (Q12-rounded, then
+/// snapped to the 120 icosians). `fbs-compare` holds the converted snapshot
+/// against it. GPU only.
+pub fn fbs_float_readout(model: &StackModel, export_mode: bool) -> Result<FbsFloatReadout> {
     check_no_sheet_arm()?;
+    if export_mode {
+        return crate::hamilton_sheet::with_d11_export_gates(|| fbs_float_readout(model, false))
+            .map(|r| FbsFloatReadout {
+                export_mode: true,
+                ..r
+            });
+    }
     let (vocab, width) = (model.config.vocab_size, model.config.width);
     let mut positions = Vec::with_capacity(vocab);
     for token in 0..vocab as u32 {
@@ -309,6 +318,7 @@ pub fn fbs_float_readout(model: &StackModel) -> Result<FbsFloatReadout> {
     Ok(FbsFloatReadout {
         vocab,
         width,
+        export_mode: false,
         positions,
     })
 }
@@ -611,8 +621,19 @@ mod tests {
         }
 
         // The trunk reads out, and an active sheet arm is refused.
-        let readout = fbs_float_readout(&model)?;
-        assert_eq!(readout.positions.len(), snap.vocab);
+        let readout = fbs_float_readout(&model, false)?;
+        let export = fbs_float_readout(&model, true)?;
+        assert!(!readout.export_mode && export.export_mode);
+        for r in [&readout, &export] {
+            r.check(snap.vocab, snap.width, r.export_mode)
+                .map_err(invalid)?;
+        }
+        // The export mode reaches the forward: some hidden vector changes.
+        assert!(readout
+            .positions
+            .iter()
+            .zip(&export.positions)
+            .any(|(a, b)| a.hidden != b.hidden));
         crate::spiralcore_fbs_arms::set_fbs_arm(Some(
             crate::spiralcore_fbs_arms::FbsArm::OneAtomActive,
         ));
@@ -624,11 +645,12 @@ mod tests {
             for (name, json) in [
                 ("snapshot.json", serde_json::to_vec(&snap)?),
                 ("readout.json", serde_json::to_vec(&readout)?),
+                ("readout-export.json", serde_json::to_vec(&export)?),
             ] {
                 uor_r4_integer::fbs_snapshot::write_new_file(&dir.join(name), &json)?;
             }
             eprintln!(
-                "fbs converter: wrote snapshot.json and readout.json to {}",
+                "fbs converter: wrote snapshot.json, readout.json and readout-export.json to {}",
                 dir.display()
             );
         }
