@@ -841,8 +841,8 @@ pub fn run_full_sheet(data_root: &Path, device: &Device) -> Result<FbsSheetRecei
             && advantage <= f_i(gap.a_hit_b_miss_c, gap.a_miss_b_hit_b);
     }
     let fit = fit_arm.is_some();
-    let (transfer, fresh) = if fit && export_ok {
-        let (fresh_tokens, fresh_mask) = hs::load_pinned_uort_split(
+    let loaded = (fit && export_ok).then(|| {
+        hs::load_pinned_uort_split(
             &data_root.join("fresh_v2/tokens.u16"),
             &data_root.join("fresh_v2/response_mask.u8"),
             PINNED_FRESH_TOKENS_SHA256,
@@ -851,7 +851,19 @@ pub fn run_full_sheet(data_root: &Path, device: &Device) -> Result<FbsSheetRecei
             EXPECTED_FRESH_TARGETS,
             hs::SHEET_VOCAB,
             hs::SHEET_BOS_ID,
-        )?;
+        )
+    });
+    // A missing or mismatched sealed draw blocks G-Fbs-Transfer; it is recorded, never a negative,
+    // and never discards the DEV results above.
+    let (transfer, fresh) = if let Some(Err(error)) = &loaded {
+        (
+            None,
+            Some(serde_json::json!({
+                "status": "blocked: the sealed fresh_v2 draw is not available under the data root",
+                "error": error.to_string(),
+            })),
+        )
+    } else if let Some(Ok((fresh_tokens, fresh_mask))) = loaded {
         let (fresh_windows, _) = hs::build_document_windows(
             &fresh_tokens,
             &fresh_mask,
