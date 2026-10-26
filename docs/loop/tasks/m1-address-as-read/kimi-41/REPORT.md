@@ -29,9 +29,9 @@ D68 whole-project review (agent-37, DeepSeek/deepseek-flash): REJECT the integer
 - `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo run -q --locked -p xtask -- roadmap check`: 94 items OK.
 - `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo run -q --locked -p xtask -- links --json local/kimi/links-3282.json`: no broken link in this unit; the pre-existing repository report has 1,088 other broken links.
 - `git diff --check origin/main`: PASS.
-- `uor-harness loop gates --full`: final result at the delivery head.
-- `uor-harness loop report --check --order docs/loop/tasks/m1-address-as-read/kimi-41/ORDER.md`: final result at the delivery head.
-- `uor-harness loop pr-check --local`: final result at the delivery head.
+- `uor-harness loop gates --full`: all 11 gates GREEN at `838a627e0`.
+- `uor-harness loop report --check --order docs/loop/tasks/m1-address-as-read/kimi-41/ORDER.md`: PASS at `838a627e0`.
+- `uor-harness loop pr-check --local`: PASS at `838a627e0`; one advisory item-scope warning only.
 
 ## Skills used
 
