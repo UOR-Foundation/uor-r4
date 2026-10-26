@@ -28,14 +28,23 @@ D and H share one head (`write_q12_rows`), so where they differ, it is because t
 
 ## 3. Bar and decision table
 
-**The classification rule, per model: faithful when** every instrument check of section 4 is green **and** D against A is within the sheets' paired test:
-- b counts the rows D hits and A misses; c counts the reverse;
-- the rule is |b − c| ≤ F_I = max(24, ⌈2√(b + c)⌉).
+**The question is identity: does A compute the same forward as D?** It is not whether A scores as well as D. A hit-count test alone would miss a departure that changes many tokens on rows that both D and A get wrong, which is about 86% of the rows. So the rule is row by row.
+
+**The classification rule, per model** (`classify_residual`; every instrument check of section 4 green first). Let r = 14,287 rows, d_H = the rows where H and A differ, and d_D = the rows where D and A differ.
+- **Faithful:** d_H = 0, **and** d_D ≤ 3% of r (428 rows), **and** D against A passes the paired test, |b − c| ≤ F_I = max(24, ⌈2√(b + c)⌉). Here b counts the rows D hits and A misses, and c the reverse.
+- **Departure:** d_H > 0, **or** d_D > 10% of r (1,429 rows or more), **or** D against A fails the paired test.
+- **Indeterminate:** anything else, that is d_H = 0 and the paired test passed, but d_D between 429 and 1,428 rows.
+
+**Why these numbers** (calibrated on claude-127's host checks, before this run):
+- **d_H = 0.** H reads A's own queries through the same head, so any difference is the head's.
+- **3%.** It is three times the integer path's measured residual against its f64 reference: 4 to 5 of 512 tokens at 6 layers, about 1%.
+- **10%.** claude-127's norm-bias defect changed 91 of 512 tokens (18%). That defect still left 509 of 512 queries within 2 LSB, so query drift alone would not have caught it. The drift is therefore a reading here, not the rule.
 
 | Outcome | It means | It decides |
 |---|---|---|
-| **Faithful on all six** | Each artifact computes its D11 forward, within the paired test. The three FAILs' top-1 gaps lie between the plain-float forward and the D11 forward itself: the gate and transition snaps, the Q12 query, the table rounding. | The exporter is cleared as the cause. The three negatives stand as mechanism results of their configurations. The item parks behind the owner's reading of §3.7 (#2028), and any decisive run targets the float-to-D11 forward gap in training. |
-| **A departure on any model** | That artifact computes something measurably different from its D11 forward. | An exporter or evaluator defect, so an instrument repair item is opened. The readings below say whether it sits in the head (H against A) or the trunk (D against H, and the drift). After the repair, the affected artifacts are re-exported and re-scored under the unchanged bar. No negative stands on an affected artifact until then. |
+| **Faithful on all six** | Each artifact computes its D11 forward: its head is identical, and its tokens differ from D's on at most the integer path's measured residual. The three FAILs' top-1 gaps then lie between the plain-float forward and the D11 forward itself: the gate and transition snaps, the Q12 query and the table rounding. | The exporter is cleared as the cause. The three negatives stand as mechanism results of their configurations. The item parks behind the owner's reading of §3.7 (#2028), and any decisive run targets the float-to-D11 forward gap in training. |
+| **A departure on any model** | That artifact computes something measurably different from its D11 forward. | An exporter or evaluator defect, so an instrument repair item is opened. The readings say whether it sits in the head (d_H) or the trunk (D against H, and the drift). After the repair, the affected artifacts are re-exported and re-scored under the unchanged bar. No negative stands on an affected artifact until then. |
+| **Indeterminate on any model, with no departure** | A's tokens differ from D's more than the measured residual, but not as a different forward does. | An instrument investigation of that model's trunk, led by the drift readings. It is never a mechanism result, and the item does not park until it is settled. |
 | **An instrument check fails** | The model, its inputs, or the stored run is not the one claimed. | Not counted. That check is repaired first. |
 
 **Readings, with no bar:**
@@ -50,14 +59,13 @@ D and H share one head (`write_q12_rows`), so where they differ, it is because t
 1. **`I-GPU-Tests`.** `cargo test --release --locked -p uor-r4-float-train --features cuda --lib` passes on the pod. That includes `gpu_the_head_on_the_d11_queries_is_the_d11_panel` and the earlier D11 GPU tests.
 2. **`I-Fetch`.** Every fetched file verifies against its store folder's `SHA256SUMS`, and the DEV data against its pins (section 5).
 3. **`I-Save-Load`.** F reproduces the stored `preds-float.json` row for row.
-4. **`I-Inputs`.**
-   - The stored run's `artifact_sha256` and `sequences_sha256` equal the pins in section 5. The mode checks this.
-   - Each model's `model.safetensors` equals its pin in section 5. The job checks this with `sha256sum -c` before any residual run, and the receipt records the hash again.
+4. **`I-Inputs`.** The stored run's `artifact_sha256` and `sequences_sha256`, and the model's `model.safetensors` sha256 (`--model-sha256`), equal the pins in section 5. The mode checks all three, and the job checks the model files with `sha256sum -c` as well, before any residual run.
 5. **`I-Verify-All`.** The stored run's two verify checks are equal at all 82,176 positions.
 6. **`I-DEV-Denominator`.** A covers 14,287 rows.
 7. **`I-D-Determinism`.** Two D panels are identical.
 8. **`I-Head`.** The head on D's own queries writes exactly D's predictions.
-9. **`I-Finite`.** Every step exits 0, and each step's stdout, stderr and exit code are saved. The log's last line is written before `SHA256SUMS`.
+9. **`I-D-Stored`, for plain-c126 only.** Stage 4b stored those two models' D11 panels when it trained them (`save/seed-s/preds-d11.json`). The recomputed D must equal them row for row, which checks D across builds.
+10. **`I-Finite`.** Every step exits 0, and each step's stdout, stderr and exit code are saved. The log's last line is written before `SHA256SUMS`.
 
 ## 5. Base artifacts and data split
 
@@ -86,7 +94,7 @@ No training data is read.
 2. Build `spiralcore-fbs-sheet` (float-train, `--features cuda`) with nvcc, and copy it with its sha256.
 3. `I-GPU-Tests`.
 4. Fetch the section 5 files, each folder's `SHA256SUMS`, and the DEV data. Check them (`I-Fetch`).
-5. For each of the six models, run `spiralcore-fbs-sheet --mode d11-residual --data-root <driver-data> --model-dir <save/seed-s/model> --evaluator <run-seed-s.json> --windows-sha256 <sha> --artifact-sha256 <sha> --stored-preds <save/seed-s/preds-float.json> --seed <s> --label <label> --out residual-<label>-seed-<s>.json`.
+5. For each of the six models, run `spiralcore-fbs-sheet --mode d11-residual --data-root <driver-data> --model-dir <save/seed-s/model> --evaluator <run-seed-s.json> --windows-sha256 <sha> --artifact-sha256 <sha> --model-sha256 <sha> --stored-preds <save/seed-s/preds-float.json> --seed <s> --label <label> --out residual-<label>-seed-<s>.json`. For plain-c126, add `--stored-d11-preds <save/seed-s/preds-d11.json>`.
 6. Save the run folder to the store at `results/claude/d11-fbs-residual-2026-10-26/`, with a `SHA256SUMS`.
 
 **Minimum test power:**
@@ -112,4 +120,17 @@ No training data is read.
 
 ## 8. Non-author TEST FITNESS review
 
-To be filled in by the fresh reviewer.
+**Round 1 (fresh non-author reviewer, 2026-10-26): NOT FIT. Its fixes are all made.**
+1. **Blocking: the rule tested "equally good", not "the same forward".** A hit-count paired test misses departures on the rows that both D and A get wrong, about 86% of them. The rule is now row by row: the head identical (d_H = 0), the tokens differing on at most 3% of rows, and the paired test as a further requirement, never alone. An "indeterminate" outcome opens an instrument investigation. The reviewer proposed drift thresholds. The sheet instead calibrates on claude-127's measured residual and defect, because that defect kept 509 of 512 queries within 2 LSB while changing 18% of tokens; the drift stays a reading.
+2. **High: a head departure was only a reading,** against the ORDER. It is now a departure by the rule (d_H > 0).
+3. **Medium:** the faithful row now says what the rule shows.
+4. **Low:** Stage 4b's stored D11 panels are now checked (`I-D-Stored`).
+5. **Low:** the model hash is now pinned inside the mode (`--model-sha256`, in `I-Inputs`).
+
+**What it confirmed:**
+- D's query path and head are `score_dev_panel`'s.
+- A's queries are in the same units.
+- E is computed before the tables are rounded and D after.
+- The instruments catch a wrong model, run or windows.
+- Every pin in section 5 matches its receipt, and every store path exists.
+- The cost is inside the caps, and the change obeys CHARTER §3.

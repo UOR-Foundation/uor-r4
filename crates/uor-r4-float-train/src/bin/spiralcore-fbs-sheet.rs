@@ -28,7 +28,7 @@
 //! `docs/harness/prep/d11-exporter-float-trunk-residual-2026-10-26.md`): one saved model's D11
 //! panel, plain and export-mode panels, and head on the artifact's queries, paired against the
 //! artifact's stored evaluator run. It takes `--model-dir`, `--evaluator`, `--windows-sha256`,
-//! `--artifact-sha256`, `--stored-preds`, `--seed`, `--label` (the configuration's name) and,
+//! `--artifact-sha256`, `--model-sha256`, `--stored-preds`, `--seed`, `--label` (the configuration's name) and,
 //! where the D11 panel was stored at training (Stage 4b), `--stored-d11-preds`.
 
 use std::collections::BTreeMap;
@@ -44,7 +44,7 @@ use uor_r4_float_train::spiralcore_fbs_sheet::{
 use uor_r4_float_train::{FloatTrainError, Result};
 
 /// The options of `d11-artifact-gap`, `d11-train-probe`, `d11-train-export` and `d11-residual`.
-const GAP_OPTIONS: [&str; 10] = [
+const GAP_OPTIONS: [&str; 11] = [
     "--model-dir",
     "--evaluator",
     "--windows-sha256",
@@ -55,6 +55,7 @@ const GAP_OPTIONS: [&str; 10] = [
     "--train-forward",
     "--label",
     "--stored-d11-preds",
+    "--model-sha256",
 ];
 
 type Args = (
@@ -283,6 +284,7 @@ fn main() -> Result<()> {
                 &PathBuf::from(option("--evaluator")?),
                 &option("--windows-sha256")?,
                 &option("--artifact-sha256")?,
+                &option("--model-sha256")?,
                 &PathBuf::from(option("--stored-preds")?),
                 extra
                     .get("--stored-d11-preds")
@@ -294,7 +296,7 @@ fn main() -> Result<()> {
             )?;
             let p = &value["pairs"]["d11_vs_artifact"];
             println!(
-                "[d11-residual] label={} seed={} top1_float={} top1_export_mode={} top1_d11={} top1_head={} top1_artifact={} d11_vs_artifact_b={} c={} net={} F_I={} differ={} head_vs_artifact_differ={} max_drift={} instruments={} faithful={}",
+                "[d11-residual] label={} seed={} top1_float={} top1_export_mode={} top1_d11={} top1_head={} top1_artifact={} d11_vs_artifact_b={} c={} net={} F_I={} differ={} head_vs_artifact_differ={} max_drift={} instruments={} classification={}",
                 value["label"],
                 value["seed"],
                 value["top1"]["float"],
@@ -310,7 +312,7 @@ fn main() -> Result<()> {
                 value["pairs"]["head_vs_artifact"]["rows_differ"],
                 value["q12_drift_d11_vs_artifact"]["all"]["max_codes"],
                 value["instruments_pass"],
-                value["faithful"],
+                value["classification"],
             );
             write_receipt(&out, &value)
         }

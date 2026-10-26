@@ -1632,6 +1632,41 @@ fn rows_differ(a: &[u32], b: &[u32]) -> usize {
     a.iter().zip(b).filter(|(x, y)| x != y).count()
 }
 
+/// The share of rows on which D and A may differ for a faithful artifact, in percent: three times
+/// claude-127's measured integer residual at 6 layers (4 to 5 of 512 tokens, about 1%).
+const RESIDUAL_FAITHFUL_PERCENT: usize = 3;
+/// The share beyond which D and A differ as a different forward does, in percent: claude-127's
+/// norm-bias defect changed 91 of 512 tokens (18%).
+const RESIDUAL_DEPARTURE_PERCENT: usize = 10;
+
+/// The residual check's classification of one model, as its sheet fixes it (claude-132):
+/// - `faithful`: every instrument green, H and A identical on every row, D and A differing on at
+///   most [`RESIDUAL_FAITHFUL_PERCENT`] of the rows, and D against A within the paired test;
+/// - `departure`: H and A differ on any row, D and A differ on more than
+///   [`RESIDUAL_DEPARTURE_PERCENT`] of the rows, or D against A is outside the paired test;
+/// - `indeterminate`: otherwise, an instrument investigation;
+/// - `not counted`: an instrument check failed.
+fn classify_residual(
+    instruments_ok: bool,
+    head_differ: usize,
+    d_a_differ: usize,
+    rows: usize,
+    paired_within: bool,
+) -> &'static str {
+    if !instruments_ok || rows == 0 {
+        "not counted"
+    } else if head_differ > 0
+        || d_a_differ * 100 > RESIDUAL_DEPARTURE_PERCENT * rows
+        || !paired_within
+    {
+        "departure"
+    } else if d_a_differ * 100 <= RESIDUAL_FAITHFUL_PERCENT * rows {
+        "faithful"
+    } else {
+        "indeterminate"
+    }
+}
+
 /// The residual check of claude-131's pivot note (claude-132), for one saved model and its
 /// artifact's stored, verified evaluator run, on the GPU.
 /// - **F**, the plain-float panel, which must reproduce `stored_preds` (`I-Save-Load`);
@@ -1640,8 +1675,9 @@ fn rows_differ(a: &[u32], b: &[u32]) -> usize {
 /// - **H**, the writer head at Q12 on the artifact's own queries;
 /// - **A**, the artifact's tokens at the scored offsets.
 ///
-/// D against A under the paired test decides whether the artifact computes its D11 forward.
-/// H against A and the Q12 drift between D's and A's queries say where a departure sits.
+/// [`classify_residual`] decides whether the artifact computes its D11 forward: H against A for
+/// the head, D against A row by row and under the paired test for the whole. The Q12 drift
+/// between D's and A's queries says where a departure sits.
 #[allow(clippy::too_many_arguments)]
 pub fn run_d11_residual(
     data_root: &Path,
@@ -1649,6 +1685,7 @@ pub fn run_d11_residual(
     evaluator: &Path,
     windows_sha256: &str,
     artifact_sha256: &str,
+    model_sha256_pin: &str,
     stored_preds: &Path,
     stored_d11_preds: Option<&Path>,
     seed: u64,
@@ -1697,7 +1734,9 @@ pub fn run_d11_residual(
             "the evaluator's run does not cover the DEV windows",
         ));
     }
-    let i_inputs = run.sequences_sha256 == windows_sha256 && run.artifact_sha256 == artifact_sha256;
+    let i_inputs = run.sequences_sha256 == windows_sha256
+        && run.artifact_sha256 == artifact_sha256
+        && model_sha256 == model_sha256_pin;
     let i_verify = run.verify.as_array().is_some_and(|checks| {
         checks.len() == 2
             && checks.iter().all(|c| c["equal"] == serde_json::json!(true))
@@ -1748,7 +1787,13 @@ pub fn run_d11_residual(
         && d_preds == d_again
         && i_head
         && i_d_stored.unwrap_or(true);
-    let faithful = d_vs_a["within"] == serde_json::json!(true);
+    let classification = classify_residual(
+        instruments_ok,
+        rows_differ(&h_preds, &a_preds),
+        rows_differ(&d_preds, &a_preds),
+        a_preds.len(),
+        d_vs_a["within"] == serde_json::json!(true),
+    );
     Ok(serde_json::json!({
         "sheet": "docs/harness/prep/d11-exporter-float-trunk-residual-2026-10-26.md",
         "label": label,
@@ -1786,11 +1831,11 @@ pub fn run_d11_residual(
         "i_head": i_head,
         "i_d_stored": i_d_stored,
         "instruments_pass": instruments_ok,
-        "faithful": if instruments_ok {
-            serde_json::json!(faithful)
-        } else {
-            serde_json::json!("not counted: an instrument check failed")
+        "rule": {
+            "faithful_percent": RESIDUAL_FAITHFUL_PERCENT,
+            "departure_percent": RESIDUAL_DEPARTURE_PERCENT,
         },
+        "classification": classification,
     }))
 }
 
@@ -2492,6 +2537,27 @@ mod tests {
         assert!(q12_drift(&a, &b, 4).is_err());
         assert_eq!(rows_differ(&[1, 2, 3], &[1, 0, 3]), 1);
         Ok(())
+    }
+
+    #[test]
+    fn the_residual_rule_is_the_sheets() {
+        let rows = 14_287;
+        // 3% of 14,287 is 428.61, so 428 rows differ at most for a faithful artifact; 10% is
+        // 1,428.7, so 1,429 or more is a departure.
+        assert_eq!(classify_residual(true, 0, 428, rows, true), "faithful");
+        assert_eq!(classify_residual(true, 0, 0, rows, true), "faithful");
+        assert_eq!(classify_residual(true, 0, 429, rows, true), "indeterminate");
+        assert_eq!(
+            classify_residual(true, 0, 1_428, rows, true),
+            "indeterminate"
+        );
+        assert_eq!(classify_residual(true, 0, 1_429, rows, true), "departure");
+        // Any head difference, or a paired gap outside F_I, is a departure however few rows differ.
+        assert_eq!(classify_residual(true, 1, 0, rows, true), "departure");
+        assert_eq!(classify_residual(true, 0, 10, rows, false), "departure");
+        // A failed instrument check is never classified.
+        assert_eq!(classify_residual(false, 0, 0, rows, true), "not counted");
+        assert_eq!(classify_residual(true, 0, 0, 0, true), "not counted");
     }
 
     /// On one GPU (claude-132): the residual check's head, given the D11 panel's own scored
