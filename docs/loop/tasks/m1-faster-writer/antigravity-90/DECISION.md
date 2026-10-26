@@ -35,10 +35,10 @@ Under `CHARTER.md §5.1` (`D68`), how should the step-4 `B1`/`B2`/`B3` bar be re
 
 1. **Whole-project chain (`PLAN.md`, `M1 #2029`, `#2840 -> #2887`):**
    - `CHARTER.md §3.10` makes `tokens/s` the primary metric, and `PLAN.md` ranks `m1-faster-writer` (`#2840`) as the open M1 infrastructure item that removes the `O(V)` per-row full-vocabulary scan (`V + 1 + A * V` `token_cell` calls per row) and unblocks `#2887` (`r-vocab-4096-vs-16384`).
-   - On `V = 4,096` (`K = 8`, `256` occupied cells, `16` tokens/cell on `A8`), the full scan evaluates `36,865` `token_cell` calls + `2,012` `cell_distance` calls + `128` `token_distance` calls = `39,005` evaluations per row (`> 5.57 × 10^8` across the `14,287`-row `DEV` panel), whereas the CSR bucketed writer evaluates `0` `token_cell` calls + `256` `cell_distance` calls + `128` `token_distance` calls = `384` evaluations per row (`> 100x` reduction at `V = 4,096` and `~192x` at `V = 16,384`).
+   - On `V = 4,096` (`K = 8`, `256` occupied cells, `16` tokens/cell on `A8`), the full scan evaluates `36,865` `token_cell` calls + `2,277` `cell_distance` calls + `128` `token_distance` calls = `39,270` evaluations per row (`561,050,490` across the `14,287`-row `DEV` panel), whereas the CSR bucketed writer evaluates `0` `token_cell` calls + `256` `cell_distance` calls + `128` `token_distance` calls = `384` evaluations per row (`> 100x` reduction at `V = 4,096` and `~196x` at `V = 16,384`).
 2. **Why the registered `B1`/`B2`/`B3` bar is exact and non-arbitrary:**
    - `B1` (`0` mismatches) enforces exact functional equivalence with `discrete.cu`'s full-scan `writer`.
-   - `B2a` (`0` `token_cell` calls for `kind != 1`, `<= 1` for `kind == 1`), `B2b` (`256` `cell_distance` calls), and `B2c` (`<= K * max_c |B[c]|` `token_distance` calls) are the exact structural invariants of CSR bucket indexing over 256 address cells, and `B2d` (`>= 10x` total comparison reduction) is a conservative floor well below the `~97x–192x` reduction achieved on `V = 4,096` and `V = 16,384`.
+   - `B2a` (`0` `token_cell` calls for `kind != 1`, `<= 1` for `kind == 1`), `B2b` (`256` `cell_distance` calls), and `B2c` (`<= K * max_c |B[c]|` `token_distance` calls) are the exact structural invariants of CSR bucket indexing over 256 address cells, and `B2d` (`>= 10x` total comparison reduction) is a conservative floor well below the `~102x–196x` reduction achieved on `V = 4,096` and `V = 16,384`.
 3. **Why pinning both seeded `V = 16,384` and the `14,287`-row `DEV` panel on `A8` and `PrimeZeta` is strictly stronger:**
    - It adopts every recommendation of the 23 Oct `NOT_FIT` review verbatim, testing both `V = 16,384` scaling and real `read_vector` queries across predecessor-structured (`A8`) and complex-orbit (`PrimeZeta`) codebooks in one self-contained GPU qualification run (`< 5` minutes on `1x RTX 5090`).
 
@@ -51,7 +51,7 @@ Under `CHARTER.md §5.1` (`D68`), how should the step-4 `B1`/`B2`/`B3` bar be re
 
 ## 5. Cost to Reverse
 
-Reversible by git revert; `discrete.cu`, `ordinary.cubin`, and `driver_source_sha256` (`04c5165464a18eea6d4edadc6970007dbdc7908ead420f4a20575e22ea43061d`) are untouched.
+Reversible by git revert; `discrete.cu`, `ordinary.cubin`, and `driver_source_sha256` (`04c5165464a18eea6d4edadc6970007dbdc7908ead420f4a2f575e22ea43061d`) are untouched.
 
 ## 6. Review Record (D68, D67, and `TEST FITNESS: FIT`)
 
