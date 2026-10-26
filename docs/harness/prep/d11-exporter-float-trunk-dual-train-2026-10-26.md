@@ -35,7 +35,7 @@ There is one trained configuration, scored two ways:
 **The bar is Stage 4b's,** with F this configuration's own plain-float model (CHARTER §3.7's comparator, kept).
 - **b** counts the `ft/dev` rows that F hits top-1 and A misses; **c** counts the reverse. Both are over the 14,287 targets.
 - **F_I** = max(24, ⌈2√(b + c)⌉).
-- **Δ_noise,L** = 0.045679637781173676, claude-126's two-seed DEV loss band. It is read from `d11-gap.json`, through the training receipt, and not re-measured.
+- **Δ_noise,L** = 0.045679637781173676, claude-126's two-seed DEV loss band: the largest |L_f32(a, 1) − L_f32(a, 2)| over Stage 4b's four arms, controls and nulls included. It is read from `d11-gap.json`, through the training receipt, and not re-measured.
 
 | Gate | PASS when | PASS unlocks | FAIL means |
 |---|---|---|---|
@@ -45,6 +45,7 @@ There is one trained configuration, scored two ways:
 - A PASS on which either seed's artifact top-1 falls below claude-129's plain-trained artifact is **flagged**. The floors are 1,907 on seed 1 and 2,294 on seed 2.
 - A flagged PASS does not close #2820. It goes to a decision review, which reads whether the gap closed only because both forwards got worse.
 - An unflagged PASS closes #2820, with the PASS-only steps of section 6.
+- The scorer does not compute the guard. The REPORT applies it, quoting each gap receipt's `top1_artifact` next to its floor.
 
 **The direction of the gap, read as claude-130's sheet reads it.** The bar is two-sided. A FAIL with c ≫ b means the float model, not the artifact, is off. A FAIL with b ≫ c means the artifact loses rows to its float model.
 
@@ -54,7 +55,7 @@ There is one trained configuration, scored two ways:
 - the training losses at the evaluation points (`run.eval`).
 
 It also gives this arm's own two-seed loss band, |L_F(1) − L_F(2)|, and reads it against two references:
-- **Stage 4b's band, 0.0457, from plain training.** A band at or below it reads as "no less stable across seeds than plain training". A band above it reads as "less stable", and the REPORT says so whatever the gate shows.
+- **The plain-trained export arm's own band, 0.0230** (claude-126's `Fbs_1Atom_Active`, |1.8546 − 1.8316|). A band at or below it reads as "no less stable across seeds than plain training". A band above it reads as "less stable", and the REPORT says so whatever the gate shows. By this rule claude-130's band, 0.0445, was less stable. Δ_noise,L (0.0457, the four-arm maximum) is the bar's figure, not this reference.
 - **The plain-float top-1 spread, |F(1) − F(2)|,** against plain training's 655 (1,988 and 2,643) and claude-130's 3,024 (3,941 and 917). A spread nearer claude-130's than plain training's reads as "the dual loss did not cure the seed instability", and is reported as such.
 
 **Other readings, with no bar:**
@@ -103,7 +104,7 @@ The noise band comes from claude-126's `d11-gap.json`, sha256 `88b6a5f988fe14467
    - `d11-fbs-eval` (the instrument, `--features cuda`).
 3. Fetch the section 5 files and check them against their pins.
 4. `I-Bridges`: the float-train CUDA tests.
-5. `I-Probe`: `spiralcore-fbs-sheet --mode d11-train-probe --train-forward dual`. Stop if it fails.
+5. `I-Probe`: `spiralcore-fbs-sheet --mode d11-train-probe --train-forward dual --data-root <driver-data> --out probe.json`. Stop if it fails.
 6. `spiralcore-fbs-sheet --mode d11-train-export --train-forward dual --data-root <driver-data> --save-dir save --stage4b d11-gap.json --out train.json`.
 7. For each seed:
    - `fbs-export save/seed-<s>/snapshot.json artifact-seed-<s>.uorlut`, recording its sha256;
@@ -139,4 +140,15 @@ The noise band comes from claude-126's `d11-gap.json`, sha256 `88b6a5f988fe14467
 
 ## 8. Non-author TEST FITNESS review
 
-To be filled in by the fresh reviewer.
+**Round 1 (fresh non-author reviewer, 2026-10-26): NOT FIT, with two required text changes, both made.**
+1. **The seed-spread loss reference.** The sheet compared this arm's two-seed band against 0.0457. That figure is Stage 4b's four-arm maximum, not plain training's own band. The reference is now the plain-trained export arm's band, 0.0230 (|1.8546 − 1.8316|), and Δ_noise,L is described as the four-arm maximum.
+2. **The probe's command.** Step 5 now passes `--data-root` and `--out`.
+
+**Also taken from it:** the REPORT applies the guard by hand, quoting each gap receipt's `top1_artifact` next to its floor.
+
+**What it confirmed:**
+- Every outcome changes a decision: an unflagged PASS closes #2820, a flagged PASS goes to a decision review, and a FAIL closes this configuration.
+- The bar, F_I and Δ_noise,L match claude-129's scorer sheet. F is the candidate's own plain float (§3.7). The band flows from `d11-gap.json` into the scorer, unmeasured.
+- The cited numbers hold against their sources: 1,907, 2,294, 655, 3,024, 1.8836 and 1.9281.
+- The dual step is as stated: the plain backward runs outside the hook, the D11 backward inside `with_d11_training`, and the gradients are summed per tensor. The signal is lawful under §3.
+- `I-Bridges` covers the gradient sum and the Q12 clamp. The cost and power are stated and inside the caps.
