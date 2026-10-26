@@ -4,7 +4,7 @@ Lab: kimi. Item: [m1-address-as-read](../../../../roadmap/items/m1-address-as-re
 
 ## Goal
 
-Turn the Stage 0 `COPY_GATE_FAIL` into an implementation-ready integer-read successor: name the served integration, exact-address oracle boundary, versioned emission controls and falsifying tests, and widen the item's declared scope so a later unit can implement it. This unit changes design and item metadata only; it runs no model evaluation and says `References #2833`.
+Turn the Stage 0 `COPY_GATE_FAIL` into an implementation-ready object-store oracle successor: name the composition, exact-address and sieve boundaries, versioned emission controls and falsifying tests, and point the item at that design. This unit changes design and item text only; it runs no model evaluation and says `References #2833`.
 
 The item's done-when remains:
 
@@ -12,9 +12,9 @@ The item's done-when remains:
 
 ## Cancel probe (run first)
 
-Stage 0 at #3273 reproduced 14,287/14,287 D11 parity and 0/40 exact copy in every arm. Repeating that configuration cannot add evidence. Source inspection finds sorted-merge GCD storage in `uor-r4-integer::m6_ablation`, but no served model read that can emit a stored value. The missing next dependency is an integer integration, not another panel. `classification: instrument`.
+Stage 0 at #3273 reproduced 14,287/14,287 D11 parity and 0/40 exact copy in every arm. Repeating that configuration cannot add evidence. The first design proposed a new integer token store and whole-crate scope expansion. D68 review rejected it: the delivered `AddressDirectory` already provides verified exact/sieve reads and the existing `address_stage0` runner already supplies the GPU path. The missing dependency is the object-store oracle composition, not a second store or another panel. `classification: instrument`.
 
-Claude-131's open ORDER reserves `crates/uor-r4-integer/**`, so this unit does not edit that crate. It produces the implementation design and item-scope repair only; implementation proceeds under a later ORDER after the scope is free. **Not cancelled.**
+The revised unit stays in the existing object-store scope and does not touch Claude-131's reserved integer crate. **Not cancelled.**
 
 ## Files in scope
 
@@ -24,18 +24,18 @@ Claude-131's open ORDER reserves `crates/uor-r4-integer/**`, so this unit does n
 - `docs/roadmap/items/m1-address-as-read.md`
 - `docs/roadmap/README.md` (rendered only)
 
-No `crates/uor-r4-integer/**` edits in this unit. The proposed item-scope addition is metadata for a later unit and requires the D68 decision review.
+No crate scope or code changes in this unit. The item's declared scope stays unchanged.
 
 ## Done when
 
-- A design names the concrete integer integration points, artifact/version identity, exact-address and no-memory paths, value-emission boundary, bounded-resource accounting and failure behavior.
-- The oracle protocol keeps no-hint and random-hint controls, separates address formation from read accuracy, and has finite host controls plus a GPU non-vacuity gate before any hidden-fact panel.
-- The item scope admits the later integer implementation, with a whole-project D68 review recorded on #2833; `status: ready` and the item's done-when stay unchanged.
+- A design names `AddressDirectory` exact/sieve integration with the existing GPU scorer, artifact/version identity, no-memory/no-address/true/random/sieve arms, value-emission boundary, bounded-resource accounting and failure behavior.
+- The protocol separates exact-store correctness, oracle assistance, address formation and model generation; uses exact hard-emission gates; includes a baseline-ceiling outcome; and requires fresh FIT/D67 review before every GPU evaluation.
+- The item text links the design without changing `status: ready`, its done-when or its scope. The whole-project D68 decision is recorded on #2833.
 - Full gates, REPORT validation, local PR policy and a fresh exact-head review pass. No GPU run, code capability claim or `Closes #2833`.
 
 ## Stop and decide if
 
-- The design would merely bypass the model and call a store lookup a model gain; redefine the oracle boundary instead.
-- It requires dense matmul, softmax/squashing, host model evaluation, an unversioned artifact change, or an unbounded scan.
-- It needs code in Claude's reserved scope now; leave that code to the later unit rather than overlapping.
-- The Stage 0 evidence cannot distinguish address-oracle assistance from unaided generation; keep the controls and non-vacuity gate explicit.
+- The design would call a hard store emission a learned model gain; keep it labelled oracle assistance and measure the sieve/baseline contrast instead.
+- It requires dense matmul, softmax/squashing, host model evaluation, an unversioned artifact change, a second store or an unbounded scan.
+- It needs code in Claude's reserved scope now; use the delivered object-store path instead.
+- Correct store emission with a high model baseline would look like failure; record the ceiling case rather than forcing a gain or calling it an instrument fault.
