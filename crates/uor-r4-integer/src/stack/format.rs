@@ -35,6 +35,15 @@ pub const STACK_POINTER_SCHEMA: &str = "uor-r4.lut-stack/2";
 /// (`read_select` in the shape), with or without a pointer head: an engine
 /// that serves only softmax reads refuses it instead of serving softmax.
 pub const STACK_READ_SCHEMA: &str = "uor-r4.lut-stack/3";
+/// Header schema of a stack whose projections are SpiralCore/FBS route tables
+/// and whose head is the native vector writer: an engine that serves only
+/// dense maps refuses it instead of ignoring the route tables.
+pub const STACK_FBS_SCHEMA: &str = "uor-r4.lut-stack/4";
+/// The native vector writer's limits (`uor-r4-float-train`'s `WriterSpec`).
+pub const WRITER_MIN_VOCAB: usize = 256;
+pub const WRITER_MAX_VOCAB: usize = 8192;
+pub const WRITER_MAX_WIDTH: usize = 1024;
+pub const WRITER_MAX_KEPT_CELLS: usize = 16;
 /// Weights per scale group along a matrix row.
 pub const GROUP: usize = 32;
 /// Alignment of the data start and of every section.
@@ -99,6 +108,19 @@ pub struct StackShape {
     /// icosians of `2I`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gate: Option<String>,
+    /// Projection law: dense 4-bit maps when absent, or `spiralcore_fbs`
+    /// (every map a SpiralCore/FBS route table: each output 8-block one signed
+    /// axis permutation of one input 8-block, served as a gather and a sign).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projection: Option<String>,
+    /// Output head: the dense vocabulary map when absent, or `native_vector`
+    /// (the native vector writer: `kept_cells` of 256 root-pair cells, then
+    /// the L1-nearest token among those cells' rows of `writer.table`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head: Option<String>,
+    /// Cells the native vector writer keeps per position.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kept_cells: Option<usize>,
 }
 
 /// The product-key memory of a layer (`memory` in the shape): the layer
@@ -140,11 +162,14 @@ pub struct StackReadSelect {
     pub k: usize,
 }
 
-/// The header schema a shape requires: [`STACK_READ_SCHEMA`] with a
-/// softmax-free read or geometric recurrence/Hamilton gate, else
-/// [`STACK_POINTER_SCHEMA`] with a pointer head, else [`STACK_SCHEMA`].
+/// The header schema a shape requires: [`STACK_FBS_SCHEMA`] with SpiralCore/FBS
+/// projections, else [`STACK_READ_SCHEMA`] with a softmax-free read or
+/// geometric recurrence/Hamilton gate, else [`STACK_POINTER_SCHEMA`] with a
+/// pointer head, else [`STACK_SCHEMA`].
 pub fn stack_schema_for(shape: &StackShape) -> &'static str {
-    if shape.read_select.is_some() || shape.rec_geometric() || shape.gate_hamilton() {
+    if shape.projection_fbs() {
+        STACK_FBS_SCHEMA
+    } else if shape.read_select.is_some() || shape.rec_geometric() || shape.gate_hamilton() {
         STACK_READ_SCHEMA
     } else if shape.pointer.is_some() {
         STACK_POINTER_SCHEMA
@@ -207,6 +232,44 @@ impl StackShape {
             .is_some_and(|g| g != "hamilton")
         {
             Some("the MLP gate is not hamilton")
+        } else if self
+            .projection
+            .as_deref()
+            .is_some_and(|p| p != "spiralcore_fbs")
+        {
+            Some("the projection is not spiralcore_fbs")
+        } else if self.head.as_deref().is_some_and(|h| h != "native_vector") {
+            Some("the head is not native_vector")
+        } else if self.projection_fbs()
+            && !(self.rec_geometric()
+                && self.gate_hamilton()
+                && self.rotation
+                && self.head_native_vector())
+        {
+            Some("SpiralCore/FBS projections require geometric gates, the Hamilton gate, rotations and the native vector head")
+        } else if self.projection_fbs() && self.pattern.bytes().any(|c| c != b'r') {
+            Some("SpiralCore/FBS projections serve recurrence layers only")
+        } else if self.projection_fbs()
+            && !(self.width.is_multiple_of(8) && self.mlp.is_multiple_of(8))
+        {
+            Some("SpiralCore/FBS projections need 8-blocks: width and MLP width multiples of 8")
+        } else if self.head_native_vector() && !self.projection_fbs() {
+            Some("the native vector head requires SpiralCore/FBS projections")
+        } else if self.kept_cells.is_some() && !self.head_native_vector() {
+            Some("kept cells belong to the native vector head")
+        } else if self.head_native_vector()
+            && self
+                .kept_cells
+                .is_none_or(|k| k == 0 || k > WRITER_MAX_KEPT_CELLS)
+        {
+            Some("the native vector head keeps 1 to 16 cells")
+        } else if self.head_native_vector()
+            && (!(WRITER_MIN_VOCAB..=WRITER_MAX_VOCAB).contains(&self.vocab)
+                || self.width > WRITER_MAX_WIDTH)
+        {
+            Some("the native vector head serves a vocabulary of 256 to 8192 and a width up to 1024")
+        } else if self.head_native_vector() && self.pointer.is_some() {
+            Some("the native vector head has no pointer head")
         } else if rank != self.read_select.is_some() {
             Some("rank read weights and a read selection require each other")
         } else if self.read_binary && self.read_learned() {
@@ -364,6 +427,18 @@ impl StackShape {
     /// icosian-snapped Hamilton output gate (`rec_gates == "geometric"`).
     pub fn rec_geometric(&self) -> bool {
         self.rec_gates.as_deref() == Some("geometric")
+    }
+
+    /// Whether every projection is a SpiralCore/FBS route table
+    /// (`projection == "spiralcore_fbs"`).
+    pub fn projection_fbs(&self) -> bool {
+        self.projection.as_deref() == Some("spiralcore_fbs")
+    }
+
+    /// Whether the output head is the native vector writer
+    /// (`head == "native_vector"`).
+    pub fn head_native_vector(&self) -> bool {
+        self.head.as_deref() == Some("native_vector")
     }
 
     /// Whether the feed-forward block uses the icosian-snapped Hamilton gate
@@ -1004,6 +1079,9 @@ pub fn export_float_trunk_uorlut01(snap: &FloatTrunkSnapshot) -> Result<Vec<u8>,
         memory: None,
         rec_gates: Some("geometric".to_owned()),
         gate: Some("hamilton".to_owned()),
+        projection: None,
+        head: None,
+        kept_cells: None,
     };
     shape.validate()?;
 

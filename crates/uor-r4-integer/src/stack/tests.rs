@@ -288,6 +288,9 @@ fn shapes_whose_read_caches_exceed_the_bound_are_rejected_before_allocation() {
         memory: None,
         rec_gates: None,
         gate: None,
+        projection: None,
+        head: None,
+        kept_cells: None,
     };
     // Dot reads cache an i32 key and value row per position: 2^28 bytes per
     // layer at this width and context, so sixteen layers reach the bound.
@@ -385,6 +388,9 @@ fn the_l2_read_serves_its_scale_and_offset_without_lifts_or_arcosh() {
         memory: None,
         rec_gates: None,
         gate: None,
+        projection: None,
+        head: None,
+        kept_cells: None,
     };
     assert_eq!(
         shape("l2").read_cache_bytes(),
@@ -2477,4 +2483,128 @@ fn float_trunk_validation_threads_and_session_roundtrip() {
     let mut bad_snap = snap.clone();
     bad_snap.embed[0] = f32::NAN;
     assert!(super::export_float_trunk_uorlut01(&bad_snap).is_err());
+}
+
+/// The lawful shape of a SpiralCore/FBS trunk with the native vector writer.
+fn fbs_shape() -> StackShape {
+    StackShape {
+        vocab: 256,
+        width: 32,
+        heads: 1,
+        mlp: 32,
+        pattern: "rr".to_owned(),
+        read: "dot".to_owned(),
+        rotation: true,
+        context: 8,
+        pointer: None,
+        read_select: None,
+        read_weights: None,
+        read_binary: false,
+        memory: None,
+        rec_gates: Some("geometric".to_owned()),
+        gate: Some("hamilton".to_owned()),
+        projection: Some("spiralcore_fbs".to_owned()),
+        head: Some("native_vector".to_owned()),
+        kept_cells: Some(2),
+    }
+}
+
+#[test]
+fn fbs_shape_takes_its_own_schema_and_refuses_unlawful_shapes() {
+    let lawful = fbs_shape();
+    assert!(lawful.validate().is_ok());
+    assert_eq!(
+        super::stack_schema_for(&lawful),
+        super::format::STACK_FBS_SCHEMA
+    );
+    assert!(lawful.projection_fbs() && lawful.head_native_vector());
+
+    // Each unlawful shape is refused for its own reason, so every rule is held.
+    const REQUIRE: &str = "SpiralCore/FBS projections require geometric gates, the Hamilton gate, rotations and the native vector head";
+    const KEPT: &str = "the native vector head keeps 1 to 16 cells";
+    type Mutation = fn(&mut StackShape);
+    let refused: [(&str, Mutation, &str); 13] = [
+        (
+            "another projection",
+            |s| s.projection = Some("dense".to_owned()),
+            "the projection is not spiralcore_fbs",
+        ),
+        (
+            "another head",
+            |s| s.head = Some("dense".to_owned()),
+            "the head is not native_vector",
+        ),
+        ("table gates", |s| s.rec_gates = None, REQUIRE),
+        ("no Hamilton gate", |s| s.gate = None, REQUIRE),
+        (
+            "no rotations",
+            |s| s.rotation = false,
+            "geometric recurrence gates require learned rotations",
+        ),
+        (
+            "FBS without the writer",
+            |s| {
+                s.head = None;
+                s.kept_cells = None;
+            },
+            REQUIRE,
+        ),
+        (
+            "a read layer",
+            |s| s.pattern = "ra".to_owned(),
+            "SpiralCore/FBS projections serve recurrence layers only",
+        ),
+        (
+            "an MLP width off the 8-blocks",
+            |s| s.mlp = 36,
+            "SpiralCore/FBS projections need 8-blocks: width and MLP width multiples of 8",
+        ),
+        (
+            "the writer without FBS",
+            |s| s.projection = None,
+            "the native vector head requires SpiralCore/FBS projections",
+        ),
+        ("no kept cells", |s| s.kept_cells = None, KEPT),
+        ("17 kept cells", |s| s.kept_cells = Some(17), KEPT),
+        (
+            "a vocabulary under 256",
+            |s| s.vocab = 255,
+            "the native vector head serves a vocabulary of 256 to 8192 and a width up to 1024",
+        ),
+        (
+            "a pointer head",
+            |s| {
+                s.pointer = Some(super::format::StackPointer {
+                    dim: 8,
+                    score: "dot".to_owned(),
+                    score_scale_q30: 1 << 30,
+                })
+            },
+            "the native vector head has no pointer head",
+        ),
+    ];
+    for (what, mutate, reason) in refused {
+        let mut shape = fbs_shape();
+        mutate(&mut shape);
+        match shape.validate() {
+            Err(StackError::Shape(got)) => assert_eq!(got, reason, "{what}"),
+            other => panic!("{what}: expected a shape refusal, got {other:?}"),
+        }
+    }
+    // Kept cells on a dense head are refused, and a dense shape keeps its schema.
+    let mut dense = fbs_shape();
+    dense.projection = None;
+    dense.head = None;
+    assert!(matches!(
+        dense.validate(),
+        Err(StackError::Shape(
+            "kept cells belong to the native vector head"
+        ))
+    ));
+    dense.kept_cells = None;
+    assert!(dense.validate().is_ok());
+    assert_eq!(
+        super::stack_schema_for(&dense),
+        super::format::STACK_READ_SCHEMA
+    );
 }
