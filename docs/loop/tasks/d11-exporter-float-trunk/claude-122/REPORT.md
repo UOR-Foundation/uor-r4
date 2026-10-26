@@ -37,7 +37,7 @@ References #2820.
 
 ## What changed
 
-Size at the review-round head: code +1,180/−160 (format.rs, session.rs, discrete_d11.rs, mod.rs), tests +517 (tests.rs, tests/memory_shape.rs), docs about +180 (ORDER, this REPORT, the notebook row). The ORDER gave no line estimate.
+Size at the review-round head: code +1,180/−160 (format.rs, session.rs, discrete_d11.rs, mod.rs), tests +517 (tests.rs, tests/memory_shape.rs), docs +174 (ORDER, this REPORT, the notebook row). The ORDER gave no line estimate.
 
 - **The container (`format.rs`).**
   - `StackShape` gains `projection`, `head` and `kept_cells`. They serialize only when set, so existing containers are byte-identical.
