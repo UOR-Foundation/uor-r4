@@ -2721,3 +2721,76 @@ fn fbs_trunk_export_refuses_bad_snapshots() {
         );
     }
 }
+
+#[test]
+fn fbs_trunk_reference_reads_only_kept_cells() {
+    let snap = synthetic_fbs_trunk(20261026);
+    for tok in 0..snap.vocab as u32 {
+        let out = snap.forward_f32(&[tok], false).expect("forward");
+        assert_eq!(out.len(), 1);
+        let w = &out[0];
+        assert_eq!(w.kept_cells.len(), snap.kept_cells, "token {tok}");
+        assert!(!w.candidates.is_empty() && w.candidates.len() <= snap.kept_cells * snap.vocab.div_ceil(256));
+        for &(cand, _) in &w.candidates {
+            assert!(
+                w.kept_cells.contains(&(cand % 256)),
+                "token {tok}: candidate {cand} lies outside the kept cells"
+            );
+        }
+        assert!(
+            w.candidates.iter().any(|&(cand, _)| cand == w.token),
+            "token {tok}: the winner is not a candidate"
+        );
+        // The winner holds the best score, ties to the smaller id.
+        let best = w
+            .candidates
+            .iter()
+            .fold(f64::NEG_INFINITY, |m, &(_, s)| m.max(s));
+        let first_best = w.candidates.iter().find(|&&(_, s)| s == best).map(|&(c, _)| c);
+        assert_eq!(first_best, Some(w.token), "token {tok}");
+    }
+    // Too long a sequence and a token outside the vocabulary are refused.
+    assert!(snap.forward_f32(&[0; 9], false).is_err());
+    assert!(snap.forward_f32(&[snap.vocab as u32], false).is_err());
+}
+
+#[test]
+fn fbs_trunk_reference_quantized_agrees() {
+    let snap = synthetic_fbs_trunk(20261026);
+    let mut agree = 0;
+    for tok in 0..snap.vocab as u32 {
+        let plain = snap.forward_f32(&[tok], false).expect("forward")[0].token;
+        let quantized = snap.forward_f32(&[tok], true).expect("forward")[0].token;
+        agree += usize::from(plain == quantized);
+    }
+    // A detector of gross quantization faults, not a precision bar: at
+    // vocabulary 256 each cell holds one token, so two kept cells leave two
+    // candidates, and the 4-bit grid-coded gains and taps of this untrained
+    // random trunk flip near-tied cells. A wrong scale or exponent falls to
+    // near chance. Measured at seed 20261026: 224 of 256. The integer session
+    // is held to the quantized reference, not to this one.
+    assert!(
+        agree >= 192,
+        "the quantized reference agrees on {agree} of 256 single-token inputs"
+    );
+}
+
+#[test]
+fn fbs_trunk_gather_is_the_signed_axis_action() {
+    let snap = synthetic_fbs_trunk(20261026);
+    let route = &snap.layers[0].rec_in;
+    let mut rng = Lcg(77);
+    let input: Vec<i32> = (0..route.in_blocks * 8)
+        .map(|_| (rng.next() % 2001) as i32 - 1000)
+        .collect();
+    let as_f64: Vec<f64> = input.iter().map(|&v| f64::from(v)).collect();
+    let gathered = super::format::fbs_reference_gather(route, &as_f64);
+    for (o, (&atom, &state)) in route.atoms.iter().zip(&route.states).enumerate() {
+        let a = usize::from(atom) * 8;
+        let block: [i32; 8] = input[a..a + 8].try_into().expect("block");
+        let acted = crate::discrete_d11::cl06_action(usize::from(state), &block);
+        for j in 0..8 {
+            assert_eq!(gathered[o * 8 + j], f64::from(acted[j]), "block {o}, channel {j}");
+        }
+    }
+}

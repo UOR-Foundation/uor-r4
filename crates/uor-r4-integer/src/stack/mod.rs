@@ -72,7 +72,7 @@ pub use flock::{
 };
 pub use format::{
     decode_grid_code, encode_grid_code, export_fbs_trunk_uorlut01, export_float_trunk_uorlut01,
-    stack_schema_for, FbsRoutes, FbsTrunkLayer, FbsTrunkSnapshot, Fixed, FloatTrunkLayer,
+    stack_schema_for, FbsRoutes, FbsTrunkLayer, FbsTrunkSnapshot, FbsWriterOutput, Fixed, FloatTrunkLayer,
     FloatTrunkMixer, FloatTrunkRead, FloatTrunkRecurrence, FloatTrunkSnapshot, StackMemory,
     StackNumerics, StackPointer, StackReadSelect, StackShape, StackTransportSnap, GROUP, MAGIC,
     MAX_POINTER_DIM, MAX_READ_SELECT, STACK_FBS_SCHEMA, STACK_POINTER_SCHEMA, STACK_READ_SCHEMA,
