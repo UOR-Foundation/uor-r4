@@ -19,15 +19,15 @@ Closes #2883
 
 ## What changed
 
-  - **Size Summary (`12` files changed: `code 3 file(s) +1344/-3, docs 7 file(s) +279/-40, generated 1 file(s) +3/-3, other 1 file(s) +188/-0, tests 0 file(s) +0/-0`; item had no numeric line estimate, ratio `N/A`, reported per D48):**
+  - **Size Summary (`12` files changed: `code 3 file(s) +1424/-3, docs 7 file(s) +284/-40, generated 1 file(s) +3/-3, other 1 file(s) +188/-0, tests 0 file(s) +0/-0`; item had no numeric line estimate, ratio `N/A`, reported per D48):**
   - **Suborders issued (`docs/loop/README.md` §Subagents):**
     - `local/antigravity/antigravity-97/orders/1.md` (D68 decision review, `96f12503-9939-466d-83c0-3268bf63d4ab`).
     - `local/antigravity/antigravity-97/orders/2.md` (D66 exact-head review Slice A: `crates/uor-r4-discrete/src/objective.rs`).
     - `local/antigravity/antigravity-97/orders/3.md` (D66 exact-head + claims review Slice C: `docs/**` and `rank-objective-grade.json`).
     - `local/antigravity/antigravity-97/orders/4.md` (D66 exact-head review Slice B: `crates/uor-r4-discrete/src/stage_t.rs` and `crates/uor-r4-discrete/src/bin/stage-t-run.rs`).
-  - **Code & Unit Tests (`3` Rust files, `+1,347 / -1` lines):**
+  - **Code & Unit Tests (`3` Rust files, `+1,424 / -3` lines):**
     - [`crates/uor-r4-discrete/src/objective.rs`](../../../../../crates/uor-r4-discrete/src/objective.rs) (`+620 / -0` lines): Added `RankOccupancyPolicy` (`NearestAddressMarginV1` `word = 0`, `OccupiedCellRankHingeV1` `word = 1`, `FixedGridRankHingeV1` `word = 2`, `OccupiedCellRankCrowdHingeV1` `word = 3`), `cell_precedes`, `occupied_cell_rank`, `fixed_grid_cell_rank`, `rank_hinge`, `admitted_cells_k`, `cell_crowding_hinge`, `move_time_g_occ_allowed`, `checked_row_loss_numerator`, `evaluate_g_occ_contract`, `RankOccupancyControlReceipt`, `verify_rank_occupancy_controls()` (`C-R1..C-R6`, `C-R7a..C-R7d`), and TDD unit test `rank_occupancy_policies_and_finite_controls_c_r1_to_c_r7d_pass`.
-    - [`crates/uor-r4-discrete/src/stage_t.rs`](../../../../../crates/uor-r4-discrete/src/stage_t.rs) (`+514 / -0` lines): Added `RANK_OBJECTIVE_GRADE_SCHEMA` (`uor-r4.rank-objective-keeps-cells-grade/v1`), `RankObjectiveVerdict`, `K16OccupancyCollapseBaseline`, `RankObjectiveWithinCellSummary`, `RankObjectiveSeedSummary`, `RankObjectiveGradeReport`, `grade_rank_objective(...)`, and TDD unit test `grade_rank_objective_verifies_g_occ_g_adm_and_count_tables`.
+    - [`crates/uor-r4-discrete/src/stage_t.rs`](../../../../../crates/uor-r4-discrete/src/stage_t.rs) (`+594 / -0` lines): Added `RANK_OBJECTIVE_GRADE_SCHEMA` (`uor-r4.rank-objective-keeps-cells-grade/v1`), `RankObjectiveVerdict`, `K16OccupancyCollapseBaseline`, `RankObjectiveWithinCellSummary`, `RankObjectiveSeedSummary`, `RankObjectiveGradeReport`, `grade_rank_objective(...)`, and TDD unit test `grade_rank_objective_verifies_g_occ_g_adm_and_count_tables`.
     - [`crates/uor-r4-discrete/src/bin/stage-t-run.rs`](../../../../../crates/uor-r4-discrete/src/bin/stage-t-run.rs) (`+213 / -1` lines): Added `build_rank_objective_seed_summary` and the `grade-rank-objective --out <path>` CLI subcommand.
   - **Generated Grade Receipt & Documentation (`9` files, `+502 / -45` lines):**
     - [`docs/labs/r-rank-objective-keeps-cells/rank-objective-grade.json`](../../../../labs/r-rank-objective-keeps-cells/rank-objective-grade.json) (`+188 / -0` lines, SHA-256 `c49382254a4d96db804ee51339255fdf3d357fb79f0e9cc4c85ccf2ffa9765d9`).
