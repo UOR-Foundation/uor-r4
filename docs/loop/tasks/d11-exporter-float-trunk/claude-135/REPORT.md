@@ -57,6 +57,12 @@ Against `origin/main`: float-train only. Docs: the ORDER, the prep sheet, this R
     - `the_forced_outcome_takes_the_first_that_applies`;
     - `the_forced_summary_reads_the_faithful_models_envelope`.
   - **GPU test:** `gpu_forcing_its_own_snaps_reproduces_d_and_a_wrong_root_does_not`.
+  - **Negative gates on the post-run delta:** each of the following fails its test with its comparison flipped or its refusal removed:
+    - the decisive-margin boundary (≥ 1e-2);
+    - the near-tie boundary (< 1e-3);
+    - the envelope boundary (> twice);
+    - the duplicate-receipt refusal;
+    - the windows refusal.
 
 ## Measurements
 
@@ -107,7 +113,7 @@ Against `origin/main`: float-train only. Docs: the ORDER, the prep sheet, this R
   - **The chunk boundary:** each forced call spans many of the snap's 8,192-block chunks, so `I-Self-Force` also holds the forcing exact across them.
 - **`I-Finite`:**
   - every step exited 0, and the forced calls were used up exactly;
-  - all 216 files of `forced/` verify against their `SHA256SUMS`, on the pod and on the laptop;
+  - all 215 files listed in `forced/SHA256SUMS` verify, on the pod and on the laptop (216 with the list itself);
   - the 221 files across the three store folders match the local copies.
 
 **Evidence:** the HF store at `results/claude/d11-fbs-forced-snaps-2026-10-26/`, each folder with a `SHA256SUMS`:
@@ -126,9 +132,18 @@ See the exact-head review record on the PR.
 
 ## Still open
 
-- **The decision review that a split calls for.** It is recorded on #2820 as an owner log.
+- **The decision review that a split calls for has passed** (#2820 owner log, comment 6426588305).
+  - The classification stands, so the exporter is not cleared. The item does not park, and the 71-row line is not moved for this run.
+  - Forcing shows that the snaps carry 72 to 99% of the residual. It does not show that A's choices come from rounding.
 - **What the split leaves open.** The snaps carry most of the residual on every model, and D's would-flips are near-ties at the faithful rate. What separates Faithful from Partly snap-carried is a continuous residual of 5 to 139 rows after forcing, and the faithful models carry 34 and 98 of their own.
-- **The sheet's own next control for Partly snap-carried** is the continuous localisation: compare A's and D's Q12 queries at the forced rows, layer by layer from the final norm.
+- **The next unit is the continuous localisation,** the sheet's control for Partly snap-carried. It runs on all six models, with the faithful two as its reference: forced-D's and A's Q12 queries, and the residual stream at the final norm layer by layer, at the rows that still differ.
+  - **It is the last exporter-faithfulness unit, and every outcome ends the investigation:**
+    - **design precision:** the leftover traces to Q16 or float32 rounding, no layer or site dominates, and the model is inside the faithful envelope. The exporter is cleared;
+    - **a defect:** a layer or site departs beyond Q16 rounding. It is repaired, and the residual check is re-run once;
+    - **neither:** the leftover is reported as part of the export gap.
+  - **The decisive run follows** in every case.
+  - **A decision-relevance bound:** it reports how many net top-1 rows the leftover could move, against F_I (60 to 73) and the FAILs' margins (+81 to +353). claude-132 found |D − A| at most 8 in net on each FAIL.
+  - **Its envelope rule is fixed before the run.** It states that two reference models are thin.
 - **The pivot note's order is unchanged:** the investigation settles, then the decisive run. Nothing waits on the owner (§5.1).
 
 ## Plain summary
