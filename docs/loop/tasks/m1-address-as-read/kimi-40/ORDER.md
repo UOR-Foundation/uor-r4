@@ -21,6 +21,8 @@ The address consumer and 6 finite controls are delivered. Panel-v2 replays the s
 - `docs/harness/prep/m1-address-as-read*`
 - `docs/loop/tasks/m1-address-as-read/kimi-40/**`
 - `docs/research/notebook/m3-durable-memory.md`
+- `docs/roadmap/items/m1-address-as-read.md`
+- `docs/roadmap/README.md` (rendered by `cargo xtask roadmap render` only)
 
 ## Done when
 

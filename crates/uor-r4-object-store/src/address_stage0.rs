@@ -1,3 +1,4 @@
+#![cfg(feature = "stage0-lab")]
 //! Deterministic Stage 0 copy-probe manifest and exact-emission protocol.
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -29,7 +30,19 @@ pub const DEV_TOKENS_SHA256: &str =
     "0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b";
 pub const DEV_MASK_SHA256: &str =
     "a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078";
+pub const TRAIN_TOKENS_SHA256: &str =
+    "3dee858f84b750f507ceb3dc3f393711741950954735efaaf61bf704c017a4c8";
+pub const TRAIN_MASK_SHA256: &str =
+    "b5e7352d67d6883a833155a5fd397a03f6d4f1b2649e3d4ec3e2ea7d95b949e3";
+/// The original Stage T config as retained in the archive. The local job
+/// rewrites its absolute paths with sed; the actual normalized file's SHA is
+/// recorded separately in identity.
+pub const ORIGINAL_CONFIG_SHA256: &str =
+    "43a316bc67bb45fe5b50bd2ceee57f6b919164c02fe45ee9e677f8819fea5d15";
+pub const CONFIG_PATH_NORMALIZATION_NOTE: &str = "The original Stage T config's absolute job paths were rewritten locally with sed; original_config_sha256 is the pre-rewrite retained config and normalized_config_sha256 is the actual normalized file read here.";
 pub const DEV_ROWS: usize = 14_287;
+/// Prompt tokens must leave room for at least one generated teacher token.
+pub const PROMPT_TOKEN_LIMIT: usize = 192;
 pub const RETAINED_TOP1: u64 = 455;
 pub const RETAINED_TOP8: u64 = 1_484;
 /// The registered strict non-vacuity floor: `d > 24 && d*d > 4*(b + c)`.
@@ -37,6 +50,7 @@ pub const PRIMARY_FLOOR: u64 = 24;
 pub const STAGE0_HEAD_ENV: &str = "UOR_STAGE0_HEAD";
 pub const IDENTITY_SCHEMA: &str = "uor-r4.address-stage0-identity/1";
 pub const PARITY_SCHEMA: &str = "uor-r4.address-stage0-parity/1";
+pub const PARITY_ROW_SCHEMA: &str = "uor-r4.address-stage0-parity-row/1";
 pub const COPY_SCHEMA: &str = "uor-r4.address-stage0-copy-report/1";
 pub const COPY_ROW_SCHEMA: &str = "uor-r4.address-stage0-copy-row/1";
 /// `uor-r4-discrete::metadata::ABSENT`; pads a short top-8 for comparison.
@@ -126,7 +140,7 @@ pub fn clears_primary(b: u64, c: u64) -> bool {
         return false;
     }
     let d = u128::from(b - c);
-    d > u128::from(PRIMARY_FLOOR) && d * d > 4 * u128::from(b + c)
+    d > u128::from(PRIMARY_FLOOR) && d * d > 4 * (u128::from(b) + u128::from(c))
 }
 
 /// Both primary comparisons must clear; teacher-forced top-8 is not a
@@ -214,8 +228,9 @@ pub fn planted_wrong_holds(
 
 /// One sealed Stage T evaluator row object, collected from the retained
 /// `final-dev.json` receipt.
-/// `admitted_cells` is that report's scalar count; the D11 scorer's row record
-/// carries the cell IDs and is compared by its length.
+/// `admitted_cells` is that report's scalar count; `target_cell_rank` is the
+/// target cell's rank among the admitted cells (1-based). The D11 scorer's row
+/// record carries the cell IDs and is compared by its count.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OriginalRow {
     pub target_position: u64,
@@ -223,6 +238,7 @@ pub struct OriginalRow {
     pub top8: [u32; 8],
     pub top1_correct: u64,
     pub admitted_cells: u64,
+    pub target_cell_rank: u64,
 }
 
 /// Recursively collects every object carrying all five original-report row
@@ -301,13 +317,253 @@ fn parse_original_row(
     let admitted_cells = map["admitted_cells"]
         .as_u64()
         .ok_or("original report row has no admitted_cells")?;
+    let target_cell_rank = map["target_cell_rank"]
+        .as_u64()
+        .ok_or("original report row has no target_cell_rank")?;
     Ok(OriginalRow {
         target_position,
         target_token,
         top8: values,
         top1_correct,
         admitted_cells,
+        target_cell_rank,
     })
+}
+
+/// ABSENT-pads a short scorer top-8 to the receipt's fixed eight slots.
+pub fn padded_top8(top8: &[u32]) -> Result<[u32; 8], String> {
+    if top8.len() > 8 {
+        return Err(format!("a scorer row has {} top-8 entries", top8.len()));
+    }
+    let mut padded = [ABSENT_TOKEN; 8];
+    padded[..top8.len()].copy_from_slice(top8);
+    Ok(padded)
+}
+
+/// One D11 parity row, independent of the GPU scorer types so the comparison
+/// can be tested on the host. `top8` is already ABSENT-padded to eight slots;
+/// `admitted_cells` carries the actual cell IDs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct D11ParityRow {
+    pub ordinal: u64,
+    pub target_position: u64,
+    pub target_token: u32,
+    pub status: i32,
+    pub prediction: u32,
+    pub top8: [u32; 8],
+    pub admitted_cells: Vec<u32>,
+}
+
+impl D11ParityRow {
+    pub fn admitted_count(&self) -> u64 {
+        self.admitted_cells.len() as u64
+    }
+}
+
+/// Compact per-row parity records. The schema and `admitted_count` are part
+/// of the recorded claim; `ordinal` is the D11 row ordinal.
+pub fn parity_row_lines(rows: &[D11ParityRow]) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    for row in rows {
+        let line = serde_json::json!({
+            "schema": PARITY_ROW_SCHEMA,
+            "ordinal": row.ordinal,
+            "target_position": row.target_position,
+            "target_token": row.target_token,
+            "status": row.status,
+            "prediction": row.prediction,
+            "top8": row.top8,
+            "admitted_count": row.admitted_count(),
+            "admitted_cells": row.admitted_cells,
+        });
+        out.extend(
+            serde_json::to_vec(&line).map_err(|e| format!("parity row {}: {e}", row.ordinal))?,
+        );
+        out.push(b'\n');
+    }
+    Ok(out)
+}
+
+/// D11 top-1/top-8/target-admission counts. Nonzero-status rows are refused by
+/// the runner but are skipped here so the aggregate does not hide them.
+pub fn d11_aggregate_rows(
+    rows: &[D11ParityRow],
+    target_cells: &[u32],
+) -> Result<(u64, u64, u64), String> {
+    let (mut top1, mut top8, mut admitted) = (0u64, 0u64, 0u64);
+    for row in rows {
+        if row.status != 0 {
+            continue;
+        }
+        if row.prediction == row.target_token {
+            top1 += 1;
+        }
+        if row.top8.contains(&row.target_token) {
+            top8 += 1;
+        }
+        let cell = *target_cells
+            .get(row.target_token as usize)
+            .ok_or_else(|| format!("target {} is outside the artifact cells", row.target_token))?;
+        if row.admitted_cells.contains(&cell) {
+            admitted += 1;
+        }
+    }
+    Ok((top1, top8, admitted))
+}
+
+/// Compares D11 parity rows to the retained receipt rows. The join is by
+/// traversal position only; the receipt has no ordinal field, so the public
+/// checks do not claim one.
+pub fn compare_parity_rows(
+    d11: &[D11ParityRow],
+    original: &[OriginalRow],
+) -> Result<serde_json::Value, String> {
+    if d11.len() != original.len() {
+        return Err(format!(
+            "{} D11 rows, {} retained receipt rows",
+            d11.len(),
+            original.len()
+        ));
+    }
+    let mut mismatched = 0u64;
+    let mut first = Vec::new();
+    for (row_index, (d11, original)) in d11.iter().zip(original).enumerate() {
+        let mut reasons: Vec<&'static str> = Vec::new();
+        if original.target_position != d11.target_position {
+            reasons.push("target_position");
+        }
+        if original.target_token != d11.target_token {
+            reasons.push("target_token");
+        }
+        if original.top8[0] != d11.prediction {
+            reasons.push("prediction");
+        }
+        if original.top8 != d11.top8 {
+            reasons.push("top8");
+        }
+        if original.admitted_cells != d11.admitted_count() {
+            reasons.push("admitted_count");
+        }
+        if original.top1_correct != u64::from(d11.prediction == d11.target_token) {
+            reasons.push("top1_correct");
+        }
+        if !reasons.is_empty() {
+            mismatched += 1;
+            if first.len() < 20 {
+                first.push(serde_json::json!({
+                    "row_index": row_index,
+                    "reasons": reasons,
+                    "original": {
+                        "target_position": original.target_position,
+                        "target_token": original.target_token,
+                        "top8": original.top8,
+                        "top1_correct": original.top1_correct,
+                        "admitted_cells": original.admitted_cells,
+                        "target_cell_rank": original.target_cell_rank,
+                    },
+                    "d11": {
+                        "target_position": d11.target_position,
+                        "target_token": d11.target_token,
+                        "status": d11.status,
+                        "prediction": d11.prediction,
+                        "top8": d11.top8,
+                        "admitted_count": d11.admitted_count(),
+                        "admitted_cells": d11.admitted_cells,
+                    },
+                }));
+            }
+        }
+    }
+    Ok(serde_json::json!({
+        "rows_compared": d11.len(),
+        "mismatched_rows": mismatched,
+        "first_mismatches": first,
+        "row_order_join": "D11 rows are joined to retained-receipt rows by traversal position; the receipt has no ordinal field.",
+        "checks": ["target_position", "target_token", "prediction", "top8", "admitted_count", "top1_correct"],
+    }))
+}
+
+/// The retained receipt's aggregate target-admitted count.
+pub fn original_target_admitted(report: &serde_json::Value) -> Result<u64, String> {
+    if let Some(value) = report
+        .get("aggregate")
+        .and_then(|aggregate| aggregate.get("target_admitted_rows"))
+        .and_then(serde_json::Value::as_u64)
+    {
+        return Ok(value);
+    }
+    let mut total = 0u64;
+    let mut seen = false;
+    if let Some(batches) = report.get("batches").and_then(serde_json::Value::as_array) {
+        for batch in batches {
+            if let Some(value) = batch
+                .get("aggregate")
+                .and_then(|aggregate| aggregate.get("target_admitted_rows"))
+                .and_then(serde_json::Value::as_u64)
+            {
+                total = total
+                    .checked_add(value)
+                    .ok_or("the original admission sum overflows")?;
+                seen = true;
+            }
+        }
+    }
+    if seen {
+        Ok(total)
+    } else {
+        Err("the original report has no target_admitted_rows aggregate".into())
+    }
+}
+
+/// Retained-receipt top-1/top-8/admission aggregate. Admission is recomputed
+/// from each row's `target_cell_rank <= admitted_cells` and cross-checked
+/// against the receipt's aggregate field, not merely copied from it.
+pub fn original_aggregate(
+    report: &serde_json::Value,
+    rows: &[OriginalRow],
+) -> Result<(u64, u64, u64), String> {
+    let top1 = rows.iter().filter(|row| row.top1_correct == 1).count() as u64;
+    let top8 = rows
+        .iter()
+        .filter(|row| row.top8.contains(&row.target_token))
+        .count() as u64;
+    let admitted_rows = rows
+        .iter()
+        .filter(|row| row.target_cell_rank <= row.admitted_cells)
+        .count() as u64;
+    let aggregate_admitted = original_target_admitted(report)?;
+    if aggregate_admitted != admitted_rows {
+        return Err(format!(
+            "the receipt's target_admitted_rows {aggregate_admitted} differs from per-row target_cell_rank <= admitted_cells ({admitted_rows})"
+        ));
+    }
+    if let Some(aggregate) = report.get("aggregate") {
+        if let Some(value) = aggregate
+            .get("scored_rows")
+            .and_then(serde_json::Value::as_u64)
+        {
+            if value != rows.len() as u64 {
+                return Err(format!(
+                    "the original report's scored_rows {value} differs from its {} rows",
+                    rows.len()
+                ));
+            }
+        }
+        let check = |name: &str, computed: u64| -> Result<(), String> {
+            if let Some(value) = aggregate.get(name).and_then(serde_json::Value::as_u64) {
+                if value != computed {
+                    return Err(format!(
+                        "the original report's {name} {value} differs from its rows' {computed}"
+                    ));
+                }
+            }
+            Ok(())
+        };
+        check("top1_correct", top1)?;
+        check("top8_correct", top8)?;
+        check("target_admitted_rows", admitted_rows)?;
+    }
+    Ok((top1, top8, admitted_rows))
 }
 
 /// Decodes a `.u16` token file without model or corpus assembly. The canonical
@@ -366,6 +622,99 @@ pub fn validate_head(value: &str) -> Result<&str, String> {
     } else {
         Err("UOR_STAGE0_HEAD must be the full 40-lowercase-hex Stage 0 commit".into())
     }
+}
+
+/// Reads `git rev-parse HEAD` from the source checkout.
+pub fn git_head(checkout: &std::path::Path) -> Result<String, String> {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(checkout)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .map_err(|e| format!("git rev-parse HEAD in {}: {e}", checkout.display()))?;
+    if !output.status.success() {
+        return Err(format!(
+            "git rev-parse HEAD failed in {}: {}",
+            checkout.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let head = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    validate_head(&head)?;
+    Ok(head)
+}
+
+/// Requires `UOR_STAGE0_HEAD` to equal the source checkout's actual HEAD, not
+/// merely to have the right shape.
+pub fn validate_head_against_git(value: &str, checkout: &std::path::Path) -> Result<(), String> {
+    validate_head(value)?;
+    let head = git_head(checkout)?;
+    if head != value {
+        return Err(format!(
+            "UOR_STAGE0_HEAD {value} differs from git rev-parse HEAD {head}"
+        ));
+    }
+    Ok(())
+}
+
+/// Runs a fallible device initializer before creating OUT_DIR, so a failed
+/// device cannot leave an empty directory that makes a retry refuse.
+pub fn create_out_dir_after<T>(
+    out_dir: &std::path::Path,
+    init: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    let value = init()?;
+    std::fs::create_dir(out_dir)
+        .map_err(|e| format!("create {}: {e} (OUT_DIR must not exist)", out_dir.display()))?;
+    Ok(value)
+}
+
+/// Validates the five registered corpus/tokenizer config pins and the DEV row
+/// count before any corpus file is read or scanned.
+pub fn validate_config_pins(config: &serde_json::Value) -> Result<(), String> {
+    let pin = |pointer: &str, expected: &str, name: &str| -> Result<(), String> {
+        let actual = config
+            .pointer(pointer)
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| format!("config lacks {pointer}"))?;
+        if actual != expected {
+            return Err(format!("config {name} pin {actual} is not {expected}"));
+        }
+        Ok(())
+    };
+    pin("/dev/tokens/sha256", DEV_TOKENS_SHA256, "DEV tokens")?;
+    pin("/dev/mask/sha256", DEV_MASK_SHA256, "DEV mask")?;
+    pin("/train/tokens/sha256", TRAIN_TOKENS_SHA256, "TRAIN tokens")?;
+    pin("/train/mask/sha256", TRAIN_MASK_SHA256, "TRAIN mask")?;
+    pin("/tokenizer/sha256", TOKENIZER_SHA256, "tokenizer")?;
+    let eligible = config
+        .pointer("/dev/expected_eligible_targets")
+        .and_then(serde_json::Value::as_u64);
+    if eligible != Some(DEV_ROWS as u64) {
+        return Err(format!(
+            "config DEV declares {eligible:?} eligible targets, not {DEV_ROWS}"
+        ));
+    }
+    Ok(())
+}
+
+/// The `manifest` CLI refuses a non-pinned tokenizer and a generated manifest
+/// that is not the registered artifact, before creating the output file.
+pub fn validate_manifest_cli_pins(
+    tokenizer_sha256: &str,
+    manifest_sha256: &str,
+) -> Result<(), String> {
+    if tokenizer_sha256 != TOKENIZER_SHA256 {
+        return Err(format!(
+            "manifest tokenizer {tokenizer_sha256} is not {TOKENIZER_SHA256}"
+        ));
+    }
+    if manifest_sha256 != MANIFEST_SHA256 {
+        return Err(format!(
+            "generated manifest {manifest_sha256} is not {MANIFEST_SHA256}"
+        ));
+    }
+    Ok(())
 }
 
 fn value(seed: &str) -> String {
@@ -442,8 +791,24 @@ pub fn build_manifest(tokenizer: &ByteBpeTokenizer) -> Result<CopyManifest, Stri
             random_prompt,
             no_hint_prompt,
         };
-        if row.prompt_tokens.len() > 192 || row.random_prompt_tokens.len() > 192 {
-            return Err(format!("prompt exceeds 192 tokens at row {index}"));
+        if row.prompt_tokens.len() >= PROMPT_TOKEN_LIMIT
+            || row.random_prompt_tokens.len() >= PROMPT_TOKEN_LIMIT
+            || row.no_hint_prompt_tokens.len() >= PROMPT_TOKEN_LIMIT
+        {
+            return Err(format!(
+                "prompt must be shorter than {PROMPT_TOKEN_LIMIT} tokens at row {index}"
+            ));
+        }
+        for (arm, prompt_tokens) in [
+            ("exact", &row.prompt_tokens),
+            ("random", &row.random_prompt_tokens),
+            ("no_hint", &row.no_hint_prompt_tokens),
+        ] {
+            if prompt_tokens.len() + row.value_tokens.len() > PROMPT_TOKEN_LIMIT {
+                return Err(format!(
+                    "prompt+value exceeds {PROMPT_TOKEN_LIMIT} tokens at row {index} ({arm})"
+                ));
+            }
         }
         if row.value_tokens.len() != row.random_tokens.len() {
             return Err(format!("hint token lengths differ at row {index}"));
@@ -485,10 +850,23 @@ pub fn validate_manifest(manifest: &CopyManifest) -> Result<(), String> {
         }
         if row.value_tokens.len() != row.random_tokens.len()
             || row.prompt_tokens.len() != row.random_prompt_tokens.len()
-            || row.prompt_tokens.len() > 192
-            || row.random_prompt_tokens.len() > 192
+            || row.prompt_tokens.len() >= PROMPT_TOKEN_LIMIT
+            || row.random_prompt_tokens.len() >= PROMPT_TOKEN_LIMIT
+            || row.no_hint_prompt_tokens.len() >= PROMPT_TOKEN_LIMIT
         {
             return Err(format!("token length mismatch at {}", row.id));
+        }
+        for (arm, prompt_tokens) in [
+            ("exact", &row.prompt_tokens),
+            ("random", &row.random_prompt_tokens),
+            ("no_hint", &row.no_hint_prompt_tokens),
+        ] {
+            if prompt_tokens.len() + row.value_tokens.len() > PROMPT_TOKEN_LIMIT {
+                return Err(format!(
+                    "prompt+value exceeds {PROMPT_TOKEN_LIMIT} tokens at {} ({arm})",
+                    row.id
+                ));
+            }
         }
         if row.prompt != prompt(&row.value)
             || row.random_prompt != prompt(&row.random_hint)
@@ -537,13 +915,14 @@ pub fn normalize_emission(text: &str) -> Result<String, String> {
 #[cfg(feature = "cuda")]
 pub mod runner {
     use super::{
-        clears_primary, collect_original_rows, corpus_value_leaks, normalize_emission,
-        planted_wrong_holds, primary_pass, sha256_hex, u16_le_tokens, validate_head, CopyManifest,
-        CopyRow, OriginalRow, PairedWins, ABSENT_TOKEN, ARTIFACT_SHA256, CHECKPOINT_SHA256,
-        COPY_ROW_SCHEMA, COPY_SCHEMA, DEV_MASK_SHA256, DEV_ROWS, DEV_TOKENS_SHA256,
-        IDENTITY_SCHEMA, MANIFEST_SHA256, PARITY_SCHEMA, RETAINED_RECEIPT_SCHEMA,
-        RETAINED_RECEIPT_SHA256, RETAINED_TOP1, RETAINED_TOP8, STAGE0_HEAD_ENV,
-        STAGE_T_ARCHIVE_SHA256, TOKENIZER_SHA256,
+        clears_primary, collect_original_rows, corpus_value_leaks, create_out_dir_after,
+        normalize_emission, original_aggregate, padded_top8, planted_wrong_holds, primary_pass,
+        sha256_hex, u16_le_tokens, validate_config_pins, validate_head_against_git, CopyManifest,
+        CopyRow, D11ParityRow, PairedWins, ABSENT_TOKEN, ARTIFACT_SHA256, CHECKPOINT_SHA256,
+        CONFIG_PATH_NORMALIZATION_NOTE, COPY_ROW_SCHEMA, COPY_SCHEMA, DEV_MASK_SHA256, DEV_ROWS,
+        DEV_TOKENS_SHA256, IDENTITY_SCHEMA, MANIFEST_SHA256, ORIGINAL_CONFIG_SHA256, PARITY_SCHEMA,
+        PROMPT_TOKEN_LIMIT, RETAINED_RECEIPT_SCHEMA, RETAINED_RECEIPT_SHA256, RETAINED_TOP1,
+        RETAINED_TOP8, STAGE0_HEAD_ENV, STAGE_T_ARCHIVE_SHA256, TOKENIZER_SHA256,
     };
     use m1_d11_artifact_scorer_instrument as inst;
     use serde_json::{json, Value};
@@ -627,10 +1006,13 @@ pub mod runner {
     /// stop report or both parity row records and `parity-report.json`, then
     /// the copy records and report. A failed primary copy gate is a completed
     /// measurement (`COPY_GATE_FAIL`), not an instrument error.
-    pub fn run(paths: &RunPaths) -> Result<Stage0Outcome, String> {
+    pub fn run(
+        paths: &RunPaths,
+        nvidia_driver_version: Result<i32, String>,
+    ) -> Result<Stage0Outcome, String> {
         let head = std::env::var(STAGE0_HEAD_ENV)
             .map_err(|_| format!("{STAGE0_HEAD_ENV} must be the full Stage 0 commit"))?;
-        validate_head(&head)?;
+        validate_head_against_git(&head, Path::new(env!("CARGO_MANIFEST_DIR")))?;
         if paths.out_dir.exists() {
             return Err(format!(
                 "{} exists; Stage 0 outputs are never overwritten",
@@ -717,33 +1099,12 @@ pub mod runner {
                 ));
             }
         }
+        let config_json: Value = serde_json::from_slice(&config_bytes)
+            .map_err(|e| format!("config {}: {e}", paths.config.display()))?;
+        validate_config_pins(&config_json)?;
         let config: DriverConfig = serde_json::from_slice(&config_bytes)
             .map_err(|e| format!("config {}: {e}", paths.config.display()))?;
         config.validate().map_err(|e| format!("config: {e}"))?;
-        if config.dev.tokens.sha256 != DEV_TOKENS_SHA256 {
-            return Err(format!(
-                "config DEV tokens pin {} is not {DEV_TOKENS_SHA256}",
-                config.dev.tokens.sha256
-            ));
-        }
-        if config.dev.mask.sha256 != DEV_MASK_SHA256 {
-            return Err(format!(
-                "config DEV mask pin {} is not {DEV_MASK_SHA256}",
-                config.dev.mask.sha256
-            ));
-        }
-        if config.dev.expected_eligible_targets != DEV_ROWS as u64 {
-            return Err(format!(
-                "config DEV declares {} eligible targets, not {DEV_ROWS}",
-                config.dev.expected_eligible_targets
-            ));
-        }
-        if config.tokenizer.sha256 != TOKENIZER_SHA256 {
-            return Err(format!(
-                "config tokenizer pin {} is not {TOKENIZER_SHA256}",
-                config.tokenizer.sha256
-            ));
-        }
 
         let (tables, model) = inst::artifact::ArtifactTables::from_bytes(&artifact_bytes)?;
         if tables.artifact_sha256 != ARTIFACT_SHA256 {
@@ -792,6 +1153,11 @@ pub mod runner {
             .tokens
             .read()
             .map_err(|e| format!("TRAIN tokens: {e}"))?;
+        config
+            .train
+            .mask
+            .read()
+            .map_err(|e| format!("TRAIN mask: {e}"))?;
         let dev_bytes = config
             .dev
             .tokens
@@ -812,14 +1178,9 @@ pub mod runner {
             ));
         }
 
-        std::fs::create_dir(&paths.out_dir).map_err(|e| {
-            format!(
-                "create {}: {e} (OUT_DIR must not exist)",
-                paths.out_dir.display()
-            )
+        let scorer = create_out_dir_after(&paths.out_dir, || {
+            inst::device::DeviceScorer::new(0, &tables).map_err(|e| format!("device 0: {e}"))
         })?;
-        let scorer =
-            inst::device::DeviceScorer::new(0, &tables).map_err(|e| format!("device 0: {e}"))?;
         let executable = std::env::current_exe().map_err(|e| format!("current exe: {e}"))?;
         let identity = json!({
             "schema": IDENTITY_SCHEMA,
@@ -840,7 +1201,20 @@ pub mod runner {
             "IMAGE_TARGET": inst::device::IMAGE_TARGET.trim(),
             "RESOURCES": inst::device::RESOURCES.trim(),
             "device_capability": [scorer.capability.0, scorer.capability.1],
-            "cuda_version": nvcc_identity(),
+            "nvidia_driver_version": match nvidia_driver_version {
+                Ok(raw) => json!({
+                    "raw": raw,
+                    "major": raw / 1000,
+                    "minor": (raw % 1000) / 10,
+                    "source": "cudarc::driver::sys::cuDriverGetVersion",
+                }),
+                Err(error) => json!({
+                    "available": false,
+                    "error": error,
+                    "source": "cudarc::driver::sys::cuDriverGetVersion",
+                }),
+            },
+            "cuda_toolkit_version": nvcc_identity(),
             "compiled_identity": uor_r4_discrete::device::compiled_identity(),
             "driver_source_sha256": uor_r4_discrete::training::driver_source_sha256(),
             "artifact_sha256": ARTIFACT_SHA256,
@@ -848,7 +1222,9 @@ pub mod runner {
             "checkpoint_file_input": false,
             "tokenizer_sha256": TOKENIZER_SHA256,
             "manifest_sha256": MANIFEST_SHA256,
-            "config_sha256": config_sha256,
+            "original_config_sha256": ORIGINAL_CONFIG_SHA256,
+            "normalized_config_sha256": config_sha256,
+            "config_path_normalization": CONFIG_PATH_NORMALIZATION_NOTE,
             "dev_tokens_sha256": DEV_TOKENS_SHA256,
             "dev_mask_sha256": DEV_MASK_SHA256,
             "dev_rows": rows.len(),
@@ -864,7 +1240,9 @@ pub mod runner {
             "checkpoint_file_input": false,
             "tokenizer_sha256": TOKENIZER_SHA256,
             "manifest_sha256": MANIFEST_SHA256,
-            "config_sha256": config_sha256,
+            "original_config_sha256": ORIGINAL_CONFIG_SHA256,
+            "normalized_config_sha256": config_sha256,
+            "config_path_normalization": CONFIG_PATH_NORMALIZATION_NOTE,
             "retained_receipt_path": paths.retained_receipt.display().to_string(),
             "retained_receipt_sha256": RETAINED_RECEIPT_SHA256,
             "stage_t_archive_sha256": STAGE_T_ARCHIVE_SHA256,
@@ -907,7 +1285,11 @@ pub mod runner {
                 ),
             );
         }
-        let bytes1 = match parity_rows(&rows, &run1) {
+        let d11_run1 = match parity_rows_from_scores(&rows, &run1) {
+            Ok(rows) => rows,
+            Err(e) => return stop_parity(&mut parity, &paths.out_dir, e),
+        };
+        let bytes1 = match super::parity_row_lines(&d11_run1) {
             Ok(bytes) => bytes,
             Err(e) => return stop_parity(&mut parity, &paths.out_dir, e),
         };
@@ -934,18 +1316,40 @@ pub mod runner {
                 ),
             );
         }
-        let bytes2 = match parity_rows(&rows, &run2) {
+        let d11_run2 = match parity_rows_from_scores(&rows, &run2) {
+            Ok(rows) => rows,
+            Err(e) => return stop_parity(&mut parity, &paths.out_dir, e),
+        };
+        let bytes2 = match super::parity_row_lines(&d11_run2) {
             Ok(bytes) => bytes,
             Err(e) => return stop_parity(&mut parity, &paths.out_dir, e),
         };
         write_new(&paths.out_dir.join("parity-rows-run2.jsonl"), &bytes2)?;
 
-        let all_status_zero = run1.iter().chain(&run2).all(|score| score.status == 0);
+        let all_status_zero = d11_run1
+            .iter()
+            .chain(&d11_run2)
+            .all(|score| score.status == 0);
         let runs_byte_identical = bytes1 == bytes2;
         parity["run1_sha256"] = json!(sha256_hex(&bytes1));
         parity["run2_sha256"] = json!(sha256_hex(&bytes2));
         parity["all_status_zero"] = json!(all_status_zero);
         parity["runs_byte_identical"] = json!(runs_byte_identical);
+
+        let (d11_top1, d11_top8, d11_admitted) =
+            match super::d11_aggregate_rows(&d11_run1, &tables.cells) {
+                Ok(values) => values,
+                Err(e) => return stop_parity(&mut parity, &paths.out_dir, e),
+            };
+        // Every parity stop after the two runs, including nonzero status and
+        // nondeterminism, must carry the aggregates.
+        let admission_delta = super::set_parity_aggregates(
+            &mut parity,
+            (d11_top1, d11_top8, d11_admitted),
+            (original_top1, original_top8, original_admitted),
+            original_rows.len() as u64,
+        );
+
         if !all_status_zero {
             return stop_parity(
                 &mut parity,
@@ -961,19 +1365,6 @@ pub mod runner {
             );
         }
 
-        let (d11_top1, d11_top8, d11_admitted) = match d11_aggregate(&rows, &run1, &tables) {
-            Ok(values) => values,
-            Err(e) => return stop_parity(&mut parity, &paths.out_dir, e),
-        };
-        // Every subsequent mismatch, top-1/top-8 or admission stop must carry
-        // the aggregates, so populate them before the first comparison stop.
-        let admission_delta = super::set_parity_aggregates(
-            &mut parity,
-            (d11_top1, d11_top8, d11_admitted),
-            (original_top1, original_top8, original_admitted),
-            original_rows.len() as u64,
-        );
-
         if original_rows.len() != rows.len() {
             return stop_parity(
                 &mut parity,
@@ -985,7 +1376,7 @@ pub mod runner {
                 ),
             );
         }
-        let comparison = match compare_rows(&rows, &run1, &original_rows) {
+        let comparison = match super::compare_parity_rows(&d11_run1, &original_rows) {
             Ok(value) => value,
             Err(e) => return stop_parity(&mut parity, &paths.out_dir, e),
         };
@@ -1074,19 +1465,10 @@ pub mod runner {
         Err(reason)
     }
 
-    fn padded_top8(top8: &[u32]) -> Result<[u32; 8], String> {
-        if top8.len() > 8 {
-            return Err(format!("a scorer row has {} top-8 entries", top8.len()));
-        }
-        let mut padded = [ABSENT_TOKEN; 8];
-        padded[..top8.len()].copy_from_slice(top8);
-        Ok(padded)
-    }
-
-    fn parity_rows(
+    fn parity_rows_from_scores(
         rows: &[inst::DevRow],
         scores: &[inst::kernel::RowScore],
-    ) -> Result<Vec<u8>, String> {
+    ) -> Result<Vec<D11ParityRow>, String> {
         if rows.len() != scores.len() {
             return Err(format!(
                 "{} DEV rows but {} D11 scores",
@@ -1094,194 +1476,25 @@ pub mod runner {
                 scores.len()
             ));
         }
-        let mut out = Vec::new();
-        for (row, score) in rows.iter().zip(scores) {
-            let top8 = if score.status == 0 {
-                padded_top8(&score.top8)?
-            } else {
-                [ABSENT_TOKEN; 8]
-            };
-            let line = json!({
-                "ordinal": row.ordinal,
-                "target_position": row.target_position,
-                "target_token": row.target_token,
-                "status": score.status,
-                "prediction": score.prediction,
-                "top8": top8,
-                "admitted_cells": score.admitted_cells,
-            });
-            out.extend(
-                serde_json::to_vec(&line)
-                    .map_err(|e| format!("parity row {}: {e}", row.ordinal))?,
-            );
-            out.push(b'\n');
-        }
-        Ok(out)
-    }
-
-    fn d11_aggregate(
-        rows: &[inst::DevRow],
-        scores: &[inst::kernel::RowScore],
-        tables: &inst::artifact::ArtifactTables,
-    ) -> Result<(u64, u64, u64), String> {
-        if rows.len() != scores.len() {
-            return Err("D11 scores do not cover the DEV rows".into());
-        }
-        let (mut top1, mut top8, mut admitted) = (0u64, 0u64, 0u64);
-        for (row, score) in rows.iter().zip(scores) {
-            if score.status != 0 {
-                continue;
-            }
-            if score.prediction == row.target_token {
-                top1 += 1;
-            }
-            if score.top8.contains(&row.target_token) {
-                top8 += 1;
-            }
-            let cell = *tables.cells.get(row.target_token as usize).ok_or_else(|| {
-                format!("target {} is outside the artifact cells", row.target_token)
-            })?;
-            if score.admitted_cells.contains(&cell) {
-                admitted += 1;
-            }
-        }
-        Ok((top1, top8, admitted))
-    }
-
-    fn compare_rows(
-        rows: &[inst::DevRow],
-        scores: &[inst::kernel::RowScore],
-        original: &[OriginalRow],
-    ) -> Result<Value, String> {
-        if rows.len() != scores.len() || rows.len() != original.len() {
-            return Err(format!(
-                "{} DEV rows, {} D11 scores, {} original rows",
-                rows.len(),
-                scores.len(),
-                original.len()
-            ));
-        }
-        let mut mismatched = 0u64;
-        let mut first = Vec::new();
-        for (index, ((row, score), report)) in rows.iter().zip(scores).zip(original).enumerate() {
-            let mut reasons: Vec<&'static str> = Vec::new();
-            if row.ordinal != index as u64 {
-                reasons.push("ordinal");
-            }
-            if report.target_position != row.target_position {
-                reasons.push("target_position");
-            }
-            if report.target_token != row.target_token {
-                reasons.push("target_token");
-            }
-            let padded = padded_top8(&score.top8)?;
-            if report.top8[0] != score.prediction {
-                reasons.push("prediction");
-            }
-            if report.top8 != padded {
-                reasons.push("top8");
-            }
-            if report.admitted_cells != score.admitted_cells.len() as u64 {
-                reasons.push("admitted_cells");
-            }
-            if report.top1_correct != u64::from(score.prediction == row.target_token) {
-                reasons.push("top1_correct");
-            }
-            if !reasons.is_empty() {
-                mismatched += 1;
-                if first.len() < 20 {
-                    first.push(json!({
-                        "ordinal": index,
-                        "reasons": reasons,
-                        "original": {
-                            "target_position": report.target_position,
-                            "target_token": report.target_token,
-                            "top8": report.top8,
-                            "top1_correct": report.top1_correct,
-                            "admitted_cells": report.admitted_cells,
-                        },
-                        "d11": {
-                            "target_position": row.target_position,
-                            "target_token": row.target_token,
-                            "status": score.status,
-                            "prediction": score.prediction,
-                            "top8": padded,
-                            "admitted_cells": score.admitted_cells,
-                        },
-                    }));
-                }
-            }
-        }
-        Ok(json!({
-            "rows_compared": rows.len(),
-            "mismatched_rows": mismatched,
-            "first_mismatches": first,
-            "checks": ["ordinal", "target_position", "target_token", "prediction", "top8", "admitted_cells", "top1_correct"],
-        }))
-    }
-
-    fn original_target_admitted(report: &Value) -> Result<u64, String> {
-        if let Some(value) = report
-            .get("aggregate")
-            .and_then(|aggregate| aggregate.get("target_admitted_rows"))
-            .and_then(Value::as_u64)
-        {
-            return Ok(value);
-        }
-        let mut total = 0u64;
-        let mut seen = false;
-        if let Some(batches) = report.get("batches").and_then(Value::as_array) {
-            for batch in batches {
-                if let Some(value) = batch
-                    .get("aggregate")
-                    .and_then(|aggregate| aggregate.get("target_admitted_rows"))
-                    .and_then(Value::as_u64)
-                {
-                    total = total
-                        .checked_add(value)
-                        .ok_or("the original admission sum overflows")?;
-                    seen = true;
-                }
-            }
-        }
-        if seen {
-            Ok(total)
-        } else {
-            Err("the original report has no target_admitted_rows aggregate".into())
-        }
-    }
-
-    fn original_aggregate(report: &Value, rows: &[OriginalRow]) -> Result<(u64, u64, u64), String> {
-        let top1 = rows.iter().filter(|row| row.top1_correct == 1).count() as u64;
-        let top8 = rows
-            .iter()
-            .filter(|row| row.top8.contains(&row.target_token))
-            .count() as u64;
-        let admitted = original_target_admitted(report)?;
-        if let Some(aggregate) = report.get("aggregate") {
-            let check = |name: &str, computed: u64| -> Result<(), String> {
-                if let Some(value) = aggregate.get(name).and_then(Value::as_u64) {
-                    if value != computed {
-                        return Err(format!(
-                            "the original report's {name} {value} differs from its rows' {computed}"
-                        ));
-                    }
-                }
-                Ok(())
-            };
-            if let Some(value) = aggregate.get("scored_rows").and_then(Value::as_u64) {
-                if value != rows.len() as u64 {
-                    return Err(format!(
-                        "the original report's scored_rows {value} differs from its {} rows",
-                        rows.len()
-                    ));
-                }
-            }
-            check("top1_correct", top1)?;
-            check("top8_correct", top8)?;
-            check("target_admitted_rows", admitted)?;
-        }
-        Ok((top1, top8, admitted))
+        rows.iter()
+            .zip(scores)
+            .map(|(row, score)| {
+                let top8 = if score.status == 0 {
+                    super::padded_top8(&score.top8)?
+                } else {
+                    [ABSENT_TOKEN; 8]
+                };
+                Ok(D11ParityRow {
+                    ordinal: row.ordinal,
+                    target_position: row.target_position,
+                    target_token: row.target_token,
+                    status: score.status,
+                    prediction: score.prediction,
+                    top8,
+                    admitted_cells: score.admitted_cells.clone(),
+                })
+            })
+            .collect()
     }
 
     fn truncate(text: &str) -> String {
@@ -1422,16 +1635,16 @@ pub mod runner {
         context: usize,
         lines: &mut Vec<u8>,
     ) -> Result<Vec<FreeRow>, String> {
-        let limit = 192.min(context);
+        let limit = PROMPT_TOKEN_LIMIT.min(context);
         if limit == 0 {
             return Err("the artifact context is zero".into());
         }
         let mut out = Vec::new();
         for row in &manifest.rows {
             let mut prefix = arm.prompt(row).to_vec();
-            if prefix.is_empty() || prefix.len() > context {
+            if prefix.is_empty() || prefix.len() >= PROMPT_TOKEN_LIMIT || prefix.len() > context {
                 return Err(format!(
-                    "{} row {} prompt length {} is outside 1..={context}",
+                    "{} row {} prompt length {} is outside 1..{PROMPT_TOKEN_LIMIT}",
                     arm.name(),
                     row.id,
                     prefix.len()

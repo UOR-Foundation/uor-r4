@@ -1,8 +1,9 @@
-use sha2::Digest;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::process::ExitCode;
-use uor_r4_object_store::address_stage0::{build_manifest, STAGE0_SCHEMA};
+use uor_r4_object_store::address_stage0::{
+    build_manifest, sha256_hex, validate_manifest_cli_pins, STAGE0_SCHEMA,
+};
 use uor_r4_tokenizer::ByteBpeTokenizer;
 
 fn main() -> ExitCode {
@@ -21,11 +22,14 @@ fn run_cli() -> Result<(), String> {
         [command, tokenizer_path, output] if command == "manifest" => {
             let bytes =
                 std::fs::read(tokenizer_path).map_err(|e| format!("{tokenizer_path}: {e}"))?;
+            let tokenizer_sha256 = sha256_hex(&bytes);
             let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&bytes)
                 .ok_or_else(|| format!("{tokenizer_path}: invalid pinned tokenizer"))?;
             let manifest = build_manifest(&tokenizer)?;
             let encoded =
                 serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())? + "\n";
+            let manifest_sha256 = sha256_hex(encoded.as_bytes());
+            validate_manifest_cli_pins(&tokenizer_sha256, &manifest_sha256)?;
             let mut file = OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -33,13 +37,7 @@ fn run_cli() -> Result<(), String> {
                 .map_err(|e| format!("{output}: {e} (outputs are never overwritten)"))?;
             file.write_all(encoded.as_bytes())
                 .map_err(|e| format!("{output}: {e}"))?;
-            println!(
-                "{STAGE0_SCHEMA}: 40 rows, sha256 {}",
-                sha2::Sha256::digest(encoded.as_bytes())
-                    .iter()
-                    .map(|b| format!("{b:02x}"))
-                    .collect::<String>()
-            );
+            println!("{STAGE0_SCHEMA}: 40 rows, sha256 {manifest_sha256}");
             Ok(())
         }
         [command, artifact, config, retained_receipt, tokenizer, manifest, out_dir]
@@ -82,7 +80,7 @@ fn run_stage0(
         manifest: PathBuf::from(manifest),
         out_dir: PathBuf::from(out_dir),
     };
-    let outcome = run(&paths)?;
+    let outcome = run(&paths, nvidia_driver_version())?;
     println!(
         "Stage 0 parity PASS; copy decision {} (primary_pass={}); outputs in {}",
         outcome.decision,
@@ -90,6 +88,22 @@ fn run_stage0(
         outcome.out_dir.display()
     );
     Ok(())
+}
+
+#[cfg(feature = "cuda")]
+fn nvidia_driver_version() -> Result<i32, String> {
+    let mut raw: i32 = 0;
+    // SAFETY: cuDriverGetVersion writes exactly one c_int to the supplied
+    // pointer; `raw` is a live stack value and the dynamic driver entry point
+    // is loaded by cudarc. No model or kernel is launched.
+    let status = unsafe { cudarc::driver::sys::cuDriverGetVersion(&mut raw) };
+    if status == cudarc::driver::sys::CUresult::CUDA_SUCCESS && raw > 0 {
+        Ok(raw)
+    } else {
+        Err(format!(
+            "cuDriverGetVersion returned {status:?} (raw {raw})"
+        ))
+    }
 }
 
 #[cfg(not(feature = "cuda"))]

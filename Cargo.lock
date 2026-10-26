@@ -2487,6 +2487,7 @@ dependencies = [
 name = "uor-r4-object-store"
 version = "0.1.0"
 dependencies = [
+ "cudarc",
  "m1-d11-artifact-scorer-instrument",
  "serde",
  "serde_json",

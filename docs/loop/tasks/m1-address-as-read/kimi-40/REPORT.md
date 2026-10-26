@@ -12,24 +12,28 @@ References #2833; this unit does not close the item or claim an oracle gain.
 
 ## What changed
 
-- Added `address_stage0` manifest generation and a GPU-only runner: pinned artifact/config/receipt validation, corpus-leak scan, two D11 parity passes, sealed `final-dev.json` comparison, teacher-forced and free-running copy, identity and stop reports.
-- Added the 40-row manifest (`ea360118…`), 14 protocol tests and the root workspace exclude required by the nested D11 instrument.
+- Added `address_stage0` manifest generation and a GPU-only runner behind `stage0-lab`: pinned artifact/config/receipt validation, corpus-leak scan, two D11 parity passes, sealed `final-dev.json` comparison, teacher-forced and free-running copy, identity and aggregate-preserving stop reports.
+- Added the 40-row manifest (`ea360118…`), protocol and pure parity tests, and the root workspace exclude required by the nested D11 instrument.
 - Recorded the scoped result in `docs/mechanisms/exact-memory.md`, the lab README and `docs/research/notebook/m3-durable-memory.md`.
-- Size at the REPORT commit: 12 files, 7,591 additions and 1 deletion. Code and unit tests 2,173 lines, documentation 191, generated manifest 5,212, dependency/workspace metadata 15. No numeric estimate was set; most additions are the generated manifest and the GPU runner.
+- Size at the REPORT commit: recomputed at the final head below. No numeric estimate was set; most additions are the generated manifest and the GPU runner.
 
 ## Measurements
 
 **GPU, one RTX 5090 (`vast-57806658`) at `97354145ecaf7ea70908ef25922ea3c57dec55fe`:**
 
-- Parity: **14,287/14,287** rows have status 0 and agree with the sealed original GPU receipt on ordinal, target position/token, prediction, top-8 and admitted count. Repeat records are byte-identical (`7f373b3b…`). Aggregate top-1 `455`, top-8 `1,484`, admitted `5,009`; all position-strip deltas are `0`. `parity-report.json` PASS.
-- Copy: exact free-running **0/40**, no-hint **0/40**, random-hint **0/40** exact normalized strings. Both primary comparisons have `b = c = 0`, hence `COPY_GATE_FAIL`. Random-hint planted-wrong held on all 9 normalized rows.
+- Parity: **14,287/14,287** rows have status 0 and agree with the sealed original GPU receipt on target position/token, prediction, top-8 and admitted count. The receipt has no ordinal field; row order was used only to join corresponding records. Repeat records are byte-identical (`7f373b3b…`). Aggregate top-1 `455`, top-8 `1,484`, admitted `5,009`; all position-strip deltas are `0`. `parity-report.json` PASS.
+- Copy: exact free-running **0/40 exact matches**, no-hint **0/40**, random-hint **0/40**. Normalized emissions were **12 / 0 / 9** respectively; these are not exact matches. Both primary comparisons have `b = c = 0`, hence `COPY_GATE_FAIL`. Random-hint planted-wrong held on all 9 normalized rows.
 - Teacher-forced (descriptive only): exact `3/275` token top-1 and `15/275` top-8; no-hint `4/275` and `17/275`; random-hint `5/275` and `18/275`. No row has all value tokens top-1 or top-8. These are not generation capability claims.
+- Config provenance: original config `43a316bc67bb45fe5b50bd2ceee57f6b919164c02fe45ee9e677f8819fea5d15`; normalized config `e6f85ca9ddaf2d1e471d6e15d385f4bce6411ef7514c412f32ac44776d838569`. The staged copy changed only the nested input path with a `sed` path replacement so it named the pod's staged input location.
+- Driver provenance: the measured run's identity receipt did not include the actual NVIDIA driver version, so it is **UNVERIFIED** for this run. The repaired runner now queries `cuDriverGetVersion`; no driver version is inferred for the old receipt.
 - Cost: pod uptime `1,163 s` at `$0.563/h` = **$0.182** (not an inferred energy measurement). One pod, released and deleted after upload. Host preparation/review cost was lab time only.
 - Artifacts: `results/kimi/m1-address-stage0-2026-10-26/results/stage0-result.tar`, local tar SHA-256 `2be4f5ef8880e6c7a53505bb6974ee06f063b49108f98b6bc35ce3f73e4c4a07`. Binary `6aa0709ddbf2b78275f95e9a8005328c37b4951fb69814098eb74abaffc7e530`; cubin `17dd4184d1e49dbb07b7f1d7bb236859c38b715edd968255dd41e61196a10465`; PTX `e8ee1c1292a46f9a5eb24779f163e771fdce94dc10644f9ce89050f5dec333be`.
 
 ## Checks run at the head
 
-- `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo test -p uor-r4-object-store --no-fail-fast`: **97 passed, 0 failed, 1 ignored**.
+- `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo test -p uor-r4-object-store --no-fail-fast`: **83 passed, 0 failed, 1 ignored** after the repair.
+- `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo test -p uor-r4-object-store --features stage0-lab --no-fail-fast`: **112 passed, 0 failed, 1 ignored** after the repair.
+- `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo check -p uor-r4-object-store` and the same check with `--features stage0-lab`: PASS after the repair.
 - `NVCC=/Users/casey.allard/uor-r4/local/fake-nvcc/nvcc UOR_NVCC_ARCH=compute_120 CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo check -p uor-r4-object-store --features cuda`: PASS.
 - `uor-harness loop gates --full`: see final head.
 - `uor-harness loop report --check --order docs/loop/tasks/m1-address-as-read/kimi-40/ORDER.md`: see final head.

@@ -1,12 +1,18 @@
+#![cfg(feature = "stage0-lab")]
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::error::Error;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use uor_r4_object_store::address_stage0::{
-    build_manifest, clears_primary, collect_original_rows, corpus_value_leaks, mark_parity_stop,
-    normalize_emission, parse_manifest, planted_wrong_holds, primary_pass, set_parity_aggregates,
-    u16_le_tokens, validate_head, validate_manifest, values_missing_from_corpus, OriginalRow,
-    PairedWins, MANIFEST_SHA256, RETAINED_RECEIPT_SHA256, STAGE0_SCHEMA, STAGE_T_ARCHIVE_SHA256,
+    build_manifest, clears_primary, collect_original_rows, compare_parity_rows, corpus_value_leaks,
+    create_out_dir_after, d11_aggregate_rows, git_head, mark_parity_stop, normalize_emission,
+    original_aggregate, padded_top8, parity_row_lines, parse_manifest, planted_wrong_holds,
+    primary_pass, set_parity_aggregates, u16_le_tokens, validate_config_pins, validate_head,
+    validate_head_against_git, validate_manifest, validate_manifest_cli_pins,
+    values_missing_from_corpus, D11ParityRow, OriginalRow, PairedWins,
+    CONFIG_PATH_NORMALIZATION_NOTE, MANIFEST_SHA256, ORIGINAL_CONFIG_SHA256, PARITY_ROW_SCHEMA,
+    PROMPT_TOKEN_LIMIT, RETAINED_RECEIPT_SHA256, STAGE0_SCHEMA, STAGE_T_ARCHIVE_SHA256,
+    TOKENIZER_SHA256,
 };
 use uor_r4_tokenizer::ByteBpeTokenizer;
 
@@ -111,8 +117,16 @@ fn pinned_copy_manifest_hashes_and_parses() -> TestResult {
         assert!(!row.prompt_tokens.is_empty());
         assert!(!row.random_prompt_tokens.is_empty());
         assert!(!row.no_hint_prompt_tokens.is_empty());
-        assert!(row.prompt_tokens.len() <= 192);
-        assert!(row.random_prompt_tokens.len() <= 192);
+        assert!(row.prompt_tokens.len() < PROMPT_TOKEN_LIMIT);
+        assert!(row.random_prompt_tokens.len() < PROMPT_TOKEN_LIMIT);
+        assert!(row.no_hint_prompt_tokens.len() < PROMPT_TOKEN_LIMIT);
+        for prompt_tokens in [
+            &row.prompt_tokens,
+            &row.random_prompt_tokens,
+            &row.no_hint_prompt_tokens,
+        ] {
+            assert!(prompt_tokens.len() + row.value_tokens.len() <= PROMPT_TOKEN_LIMIT);
+        }
     }
     validate_manifest(&manifest)?;
     Ok(())
@@ -140,12 +154,13 @@ fn original_report_rows_are_collected_recursively_in_traversal_order() -> TestRe
             {"rows": [
                 {"target_position": 41, "target_token": 1155,
                  "top8": [552, 561, 935, 542, 690, 772, 971, 1258],
-                 "top1_correct": 0, "admitted_cells": 8, "unrelated": true}
+                 "top1_correct": 0, "admitted_cells": 8, "target_cell_rank": 9,
+                 "unrelated": true}
             ]},
             {"nested": {"deeper": [
                 {"target_position": 42, "target_token": 1156,
                  "top8": [1156, 2, 3, 4, 5, 6, 7, 8],
-                 "top1_correct": 1, "admitted_cells": 7}
+                 "top1_correct": 1, "admitted_cells": 7, "target_cell_rank": 7}
             ]}}
         ],
         "count_reference": {"top8": [1, 2, 3, 4, 5, 6, 7, 8], "top1_correct": 1, "scored_rows": 2}
@@ -160,6 +175,7 @@ fn original_report_rows_are_collected_recursively_in_traversal_order() -> TestRe
                 top8: [552, 561, 935, 542, 690, 772, 971, 1258],
                 top1_correct: 0,
                 admitted_cells: 8,
+                target_cell_rank: 9,
             },
             OriginalRow {
                 target_position: 42,
@@ -167,6 +183,7 @@ fn original_report_rows_are_collected_recursively_in_traversal_order() -> TestRe
                 top8: [1156, 2, 3, 4, 5, 6, 7, 8],
                 top1_correct: 1,
                 admitted_cells: 7,
+                target_cell_rank: 7,
             },
         ]
     );
@@ -350,4 +367,347 @@ fn retained_receipt_and_stage_t_archive_pins_are_registered() {
         STAGE_T_ARCHIVE_SHA256,
         "c004db506bf64903231c5c225a07e9969d5e3344c51a67eaec9429265e5f44b6"
     );
+    assert_eq!(
+        ORIGINAL_CONFIG_SHA256,
+        "43a316bc67bb45fe5b50bd2ceee57f6b919164c02fe45ee9e677f8819fea5d15"
+    );
+    assert!(CONFIG_PATH_NORMALIZATION_NOTE.contains("sed"));
+}
+
+fn pinned_config_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../docs/labs/m1-bvg-k-stage-t-training/configs/t16-frozen-zero-seed1.json")
+}
+
+fn aggregate_stop_report(reason: &str) -> serde_json::Value {
+    let mut report = json!({
+        "schema": "uor-r4.address-stage0-parity/1",
+        "rows": 2,
+        "comparison": {"mismatched_rows": 0},
+    });
+    let delta = set_parity_aggregates(&mut report, (1, 1, 1), (1, 1, 1), 2);
+    assert_eq!(delta, 0);
+    mark_parity_stop(&mut report, reason);
+    report
+}
+
+#[test]
+fn nonzero_status_stop_report_carries_aggregates() {
+    let report = aggregate_stop_report("a D11 parity row has nonzero status");
+    assert_eq!(
+        report["instrument_stop"].as_str(),
+        Some("a D11 parity row has nonzero status")
+    );
+    assert_eq!(report["d11_aggregate"]["rows"].as_u64(), Some(2));
+    assert_eq!(report["d11_aggregate"]["top1"].as_u64(), Some(1));
+    assert_eq!(report["original_aggregate"]["top1"].as_u64(), Some(1));
+    assert_eq!(report["position_strip"]["d11_top1"].as_u64(), Some(1));
+    assert_eq!(
+        report["position_strip"]["retained_top1"].as_u64(),
+        Some(455)
+    );
+}
+
+#[test]
+fn nondeterminism_stop_report_carries_aggregates() {
+    let report = aggregate_stop_report("the two D11 parity runs differ byte-for-byte");
+    assert_eq!(
+        report["instrument_stop"].as_str(),
+        Some("the two D11 parity runs differ byte-for-byte")
+    );
+    assert!(report["d11_aggregate"].is_object());
+    assert!(report["original_aggregate"].is_object());
+    assert!(report["position_strip"].is_object());
+    assert_eq!(
+        report["position_strip"]["retained_top8"].as_u64(),
+        Some(1_484)
+    );
+}
+
+#[test]
+fn admission_delta_stop_report_carries_aggregates() {
+    let mut report = json!({"schema": "uor-r4.address-stage0-parity/1", "rows": 2});
+    let delta = set_parity_aggregates(&mut report, (1, 1, 2), (1, 1, 1), 2);
+    mark_parity_stop(&mut report, "admission aggregate differs");
+    assert_eq!(delta, 1);
+    assert_eq!(
+        report["position_strip"]["admission_delta"].as_i64(),
+        Some(1)
+    );
+    assert_eq!(
+        report["position_strip"]["admission_aggregate_matches"].as_bool(),
+        Some(false)
+    );
+    assert_eq!(
+        report["position_strip"]["d11_target_admitted"].as_u64(),
+        Some(2)
+    );
+    assert_eq!(
+        report["position_strip"]["original_target_admitted"].as_u64(),
+        Some(1)
+    );
+    assert!(report["d11_aggregate"].is_object());
+    assert!(report["original_aggregate"].is_object());
+}
+
+#[test]
+fn padded_top8_pads_and_refuses_nine() -> TestResult {
+    assert_eq!(padded_top8(&[])?, [u32::MAX; 8]);
+    assert_eq!(
+        padded_top8(&[1, 2])?,
+        [
+            1,
+            2,
+            u32::MAX,
+            u32::MAX,
+            u32::MAX,
+            u32::MAX,
+            u32::MAX,
+            u32::MAX
+        ]
+    );
+    assert!(padded_top8(&[0; 9]).is_err());
+    Ok(())
+}
+
+#[test]
+fn parity_rows_include_schema_and_admitted_count() -> TestResult {
+    let rows = vec![D11ParityRow {
+        ordinal: 7,
+        target_position: 41,
+        target_token: 2,
+        status: 0,
+        prediction: 2,
+        top8: padded_top8(&[2])?,
+        admitted_cells: vec![10, 11, 12],
+    }];
+    let lines = parity_row_lines(&rows)?;
+    assert_eq!(lines.iter().filter(|byte| **byte == b'\n').count(), 1);
+    let line: serde_json::Value = serde_json::from_slice(&lines[..lines.len() - 1])?;
+    assert_eq!(line["schema"], PARITY_ROW_SCHEMA);
+    assert_eq!(line["ordinal"].as_u64(), Some(7));
+    assert_eq!(line["admitted_count"].as_u64(), Some(3));
+    assert_eq!(
+        line["admitted_cells"].as_array().map(|cells| cells.len()),
+        Some(3)
+    );
+    assert_eq!(parity_row_lines(&rows)?, lines);
+    Ok(())
+}
+
+#[test]
+fn compare_parity_rows_uses_positional_join_and_reports_admitted_count() -> TestResult {
+    let original = vec![OriginalRow {
+        target_position: 10,
+        target_token: 30,
+        top8: [30, 31, 32, 33, 34, 35, 36, 37],
+        top1_correct: 1,
+        admitted_cells: 2,
+        target_cell_rank: 1,
+    }];
+    let d11 = vec![D11ParityRow {
+        ordinal: 0,
+        target_position: 10,
+        target_token: 30,
+        status: 0,
+        prediction: 30,
+        top8: [30, 31, 32, 33, 34, 35, 36, 37],
+        admitted_cells: vec![100, 101],
+    }];
+    let comparison = compare_parity_rows(&d11, &original)?;
+    assert_eq!(comparison["mismatched_rows"].as_u64(), Some(0));
+    let checks = comparison["checks"].as_array().expect("checks");
+    assert!(!checks.iter().any(|value| value == "ordinal"));
+    assert!(checks.iter().any(|value| value == "admitted_count"));
+    assert!(comparison["row_order_join"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("no ordinal"));
+
+    let mut bad = d11.clone();
+    bad[0].target_position = 11;
+    bad[0].prediction = 31;
+    bad[0].top8 = [31, 32, 33, 34, 35, 36, 37, 38];
+    bad[0].admitted_cells = vec![100];
+    let comparison = compare_parity_rows(&bad, &original)?;
+    assert_eq!(comparison["mismatched_rows"].as_u64(), Some(1));
+    let first = &comparison["first_mismatches"][0];
+    let reasons = first["reasons"].as_array().expect("reasons");
+    for reason in [
+        "target_position",
+        "prediction",
+        "top8",
+        "admitted_count",
+        "top1_correct",
+    ] {
+        assert!(
+            reasons.iter().any(|value| value == reason),
+            "missing {reason}"
+        );
+    }
+    assert!(first.get("ordinal").is_none());
+    assert!(first["d11"].get("ordinal").is_none());
+    Ok(())
+}
+
+#[test]
+fn d11_aggregate_skips_nonzero_status_and_counts_admission() -> TestResult {
+    let target_cells = vec![10, 11, 12];
+    let rows = vec![
+        D11ParityRow {
+            ordinal: 0,
+            target_position: 1,
+            target_token: 0,
+            status: 0,
+            prediction: 0,
+            top8: padded_top8(&[0])?,
+            admitted_cells: vec![10, 11],
+        },
+        D11ParityRow {
+            ordinal: 1,
+            target_position: 2,
+            target_token: 1,
+            status: 1,
+            prediction: 0,
+            top8: [u32::MAX; 8],
+            admitted_cells: vec![11],
+        },
+        D11ParityRow {
+            ordinal: 2,
+            target_position: 3,
+            target_token: 2,
+            status: 0,
+            prediction: 0,
+            top8: padded_top8(&[0, 2])?,
+            admitted_cells: vec![11],
+        },
+    ];
+    assert_eq!(d11_aggregate_rows(&rows, &target_cells)?, (1, 2, 1));
+    Ok(())
+}
+
+#[test]
+fn original_aggregate_recomputes_admission_from_target_cell_rank() -> TestResult {
+    let rows = vec![
+        OriginalRow {
+            target_position: 1,
+            target_token: 7,
+            top8: [7, 2, 3, 4, 5, 6, 7, 8],
+            top1_correct: 1,
+            admitted_cells: 8,
+            target_cell_rank: 8,
+        },
+        OriginalRow {
+            target_position: 2,
+            target_token: 9,
+            top8: [1, 2, 3, 4, 5, 6, 7, 8],
+            top1_correct: 0,
+            admitted_cells: 8,
+            target_cell_rank: 9,
+        },
+    ];
+    let report = json!({
+        "aggregate": {
+            "scored_rows": 2,
+            "top1_correct": 1,
+            "top8_correct": 1,
+            "target_admitted_rows": 1,
+        }
+    });
+    assert_eq!(original_aggregate(&report, &rows)?, (1, 1, 1));
+
+    let mut bad_aggregate = report.clone();
+    bad_aggregate["aggregate"]["target_admitted_rows"] = json!(0);
+    assert!(original_aggregate(&bad_aggregate, &rows).is_err());
+
+    let mut bad_rank = rows.clone();
+    bad_rank[1].target_cell_rank = 8;
+    assert!(original_aggregate(&report, &bad_rank).is_err());
+    Ok(())
+}
+
+#[test]
+fn manifest_rejects_prompt_at_limit() -> TestResult {
+    let tokenizer = tokenizer()?;
+    let mut manifest = build_manifest(&tokenizer)?;
+    let row = &mut manifest.rows[0];
+    row.prompt_tokens = vec![0; PROMPT_TOKEN_LIMIT];
+    row.random_prompt_tokens = vec![0; PROMPT_TOKEN_LIMIT];
+    row.value_tokens.clear();
+    row.random_tokens.clear();
+    assert!(validate_manifest(&manifest).is_err());
+    Ok(())
+}
+
+#[test]
+fn manifest_rejects_prompt_plus_value_over_limit() -> TestResult {
+    let tokenizer = tokenizer()?;
+    let mut manifest = build_manifest(&tokenizer)?;
+    let row = &mut manifest.rows[0];
+    row.prompt_tokens = vec![0; PROMPT_TOKEN_LIMIT - 2];
+    row.random_prompt_tokens = vec![0; PROMPT_TOKEN_LIMIT - 2];
+    row.value_tokens = vec![0; 3];
+    row.random_tokens = vec![0; 3];
+    assert!(validate_manifest(&manifest).is_err());
+    Ok(())
+}
+
+#[test]
+fn config_pins_cover_train_and_dev() -> TestResult {
+    let config: serde_json::Value = serde_json::from_slice(&std::fs::read(pinned_config_path())?)?;
+    validate_config_pins(&config)?;
+    for pointer in [
+        "/dev/tokens/sha256",
+        "/dev/mask/sha256",
+        "/train/tokens/sha256",
+        "/train/mask/sha256",
+        "/tokenizer/sha256",
+    ] {
+        let mut bad = config.clone();
+        *bad.pointer_mut(pointer).expect("config pointer") = json!("00");
+        assert!(validate_config_pins(&bad).is_err(), "{pointer}");
+    }
+    let mut bad = config.clone();
+    *bad.pointer_mut("/dev/expected_eligible_targets")
+        .expect("eligible pointer") = json!(0);
+    assert!(validate_config_pins(&bad).is_err());
+    Ok(())
+}
+
+#[test]
+fn clears_primary_widens_before_sum() {
+    assert!(clears_primary(u64::MAX, 1));
+    assert!(!clears_primary(u64::MAX, u64::MAX));
+}
+
+#[test]
+fn manifest_cli_pins_require_registered_hashes() {
+    assert!(validate_manifest_cli_pins(TOKENIZER_SHA256, MANIFEST_SHA256).is_ok());
+    assert!(validate_manifest_cli_pins("00", MANIFEST_SHA256).is_err());
+    assert!(validate_manifest_cli_pins(TOKENIZER_SHA256, "00").is_err());
+}
+
+#[test]
+fn head_is_checked_against_git_head() -> TestResult {
+    let checkout = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let head = git_head(checkout)?;
+    validate_head_against_git(&head, checkout)?;
+    assert!(validate_head_against_git(&"0".repeat(40), checkout).is_err());
+    Ok(())
+}
+
+#[test]
+fn device_init_failure_does_not_create_out_dir() -> TestResult {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_nanos();
+    let out_dir = std::env::temp_dir().join(format!(
+        "uor-r4-stage0-no-out-{}-{nanos}",
+        std::process::id()
+    ));
+    assert!(!out_dir.exists());
+    let result = create_out_dir_after(&out_dir, || Err::<(), _>("device init failed".to_string()));
+    assert!(result.is_err());
+    assert!(!out_dir.exists());
+    Ok(())
 }

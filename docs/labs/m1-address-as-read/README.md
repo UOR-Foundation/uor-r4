@@ -11,7 +11,8 @@ Delivers Steps 1–4 of [`m1-address-as-read`](../../roadmap/items/m1-address-as
 ## Stage 0 result (kimi-40, 2026-10-26)
 
 - **Parity:** the T16_fz Seed 1 D11 (`cd88b6b7…`) matched the sealed original GPU receipt on all **14,287/14,287** rows: prediction, top-8 and admitted count, with status 0 everywhere and byte-identical repeat records. Aggregate top-1 `455`, top-8 `1,484`, admitted `5,009`; position-strip delta `0`.
-- **Copy gate:** exact-hint free-running recovered **0/40** exact values. Both primary comparisons had `b = c = 0`, so neither met `d > 24 && d^2 > 4(b+c)`. The random-hint planted-wrong control held on all 9 normalized rows.
+- **Copy gate:** exact-hint, no-hint and random-hint free-running each recovered **0/40 exact matches**. Normalized emissions were **12 / 0 / 9** respectively; those emissions are not exact matches. Both primary comparisons had `b = c = 0`, so neither met `d > 24 && d^2 > 4(b+c)`. The random-hint planted-wrong control held on all 9 normalized rows.
+- **Config provenance:** original config `43a316bc67bb45fe5b50bd2ceee57f6b919164c02fe45ee9e677f8819fea5d15`; normalized config `e6f85ca9ddaf2d1e471d6e15d385f4bce6411ef7514c412f32ac44776d838569`. A `sed` path replacement changed only the nested input path to the pod's staged location.
 - **Decision:** no hidden-fact panel, no BPB and no training followed. This is an artifact/copy-instrument limitation, not a mechanism negative or a model-oracle result. The issue remains open with `References #2833`.
 - **Evidence:** `docs/loop/tasks/m1-address-as-read/kimi-40/REPORT.md`; HF `results/kimi/m1-address-stage0-2026-10-26/results/stage0-result.tar` (`2be4f5ef8880e6c7a53505bb6974ee06f063b49108f98b6bc35ce3f73e4c4a07`).
 
