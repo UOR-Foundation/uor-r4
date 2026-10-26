@@ -1523,6 +1523,125 @@ pub fn run_d11_artifact_gap(
     }))
 }
 
+/// Probe (b) of D11-mode training (claude-130): 32 D11-mode steps of [`D11_EXPORT_ARM`] on seed 1,
+/// the DEV panel at steps 0 and 32, and the projected wall time of the full run (two seeds of
+/// [`STEPS`] steps, each evaluated at [`EVAL_STEPS`]).
+pub fn run_d11_train_probe(data_root: &Path, device: &Device) -> Result<serde_json::Value> {
+    let (batches, dev_windows, dev_docs) = load_inputs(data_root, 32)?;
+    let out = run_fbs_arm_with(
+        D11_EXPORT_ARM,
+        true,
+        1,
+        32,
+        &batches,
+        &dev_windows,
+        &[0, 32],
+        device,
+    )?;
+    let first = &out.run.eval[0];
+    let last = out.run.final_point()?;
+    let per_step = out.run.train_wall_seconds / 32.0;
+    let eval_seconds = last.dev_float.eval_wall_seconds + last.dev_int.eval_wall_seconds;
+    let projected_seed = per_step * STEPS as f64 + eval_seconds * 2.0 * EVAL_STEPS.len() as f64;
+    Ok(serde_json::json!({
+        "probe": "d11-train-probe",
+        "kernels": kernel_identity(),
+        "dev_documents": dev_docs,
+        "dev_windows": dev_windows.len(),
+        "train_loss_step_32": last.train_loss,
+        "dev_loss_float_step_0": first.dev_loss_float,
+        "dev_loss_float_step_32": last.dev_loss_float,
+        "learns": last.dev_loss_float < first.dev_loss_float,
+        "seconds_per_step": per_step,
+        "projected_seconds_per_seed": projected_seed,
+        "projected_full_seconds": projected_seed * SEEDS.len() as f64,
+        "run": out.run,
+    }))
+}
+
+/// D11-mode training and export (claude-130): [`D11_EXPORT_ARM`] trained on both seeds with every
+/// step in the D11 mode (`run_fbs_arm_with`, `d11_train`), each saved model reloaded and checked
+/// (`I-Save-Load`), and its snapshot and plain float predictions written under
+/// `save_dir/seed-<seed>/` (a directory that must not exist yet) for `fbs-export` and the
+/// artifact-gap scorer. The receipt carries Stage 4b's noise band, read from `stage4b`, and each
+/// seed's float loss, in the shape `run_d11_artifact_gap` reads as its `stage4b` receipt.
+pub fn run_d11_train_export(
+    data_root: &Path,
+    save_dir: &Path,
+    stage4b: &Path,
+    device: &Device,
+) -> Result<serde_json::Value> {
+    use crate::fbs_export::fbs_trunk_snapshot;
+    use uor_r4_integer::fbs_snapshot::write_new_file;
+
+    let receipt: serde_json::Value = serde_json::from_slice(&fs::read(stage4b)?)?;
+    let noise = receipt["noise_band_dev_loss"]
+        .as_f64()
+        .ok_or_else(|| invalid("the Stage 4b receipt has no noise band"))?;
+    fs::create_dir(save_dir)?;
+    let (batches, dev_windows, dev_docs) = load_inputs(data_root, TRAIN_BATCHES)?;
+    let mut seeds = Vec::new();
+    let mut instruments_ok = true;
+    for seed in SEEDS {
+        let out = run_fbs_arm_with(
+            D11_EXPORT_ARM,
+            true,
+            seed,
+            STEPS,
+            &batches,
+            &dev_windows,
+            &EVAL_STEPS,
+            device,
+        )?;
+        let last = out.run.final_point()?;
+        let dir = save_dir.join(format!("seed-{seed}"));
+        fs::create_dir(&dir)?;
+        out.model.save(&dir.join("model"))?;
+        let loaded = StackModel::load(&dir.join("model"), device)?;
+        let (_, reloaded_preds) = hs::evaluate_dev_panel(
+            &loaded,
+            &dev_windows,
+            HamiltonArm::HamiltonActive,
+            seed,
+            STEPS,
+            false,
+            false,
+        )?;
+        let reloaded_loss = panel_loss(&loaded, &dev_windows, seed, STEPS, false)?;
+        let i_save_load = reloaded_preds == out.preds_float && reloaded_loss == last.dev_loss_float;
+        hs::clear_active_arm();
+        instruments_ok &= i_save_load;
+        let snapshot = fbs_trunk_snapshot(&loaded)?;
+        write_new_file(&dir.join("snapshot.json"), &serde_json::to_vec(&snapshot)?)?;
+        write_new_file(
+            &dir.join("preds-float.json"),
+            &serde_json::to_vec(&out.preds_float)?,
+        )?;
+        seeds.push(serde_json::json!({
+            "seed": seed,
+            "arm": D11_EXPORT_ARM.name(),
+            "d11_trained": true,
+            "float": last.dev_float,
+            "export_mode": last.dev_int,
+            "loss_float": last.dev_loss_float,
+            "loss_export_mode": last.dev_loss_int,
+            "preds_float_sha256": preds_sha256(&out.preds_float),
+            "i_save_load": i_save_load,
+            "reloaded_loss_float": reloaded_loss,
+        }));
+    }
+    Ok(serde_json::json!({
+        "sheet": "docs/harness/prep/d11-exporter-float-trunk-d11-train-2026-10-26.md",
+        "kernels": kernel_identity(),
+        "dev_documents": dev_docs,
+        "dev_windows": dev_windows.len(),
+        "noise_band_dev_loss": noise,
+        "noise_band_source": "claude-126's Stage 4b receipt (d11-gap.json)",
+        "seeds": seeds,
+        "instruments_pass": instruments_ok,
+    }))
+}
+
 /// Writes `value` as pretty JSON to `path`, never over an existing file (the file is created
 /// exclusively, so a concurrent writer cannot be overwritten either).
 pub fn write_receipt(path: &Path, value: &serde_json::Value) -> Result<()> {
