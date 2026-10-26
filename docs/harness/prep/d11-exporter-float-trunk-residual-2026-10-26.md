@@ -37,8 +37,8 @@ D and H share one head (`write_q12_rows`), so where they differ, it is because t
 
 **Why these numbers** (calibrated on claude-127's host checks, before this run):
 - **d_H = 0.** H reads A's own queries through the same head, so any difference is the head's.
-- **3%.** It is three times the integer path's measured residual against its f64 reference: 4 to 5 of 512 tokens at 6 layers, about 1%.
-- **10%.** claude-127's norm-bias defect changed 91 of 512 tokens (18%). That defect still left 509 of 512 queries within 2 LSB, so query drift alone would not have caught it. The drift is therefore a reading here, not the rule.
+- **3%.** It is three times the integer path's measured residual against its f64 reference on the Stage 4b snapshots: 4 to 5 of 512 tokens at 6 layers, about 1%.
+- **10%.** On claude-127's tiny-gain control, its norm-bias defect changed 91 of 512 tokens (18%). That defect still left 509 of 512 queries within 2 LSB, so query drift alone would not have caught it. The drift is therefore a reading here, not the rule.
 
 | Outcome | It means | It decides |
 |---|---|---|
