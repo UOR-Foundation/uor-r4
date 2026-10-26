@@ -115,12 +115,12 @@ On one leased RTX 5090 pod (`CHARTER.md` §3.5) and the client laptop (`CHARTER.
 - **Configuration negative (D22):**
   - For an offline float-trained candidate (D37), an export gap exceeding `\Delta_{\text{noise,top1}} = 398` rows, `\Delta_{\text{noise,top8}} = 748` rows, or `\Delta_{\text{noise,adm}} = 930` rows on the `14,287` DEV rows disqualifies that candidate configuration without closing the D11 serving mechanism.
 - **Hard resource caps:**
-  - Pod spend `<= $0.25` (single RTX 5090 pod for `<= 15 min` at `~$0.89/h`), fleet cap `<= 4` pods and `<= $8/h` across all labs.
+  - Pod spend `<= $0.50` (single RTX 5090 pod for `<= 15 min` at `~$1.41/h` on a 1-hour lease), fleet cap `<= 4` pods and `<= $8/h` across all labs.
 
 ## Cost
 
 - **Laptop static audits and product timing (Steps 1 & 3):** `$0.00` (local Apple Silicon M-series laptop, `< 5 min` wall time).
-- **GPU DEV evaluation and parity receipt (Step 2):** `<= 15 min` on one leased RTX 5090 pod (`~$0.89/h`), estimated cost `<= $0.25`.
+- **GPU DEV evaluation and parity receipt (Step 2):** `<= 15 min` on one leased RTX 5090 pod (`~$1.41/h`), estimated cost `<= $0.50`.
 
 ## Minimum test power
 
@@ -131,6 +131,6 @@ On one leased RTX 5090 pod (`CHARTER.md` §3.5) and the client laptop (`CHARTER.
 
 TEST FITNESS: FIT - M1 #2029 lut-serving
 sheet: docs/harness/prep/m1-export-gap-and-toks-DRAFT-2026-10-23.md
-reviewer: antigravity-fresh-reviewer (8a915285-22c1-4fcf-b336-9f292d2a5b7d; https://github.com/UOR-Foundation/uor-r4/issues/2839#issuecomment-6398709883)
-date: 2026-10-25
+reviewer: antigravity-fresh-reviewer (8a915285-22c1-4fcf-b336-9f292d2a5b7d; re-verified with Stage T pins by ac559562-b8ce-4d82-b1d8-d8ae66015505 at b287ccc3144c1a894c75066c02d0302138bc8b59)
+date: 2026-10-26
 A FIT verdict clears compute for the configuration in that sheet only (D22).
