@@ -74,7 +74,7 @@ claude-123's 67/256 is therefore the Hamilton gate snap, entirely. At a single p
 | The causality check without the hook repair | fails, gap 2.33 |
 | Host set-asides | each fails its test: the `Normalize` arm; the Q12 rounding; the recurrence ignoring its snaps; the readout's order check; and, one at a time, the transition site, the recurrence output gate site and the feed-forward gate site |
 | Artifact | `fbs-export` exits 0; sha256 `0621616ab3d6a9786be8e1e82569d6bf6539a854fbe8775cd5c47d6622c9447a`, the same as claude-123's |
-| Suites | float-train 31; integer serving-build library 319; no-feature library 55; `m5_full_path_cost_controls` 3/3; `memory_shape` 3/3 |
+| Suites | float-train 31; integer serving-build library 320; no-feature library 55; `m5_full_path_cost_controls` 3/3; `memory_shape` 3/3 |
 | Zero-multiply audit | `FULL PASS`: rlib 56 symbol ranges and 40 call-graph functions; `uor-r4-stack` 44 and 90 |
 | GPU cost | one RTX 5090, about 8 minutes for both jobs, at $1.09/h; `vast-57772919` deleted |
 
