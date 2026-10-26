@@ -23,7 +23,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
-use candle_core::{DType, Device, Tensor};
+use candle_core::{backprop::GradStore, DType, Device, Tensor};
 use serde::{Deserialize, Serialize};
 
 use crate::geometric_stack::{StackAdamW, StackModel};
@@ -316,7 +316,7 @@ pub fn run_fbs_arm(
 ) -> Result<FbsArmOutput> {
     run_fbs_arm_with(
         arm,
-        false,
+        TrainForward::Plain,
         seed,
         steps,
         batches,
@@ -326,13 +326,82 @@ pub fn run_fbs_arm(
     )
 }
 
-/// [`run_fbs_arm`], with every training step in the D11 mode when `d11_train` (claude-130): the
-/// loss is the D11 forward's, its scored query at Q12, through `hamilton_sheet::with_d11_training`'s
-/// bridges, with the step's backward inside the same mode. The evaluations are unchanged.
+/// How an arm's training steps compute their loss.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrainForward {
+    /// The plain forward, as Stage 3 and Stage 4b train.
+    Plain,
+    /// Every step in the D11 mode, its scored query at Q12, through
+    /// `hamilton_sheet::with_d11_training`'s bridges (claude-130).
+    D11,
+    /// The plain loss plus the D11-mode loss, weighted 1:1, so both forwards are trained
+    /// (claude-131, the decision review after claude-130).
+    Dual,
+}
+
+impl TrainForward {
+    pub fn name(self) -> &'static str {
+        match self {
+            TrainForward::Plain => "plain",
+            TrainForward::D11 => "d11",
+            TrainForward::Dual => "dual",
+        }
+    }
+
+    pub fn parse(name: &str) -> Result<Self> {
+        match name {
+            "plain" => Ok(TrainForward::Plain),
+            "d11" => Ok(TrainForward::D11),
+            "dual" => Ok(TrainForward::Dual),
+            other => Err(invalid(format!("unknown training forward {other}"))),
+        }
+    }
+}
+
+/// `a + b`, tensor by tensor: a gradient in only one of them is kept as it is.
+fn sum_grads(mut a: GradStore, b: &GradStore) -> Result<GradStore> {
+    let ids: Vec<_> = b.get_ids().copied().collect();
+    for id in ids {
+        let Some(gb) = b.get_id(id) else { continue };
+        let sum = match a.get_id(id) {
+            Some(ga) => (ga + gb)?,
+            None => gb.clone(),
+        };
+        a.insert_id(id, sum);
+    }
+    Ok(a)
+}
+
+/// One training step's loss and gradients as `forward` says, from `loss_and_grads(q12)`: the
+/// batch's loss and its backward, the scored query at Q12 when `q12`.
+fn train_step(
+    forward: TrainForward,
+    seed: u64,
+    step: usize,
+    loss_and_grads: impl Fn(bool) -> Result<(f64, GradStore)>,
+) -> Result<(f64, GradStore)> {
+    match forward {
+        TrainForward::Plain => loss_and_grads(false),
+        TrainForward::D11 => hs::with_d11_training(seed, step, || loss_and_grads(true)),
+        TrainForward::Dual => {
+            // claude-131: each forward's backward runs under its own gate mode (the icosian
+            // gate's backward reads the hook), and the gradients are summed 1:1.
+            let (plain, plain_grads) = loss_and_grads(false)?;
+            let (d11, d11_grads) = hs::with_d11_training(seed, step, || loss_and_grads(true))?;
+            Ok((plain + d11, sum_grads(plain_grads, &d11_grads)?))
+        }
+    }
+}
+
+/// [`run_fbs_arm`], with its training steps' loss as `forward` says. In the D11 mode the loss is
+/// the D11 forward's, its scored query at Q12, through `hamilton_sheet::with_d11_training`'s
+/// bridges, with the step's backward inside the same mode (claude-130). In the dual mode it is
+/// that plus the plain loss, each with its own backward (claude-131). The evaluations are
+/// unchanged.
 #[allow(clippy::too_many_arguments)]
 pub fn run_fbs_arm_with(
     arm: FbsArm,
-    d11_train: bool,
+    forward: TrainForward,
     seed: u64,
     steps: usize,
     batches: &[TrainBatch],
@@ -392,8 +461,8 @@ pub fn run_fbs_arm_with(
     for step in 0..steps {
         let started = Instant::now();
         let (ids, scored, targets) = &batches[step % batches.len()];
-        let loss_and_grads = || -> Result<(f64, candle_core::backprop::GradStore)> {
-            let loss = batch_loss(&model, ids, scored, targets, SHEET_TRAIN_BATCH, d11_train)?;
+        let loss_and_grads = |q12: bool| -> Result<(f64, GradStore)> {
+            let loss = batch_loss(&model, ids, scored, targets, SHEET_TRAIN_BATCH, q12)?;
             let value = f64::from(loss.to_scalar::<f32>()?);
             if !value.is_finite() {
                 return Err(invalid(format!(
@@ -403,11 +472,7 @@ pub fn run_fbs_arm_with(
             }
             Ok((value, loss.backward()?))
         };
-        let (value, grads) = if d11_train {
-            hs::with_d11_training(seed, step, loss_and_grads)?
-        } else {
-            loss_and_grads()?
-        };
+        let (value, grads) = train_step(forward, seed, step, loss_and_grads)?;
         if step == 0 {
             step0_credit = query_credit_l2(&model, &grads)?;
         }
@@ -1487,6 +1552,8 @@ pub fn run_d11_artifact_gap(
     let net = paired.a_hit_b_miss_c as isize - paired.a_miss_b_hit_b as isize;
     Ok(serde_json::json!({
         "sheet": "docs/harness/prep/d11-exporter-float-trunk-artifact-gap-2026-10-26.md",
+        // The sheet the trained models answer to, as their training receipt names it (claude-131).
+        "training_sheet": receipt["sheet"],
         "seed": seed,
         "arm": D11_EXPORT_ARM.name(),
         "dev_documents": dev_docs,
@@ -1523,14 +1590,407 @@ pub fn run_d11_artifact_gap(
     }))
 }
 
-/// Probe (b) of D11-mode training (claude-130): 32 D11-mode steps of [`D11_EXPORT_ARM`] on seed 1,
-/// the DEV panel at steps 0 and 32, and the projected wall time of the full run (two seeds of
-/// [`STEPS`] steps, each evaluated at [`EVAL_STEPS`]).
-pub fn run_d11_train_probe(data_root: &Path, device: &Device) -> Result<serde_json::Value> {
+/// Per row, the largest distance in Q12 codes between two sets of scored queries (`code / 4096`,
+/// rows × `width`).
+fn q12_drift(a: &[f32], b: &[f32], width: usize) -> Result<Vec<u32>> {
+    if width == 0 || a.len() != b.len() || !a.len().is_multiple_of(width) {
+        return Err(invalid("the two query sets are not the same whole rows"));
+    }
+    let code = |v: f32| (v * hs::Q12_SCALE).round() as i32;
+    Ok(a.chunks(width)
+        .zip(b.chunks(width))
+        .map(|(ra, rb)| {
+            ra.iter()
+                .zip(rb)
+                .map(|(&x, &y)| code(x).abs_diff(code(y)))
+                .max()
+                .unwrap_or(0)
+        })
+        .collect())
+}
+
+/// How far two sets of queries drift, over all rows and over the rows `selected`.
+fn drift_summary(drift: &[u32], selected: impl Fn(usize) -> bool) -> serde_json::Value {
+    let summary = |rows: Vec<u32>| {
+        serde_json::json!({
+            "rows": rows.len(),
+            "max_codes": rows.iter().copied().max().unwrap_or(0),
+            "rows_exact": rows.iter().filter(|&&d| d == 0).count(),
+            "rows_within_1": rows.iter().filter(|&&d| d <= 1).count(),
+            "rows_within_2": rows.iter().filter(|&&d| d <= 2).count(),
+        })
+    };
+    serde_json::json!({
+        "all": summary(drift.to_vec()),
+        "selected": summary(
+            drift.iter().enumerate().filter(|(i, _)| selected(*i)).map(|(_, &d)| d).collect()
+        ),
+    })
+}
+
+/// The smallest size, in Q12 codes on both sides, at which an opposite sign counts as a sign flip
+/// in [`drift_readings`] (1/64 of a unit): below it, rounding alone can cross zero.
+const SIGN_FLIP_MIN_CODES: i64 = 64;
+
+/// The drift readings the claude-132 code review asked for (claude-133), in Q12 codes, of the
+/// queries `a` against the reference `r` (rows × `width`):
+/// - the median, mean, 99th-percentile and largest absolute difference over every entry (by
+///   nearest rank: the upper middle value when the count is even);
+/// - the three columns that hold the most per-row maxima (a row whose largest difference is in
+///   two columns counts toward the lower one), and the rows with no difference at all, which
+///   count toward no column;
+/// - the largest per-channel mean signed difference in size, and its channel (the higher one on a
+///   tie);
+/// - the entries saturated at the i16 ends on each side;
+/// - the entries of opposite sign where both sides are at least [`SIGN_FLIP_MIN_CODES`] in size,
+///   so that a sign flip shows;
+/// - the per-row scale Σ|a| / Σ|r| (5th percentile, median, 95th percentile), so that a scale or
+///   exponent error shows. It is an L1 ratio: no products.
+fn drift_readings(a: &[f32], r: &[f32], width: usize) -> Result<serde_json::Value> {
+    if width == 0 || a.len() != r.len() || a.is_empty() || !a.len().is_multiple_of(width) {
+        return Err(invalid("the two query sets are not the same whole rows"));
+    }
+    let code = |v: f32| (v * hs::Q12_SCALE).round() as i64;
+    let saturated = |c: i64| c >= i64::from(i16::MAX) || c <= i64::from(i16::MIN);
+    let rows = a.len() / width;
+    let mut abs = Vec::with_capacity(a.len());
+    let mut channel_sum = vec![0i64; width];
+    let mut max_column = vec![0usize; width];
+    let (mut saturated_a, mut saturated_r) = (0usize, 0usize);
+    let mut sign_flips = 0usize;
+    let mut rows_no_gap = 0usize;
+    let mut scales = Vec::with_capacity(rows);
+    for (ra, rr) in a.chunks(width).zip(r.chunks(width)) {
+        let (mut best, mut best_col) = (0u64, 0usize);
+        let (mut l1_a, mut l1_r) = (0u64, 0u64);
+        for (j, (&x, &y)) in ra.iter().zip(rr).enumerate() {
+            let (cx, cy) = (code(x), code(y));
+            let d = cx - cy;
+            abs.push(d.unsigned_abs());
+            channel_sum[j] += d;
+            if d.unsigned_abs() > best {
+                (best, best_col) = (d.unsigned_abs(), j);
+            }
+            saturated_a += usize::from(saturated(cx));
+            saturated_r += usize::from(saturated(cy));
+            sign_flips += usize::from(
+                cx.signum() * cy.signum() < 0 && cx.abs().min(cy.abs()) >= SIGN_FLIP_MIN_CODES,
+            );
+            l1_a += cx.unsigned_abs();
+            l1_r += cy.unsigned_abs();
+        }
+        // A row with no difference has no column of its largest one (claude-133 code review).
+        if best > 0 {
+            max_column[best_col] += 1;
+        } else {
+            rows_no_gap += 1;
+        }
+        if l1_r > 0 {
+            scales.push(l1_a as f64 / l1_r as f64);
+        }
+    }
+    abs.sort_unstable();
+    scales.sort_by(f64::total_cmp);
+    let at = |len: usize, q: f64| ((len.saturating_sub(1)) as f64 * q).round() as usize;
+    let scale = |q: f64| scales.get(at(scales.len(), q)).copied();
+    let mut columns: Vec<(usize, usize)> = max_column.iter().copied().enumerate().collect();
+    columns.sort_by(|x, y| y.1.cmp(&x.1).then(x.0.cmp(&y.0)));
+    let (worst_channel, worst_mean) = channel_sum
+        .iter()
+        .enumerate()
+        .map(|(j, &s)| (j, s as f64 / rows as f64))
+        .max_by(|x, y| x.1.abs().total_cmp(&y.1.abs()))
+        .unwrap_or((0, 0.0));
+    Ok(serde_json::json!({
+        "entries": abs.len(),
+        "median_abs_codes": abs[at(abs.len(), 0.5)],
+        "mean_abs_codes": abs.iter().sum::<u64>() as f64 / abs.len() as f64,
+        "p99_abs_codes": abs[at(abs.len(), 0.99)],
+        "max_abs_codes": abs[abs.len() - 1],
+        "top_max_columns": columns.iter().take(3).map(|&(j, n)| [j, n]).collect::<Vec<_>>(),
+        "rows_no_gap": rows_no_gap,
+        "max_abs_channel_mean_codes": worst_mean,
+        "max_abs_channel_mean_channel": worst_channel,
+        "saturated_entries": {"queries": saturated_a, "reference": saturated_r},
+        "sign_flip_entries": sign_flips,
+        "row_l1_scale": {"p05": scale(0.05), "median": scale(0.5), "p95": scale(0.95)},
+    }))
+}
+
+fn rows_differ(a: &[u32], b: &[u32]) -> usize {
+    a.iter().zip(b).filter(|(x, y)| x != y).count()
+}
+
+/// The share of rows on which D and A may differ for a faithful artifact, in percent: three times
+/// claude-127's measured integer residual at 6 layers (4 to 5 of 512 tokens, about 1%).
+const RESIDUAL_FAITHFUL_PERCENT: usize = 3;
+/// The share beyond which D and A differ as a different forward does, in percent: claude-127's
+/// norm-bias defect changed 91 of 512 tokens (18%).
+const RESIDUAL_DEPARTURE_PERCENT: usize = 10;
+
+/// The residual check's classification of one model, as its sheet fixes it (claude-132):
+/// - `faithful`: every instrument green, H and A identical on every row, D and A differing on at
+///   most [`RESIDUAL_FAITHFUL_PERCENT`] of the rows, and D against A within the paired test;
+/// - `departure`: H and A differ on any row, D and A differ on more than
+///   [`RESIDUAL_DEPARTURE_PERCENT`] of the rows, or D against A is outside the paired test;
+/// - `indeterminate`: otherwise, an instrument investigation;
+/// - `not counted`: an instrument check failed.
+fn classify_residual(
+    instruments_ok: bool,
+    head_differ: usize,
+    d_a_differ: usize,
+    rows: usize,
+    paired_within: bool,
+) -> &'static str {
+    if !instruments_ok || rows == 0 {
+        "not counted"
+    } else if head_differ > 0
+        || d_a_differ * 100 > RESIDUAL_DEPARTURE_PERCENT * rows
+        || !paired_within
+    {
+        "departure"
+    } else if d_a_differ * 100 <= RESIDUAL_FAITHFUL_PERCENT * rows {
+        "faithful"
+    } else {
+        "indeterminate"
+    }
+}
+
+/// The residual check of claude-131's pivot note (claude-132), for one saved model and its
+/// artifact's stored, verified evaluator run, on the GPU.
+/// - **F**, the plain-float panel, which must reproduce `stored_preds` (`I-Save-Load`);
+/// - **E**, the export-mode panel, on the tables as trained;
+/// - **D**, the D11 panel, with the tables rounded as exported;
+/// - **H**, the writer head at Q12 on the artifact's own queries;
+/// - **A**, the artifact's tokens at the scored offsets.
+///
+/// [`classify_residual`] decides whether the artifact computes its D11 forward: H against A for
+/// the head, D against A row by row and under the paired test for the whole. The Q12 drift
+/// between D's and A's queries says where a departure sits.
+#[allow(clippy::too_many_arguments)]
+pub fn run_d11_residual(
+    data_root: &Path,
+    model_dir: &Path,
+    evaluator: &Path,
+    windows_sha256: &str,
+    artifact_sha256: &str,
+    model_sha256_pin: &str,
+    stored_preds: &Path,
+    stored_d11_preds: Option<&Path>,
+    seed: u64,
+    label: &str,
+    device: &Device,
+) -> Result<serde_json::Value> {
+    use crate::fbs_export::round_tables_as_exported;
+
+    let stored_d11: Option<Vec<u32>> = match stored_d11_preds {
+        Some(path) => Some(serde_json::from_slice(&fs::read(path)?)?),
+        None => None,
+    };
+    let (dev_windows, dev_docs) = load_dev(data_root)?;
+    let targets: Vec<u32> = dev_windows
+        .iter()
+        .flat_map(|w| w.scored_targets.iter().copied())
+        .collect();
+    let stored: Vec<u32> = serde_json::from_slice(&fs::read(stored_preds)?)?;
+    let loaded = StackModel::load(model_dir, device)?;
+    let model_sha256 = sha256_bytes(&fs::read(model_dir.join("model.safetensors"))?);
+    let panel = |export_mode: bool| {
+        hs::evaluate_dev_panel(
+            &loaded,
+            &dev_windows,
+            HamiltonArm::HamiltonActive,
+            seed,
+            STEPS,
+            export_mode,
+            false,
+        )
+    };
+    let (f_metrics, f_preds) = panel(false)?;
+    let (e_metrics, e_preds) = panel(true)?;
+    hs::clear_active_arm();
+    let i_save_load = f_preds == stored;
+
+    let run: EvaluatorRun = serde_json::from_slice(&fs::read(evaluator)?)?;
+    let width = loaded.config.width;
+    let shape_ok = run.sequences == dev_windows.len()
+        && run.len == SHEET_CONTEXT
+        && run.width == width
+        && run.tokens.len() == run.sequences * run.len
+        && run.queries.len() == run.tokens.len() * width;
+    if !shape_ok {
+        return Err(invalid(
+            "the evaluator's run does not cover the DEV windows",
+        ));
+    }
+    let i_inputs = run.sequences_sha256 == windows_sha256
+        && run.artifact_sha256 == artifact_sha256
+        && model_sha256 == model_sha256_pin;
+    let i_verify = run.verify.as_array().is_some_and(|checks| {
+        checks.len() == 2
+            && checks.iter().all(|c| c["equal"] == serde_json::json!(true))
+            && checks
+                .iter()
+                .all(|c| c["positions"].as_u64() == Some((run.sequences * run.len) as u64))
+    });
+    let (a_preds, a_queries) =
+        artifact_rows(&dev_windows, &run.tokens, &run.queries, run.len, width)?;
+    let i_dev = a_preds.len() == hs::EXPECTED_DEV_ELIGIBLE_TARGETS;
+
+    round_tables_as_exported(&loaded)?;
+    let (d_metrics, d_preds) = hs::evaluate_dev_panel_d11(&loaded, &dev_windows)?;
+    let (_, d_again) = hs::evaluate_dev_panel_d11(&loaded, &dev_windows)?;
+    let d_queries = hs::with_d11_mode(|| hs::dev_panel_q12_queries(&loaded, &dev_windows))?;
+    // I-Head: the head path reproduces the D11 panel's own predictions from its own queries, so H
+    // is the panel's head.
+    let i_head = hs::write_q12_rows(&loaded, &d_queries)? == d_preds;
+    let h_preds = hs::write_q12_rows(&loaded, &a_queries)?;
+    // The Q16 control (claude-133): the D11 forward with its residual stream on the integer
+    // session's 2^-16 grid.
+    let (d16_metrics, d16_preds) =
+        hs::with_q16_residual(|| hs::evaluate_dev_panel_d11(&loaded, &dev_windows))?;
+    let d16_queries = hs::with_q16_residual(|| {
+        hs::with_d11_mode(|| hs::dev_panel_q12_queries(&loaded, &dev_windows))
+    })?;
+    let i_head_q16 = hs::write_q12_rows(&loaded, &d16_queries)? == d16_preds;
+    if [&d_preds, &d16_preds, &h_preds, &f_preds, &e_preds]
+        .iter()
+        .any(|p| p.len() != a_preds.len())
+    {
+        return Err(invalid("the panels do not cover the artifact's rows"));
+    }
+    let drift = q12_drift(&d_queries, &a_queries, width)?;
+    let drift_q16 = q12_drift(&d16_queries, &a_queries, width)?;
+
+    let pair = |name_a: &str, a: &[u32], name_b: &str, b: &[u32]| {
+        let p = hs::compute_paired_discordance(name_a, a, name_b, b, &targets, seed);
+        serde_json::json!({
+            "b": p.a_hit_b_miss_c,
+            "c": p.a_miss_b_hit_b,
+            "net": p.net_advantage_rows,
+            "f_i": f_i(p.a_hit_b_miss_c, p.a_miss_b_hit_b),
+            "within": p.net_advantage_rows.unsigned_abs() <= f_i(p.a_hit_b_miss_c, p.a_miss_b_hit_b),
+            "rows_differ": rows_differ(a, b),
+        })
+    };
+    let top1 = |preds: &[u32]| preds.iter().zip(&targets).filter(|(p, t)| p == t).count();
+    let d_vs_a = pair("d11", &d_preds, "artifact", &a_preds);
+    // I-D-Stored: where the model's D11 panel was stored when it was trained (Stage 4b), the
+    // recomputed panel is that one, row for row.
+    let i_d_stored = stored_d11.as_ref().map(|s| *s == d_preds);
+    let instruments_ok = i_save_load
+        && i_inputs
+        && i_verify
+        && i_dev
+        && d_preds == d_again
+        && i_head
+        && i_d_stored.unwrap_or(true);
+    // The Q16 control's own head check gates only its own classification (claude-133 code review).
+    let instruments_q16_ok = instruments_ok && i_head_q16;
+    let classification = classify_residual(
+        instruments_ok,
+        rows_differ(&h_preds, &a_preds),
+        rows_differ(&d_preds, &a_preds),
+        a_preds.len(),
+        d_vs_a["within"] == serde_json::json!(true),
+    );
+    // The same rule with the Q16 control as the reference (claude-133).
+    let d16_vs_a = pair("d11_q16", &d16_preds, "artifact", &a_preds);
+    let classification_q16 = classify_residual(
+        instruments_q16_ok,
+        rows_differ(&h_preds, &a_preds),
+        rows_differ(&d16_preds, &a_preds),
+        a_preds.len(),
+        d16_vs_a["within"] == serde_json::json!(true),
+    );
+    Ok(serde_json::json!({
+        "sheet": "docs/harness/prep/d11-exporter-float-trunk-investigation-2026-10-26.md",
+        "residual_sheet": "docs/harness/prep/d11-exporter-float-trunk-residual-2026-10-26.md",
+        "label": label,
+        "seed": seed,
+        "arm": D11_EXPORT_ARM.name(),
+        "dev_documents": dev_docs,
+        "dev_windows": dev_windows.len(),
+        "model_safetensors_sha256": model_sha256,
+        "artifact_sha256": run.artifact_sha256,
+        "windows_sha256": run.sequences_sha256,
+        "evaluator_build": run.build,
+        "top1": {
+            "float": f_metrics.top1_hits,
+            "export_mode": e_metrics.top1_hits,
+            "d11": d_metrics.top1_hits,
+            "d11_q16": d16_metrics.top1_hits,
+            "head_on_artifact_queries": top1(&h_preds),
+            "artifact": top1(&a_preds),
+        },
+        "d11_q12_oracle_mismatches": d_metrics.q12_i32_oracle_mismatches,
+        "pairs": {
+            "d11_vs_artifact": d_vs_a,
+            "head_vs_artifact": pair("head", &h_preds, "artifact", &a_preds),
+            "d11_vs_head": pair("d11", &d_preds, "head", &h_preds),
+            "export_mode_vs_artifact": pair("export_mode", &e_preds, "artifact", &a_preds),
+            "export_mode_vs_d11": pair("export_mode", &e_preds, "d11", &d_preds),
+            "float_vs_d11": pair("float", &f_preds, "d11", &d_preds),
+            "float_vs_artifact": pair("float", &f_preds, "artifact", &a_preds),
+            "d11_q16_vs_artifact": d16_vs_a,
+            "d11_vs_d11_q16": pair("d11", &d_preds, "d11_q16", &d16_preds),
+        },
+        "q12_drift_d11_vs_artifact": drift_summary(&drift, |i| d_preds[i] != a_preds[i]),
+        "q12_drift_d11_q16_vs_artifact": drift_summary(&drift_q16, |i| d16_preds[i] != a_preds[i]),
+        "drift_readings": {
+            "artifact_vs_d11": drift_readings(&a_queries, &d_queries, width)?,
+            "artifact_vs_d11_q16": drift_readings(&a_queries, &d16_queries, width)?,
+            "d11_q16_vs_d11": drift_readings(&d16_queries, &d_queries, width)?,
+        },
+        "d11_q16_q12_oracle_mismatches": d16_metrics.q12_i32_oracle_mismatches,
+        "i_head_q16": i_head_q16,
+        "classification_q16": classification_q16,
+        "i_save_load": i_save_load,
+        "i_inputs": i_inputs,
+        "i_verify_all": i_verify,
+        "i_dev_denominator": i_dev,
+        "i_d_determinism": d_preds == d_again,
+        "i_head": i_head,
+        "i_d_stored": i_d_stored,
+        "instruments_pass": instruments_ok,
+        "instruments_pass_q16": instruments_q16_ok,
+        "rule": {
+            "faithful_percent": RESIDUAL_FAITHFUL_PERCENT,
+            "departure_percent": RESIDUAL_DEPARTURE_PERCENT,
+        },
+        "classification": classification,
+    }))
+}
+
+/// The prep sheet a D11-trained run answers to.
+fn d11_train_sheet(forward: TrainForward) -> Result<&'static str> {
+    match forward {
+        TrainForward::D11 => {
+            Ok("docs/harness/prep/d11-exporter-float-trunk-d11-train-2026-10-26.md")
+        }
+        TrainForward::Dual => {
+            Ok("docs/harness/prep/d11-exporter-float-trunk-dual-train-2026-10-26.md")
+        }
+        TrainForward::Plain => Err(invalid(
+            "plain training is Stage 4b's (d11-export-gap), not a D11-trained run",
+        )),
+    }
+}
+
+/// Probe (b) of D11-trained training (claude-130, claude-131): 32 steps of [`D11_EXPORT_ARM`] on
+/// seed 1 trained as `forward` says, the DEV panel at steps 0 and 32, and the projected wall time of
+/// the full run (two seeds of [`STEPS`] steps, each evaluated at [`EVAL_STEPS`]). In the dual mode
+/// the training loss is the sum of the plain and D11-mode losses.
+pub fn run_d11_train_probe(
+    data_root: &Path,
+    forward: TrainForward,
+    device: &Device,
+) -> Result<serde_json::Value> {
+    let sheet = d11_train_sheet(forward)?;
     let (batches, dev_windows, dev_docs) = load_inputs(data_root, 32)?;
     let out = run_fbs_arm_with(
         D11_EXPORT_ARM,
-        true,
+        forward,
         1,
         32,
         &batches,
@@ -1551,6 +2011,8 @@ pub fn run_d11_train_probe(data_root: &Path, device: &Device) -> Result<serde_js
     };
     Ok(serde_json::json!({
         "probe": "d11-train-probe",
+        "sheet": sheet,
+        "train_forward": forward.name(),
         "kernels": kernel_identity(),
         "dev_documents": dev_docs,
         "dev_windows": dev_windows.len(),
@@ -1569,21 +2031,24 @@ pub fn run_d11_train_probe(data_root: &Path, device: &Device) -> Result<serde_js
     }))
 }
 
-/// D11-mode training and export (claude-130): [`D11_EXPORT_ARM`] trained on both seeds with every
-/// step in the D11 mode (`run_fbs_arm_with`, `d11_train`), each saved model reloaded and checked
+/// D11-trained training and export (claude-130, claude-131): [`D11_EXPORT_ARM`] trained on both
+/// seeds as `forward` says (`run_fbs_arm_with`), each saved model reloaded and checked
 /// (`I-Save-Load`), and its snapshot and plain float predictions written under
 /// `save_dir/seed-<seed>/` (a directory that must not exist yet) for `fbs-export` and the
 /// artifact-gap scorer. The receipt carries Stage 4b's noise band, read from `stage4b`, and each
-/// seed's float loss, in the shape `run_d11_artifact_gap` reads as its `stage4b` receipt.
+/// seed's float loss and training trajectory, in the shape `run_d11_artifact_gap` reads as its
+/// `stage4b` receipt.
 pub fn run_d11_train_export(
     data_root: &Path,
     save_dir: &Path,
     stage4b: &Path,
+    forward: TrainForward,
     device: &Device,
 ) -> Result<serde_json::Value> {
     use crate::fbs_export::fbs_trunk_snapshot;
     use uor_r4_integer::fbs_snapshot::write_new_file;
 
+    let sheet = d11_train_sheet(forward)?;
     let receipt: serde_json::Value = serde_json::from_slice(&fs::read(stage4b)?)?;
     let noise = receipt["noise_band_dev_loss"]
         .as_f64()
@@ -1595,7 +2060,7 @@ pub fn run_d11_train_export(
     for seed in SEEDS {
         let out = run_fbs_arm_with(
             D11_EXPORT_ARM,
-            true,
+            forward,
             seed,
             STEPS,
             &batches,
@@ -1630,7 +2095,7 @@ pub fn run_d11_train_export(
         seeds.push(serde_json::json!({
             "seed": seed,
             "arm": D11_EXPORT_ARM.name(),
-            "d11_trained": true,
+            "train_forward": forward.name(),
             "float": last.dev_float,
             "export_mode": last.dev_int,
             "loss_float": last.dev_loss_float,
@@ -1638,10 +2103,12 @@ pub fn run_d11_train_export(
             "preds_float_sha256": preds_sha256(&out.preds_float),
             "i_save_load": i_save_load,
             "reloaded_loss_float": reloaded_loss,
+            "run": out.run,
         }));
     }
     Ok(serde_json::json!({
-        "sheet": "docs/harness/prep/d11-exporter-float-trunk-d11-train-2026-10-26.md",
+        "sheet": sheet,
+        "train_forward": forward.name(),
         "kernels": kernel_identity(),
         "dev_documents": dev_docs,
         "dev_windows": dev_windows.len(),
@@ -2079,6 +2546,256 @@ mod tests {
             Some(hs::SHEET_KEPT_CELLS)
         );
         fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn the_training_forwards_name_their_sheets() -> Result<()> {
+        for forward in [TrainForward::Plain, TrainForward::D11, TrainForward::Dual] {
+            assert_eq!(TrainForward::parse(forward.name())?, forward);
+        }
+        assert!(TrainForward::parse("both").is_err());
+        assert!(d11_train_sheet(TrainForward::D11)?.ends_with("d11-train-2026-10-26.md"));
+        assert!(d11_train_sheet(TrainForward::Dual)?.ends_with("dual-train-2026-10-26.md"));
+        // Plain training of the export arm is Stage 4b's run, not a D11-trained one.
+        assert!(d11_train_sheet(TrainForward::Plain).is_err());
+        Ok(())
+    }
+
+    /// On one GPU (claude-131): the dual step's gradient is the plain backward's plus the D11
+    /// backward's, tensor by tensor, and a tensor in only one of them keeps its gradient.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn gpu_dual_gradients_add_tensor_by_tensor() -> Result<()> {
+        use candle_core::Var;
+        let device = Device::new_cuda(0)?;
+        let shared = Var::from_vec(vec![1.0f32, -2.0, 0.5], 3, &device)?;
+        let plain_only = Var::from_vec(vec![3.0f32, 4.0], 2, &device)?;
+        let d11_only = Var::from_vec(vec![-1.0f32], 1, &device)?;
+        let a = ((shared.as_tensor().affine(2.0, 0.0)?.sum_all()?
+            + plain_only.as_tensor().sum_all()?)?)
+        .backward()?;
+        let b = ((shared.as_tensor().affine(3.0, 0.0)?.sum_all()?
+            + d11_only.as_tensor().affine(5.0, 0.0)?.sum_all()?)?)
+        .backward()?;
+        let sum = sum_grads(a, &b)?;
+        let grad = |v: &Var| -> Result<Vec<f32>> {
+            Ok(sum
+                .get(v.as_tensor())
+                .ok_or_else(|| invalid("a gradient is missing"))?
+                .to_vec1::<f32>()?)
+        };
+        assert_eq!(grad(&shared)?, vec![5.0, 5.0, 5.0]);
+        assert_eq!(grad(&plain_only)?, vec![1.0, 1.0]);
+        assert_eq!(grad(&d11_only)?, vec![5.0]);
+        Ok(())
+    }
+
+    /// On one GPU (claude-131): a dual step of the export arm is a plain step plus a D11 step,
+    /// each taken on its own, loss and gradient. So the plain half's backward runs outside the D11
+    /// mode and the D11 half's inside it; with either half in the other's mode the sum differs.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn gpu_a_dual_step_is_a_plain_step_plus_a_d11_step() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let _guard = ArmGuard::set(D11_EXPORT_ARM);
+        let model = build_fbs_model(D11_EXPORT_ARM, 1, &device)?;
+        let batches = synthetic_batches(1, 3);
+        let (ids, scored, targets) = &batches[0];
+        let loss_and_grads = |q12: bool| -> Result<(f64, GradStore)> {
+            let loss = batch_loss(&model, ids, scored, targets, SHEET_TRAIN_BATCH, q12)?;
+            Ok((f64::from(loss.to_scalar::<f32>()?), loss.backward()?))
+        };
+        let (plain, plain_grads) = train_step(TrainForward::Plain, 1, 0, loss_and_grads)?;
+        let (d11, d11_grads) = train_step(TrainForward::D11, 1, 0, loss_and_grads)?;
+        let (dual, dual_grads) = train_step(TrainForward::Dual, 1, 0, loss_and_grads)?;
+        assert!(plain.is_finite() && d11.is_finite());
+        assert_eq!(dual, plain + d11);
+        let max_abs =
+            |t: &Tensor| -> Result<f32> { Ok(t.abs()?.flatten_all()?.max(0)?.to_scalar::<f32>()?) };
+        let mut differs = false;
+        for (name, var) in model.variables() {
+            let get = |store: &GradStore| store.get(var.as_tensor()).cloned();
+            let want = match (get(&plain_grads), get(&d11_grads)) {
+                (Some(p), Some(d)) => {
+                    differs |= max_abs(&(&p - &d)?)? > 0.0;
+                    Some((&p + &d)?)
+                }
+                (Some(g), None) | (None, Some(g)) => Some(g),
+                (None, None) => None,
+            };
+            match (get(&dual_grads), want) {
+                (Some(s), Some(w)) => {
+                    let gap = max_abs(&(&s - &w)?)?;
+                    let tol = 1e-5 * (1.0 + max_abs(&w)?);
+                    assert!(gap <= tol, "{name}: dual differs from plain + d11 by {gap}");
+                }
+                (None, None) => {}
+                _ => panic!("{name}: dual and plain + d11 disagree on having a gradient"),
+            }
+        }
+        // The two halves are different gradients, so the test can tell them apart.
+        assert!(differs);
+        hs::clear_active_arm();
+        Ok(())
+    }
+
+    #[test]
+    fn the_q12_drift_is_each_rows_largest_code_distance() -> Result<()> {
+        let q = |codes: &[i32]| -> Vec<f32> { codes.iter().map(|&c| c as f32 / 4096.0).collect() };
+        // Three rows of width 2: equal, one code apart, three codes apart (in the second column).
+        let a = q(&[10, -20, 0, 5, 7, 100]);
+        let b = q(&[10, -20, 1, 5, 7, 97]);
+        let drift = q12_drift(&a, &b, 2)?;
+        assert_eq!(drift, vec![0, 1, 3]);
+        let summary = drift_summary(&drift, |i| i != 0);
+        assert_eq!(summary["all"]["rows"], serde_json::json!(3));
+        assert_eq!(summary["all"]["max_codes"], serde_json::json!(3));
+        assert_eq!(summary["all"]["rows_exact"], serde_json::json!(1));
+        assert_eq!(summary["all"]["rows_within_1"], serde_json::json!(2));
+        assert_eq!(summary["all"]["rows_within_2"], serde_json::json!(2));
+        assert_eq!(summary["selected"]["rows"], serde_json::json!(2));
+        assert_eq!(summary["selected"]["rows_exact"], serde_json::json!(0));
+        assert!(q12_drift(&a, &b[..4], 2).is_err());
+        assert!(q12_drift(&a, &b, 4).is_err());
+        assert_eq!(rows_differ(&[1, 2, 3], &[1, 0, 3]), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn the_residual_rule_is_the_sheets() {
+        let rows = 14_287;
+        // 3% of 14,287 is 428.61, so 428 rows differ at most for a faithful artifact; 10% is
+        // 1,428.7, so 1,429 or more is a departure.
+        assert_eq!(classify_residual(true, 0, 428, rows, true), "faithful");
+        assert_eq!(classify_residual(true, 0, 0, rows, true), "faithful");
+        assert_eq!(classify_residual(true, 0, 429, rows, true), "indeterminate");
+        assert_eq!(
+            classify_residual(true, 0, 1_428, rows, true),
+            "indeterminate"
+        );
+        assert_eq!(classify_residual(true, 0, 1_429, rows, true), "departure");
+        // Any head difference, or a paired gap outside F_I, is a departure however few rows differ.
+        assert_eq!(classify_residual(true, 1, 0, rows, true), "departure");
+        assert_eq!(classify_residual(true, 0, 10, rows, false), "departure");
+        // A failed instrument check is never classified.
+        assert_eq!(classify_residual(false, 0, 0, rows, true), "not counted");
+        assert_eq!(classify_residual(true, 0, 0, 0, true), "not counted");
+    }
+
+    /// On one GPU (claude-132): the residual check's head, given the D11 panel's own scored
+    /// queries, writes exactly the D11 panel's predictions, so H is the panel's head (`I-Head`).
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn gpu_the_head_on_the_d11_queries_is_the_d11_panel() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let model = build_fbs_model(D11_EXPORT_ARM, 1, &device)?;
+        crate::fbs_export::round_tables_as_exported(&model)?;
+        let batches = synthetic_batches(1, 11);
+        let (ids, _, _) = &batches[0];
+        let windows: Vec<CausalWindow> = ids
+            .chunks(SHEET_CONTEXT)
+            .take(4)
+            .enumerate()
+            .map(|(doc_id, input)| {
+                let scored_offsets: Vec<usize> = (0..SHEET_CONTEXT - 1).step_by(5).collect();
+                CausalWindow {
+                    doc_id,
+                    input_ids: input.to_vec(),
+                    scored_targets: scored_offsets.iter().map(|&o| input[o + 1]).collect(),
+                    scored_corpus_positions: scored_offsets.clone(),
+                    scored_offsets,
+                }
+            })
+            .collect();
+        let (_, d_preds) = hs::evaluate_dev_panel_d11(&model, &windows)?;
+        let d_queries = hs::with_d11_mode(|| hs::dev_panel_q12_queries(&model, &windows))?;
+        assert_eq!(d_queries.len(), d_preds.len() * model.config.width);
+        assert!(!d_preds.is_empty());
+        assert_eq!(hs::write_q12_rows(&model, &d_queries)?, d_preds);
+        // Every query is a whole Q12 code.
+        assert!(d_queries
+            .iter()
+            .all(|&v| (v * 4096.0 - (v * 4096.0).round()).abs() == 0.0));
+        hs::clear_active_arm();
+        Ok(())
+    }
+
+    #[test]
+    fn the_drift_readings_count_codes_columns_saturation_and_scale() -> Result<()> {
+        let q = |codes: &[i32]| -> Vec<f32> { codes.iter().map(|&c| c as f32 / 4096.0).collect() };
+        // Two rows of width 3. Row 0: A doubles the reference (scale 2), largest gap in column 2.
+        // Row 1: A saturates at the i16 top in column 0, its largest gap.
+        let r = q(&[10, 20, 30, 100, 0, -50]);
+        let a = q(&[20, 40, 60, 32767, 0, -50]);
+        let v = drift_readings(&a, &r, 3)?;
+        // No entry is a sign flip: the opposite-sign pairs are all below 64 codes or absent.
+        assert_eq!(v["sign_flip_entries"], serde_json::json!(0));
+        // A third row with no difference counts toward no column (claude-133 code review).
+        let with_equal_row = drift_readings(
+            &q(&[20, 40, 60, 32767, 0, -50, 7, 7, 7]),
+            &q(&[10, 20, 30, 100, 0, -50, 7, 7, 7]),
+            3,
+        )?;
+        assert_eq!(with_equal_row["rows_no_gap"], serde_json::json!(1));
+        assert_eq!(
+            with_equal_row["top_max_columns"],
+            serde_json::json!([[0, 1], [2, 1], [1, 0]])
+        );
+        let flipped = drift_readings(&q(&[-100, 63, 5, 64]), &q(&[100, -64, -5, -64]), 4)?;
+        // The first and last entries are flips: both sides at least 64 codes, of opposite sign.
+        assert_eq!(flipped["sign_flip_entries"], serde_json::json!(2));
+        assert_eq!(v["entries"], serde_json::json!(6));
+        // The absolute gaps are 10, 20, 30, 32667, 0, 0; sorted 0, 0, 10, 20, 30, 32667.
+        assert_eq!(v["median_abs_codes"], serde_json::json!(20));
+        assert_eq!(v["max_abs_codes"], serde_json::json!(32667));
+        assert_eq!(
+            v["top_max_columns"],
+            serde_json::json!([[0, 1], [2, 1], [1, 0]])
+        );
+        // Column 0's mean signed gap is (10 + 32667) / 2.
+        assert_eq!(v["max_abs_channel_mean_channel"], serde_json::json!(0));
+        assert_eq!(v["max_abs_channel_mean_codes"], serde_json::json!(16338.5));
+        assert_eq!(
+            v["saturated_entries"],
+            serde_json::json!({"queries": 1, "reference": 0})
+        );
+        // Row 0's L1 scale is 120 / 60 = 2; row 1's is 32817 / 150.
+        assert_eq!(v["row_l1_scale"]["p05"], serde_json::json!(2.0));
+        assert!(drift_readings(&a, &r[..3], 3).is_err());
+        assert!(drift_readings(&[], &[], 3).is_err());
+        Ok(())
+    }
+
+    /// On one GPU (claude-133): the Q16 control puts the residual on the 2^-16 grid only when it is
+    /// on, and off it returns the tensor bit for bit; under it the trunk's output changes.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn gpu_the_q16_control_holds_the_residual_on_its_grid_and_is_off_by_default() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let x = Tensor::from_vec(vec![0.1f32, -2.5001, 3.000_01, 1.0 / 3.0], 4, &device)?;
+        let bits = |t: &Tensor| -> Result<Vec<u32>> {
+            Ok(t.to_vec1::<f32>()?.iter().map(|v| v.to_bits()).collect())
+        };
+        assert_eq!(bits(&hs::q16_residual(x.clone())?)?, bits(&x)?);
+        let on = hs::with_q16_residual(|| hs::q16_residual(x.clone()))?;
+        assert!(on
+            .to_vec1::<f32>()?
+            .iter()
+            .all(|&v| (v * 65536.0).fract() == 0.0));
+        assert_ne!(bits(&on)?, bits(&x)?);
+
+        let model = build_fbs_model(D11_EXPORT_ARM, 1, &device)?;
+        let batches = synthetic_batches(1, 13);
+        let (ids, _, _) = &batches[0];
+        let plain = model.hidden(ids, SHEET_TRAIN_BATCH, SHEET_CONTEXT)?;
+        let again = model.hidden(ids, SHEET_TRAIN_BATCH, SHEET_CONTEXT)?;
+        let control =
+            hs::with_q16_residual(|| model.hidden(ids, SHEET_TRAIN_BATCH, SHEET_CONTEXT))?;
+        let flat = |t: &Tensor| -> Result<Vec<f32>> { Ok(t.flatten_all()?.to_vec1::<f32>()?) };
+        assert_eq!(flat(&plain)?, flat(&again)?);
+        assert_ne!(flat(&plain)?, flat(&control)?);
+        assert!(flat(&control)?.iter().all(|v| v.is_finite()));
         Ok(())
     }
 }

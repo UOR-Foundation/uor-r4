@@ -567,6 +567,43 @@ impl GateHookState {
 
 thread_local! {
     static GATE_HOOK: RefCell<GateHookState> = RefCell::new(GateHookState::default());
+    /// The Q16 control (claude-133): round the trunk's residual stream to 2^-16. It is apart from
+    /// the gate hook, which `with_d11_mode` saves and restores.
+    static ROUND_RESIDUAL_Q16: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The integer session's residual exponent (`RESIDUAL_EXP`, −16): its residual stream is on the
+/// 2^-16 grid.
+pub const Q16_SCALE: f32 = 65536.0;
+
+/// Runs `f` with the trunk's residual stream rounded to 2^-16 after the embedding and after each
+/// sublayer add, where the integer session holds it (claude-133, the Q16 control). It restores
+/// the flag as it was. An evaluation control: it has no backward bridge.
+pub fn with_q16_residual<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
+    /// Restores the flag on every exit, a panic included (claude-133 code review).
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            ROUND_RESIDUAL_Q16.with(|c| c.set(self.0));
+        }
+    }
+    let _restore = Restore(ROUND_RESIDUAL_Q16.with(|c| c.replace(true)));
+    f()
+}
+
+/// Whether the trunk rounds its residual stream to 2^-16 on this thread.
+pub(crate) fn is_rounding_residual_q16() -> bool {
+    ROUND_RESIDUAL_Q16.with(|c| c.get())
+}
+
+/// `x` on the 2^-16 grid under [`with_q16_residual`]; `x` itself otherwise.
+pub(crate) fn q16_residual(x: Tensor) -> Result<Tensor> {
+    if !is_rounding_residual_q16() {
+        return Ok(x);
+    }
+    Ok(x.affine(f64::from(Q16_SCALE), 0.0)?
+        .round()?
+        .affine(1.0 / f64::from(Q16_SCALE), 0.0)?)
 }
 
 #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
@@ -1416,6 +1453,70 @@ pub fn evaluate_dev_panel_d11(
     with_d11_mode(|| score_dev_panel(model, dev_windows, true))
 }
 
+/// The DEV panel's scored queries at Q12 (`code / 4096`, rows × width, in panel order) under the
+/// gate hook as it is set: the `eval_hidden` that [`score_dev_panel`] writes with `q12_writer`
+/// (claude-132). Under [`with_d11_mode`] they are the D11 panel's queries. GPU.
+pub fn dev_panel_q12_queries(model: &StackModel, dev_windows: &[CausalWindow]) -> Result<Vec<f32>> {
+    let mut rows = Vec::new();
+    for chunk in dev_windows.chunks(SHEET_EVAL_BATCH) {
+        let batch_len = chunk.len();
+        let mut flat_ids = Vec::with_capacity(batch_len * SHEET_CONTEXT);
+        let mut scored_indices = Vec::new();
+        for (b_idx, win) in chunk.iter().enumerate() {
+            flat_ids.extend_from_slice(&win.input_ids);
+            for (&off, _) in win.scored_offsets.iter().zip(&win.scored_targets) {
+                scored_indices.push((b_idx * SHEET_CONTEXT + off) as u32);
+            }
+        }
+        if scored_indices.is_empty() {
+            continue;
+        }
+        let hidden = model.hidden(&flat_ids, batch_len, SHEET_CONTEXT)?;
+        let count = scored_indices.len();
+        let idx_tensor = Tensor::from_vec(scored_indices, count, model.device())?;
+        let query = hidden
+            .index_select(&idx_tensor, 0)?
+            .affine(f64::from(Q12_SCALE), 0.0)?
+            .round()?
+            .clamp(Q12_I16_MIN, Q12_I16_MAX)?
+            .affine(1.0 / f64::from(Q12_SCALE), 0.0)?;
+        rows.extend(query.flatten_all()?.to_vec1::<f32>()?);
+    }
+    Ok(rows)
+}
+
+/// The writer head's top-1 on given scored queries (`code / 4096`, rows × width) with the table at
+/// Q12, as [`score_dev_panel`] writes them with `q12_writer` (claude-132). GPU.
+pub fn write_q12_rows(model: &StackModel, queries: &[f32]) -> Result<Vec<u32>> {
+    let width = model.config.width;
+    if width == 0 || !queries.len().is_multiple_of(width) {
+        return Err(invalid(
+            "the queries are not whole rows of the model's width",
+        ));
+    }
+    let spec = WriterSpec {
+        vocabulary: model.config.vocab_size,
+        width,
+        kept_cells: SHEET_KEPT_CELLS,
+    };
+    let table = model
+        .variables()
+        .get("embedding.weight")
+        .ok_or_else(|| invalid("missing embedding.weight"))?
+        .as_tensor()
+        .affine(f64::from(Q12_SCALE), 0.0)?
+        .round()?
+        .clamp(Q12_I16_MIN, Q12_I16_MAX)?
+        .affine(1.0 / f64::from(Q12_SCALE), 0.0)?;
+    let writer = NativeVectorWriter::new(&table, spec)?;
+    let mut preds = Vec::with_capacity(queries.len() / width);
+    for chunk in queries.chunks(SHEET_EVAL_BATCH * SHEET_CONTEXT * width) {
+        let query = Tensor::from_vec(chunk.to_vec(), (chunk.len() / width, width), model.device())?;
+        preds.extend(writer.write(&query)?.to_vec1::<u32>()?);
+    }
+    Ok(preds)
+}
+
 /// Score `model` on `dev_windows` under the gate hook as it is set, the
 /// query and the writer table at Q12 when `q12_writer`.
 fn score_dev_panel(
@@ -1865,18 +1966,23 @@ pub(crate) fn d11_transition_unit(raw: &Tensor) -> Result<Tensor> {
 }
 
 /// The scored query at Q12, as the D11 head reads it: `round(4096 q) / 4096`, clamped to i16.
-/// Under [`with_d11_training`] its gradient passes straight through (claude-130); otherwise the
+/// Under [`with_d11_training`] its gradient passes straight through (claude-130) where the clamp
+/// does not bind, and none where it saturates, as the forward does (claude-131); otherwise the
 /// rounding passes none.
 pub(crate) fn q12_query(query: &Tensor) -> Result<Tensor> {
-    let rounded = query
-        .affine(f64::from(Q12_SCALE), 0.0)?
+    let scaled = query.affine(f64::from(Q12_SCALE), 0.0)?;
+    let rounded = scaled
         .round()?
         .clamp(Q12_I16_MIN, Q12_I16_MAX)?
         .affine(1.0 / f64::from(Q12_SCALE), 0.0)?;
     if !is_bridging_d11() {
         return Ok(rounded);
     }
-    Ok((query + (rounded - query)?.detach())?)
+    let dtype = query.dtype();
+    let inside = (scaled.ge(f64::from(Q12_I16_MIN))?.to_dtype(dtype)?
+        * scaled.le(f64::from(Q12_I16_MAX))?.to_dtype(dtype)?)?;
+    let free = (query * inside)?;
+    Ok((&free + (rounded - &free)?.detach())?)
 }
 
 /// The nearest of the 120 icosians to each 4-vector of `raw` (last axis 4):
@@ -2593,10 +2699,31 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn the_q16_control_sets_and_restores_its_flag() -> Result<()> {
+        // claude-133: the residual rounds only inside `with_q16_residual`, survives the D11 mode's
+        // own save and restore, and an error inside still restores the flag.
+        assert!(!is_rounding_residual_q16());
+        assert!(with_q16_residual(|| Ok(is_rounding_residual_q16()))?);
+        assert!(with_q16_residual(|| with_d11_mode(|| Ok(
+            is_rounding_residual_q16()
+        )))?);
+        assert!(!with_d11_mode(|| Ok(is_rounding_residual_q16()))?);
+        assert!(with_q16_residual(|| -> Result<()> { Err(invalid("inside")) }).is_err());
+        assert!(!is_rounding_residual_q16());
+        // A panic inside restores it too.
+        let panicked =
+            std::panic::catch_unwind(|| with_q16_residual(|| -> Result<()> { panic!("inside") }));
+        assert!(panicked.is_err());
+        assert!(!is_rounding_residual_q16());
+        Ok(())
+    }
+
     /// On one GPU (claude-130): in the evaluation's D11 mode the transition is the snap itself
     /// and passes no gradient; in D11-mode training its forward is the snap (to float rounding)
     /// and its gradient the unit normalization's, the S^3 tangent bridge. The Q12 query likewise:
-    /// rounded in evaluation, rounded forward with a straight-through gradient in training.
+    /// rounded in evaluation, rounded forward with a straight-through gradient in training, none
+    /// where the i16 clamp saturates.
     #[cfg(feature = "cuda")]
     #[test]
     fn gpu_d11_bridges_pass_the_tangent_and_straight_gradients() -> Result<()> {
@@ -2656,6 +2783,21 @@ mod tests {
             .get(query.as_tensor())
             .expect("the Q12 bridge passes a gradient");
         assert!(max_diff(got, &weights)? <= 1e-6);
+
+        // Where the i16 clamp saturates (|q| past 8), the bridge passes no gradient (claude-131).
+        let wide = Var::from_vec(vec![9.0f32, -9.0, 0.25, -0.5], (1, 4), &device)?;
+        let clamped = with_d11_training(1, 0, || q12_query(wide.as_tensor()))?;
+        assert!(
+            max_diff(
+                &clamped,
+                &Tensor::from_vec(vec![32767.0f32 / 4096.0, -8.0, 0.25, -0.5], (1, 4), &device)?
+            )? <= 1e-6
+        );
+        let grads = clamped.sum_all()?.backward()?;
+        let got = grads
+            .get(wide.as_tensor())
+            .expect("the Q12 bridge passes a gradient");
+        assert_eq!(got.to_vec2::<f32>()?, vec![vec![0.0, 0.0, 1.0, 1.0]]);
         Ok(())
     }
 
