@@ -12,7 +12,7 @@ Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-har
 - The loop page says "Widening scope takes a separate item PR" ([docs/loop/README.md](../../../README.md), "Checked at the base"). The charter lets it go ahead when the lab's own decision review passes (§5.1, D68).
 
 **The two edits.**
-1. **Scope:** `scope:` gains nine globs: the files that read the real registry and name or count its labs, plus the archive. Nothing else is added.
+1. **Scope:** `scope:` gains ten globs: the files that read the real registry and name or count its labs, the loop page that lists the labs, and the archive. Nothing else is added.
    - `docs/harness/labs.json`: the registry. It stays owner-only, so the guard still refuses every lab write and Casey makes that one edit.
    - `crates/uor-r4-harness/src/labs.rs`: its tests read the real registry and list five labs.
    - `crates/uor-r4-harness/src/receipt.rs`: the no-identity hints name the labs.
@@ -21,6 +21,7 @@ Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-har
    - `crates/uor-r4-harness/src/loopguard.rs`: `check_all_receipts` walks `CLIENTS` (five, codex included) and returns "codex is not in docs/harness/labs.json" once the registry drops it.
    - `crates/uor-r4-harness/tests/loop_guard.rs`: `make_uor_fixture` copies the real registry. So the codex-client tests (`evaluate_guard(root, "codex", "codex", …)`, `run_onboard` over `CLIENTS`) and the real-repo receipt test (`assert_eq!(verified, CLIENTS)`) change with it.
    - `docs/harness/README.md`: "`--check-receipts` verifies all five committed receipts".
+   - `docs/loop/README.md`: its title and "## The five labs" table (added after the second review's advisory A1). Its probe and history rows stay as history.
    - `archive/history/branch-archive/codex-d63-finite-probe-scope-20261026.*`: codex's closed #3169, kept as a patch and its record.
 
    The other harness tests that name codex build their own registry fixtures, and none of them copy the real one: `loop_bench`, `loop_board`, `loop_claim`, `loop_close`, `loop_next`, `loop_prcheck`, `loop_queue`, `loop_repair_orders`, `loop_review` and `loop_shared_files`. The two heartbeat tests copy it but run as `claude` and `deepseek`. The client-adapters item (`infra-loop-pr09-client-adapters`) owns `loopguard.rs` and `onboard.rs` but is `done`, so it cannot be claimed.
@@ -55,7 +56,7 @@ Cancel if codex is already out of the registry, or another open PR changes the i
 - the open PRs' files.
 
 Result (2026-10-26T21:40Z, re-checked 22:05Z, `origin/main` at `1b9b87b39`):
-- `docs/harness/labs.json` still lists codex, and the item's `scope:` holds none of the five globs.
+- `docs/harness/labs.json` still lists codex, and the item's `scope:` holds none of the globs listed below.
 - The open PRs are #3304 (antigravity), #3306 (kimi) and this unit's #3307. None of them touches the item file, the registry, the two registry tests or the branch archive.
 
 **Not cancelled (instrument: none needed).**

@@ -23,7 +23,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). References #2904.
 
 Size: docs 1 file (+2/−2), plus this task folder.
 
-- **`docs/roadmap/items/infra-loop-harness.md`, the `scope:` line.** It gains nine globs, and nothing else: the files that read the real registry and name or count its labs, plus the archive. The ORDER gives the reason for each.
+- **`docs/roadmap/items/infra-loop-harness.md`, the `scope:` line.** It gains ten globs, and nothing else: the files that read the real registry and name or count its labs, the loop page that lists the labs, and the archive. The ORDER gives the reason for each.
   - `docs/harness/labs.json`
   - `crates/uor-r4-harness/src/labs.rs`
   - `crates/uor-r4-harness/src/receipt.rs`
@@ -32,6 +32,7 @@ Size: docs 1 file (+2/−2), plus this task folder.
   - `crates/uor-r4-harness/src/loopguard.rs`
   - `crates/uor-r4-harness/tests/loop_guard.rs`
   - `docs/harness/README.md`
+  - `docs/loop/README.md`
   - `archive/history/branch-archive/codex-d63-finite-probe-scope-20261026.*`
 - **The receipt-gate decision (D68), built in claude-138.**
   - `CLIENTS` keeps codex's adapter.
@@ -63,7 +64,9 @@ See the exact-head review record on the PR, which covers `xtask roadmap check` (
 - **claude-138, the registry change:**
   - the tests and hints move to four labs;
   - #3169's patch and its record go into the archive;
-  - Casey edits `docs/harness/labs.json` on that branch.
+  - Casey edits `docs/harness/labs.json` on that branch, including its note's "The registry of the five labs";
+  - confirm that `loop drive --client codex` is refused. Its receipt check only tests that `docs/harness/onboarding/codex.json` exists (`loopdrive.rs:1504`), and that file stays;
+  - the loop page's title and its "## The five labs" table.
 - **For the owner:**
   - `AGENTS.md`'s `UOR_LAB=<antigravity|claude|codex|deepseek|kimi>`, an owner path his instruction did not name;
   - the item's title and its "Why it matters" prose.
