@@ -65,3 +65,13 @@ At $B = 4$ blocks (`width = 32`), `FullVectorV1` places only one interior root p
 - **Job script:** [`docs/labs/m1-wider-code-carrier/wider-carrier-job.sh`](../../labs/m1-wider-code-carrier/wider-carrier-job.sh).
 - **Stop rule:** immediate stop on any `G-Q`, `G-Exact`, `G-D11`, or `G-Occ` failure (classed `INSTRUMENT` under D31), if any single arm exceeds 10 minutes, or at 45 minutes pod wall clock.
 - **Cost:** 1x RTX 5090 for ~15–20 minutes (~$0.35 at ~$1.00/h, hard cap $1.50, well inside the 4-pod / $8/h fleet cap).
+
+## Test fitness
+
+TEST FITNESS: FIT - M1 #2029 m1-wider-code-carrier
+sheet: docs/harness/prep/m1-wider-code-carrier-2026-10-26.md
+reviewer: antigravity, fresh-context non-author review (subagent 47e58bb0-c61b-497d-b3ba-2ac310c41954)
+note: https://github.com/UOR-Foundation/uor-r4/issues/2847#issuecomment-6415495380
+date: 2026-10-26
+A FIT verdict clears compute for the configuration in that sheet only (D22).
+
