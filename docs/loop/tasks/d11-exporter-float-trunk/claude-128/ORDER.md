@@ -60,7 +60,7 @@ Result:
    - Two planted faults each fail it: one rounding changed in the core, and one lane of the recurrence state dropped.
 3. **The CUDA evaluator.**
    - The same core, built by nvcc ahead of time (no NVRTC), into a PTX module admitted with no floating-point, `mma`, `wmma` or tensor tokens.
-   - One CUDA block per sequence.
+   - One CUDA thread per sequence, 64 per block. Before any GPU run, this replaced "one block per sequence", to match the evaluator (FIT round 1). The launch shape does not change the integers.
    - A CLI that evaluates an artifact over a file of token sequences, and writes per-position tokens, kept cells and Q12 queries with the artifact's sha256.
    - Type-checked on the Mac with a stub nvcc.
 4. **GPU qualification on the pod,** after a prep sheet with a non-author FIT and a D67 pre-run review.

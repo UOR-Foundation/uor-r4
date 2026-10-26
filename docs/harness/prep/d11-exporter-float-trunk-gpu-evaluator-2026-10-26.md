@@ -27,7 +27,7 @@ There is one evaluator and two references. This is not a comparison of models.
 
 **Readings, with no bar:**
 - G's wall time per position on each input;
-- the projected wall time of every DEV window (about 8 × 54 windows of 192, since claude-126's readouts hold every eighth window);
+- **the projected wall time of the full 14,287-row panel.** Its eligible targets lie in claude-126's 428 DEV windows of 192 tokens (`d11-gap.json`: `dev_windows` 428). A session cannot skip ahead, so evaluating every position of every window covers every row: 82,176 positions × G's time per position on the DEV windows;
 - the ptxas resource report (registers and stack per thread).
 
 ## 4. Instrument checks (each must be green before the bar counts)
@@ -37,7 +37,7 @@ There is one evaluator and two references. This is not a comparison of models.
    - the cubin's target equals the device's capability (`sm_120`);
    - the host parity tests (`cargo test --release`) pass on the pod's own host twin.
 2. **`I-Inputs`.** The artifacts and readouts match their sha256s (section 5) before any run.
-3. **`I-Finite`.** Every run exits without a CUDA error, and every sequence's status is 0.
+3. **`I-Finite`.** Every step exits 0: no CUDA error, every sequence's status 0, and no panic. The job writes each step's stderr and exit code to `/workspace/evalq/` (`<step>.err`, `<step>.exit`), so a failure is localized from the saved files. Any exit other than 0 is an `I-Finite` fault.
 4. **`I-Identity`.** Each output records the artifact's sha256, the PTX's and the cubin's. The binary run is copied to `/workspace/evalq-bin/` with its own sha256.
 
 ## 5. Base artifact and data split
@@ -57,8 +57,9 @@ There is one evaluator and two references. This is not a comparison of models.
   - seed 1: `…/save/seed-1/readout-export.json`, sha256 `89385c4cf001576a9745f8eb5b03c3a58df792062d575043ca5dc1090a00d6e2`;
   - seed 2: `…/save/seed-2/readout-export.json`, sha256 `d322032a4d9bc69b08bcee7176f2c917e1600ef23424ff3c68ab9761754198c6`.
 
-  The windows file is `jq '{sequences: [.sequences[].tokens]}'` of the readout.
-- **The single tokens:** all 4,096, each from a fresh session.
+  The windows file is written by `d11-fbs-eval windows <readout> <windows.json>`. That command refuses windows of unequal length and prints their count and length, which must be 54 and 192. Every `run` output records the artifact's context, which must be at least 192, or the references refuse the windows.
+- **The single tokens:** all 4,096, each from a fresh session, written by `d11-fbs-eval singles <artifact> <singles.json>`.
+- **Hashes:** the sha256s of `singles.json` and both `windows-seed-<s>.json` go into the run folder's `SHA256SUMS`. Each `run` output records its own input's sha256 (`sequences_sha256`).
 
 ## 6. Steps and minimum test power
 
@@ -69,7 +70,12 @@ There is one evaluator and two references. This is not a comparison of models.
    Copy the binary to `/workspace/evalq-bin/` with its sha256.
 3. Fetch the four store files and check them against `SHA256SUMS` (`I-Inputs`).
 4. `d11-fbs-eval qualify /workspace/evalq/qualify.json`.
-5. For each seed, `d11-fbs-eval run <artifact> <windows.json> <out> --verify`, then the same for `<singles.json>`.
+5. `d11-fbs-eval singles <seed-1 artifact> singles.json`. Then, for each seed:
+   - `d11-fbs-eval windows <readout> windows-seed-<s>.json`;
+   - `d11-fbs-eval run <artifact> windows-seed-<s>.json <out> --verify`;
+   - the same `run … --verify` on `singles.json`.
+
+   Each step's stderr and exit code are saved.
 6. Save `/workspace/evalq/` to the store at `results/claude/d11-fbs-gpu-evaluator-2026-10-26/`, with a `SHA256SUMS`.
 
 **Minimum test power.** The bar is exact equality, not a statistic. It covers:
@@ -101,3 +107,13 @@ A single differing value fails it.
 ## 8. Non-author TEST FITNESS review
 
 TEST FITNESS: PENDING
+
+**Round 1 (fresh non-author reviewer, 2026-10-26): FIT, with four required changes before the run.** Each is made above:
+1. The single-tokens and windows inputs each get a command (`d11-fbs-eval singles` and `windows`) and a recorded sha256. The window length and the artifact's context are checked.
+2. Every step's stderr and exit code are saved, and a nonzero exit is an `I-Finite` fault.
+3. The projection covers the full 14,287-row panel (82,176 window positions).
+4. The ORDER's launch shape now reads one thread per sequence (64 per block), as the evaluator runs it.
+
+The reviewer found the bar decidable and hard to fool: `equal` needs both `first_difference` empty and whole-`Outputs` equality. The identity hashes bind the result to the binary. CHARTER §3.5 holds, because the references only qualify and the next unit scores with G alone.
+
+TEST FITNESS: FIT

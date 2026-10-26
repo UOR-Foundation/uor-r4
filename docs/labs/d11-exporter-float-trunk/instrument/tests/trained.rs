@@ -18,8 +18,8 @@ fn host_twin_equals_the_session_on_a_trained_artifact() {
     ) else {
         panic!("set UOR_FBS_ARTIFACT and UOR_FBS_READOUT");
     };
-    let model = IntegerStackModel::parse(&std::fs::read(&artifact).expect("artifact"))
-        .expect("parse");
+    let model =
+        IntegerStackModel::parse(&std::fs::read(&artifact).expect("artifact")).expect("parse");
     let value: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&readout).expect("readout")).expect("json");
     let windows: Vec<Vec<u32>> = value["sequences"]

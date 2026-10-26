@@ -3,7 +3,13 @@
 //! ```text
 //! d11-fbs-eval qualify OUT_JSON
 //! d11-fbs-eval run ARTIFACT SEQUENCES_JSON OUT_JSON [--verify]
+//! d11-fbs-eval windows READOUT_JSON OUT_JSON
+//! d11-fbs-eval singles ARTIFACT OUT_JSON
 //! ```
+//!
+//! `windows` writes the token windows of a float readout
+//! (`sequences[].tokens`, all of one length) as a sequences file; `singles`
+//! writes every token of the artifact's vocabulary as one-token sequences.
 //!
 //! `qualify` evaluates the synthetic FBS controls on the GPU and holds every
 //! position against the host twin and the Rust integer session (bit for bit).
@@ -26,7 +32,7 @@ use uor_r4_integer::stack::synthetic::{
 };
 use uor_r4_integer::stack::{export_fbs_trunk_uorlut01, IntegerStackModel};
 
-const USAGE: &str = "usage: d11-fbs-eval qualify OUT_JSON | d11-fbs-eval run ARTIFACT SEQUENCES_JSON OUT_JSON [--verify]";
+const USAGE: &str = "usage: d11-fbs-eval qualify OUT_JSON | run ARTIFACT SEQUENCES_JSON OUT_JSON [--verify] | windows READOUT_JSON OUT_JSON | singles ARTIFACT OUT_JSON";
 
 fn write_new(path: &str, value: &Value) -> Result<(), String> {
     let mut file = std::fs::OpenOptions::new()
@@ -149,6 +155,39 @@ fn read_sequences(path: &str) -> Result<Vec<Vec<u32>>, String> {
     serde_json::from_value(list.clone()).map_err(|e| format!("{path}: sequences: {e}"))
 }
 
+fn windows(readout: &str, out: &str) -> Result<bool, String> {
+    let text = std::fs::read_to_string(readout).map_err(|e| format!("{readout}: {e}"))?;
+    let value: Value = serde_json::from_str(&text).map_err(|e| format!("{readout}: {e}"))?;
+    let windows: Vec<Vec<u32>> = value["sequences"]
+        .as_array()
+        .ok_or(format!("{readout}: no sequences"))?
+        .iter()
+        .map(|s| {
+            serde_json::from_value(s["tokens"].clone())
+                .map_err(|e| format!("{readout}: tokens: {e}"))
+        })
+        .collect::<Result<_, _>>()?;
+    let len = windows.first().map_or(0, Vec::len);
+    if windows.is_empty() || windows.iter().any(|w| w.len() != len) {
+        return Err(format!(
+            "{readout}: the windows are empty or of unequal lengths"
+        ));
+    }
+    eprintln!("{} windows of {len} tokens", windows.len());
+    write_new(out, &json!({ "sequences": windows }))?;
+    Ok(true)
+}
+
+fn singles(artifact: &str, out: &str) -> Result<bool, String> {
+    let bytes = std::fs::read(artifact).map_err(|e| format!("{artifact}: {e}"))?;
+    let model = IntegerStackModel::parse(&bytes).map_err(|e| e.to_string())?;
+    let vocab = model.shape().vocab as u32;
+    let sequences: Vec<Vec<u32>> = (0..vocab).map(|t| vec![t]).collect();
+    eprintln!("{vocab} single tokens");
+    write_new(out, &json!({ "sequences": sequences }))?;
+    Ok(true)
+}
+
 fn run(artifact: &str, sequences_path: &str, out: &str, check: bool) -> Result<bool, String> {
     let bytes = std::fs::read(artifact).map_err(|e| format!("{artifact}: {e}"))?;
     let model = IntegerStackModel::parse(&bytes).map_err(|e| e.to_string())?;
@@ -180,6 +219,7 @@ fn run(artifact: &str, sequences_path: &str, out: &str, check: bool) -> Result<b
             "artifact_sha256": sha256_hex(&bytes),
             "sequences_sha256": sha256_hex(&std::fs::read(sequences_path).map_err(|e| e.to_string())?),
             "build": hashes(&evaluator),
+            "context": model.shape().context,
             "gpu_ns": gpu_ns,
             "sequences": gpu.sequences,
             "len": gpu.len,
@@ -205,6 +245,8 @@ fn main() -> ExitCode {
         ["qualify", out] => qualify(out),
         ["run", artifact, sequences, out] => run(artifact, sequences, out, false),
         ["run", artifact, sequences, out, "--verify"] => run(artifact, sequences, out, true),
+        ["windows", readout, out] => windows(readout, out),
+        ["singles", artifact, out] => singles(artifact, out),
         _ => Err(USAGE.to_owned()),
     };
     match result {
