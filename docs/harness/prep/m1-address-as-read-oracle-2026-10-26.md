@@ -42,7 +42,7 @@ Bind source HEAD and a clean tree, executable/PTX/cubin/geometry/kernel/driver i
 
 ## Cost and storage
 
-Host preparation/build/review is lab time only. One pod at the live offer is estimated <15 min and about $0.30, with a $0.50 projected spend ceiling for this single dispatch; no retry without a new instrument classification. Output reports and row records are bounded to <64 MiB. Preserve the new tar and SHA256SUMS in HF and re-download/cmp them before release/down. Record create/bootstrap from the external pod ledger and build/run/upload/retry wall time separately in the job receipt. `actual_create_to_down_cost` starts as `PENDING_LEAD_LEDGER`; the lead must replace it with the actual uor-pod ledger value before release/down, and the evidence is incomplete until then. Record local temporary/retained storage and available disk. No energy claim.
+Host preparation/build/review is lab time only. One pod at the live offer is estimated <15 min and about $0.30, with a $0.50 projected spend ceiling for this single dispatch; no retry without a new instrument classification. Output reports and row records are bounded to <64 MiB. Preserve the new tar and SHA256SUMS in HF and re-download/cmp them before release/down. Record create/bootstrap from the external pod ledger and build/run/upload/retry wall time separately. The tar's job receipt marks final upload/readback as `PENDING_FINAL_SIDECAR`; the separately uploaded and readback-verified final receipt records their actual times. `actual_create_to_down_cost` starts as `PENDING_LEAD_LEDGER`; the lead must replace it with the actual uor-pod ledger value before release/down, and the evidence is incomplete until then. Record local temporary/retained storage and available disk. No energy claim.
 
 ## Stop rules
 

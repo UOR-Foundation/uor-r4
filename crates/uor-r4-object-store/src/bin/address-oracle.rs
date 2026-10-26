@@ -234,6 +234,7 @@ fn run_oracle(
     for row in &panel.rows {
         let mut per_arm = serde_json::Map::new();
         for arm in Arm::ALL {
+            let started = Instant::now();
             let candidate_counts = match arm {
                 Arm::Sieve => {
                     let query = form_sieve_query(&panel.lexicon, &row.prompt)?;
@@ -241,7 +242,6 @@ fn run_oracle(
                 }
                 _ => Default::default(),
             };
-            let started = Instant::now();
             let mut generated_tokens = Vec::new();
             let mut fetches = 0usize;
             let record: ArmRecord = if arm.is_model() {
