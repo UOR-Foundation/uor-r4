@@ -2577,6 +2577,25 @@ fn forced_calls(trace: &[u8], shape: SnapShape) -> Vec<Vec<u8>> {
     calls
 }
 
+/// The joined captures laid out as an artifact trace (claude-135): the inverse of the layout
+/// [`compare_snaps`] reads, so `forced_calls` of it can be held against the panel's own calls.
+fn trace_layout(joined: &[hs::SnapCapture], shape: SnapShape) -> Vec<u8> {
+    let rows = shape.windows * shape.len;
+    let mut trace = vec![0u8; rows * shape.stride()];
+    for layer in 0..shape.layers {
+        for site in 0..3 {
+            let blocks = shape.blocks(site);
+            let roots = &joined[layer * 3 + site].roots;
+            for row in 0..rows {
+                let base = shape.offset(row, layer, site);
+                trace[base..base + blocks]
+                    .copy_from_slice(&roots[row * blocks..(row + 1) * blocks]);
+            }
+        }
+    }
+    trace
+}
+
 /// `calls` with every root of one (layer, site) moved to another root, in every chunk
 /// (claude-135's wrong-root gate): root r becomes r + 1 (mod 120), and 255 (root 0) becomes 1.
 fn wrong_root_calls(
@@ -2603,7 +2622,7 @@ pub struct ForcedReadings {
     pub rows_differ_unforced: usize,
     pub rows_differ_forced: usize,
     /// Every forced site, and the would-flips: the sites (inert ones apart) where D's own
-    /// choice, at the forced state, applies another root than A's.
+    /// choice, at the forced state, applies another root than A's ([`would_flip_count`]).
     pub sites: usize,
     pub would_flips: usize,
     /// The root would-flips, those of them at an exact tie (D's margin 0), and D's upper median
@@ -2623,6 +2642,13 @@ impl ForcedReadings {
     }
 }
 
+/// The would-flips of a forced comparison's classes (in [`SnapClass`] order): the root ones and
+/// the one-sided zero blocks. A zero block on both sides is the same arithmetic in D and A, apart
+/// only in the zero convention, so it is a reading, never a would-flip.
+fn would_flip_count(per_class: [usize; 4]) -> usize {
+    per_class[0] + per_class[2] + per_class[3]
+}
+
 /// The forced-snap bar's thresholds (the sheet's §3), in rows per thousand and margins.
 const FORCED_MATCH_MAX_PERMILLE: usize = 5;
 const FORCED_CONTINUOUS_MIN_PERMILLE: usize = 20;
@@ -2630,6 +2656,9 @@ const WOULD_FLIP_NEAR_TIE_MAX_MARGIN: f32 = 1e-3;
 const WOULD_FLIP_DECISIVE_MIN_MARGIN: f32 = 1e-2;
 /// A would-flip rate beyond this many times the faithful models' largest is outside their envelope.
 const WOULD_FLIP_ENVELOPE_FACTOR: f64 = 2.0;
+/// The envelope's floor: one would-flip per 10^7 sites, so a zero envelope is not a bar no model
+/// can meet.
+const WOULD_FLIP_ENVELOPE_FLOOR: f64 = 1e-7;
 
 /// One model's forced-snap outcome, the first that applies (the sheet's §3 precedence), given
 /// the faithful models' largest would-flip rate.
@@ -2666,7 +2695,7 @@ pub fn summarize_forced(
     let readings = |r: &serde_json::Value| -> Result<ForcedReadings> {
         Ok(serde_json::from_value(r["readings"].clone())?)
     };
-    let mut envelope = 0.0f64;
+    let mut envelope = WOULD_FLIP_ENVELOPE_FLOOR;
     for (label, seed) in faithful {
         let r = receipts
             .iter()
@@ -2709,8 +2738,9 @@ pub fn summarize_forced(
 /// The forced-snap control (claude-135), on the GPU: over the first `windows_count` DEV windows
 /// (all 428 in the run), the D11 forward with every snap forced to the artifact's traced choice.
 /// It reads the rows where forced-D and A still differ, and D's own would-flips at every forced
-/// site. Its gates: D forced to its own choices reproduces D (`I-Self-Force`), a forced wrong root
-/// changes the tokens (`I-Wrong-Root`), and the unforced D reproduces its expected rows
+/// site. Its gates: D forced to its own choices reproduces D (`I-Self-Force`), D's choices laid
+/// out as a trace map back to the panel's calls (`I-Forced-Layout`), forced wrong roots at two
+/// sites change the tokens (`I-Wrong-Root`), and the unforced D reproduces its expected rows
 /// (`I-Unforced`), with claude-134's `I-Trace`, `I-Old-Run`, `I-Inputs` and `I-Layout`.
 #[allow(clippy::too_many_arguments)]
 pub fn run_d11_forced_snaps(
@@ -2772,27 +2802,31 @@ pub fn run_d11_forced_snaps(
     let panel = || hs::evaluate_dev_panel_d11(&loaded, windows);
     // Unforced D, with its own choices.
     let ((_, d_preds), unforced_caps) = hs::with_snap_capture(panel)?;
+    let chunk_roots: Vec<Vec<u8>> = unforced_caps.iter().map(|c| c.roots.clone()).collect();
     // I-Self-Force: D forced to its own choices reproduces D.
-    let self_calls: Vec<Vec<u8>> = unforced_caps
-        .iter()
-        .map(|c| hs::self_forced(&c.roots))
-        .collect();
+    let self_calls: Vec<Vec<u8>> = chunk_roots.iter().map(|r| hs::self_forced(r)).collect();
     let (_, self_preds) = hs::with_snap_override(self_calls, panel)?;
     let i_self_force = self_preds == d_preds;
+    let unforced_joined = join_chunk_captures(unforced_caps, windows_count, shape.layers)?;
+    // I-Forced-Layout: D's own choices, laid out as A's trace, map back through `forced_calls`
+    // to the panel's own calls, so A's trace is forced at the sites it was read from.
+    let i_forced_layout =
+        forced_calls(&trace_layout(&unforced_joined, shape), shape) == chunk_roots;
     // Forced to A's choices, with D's own choice captured at every forced site.
     let a_calls = forced_calls(&trace_bytes, shape);
     let ((_, forced_preds), forced_caps) =
         hs::with_snap_capture(|| hs::with_snap_override(a_calls.clone(), panel))?;
-    // I-Wrong-Root: layer 0's output gate forced to other roots changes the tokens.
-    let wrong = wrong_root_calls(a_calls, shape.layers, 0, 1);
-    let (_, wrong_preds) = hs::with_snap_override(wrong, panel)?;
-    let i_wrong_root = wrong_preds != forced_preds;
-    hs::clear_active_arm();
-    let unforced = compare_snaps(
-        &join_chunk_captures(unforced_caps, windows_count, shape.layers)?,
-        &trace_bytes,
-        shape,
+    // I-Wrong-Root: layer 0's output gate, and the last layer's feed-forward gate, each forced to
+    // other roots, change the tokens.
+    let (_, wrong_first) =
+        hs::with_snap_override(wrong_root_calls(a_calls.clone(), shape.layers, 0, 1), panel)?;
+    let (_, wrong_last) = hs::with_snap_override(
+        wrong_root_calls(a_calls, shape.layers, shape.layers - 1, 2),
+        panel,
     )?;
+    let i_wrong_root = wrong_first != forced_preds && wrong_last != forced_preds;
+    hs::clear_active_arm();
+    let unforced = compare_snaps(&unforced_joined, &trace_bytes, shape)?;
     let i_layout = layout_agrees(&unforced, shape);
     let would = compare_snaps(
         &join_chunk_captures(forced_caps, windows_count, shape.layers)?,
@@ -2833,7 +2867,7 @@ pub fn run_d11_forced_snaps(
         rows_differ_unforced,
         rows_differ_forced: differ(&forced_preds),
         sites: would.sites - inert_sites,
-        would_flips: would.per_class.iter().sum(),
+        would_flips: would_flip_count(would.per_class),
         root_would_flips: would.per_class[0],
         would_flip_exact_ties: exact_ties,
         would_flip_median_margin: off_tie.get(off_tie.len() / 2).copied(),
@@ -2843,6 +2877,7 @@ pub fn run_d11_forced_snaps(
         && i_trace
         && i_old_run
         && i_self_force
+        && i_forced_layout
         && i_wrong_root
         && i_unforced
         && i_layout
@@ -2885,8 +2920,9 @@ pub fn run_d11_forced_snaps(
         "i_trace": i_trace,
         "i_old_run": i_old_run,
         "i_self_force": i_self_force,
+        "i_forced_layout": i_forced_layout,
         "i_wrong_root": i_wrong_root,
-        "rows_differ_wrong_root": differ(&wrong_preds),
+        "rows_differ_wrong_root": [differ(&wrong_first), differ(&wrong_last)],
         "i_unforced": i_unforced,
         "expected_rows_differ_unforced": expect_unforced,
         "i_layout": i_layout,
@@ -3986,6 +4022,39 @@ mod tests {
         assert_eq!((wrong[2][0], wrong[2][3]), (101, 1));
         assert_eq!(wrong[5], vec![117]);
         assert_eq!(wrong_root_calls(vec![vec![119]], 1, 0, 0), vec![vec![0]]);
+        // I-Forced-Layout's round trip: joined captures laid out as a trace map back, through
+        // `forced_calls`, to the chunk calls they were joined from, and agree with themselves.
+        let joined: Vec<hs::SnapCapture> = (0..3u8)
+            .map(|site| hs::SnapCapture {
+                roots: (0..17u8).map(|w| site * 30 + w).collect(),
+                margins: vec![0.5; 17],
+            })
+            .collect();
+        let laid = trace_layout(&joined, shape);
+        let chunks = forced_calls(&laid, shape);
+        assert_eq!(chunks[1], (30..46).collect::<Vec<u8>>());
+        assert_eq!((&chunks[3], &chunks[5]), (&vec![16], &vec![76]));
+        let agree = compare_snaps(&joined, &laid, shape).expect("the layout compares");
+        assert_eq!(agree.per_class, [0; 4]);
+    }
+
+    #[test]
+    fn a_zero_block_on_both_sides_is_never_a_would_flip() {
+        // Root, zero both, zero float only, zero integer only: both-sides zero blocks are a
+        // reading, so 1,000 of them leave the rate at 0 and the model faithful.
+        assert_eq!(would_flip_count([5, 1000, 2, 3]), 10);
+        assert_eq!(would_flip_count([0, 1000, 0, 0]), 0);
+        let zeros = ForcedReadings {
+            rows: 14_287,
+            rows_differ_unforced: 580,
+            rows_differ_forced: 20,
+            sites: 1_000_000,
+            would_flips: would_flip_count([0, 1000, 0, 0]),
+            root_would_flips: 0,
+            would_flip_exact_ties: 0,
+            would_flip_median_margin: None,
+        };
+        assert_eq!(classify_forced(&zeros, 1e-4), "faithful");
     }
 
     #[test]
@@ -4082,6 +4151,12 @@ mod tests {
         // A faithful model that is missing, or that failed its instruments, is refused.
         assert!(summarize_forced(&receipts, &[("z".to_owned(), 1)]).is_err());
         assert!(summarize_forced(&receipts, &[("d".to_owned(), 1)]).is_err());
+        // Faithful models with no would-flips leave the envelope at its floor.
+        let none = vec![receipt("a", 1, 0, true), receipt("b", 1, 0, true)];
+        assert_eq!(
+            summarize_forced(&none, &faithful)?["envelope_would_flip_rate"],
+            WOULD_FLIP_ENVELOPE_FLOOR
+        );
         Ok(())
     }
 

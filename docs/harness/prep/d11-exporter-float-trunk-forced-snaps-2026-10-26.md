@@ -35,15 +35,16 @@ There is one model per (configuration, seed), as in claude-132: plain-c126, d11-
 - **Self-forced D:** D forced to its own captured choices, which must reproduce D (`I-Self-Force`).
 - **Forced-D:** D with every snap forced to A's traced choice (`with_snap_override`), in the panel's call order (chunks of 16 windows, per layer, the three sites).
   - A capture runs alongside it and records D's own choice and margin at every forced site.
-  - **The would-flips** are the sites, inert transitions at position 0 apart, where D's own choice applies another root than A's.
-- **A wrong-root gate:** forced-D with layer 0's output gate moved to other roots must change the tokens (`I-Wrong-Root`).
+  - **The would-flips** are the sites, inert transitions at position 0 apart, where D's own choice applies another root than A's. They are the root disagreements and the one-sided zero blocks.
+  - **A zero block on both sides is never a would-flip.** D and A compute the same arithmetic there and part only in the zero convention: the identity against −1. It is reported as a reading (`would_flip_count`).
+- **A wrong-root gate:** forced-D with layer 0's output gate, and separately the last layer's feed-forward gate, moved to other roots must change the tokens (`I-Wrong-Root`).
 - **The readings per model:**
   - **R_F:** the rows where forced-D and A differ;
   - **R_D:** the same for unforced D;
   - **the would-flip rate:** would-flips over the non-inert sites;
   - **the would-flip margins:** **m**, D's upper median margin at the root would-flips off an exact tie, and the exact ties;
   - the would-flips by class, layer and site.
-- **The envelope** is the larger would-flip rate of the two models that claude-132 found faithful, d11-c130 s1 and dual-c131 s1. `--mode d11-forced-summary` computes it, and applies the bar to every model.
+- **The envelope** is the larger would-flip rate of the two models that claude-132 found faithful, d11-c130 s1 and dual-c131 s1, with a floor of one would-flip per 10⁷ sites. The floor keeps a zero envelope from being a bar no model can meet. `--mode d11-forced-summary` computes the envelope and applies the bar to every model.
 
 ## 3. Bar and decision table
 
@@ -59,12 +60,15 @@ The bar is per model, over its 14,287 rows. Every instrument check of section 4 
 | 6 | **Indeterminate** | anything else | — | The readings are reported. The next step is a decision review, and the item does not park. |
 
 - **The item's reading:**
-  - If all four indeterminate models are **Faithful**, they settle as faithful, and the residual check reads "faithful on all six". The exporter is then cleared, and the three FAILs (claude-129 to -131) stand as configuration results, never a mechanism result (§4.1). The pivot note's decisive run goes next, under Stage 4b's unchanged bar unless the owner reads §3.7 otherwise (#2028). Nothing waits on the owner.
-  - If they split, each model's outcome is reported, and the next step is a decision review.
-- **The two faithful models** are classified the same way. Their outcomes are readings, and their rates set the envelope. The summary refuses to run without both, or if either fails its instruments.
+  - If all four indeterminate models are **Faithful**, they settle as faithful, and the residual check reads "faithful on all six".
+  - The exporter is then cleared on this panel at this bar: the snaps carry the residual, and D's would-flips are near-ties at the faithful models' rate. It says nothing further about the continuous arithmetic on the rows where forcing already matches.
+  - The three FAILs (claude-129 to -131) stand as configuration results, never a mechanism result (§4.1).
+  - The pivot note's decisive run goes next, under Stage 4b's unchanged bar unless the owner reads §3.7 otherwise (#2028). Nothing waits on the owner.
+  - If the four split, each model's outcome is reported, and the next step is a decision review.
+- **The two faithful models** are classified the same way. Their outcomes are readings, and their rates set the envelope, so they pass the rate check by construction. For them, only R_F and m test anything. The summary refuses to run without both, or if either fails its instruments.
 - **Readings, with no bar:**
   - R_D, R_F, and the rows they share;
-  - the would-flips by class, layer and site, and their margins below 1e-6, 1e-4, 1e-3 and 1e-2;
+  - the would-flips by class, layer and site, the zero blocks on both sides included, and their margins below 1e-6, 1e-4, 1e-3 and 1e-2;
   - unforced D's disagreements by class, layer and site;
   - the wrong-root gate's rows.
 
@@ -77,9 +81,12 @@ The bar is per model, over its 14,287 rows. Every instrument check of section 4 
 5. **`I-Inputs`.** Each artifact's, the windows' and each model's sha256 equal their pins (section 5).
 6. **`I-Unforced`.** Unforced D's rows against A equal claude-132's: 580, 484, 367, 697, 289 and 497.
 7. **`I-Self-Force`.** D forced to its own captured choices gives D's tokens on every row.
-8. **`I-Wrong-Root`.** Layer 0's output gate forced to other roots changes at least one token.
-9. **`I-Layout`.** Each (layer, site) of unforced D agrees with A's trace on at least 50% of its snaps.
-10. **`I-Finite`.** Every would-flip margin is finite, every step exits 0, every fetched file checks against its folder's `SHA256SUMS`, and the log is written before `SHA256SUMS`.
+8. **`I-Forced-Layout`.** D's own choices, laid out as an artifact trace (`trace_layout`), map back through `forced_calls` to the panel's own calls byte for byte. So A's trace is forced at exactly the sites it was read from. An offset or order error there would otherwise pass `I-Self-Force`, and read as a high would-flip rate.
+9. **`I-Wrong-Root`.** Layer 0's output gate, and the last layer's feed-forward gate, each forced to other roots, change at least one token.
+10. **`I-Layout`.** Each (layer, site) of unforced D agrees with A's trace on at least 50% of its snaps.
+11. **`I-Finite`.** Every would-flip margin is finite, every step exits 0, every fetched file checks against its folder's `SHA256SUMS`, and the log is written before `SHA256SUMS`.
+    - The forced calls must also be used up exactly.
+    - If the panel skipped a chunk with no scored rows, the calls would fall out of step, and the run would end on the override's "never made" or "beyond the forced calls" error: an instrument failure with a nonzero exit, never a silent misforcing.
 
 ## 5. Base artifact and data split
 
