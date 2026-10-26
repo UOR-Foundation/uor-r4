@@ -40,7 +40,8 @@ use super::kernels::{
     stack_dequant_row, stack_div_u128, stack_dot, stack_exp_neg, stack_gemv, stack_gemv_pairs,
     stack_hamilton, stack_isqrt, stack_l2_distance, stack_lift, stack_lorentz_distance,
     stack_mix_row, stack_mul_u128, stack_mul_u64, stack_pair_tables, stack_pointer_mixture,
-    stack_quantize16, stack_query_tables, stack_rms_norm, stack_rms_norm_fine, stack_sigmoid_q31, stack_snap_rotation,
+    stack_quantize16, stack_query_tables, stack_rms_norm, stack_rms_norm_fine, stack_sigmoid_q31,
+    stack_snap_rotation,
     stack_snap_select, stack_square, to_exp_i32, PackedMatrix, ARCOSH_TABLE_LEN, PRODUCT_EXP,
     NORM_FINE_EXP, RESIDUAL_EXP,
 };

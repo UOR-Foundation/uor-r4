@@ -2618,7 +2618,6 @@ fn fbs_shape_takes_its_own_schema_and_refuses_unlawful_shapes() {
     );
 }
 
-/// A synthetic SpiralCore/FBS trunk whose export has exactly [`fbs_shape`].
 /// The shape and value ranges of a synthetic FBS trunk (claude-127: a trained
 /// trunk is wider, deeper, non-square and has larger tables than the small one).
 #[derive(Clone, Copy, Debug)]
@@ -2652,6 +2651,7 @@ const FBS_SYNTH_SMALL: FbsSynth = FbsSynth {
     decay_step: 0.0625,
 };
 
+/// A synthetic SpiralCore/FBS trunk whose export has exactly [`fbs_shape`].
 fn synthetic_fbs_trunk(seed: u64) -> super::FbsTrunkSnapshot {
     synthetic_fbs_trunk_with(seed, FBS_SYNTH_SMALL)
 }
@@ -3330,9 +3330,9 @@ fn fbs_writer_matches_reference_when_its_address_gains_are_tiny() {
     // claude-127: a trained trunk shrank the final gains of the 16 channels
     // the writer scores its cells from (the query's first and last 8-blocks)
     // to about 6e-4, so those blocks sit at a few Q12 steps and one LSB
-    // reorders the cells. The query must then be rounded to Q12 once, from an
-    // unbiased norm, as the reference rounds it: a truncated 2^-14 norm,
-    // rounded a second time, chose different cells on 30% of tokens.
+    // reorders the cells. The query must then reach Q12 from a norm rounded to
+    // nearest at 2^-24, as unbiased as the reference's: a 2^-14 norm truncated
+    // and then rounded again to Q12 chose different cells on 30% of tokens.
     let s = FbsSynth {
         vocab: 512,
         d: 64,
@@ -3349,16 +3349,25 @@ fn fbs_writer_matches_reference_when_its_address_gains_are_tiny() {
     }
     let model = IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&snap).expect("export"))
         .expect("parse");
-    let (mut tokens, mut cells) = (0usize, 0usize);
+    let (mut tokens, mut cells, mut close) = (0usize, 0usize, 0usize);
     for tok in 0..snap.vocab as u32 {
         let got = model.session().step_native(tok).expect("integer step");
         let want = &snap.forward_f32(&[tok], true).expect("reference")[0];
         tokens += usize::from(got.token == want.token);
         cells += usize::from(got.kept_cells == want.kept_cells);
+        let worst = got
+            .query_q12
+            .iter()
+            .zip(&want.query)
+            .map(|(&g, &w)| (g - (w * 4096.0).round() as i32).abs())
+            .max()
+            .unwrap_or(i32::MAX);
+        close += usize::from(worst <= 2);
     }
-    eprintln!("fbs tiny-address control: tokens {tokens}/512, kept cells {cells}/512");
+    eprintln!("fbs tiny-address control: tokens {tokens}/512, kept cells {cells}/512, queries within 2 LSB {close}/512");
     assert!(cells >= 500, "kept cells agree on only {cells} of 512");
     assert!(tokens >= 500, "tokens agree on only {tokens} of 512");
+    assert!(close >= 500, "queries within 2 LSB on only {close} of 512");
 }
 
 #[test]

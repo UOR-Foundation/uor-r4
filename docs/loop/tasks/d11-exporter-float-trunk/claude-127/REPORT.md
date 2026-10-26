@@ -6,7 +6,7 @@ References #2820.
 
 ## What did not work, first
 
-- **`G-D11-ExportGap` stays blocked, and `I-D11-Artifact-Agreement` was not re-run (NOT_RUN, not FAIL).** Even after the repair below, the integer artifact still disagrees with its f64 specification on about 1% of single tokens at 6 layers. From single tokens alone, that projects to a P of at least about 110 to 140 rows (the bar's P takes the larger of the single-token and window rates), against claude-126's bar of 6.
+- **`G-D11-ExportGap` stays blocked, and `I-D11-Artifact-Agreement` was not re-run (NOT_RUN, not FAIL).** Even after the repair below, the integer artifact still disagrees with its f64 specification on about 1% of single tokens at 6 layers. From single tokens alone, that projects to a P of at least about 110 to 140 rows (the bar's P takes the larger of the single-token and window rates), against claude-126's bar of 6. Even the low end of a 95% interval on 4 or 5 events in 512 (about 0.21% and 0.32%) puts P near 30 and 45.
   - The pod re-run (ORDER done-when 3) could not pass or change the next step. So by decision D2 it was skipped, with no GPU spent.
   - These are host diagnostics on the laptop, on the stored Stage 4b snapshots. They decide spend only. None counts toward a bar, and no negative is recorded.
 - **The residual's cause is inferred, not tested.** At 6 layers, after the repair:
@@ -16,16 +16,20 @@ References #2820.
   | 1 | 512 | 9 | 5 |
   | 2 | 512 | 17, all in their kept cells | 4 |
 
-  - **On seed 2, not cell-ranking near-ties.** At the 17 positions, the reference's margin between its 8th and 9th cells runs from 2 to 156 LSB, against a median of 44 over all 512 (10th percentile 6).
-  - **Gate-snap near-ties contribute on seed 2 but do not explain most.** The 17 positions' Hamilton-gate snap margins rank from 15 to 490 of 512. Four fall among the 30 smallest.
+  - **On seed 2, mostly not cell-ranking near-ties.** At the 17 positions, the reference's margin between its 8th and 9th cells runs from 2 to 156 LSB, against a median of 44 over all 512 (the 10th smallest is 6). 14 of the 17 are at 10 LSB or more; 3 (2, 4 and 4 LSB) may be near-ties.
+  - **Gate-snap near-ties contribute on seed 2 but do not explain most.** The 17 positions' Hamilton-gate snap margins rank from 15 to 490 of 512. Three fall among the 30 smallest (ranks 15, 18 and 29).
   - **On seed 1, ties cannot be ruled out.** The reference's own 8th-to-9th cell margin is 0 LSB at the median: the address collapse below leaves the cell ranking exactly tied on most positions.
-  - **No systematic bias.** These are per-channel query differences at 6 layers, every 32nd token, binned with anything beyond ±3 LSB in the end buckets.
-    - The binned counts are symmetric. Their mean is +0.007 LSB on seed 1 and −0.016 on seed 2.
-    - The full means are −1.64 and +3.07 LSB, of opposite sign. Values beyond ±3 LSB pull them.
-  - **The likely cause:** the artifact's Q16 fixed-point residual stream, accumulating over 6 layers against f64. A second, unlocalized defect is not excluded. The control that would test it is the f64 reference with its residual rounded to Q16 at the same points; it was not built here.
+  - **No bias within ±3 LSB; the tails are unexplained.** These are per-channel query differences, every 32nd token, binned with anything beyond ±3 LSB in the end buckets.
+    - At 6 layers the binned counts are symmetric. Their mean is +0.007 LSB on seed 1 and −0.016 on seed 2.
+    - The full means at 6 layers are −1.64 and +3.07 LSB, of opposite sign, pulled by values beyond ±3 LSB. Opposite signs across two seeds do not rule out a bias within either seed.
+    - Large differences are present already at 1 layer on seed 2. After the repair its full mean there is −0.53 LSB (with 127 of 128 kept-cell sets agreeing). Before the repair its largest 1-layer query gap was 9,300 LSB.
+  - **The cause is untested.**
+    - One candidate is the artifact's Q16 fixed-point residual stream against f64, accumulating over the layers. The large differences at 1 layer on seed 2 do not fit accumulation alone.
+    - A second, unlocalized defect is not excluded.
+    - The control that would test the Q16 candidate is the f64 reference with its residual rounded to Q16 at the same points. It was not built here.
 - **ORDER done-when 2 holds in part.**
   - At 1 layer, every 32nd token, seed 1 matches the reference on 128 of 128 tokens and kept-cell sets. Seed 2 matches on 128 of 128 tokens and 127 of 128 kept-cell sets.
-  - At 6 layers, positions differ at about 2 to 3% of positions. On seed 2 their cell margins are well above near-tie, so they are not the near-tie exceptions the done-when allows.
+  - At 6 layers, 2 to 3% of positions differ. On seed 2, 14 of the 17 have cell margins of 10 LSB or more, so most are not the near-tie exceptions the done-when allows.
   - The two synthetic controls pass (below).
 - **The dense path still uses the truncating norm.** Only the FBS step was repaired. The dense step is outside this ORDER and is unchanged.
 
@@ -42,18 +46,23 @@ The integer FBS step had a systematic rounding bias against its specification.
   | 2 | 0.203 | 0.144 | 1.974 |
 
   So on seed 1 the cell ranking is decided at a few Q12 LSB, where a −0.088 LSB bias changes the kept cells. Before the repair, restoring those 16 gains to the other channels' mean gave 128 of 128 tokens at 1 and 6 layers. That is the control showing it was the address's sensitivity.
-- **The repair.** `stack_rms_norm_fine` rounds to nearest at 2^-24. The FBS step reads all three of its norms from it and rounds the query to Q12 once. Only the FBS step uses it.
+- **ORDER done-when 1: the localized difference** is none of the four the ORDER listed (the non-square MLP, the depth, the larger tables, the larger decay offsets). It is tiny writer-address gains, as seed 1 trained them, which expose the step's truncating norm.
+  - The finite control first fails at the tiny-gain shape: 1 layer, width 64, address gains about 6e-4.
+  - The non-square, deeper control with larger tables passes with or without the repair.
+- **The repair.** `stack_rms_norm_fine` rounds to nearest at 2^-24, and only the FBS step uses it.
+  - The FBS step reads all three of its norms from it. The query reaches Q12 from that value: the norm and the final gain each round at 2^-24, negligible against a Q12 step, before one rounding to Q12.
+  - The integer rounding is half-up. The reference's `f64::round` rounds half away from zero. They differ only on exact ties of negative values, by at most 1 LSB.
 - **After the repair,** on seed 1 every 32nd token: 128 of 128 tokens and kept-cell sets at 1 layer (bias −0.0066 LSB), and 127 of 128 tokens at 6 layers. The residual is in the table above.
 
 ## What changed
 
-Size against `origin/main`: runtime +35/−15 in `stack/kernels.rs` and `stack/session.rs`; tests +124/−8 in `stack/tests.rs`; docs: the ORDER, this REPORT and the notebook row. The artifact format is unchanged.
+Size against `origin/main`: runtime +36/−15 in `stack/kernels.rs` and `stack/session.rs`; tests +133/−8 in `stack/tests.rs`; docs: the ORDER, this REPORT and the notebook row. The artifact format is unchanged.
 
 - **`stack_rms_norm_fine` and `NORM_FINE_EXP`** (`kernels.rs`): the norm, rounded to nearest at 2^-24, sharing its body with `stack_rms_norm` through `rms_norm_into`.
 - **`stack_step_fbs`** (`session.rs`): the three norms through `stack_rms_norm_fine`, their gathers at `NORM_FINE_EXP`, and one rounding of the query to Q12.
 - **`FbsSynth`** (`tests.rs`): the synthetic FBS trunk's shape and value ranges as parameters. The default draw is unchanged, so every existing test sees the same trunk.
 - **`fbs_trunk_matches_reference_at_a_non_square_multi_token_shape`:** width 64, MLP 96, 3 layers, vocabulary 512 (two tokens per writer cell), 8 kept cells, larger tables. Bars: tokens ≥ 504, kept cells ≥ 496 and queries within 2 LSB ≥ 480, of 512.
-- **`fbs_writer_matches_reference_when_its_address_gains_are_tiny`:** width 64, 1 layer, vocabulary 512, 8 kept cells, with the address gains set to about 6e-4 as on seed 1. Bars: kept cells ≥ 500 and tokens ≥ 500, of 512.
+- **`fbs_writer_matches_reference_when_its_address_gains_are_tiny`:** width 64, 1 layer, vocabulary 512, 8 kept cells, with the address gains set to about 6e-4 as on seed 1. Bars: kept cells ≥ 500, tokens ≥ 500 and queries within 2 LSB ≥ 500, of 512.
 
 ## Measurements
 
@@ -67,14 +76,14 @@ Size against `origin/main`: runtime +35/−15 in `stack/kernels.rs` and `stack/s
 
   - The machine was shared: its 1-minute load average was 8 to 10. The first seed-1 run's prefill took anywhere from 0.49 s to 1.31 s.
   - Each seed's runs wrote the same reply.
-  - The second seed-1 run is inside claude-126's range (medians 231 to 269), so no slowdown from the repair shows at this noise level.
+  - At this load, a slowdown from the repair cannot be resolved. The second seed-1 run is inside claude-126's range (medians 231 to 269). Seed 2's run is about 12% under its claude-126 run (269 and 268).
   - These time the integer runtime for this shape (width 256, 6 layers, vocabulary 4,096). The artifact's gap is not measured, so they are not a qualified serving rate.
 - **The artifact is unchanged.** Re-exported from the stored snapshots, both artifacts have the sha256s that claude-126 stored (`314c3909…` and `d5b43596…`, in `d11gap/SHA256SUMS`). The repair changes how the runtime computes, not what is shipped.
 - **The controls at the head.**
-  - The tiny-gain control: 512 of 512 tokens and 512 of 512 kept-cell sets.
+  - The tiny-gain control: 512 of 512 tokens, kept-cell sets and queries within 2 LSB.
   - The non-square control: 511 of 512 tokens, 511 of 512 kept-cell sets, and 510 of 512 queries within 2 LSB.
 - **Their set-asides, each failing:**
-  - the repair set aside: the tiny-gain control drops to 142 of 512 kept-cell sets and 421 of 512 tokens (re-run at the head);
+  - the repair set aside: the tiny-gain control drops to 142 of 512 kept-cell sets and 421 of 512 tokens (re-run at the head). 509 of 512 queries still fall within 2 LSB, so a 2-LSB query tolerance alone cannot see a −0.088 LSB bias; the kept-cell check does;
   - the writer scanning the wrong tokens of a cell (a stride of 255): the non-square control drops to 227 of 512 tokens;
   - the down projection reading only the first width activations: the non-square control fails at once.
 
@@ -91,7 +100,7 @@ See the exact-head review record on the PR.
   - float-train 37 and 2.
 - **The negative gate:** the repair set aside (`git diff origin/main` of `kernels.rs` and `session.rs`, reversed) fails the tiny-gain control; restored, it passes.
 - **Build checks:**
-  - zero-multiply audits FULL PASS (rlib 56 and 40; `uor-r4-stack` 44 and 99, one more than before, the new `inline(never)` norm);
+  - zero-multiply audits FULL PASS (rlib 56 and 40; `uor-r4-stack` 44 and 99). The new `inline(never)` norm is in the audit's call-graph walk: with the repair set aside, the stack binary's walk reaches 98 functions;
   - CUDA type-check of float-train with a stub nvcc: exit 0;
   - clippy: no findings in the changed hunks;
   - `cargo fmt` clean.
@@ -112,6 +121,6 @@ See the exact-head review record on the PR.
 ## Plain summary
 
 The last unit found that the shipped integer file disagreed with the GPU's emulation of it.
-- **Part of that was a real bug, now fixed.** The integer file rounded one step down instead of to the nearest value, and then rounded again. On the first trained model this mattered, because training had shrunk the 16 numbers that pick the output's candidate group to almost nothing, so a tiny rounding bias changed the pick. With the fix, the file matches its specification exactly at one layer.
-- **A small part remains.** At six layers, about 1 in 100 output tokens still differs, most likely from the file's fixed-point arithmetic adding up over the layers. That is too much for the GPU emulation to vouch for the file at the precision needed.
+- **Part of that was a real bug, now fixed.** The integer file rounded one step down instead of to the nearest value, and then rounded again. On the first trained model this mattered, because training had shrunk the 16 numbers that pick the output's candidate group to almost nothing, so a tiny rounding bias changed the pick. With the fix, the file gives the specified token on every one sampled at one layer.
+- **A small part remains.** At six layers, about 1 in 100 output tokens still differs. The cause is not yet tested; one candidate is the file's fixed-point arithmetic adding up over the layers. That is too much for the GPU emulation to vouch for the file at the precision needed.
 - **Next:** run the integer file itself on the GPU and score it directly.
