@@ -43,9 +43,9 @@ References #2833; this unit does not close the item or claim an oracle gain.
 - `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo test -p uor-r4-object-store --features stage0-lab --no-fail-fast`: **112 passed, 0 failed, 1 ignored** after the repair.
 - `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo check -p uor-r4-object-store` and the same check with `--features stage0-lab`: PASS after the repair.
 - `NVCC=/Users/casey.allard/uor-r4/local/fake-nvcc/nvcc UOR_NVCC_ARCH=compute_120 CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo check -p uor-r4-object-store --features cuda`: PASS.
-- `uor-harness loop gates --full`: all 11 gates GREEN at `11624e808`.
-- `uor-harness loop report --check --order docs/loop/tasks/m1-address-as-read/kimi-40/ORDER.md`: final result below after this receipt commit.
-- `uor-harness loop pr-check --local`: final result below after this receipt commit.
+- `uor-harness loop gates --full`: all 11 gates GREEN at `7d5a6402f`.
+- `uor-harness loop report --check --order docs/loop/tasks/m1-address-as-read/kimi-40/ORDER.md`: PASS at `7d5a6402f`.
+- `uor-harness loop pr-check --local`: PASS at `7d5a6402f`; only advisory scope and rule-source warnings.
 - D68 review: REJECT old plan; Stage 0 accepted as the required next measurement.
 - FIT: FIT at `97354145e` and confirmed again for the repaired instrument (agent-32). D67: PASS at `97354145e`; delta PASS at `11624e808` after the staging and repeat-registration corrections (agent-34).
 
