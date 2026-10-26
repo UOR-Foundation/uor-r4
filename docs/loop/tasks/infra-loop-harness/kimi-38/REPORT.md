@@ -16,7 +16,7 @@ References #2904, #3128 and #3129; this PR closes none of them.
 - Added `m1-within-cell-writer` as a ready M1 mechanism item. Its discrete scope remains unavailable while #3258 is open.
 - The item requires error decomposition, a zero-update frame-source comparison, capped relation arithmetic, identity-safe replay, matched lookup/reranker controls and the strict paired floor before training.
 - Regenerated `docs/roadmap/README.md`; added the ORDER, cancel probe and this REPORT.
-- Size at the review-repair commit: 5 files, 189 additions and 2 deletions. Task documentation (ORDER/probe/REPORT) 124 lines, roadmap item 60, generated view 5 additions and 2 deletions; no code or test files. The ORDER set no numeric estimate, so an estimate ratio is not applicable.
+- Size at the review-repair commit: 5 files, 187 additions and 2 deletions. Task documentation (ORDER/probe/REPORT) 122 lines, roadmap item 60, generated view 5 additions and 2 deletions; no code or test files. The ORDER set no numeric estimate, so an estimate ratio is not applicable.
 
 ## Measurements
 
