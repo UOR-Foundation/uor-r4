@@ -78,3 +78,11 @@ Why a 6-run (`~2.2h`, `~$2.40`) `16,404`-batch GPU rerun of `Arm-R-Grid` and `Ar
    - Close `r-rank-objective-keeps-cells` (`#2883`, `status: done`) with one notebook row in `docs/research/notebook/m1-discrete-attention.md`.
 2. **Reversibility:**
    - All `R_grid` (`s[11]=2`) and `R_occ` (`s[11]=3`) evaluators and finite controls (`C-R1..C-R7d`) remain in `crates/uor-r4-discrete/src/objective.rs` (`READY` in `docs/mechanisms/rank-margin.md`). If Casey or a future multi-cell sparse initialization (`occ_0 < 256`) wants a full 6-run `R_occ` GPU sweep, it can be dispatched immediately.
+
+---
+
+## 5. Fresh-Context D68 Decision Review Record
+
+- **Reviewer:** Fresh-context `research` subagent `96f12503-9939-466d-83c0-3268bf63d4ab` (`antigravity`, CHARTER §5.1, D68)
+- **Reviewed Commit:** `042105d6c` (`DECISION.md` `3cbd4bf7e1040f4be294b21f60d1802e7ec0f9564ed38209e4498c656a09bba2`)
+- **Verdict:** `D68 DECISION REVIEW: APPROVE`
