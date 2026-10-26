@@ -105,7 +105,7 @@ fn main() -> Result<()> {
             let value = run_d11_export_gap(&data_root, &save_dir, &device)?;
             for s in value["seeds"].as_array().into_iter().flatten() {
                 println!(
-                    "[d11-export-gap] seed={} top1_float={} top1_d11={} b={} c={} net={} F_I={} loss_float={} loss_d11={} within={} save_load={} determinism={} dev={} q12={}",
+                    "[d11-export-gap] seed={} top1_float={} top1_d11={} b={} c={} net={} F_I={} loss_float={} loss_d11={} within_gpu_half={} save_load={} determinism={} dev={} q12={}",
                     s["seed"],
                     s["float"]["top1_hits"],
                     s["d11"]["top1_hits"],

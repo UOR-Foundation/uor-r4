@@ -291,6 +291,13 @@ fn parity_section(
     d11_gpu: &[Output],
 ) -> Result<Value, String> {
     let served = served(model, inputs)?;
+    if d11_gpu.len() != served.len() {
+        return Err(format!(
+            "the D11 readout has {} positions, the integer session {}",
+            d11_gpu.len(),
+            served.len()
+        ));
+    }
     let agree = d11_gpu
         .iter()
         .zip(&served)

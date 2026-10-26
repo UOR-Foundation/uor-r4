@@ -1067,8 +1067,6 @@ pub fn run_full_sheet(data_root: &Path, device: &Device) -> Result<FbsSheetRecei
     Ok(receipt)
 }
 
-/// Writes `value` as pretty JSON to `path`, never over an existing file (the file is created
-/// exclusively, so a concurrent writer cannot be overwritten either).
 /// The arm Stage 4b exports (claude-126): only one-atom routes convert
 /// (`fbs_export::decode_coded_routes`), and Stage 3's capacity gate kept one atom.
 pub const D11_EXPORT_ARM: FbsArm = FbsArm::OneAtomActive;
@@ -1242,6 +1240,7 @@ pub fn run_d11_export_gap(
             "paired_float_vs_d11": paired,
             "net_gap_rows": net,
             "f_i": f_i(paired.a_hit_b_miss_c, paired.a_miss_b_hit_b),
+            // The GPU half on this seed: the gate also needs I-D11-Artifact-Agreement.
             "within_band": within,
             "preds_float_sha256": preds_sha256(&out.preds_float),
             "preds_d11_sha256": preds_sha256(&d11_preds),
@@ -1280,6 +1279,8 @@ pub fn run_d11_export_gap(
     }))
 }
 
+/// Writes `value` as pretty JSON to `path`, never over an existing file (the file is created
+/// exclusively, so a concurrent writer cannot be overwritten either).
 pub fn write_receipt(path: &Path, value: &serde_json::Value) -> Result<()> {
     let mut text = serde_json::to_string_pretty(value).map_err(|e| invalid(e.to_string()))?;
     text.push('\n');
