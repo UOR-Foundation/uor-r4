@@ -68,3 +68,8 @@ required-features = ["serving-wasm"]
 name = "mk-synthetic-stack"
 path = "src/bin/mk-synthetic-stack.rs"
 required-features = ["serving-wasm"]
+
+[[bin]]
+name = "fbs-export"
+path = "src/bin/fbs-export.rs"
+required-features = ["serving-wasm"]

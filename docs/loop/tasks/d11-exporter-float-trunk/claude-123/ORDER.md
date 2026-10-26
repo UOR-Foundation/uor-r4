@@ -28,7 +28,13 @@ Cancel if a float-to-`FbsTrunkSnapshot` converter already exists on main or in a
 
 **Not cancelled (instrument check: none needed).**
 
-**Scope note.** `crates/uor-r4-float-train` gains a path dependency on `uor-r4-integer` (the design note's §1 edge; it does not exist yet). That changes one line of the generated `Cargo.lock`, which the item's scope omits. The change is mechanical, and the pod builds need it, because they use `--locked`. The exact-head reviewer confirms the lock diff is only that edge, and pr-check's scope rule (advisory) will WARN on it.
+**Scope note.** `crates/uor-r4-float-train` gains a path dependency on `uor-r4-integer`. This is the design note's §1 edge, which does not exist yet. That changes one line of the generated `Cargo.lock`, which the item's scope omits. The change is mechanical, and the pod builds need it, because they use `--locked`. The exact-head reviewer confirms the lock diff is only that edge, and pr-check's scope rule (advisory) will WARN on it.
+
+**Feature boundary (found while reading).** The integer crate's `stack` module, which holds the FBS snapshot and `export_fbs_trunk_uorlut01`, compiles only under `serving-wasm` (`native_geometry.rs` includes `serving_root.rs`). That feature also compiles the `model`, `sampling` and `tables` modules. D29's "presence counts" compliance rests on the feature staying off in the native graph (`docs/model/serving-and-export.md`). So the converter never enables it. Instead:
+- The three plain snapshot types move to an ungated `uor_r4_integer::fbs_snapshot`. `stack::format` re-exports them, so existing paths and tests are unchanged.
+- `float-train` depends on the integer crate without features, as `uor-r4-training` already does. It writes the snapshot as JSON, and `serde_json` writes `f32` values so they round-trip exactly.
+- A small integer bin (`serving-wasm`, the serving build) turns that JSON into the `.uorlut` file.
+- Only the float-train GPU test enables `serving-wasm`, through a dev-dependency, to export, parse and run the session. Resolver 2 keeps dev-dependency features out of normal builds.
 
 ## Files in scope
 
@@ -43,7 +49,10 @@ Cancel if a float-to-`FbsTrunkSnapshot` converter already exists on main or in a
 
 ## Done when
 
-1. **Converter.** `uor-r4-integer` exposes its Cl(0,6) signed-axis table and orbit roots read-only. `crates/uor-r4-float-train/src/fbs_export.rs` turns a `StackModel` into an `FbsTrunkSnapshot` that `export_fbs_trunk_uorlut01` accepts. A small bin converts a `StackModel::save` directory to a `.uorlut` file.
+1. **Converter.**
+   - `uor-r4-integer` exposes its Cl(0,6) signed-axis table and orbit roots read-only, and holds the snapshot types in the ungated `fbs_snapshot` module.
+   - `crates/uor-r4-float-train/src/fbs_export.rs` turns a `StackModel` into an `FbsTrunkSnapshot` that `export_fbs_trunk_uorlut01` accepts.
+   - Two small bins: a float-train one converts a `StackModel::save` directory to snapshot JSON, and an integer one (`serving-wasm`) exports that JSON to a `.uorlut` file.
 2. **Host tests (laptop):**
    - the tables are identical;
    - the coded-carrier decode recovers a synthetic gather exactly, and refuses a mix, an out-of-range value, a non-integer value and a code outside the group;
