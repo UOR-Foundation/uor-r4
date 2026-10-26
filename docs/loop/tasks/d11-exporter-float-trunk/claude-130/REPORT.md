@@ -18,7 +18,13 @@ References #2820.
   - **On seed 1 the artifact loses 278 net rows.**
   - **What it decides,** under the sheet's FAIL row: D11-mode training by this recipe (the bridges, Stage 4b's 1,024 steps and data) does not bring the gap inside the band. That closes this configuration, never the mechanism. The next step is the decision review's, below.
 - **D11-mode training is unstable across seeds in plain float.** Its top-1 is 3,941 and 917, against the plain-trained trunk's 1,988 and 2,643. Its own two-seed loss band, |L_F(1) − L_F(2)|, is 0.0445, about Stage 4b's whole band of 0.0457.
-- **This recipe made seed 2 worse in every forward, not only in plain float.** Its export-mode top-1 is 1,237, below claude-129's plain-trained artifact (2,294). Its admitted-target rate is 0.115, against seed 1's 0.354.
+- **This recipe made seed 2 worse in every forward, on top-1 and loss.** Against the plain-trained trunk:
+  - plain float, 917 against 2,643;
+  - export mode, 1,237 against claude-129's artifact (2,294);
+  - artifact, 1,249 against 2,294;
+  - L_F, 1.928 against 1.8316.
+
+  Its admitted-target rate is also below seed 1's in each forward: 0.091 against 0.354 in plain float, and 0.115 against 0.334 in export mode.
 - **The gap receipts carry the wrong sheet path.** They name the artifact-gap sheet, claude-129's scorer default, not this unit's sheet. The receipts are as the scorer wrote them, and this REPORT names the sheet that governs them.
 - **The item's done-when is not met,** so #2820 stays open.
 
@@ -69,7 +75,10 @@ Size against `origin/main`: float-train, in `hamilton_sheet.rs`, `geometric_stac
 - **The artifact against the model's export-mode panel.** The artifact's top-1 (3,663 and 1,249) is within a few dozen rows of the same weights' export-mode panel (3,638 and 1,237). So after D11 training, what is left of the gap lies between the plain-float forward and the D11-like forwards of the same weights, not between the D11 forward and the artifact.
 - **Against claude-129's direct export of the plain-trained trunk.** That artifact scored 1,907 and 2,294. The D11-trained artifact scores 3,663 on seed 1, almost twice as many rows, and 1,249 on seed 2.
 - **The step-0 query credit** is in the probe receipt.
-- **Training wall time:** 1,024 steps per seed took about 3 minutes, and both seeds with their evaluations about 6 minutes.
+- **Wall time:**
+  - 1,024 steps per seed took about 3 minutes.
+  - The training step, both seeds with their in-training float and export-mode evaluations, took 6 m 19 s.
+  - Each seed's verified evaluator run took about 9 m 44 s, mostly the CPU verify.
 
 **Evidence:** the HF store at `results/claude/d11-fbs-d11-train-2026-10-26/`, each folder with a `SHA256SUMS`:
 - `d11t/` holds every step's stdout, stderr and exit code, the probe, the training receipt, the saved models and snapshots, both artifacts, the windows, both evaluator runs, both gap receipts and `job.log`;
@@ -78,6 +87,17 @@ Size against `origin/main`: float-train, in `hamilton_sheet.rs`, `geometric_stac
 ## Checks run at the head
 
 See the exact-head review record on the PR.
+
+**The code review's low findings,** recorded for the dual-forward unit and not changed after the run:
+1. **No training trajectory.** `run_d11_train_export`'s receipt leaves out each seed's trajectory (`out.run`). So the training losses at the evaluation points, a reading the sheet names, are in the probe receipt only. The next unit should add `"run": out.run` to each seed's entry.
+2. **The Q12 bridge and the clamp.** The straight-through Q12 bridge passes the gradient even where the clamp pins the forward (|q| ≥ 8). This is probably unreachable at these query scales, but worth a note.
+3. **Test coverage.** The Q12 bridge is pinned only by the CUDA test, beside the transition bridge.
+
+**Checks:**
+- float-train library 39 on the host, and 55 on the GPU with 5 ignored, including both bridge tests;
+- a stub-nvcc CUDA check, clean; `cargo fmt`, clean;
+- `loop report --check` and `loop pr-check --local` pass, with advisory WARNs;
+- `loop gates --full` exits 0.
 
 ## Skills used
 
