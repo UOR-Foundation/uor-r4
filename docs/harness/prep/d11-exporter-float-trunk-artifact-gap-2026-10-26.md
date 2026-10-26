@@ -86,6 +86,8 @@ The loader checks both pins itself. The panel is 400 documents, 428 windows of 1
    - then `spiralcore-fbs-sheet --mode d11-artifact-gap --data-root <driver-data> --model-dir <save/seed-<s>/model> --evaluator run-seed-<s>.json --windows-sha256 <sha> --stage4b d11-gap.json --stored-preds <preds-float.json> --seed <s> --out gap-seed-<s>.json`.
 6. Save the run folder to the store at `results/claude/d11-fbs-artifact-gap-2026-10-26/`, with a `SHA256SUMS`.
 
+*Note after the run:* step 5's `d11-artifact-gap` also takes `--artifact-sha256 <seed's pin>`, added in FIT round 1 and passed by the job for each seed.
+
 **Minimum test power:**
 - 2 seeds;
 - 14,287 frozen DEV targets;

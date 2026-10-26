@@ -13,7 +13,7 @@ References #2820.
   | 1 | 1,988 | 1,907 | 477 | 396 | 81 | 60 | outside |
   | 2 | 2,643 | 2,294 | 772 | 423 | 349 | 70 | outside |
 
-  Both counts are over the 14,287 `ft/dev` targets.
+  Both counts are over the 14,287 `ft/dev` targets. The receipts store b under the key `a_hit_b_miss_c` and c under `a_miss_b_hit_b`, with float as A and the artifact as B. Their `_c` and `_b` suffixes run opposite to the sheet's letters.
   - **This counts as a result:** every instrument check was green (below).
   - **What it decides,** under the sheet's FAIL row: direct post-training rounding into the artifact is disqualified for this trained configuration (CHARTER §3.7). The next configuration trains in the D11 mode before export.
   - **What it does not do:** it closes this configuration, never the mechanism.
@@ -62,10 +62,10 @@ The emulation's disagreement with the artifact, about 1% of tokens, barely moved
 
 **Evaluator throughput, on one RTX 5090** (driver 595.80, nvcc 12.8):
 - 428 windows of 192 took 14.39 s and 14.36 s of GPU wall time, in one launch.
-- That confirms claude-128's inference of about 15 s, against its 115 s linear projection.
-- The verify on the pod's CPU, against both references, took about 19 minutes per seed.
+- claude-128's REPORT inferred about 15 s for that launch and projected 115 s linearly; the measured times fit the inference.
+- Each seed's evaluator step, GPU and the CPU verify against both references together, took about 19 minutes. Nearly all of that is the CPU verify.
 
-**No tokens per second are newly measured.** The runtime is unchanged since claude-127's laptop figures.
+**No tokens per second are newly measured.** This diff changes no runtime code, and claude-128 added only a read-only accessor. So the serving arithmetic is claude-127's, the one its laptop figures time.
 
 **Evidence:** the HF store at `results/claude/d11-fbs-artifact-gap-2026-10-26/`, each folder with a `SHA256SUMS`:
 - `gap/` holds every step's stdout, stderr and exit code, `windows.json`, both evaluator runs, both receipts (`gap-seed-<s>.json`) and `job.log`;
@@ -74,6 +74,17 @@ The emulation's disagreement with the artifact, about 1% of tokens, barely moved
 ## Checks run at the head
 
 See the exact-head review record on the PR.
+
+**The code review's low findings, recorded and not changed after the run,** so that the head's scorer is the one that produced the receipts:
+1. **The windows hash.** The scorer compares the evaluator's `sequences_sha256` with the `--windows-sha256` it is given; it does not rebuild the windows itself. In this run, the job wrote `windows.json` with the sheet's own `d11-artifact-windows` mode and hashed it in the same job (`windows.sha256`), and the evaluator recorded that hash. A later scorer should rebuild the hash from the panel.
+2. **The window count.** The code checks the 14,287 rows, not the 428 windows the sheet names. The receipts record `dev_windows` 428.
+3. **The sheet's step 5** leaves out `--artifact-sha256`, which the binary requires. The job passed it for each seed.
+4. **The new options** are accepted by every mode, and ignored outside `d11-artifact-gap`.
+
+**Checks:**
+- **Suites:** float-train library 38, including `the_artifact_is_read_at_each_scored_offset_in_panel_order`, which fails when the mapping is read one position late.
+- **Build:** a stub-nvcc CUDA check of float-train, clean; `cargo fmt`, clean.
+- **Loop:** `loop report --check` and `loop pr-check --local` pass, with an advisory WARN for the sheet's "Cost and stop rule" heading; `loop gates --full` exits 0.
 
 ## Skills used
 
