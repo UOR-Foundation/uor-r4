@@ -2160,7 +2160,7 @@ mod cuda_impl {
             if dev_is_psucc[r] {
                 dev_psucc_admitted_rows += 1;
             }
-            if ev.target_cell_rank == 0 {
+            if ev.target_cell_rank == 1 {
                 dev_target_cell_rank1_rows += 1;
             } else {
                 dev_target_cell_rank2_to_8_rows += 1;

@@ -7,6 +7,7 @@
 //!   within-cell-writer-run decompose-stage-t STAGE_T_DIR DATA_ROOT OUT_JSON
 //!   within-cell-writer-run b0 DATA_ROOT QUAL_JSON DECOMP_JSON OUT_JSON
 
+#[cfg(feature = "cuda")]
 use std::path::Path;
 use std::process::ExitCode;
 

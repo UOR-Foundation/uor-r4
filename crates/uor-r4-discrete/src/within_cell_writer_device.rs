@@ -222,7 +222,13 @@ impl Device {
         launch.arg(&mut status);
 
         // SAFETY: all device buffers are allocated on this stream with exact row capacities.
-        unsafe { launch.launch(launch_config(batch.rows)) }.map_err(cuda)?;
+        // Launch 1 threadblock per row so all 64 rows in a batch distribute across up to 64 SMs.
+        let row_grid = LaunchConfig {
+            grid_dim: (batch.rows.max(1), 1, 1),
+            block_dim: (1, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        unsafe { launch.launch(row_grid) }.map_err(cuda)?;
         check_status(&self.stream, &status, "within-cell writer evaluation")?;
 
         let h_q = self.stream.clone_dtoh(&out_q).map_err(cuda)?;
@@ -320,7 +326,12 @@ impl Device {
 
         // SAFETY: `out_q` has capacity `rows * width`, and `wc_cfg[5] & 32` returns before touching
         // `out_admitted_cells`, `out_top8_tokens`, `out_metrics`, or `out_trace`.
-        unsafe { launch.launch(launch_config(batch.rows)) }.map_err(cuda)?;
+        let row_grid = LaunchConfig {
+            grid_dim: (batch.rows.max(1), 1, 1),
+            block_dim: (1, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        unsafe { launch.launch(row_grid) }.map_err(cuda)?;
         check_status(&self.stream, &status, "within-cell read vector capture")?;
         self.stream.clone_dtoh(&out_q).map_err(cuda)
     }
