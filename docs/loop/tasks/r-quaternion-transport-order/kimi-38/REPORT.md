@@ -10,12 +10,12 @@ Closes #2882.
 
 ## Cancel probe
 
-Merged #2890 already provides the required matched on/off comparison in a lawful geometric stack. Its sheet defines `Rec_Geometric_S3_Active` against `Rec_Geometric_IdentityTransport_Control` and `Rec_Geometric_U1_AbelianControl` on both seeds. Its lab record and `docs/research/notebook/float-training.md` record the outcome as `G-Rec-Transport = FAIL`: identity and U(1) outperform non-abelian S³ at 1,024 steps. No new run adds information.
+The merged #2890 work (PR #3245) already provides the required matched on/off comparison in a lawful geometric stack. Its sheet defines `Rec_Geometric_S3_Active` against `Rec_Geometric_IdentityTransport_Control` and `Rec_Geometric_U1_AbelianControl` on both seeds. Its lab record and `docs/research/notebook/float-training.md` record the outcome as `G-Rec-Transport = FAIL`: identity and U(1) outperform non-abelian S³ on mean and the both-seeds criterion at 1,024 steps. No new run adds information.
 
 ## What changed
 
 - Set `r-quaternion-transport-order` to `done` because its required controlled comparison and notebook row already exist.
-- The PR closes #2882 only. No mechanism, bar, hold, experiment, source file or item dependency changed. Size: item status 1 line + ORDER +34 + REPORT +35; generated 0.
+- The PR closes #2882 only. No mechanism, bar, hold, experiment, source file or item dependency changed. Size: item status 1 line + ORDER 27 + REPORT 45 + roadmap render 3/-3; generated 1 file +3/-3.
 
 ## Measurements
 
@@ -29,7 +29,7 @@ Merged #2890 already provides the required matched on/off comparison in a lawful
 - `uor-harness loop pr-check --local`
 - `uor-harness loop gates --full`
 - `cargo run -q --locked -p xtask -- roadmap render --check`
-- `git diff --check`
+- `git diff --check origin/main...HEAD`
 
 ## Skills used
 
@@ -42,4 +42,4 @@ Merged #2890 already provides the required matched on/off comparison in a lawful
 
 ## Plain summary
 
-The controlled quaternion on/off experiment already ran and answered the item: identity and U(1) beat S³ at this horizon. This PR closes only the item that required that comparison and does not run it again.
+The controlled quaternion on/off experiment already ran and answered the item: identity and U(1) beat S³ on mean and the both-seeds criterion at this horizon. This PR closes only the item that required that comparison and does not run it again.

@@ -4,11 +4,11 @@ Lab: kimi. Item: [r-quaternion-transport-order](../../../../roadmap/items/r-quat
 
 ## Goal
 
-Verify that merged #2890 already meets the item's done-when with a matched on/off comparison in a lawful model and a notebook row. Set only this item to `done` and close #2882. Do not rerun GPU or claim a positive transport result.
+Verify that the merged #2890 work (PR #3245) already meets the item's done-when with a matched on/off comparison in a lawful model and a notebook row. Set only this item to `done` and close #2882. Do not rerun GPU or claim a positive transport result.
 
 ## Cancel probe (run first)
 
-The sheet and `docs/research/notebook/float-training.md` compare `Rec_Geometric_S3_Active` against `Rec_Geometric_IdentityTransport_Control` and `Rec_Geometric_U1_AbelianControl` on both seeds across two clean builds. Identity and U(1) beat S³, so the required controlled comparison and its negative result already exist. The older positive result was confounded; this new comparison uses the lawful geometric stack.
+The sheet and `docs/research/notebook/float-training.md` compare `Rec_Geometric_S3_Active` against `Rec_Geometric_IdentityTransport_Control` and `Rec_Geometric_U1_AbelianControl` on both seeds across two clean builds. Identity and U(1) beat S³ on mean and the both-seeds criterion, so the required controlled comparison and its negative result already exist. The older positive result was confounded; this new comparison uses the lawful geometric stack.
 
 ## Files in scope
 
@@ -24,4 +24,3 @@ The sheet and `docs/research/notebook/float-training.md` compare `Rec_Geometric_
 ## Stop and decide, never wait
 
 Any new experiment, GPU run, notebook rewrite, mechanism change or broader status change needs a new ORDER.
-
