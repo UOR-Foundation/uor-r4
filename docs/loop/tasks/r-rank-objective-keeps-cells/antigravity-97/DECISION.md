@@ -12,7 +12,7 @@
 
 1. **Why `#2883` Exists:**
    - In the `K16-A` vs `K16-R` GPU run (`#2029` comment `6257335075`, [`docs/labs/k16-outcome-call-2026-10-19/README.md`](../../../../labs/k16-outcome-call-2026-10-19/README.md)), `OccupiedCellRankHingeV1` (`R`, `s[11] = 1`) collapsed from `16` initial cells to **`20 / 256`** (Seed 1, $\bar{n}_R = 3,403.9$) and **`19 / 256`** (Seed 2, $\bar{n}_R = 3,480.7$) occupied cells vs `209 / 256` ($\bar{n}_A = 351.8$) and `192 / 256` ($\bar{n}_A = 376.1$) under `NearestAddressMarginV1` (`A`, `s[11] = 0`).
-   - This triggered `OCCUPANCY_COLLAPSE_TRIGGERED` on both `G-Occ` clauses (`occupied_cells < max(32, ceil(0.5 * occ_A))` and $\bar{n}_R > 2 \cdot \bar{n}_A$) because `if (occupied[cell]) ++rank` (`discrete.cu:384-387`) rewards vacating preceding cells (`-1` rank across the dataset whenever a cell is emptied) and charges zero penalty for crowding thousands of tokens into a single cell (`C-R2`).
+   - This triggered `OCCUPANCY_COLLAPSE_TRIGGERED` on both `G-Occ` clauses (`occupied_cells < max(32, ceil(0.5 * occ_A))` and $\bar{n}_R > 2 \cdot \bar{n}_A$) because `if (occupied[cell]) ++rank` (`discrete.cu:401-406`, historically `383-388`) rewards vacating preceding cells (`-1` rank across the dataset whenever a cell is emptied) and charges zero penalty for crowding thousands of tokens into a single cell (`C-R2`).
    - Roadmap item `r-rank-objective-keeps-cells` (`#2883`) was created with done-when:
      > *"A rank objective that passes G-Occ (more than 16 of 256 cells, plus the D39 condition) and is evaluated against the count tables."*
 2. **Pre-Registration (`antigravity-67`, `#3212`):**
@@ -29,25 +29,25 @@
 
 Since `docs/harness/prep/r-rank-objective-keeps-cells-2026-10-25.md` was written on 25 Oct 2026, two decisive GPU units have completed and sealed their artifacts:
 
-1. **Two-Seed Stage T `BVG-K` (`K = 16`) GPU Run (`#2836`, PR `#3239`, HF archive `stage-t-20261025.tar.gz` `c004db506bf64903231c5c225a07e9969d5e3344c51a67eaec9429265e5f44b6`, [`docs/labs/m1-bvg-k-stage-t-training/grade.json`](../../../../labs/m1-bvg-k-stage-t-training/grade.json) `cd66a41b77050c01511b40ff61cf07c86116bf05344566ab642d1a07213e917a`):**
+1. **Two-Seed Stage T `BVG-K` (`K = 16`) GPU Run (`#2836`, PR `#3239`, HF archive `stage-t-20261025.tar.gz` `c004db506bf64903231c5c225a07e9969d5e3344c51a67eaec9429265e5f44b6`, [`docs/labs/m1-bvg-k-stage-t-training/grade.json`](../../../../labs/m1-bvg-k-stage-t-training/grade.json) `7917ec85941d919db14ab67567fe824c87d6d2edf18bbd54138bf320b6ea4c81`):**
    - Under `AddressCellsA8` (`256 / 256` cells occupied at `16` tokens/cell) + `D40` (`3,847`-row TRAIN anchor floor `>= 1,187`) + `BVG-K` (`K = 16` coordinates/step), **`Arm-A` (`T16_fz`, `NearestAddressMarginV1`) already passes both `G-Occ` and `G-Adm` on both seeds (`1` and `2`):**
      - `G-Occ`: `occupied_cells = 256 / 256 > 16` (`>= max(32, ceil(0.5 * 256)) = 128`), `mean_admitted_tokens = 256 <= 2 * 256 = 512`, `max_cell_tokens = 16 <= 32` (**`G-Occ PASS`**).
      - `G-Adm`: `DEV b_3(Full) = 5,009 / 14,287 >= 4,894` (`+765` over cp0 `4,244`, `+717` over `#2831` `Q1` `4,292`), `DEV b_3(P_succ) = 1,216 / 3,847 >= 1,106` (**`G-Adm PASS`**).
-     - `DEV writer top-1` (`OuterL1V1`): `455 / 14,287` (`top-8 = 1,353 / 14,287`, `P_succ top-1 = 236 / 3,847`, `strict_wins = 408`; `T16_rel = 442 / 14,287`).
-     - Lawful count-table baselines on the `14,287`-row DEV panel:
+     - `DEV writer top-1` (`OuterL1V1`): `455 / 14,287` (`top-8 = 1,484 / 14,287`, `P_succ top-1 = 107 / 3,847`, `P_succ top-8 = 318 / 3,847`, `strict_wins = 93`; `T16_rel = 371 / 14,287`, `top-8 = 1,124 / 14,287`, `P_succ top-1 = 78 / 3,847`, `P_succ top-8 = 243 / 3,847`, `strict_wins = 172`).
+     - Lawful count-table baselines on the `14,287`-row DEV panel (`t16-frozen-zero-seed1/w2-summary.json` `19009681fc7f81cd3af581b77b10e418d57d1437eb07f7ecd139cfcd5187f22c`, `t16-relation-seed1/w2-summary.json` `565e0aa10c6ec93fdaa8b70e510f23dfd612d2602826ff9176b3986861089e10`):
        - Unconditional Unigram `U`: `1,226 / 14,287`
        - Unconditional Bigram `T2`: `6,300 / 14,287`
-       - Full-panel read-code table `T(c(x))`: `4,085 / 14,287` (`T16_rel = 4,090`)
-       - Admitted-set restricted unigram `U_restr(A_W)`: `1,127 / 14,287` (`T16_rel = 909`)
-       - Admitted-set restricted symmetric code table `T_sym_restr(A_W)`: `1,909 / 14,287` (`T16_rel = 1,683`)
-       - Admitted-set restricted read-code table `T_restr(A_W)`: `2,140 / 14,287` (`top-8 = 3,795`, `P_succ = 609 / 3,847`; `T16_rel = 1,929`)
-       - Admitted-set restricted bigram-x-code table `G_restr(A_W)`: `3,084 / 14,287` (`top-8 = 3,798`, `P_succ = 1,039 / 3,847`; `T16_rel = 2,756`).
+       - Full-panel read-code table `T(c(x))`: `4,085 / 14,287` (`T16_rel = 3,680`)
+       - Admitted-set restricted unigram `U_restr(A_W)`: `1,127 / 14,287` (`T16_rel = 942`)
+       - Admitted-set restricted symmetric code table `T_sym_restr(A_W)`: `1,909 / 14,287` (`T16_rel = 1,377`)
+       - Admitted-set restricted read-code table `T_restr(A_W)`: `2,140 / 14,287` (`top-8 = 4,006`, `P_succ = 376 / 3,847`; `T16_rel = 1,602`, `top-8 = 3,007`, `P_succ = 327 / 3,847`)
+       - Admitted-set restricted bigram-x-code table `G_restr(A_W)`: `3,084 / 14,287` (`top-8 = 4,674`, `P_succ = 517 / 3,847`; `T16_rel = 2,364`, `top-8 = 3,529`, `P_succ = 496 / 3,847`).
 
-2. **Within-Cell Read-Code Reranker Decomposition (`#3267`, PR `#3285`, [`docs/labs/m1-within-cell-writer/stage-t-decomposition.json`](../../../../labs/m1-within-cell-writer/stage-t-decomposition.json) `e9dd940c0f58a1c494bb5d8f38a485528b6693bcaa67b23df3f1d867bec76cc6`):**
+2. **Within-Cell Read-Code Reranker Decomposition (`#3267`, PR `#3280`, [`docs/labs/m1-within-cell-writer/stage-t-decomposition.json`](../../../../labs/m1-within-cell-writer/stage-t-decomposition.json) `e9dd940c0f58a1c494bb5d8f38a485528b6693bcaa67b23df3f1d867bec76cc6`):**
    - On `T16_fz`'s `5,009` admitted DEV rows (`G-Occ PASS`, `G-Adm PASS`):
      - **`4,208 / 5,009` (`84.01%`) of admitted DEV target tokens lose to a rival token inside their own endpoint cell `target_cell`** (`admitted_target_loses_within_own_cell_rows = 4,208`).
-     - Of the `1,765` DEV rows where `T_restr(A_W)` (`2,140`) hits `top-1` and `OuterL1V1` (`455`) misses (`t_restr_hits_w_misses = 1,765`), **`1,597 / 1,765` (`90.48%`, `959` within-cell only + `638` both within-cell and cross-cell) lose to a rival token inside `target_cell`**.
-     - Replacing `OuterL1V1` within-cell ranking on the exact same `5,009` admitted cells with `WithinCellCodeRerankerV1` (`#3267`) immediately raises `DEV top-1` from `455` to **`2,126 / 14,287`** (`+1,671` rows, beating `Unigram = 1,226` by `+900` rows, `U_restr(A_W) = 1,127` by `+999` rows, and `T_sym_restr(A_W) = 1,909` by `+217` rows while keeping `occupied_cells = 256 / 256`, `G-Occ = PASS`, and `b_3(Full) = 5,009` identical).
+     - Of the `1,765` DEV rows where `T_restr(A_W)` (`2,140`) hits `top-1` and `OuterL1V1` (`455`) misses (`t_restr_hits_w_misses = 1,765`), **`1,597 / 1,765` (`90.48%`, `415` within-cell only + `1,182` both within-cell and cross-cell, with `168` cross-cell only) lose to a rival token inside `target_cell`**.
+     - Replacing `OuterL1V1` within-cell ranking on the exact same `5,009` admitted cells with `WithinCellCodeRerankerV1` (`#3267`) immediately raises `DEV top-1` from `455` to **`2,140 / 14,287`** (`reranker_code_pooled`, `top-8 = 4,006`, `+1,685` rows over `455`, beating `Unigram = 1,226` by `+914` rows, `U_restr(A_W) = 1,127` by `+1,013` rows, `T_sym_restr(A_W) = 1,909` by `+231` rows, and `reranker_code_permuted_null = 753` by `+1,387` rows), **`2,142 / 14,287`** (`reranker_code_cell_prio`, `+1,687` rows over `455`), and **`1,706 / 14,287`** (`reranker_code_top1_cell_only`, `+1,251` rows over `455`), while keeping `occupied_cells = 256 / 256`, `G-Occ = PASS`, and `b_3(Full) = 5,009` identical.
 
 ---
 
