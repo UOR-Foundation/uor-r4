@@ -4,7 +4,7 @@
 - **Sheet:** [`spiralcore-fbs-offline-float-sheet-2026-10-25.md`](../../harness/prep/spiralcore-fbs-offline-float-sheet-2026-10-25.md), FIT in #3233. The pre-run review and D68 decision review are on #2891.
 - **Runner:** `crates/uor-r4-float-train/src/spiralcore_fbs_sheet.rs`, with bin `spiralcore-fbs-sheet`. The arm kernels are `src/spiralcore_fbs_arms.cu` (own PTX module `spiralcore_fbs_arms_f32.ptx`).
 - **Source built on the pod:** `ca0572423f472c9f2b01d60a4f50cb17261281e9`.
-- **GPU:** GPU 1 of `vast-57710022`, which is antigravity's 2 × RTX 5090 pod (`sm_120`, driver `595.80`, `nvcc 12.8.93`). Claude leased only GPU 1: from about 00:50 to 01:24Z for the sheet, and about 01:44 to 01:50Z for the review round's GPU tests. That is about 40 minutes, or about $0.73 at half the pod's $2.171/h.
+- **GPU:** GPU 1 of `vast-57710022`, which is antigravity's 2 × RTX 5090 pod (`sm_120`, driver `595.80`, `nvcc 12.8.93`). Claude leased only GPU 1: from about 00:50 to 01:24Z for the sheet, and about 01:44 to 01:50Z for the review round's GPU tests. That is about 40 minutes, or about $0.72 at half the pod's $2.171/h.
 - **Binary:** builds A and B are byte-identical, `bb88f774cc225e002c1448c6fb36eeb8f468c1ee254a7df95d02764e682bd139`.
 - **Pins re-hashed on the pod:**
   - `spiralcore_fbs.cu` `517bffcc…`, `spiralcore_fbs.rs` `6eb2b09d…` and `cuda_stack.cu` `c577fce9…`; all match the sheet.
@@ -30,7 +30,7 @@ All numbers below are **measurements** from these receipts unless they are label
 
 - **Decode is a lower bound.** Each new token recomputes the whole prefix, because there is no incremental state, and it pays one host read-back. It is not a serving speed.
 - **Evaluation at the other steps.** Over all 64 evaluation points, steps 0–512 included, the float evaluation range widens to 110,864–134,857 tok/s; the low end is a step-0 point. The export mode widens to 13,815–14,531 tok/s.
-- **The training timer did not wait for the GPU** after each step's update. The next step's loss read-back waits for it, so only the 3 steps before an evaluation point and the last step leave queued work outside the timer. Training tok/s is therefore overstated by at most about 4 steps' worth in 1,024. The head now synchronizes before reading the clock.
+- **The training timer did not wait for the GPU** after each step's update. The next step's loss read-back waits for it, so only the 3 steps just before an evaluation (at 256, 512 and 1,024, the last step included) leave queued work outside the timer. Training tok/s is therefore overstated by at most 3 steps' worth in 1,024. The head now synchronizes before reading the clock.
 
 ## Outcomes, negatives first
 
@@ -66,7 +66,7 @@ All numbers below are **measurements** from these receipts unless they are label
    - `Fbs_2Atom_Mix`: top-1 2,520 → 1,277.
    - Identity-transport control: top-1 1,548 → 152. Its admitted hits peak earlier, at 2,250 at step 256, then fall to 2,118 and then 256.
 
-   The frozen null's admitted hits rise throughout, 6,437 → 7,740. Antigravity's recurrence sheet showed the same signature: S³ seed 1 reached 352 top-1 despite loss descent ([notebook row](../../research/notebook/float-training.md), [record](../recurrence-gates-six-recurrence-fit/README.md)). **Hypothesis:** the margin-hinge objective lets the loss fall while the writer's cell admission degrades.
+   The frozen null's admitted hits rise throughout, 6,437 → 7,740. Build B does not repeat this exactly: its identity control's seed-1 top-1 keeps rising (445 → 1,457 → 1,500), another sign of the run-to-run spread in item 3. Antigravity's recurrence sheet showed the same signature: S³ seed 1 reached 352 top-1 despite loss descent ([notebook row](../../research/notebook/float-training.md), [record](../recurrence-gates-six-recurrence-fit/README.md)). **Hypothesis:** the margin-hinge objective lets the loss fall while the writer's cell admission degrades.
 5. **`G-Fbs-Capacity`: one atom is retained.** Two-path mixing would need lower loss by the full noise band on both seeds. It is lower by 0.0099 and 0.0617 in A (band 0.0686). In B it is higher by 0.0031 and 0.0146. The two-atom arm costs about 8% of training speed.
 6. **`G-Fbs-Transfer` was not reached.** It runs only after `G-Fbs-Sheet-Fit` and `G-Fbs-ExportGap` pass. Separately, the sealed `fresh_v2` draw is not in the `w2-inputs/2026-10-25/driver-data/` store bundle. The runner would have recorded that as blocked, never as a negative.
 
@@ -86,6 +86,9 @@ All numbers below are **measurements** from these receipts unless they are label
 - **The arm tests after the review round,** at `abe8102a`, on the same GPU (store `review-round-1/`, `SHA256SUMS` `66885d5f…`):
   - **At head:** all 5 arm tests pass, including the new distinct-paths test.
   - **Set-aside 1, every arm replaced by the standard projection:** all 5 fail.
+    - The identity and frozen tests fail on their own assertions: axes moved, and frozen queries received credit.
+    - The three tests that use two-path queries fail because the standard plan refuses their widened shape. So for the two-atom forward and its 1/√2, the evidence is set-aside 2 plus the tests' expected relations, not set-aside 1.
+    - The transpose property also holds for the standard projection, so that test pins the adjoint's correctness, not which arm is running.
   - **Set-aside 2, the two-atom backward writing each path's credit into the other path's slot:** only the distinct-paths test fails. The equal-paths test cannot see the swap.
 
 ## Open choices, labelled
@@ -98,6 +101,11 @@ All numbers below are **measurements** from these receipts unless they are label
 - **The ORDER's last D68 condition is only partly met.** It asks for the Q12 oracle to be checked against the existing integer SpiralCore/FBS form. `I-Export-Exactness` checks against the pinned crate's integer signed-axis table (`geometry.axes`), not against the kernel in `crates/uor-r4-discrete`, which is outside this item's scope. The two-atom arm's integer form, a sum with a shift, was not exercised.
 - **The training settings are the Hamilton sheet's, reused:** base rate 0.002, decay-rate multiplier 20, weight decay 0.1. Training runs 1,024 steps, one per `mw-balp/train` batch, with 1,024 batches loaded (`train_batches` in the receipt).
 - **Route mobility uses the nearest orbit root of each query block.** It is computed on the GPU over the 16 anchor roots.
+- **The exported arm, after the review round, departs from the sheet's wording.**
+  - The sheet scores the export gap for "the winning active arm".
+  - From `abe8102a`, the runner exports the one arm that passes `G-Fbs-Sheet-Fit` when exactly one passes. Otherwise it exports the capacity winner. This keeps an arm that failed the fit out of export and transfer.
+  - The receipt names the arm as `g_export_gap_arm`.
+  - It does not change this run, where no arm passed the fit.
 - **The noise band follows the sheet.** It is the largest two-seed loss difference over arms, which is the frozen null in both builds.
 - **The paired fit comparisons use float predictions.**
 - **Attempt 1** (source `dc8d2a56`) stopped at the GPU tests. The frozen-arm test required bit equality of an atomically accumulated input adjoint and failed only in the last bit. That is an instrument fault in the test, repaired in `ca057242` with a 1e-5 relative tolerance. Its logs are under `attempt1/` in the store.

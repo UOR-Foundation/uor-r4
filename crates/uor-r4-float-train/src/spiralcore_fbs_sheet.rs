@@ -1118,12 +1118,20 @@ mod tests {
             8,
             "2 active arms x 2 seeds x 2 controls"
         );
-        // One control out-hits both active arms on one seed: no arm fits.
-        let gates = gates_for(|arm, seed| match (arm, seed) {
-            (FbsArm::IdentityTransport, 2) => (2.0, 2.0, 600, 600),
-            _ => base(arm, seed),
+        // One control out-hits both active arms on one seed, either seed: no arm fits.
+        for bad in SEEDS {
+            let gates = gates_for(|arm, seed| match arm {
+                FbsArm::IdentityTransport if seed == bad => (2.0, 2.0, 600, 600),
+                _ => base(arm, seed),
+            });
+            assert_eq!(gates.fit_arm, None, "a control wins on seed {bad}");
+        }
+        // Winning on top-1 is not enough without descent below step 0 (3.0).
+        let gates = gates_for(|arm, seed| {
+            let (_, _, hits, hits_int) = base(arm, seed);
+            (3.5, 3.5, hits, hits_int)
         });
-        assert_eq!(gates.fit_arm, None);
+        assert_eq!(gates.fit_arm, None, "no arm descends");
     }
 
     #[test]
@@ -1229,6 +1237,60 @@ mod tests {
         assert!(!gates.export_ok, "400 rows exceed F_I = 40");
         let gates = gates_for(|arm, seed| cell(arm, seed, 0.2, 900));
         assert!(!gates.export_ok, "a 0.2 loss gap exceeds the 0.1 band");
+        // An export loss 0.2 below the float loss, on seed 1 only: the gap is absolute, and one
+        // failing seed fails the gate.
+        let gates = gates_for(|arm, seed| {
+            let (loss, _, hits, hits_int) = cell(arm, seed, 0.0, 900);
+            let gap = if seed == 1 { -0.2 } else { 0.0 };
+            (loss, loss + gap, hits, hits_int)
+        });
+        assert!(
+            !gates.export_ok,
+            "a 0.2 loss gap below the float loss on seed 1"
+        );
+    }
+
+    #[test]
+    fn capacity_keeps_one_atom_unless_two_paths_win_by_the_band_on_both_seeds() {
+        // The frozen null's 0.3 seed gap is the band (the largest over arms); the one-atom and
+        // control arms move by 0.1, and both active arms beat the controls on top-1.
+        let with_two = |two: [f64; 2]| {
+            gates_for(move |arm, seed| {
+                let s = (seed - 1) as usize;
+                let (loss, hits) = match arm {
+                    FbsArm::TwoAtomMix => (two[s], 500),
+                    FbsArm::OneAtomActive => ([1.8, 1.9][s], 500),
+                    FbsArm::FrozenQueries => ([2.0, 2.3][s], 100),
+                    FbsArm::IdentityTransport => ([2.0, 2.1][s], 100),
+                };
+                (loss, loss, hits, hits)
+            })
+        };
+        let gates = with_two([1.35, 1.45]);
+        assert!(
+            (gates.noise - 0.3).abs() < 1e-9,
+            "the band is the largest arm gap"
+        );
+        assert_eq!(
+            gates.capacity_winner,
+            FbsArm::TwoAtomMix,
+            "0.45 below on both"
+        );
+        assert_eq!(
+            with_two([1.6, 1.7]).capacity_winner,
+            FbsArm::OneAtomActive,
+            "0.2 below on both seeds is inside the 0.3 band"
+        );
+        assert_eq!(
+            with_two([1.7, 1.55]).capacity_winner,
+            FbsArm::OneAtomActive,
+            "by the band on seed 2 only"
+        );
+        assert_eq!(
+            with_two([1.45, 1.7]).capacity_winner,
+            FbsArm::OneAtomActive,
+            "by the band on seed 1 only"
+        );
     }
 
     #[test]
