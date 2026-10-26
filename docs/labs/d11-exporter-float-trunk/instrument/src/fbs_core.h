@@ -447,6 +447,11 @@ FBS_FN uint64_t fbs_trace_layer_bytes(const fbs_model *m) {
 FBS_FN uint64_t fbs_trace_stride(const fbs_model *m) {
   return (uint64_t)m->layer_count * fbs_trace_layer_bytes(m);
 }
+// One block's trace byte: the chosen root's index, or 255 for a zero raw (all
+// four channels zero), which selects root 0 (-1) on the tie (claude-134).
+FBS_FN uint8_t fbs_trace_root(const int32_t raw[4], uint32_t chosen) {
+  return (raw[0] | raw[1] | raw[2] | raw[3]) == 0 ? 255 : (uint8_t)chosen;
+}
 
 // ---------------------------------------------------------------------------
 // The recurrence core, geometric with snapped rotations (session.rs
@@ -482,7 +487,7 @@ FBS_FN int32_t fbs_recurrence(const fbs_model *m, const fbs_layer *layer, int64_
     int32_t raw[4] = {rotations[lane * 4], rotations[lane * 4 + 1], rotations[lane * 4 + 2], rotations[lane * 4 + 3]};
     int64_t transition[4];
     uint32_t chosen = fbs_snap_rotation(m->icosian, raw, lambda, transition);
-    if (trace) trace[lane] = (uint8_t)chosen;
+    if (trace) trace[lane] = fbs_trace_root(raw, chosen);
     int64_t *held = state + lane * 4;
     int64_t h[4] = {held[0], held[1], held[2], held[3]};
     fbs_i128 moved[4];
@@ -498,7 +503,7 @@ FBS_FN int32_t fbs_recurrence(const fbs_model *m, const fbs_layer *layer, int64_
     int32_t raw[4] = {gate[lane * 4], gate[lane * 4 + 1], gate[lane * 4 + 2], gate[lane * 4 + 3]};
     int64_t q[4];
     uint32_t chosen = fbs_snap_rotation(m->icosian, raw, 1ull << 31, q);
-    if (trace) trace[lanes + lane] = (uint8_t)chosen;
+    if (trace) trace[lanes + lane] = fbs_trace_root(raw, chosen);
     int64_t rhs[4];
     for (uint32_t k = 0; k < 4; k++) rhs[k] = fbs_shift(state[lane * 4 + k], FBS_RESIDUAL_EXP - FBS_STATE_EXP);
     fbs_i128 prod[4];
@@ -517,7 +522,7 @@ FBS_FN void fbs_hamilton_gate(const fbs_model *m, const int32_t *gate, const int
     int32_t raw[4] = {gate[j * 4], gate[j * 4 + 1], gate[j * 4 + 2], gate[j * 4 + 3]};
     int64_t q[4];
     uint32_t chosen = fbs_snap_rotation(m->icosian, raw, 1ull << 31, q);
-    if (trace) trace[j] = (uint8_t)chosen;
+    if (trace) trace[j] = fbs_trace_root(raw, chosen);
     int64_t rhs[4] = {(int64_t)up[j * 4], (int64_t)up[j * 4 + 1], (int64_t)up[j * 4 + 2], (int64_t)up[j * 4 + 3]};
     fbs_i128 prod[4];
     fbs_hamilton(q, rhs, prod);

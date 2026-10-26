@@ -203,7 +203,8 @@ pub fn work_bytes(m: &CModel) -> u64 {
 
 /// The bytes of one position's snap trace (`fbs_trace_stride`, claude-134):
 /// per layer, the transition's icosian root per lane, the output gate's root
-/// per lane, then the feed-forward gate's root per 4 MLP channels.
+/// per lane, then the feed-forward gate's root per 4 MLP channels; 255 marks a
+/// zero raw, which selects root 0 on the tie.
 pub fn trace_stride(m: &CModel) -> u64 {
     // SAFETY: `fbs_trace_stride` reads only `m`'s integer fields.
     unsafe { fbs_host_trace_stride(m) }

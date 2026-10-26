@@ -89,7 +89,7 @@ fn host_twin_equals_the_session_over_sequences() {
 
 /// The snap trace (claude-134) changes no output, has `trace_stride` bytes per
 /// position (per layer: 2 × width/4 + mlp/4), names only the 120 icosian
-/// roots, repeats exactly, and is not one root everywhere.
+/// roots or 255 (a zero raw), repeats exactly, and is not one root everywhere.
 #[test]
 fn the_snap_trace_leaves_the_outputs_unchanged_and_names_roots() {
     use d11_fbs_evaluator::host_trace_sequences;
@@ -112,7 +112,7 @@ fn the_snap_trace_leaves_the_outputs_unchanged_and_names_roots() {
             "{name}: trace length"
         );
         assert!(
-            trace.iter().all(|&r| r < 120),
+            trace.iter().all(|&r| r < 120 || r == u8::MAX),
             "{name}: an index past the 120 roots"
         );
         let (_, again) = host_trace_sequences(&model, &seqs).expect("traced host twin");

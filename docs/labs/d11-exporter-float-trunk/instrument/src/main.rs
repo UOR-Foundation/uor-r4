@@ -248,7 +248,8 @@ fn run(artifact: &str, sequences_path: &str, out: &str, check: bool) -> Result<b
 /// run, held against the host twin's traced run, outputs and trace (G = H).
 /// The trace is hex, `trace_stride` bytes per position in sequence order: per
 /// layer, the transition's root per lane, the output gate's root per lane, then
-/// the feed-forward gate's root per 4 MLP channels.
+/// the feed-forward gate's root per 4 MLP channels; 255 marks a zero raw, which
+/// selects root 0 on the tie.
 fn trace(artifact: &str, sequences_path: &str, out: &str) -> Result<bool, String> {
     let bytes = std::fs::read(artifact).map_err(|e| format!("{artifact}: {e}"))?;
     let model = IntegerStackModel::parse(&bytes).map_err(|e| e.to_string())?;

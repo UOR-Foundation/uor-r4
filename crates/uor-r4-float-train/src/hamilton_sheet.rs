@@ -727,6 +727,7 @@ pub fn with_snap_capture<T>(f: impl FnOnce() -> Result<T>) -> Result<(T, Vec<Sna
     Ok((out, captured))
 }
 
+#[cfg(feature = "cuda")]
 fn is_capturing_snaps() -> bool {
     SNAP_CAPTURE.with(|c| c.borrow().is_some())
 }
