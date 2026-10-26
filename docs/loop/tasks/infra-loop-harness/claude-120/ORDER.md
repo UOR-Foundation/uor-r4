@@ -54,3 +54,11 @@ Stop and decide, never stop and wait.
 
 - **The review finds another live blocker.** Then the item stays `held`, the finding is recorded on #2820, and the unit ends with a REPORT.
 - **The release would also need a change to CHARTER §3 or a cap.** Then post one `[claude, for Casey]` note on #2028 and keep the item `held`.
+
+## Cancel probe result
+
+Run at `c54fdc121`. All four hold, so the unit goes ahead to the decision review:
+- **The hold reason** in #2820 comment `6399222146` is the Stage 4 run "which requires two-seed trained Stage 3 float-trunk checkpoints from the upstream float-training chain (#2886 -> #2890 -> #2824 -> #2891)".
+- **The chain is done:** `r-secant-surrogate-descent`, `recurrence-gates-six-recurrence-fit`, `hamilton-gate-offline-float-sheet` and `spiralcore-fbs-offline-float-sheet` all read `status: done`.
+- **No other hold exists.** #2820 carries the labels `area:serving` and `roadmap:item` only, and no comment records an owner hold. The item's step 4 still says training "stays HELD until Casey types the owner release himself". That wording predates CHARTER §5.1's rule that held work goes ahead on the lab's own pre-run review (D67); the decision review weighs it.
+- **Nobody else is on it:** no open PR touches the item, `crates/uor-r4-integer/` or `crates/uor-r4-float-train/` (open: #3239, #3169).
