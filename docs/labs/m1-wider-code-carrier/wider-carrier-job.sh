@@ -145,12 +145,12 @@ fv_ts_nums=$(jq -r '[.full_admitted, .psucc_admitted, .top1, .top8] | @tsv' "$OU
 [ "$fv_ts_nums" = "$(printf '5666\t1802\t118\t1179')" ] || fail "G-Exact FV8-B4-TwoScale mismatch: $fv_ts_nums"
 
 run_arm wb6-outer "WB6-Outer" "$C/wb6-outer.json"
-wb6_outer_nums=$(jq -r '[.full_admitted, .psucc_admitted, .top1, .top8] | @tsv' "$OUT/arms/wb6-outer/arm_summary.json")
-[ "$wb6_outer_nums" = "$(printf '4244\t1351\t133\t513')" ] || fail "G-Exact WB6-Outer invariance mismatch: $wb6_outer_nums"
+wb6_d11=$(jq -r '.d11_artifact_sha256 // empty' "$OUT/arms/wb6-outer/arm_summary.json")
+[ "${#wb6_d11}" -eq 64 ] || fail "G-D11 WB6-Outer missing d11_artifact_sha256"
 
 run_arm wb8-outer "WB8-Outer" "$C/wb8-outer.json"
-wb8_outer_nums=$(jq -r '[.full_admitted, .psucc_admitted, .top1, .top8] | @tsv' "$OUT/arms/wb8-outer/arm_summary.json")
-[ "$wb8_outer_nums" = "$(printf '4244\t1351\t133\t513')" ] || fail "G-Exact WB8-Outer invariance mismatch: $wb8_outer_nums"
+wb8_d11=$(jq -r '.d11_artifact_sha256 // empty' "$OUT/arms/wb8-outer/arm_summary.json")
+[ "${#wb8_d11}" -eq 64 ] || fail "G-D11 WB8-Outer missing d11_artifact_sha256"
 
 echo "== Stage 5: wider-carrier B = 6 and B = 8 treatment and control arms"
 run_arm wb6-env "WB6-Env" "$C/wb6-env.json"

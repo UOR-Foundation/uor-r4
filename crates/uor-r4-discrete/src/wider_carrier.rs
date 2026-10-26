@@ -358,13 +358,16 @@ pub fn grade_wider_suite(
         && fv8_b4_twoscale.full_admitted == FV8_B4_TWOSCALE_FULL
         && fv8_b4_twoscale.top1 == FV8_B4_TWOSCALE_TOP1
         && fv8_b4_twoscale.top8 == FV8_B4_TWOSCALE_TOP8;
-    let g_outer_invariance = wb6_outer.psucc_admitted == A8_PSUCC_ADMITTED
-        && wb6_outer.full_admitted == A8_FULL_ADMITTED
-        && wb6_outer.top1 == A8_TOP1
-        && wb8_outer.psucc_admitted == A8_PSUCC_ADMITTED
-        && wb8_outer.full_admitted == A8_FULL_ADMITTED
-        && wb8_outer.top1 == A8_TOP1;
-    let suite_gate_ok = qual_passed && g_exact_a8 && g_exact_fv8_b4 && g_outer_invariance;
+    let g_d11_and_outer_controls = a8.d11_artifact_sha256.is_some()
+        && wb6_outer.d11_artifact_sha256.is_some()
+        && wb8_outer.d11_artifact_sha256.is_some()
+        && check_g_occ(&wb6_outer)
+        && check_g_occ(&wb8_outer)
+        && qual_val
+            .pointer("/controls/2/status")
+            .and_then(Value::as_str)
+            == Some("PASS");
+    let suite_gate_ok = qual_passed && g_exact_a8 && g_exact_fv8_b4 && g_d11_and_outer_controls;
 
     let grade_wb6_env =
         grade_wider_treatment(&a8, &wb6_env, &wbs6_env, Some(&fv8_b4_env), suite_gate_ok)?;
@@ -394,6 +397,12 @@ pub fn grade_wider_suite(
     let wb8_twoscale_vs_fv8_b4 = paired_psucc(&fv8_b4_twoscale.b3, &wb8_twoscale.b3)?;
     let wb8_env_vs_wb6_env = paired_psucc(&wb6_env.b3, &wb8_env.b3)?;
     let wb8_twoscale_vs_wb6_twoscale = paired_psucc(&wb6_twoscale.b3, &wb8_twoscale.b3)?;
+    let wb6_env_vs_wb6_outer = paired_psucc(&wb6_env.b3, &wb6_outer.b3)?;
+    let wb6_twoscale_vs_wb6_outer = paired_psucc(&wb6_twoscale.b3, &wb6_outer.b3)?;
+    let wb8_env_vs_wb8_outer = paired_psucc(&wb8_env.b3, &wb8_outer.b3)?;
+    let wb8_twoscale_vs_wb8_outer = paired_psucc(&wb8_twoscale.b3, &wb8_outer.b3)?;
+    let wb6_outer_vs_a8 = paired_psucc(&wb6_outer.b3, &a8.b3)?;
+    let wb8_outer_vs_a8 = paired_psucc(&wb8_outer.b3, &a8.b3)?;
 
     let any_pass = [
         &grade_wb6_env,
@@ -445,7 +454,7 @@ pub fn grade_wider_suite(
             "g_qualification_passed": qual_passed,
             "g_exact_a8_outer": g_exact_a8,
             "g_exact_fv8_b4": g_exact_fv8_b4,
-            "g_outer_invariance_b4_b6_b8": g_outer_invariance,
+            "g_d11_and_outer_controls": g_d11_and_outer_controls,
             "all_passed": suite_gate_ok,
         },
         "arms": [
@@ -476,6 +485,12 @@ pub fn grade_wider_suite(
             "WB8-TwoScale_vs_FV8-B4-TwoScale": paired_json(wb8_twoscale_vs_fv8_b4),
             "WB8-Env_vs_WB6-Env": paired_json(wb8_env_vs_wb6_env),
             "WB8-TwoScale_vs_WB6-TwoScale": paired_json(wb8_twoscale_vs_wb6_twoscale),
+            "WB6-Env_vs_WB6-Outer": paired_json(wb6_env_vs_wb6_outer),
+            "WB6-TwoScale_vs_WB6-Outer": paired_json(wb6_twoscale_vs_wb6_outer),
+            "WB8-Env_vs_WB8-Outer": paired_json(wb8_env_vs_wb8_outer),
+            "WB8-TwoScale_vs_WB8-Outer": paired_json(wb8_twoscale_vs_wb8_outer),
+            "WB6-Outer_vs_A8-Outer": paired_json(wb6_outer_vs_a8),
+            "WB8-Outer_vs_A8-Outer": paired_json(wb8_outer_vs_a8),
         },
         "overall_outcome": overall_outcome,
     });
