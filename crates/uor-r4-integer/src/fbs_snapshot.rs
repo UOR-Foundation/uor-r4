@@ -69,8 +69,11 @@ pub fn fixed_value(v: f32, exp: i32) -> f64 {
 }
 
 /// `v` at Q12 in `i16`, as the exporter writes the writer table, or `None`
-/// when it does not fit (the exporter refuses it).
+/// when it is not finite or does not fit (the exporter refuses both).
 pub fn q12_value(v: f32) -> Option<f64> {
+    if !v.is_finite() {
+        return None;
+    }
     i16::try_from((f64::from(v) * 4096.0).round() as i64)
         .ok()
         .map(|k| f64::from(k) / 4096.0)

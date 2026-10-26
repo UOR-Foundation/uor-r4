@@ -29,12 +29,15 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use uor_r4_integer::fbs_snapshot::{FbsFloatReadout, FbsReadoutMode};
 use uor_r4_integer::stack::{
-    export_fbs_trunk_uorlut01, FbsReferenceSnaps, FbsTrunkSnapshot, FbsWriterOutput,
+    export_fbs_trunk_uorlut01, FbsReferenceSnaps, FbsTieMargins, FbsTrunkSnapshot, FbsWriterOutput,
     IntegerStackModel,
 };
 
 /// One position's writer token and query.
 type Output = (u32, Vec<f64>);
+
+/// One kind of [`FbsTieMargins`] margin.
+type Margin = fn(&FbsTieMargins) -> f64;
 
 const USAGE: &str =
     "usage: fbs-compare SNAPSHOT_JSON READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]";
@@ -59,13 +62,9 @@ fn check_readout(
 /// The parity bar's gap (claude-124, claude-125).
 const GAP_BAR: f64 = 1e-3;
 
-/// Token agreement and the largest query gap between two sets of outputs,
-/// with how many positions exceed [`GAP_BAR`] and the worst of them
-/// (`[position, gap, tokens agree]`), so a miss can be traced.
-fn pair(a: &[Output], b: &[Output]) -> Value {
-    let tokens = a.iter().zip(b).filter(|(x, y)| x.0 == y.0).count();
-    let gaps: Vec<f64> = a
-        .iter()
+/// The largest query gap at each position between two sets of outputs.
+fn gaps(a: &[Output], b: &[Output]) -> Vec<f64> {
+    a.iter()
         .zip(b)
         .map(|(x, y)| {
             x.1.iter()
@@ -73,7 +72,17 @@ fn pair(a: &[Output], b: &[Output]) -> Value {
                 .map(|(p, q)| (p - q).abs())
                 .fold(0f64, f64::max)
         })
-        .collect();
+        .collect()
+}
+
+/// Token agreement and the largest query gap between two sets of outputs,
+/// with how many positions exceed [`GAP_BAR`] and the worst of them
+/// (`[position, gap, tokens agree]`), so a miss can be traced. Positions
+/// count across all inputs in order: for sequences, sequence `s` position
+/// `t` is `s * context + t`.
+fn pair(a: &[Output], b: &[Output]) -> Value {
+    let tokens = a.iter().zip(b).filter(|(x, y)| x.0 == y.0).count();
+    let gaps = gaps(a, b);
     let gap = gaps.iter().copied().fold(0f64, f64::max);
     let mut over: Vec<usize> = (0..gaps.len()).filter(|&i| gaps[i] > GAP_BAR).collect();
     over.sort_by(|&i, &j| gaps[j].total_cmp(&gaps[i]).then(i.cmp(&j)));
@@ -126,6 +135,63 @@ fn served(model: &IntegerStackModel, inputs: &[Vec<u32>]) -> Result<Vec<Output>,
         }
     }
     Ok(all)
+}
+
+/// The quantized, fully snapped reference's [`FbsTieMargins`] at every
+/// position of every input: those met on the way to it, so each prefix runs
+/// on its own.
+fn tie_margins(snap: &FbsTrunkSnapshot, inputs: &[Vec<u32>]) -> Result<Vec<FbsTieMargins>, String> {
+    let mut all = Vec::new();
+    for tokens in inputs {
+        for end in 1..=tokens.len() {
+            let margins = snap
+                .tie_margins(&tokens[..end], true, FbsReferenceSnaps::INTEGER)
+                .map_err(|e| format!("{tokens:?}: tie margins: {e}"))?;
+            all.push(margins);
+        }
+    }
+    Ok(all)
+}
+
+/// Each position over [`GAP_BAR`] in any of `pairings`, traced to its
+/// near-tie: the reference's margins there, with how many positions came
+/// nearer on each (0 is the nearest), and the median of each margin.
+fn trace_ties(margins: &[FbsTieMargins], pairings: &[Vec<f64>]) -> Value {
+    let kinds: [(&str, Margin); 3] = [
+        ("transition", |m| m.transition),
+        ("gate", |m| m.gate),
+        ("rate", |m| m.rate),
+    ];
+    let over: std::collections::BTreeSet<usize> = pairings
+        .iter()
+        .flat_map(|g| (0..g.len()).filter(move |&i| g[i] > GAP_BAR))
+        .collect();
+    let traced: Vec<Value> = over
+        .iter()
+        .map(|&i| {
+            let mut entry = json!({ "position": i, "zero_snaps": margins[i].zero_snaps });
+            for (name, pick) in kinds {
+                let nearer = margins
+                    .iter()
+                    .filter(|m| pick(m) < pick(&margins[i]))
+                    .count();
+                entry[name] = json!({ "margin": pick(&margins[i]), "nearer_positions": nearer });
+            }
+            entry
+        })
+        .collect();
+    let mut medians = json!({});
+    for (name, pick) in kinds {
+        let mut values: Vec<f64> = margins.iter().map(pick).collect();
+        values.sort_by(f64::total_cmp);
+        medians[name] = json!(values.get(values.len() / 2));
+    }
+    let zero = margins.iter().filter(|m| m.zero_snaps > 0).count();
+    json!({
+        "median": medians,
+        "positions_with_zero_snaps": zero,
+        "over_gap_bar": traced,
+    })
 }
 
 /// A readout's single-token outputs, then its sequence outputs, as the
@@ -191,6 +257,15 @@ fn section(
             .count());
         // The artifact's own Q12 query, not a reference of it.
         out["d11_gpu_vs_integer_session"] = pair(d11_gpu, &served);
+        // Where the three disagree, how near the reference came to a switch.
+        out["tie_margins"] = trace_ties(
+            &tie_margins(snap, inputs)?,
+            &[
+                gaps(d11_gpu, &quantized_ref),
+                gaps(d11_gpu, &served),
+                gaps(&served, &quantized_ref),
+            ],
+        );
     }
     Ok(out)
 }

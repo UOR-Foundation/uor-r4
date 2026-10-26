@@ -888,7 +888,7 @@ fn pad_matrix_f32(
     Ok(out)
 }
 
-fn quantize_fixed_i32(values: &[f32], expected_len: usize, exp: i32, name: &str) -> Result<Vec<i32>, StackError> {
+pub(super) fn quantize_fixed_i32(values: &[f32], expected_len: usize, exp: i32, name: &str) -> Result<Vec<i32>, StackError> {
     if values.len() != expected_len {
         return Err(StackError::TableLength {
             name: name.to_owned(),
@@ -1476,6 +1476,100 @@ pub(super) fn ref_snap_icosian(raw: [f64; 4]) -> [f64; 4] {
     q
 }
 
+/// How near the float reference came to a discrete switch on its way to a
+/// position (claude-125). Where computations of other precisions disagree at
+/// a position, the smallest margin names the near-tie (0 at a tie):
+/// - `transition`: the gap between the best and the second-best icosian at a
+///   transition snap, relative to the rotation's length, counted only where
+///   the transition moves a nonzero state;
+/// - `gate`: the same at a Hamilton gate snap (output or feed-forward);
+/// - `rate`: the distance of a transition rate to a step of its 16-entry
+///   dyadic table.
+///
+/// A switch the snaps do not make (`FbsQuatMode::Normalize`) has no margin
+/// (infinite). `zero_snaps` counts snaps of an all-zero vector, which every
+/// root ties: there the float GPU snap and this reference pick different
+/// roots, a known edge rather than a near-tie.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FbsTieMargins {
+    pub transition: f64,
+    pub gate: f64,
+    pub rate: f64,
+    pub zero_snaps: u32,
+}
+
+impl FbsTieMargins {
+    /// Nothing met yet.
+    const NONE: Self = Self {
+        transition: f64::INFINITY,
+        gate: f64::INFINITY,
+        rate: f64::INFINITY,
+        zero_snaps: 0,
+    };
+
+    /// Fold in the snap of `q` under `mode`, at the transition or at a gate.
+    pub(super) fn note_snap(&mut self, q: [f64; 4], mode: FbsQuatMode, transition: bool) {
+        let raw = match mode {
+            FbsQuatMode::Icosian => q,
+            FbsQuatMode::Q12Icosian => q.map(|v| (v * 4096.0).round().clamp(-32768.0, 32767.0)),
+            FbsQuatMode::Normalize => return,
+        };
+        if raw == [0.0; 4] {
+            self.zero_snaps += 1;
+        }
+        let slot = if transition { &mut self.transition } else { &mut self.gate };
+        *slot = slot.min(icosian_margin(raw));
+    }
+}
+
+thread_local! {
+    /// The margins of the reference forward [`FbsTrunkSnapshot::tie_margins`]
+    /// runs on this thread; `None` (every other forward) records nothing.
+    static TIE_MARGINS: std::cell::Cell<Option<FbsTieMargins>> = const { std::cell::Cell::new(None) };
+}
+
+/// Fold a margin into the running [`FbsTieMargins`], if one is recording.
+fn note_tie(f: impl FnOnce(&mut FbsTieMargins)) {
+    TIE_MARGINS.with(|cell| {
+        if let Some(mut margins) = cell.get() {
+            f(&mut margins);
+            cell.set(Some(margins));
+        }
+    });
+}
+
+/// How near the snap of `raw` to the 120 icosians is to a tie: the gap
+/// between the best and the second-best dot product, over `raw`'s length
+/// (0 for a zero vector). The snap itself is [`ref_snap_icosian`]'s.
+pub(super) fn icosian_margin(raw: [f64; 4]) -> f64 {
+    use crate::h4_classifier::H4_ROOT_COEFFICIENTS;
+    let len = raw.iter().map(|v| v * v).sum::<f64>().sqrt();
+    if len == 0.0 {
+        return 0.0;
+    }
+    let phi = 0.5 * (1.0 + 5.0f64.sqrt());
+    let (mut best, mut second) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for root in H4_ROOT_COEFFICIENTS.iter() {
+        let dot: f64 = (0..4)
+            .map(|c| raw[c] * 0.5 * (f64::from(root[c][0]) + f64::from(root[c][1]) * phi))
+            .sum();
+        if dot > best {
+            (best, second) = (dot, best);
+        } else if dot > second {
+            second = dot;
+        }
+    }
+    (best - second) / len
+}
+
+/// The distance of the transition rate `s` (before its clamp) to the nearest
+/// step of its 16-entry table, `k / 16` for `k` in 1..=15.
+pub(super) fn rate_margin(s: f64) -> f64 {
+    (1..16)
+        .map(|k| (s - f64::from(k) / 16.0).abs())
+        .fold(f64::INFINITY, f64::min)
+}
+
 /// The Hamilton product `a b`.
 pub(super) fn ref_hamilton(a: [f64; 4], b: [f64; 4]) -> [f64; 4] {
     [
@@ -1562,6 +1656,7 @@ pub(super) fn ref_quat_mode(q: [f64; 4], mode: FbsQuatMode, eps: f64) -> [f64; 4
 pub(super) fn ref_hamilton_feed_forward(g: &[f64], up: &[f64], mode: FbsQuatMode) -> Vec<f64> {
     let mut h = vec![0.0f64; g.len()];
     for blk in 0..(g.len() / 4) {
+        note_tie(|m| m.note_snap(ref_quat(g, blk), mode, false));
         let prod = ref_hamilton(ref_quat_mode(ref_quat(g, blk), mode, GATE_EPS), ref_quat(up, blk));
         h[4 * blk..4 * blk + 4].copy_from_slice(&prod);
     }
@@ -1619,7 +1714,15 @@ impl RefRecurrence {
 
         let (decays, rotations) = gate_out.split_at(lanes);
         for u in 0..lanes {
-            let s = (decays[u] + self.decay[u]).clamp(0.0, 1.0);
+            let rate = decays[u] + self.decay[u];
+            note_tie(|m| {
+                m.rate = m.rate.min(rate_margin(rate));
+                // The transition snap matters only where it moves a state.
+                if ref_quat(state, u).iter().any(|&v| v != 0.0) {
+                    m.note_snap(ref_quat(rotations, u), snaps.transition, true);
+                }
+            });
+            let s = rate.clamp(0.0, 1.0);
             let idx = ((s * 16.0).floor() as usize).min(15);
             let lambda = 2.0f64.powi(-((idx as i32) + 1));
             let keep = (1.0 - lambda * lambda).sqrt();
@@ -1637,6 +1740,7 @@ impl RefRecurrence {
         }
         let mut gated = vec![0.0f64; d];
         for u in 0..lanes {
+            note_tie(|m| m.note_snap(ref_quat(out_gate, u), snaps.gates, false));
             let prod = ref_hamilton(
                 ref_quat_mode(ref_quat(out_gate, u), snaps.gates, GATE_EPS),
                 ref_quat(state, u),
@@ -2095,5 +2199,21 @@ impl FbsTrunkSnapshot {
             out.push(fbs_native_writer(&q, &table, self.vocab, self.kept_cells)?);
         }
         Ok(out)
+    }
+
+    /// The [`FbsTieMargins`] of [`Self::forward_f32_with`] over `tokens`:
+    /// every snap and rate met up to the last position, the carried state's
+    /// included. A diagnostic, for tracing a disagreement to its near-tie.
+    pub fn tie_margins(
+        &self,
+        tokens: &[u32],
+        quantized: bool,
+        snaps: FbsReferenceSnaps,
+    ) -> Result<FbsTieMargins, StackError> {
+        TIE_MARGINS.with(|cell| cell.set(Some(FbsTieMargins::NONE)));
+        let run = self.forward_f32_with(tokens, quantized, snaps);
+        let margins = TIE_MARGINS.with(|cell| cell.take());
+        run?;
+        margins.ok_or_else(|| StackError::Numerics("the tie margins were not recorded".to_owned()))
     }
 }

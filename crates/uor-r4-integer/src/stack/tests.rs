@@ -2873,8 +2873,66 @@ fn fbs_exported_roundings_match_the_stack_exporter() {
     }
     assert_eq!(super::export_fbs_trunk_uorlut01(&rounded).expect("export"), bytes);
     assert!(IntegerStackModel::parse(&bytes).is_ok() && model.session().step_native(3).is_ok());
+    // The reference reads the Q16 tables through `fixed_value` too, so the
+    // checks above cannot see it drift: hold it against the code the exporter
+    // stores for every bias, gate bias and decay offset, and see some move.
+    let mut moved = false;
+    for layer in &snap.layers {
+        for values in [&layer.conv_bias, &layer.gate_bias, &layer.decay] {
+            let codes = super::format::quantize_fixed_i32(values, values.len(), FBS_FIXED_EXP, "q16")
+                .expect("fixed");
+            for (&v, &code) in values.iter().zip(&codes) {
+                let value = fixed_value(v, FBS_FIXED_EXP);
+                assert_eq!(value, f64::from(code) * 2f64.powi(FBS_FIXED_EXP));
+                moved |= value != f64::from(v);
+            }
+        }
+    }
+    assert!(moved, "no Q16 value moves, so a skipped rounding would pass");
     assert_eq!(q12_value(8.0), None);
+    assert_eq!(q12_value(f32::NAN), None);
     assert_eq!(q12_value(-8.0), Some(-8.0));
+}
+
+#[test]
+fn fbs_tie_margins_measure_how_near_each_switch_is() {
+    use super::format::{icosian_margin, rate_margin, FbsQuatMode, FbsReferenceSnaps, FbsTieMargins};
+    // A root's nearest rival is 60 degrees away: dot φ/2 against 1.
+    let phi = 0.5 * (1.0 + 5.0f64.sqrt());
+    let own = icosian_margin([1.0, 0.0, 0.0, 0.0]);
+    assert!((own - (1.0 - 0.5 * phi)).abs() < 1e-12, "{own}");
+    // (1, 1, 0, 0) is equally near ½(φ, 1, φ⁻¹, 0) and ½(1, φ, 0, φ⁻¹): a tie.
+    assert_eq!(icosian_margin([1.0, 1.0, 0.0, 0.0]), 0.0);
+    let mut m = FbsTieMargins {
+        transition: f64::INFINITY,
+        gate: f64::INFINITY,
+        rate: f64::INFINITY,
+        zero_snaps: 0,
+    };
+    m.note_snap([0.3, 0.1, 0.2, 0.4], FbsQuatMode::Normalize, false);
+    assert_eq!((m.gate, m.zero_snaps), (f64::INFINITY, 0));
+    m.note_snap([1.0, 0.0, 0.0, 0.0], FbsQuatMode::Icosian, true);
+    assert_eq!((m.transition, m.gate), (own, f64::INFINITY));
+    // A vector that rounds to zero at Q12 snaps a zero vector: every root ties.
+    m.note_snap([1e-5, 0.0, 0.0, 0.0], FbsQuatMode::Q12Icosian, false);
+    assert_eq!((m.gate, m.zero_snaps), (0.0, 1));
+    assert_eq!(rate_margin(0.5), 0.0);
+    assert_eq!(rate_margin(0.5 + 1.0 / 64.0), 1.0 / 64.0);
+    assert_eq!(rate_margin(-1.0), 1.0 + 1.0 / 16.0);
+
+    let snap = synthetic_fbs_trunk(20261026);
+    let one = snap.tie_margins(&[5], true, FbsReferenceSnaps::INTEGER).expect("margins");
+    // One token moves no state, so its transition snap never matters.
+    assert_eq!(one.transition, f64::INFINITY);
+    assert!(one.gate.is_finite() && one.gate >= 0.0 && one.rate.is_finite() && one.rate >= 0.0);
+    assert_eq!(one.zero_snaps, 0);
+    let two = snap.tie_margins(&[5, 11], true, FbsReferenceSnaps::INTEGER).expect("margins");
+    assert!(two.transition.is_finite() && two.transition >= 0.0);
+    // The prefix's switches stay counted, and runs do not leak into each other.
+    assert!(two.gate <= one.gate && two.rate <= one.rate);
+    assert_eq!(snap.tie_margins(&[5], true, FbsReferenceSnaps::INTEGER).expect("margins"), one);
+    let float = snap.tie_margins(&[5, 11], true, FbsReferenceSnaps::FLOAT).expect("margins");
+    assert_eq!((float.transition, float.gate), (f64::INFINITY, f64::INFINITY));
 }
 
 #[test]
