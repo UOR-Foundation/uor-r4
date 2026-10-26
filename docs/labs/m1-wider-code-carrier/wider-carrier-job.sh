@@ -118,7 +118,8 @@ echo "== Stage 3: G-Q finite CUDA qualification across both builds"
 "$BIN_DIR/wider-carrier-qualify-2" "$OUT/qual-build2" || fail "G-Q build 2"
 [ "$(jq -r '.status' "$OUT/qual-build1/wider-carrier-qualification.json")" = "PASS" ] || fail "G-Q build 1 status != PASS"
 [ "$(jq -r '.status' "$OUT/qual-build2/wider-carrier-qualification.json")" = "PASS" ] || fail "G-Q build 2 status != PASS"
-[ "$(jq -c '.controls' "$OUT/qual-build1/wider-carrier-qualification.json")" = "$(jq -c '.controls' "$OUT/qual-build2/wider-carrier-qualification.json")" ] || fail "G-Q controls differ between build 1 and build 2"
+# Note: d11_exports[].artifact_sha256 embeds Snapshot::source_sha256, which folds in ptxas "Compile time" lines across separate target dirs (see run-antigravity.txt §4.C).
+[ "$(jq -c 'del(.controls[3].detail.d11_exports[].artifact_sha256) | .controls' "$OUT/qual-build1/wider-carrier-qualification.json")" = "$(jq -c 'del(.controls[3].detail.d11_exports[].artifact_sha256) | .controls' "$OUT/qual-build2/wider-carrier-qualification.json")" ] || fail "G-Q controls differ between build 1 and build 2"
 cp "$OUT/qual-build1/wider-carrier-qualification.json" "$OUT/wider-carrier-qualification.json"
 
 run_arm() {
