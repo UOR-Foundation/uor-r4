@@ -1507,7 +1507,7 @@ pub(super) fn ref_snap_icosian(raw: [f64; 4]) -> [f64; 4] {
 }
 
 /// The Hamilton product `a b`.
-fn ref_hamilton(a: [f64; 4], b: [f64; 4]) -> [f64; 4] {
+pub(super) fn ref_hamilton(a: [f64; 4], b: [f64; 4]) -> [f64; 4] {
     [
         a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
         a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2],
@@ -1589,7 +1589,7 @@ pub(super) fn ref_quat_mode(q: [f64; 4], mode: FbsQuatMode, eps: f64) -> [f64; 4
 
 /// The Hamilton feed-forward gate: `hamilton(gate(g), up)` per 4-block, the
 /// gate snapped (or normalized) under `mode`.
-fn ref_hamilton_feed_forward(g: &[f64], up: &[f64], mode: FbsQuatMode) -> Vec<f64> {
+pub(super) fn ref_hamilton_feed_forward(g: &[f64], up: &[f64], mode: FbsQuatMode) -> Vec<f64> {
     let mut h = vec![0.0f64; g.len()];
     for blk in 0..(g.len() / 4) {
         let prod = ref_hamilton(ref_quat_mode(ref_quat(g, blk), mode, GATE_EPS), ref_quat(up, blk));
@@ -1600,7 +1600,7 @@ fn ref_hamilton_feed_forward(g: &[f64], up: &[f64], mode: FbsQuatMode) -> Vec<f6
 
 /// The scalar tables of one geometric recurrence layer, as the float
 /// references read them (`RecGates::Geometric`, Hamilton output gate).
-struct RefRecurrence {
+pub(super) struct RefRecurrence {
     /// `4 * d` taps `[tap][channel]`.
     taps: Vec<f64>,
     conv_bias: Vec<f64>,
@@ -1609,7 +1609,7 @@ struct RefRecurrence {
 }
 
 impl RefRecurrence {
-    fn new(taps: &[f32], conv_bias: &[f32], decay: &[f32], quantized: bool) -> Result<Self, StackError> {
+    pub(super) fn new(taps: &[f32], conv_bias: &[f32], decay: &[f32], quantized: bool) -> Result<Self, StackError> {
         let exp = super::kernels::RESIDUAL_EXP;
         Ok(Self {
             taps: taps
@@ -1625,7 +1625,7 @@ impl RefRecurrence {
     /// rate and icosian transport per lane, then the Hamilton output gate.
     /// `gate_out` is `lanes` decay pre-activations then `d` rotation values
     /// (gate bias already added); `hist` is the `3 * d` convolution history.
-    fn step(
+    pub(super) fn step(
         &self,
         drive: &[f64],
         out_gate: &[f64],

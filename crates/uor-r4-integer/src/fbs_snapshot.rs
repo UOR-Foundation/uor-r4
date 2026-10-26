@@ -139,6 +139,9 @@ impl FbsFloatReadout {
         context: usize,
         export_mode: bool,
     ) -> Result<(), String> {
+        if self.sequences.is_empty() {
+            return Err("the readout holds no sequences".to_owned());
+        }
         for (s, q) in self.sequences.iter().enumerate() {
             let n = q.tokens.len();
             if n == 0
@@ -271,6 +274,11 @@ mod tests {
             .check(3, 2, 4, false)
             .is_err_and(|e| e.contains("position 1")));
         assert!(readout(&[0, 1, 2], false).check(4, 2, 4, false).is_err());
+        let mut none = readout(&[0, 1, 2], false);
+        none.sequences.clear();
+        assert!(none
+            .check(3, 2, 4, false)
+            .is_err_and(|e| e.contains("no sequences")));
         // A sequence must be 1 to `context` in-vocabulary tokens, each read.
         type Seq = fn(&mut FbsFloatSequence);
         let bad: [(&str, Seq); 5] = [

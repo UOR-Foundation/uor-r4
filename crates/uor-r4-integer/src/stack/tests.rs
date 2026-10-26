@@ -2728,6 +2728,74 @@ fn fbs_reference_quat_modes_match_their_definitions() {
 }
 
 #[test]
+fn fbs_reference_each_snap_site_reads_its_own_mode() {
+    use super::format::{
+        ref_hamilton, ref_hamilton_feed_forward, ref_quat_mode, FbsQuatMode, FbsReferenceSnaps,
+        RefRecurrence,
+    };
+    use FbsQuatMode::{Icosian, Normalize};
+    let close = |got: &[f64], want: &[f64], what: &str| {
+        assert!(
+            got.iter().zip(want).all(|(a, b)| (a - b).abs() < 1e-12) && got.len() == want.len(),
+            "{what}: {got:?} against {want:?}"
+        );
+    };
+    let quat = |v: &[f64]| [v[0], v[1], v[2], v[3]];
+
+    // The feed-forward gate: hamilton(mode(g), up) per 4-block.
+    let g = [0.3, -0.7, 0.2, 0.5, 1.5, 0.1, -0.4, 0.2];
+    let up = [1.0, 2.0, -1.0, 0.5, -0.3, 0.8, 0.2, -1.1];
+    for mode in [Icosian, Normalize] {
+        let h = ref_hamilton_feed_forward(&g, &up, mode);
+        for b in 0..2 {
+            let want = ref_hamilton(
+                ref_quat_mode(quat(&g[4 * b..]), mode, 1e-12),
+                quat(&up[4 * b..]),
+            );
+            close(&h[4 * b..4 * b + 4], &want, &format!("feed-forward {mode:?}"));
+        }
+    }
+    assert_ne!(
+        ref_hamilton_feed_forward(&g, &up, Icosian),
+        ref_hamilton_feed_forward(&g, &up, Normalize)
+    );
+
+    // One recurrence lane: tap 0 is 1 and every other table 0, so the
+    // convolution is the drive; the decay pre-activation 0.5 picks rate 8.
+    let mut taps = [0.0f32; 16];
+    taps[..4].copy_from_slice(&[1.0; 4]);
+    let rec = RefRecurrence::new(&taps, &[0.0; 4], &[0.0], false).expect("recurrence");
+    let lambda = 2f64.powi(-9);
+    let keep = (1.0 - lambda * lambda).sqrt();
+    let drive = [1.0, 2.0, 3.0, 4.0];
+    let out_gate = [0.5, 0.1, -0.2, 0.3];
+    let rotation = [0.6, -0.3, 0.2, 0.7];
+    let gate_out = [0.5, rotation[0], rotation[1], rotation[2], rotation[3]];
+    for snaps in [
+        FbsReferenceSnaps::INTEGER,
+        FbsReferenceSnaps::FLOAT,
+        FbsReferenceSnaps { transition: Icosian, gates: Normalize },
+        FbsReferenceSnaps { transition: Normalize, gates: Icosian },
+    ] {
+        let (mut hist, mut state) = (vec![0.0f64; 12], vec![0.0f64; 4]);
+        // Step 1, from a zero state: only the output gate's mode shows.
+        let gated = rec.step(&drive, &out_gate, &gate_out, &mut hist, &mut state, snaps);
+        let s1 = drive.map(|v| keep * v);
+        close(&state, &s1, &format!("{snaps:?} state 1"));
+        let want = ref_hamilton(ref_quat_mode(out_gate, snaps.gates, 1e-12), s1);
+        close(&gated, &want, &format!("{snaps:?} output 1"));
+        // Step 2: the transition's mode moves the carried state.
+        let gated = rec.step(&drive, &out_gate, &gate_out, &mut hist, &mut state, snaps);
+        let trans = ref_quat_mode(rotation, snaps.transition, 1e-6).map(|v| lambda * v);
+        let moved = ref_hamilton(trans, s1);
+        let s2: Vec<f64> = (0..4).map(|c| moved[c] + keep * drive[c]).collect();
+        close(&state, &s2, &format!("{snaps:?} state 2"));
+        let want = ref_hamilton(ref_quat_mode(out_gate, snaps.gates, 1e-12), quat(&s2));
+        close(&gated, &want, &format!("{snaps:?} output 2"));
+    }
+}
+
+#[test]
 fn fbs_reference_snaps_default_to_the_integer_path_and_each_switch_is_live() {
     use super::format::FbsReferenceSnaps;
     let snap = synthetic_fbs_trunk(20261026);

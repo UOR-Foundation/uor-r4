@@ -12,7 +12,10 @@ References #2820.
   - **Cause:** `try_hamilton_gate_fwd_cuda` (`hamilton_sheet.rs`) rebuilt its gate operand with `Tensor::from_storage(s.try_clone(l), shape)`. candle's CUDA `try_clone` copies the whole buffer and ignores the layout. At one position the recurrence output gate is a narrow of `rec.in`'s output: contiguous, but starting at offset `d`. So the hook snapped the drive half instead of the gate. With a batch or more than one position the narrow is not contiguous and gets copied first, which is why sequences were right.
   - **Repaired here:** `cuda_layout_tensor` narrows the copy back to the operand's own elements. The telemetry copy of `up` had the same pattern and is fixed too.
   - **Pinned:** the GPU test now requires a token read alone to equal that token at position 0 of each sequence, in both modes. With the repair set aside it fails ("export_mode true: token 1 alone differs from position 0 of its sequence, gap 2.33").
-  - **Reach, by reading:** the sheets score export mode over full windows (`spiralcore_fbs_sheet.rs`, `model.hidden(ids, batch, SHEET_CONTEXT)` with context 192), where the bug cannot occur. Their published numbers therefore stand. Only a one-position forward in export mode was wrong.
+  - **Reach, by reading:** every other export-mode caller in the crate scores full windows: `hamilton_sheet.rs` `evaluate_dev_panel` and `spiralcore_fbs_sheet.rs` `panel_loss`, both through `model.hidden(…, SHEET_CONTEXT)` with context 192. The bug cannot occur there, so their published numbers stand. Only a one-position forward in export mode was wrong.
+  - **Not pinned:**
+    - The same repair to the telemetry copy of `up` has no test; only telemetry reads it.
+    - `with_d11_export_gates` restores the hook when its closure returns an error, but not when it panics. The state is thread-local.
 - **My first parity design proved nothing about the recurrence's memory.** Single tokens from a zero state never reach the transition rotation, convolution taps 1 to 3 or the carried state. The pre-run reviewer caught it. Before any run, the readouts gained 8 fixed full-context sequences (64 positions), and the ORDER's bars were amended, once and before the run, to cover them.
 - **I lost uncommitted edits once, and recovered them.** I set aside a line to build a patch, then ran `git checkout --` on a file that also held my uncommitted sequence edits, which threw them away. The diff I had just written held them, and I restored them from it. Set-asides now run only on a clean, committed tree.
 - **One test does not pin one call site.** The reference-variants test catches a recurrence that ignores its snap switches. It would not catch the feed-forward call ignoring its gate switch, because the recurrence output gate already makes the variants differ. Only the GPU parity reading covers that line: the export readout matches `FLOAT_EXPORT` to 4.6e-7 on every position.
@@ -20,7 +23,7 @@ References #2820.
 
 ## What changed
 
-Size against `origin/main`: code +587/−93 in 8 files (including the two in-file test modules); tests +50 in `stack/tests.rs`; docs: the ORDER, this REPORT and the notebook row.
+Size against `origin/main`: code +590/−93 in 7 files, including the two in-file test modules; tests +50 in `stack/tests.rs`; docs: the ORDER, this REPORT and the notebook row.
 
 - **`uor-r4-integer`:**
   - `FbsTrunkSnapshot::forward_f32_with(tokens, quantized, FbsReferenceSnaps)` adds snap switches for the transition and the gates (`FbsQuatMode::{Icosian, Q12Icosian, Normalize}`). The constants are `INTEGER`, `FLOAT` and `FLOAT_EXPORT`.
@@ -48,7 +51,7 @@ On an RTX 5090, random-init trunk (vocabulary 256, width 32, 2 layers), at the c
 | export mode against `FLOAT_EXPORT` | 256/256, gap 4.6e-7 | 64/64, gap 4.3e-7 |
 | integer session against the quantized reference | 256/256 | 64/64 |
 
-So the converter maps every table right, including the transition, taps 1 to 3 and the state carry.
+So on this random-init trunk shape the converter maps every table right, including the transition, taps 1 to 3 and the state carry. Other shapes and trained weights are not covered by this run.
 
 **Attribution: a reading, no bar.** Each row is the token agreement between adjacent reference variants:
 
