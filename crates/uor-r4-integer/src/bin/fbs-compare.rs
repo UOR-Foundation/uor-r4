@@ -2,7 +2,7 @@
 //! from (d11-exporter-float-trunk, claude-123 and claude-124).
 //!
 //! ```text
-//! fbs-compare SNAPSHOT_JSON READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]
+//! fbs-compare [--parity-only] SNAPSHOT_JSON READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]
 //! ```
 //!
 //! `SNAPSHOT_JSON` is the converter's snapshot. `READOUT_JSON` is the float
@@ -19,6 +19,10 @@
 //! - the integer session with the fully snapped, quantized reference;
 //! - the reference variants with each other, which needs no GPU: how much of
 //!   the float-to-integer gap each snap and the table rounding explain.
+//!
+//! With `--parity-only` it reports only the D11 readout against the integer
+//! session, and runs no float reference: a GPU job's parity proof, since a
+//! host reference run is a host fallback (CHARTER §3.5, claude-126).
 //!
 //! It prints one JSON line: readings, not bars. It exits non-zero only when
 //! the snapshot does not export, parse or serve, or a readout does not fit.
@@ -40,7 +44,7 @@ type Output = (u32, Vec<f64>);
 type Margin = fn(&FbsTieMargins) -> f64;
 
 const USAGE: &str =
-    "usage: fbs-compare SNAPSHOT_JSON READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]";
+    "usage: fbs-compare [--parity-only] SNAPSHOT_JSON READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]";
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
@@ -277,8 +281,34 @@ fn section(
     Ok(out)
 }
 
+/// The D11 readout against the integer session alone, with no float
+/// reference (`--parity-only`, claude-126): the artifact's own tokens and Q12
+/// query, which is all a GPU job's parity proof needs, since a host reference
+/// run is a host fallback (CHARTER §3.5).
+fn parity_section(
+    model: &IntegerStackModel,
+    inputs: &[Vec<u32>],
+    d11_gpu: &[Output],
+) -> Result<Value, String> {
+    let served = served(model, inputs)?;
+    let agree = d11_gpu
+        .iter()
+        .zip(&served)
+        .filter(|(g, s)| g.0 == s.0)
+        .count();
+    Ok(json!({
+        "positions": served.len(),
+        "d11_gpu_token_equals_integer_token": agree,
+        "d11_gpu_vs_integer_session": pair(d11_gpu, &served),
+    }))
+}
+
 fn run() -> Result<(), String> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let parity_only = args.first().is_some_and(|a| a == "--parity-only");
+    if parity_only {
+        args.remove(0);
+    }
     let [snapshot, plain, rest @ ..] = args.as_slice() else {
         return Err(USAGE.to_owned());
     };
@@ -323,6 +353,18 @@ fn run() -> Result<(), String> {
     let (plain_singles, plain_sequences) = floats(&plain_readout);
     let export = export_readout.as_ref().map(floats);
     let d11 = d11_readout.as_ref().map(floats);
+    if parity_only {
+        let (d11_singles, d11_sequences) =
+            d11.as_ref().ok_or("--parity-only needs the D11 readout")?;
+        let report = json!({
+            "artifact_sha256": hex::encode(Sha256::digest(&artifact)),
+            "parity_only": true,
+            "single_tokens": parity_section(&model, &singles, d11_singles)?,
+            "sequences": parity_section(&model, &sequences, d11_sequences)?,
+        });
+        println!("{report}");
+        return Ok(());
+    }
     let report = json!({
         "artifact_sha256": hex::encode(Sha256::digest(&artifact)),
         "single_tokens": section(

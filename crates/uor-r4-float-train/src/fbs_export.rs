@@ -404,6 +404,33 @@ pub fn fbs_float_readout_on(
     Ok(FbsFloatReadout { mode, ..readout })
 }
 
+/// The native writer's next token at every position of each of `sequences`,
+/// each read alone, as [`fbs_float_readout_on`] reads them but without the
+/// hidden vectors (claude-126: the D11 tokens of every DEV window, held
+/// against the panel's). GPU only.
+pub fn fbs_float_next_tokens(
+    model: &StackModel,
+    mode: FbsReadoutMode,
+    sequences: &[Vec<u32>],
+) -> Result<Vec<Vec<u32>>> {
+    check_no_sheet_arm()?;
+    if mode == FbsReadoutMode::D11 {
+        check_tables_rounded_as_exported(model)?;
+    }
+    let q12_query = mode == FbsReadoutMode::D11;
+    let read = || -> Result<Vec<Vec<u32>>> {
+        sequences
+            .iter()
+            .map(|tokens| Ok(hidden_and_next(model, tokens, q12_query)?.1))
+            .collect()
+    };
+    match mode {
+        FbsReadoutMode::Plain => read(),
+        FbsReadoutMode::Export => crate::hamilton_sheet::with_d11_export_gates(read),
+        FbsReadoutMode::D11 => crate::hamilton_sheet::with_d11_mode(read),
+    }
+}
+
 /// The hidden vectors of `tokens` (one sequence), rounded to Q12 when
 /// `q12_query`, with the native writer's next token for each.
 fn hidden_and_next(

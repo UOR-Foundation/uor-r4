@@ -1078,38 +1078,34 @@ pub const D11_EXPORT_ARM: FbsArm = FbsArm::OneAtomActive;
 pub const PARITY_WINDOW_STRIDE: usize = 8;
 
 /// The panel's D11 predictions against the D11 readout's next tokens at the same positions, over
-/// the scored rows of the sampled windows (window `w` is sampled when `w % stride == 0`, and is
-/// the readout's sequence `w / stride`): `(rows compared, rows that differ)`.
+/// every scored row: `next[w]` is window `w` read alone (`fbs_export::fbs_float_next_tokens`).
+/// Returns `(rows compared, rows that differ)`. The panel batches windows and the readout reads
+/// one, so this ties the panel to the readout path the integer parity covers.
 fn panel_against_readout(
     windows: &[CausalWindow],
     panel_preds: &[u32],
-    readout: &uor_r4_integer::fbs_snapshot::FbsFloatReadout,
-    stride: usize,
+    next: &[Vec<u32>],
 ) -> Result<(usize, usize)> {
-    let (mut row, mut compared, mut differ) = (0usize, 0usize, 0usize);
+    if next.len() != windows.len() {
+        return Err(invalid("the readout did not read every window"));
+    }
+    let (mut row, mut differ) = (0usize, 0usize);
     for (w, window) in windows.iter().enumerate() {
         for &offset in &window.scored_offsets {
-            if w % stride == 0 {
-                let next = readout
-                    .sequences
-                    .get(w / stride)
-                    .and_then(|q| q.next.get(offset))
-                    .ok_or_else(|| {
-                        invalid(format!("the readout lacks window {w} offset {offset}"))
-                    })?;
-                let pred = panel_preds
-                    .get(row)
-                    .ok_or_else(|| invalid("fewer panel predictions than scored rows"))?;
-                compared += 1;
-                differ += usize::from(pred != next);
-            }
+            let read = next[w]
+                .get(offset)
+                .ok_or_else(|| invalid(format!("the readout lacks window {w} offset {offset}")))?;
+            let pred = panel_preds
+                .get(row)
+                .ok_or_else(|| invalid("fewer panel predictions than scored rows"))?;
+            differ += usize::from(pred != read);
             row += 1;
         }
     }
     if row != panel_preds.len() {
         return Err(invalid("more panel predictions than scored rows"));
     }
-    Ok((compared, differ))
+    Ok((row, differ))
 }
 
 /// Stage 4b's run (`docs/harness/prep/d11-exporter-float-trunk-stage4b-2026-10-26.md`): the four
@@ -1121,7 +1117,9 @@ pub fn run_d11_export_gap(
     save_dir: &Path,
     device: &Device,
 ) -> Result<serde_json::Value> {
-    use crate::fbs_export::{fbs_float_readout_on, fbs_trunk_snapshot, round_tables_as_exported};
+    use crate::fbs_export::{
+        fbs_float_next_tokens, fbs_float_readout_on, fbs_trunk_snapshot, round_tables_as_exported,
+    };
     use uor_r4_integer::fbs_snapshot::{write_new_file, FbsReadoutMode};
 
     fs::create_dir(save_dir)?;
@@ -1200,9 +1198,12 @@ pub fn run_d11_export_gap(
         let (d11, d11_preds) = hs::evaluate_dev_panel_d11(&loaded, &dev_windows)?;
         let (_, d11_again) = hs::evaluate_dev_panel_d11(&loaded, &dev_windows)?;
         let d11_loss = panel_loss_d11(&loaded, &dev_windows)?;
-        // The panel's D11 path against the readout's, which the integer parity covers.
+        // m1: the panel's D11 path against the readout's on every scored row; the integer
+        // parity (m2, from `fbs-compare` on the sample) covers the readout's.
+        let all_windows: Vec<Vec<u32>> = dev_windows.iter().map(|w| w.input_ids.clone()).collect();
+        let d11_next = fbs_float_next_tokens(&loaded, FbsReadoutMode::D11, &all_windows)?;
         let (panel_rows, panel_differ) =
-            panel_against_readout(&dev_windows, &d11_preds, &d11_readout, PARITY_WINDOW_STRIDE)?;
+            panel_against_readout(&dev_windows, &d11_preds, &d11_next)?;
         let paired = hs::compute_paired_discordance(
             "float",
             &out.preds_float,
@@ -1591,8 +1592,7 @@ mod tests {
     }
 
     #[test]
-    fn the_panel_is_held_against_the_readout_only_on_sampled_windows() -> Result<()> {
-        use uor_r4_integer::fbs_snapshot::{FbsFloatReadout, FbsFloatSequence, FbsReadoutMode};
+    fn the_panel_is_held_against_the_readout_on_every_scored_row() -> Result<()> {
         let window = |scored: Vec<usize>| CausalWindow {
             doc_id: 0,
             input_ids: vec![1; 4],
@@ -1600,36 +1600,25 @@ mod tests {
             scored_targets: vec![0; scored.len()],
             scored_corpus_positions: vec![0; scored.len()],
         };
-        // Windows 0 and 2 are sampled (stride 2) and are the readout's sequences 0 and 1.
         let windows = vec![window(vec![1, 3]), window(vec![0]), window(vec![2])];
-        let sequence = |next: Vec<u32>| FbsFloatSequence {
-            tokens: vec![1; 4],
-            next,
-            hidden: vec![vec![0.0]; 4],
-        };
-        let readout = FbsFloatReadout {
-            vocab: 8,
-            width: 1,
-            mode: FbsReadoutMode::D11,
-            positions: Vec::new(),
-            sequences: vec![sequence(vec![0, 5, 0, 6]), sequence(vec![0, 0, 7, 0])],
-        };
-        // Rows: window 0 offsets 1 and 3, window 1 offset 0 (not sampled), window 2 offset 2.
+        let next = vec![vec![0, 5, 0, 6], vec![9, 0, 0, 0], vec![0, 0, 7, 0]];
+        // Rows, in panel order: window 0 offsets 1 and 3, window 1 offset 0, window 2 offset 2.
         assert_eq!(
-            panel_against_readout(&windows, &[5, 6, 9, 7], &readout, 2)?,
-            (3, 0)
+            panel_against_readout(&windows, &[5, 6, 9, 7], &next)?,
+            (4, 0)
         );
         assert_eq!(
-            panel_against_readout(&windows, &[5, 4, 9, 1], &readout, 2)?,
-            (3, 2)
+            panel_against_readout(&windows, &[5, 4, 9, 1], &next)?,
+            (4, 2)
         );
-        // The unsampled window's row never counts, whatever it holds.
+        // Every window's rows count, the middle one's too.
         assert_eq!(
-            panel_against_readout(&windows, &[5, 6, 0, 7], &readout, 2)?,
-            (3, 0)
+            panel_against_readout(&windows, &[5, 6, 0, 7], &next)?,
+            (4, 1)
         );
-        assert!(panel_against_readout(&windows, &[5, 6, 9], &readout, 2).is_err());
-        assert!(panel_against_readout(&windows, &[5, 6, 9, 7, 1], &readout, 2).is_err());
+        assert!(panel_against_readout(&windows, &[5, 6, 9], &next).is_err());
+        assert!(panel_against_readout(&windows, &[5, 6, 9, 7, 1], &next).is_err());
+        assert!(panel_against_readout(&windows, &[5, 6, 9, 7], &next[..2]).is_err());
         Ok(())
     }
 
