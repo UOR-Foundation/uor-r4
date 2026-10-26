@@ -13,7 +13,8 @@
 //! artifact (`d11-fbs-eval run`). `d11-artifact-gap` scores the artifact's own export gap on one
 //! seed from that evaluator's run (claude-129,
 //! `docs/harness/prep/d11-exporter-float-trunk-artifact-gap-2026-10-26.md`), with `--model-dir`,
-//! `--evaluator`, `--windows-sha256`, `--stage4b`, `--stored-preds` and `--seed`.
+//! `--evaluator`, `--windows-sha256`, `--artifact-sha256` (the seed's pinned artifact),
+//! `--stage4b`, `--stored-preds` and `--seed`.
 
 use std::collections::BTreeMap;
 use std::env;
@@ -27,10 +28,11 @@ use uor_r4_float_train::spiralcore_fbs_sheet::{
 use uor_r4_float_train::{FloatTrainError, Result};
 
 /// The options of `d11-artifact-gap`.
-const GAP_OPTIONS: [&str; 6] = [
+const GAP_OPTIONS: [&str; 7] = [
     "--model-dir",
     "--evaluator",
     "--windows-sha256",
+    "--artifact-sha256",
     "--stage4b",
     "--stored-preds",
     "--seed",
@@ -182,6 +184,7 @@ fn main() -> Result<()> {
                 &PathBuf::from(option("--model-dir")?),
                 &PathBuf::from(option("--evaluator")?),
                 &option("--windows-sha256")?,
+                &option("--artifact-sha256")?,
                 &PathBuf::from(option("--stage4b")?),
                 &PathBuf::from(option("--stored-preds")?),
                 seed,

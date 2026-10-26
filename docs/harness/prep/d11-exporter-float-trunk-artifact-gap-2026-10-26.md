@@ -47,7 +47,9 @@
    - its plain loss is within 1e-6 of the receipt's `loss_float`.
 3. **`I-Inputs`.**
    - The windows file the evaluator reads is the one the sheet wrote: `sequences_sha256` equals the windows file's sha256.
-   - Every store input matches section 5's sha256s.
+   - The artifact the evaluator ran is this seed's own: the run's `artifact_sha256` equals section 5's pin for seed s, passed as `--artifact-sha256` and checked in `run_d11_artifact_gap`.
+   - Every store input matches section 5's sha256s at fetch.
+   - The receipt records the sha256s of the model's `model.safetensors` and `config.json`.
 4. **`I-DEV-Denominator`.** 14,287 scored rows over 428 windows. The windows mode refuses anything else, and so does the scorer.
 5. **`I-Finite`.**
    - Every step exits 0, and each step's stderr and exit code are saved.
@@ -107,3 +109,17 @@ The loader checks both pins itself. The panel is 400 documents, 428 windows of 1
 ## 8. Non-author TEST FITNESS review
 
 TEST FITNESS: PENDING
+
+**Round 1 (fresh non-author reviewer, 2026-10-26): FIT, with two required changes before the run.** Both are made in `I-Inputs` above:
+1. The scorer checks the evaluator's `artifact_sha256` against the seed's own pin.
+2. The receipt records the model files' sha256s.
+
+**What the reviewer confirmed:**
+- **The row mapping.** The evaluator's position `w · 192 + offset` is the hidden state the float panel scores.
+- **The loss.** It is `panel_loss_d11`'s counterpart: the same D11 head on the exported tables, fed the artifact's own `q / 4096`, with a row-weighted mean that does not depend on chunking.
+- **No emulation.** The A side runs no trunk forward.
+- **The bar** is Stage 4b's.
+- **`I-Verify-All`** makes the scored outputs the shipped runtime's own. That is why a PTX hash differing from claude-128's may be recorded rather than gating.
+- **§3.5 holds.** The CPU runs only integer parity references, and neither feeds the gap.
+
+TEST FITNESS: FIT

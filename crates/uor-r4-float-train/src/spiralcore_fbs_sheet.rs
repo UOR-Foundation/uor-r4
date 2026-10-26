@@ -1364,6 +1364,7 @@ pub fn run_d11_artifact_gap(
     model_dir: &Path,
     evaluator: &Path,
     windows_sha256: &str,
+    artifact_sha256: &str,
     stage4b: &Path,
     stored_preds: &Path,
     seed: u64,
@@ -1417,7 +1418,10 @@ pub fn run_d11_artifact_gap(
             "the evaluator's run does not cover the DEV windows",
         ));
     }
-    let i_inputs = run.sequences_sha256 == windows_sha256;
+    // I-Inputs: the evaluator read the sheet's windows and this seed's pinned artifact.
+    let i_inputs = run.sequences_sha256 == windows_sha256 && run.artifact_sha256 == artifact_sha256;
+    let model_sha256 = sha256_bytes(&fs::read(model_dir.join("model.safetensors"))?);
+    let config_sha256 = sha256_bytes(&fs::read(model_dir.join("config.json"))?);
     let i_verify = run.verify.as_array().is_some_and(|checks| {
         checks.len() == 2
             && checks.iter().all(|c| c["equal"] == serde_json::json!(true))
@@ -1461,6 +1465,9 @@ pub fn run_d11_artifact_gap(
         "artifact_sha256": run.artifact_sha256,
         "evaluator_build": run.build,
         "windows_sha256": windows_sha256,
+        "artifact_sha256_pinned": artifact_sha256,
+        "model_safetensors_sha256": model_sha256,
+        "model_config_sha256": config_sha256,
         "float": float,
         "top1_artifact": top1_artifact,
         "loss_float": loss_float,
