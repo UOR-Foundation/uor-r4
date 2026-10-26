@@ -66,6 +66,42 @@ type Args = (
     BTreeMap<String, String>,
 );
 
+/// The options of `d11-residual` (claude-132): every one required but `--stored-d11-preds`.
+#[derive(Debug, PartialEq)]
+struct ResidualArgs {
+    model_dir: PathBuf,
+    evaluator: PathBuf,
+    windows_sha256: String,
+    artifact_sha256: String,
+    model_sha256: String,
+    stored_preds: PathBuf,
+    stored_d11_preds: Option<PathBuf>,
+    seed: u64,
+    label: String,
+}
+
+fn residual_args(extra: &BTreeMap<String, String>) -> Result<ResidualArgs> {
+    let option = |name: &str| {
+        extra
+            .get(name)
+            .cloned()
+            .ok_or_else(|| FloatTrainError::Invalid(format!("d11-residual needs {name}")))
+    };
+    Ok(ResidualArgs {
+        model_dir: PathBuf::from(option("--model-dir")?),
+        evaluator: PathBuf::from(option("--evaluator")?),
+        windows_sha256: option("--windows-sha256")?,
+        artifact_sha256: option("--artifact-sha256")?,
+        model_sha256: option("--model-sha256")?,
+        stored_preds: PathBuf::from(option("--stored-preds")?),
+        stored_d11_preds: extra.get("--stored-d11-preds").map(PathBuf::from),
+        seed: option("--seed")?
+            .parse()
+            .map_err(|_| FloatTrainError::Invalid("--seed must be an integer".to_owned()))?,
+        label: option("--label")?,
+    })
+}
+
 fn parse_args() -> Result<Args> {
     let mut mode = String::from("full");
     let mut data_root = PathBuf::from(".");
@@ -275,23 +311,18 @@ fn main() -> Result<()> {
             write_receipt(&out, &value)
         }
         "d11-residual" => {
-            let seed: u64 = option("--seed")?
-                .parse()
-                .map_err(|_| FloatTrainError::Invalid("--seed must be an integer".to_owned()))?;
+            let a = residual_args(&extra)?;
             let value = run_d11_residual(
                 &data_root,
-                &PathBuf::from(option("--model-dir")?),
-                &PathBuf::from(option("--evaluator")?),
-                &option("--windows-sha256")?,
-                &option("--artifact-sha256")?,
-                &option("--model-sha256")?,
-                &PathBuf::from(option("--stored-preds")?),
-                extra
-                    .get("--stored-d11-preds")
-                    .map(PathBuf::from)
-                    .as_deref(),
-                seed,
-                &option("--label")?,
+                &a.model_dir,
+                &a.evaluator,
+                &a.windows_sha256,
+                &a.artifact_sha256,
+                &a.model_sha256,
+                &a.stored_preds,
+                a.stored_d11_preds.as_deref(),
+                a.seed,
+                &a.label,
                 &device,
             )?;
             let p = &value["pairs"]["d11_vs_artifact"];
@@ -319,5 +350,52 @@ fn main() -> Result<()> {
         other => Err(FloatTrainError::Invalid(format!(
             "unsupported --mode {other}"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn residual_extra() -> BTreeMap<String, String> {
+        [
+            ("--model-dir", "m"),
+            ("--evaluator", "e.json"),
+            ("--windows-sha256", "w"),
+            ("--artifact-sha256", "a"),
+            ("--model-sha256", "s"),
+            ("--stored-preds", "p.json"),
+            ("--seed", "2"),
+            ("--label", "dual-c131"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_owned(), v.to_owned()))
+        .collect()
+    }
+
+    #[test]
+    fn the_residual_options_parse_and_only_the_stored_panel_is_optional() -> Result<()> {
+        let mut extra = residual_extra();
+        // Every option the mode reads is one the parser accepts.
+        assert!(extra.keys().all(|k| GAP_OPTIONS.contains(&k.as_str())));
+        assert!(GAP_OPTIONS.contains(&"--stored-d11-preds"));
+        let args = residual_args(&extra)?;
+        assert_eq!(args.stored_d11_preds, None);
+        assert_eq!((args.seed, args.label.as_str()), (2, "dual-c131"));
+        assert_eq!(args.model_sha256, "s");
+        extra.insert("--stored-d11-preds".to_owned(), "d.json".to_owned());
+        assert_eq!(
+            residual_args(&extra)?.stored_d11_preds,
+            Some(PathBuf::from("d.json"))
+        );
+        for required in residual_extra().keys() {
+            let mut missing = residual_extra();
+            missing.remove(required);
+            assert!(residual_args(&missing).is_err(), "{required} is required");
+        }
+        let mut bad_seed = residual_extra();
+        bad_seed.insert("--seed".to_owned(), "two".to_owned());
+        assert!(residual_args(&bad_seed).is_err());
+        Ok(())
     }
 }

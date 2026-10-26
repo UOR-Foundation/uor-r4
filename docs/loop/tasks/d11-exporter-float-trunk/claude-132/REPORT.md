@@ -43,7 +43,9 @@ Size against `origin/main`: float-train, in `spiralcore_fbs_sheet.rs`, `hamilton
 - **`hamilton_sheet::dev_panel_q12_queries` and `write_q12_rows`**: the panel's scored Q12 queries under the current gate hook, and the panel's writer head on given queries. `score_dev_panel` is unchanged.
 - **Tests:**
   - the host tests `the_q12_drift_is_each_rows_largest_code_distance` and `the_residual_rule_is_the_sheets` (the rule at its 428/429 and 1,428/1,429 boundaries);
+  - the host test `the_residual_options_parse_and_only_the_stored_panel_is_optional`, in the binary;
   - the GPU test `gpu_the_head_on_the_d11_queries_is_the_d11_panel`.
+- **After the run,** following the code review, the mode's option parsing moved into a pure `residual_args`, which the binary's host test pins. The mode's behaviour is the same as the run built at `9bfbf31c8`.
 
 ## Measurements
 
@@ -111,14 +113,26 @@ See the exact-head review record on the PR.
 
   claude-127's own residual matters here. The integer session differs from its f64 specification on about 1% of single tokens at 6 layers, and that residual is itself unexplained. One candidate is the artifact's Q16 residual stream, though claude-127 notes that its 1-layer seed-2 differences do not fit accumulation alone. The control that would test it, the f64 reference with its residual rounded to Q16 at the same points, was not built ([claude-127 REPORT](../claude-127/REPORT.md)).
 
-  So the investigation is three host checks, needing no new GPU spend:
-  1. build that Q16 control;
-  2. run the integer session against the f64 reference and against the Q16 control, on all six stored snapshots;
-  3. record per-channel drift and the layer and position of every icosian-snap difference.
+  So the investigation has two parts.
+  - **Three host checks, needing no new GPU spend:**
+    1. build that Q16 control;
+    2. run the integer session against the f64 reference and against the Q16 control, on all six stored snapshots;
+    3. record per-channel drift and the layer and position of every icosian-snap difference.
+  - **The drift readings the code review asked for.** This run's per-row maximum cannot separate a scale or exponent error, one saturating channel, and a real forward departure. So the readings needed are:
+    - the column holding each row's maximum;
+    - the median absolute difference;
+    - the saturation counts (±32,767 and −32,768) on each side;
+    - a per-row least-squares scale.
+
+    They need D's queries, which this run did not store, so they are a short GPU evaluation with its own sheet. No departure is attributed to the exporter before these readings exist.
 
   How it reads:
   - **A tracks the Q16 control:** it computes the D11 forward with a Q16 residual, as designed. The extra D-against-A difference is D's float32 rounding together with Q16. Whether that is faithful is then a calibration question for the rule, settled by a decision review, not after the fact.
   - **A does not track it:** that is a departure, and a repair item opens.
+- **The code review's low findings, for that unit:**
+  - `I-D-Stored` records `null` when its flag is absent, which reads like "passed". Make it "not run".
+  - The new options are accepted, and ignored, by every gap-family mode, as `--train-forward` already was.
+  - The GPU head test does not exercise the query clamp. Nothing yet compares D's queries with an exported artifact's on a synthetic trunk.
 - **After that, the pivot note's order stands:** the owner's reading of §3.7 (#2028), then one decisive run. The item parks only once the investigation is settled.
 
 ## Plain summary
