@@ -56,7 +56,7 @@ tar -xzf "${STAGE_T_ARCHIVE_DIR}/stage-t-20261025.tar.gz" -C /workspace/stage-t-
 SRC_DIR=$(ls -d /root/build/src-* | head -n 1)
 echo "[$(date -u +%FT%TZ)] Syncing latest branch commit in ${SRC_DIR} and building Build 1 & Build 2..."
 cd "${SRC_DIR}"
-git fetch origin antigravity/m1-within-cell-writer
+git fetch https://github.com/UOR-Foundation/uor-r4.git antigravity/m1-within-cell-writer
 git checkout -f FETCH_HEAD
 git rev-parse HEAD > "${WORK_ROOT}/source-head.txt"
 
