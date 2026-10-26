@@ -52,7 +52,11 @@ Result at `509f1d80`:
    - D11-mode GPU against the quantized, fully snapped reference: largest query gap at most `1e-3`, and tokens agree on at least 250 of 256 single tokens and 60 of 64 sequence positions;
    - D11-mode GPU token against the integer session's token: at least 250 of 256 and 60 of 64.
 
-   A miss confined to at most 6 positions, each traced to a near-tie (an icosian snap, a rate index or a Q12 rounding), is an instrument miss. A mapping fault is repaired in this unit. A planted fault must break parity: tables left unrounded in D11 mode.
+   A miss confined to at most 6 positions, each traced to a near-tie (an icosian snap, a rate index or a Q12 rounding), is an instrument miss. A mapping fault is repaired in this unit.
+
+   Two planted faults must each break parity: tables left unrounded in D11 mode, and the transition snap turned off. "Breaks parity" means the set-aside misses at least one of the bars above, against the quantized reference or against the integer session. This definition is fixed after the pre-run review and before the run.
+
+   The rounded trunk must also export to the same artifact bytes as the original: `cmp` in the job log.
 3. Audits green, `loop gates --full` green, and a REPORT that hands Stage 4b a mode it can score on the GPU.
 
 ## Stop and ask if
