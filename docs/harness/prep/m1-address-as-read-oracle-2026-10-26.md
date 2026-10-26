@@ -50,4 +50,4 @@ Any artifact/input/schema/hash/shape mismatch, nonzero parity status, nondetermi
 
 ## TEST FITNESS line
 
-TEST FITNESS: PENDING — the manifest is generated and pinned; fresh non-author review is required before dispatch.
+TEST FITNESS: FIT — M1 #2029 m1-address-as-read object-store oracle, reviewed at `c622cd52dbb3a11263c6ad704c4b216f69d3ca63` by fresh non-author uor-evidence-auditor agent-40 on 2026-10-26. FIT covers only this registered configuration.
