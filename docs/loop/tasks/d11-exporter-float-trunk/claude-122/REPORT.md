@@ -16,6 +16,11 @@ References #2820.
   - On this untrained random trunk, the 4-bit grid-coded gains and taps flip near-tied cells.
   - The test is now a floor against gross faults (192). The measured 224 is recorded in the test and the commit.
   - The integer session is held to the quantized reference instead, and matches it exactly (below).
+- **The fresh review found weak spots in my tests and two holes in the container rules (fixed in review round 1).**
+  - The near-tie exception took the smaller of the token margin and the cell-boundary margin, whatever had differed. A wrong token with agreeing kept cells could have passed on a near-tied cell boundary. It never ran (0 exceptions), so this was a latent flaw, not a hidden failure.
+  - The export-refusal test checked only that some error occurred. The kept-cell test would have passed a writer that kept the worst cells.
+  - An FBS shape could carry a read selection or read weights. A writer-table value outside Q12 in i16 saturated silently. `rms_eps` was never checked.
+  - My REPORT's size line added additions to deletions, and its plain summary claimed "every possible input".
 - **The first validation test could not fail.** It asserted only that some shape error occurred: with the projection rule set aside, a later rule still refused the shape. It now asserts each refusal's own reason, and fails with that rule set aside.
 - **The zero-multiply audit first failed on the binary.** `stack_native_writer` showed `fmov x9, d0` twice in `uor-r4-stack`, but not in the rlib: the compiler had vectorized its abs-difference sums. `black_box` on each loaded value fixed it, the same way `stack_max_abs` does, and both audits now pass.
 - **Four builder dispatches handed back with no code.** The causes, each logged in `local/claude/FRICTION.md`:
@@ -32,13 +37,13 @@ References #2820.
 
 ## What changed
 
-Size: code about 1,330 lines (format.rs, session.rs, discrete_d11.rs, mod.rs), tests about 440 (tests.rs, tests/memory_shape.rs), docs about 70 (ORDER, this REPORT, the notebook row). The ORDER gave no line estimate.
+Size at the review-round head: code +1,180/−160 (format.rs, session.rs, discrete_d11.rs, mod.rs), tests +517 (tests.rs, tests/memory_shape.rs), docs about +180 (ORDER, this REPORT, the notebook row). The ORDER gave no line estimate.
 
 - **The container (`format.rs`).**
   - `StackShape` gains `projection`, `head` and `kept_cells`. They serialize only when set, so existing containers are byte-identical.
   - An FBS shape takes `uor-r4.lut-stack/4`.
-  - Validation refuses 13 unlawful FBS shapes, each for its own reason.
-  - `FbsRoutes`, `FbsTrunkLayer` and `FbsTrunkSnapshot`, with `export_fbs_trunk_uorlut01`, which is byte-deterministic. It writes:
+  - Validation refuses unlawful FBS shapes, each for its own reason (16 cases in the test). An FBS shape serves recurrence layers only, with no read selection or read weights. The group rule (multiples of 32) gives every route table whole 8-blocks.
+  - `FbsRoutes`, `FbsTrunkLayer` and `FbsTrunkSnapshot`, with `export_fbs_trunk_uorlut01`, which is byte-deterministic. It refuses a writer-table value that does not fit Q12 in i16 and an `rms_eps` that is not finite and positive. It writes:
     - one `u32` route entry per output block (`atom | state << 16`);
     - grid-coded gains and conv taps;
     - Q16 biases and decay offsets;
@@ -57,8 +62,8 @@ Size: code about 1,330 lines (format.rs, session.rs, discrete_d11.rs, mod.rs), t
   - `IntegerStackSession::step` dispatches FBS models to it, so the audit's call-graph root covers the new path. `step_native` returns a `NativeStep { token, kept_cells, query_q12 }`.
 - **Tests.**
   - The shape rules.
-  - Export determinism and parsing, and export refusals.
-  - The reference: kept cells only, the gather pinned to `cl06_action`, and the quantized floor.
+  - Export determinism and parsing, and export refusals, each pinned to its own error.
+  - The reference: kept cells only, no left-out cell scoring above a kept one, the gather pinned to `cl06_action`, and the quantized floor.
   - The full-vocabulary control.
   - Parse refusals of corrupt route bytes.
 
@@ -70,8 +75,10 @@ All of this ran on the laptop, with `CARGO_TARGET_DIR=local/target`, on the hand
 |---|---|---|
 | Integer session against the quantized reference | 256 of 256 single tokens and 8 of 8 sequence positions agree on kept cells, token, and the Q12 query within 2 LSBs; 0 near-tie exceptions | `cargo test -p uor-r4-integer --features serving-wasm --lib fbs_trunk_export_matches -- --nocapture` |
 | Set-asides | gather sign dropped: fails (query 718 against 5,335); gain dropped: fails (3,831 against 5,335) | same test, each change applied and restored |
+| Review-round set-asides | each fails its test: the read-path rule, the Q12 range refusal, the `rms_eps` check, and a reference that keeps the worst cells | `fbs_shape_takes…`, `fbs_trunk_export_refuses…`, `fbs_trunk_reference_reads_only…`, each change applied and restored |
 | Plain against quantized float reference | 224 of 256 single tokens agree | `fbs_trunk_reference_quantized_agrees` |
-| Zero-multiply audit | `FULL PASS`: rlib 56 symbol ranges and 41 call-graph functions; `uor-r4-stack` 44 symbol ranges and 97 functions; 0 forbidden instructions | `python3 scripts/audit_zero_matmul_serving.py local/target/release/{libuor_r4_integer.rlib,uor-r4-stack} --stack` |
+| Zero-multiply audit | `FULL PASS`: rlib 56 symbol ranges and 40 call-graph functions; `uor-r4-stack` 44 symbol ranges and 97 functions; 0 forbidden instructions | `python3 scripts/audit_zero_matmul_serving.py local/target/release/{libuor_r4_integer.rlib,uor-r4-stack} --stack` |
+| FBS helpers in the binary | `IntegerStackSession::step` calls `stack_fbs_gather` (two forms), `stack_norm_gain` and `stack_native_writer` directly. None holds a forbidden instruction. `stack_norm_gain` uses no SIMD register. The gathers move data through SIMD registers by plain loads and stores only, which the audit allows | `otool -tvV` and `objdump -d` on `uor-r4-stack` |
 | Integer library suite | 313 passed, 0 failed, including every dense-stack test | `cargo test -p uor-r4-integer --features serving-wasm --lib --no-fail-fast` |
 
 ## Checks run at the head
@@ -102,4 +109,4 @@ The project's float-trained models use SpiralCore/FBS projections: each output b
 - the integer code that runs those choices as a lookup and a sign;
 - the model's own head, which picks the next token from a short list of candidates rather than scoring every word.
 
-On a small hand-built model, the integer engine picks exactly the same next token as a careful floating-point reference for every possible input. A check of the compiled code finds no multiply, divide or floating-point instruction in the served path. What is not done yet is the piece that takes a real trained model from the training code into this format, and the measurement on a trained model.
+On a small hand-built model, the integer engine picks exactly the same next token as a floating-point reference that rounds its tables the same way. It did so for every single-token input and for each position of one 8-token sequence. A check of the compiled code finds no multiply, divide or floating-point instruction in the served path. What is not done yet is the piece that takes a real trained model from the training code into this format, and the measurement on a trained model.
