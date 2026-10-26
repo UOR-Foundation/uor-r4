@@ -1541,6 +1541,8 @@ pub fn run_d11_artifact_gap(
     let net = paired.a_hit_b_miss_c as isize - paired.a_miss_b_hit_b as isize;
     Ok(serde_json::json!({
         "sheet": "docs/harness/prep/d11-exporter-float-trunk-artifact-gap-2026-10-26.md",
+        // The sheet the trained models answer to, as their training receipt names it (claude-131).
+        "training_sheet": receipt["sheet"],
         "seed": seed,
         "arm": D11_EXPORT_ARM.name(),
         "dev_documents": dev_docs,
