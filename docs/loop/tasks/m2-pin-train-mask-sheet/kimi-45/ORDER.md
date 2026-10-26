@@ -1,12 +1,12 @@
-# ORDER: m2-pin-train-mask-sheet-cli-repair, kimi-45
+# ORDER: m2-pin-train-mask-sheet, kimi-45
 
-Lab: kimi. Item: [m2-pin-train-mask-sheet-cli-repair](../../../../roadmap/items/m2-pin-train-mask-sheet-cli-repair.md). Base: `e9cfa8873`. Origin: post-merge audit of #3300.
+Lab: kimi. Item: [m2-pin-train-mask-sheet](../../../../roadmap/items/m2-pin-train-mask-sheet.md). Base: `e9cfa8873`. Origin: post-merge audit of #3300.
 
 ## Goal
 
 Prevent a non-executable M2 recipe from authorizing compute. Preserve the valid pins and bars, but downgrade the discrete sheet to `NOT_FIT` unless a complete training and deterministic grounded-reply evaluation chain is shown to exist. Bind the missing implementation to `m2-train-grounded-replies`; do not invent commands or change the M2 bar.
 
-The item's done-when reads:
+The tracked repair #3303's done-when reads; the harness base is the existing #2851 item:
 
 > The sheet no longer presents a non-executable chain as FIT. Record the exact CLI and missing-runner findings, replace the misleading recipe and verdict with `NOT_FIT` unless the complete chain exists, bind the remaining implementation to `m2-train-grounded-replies`, and obtain fresh D68 and non-author fitness reviews. No GPU work or model execution.
 
@@ -18,9 +18,9 @@ Source comparison found `stage-t-run step0` requires `--t16-fz`, `--t16-rel`, `-
 
 - `docs/harness/prep/m2-pin-train-mask-sheet-discrete-2026-10-26.md`
 - `docs/labs/m2-pin-train-mask-sheet/**`
-- `docs/loop/tasks/m2-pin-train-mask-sheet-cli-repair/**`
+- `docs/loop/tasks/m2-pin-train-mask-sheet/**`
 - `docs/research/notebook/m2-grounded-reply.md`
-- `docs/roadmap/items/m2-pin-train-mask-sheet-cli-repair.md`
+- `docs/roadmap/items/m2-pin-train-mask-sheet.md`
 - rendered `docs/roadmap/README.md` and `docs/roadmap/issues.json`
 
 No source, model, bar, hold, milestone-registry or other prep-sheet change. No pod and no host model evaluation.

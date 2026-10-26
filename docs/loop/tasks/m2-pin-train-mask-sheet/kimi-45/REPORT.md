@@ -34,7 +34,7 @@ This was a host-only source and record audit, not a model measurement.
 - `uor-harness prep-check`: sheet is complete and classified `NOT_FIT`.
 - `uor-harness loop gates --quick`: all three checks GREEN.
 - `uor-harness loop gates --full`: 11/11 GREEN at the review head.
-- `uor-harness loop report --check --order docs/loop/tasks/m2-pin-train-mask-sheet-cli-repair/kimi-45/ORDER.md`: PASS.
+- `uor-harness loop report --check --order docs/loop/tasks/m2-pin-train-mask-sheet/kimi-45/ORDER.md`: PASS.
 - `uor-harness loop pr-check --local`: PASS; any scope/commit-order messages are advisory under D76.
 - `git diff --check`: PASS.
 

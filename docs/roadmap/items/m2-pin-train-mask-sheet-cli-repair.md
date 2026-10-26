@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: false
 depends_on: [m2-pin-train-mask-sheet]
 notebook: docs/research/notebook/m2-grounded-reply.md
-scope: [docs/harness/prep/m2-pin-train-mask-sheet-discrete-2026-10-26.md, docs/labs/m2-pin-train-mask-sheet/**, docs/loop/tasks/m2-pin-train-mask-sheet-cli-repair/**, docs/research/notebook/m2-grounded-reply.md]
+scope: [docs/harness/prep/m2-pin-train-mask-sheet-discrete-2026-10-26.md, docs/labs/m2-pin-train-mask-sheet/**, docs/loop/tasks/m2-pin-train-mask-sheet/**, docs/research/notebook/m2-grounded-reply.md]
 ---
 
 ## Why it matters
