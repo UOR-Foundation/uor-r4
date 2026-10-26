@@ -40,7 +40,7 @@ The bar applies per model. Every instrument check of section 4 must be green fir
 **The faithful envelope,** from claude-132's two faithful models in this same run (d11-c130 seed 1 and dual-c131 seed 1), for A against D. For each of these readings, the envelope is the larger of the two models' values:
 - the absolute deviation of the median row L1 scale from 1;
 - the largest per-channel mean signed difference, in size;
-- the saturation excess, A's saturated entries minus D's;
+- the saturation excess in size, |A's saturated entries minus D's|;
 - the sign-flip entries.
 
 **A gross signature, on an indeterminate model,** is any of those readings, for A against D, above twice its envelope plus a floor:
@@ -55,7 +55,7 @@ A gross signature is **"localise first"**, not a ruling. The integer step's othe
 | Outcome | It means | It decides |
 |---|---|---|
 | **Q16 arithmetic.** D16 explains the residual on each of claude-132's four indeterminate models, and no model shows a gross signature. | A computes the D11 forward at the integer session's designed residual precision. D's float32 residual explains the rest of the D-against-A residual. | The residual sheet's indeterminate row is settled as faithful, so all six models are faithful against the integer session's own precision. The residual sheet's "faithful on all six" decision follows: the three FAILs stand as mechanism results of their configurations, and the item parks behind the owner's reading of §3.7 (#2028). |
-| **Localise first.** Any indeterminate model shows a gross signature. | That model's queries differ from D's beyond the faithful models' own envelope, by scale, sign, saturation or a channel offset. | An instrument localisation step, before any ruling. The signature's reading and column name where to look in the exporter or evaluator. A departure is called only when the localisation finds the defect; then a repair item opens and the affected artifacts are re-scored under the unchanged bar. |
+| **Localise first.** Any model shows a gross signature, or `classification_q16` = departure on any model. | That model's queries differ from D's beyond the faithful models' own envelope, by scale, sign, saturation or a channel offset. | An instrument localisation step, before any ruling. The signature's reading and column name where to look in the exporter or evaluator. A departure is called only when the localisation finds the defect; then a repair item opens and the affected artifacts are re-scored under the unchanged bar. |
 | **Other arithmetic, still indeterminate.** Neither of the above. This is the expected outcome (section 1). | D16 does not explain the residual, and no model departs from the faithful envelope. | The remaining residual is fine-grained, and in its gross readings no different from the faithful models'. The next control is snap-flip localisation: the layer and position of every icosian-snap disagreement between D and A, which needs the evaluator to emit its snap choices. After that come `stack_quantize16` and the other roundings. It is never a mechanism result, and the item does not park. |
 
 **Readings, with no bar:**
@@ -72,7 +72,7 @@ These are claude-132's checks, unchanged:
 3. **`I-Save-Load`, `I-Inputs`, `I-Verify-All`, `I-DEV-Denominator`, `I-D-Determinism` and `I-Head`,** as in claude-132.
 4. **`I-Head-Q16`.** The head on D16's own queries writes exactly D16's predictions.
 5. **`I-D-Stored`, plain-c126 only.** D equals Stage 4b's stored D11 panel.
-6. **`I-D-Reproduces`.** D is claude-132's on every model. The new receipt and claude-132's (`results/claude/d11-fbs-residual-2026-10-26/resid/`) agree on `.top1.d11`, `.pairs.d11_vs_artifact.rows_differ` and `.classification`, and each of those values is non-null: a number, a number and a string. A missing path fails the step. This shows that the Q16 hook, off, leaves D unchanged.
+6. **`I-D-Reproduces`.** D is claude-132's on every model. The new receipt and claude-132's (`results/claude/d11-fbs-residual-2026-10-26/resid/`) agree on `.top1.d11`, `.pairs.d11_vs_artifact.rows_differ` and `.classification`, and each of those values is non-null: a number, a number and a string. A missing path fails the step. Agreement on these summaries is consistent with the Q16 hook, off, leaving D unchanged; with `I-D-Determinism`, `I-D-Stored` and the GPU test's bit-for-bit check, it is the evidence for that.
 7. **`I-Finite`.** Every step exits 0, and each step's stdout, stderr and exit code are saved. The log's last line is written before `SHA256SUMS`.
 
 ## 5. Base artifact and data split
@@ -142,3 +142,15 @@ No training data is read.
 - f32 holds the 2^-16 grid exactly at these magnitudes.
 - `drift_readings`' arithmetic is correct and has no products (§3.3).
 - The cost and stop rule are inside the caps.
+
+**Round 2 (fresh non-author reviewer, 2026-10-26): FIT.**
+- All four round-1 findings are resolved.
+- The `jq` check fails on a misspelled path, on one side only, and on an empty file.
+- The faithful envelope is not circular: its models were classified by claude-132's earlier rule, and the rule is fixed before the run.
+- **Its minor items, applied:**
+  - the saturation excess is taken in size;
+  - "localise first" triggers on any model's signature or Q16 departure;
+  - `I-D-Reproduces` is worded as consistency, with `I-D-Determinism`, `I-D-Stored` and the GPU test as the evidence;
+  - the sign-flip test covers the 64-code boundary.
+
+TEST FITNESS: FIT

@@ -2718,9 +2718,9 @@ mod tests {
         let v = drift_readings(&a, &r, 3)?;
         // No entry is a sign flip: the opposite-sign pairs are all below 64 codes or absent.
         assert_eq!(v["sign_flip_entries"], serde_json::json!(0));
-        let flipped = drift_readings(&q(&[-100, 63, 5]), &q(&[100, -64, -5]), 3)?;
-        // Only the first entry is a flip: both sides at least 64 codes, of opposite sign.
-        assert_eq!(flipped["sign_flip_entries"], serde_json::json!(1));
+        let flipped = drift_readings(&q(&[-100, 63, 5, 64]), &q(&[100, -64, -5, -64]), 4)?;
+        // The first and last entries are flips: both sides at least 64 codes, of opposite sign.
+        assert_eq!(flipped["sign_flip_entries"], serde_json::json!(2));
         assert_eq!(v["entries"], serde_json::json!(6));
         // The absolute gaps are 10, 20, 30, 32667, 0, 0; sorted 0, 0, 10, 20, 30, 32667.
         assert_eq!(v["median_abs_codes"], serde_json::json!(20));
