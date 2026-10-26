@@ -16,7 +16,7 @@ Lab: kimi. Order: [ORDER.md](ORDER.md). Prep: [`m1-address-as-read-oracle-2026-1
 - Added five matched arms and exact true-address gates, per-family contrasts, formed-query versus selected-slot distinctions, ceiling/gain/no-gain classification and one composed gate requiring parity, leaks, identity, baseline identity, random control and hard gates.
 - Added parity-only reuse of the Stage 0 GPU scorer, real candidate/fetch/byte/resource accounting, actual-emission token/context rates, clean-tree and runtime-identity checks, invalid-UTF8 marking, and a single-tar/checksum/readback evidence path.
 - Updated the item's measurement records and removed the stale trunk dependency: this T16_fz oracle does not require the M2 trunk checkpoint. Item scope and mechanism status remain bounded.
-- Size at the REPORT commit: 19 files, 11,342 additions and 17 deletions. Code and unit tests 4,589 lines, documentation 221, generated manifest 6,527, dependency/workspace metadata 5. No numeric estimate was set; most additions are the generated manifest, pure controls and GPU runner.
+- Size at the REPORT commit: 20 files, 11,386 additions and 21 deletions. Code and unit tests 4,627 lines, documentation 227, generated manifest 6,527, dependency/workspace metadata 5. No numeric estimate was set; most additions are the generated manifest, pure controls and GPU runner.
 
 ## Measurements
 
