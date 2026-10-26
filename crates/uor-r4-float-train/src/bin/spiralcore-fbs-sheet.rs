@@ -28,7 +28,8 @@
 //! `docs/harness/prep/d11-exporter-float-trunk-residual-2026-10-26.md`): one saved model's D11
 //! panel, plain and export-mode panels, and head on the artifact's queries, paired against the
 //! artifact's stored evaluator run. It takes `--model-dir`, `--evaluator`, `--windows-sha256`,
-//! `--artifact-sha256`, `--stored-preds`, `--seed` and `--label` (the configuration's name).
+//! `--artifact-sha256`, `--stored-preds`, `--seed`, `--label` (the configuration's name) and,
+//! where the D11 panel was stored at training (Stage 4b), `--stored-d11-preds`.
 
 use std::collections::BTreeMap;
 use std::env;
@@ -43,7 +44,7 @@ use uor_r4_float_train::spiralcore_fbs_sheet::{
 use uor_r4_float_train::{FloatTrainError, Result};
 
 /// The options of `d11-artifact-gap`, `d11-train-probe`, `d11-train-export` and `d11-residual`.
-const GAP_OPTIONS: [&str; 9] = [
+const GAP_OPTIONS: [&str; 10] = [
     "--model-dir",
     "--evaluator",
     "--windows-sha256",
@@ -53,6 +54,7 @@ const GAP_OPTIONS: [&str; 9] = [
     "--seed",
     "--train-forward",
     "--label",
+    "--stored-d11-preds",
 ];
 
 type Args = (
@@ -282,6 +284,10 @@ fn main() -> Result<()> {
                 &option("--windows-sha256")?,
                 &option("--artifact-sha256")?,
                 &PathBuf::from(option("--stored-preds")?),
+                extra
+                    .get("--stored-d11-preds")
+                    .map(PathBuf::from)
+                    .as_deref(),
                 seed,
                 &option("--label")?,
                 &device,

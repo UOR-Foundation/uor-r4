@@ -1650,12 +1650,17 @@ pub fn run_d11_residual(
     windows_sha256: &str,
     artifact_sha256: &str,
     stored_preds: &Path,
+    stored_d11_preds: Option<&Path>,
     seed: u64,
     label: &str,
     device: &Device,
 ) -> Result<serde_json::Value> {
     use crate::fbs_export::round_tables_as_exported;
 
+    let stored_d11: Option<Vec<u32>> = match stored_d11_preds {
+        Some(path) => Some(serde_json::from_slice(&fs::read(path)?)?),
+        None => None,
+    };
     let (dev_windows, dev_docs) = load_dev(data_root)?;
     let targets: Vec<u32> = dev_windows
         .iter()
@@ -1733,8 +1738,16 @@ pub fn run_d11_residual(
     };
     let top1 = |preds: &[u32]| preds.iter().zip(&targets).filter(|(p, t)| p == t).count();
     let d_vs_a = pair("d11", &d_preds, "artifact", &a_preds);
-    let instruments_ok =
-        i_save_load && i_inputs && i_verify && i_dev && d_preds == d_again && i_head;
+    // I-D-Stored: where the model's D11 panel was stored when it was trained (Stage 4b), the
+    // recomputed panel is that one, row for row.
+    let i_d_stored = stored_d11.as_ref().map(|s| *s == d_preds);
+    let instruments_ok = i_save_load
+        && i_inputs
+        && i_verify
+        && i_dev
+        && d_preds == d_again
+        && i_head
+        && i_d_stored.unwrap_or(true);
     let faithful = d_vs_a["within"] == serde_json::json!(true);
     Ok(serde_json::json!({
         "sheet": "docs/harness/prep/d11-exporter-float-trunk-residual-2026-10-26.md",
@@ -1771,6 +1784,7 @@ pub fn run_d11_residual(
         "i_dev_denominator": i_dev,
         "i_d_determinism": d_preds == d_again,
         "i_head": i_head,
+        "i_d_stored": i_d_stored,
         "instruments_pass": instruments_ok,
         "faithful": if instruments_ok {
             serde_json::json!(faithful)
