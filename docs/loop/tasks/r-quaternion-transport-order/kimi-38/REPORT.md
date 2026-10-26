@@ -15,7 +15,7 @@ The merged #2890 work (PR #3245) already provides the required matched on/off co
 ## What changed
 
 - Set `r-quaternion-transport-order` to `done` because its required controlled comparison and notebook row already exist.
-- The PR closes #2882 only. No mechanism, bar, hold, experiment, source file or item dependency changed. Size: item status 1 line + ORDER 27 + REPORT 45 + roadmap render 3/-3; generated 1 file +3/-3.
+- The PR closes #2882 only. No mechanism, bar, hold, experiment, source file or item dependency changed. Size: docs 3 file(s) +72/-1 (item status 1/1, ORDER 26, REPORT 45); generated 1 file(s) +3/-3 (roadmap README).
 
 ## Measurements
 
