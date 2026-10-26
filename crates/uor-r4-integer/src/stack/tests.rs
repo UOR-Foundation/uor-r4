@@ -2630,17 +2630,20 @@ fn fbs_image_matches_its_shape() {
         for (&q, &v) in image.writer_table.iter().zip(&snap.embed) {
             assert_eq!(i64::from(q), (f64::from(v) * 4096.0).round() as i64);
         }
-        for layer in &image.layers {
+        for (layer, routes) in image.layers.iter().zip(&snap.layers) {
             assert_eq!((layer.rec_gain.len(), layer.mlp_gain.len()), (d, d));
-            for (map, out_dim, in_dim) in [
-                (layer.rec_in, 2 * d, d),
-                (layer.rec_gate, g, d),
-                (layer.rec_out, d, d),
-                (layer.mlp_gate, m, d),
-                (layer.mlp_up, m, d),
-                (layer.mlp_down, d, m),
+            // Each map's atoms are the snapshot's routes for that map, so a
+            // swapped map or layer would differ.
+            for (map, route, out_dim, in_dim) in [
+                (layer.rec_in, &routes.rec_in, 2 * d, d),
+                (layer.rec_gate, &routes.rec_gate, g, d),
+                (layer.rec_out, &routes.rec_out, d, d),
+                (layer.mlp_gate, &routes.mlp_gate, m, d),
+                (layer.mlp_up, &routes.mlp_up, m, d),
+                (layer.mlp_down, &routes.mlp_down, d, m),
             ] {
                 assert_eq!((map.atoms.len(), map.codes.len()), (out_dim / 8, out_dim / 8));
+                assert_eq!(map.atoms, route.atoms.as_slice());
                 assert!(map.atoms.iter().all(|&a| usize::from(a) < in_dim / 8));
                 assert!(map.codes.iter().flatten().all(|&c| c < 16));
             }

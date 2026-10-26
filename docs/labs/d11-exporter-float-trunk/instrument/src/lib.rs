@@ -59,6 +59,7 @@ pub struct CModel {
 }
 
 static KEEP_Q31: [u64; 16] = FbsImage::GEOMETRIC_KEEP_Q31;
+static ICOSIAN: [[[i8; 2]; 4]; 120] = H4_ROOT_COEFFICIENTS;
 
 #[cfg(feature = "cuda")]
 pub mod device;
@@ -163,7 +164,7 @@ impl<'a> CModelHost<'a> {
             final_gain: image.final_gain.as_ptr(),
             writer_table: image.writer_table.as_ptr(),
             roots_q12: image.roots_q12.as_ptr().cast::<i32>(),
-            icosian: H4_ROOT_COEFFICIENTS.as_ptr().cast::<i8>(),
+            icosian: ICOSIAN.as_ptr().cast::<i8>(),
             keep_q31: KEEP_Q31.as_ptr(),
         };
         Ok(Self {
@@ -252,6 +253,9 @@ pub fn session_sequences(
     let shape = model.shape();
     let kept = model.fbs_image().ok_or("not an FBS stack")?.kept_cells;
     let len = sequences.first().map_or(0, Vec::len);
+    if sequences.iter().any(|s| s.len() != len) {
+        return Err("every sequence must have the same length".to_owned());
+    }
     let mut out = Outputs::zeroed(sequences.len(), len, kept, shape.width);
     for (s, seq) in sequences.iter().enumerate() {
         let mut session = model.session();
@@ -266,8 +270,12 @@ pub fn session_sequences(
     Ok(out)
 }
 
-/// The first position where two outputs differ, as `(sequence, position)`.
+/// The first position where two outputs differ, as `(sequence, position)`;
+/// `(0, 0)` when their dimensions differ.
 pub fn first_difference(a: &Outputs, b: &Outputs) -> Option<(usize, usize)> {
+    if (a.sequences, a.len, a.kept, a.width) != (b.sequences, b.len, b.kept, b.width) {
+        return Some((0, 0));
+    }
     let n = a.sequences * a.len;
     (0..n)
         .find(|&i| {

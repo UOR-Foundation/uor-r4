@@ -17,4 +17,18 @@ CARGO_TARGET_DIR=<worktree>/local/target-instr ~/.cargo/bin/cargo test --target 
 
 `tests/parity.rs` holds the host twin equal to `step_native`, bit for bit, at every position. It runs every single token of the three synthetic FBS controls (`uor_r4_integer::stack::synthetic`), and sequences that carry state for up to 64 positions.
 
-The CUDA evaluator (the `cuda` feature) and its CLI come next in claude-128.
+## The CUDA evaluator and its CLI
+
+`build.rs` builds `src/evaluator.cu` ahead of time with nvcc (no NVRTC), admits the PTX as integer-only, and assembles it to a cubin. The CLI needs the `cuda` feature and a GPU:
+
+```bash
+UOR_NVCC_ARCH=compute_120 cargo build --release --locked --target x86_64-unknown-linux-gnu --features cuda --bin d11-fbs-eval
+d11-fbs-eval qualify OUT_JSON                              # synthetic controls against both references
+d11-fbs-eval windows READOUT_JSON WINDOWS_JSON             # a float readout's DEV windows
+d11-fbs-eval singles ARTIFACT SINGLES_JSON                 # every token, one per sequence
+d11-fbs-eval run ARTIFACT SEQUENCES_JSON OUT_JSON --verify # evaluate; hold against both references
+```
+
+On the Mac, type-check the CUDA build with a stub nvcc (see `run-claude.txt`, PART 4).
+
+claude-128 qualified it on an RTX 5090: it equals the host twin and the Rust session at all 32,256 positions of the synthetic controls and both Stage 4b artifacts. The record is the [prep sheet](../../harness/prep/d11-exporter-float-trunk-gpu-evaluator-2026-10-26.md) and the [REPORT](../../loop/tasks/d11-exporter-float-trunk/claude-128/REPORT.md).

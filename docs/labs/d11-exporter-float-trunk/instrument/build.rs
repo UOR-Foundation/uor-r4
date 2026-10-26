@@ -84,10 +84,23 @@ fn ptx_admission_self_test() -> Result<(), String> {
         &format!("// floats such as .f32 are comments\n{inventory}mul.lo.u64 %a,%b,8;"),
         &ENTRIES,
     )?;
+    // One probe per forbidden component, so deleting any of them fails here.
     for forbidden in [
         "add.f32 %a,%b,%c;",
+        "add.f64 %a,%b,%c;",
+        "add.f16 %a,%b,%c;",
+        ".reg .f16x2 %a;",
         ".reg .bf16 %a;",
+        ".reg .bf16x2 %a;",
+        "cvt.rna.tf32.u32 %a,%b;",
+        ".reg .e4m3 %a;",
+        ".reg .e5m2 %a;",
         "mma.sync.aligned.m16n8k8.row.col.s32.s8.s8.s32 %a,%b,%c,%d;",
+        "wmma.load.a.sync.aligned.row %a,[%b];",
+        "wgmma.fence.sync.aligned;",
+        "tcgen05.alloc %a;",
+        "cp.async.bulk.tensor %a;",
+        ".param .tensormap %a;",
         "ex2.approx %a,%b;",
         ".visible .entry unexpected() { ret; }",
         ".visible .entry fbs_eval_sequences() { ret; }",

@@ -35,6 +35,7 @@ fn assert_parity(name: &str, model: &IntegerStackModel, seqs: &[Vec<u32>]) {
     let rust = session_sequences(model, seqs).expect("Rust session");
     let positions = host.sequences * host.len;
     eprintln!("{name}: {positions} positions compared");
+    assert!(positions > 0, "{name}: nothing was compared");
     assert_eq!(
         first_difference(&host, &rust),
         None,
@@ -44,7 +45,7 @@ fn assert_parity(name: &str, model: &IntegerStackModel, seqs: &[Vec<u32>]) {
 }
 
 #[test]
-fn the_c_and_rust_layouts_agree() {
+fn the_c_and_rust_struct_sizes_agree() {
     assert!(layouts_agree());
 }
 

@@ -77,6 +77,7 @@ fn all_equal(checks: &Value) -> bool {
 fn hashes(evaluator: &DeviceEvaluator) -> Value {
     json!({
         "ptx_sha256": device::ptx_sha256(),
+        "ptxas": device::RESOURCES,
         "cubin_sha256": device::cubin_sha256(),
         "image_target": device::IMAGE_TARGET,
         "capability": [evaluator.capability.0, evaluator.capability.1],
@@ -148,11 +149,14 @@ fn qualify(out: &str) -> Result<bool, String> {
     Ok(pass)
 }
 
-fn read_sequences(path: &str) -> Result<Vec<Vec<u32>>, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-    let value: Value = serde_json::from_str(&text).map_err(|e| format!("{path}: {e}"))?;
+/// The sequences of `path` and the sha256 of the bytes they were parsed from.
+fn read_sequences(path: &str) -> Result<(Vec<Vec<u32>>, String), String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+    let value: Value = serde_json::from_slice(&bytes).map_err(|e| format!("{path}: {e}"))?;
     let list = value.get("sequences").unwrap_or(&value);
-    serde_json::from_value(list.clone()).map_err(|e| format!("{path}: sequences: {e}"))
+    let sequences =
+        serde_json::from_value(list.clone()).map_err(|e| format!("{path}: sequences: {e}"))?;
+    Ok((sequences, sha256_hex(&bytes)))
 }
 
 fn windows(readout: &str, out: &str) -> Result<bool, String> {
@@ -168,7 +172,7 @@ fn windows(readout: &str, out: &str) -> Result<bool, String> {
         })
         .collect::<Result<_, _>>()?;
     let len = windows.first().map_or(0, Vec::len);
-    if windows.is_empty() || windows.iter().any(|w| w.len() != len) {
+    if windows.is_empty() || len == 0 || windows.iter().any(|w| w.len() != len) {
         return Err(format!(
             "{readout}: the windows are empty or of unequal lengths"
         ));
@@ -191,7 +195,10 @@ fn singles(artifact: &str, out: &str) -> Result<bool, String> {
 fn run(artifact: &str, sequences_path: &str, out: &str, check: bool) -> Result<bool, String> {
     let bytes = std::fs::read(artifact).map_err(|e| format!("{artifact}: {e}"))?;
     let model = IntegerStackModel::parse(&bytes).map_err(|e| e.to_string())?;
-    let sequences = read_sequences(sequences_path)?;
+    let (sequences, sequences_sha256) = read_sequences(sequences_path)?;
+    if sequences.is_empty() || sequences[0].is_empty() {
+        return Err(format!("{sequences_path}: no sequences, or empty ones"));
+    }
     let evaluator = DeviceEvaluator::new(0, &model)?;
     let start = Instant::now();
     let gpu = evaluator.evaluate(&sequences)?;
@@ -217,7 +224,7 @@ fn run(artifact: &str, sequences_path: &str, out: &str, check: bool) -> Result<b
         &json!({
             "schema": "uor-r4.d11-fbs-eval/1",
             "artifact_sha256": sha256_hex(&bytes),
-            "sequences_sha256": sha256_hex(&std::fs::read(sequences_path).map_err(|e| e.to_string())?),
+            "sequences_sha256": sequences_sha256,
             "build": hashes(&evaluator),
             "context": model.shape().context,
             "gpu_ns": gpu_ns,
