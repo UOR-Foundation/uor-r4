@@ -55,7 +55,11 @@ Definitions:
      - It counts the positions where the D11 readout's token differs from the exported artifact's own integer session. The pod runs `fbs-export`, then `fbs-compare --parity-only`.
      - The positions are the 4,096 single tokens and every position of the sampled windows: n₂ ≈ 14,464.
      - Comparison fields, in `compare-seed-<s>.json`: m2 = Σ over `single_tokens` and `sequences` of (`positions` − `d11_gpu_token_equals_integer_token`), and n₂ = Σ `positions`.
-   - **The bar, projected onto the panel:** 14,287 · (m1/n₁ + m2/n₂) ≤ 6 on each seed. 6 is F_I's floor of 24 divided by 4, so D's possible distance from the artifact stays well below what the gap bar resolves. Since n₁ is the whole panel, m1 counts at full weight.
+   - **The bar, projected onto the panel:** P = 14,287 · (m1/n₁ + max(m2ₛ/n₂ₛ, m2_q/n₂_q)) ≤ 6 on each seed.
+     - m2ₛ/n₂ₛ is the rate on the `single_tokens` section and m2_q/n₂_q the rate on the `sequences` section. The larger is used, so the context-free single tokens never dilute the DEV-text rate.
+     - 6 is F_I's floor of 24 divided by 4, so D's possible distance from the artifact stays well below what the gap bar resolves. Since n₁ is the whole panel, m1 counts at full weight.
+     - On a PASS, the gate also needs |b − c| + P ≤ F_I on each seed, so the instrument's possible error cannot carry a gap over the bar.
+   - **The artifact checked is the one served:** the sha256 of each seed's `artifact.uorlut` must equal `artifact_sha256` in `compare-seed-<s>.json`. `fbs-compare` re-exports from the snapshot, and `fbs-toks` times the file.
    - **No float reference runs.** `--parity-only` runs the artifact itself (the integer session) and no f64 host reference model. CHARTER §3.5 makes a host reference run a host fallback, even on the pod. Running the artifact in the GPU job for its parity is the qualification §3.6 keeps as research compute.
    - **The zero-vector snap edge folds into m2.** Where the GPU and the integer path pick different roots for an all-zero vector and that changes a token, m2 counts it. The host-reference tie trace and its zero-snap count are not run.
    - **What the tie covers:** tokens. The loss half of the gate, |L_D − L_F|, is tied to the artifact only through the same D11 forward, whose tokens the bar checks.
@@ -127,3 +131,18 @@ TEST FITNESS: PENDING
 - **The loss half of the gate** is stated to be tied to the artifact only through the D11 forward.
 
 TEST FITNESS: PENDING
+
+**Round 3 (fresh non-author reviewer, 2026-10-26): FIT.**
+
+The reviewer's reasons:
+- **The bar is testable, and the chain panel → readout → artifact holds.** m1 covers all 14,287 rows, and m2's fields are the ones `parity_section` emits.
+- **A FAIL is decisive.** A PASS can be off by at most about 6 rows, against an F_I of at least 24.
+- **CHARTER §3.5 and §3.6 are met.** `--parity-only` returns before any f64 reference runs, and the artifact runs inside the pod job.
+- **The instruments, cost and stop rule are sound.**
+
+Its three recommendations are adopted above, before the run. Each makes the bar stricter:
+- the larger of the two m2 rates;
+- |b − c| + P ≤ F_I on a PASS;
+- the served artifact's sha256 must equal the compared one.
+
+TEST FITNESS: FIT
