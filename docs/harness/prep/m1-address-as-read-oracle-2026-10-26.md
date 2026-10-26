@@ -30,7 +30,7 @@ The sieve selects current values only. Previous-version sieve output is descript
 - True-address hard emission: exactly **40/40 current, 20/20 previous, 20/20 typed abstention = 10 absent + 10 evicted**, zero wrong-value substitutions.
 - No-memory/no-address byte identity holds; random-address planted-wrong rows remain wrong; every expected value is absent from TRAIN/DEV and all model-visible panel text.
 - Report each family-specific true-versus-sieve, true-versus-no-memory and sieve-versus-no-memory `b`, `c`, `d` on its supported population. Previous is excluded from sieve contrasts. No BPB.
-- **Instrument failure:** wrong substitution, baseline drift, missing/vacuous control, leak, nondeterminism or emission error. **Ceiling:** per family and contrast, the hard gate passes and the control is already exact on every row of that family; no gain is measurable and no training follows. **Gain:** hard gate passes and treatment `d > 0` for that family. **No-gain:** hard gate passes but neither ceiling nor gain holds; report explicitly and do not train. **Address next:** only a true-address gain with poor sieve query formation localizes the next question to addressing. No hidden-fact panel in this unit; every negative is configuration-scoped (D22).
+- **Instrument failure:** wrong substitution, baseline drift, missing/vacuous control, leak, nondeterminism or emission error. Invalid model-emission UTF-8 is instead a lossy model miss marked `emission_utf8=false`, not an instrument failure; store-read/decoding failures remain instrument faults. **Ceiling:** per family and contrast, the hard gate passes and the control is already exact on every row of that family; no gain is measurable and no training follows. **Gain:** hard gate passes and treatment `d > 0` for that family. **No-gain:** hard gate passes but neither ceiling nor gain holds; report explicitly and do not train. **Address next:** only a true-address gain with poor sieve query formation localizes the next question to addressing. No hidden-fact panel in this unit; every negative is configuration-scoped (D22).
 
 ## Instrument checks and identity
 
@@ -69,4 +69,4 @@ The 80-row composition is the registered instrument, not an M3 decisive language
 
 ## TEST FITNESS line
 
-TEST FITNESS: FIT — M1 #2029 m1-address-as-read object-store oracle, reviewed at `c622cd52dbb3a11263c6ad704c4b216f69d3ca63` by fresh non-author uor-evidence-auditor agent-40 on 2026-10-26. FIT covers only this registered configuration.
+TEST FITNESS: FIT — M1 #2029 m1-address-as-read object-store oracle, reviewed at `94330a3cc3df8f0ee4f81c10bcc7d72fcd0a4709` by fresh non-author uor-evidence-auditor agent-40 on 2026-10-26. The tested code ancestor is `c1a95ab92392557622b28bddca38c1a780791fdf`; later changes are documentation only. FIT covers only this registered configuration.
