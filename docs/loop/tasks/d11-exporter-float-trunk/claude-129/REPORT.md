@@ -19,6 +19,18 @@ References #2820.
   - **What it does not do:** it closes this configuration, never the mechanism.
 - **The item's done-when is not met,** so #2820 stays open.
 
+## What changed
+
+Size against `origin/main`: float-train +339/−16, in `spiralcore_fbs_sheet.rs` (+252/−12, including the test) and the sheet binary (+87/−4). Docs: the ORDER, the prep sheet, this REPORT and the notebook row.
+
+- **`load_dev`:** the DEV half of `load_inputs`, factored out, so the new modes read no training split.
+- **`d11_artifact_windows`:** writes the 428 DEV windows in panel order, refusing any count other than 14,287 rows. It runs as the `--mode d11-artifact-windows` of `spiralcore-fbs-sheet`.
+- **`run_d11_artifact_gap`:** scores one seed's `d11-fbs-eval run --verify` output under Stage 4b's unchanged bar, as `--mode d11-artifact-gap`, with `--model-dir`, `--evaluator`, `--windows-sha256`, `--artifact-sha256`, `--stage4b`, `--stored-preds` and `--seed`.
+  - It takes the artifact's prediction at each scored offset.
+  - The loss is the D11 head on the exported tables, fed the artifact's own `q / 4096`.
+  - It checks the instruments below.
+- **`artifact_rows`:** the row mapping, pinned by `the_artifact_is_read_at_each_scored_offset_in_panel_order`, which fails when the mapping is read one position late.
+
 ## Measurements
 
 **The loss half is inside the band on both seeds.** The noise band is Δ_noise,L = 0.045679637781173676, claude-126's two-seed band.
@@ -58,18 +70,6 @@ The emulation's disagreement with the artifact, about 1% of tokens, barely moved
 **Evidence:** the HF store at `results/claude/d11-fbs-artifact-gap-2026-10-26/`, each folder with a `SHA256SUMS`:
 - `gap/` holds every step's stdout, stderr and exit code, `windows.json`, both evaluator runs, both receipts (`gap-seed-<s>.json`) and `job.log`;
 - `gap-bin/` holds the two binaries run: `spiralcore-fbs-sheet` `5a1e925c…` and `d11-fbs-eval` `67dd684a…`.
-
-## What changed
-
-Size against `origin/main`: float-train +339/−16, in `spiralcore_fbs_sheet.rs` (+252/−12, including the test) and the sheet binary (+87/−4). Docs: the ORDER, the prep sheet, this REPORT and the notebook row.
-
-- **`load_dev`:** the DEV half of `load_inputs`, factored out, so the new modes read no training split.
-- **`d11_artifact_windows`:** writes the 428 DEV windows in panel order, refusing any count other than 14,287 rows. It runs as the `--mode d11-artifact-windows` of `spiralcore-fbs-sheet`.
-- **`run_d11_artifact_gap`:** scores one seed's `d11-fbs-eval run --verify` output under Stage 4b's unchanged bar, as `--mode d11-artifact-gap`, with `--model-dir`, `--evaluator`, `--windows-sha256`, `--artifact-sha256`, `--stage4b`, `--stored-preds` and `--seed`.
-  - It takes the artifact's prediction at each scored offset.
-  - The loss is the D11 head on the exported tables, fed the artifact's own `q / 4096`.
-  - It checks the instruments above.
-- **`artifact_rows`:** the row mapping, pinned by `the_artifact_is_read_at_each_scored_offset_in_panel_order`, which fails when the mapping is read one position late.
 
 ## Checks run at the head
 
