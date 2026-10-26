@@ -38,7 +38,7 @@ Size against `origin/main`: code +587/−93 in 8 files (including the two in-fil
 
 ## Measurements
 
-On an RTX 5090, random-init trunk (vocabulary 256, width 32, 2 layers), at the code head `5fdec38a`. That head is the pod's `06148c7a` source plus `git diff 06148c7a..5fdec38a` applied as two patches.
+On an RTX 5090, random-init trunk (vocabulary 256, width 32, 2 layers), at the code head `5fdec38a`. That head is the pod's `06148c7a` source plus `git diff 06148c7a..5fdec38a` applied as two patches. Later commits add only this REPORT, the notebook row, and a type alias in `fbs-compare` for clippy, with no change in behaviour.
 
 **Parity: every bar holds.** Bars: largest hidden gap ≤ 1e-3; at least 250 of 256 single tokens agree, and at least 60 of 64 sequence positions.
 
