@@ -14,6 +14,7 @@ The address consumer and 6 finite controls are delivered. Panel-v2 replays the s
 
 ## Files in scope
 
+- `Cargo.toml` and `Cargo.lock` (workspace exclude and generated dependency pins only)
 - `crates/uor-r4-object-store/**`
 - `docs/mechanisms/exact-memory.md`
 - `docs/labs/m1-address-as-read/**`
@@ -24,7 +25,7 @@ The address consumer and 6 finite controls are delivered. Panel-v2 replays the s
 ## Done when
 
 - A Rust instrument validates the pinned T16_fz Seed 1 D11 artifact (`cd88b6b7b950e7f4672ca645adfeccf37c5560c45831377b54a3c772ce28defd`) and tokenizer (`d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`).
-- Two GPU evaluators agree on all 14,287 DEV rows, with top-1/top-8/admission and any aggregate position-strip difference from retained 455/1,484 recorded; every row has status 0 and two runs are byte-identical. No host model forward is allowed.
+- The D11 scorer agrees with the sealed original GPU receipt on all 14,287 DEV rows, with top-1/top-8/admission and any aggregate position-strip difference from retained 455/1,484 recorded; every row has status 0 and two passes are byte-identical. The receipt hash is `a7d23490c511fc7a391c95546646cd6aaef391950a5fb541fd13d2029a6edf8e`; no host model forward is allowed.
 - A 40-pair copy probe reports teacher-forced and free-running exact recovery against no-hint and random-hint controls. It passes only if both primary comparisons meet `d > 24 && d^2 > 4(b+c)`; otherwise the instrument is not sufficient for a hidden-fact oracle and no v3 follows.
 - Host finite controls and full gates pass; the GPU sheet has non-author FIT and the lab's D67 pre-run review before dispatch. REPORT records exact costs, negative scope and the next branch. No BPB, training or issue close.
 

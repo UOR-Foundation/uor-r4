@@ -5,11 +5,26 @@ edition = "2021"
 license = "MIT"
 description = "Bounded exact ternary byte-object storage for D19 durable memory"
 
+[features]
+default = []
+# Stage 0's GPU path: the D11 scorer instrument (which owns the admitted
+# cubin) and the discrete training crate for `DriverConfig`, `compiled_identity`
+# and `driver_source_sha256`. Host tests and the manifest command never compile
+# either dependency.
+cuda = [
+    "dep:m1-d11-artifact-scorer-instrument",
+    "m1-d11-artifact-scorer-instrument/cuda",
+    "dep:uor-r4-discrete",
+    "uor-r4-discrete/cuda",
+]
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10.8"
 uor-r4-tokenizer = { path = "../uor-r4-tokenizer" }
+m1-d11-artifact-scorer-instrument = { path = "../../docs/labs/m1-d11-artifact-scorer/instrument", optional = true }
+uor-r4-discrete = { path = "../uor-r4-discrete", optional = true }
 
 [dev-dependencies]
 serde_json = "1.0"

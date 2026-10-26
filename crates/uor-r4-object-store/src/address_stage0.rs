@@ -6,6 +6,42 @@ use uor_r4_tokenizer::ByteBpeTokenizer;
 pub const STAGE0_SCHEMA: &str = "uor-r4.address-stage0-copy/1";
 pub const STAGE0_SEED: &str = "m1-address-stage0-v1";
 
+/// Stage 0's pinned inputs (sheet
+/// `docs/harness/prep/m1-address-as-read-stage0-2026-10-26.md`).
+pub const ARTIFACT_SHA256: &str =
+    "cd88b6b7b950e7f4672ca645adfeccf37c5560c45831377b54a3c772ce28defd";
+/// The sheet's original checkpoint file pin. The receipt-based CLI no longer
+/// reads the checkpoint; identity records it as registered lineage only.
+pub const CHECKPOINT_SHA256: &str =
+    "0831900fc6c04b4489215dc93876f87a173b2c6c16b6635dde2f2ff24c1015a4";
+pub const TOKENIZER_SHA256: &str =
+    "d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89";
+pub const MANIFEST_SHA256: &str =
+    "ea36011870e3f6d0add87e9fc1d25115ffc77f2a9206d13bfe304c6785351fa5";
+/// The sealed Stage T GPU receipt that replaces the external evaluator.
+pub const RETAINED_RECEIPT_SHA256: &str =
+    "a7d23490c511fc7a391c95546646cd6aaef391950a5fb541fd13d2029a6edf8e";
+pub const RETAINED_RECEIPT_SCHEMA: &str = "uor-r4.discrete-corpus-driver/1";
+/// The outer Stage T archive that retains the sealed receipt.
+pub const STAGE_T_ARCHIVE_SHA256: &str =
+    "c004db506bf64903231c5c225a07e9969d5e3344c51a67eaec9429265e5f44b6";
+pub const DEV_TOKENS_SHA256: &str =
+    "0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b";
+pub const DEV_MASK_SHA256: &str =
+    "a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078";
+pub const DEV_ROWS: usize = 14_287;
+pub const RETAINED_TOP1: u64 = 455;
+pub const RETAINED_TOP8: u64 = 1_484;
+/// The registered strict non-vacuity floor: `d > 24 && d*d > 4*(b + c)`.
+pub const PRIMARY_FLOOR: u64 = 24;
+pub const STAGE0_HEAD_ENV: &str = "UOR_STAGE0_HEAD";
+pub const IDENTITY_SCHEMA: &str = "uor-r4.address-stage0-identity/1";
+pub const PARITY_SCHEMA: &str = "uor-r4.address-stage0-parity/1";
+pub const COPY_SCHEMA: &str = "uor-r4.address-stage0-copy-report/1";
+pub const COPY_ROW_SCHEMA: &str = "uor-r4.address-stage0-copy-row/1";
+/// `uor-r4-discrete::metadata::ABSENT`; pads a short top-8 for comparison.
+pub const ABSENT_TOKEN: u32 = u32::MAX;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CopyManifest {
@@ -35,6 +71,250 @@ pub struct CopyRow {
 
 fn sha(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
+}
+
+/// The public hash used by the runner's identity records.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    sha(bytes)
+}
+
+/// Parses the pinned copy manifest and runs the existing validator. The
+/// caller still owns the pin check (`MANIFEST_SHA256`), because a manifest's
+/// digest is evidence, not an authorization signature.
+pub fn parse_manifest(bytes: &[u8]) -> Result<CopyManifest, String> {
+    let manifest: CopyManifest =
+        serde_json::from_slice(bytes).map_err(|e| format!("copy manifest: {e}"))?;
+    validate_manifest(&manifest)?;
+    Ok(manifest)
+}
+
+fn contains_sequence(haystack: &[u32], needle: &[u32]) -> bool {
+    !needle.is_empty()
+        && haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
+}
+
+/// Row ids whose exact value token sequence appears in `corpus`.
+pub fn corpus_value_leaks(manifest: &CopyManifest, corpus: &[u32]) -> Vec<String> {
+    manifest
+        .rows
+        .iter()
+        .filter(|row| contains_sequence(corpus, &row.value_tokens))
+        .map(|row| row.id.clone())
+        .collect()
+}
+
+/// The two discordant counts of one paired comparison: `b` is a treatment-only
+/// win, `c` a control-only win.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PairedWins {
+    pub b: u64,
+    pub c: u64,
+}
+
+impl PairedWins {
+    pub fn d(&self) -> i64 {
+        self.b as i64 - self.c as i64
+    }
+}
+
+/// The registered floor `b - c > max(24, 2*sqrt(b + c))`, decided exactly in
+/// integers as `d > 24 && d*d > 4*(b + c)`. Equality never clears.
+pub fn clears_primary(b: u64, c: u64) -> bool {
+    if b <= c {
+        return false;
+    }
+    let d = u128::from(b - c);
+    d > u128::from(PRIMARY_FLOOR) && d * d > 4 * u128::from(b + c)
+}
+
+/// Both primary comparisons must clear; teacher-forced top-8 is not a
+/// substitute for either.
+pub fn primary_pass(exact_vs_no_hint: PairedWins, exact_vs_random_hint: PairedWins) -> bool {
+    clears_primary(exact_vs_no_hint.b, exact_vs_no_hint.c)
+        && clears_primary(exact_vs_random_hint.b, exact_vs_random_hint.c)
+}
+
+/// A planted wrong answer holds only when at least one row is applicable and
+/// every applicable random-hint emission differs from the exact value.
+pub fn planted_wrong_holds(
+    manifest: &CopyManifest,
+    random_emissions: &[Option<String>],
+) -> Result<bool, String> {
+    if random_emissions.len() != manifest.rows.len() {
+        return Err(format!(
+            "{} random emissions for {} manifest rows",
+            random_emissions.len(),
+            manifest.rows.len()
+        ));
+    }
+    let mut applicable = 0usize;
+    for (row, emission) in manifest.rows.iter().zip(random_emissions) {
+        if let Some(answer) = emission {
+            applicable += 1;
+            if answer == &row.value {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(applicable > 0)
+}
+
+/// One sealed Stage T evaluator row object, collected from the retained
+/// `final-dev.json` receipt.
+/// `admitted_cells` is that report's scalar count; the D11 scorer's row record
+/// carries the cell IDs and is compared by its length.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OriginalRow {
+    pub target_position: u64,
+    pub target_token: u32,
+    pub top8: [u32; 8],
+    pub top1_correct: u64,
+    pub admitted_cells: u64,
+}
+
+/// Recursively collects every object carrying all five original-report row
+/// keys, in deterministic traversal order (arrays in order, then object keys).
+/// Row objects are terminal; their contents are not traversed again.
+pub fn collect_original_rows(report: &serde_json::Value) -> Result<Vec<OriginalRow>, String> {
+    let mut rows = Vec::new();
+    collect_rows_into(report, &mut rows)?;
+    Ok(rows)
+}
+
+fn collect_rows_into(value: &serde_json::Value, rows: &mut Vec<OriginalRow>) -> Result<(), String> {
+    match value {
+        serde_json::Value::Array(items) => {
+            for item in items {
+                collect_rows_into(item, rows)?;
+            }
+        }
+        serde_json::Value::Object(map) => {
+            let keys = [
+                "target_position",
+                "target_token",
+                "top8",
+                "top1_correct",
+                "admitted_cells",
+            ];
+            if keys.iter().all(|key| map.contains_key(*key)) {
+                rows.push(parse_original_row(map)?);
+            } else {
+                for item in map.values() {
+                    collect_rows_into(item, rows)?;
+                }
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn parse_original_row(
+    map: &serde_json::Map<String, serde_json::Value>,
+) -> Result<OriginalRow, String> {
+    let target_position = map["target_position"]
+        .as_u64()
+        .ok_or("original report row has no target_position")?;
+    let target_token = u32::try_from(
+        map["target_token"]
+            .as_u64()
+            .ok_or("original report row has no target_token")?,
+    )
+    .map_err(|_| "original report row target_token exceeds u32".to_string())?;
+    let top8 = map["top8"]
+        .as_array()
+        .ok_or("original report row top8 is not an array")?;
+    if top8.len() != 8 {
+        return Err(format!(
+            "original report row has {} top8 entries, not 8",
+            top8.len()
+        ));
+    }
+    let mut values = [0u32; 8];
+    for (slot, value) in values.iter_mut().zip(top8) {
+        *slot = u32::try_from(
+            value
+                .as_u64()
+                .ok_or("original report row top8 entry is not a u64")?,
+        )
+        .map_err(|_| "original report row top8 entry exceeds u32".to_string())?;
+    }
+    let top1_correct = map["top1_correct"]
+        .as_u64()
+        .ok_or("original report row has no top1_correct")?;
+    if top1_correct > 1 {
+        return Err("original report row top1_correct is not 0 or 1".into());
+    }
+    let admitted_cells = map["admitted_cells"]
+        .as_u64()
+        .ok_or("original report row has no admitted_cells")?;
+    Ok(OriginalRow {
+        target_position,
+        target_token,
+        top8: values,
+        top1_correct,
+        admitted_cells,
+    })
+}
+
+/// Decodes a `.u16` token file without model or corpus assembly. The canonical
+/// corpus files carry a 64-byte `UORT` header; a headerless file is accepted
+/// byte-for-byte, so the leak check never needs the corpus machinery.
+pub fn u16_le_tokens(bytes: &[u8]) -> Result<Vec<u32>, String> {
+    let payload = if bytes.starts_with(b"UORT") {
+        if bytes.len() < 64 {
+            return Err("UORT header is short".into());
+        }
+        let version = u32::from_le_bytes(
+            bytes[4..8]
+                .try_into()
+                .map_err(|_| "UORT version field is short")?,
+        );
+        if version != 1 {
+            return Err(format!("UORT version {version} is not 1"));
+        }
+        let count = u64::from_le_bytes(
+            bytes[8..16]
+                .try_into()
+                .map_err(|_| "UORT count field is short")?,
+        );
+        let physical = count
+            .checked_mul(2)
+            .and_then(|n| n.checked_add(64))
+            .ok_or("UORT count overflows")?;
+        if physical != bytes.len() as u64 {
+            return Err(format!(
+                "UORT count {count} disagrees with {} bytes",
+                bytes.len()
+            ));
+        }
+        &bytes[64..]
+    } else {
+        bytes
+    };
+    if payload.len() % 2 != 0 {
+        return Err("token bytes are not a whole number of u16 values".into());
+    }
+    Ok(payload
+        .chunks_exact(2)
+        .map(|pair| u32::from(u16::from_le_bytes([pair[0], pair[1]])))
+        .collect())
+}
+
+/// The run's HEAD is recorded from the harness environment and must be a full
+/// 40-lowercase-hex commit; a short or abbreviated HEAD is refused.
+pub fn validate_head(value: &str) -> Result<&str, String> {
+    if value.len() == 40
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        Ok(value)
+    } else {
+        Err("UOR_STAGE0_HEAD must be the full 40-lowercase-hex Stage 0 commit".into())
+    }
 }
 
 fn value(seed: &str) -> String {
@@ -176,16 +456,10 @@ pub fn validate_manifest(manifest: &CopyManifest) -> Result<(), String> {
 }
 
 pub fn values_missing_from_corpus(manifest: &CopyManifest, corpus: &[u32]) -> bool {
-    fn contains(haystack: &[u32], needle: &[u32]) -> bool {
-        !needle.is_empty()
-            && haystack
-                .windows(needle.len())
-                .any(|window| window == needle)
-    }
     manifest
         .rows
         .iter()
-        .all(|row| !contains(corpus, &row.value_tokens))
+        .all(|row| !contains_sequence(corpus, &row.value_tokens))
 }
 
 pub fn normalize_emission(text: &str) -> Result<String, String> {
@@ -204,4 +478,1188 @@ pub fn normalize_emission(text: &str) -> Result<String, String> {
         return Err("emission contains punctuation or a non-ASCII character".into());
     }
     Ok(answer)
+}
+
+/// The Stage 0 GPU runner (`cuda` feature). It links the D11 scorer instrument
+/// and `uor-r4-discrete` only behind this feature; the default host build and
+/// the `manifest` command never compile the scorer.
+#[cfg(feature = "cuda")]
+pub mod runner {
+    use super::{
+        clears_primary, collect_original_rows, corpus_value_leaks, normalize_emission,
+        planted_wrong_holds, primary_pass, sha256_hex, u16_le_tokens, validate_head, CopyManifest,
+        CopyRow, OriginalRow, PairedWins, ABSENT_TOKEN, ARTIFACT_SHA256, CHECKPOINT_SHA256,
+        COPY_ROW_SCHEMA, COPY_SCHEMA, DEV_MASK_SHA256, DEV_ROWS, DEV_TOKENS_SHA256,
+        IDENTITY_SCHEMA, MANIFEST_SHA256, PARITY_SCHEMA, RETAINED_RECEIPT_SCHEMA,
+        RETAINED_RECEIPT_SHA256, RETAINED_TOP1, RETAINED_TOP8, STAGE0_HEAD_ENV,
+        STAGE_T_ARCHIVE_SHA256, TOKENIZER_SHA256,
+    };
+    use m1_d11_artifact_scorer_instrument as inst;
+    use serde_json::{json, Value};
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+    use uor_r4_discrete::training::DriverConfig;
+    use uor_r4_discrete::ReadSpec;
+    use uor_r4_tokenizer::ByteBpeTokenizer;
+
+    /// The exact inputs of the registered Stage 0 command.
+    #[derive(Debug, Clone)]
+    pub struct RunPaths {
+        pub artifact: PathBuf,
+        pub config: PathBuf,
+        pub retained_receipt: PathBuf,
+        pub tokenizer: PathBuf,
+        pub manifest: PathBuf,
+        pub out_dir: PathBuf,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct Stage0Outcome {
+        pub parity_pass: bool,
+        pub copy_primary_pass: bool,
+        pub decision: String,
+        pub out_dir: PathBuf,
+    }
+
+    #[derive(Debug, Clone)]
+    struct CopyOutcome {
+        primary_pass: bool,
+        decision: String,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Arm {
+        Exact,
+        NoHint,
+        RandomHint,
+    }
+
+    impl Arm {
+        const ALL: [Arm; 3] = [Arm::Exact, Arm::NoHint, Arm::RandomHint];
+
+        fn name(self) -> &'static str {
+            match self {
+                Arm::Exact => "exact",
+                Arm::NoHint => "no_hint",
+                Arm::RandomHint => "random_hint",
+            }
+        }
+
+        fn prompt<'a>(self, row: &'a CopyRow) -> &'a [u32] {
+            match self {
+                Arm::Exact => &row.prompt_tokens,
+                Arm::NoHint => &row.no_hint_prompt_tokens,
+                Arm::RandomHint => &row.random_prompt_tokens,
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, Default)]
+    struct TeacherCounts {
+        rows: u64,
+        tokens: u64,
+        token_top1: u64,
+        token_top8: u64,
+        rows_all_top1: u64,
+        rows_all_top8: u64,
+    }
+
+    #[derive(Debug, Clone)]
+    struct FreeRow {
+        normalized: Option<String>,
+        exact: bool,
+    }
+
+    /// Validated Stage 0 run. It writes `identity.json`, then either a parity
+    /// stop report or both parity row records and `parity-report.json`, then
+    /// the copy records and report. A failed primary copy gate is a completed
+    /// measurement (`COPY_GATE_FAIL`), not an instrument error.
+    pub fn run(paths: &RunPaths) -> Result<Stage0Outcome, String> {
+        let head = std::env::var(STAGE0_HEAD_ENV)
+            .map_err(|_| format!("{STAGE0_HEAD_ENV} must be the full Stage 0 commit"))?;
+        validate_head(&head)?;
+        if paths.out_dir.exists() {
+            return Err(format!(
+                "{} exists; Stage 0 outputs are never overwritten",
+                paths.out_dir.display()
+            ));
+        }
+
+        // Pinned bytes are checked before any GPU context exists.
+        let artifact_bytes = read_pinned(&paths.artifact, ARTIFACT_SHA256, "artifact")?;
+        let receipt_bytes = read_pinned(
+            &paths.retained_receipt,
+            RETAINED_RECEIPT_SHA256,
+            "retained final-dev receipt",
+        )?;
+        let tokenizer_bytes = read_pinned(&paths.tokenizer, TOKENIZER_SHA256, "tokenizer")?;
+        let manifest_bytes = read_pinned(&paths.manifest, MANIFEST_SHA256, "manifest")?;
+        let config_bytes = read_file(&paths.config, "config")?;
+        let config_sha256 = sha256_hex(&config_bytes);
+
+        let receipt: Value = serde_json::from_slice(&receipt_bytes)
+            .map_err(|e| format!("retained receipt {}: {e}", paths.retained_receipt.display()))?;
+        if receipt.get("schema").and_then(Value::as_str) != Some(RETAINED_RECEIPT_SCHEMA) {
+            return Err(format!(
+                "retained receipt schema is not {RETAINED_RECEIPT_SCHEMA}"
+            ));
+        }
+        let receipt_epoch = receipt
+            .get("model_epoch")
+            .and_then(Value::as_u64)
+            .ok_or("retained receipt lacks model_epoch")?;
+        let receipt_accepted = receipt
+            .get("accepted_updates_in_model")
+            .and_then(Value::as_u64)
+            .ok_or("retained receipt lacks accepted_updates_in_model")?;
+        if receipt_epoch != receipt_accepted {
+            return Err(format!(
+                "retained receipt model_epoch {receipt_epoch} differs from accepted_updates_in_model {receipt_accepted}"
+            ));
+        }
+        let receipt_model_storage = receipt
+            .get("model_storage_sha256")
+            .and_then(Value::as_str)
+            .ok_or("retained receipt lacks model_storage_sha256")?;
+        let receipt_lineage = receipt
+            .get("evaluation_lineage_sha256")
+            .and_then(Value::as_str)
+            .ok_or("retained receipt lacks evaluation_lineage_sha256")?;
+        let original_rows =
+            collect_original_rows(&receipt).map_err(|e| format!("retained receipt rows: {e}"))?;
+        if original_rows.len() != DEV_ROWS {
+            return Err(format!(
+                "retained receipt has {} rows, not {DEV_ROWS}",
+                original_rows.len()
+            ));
+        }
+        let (original_top1, original_top8, original_admitted) =
+            original_aggregate(&receipt, &original_rows)
+                .map_err(|e| format!("retained receipt aggregate: {e}"))?;
+        let original_descriptor = json!({
+            "kind": "sealed_stage_t_final_dev_receipt",
+            "path": paths.retained_receipt.display().to_string(),
+            "sha256": RETAINED_RECEIPT_SHA256,
+            "stage_t_archive_sha256": STAGE_T_ARCHIVE_SHA256,
+            "schema": RETAINED_RECEIPT_SCHEMA,
+            "model_epoch": receipt_epoch,
+            "accepted_updates_in_model": receipt_accepted,
+            "model_storage_sha256": receipt_model_storage,
+            "evaluation_lineage_sha256": receipt_lineage,
+            "rows": original_rows.len(),
+        });
+
+        let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizer_bytes)
+            .ok_or_else(|| "the pinned tokenizer JSON is not a ByteBpeTokenizer".to_string())?;
+        let manifest = super::parse_manifest(&manifest_bytes)?;
+        for row in &manifest.rows {
+            if row.value_tokens.is_empty()
+                || row.prompt_tokens.is_empty()
+                || row.random_prompt_tokens.is_empty()
+                || row.no_hint_prompt_tokens.is_empty()
+            {
+                return Err(format!(
+                    "manifest row {} has an empty token sequence; the copy probe would be vacuous",
+                    row.id
+                ));
+            }
+        }
+        let config: DriverConfig = serde_json::from_slice(&config_bytes)
+            .map_err(|e| format!("config {}: {e}", paths.config.display()))?;
+        config.validate().map_err(|e| format!("config: {e}"))?;
+        if config.dev.tokens.sha256 != DEV_TOKENS_SHA256 {
+            return Err(format!(
+                "config DEV tokens pin {} is not {DEV_TOKENS_SHA256}",
+                config.dev.tokens.sha256
+            ));
+        }
+        if config.dev.mask.sha256 != DEV_MASK_SHA256 {
+            return Err(format!(
+                "config DEV mask pin {} is not {DEV_MASK_SHA256}",
+                config.dev.mask.sha256
+            ));
+        }
+        if config.dev.expected_eligible_targets != DEV_ROWS as u64 {
+            return Err(format!(
+                "config DEV declares {} eligible targets, not {DEV_ROWS}",
+                config.dev.expected_eligible_targets
+            ));
+        }
+        if config.tokenizer.sha256 != TOKENIZER_SHA256 {
+            return Err(format!(
+                "config tokenizer pin {} is not {TOKENIZER_SHA256}",
+                config.tokenizer.sha256
+            ));
+        }
+
+        let (tables, model) = inst::artifact::ArtifactTables::from_bytes(&artifact_bytes)?;
+        if tables.artifact_sha256 != ARTIFACT_SHA256 {
+            return Err(format!(
+                "the integer reader's artifact hash {} is not the pin",
+                tables.artifact_sha256
+            ));
+        }
+        let shape = model.shape();
+        if shape.vocabulary != config.spec.vocabulary
+            || shape.blocks != config.spec.blocks
+            || shape.context != config.spec.context
+            || shape.kept_cells != config.spec.kept_cells
+        {
+            return Err(format!(
+                "artifact shape {shape:?} differs from config spec {:?}",
+                config.spec
+            ));
+        }
+        let read_kept = u32::try_from(tables.shape[6]).unwrap_or(u32::MAX);
+        let read_sweeps = u32::try_from(tables.shape[7]).unwrap_or(u32::MAX);
+        let read_matches = match &config.read_spec {
+            ReadSpec::Route => tables.shape[5] == inst::artifact::READ_ROUTE,
+            ReadSpec::Flock { kept } => {
+                tables.shape[5] == inst::artifact::READ_FLOCK && *kept == read_kept
+            }
+            ReadSpec::Relation { kept, sweeps } => {
+                tables.shape[5] == inst::artifact::READ_RELATION
+                    && *kept == read_kept
+                    && *sweeps == read_sweeps
+            }
+        };
+        if !read_matches {
+            return Err("artifact read mode differs from the config's read_spec".into());
+        }
+        let context = shape.context as usize;
+
+        let rows = inst::dev_rows(&config).map_err(|e| format!("DEV rows: {e}"))?;
+        if rows.len() != DEV_ROWS {
+            return Err(format!("DEV rows are {}, not {DEV_ROWS}", rows.len()));
+        }
+
+        // The leak check is direct u16 little-endian file work; no model runs.
+        let train_bytes = config
+            .train
+            .tokens
+            .read()
+            .map_err(|e| format!("TRAIN tokens: {e}"))?;
+        let dev_bytes = config
+            .dev
+            .tokens
+            .read()
+            .map_err(|e| format!("DEV tokens: {e}"))?;
+        config
+            .dev
+            .mask
+            .read()
+            .map_err(|e| format!("DEV mask: {e}"))?;
+        let train_tokens = u16_le_tokens(&train_bytes).map_err(|e| format!("TRAIN tokens: {e}"))?;
+        let dev_tokens = u16_le_tokens(&dev_bytes).map_err(|e| format!("DEV tokens: {e}"))?;
+        let train_leaks = corpus_value_leaks(&manifest, &train_tokens);
+        let dev_leaks = corpus_value_leaks(&manifest, &dev_tokens);
+        if !train_leaks.is_empty() || !dev_leaks.is_empty() {
+            return Err(format!(
+                "exact value tokens leak into the corpus: TRAIN {train_leaks:?}, DEV {dev_leaks:?}"
+            ));
+        }
+
+        std::fs::create_dir(&paths.out_dir).map_err(|e| {
+            format!(
+                "create {}: {e} (OUT_DIR must not exist)",
+                paths.out_dir.display()
+            )
+        })?;
+        let scorer =
+            inst::device::DeviceScorer::new(0, &tables).map_err(|e| format!("device 0: {e}"))?;
+        let executable = std::env::current_exe().map_err(|e| format!("current exe: {e}"))?;
+        let identity = json!({
+            "schema": IDENTITY_SCHEMA,
+            "HEAD": head.as_str(),
+            "executable_sha256": file_sha256(&executable)?,
+            "executable_path": executable.display().to_string(),
+            "retained_receipt_path": paths.retained_receipt.display().to_string(),
+            "retained_receipt_sha256": RETAINED_RECEIPT_SHA256,
+            "stage_t_archive_sha256": STAGE_T_ARCHIVE_SHA256,
+            "retained_receipt_schema": RETAINED_RECEIPT_SCHEMA,
+            "retained_receipt_model_epoch": receipt_epoch,
+            "retained_receipt_accepted_updates_in_model": receipt_accepted,
+            "retained_receipt_model_storage_sha256": receipt_model_storage,
+            "retained_receipt_evaluation_lineage_sha256": receipt_lineage,
+            "retained_receipt_rows": original_rows.len(),
+            "cubin_sha256": inst::device::cubin_sha256(),
+            "ptx_sha256": inst::device::ptx_sha256(),
+            "IMAGE_TARGET": inst::device::IMAGE_TARGET.trim(),
+            "RESOURCES": inst::device::RESOURCES.trim(),
+            "device_capability": [scorer.capability.0, scorer.capability.1],
+            "cuda_version": nvcc_identity(),
+            "compiled_identity": uor_r4_discrete::device::compiled_identity(),
+            "driver_source_sha256": uor_r4_discrete::training::driver_source_sha256(),
+            "artifact_sha256": ARTIFACT_SHA256,
+            "checkpoint_sha256": CHECKPOINT_SHA256,
+            "checkpoint_file_input": false,
+            "tokenizer_sha256": TOKENIZER_SHA256,
+            "manifest_sha256": MANIFEST_SHA256,
+            "config_sha256": config_sha256,
+            "dev_tokens_sha256": DEV_TOKENS_SHA256,
+            "dev_mask_sha256": DEV_MASK_SHA256,
+            "dev_rows": rows.len(),
+            "UOR_NVCC_ARCH": std::env::var("UOR_NVCC_ARCH").ok(),
+        });
+        write_json(&paths.out_dir.join("identity.json"), &identity)?;
+
+        let mut parity = json!({
+            "schema": PARITY_SCHEMA,
+            "HEAD": head.as_str(),
+            "artifact_sha256": ARTIFACT_SHA256,
+            "checkpoint_sha256": CHECKPOINT_SHA256,
+            "checkpoint_file_input": false,
+            "tokenizer_sha256": TOKENIZER_SHA256,
+            "manifest_sha256": MANIFEST_SHA256,
+            "config_sha256": config_sha256,
+            "retained_receipt_path": paths.retained_receipt.display().to_string(),
+            "retained_receipt_sha256": RETAINED_RECEIPT_SHA256,
+            "stage_t_archive_sha256": STAGE_T_ARCHIVE_SHA256,
+            "rows_expected": DEV_ROWS,
+            "rows": rows.len(),
+            "all_status_zero": null,
+            "runs_byte_identical": null,
+            "run1_sha256": null,
+            "run2_sha256": null,
+            "original": original_descriptor,
+            "comparison": null,
+            "d11_aggregate": null,
+            "original_aggregate": null,
+            "retained": {"top1": RETAINED_TOP1, "top8": RETAINED_TOP8},
+            "position_strip": null,
+            "pass": false,
+            "instrument_stop": null,
+        });
+
+        let views: Vec<&[u32]> = rows.iter().map(|row| row.prefix.as_slice()).collect();
+        let packed = inst::kernel::pack_rows(&views).map_err(|e| format!("pack DEV rows: {e}"))?;
+        let run1 = match scorer.score(&packed) {
+            Ok(scores) => scores,
+            Err(e) => {
+                return stop_parity(
+                    &mut parity,
+                    &paths.out_dir,
+                    format!("D11 parity run 1: {e}"),
+                )
+            }
+        };
+        if run1.len() != rows.len() {
+            return stop_parity(
+                &mut parity,
+                &paths.out_dir,
+                format!(
+                    "D11 parity run 1 scored {} of {} rows",
+                    run1.len(),
+                    rows.len()
+                ),
+            );
+        }
+        let bytes1 = match parity_rows(&rows, &run1) {
+            Ok(bytes) => bytes,
+            Err(e) => return stop_parity(&mut parity, &paths.out_dir, e),
+        };
+        write_new(&paths.out_dir.join("parity-rows-run1.jsonl"), &bytes1)?;
+
+        let run2 = match scorer.score(&packed) {
+            Ok(scores) => scores,
+            Err(e) => {
+                return stop_parity(
+                    &mut parity,
+                    &paths.out_dir,
+                    format!("D11 parity run 2: {e}"),
+                )
+            }
+        };
+        if run2.len() != rows.len() {
+            return stop_parity(
+                &mut parity,
+                &paths.out_dir,
+                format!(
+                    "D11 parity run 2 scored {} of {} rows",
+                    run2.len(),
+                    rows.len()
+                ),
+            );
+        }
+        let bytes2 = match parity_rows(&rows, &run2) {
+            Ok(bytes) => bytes,
+            Err(e) => return stop_parity(&mut parity, &paths.out_dir, e),
+        };
+        write_new(&paths.out_dir.join("parity-rows-run2.jsonl"), &bytes2)?;
+
+        let all_status_zero = run1.iter().chain(&run2).all(|score| score.status == 0);
+        let runs_byte_identical = bytes1 == bytes2;
+        parity["run1_sha256"] = json!(sha256_hex(&bytes1));
+        parity["run2_sha256"] = json!(sha256_hex(&bytes2));
+        parity["all_status_zero"] = json!(all_status_zero);
+        parity["runs_byte_identical"] = json!(runs_byte_identical);
+        if !all_status_zero {
+            return stop_parity(
+                &mut parity,
+                &paths.out_dir,
+                "a D11 parity row has nonzero status".into(),
+            );
+        }
+        if !runs_byte_identical {
+            return stop_parity(
+                &mut parity,
+                &paths.out_dir,
+                "the two D11 parity runs differ byte-for-byte".into(),
+            );
+        }
+
+        let (d11_top1, d11_top8, d11_admitted) = match d11_aggregate(&rows, &run1, &tables) {
+            Ok(values) => values,
+            Err(e) => return stop_parity(&mut parity, &paths.out_dir, e),
+        };
+
+        if original_rows.len() != rows.len() {
+            return stop_parity(
+                &mut parity,
+                &paths.out_dir,
+                format!(
+                    "the retained receipt has {} rows; the D11 scored {}",
+                    original_rows.len(),
+                    rows.len()
+                ),
+            );
+        }
+        let comparison = match compare_rows(&rows, &run1, &original_rows) {
+            Ok(value) => value,
+            Err(e) => return stop_parity(&mut parity, &paths.out_dir, e),
+        };
+        let mismatched = comparison["mismatched_rows"].as_u64().unwrap_or(u64::MAX);
+        parity["comparison"] = comparison;
+        if mismatched != 0 {
+            return stop_parity(
+                &mut parity,
+                &paths.out_dir,
+                format!("{mismatched} per-row parity mismatches"),
+            );
+        }
+        if d11_top1 != original_top1 || d11_top8 != original_top8 {
+            return stop_parity(
+                &mut parity,
+                &paths.out_dir,
+                format!(
+                    "aggregate parity disagrees: D11 {d11_top1}/{d11_top8}, original {original_top1}/{original_top8}"
+                ),
+            );
+        }
+        let admission_delta = d11_admitted as i64 - original_admitted as i64;
+        parity["d11_aggregate"] = json!({
+            "rows": rows.len(),
+            "top1": d11_top1,
+            "top8": d11_top8,
+            "target_admitted": d11_admitted,
+        });
+        parity["original_aggregate"] = json!({
+            "rows": original_rows.len(),
+            "top1": original_top1,
+            "top8": original_top8,
+            "target_admitted": original_admitted,
+        });
+        parity["position_strip"] = json!({
+            "d11_top1": d11_top1,
+            "retained_top1": RETAINED_TOP1,
+            "top1_delta": d11_top1 as i64 - RETAINED_TOP1 as i64,
+            "d11_top8": d11_top8,
+            "retained_top8": RETAINED_TOP8,
+            "top8_delta": d11_top8 as i64 - RETAINED_TOP8 as i64,
+            "d11_target_admitted": d11_admitted,
+            "original_target_admitted": original_admitted,
+            "admission_delta": admission_delta,
+            "admission_aggregate_matches": admission_delta == 0,
+            "note": "Aggregates only; no row-level baseline is assumed. A position-strip difference is recorded before copy results are interpreted.",
+        });
+        if admission_delta != 0 {
+            return stop_parity(
+                &mut parity,
+                &paths.out_dir,
+                format!(
+                    "admission aggregate differs: D11 {d11_admitted}, original {original_admitted}"
+                ),
+            );
+        }
+        parity["pass"] = json!(true);
+        write_json(&paths.out_dir.join("parity-report.json"), &parity)?;
+
+        let copy = copy_probe(&scorer, &tokenizer, &manifest, context, &paths.out_dir)?;
+        Ok(Stage0Outcome {
+            parity_pass: true,
+            copy_primary_pass: copy.primary_pass,
+            decision: copy.decision,
+            out_dir: paths.out_dir.clone(),
+        })
+    }
+
+    fn read_file(path: &Path, label: &str) -> Result<Vec<u8>, String> {
+        std::fs::read(path).map_err(|e| format!("{label} {}: {e}", path.display()))
+    }
+
+    fn read_pinned(path: &Path, expected: &str, label: &str) -> Result<Vec<u8>, String> {
+        let bytes = read_file(path, label)?;
+        let actual = sha256_hex(&bytes);
+        if actual != expected {
+            return Err(format!(
+                "{label} {} sha256 {actual} differs from pinned {expected}",
+                path.display()
+            ));
+        }
+        Ok(bytes)
+    }
+
+    fn file_sha256(path: &Path) -> Result<String, String> {
+        Ok(sha256_hex(&read_file(path, "file")?))
+    }
+
+    fn json_bytes(value: &Value) -> Result<Vec<u8>, String> {
+        let mut text = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
+        text.push('\n');
+        Ok(text.into_bytes())
+    }
+
+    fn write_new(path: &Path, bytes: &[u8]) -> Result<(), String> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .map_err(|e| format!("{}: {e} (outputs are never overwritten)", path.display()))?;
+        file.write_all(bytes)
+            .map_err(|e| format!("{}: {e}", path.display()))
+    }
+
+    fn write_json(path: &Path, value: &Value) -> Result<(), String> {
+        write_new(path, &json_bytes(value)?)
+    }
+
+    fn stop_parity<T>(report: &mut Value, out_dir: &Path, reason: String) -> Result<T, String> {
+        report["pass"] = json!(false);
+        report["instrument_stop"] = json!(reason);
+        write_json(&out_dir.join("parity-report.json"), report)?;
+        Err(reason)
+    }
+
+    fn padded_top8(top8: &[u32]) -> Result<[u32; 8], String> {
+        if top8.len() > 8 {
+            return Err(format!("a scorer row has {} top-8 entries", top8.len()));
+        }
+        let mut padded = [ABSENT_TOKEN; 8];
+        padded[..top8.len()].copy_from_slice(top8);
+        Ok(padded)
+    }
+
+    fn parity_rows(
+        rows: &[inst::DevRow],
+        scores: &[inst::kernel::RowScore],
+    ) -> Result<Vec<u8>, String> {
+        if rows.len() != scores.len() {
+            return Err(format!(
+                "{} DEV rows but {} D11 scores",
+                rows.len(),
+                scores.len()
+            ));
+        }
+        let mut out = Vec::new();
+        for (row, score) in rows.iter().zip(scores) {
+            let top8 = if score.status == 0 {
+                padded_top8(&score.top8)?
+            } else {
+                [ABSENT_TOKEN; 8]
+            };
+            let line = json!({
+                "ordinal": row.ordinal,
+                "target_position": row.target_position,
+                "target_token": row.target_token,
+                "status": score.status,
+                "prediction": score.prediction,
+                "top8": top8,
+                "admitted_cells": score.admitted_cells,
+            });
+            out.extend(
+                serde_json::to_vec(&line)
+                    .map_err(|e| format!("parity row {}: {e}", row.ordinal))?,
+            );
+            out.push(b'\n');
+        }
+        Ok(out)
+    }
+
+    fn d11_aggregate(
+        rows: &[inst::DevRow],
+        scores: &[inst::kernel::RowScore],
+        tables: &inst::artifact::ArtifactTables,
+    ) -> Result<(u64, u64, u64), String> {
+        if rows.len() != scores.len() {
+            return Err("D11 scores do not cover the DEV rows".into());
+        }
+        let (mut top1, mut top8, mut admitted) = (0u64, 0u64, 0u64);
+        for (row, score) in rows.iter().zip(scores) {
+            if score.status != 0 {
+                continue;
+            }
+            if score.prediction == row.target_token {
+                top1 += 1;
+            }
+            if score.top8.contains(&row.target_token) {
+                top8 += 1;
+            }
+            let cell = *tables.cells.get(row.target_token as usize).ok_or_else(|| {
+                format!("target {} is outside the artifact cells", row.target_token)
+            })?;
+            if score.admitted_cells.contains(&cell) {
+                admitted += 1;
+            }
+        }
+        Ok((top1, top8, admitted))
+    }
+
+    fn compare_rows(
+        rows: &[inst::DevRow],
+        scores: &[inst::kernel::RowScore],
+        original: &[OriginalRow],
+    ) -> Result<Value, String> {
+        if rows.len() != scores.len() || rows.len() != original.len() {
+            return Err(format!(
+                "{} DEV rows, {} D11 scores, {} original rows",
+                rows.len(),
+                scores.len(),
+                original.len()
+            ));
+        }
+        let mut mismatched = 0u64;
+        let mut first = Vec::new();
+        for (index, ((row, score), report)) in rows.iter().zip(scores).zip(original).enumerate() {
+            let mut reasons: Vec<&'static str> = Vec::new();
+            if row.ordinal != index as u64 {
+                reasons.push("ordinal");
+            }
+            if report.target_position != row.target_position {
+                reasons.push("target_position");
+            }
+            if report.target_token != row.target_token {
+                reasons.push("target_token");
+            }
+            let padded = padded_top8(&score.top8)?;
+            if report.top8[0] != score.prediction {
+                reasons.push("prediction");
+            }
+            if report.top8 != padded {
+                reasons.push("top8");
+            }
+            if report.admitted_cells != score.admitted_cells.len() as u64 {
+                reasons.push("admitted_cells");
+            }
+            if report.top1_correct != u64::from(score.prediction == row.target_token) {
+                reasons.push("top1_correct");
+            }
+            if !reasons.is_empty() {
+                mismatched += 1;
+                if first.len() < 20 {
+                    first.push(json!({
+                        "ordinal": index,
+                        "reasons": reasons,
+                        "original": {
+                            "target_position": report.target_position,
+                            "target_token": report.target_token,
+                            "top8": report.top8,
+                            "top1_correct": report.top1_correct,
+                            "admitted_cells": report.admitted_cells,
+                        },
+                        "d11": {
+                            "target_position": row.target_position,
+                            "target_token": row.target_token,
+                            "status": score.status,
+                            "prediction": score.prediction,
+                            "top8": padded,
+                            "admitted_cells": score.admitted_cells,
+                        },
+                    }));
+                }
+            }
+        }
+        Ok(json!({
+            "rows_compared": rows.len(),
+            "mismatched_rows": mismatched,
+            "first_mismatches": first,
+            "checks": ["ordinal", "target_position", "target_token", "prediction", "top8", "admitted_cells", "top1_correct"],
+        }))
+    }
+
+    fn original_target_admitted(report: &Value) -> Result<u64, String> {
+        if let Some(value) = report
+            .get("aggregate")
+            .and_then(|aggregate| aggregate.get("target_admitted_rows"))
+            .and_then(Value::as_u64)
+        {
+            return Ok(value);
+        }
+        let mut total = 0u64;
+        let mut seen = false;
+        if let Some(batches) = report.get("batches").and_then(Value::as_array) {
+            for batch in batches {
+                if let Some(value) = batch
+                    .get("aggregate")
+                    .and_then(|aggregate| aggregate.get("target_admitted_rows"))
+                    .and_then(Value::as_u64)
+                {
+                    total = total
+                        .checked_add(value)
+                        .ok_or("the original admission sum overflows")?;
+                    seen = true;
+                }
+            }
+        }
+        if seen {
+            Ok(total)
+        } else {
+            Err("the original report has no target_admitted_rows aggregate".into())
+        }
+    }
+
+    fn original_aggregate(report: &Value, rows: &[OriginalRow]) -> Result<(u64, u64, u64), String> {
+        let top1 = rows.iter().filter(|row| row.top1_correct == 1).count() as u64;
+        let top8 = rows
+            .iter()
+            .filter(|row| row.top8.contains(&row.target_token))
+            .count() as u64;
+        let admitted = original_target_admitted(report)?;
+        if let Some(aggregate) = report.get("aggregate") {
+            let check = |name: &str, computed: u64| -> Result<(), String> {
+                if let Some(value) = aggregate.get(name).and_then(Value::as_u64) {
+                    if value != computed {
+                        return Err(format!(
+                            "the original report's {name} {value} differs from its rows' {computed}"
+                        ));
+                    }
+                }
+                Ok(())
+            };
+            if let Some(value) = aggregate.get("scored_rows").and_then(Value::as_u64) {
+                if value != rows.len() as u64 {
+                    return Err(format!(
+                        "the original report's scored_rows {value} differs from its {} rows",
+                        rows.len()
+                    ));
+                }
+            }
+            check("top1_correct", top1)?;
+            check("top8_correct", top8)?;
+            check("target_admitted_rows", admitted)?;
+        }
+        Ok((top1, top8, admitted))
+    }
+
+    fn truncate(text: &str) -> String {
+        const LIMIT: usize = 16_384;
+        if text.chars().count() <= LIMIT {
+            text.to_owned()
+        } else {
+            let mut out: String = text.chars().take(LIMIT).collect();
+            out.push_str("...[truncated]");
+            out
+        }
+    }
+
+    fn nvcc_identity() -> Value {
+        let path = std::env::var("NVCC").unwrap_or_else(|_| "nvcc".to_owned());
+        match Command::new(&path).arg("--version").output() {
+            Ok(output) if output.status.success() => json!({
+                "path": path,
+                "available": true,
+                "output": truncate(&String::from_utf8_lossy(&output.stdout)),
+            }),
+            Ok(output) => json!({
+                "path": path,
+                "available": false,
+                "output": truncate(&String::from_utf8_lossy(&output.stdout)),
+                "error": truncate(&String::from_utf8_lossy(&output.stderr)),
+            }),
+            Err(e) => json!({
+                "path": path,
+                "available": false,
+                "error": e.to_string(),
+            }),
+        }
+    }
+
+    fn teacher_counts(
+        scorer: &inst::device::DeviceScorer,
+        manifest: &CopyManifest,
+        arm: Arm,
+        context: usize,
+        lines: &mut Vec<u8>,
+    ) -> Result<TeacherCounts, String> {
+        let mut prefixes: Vec<Vec<u32>> = Vec::new();
+        let mut meta: Vec<(usize, usize, u32)> = Vec::new();
+        for (row_index, row) in manifest.rows.iter().enumerate() {
+            let base = arm.prompt(row);
+            if base.is_empty() || base.len() > context {
+                return Err(format!(
+                    "{} row {} prompt length {} is outside 1..={context}",
+                    arm.name(),
+                    row.id,
+                    base.len()
+                ));
+            }
+            for (target_index, target) in row.value_tokens.iter().enumerate() {
+                let length = base.len() + target_index;
+                if length > context {
+                    return Err(format!(
+                        "{} row {} teacher prefix length {length} exceeds context {context}",
+                        arm.name(),
+                        row.id
+                    ));
+                }
+                let mut prefix = Vec::with_capacity(length);
+                prefix.extend_from_slice(base);
+                prefix.extend_from_slice(&row.value_tokens[..target_index]);
+                prefixes.push(prefix);
+                meta.push((row_index, target_index, *target));
+            }
+        }
+        let views: Vec<&[u32]> = prefixes.iter().map(Vec::as_slice).collect();
+        let packed = inst::kernel::pack_rows(&views)?;
+        let scores = scorer.score(&packed)?;
+        if scores.len() != meta.len() {
+            return Err(format!(
+                "teacher-forced {} scored {} of {} prefixes",
+                arm.name(),
+                scores.len(),
+                meta.len()
+            ));
+        }
+        let mut counts = TeacherCounts {
+            rows: manifest.rows.len() as u64,
+            ..TeacherCounts::default()
+        };
+        let mut all_top1 = vec![true; manifest.rows.len()];
+        let mut all_top8 = vec![true; manifest.rows.len()];
+        for (score, (row_index, target_index, target)) in scores.iter().zip(&meta) {
+            let (top1, top8_correct, top8, status) = if score.status == 0 {
+                (
+                    score.prediction == *target,
+                    score.top8.contains(target),
+                    padded_top8(&score.top8)?,
+                    score.status,
+                )
+            } else {
+                (false, false, [ABSENT_TOKEN; 8], score.status)
+            };
+            let line = json!({
+                "schema": COPY_ROW_SCHEMA,
+                "row": manifest.rows[*row_index].id,
+                "arm": arm.name(),
+                "kind": "teacher",
+                "target_index": target_index,
+                "target_token": target,
+                "status": status,
+                "prediction": score.prediction,
+                "top1_correct": top1,
+                "top8_correct": top8_correct,
+                "top8": top8,
+            });
+            lines.extend(serde_json::to_vec(&line).map_err(|e| format!("teacher row: {e}"))?);
+            lines.push(b'\n');
+            counts.tokens += 1;
+            counts.token_top1 += u64::from(top1);
+            counts.token_top8 += u64::from(top8_correct);
+            all_top1[*row_index] &= top1;
+            all_top8[*row_index] &= top8_correct;
+            if status != 0 {
+                return Err(format!(
+                    "teacher-forced {} {} target {} status {status}",
+                    arm.name(),
+                    manifest.rows[*row_index].id,
+                    target_index
+                ));
+            }
+        }
+        counts.rows_all_top1 = all_top1.iter().filter(|value| **value).count() as u64;
+        counts.rows_all_top8 = all_top8.iter().filter(|value| **value).count() as u64;
+        Ok(counts)
+    }
+
+    fn free_counts(
+        scorer: &inst::device::DeviceScorer,
+        tokenizer: &ByteBpeTokenizer,
+        manifest: &CopyManifest,
+        arm: Arm,
+        context: usize,
+        lines: &mut Vec<u8>,
+    ) -> Result<Vec<FreeRow>, String> {
+        let limit = 192.min(context);
+        if limit == 0 {
+            return Err("the artifact context is zero".into());
+        }
+        let mut out = Vec::new();
+        for row in &manifest.rows {
+            let mut prefix = arm.prompt(row).to_vec();
+            if prefix.is_empty() || prefix.len() > context {
+                return Err(format!(
+                    "{} row {} prompt length {} is outside 1..={context}",
+                    arm.name(),
+                    row.id,
+                    prefix.len()
+                ));
+            }
+            let mut generated: Vec<u32> = Vec::new();
+            let mut status = 0;
+            loop {
+                let bytes = tokenizer.decode_bytes(&generated);
+                let letters = bytes
+                    .iter()
+                    .filter(|byte| byte.is_ascii_lowercase())
+                    .count();
+                if letters >= 8 || prefix.len() >= limit {
+                    break;
+                }
+                let packed = inst::kernel::pack_rows(&[prefix.as_slice()])?;
+                let scores = scorer.score(&packed)?;
+                if scores.len() != 1 {
+                    return Err(format!(
+                        "free-running {} {} scored {} rows, not 1",
+                        arm.name(),
+                        row.id,
+                        scores.len()
+                    ));
+                }
+                let score = &scores[0];
+                if score.status != 0 {
+                    status = score.status;
+                    break;
+                }
+                generated.push(score.prediction);
+                prefix.push(score.prediction);
+            }
+            let bytes = tokenizer.decode_bytes(&generated);
+            let letters = bytes
+                .iter()
+                .filter(|byte| byte.is_ascii_lowercase())
+                .count();
+            let emission_hex = bytes
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>();
+            let emission = String::from_utf8(bytes).ok();
+            let normalized = emission
+                .as_deref()
+                .and_then(|text| normalize_emission(text).ok());
+            let exact = normalized.as_deref() == Some(row.value.as_str());
+            let record = FreeRow {
+                normalized: normalized.clone(),
+                exact,
+            };
+            let line = json!({
+                "schema": COPY_ROW_SCHEMA,
+                "row": row.id,
+                "arm": arm.name(),
+                "kind": "free",
+                "status": status,
+                "steps": generated.len(),
+                "generated_tokens": generated,
+                "lowercase_letters": letters,
+                "emission": emission,
+                "emission_hex": emission_hex,
+                "normalized": normalized,
+                "exact": exact,
+            });
+            lines.extend(serde_json::to_vec(&line).map_err(|e| format!("free row: {e}"))?);
+            lines.push(b'\n');
+            out.push(record);
+            if status != 0 {
+                return Err(format!(
+                    "free-running {} {} status {status}",
+                    arm.name(),
+                    row.id
+                ));
+            }
+        }
+        Ok(out)
+    }
+
+    fn arm_report(counts: &TeacherCounts, free: &[FreeRow]) -> Value {
+        json!({
+            "rows": counts.rows,
+            "teacher": {
+                "tokens": counts.tokens,
+                "token_top1": counts.token_top1,
+                "token_top8": counts.token_top8,
+                "rows_all_top1": counts.rows_all_top1,
+                "rows_all_top8": counts.rows_all_top8,
+            },
+            "free": {
+                "rows": free.len(),
+                "normalized": free.iter().filter(|row| row.normalized.is_some()).count(),
+                "exact": free.iter().filter(|row| row.exact).count(),
+            },
+        })
+    }
+
+    fn stop_copy(
+        report: Value,
+        lines: &[u8],
+        out_dir: &Path,
+        reason: String,
+    ) -> Result<CopyOutcome, String> {
+        let mut report = report;
+        report["instrument_stop"] = json!(reason);
+        report["decision"] = json!("STOP");
+        write_new(&out_dir.join("copy-rows.jsonl"), lines)?;
+        write_json(&out_dir.join("copy-report.json"), &report)?;
+        Err(reason)
+    }
+
+    fn copy_probe(
+        scorer: &inst::device::DeviceScorer,
+        tokenizer: &ByteBpeTokenizer,
+        manifest: &CopyManifest,
+        context: usize,
+        out_dir: &Path,
+    ) -> Result<CopyOutcome, String> {
+        let mut lines = Vec::new();
+        let mut report = json!({
+            "schema": COPY_SCHEMA,
+            "manifest_sha256": MANIFEST_SHA256,
+            "rows": manifest.rows.len(),
+            "arms": {},
+            "primary": null,
+            "planted_wrong": null,
+            "teacher_note": "Teacher-forced top-8 is descriptive oracle assistance, not generation capability.",
+            "instrument_stop": null,
+            "decision": "INCOMPLETE",
+        });
+        let mut results: Vec<(Arm, TeacherCounts, Vec<FreeRow>)> = Vec::new();
+        for arm in Arm::ALL {
+            let counts = match teacher_counts(scorer, manifest, arm, context, &mut lines) {
+                Ok(counts) => counts,
+                Err(e) => return stop_copy(report, &lines, out_dir, e),
+            };
+            let free = match free_counts(scorer, tokenizer, manifest, arm, context, &mut lines) {
+                Ok(free) => free,
+                Err(e) => return stop_copy(report, &lines, out_dir, e),
+            };
+            report["arms"][arm.name()] = arm_report(&counts, &free);
+            results.push((arm, counts, free));
+        }
+
+        if results.len() != Arm::ALL.len() {
+            return stop_copy(
+                report,
+                &lines,
+                out_dir,
+                "the copy probe did not complete all three arms".into(),
+            );
+        }
+        let exact = results
+            .iter()
+            .find(|(arm, _, _)| *arm == Arm::Exact)
+            .ok_or_else(|| "the exact copy arm is missing".to_string())?;
+        let no_hint = results
+            .iter()
+            .find(|(arm, _, _)| *arm == Arm::NoHint)
+            .ok_or_else(|| "the no-hint copy arm is missing".to_string())?;
+        let random_hint = results
+            .iter()
+            .find(|(arm, _, _)| *arm == Arm::RandomHint)
+            .ok_or_else(|| "the random-hint copy arm is missing".to_string())?;
+        for (arm, _, free) in &results {
+            if free.len() != manifest.rows.len() {
+                return stop_copy(
+                    report,
+                    &lines,
+                    out_dir,
+                    format!(
+                        "{} arm has {} free-running rows, not {}",
+                        arm.name(),
+                        free.len(),
+                        manifest.rows.len()
+                    ),
+                );
+            }
+        }
+
+        let paired_wins = |treatment: &[FreeRow], control: &[FreeRow]| -> PairedWins {
+            let mut b = 0u64;
+            let mut c = 0u64;
+            for (treatment, control) in treatment.iter().zip(control) {
+                match (treatment.exact, control.exact) {
+                    (true, false) => b += 1,
+                    (false, true) => c += 1,
+                    _ => {}
+                }
+            }
+            PairedWins { b, c }
+        };
+        let wins_no_hint = paired_wins(&exact.2, &no_hint.2);
+        let wins_random_hint = paired_wins(&exact.2, &random_hint.2);
+        let pass = primary_pass(wins_no_hint, wins_random_hint);
+
+        let random_norm: Vec<Option<String>> = random_hint
+            .2
+            .iter()
+            .map(|row| row.normalized.clone())
+            .collect();
+        let planted = match planted_wrong_holds(manifest, &random_norm) {
+            Ok(value) => value,
+            Err(e) => return stop_copy(report, &lines, out_dir, e),
+        };
+        let mut rows_equal_to_exact = Vec::new();
+        let mut applicable = 0u64;
+        for (row, result) in manifest.rows.iter().zip(&random_hint.2) {
+            if let Some(answer) = &result.normalized {
+                applicable += 1;
+                if answer == &row.value {
+                    rows_equal_to_exact.push(row.id.clone());
+                }
+            }
+        }
+        report["primary"] = json!({
+            "exact_vs_no_hint": {
+                "b": wins_no_hint.b,
+                "c": wins_no_hint.c,
+                "d": wins_no_hint.d(),
+                "clears": clears_primary(wins_no_hint.b, wins_no_hint.c),
+            },
+            "exact_vs_random_hint": {
+                "b": wins_random_hint.b,
+                "c": wins_random_hint.c,
+                "d": wins_random_hint.d(),
+                "clears": clears_primary(wins_random_hint.b, wins_random_hint.c),
+            },
+            "pass": pass,
+            "rule": "d > 24 && d*d > 4*(b+c) for both primary comparisons; teacher-forced top-8 cannot replace either",
+        });
+        report["planted_wrong"] = json!({
+            "arm": "random_hint",
+            "applicable_rows": applicable,
+            "rows_equal_to_exact": rows_equal_to_exact,
+            "holds": planted,
+            "rule": "every applicable random-hint normalized answer differs from the exact value; a vacuous arm does not hold",
+        });
+        if !planted {
+            let reason = if applicable == 0 {
+                "the random-hint arm produced no normalized emission (vacuous planted control)"
+                    .to_string()
+            } else {
+                format!(
+                    "the random-hint arm returned the exact value on {} applicable rows: {:?}",
+                    rows_equal_to_exact.len(),
+                    rows_equal_to_exact
+                )
+            };
+            return stop_copy(report, &lines, out_dir, reason);
+        }
+
+        let decision = if pass { "PASS" } else { "COPY_GATE_FAIL" };
+        report["decision"] = json!(decision);
+        write_new(&out_dir.join("copy-rows.jsonl"), &lines)?;
+        write_json(&out_dir.join("copy-report.json"), &report)?;
+        Ok(CopyOutcome {
+            primary_pass: pass,
+            decision: decision.to_owned(),
+        })
+    }
 }
