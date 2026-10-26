@@ -9,7 +9,7 @@
 
 Does doubling only the dose of the existing `Fbs_1Atom_Active` dual-forward recipe bring the exported artifact inside Stage 4b's export-gap band on both seeds, without sacrificing claude-129's artifact top-1 floors?
 
-## 2. Arms and artifacts
+## 2. Base artifact
 
 - **F:** this run's plain-float model, trained from step 0 with `TrainForward::Dual` for 2,048 steps on seeds 1 and 2, scored on 14,287 `ft/dev` rows.
 - **A:** each saved model's UORLUT01 artifact, scored through `fbs-export`, `d11-fbs-eval run --verify` and the existing artifact-gap scorer.
@@ -40,7 +40,7 @@ Report plain/export-mode top-1 and admitted rates, training trajectories, `net(D
 6. **I-DEV-Denominator:** 14,287 rows over 428 windows.
 7. **I-Finite:** every command exits 0; stdout/stderr/exit codes and SHA256SUMS are saved and read back.
 
-## 5. Data and source
+## 5. Data split
 
 Use `w2-inputs/2026-10-25/driver-data/` with the existing pins:
 
