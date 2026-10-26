@@ -1073,6 +1073,45 @@ pub fn run_full_sheet(data_root: &Path, device: &Device) -> Result<FbsSheetRecei
 /// (`fbs_export::decode_coded_routes`), and Stage 3's capacity gate kept one atom.
 pub const D11_EXPORT_ARM: FbsArm = FbsArm::OneAtomActive;
 
+/// Stage 4b's parity sample: every eighth `ft/dev` window, fixed before the run. The readouts
+/// read these windows whole, so the parity with the integer session covers real text.
+pub const PARITY_WINDOW_STRIDE: usize = 8;
+
+/// The panel's D11 predictions against the D11 readout's next tokens at the same positions, over
+/// the scored rows of the sampled windows (window `w` is sampled when `w % stride == 0`, and is
+/// the readout's sequence `w / stride`): `(rows compared, rows that differ)`.
+fn panel_against_readout(
+    windows: &[CausalWindow],
+    panel_preds: &[u32],
+    readout: &uor_r4_integer::fbs_snapshot::FbsFloatReadout,
+    stride: usize,
+) -> Result<(usize, usize)> {
+    let (mut row, mut compared, mut differ) = (0usize, 0usize, 0usize);
+    for (w, window) in windows.iter().enumerate() {
+        for &offset in &window.scored_offsets {
+            if w % stride == 0 {
+                let next = readout
+                    .sequences
+                    .get(w / stride)
+                    .and_then(|q| q.next.get(offset))
+                    .ok_or_else(|| {
+                        invalid(format!("the readout lacks window {w} offset {offset}"))
+                    })?;
+                let pred = panel_preds
+                    .get(row)
+                    .ok_or_else(|| invalid("fewer panel predictions than scored rows"))?;
+                compared += 1;
+                differ += usize::from(pred != next);
+            }
+            row += 1;
+        }
+    }
+    if row != panel_preds.len() {
+        return Err(invalid("more panel predictions than scored rows"));
+    }
+    Ok((compared, differ))
+}
+
 /// Stage 4b's run (`docs/harness/prep/d11-exporter-float-trunk-stage4b-2026-10-26.md`): the four
 /// Stage 3 arms trained on both seeds, for the noise band; and, for [`D11_EXPORT_ARM`] on each
 /// seed, the D11 export gap, with the trained model, its snapshot and its plain, export and D11
@@ -1082,7 +1121,7 @@ pub fn run_d11_export_gap(
     save_dir: &Path,
     device: &Device,
 ) -> Result<serde_json::Value> {
-    use crate::fbs_export::{fbs_float_readout, fbs_trunk_snapshot, round_tables_as_exported};
+    use crate::fbs_export::{fbs_float_readout_on, fbs_trunk_snapshot, round_tables_as_exported};
     use uor_r4_integer::fbs_snapshot::{write_new_file, FbsReadoutMode};
 
     fs::create_dir(save_dir)?;
@@ -1090,6 +1129,11 @@ pub fn run_d11_export_gap(
     let targets: Vec<u32> = dev_windows
         .iter()
         .flat_map(|w| w.scored_targets.iter().copied())
+        .collect();
+    let sample: Vec<Vec<u32>> = dev_windows
+        .iter()
+        .step_by(PARITY_WINDOW_STRIDE)
+        .map(|w| w.input_ids.clone())
         .collect();
     let mut outputs: BTreeMap<(FbsArm, u64), FbsArmOutput> = BTreeMap::new();
     for seed in SEEDS {
@@ -1145,16 +1189,20 @@ pub fn run_d11_export_gap(
             false,
             false,
         )?;
-        let i_save_load = reloaded_preds == out.preds_float;
+        let reloaded_loss = panel_loss(&loaded, &dev_windows, seed, STEPS, false)?;
+        let i_save_load = reloaded_preds == out.preds_float && reloaded_loss == last.dev_loss_float;
         hs::clear_active_arm();
         let snapshot = fbs_trunk_snapshot(&loaded)?;
-        let plain = fbs_float_readout(&loaded, FbsReadoutMode::Plain)?;
-        let export = fbs_float_readout(&loaded, FbsReadoutMode::Export)?;
+        let plain = fbs_float_readout_on(&loaded, FbsReadoutMode::Plain, &sample)?;
+        let export = fbs_float_readout_on(&loaded, FbsReadoutMode::Export, &sample)?;
         round_tables_as_exported(&loaded)?;
-        let d11_readout = fbs_float_readout(&loaded, FbsReadoutMode::D11)?;
+        let d11_readout = fbs_float_readout_on(&loaded, FbsReadoutMode::D11, &sample)?;
         let (d11, d11_preds) = hs::evaluate_dev_panel_d11(&loaded, &dev_windows)?;
         let (_, d11_again) = hs::evaluate_dev_panel_d11(&loaded, &dev_windows)?;
         let d11_loss = panel_loss_d11(&loaded, &dev_windows)?;
+        // The panel's D11 path against the readout's, which the integer parity covers.
+        let (panel_rows, panel_differ) =
+            panel_against_readout(&dev_windows, &d11_preds, &d11_readout, PARITY_WINDOW_STRIDE)?;
         let paired = hs::compute_paired_discordance(
             "float",
             &out.preds_float,
@@ -1197,9 +1245,12 @@ pub fn run_d11_export_gap(
             "preds_float_sha256": preds_sha256(&out.preds_float),
             "preds_d11_sha256": preds_sha256(&d11_preds),
             "i_save_load": i_save_load,
+            "reloaded_loss_float": reloaded_loss,
             "i_d_determinism": i_determinism,
             "i_dev_denominator": i_dev,
             "i_q12_oracle": i_q12,
+            "panel_vs_readout_rows": panel_rows,
+            "panel_vs_readout_differ": panel_differ,
         }));
     }
     let runs: Vec<&FbsArmRun> = outputs.values().map(|o| &o.run).collect();
@@ -1208,13 +1259,18 @@ pub fn run_d11_export_gap(
         "kernels": kernel_identity(),
         "dev_documents": dev_docs,
         "dev_windows": dev_windows.len(),
+        "parity_window_stride": PARITY_WINDOW_STRIDE,
+        "parity_windows": sample.len(),
+        "parity_positions": sample.iter().map(Vec::len).sum::<usize>(),
         "noise_band_dev_loss": stage3.noise,
         "stage3_export_mode_paired": stage3.export_paired,
         "stage3_export_mode_arm": stage3.export_arm.name(),
         "seeds": seeds,
-        "instruments_pass": instruments_ok,
-        // A failed instrument check is an instrument fault: the gap is not counted, never FAIL.
-        "g_d11_export_gap": if instruments_ok {
+        "gpu_instruments_pass": instruments_ok,
+        // Half of G-D11-ExportGap: the gate also needs I-D11-Artifact-Agreement, from
+        // `fbs-compare` on each seed's outputs and `panel_vs_readout_differ`. A failed
+        // instrument check is an instrument fault: the gap is not counted, never FAIL.
+        "gap_inside_band_on_both_seeds": if instruments_ok {
             serde_json::json!(gap_ok)
         } else {
             serde_json::json!("not counted: an instrument check failed")
@@ -1532,6 +1588,49 @@ mod tests {
         assert!(export_gap_within(0.0, 1.0, 1.0, &paired(220, 180)));
         assert!(export_gap_within(0.0, 1.0, 1.0, &paired(180, 220)));
         assert!(!export_gap_within(0.0, 1.0, 1.0, &paired(222, 180)));
+    }
+
+    #[test]
+    fn the_panel_is_held_against_the_readout_only_on_sampled_windows() -> Result<()> {
+        use uor_r4_integer::fbs_snapshot::{FbsFloatReadout, FbsFloatSequence, FbsReadoutMode};
+        let window = |scored: Vec<usize>| CausalWindow {
+            doc_id: 0,
+            input_ids: vec![1; 4],
+            scored_offsets: scored.clone(),
+            scored_targets: vec![0; scored.len()],
+            scored_corpus_positions: vec![0; scored.len()],
+        };
+        // Windows 0 and 2 are sampled (stride 2) and are the readout's sequences 0 and 1.
+        let windows = vec![window(vec![1, 3]), window(vec![0]), window(vec![2])];
+        let sequence = |next: Vec<u32>| FbsFloatSequence {
+            tokens: vec![1; 4],
+            next,
+            hidden: vec![vec![0.0]; 4],
+        };
+        let readout = FbsFloatReadout {
+            vocab: 8,
+            width: 1,
+            mode: FbsReadoutMode::D11,
+            positions: Vec::new(),
+            sequences: vec![sequence(vec![0, 5, 0, 6]), sequence(vec![0, 0, 7, 0])],
+        };
+        // Rows: window 0 offsets 1 and 3, window 1 offset 0 (not sampled), window 2 offset 2.
+        assert_eq!(
+            panel_against_readout(&windows, &[5, 6, 9, 7], &readout, 2)?,
+            (3, 0)
+        );
+        assert_eq!(
+            panel_against_readout(&windows, &[5, 4, 9, 1], &readout, 2)?,
+            (3, 2)
+        );
+        // The unsampled window's row never counts, whatever it holds.
+        assert_eq!(
+            panel_against_readout(&windows, &[5, 6, 0, 7], &readout, 2)?,
+            (3, 0)
+        );
+        assert!(panel_against_readout(&windows, &[5, 6, 9], &readout, 2).is_err());
+        assert!(panel_against_readout(&windows, &[5, 6, 9, 7, 1], &readout, 2).is_err());
+        Ok(())
     }
 
     #[test]

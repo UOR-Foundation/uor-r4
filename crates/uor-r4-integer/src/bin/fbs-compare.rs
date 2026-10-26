@@ -106,14 +106,15 @@ fn reference(
     quantized: bool,
     snaps: FbsReferenceSnaps,
 ) -> Result<Vec<Output>, String> {
-    let mut all = Vec::new();
-    for tokens in inputs {
-        let out: Vec<FbsWriterOutput> = snap
-            .forward_f32_with(tokens, quantized, snaps)
-            .map_err(|e| format!("{tokens:?}: reference: {e}"))?;
-        all.extend(out.into_iter().map(|o| (o.token, o.query)));
-    }
-    Ok(all)
+    let inputs: Vec<&[u32]> = inputs.iter().map(Vec::as_slice).collect();
+    let each: Vec<Vec<FbsWriterOutput>> = snap
+        .forward_f32_each(&inputs, quantized, snaps)
+        .map_err(|e| format!("reference: {e}"))?;
+    Ok(each
+        .into_iter()
+        .flatten()
+        .map(|o| (o.token, o.query))
+        .collect())
 }
 
 /// The integer session's token at every position of every input, each input
@@ -138,25 +139,28 @@ fn served(model: &IntegerStackModel, inputs: &[Vec<u32>]) -> Result<Vec<Output>,
 }
 
 /// The quantized, fully snapped reference's [`FbsTieMargins`] at every
-/// position of every input: those met on the way to it, so each prefix runs
-/// on its own.
-fn tie_margins(snap: &FbsTrunkSnapshot, inputs: &[Vec<u32>]) -> Result<Vec<FbsTieMargins>, String> {
-    let mut all = Vec::new();
-    for tokens in inputs {
-        for end in 1..=tokens.len() {
-            let margins = snap
-                .tie_margins(&tokens[..end], true, FbsReferenceSnaps::INTEGER)
-                .map_err(|e| format!("{tokens:?}: tie margins: {e}"))?;
-            all.push(margins);
-        }
-    }
-    Ok(all)
+/// position of every input (those met on the way to it, in one pass per
+/// input), and how many snaps of a zero vector each whole input met.
+fn tie_margins(
+    snap: &FbsTrunkSnapshot,
+    inputs: &[Vec<u32>],
+) -> Result<(Vec<FbsTieMargins>, u64), String> {
+    let inputs: Vec<&[u32]> = inputs.iter().map(Vec::as_slice).collect();
+    let each = snap
+        .tie_margins_each(&inputs, true, FbsReferenceSnaps::INTEGER)
+        .map_err(|e| format!("tie margins: {e}"))?;
+    let zero = each
+        .iter()
+        .filter_map(|m| m.last())
+        .map(|m| u64::from(m.zero_snaps))
+        .sum();
+    Ok((each.into_iter().flatten().collect(), zero))
 }
 
 /// Each position over [`GAP_BAR`] in any of `pairings`, traced to its
 /// near-tie: the reference's margins there, with how many positions came
 /// nearer on each (0 is the nearest), and the median of each margin.
-fn trace_ties(margins: &[FbsTieMargins], pairings: &[Vec<f64>]) -> Value {
+fn trace_ties(margins: &[FbsTieMargins], zero_snaps: u64, pairings: &[Vec<f64>]) -> Value {
     let kinds: [(&str, Margin); 3] = [
         ("transition", |m| m.transition),
         ("gate", |m| m.gate),
@@ -190,6 +194,7 @@ fn trace_ties(margins: &[FbsTieMargins], pairings: &[Vec<f64>]) -> Value {
     json!({
         "median": medians,
         "positions_with_zero_snaps": zero,
+        "zero_snaps": zero_snaps,
         "over_gap_bar": traced,
     })
 }
@@ -258,8 +263,10 @@ fn section(
         // The artifact's own Q12 query, not a reference of it.
         out["d11_gpu_vs_integer_session"] = pair(d11_gpu, &served);
         // Where the three disagree, how near the reference came to a switch.
+        let (margins, zero_snaps) = tie_margins(snap, inputs)?;
         out["tie_margins"] = trace_ties(
-            &tie_margins(snap, inputs)?,
+            &margins,
+            zero_snaps,
             &[
                 gaps(d11_gpu, &quantized_ref),
                 gaps(d11_gpu, &served),

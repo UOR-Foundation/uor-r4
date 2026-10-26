@@ -123,8 +123,8 @@ fn main() -> Result<()> {
                 );
             }
             println!(
-                "[summary] noise={} instruments={} G-D11-ExportGap={}",
-                value["noise_band_dev_loss"], value["instruments_pass"], value["g_d11_export_gap"]
+                "[summary] noise={} gpu_instruments={} gap_inside_band_on_both_seeds={} (the gate also needs the artifact parity)",
+                value["noise_band_dev_loss"], value["gpu_instruments_pass"], value["gap_inside_band_on_both_seeds"]
             );
             write_receipt(&out, &value)
         }
