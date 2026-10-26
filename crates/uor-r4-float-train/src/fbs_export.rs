@@ -570,13 +570,34 @@ mod tests {
                 .flatten_all()?
                 .to_vec1::<f32>()?)
         };
-        let before = values(&model, "embedding.weight")?;
+        // A fresh trunk's gains are ones, already on the grid: give every
+        // table random values off every grid first, so each rounding has work.
+        let mut rng = Lcg(31);
+        for (name, var) in model.variables() {
+            if name.ends_with(".spiralcore_fbs") {
+                continue;
+            }
+            let n = var.as_tensor().elem_count();
+            let random: Vec<f32> = (0..n)
+                .map(|_| (rng.next() % 2_000_001) as f32 / 1_000_003.0 - 1.0)
+                .collect();
+            var.set(&Tensor::from_vec(
+                random,
+                var.as_tensor().shape(),
+                &candle_core::Device::Cpu,
+            )?)?;
+        }
+        let before: Vec<Vec<f32>> = model
+            .variables()
+            .keys()
+            .map(|name| values(&model, name))
+            .collect::<Result<_>>()?;
         round_tables_as_exported(&model)?;
-        assert_ne!(
-            values(&model, "embedding.weight")?,
-            before,
-            "the rounding changed nothing"
-        );
+        for (name, b) in model.variables().keys().zip(&before) {
+            // Every table changes; the FBS routes do not.
+            let a = values(&model, name)?;
+            assert_eq!(name.ends_with(".spiralcore_fbs"), &a == b, "{name}");
+        }
         let grid = |v: f32| grid_value(grid_code(f64::from(v), false).expect("grid")) as f32;
         let fixed = |v: f32| fixed_value(v, FBS_FIXED_EXP) as f32;
         let q12 = |v: f32| q12_value(v).expect("q12") as f32;
