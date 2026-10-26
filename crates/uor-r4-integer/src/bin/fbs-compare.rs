@@ -56,14 +56,38 @@ fn check_readout(
 }
 
 /// Token agreement and the largest query gap between two sets of outputs.
+/// The parity bar's gap (claude-124, claude-125).
+const GAP_BAR: f64 = 1e-3;
+
+/// Token agreement and the largest query gap between two sets of outputs,
+/// with how many positions exceed [`GAP_BAR`] and the worst of them
+/// (`[position, gap, tokens agree]`), so a miss can be traced.
 fn pair(a: &[Output], b: &[Output]) -> Value {
     let tokens = a.iter().zip(b).filter(|(x, y)| x.0 == y.0).count();
-    let gap = a
+    let gaps: Vec<f64> = a
         .iter()
         .zip(b)
-        .flat_map(|(x, y)| x.1.iter().zip(&y.1).map(|(p, q)| (p - q).abs()))
-        .fold(0f64, f64::max);
-    json!({"tokens_agree": tokens, "max_abs_query_gap": gap})
+        .map(|(x, y)| {
+            x.1.iter()
+                .zip(&y.1)
+                .map(|(p, q)| (p - q).abs())
+                .fold(0f64, f64::max)
+        })
+        .collect();
+    let gap = gaps.iter().copied().fold(0f64, f64::max);
+    let mut over: Vec<usize> = (0..gaps.len()).filter(|&i| gaps[i] > GAP_BAR).collect();
+    over.sort_by(|&i, &j| gaps[j].total_cmp(&gaps[i]).then(i.cmp(&j)));
+    let worst: Vec<Value> = over
+        .iter()
+        .take(6)
+        .map(|&i| json!([i, gaps[i], a[i].0 == b[i].0]))
+        .collect();
+    json!({
+        "tokens_agree": tokens,
+        "max_abs_query_gap": gap,
+        "positions_over_gap_bar": over.len(),
+        "worst": worst,
+    })
 }
 
 /// The reference's token and query at every position of every input.
@@ -85,7 +109,7 @@ fn reference(
 
 /// The integer session's token at every position of every input, each input
 /// in a fresh session.
-fn served(model: &IntegerStackModel, inputs: &[Vec<u32>]) -> Result<Vec<u32>, String> {
+fn served(model: &IntegerStackModel, inputs: &[Vec<u32>]) -> Result<Vec<Output>, String> {
     let mut all = Vec::new();
     for tokens in inputs {
         let mut session = model.session();
@@ -93,7 +117,12 @@ fn served(model: &IntegerStackModel, inputs: &[Vec<u32>]) -> Result<Vec<u32>, St
             let step = session
                 .step_native(t)
                 .map_err(|e| format!("{tokens:?}: integer step: {e}"))?;
-            all.push(step.token);
+            let query = step
+                .query_q12
+                .iter()
+                .map(|&q| f64::from(q) / 4096.0)
+                .collect();
+            all.push((step.token, query));
         }
     }
     Ok(all)
@@ -134,13 +163,14 @@ fn section(
     let integer_vs_quantized = served
         .iter()
         .zip(&quantized_ref)
-        .filter(|(s, r)| **s == r.0)
+        .filter(|(s, r)| s.0 == r.0)
         .count();
     let mut out = json!({
         "positions": float_ref.len(),
         "parity_plain_gpu_vs_float_reference": pair(plain_gpu, &float_ref),
         "plain_gpu_vs_integer_reference": pair(plain_gpu, &integer_ref),
         "integer_token_equals_quantized_reference": integer_vs_quantized,
+        "integer_session_vs_quantized_reference": pair(&served, &quantized_ref),
         "attribution": {
             "float_vs_float_export_reference": pair(&float_ref, &export_ref),
             "float_export_vs_integer_reference": pair(&export_ref, &integer_ref),
@@ -157,8 +187,10 @@ fn section(
         out["d11_gpu_token_equals_integer_token"] = json!(d11_gpu
             .iter()
             .zip(&served)
-            .filter(|(g, s)| g.0 == **s)
+            .filter(|(g, s)| g.0 == s.0)
             .count());
+        // The artifact's own Q12 query, not a reference of it.
+        out["d11_gpu_vs_integer_session"] = pair(d11_gpu, &served);
     }
     Ok(out)
 }
@@ -239,5 +271,29 @@ fn main() -> ExitCode {
             eprintln!("fbs-compare: {e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pair_counts_and_ranks_the_positions_over_the_gap_bar() {
+        let a: Vec<Output> = vec![
+            (1, vec![0.0, 0.5]),
+            (2, vec![0.0, 0.0]),
+            (3, vec![1.0, 0.0]),
+        ];
+        let b: Vec<Output> = vec![
+            (1, vec![0.0, 0.5005]),
+            (9, vec![0.0, 0.0]),
+            (3, vec![0.0, 0.0]),
+        ];
+        let p = pair(&a, &b);
+        assert_eq!(p["tokens_agree"], 2);
+        assert_eq!(p["positions_over_gap_bar"], 1);
+        assert_eq!(p["max_abs_query_gap"], 1.0);
+        assert_eq!(p["worst"], json!([[2, 1.0, true]]));
     }
 }
