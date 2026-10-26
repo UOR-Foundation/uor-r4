@@ -25,8 +25,17 @@ References #2820.
 - **The design changed after the ORDER was written.** The integer crate's `stack` module compiles only under `serving-wasm`, and that feature also compiles `model`, `sampling` and `tables`. D29's presence rule rests on the feature staying off in the native graph. So:
   - The snapshot types moved to an ungated `fbs_snapshot` module.
   - The converter writes JSON. A second bin, in the serving build, exports that JSON to the artifact.
-  - Only the test build enables `serving-wasm`, through a dev-dependency.
   - The new path dependency adds one line to `Cargo.lock`. The item's scope omits that file, so pr-check's scope rule (advisory) WARNs on it.
+- **My first boundary still let the serving build in, and the fresh review caught it (round 1).**
+  - I had given float-train a test-only `serving-wasm` dev-dependency. Resolver 2 keeps that out of normal builds. It does not keep it out of workspace-wide runs that build float-train's tests: CI's `cargo check --workspace --all-targets` and `cargo test --workspace --lib` would then have compiled the serving build for every crate in the run. They would also have stopped testing the integer crate's no-feature configuration.
+  - The dev-dependency is gone. The GPU test now proves the routes and writes `snapshot.json` and `readout.json`. A serving-build bin, `fbs-compare`, exports, parses and serves them, and prints the reading.
+  - `cargo tree --workspace -e features -i uor-r4-integer` now shows only `default`.
+- **The other round-1 findings, all fixed:**
+  - a sheet arm left set on the thread would have been exported as plain routes, with no record;
+  - a table that is not finite would have reached the JSON as `null`;
+  - a failed write could leave a partial output file that blocked the retry;
+  - the GPU compare did not check output length;
+  - one sample did not prove that `f32` values survive JSON exactly.
 - **Two of my own checks were wrong at first.**
   - A "scaled value" refusal case halved a coded value. That can land on another atom's slot, which the decoder correctly reports as two atoms. It is now a fractional value.
   - My first set-aside of the two-atom check did not compile, so it proved nothing. A compiling set-aside then failed the test as required.
@@ -37,42 +46,50 @@ References #2820.
 
 ## What changed
 
-Size against `origin/main`:
-- code about +464/−69, which is `fbs_export.rs` lines 1–256 plus the other code files and `Cargo.lock`;
-- tests about +345: the `fbs_export.rs` test module (lines 257–578) and `stack/tests.rs`;
-- docs about +180: the ORDER, this REPORT and the notebook row.
+Size against `origin/main` at `398edb88`:
+- code +661/−69: the code parts of `fbs_export.rs` (lines 1–315) and `fbs_snapshot.rs` (lines 1–127), the three bins, the other code files and `Cargo.lock`;
+- tests +409: the test modules of `fbs_export.rs` (322 lines) and `fbs_snapshot.rs` (64), and `stack/tests.rs` (23);
+- docs +181: the ORDER, this REPORT and the notebook row.
 
-pr-check counts the whole of `fbs_export.rs` as code: code +785/−69, tests +23, docs +169, generated +1. The ORDER gave no line estimate.
+pr-check counts whole files, so it reports the in-file test modules as code. The ORDER gave no line estimate.
 
 - **`uor-r4-integer`:**
-  - `fbs_snapshot` (ungated) now holds `FbsRoutes`, `FbsTrunkLayer` and `FbsTrunkSnapshot`, with serde that refuses unknown fields. `stack::format` re-exports them.
+  - `fbs_snapshot` (ungated) holds `FbsRoutes`, `FbsTrunkLayer` and `FbsTrunkSnapshot`, plus the float readout types `FbsFloatReadout` and `FbsFloatPosition`. Their serde refuses unknown fields, and `stack::format` re-exports the snapshot types.
+  - `fbs_snapshot` also has `write_new_file`. It writes through `<path>.partial` and a hard link, so it never replaces a file or leaves a partial one.
   - `discrete_d11` adds `spiralcore_signed_axes()` and `spiralcore_orbit_roots()`, both read-only.
-  - A new serving-build bin, `fbs-export SNAPSHOT_JSON OUT_PATH`. It parses the artifact back before writing it, never overwrites, and prints the sha256.
+  - Two new serving-build bins:
+    - `fbs-export SNAPSHOT_JSON OUT_PATH` parses the artifact back before writing it, and prints the sha256.
+    - `fbs-compare SNAPSHOT_JSON READOUT_JSON` exports, parses and serves every readout position, and prints one JSON line of counts. It is the instrument for Stage 4's comparison.
   - The `stack_fbs_gather` repair.
 - **`uor-r4-float-train`, `fbs_export`:**
   - `fbs_trunk_snapshot(&StackModel)` reads each projection's routes back through the model's own GPU projection, `linear`, now `pub(crate)`. It feeds one coded carrier, where slot `i` holds `i + 1`.
+  - It refuses a thread with a sheet arm set, and refuses any copied table with a value that is not finite.
   - `decode_coded_routes` refuses any block that is not a one-atom signed gather with a state in the integer Cl(0,6) table.
   - `check_geometry_tables` holds the float geometry's 64×8 signed axes and 16 orbit roots to the integer crate's, in order.
   - `check_fbs_export_config` refuses each unservable configuration for its own reason.
-  - A new GPU bin, `fbs-snapshot MODEL_DIR OUT_JSON`.
+  - `fbs_float_readout` records the float GPU trunk's hidden vector and next token for every single token.
+  - A new GPU bin, `fbs-snapshot MODEL_DIR OUT_JSON [READOUT_JSON]`.
+  - `uor-r4-integer` is a dependency without features, and never `serving-wasm`.
 
 ## Measurements
 
 | Measurement | Value | Where |
 |---|---|---|
-| Route read-back on the GPU | bit-identical to the model's projection on 3 random carriers, for all 6 projections in both layers | `gpu_converted_trunk_reproduces_the_projection_and_serves`, RTX 5090, head `d93b4977` |
-| GPU set-asides | the GPU test fails at its bit-equality assert (`fbs_export.rs:532`) with the decode's sign bit dropped, and with a valid but wrong state | same pod, `tests-setaside-{1,2}.log` |
-| Export, parse, serve | the converted trunk exports and parses; the integer session matches the quantized reference's token on 256 of 256 | same test |
-| Float GPU against the converted reference (a reading, no bar) | 67 of 256 tokens agree; largest hidden gap 2.825 | same test |
-| Tables identical | float signed axes and roots equal the integer crate's | `geometry_tables_match_the_integer_crate` (host) |
-| Host converter tests | 4 pass. Set aside the root check, the two-atom check, the state lookup or the U(1) refusal, and each fails its test | `cargo test -p uor-r4-float-train --lib fbs_export` |
-| Snapshot JSON | round-trips bit-exactly and exports to the same bytes; an unknown field is refused | `fbs_trunk_snapshot_json_round_trips_exactly` |
+| Route read-back on the GPU | bit-identical to the model's projection on 3 random carriers, for all 6 projections in both layers, output lengths checked | `gpu_converted_trunk_reproduces_the_projection`, RTX 5090, at the code head `398edb88` |
+| GPU set-asides | the GPU test fails at its bit-equality assert (`fbs_export.rs:603`) with the decode's sign bit dropped, and with a valid but wrong state | same pod, `tests-setaside-{1,2}.log` |
+| Sheet arm | conversion is refused while an arm is set | same test |
+| Export, parse, serve | `fbs-compare` and `fbs-export` exit 0. The integer session matches the quantized reference's token on 256 of 256. Artifact sha256 `0621616ab3d6a9786be8e1e82569d6bf6539a854fbe8775cd5c47d6622c9447a` | `compare.json`, `out/trunk.uorlut` |
+| Float GPU against the converted reference (a reading, no bar) | 67 of 256 tokens agree; largest hidden gap 2.825. The same at `d93b4977` and at `398edb88` | `compare.json` |
+| Tables identical | the float signed axes and roots equal the integer crate's | `geometry_tables_match_the_integer_crate` (host) |
+| Host converter tests | 5 pass. Set aside the root check, the two-atom check, the state lookup or the U(1) refusal, and each fails its test | `cargo test -p uor-r4-float-train --lib fbs_export` |
+| Snapshot JSON | round-trips bit-exactly and exports to the same bytes; an unknown field is refused. 200,000 random finite `f32` values plus edge values (signed zeros, subnormals, extremes) keep their bits through JSON | `fbs_trunk_snapshot_json_round_trips_exactly`, `json_f32_round_trips_bit_exactly` |
+| Feature boundary | `serving-wasm` appears 0 times in `cargo tree --workspace -e features -i uor-r4-integer` | host |
 | Step-audit repair | `m5_full_path_cost_controls` passes 3 of 3; with the fix set aside, 1 of 3 | integration test, host |
 | Zero-multiply audit | `FULL PASS`: rlib 56 symbol ranges and 41 call-graph functions; `uor-r4-stack` 44 and 90 | `scripts/audit_zero_matmul_serving.py --stack` |
-| Integer serving-build library | 314 passed | `cargo test -p uor-r4-integer --features serving-wasm --lib` |
-| GPU cost | one RTX 5090 for about 5 minutes, at $1.09/h | Vast `vast-57766451`, deleted |
+| Suites | float-train 31 passed; integer serving-build library 316; integer no-feature library 54; `memory_shape` 3 | host |
+| GPU cost | two RTX 5090 pods, about 5 minutes each, at $1.09/h | Vast `vast-57766451` and `vast-57768703`, both deleted |
 
-The GPU evidence is in the HF store at `results/claude/d11-fbs-converter-2026-10-26/`, with a `SHA256SUMS`. The run was at `d93b4977`. Later commits change only the integer gather's code generation (the same values: the FBS control is unchanged) and the docs. The run is repeated at the final head before the merge.
+The GPU evidence is in the HF store under `results/claude/d11-fbs-converter-2026-10-26/`, with a `SHA256SUMS` for each run. The first run, at `d93b4977`, is at the folder's top level. The run at the code head is under `final-398edb88/`.
 
 ## Checks run at the head
 
