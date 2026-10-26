@@ -128,7 +128,7 @@ See the exact-head review record on the PR.
 
   How it reads:
   - **A tracks the Q16 control:** it computes the D11 forward with a Q16 residual, as designed. The extra D-against-A difference is D's float32 rounding together with Q16. Whether that is faithful is then a calibration question for the rule, settled by a decision review, not after the fact.
-  - **A does not track it:** that is a departure, and a repair item opens.
+  - **A does not track it:** that points to a departure. With the drift readings below, it is attributed, and a repair item opens.
 - **The code review's low findings, for that unit:**
   - `I-D-Stored` records `null` when its flag is absent, which reads like "passed". Make it "not run".
   - The new options are accepted, and ignored, by every gap-family mode, as `--train-forward` already was.
@@ -141,4 +141,4 @@ This checked whether the shipped integer files compute what the model's integer-
 - **The file's final step is exactly right on every model.** It picks the same answers as the model's own head, on all 14,287 rows of all six models.
 - **The files get as many answers right as the model's integer-like mode,** to within 8 of 14,287 per model. But the answers they pick still differ from that mode's on 2% to 5% of the rows.
 - **Counted as right answers, the earlier failed comparisons sit almost entirely between the model's ordinary float mode and its integer-like mode.** That is a reading, not a verdict. It does not clear the export.
-- **Four of the six models differ by more than the pre-agreed limit.** So the export is not yet cleared, and one more check, on the laptop, comes next.
+- **Four of the six models differ by more than the pre-agreed limit.** So the export is not yet cleared. Next come checks on the laptop and one short GPU measurement of how the internal numbers differ.

@@ -379,10 +379,21 @@ mod tests {
         // Every option the mode reads is one the parser accepts.
         assert!(extra.keys().all(|k| GAP_OPTIONS.contains(&k.as_str())));
         assert!(GAP_OPTIONS.contains(&"--stored-d11-preds"));
-        let args = residual_args(&extra)?;
-        assert_eq!(args.stored_d11_preds, None);
-        assert_eq!((args.seed, args.label.as_str()), (2, "dual-c131"));
-        assert_eq!(args.model_sha256, "s");
+        // Each option lands in its own field, so no two can be swapped unnoticed.
+        assert_eq!(
+            residual_args(&extra)?,
+            ResidualArgs {
+                model_dir: PathBuf::from("m"),
+                evaluator: PathBuf::from("e.json"),
+                windows_sha256: "w".to_owned(),
+                artifact_sha256: "a".to_owned(),
+                model_sha256: "s".to_owned(),
+                stored_preds: PathBuf::from("p.json"),
+                stored_d11_preds: None,
+                seed: 2,
+                label: "dual-c131".to_owned(),
+            }
+        );
         extra.insert("--stored-d11-preds".to_owned(), "d.json".to_owned());
         assert_eq!(
             residual_args(&extra)?.stored_d11_preds,
