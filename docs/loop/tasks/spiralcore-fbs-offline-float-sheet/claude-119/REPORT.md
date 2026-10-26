@@ -20,15 +20,37 @@ Closes #2891.
   - **Loss across arms.** The identity-transport control has the lowest float DEV loss in all four seed-build cells (1.8030–1.8290).
   - **Verdict.** A negative for this configuration only: 6 layers, 1,024 steps, `StackAdamW` at the Hamilton sheet's rates (CHARTER §4.1). SpiralCore/FBS stays ACTIVE in its integer form and READY in float.
 - **`G-Fbs-ExportGap` failed in both builds, on its top-1 part.**
-  - **The loss part passes.** The one-atom arm's integer-minus-float DEV loss gap is 0.0080–0.0264, inside the band.
+  - **The loss part passes, but it measures only the gate snap.** The one-atom arm's export-minus-float DEV loss gap is 0.0080–0.0264, inside the band. The export-mode loss snaps the Hamilton gates and does not round the writer table or hidden state to Q12; only the export-mode top-1 does.
   - **The top-1 part fails in build A (proof).** The top-1 gaps are 184 and 481 rows. The hit counts allow F_I of at most 117 and 166, since b + c cannot exceed float hits plus integer hits.
   - **Build B records a FAIL, but which seed failed can't be recomputed.** Its net gaps are 25 and 79 rows. The receipt does not store the export gap's b and c. That is a receipt gap, not a gate gap.
 - **Trained-query arms do not reproduce between two byte-identical builds.**
   - Both builds use the same binary, `bb88f774…`, and the same seeds, yet the results hashes differ (`d6b2d993…` against `ee0fd4aa…`).
   - Trained-query top-1 moves by up to 2,212 rows. For example, the identity control on seed 2 scores 2,533 against 321. The frozen null moves by at most 280.
   - The one-atom-versus-identity top-1 comparison changes sign between builds, so this run gives no transport verdict on top-1.
-  - **Hypothesis.** Atomically accumulated adjoints flip hard root choices. Step 0 is identical in both builds.
-- **Late collapse on seed 1 (measurement; the cause is a hypothesis).** The trained-query arms' top-1 and admitted-target hits peak at step 512 and fall by step 1,024 while loss falls. For example, the identity control goes from 1,548 to 152 top-1, and from 2,118 to 256 admitted. Antigravity's recurrence sheet showed the same pattern.
+  - **Hypothesis.** Atomically accumulated adjoints flip hard root choices. The step-0 evaluation matches exactly between builds, but the step-0 query credit already differs at about 1e-7 relative.
+- **Late collapse on seed 1 (measurement; the cause is a hypothesis).** The trained-query arms' top-1 peaks at step 512 and falls by step 1,024 while loss falls. For example, the identity control goes from 1,548 to 152 top-1, while its admitted hits peak at step 256 (2,250) and end at 256. Antigravity's recurrence sheet showed the same pattern.
+- **The exact-head review asked for changes. A fix round followed, and no recorded verdict changed.**
+  - **Slice 1, the kernels:** APPROVE.
+  - **Slice 2, the hook and stack:**
+    - The two-atom tests could not tell the paths' query slots apart. Added a distinct-paths GPU test.
+    - `with_gate_mode` left its flags changed. It now restores them.
+    - The identity arm's query credit has no exact reference test. That is still open.
+  - **Slices 3a and 3b, the runner:**
+    - I-Export-Exactness was narrower than its docstring said. It now states the one-atom, random-query coverage.
+    - The training timer did not synchronize the GPU. That overstates training tok/s by at most about 4 of 1,024 steps' work; the timer now synchronizes.
+    - The export-mode loss is gate-snap only. That is now stated.
+    - The gate logic had no tests. It moved into `evaluate_gates`, with unit tests.
+    - The receipt lacked the export gap's b and c. They are now recorded.
+    - A transfer-branch error could discard every DEV result. Any error there is now recorded as blocked.
+    - A capacity winner that failed the fit could be exported. A lone fitting arm is now the one exported.
+    - A zero noise band let a tie count as a win. A loss win now needs a strict gap.
+    - `write_receipt` could race with a concurrent writer. It now creates the file exclusively.
+  - **The claims check found four wrong claims, all corrected here:**
+    - step-0 query credit called identical;
+    - the identity control's admitted peak;
+    - a `job.log` checksum sentence;
+    - evaluation speed ranges that mixed in warm-up points.
+- **The ORDER's last D68 condition is only partly met.** `I-Export-Exactness` checks the one-atom table against the pinned crate's integer signed-axis table (`geometry.axes`). It does not check against the integer kernel in `crates/uor-r4-discrete`, which is outside this item's scope.
 - **`G-Fbs-Transfer` was not reached,** because the fit and export bars failed. Separately, the sealed `fresh_v2` draw is not in the `w2-inputs/2026-10-25/driver-data/` store bundle. The runner records a missing draw as blocked, never as a negative.
 - **Attempt 1 stopped at the GPU tests (instrument fault, repaired).** The frozen-arm test demanded bit equality of an input adjoint that is summed with device atomics, and the values differed only in the last bit. The forward was bit-identical, and the other three arm tests passed. `ca057242` compares with the 1e-5 relative tolerance the two-path test already used. Attempt 1's logs are in the store under `attempt1/`.
 - **The notebook row is staged, not appended.**
@@ -50,7 +72,9 @@ Closes #2891.
   - There are no new dependencies and no softmax, squashing or matmul. The kernels are built ahead of time by nvcc.
 - **Tests (about 330 lines).**
   - Four `#[ignore]`d CUDA tests pin each arm against a reference or an exact invariant: identity selection, √2 × standard on equal paths, frozen credit 0 with the standard input adjoint, and adjoint-transpose on every arm.
+  - The review round added a fifth GPU test: distinct paths give the 1/√2 sum of two standard projections, with each path's own query credit.
   - The host tests cover arm names and codes, the per-thread hook, the kernel inventory, F_I, the schedule, the pins and synthetic batches.
+  - Five gate tests (`evaluate_gates`) fail when the paired count is reversed or a zero-band tie is let through. Both set-asides were run, and three tests went red each time.
 - **Docs:**
   - the lab record and four receipts;
   - the staged notebook row;
@@ -71,23 +95,27 @@ All of these come from one RTX 5090: GPU 1 of `vast-57710022`, `sm_120`, driver 
 
 | Measurement | Value |
 |---|---|
-| Training (batch 4 × context 192, 1,024 steps) | 20,643–23,929 tok/s |
-| Float DEV evaluation (14,287 targets, 82,176 tokens) | 110,864–134,857 tok/s |
-| Integer-export-mode DEV evaluation | 13,815–14,531 tok/s |
+| Training (batch 4 × context 192, 1,024 steps; timer unsynchronized, see above) | 20,643–23,929 tok/s |
+| Float DEV evaluation at step 1,024 (14,287 targets, 82,176 tokens) | 127,123–134,225 tok/s |
+| Integer-export-mode DEV evaluation at step 1,024 | 13,886–14,531 tok/s |
 | Greedy decode (batch 1, 128-token prefix, 64 tokens; full recompute per token, a lower bound) | 109.1–139.5 tok/s |
 | Float DEV loss, step 0 → step 1,024 | 2.6487–2.8450 → 1.8030–1.9250, every arm |
 | Route mobility (trained-query arms) | 5.46%–7.95%; last-step churn ≤ 0.0004 |
 | Noise band (largest two-seed loss difference; the frozen null in both builds) | 0.0686 (A), 0.0597 (B) |
-| GPU tests matching `spiralcore_fbs` | 18 of 18 pass |
+| GPU tests matching `spiralcore_fbs`, at `ca057242` | 18 of 18 pass |
+| Arm GPU tests after the review round, at `abe8102a` | 5 of 5 pass; with set-aside 1 (no arm dispatch) 5 of 5 fail; with set-aside 2 (path credit swapped) only the distinct-paths test fails |
 | `I-Export-Exactness` | 48 of 48 lawful blocks; 0 of 3,072 integer mismatches |
 | Q12 `i32` writer oracle | 0 mismatches on 517 rows × 32 evaluations per build |
-| GPU time | about 34 min on one leased GPU of antigravity's pod; about $0.62 |
+| GPU time | about 40 min on one leased GPU of antigravity's pod (34 for the sheet, 6 for the review round's tests); about $0.73 |
 
-The receipts are [`receipt.json`](../../../../labs/spiralcore-fbs-offline-float-sheet/receipt.json) (`17c5563b74f3ccd9400b5a05ae042f844d2f0e0af2f0b6ee17acc84e95edb789`) and [`receipt-build-b.json`](../../../../labs/spiralcore-fbs-offline-float-sheet/receipt-build-b.json) (`d3cf226db091006a79226fdeb5529ae11206391998328e482dd02a0c56e18443`). The store copy is `caseyallard/uor-r4-store:results/claude/spiralcore-fbs-offline-float-sheet-2026-10-25/`, with `SHA256SUMS` `17939779656db70ae40409cf06ea64a705ffd0ebe94d6822747b3dc83c759320`. In that folder, `attempt2/job.log` differs from its listed sum only by the closing `DONE` line, which was written after the sums.
+The receipts are [`receipt.json`](../../../../labs/spiralcore-fbs-offline-float-sheet/receipt.json) (`17c5563b74f3ccd9400b5a05ae042f844d2f0e0af2f0b6ee17acc84e95edb789`) and [`receipt-build-b.json`](../../../../labs/spiralcore-fbs-offline-float-sheet/receipt-build-b.json) (`d3cf226db091006a79226fdeb5529ae11206391998328e482dd02a0c56e18443`). The store copy is `caseyallard/uor-r4-store:results/claude/spiralcore-fbs-offline-float-sheet-2026-10-25/`, with top-level `SHA256SUMS` `17939779656db70ae40409cf06ea64a705ffd0ebe94d6822747b3dc83c759320`, which covers every file as stored. The review round's GPU tests and set-aside patches are under `review-round-1/` there (`SHA256SUMS` `66885d5fa0a258f73cb8f3492001fa7709719cf260e6ac6e9c520277eebdc613`), run by `local/claude/fbs-tests-job.sh` (sha256 `6402b13a…`). The pod-written `attempt2/SHA256SUMS` was computed before the job appended its closing `DONE` line to `attempt2/job.log`, so it lists an earlier sum for that one file.
 
 **Open choices, labelled:**
-- The integer-export mode is the Hamilton sheet's D11-compatible evaluation. It snaps the Hamilton gates to the 120 icosians, and rounds the writer table and final hidden state to Q12. The rest of the stack stays float, and the two-atom arm's 1/√2 is applied in float.
-- `I-Export-Exactness` covers the one-atom forward against the pinned crate's integer signed-axis table, not the discrete crate's kernel.
+- **The integer-export mode is the Hamilton sheet's D11-compatible evaluation.**
+  - It snaps the Hamilton gates to the 120 icosians.
+  - Its top-1 evaluation also rounds the writer table and the scored hidden state to Q12; its loss does not.
+  - The rest of the stack stays float, and the two-atom arm's 1/√2 is applied in float.
+- **`I-Export-Exactness` covers the one-atom forward only,** with random untrained queries, against the pinned crate's integer signed-axis table. The writer half of the sheet's I-4 is the pure-`i32` writer oracle inside each export-mode evaluation.
 - The Hamilton sheet's learning rates, weight decay and clip are reused.
 - Training uses 1,024 batches.
 - Route mobility is measured as the change in each query block's nearest orbit root.
@@ -106,8 +134,10 @@ Filled in by the exact-head review record: `loop report --check`, `loop pr-check
 - **Append the staged notebook row** once the shared harness binary is current (FRICTION line, #2028 note).
 - **Make the FBS backward deterministic** (an ordered reduction in place of atomics) before any further float comparison of trained routes. This is a hypothesis, not yet tested.
 - **Test whether the margin-hinge loss and the writer's admission come apart late in training.** This is a hypothesis.
-- **Store the export gap's b and c in the receipt,** so a reader can recompute the top-1 export bar per seed.
 - **Add `fresh_v2` to the `w2-inputs` store bundle** before any sheet that reaches its transfer gate.
+- **An exact reference test for the identity arm's query credit** (slice 2's recommended finding). Its forward and adjoint are pinned; its credit is checked only as finite and nonzero.
+- **Check the float form's integer export against `crates/uor-r4-discrete`'s kernel** (the partly met D68 condition), in an item whose scope includes that crate.
+- **Include the gate verdicts and paired counts in `results_sha256`** (a review nit). Today the digest covers losses and prediction hashes only.
 
 ## Plain summary
 
