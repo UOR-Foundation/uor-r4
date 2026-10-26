@@ -10,6 +10,12 @@ The T16_fz Seed 1 D11 artifact passed exact parity on all 14,287 DEV rows agains
 
 The same artifact failed the registered copy non-vacuity gate: exact-hint free-running recovered **0/40** exact values, so exact-minus-control had `b = c = 0` against both no-hint and random-hint. It did not meet either `d > 24 && d^2 > 4(b+c)` comparison. A hidden-fact panel is therefore not justified on this artifact/prompt layout. This is a scoped artifact/copy-instrument limitation, not a mechanism negative and not a model-oracle result. The unit is `References #2833`; BPB and training were not run. See [`docs/loop/tasks/m1-address-as-read/kimi-40/REPORT.md`](../loop/tasks/m1-address-as-read/kimi-40/REPORT.md).
 
+## Object-store oracle measurement (2026-10-26)
+
+The registered five-arm object-store oracle passed at `590ace9e`: true address recovered 40/40 current, 20/20 previous and 20/20 typed abstention with zero substitutions; no-memory recovered 0/80; deterministic sieve recovered 20/80. Sieve formed the true query on 60/80 rows but recovered only 20 values. True address beat no-memory on every family and beat sieve by 20/0 current and 20/0 abstention; previous sieve is descriptive current-value fallback and excluded from the contrast. D11 parity remained exact on 14,287/14,287 rows with byte-identical repeats.
+
+This is an exact-read/oracle gain at the item's tested scope, not learned address formation, default serving or M3 durable-memory qualification. The mechanism stays **PARKED**. The next question is address formation on the 20 current rows the sieve misses, not storage. Evidence: [`kimi-42 REPORT`](../loop/tasks/m1-address-as-read/kimi-42/REPORT.md) and HF `results/kimi/m1-address-oracle-2026-10-26/results-v3/address-oracle-result-v3.tar.gz`.
+
 ## In plain words
 
 Write each fact once, under an exact address, and read it back exactly. Do not smear it across weights, and do not hunt for it by fuzzy similarity. The address is built from prime numbers: every word has its own prime, so the same words always name the same slot. A new value replaces the old one, but the old one stays recoverable. A fact that was never written can answer "I do not know". In the one probe that checked, the store was never the cause of a failure: among 1,905 held-out misses, none was an eviction or a wrong stored value. What failed was the model's learned step of forming the address from a question.

@@ -4,7 +4,7 @@ Lab: kimi. Item: [m1-address-as-read](../../../../roadmap/items/m1-address-as-re
 
 ## Goal
 
-Implement the approved object-store oracle instrument: versioned 40-current/20-previous/20-abstention manifest, pure exact/sieve controls, and a five-arm GPU run through the existing D11 scorer. Require exact true-address hard emission, baseline parity and planted-wrong controls, then report true/sieve/no-memory contrasts and resource cost. This unit says `References #2833`; no hidden-fact or learned-memory claim follows.
+Implement the approved object-store oracle instrument: versioned 40-current/20-previous/20-abstention manifest, pure exact/sieve controls, and a five-arm GPU run through the existing D11 scorer. Require exact true-address hard emission, baseline parity and planted-wrong controls, then report true/sieve/no-memory contrasts and resource cost. After the measured result and D68 review, this unit **Closes #2833 at the exact-read/oracle scope only** and removes the stale M2-trunk dependency. No hidden-fact or learned-memory claim follows.
 
 The item's done-when remains:
 
@@ -22,6 +22,9 @@ kimi-40 repeated Stage 0 with no new information. kimi-41's D68-approved design 
 - `docs/harness/prep/m1-address-as-read*`
 - `docs/loop/tasks/m1-address-as-read/kimi-42/**`
 - `docs/research/notebook/m3-durable-memory.md`
+- `docs/roadmap/items/m1-address-as-read.md`
+- `docs/roadmap/README.md` (rendered only)
+- `PLAN.md`
 
 No integer crate, D11 artifact or default-serving change. Any dependency change needs a declared decision record before it is made.
 
