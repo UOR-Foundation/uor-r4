@@ -39,6 +39,8 @@ Host manifest generation and finite tests: $0. GPU: one pod with two scorer pass
 
 ## TEST FITNESS line
 
-TEST FITNESS: PENDING - M1 #2029 m1-address-as-read Stage 0
+TEST FITNESS: FIT - M1 #2029 m1-address-as-read Stage 0
 sheet: docs/harness/prep/m1-address-as-read-stage0-2026-10-26.md
-reviewer: pending fresh non-author review
+reviewer: fresh non-author uor-evidence-auditor (agent-32)
+date: 2026-10-26
+A FIT verdict clears compute for the configuration in this sheet only (D22).
