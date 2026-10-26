@@ -2608,3 +2608,116 @@ fn fbs_shape_takes_its_own_schema_and_refuses_unlawful_shapes() {
         super::format::STACK_READ_SCHEMA
     );
 }
+
+/// A synthetic SpiralCore/FBS trunk whose export has exactly [`fbs_shape`].
+fn synthetic_fbs_trunk(seed: u64) -> super::FbsTrunkSnapshot {
+    let mut rng = Lcg(seed);
+    let (vocab, d, mlp, context) = (256usize, 32usize, 32usize, 8usize);
+    let lanes = d / 4;
+    let g = lanes + d;
+    let rand_vec = |rng: &mut Lcg, len: usize, scale: f32| -> Vec<f32> {
+        (0..len)
+            .map(|_| ((rng.next() % 2001) as i32 - 1000) as f32 / 1000.0 * scale)
+            .collect()
+    };
+    let rand_pos = |rng: &mut Lcg, len: usize| -> Vec<f32> {
+        (0..len)
+            .map(|_| 0.75 + (rng.next() % 1000) as f32 / 2000.0)
+            .collect()
+    };
+    let routes = |rng: &mut Lcg, in_dim: usize, out_dim: usize| -> super::FbsRoutes {
+        let (in_blocks, out_blocks) = (in_dim / 8, out_dim / 8);
+        super::FbsRoutes {
+            in_blocks,
+            out_blocks,
+            atoms: (0..out_blocks)
+                .map(|_| (rng.next() % in_blocks as u64) as u16)
+                .collect(),
+            states: (0..out_blocks).map(|_| (rng.next() % 64) as u8).collect(),
+        }
+    };
+    let layers = (0..2)
+        .map(|_| super::FbsTrunkLayer {
+            rec_norm: rand_pos(&mut rng, d),
+            mlp_norm: rand_pos(&mut rng, d),
+            rec_in: routes(&mut rng, d, 2 * d),
+            rec_gate: routes(&mut rng, d, g),
+            rec_out: routes(&mut rng, d, d),
+            mlp_gate: routes(&mut rng, d, mlp),
+            mlp_up: routes(&mut rng, d, mlp),
+            mlp_down: routes(&mut rng, mlp, d),
+            conv_taps: rand_vec(&mut rng, 4 * d, 0.25),
+            conv_bias: rand_vec(&mut rng, d, 0.25),
+            gate_bias: rand_vec(&mut rng, g, 0.25),
+            decay: (0..lanes).map(|i| 0.0625 * (i as f32 + 0.5)).collect(),
+        })
+        .collect();
+    super::FbsTrunkSnapshot {
+        vocab,
+        width: d,
+        mlp,
+        context,
+        rms_eps: 1e-5,
+        kept_cells: 2,
+        embed: rand_vec(&mut rng, vocab * d, 1.5),
+        final_norm: rand_pos(&mut rng, d),
+        layers,
+    }
+}
+
+#[test]
+fn fbs_trunk_export_is_deterministic_and_parses() {
+    let snap = synthetic_fbs_trunk(20261025);
+    let bytes = super::export_fbs_trunk_uorlut01(&snap).expect("export FBS trunk");
+    assert_eq!(
+        bytes,
+        super::export_fbs_trunk_uorlut01(&snap).expect("export again"),
+        "the FBS export is byte-deterministic"
+    );
+    let container = super::format::Container::parse(&bytes).expect("parse FBS container");
+    assert_eq!(container.shape, fbs_shape());
+
+    let len = u64::from_le_bytes(bytes[8..16].try_into().expect("length")) as usize;
+    let header: Value = serde_json::from_slice(&bytes[16..16 + len]).expect("header");
+    assert_eq!(header["schema"], json!("uor-r4.lut-stack/4"));
+    assert_eq!(header["matrices"], json!([]));
+
+    for (name, routes) in [
+        ("l0.rec_in.fbs", &snap.layers[0].rec_in),
+        ("l1.mlp_down.fbs", &snap.layers[1].mlp_down),
+    ] {
+        let entries = container.table_u32(name).expect(name);
+        let atoms: Vec<u16> = entries.iter().map(|&e| (e & 0xffff) as u16).collect();
+        let states: Vec<u8> = entries.iter().map(|&e| (e >> 16) as u8).collect();
+        assert_eq!(atoms, routes.atoms, "{name} atoms");
+        assert_eq!(states, routes.states, "{name} states");
+    }
+    let writer = container.table_i16("writer.table").expect("writer table");
+    assert_eq!(writer.len(), 256 * 32);
+}
+
+#[test]
+fn fbs_trunk_export_refuses_bad_snapshots() {
+    let good = synthetic_fbs_trunk(20261026);
+    assert!(super::export_fbs_trunk_uorlut01(&good).is_ok());
+    type Mutation = fn(&mut super::FbsTrunkSnapshot);
+    let refused: [(&str, Mutation); 5] = [
+        ("atom == in_blocks", |s| {
+            s.layers[0].rec_in.atoms[0] = s.layers[0].rec_in.in_blocks as u16
+        }),
+        ("state 64", |s| s.layers[1].mlp_up.states[0] = 64),
+        ("a short route", |s| {
+            s.layers[0].rec_gate.atoms.pop();
+        }),
+        ("NaN in embed", |s| s.embed[0] = f32::NAN),
+        ("width 40", |s| s.width = 40),
+    ];
+    for (what, mutate) in refused {
+        let mut snap = good.clone();
+        mutate(&mut snap);
+        assert!(
+            super::export_fbs_trunk_uorlut01(&snap).is_err(),
+            "{what} must be refused"
+        );
+    }
+}

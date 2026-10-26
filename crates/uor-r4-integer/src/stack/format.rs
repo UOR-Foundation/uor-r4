@@ -846,6 +846,72 @@ pub struct FloatTrunkSnapshot {
     pub layers: Vec<FloatTrunkLayer>,
 }
 
+/// SpiralCore/FBS routes of one projection: one `(atom, state)` per output 8-block.
+///
+/// Output block `o` reads input block `atoms[o]`: its channel `j` is
+/// `y[o*8 + j] = ±x[atoms[o]*8 + (code & 7)]`, negated when `code & 8`, where
+/// `code` is the `j`-th code of the 64-state Cl(0,6) signed-axis table at
+/// `states[o]`. This change only exports the routes; the served gather lands
+/// in a later change.
+#[derive(Clone, Debug)]
+pub struct FbsRoutes {
+    /// Input 8-blocks the atoms index.
+    pub in_blocks: usize,
+    /// Output 8-blocks, one route each.
+    pub out_blocks: usize,
+    /// `out_blocks` input-block indices, each below `in_blocks`.
+    pub atoms: Vec<u16>,
+    /// `out_blocks` signed-axis states, each below 64.
+    pub states: Vec<u8>,
+}
+
+/// One recurrence layer of a SpiralCore/FBS trunk snapshot (`d = width`,
+/// `m = mlp`, `lanes = d / 4`, `g = lanes + d`).
+#[derive(Clone, Debug)]
+pub struct FbsTrunkLayer {
+    /// `d` RMSNorm gain before the recurrence.
+    pub rec_norm: Vec<f32>,
+    /// `d` RMSNorm gain before the Hamilton feed-forward block.
+    pub mlp_norm: Vec<f32>,
+    /// `d/8 -> 2d/8` drive and output-gate routes.
+    pub rec_in: FbsRoutes,
+    /// `d/8 -> g/8` decay-gate and rotation routes.
+    pub rec_gate: FbsRoutes,
+    /// `d/8 -> d/8` output routes.
+    pub rec_out: FbsRoutes,
+    /// `d/8 -> m/8` feed-forward gate routes.
+    pub mlp_gate: FbsRoutes,
+    /// `d/8 -> m/8` feed-forward up routes.
+    pub mlp_up: FbsRoutes,
+    /// `m/8 -> d/8` feed-forward down routes.
+    pub mlp_down: FbsRoutes,
+    /// `4 * d` causal convolution taps `[tap][channel]`, as [`FloatTrunkRecurrence::conv_taps`].
+    pub conv_taps: Vec<f32>,
+    /// `d` causal convolution biases.
+    pub conv_bias: Vec<f32>,
+    /// `g` gate biases (decay-gate bias then rotation bias).
+    pub gate_bias: Vec<f32>,
+    /// `lanes` learned per-lane decay offsets.
+    pub decay: Vec<f32>,
+}
+
+/// Offline SpiralCore/FBS trunk snapshot handed to [`export_fbs_trunk_uorlut01`].
+#[derive(Clone, Debug)]
+pub struct FbsTrunkSnapshot {
+    pub vocab: usize,
+    pub width: usize,
+    pub mlp: usize,
+    pub context: usize,
+    pub rms_eps: f64,
+    /// Cells the native vector head keeps (1 to 16).
+    pub kept_cells: usize,
+    /// `vocab * width` row-major: the input embedding and the writer table.
+    pub embed: Vec<f32>,
+    /// `width` final RMSNorm gain.
+    pub final_norm: Vec<f32>,
+    pub layers: Vec<FbsTrunkLayer>,
+}
+
 /// Encode a finite scalar as a grid code `±(16 + m) 2^(e - 4)` with `1 <= e + 64 <= 127`.
 pub fn encode_grid_code(value: f64, positive: bool) -> Result<i16, StackError> {
     if !value.is_finite() || (positive && value <= 0.0) {
@@ -1226,6 +1292,217 @@ pub fn export_float_trunk_uorlut01(snap: &FloatTrunkSnapshot) -> Result<Vec<u8>,
         "tables": b.tables,
         "source": {
             "exporter": "uor-r4-integer::stack::export_float_trunk_uorlut01",
+            "rec_gates": "geometric",
+            "gate": "hamilton",
+        },
+        "transport_snap": transport_snap,
+    });
+    let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
+    let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + b.data.len());
+    out.extend_from_slice(MAGIC);
+    out.extend_from_slice(&(header_bytes.len() as u64).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
+    out.extend_from_slice(&b.data);
+    Ok(out)
+}
+
+/// Refuse a table of the wrong length or with a non-finite value.
+fn check_f32(name: &str, values: &[f32], expected: usize) -> Result<(), StackError> {
+    if values.len() != expected {
+        return Err(StackError::TableLength {
+            name: name.to_owned(),
+            len: values.len(),
+            expected,
+        });
+    }
+    match values.iter().position(|v| !v.is_finite()) {
+        Some(i) => Err(StackError::Numerics(format!("{name}[{i}] is not finite"))),
+        None => Ok(()),
+    }
+}
+
+/// Check one projection's routes against its `in_dim -> out_dim` and pack each
+/// as `atom | state << 16`.
+fn pack_fbs_routes(
+    name: &str,
+    routes: &FbsRoutes,
+    in_dim: usize,
+    out_dim: usize,
+) -> Result<Vec<u32>, StackError> {
+    let (in_blocks, out_blocks) = (in_dim / 8, out_dim / 8);
+    if routes.in_blocks != in_blocks || routes.out_blocks != out_blocks {
+        return Err(StackError::Numerics(format!(
+            "{name}: routes declare {} -> {} blocks, the trunk needs {in_blocks} -> {out_blocks}",
+            routes.in_blocks, routes.out_blocks
+        )));
+    }
+    for (part, len) in [("atoms", routes.atoms.len()), ("states", routes.states.len())] {
+        if len != out_blocks {
+            return Err(StackError::TableLength {
+                name: format!("{name}.{part}"),
+                len,
+                expected: out_blocks,
+            });
+        }
+    }
+    routes
+        .atoms
+        .iter()
+        .zip(&routes.states)
+        .enumerate()
+        .map(|(o, (&atom, &state))| {
+            if usize::from(atom) >= in_blocks {
+                return Err(StackError::Numerics(format!(
+                    "{name}[{o}]: atom {atom} is not below {in_blocks} input blocks"
+                )));
+            }
+            if state >= 64 {
+                return Err(StackError::Numerics(format!(
+                    "{name}[{o}]: state {state} is not below 64"
+                )));
+            }
+            Ok(u32::from(atom) | (u32::from(state) << 16))
+        })
+        .collect()
+}
+
+/// Export a SpiralCore/FBS [`FbsTrunkSnapshot`] into a deterministic `UORLUT01`
+/// (`uor-r4.lut-stack/4`) byte container: recurrence layers only, every
+/// projection as packed FBS routes (no matrices), geometric recurrence gates,
+/// the Hamilton gate, and the native vector writer table built from `embed`.
+/// Width and MLP width must be multiples of 32; they are refused, not padded.
+pub fn export_fbs_trunk_uorlut01(snap: &FbsTrunkSnapshot) -> Result<Vec<u8>, StackError> {
+    let shape = StackShape {
+        vocab: snap.vocab,
+        width: snap.width,
+        heads: 1,
+        mlp: snap.mlp,
+        pattern: "r".repeat(snap.layers.len()),
+        read: "dot".to_owned(),
+        rotation: true,
+        context: snap.context,
+        pointer: None,
+        read_select: None,
+        read_weights: None,
+        read_binary: false,
+        memory: None,
+        rec_gates: Some("geometric".to_owned()),
+        gate: Some("hamilton".to_owned()),
+        projection: Some("spiralcore_fbs".to_owned()),
+        head: Some("native_vector".to_owned()),
+        kept_cells: Some(snap.kept_cells),
+    };
+    shape.validate()?;
+    let (d, m) = (snap.width, snap.mlp);
+    if !d.is_multiple_of(GROUP) || !m.is_multiple_of(GROUP) {
+        return Err(StackError::Shape(
+            "SpiralCore/FBS trunks need width and MLP width multiples of 32",
+        ));
+    }
+    let lanes = shape.lanes();
+    let g = lanes + d;
+    if !g.is_multiple_of(8) {
+        return Err(StackError::Shape(
+            "SpiralCore/FBS gate rows must fill whole 8-blocks",
+        ));
+    }
+
+    let mut b = ExportBuilder::new();
+    for (l, layer) in snap.layers.iter().enumerate() {
+        let prefix = |part: &str| format!("l{l}.{part}");
+        for (part, routes, in_dim, out_dim) in [
+            ("rec_in", &layer.rec_in, d, 2 * d),
+            ("rec_gate", &layer.rec_gate, d, g),
+            ("rec_out", &layer.rec_out, d, d),
+            ("mlp_gate", &layer.mlp_gate, d, m),
+            ("mlp_up", &layer.mlp_up, d, m),
+            ("mlp_down", &layer.mlp_down, m, d),
+        ] {
+            let name = prefix(&format!("{part}.fbs"));
+            let packed = pack_fbs_routes(&name, routes, in_dim, out_dim)?;
+            b.push_u32(&name, &packed);
+        }
+        for (part, gain) in [("rec_norm_gain", &layer.rec_norm), ("mlp_norm_gain", &layer.mlp_norm)] {
+            let name = prefix(part);
+            check_f32(&name, gain, d)?;
+            let codes: Vec<i16> = gain
+                .iter()
+                .map(|&v| encode_grid_code(f64::from(v), false))
+                .collect::<Result<_, _>>()?;
+            b.push_i16(&name, &codes);
+        }
+        check_f32(&prefix("conv_taps"), &layer.conv_taps, super::CONVOLUTION_WIDTH * d)?;
+        let taps: Vec<i16> = layer
+            .conv_taps
+            .iter()
+            .map(|&v| encode_grid_code(f64::from(v), false))
+            .collect::<Result<_, _>>()?;
+        b.push_i16(&prefix("conv_taps"), &taps);
+        for (part, values, len) in [
+            ("conv_bias", &layer.conv_bias, d),
+            ("gate_bias", &layer.gate_bias, g),
+            ("decay_offset", &layer.decay, lanes),
+        ] {
+            let name = prefix(part);
+            check_f32(&name, values, len)?;
+            b.push_i32(
+                &name,
+                &quantize_fixed_i32(values, len, super::kernels::RESIDUAL_EXP, &name)?,
+            );
+        }
+    }
+
+    check_f32("final_norm_gain", &snap.final_norm, d)?;
+    let final_norm: Vec<i16> = snap
+        .final_norm
+        .iter()
+        .map(|&v| encode_grid_code(f64::from(v), false))
+        .collect::<Result<_, _>>()?;
+    b.push_i16("final_norm_gain", &final_norm);
+    check_f32("writer.table", &snap.embed, shape.vocab * d)?;
+    let writer: Vec<i16> = snap
+        .embed
+        .iter()
+        .map(|&v| (f64::from(v) * 4096.0).round().clamp(-32768.0, 32767.0) as i16)
+        .collect();
+    b.push_i16("writer.table", &writer);
+
+    let eps_exp = -48i32;
+    let eps_mantissa = (snap.rms_eps * 2f64.powi(-eps_exp)).round() as i64;
+    let score_scale_q30 = ((1.0 / (shape.head_dim() as f64).sqrt()) * 2f64.powi(30))
+        .round()
+        .clamp(1.0, (1i64 << 31) as f64) as i64;
+    let mut numerics = serde_json::Map::new();
+    numerics.insert(
+        "rms_eps".to_owned(),
+        json!(Fixed {
+            mantissa: eps_mantissa.max(1),
+            exp: eps_exp,
+        }),
+    );
+    numerics.insert("score_scale_q30".to_owned(), json!(score_scale_q30));
+    numerics.insert("exp_step_log2".to_owned(), json!(-8));
+    numerics.insert(concat!("si", "lu_step_log2").to_owned(), json!(-8));
+    numerics.insert(concat!("si", "lu_range_log2").to_owned(), json!(4));
+    numerics.insert(concat!("ge", "lu_step_log2").to_owned(), json!(-8));
+    numerics.insert(concat!("ge", "lu_range_log2").to_owned(), json!(4));
+    let transport_snap = StackTransportSnap {
+        name: "icosian".to_owned(),
+        roots: 120,
+        roots_sha256: super::ICOSIAN_ROOTS_SHA256.to_owned(),
+    };
+    let header = json!({
+        "schema": stack_schema_for(&shape),
+        "shape": shape,
+        "group": GROUP,
+        "numerics": numerics,
+        "matrices": b.matrices,
+        "tables": b.tables,
+        "source": {
+            "exporter": "uor-r4-integer::stack::export_fbs_trunk_uorlut01",
+            "projection": "spiralcore_fbs",
+            "head": "native_vector",
             "rec_gates": "geometric",
             "gate": "hamilton",
         },
