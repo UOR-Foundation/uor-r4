@@ -4,7 +4,7 @@
 - **Lab**: `antigravity` (`antigravity-89`, PR `#3258`)
 - **Milestone**: M2 (`#2030`, effective M1 blocker on `#2833`)
 - **Roadmap Item**: [`docs/roadmap/items/m1-trunk-assembly-and-training.md`](../../roadmap/items/m1-trunk-assembly-and-training.md) (`#2844`)
-- **Pre-Registration Sheet**: [`docs/harness/prep/m1-trunk-assembly-and-training-2026-10-25.md`](../../harness/prep/m1-trunk-assembly-and-training-2026-10-25.md) (`sha256 = b49051c0f5ef3294089b21dd405d247341c1cf28bd179b6807870eb9373afb07`)
+- **Pre-Registration Sheet**: [`docs/harness/prep/m1-trunk-assembly-and-training-2026-10-25.md`](../../harness/prep/m1-trunk-assembly-and-training-2026-10-25.md) (`sha256 = bbb641f9115634b03d319b8937d534ed987ebfa18f3d3e73df8ff45d9f554ce0`; pre-stamp `b49051c0f5ef3294089b21dd405d247341c1cf28bd179b6807870eb9373afb07`)
 - **Reviews**:
   - `TEST FITNESS: FIT` + `DECISION REVIEW (D68): APPROVE` + `PRE-RUN REVIEW (D67): APPROVE` by independent fresh-context reviewer `65458246-8c07-489e-85d5-935d01db8259` ([`#2844` comment `6408200462`](https://github.com/UOR-Foundation/uor-r4/issues/2844#issuecomment-6408200462); [`DECISION.md`](../../loop/tasks/m1-trunk-assembly-and-training/antigravity-89/DECISION.md))
 - **GPU Pod & Cost**: `vast-57764453` (`1x NVIDIA GeForce RTX 5090`, `\$0.563/h`, leased via `scripts/pod/uor-pod`, `~4.4h` total wall time $\approx \$2.48$, within the registered `\$3.00` cap)
@@ -49,7 +49,7 @@ We assembled the rules-compliant whole-number geometric trunk (`TrunkAssemblyV1`
 | Unchanged `driver_source_sha256` | `crates/uor-r4-discrete/src/training.rs` | `04c5165464a18eea6d4edadc6970007dbdc7908ead420f4a2f575e22ea43061d` |
 | Pod binary Build A (`trunk-run`) | `/workspace/trunk-out/bin/trunk-run` | `cbbed056517161f36018d8fc21158692ea833e1e4e346e7d5621fd7a25934a0e` |
 | Pod binary Build B (`trunk-run-b`) | `/workspace/trunk-out/bin/trunk-run-b` | `4df030799119014a7ef2877fc5b799d097facfec887e6a38a2933c1a81654d0c` |
-| Pre-registration sheet | [`docs/harness/prep/m1-trunk-assembly-and-training-2026-10-25.md`](../../harness/prep/m1-trunk-assembly-and-training-2026-10-25.md) | `b49051c0f5ef3294089b21dd405d247341c1cf28bd179b6807870eb9373afb07` |
+| Pre-registration sheet | [`docs/harness/prep/m1-trunk-assembly-and-training-2026-10-25.md`](../../harness/prep/m1-trunk-assembly-and-training-2026-10-25.md) | `bbb641f9115634b03d319b8937d534ed987ebfa18f3d3e73df8ff45d9f554ce0` (pre-stamp `b49051c0f5ef3294089b21dd405d247341c1cf28bd179b6807870eb9373afb07`) |
 | Step 0 GPU controls receipt | [`step0-receipt.json`](step0-receipt.json) | `852ec34e9247c543418c387d72b02527d5f5c65f29cfe0f6db0a68ffdd69a85e` |
 | Sealed `fresh_v2` slice (`14,287` targets) | `tokens` / `mask` (in-memory cut past `1,049,856`) | `1f8bf88d8deee51574c68ffd8976ce4415fc8aed5602213d6905a37a138517ea` / `fe87363920e19bf072e9fe3a7289e6cd2f1abde6c2431caae8f5c8494d3829d5` |
 | `T16_fz` Seed 1 checkpoint (`epoch = 420`) | `t16-frozen-zero-seed1/final-checkpoint.json` | `0831900fc6c04b4489215dc93876f87a173b2c6c16b6635dde2f2ff24c1015a4` |

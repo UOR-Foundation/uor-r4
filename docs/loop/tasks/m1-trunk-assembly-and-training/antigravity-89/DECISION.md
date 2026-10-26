@@ -14,7 +14,7 @@ Now that all four dependencies of `m1-trunk-assembly-and-training` (`#2844`) are
      1. `Level 1` (`hamilton_read_only`) beats `Level 0` (`writer_raw`: `455` on `T16_fz`, `371` on `T16_rel`) by $> \max(\text{seed\_noise}, \lceil 2\sqrt{b+c}\rceil)$ on both `ft/dev` and `fresh_v2`;
      2. `Level 2` (`hamilton_read_recurrence`) beats `Level 1` (`T_restr(A_W)` equivalent: `2,140` on `T16_fz`, `1,602` on `T16_rel`) and `Level 2 [C_rec_null]` by $> \text{seed\_noise}$ on both `ft/dev` and `fresh_v2`;
      3. `Level 3` (`hamilton_full_trunk`) beats Stage 2's highest restricted table (`G_restr(A_W)`: `3,084` on `T16_fz`, `2,364` on `T16_rel`) and `Level 3 [C_rec_null]` by $> \text{seed\_noise}$ (and beats `Level 1` by $> \max(\text{seed\_noise}, \lceil 2\sqrt{b+c}\rceil)$) on both `ft/dev` and `fresh_v2`.
-2. **Proceed immediately with the `1x RTX 5090` GPU execution (`trunk-run step0`, `trunk-run arm` on all 4 Stage T arms, and `trunk-run grade`) under `docs/harness/prep/m1-trunk-assembly-and-training-2026-10-25.md` (`sha256 = b49051c0f5ef3294089b21dd405d247341c1cf28bd179b6807870eb9373afb07`).**
+2. **Proceed immediately with the `1x RTX 5090` GPU execution (`trunk-run step0`, `trunk-run arm` on all 4 Stage T arms, and `trunk-run grade`) under `docs/harness/prep/m1-trunk-assembly-and-training-2026-10-25.md` (`sha256 = bbb641f9115634b03d319b8937d534ed987ebfa18f3d3e73df8ff45d9f554ce0`; pre-stamp `b49051c0f5ef3294089b21dd405d247341c1cf28bd179b6807870eb9373afb07`).**
 
 ## 3. Why (Whole-Project Context & M1 $\to$ M2 Chain)
 
@@ -31,7 +31,7 @@ Reversible by git revert of the `#2844` commits; `training::driver_source_sha256
 ## 5. Independent Fresh-Context Review Record (`FIT`, `D68`, `D67`)
 
 - **Reviewer**: `antigravity` fresh-context non-author subagent (`65458246-8c07-489e-85d5-935d01db8259`) at commit `6a7848e40ba414a5d0d08a5cba69aca9ece905af`
-- **Prep Sheet**: [`docs/harness/prep/m1-trunk-assembly-and-training-2026-10-25.md`](../../../harness/prep/m1-trunk-assembly-and-training-2026-10-25.md) (`sha256 = b49051c0f5ef3294089b21dd405d247341c1cf28bd179b6807870eb9373afb07`)
+- **Prep Sheet**: [`docs/harness/prep/m1-trunk-assembly-and-training-2026-10-25.md`](../../../harness/prep/m1-trunk-assembly-and-training-2026-10-25.md) (`sha256 = bbb641f9115634b03d319b8937d534ed987ebfa18f3d3e73df8ff45d9f554ce0`; pre-stamp `b49051c0f5ef3294089b21dd405d247341c1cf28bd179b6807870eb9373afb07`)
 - **Verdicts**:
   - `TEST FITNESS: FIT`
   - `DECISION REVIEW (D68): APPROVE`

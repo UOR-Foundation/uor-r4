@@ -38,7 +38,7 @@ Every operator in `TrunkAssemblyV1` is pure integer geometry on the 64-element s
 
 ---
 
-## 3. Registered Arms, Readout Levels, and Component Ablations
+## 3. Base Artifact, Data Split, Registered Arms, Readout Levels, and Component Ablations
 
 ### 3.1 Four Primary Arms Across Two Seeds (`Seed 1`, `Seed 2`)
 
@@ -78,7 +78,7 @@ Before any Stage 3 claim is graded, all five Step 0 checks must pass (`all_contr
 
 ---
 
-## 5. Bars & Decision Table
+## 5. Minimum Test Power, Bars & Decision Table
 
 | Outcome | Condition | Decision & Unlocked Next Work |
 |---|---|---|
@@ -103,3 +103,10 @@ Before any Stage 3 claim is graded, all five Step 0 checks must pass (`all_contr
 
 - **Compute & Cost Budget**: `1x NVIDIA GeForce RTX 5090` (`~$0.76/h`) via `scripts/pod/uor-pod`, estimated wall time `~1.2 hours` (`~$0.95`), hard cap `3.0 hours` (`$3.00`), inside the global `<= 4` pods and `<= $8/h` caps.
 - **Stop Rule**: Stop immediately if any Step 0 control (`G-T1`..`G-T5`) fails, if any GPU status word is non-zero, or if wall time approaches `3.0 hours`. Archive all artifacts to `caseyallard/uor-r4-store:results/antigravity/m1-trunk-assembly-and-training-2026-10-25/` before releasing and tearing down the pod.
+
+---
+
+## 7. TEST FITNESS
+
+TEST FITNESS: FIT (Reviewed by independent fresh-context reviewer `65458246-8c07-489e-85d5-935d01db8259` on 2026-10-25; recorded in [`DECISION.md`](../../loop/tasks/m1-trunk-assembly-and-training/antigravity-89/DECISION.md) and [#2844 comment `6408200462`](https://github.com/UOR-Foundation/uor-r4/issues/2844#issuecomment-6408200462)).
+
