@@ -1628,12 +1628,18 @@ fn drift_summary(drift: &[u32], selected: impl Fn(usize) -> bool) -> serde_json:
     })
 }
 
+/// The smallest size, in Q12 codes on both sides, at which an opposite sign counts as a sign flip
+/// in [`drift_readings`] (1/64 of a unit): below it, rounding alone can cross zero.
+const SIGN_FLIP_MIN_CODES: i64 = 64;
+
 /// The drift readings the claude-132 code review asked for (claude-133), in Q12 codes, of the
 /// queries `a` against the reference `r` (rows × `width`):
 /// - the median, mean, 99th-percentile and largest absolute difference over every entry;
 /// - the three columns that hold the most per-row maxima;
 /// - the largest per-channel mean signed difference, and its channel;
 /// - the entries saturated at the i16 ends on each side;
+/// - the entries of opposite sign where both sides are at least [`SIGN_FLIP_MIN_CODES`] in size,
+///   so that a sign flip shows;
 /// - the per-row scale Σ|a| / Σ|r| (5th percentile, median, 95th percentile), so that a scale or
 ///   exponent error shows. It is an L1 ratio: no products.
 fn drift_readings(a: &[f32], r: &[f32], width: usize) -> Result<serde_json::Value> {
@@ -1647,6 +1653,7 @@ fn drift_readings(a: &[f32], r: &[f32], width: usize) -> Result<serde_json::Valu
     let mut channel_sum = vec![0i64; width];
     let mut max_column = vec![0usize; width];
     let (mut saturated_a, mut saturated_r) = (0usize, 0usize);
+    let mut sign_flips = 0usize;
     let mut scales = Vec::with_capacity(rows);
     for (ra, rr) in a.chunks(width).zip(r.chunks(width)) {
         let (mut best, mut best_col) = (0u64, 0usize);
@@ -1661,6 +1668,9 @@ fn drift_readings(a: &[f32], r: &[f32], width: usize) -> Result<serde_json::Valu
             }
             saturated_a += usize::from(saturated(cx));
             saturated_r += usize::from(saturated(cy));
+            sign_flips += usize::from(
+                cx.signum() * cy.signum() < 0 && cx.abs().min(cy.abs()) >= SIGN_FLIP_MIN_CODES,
+            );
             l1_a += cx.unsigned_abs();
             l1_r += cy.unsigned_abs();
         }
@@ -1691,6 +1701,7 @@ fn drift_readings(a: &[f32], r: &[f32], width: usize) -> Result<serde_json::Valu
         "max_abs_channel_mean_codes": worst_mean,
         "max_abs_channel_mean_channel": worst_channel,
         "saturated_entries": {"queries": saturated_a, "reference": saturated_r},
+        "sign_flip_entries": sign_flips,
         "row_l1_scale": {"p05": scale(0.05), "median": scale(0.5), "p95": scale(0.95)},
     }))
 }
@@ -2705,6 +2716,11 @@ mod tests {
         let r = q(&[10, 20, 30, 100, 0, -50]);
         let a = q(&[20, 40, 60, 32767, 0, -50]);
         let v = drift_readings(&a, &r, 3)?;
+        // No entry is a sign flip: the opposite-sign pairs are all below 64 codes or absent.
+        assert_eq!(v["sign_flip_entries"], serde_json::json!(0));
+        let flipped = drift_readings(&q(&[-100, 63, 5]), &q(&[100, -64, -5]), 3)?;
+        // Only the first entry is a flip: both sides at least 64 codes, of opposite sign.
+        assert_eq!(flipped["sign_flip_entries"], serde_json::json!(1));
         assert_eq!(v["entries"], serde_json::json!(6));
         // The absolute gaps are 10, 20, 30, 32667, 0, 0; sorted 0, 0, 10, 20, 30, 32667.
         assert_eq!(v["median_abs_codes"], serde_json::json!(20));

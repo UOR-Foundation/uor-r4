@@ -10,6 +10,11 @@
 - On four models, the D11 panel (D) and the artifact (A) differ on 3.4% to 4.9% of tokens, above claude-132's 3% faithful bound. The head is identical to A on every row, and D against A passes the paired test.
 - D is a float32 forward, and the integer session keeps its residual stream on a 2^-16 grid (`RESIDUAL_EXP` = −16).
 - If A tracks the D11 forward computed on that grid, the residual is the design's own precision, not a departure.
+- **The expected outcome is "other arithmetic, still indeterminate"** (section 3), stated before the run.
+  - Rounding to 2^-16 moves an entry by at most 2^-17, about 1/32 of a Q12 code, so D16 will lie close to D.
+  - The integer step's other roundings are left out of D16. The largest is the 16-bit block requantization of each sublayer output, `stack_quantize16`, which keeps about 15 significant bits per block.
+  - A discrete source is likelier than any of these: an icosian snap that flips on a near-tie, carried forward by the recurrence to later positions.
+  - The run is worth its cost, under $1, for two reasons. Its drift readings are what claude-132's code review required before any departure is attributed. And it checks whether any model shows a gross signature (scale, sign, saturation or channel offset) beyond the faithful models' own.
 
 ## 2. Arms
 
@@ -21,23 +26,37 @@ These are claude-132's five panels (F, E, D, H, A), on the 14,287-row `ft/dev` p
 - the three columns holding the most per-row maxima;
 - the largest per-channel mean signed difference;
 - the entries saturated at the i16 ends on each side;
+- the entries of opposite sign where both sides are at least 64 codes in size, the sign flips;
 - the per-row L1 scale Σ|A| / Σ|reference|, at its 5th percentile, median and 95th percentile.
 
 ## 3. Bar and decision table
 
 The bar applies per model. Every instrument check of section 4 must be green first. `classification_q16` is claude-132's rule (`classify_residual`) with D16 as the reference: d_H = 0, D16 differing from A on at most 3% of rows, and the paired test.
 
-**A departure signature, on any model, is any of these for A against D16:**
-- the median row L1 scale outside [0.98, 1.02];
-- the largest per-channel mean signed difference above 8 codes in size;
-- A saturated on more than 1% of entries above the reference's count;
-- `classification_q16` = departure.
+**D16 explains the residual on a model only when both hold:**
+- `classification_q16` = faithful;
+- D16 is closer to A than D is: fewer rows differ, and the median and the mean absolute drift of A against D16 are both below the same readings against D.
+
+**The faithful envelope,** from claude-132's two faithful models in this same run (d11-c130 seed 1 and dual-c131 seed 1), for A against D. For each of these readings, the envelope is the larger of the two models' values:
+- the absolute deviation of the median row L1 scale from 1;
+- the largest per-channel mean signed difference, in size;
+- the saturation excess, A's saturated entries minus D's;
+- the sign-flip entries.
+
+**A gross signature, on an indeterminate model,** is any of those readings, for A against D, above twice its envelope plus a floor:
+- 0.01 for the scale;
+- 2 codes for the channel mean;
+- 0.1% of entries for the saturation excess and for the sign flips.
+
+`classification_q16` = departure on any model also counts.
+
+A gross signature is **"localise first"**, not a ruling. The integer step's other roundings are left out of D16 (section 1), so a signature can still be arithmetic.
 
 | Outcome | It means | It decides |
 |---|---|---|
-| **Q16 arithmetic.** On each of claude-132's four indeterminate models, `classification_q16` = faithful, and no model shows a departure signature. | A computes the D11 forward at the integer session's designed residual precision. D's float32 residual explains the rest of the D-against-A residual. | The residual sheet's indeterminate row is settled as faithful, so all six models are faithful against the integer session's own precision. The residual sheet's "faithful on all six" decision follows: the three FAILs stand as mechanism results of their configurations, and the item parks behind the owner's reading of §3.7 (#2028). |
-| **A departure.** Any model shows a departure signature. | A computes something measurably different from its D11 forward, even at Q16 precision. | An exporter or evaluator defect: an instrument repair item opens, located by the readings. After the repair, the affected artifacts are re-exported and re-scored under the unchanged bar. |
-| **Other arithmetic, still indeterminate.** Neither of the above. | The Q16 residual does not explain the residual, and no departure signature shows. | The remaining residual lies in the integer session's other roundings: the norm at 2^-24, the products, the state exponents, or snap ties. The next control emulates those roundings. It is never a mechanism result, and the item does not park. |
+| **Q16 arithmetic.** D16 explains the residual on each of claude-132's four indeterminate models, and no model shows a gross signature. | A computes the D11 forward at the integer session's designed residual precision. D's float32 residual explains the rest of the D-against-A residual. | The residual sheet's indeterminate row is settled as faithful, so all six models are faithful against the integer session's own precision. The residual sheet's "faithful on all six" decision follows: the three FAILs stand as mechanism results of their configurations, and the item parks behind the owner's reading of §3.7 (#2028). |
+| **Localise first.** Any indeterminate model shows a gross signature. | That model's queries differ from D's beyond the faithful models' own envelope, by scale, sign, saturation or a channel offset. | An instrument localisation step, before any ruling. The signature's reading and column name where to look in the exporter or evaluator. A departure is called only when the localisation finds the defect; then a repair item opens and the affected artifacts are re-scored under the unchanged bar. |
+| **Other arithmetic, still indeterminate.** Neither of the above. This is the expected outcome (section 1). | D16 does not explain the residual, and no model departs from the faithful envelope. | The remaining residual is fine-grained, and in its gross readings no different from the faithful models'. The next control is snap-flip localisation: the layer and position of every icosian-snap disagreement between D and A, which needs the evaluator to emit its snap choices. After that come `stack_quantize16` and the other roundings. It is never a mechanism result, and the item does not park. |
 
 **Readings, with no bar:**
 - per model, D16 against A, against D and against H, each with b, c, net and the number of rows that differ;
@@ -53,7 +72,7 @@ These are claude-132's checks, unchanged:
 3. **`I-Save-Load`, `I-Inputs`, `I-Verify-All`, `I-DEV-Denominator`, `I-D-Determinism` and `I-Head`,** as in claude-132.
 4. **`I-Head-Q16`.** The head on D16's own queries writes exactly D16's predictions.
 5. **`I-D-Stored`, plain-c126 only.** D equals Stage 4b's stored D11 panel.
-6. **`I-D-Reproduces`.** D's predictions are claude-132's, row for row: its D-against-A rows-differ count and its D top-1 equal the receipts in `results/claude/d11-fbs-residual-2026-10-26/resid/`. This shows that the Q16 hook, off, leaves D unchanged.
+6. **`I-D-Reproduces`.** D is claude-132's on every model. The new receipt and claude-132's (`results/claude/d11-fbs-residual-2026-10-26/resid/`) agree on `.top1.d11`, `.pairs.d11_vs_artifact.rows_differ` and `.classification`, and each of those values is non-null: a number, a number and a string. A missing path fails the step. This shows that the Q16 hook, off, leaves D unchanged.
 7. **`I-Finite`.** Every step exits 0, and each step's stdout, stderr and exit code are saved. The log's last line is written before `SHA256SUMS`.
 
 ## 5. Base artifact and data split
@@ -88,7 +107,7 @@ No training data is read.
 3. `I-GPU-Tests`.
 4. Fetch and check the inputs exactly as claude-132's job did (`I-Fetch`). Also fetch claude-132's six residual receipts, for `I-D-Reproduces`.
 5. Run `--mode d11-residual` on each of the six models, with claude-132's arguments, writing `residual-<label>-seed-<s>.json`.
-6. Check `I-D-Reproduces` against claude-132's receipts. It is a job step: `jq` compares the D top-1 and the D-against-A rows-differ count.
+6. Check `I-D-Reproduces` against claude-132's receipts. It is a job step (`jq -e`), and it fails on any null or on a type other than the one named in section 4.6.
 7. Save the run folder to the store at `results/claude/d11-fbs-investigation-2026-10-26/`, with a `SHA256SUMS`, from the laptop, confirmed with `uor-store ls` before `down`.
 
 **Minimum test power:**
@@ -112,4 +131,14 @@ No training data is read.
 
 ## 8. Non-author TEST FITNESS review
 
-To be filled in by the fresh reviewer.
+**Round 1 (fresh non-author reviewer, 2026-10-26): NOT FIT. Its fixes are all made.**
+1. **The departure signature measured A against a control that leaves most integer roundings out,** so it could call designed arithmetic a departure. Its thresholds were also uncalibrated. It is now "localise first", not a ruling. Its thresholds come from claude-132's two faithful models in the same run, at twice their envelope plus a floor. A sign-flip reading is added (both sides at least 64 codes, of opposite sign), since the L1 scale cannot see a flip.
+2. **"Q16 arithmetic" could be reached without D16 explaining anything.** It now also requires D16 to be closer to A than D is, in the rows that differ and in the median and mean drift.
+3. **`I-D-Reproduces` could pass on nulls.** Its paths and types are pinned. A dry run on a claude-132 receipt returns true and exit 0, and with a misspelled path, false and exit 1.
+4. **The expected outcome, "other arithmetic", is now stated.** The next control is named: snap-flip localisation, then `stack_quantize16`.
+
+**What it confirmed:**
+- Swapping in D16 is a fair instrument correction, with fix 2.
+- f32 holds the 2^-16 grid exactly at these magnitudes.
+- `drift_readings`' arithmetic is correct and has no products (§3.3).
+- The cost and stop rule are inside the caps.
