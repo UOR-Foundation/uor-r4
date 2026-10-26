@@ -21,7 +21,7 @@ For the exported arm on each seed, at step 1,024:
   1. the model is saved (`StackModel::save`) and loaded again;
   2. its tables are rounded as exported (`round_tables_as_exported`). An embedding value outside Q12 in `i16` (±8) is refused, never clamped, and the run stops as an instrument fault;
   3. it is scored with `evaluate_dev_panel_d11`. The D loss is the same `MarginHinge(rivals = 8)` with the trunk in D11 mode and each scored hidden vector rounded to Q12 before the head.
-- **The parity sample:** every eighth `ft/dev` window (`PARITY_WINDOW_STRIDE = 8`), fixed here before the run: about 54 windows and 10,368 positions. The plain, export and D11 readouts read these windows whole, besides the 4,096 single tokens.
+- **The parity sample:** every eighth `ft/dev` window (`PARITY_WINDOW_STRIDE = 8`), fixed here before the run: about 54 windows and 10,368 positions. The plain, export and D11 readouts read these windows whole, besides the 4,096 single tokens. The D11 readout's tokens alone (`fbs_float_next_tokens`) are read for every window.
 
 ## 3. Bar and decision table
 
@@ -47,11 +47,18 @@ Definitions:
 2. **`I-D-Determinism`:** two D11 panel passes on the same rounded model give identical predictions. Training is not reproducible run to run (Stage 3 item 3), but the forward is; the gap compares F and D on one saved checkpoint.
 3. **`I-DEV-Denominator`:** the D11 panel scores 14,287 of 14,287 rows.
 4. **`I-Q12-Oracle`:** the D11 panel's pure-`i32` writer oracle has 0 mismatches.
-5. **`I-D11-Artifact-Agreement`:** this ties D to the artifact itself. It runs inside the GPU job on the pod, never on the laptop: CHARTER §3.5 makes parity reference execution GPU-job compute. It is the item's "bit-exact parity proof" path (D68). Per seed:
-   - **m1:** the scored rows of the sampled windows where the panel's D11 prediction differs from the D11 readout's next token at the same position. The panel batches windows and the readout reads one, so this checks the two GPU paths agree.
-   - **m2:** the positions where the D11 readout's token differs from the exported artifact's integer session (`fbs-export`, then `fbs-compare`). These are counted over the 4,096 single tokens and every position of the sampled windows, about 14,464 positions, close to the panel's 14,287 rows.
-   - **The bar:** m1 + m2 ≤ 6 on each seed. That is F_I's floor of 24 divided by 4, at about the panel's size, so the instrument's disagreement stays well below what the gap bar resolves.
-   - Each disagreeing position is traced with `fbs-compare`'s tie margins. Snaps of an all-zero vector are counted over the sample; that is the known edge where the GPU and the integer path pick different roots.
+5. **`I-D11-Artifact-Agreement`:** this ties D to the artifact itself through two links, panel → readout → artifact. It runs inside the GPU job on the pod; the laptop never runs it. It is the item's "bit-exact parity proof" path (D68). Per seed:
+   - **m1 (panel against readout, on the GPU):**
+     - It counts the rows, over all n₁ = 14,287 scored rows, where the panel's D11 prediction differs from the D11 readout's next token at the same position. The readout reads each window alone (`fbs_float_next_tokens`) and the panel batches them.
+     - Receipt fields: `seeds[s].panel_vs_readout_differ` over `seeds[s].panel_vs_readout_rows`.
+   - **m2 (readout against artifact):**
+     - It counts the positions where the D11 readout's token differs from the exported artifact's own integer session. The pod runs `fbs-export`, then `fbs-compare --parity-only`.
+     - The positions are the 4,096 single tokens and every position of the sampled windows: n₂ ≈ 14,464.
+     - Comparison fields, in `compare-seed-<s>.json`: m2 = Σ over `single_tokens` and `sequences` of (`positions` − `d11_gpu_token_equals_integer_token`), and n₂ = Σ `positions`.
+   - **The bar, projected onto the panel:** 14,287 · (m1/n₁ + m2/n₂) ≤ 6 on each seed. 6 is F_I's floor of 24 divided by 4, so D's possible distance from the artifact stays well below what the gap bar resolves. Since n₁ is the whole panel, m1 counts at full weight.
+   - **No float reference runs.** `--parity-only` runs the artifact itself (the integer session) and no f64 host reference model. CHARTER §3.5 makes a host reference run a host fallback, even on the pod. Running the artifact in the GPU job for its parity is the qualification §3.6 keeps as research compute.
+   - **The zero-vector snap edge folds into m2.** Where the GPU and the integer path pick different roots for an all-zero vector and that changes a token, m2 counts it. The host-reference tie trace and its zero-snap count are not run.
+   - **What the tie covers:** tokens. The loss half of the gate, |L_D − L_F|, is tied to the artifact only through the same D11 forward, whose tokens the bar checks.
    - **A miss is an instrument fault:** the gap is not counted, and the D11 mode is repaired before any verdict.
 6. **`I-Finite`:** finite losses and outputs, with no CUDA error. The D11 entries refuse an unrounded trunk by construction (host-tested).
 
@@ -77,7 +84,7 @@ Definitions:
    - `--mode synthetic-probe`, which covers `I-Finite-CUDA`, export exactness and an 8-step descent;
    - the `fbs_export::` GPU tests, which re-run Stage 4a's D11 parity on a random-init trunk at the head.
 2. **Probe b**, about 2 minutes: `--mode throughput-probe` projects the wall time. If it is projected past about an hour, fix the code before running.
-3. **The run:** `--mode d11-export-gap`. It writes a receipt, each seed's saved model, snapshot and readouts, and both prediction sets. In the same job, the serving build on the pod exports each seed's artifact, and `fbs-compare` writes `I-D11-Artifact-Agreement`'s comparison.
+3. **The run:** `--mode d11-export-gap`. It writes a receipt, each seed's saved model, snapshot and readouts, and both prediction sets. In the same job, the serving build on the pod exports each seed's artifact, and `fbs-compare --parity-only` writes `I-D11-Artifact-Agreement`'s comparison.
 4. **Archive** to `results/claude/d11-fbs-export-gap-2026-10-26/` with a `SHA256SUMS`, then release and tear down the pod. Reading the bars off the stored receipt and comparison is analysis of stored outputs.
 5. **On the laptop:** only product serving (CHARTER §3.6).
    - Both zero-multiply audits on the serving builds.
@@ -111,5 +118,12 @@ Also adopted from the reviewer's suggestions:
 - `I-Save-Load` also compares the plain loss.
 - The embedding's Q12 range is refused, never clamped.
 - The sheet says FAIL is the expected outcome.
+
+TEST FITNESS: PENDING
+
+**Round 2 (fresh non-author reviewer, 2026-10-26): NOT_FIT.** The required changes, each made above:
+- **m1 had the wrong denominator.** It covered only the sampled windows' rows. It now compares all 14,287 scored rows, using the readout's tokens for every window, and the bar is projected onto the panel with the exact fields named.
+- **The f64 reference sections of `fbs-compare` were host fallbacks under §3.5, even on the pod.** The run uses `--parity-only`, which runs only the artifact's integer session against the D11 readout. The zero-vector snap edge folds into m2.
+- **The loss half of the gate** is stated to be tied to the artifact only through the D11 forward.
 
 TEST FITNESS: PENDING
