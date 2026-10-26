@@ -1,4 +1,4 @@
-//! `spiralcore-fbs-sheet --mode synthetic-probe|throughput-probe|full|d11-export-gap|d11-artifact-windows|d11-artifact-gap|d11-train-probe|d11-train-export|d11-residual|d11-snap-trace --data-root DIR --out FILE [--save-dir DIR] [options below]`
+//! `spiralcore-fbs-sheet --mode synthetic-probe|throughput-probe|full|d11-export-gap|d11-artifact-windows|d11-artifact-gap|d11-train-probe|d11-train-export|d11-residual|d11-snap-trace|d11-forced-snaps|d11-forced-summary --data-root DIR --out FILE [--save-dir DIR] [options below]`
 //!
 //! The runner of `docs/harness/prep/spiralcore-fbs-offline-float-sheet-2026-10-25.md`
 //! (spiralcore-fbs-offline-float-sheet, #2891). GPU only. `--data-root` holds `mw-balp/train/`,
@@ -37,6 +37,13 @@
 //! (`d11-fbs-eval trace`, `--trace`), with `--model-dir`, `--windows-sha256`, `--artifact-sha256`,
 //! `--model-sha256`, `--stored-run` (the qualified run of the same artifact, I-Old-Run), `--label`
 //! and `--seed`.
+//!
+//! `d11-forced-snaps` is the forced-snap control (claude-135,
+//! `docs/harness/prep/d11-exporter-float-trunk-forced-snaps-2026-10-26.md`): the same options as
+//! `d11-snap-trace` plus `--expect-unforced` (the unforced D's rows against A, `I-Unforced`), over
+//! the full panel, with every snap forced to the artifact's trace. `d11-forced-summary` applies its
+//! bar to `--receipts` (comma-separated receipt paths) against the envelope of `--faithful`
+//! (comma-separated `label:seed`).
 
 use std::collections::BTreeMap;
 use std::env;
