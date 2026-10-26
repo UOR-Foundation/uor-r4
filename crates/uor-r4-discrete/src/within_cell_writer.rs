@@ -873,18 +873,15 @@ mod cuda_impl {
     use crate::address_cells::{self, AddressCellsMode, BigramCounts};
     use crate::controller::attention_learning::evidence;
     use crate::corpus::{BosIdentity, CorpusSource, FilePin, PreparedCorpus, Split};
-    use crate::device::{
-        compiled_identity, compiled_within_cell_writer_image_sha256, Device, WithinCellDeviceConfig,
-    };
+    use crate::device::{compiled_within_cell_writer_image_sha256, Device, WithinCellDeviceConfig};
     use crate::normalization_mechanism::NormalizationMode;
     use crate::q4_import::TargetIdentity;
     use crate::snapshot::{stored_snapshot_hash_domains, Snapshot};
     use crate::stage_t::{StageTW2Summary, STAGE_T_MAX_BATCHES};
-    use crate::training::DriverCheckpoint;
+    use crate::training::{driver_source_sha256, DriverCheckpoint};
     use crate::w2_capacity::{self, DevRow, TrainRow};
     use crate::{ObjectivePolicy, ReadInitialization, ReadSpec, Spec};
     use serde::de::DeserializeOwned;
-    use serde_json::Value;
     use std::time::Instant;
 
     const DEV_ROWS: usize = 14_287;
@@ -929,17 +926,11 @@ mod cuda_impl {
 
     fn identity_strings() -> Result<(String, String, String, String)> {
         let id = TargetIdentity::compiled().map_err(invalid)?;
-        let full = compiled_identity();
-        let driver_sha = full
-            .get("driver_source_sha256")
-            .and_then(Value::as_str)
-            .ok_or_else(|| invalid("missing driver_source_sha256"))?
-            .to_owned();
         Ok((
             id.source_sha256,
             id.kernel_sha256,
             id.geometry_sha256,
-            driver_sha,
+            driver_source_sha256(),
         ))
     }
 
