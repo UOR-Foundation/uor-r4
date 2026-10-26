@@ -2966,30 +2966,47 @@ fn hex_bytes(text: &str) -> Result<Vec<u8>> {
 }
 
 /// The prep sheet a D11-trained run answers to.
-fn d11_train_sheet(forward: TrainForward) -> Result<&'static str> {
-    match forward {
-        TrainForward::D11 => {
+fn d11_train_sheet(forward: TrainForward, steps: usize) -> Result<&'static str> {
+    match (forward, steps) {
+        (TrainForward::D11, STEPS) => {
             Ok("docs/harness/prep/d11-exporter-float-trunk-d11-train-2026-10-26.md")
         }
-        TrainForward::Dual => {
+        (TrainForward::Dual, STEPS) => {
             Ok("docs/harness/prep/d11-exporter-float-trunk-dual-train-2026-10-26.md")
         }
-        TrainForward::Plain => Err(invalid(
+        (TrainForward::Dual, _) => {
+            Ok("docs/harness/prep/d11-exporter-float-trunk-longer-dual-2026-10-26.md")
+        }
+        (TrainForward::D11, _) => Err(invalid(
+            "a longer D11-only dose has no registered prep sheet",
+        )),
+        (TrainForward::Plain, _) => Err(invalid(
             "plain training is Stage 4b's (d11-export-gap), not a D11-trained run",
         )),
     }
 }
 
+fn training_eval_steps(steps: usize) -> Result<Vec<usize>> {
+    if steps < STEPS {
+        return Err(invalid("training steps must be at least 1024"));
+    }
+    let mut eval_steps = EVAL_STEPS.to_vec();
+    if steps != STEPS {
+        eval_steps.push(steps);
+    }
+    Ok(eval_steps)
+}
+
 /// Probe (b) of D11-trained training (claude-130, claude-131): 32 steps of [`D11_EXPORT_ARM`] on
 /// seed 1 trained as `forward` says, the DEV panel at steps 0 and 32, and the projected wall time of
-/// the full run (two seeds of [`STEPS`] steps, each evaluated at [`EVAL_STEPS`]). In the dual mode
-/// the training loss is the sum of the plain and D11-mode losses.
+/// the requested full run. In the dual mode the training loss is the sum of the plain and D11-mode losses.
 pub fn run_d11_train_probe(
     data_root: &Path,
     forward: TrainForward,
+    steps: usize,
     device: &Device,
 ) -> Result<serde_json::Value> {
-    let sheet = d11_train_sheet(forward)?;
+    let sheet = d11_train_sheet(forward, steps)?;
     let (batches, dev_windows, dev_docs) = load_inputs(data_root, 32)?;
     let out = run_fbs_arm_with(
         D11_EXPORT_ARM,
@@ -3007,7 +3024,8 @@ pub fn run_d11_train_probe(
     let last = out.run.final_point()?;
     let per_step = out.run.train_wall_seconds / 32.0;
     let eval_seconds = last.dev_float.eval_wall_seconds + last.dev_int.eval_wall_seconds;
-    let projected_seed = per_step * STEPS as f64 + eval_seconds * 2.0 * EVAL_STEPS.len() as f64;
+    let eval_steps = training_eval_steps(steps)?;
+    let projected_seed = per_step * steps as f64 + eval_seconds * 2.0 * eval_steps.len() as f64;
     let train_learns = match (after_first.train_loss, last.train_loss) {
         (Some(a), Some(b)) => b < a,
         _ => false,
@@ -3016,6 +3034,8 @@ pub fn run_d11_train_probe(
         "probe": "d11-train-probe",
         "sheet": sheet,
         "train_forward": forward.name(),
+        "steps": steps,
+        "eval_steps": eval_steps,
         "kernels": kernel_identity(),
         "dev_documents": dev_docs,
         "dev_windows": dev_windows.len(),
@@ -3046,18 +3066,20 @@ pub fn run_d11_train_export(
     save_dir: &Path,
     stage4b: &Path,
     forward: TrainForward,
+    steps: usize,
     device: &Device,
 ) -> Result<serde_json::Value> {
     use crate::fbs_export::fbs_trunk_snapshot;
     use uor_r4_integer::fbs_snapshot::write_new_file;
 
-    let sheet = d11_train_sheet(forward)?;
+    let sheet = d11_train_sheet(forward, steps)?;
     let receipt: serde_json::Value = serde_json::from_slice(&fs::read(stage4b)?)?;
     let noise = receipt["noise_band_dev_loss"]
         .as_f64()
         .ok_or_else(|| invalid("the Stage 4b receipt has no noise band"))?;
+    let eval_steps = training_eval_steps(steps)?;
     fs::create_dir(save_dir)?;
-    let (batches, dev_windows, dev_docs) = load_inputs(data_root, TRAIN_BATCHES)?;
+    let (batches, dev_windows, dev_docs) = load_inputs(data_root, steps)?;
     let mut seeds = Vec::new();
     let mut instruments_ok = true;
     for seed in SEEDS {
@@ -3065,10 +3087,10 @@ pub fn run_d11_train_export(
             D11_EXPORT_ARM,
             forward,
             seed,
-            STEPS,
+            steps,
             &batches,
             &dev_windows,
-            &EVAL_STEPS,
+            &eval_steps,
             device,
         )?;
         let last = out.run.final_point()?;
@@ -3081,11 +3103,11 @@ pub fn run_d11_train_export(
             &dev_windows,
             HamiltonArm::HamiltonActive,
             seed,
-            STEPS,
+            steps,
             false,
             false,
         )?;
-        let reloaded_loss = panel_loss(&loaded, &dev_windows, seed, STEPS, false)?;
+        let reloaded_loss = panel_loss(&loaded, &dev_windows, seed, steps, false)?;
         let i_save_load = reloaded_preds == out.preds_float && reloaded_loss == last.dev_loss_float;
         hs::clear_active_arm();
         instruments_ok &= i_save_load;
@@ -3144,6 +3166,21 @@ pub fn write_receipt(path: &Path, value: &serde_json::Value) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn longer_training_adds_only_the_final_evaluation_point() {
+        assert_eq!(training_eval_steps(STEPS).unwrap(), EVAL_STEPS);
+        assert_eq!(
+            training_eval_steps(2_048).unwrap(),
+            [0, 256, 512, 1_024, 2_048]
+        );
+        for invalid in [0, 1, 1_023] {
+            assert!(
+                training_eval_steps(invalid).is_err(),
+                "{invalid} must be refused"
+            );
+        }
+    }
 
     #[test]
     fn the_noise_threshold_follows_the_sheet() {
@@ -3558,10 +3595,12 @@ mod tests {
             assert_eq!(TrainForward::parse(forward.name())?, forward);
         }
         assert!(TrainForward::parse("both").is_err());
-        assert!(d11_train_sheet(TrainForward::D11)?.ends_with("d11-train-2026-10-26.md"));
-        assert!(d11_train_sheet(TrainForward::Dual)?.ends_with("dual-train-2026-10-26.md"));
+        assert!(d11_train_sheet(TrainForward::D11, STEPS)?.ends_with("d11-train-2026-10-26.md"));
+        assert!(d11_train_sheet(TrainForward::Dual, STEPS)?.ends_with("dual-train-2026-10-26.md"));
+        assert!(d11_train_sheet(TrainForward::Dual, 2_048)?.ends_with("longer-dual-2026-10-26.md"));
+        assert!(d11_train_sheet(TrainForward::D11, 2_048).is_err());
         // Plain training of the export arm is Stage 4b's run, not a D11-trained one.
-        assert!(d11_train_sheet(TrainForward::Plain).is_err());
+        assert!(d11_train_sheet(TrainForward::Plain, STEPS).is_err());
         Ok(())
     }
 

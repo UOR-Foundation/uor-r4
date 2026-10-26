@@ -60,7 +60,7 @@ use uor_r4_float_train::{FloatTrainError, Result};
 
 /// The options of `d11-artifact-gap`, `d11-train-probe`, `d11-train-export`, `d11-residual`,
 /// `d11-snap-trace`, `d11-forced-snaps` and `d11-forced-summary`.
-const GAP_OPTIONS: [&str; 17] = [
+const GAP_OPTIONS: [&str; 18] = [
     "--expect-unforced",
     "--receipts",
     "--faithful",
@@ -78,7 +78,26 @@ const GAP_OPTIONS: [&str; 17] = [
     "--trace",
     "--windows-count",
     "--stored-run",
+    "--steps",
 ];
+
+fn train_steps(extra: &BTreeMap<String, String>) -> Result<usize> {
+    let steps = extra
+        .get("--steps")
+        .map(|value| {
+            value
+                .parse::<usize>()
+                .map_err(|_| FloatTrainError::Invalid("--steps must be an integer".to_owned()))
+        })
+        .transpose()?
+        .unwrap_or(1_024);
+    if steps < 1_024 {
+        return Err(FloatTrainError::Invalid(
+            "--steps must be at least 1024".to_owned(),
+        ));
+    }
+    Ok(steps)
+}
 
 type Args = (
     String,
@@ -263,7 +282,8 @@ fn main() -> Result<()> {
             write_receipt(&out, &value)
         }
         "d11-train-probe" => {
-            let value = run_d11_train_probe(&data_root, train_forward, &device)?;
+            let value =
+                run_d11_train_probe(&data_root, train_forward, train_steps(&extra)?, &device)?;
             println!(
                 "[d11-train-probe] forward={} train_learns={} learns={} train_loss_0={} train_loss_31={} dev_loss_0={} dev_loss_32={} s_per_step={} projected_full_s={} under_one_hour_per_seed={}",
                 value["train_forward"],
@@ -288,6 +308,7 @@ fn main() -> Result<()> {
                 &save_dir,
                 &PathBuf::from(option("--stage4b")?),
                 train_forward,
+                train_steps(&extra)?,
                 &device,
             )?;
             for s in value["seeds"].as_array().into_iter().flatten() {
@@ -490,6 +511,19 @@ mod tests {
         .into_iter()
         .map(|(k, v)| (k.to_owned(), v.to_owned()))
         .collect()
+    }
+
+    #[test]
+    fn the_train_step_option_preserves_the_default_and_accepts_a_longer_dose() -> Result<()> {
+        let mut extra = BTreeMap::new();
+        assert_eq!(train_steps(&extra)?, 1_024);
+        extra.insert("--steps".to_owned(), "2048".to_owned());
+        assert_eq!(train_steps(&extra)?, 2_048);
+        for invalid in ["0", "1023", "not-a-number"] {
+            extra.insert("--steps".to_owned(), invalid.to_owned());
+            assert!(train_steps(&extra).is_err(), "{invalid} must be refused");
+        }
+        Ok(())
     }
 
     #[test]
