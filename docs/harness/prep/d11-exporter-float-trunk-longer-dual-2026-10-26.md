@@ -3,7 +3,8 @@
 - **Item:** #2820; ORDER `docs/loop/tasks/d11-exporter-float-trunk/kimi-46/ORDER.md`.
 - **Prior decision:** claude-136's bound proves exporter fidelity cannot flip any of the six existing verdicts. The remaining pivot is one decisive longer run, not more residual inspection. claude-131's DEV losses were still falling at step 1,024.
 - **Intervention:** **2,048 steps per seed instead of 1,024**, with the same per-step learning rates (`0.002` base, `20` decay multiplier), weight decay `0.1`, clipping, corpus, dual 1:1 loss, bridges, exporter and GPU evaluator. Evaluation points are exactly `0, 256, 512, 1,024, 2,048`. The first 1,024 batches are claude-131's deterministic document-order batches; the next 1,024 are new windows from the same corpus, so this is a dose-plus-coverage intervention, not a pure optimizer-step isolation.
-- **Status:** `TEST FITNESS: PENDING` until a fresh non-author review. No compute before FIT and D67.
+- **D68 decision:** `agent-53` PASS at `e77a1f91f0f198de9aee58b7bc20d65a6c12b298`, owner log #2820 comment `6428815813`; full card `docs/loop/tasks/d11-exporter-float-trunk/kimi-46/DECISION.md`. It approves dose-plus-coverage, the exact D counterfactual and the registered floors, with cancellation/marginal readings required.
+- **Status:** `TEST FITNESS: PENDING` for a delta review of this D68-amended command manifest. No compute before FIT and D67.
 
 ## 1. Question
 
@@ -23,8 +24,9 @@ Does the 2,048-step `Fbs_1Atom_Active` dual-forward recipe bring the exported ar
 1. **Instrument stop** if any instrument, batch/prefix, save/load, verification or finiteness check fails. Repair it; no model result.
 2. **Unflagged PASS** if both A seeds pass top-1 and loss, all instruments are green, and artifact top-1 is at least 1,907 (seed 1) and 2,294 (seed 2). Measure product decode/context tokens/s, zero-multiply audits and integer FBS serving tests, then close #2820 at DEV scope only.
 3. **Flagged PASS** if both A seeds pass but either artifact is below its floor. D68 review; do not close #2820 automatically.
-4. **Exporter unresolved** if at least one A seed fails and every failing A seed has D passing top-1 and loss, including mixed pass/unresolved. Do not call FAIL; open a separately FIT'd localisation/repair unit with its own cost.
-5. **FAIL** if any seed has both A and D failing, including mixed pass/clean-fail. Close only this 2,048-step dual configuration and record a lab stop decision; the mechanism stays open and #2820 is not closed.
+4. **Cancellation PASS** if both A seeds pass but D fails on either seed. The registered A result stands, but report that A and D diverge; do not claim D11 fidelity or exporter clearance.
+5. **Exporter unresolved** if at least one A seed fails and every failing A seed has D passing top-1 and loss, including mixed pass/unresolved. Do not call FAIL; open a separately FIT'd localisation/repair unit with its own cost.
+6. **FAIL** if any seed has both A and D failing, including mixed pass/clean-fail. Close only this 2,048-step dual configuration and record a lab stop decision; the mechanism stays open and #2820 is not closed. A D failure whose excess over its paired F_I exceeds the model's own `|net(D,A)|` is clean; within that envelope it is marginal and routes to a separately FIT'd localisation, but is never attributed to the D11 forward alone.
 
 At claude-131's discordance, a pass requires roughly 79% (seed 1) and 70% (seed 2) reductions in absolute net gap. A FAIL therefore rejects this configuration, not every longer-training benefit. Report plain/export-mode top-1 and admitted rates, trajectories, `net(D,A)`, full-precision two-seed loss band against `0.0230`, plain-float top-1 spread against `655`, and paired b/c/F_I with a 95% paired interval as a reading.
 
@@ -49,7 +51,8 @@ Use `w2-inputs/2026-10-25/driver-data/` with the existing pins:
 - train tokens `3dee858f84b750f507ceb3dc3f393711741950954735efaaf61bf704c017a4c8`; train mask `b5e7352d67d6883a833155a5fd397a03f6d4f1b2649e3d4ec3e2ea7d95b949e3`.
 - DEV tokens `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b`; DEV mask `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078`.
 - tokenizer `d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`.
-- No `fresh_v2` evaluation and no base checkpoint. Models train from step 0 at the pushed head. `--steps` accepts only 1,024 or 2,048 and is validated before opening CUDA; other longer doses are refused.
+- No `fresh_v2` evaluation and no base checkpoint. Models train from step 0 at `e77a1f91f0f198de9aee58b7bc20d65a6c12b298` (or a descendant whose only changes are documentation). `--steps` accepts only 1,024 or 2,048 and is validated before opening CUDA; other longer doses are refused.
+- Prefix control: `results/claude/d11-fbs-dual-train-2026-10-26/dual/train.json`, SHA-256 `5a290fbe47d8f10495b6d89fa8384110061902001ad9ebdf6b365935e220d9bc`. Compare both seeds at step 1,024 for exact top-1/top-8/admitted counts and losses within `1e-6`.
 
 The two seeds are **initialization seeds on a common fixed batch stream and common DEV panel**, not independent data-order replicates. Each seed's paired row statistics are reported separately; no cross-seed confidence interval is inferred.
 
@@ -75,3 +78,89 @@ The two seeds are **initialization seeds on a common fixed batch stream and comm
 ## 8. Review
 
 TEST FITNESS: PENDING. A fresh non-author FIT and a fresh D67 pre-run review are required before dispatch.
+
+## 9. Exact dispatch and serving manifest
+
+Source `e77a1f91f0f198de9aee58b7bc20d65a6c12b298`. Build and copy all three binaries, record their SHA-256s, and run them from `/workspace/longer-dual/bin`. Inputs are fetched with the store client, checked against the pins, and no host model/parity fallback is allowed.
+
+```sh
+REF=e77a1f91f0f198de9aee58b7bc20d65a6c12b298
+RUN=/workspace/longer-dual
+DATA=/workspace/driver-data
+mkdir -p "$RUN/bin" /workspace/staging
+scripts/pod/uor-pod up --lab kimi --session longer-dual --purpose "2,048-step dual export-gap FIT run" --hours 2.5 --count 1 --gpu 5090 --ref "$REF" --card https://github.com/UOR-Foundation/uor-r4/issues/2820
+cd /root/build/src-$REF
+export UOR_NVCC_ARCH=compute_120 CARGO_TARGET_DIR=/root/build/target-sm120
+cargo build --release --locked -p uor-r4-float-train --features cuda --bin spiralcore-fbs-sheet
+cargo build --release --locked -p uor-r4-integer --features serving-wasm --bin fbs-export
+(cd docs/labs/d11-exporter-float-trunk/instrument && cargo build --release --locked --features cuda --bin d11-fbs-eval)
+cp /root/build/target-sm120/release/spiralcore-fbs-sheet /root/build/target-sm120/release/fbs-export /root/build/target-sm120/release/d11-fbs-eval "$RUN/bin/"
+sha256sum "$RUN/bin"/* > "$RUN/binary-SHA256SUMS"
+/root/uor-store get w2-inputs/2026-10-25/ /workspace/staging/
+ln -s /workspace/staging/w2-inputs/2026-10-25/driver-data "$DATA"
+printf '%s  %s\n' \
+  '3dee858f84b750f507ceb3dc3f393711741950954735efaaf61bf704c017a4c8  mw-balp/train/tokens.u16' \
+  'b5e7352d67d6883a833155a5fd397a03f6d4f1b2649e3d4ec3e2ea7d95b949e3  mw-balp/train/response_mask.u8' \
+  '0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b  ft/dev/tokens.u16' \
+  'a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078  ft/dev/response_mask.u8' \
+  'd36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89  tokenizer.json' | (cd "$DATA" && sha256sum -c -)
+/root/uor-store get results/claude/d11-fbs-export-gap-2026-10-26/d11gap/d11-gap.json "$RUN/d11-gap.json"
+/root/uor-store get results/claude/d11-fbs-dual-train-2026-10-26/dual/train.json "$RUN/train-1024.json"
+printf '%s  %s\n' \
+  '88b6a5f988fe144671365a258a100e5cf3935f98e917040b38f90df2637a1e8a  d11-gap.json' \
+  '5a290fbe47d8f10495b6d89fa8384110061902001ad9ebdf6b365935e220d9bc  train-1024.json' | (cd "$RUN" && sha256sum -c -)
+cargo test --release --locked -p uor-r4-float-train --features cuda --lib
+"$RUN/bin/spiralcore-fbs-sheet" --mode d11-train-probe --train-forward dual --steps 2048 --data-root "$DATA" --out "$RUN/probe.json"
+"$RUN/bin/spiralcore-fbs-sheet" --mode d11-train-export --train-forward dual --steps 2048 --data-root "$DATA" --save-dir "$RUN/save" --stage4b "$RUN/d11-gap.json" --out "$RUN/train.json"
+jq -e -n --argfile new "$RUN/train.json" --argfile old "$RUN/train-1024.json" '
+  def point: .run.eval[] | select(.step == 1024);
+  def close($a; $b): ($a - $b) | abs <= 1e-6;
+  $new.seeds as $ns | $old.seeds as $os |
+  all($ns; . as $n | ($os[] | select(.seed == $n.seed)) as $o |
+    ($n | point) as $np | ($o | point) as $op |
+    $np.dev_float.top1_hits == $op.dev_float.top1_hits and
+    $np.dev_int.top1_hits == $op.dev_int.top1_hits and
+    $np.dev_float.top8_hits == $op.dev_float.top8_hits and
+    $np.dev_int.top8_hits == $op.dev_int.top8_hits and
+    $np.dev_float.admitted_target_hits == $op.dev_float.admitted_target_hits and
+    $np.dev_int.admitted_target_hits == $op.dev_int.admitted_target_hits and
+    close($np.dev_loss_float; $op.dev_loss_float) and
+    close($np.dev_loss_int; $op.dev_loss_int))'
+"$RUN/bin/spiralcore-fbs-sheet" --mode d11-artifact-windows --data-root "$DATA" --out "$RUN/windows.json"
+for s in 1 2; do
+  "$RUN/bin/fbs-export" "$RUN/save/seed-$s/snapshot.json" "$RUN/artifact-seed-$s.uorlut"
+  "$RUN/bin/d11-fbs-eval" run "$RUN/artifact-seed-$s.uorlut" "$RUN/windows.json" "$RUN/run-seed-$s.json" --verify
+  ART=$(sha256sum "$RUN/artifact-seed-$s.uorlut" | cut -d' ' -f1)
+  MODEL=$(sha256sum "$RUN/save/seed-$s/model/model.safetensors" | cut -d' ' -f1)
+  WINDOWS=$(sha256sum "$RUN/windows.json" | cut -d' ' -f1)
+  "$RUN/bin/spiralcore-fbs-sheet" --mode d11-artifact-gap --steps 2048 --data-root "$DATA" \
+    --model-dir "$RUN/save/seed-$s/model" --evaluator "$RUN/run-seed-$s.json" \
+    --windows-sha256 "$WINDOWS" --artifact-sha256 "$ART" --model-sha256 "$MODEL" \
+    --stage4b "$RUN/train.json" --stored-preds "$RUN/save/seed-$s/preds-float.json" --seed "$s" \
+    --out "$RUN/gap-seed-$s.json" --preds-artifact-out "$RUN/preds-artifact-seed-$s.json"
+  "$RUN/bin/spiralcore-fbs-sheet" --mode d11-residual --steps 2048 --data-root "$DATA" \
+    --model-dir "$RUN/save/seed-$s/model" --evaluator "$RUN/run-seed-$s.json" \
+    --windows-sha256 "$WINDOWS" --artifact-sha256 "$ART" --model-sha256 "$MODEL" \
+    --stage4b "$RUN/train.json" --stored-preds "$RUN/save/seed-$s/preds-float.json" \
+    --seed "$s" --label longer-dual --out "$RUN/residual-seed-$s.json" \
+    --preds-d11-out "$RUN/preds-d11-seed-$s.json"
+done
+# I-Negative: a wrong artifact pin must fail, never count a gap.
+"$RUN/bin/spiralcore-fbs-sheet" --mode d11-artifact-gap --steps 2048 --data-root "$DATA" \
+  --model-dir "$RUN/save/seed-1/model" --evaluator "$RUN/run-seed-1.json" \
+  --windows-sha256 "$WINDOWS" --artifact-sha256 0000000000000000000000000000000000000000000000000000000000000000 \
+  --model-sha256 "$MODEL" --stage4b "$RUN/train.json" \
+  --stored-preds "$RUN/save/seed-1/preds-float.json" --seed 1 --out "$RUN/negative.json" || true
+jq -e '.i_inputs == false and (.gap_inside_band | contains("not counted"))' "$RUN/negative.json"
+find "$RUN" -type f -print0 | sort -z | xargs -0 sha256sum > "$RUN/SHA256SUMS"
+scripts/pod/uor-store put "$RUN" results/kimi/d11-fbs-longer-dual-2026-10-26/
+scripts/pod/uor-store ls results/kimi/d11-fbs-longer-dual-2026-10-26/
+scripts/pod/uor-pod release "$POD" --lab kimi --session longer-dual
+scripts/pod/uor-pod down "$POD" --lab kimi --session longer-dual
+```
+
+PASS-only serving: MacBookPro17,1, Apple M1 (4 performance + 4 efficiency cores), 16 GiB, AC power; `fbs-toks` records the OS and its binary SHA. Build with `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo build --release --locked -p uor-r4-integer --features serving-wasm --bin fbs-toks`. For each artifact run `local/target/release/fbs-toks <artifact>`: one warmup and 20 timed runs, 128-token prefill and 64-token greedy decode, median and p95 for context and decode separately. Run `python3 scripts/audit_zero_matmul_serving.py <release-rlib> --stack` and the same command on `local/target/release/uor-r4-stack`, plus `~/.cargo/bin/cargo test -p uor-r4-integer --features serving-wasm --no-fail-fast`.
+
+## 10. FIT record
+
+Agent-50 returned **TEST FITNESS: FIT** at `9906d681a18403c701a066197cbee0136c67a03c`, after the initial counterfactual, batch, scorer and ORDER corrections. The final hardening commit `e77a1f91f0f198de9aee58b7bc20d65a6c12b298` adds only missing-seed-loss refusal and passed the same host suite (60 lib, 3 CLI, 2 dependency, 12 kernel controls). This D68-amended manifest requires a fresh FIT delta before dispatch.
