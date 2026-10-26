@@ -1,23 +1,30 @@
-# ORDER: infra-loop-harness, claude-137
+# ORDER: infra-loop-harness, claude-137 (widen the item's scope to take codex out of the registry)
 
 Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `1b9b87b39`.
 
 ## Goal
 
-The item's done-when reads:
+**This unit is the item PR for a D68 scope and bar decision, at the owner's instruction (below).** It edits one file, `docs/roadmap/items/infra-loop-harness.md`, so that the next unit can take codex out of the lab registry. Codex works independently on lexlean-r4 and is no longer part of the UOR-R4 loop.
 
-> Every PR in the build plan on [the loop page](../../loop/README.md#build-plan) is merged, each with its planted fault turning its gate red. The five labs (Kimi, Claude, Codex, DeepSeek, Antigravity) are onboarded, each with a committed onboarding receipt. Each lab has completed one loop task end to end: claim, probe, work, gates, report, review by another vendor, queue, and verify on fresh `main`.
+**Why a separate PR.**
+- The loop guard takes a unit's scope from the item as it is on `origin/main`, so a branch cannot widen its own scope (`loopguard.rs`, `check_repo_rel_write`).
+- No item's `scope:` holds the registry, its two tests, the no-identity hints or the branch archive. The guard refused the first test edit: "REFUSED: crates/uor-r4-harness/src/labs.rs is outside active ORDER … scope [PLAN.md, …]".
+- The loop page says "Widening scope takes a separate item PR" ([docs/loop/README.md](../../../README.md), "Checked at the base"). The charter lets it go ahead when the lab's own decision review passes (§5.1, D68).
 
-**This unit removes codex from the lab registry, at the owner's instruction (below).** Codex works independently on lexlean-r4 and is no longer part of the UOR-R4 loop.
+**The two edits.**
+1. **Scope:** `scope:` gains five globs, exactly the files the registry change touches. Nothing else is added.
+   - `docs/harness/labs.json`: the registry. It stays owner-only, so the guard still refuses every lab write and Casey makes that one edit.
+   - `crates/uor-r4-harness/src/labs.rs`: its tests read the real registry and list five labs.
+   - `crates/uor-r4-harness/src/receipt.rs`: the no-identity hints name the labs.
+   - `crates/uor-r4-harness/tests/lab_registry_cli.rs`: its tests read the real registry and the hints.
+   - `archive/history/branch-archive/codex-d63-finite-probe-scope-20261026.*`: codex's closed #3169, kept as a patch and its record.
+2. **Bar:** the done-when's "The five labs (Kimi, Claude, Codex, DeepSeek, Antigravity) are onboarded" becomes "The four labs (Kimi, Claude, DeepSeek, Antigravity)". The bar keeps the same shape. It no longer asks for a receipt and a loop task from a lab that has left. Codex's onboarding receipt and its past units stay in the repository as history.
 
-- **The registry.** `docs/harness/labs.json` lists four labs: antigravity, claude, deepseek and kimi. Its note says "four".
-- **The two tests that read the real registry** move from five labs to four: `crates/uor-r4-harness/src/labs.rs` and `crates/uor-r4-harness/tests/lab_registry_cli.rs`. Tests that build their own registry fixture are unchanged.
-- **The no-identity hints** (`receipt.rs`) name the same four labs. The CLI test holds them to that exact list.
-- **Codex's closed PR #3169** is kept byte-identically in the archive, as `archive/history/branch-archive/codex-d63-finite-probe-scope-20261026.patch`, with its own record file beside it.
-  - The record is a new file because the existing `INDEX.md` is immutable (CHARTER §3.12).
-  - The PR was closed at the same instruction, at 2026-10-26T21:36:57Z.
-- **The registry line itself is the owner's edit.** The loop guard refuses every lab write to an owner-only path, approval or not. So Casey makes the `docs/harness/labs.json` change on this branch, and this unit carries everything around it.
-- **Left for the owner:** `AGENTS.md` (`UOR_LAB=<antigravity|claude|codex|deepseek|kimi>`) and this item's own done-when ("The five labs (… Codex …)"). The first is an owner path that this instruction does not name. The second changes a done-when, which needs its own decision. The REPORT lists both.
+**Left as they are.**
+- **The item's title and its "Why it matters" prose** ("five-lab", "Five labs from five vendors"). They describe the build and no gate reads them; the REPORT lists them.
+- **`AGENTS.md`** (`UOR_LAB=<antigravity|claude|codex|deepseek|kimi>`): an owner path this instruction does not name. The REPORT lists it for the owner.
+
+**Next unit.** Once this merges, claude-138 claims the item for the registry change: the tests and hints move to four labs, the patch goes into the archive, and Casey edits `docs/harness/labs.json` on that branch.
 
 ## Owner approval
 
@@ -29,35 +36,30 @@ It answered claude's question "Close codex's #3169 and take codex out of the lab
 
 ## Cancel probe (run first)
 
-Cancel if codex is already out of the registry, or another open ORDER changes `docs/harness/labs.json`. To check:
-- `docs/harness/labs.json` on `origin/main`;
+Cancel if codex is already out of the registry, or another open PR changes the item file or `docs/harness/labs.json`. To check:
+- `docs/harness/labs.json` and the item file on `origin/main`;
 - the open PRs' files.
 
-Result (2026-10-26T21:40Z, `origin/main` at `1b9b87b39`):
-- `docs/harness/labs.json` still lists codex.
-- The open PRs are #3304 (antigravity), #3306 (kimi) and this unit's #3307. None of them touches the registry, the two registry tests or the branch archive.
+Result (2026-10-26T21:40Z, re-checked 22:05Z, `origin/main` at `1b9b87b39`):
+- `docs/harness/labs.json` still lists codex, and the item's `scope:` holds none of the five globs.
+- The open PRs are #3304 (antigravity), #3306 (kimi) and this unit's #3307. None of them touches the item file, the registry, the two registry tests or the branch archive.
 
 **Not cancelled (instrument: none needed).**
 
 ## Files in scope
 
-- `docs/harness/labs.json`
-- `crates/uor-r4-harness/src/labs.rs`
-- `crates/uor-r4-harness/src/receipt.rs`: the no-identity hints name the registry's labs.
-- `crates/uor-r4-harness/tests/lab_registry_cli.rs`
-- `archive/history/branch-archive/**`
-- `docs/loop/tasks/infra-loop-harness/claude-137/**`
+- `docs/roadmap/items/infra-loop-harness.md` (the `scope:` line and the done-when sentence)
+- this task folder
 
 ## Done when
 
-1. **The registry lists four labs,** and the harness refuses `codex` as an unregistered lab name.
-2. **The registry tests read four labs.** The harness's full test suite passes, apart from tests that fail the same way on `origin/main` from a lab worktree; the REPORT names those.
-3. **Codex's #3169 is in the archive.** Its patch reproduces the PR's tree exactly from its base, and its record file says so.
-4. **`loop pr-check --local` passes,** including `owner-paths`, and `loop gates --full` is green.
-5. **A REPORT.**
+1. The two edits are made, and `xtask roadmap check` passes.
+2. A fresh decision review, reading the whole project, approves the scope and bar change. Its record goes to the owner's log on #2028.
+3. A fresh exact-head review approves the PR, and `loop report --check`, `loop pr-check --local` and the required checks pass.
+4. The REPORT says `References #2904`.
 
 ## Stop and ask if
 
 Stop and decide; never wait.
-- **A harness rule or test needs codex registered** for a reason other than the registry's lab list. Fix it in this scope, or record it and leave codex's client support (the guard's hook installer) unchanged.
-- **Another owner path would need to change** (`AGENTS.md`, `CHARTER.md`, `docs/harness/owner-paths.json`): leave it, and list it for the owner.
+- **The review finds a narrower way** to make the registry change, for example a glob already in another item's scope. Take it, and drop the globs it makes unneeded.
+- **The bar edit needs more than the lab list**, for example a gate that counts onboarding receipts. Record it, and keep this unit to the two edits.
