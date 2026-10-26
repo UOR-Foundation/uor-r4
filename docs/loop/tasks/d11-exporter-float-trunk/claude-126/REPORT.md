@@ -104,7 +104,7 @@ Size against `origin/main`:
 - **`fbs-compare --parity-only`:** the D11 readout against the integer session alone, with no float reference.
 - **`fbs-toks ARTIFACT`:** the step-6 serving-rate protocol for a stack artifact's integer session.
 
-## Measurements and checks
+## Measurements
 
 - **The run.**
   - One RTX 5090 (`vast-57786001`, driver 580.95.05, nvcc 12.8) at `80be868964622bf357b5905e93abe72ef9280a66`, from 08:17:39Z to 08:41:02Z, about 23 minutes of job time. The pod was up about 30 minutes, at about $0.99/h; it is deleted.
@@ -115,25 +115,34 @@ Size against `origin/main`:
   - `I-D-Determinism`;
   - `I-DEV-Denominator`: 14,287 of 14,287;
   - `I-Q12-Oracle`: 517 rows, 0 mismatches.
-- **Host checks at the head:**
-  - **Suites:** float-train 37; integer serving library 323; no-feature library 55; `m5_full_path_cost_controls` 3/3; `memory_shape` 3/3; `fbs-compare` 1; `fbs-toks` 2.
-  - **The set-asides, each failing its test:**
-    - the bar's loss side (also failing Stage 3's gate test) and its net side;
-    - the D11 loss guard;
-    - the panel-to-readout indexing and sampling;
-    - the per-position margin record;
-    - the `fbs-toks` median, decode feedback and reply check.
-  - **The new single-pass trace** reproduces claude-125's stored trace byte for byte, and `--parity-only` reproduces the full mode's D11 pairings.
-  - **Build checks:**
-    - CUDA type-check with a stub nvcc: exit 0;
-    - clippy: no findings in the changed code;
-    - `cargo fmt` clean;
-    - zero-multiply audits FULL PASS (rlib 56 and 40; `uor-r4-stack` 44 and 98).
 - **Evidence** is in the HF store under `results/claude/d11-fbs-export-gap-2026-10-26/`, each folder with a `SHA256SUMS`:
   - `d11gap/`: the run, the saved models, snapshots, readouts, predictions, artifacts and both comparisons;
   - `d11gap-bin/`;
   - `toks/`;
   - `diag/`: the laptop diagnostic, labelled as such.
+
+## Checks run at the head
+
+See the exact-head review record on the PR.
+- **Suites:** float-train 37; integer serving library 323; no-feature library 55; `m5_full_path_cost_controls` 3/3; `memory_shape` 3/3; `fbs-compare` 1; `fbs-toks` 2.
+- **The set-asides, each failing its test:**
+  - the bar's loss side (also failing Stage 3's gate test) and its net side;
+  - the D11 loss guard;
+  - the panel-to-readout indexing and sampling;
+  - the per-position margin record;
+  - the `fbs-toks` median, decode feedback and reply check.
+- **The new single-pass trace** reproduces claude-125's stored trace byte for byte, and `--parity-only` reproduces the full mode's D11 pairings.
+- **Build checks:**
+  - CUDA type-check with a stub nvcc: exit 0;
+  - clippy: no findings in the changed code;
+  - `cargo fmt` clean;
+  - zero-multiply audits FULL PASS (rlib 56 and 40; `uor-r4-stack` 44 and 98).
+- **Loop checks:** `loop report --check`, `loop pr-check --local` and `loop gates --full`.
+
+## Skills used
+
+- **holding-the-goal.** The goal was the artifact's own gap, not the GPU emulation's. That is why three FIT rounds tightened the tie to the artifact, and why a clean-looking FAIL was not reported.
+- **writing-meaningful-tests.** Every new check was set aside to show that its test fails.
 
 ## Still open
 
@@ -143,11 +152,6 @@ Size against `origin/main`:
   - Re-run only the pod parity on the stored snapshots and readouts. No retraining is needed, because the saved models are in the store.
   - Then read the verdict. The readings above point to a top-1 FAIL, which would move this trunk to training in the D11 mode.
 - **The mechanism page and the item's "What is missing" text** are outside this ORDER's scope (claude-121's note). The next REPORT carries them.
-
-## Skills used
-
-- **holding-the-goal.** The goal was the artifact's own gap, not the GPU emulation's. That is why three FIT rounds tightened the tie to the artifact, and why a clean-looking FAIL was not reported.
-- **writing-meaningful-tests.** Every new check was set aside to show that its test fails.
 
 ## Plain summary
 
