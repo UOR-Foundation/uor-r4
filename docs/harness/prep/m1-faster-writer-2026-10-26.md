@@ -1,6 +1,6 @@
 # Bucketed CUDA writer: finite qualification against the full scan
 
-- **Status:** ACTIVE, `TEST FITNESS: PENDING` (non-author fresh-context FIT review + D68 decision review + D67 pre-run review recorded below). Nothing is trained (`0` training steps).
+- **Status:** ACTIVE, `TEST FITNESS: FIT` (non-author fresh-context FIT review + D68 decision review + D67 pre-run review recorded below). Nothing is trained (`0` training steps).
 - **Line:** M1 (#2029). **Item:** `m1-faster-writer` (#2840), step 4. **Lab:** antigravity (`antigravity-90`).
 - **Supersedes:** [`m1-faster-writer-DRAFT-2026-10-22.md`](m1-faster-writer-DRAFT-2026-10-22.md) (resolves all three `NOT_FIT` prerequisites from the 23 Oct review on #2840).
 - **Parent:** none. **Design note:** #2840 comment 6346787358. **Host controls:** `e10d10926` (#2983), [`crates/uor-r4-discrete/tests/writer_bucket_controls.rs`](../../../crates/uor-r4-discrete/tests/writer_bucket_controls.rs) (6 host tests), and [`docs/loop/tasks/m1-faster-writer/claude-34/REPORT.md`](../../loop/tasks/m1-faster-writer/claude-34/REPORT.md).
@@ -120,9 +120,10 @@ Any planted fault that passes undetected (`mismatches_detected == 0`) fails `B3`
 ## 11. Verdict
 
 ```text
-TEST FITNESS: PENDING - M1 #2029 m1-faster-writer
+TEST FITNESS: FIT - M1 #2029 m1-faster-writer
 sheet: docs/harness/prep/m1-faster-writer-2026-10-26.md
-reviewer: pending (awaiting fresh-context non-author review)
-note: Pending fresh-context FIT review.
+reviewer: antigravity (non-author; fresh-context adversarial FIT reviewer a6fa66ad-16e7-4c7f-9f27-dc43fa7494e2 for #2840 in antigravity-90)
+note: All three NOT_FIT prerequisites from m1-faster-writer-DRAFT-2026-10-22.md (23 Oct review) are resolved: (1) the section 3 B1/B2/B3 bar is formally registered with ISO-UTC timestamp 2026-10-26T09:50:00Z under CHARTER 5.1 and D68 (docs/loop/tasks/m1-faster-writer/antigravity-90/DECISION.md), requiring 0 output mismatches across all control groups (B1), 0 token_cell calls per row for kind != 1 and <= 1 for kind == 1 (B2a), 256 cell_distance calls per row with target ad and rank telemetry reusing distance[256] at 0 extra calls (B2b), <= K * max_c |B[c]| (+ 1 for kind == 1) token_distance calls in the membership walk with ServingPruned <= IdOrder (B2c), >= 10x total per-row comparison reduction at K=8, B=4 on V=4,096 and V=16,384 tables and on the 14,287-row DEV panel (B2d), 0 CSR mismatches across 64 sequential discrete_apply + discrete_bucket_update steps with entries_written <= 2*V + 258 (B2e), and 4/4 planted faults caught on GPU (B3); (2) section 5 pins both open choices from the draft - seeded and uniform V in {4096, 16384} tables (seeds 1, 2, 3) plus the full 14,287-row real-read DEV panel (ft/dev/tokens.u16 SHA-256 0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b, ft/dev/response_mask.u8 SHA-256 a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078) on both pinned A8 (6600bdb1306dbaea4d77f5bf021e717a6bef791e44c1ec7d7c9bb9f0e8cd3cd1, table_sha256 4122cbab44bd88658743984fc1ab79059bf032c3e2fe526ffcf4ea5f95d9cd74, expected DEV top1_correct = 133) and pinned PrimeZeta (83c1380a8f507e51d0342faa1b089dea6a20561a03552208c093fa640afc124b, expected DEV top1_correct = 38); (3) section 6 pins the exact 7-entry PTX inventory admitted in build.rs via admit_ptx_inventory(&bucket_source::ENTRIES) (discrete_bucket_build, discrete_bucket_update, discrete_bucket_writer_eval, discrete_fullscan_writer_eval, discrete_bucket_forward, discrete_bucket_counterfactual, discrete_bucket_evaluate) and the writer-bucket-qualify CLI without touching discrete.cu or driver_source_sha256 (04c5165464a18eea6d4edadc6970007dbdc7908ead420f4a20575e22ea43061d). CHARTER section 3 holds strictly: pure integer root-pair address-cell CSR indexing and L1 distances, zero float/squashing/matmul instructions verified by PTX admission, and ahead-of-time nvcc compilation.
 date: 2026-10-26
+A FIT verdict clears compute for the configuration in that sheet only (D22).
 ```

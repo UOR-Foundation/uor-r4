@@ -55,4 +55,30 @@ Reversible by git revert; `discrete.cu`, `ordinary.cubin`, and `driver_source_sh
 
 ## 6. Review Record (D68, D67, and `TEST FITNESS: FIT`)
 
-Pending fresh-context reviewer verification.
+- **Reviewer:** `antigravity` fresh-context non-author reviewer (`a6fa66ad-16e7-4c7f-9f27-dc43fa7494e2`)
+- **Verdicts:**
+  - `TEST FITNESS: FIT` on `docs/harness/prep/m1-faster-writer-2026-10-26.md`
+  - `DECISION REVIEW (D68): PASS`
+  - `PRE-RUN REVIEW (D67): PASS`
+
+```text
+DECISION REVIEW (D68): PASS - M1 #2029 m1-faster-writer (#2840)
+card: docs/loop/tasks/m1-faster-writer/antigravity-90/DECISION.md
+reviewer: antigravity (fresh-context non-author decision reviewer a6fa66ad-16e7-4c7f-9f27-dc43fa7494e2)
+whole_project_context: Verified against CHARTER.md (sections 3, 4.5, 5.1, D65-D69), PLAN.md, docs/roadmap/items/m1-faster-writer.md (#2840), and docs/roadmap/items/r-vocab-4096-vs-16384.md (#2887). #2840 has no upstream dependencies (depends_on: []) and directly unblocks #2887 (r-vocab-4096-vs-16384) while removing the O(V) per-row writer scan (V + 1 + A*V token_cell calls per row) on the M1/M4 serving path.
+verdict: PASS. The registered B1/B2/B3 bar is exact and non-arbitrary (0 parity mismatches, 0 token_cell calls for kind != 1 and <= 1 for kind == 1, 256 cell_distance calls, <= K * max_c |B[c]| token_distance calls, >= 10x total comparison reduction at V=4,096 and V=16,384, 0 CSR update mismatches across 64 sequential commits, and 4/4 planted faults caught). Pinning both seeded/uniform V=16,384 tables and the 14,287-row real-read DEV panel on pinned A8 and PrimeZeta adopts all 23 Oct review recommendations, and the change is fully reversible without touching discrete.cu or driver_source_sha256.
+date: 2026-10-26T09:59:00Z
+```
+
+```text
+PRE-RUN REVIEW (D67): PASS - M1 #2029 m1-faster-writer (#2840)
+sheet: docs/harness/prep/m1-faster-writer-2026-10-26.md
+reviewer: antigravity (fresh-context non-author pre-run reviewer a6fa66ad-16e7-4c7f-9f27-dc43fa7494e2)
+criteria:
+  1. whole_project_chain: Verified. m1-faster-writer (#2840) is ready with depends_on: [] and is the sole blocker on r-vocab-4096-vs-16384 (#2887) and the D5-b per-token sparsity requirement (CHARTER 3.9).
+  2. mechanism_and_inputs_ready: Verified. bucket_source.rs, writer_bucket_device.rs, writer_bucket_qualification.rs, src/bin/writer-bucket-qualify.rs, src/bin/prime-zeta-codebook.rs, docs/labs/r-prime-zeta-vs-nulls/evidence/spec-v4096-b4-c192-k8.json, and build.rs are present in the worktree, and ft-dev.tar (0919e90f... / a838bb1a...) and a8-rebuilt.json (6600bdb1...) are present in caseyallard/uor-r4-store (with the 5 pre-flight audit fixes applied).
+  3. unlock_value: Verified. A pass closes #2840 (m1-faster-writer -> done) and unblocks #2887 (r-vocab-4096-vs-16384); a B2 miss keeps the exact CSR index and iterates on bucket layout; a B1/B3 failure diagnoses the kernel/instrument defect.
+  4. fit_verdict: Verified. TEST FITNESS: FIT recorded on docs/harness/prep/m1-faster-writer-2026-10-26.md.
+  5. lease_and_caps: Verified. 0 pods currently active (<= 4 pods cap) and $0.00/h spend (<= $8.00/h cap); planned 1x RTX 5090 lease (~$0.50-$0.80/h for < 20 min, < $0.40 total) is well within caps.
+date: 2026-10-26T09:59:00Z
+```

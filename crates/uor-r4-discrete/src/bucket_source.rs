@@ -90,6 +90,7 @@ const BUCKET: &str = r#"
 #define BUCKET_WALK_ID_ORDER 0u
 #define BUCKET_WALK_SERVING_PRUNED 1u
 #define BUCKET_FAULT_NONE 0u
+#define BUCKET_FAULT_STALE_BUCKET 1u
 #define BUCKET_FAULT_REVERSED_TIE 2u
 #define BUCKET_FAULT_OVER_PRUNED 3u
 #define BUCKET_FAULT_CORRUPTED_CSR 4u
@@ -109,7 +110,7 @@ __device__ W bucket_writer(
         if(counters_out){counters_out[0]=0u;counters_out[1]=0u;counters_out[2]=0u;counters_out[3]=0u;}
         return ~(W)0;
     }
-    bool has_move=(kind==1u && candidate!=0u && index<s[0]*s[1]);
+    bool has_move=(fault_mode!=BUCKET_FAULT_STALE_BUCKET && kind==1u && candidate!=0u && index<s[0]*s[1]);
     U moved_token=has_move?index/s[1]:ABSENT;
     U moved_old_cell=has_move?cells[moved_token]:ABSENT;
     U moved_new_cell=ABSENT;
@@ -160,7 +161,8 @@ __device__ W bucket_writer(
         U cell=ABSENT;W cost=~(W)0;
         for(U c=0;c<256u;++c)if(occupied[c] && !used[c]){
             W d=dist_cell[c];
-            if(cell_precedes_w(d,c,cost,cell)){cell=c;cost=d;}
+            bool cell_win=(fault_mode==BUCKET_FAULT_REVERSED_TIE)?(d<cost || (d==cost && c>cell)):cell_precedes_w(d,c,cost,cell);
+            if(cell_win){cell=c;cost=d;}
         }
         if(cell==ABSENT)break;
         used[cell]=true;
@@ -239,7 +241,6 @@ __device__ W bucket_writer(
         if(counters_out){counters_out[0]=c_token_cell;counters_out[1]=c_cell_dist;counters_out[2]=c_token_dist;counters_out[3]=c_max_bucket;}
         return ~(W)0;
     }
-    ++c_token_dist;
     U width=s[1]*8u,td=token_distance(q,table,g,s,target,kind,index,candidate);
     if(counters_out){counters_out[0]=c_token_cell;counters_out[1]=c_cell_dist;counters_out[2]=c_token_dist;counters_out[3]=c_max_bucket;}
     W ad=dist_cell[target_cell];
@@ -456,7 +457,7 @@ extern "C" __global__ void discrete_fullscan_writer_eval(
     for(U k=0;k<cell_count;++k)full_cell_dist+=(occ-k);
     counters[row*4u]=(1u+cell_count)*s[0]+1u;
     counters[row*4u+1u]=full_cell_dist;
-    counters[row*4u+2u]=admitted_tokens+1u;
+    counters[row*4u+2u]=admitted_tokens;
     counters[row*4u+3u]=max_b;
     W hit8=0;
     for(U i=0;i<8u;++i){top8[row*8u+i]=ranked[i];if(ranked[i]==targets[row])hit8=1;}

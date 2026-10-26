@@ -447,11 +447,17 @@ fn run_device_parity_controls(ordinal: usize) -> Result<Vec<DeviceParityCase>> {
             11u32,
             ObjectivePolicy::NearestAddressMarginV1,
         ),
-        (64, 4, 8, 16, 12, ObjectivePolicy::OccupiedCellRankHingeV1),
+        (64, 4, 8, 8, 12, ObjectivePolicy::OccupiedCellRankHingeV1),
+        (64, 4, 8, 16, 13, ObjectivePolicy::NearestAddressMarginV1),
+        (64, 4, 8, 16, 14, ObjectivePolicy::OccupiedCellRankHingeV1),
         (256, 4, 8, 8, 21, ObjectivePolicy::NearestAddressMarginV1),
-        (256, 4, 8, 16, 22, ObjectivePolicy::OccupiedCellRankHingeV1),
+        (256, 4, 8, 8, 22, ObjectivePolicy::OccupiedCellRankHingeV1),
+        (256, 4, 8, 16, 23, ObjectivePolicy::NearestAddressMarginV1),
+        (256, 4, 8, 16, 24, ObjectivePolicy::OccupiedCellRankHingeV1),
         (4096, 4, 8, 8, 31, ObjectivePolicy::NearestAddressMarginV1),
-        (4096, 4, 8, 16, 32, ObjectivePolicy::OccupiedCellRankHingeV1),
+        (4096, 4, 8, 8, 32, ObjectivePolicy::OccupiedCellRankHingeV1),
+        (4096, 4, 8, 16, 33, ObjectivePolicy::NearestAddressMarginV1),
+        (4096, 4, 8, 16, 34, ObjectivePolicy::OccupiedCellRankHingeV1),
     ];
     let mut cases = Vec::with_capacity(configs.len());
     for (vocabulary, blocks, context, kept_cells, seed, objective_policy) in configs {
@@ -1735,18 +1741,16 @@ fn run_planted_fault_controls(engine: &BucketWriterEngine) -> Result<Vec<Planted
     });
 
     // Fault 3: FAULT_OVER_PRUNED (ServingPruned skips when cell_dist >= best_distance instead of >).
-    // Token 1 is in cell rx (admitted first) with interior block perturbed so token_distance = 18.
-    // Token 0 is in cell ry (admitted second) with exact root interior block so address_distance = 18
-    // and token_distance = 18. Under exact pruning (>), cell ry is searched and Token 0 wins the tie
-    // (0 < 1). Under FAULT_OVER_PRUNED (>=), cell ry is skipped because 18 >= 18, leaving Token 1!
-    let mut perturbed_root0 = root(0);
-    perturbed_root0[0] += 1;
+    // Token 1 is in cell rx (admitted first) and Token 0 is in cell ry (admitted second) at equal
+    // address_distance and equal token_distance from f3_q. Under exact pruning (>), cell ry is searched
+    // and Token 0 wins the tie (0 < 1). Under FAULT_OVER_PRUNED (>=), cell ry is skipped because
+    // dist_cell[ry] >= best_distance, leaving Token 1!
     let f3_tokens = vec![
         vec![root(0), root(0), root(ry)],
-        vec![root(0), perturbed_root0, root(rx)],
+        vec![root(0), root(0), root(rx)],
     ];
     let f3_table = flatten_tokens(&f3_tokens);
-    let f3_q = flatten_tokens(&[vec![root(0), perturbed_root0, root(0)]]);
+    let f3_q = flatten_tokens(&[vec![root(0), root(0), root(0)]]);
     let (f3_full, f3_bucket, _) = engine.eval_direct_pair(
         2,
         3,
