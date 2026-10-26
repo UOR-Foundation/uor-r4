@@ -1561,3 +1561,16 @@ fn cross_row_and_corpus_value_leaks_are_detected() -> TestResult {
     assert!(corpus_value_leaks(&panel, &[9999u32]).is_empty());
     Ok(())
 }
+
+#[test]
+fn production_manifest_is_pinned_and_structurally_valid() -> TestResult {
+    let bytes = include_bytes!("../../../docs/labs/m1-address-as-read/address-oracle.json");
+    let panel = PanelManifest::parse(bytes)?;
+    assert_eq!(
+        panel.sha256()?,
+        "a4aa548f3e38478fdc8cd4ad077d9886cefa3aaa8e2712abe8f38abe0dba4103"
+    );
+    panel.validate(None)?;
+    assert_eq!(panel.rows.len(), PANEL_ROWS);
+    Ok(())
+}

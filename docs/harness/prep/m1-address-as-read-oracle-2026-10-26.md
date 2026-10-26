@@ -16,8 +16,8 @@ Can the delivered `AddressDirectory` and existing D11 GPU scorer measure the con
 
 ## Arms
 
-1. **No-memory:** store disabled; model-only baseline (L-010).
-2. **No-address:** store populated but no address supplied; model-only baseline must be byte-identical to no-memory.
+1. **No-memory:** model-only control with zero store slots (L-010).
+2. **No-address:** model-only control with a populated store but no store read; it must be byte-identical to no-memory. This checks determinism and absence of oracle information, not a store-presence performance effect.
 3. **Sieve:** deterministic prompt-to-`PrimeAddress` query from the versioned lexicon: split words, retain lexicon words in order, take primes, pair adjacent kept words. Use `read_sieve`/`read_sieve_from`. Record `sieve_query_address_match` (formed query equals true address) separately from `sieve_selected_address_match` (selected slot equals true address) and `sieve_value_check_pass`; never substitute selected-slot equality for address formation.
 4. **True-address:** exact `read_exact`/`read_exact_from` with the registered key and `Current`/`Previous` selection. A hit emits verified content marked `ExactStore`; this is oracle assistance, not learned model copy.
 5. **Random-address:** a present, exactly unequal key bound to a different value; planted-wrong control, never an accuracy arm.
@@ -38,7 +38,7 @@ Pure tests cover exact current/previous, overlapping-but-unequal active/evicted 
 
 One composed gate must require parity, leak-free inputs, complete identity, no-memory/no-address identity, random control and exact hard gates; a caller cannot pass on the true-address subset alone.
 
-Bind source HEAD, executable/PTX/cubin/geometry/kernel/driver identities, artifact/checkpoint/tokenizer/TRAIN/DEV/config/panel hashes, CUDA toolkit and driver API version, and display-driver version from `nvidia-smi` or UNVERIFIED. Explicitly include TRAIN token/mask and panel hashes in identity. Record per-arm rows/outcomes, per-row slots/fetches/candidates/value bytes, resident bytes, decode/context tokens/s and complete pod uptime/cost. No energy claim.
+Bind source HEAD and a clean tree, executable/PTX/cubin/geometry/kernel/driver identities, artifact/checkpoint/tokenizer/TRAIN/DEV/config/panel hashes, CUDA toolkit and driver API version, and display-driver version from `nvidia-smi` or UNVERIFIED. Hash-bind the complete Stage 0 runtime identity and require its PTX/cubin/geometry/kernel/driver/capability fields. Explicitly include TRAIN token/mask and panel hashes. Record per-arm rows/outcomes and rates, per-row slots/fetches/actual admitted candidates/value bytes, exact serialized-store bytes, resident heap bytes as UNVERIFIED rather than inferred, decode tokens/s and context rows/s with milli-rates, and complete pod uptime/cost. No energy claim.
 
 ## Cost and storage
 

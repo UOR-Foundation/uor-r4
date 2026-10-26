@@ -307,18 +307,32 @@ fn run_oracle(
                 score_store_read(row, arm, outcome, Some(&panel.lexicon))?
             };
             let elapsed_ns = started.elapsed().as_nanos() as u64;
-            let candidates = match arm {
-                Arm::Sieve => oracle.directory().len(),
-                Arm::TrueAddress | Arm::RandomAddress => 1,
-                Arm::NoMemory | Arm::NoAddress => 0,
+            let candidate_counts = match arm {
+                Arm::Sieve => {
+                    let query = form_sieve_query(&panel.lexicon, &row.prompt)?;
+                    oracle.directory().sieve_candidate_counts(&query)
+                }
+                _ => Default::default(),
+            };
+            let slots = if arm == Arm::NoMemory {
+                0
+            } else {
+                oracle.directory().len()
+            };
+            let emission_token_count = if generated_tokens.is_empty() {
+                row.expected_value().map_or(0, |value| value.tokens.len())
+            } else {
+                generated_tokens.len()
             };
             let value = serde_json::json!({
                 "record": record,
                 "generated_tokens": generated_tokens,
+                "emission_token_count": emission_token_count,
                 "elapsed_ns": elapsed_ns,
-                "slots": oracle.directory().len(),
+                "slots": slots,
                 "backend_fetches": fetches,
-                "candidates": candidates,
+                "candidate_counts": candidate_counts,
+                "candidates": candidate_counts.active_admitted + candidate_counts.evicted_admitted,
                 "value_bytes": record.emitted_text.as_ref().map_or(0, String::len),
             });
             per_arm.insert(format!("{arm:?}"), value);
@@ -333,6 +347,35 @@ fn run_oracle(
         all_records.insert(row.id.clone(), serde_json::Value::Object(per_arm));
     }
 
+    let mut rates = serde_json::Map::new();
+    for arm in Arm::ALL {
+        let key = format!("{arm:?}");
+        let mut tokens = 0u128;
+        let mut rows = 0u128;
+        let mut elapsed_ns = 0u128;
+        for record in all_records.values() {
+            let value = &record[&key];
+            tokens += u128::from(
+                value["emission_token_count"]
+                    .as_u64()
+                    .ok_or("missing emission_token_count")?,
+            );
+            rows += 1;
+            elapsed_ns += u128::from(value["elapsed_ns"].as_u64().ok_or("missing elapsed_ns")?);
+        }
+        let divisor = elapsed_ns.max(1);
+        rates.insert(
+            key,
+            serde_json::json!({
+                "emission_tokens": tokens as u64,
+                "context_rows": rows as u64,
+                "elapsed_ns": elapsed_ns as u64,
+                "decode_tokens_per_second_milli": (tokens * 1_000_000_000_000u128 / divisor) as u64,
+                "context_rows_per_second_milli": (rows * 1_000_000_000_000u128 / divisor) as u64,
+            }),
+        );
+    }
+
     let baseline_identical = baseline_records_identical(&no_memory, &no_address)?
         && no_memory_tokens == no_address_tokens;
     let random_holds = random_control_holds(&panel, &random_address)?;
@@ -345,7 +388,26 @@ fn run_oracle(
         .output()
         .ok()
         .filter(|output| output.status.success())
-        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned());
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        .unwrap_or_else(|| "UNVERIFIED".into());
+    let stage0_identity_bytes = std::fs::read(out.join("identity.json"))
+        .map_err(|e| format!("read Stage 0 identity: {e}"))?;
+    let stage0_identity_sha256 = sha256_hex(&stage0_identity_bytes);
+    let stage0_identity: serde_json::Value = serde_json::from_slice(&stage0_identity_bytes)
+        .map_err(|e| format!("parse Stage 0 identity: {e}"))?;
+    let stage0_runtime_complete = [
+        "cubin_sha256",
+        "ptx_sha256",
+        "compiled_identity",
+        "driver_source_sha256",
+        "cuda_toolkit_version",
+        "device_capability",
+        "UOR_NVCC_ARCH",
+        "IMAGE_TARGET",
+        "RESOURCES",
+    ]
+    .iter()
+    .all(|key| stage0_identity.get(*key).is_some());
     let serialized_store_bytes = oracle
         .store()
         .export_records()
@@ -370,7 +432,10 @@ fn run_oracle(
         "nvidia_display_driver": display_driver,
         "store_slots": oracle.directory().len(),
         "serialized_store_bytes": serialized_store_bytes,
-        "parity_identity": "identity.json",
+        "resident_heap_bytes": "UNVERIFIED",
+        "stage0_identity_sha256": stage0_identity_sha256,
+        "stage0_runtime_complete": stage0_runtime_complete,
+        "baseline_note": "Both arms are model-only controls; no-memory has zero store slots and no-address has a populated store but performs no read. Byte identity checks determinism, not a store-presence effect.",
     });
     write_json(&out.join("oracle-identity.json"), &identity)?;
     let required_identity = [
@@ -391,11 +456,15 @@ fn run_oracle(
         "nvidia_display_driver",
         "store_slots",
         "serialized_store_bytes",
-        "parity_identity",
+        "resident_heap_bytes",
+        "stage0_identity_sha256",
+        "stage0_runtime_complete",
+        "baseline_note",
     ];
-    let identity_complete = required_identity
-        .iter()
-        .all(|key| identity.get(*key).is_some());
+    let identity_complete = stage0_runtime_complete
+        && required_identity
+            .iter()
+            .all(|key| identity.get(*key).is_some());
     let leak_free = prompt_leaks.is_empty() && train_leaks.is_empty() && dev_leaks.is_empty();
     let composed = uor_r4_object_store::address_oracle::composed_gate(
         hard,
@@ -458,6 +527,7 @@ fn run_oracle(
         "composed_pass": composed_pass,
         "decision": if composed_pass { "ORACLE_INSTRUMENT_PASS" } else { "INSTRUMENT_FAIL" },
         "families": families,
+        "rates": rates,
         "rows": all_records,
     });
     write_json(&out.join("oracle-report.json"), &report)?;
