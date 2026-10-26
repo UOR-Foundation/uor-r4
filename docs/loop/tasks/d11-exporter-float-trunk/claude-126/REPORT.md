@@ -49,7 +49,7 @@ References #2820.
 - **A correction to claude-125.** Its `traced/` and `ties/` analyses re-ran the f64 reference on the laptop, which CHARTER §3.5 puts on the GPU.
   - Their numbers stand: the new single-pass trace reproduces them byte for byte.
   - This unit's own laptop diagnostic is the one exception. It is labelled as such, and no result rests on it.
-- **The lease watcher did not work.** `uor-harness loop drive --watch --lease -- uor-pod renew …` exited at once ("renew exited exit status: 1"), while the same renew run directly succeeded. A bounded renew loop kept the lease instead. The case is in FRICTION.md.
+- **The lease watcher did not work.** The harness's lease watcher (loop drive in its watch-and-lease mode, handed the uor-pod renew command) exited at once ("renew exited exit status: 1"), while the same renew run directly succeeded. A bounded renew loop kept the lease instead. The case is in FRICTION.md.
 
 ## Readings, not verdicts
 
