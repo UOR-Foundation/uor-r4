@@ -19,7 +19,7 @@ References #2820.
   - **What it does not do:** it closes this configuration, never the mechanism.
 - **The item's done-when is not met,** so #2820 stays open.
 
-## What was measured
+## Measurements
 
 **The loss half is inside the band on both seeds.** The noise band is Δ_noise,L = 0.045679637781173676, claude-126's two-seed band.
 
