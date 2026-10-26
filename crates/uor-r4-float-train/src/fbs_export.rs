@@ -16,7 +16,7 @@
 use candle_core::Tensor;
 use uor_r4_integer::discrete_d11::{spiralcore_orbit_roots, spiralcore_signed_axes};
 use uor_r4_integer::fbs_snapshot::{
-    FbsFloatPosition, FbsFloatReadout, FbsRoutes, FbsTrunkLayer, FbsTrunkSnapshot,
+    FbsFloatPosition, FbsFloatReadout, FbsFloatSequence, FbsRoutes, FbsTrunkLayer, FbsTrunkSnapshot,
 };
 
 use crate::geometric_stack::{
@@ -315,13 +315,44 @@ pub fn fbs_float_readout(model: &StackModel, export_mode: bool) -> Result<FbsFlo
             hidden: finite_table("hidden", hidden)?,
         });
     }
+    // Eight fixed full-context sequences: past the first position they reach
+    // the transition, the later convolution taps and the carried state.
+    let time = model.config.context;
+    let mut sequences = Vec::with_capacity(READOUT_SEQUENCES);
+    for s in 0..READOUT_SEQUENCES {
+        let tokens: Vec<u32> = (0..time)
+            .map(|t| ((s * 37 + t * 11 + 1) % vocab) as u32)
+            .collect();
+        let hidden = model.hidden(&tokens, 1, time)?.to_vec2::<f32>()?;
+        let next = model
+            .native_next_token_ids(&tokens, 1, time)?
+            .flatten_all()?
+            .to_vec1::<u32>()?;
+        if next.len() != time {
+            return Err(invalid(
+                "the native writer returned other than one token per position",
+            ));
+        }
+        sequences.push(FbsFloatSequence {
+            tokens,
+            next,
+            hidden: hidden
+                .into_iter()
+                .map(|h| finite_table("hidden", h))
+                .collect::<Result<_>>()?,
+        });
+    }
     Ok(FbsFloatReadout {
         vocab,
         width,
         export_mode: false,
         positions,
+        sequences,
     })
 }
+
+/// The fixed sequences [`fbs_float_readout`] reads, each the full context.
+pub const READOUT_SEQUENCES: usize = 8;
 
 #[cfg(test)]
 mod tests {
@@ -625,7 +656,7 @@ mod tests {
         let export = fbs_float_readout(&model, true)?;
         assert!(!readout.export_mode && export.export_mode);
         for r in [&readout, &export] {
-            r.check(snap.vocab, snap.width, r.export_mode)
+            r.check(snap.vocab, snap.width, snap.context, r.export_mode)
                 .map_err(invalid)?;
         }
         // The export mode reaches the forward: some hidden vector changes.

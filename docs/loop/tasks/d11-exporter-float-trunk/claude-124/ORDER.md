@@ -52,9 +52,11 @@ Cancel if the reference cannot copy the float normalizations exactly, for exampl
 1. **Reference variants.** The reference gains snap switches. Its default stays bit-identical to `forward_f32`, held by a test. Host tests check each switch on hand-computed blocks, and a set-aside of each switch fails its test.
 2. **Readouts.** `fbs_float_readout` can read out in the sheets' export mode as well as plain. The GPU test writes both readouts.
 3. **`fbs-compare`.** It reports each pairing above, and refuses an incomplete or repeated readout (host-tested).
-4. **The GPU run, on a random-init trunk.** Bars fixed here, before the run:
-   - plain float GPU against the reference with no snaps: largest hidden gap at most `1e-3`, and tokens agree on at least 250 of 256;
-   - the same bar for the export-mode readout against its matching reference.
+4. **The GPU run, on a random-init trunk.** Bars fixed here, before the run, and amended once, before the run, after the pre-run review (#2820):
+   - **Single tokens.** Plain float GPU against the reference with no snaps: largest hidden gap at most `1e-3`, and tokens agree on at least 250 of 256. The same bar holds for the export-mode readout against its matching reference.
+   - **Sequences (the amendment).** A single token from a zero state never reaches the transition rotation, convolution taps 1 to 3 or the carried state, so one position proves none of them. The readouts therefore also hold 8 fixed sequences of the full context, 64 positions. Their bar: largest hidden gap at most `1e-3`, and tokens agree on at least 60 of 64, for each readout against its matching reference.
+   - **Near-ties.** A miss confined to at most 6 positions, each traced to one icosian snap or rate-index flip at a near-tie, is an instrument miss, not a mapping fault. The gap bar takes the worst position, so one flip fails it.
+   - **f32 only.** The model runs in f32: `hidden()` refuses any other precision (`params()`).
 
    A miss is classified: a mapping fault in the converter or the reference is a real finding and gets repaired, while a bar set too tight is an instrument fault. The gap attribution is a reading with no bar.
 5. Audits green, `loop gates --full` green, and a REPORT that says what Stage 4 still owes.

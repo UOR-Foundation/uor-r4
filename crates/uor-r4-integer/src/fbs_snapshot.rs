@@ -97,8 +97,22 @@ pub struct FbsFloatPosition {
     pub hidden: Vec<f32>,
 }
 
-/// The float GPU trunk's single-token outputs, for comparison with its
-/// converted snapshot's reference and integer session.
+/// The float GPU trunk's outputs at every position of one token sequence: the
+/// recurrence's transition, its later convolution taps and the carried state
+/// act only after the first position (claude-124).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FbsFloatSequence {
+    /// The input tokens, in order.
+    pub tokens: Vec<u32>,
+    /// The float native writer's next token at each position.
+    pub next: Vec<u32>,
+    /// `width` final hidden values at each position.
+    pub hidden: Vec<Vec<f32>>,
+}
+
+/// The float GPU trunk's single-token and sequence outputs, for comparison
+/// with its converted snapshot's reference and integer session.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FbsFloatReadout {
@@ -109,13 +123,36 @@ pub struct FbsFloatReadout {
     pub export_mode: bool,
     /// One position per token, in token order.
     pub positions: Vec<FbsFloatPosition>,
+    /// Token sequences read position by position.
+    pub sequences: Vec<FbsFloatSequence>,
 }
 
 impl FbsFloatReadout {
     /// Refuse a readout that does not hold every token of a `vocab`-token,
-    /// `width`-wide trunk once, in token order, with a full hidden vector, or
-    /// that was read in the other mode.
-    pub fn check(&self, vocab: usize, width: usize, export_mode: bool) -> Result<(), String> {
+    /// `width`-wide trunk once, in token order, with a full hidden vector,
+    /// that holds a sequence that is empty, longer than `context`, out of the
+    /// vocabulary or not fully read, or that was read in the other mode.
+    pub fn check(
+        &self,
+        vocab: usize,
+        width: usize,
+        context: usize,
+        export_mode: bool,
+    ) -> Result<(), String> {
+        for (s, q) in self.sequences.iter().enumerate() {
+            let n = q.tokens.len();
+            if n == 0
+                || n > context
+                || q.tokens.iter().any(|&t| t as usize >= vocab)
+                || q.next.len() != n
+                || q.hidden.len() != n
+                || q.hidden.iter().any(|h| h.len() != width)
+            {
+                return Err(format!(
+                    "sequence {s} is not 1 to {context} tokens with an output at each"
+                ));
+            }
+        }
         if self.vocab != vocab || self.width != width {
             return Err("the readout's vocabulary or width differs from the trunk's".to_owned());
         }
@@ -196,9 +233,14 @@ mod tests {
                     hidden: vec![0.0; 2],
                 })
                 .collect(),
+            sequences: vec![FbsFloatSequence {
+                tokens: vec![2, 0],
+                next: vec![1, 1],
+                hidden: vec![vec![0.0; 2]; 2],
+            }],
         };
-        assert!(readout(&[0, 1, 2], false).check(3, 2, false).is_ok());
-        assert!(readout(&[0, 1, 2], true).check(3, 2, true).is_ok());
+        assert!(readout(&[0, 1, 2], false).check(3, 2, 4, false).is_ok());
+        assert!(readout(&[0, 1, 2], true).check(3, 2, 4, true).is_ok());
         for (what, r, reason) in [
             ("empty", readout(&[], false), "0 positions"),
             ("a token missing", readout(&[0, 1], false), "2 positions"),
@@ -218,7 +260,7 @@ mod tests {
                 "export_mode = true",
             ),
         ] {
-            match r.check(3, 2, false) {
+            match r.check(3, 2, 4, false) {
                 Err(e) => assert!(e.contains(reason), "{what}: {e}"),
                 Ok(()) => panic!("{what} must be refused"),
             }
@@ -226,9 +268,38 @@ mod tests {
         let mut short = readout(&[0, 1, 2], false);
         short.positions[1].hidden.pop();
         assert!(short
-            .check(3, 2, false)
+            .check(3, 2, 4, false)
             .is_err_and(|e| e.contains("position 1")));
-        assert!(readout(&[0, 1, 2], false).check(4, 2, false).is_err());
+        assert!(readout(&[0, 1, 2], false).check(4, 2, 4, false).is_err());
+        // A sequence must be 1 to `context` in-vocabulary tokens, each read.
+        type Seq = fn(&mut FbsFloatSequence);
+        let bad: [(&str, Seq); 5] = [
+            ("empty", |q| {
+                q.tokens.clear();
+                q.next.clear();
+                q.hidden.clear();
+            }),
+            ("past the context", |q| {
+                q.tokens = vec![0; 5];
+                q.next = vec![0; 5];
+                q.hidden = vec![vec![0.0; 2]; 5];
+            }),
+            ("a token out of the vocabulary", |q| q.tokens[1] = 3),
+            ("a position not read", |q| {
+                q.next.pop();
+            }),
+            ("a short hidden vector", |q| {
+                q.hidden[1].pop();
+            }),
+        ];
+        for (what, mutate) in bad {
+            let mut r = readout(&[0, 1, 2], false);
+            mutate(&mut r.sequences[0]);
+            match r.check(3, 2, 4, false) {
+                Err(e) => assert!(e.contains("sequence 0"), "{what}: {e}"),
+                Ok(()) => panic!("{what} must be refused"),
+            }
+        }
     }
 
     #[test]
