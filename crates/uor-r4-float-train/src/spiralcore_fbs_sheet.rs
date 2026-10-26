@@ -2452,7 +2452,9 @@ pub fn run_d11_snap_trace(
         exact_ties,
         median_margin,
     };
-    let instruments_pass = i_inputs && i_trace && i_old_run;
+    // I-Finite on the margins: a NaN would otherwise read as an exact tie.
+    let i_finite_margins = compared.root_margins.iter().all(|m| m.is_finite());
+    let instruments_pass = i_inputs && i_trace && i_old_run && i_finite_margins;
     let mut root_margins = compared.root_margins.clone();
     root_margins.sort_by(f32::total_cmp);
     let below = |t: f32| root_margins.iter().filter(|&&m| m < t).count();
@@ -2519,6 +2521,7 @@ pub fn run_d11_snap_trace(
         "i_inputs": i_inputs,
         "i_trace": i_trace,
         "i_old_run": i_old_run,
+        "i_finite_margins": i_finite_margins,
         "instruments_pass": instruments_pass,
         "classification": if instruments_pass {
             classify_snap_trace(&readings)

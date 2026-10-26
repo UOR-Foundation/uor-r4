@@ -55,7 +55,7 @@ The bar is per model, over its 32 windows. Every instrument check of section 4 m
 |---|---|---|---|---|
 | 0 | **No rows differ** | R is empty | D and A agree on every scored row of the 32 windows. | Nothing to place. The readings are reported (the faithful models may land here). |
 | 1 | **Zero convention** | zero mask: P ≥ 50%, L ≥ 50%, and P − B ≥ 20 points | Zero blocks sit before most partings, well above their base rate. There, D applies the identity and A applies −1. | D is not A's twin there: an instrument repair. D's zero convention is aligned with the integer path's, the twin is requalified, and the residual check is re-run. It is not a mechanism or trunk result. |
-| 2 | **Not snap-carried** | root mask: P < 50% or L < 50% | Most partings start with no root disagreement before them. | The residual is in the continuous arithmetic: the final norm, the Q12 query or the writer's kept cells. The next control compares A's and D's queries at those rows. It is never a mechanism result. |
+| 2 | **Not snap-carried** | root mask: P < 50% or L < 50% | Most partings start with no root disagreement before them, and zero blocks did not lead them enough for outcome 1. The REPORT gives the zero mask's P, B and L beside this outcome. | The residual is in the continuous arithmetic: the final norm, the Q12 query or the writer's kept cells. The next control compares A's and D's queries at those rows. It is never a mechanism result. |
 | 3 | **Tie-break** | exact ties ≥ half the primaries (and > 0) | Partings start where D's raw scores two roots exactly alike, and D's tie rule parts from the integer path's lowest index. | The same kind of instrument repair: D's argmax tie rule is aligned with the integer path's lowest index. |
 | 4 | **Localise upstream** | m ≥ 1e-2 | D chose decisively where A chose differently, so A's input to the snap differs from D's by more than rounding. | An instrument localisation of the pre-snap values on that model: the gate and transition raws, layer by layer. It needs no lift, because it decides a localisation, not a ruling. A departure is called only when that localisation finds the defect. |
 | 5 | **Snap-flip near-tie** | root mask: P ≥ 90%, P − B ≥ 20 points, L ≥ 90%; and m < 1e-3 | Partings start at snaps whose two best roots nearly tie, and the recurrence carries them. | The residual is consistent with D's own sensitivity at its discrete choices. **It does not clear the exporter.** The next control compares A's pre-snap raws with D's at the primaries. Only if they agree within claude-133's measured drift (median 1 to 3 codes) does the next unit settle the four models as faithful, so that the residual check's "faithful on all six" follows. |
@@ -84,7 +84,7 @@ The bar is per model, over its 32 windows. Every instrument check of section 4 m
 4. **`I-Old-Run`.** For each artifact, the traced build's tokens on the 32 windows equal the stored, qualified run's: claude-129's, claude-130's or claude-131's.
 5. **`I-Inputs`.** Each artifact's, the windows' and each model's sha256 equal their pins (section 5).
 6. **`I-Capture`.** The D panel's snap calls cover its two chunks, three per layer each. A miscount is refused, not read.
-7. **`I-Fetch` and `I-Finite`,** as in claude-132: every fetched file against its folder's `SHA256SUMS`, every step exiting 0, and the log written before `SHA256SUMS`.
+7. **`I-Fetch` and `I-Finite`,** as in claude-132: every fetched file against its folder's `SHA256SUMS`, every step exiting 0, and the log written before `SHA256SUMS`. Every root-disagreement margin must be finite too (`i_finite_margins`), since a NaN would otherwise read as an exact tie.
 
 ## 5. Base artifact and data split
 
@@ -133,4 +133,23 @@ The bar is per model, over its 32 windows. Every instrument check of section 4 m
 
 ## 8. Non-author TEST FITNESS review
 
-To be filled in by the fresh reviewer.
+Three rounds, each by a fresh-context reviewer that read only the sheet, its sources and the code (claude-134, 26 Oct):
+
+- **Round 1: NOT FIT.** It found seven problems:
+  - the margin mixed first flips with carried ones;
+  - P had no base rate;
+  - zero blocks were treated as benign;
+  - "clears the exporter" did not follow;
+  - there was no outcome precedence;
+  - D's tokens came from a second forward;
+  - no power was stated.
+- **Round 2: NOT FIT.** All seven were fixed bar one. Zero blocks still drove the position mask, so a structurally zero lane would fire "zero convention" mechanically.
+- **Round 3: FIT.** It confirmed:
+  - root-only masks and first flips;
+  - a separate zero mask with its own 20-point lift;
+  - position-0 transitions as inert, checked against `fbs_sequence`, `fbs_recurrence` and `quaternion_scan`;
+  - the code's precedence and thresholds against the table.
+
+  Its advisories were folded in: outcome 2's wording, and finite margins as an instrument check.
+
+**TEST FITNESS: FIT**
