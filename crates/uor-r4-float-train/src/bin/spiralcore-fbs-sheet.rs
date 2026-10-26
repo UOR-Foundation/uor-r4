@@ -35,7 +35,8 @@
 //! `docs/harness/prep/d11-exporter-float-trunk-snap-trace-2026-10-26.md`): over the first
 //! `--windows-count` DEV windows, a saved model's D11 snap choices against the artifact's trace
 //! (`d11-fbs-eval trace`, `--trace`), with `--model-dir`, `--windows-sha256`, `--artifact-sha256`,
-//! `--model-sha256`, `--label` and `--seed`.
+//! `--model-sha256`, `--stored-run` (the qualified run of the same artifact, I-Old-Run), `--label`
+//! and `--seed`.
 
 use std::collections::BTreeMap;
 use std::env;
@@ -51,7 +52,7 @@ use uor_r4_float_train::{FloatTrainError, Result};
 
 /// The options of `d11-artifact-gap`, `d11-train-probe`, `d11-train-export`, `d11-residual` and
 /// `d11-snap-trace`.
-const GAP_OPTIONS: [&str; 13] = [
+const GAP_OPTIONS: [&str; 14] = [
     "--model-dir",
     "--evaluator",
     "--windows-sha256",
@@ -65,6 +66,7 @@ const GAP_OPTIONS: [&str; 13] = [
     "--model-sha256",
     "--trace",
     "--windows-count",
+    "--stored-run",
 ];
 
 type Args = (
@@ -370,6 +372,7 @@ fn main() -> Result<()> {
                 &option("--windows-sha256")?,
                 &option("--artifact-sha256")?,
                 &option("--model-sha256")?,
+                &PathBuf::from(option("--stored-run")?),
                 &option("--label")?,
                 number("--seed")?,
                 &device,

@@ -2089,6 +2089,7 @@ pub fn run_d11_snap_trace(
     windows_sha256: &str,
     artifact_sha256: &str,
     model_sha256_pin: &str,
+    stored_run: &Path,
     label: &str,
     seed: u64,
     device: &Device,
@@ -2100,6 +2101,12 @@ pub fn run_d11_snap_trace(
         .get(..windows_count)
         .ok_or_else(|| invalid("fewer DEV windows than asked for"))?;
     let trace: EvaluatorTrace = serde_json::from_slice(&fs::read(trace_path)?)?;
+    // I-Old-Run: on these windows the traced build's tokens are the stored, qualified run's
+    // (claude-128's evaluator), so the trace describes the artifact that was scored.
+    let old: EvaluatorRun = serde_json::from_slice(&fs::read(stored_run)?)?;
+    let i_old_run = old.artifact_sha256 == trace.artifact_sha256
+        && old.len == SHEET_CONTEXT
+        && old.tokens.get(..windows_count * SHEET_CONTEXT) == Some(&trace.tokens[..]);
     let loaded = StackModel::load(model_dir, device)?;
     let model_sha256 = sha256_bytes(&fs::read(model_dir.join("model.safetensors"))?);
     let config = &loaded.config;
@@ -2206,7 +2213,8 @@ pub fn run_d11_snap_trace(
         },
         "i_inputs": i_inputs,
         "i_trace": i_trace,
-        "instruments_pass": i_inputs && i_trace,
+        "i_old_run": i_old_run,
+        "instruments_pass": i_inputs && i_trace && i_old_run,
     }))
 }
 

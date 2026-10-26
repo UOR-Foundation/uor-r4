@@ -696,8 +696,8 @@ fn cached_device_icosians(device: &CudaDevice) -> candle_core::Result<(Tensor, T
 }
 
 /// One snap call's capture (claude-134): per 4-block, the chosen root's index (255 for a zero
-/// block, which snaps to the identity), and the margin between the best and the second-best root
-/// scores (a near-tie reading).
+/// block, which snaps to the identity), and the relative margin `(best − second) / best` between
+/// the best and the second-best root scores (a near-tie reading).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SnapCapture {
     pub roots: Vec<u8>,
@@ -759,7 +759,9 @@ pub fn icosian_snap_cuda_tensor(device: &CudaDevice, gate: &Tensor) -> candle_co
             let chosen = ids.broadcast_eq(&raw_idx.unsqueeze(1)?)?;
             let floor = Tensor::full(f32::MIN, (len, 120), &dev)?;
             let second = chosen.where_cond(&floor, &scores)?.max(1)?;
-            let margin = (scores.max(1)? - second)?;
+            // Relative to the best score, so a near-tie reads the same at any raw scale.
+            let best = scores.max(1)?;
+            let margin = ((&best - second)? / best.clamp(1e-12f32, f32::MAX)?)?;
             let zero = is_zero.to_vec1::<u8>()?;
             capture
                 .roots
