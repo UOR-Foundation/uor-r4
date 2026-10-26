@@ -34,7 +34,10 @@ Complete the D68 decision review weighing `#2834` (`m1-address-key-full-vector`)
 
 ## Files in scope
 
-- `crates/uor-r4-discrete/**`
+- `crates/uor-r4-discrete/Cargo.toml`
+- `crates/uor-r4-discrete/src/lib.rs`
+- `crates/uor-r4-discrete/src/stage_t.rs`
+- `crates/uor-r4-discrete/src/bin/stage-t-run.rs`
 - `docs/harness/prep/m1-bvg-k-stage-t-training*`
 - `docs/labs/m1-bvg-k-stage-t-training/**`
 - `docs/loop/tasks/m1-bvg-k-stage-t-training/**`
