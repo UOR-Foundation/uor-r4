@@ -25,7 +25,7 @@ Cancel if the gap of these artifacts was measured after `a605d033d`, or another 
 
 Result:
 - No commit after `a605d033d` touches those paths.
-- The open PRs are #3278 (this one), #3273 (kimi, m1-address-as-read) and #3169 (codex). Neither of the other two touches this item.
+- The open PRs are #3278 (this one), #3277 and #3276 (antigravity: m1-wider-code-carrier and r-vocab-4096-vs-16384), #3273 (kimi, m1-address-as-read) and #3169 (codex). None of the others touches this item.
 
 **Not cancelled (instrument: none needed).**
 
