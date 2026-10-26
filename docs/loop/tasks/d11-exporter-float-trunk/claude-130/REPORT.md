@@ -1,6 +1,6 @@
 # REPORT: d11-exporter-float-trunk, claude-130
 
-Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [d11-exporter-float-trunk-d11-train-2026-10-26](../../../../harness/prep/d11-exporter-float-trunk-d11-train-2026-10-26.md) (FIT round 1; D67 pre-run review GO). Decision review: DECISION_REF.
+Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [d11-exporter-float-trunk-d11-train-2026-10-26](../../../../harness/prep/d11-exporter-float-trunk-d11-train-2026-10-26.md) (FIT round 1; D67 pre-run review GO). Decision review: [owner log on #2820](https://github.com/UOR-Foundation/uor-r4/issues/2820#issuecomment-6417189833) (fresh, APPROVE).
 
 References #2820.
 
@@ -18,6 +18,8 @@ References #2820.
   - **On seed 1 the artifact loses 278 net rows.**
   - **What it decides,** under the sheet's FAIL row: D11-mode training by this recipe (the bridges, Stage 4b's 1,024 steps and data) does not bring the gap inside the band. That closes this configuration, never the mechanism. The next step is the decision review's, below.
 - **D11-mode training is unstable across seeds in plain float.** Its top-1 is 3,941 and 917, against the plain-trained trunk's 1,988 and 2,643. Its own two-seed loss band, |L_F(1) − L_F(2)|, is 0.0445, about Stage 4b's whole band of 0.0457.
+- **This recipe made seed 2 worse in every forward, not only in plain float.** Its export-mode top-1 is 1,237, below claude-129's plain-trained artifact (2,294). Its admitted-target rate is 0.115, against seed 1's 0.354.
+- **The gap receipts carry the wrong sheet path.** They name the artifact-gap sheet, claude-129's scorer default, not this unit's sheet. The receipts are as the scorer wrote them, and this REPORT names the sheet that governs them.
 - **The item's done-when is not met,** so #2820 stays open.
 
 ## What changed
@@ -84,11 +86,13 @@ See the exact-head review record on the PR.
 
 ## Still open
 
-- **The next step is the decision review's** (the sheet's FAIL row). Its options:
-  - **A comparator question.** For a candidate trained in the D11 mode, CHARTER §3.7's float candidate is still its plain-float forward, so the gap measures how far the weights have moved away from plain float.
-  - **Seed instability** of D11-mode training: top-1 of 3,941 against 917.
-  - **A longer or annealed D11 schedule.**
-  - **Seed 1's writer-address collapse** (claude-127).
+- **The next configuration, by the decision review: dual-forward training.**
+  - Each step's loss is the sum of the plain-float and the D11-mode `MarginHinge` losses, weighted 1:1 and pinned before the run, with the same bridges, data and steps. The gap is measured as before.
+  - **Its sheet must:**
+    - flag a PASS where either seed's artifact top-1 falls below the plain-trained artifact's (1,907 or 2,294); such a PASS does not close #2820 without a decision review;
+    - report each seed's plain-float and export-mode top-1, admitted rate and two-seed loss band, with a stated reading.
+  - CHARTER §3.7's comparator, the plain-float forward, is kept, so there is no owner question.
+- **Seed 1's writer-address collapse** (claude-127) is still a hypothesis for the training line.
 - **The item's "What is missing" text** is outside this ORDER's scope.
 
 ## Plain summary
