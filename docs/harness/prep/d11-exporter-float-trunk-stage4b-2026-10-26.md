@@ -1,7 +1,7 @@
 # Prep sheet: the D11 export gap of a trained SpiralCore/FBS trunk (d11-exporter-float-trunk Stage 4b, claude-126), 2026-10-26
 
 - Item: [d11-exporter-float-trunk](../../roadmap/items/d11-exporter-float-trunk.md) (#2820). ORDER: [claude-126](../../loop/tasks/d11-exporter-float-trunk/claude-126/ORDER.md).
-- Run: `spiralcore-fbs-sheet --mode d11-export-gap` on one leased RTX 5090, then `fbs-export`, `fbs-compare` and `fbs-toks` on the laptop.
+- Run: `spiralcore-fbs-sheet --mode d11-export-gap`, then `fbs-export` and `fbs-compare`, all inside one GPU job on one leased RTX 5090. Only `fbs-toks` (serving the artifact and timing it) runs on the laptop.
 
 ## 1. Question
 
@@ -19,8 +19,9 @@ For the exported arm on each seed, at step 1,024:
 - **F (float):** `evaluate_dev_panel` with export off. These are the trained model's plain predictions.
 - **D (D11):**
   1. the model is saved (`StackModel::save`) and loaded again;
-  2. its tables are rounded as exported (`round_tables_as_exported`);
+  2. its tables are rounded as exported (`round_tables_as_exported`). An embedding value outside Q12 in `i16` (±8) is refused, never clamped, and the run stops as an instrument fault;
   3. it is scored with `evaluate_dev_panel_d11`. The D loss is the same `MarginHinge(rivals = 8)` with the trunk in D11 mode and each scored hidden vector rounded to Q12 before the head.
+- **The parity sample:** every eighth `ft/dev` window (`PARITY_WINDOW_STRIDE = 8`), fixed here before the run: about 54 windows and 10,368 positions. The plain, export and D11 readouts read these windows whole, besides the 4,096 single tokens.
 
 ## 3. Bar and decision table
 
@@ -31,7 +32,9 @@ Definitions:
 
 | Gate | Bar | PASS unlocks | FAIL decides (instruments green) |
 |---|---|---|---|
-| `G-D11-ExportGap` | On **both** seeds: \|b − c\| ≤ F_I **and** \|L_D − L_F\| ≤ Δ_noise,L | This trunk's D11 export is inside the band. With the audits and the tok/s, the item's done-when is met, and #2820 closes. | Direct post-training rounding into the artifact is disqualified for this trained configuration (CHARTER §3.7). The next configuration trains in the D11 mode (a root-snapped forward) before export. A negative closes this configuration, never the mechanism. |
+| `G-D11-ExportGap` | On **both** seeds: \|b − c\| ≤ F_I **and** \|L_D − L_F\| ≤ Δ_noise,L, with every instrument check of section 4 green, `I-D11-Artifact-Agreement` included | This trunk's D11 export is inside the band. With the audits and the tok/s, the item's done-when is met, and #2820 closes. | Direct post-training rounding into the artifact is disqualified for this trained configuration (CHARTER §3.7). The next configuration trains in the D11 mode (a root-snapped forward) before export. A negative closes this configuration, never the mechanism. |
+
+**The expected outcome is FAIL.** Stage 3's build A already missed its top-1 export bar by 184 and 481 rows, in a mode that rounded less than the artifact: it snapped only the gates and the writer. A FAIL is still decisive, because it is the first gap measured in the artifact's own computation. It moves this trunk to training in D11 mode. The receipt's `gap_inside_band_on_both_seeds` is only half of the gate, and must not be read as the verdict before `I-D11-Artifact-Agreement` is green.
 
 **Readings, with no bar:**
 - the Stage 3 export-mode gap on the same checkpoint (`evaluate_dev_panel`, export on), so the extra rounding the artifact adds shows;
@@ -40,11 +43,16 @@ Definitions:
 
 ## 4. Instrument checks (each must be green before the gap counts)
 
-1. **`I-Save-Load`:** the loaded model's plain panel predictions equal the trained model's on all 14,287 rows.
+1. **`I-Save-Load`:** the loaded model's plain panel predictions equal the trained model's on all 14,287 rows, and its plain panel loss is the same number.
 2. **`I-D-Determinism`:** two D11 panel passes on the same rounded model give identical predictions. Training is not reproducible run to run (Stage 3 item 3), but the forward is; the gap compares F and D on one saved checkpoint.
 3. **`I-DEV-Denominator`:** the D11 panel scores 14,287 of 14,287 rows.
 4. **`I-Q12-Oracle`:** the D11 panel's pure-`i32` writer oracle has 0 mismatches.
-5. **`I-D11-Parity`** (laptop, from the stored outputs): on each seed's trained snapshot, `fbs-compare` holds the D11 GPU readout against the integer session. Tokens must agree on at least 250 of 256 single tokens and 60 of 64 sequence positions. A miss is classified with the tie trace before any gap counts.
+5. **`I-D11-Artifact-Agreement`:** this ties D to the artifact itself. It runs inside the GPU job on the pod, never on the laptop: CHARTER §3.5 makes parity reference execution GPU-job compute. It is the item's "bit-exact parity proof" path (D68). Per seed:
+   - **m1:** the scored rows of the sampled windows where the panel's D11 prediction differs from the D11 readout's next token at the same position. The panel batches windows and the readout reads one, so this checks the two GPU paths agree.
+   - **m2:** the positions where the D11 readout's token differs from the exported artifact's integer session (`fbs-export`, then `fbs-compare`). These are counted over the 4,096 single tokens and every position of the sampled windows, about 14,464 positions, close to the panel's 14,287 rows.
+   - **The bar:** m1 + m2 ≤ 6 on each seed. That is F_I's floor of 24 divided by 4, at about the panel's size, so the instrument's disagreement stays well below what the gap bar resolves.
+   - Each disagreeing position is traced with `fbs-compare`'s tie margins. Snaps of an all-zero vector are counted over the sample; that is the known edge where the GPU and the integer path pick different roots.
+   - **A miss is an instrument fault:** the gap is not counted, and the D11 mode is repaired before any verdict.
 6. **`I-Finite`:** finite losses and outputs, with no CUDA error. The D11 entries refuse an unrounded trunk by construction (host-tested).
 
 ## 5. Base artifact and data split
@@ -69,13 +77,11 @@ Definitions:
    - `--mode synthetic-probe`, which covers `I-Finite-CUDA`, export exactness and an 8-step descent;
    - the `fbs_export::` GPU tests, which re-run Stage 4a's D11 parity on a random-init trunk at the head.
 2. **Probe b**, about 2 minutes: `--mode throughput-probe` projects the wall time. If it is projected past about an hour, fix the code before running.
-3. **The run:** `--mode d11-export-gap`. It writes a receipt, each seed's saved model, snapshot and readouts, and the D11 predictions.
-4. **Archive** to `results/claude/d11-fbs-export-gap-2026-10-26/` with a `SHA256SUMS`, then release and tear down the pod.
-5. **On the laptop:**
-   - `fbs-export` each seed's snapshot;
-   - both zero-multiply audits;
-   - `fbs-compare` (`I-D11-Parity`);
-   - `fbs-toks` on the exported artifact: 1 warmup and 20 timed runs, a 128-token prefill (context) and a 64-token greedy decode; medians, p95 and the hardware profile.
+3. **The run:** `--mode d11-export-gap`. It writes a receipt, each seed's saved model, snapshot and readouts, and both prediction sets. In the same job, the serving build on the pod exports each seed's artifact, and `fbs-compare` writes `I-D11-Artifact-Agreement`'s comparison.
+4. **Archive** to `results/claude/d11-fbs-export-gap-2026-10-26/` with a `SHA256SUMS`, then release and tear down the pod. Reading the bars off the stored receipt and comparison is analysis of stored outputs.
+5. **On the laptop:** only product serving (CHARTER §3.6).
+   - Both zero-multiply audits on the serving builds.
+   - `fbs-toks` on each exported artifact: 1 warmup and 20 timed runs, a 128-token prefill (context) and a 64-token greedy decode; medians, p95 and the hardware profile.
 
 **Minimum test power:** 2 seeds; 14,287 frozen DEV targets; trained from step 0 (1,024 steps, 786,432 tokens per arm-seed).
 
@@ -83,13 +89,27 @@ Definitions:
 
 - **Cost:** one RTX 5090 at about $0.90–1.90/h, inside the caps of 4 pods and $8/h.
   - Stage 3 took about 35 s of training per arm-seed, plus its evaluations, so the 8 arm-seeds take about 10 minutes.
-  - The D11 passes take under a minute per seed. The probes and builds take about 10 minutes.
+  - The D11 passes and readouts take a few minutes per seed. `fbs-compare` on the pod takes a few minutes per seed. The probes and builds take about 15 minutes.
   - The estimate is about $0.50, with a ceiling of $2.00 (`--hours 1.5`).
 - **Stop rule:**
-  - Stop and repair if any of these fails: `I-Finite`, `I-Save-Load`, `I-D-Determinism`, `I-DEV-Denominator` or `I-Q12-Oracle`. These are instrument faults and never count as a gap.
+  - Stop and repair if any of these fails: `I-Finite`, `I-Save-Load`, `I-D-Determinism`, `I-DEV-Denominator`, `I-Q12-Oracle` or `I-D11-Artifact-Agreement`. These are instrument faults and never count as a gap.
   - A probe-a failure stops before the run.
   - Never cancel a healthy run for a self-set time estimate; extend the lease.
 
 ## 8. Non-author TEST FITNESS review
+
+TEST FITNESS: PENDING
+
+**Round 1 (fresh non-author reviewer, 2026-10-26): NOT_FIT.**
+
+The required changes, each made above:
+- `I-D11-Artifact-Agreement` ties D to the artifact on DEV text, at a tolerance below what the bar resolves (section 4, item 5). It runs on the pod: CHARTER §3.5 rules out laptop parity reference execution, and the reviewer had proposed the laptop.
+- An agreement miss is an instrument fault, and the receipt's gap field is labelled half of the gate.
+- Zero-vector snaps are counted on the DEV sample.
+
+Also adopted from the reviewer's suggestions:
+- `I-Save-Load` also compares the plain loss.
+- The embedding's Q12 range is refused, never clamped.
+- The sheet says FAIL is the expected outcome.
 
 TEST FITNESS: PENDING
