@@ -1330,8 +1330,11 @@ pub fn grade_relation_head(
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum RankObjectiveVerdict {
+    PassRankAndOcc,
     PassRankOccAndUnigram,
     PassRankOccKeepIterate,
+    FailOccCollapse,
+    FailAdmissionRegression,
     FailRankGainAtHighOcc,
     InstrumentStop,
 }
@@ -1514,7 +1517,7 @@ pub fn grade_rank_objective(
         ));
     }
 
-    // Verify K16-R collapse baseline triggers G-Occ on both seeds
+    // Verify K16-R collapse baseline, K16-A floor, and #2831 Q1 baseline
     let (k16_r_s1_occ_ok, _, _) = crate::objective::evaluate_g_occ_contract(
         k16_collapse_baseline.k16_r_seed1_occupied_cells,
         k16_collapse_baseline.k16_a_seed1_occupied_cells,
@@ -1533,9 +1536,16 @@ pub fn grade_rank_objective(
         || k16_r_s2_occ_ok
         || k16_collapse_baseline.k16_r_seed1_g_occ_pass
         || k16_collapse_baseline.k16_r_seed2_g_occ_pass
+        || k16_collapse_baseline.k16_r_seed1_occupied_cells != 20
+        || k16_collapse_baseline.k16_r_seed2_occupied_cells != 19
+        || k16_collapse_baseline.k16_a_seed1_occupied_cells < 192
+        || k16_collapse_baseline.k16_a_seed2_occupied_cells < 192
+        || k16_collapse_baseline.a8_q1_frozen_zero_dev_b3_full_admitted < 4_292
+        || k16_collapse_baseline.a8_q1_frozen_zero_dev_b3_psucc_admitted < 1_106
+        || k16_collapse_baseline.a8_q1_frozen_zero_dev_top1 != RANK_OBJECTIVE_Q1_TOP1_BAR
     {
         return Err(invalid(
-            "K16-R collapse baseline must fail G-Occ on both seeds",
+            "K16-R/K16-A collapse baseline or #2831 Q1 reference failed verification",
         ));
     }
 
@@ -1561,13 +1571,12 @@ pub fn grade_rank_objective(
             2_560,
             s.max_cell_tokens,
         );
-        if !g_occ_ok
-            || !s.g_occ_pass
+        if s.g_occ_pass != g_occ_ok
             || s.min_required_occupied_cells != min_cells
             || s.max_allowed_mean_admitted_tokens_x10 != max_mean_x10
         {
             return Err(invalid(
-                "G-Occ breach or threshold mismatch in rank objective seed summary",
+                "G-Occ flag or threshold mismatch in rank objective seed summary",
             ));
         }
         let d40_ok = s.train_anchor_required_floor == RELATION_HEAD_D40_TRAIN_FLOOR
@@ -1575,15 +1584,17 @@ pub fn grade_rank_objective(
             && s.rel_train_anchor_final_admitted >= s.train_anchor_required_floor
             && s.fz_dev_b3_psucc_admitted >= DEV_PSUCC_ADMISSION_BAR
             && s.rel_dev_b3_psucc_admitted >= DEV_PSUCC_ADMISSION_BAR;
-        if !d40_ok || !s.gate_d40_pass {
+        if s.gate_d40_pass != d40_ok || !d40_ok {
             return Err(invalid(
                 "Gate D40 breach in rank objective seed summary: TRAIN anchor or DEV P_succ floor violated",
             ));
         }
         let g_adm_ok = s.r_occ_dev_b3_full_admitted >= RANK_OBJECTIVE_G_ADM_FULL_BAR
             && s.r_occ_dev_b3_psucc_admitted >= RANK_OBJECTIVE_G_ADM_PSUCC_BAR;
-        if !g_adm_ok || !s.g_adm_pass {
-            return Err(invalid("G-Adm breach in rank objective seed summary"));
+        if s.g_adm_pass != g_adm_ok {
+            return Err(invalid(
+                "G-Adm flag mismatch in rank objective seed summary",
+            ));
         }
         let expected_delta = i64::try_from(s.r_occ_dev_writer_top1_all).unwrap_or(0)
             - i64::try_from(s.fz_dev_writer_top1_all).unwrap_or(0);
@@ -1592,15 +1603,19 @@ pub fn grade_rank_objective(
                 "r_occ_minus_arm_a_top1 mismatch against r_occ_dev_writer_top1_all - fz_dev_writer_top1_all",
             ));
         }
+        let g_rank_ok = s.r_occ_dev_writer_top1_all > RANK_OBJECTIVE_Q1_TOP1_BAR
+            && s.r_occ_minus_arm_a_top1
+                >= i64::try_from(RANK_OBJECTIVE_MIN_TOP1_GAIN_OVER_A).unwrap_or(192);
+        if s.g_rank_pass != g_rank_ok {
+            return Err(invalid(
+                "G-Rank flag mismatch in rank objective seed summary",
+            ));
+        }
     }
 
     let g_occ_two_seeds_pass = seeds.iter().all(|s| s.g_occ_pass);
     let g_adm_two_seeds_pass = seeds.iter().all(|s| s.g_adm_pass);
-    let g_rank_two_seeds_pass = seeds.iter().all(|s| {
-        s.r_occ_dev_writer_top1_all > RANK_OBJECTIVE_Q1_TOP1_BAR
-            && s.r_occ_minus_arm_a_top1
-                >= i64::try_from(RANK_OBJECTIVE_MIN_TOP1_GAIN_OVER_A).unwrap_or(192)
-    });
+    let g_rank_two_seeds_pass = seeds.iter().all(|s| s.g_rank_pass);
     let beats_unigram_with_outer_l1_two_seeds = seeds
         .iter()
         .all(|s| s.r_occ_dev_writer_top1_all > UNIGRAM_FULL_BAR);
@@ -1617,13 +1632,13 @@ pub fn grade_rank_objective(
         && within_cell_seed1.fz_admitted_target_loses_within_own_cell_rows > 4_000
         && beats_unigram_with_within_cell_reranker;
 
-    let verdict = if g_occ_two_seeds_pass
-        && g_adm_two_seeds_pass
-        && g_rank_two_seeds_pass
-        && beats_unigram_with_outer_l1_two_seeds
-    {
-        RankObjectiveVerdict::PassRankOccAndUnigram
-    } else if g_occ_two_seeds_pass && g_adm_two_seeds_pass && g_rank_two_seeds_pass {
+    let verdict = if !g_occ_two_seeds_pass {
+        RankObjectiveVerdict::FailOccCollapse
+    } else if !g_adm_two_seeds_pass {
+        RankObjectiveVerdict::FailAdmissionRegression
+    } else if g_rank_two_seeds_pass && beats_unigram_with_outer_l1_two_seeds {
+        RankObjectiveVerdict::PassRankAndOcc
+    } else if g_rank_two_seeds_pass {
         RankObjectiveVerdict::PassRankOccKeepIterate
     } else {
         RankObjectiveVerdict::FailRankGainAtHighOcc
@@ -3658,7 +3673,72 @@ mod tests {
         assert!(!report.mechanism_negative);
         assert_eq!(report.verdict, RankObjectiveVerdict::FailRankGainAtHighOcc);
 
-        // G-Occ failure on any seed must be refused
+        // (a) PASS_RANK_AND_OCC when both seeds pass G-Occ, G-Adm, G-Rank, and beat Unigram (1,226)
+        let mut pass_s1 = s1.clone();
+        pass_s1.r_occ_dev_writer_top1_all = 1_300;
+        pass_s1.r_occ_minus_arm_a_top1 = 845;
+        pass_s1.g_rank_pass = true;
+        let mut pass_s2 = s2.clone();
+        pass_s2.r_occ_dev_writer_top1_all = 1_300;
+        pass_s2.r_occ_minus_arm_a_top1 = 845;
+        pass_s2.g_rank_pass = true;
+        let pass_report = grade_rank_objective(
+            "docs/harness/prep/r-rank-objective-keeps-cells-2026-10-25.md",
+            &"1".repeat(64),
+            "docs/loop/tasks/r-rank-objective-keeps-cells/antigravity-97/DECISION.md",
+            &"2".repeat(64),
+            &step0,
+            &"3".repeat(64),
+            &"4".repeat(64),
+            k16_collapse.clone(),
+            within_cell.clone(),
+            vec![pass_s1, pass_s2],
+        )?;
+        assert_eq!(pass_report.verdict, RankObjectiveVerdict::PassRankAndOcc);
+
+        // (b) FAIL_OCC_COLLAPSE when G-Occ fails consistently (g_occ_pass == false)
+        let mut collapse_s1 = s1.clone();
+        collapse_s1.occupied_cells = 20;
+        collapse_s1.g_occ_pass = false;
+        let collapse_report = grade_rank_objective(
+            "docs/harness/prep/r-rank-objective-keeps-cells-2026-10-25.md",
+            &"1".repeat(64),
+            "docs/loop/tasks/r-rank-objective-keeps-cells/antigravity-97/DECISION.md",
+            &"2".repeat(64),
+            &step0,
+            &"3".repeat(64),
+            &"4".repeat(64),
+            k16_collapse.clone(),
+            within_cell.clone(),
+            vec![collapse_s1, s2.clone()],
+        )?;
+        assert_eq!(
+            collapse_report.verdict,
+            RankObjectiveVerdict::FailOccCollapse
+        );
+
+        // (c) FAIL_ADMISSION_REGRESSION when G-Adm fails consistently (g_adm_pass == false)
+        let mut adm_fail_s1 = s1.clone();
+        adm_fail_s1.r_occ_dev_b3_full_admitted = 4_000;
+        adm_fail_s1.g_adm_pass = false;
+        let adm_fail_report = grade_rank_objective(
+            "docs/harness/prep/r-rank-objective-keeps-cells-2026-10-25.md",
+            &"1".repeat(64),
+            "docs/loop/tasks/r-rank-objective-keeps-cells/antigravity-97/DECISION.md",
+            &"2".repeat(64),
+            &step0,
+            &"3".repeat(64),
+            &"4".repeat(64),
+            k16_collapse.clone(),
+            within_cell.clone(),
+            vec![adm_fail_s1, s2.clone()],
+        )?;
+        assert_eq!(
+            adm_fail_report.verdict,
+            RankObjectiveVerdict::FailAdmissionRegression
+        );
+
+        // (d) Inconsistent g_occ_pass flag on any seed must be refused with Err
         let mut bad_occ = s1;
         bad_occ.occupied_cells = 20;
         assert!(grade_rank_objective(
