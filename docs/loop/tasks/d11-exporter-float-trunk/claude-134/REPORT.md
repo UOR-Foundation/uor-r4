@@ -6,13 +6,13 @@ References #2820.
 
 **Speed and cost.**
 - **The tokens/s are the instrument's, not the served product's.**
-  - The traced evaluator scored 32 sequences × 192 positions in 14.0 s on one RTX 5090: 437 to 439 tok/s.
+  - The traced evaluator scored 32 sequences × 192 positions in 13.9 to 14.1 s on one RTX 5090: 437 to 441 tok/s.
   - The untraced evaluator scored 428 × 192 in 14.3 s: 5,729 tok/s.
   - It runs one sequence per thread, so a batch takes about 14 s whatever its size, and the trace costs nothing measurable.
 - **Times:**
   - The first job ran in 29 m 27 s, from 17:45:40Z to 18:15:07Z: the build, the GPU tests, the fetch, the qualification (19 m 34 s, mostly the host twin and the Rust session of `--verify`), and the six traces and comparisons.
   - The second-build job ran in 7 m 41 s (18:18:15Z to 18:25:56Z).
-- **Cost:** the pod was up from 17:42:53Z to 18:28:28Z at $1.106/h, about $0.84.
+- **Cost:** the pod was up from 17:42:53Z to 18:28:28Z at $1.106/h, about $0.84. The down time is from the `uor-pod down` call, and is not in the store.
 
 ## What did not work, first
 
@@ -117,7 +117,7 @@ Against `origin/main`: the evaluator instrument and the float-train crate. Docs:
 - **`I-Capture`:** passed.
 - **`I-Layout`** (second build): passed on all six. Each site's snaps agree at least 97.7% between D's capture and A's trace, where a misplaced site would agree on about 1 in 120.
 - **Finite margins:** all finite.
-- **`I-Finite`:** every step exited 0. The 287 files in the five folders verify against their `SHA256SUMS`, on the pod and on the laptop.
+- **`I-Finite`:** every step exited 0. The 282 data files in the five folders verify against their folders' `SHA256SUMS`, on the pod and on the laptop.
 
 **Evidence:** the HF store at `results/claude/d11-fbs-snap-trace-2026-10-26/`, each folder with a `SHA256SUMS`:
 - `snap/`: the first job, holding every step's output, `qualify.json`, the verify run, the six traces, the six receipts and `job.log`;
