@@ -2798,4 +2798,41 @@ mod tests {
         assert!(flat(&control)?.iter().all(|v| v.is_finite()));
         Ok(())
     }
+
+    /// On one GPU (claude-134): the snap capture of a D11-mode forward records, per layer, the
+    /// transition, the output gate and the feed-forward gate, in that order, one root per 4-block
+    /// (each below 120, or 255 for a zero block) with a non-negative margin, and changes nothing.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn gpu_the_snap_capture_records_each_site_and_changes_nothing() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let model = build_fbs_model(D11_EXPORT_ARM, 1, &device)?;
+        crate::fbs_export::round_tables_as_exported(&model)?;
+        let batches = synthetic_batches(1, 17);
+        let (ids, _, _) = &batches[0];
+        let forward = || hs::with_d11_mode(|| model.hidden(ids, SHEET_TRAIN_BATCH, SHEET_CONTEXT));
+        let plain = forward()?;
+        let (captured_out, captures) = hs::with_snap_capture(forward)?;
+        let flat = |t: &Tensor| -> Result<Vec<f32>> { Ok(t.flatten_all()?.to_vec1::<f32>()?) };
+        assert_eq!(flat(&plain)?, flat(&captured_out)?);
+        let config = &model.config;
+        let rows = SHEET_TRAIN_BATCH * SHEET_CONTEXT;
+        let lanes = config.width / 4;
+        assert_eq!(captures.len(), 3 * config.layers());
+        for (call, capture) in captures.iter().enumerate() {
+            let blocks = if call % 3 == 2 {
+                config.mlp_hidden / 4
+            } else {
+                lanes
+            };
+            assert_eq!(capture.roots.len(), rows * blocks, "call {call}");
+            assert_eq!(capture.margins.len(), rows * blocks, "call {call}");
+            assert!(capture.roots.iter().all(|&r| r < 120 || r == u8::MAX));
+            assert!(capture.margins.iter().all(|&m| m >= 0.0));
+        }
+        // Outside the capture, nothing is recorded.
+        assert!(hs::with_snap_capture(|| Ok(()))?.1.is_empty());
+        hs::clear_active_arm();
+        Ok(())
+    }
 }
