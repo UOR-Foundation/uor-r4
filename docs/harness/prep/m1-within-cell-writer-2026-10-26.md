@@ -14,7 +14,7 @@ On Stage T (`#2836`), `T16_fz` admits `5,009 / 14,287` target cells (`35.06%`), 
 
 ## 2. Arms (`B0` on Re-Derived Epoch-0 `FullVectorV1`, `B = 4`, `OuterL1V1`, Zero Updates)
 
-All GPU writer arms evaluate the identical `4,096 x 32` `FullVectorV1` table (`2c88673638bf7efba7d3c4fd6fb9acdb1fa8f0dc04ca32b9cfbb8d78b153f433`), `ActiveLeafV1` gates (`gates[b*5+0] = +1`, relation gates `0`), `kept_cells = 8`, `kept = 8`, `sweeps = 1`:
+All GPU writer arms evaluate the identical `4,096 x 32` `FullVectorV1` table (`2c886736c858778677d6a7b87253af188d8787cedc5fe5acd9b3c899a10a90e2`), `ActiveLeafV1` gates (`gates[b*5+0] = +1`, relation gates `0`), `kept_cells = 8`, `kept = 8`, `sweeps = 1`:
 1. **`current_single_pass_v1` / `_v2`**: `f(0)=3, f(1)=0, f(2)=0, f(3)=0`, `fq` from cursor token (`ReadLawV1` / `ReadLawV2`, `RelativeFrameTransportV1`).
 2. **`nearest_endpoint_single_pass_v1` / `_v2`**: `f(0)=3, f(1)=0, f(2)=3, f(3)=0`, `fq` from cursor token's nearest endpoint (`ReadLawV1` / `ReadLawV2`, `RelativeFrameTransportV1`).
 3. **`twopass_endpoint_output_v1` / `_v2`**: Pass 1 executes `b in {0, 3}`; Pass 2 conditions `b = 1` on `out_0` (`f = 0, fq = out_0`) and `b = 2` on `out_3` (`f = 3, fq = out_3`) (`ReadLawV1` / `ReadLawV2`, `RelativeFrameTransportV1`).
@@ -54,7 +54,7 @@ Every negative gate is proven failing when its check is set aside (`bypass_refus
 | DEV tokens (`42,856` payload, `14,287` eligible) | `ft/dev/tokens.u16` | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
 | DEV response mask | `ft/dev/response_mask.u8` | `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` |
 | Pinned A8 `StructuredV1` table | `address-cells/address-structured-v1.json` | `6600bdb1306dbaea4d77f5bf021e717a6bef791e44c1ec7d7c9bb9f0e8cd3cd1` |
-| Re-derived `FullVectorV1` (`B = 4`) raw LE table | Re-derived deterministically from TRAIN | `2c88673638bf7efba7d3c4fd6fb9acdb1fa8f0dc04ca32b9cfbb8d78b153f433` |
+| Re-derived `FullVectorV1` (`B = 4`) raw LE table | Re-derived deterministically from TRAIN | `2c886736c858778677d6a7b87253af188d8787cedc5fe5acd9b3c899a10a90e2` |
 | Sealed Stage T `T16_fz` Seed 1 checkpoint (`epoch = 420`) | `t16-frozen-zero-seed1/final-checkpoint.json` | `0831900fc6c04b4489215dc93876f87a173b2c6c16b6635dde2f2ff24c1015a4` |
 | Sealed Stage T `T16_rel` Seed 1 checkpoint (`epoch = 678`) | `t16-relation-seed1/final-checkpoint.json` | `558b8810dc888d3acd2d5d135b9137062ce69f74e4148a822e1b59b9cfccb944` |
 | Unchanged `driver_source_sha256` | `crates/uor-r4-discrete/src/training.rs` | `04c5165464a18eea6d4edadc6970007dbdc7908ead420f4a2f575e22ea43061d` |

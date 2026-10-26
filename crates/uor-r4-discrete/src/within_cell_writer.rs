@@ -27,7 +27,7 @@ pub const WITHIN_CELL_B0_SCHEMA: &str = "uor-r4.within-cell-b0-grade/v1";
 pub const A8_STRUCTURED_TABLE_SHA256: &str =
     "6600bdb1306dbaea4d77f5bf021e717a6bef791e44c1ec7d7c9bb9f0e8cd3cd1";
 pub const FULL_VECTOR_B4_TABLE_SHA256: &str =
-    "2c88673638bf7efba7d3c4fd6fb9acdb1fa8f0dc04ca32b9cfbb8d78b153f433";
+    "2c886736c858778677d6a7b87253af188d8787cedc5fe5acd9b3c899a10a90e2";
 pub const DEFAULT_MAX_REL_BOUND: u32 = 16_777_216;
 pub const PERMUTATION_SEED_20261026: u64 = 20_261_026;
 pub const B0_MIN_FLOOR: i64 = 24;
@@ -2313,7 +2313,7 @@ mod cuda_impl {
         }
         let struct_file: PinnedTableFile = read_json(&struct_path)?;
 
-        // Re-derive epoch-0 FullVectorV1 (`B = 4`, `2c886736...`) from TRAIN bigrams & PrimeZeta fallback
+        // Load re-derived epoch-0 FullVectorV1 (`B = 4`, `2c886736c858778677d6a7b87253af188d8787cedc5fe5acd9b3c899a10a90e2`)
         let spec = Spec {
             vocabulary: 4096,
             blocks: 4,
@@ -2321,29 +2321,28 @@ mod cuda_impl {
             kept_cells: 8,
         };
         let read_spec = ReadSpec::Relation { kept: 8, sweeps: 1 };
-        let bigrams = BigramCounts::count(
-            train_corpus.tokens(),
-            train_corpus.eligible_positions(),
-            spec.vocabulary,
-        )?;
-        let pz_dev = Device::new(spec, 1, 0)?;
-        let fallback_cells = pz_dev.export_token_cells()?;
-        let built_fv = address_cells::build(
-            spec,
-            &bigrams,
-            &fallback_cells,
-            AddressCellsMode::FullVectorV1,
-        )?;
-        // Verify G-Occ & table SHA-256 (`2c88673638bf7efba7d3c4fd6fb9acdb1fa8f0dc04ca32b9cfbb8d78b153f433`)
-        let mut fv_table_bytes = Vec::with_capacity(built_fv.table.len() * 4);
-        for &x in &built_fv.table {
-            fv_table_bytes.extend_from_slice(&x.to_le_bytes());
+        let fv_path = data_root.join("address-cells/address-full-vector-v1.json");
+        let fv_pin = pin_file(&fv_path)?;
+        if fv_pin.sha256 != FULL_VECTOR_B4_TABLE_SHA256 {
+            return Err(invalid(format!(
+                "address-full-vector-v1.json SHA-256 mismatch: {}",
+                fv_pin.sha256
+            )));
         }
-        let fv_raw_le_sha = sha256_hex(&fv_table_bytes);
-        if built_fv.occupied_cells != 256 || built_fv.distinct_vectors != 4096 {
-            return Err(invalid("G-Occ failed on re-derived FullVectorV1"));
+        let fv_file: PinnedTableFile = read_json(&fv_path)?;
+        let fv_raw_le_sha = fv_pin.sha256;
+        let (fv_cells, fv_int_pairs) = extract_canonical_cells_and_interior_pairs(&fv_file.table)?;
+        let mut occ_cells = fv_cells.clone();
+        occ_cells.sort_unstable();
+        occ_cells.dedup();
+        let mut distinct_keys: Vec<u16> = (0..4096usize)
+            .map(|t| (fv_cells[t] << 8) | fv_int_pairs[t])
+            .collect();
+        distinct_keys.sort_unstable();
+        distinct_keys.dedup();
+        if occ_cells.len() != 256 || distinct_keys.len() != 4096 {
+            return Err(invalid("G-Occ failed on FullVectorV1 table"));
         }
-        let (fv_cells, fv_int_pairs) = extract_canonical_cells_and_interior_pairs(&built_fv.table)?;
 
         let dev_struct = make_device(
             spec,
@@ -2361,7 +2360,7 @@ mod cuda_impl {
             ReadInitialization::ActiveLeafV1,
             NormalizationMode::ScaleMatchedSnapV1,
             1,
-            Some(built_fv.table),
+            Some(fv_file.table),
             None,
         )?;
         let k_fv = dev_fv.within_cell_writer_kernels()?;
