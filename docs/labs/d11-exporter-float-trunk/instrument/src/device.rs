@@ -169,7 +169,8 @@ impl DeviceEvaluator {
 
     /// Every sequence (all of one length) from a fresh session, on the GPU.
     pub fn evaluate(&self, sequences: &[Vec<u32>]) -> Result<Outputs, String> {
-        Ok(self.run(sequences, false)?.0)
+        let (outputs, _) = self.run(sequences, false)?;
+        Ok(outputs)
     }
 
     /// [`Self::evaluate`] with every position's snap trace, `trace_stride` bytes
