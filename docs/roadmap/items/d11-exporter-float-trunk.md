@@ -23,7 +23,7 @@ Without it no float-trained trunk can be served, so Stages 3–5 of the float pa
   - `StackModel::save` and `StackModel::load` exist (`crates/uor-r4-float-train/src/geometric_stack_native.rs:1293`, `:1337`), but no sheet runner calls them; only a writer test does.
   - What is missing is a save call in a runner, and a converter from a saved model to the exporter's input.
 - **The merged exporter covers a different trunk from the one Stage 3 trained.**
-  - `FloatTrunkSnapshot`, `FloatTrunkLayer` and `FloatTrunkRecurrence` (`crates/uor-r4-integer/src/stack/format.rs:690-770`) hold dense mixer, MLP, read and head matrices. Nothing in `stack/format.rs` or `stack/session.rs` mentions SpiralCore/FBS or the vector writer.
+  - `FloatTrunkSnapshot`, `FloatTrunkLayer` and `FloatTrunkRecurrence` (`crates/uor-r4-integer/src/stack/format.rs:690-772`) hold dense mixer, MLP, read and head matrices. Nothing in `stack/format.rs` or `stack/session.rs` mentions SpiralCore/FBS or the vector writer.
   - The Stage 3 sheets trained a different trunk (`build_hamilton_model`, `crates/uor-r4-float-train/src/hamilton_sheet.rs:1640-1658`): six recurrence layers, the Hamilton gate, geometric recurrence gates, and SpiralCore/FBS projections. Each dense map in `QUATERNION_MAPS` (`geometric_stack_native.rs:402`) becomes a `[outputs, stages, 8]` routing tensor. The head is the native vector writer, keeping 8 cells.
   - So the work left is an FBS `(atom, action)` projection path and a vector-writer head, in the exporter and in the integer runtime, with finite CPU controls.
   - Prior art to reuse: the recurrence-fit lab's integer exporter (`docs/labs/recurrence-gates-six-recurrence-fit/README.md:94`) and `pure_i32_q12_writer_oracle` (`hamilton_sheet.rs:1245`).

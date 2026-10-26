@@ -8,6 +8,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). References #2820.
 - **The merged exporter does not fit the trained trunks.** antigravity-75's exporter (#3221) takes dense mixer, MLP, read and head matrices. The Stage 3 sheets trained SpiralCore/FBS-projection recurrence trunks with the Hamilton gate and the native vector writer head. Mapping one onto the other would break CHARTER §3.3 and §3.6. So the item's remaining work is larger than "run Stage 4": it needs an FBS and writer export path first.
 - **The Stage 4 sheet FIT'd for antigravity-75 does not carry over.** It assumes a flock read and a `rec_out` planted fault, which an FBS trunk lacks, and its band must be measured again. A new sheet and a fresh FIT come before any GPU run.
 - **The decision review overstated one fact.** It said only `Hamilton_IcosianHard` passed its export gap; the Hamilton record says all its arms did. The item text and the owner log use the record's wording.
+- **The scope grew beyond the ORDER's text.** The ORDER named only `crates/uor-r4-float-train/**`. The D68 review also required the item's own prep, lab, task and notebook paths, as its sibling items carry. The owner log (#2820 comment `6406906219`) approves all five.
 - **`loop next` gave no GO.** Every ready item was claimed or overlapped antigravity's `crates/uor-r4-discrete/**` claim (#3239), and held items count only as a reason to wait. The owner directed this unit; the gap is logged in `local/claude/FRICTION.md`.
 
 ## What changed
@@ -34,7 +35,7 @@ Size: docs 1 file, generated 1 file (+35/−9 together), plus this task folder. 
 
 None. This is a status and scope decision. The review's evidence was:
 - the store listings of the four Stage 3 folders, with no model file;
-- `crates/uor-r4-integer/src/stack/format.rs:690-770`, and the absence of FBS or writer code in `stack/format.rs` and `stack/session.rs`;
+- `crates/uor-r4-integer/src/stack/format.rs:690-772`, and the absence of FBS or writer code in `stack/format.rs` and `stack/session.rs`;
 - `crates/uor-r4-float-train/src/hamilton_sheet.rs:1640-1658`;
 - `geometric_stack_native.rs:402`, `:1293` and `:1337`.
 
