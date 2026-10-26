@@ -39,7 +39,12 @@ Class: instrument. Run at `383ffa813`; all must hold:
 
 ## Done when
 
-Built and run in stages, each committed with its own checks:
+**This unit lands only the scope decision.** The loop guard reads an item's scope from `origin/main`, so that "a branch cannot widen its own scope" (`crates/uor-r4-harness/src/loopguard.rs`). A crate file could not be written until the restored scope merged, and the first kernel write was refused. Under this ORDER's own stop rule ("grows past one PR"), the work splits:
+
+- **claude-118 (this PR):** the item's `scope:` line gains `crates/uor-r4-float-train/**`, under the D68 decision above. The owner log is posted on #2891, the REPORT is written, and the PR is reviewed, merged and verified as **References #2891**.
+- **The next claim on this item** builds and runs the sheet in the stages below, under its own ORDER. That ORDER carries this one's design and D68 conditions.
+
+The stages for that next unit, each committed with its own checks:
 
 1. **The arms.**
    - The identity-transport and 2-atom kernels go in a new `src/spiralcore_fbs_arms.cu`, with a thread-local arm hook in the unpinned CUDA launcher.
