@@ -41,7 +41,9 @@ Lab: kimi. Order: [ORDER.md](ORDER.md). Prep: [`m1-address-as-read-oracle-2026-1
 - Production manifest SHA-256 `a4aa548f3e38478fdc8cd4ad077d9886cefa3aaa8e2712abe8f38abe0dba4103`, reproduced and `cmp`-verified on the pod.
 - FIT: FIT at `94330a3c` (agent-40). D67: PASS at the same configuration (agent-34). Both are recorded on #2833; final HEAD adds only those records.
 - D68 measurement/scope review (agent-41): the exact-read/oracle done-when is met at bounded scope. Close only after the registration and record repairs in this REPORT; do not promote the mechanism or infer learned capability.
-- `uor-harness loop gates --full`, `loop report --check`, and `loop pr-check --local`: final results at the delivery head.
+- `uor-harness loop gates --full`: all 11 gates GREEN at `4e36ecb1a`.
+- `uor-harness loop report --check --order docs/loop/tasks/m1-address-as-read/kimi-42/ORDER.md`: PASS at `4e36ecb1a`.
+- `uor-harness loop pr-check --local`: PASS at `4e36ecb1a`; only advisory scope and rule-source warnings.
 
 ## Skills used
 
