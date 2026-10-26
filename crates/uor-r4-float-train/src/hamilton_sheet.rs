@@ -792,6 +792,28 @@ fn observe_gate_blocks_telemetry(gate_host: &[f32], up_host: &[f32], out_host: &
     });
 }
 
+/// The tensor a custom op's operand `(storage, layout)` holds. candle's CUDA
+/// `try_clone` copies the whole buffer and ignores the layout, so a
+/// contiguous view with a start offset (the recurrence output gate, a narrow
+/// of `rec.in`'s output, is one at a single position) must be narrowed back to
+/// its own elements. Without this, the export-mode gate read the drive half of
+/// `rec.in` at time 1 (claude-124's parity run).
+#[cfg(feature = "cuda")]
+fn cuda_layout_tensor(storage: &CudaStorage, layout: &Layout) -> candle_core::Result<Tensor> {
+    if !layout.is_contiguous() {
+        candle_core::bail!("the Hamilton gate hook needs contiguous operands");
+    }
+    let (offset, count) = (layout.start_offset(), layout.shape().elem_count());
+    Tensor::from_storage(
+        candle_core::Storage::Cuda(storage.try_clone(layout)?),
+        offset + count,
+        candle_core::op::BackpropOp::none(),
+        false,
+    )
+    .narrow(0, offset, count)?
+    .reshape(layout.shape().clone())
+}
+
 #[cfg(feature = "cuda")]
 pub(crate) fn try_hamilton_gate_fwd_cuda(
     s1: &CudaStorage,
@@ -819,12 +841,7 @@ pub(crate) fn try_hamilton_gate_fwd_cuda(
     let device = &s1.device;
     let dev = Device::Cuda(device.clone());
     let shape = l1.shape().clone();
-    let gate_tensor = Tensor::from_storage(
-        candle_core::Storage::Cuda(s1.try_clone(l1)?),
-        shape.clone(),
-        candle_core::op::BackpropOp::none(),
-        false,
-    );
+    let gate_tensor = cuda_layout_tensor(s1, l1)?;
     let _ = &dev;
     let effective_gate = match (active_arm, export_mode) {
         (Some(HamiltonArm::IdentityGateControl), _) => build_identity_gate_tensor(device, &shape)?,
@@ -852,12 +869,7 @@ pub(crate) fn try_hamilton_gate_fwd_cuda(
     let (out_storage, out_shape) =
         crate::geometric_stack::cuda_ops::raw_hamilton_gate_fwd(eff_cuda, eff_l, s2, l2)?;
     if capture {
-        let up_tensor = Tensor::from_storage(
-            candle_core::Storage::Cuda(s2.try_clone(l2)?),
-            l2.shape().clone(),
-            candle_core::op::BackpropOp::none(),
-            false,
-        );
+        let up_tensor = cuda_layout_tensor(s2, l2)?;
         let out_layout = Layout::contiguous(out_shape.clone());
         let out_tensor = Tensor::from_storage(
             candle_core::Storage::Cuda(out_storage.try_clone(&out_layout)?),

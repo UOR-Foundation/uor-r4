@@ -659,6 +659,26 @@ mod tests {
             r.check(snap.vocab, snap.width, snap.context, r.export_mode)
                 .map_err(invalid)?;
         }
+        // Causality, in both modes: a token read alone from a zero state is
+        // that token at the first position of a sequence. The export-mode gate
+        // hook once broke this at time 1 (claude-124).
+        for r in [&readout, &export] {
+            for q in &r.sequences {
+                let alone = &r.positions[q.tokens[0] as usize];
+                let gap = alone
+                    .hidden
+                    .iter()
+                    .zip(&q.hidden[0])
+                    .map(|(a, b)| (a - b).abs())
+                    .fold(0f32, f32::max);
+                assert!(
+                    gap <= 1e-5 && alone.next == q.next[0],
+                    "export_mode {}: token {} alone differs from position 0 of its sequence (gap {gap:e})",
+                    r.export_mode,
+                    q.tokens[0]
+                );
+            }
+        }
         // The export mode reaches the forward: some hidden vector changes.
         assert!(readout
             .positions
