@@ -152,3 +152,13 @@ The noise band comes from claude-126's `d11-gap.json`, sha256 `88b6a5f988fe14467
 - The cited numbers hold against their sources: 1,907, 2,294, 655, 3,024, 1.8836 and 1.9281.
 - The dual step is as stated: the plain backward runs outside the hook, the D11 backward inside `with_d11_training`, and the gradients are summed per tensor. The signal is lawful under §3.
 - `I-Bridges` covers the gradient sum and the Q12 clamp. The cost and power are stated and inside the caps.
+
+**Round 2 (fresh non-author reviewer, 2026-10-26): FIT.**
+- All three round-1 changes are made, and the new text agrees with its sources.
+  - The 0.0230 band is |1.8546 − 1.8316|.
+  - claude-130's 0.0445 is above it, so it reads as less stable.
+  - The receipt field is `top1_artifact`.
+- Steps 5 and 6 run commands the binary accepts.
+- One nit, kept for the REPORT: it computes |L_F(1) − L_F(2)| from the full-precision losses, not the four-place figures quoted here.
+
+TEST FITNESS: FIT
