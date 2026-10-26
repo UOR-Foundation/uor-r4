@@ -132,6 +132,14 @@ The bar is per model, over its 14,287 rows. Every instrument check of section 4 
 
 ## 8. Non-author TEST FITNESS review
 
-To be filled in by the fresh reviewer.
+Two rounds, each by a fresh-context reviewer that read only the sheet, its sources and the code (claude-135, 26 Oct):
+- **Round 1: NOT FIT.** The would-flip rate counted zero blocks on both sides, which under forcing are the same arithmetic in D and A, apart only in convention. So convention counts could fill the envelope and pass a model with ten times the faithful root rate. Its advisories asked for:
+  - a gate on how `forced_calls` maps A's layout onto the panel's calls;
+  - a second wrong-root site;
+  - an envelope floor;
+  - three wording fixes.
+- **Round 2: FIT.** All fixed: `would_flip_count`, with a host test and a negative gate run; `I-Forced-Layout` with its round-trip test; two wrong-root sites; the 10⁻⁷ floor; the wording.
+  - Its advisory: m reads root would-flips only, so a model whose would-flips are all one-sided zero blocks has no m and reads Indeterminate. That is the conservative side, and the REPORT says so.
+  - Its second advisory: the tie-break comes before the rate check. It was accepted as written, because its decision is a repair and a re-run.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
