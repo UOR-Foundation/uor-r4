@@ -386,7 +386,9 @@ mod gpu_tests {
             yf, ys,
             "the frozen arm's forward is the standard projection"
         );
-        assert_eq!(dxf, dxs, "the frozen arm keeps the exact input adjoint");
+        // The input adjoint sums several output blocks into one atom with device atomics, so its
+        // last bit depends on the order the threads land; compare it to rounding, not bitwise.
+        close(&dxf, &dxs, "the frozen arm keeps the exact input adjoint");
         assert!(
             dqs.iter().any(|&v| v != 0.0),
             "the fixture has query credit to zero"
