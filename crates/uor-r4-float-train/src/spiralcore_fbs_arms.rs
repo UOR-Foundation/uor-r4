@@ -25,7 +25,7 @@ use crate::spiralcore_fbs::ProjectionPlan;
 use crate::{invalid, Result};
 
 /// One registered sheet arm.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum FbsArm {
     OneAtomActive,
     TwoAtomMix,
@@ -67,6 +67,7 @@ impl FbsArm {
 
     /// The `arm` code of `spiralcore_fbs_arm_fwd`/`_bwd`, or `None` for an arm that uses the
     /// pinned kernels.
+    #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
     fn kernel_code(self) -> Option<u32> {
         match self {
             FbsArm::IdentityTransport => Some(1),
@@ -149,6 +150,7 @@ pub fn project(
     )?)
 }
 
+#[cfg_attr(not(feature = "cuda"), allow(dead_code))]
 struct ArmProjection {
     plan: Arc<ProjectionPlan>,
     arm: FbsArm,
