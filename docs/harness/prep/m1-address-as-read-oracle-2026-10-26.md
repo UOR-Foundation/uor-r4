@@ -48,6 +48,25 @@ Host preparation/build/review is lab time only. One pod at the live offer is est
 
 Any artifact/input/schema/hash/shape mismatch, nonzero parity status, nondeterminism, corpus or cross-row leak, missing/vacuous control or baseline identity, unauthorized fallback or wrong substitution stops as an instrument fault. A failed hard-emission or composed gate ends this configuration with no hidden-fact panel or training. Do not change thresholds after FIT.
 
+## Base artifact
+
+The pinned T16_fz Seed 1 D11 and sealed Stage T receipt above are the base. The instrument composes `AddressDirectory` with the existing GPU scorer; it does not alter the artifact, train, or claim learned address formation.
+
+## Data split
+
+TRAIN and DEV are used only for pinned parity and value-leak checks. The oracle instrument has 40 current-value, 20 previous-version and 20 abstention rows (10 Absent + 10 Evicted), with no seeds and no hidden-fact panel. All arms see the same rows and artifact.
+
+## Steps
+
+1. Generate the manifest twice and pin its byte-identical SHA-256; run pure exact/sieve, binding, limit and leak controls.
+2. Build the CUDA runner on one RTX 5090 and reproduce the pinned manifest.
+3. Verify D11 parity twice, then execute no-memory, no-address, sieve, true-address and random-address arms.
+4. Require the composed gate, report per-family contrasts, ceiling/gain/no-gain, actual candidate/resource/rate fields and full identity/cost, then preserve tar and sidecar with remote readback.
+
+## Minimum test power
+
+The 80-row composition is the registered instrument, not an M3 decisive language run. Exact 40/40 current, 20/20 previous and 20/20 typed abstention plus the planted random control are the non-vacuity floor. No-memory/no-address and sieve provide the contrast; 20 current rows where sieve and true address differ are enough to change the next address-formation decision. No seeds, BPB or ≥200-row capability claim is made.
+
 ## TEST FITNESS line
 
 TEST FITNESS: FIT — M1 #2029 m1-address-as-read object-store oracle, reviewed at `c622cd52dbb3a11263c6ad704c4b216f69d3ca63` by fresh non-author uor-evidence-auditor agent-40 on 2026-10-26. FIT covers only this registered configuration.
