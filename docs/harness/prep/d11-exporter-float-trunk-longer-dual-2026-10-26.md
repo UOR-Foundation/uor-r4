@@ -26,7 +26,7 @@ Does the 2,048-step `Fbs_1Atom_Active` dual-forward recipe bring the exported ar
 3. **Flagged PASS** if both A seeds pass but either artifact is below its floor. D68 review; do not close #2820 automatically.
 4. **Cancellation PASS** if both A seeds pass but D fails on either seed. The registered A result stands, but report that A and D diverge; do not claim D11 fidelity or exporter clearance. This goes to D68 before any #2820 close and is not an unflagged PASS.
 5. **Exporter unresolved** if at least one A seed fails and every failing A seed has D passing top-1 and loss, including mixed pass/unresolved. Do not call FAIL; open a separately FIT'd localisation/repair unit with its own cost.
-6. **FAIL** if any seed has both A and D failing, including mixed pass/clean-fail. Close only this 2,048-step dual configuration and record a lab stop decision; the mechanism stays open and #2820 is not closed. Reopen only with new evidence that the D11 forward can meet its own band; otherwise #2820 remains parked for this recipe family. A D failure whose excess over its paired F_I exceeds the model's own `|net(D,A)|` is clean; within that envelope it is marginal and routes to a separately FIT'd localisation, but is never attributed to the D11 forward alone.
+6. **FAIL** if any seed has both A and D failing, including mixed pass/clean-fail. Close only this 2,048-step dual configuration and record a lab stop decision; the mechanism stays open and #2820 is not closed. Reopen only with new evidence that the D11 forward can meet its own band; otherwise #2820 remains parked for this recipe family. A D failure whose excess over its paired F_I exceeds the model's own `|net(D,A)|` is clean; within that envelope it is marginal: still a categorical FAIL, with separately FIT'd localisation as a reading, not a reclassification, and never attributed to the D11 forward alone.
 
 At claude-131's discordance, a pass requires roughly 79% (seed 1) and 70% (seed 2) reductions in absolute net gap. A FAIL therefore rejects this configuration, not every longer-training benefit. Report plain/export-mode top-1 and admitted rates, trajectories, `net(D,A)`, full-precision two-seed loss band against `0.0230`, plain-float top-1 spread against `655`, artifact top-1 against claude-131's `3,492 / 2,897` as a regression reading, and paired b/c/F_I with a 95% paired interval as a reading. The paired F_I reading is operative; the two-seed spread is reported beside it and never used to re-score old receipts.
 
@@ -114,9 +114,14 @@ SRC=/root/build/src-$REF
 export UOR_NVCC_ARCH=compute_120 CARGO_TARGET_DIR=/root/build/target-sm120
 run_step build-sheet cargo build --release --locked --manifest-path "$SRC/Cargo.toml" -p uor-r4-float-train --features cuda --bin spiralcore-fbs-sheet
 run_step build-export cargo build --release --locked --manifest-path "$SRC/Cargo.toml" -p uor-r4-integer --features serving-wasm --bin fbs-export
-run_step build-eval cargo build --release --locked --features cuda --bin d11-fbs-eval --manifest-path "$SRC/docs/labs/d11-exporter-float-trunk/instrument/Cargo.toml"
-run_step copy-binaries cp /root/build/target-sm120/release/spiralcore-fbs-sheet /root/build/target-sm120/release/fbs-export /root/build/target-sm120/release/d11-fbs-eval "$RUN/bin/"
+run_step build-eval env CARGO_TARGET_DIR=/root/build/eval-target-sm120 cargo build --release --locked --target x86_64-unknown-linux-gnu --features cuda --bin d11-fbs-eval --manifest-path "$SRC/docs/labs/d11-exporter-float-trunk/instrument/Cargo.toml"
+run_step copy-binaries cp /root/build/target-sm120/release/spiralcore-fbs-sheet /root/build/target-sm120/release/fbs-export /root/build/eval-target-sm120/x86_64-unknown-linux-gnu/release/d11-fbs-eval "$RUN/bin/"
 run_step binary-pins bash -c 'sha256sum "$1"/* > "$1/binary-SHA256SUMS"' _ "$RUN/bin"
+run_step source-pin bash -c 'test "$(git -C "$1" rev-parse HEAD)" = "$2"' _ "$SRC" "$REF"
+if ! command -v jq >/dev/null 2>&1; then
+  run_step install-jq bash -c 'apt-get update && apt-get install -y jq'
+fi
+run_step disk-gate bash -c 'avail=$(df -BG /workspace | awk "NR==2{gsub(/G/,\"\",$4); print $4}"); test "$avail" -ge 30'
 run_step get-inputs /root/uor-store get w2-inputs/2026-10-25/ "$STAGING"
 run_step link-data ln -s "$STAGING/w2-inputs/2026-10-25/driver-data" "$DATA"
 run_step pins bash -c "printf '%s  %s\n' \
@@ -132,14 +137,17 @@ run_step stage-prefix mv "$RUN/store/results/claude/d11-fbs-dual-train-2026-10-2
 run_step reference-pins bash -c "printf '%s  %s\n' \
   '88b6a5f988fe144671365a258a100e5cf3935f98e917040b38f90df2637a1e8a  d11-gap.json' \
   '5a290fbe47d8f10495b6d89fa8384110061902001ad9ebdf6b365935e220d9bc  train-1024.json' | (cd \"$RUN\" && sha256sum -c -)"
-run_step bridges cargo test --release --locked -p uor-r4-float-train --features cuda --lib
+run_step bridges cargo test --release --locked --manifest-path "$SRC/Cargo.toml" -p uor-r4-float-train --features cuda --lib
 run_step probe "$RUN/bin/spiralcore-fbs-sheet" --mode d11-train-probe --train-forward dual --steps 2048 --data-root "$DATA" --out "$RUN/probe.json"
+run_step probe-gate jq -e '.train_learns and .learns and .under_one_hour_per_seed and .probe_steps == 32 and .target_steps == 2048 and .projected_eval_steps == [0,256,512,1024,2048] and .inputs.batch_count == 2048 and .inputs.used_windows == 8192 and .inputs.usable_windows >= 8192 and .inputs.total_windows >= 8192 and .inputs.train_tokens == 7512797 and .inputs.scored_targets > 0 and .inputs.peak_host_rss_bytes > 0' "$RUN/probe.json"
 run_step train "$RUN/bin/spiralcore-fbs-sheet" --mode d11-train-export --train-forward dual --steps 2048 --data-root "$DATA" --save-dir "$RUN/save" --stage4b "$RUN/d11-gap.json" --out "$RUN/train.json"
-run_step prefix jq -e -n --argfile new "$RUN/train.json" --argfile old "$RUN/train-1024.json" '
+run_step train-gate jq -e '.instruments_pass and .steps == 2048 and .train_batches == 2048 and .eval_steps == [0,256,512,1024,2048] and (.seeds | length == 2) and all(.seeds[]; .i_save_load and (.run.eval | length == 5))' "$RUN/train.json"
+run_step prefix jq -e -n --slurpfile new "$RUN/train.json" --slurpfile old "$RUN/train-1024.json" '
   def point: .run.eval[] | select(.step == 1024);
   def close($a; $b): ($a - $b) | abs <= 1e-6;
-  $new.seeds as $ns | $old.seeds as $os |
-  all($ns; . as $n | ($os[] | select(.seed == $n.seed)) as $o |
+  def valid($doc): ($doc.seeds | length == 2) and all($doc.seeds[]; point | type == "object");
+  valid($new[0]) and valid($old[0]) and
+  all($new[0].seeds[]; . as $n | ($old[0].seeds[] | select(.seed == $n.seed)) as $o |
     ($n | point) as $np | ($o | point) as $op |
     $np.dev_float.top1_hits == $op.dev_float.top1_hits and
     $np.dev_int.top1_hits == $op.dev_int.top1_hits and
@@ -170,6 +178,8 @@ for s in 1 2; do
     --stage4b "$RUN/train.json" --stored-preds "$RUN/save/seed-$s/preds-float.json" \
     --seed "$s" --label longer-dual --out "$RUN/residual-seed-$s.json" \
     --preds-d11-out "$RUN/preds-d11-seed-$s.json"
+  run_step "gap-gate-$s" jq -e '.i_save_load and .i_inputs and .i_verify_all and .i_dev_denominator and .instruments_pass and (.gap_inside_band != "not counted: an instrument check failed")' "$RUN/gap-seed-$s.json"
+  run_step "residual-gate-$s" jq -e '.i_save_load and .i_inputs and .i_verify_all and .i_dev_denominator and .i_d_determinism and .i_head and .instruments_pass and (.counterfactual_within_band != null)' "$RUN/residual-seed-$s.json"
 done
 # I-Negative: only the artifact pin is wrong; the seed-1 model pin is correct.
 run_step hash-model-1-negative bash -c 'sha256sum "$1" | cut -d" " -f1' _ "$RUN/save/seed-1/model/model.safetensors"
@@ -178,7 +188,7 @@ run_step negative "$RUN/bin/spiralcore-fbs-sheet" --mode d11-artifact-gap --step
   --model-dir "$RUN/save/seed-1/model" --evaluator "$RUN/run-seed-1.json" \
   --windows-sha256 "$WINDOWS" --artifact-sha256 0000000000000000000000000000000000000000000000000000000000000000 \
   --model-sha256 "$MODEL1" --stage4b "$RUN/train.json" \
-  --stored-preds "$RUN/save/seed-1/preds-float.json" --seed 1 --out "$RUN/negative.json" || true
+  --stored-preds "$RUN/save/seed-1/preds-float.json" --seed 1 --out "$RUN/negative.json"
 run_step negative-check jq -e '.i_inputs == false and (.gap_inside_band | contains("not counted"))' "$RUN/negative.json"
 ```
 
