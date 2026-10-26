@@ -4,7 +4,7 @@
 - **Prior decision:** claude-136's bound proves exporter fidelity cannot flip any of the six existing verdicts. The remaining pivot is one decisive longer run, not more residual inspection. claude-131's DEV losses were still falling at step 1,024.
 - **Intervention:** **2,048 steps per seed instead of 1,024**, with the same per-step learning rates (`0.002` base, `20` decay multiplier), weight decay `0.1`, clipping, corpus, dual 1:1 loss, bridges, exporter and GPU evaluator. Evaluation points are exactly `0, 256, 512, 1,024, 2,048`. The first 1,024 batches are claude-131's deterministic document-order batches; the next 1,024 are new windows from the same corpus, so this is a dose-plus-coverage intervention, not a pure optimizer-step isolation.
 - **D68 decision:** `agent-53` PASS at `e77a1f91f0f198de9aee58b7bc20d65a6c12b298`, owner log #2820 comment `6428815813`; full card `docs/loop/tasks/d11-exporter-float-trunk/kimi-46/DECISION.md`. It approves dose-plus-coverage, the exact D counterfactual and the registered floors, with cancellation/marginal readings required.
-- **Status:** `TEST FITNESS: PENDING` for a delta review of this D68-amended command manifest. No compute before FIT and D67.
+- **Status:** `TEST FITNESS: FIT` at `5345b554038954a3d46fdedcf3c30daeeb9d429f`. No compute before D67.
 
 ## 1. Question
 
@@ -190,4 +190,4 @@ PASS-only serving: MacBookPro17,1, Apple M1 (4 performance + 4 efficiency cores)
 
 ## 10. FIT record
 
-Agent-50 returned **TEST FITNESS: FIT** at `9906d681a18403c701a066197cbee0136c67a03c`, after the initial counterfactual, batch, scorer and ORDER corrections. The final hardening commit `e77a1f91f0f198de9aee58b7bc20d65a6c12b298` adds only missing-seed-loss refusal and passed the same host suite (60 lib, 3 CLI, 2 dependency, 12 kernel controls). This D68-amended manifest requires a fresh FIT delta before dispatch.
+Agent-50 returned **TEST FITNESS: FIT** at `5345b554038954a3d46fdedcf3c30daeeb9d429f`, after the counterfactual, batch, scorer, ORDER, D68 and full pod-job/readback reviews. The final hardening commit `e77a1f91f0f198de9aee58b7bc20d65a6c12b298` adds missing-seed-loss refusal and passed the same host suite (60 lib, 3 CLI, 2 dependency, 12 kernel controls). D68 owner log #2820 comment `6428815813` and the executable job at `local/kimi/d11-float-trunk/job.sh` are part of this packet. Fresh D67 is still required before dispatch.
