@@ -80,7 +80,7 @@ fn run_stage0(
         manifest: PathBuf::from(manifest),
         out_dir: PathBuf::from(out_dir),
     };
-    let outcome = run(&paths, nvidia_driver_version())?;
+    let outcome = run(&paths, cuda_driver_api_version())?;
     println!(
         "Stage 0 parity PASS; copy decision {} (primary_pass={}); outputs in {}",
         outcome.decision,
@@ -91,7 +91,7 @@ fn run_stage0(
 }
 
 #[cfg(feature = "cuda")]
-fn nvidia_driver_version() -> Result<i32, String> {
+fn cuda_driver_api_version() -> Result<i32, String> {
     let mut raw: i32 = 0;
     // SAFETY: cuDriverGetVersion writes exactly one c_int to the supplied
     // pointer; `raw` is a live stack value and the dynamic driver entry point

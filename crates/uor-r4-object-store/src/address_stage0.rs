@@ -1011,7 +1011,7 @@ pub mod runner {
     /// measurement (`COPY_GATE_FAIL`), not an instrument error.
     pub fn run(
         paths: &RunPaths,
-        nvidia_driver_version: Result<i32, String>,
+        cuda_driver_api_version: Result<i32, String>,
     ) -> Result<Stage0Outcome, String> {
         let head = std::env::var(STAGE0_HEAD_ENV)
             .map_err(|_| format!("{STAGE0_HEAD_ENV} must be the full Stage 0 commit"))?;
@@ -1204,7 +1204,7 @@ pub mod runner {
             "IMAGE_TARGET": inst::device::IMAGE_TARGET.trim(),
             "RESOURCES": inst::device::RESOURCES.trim(),
             "device_capability": [scorer.capability.0, scorer.capability.1],
-            "nvidia_driver_version": match nvidia_driver_version {
+            "cuda_driver_api_version": match cuda_driver_api_version {
                 Ok(raw) => json!({
                     "raw": raw,
                     "major": raw / 1000,
