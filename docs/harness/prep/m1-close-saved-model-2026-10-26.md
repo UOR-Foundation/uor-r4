@@ -28,7 +28,7 @@ Does any saved discrete geometric language model (`crates/uor-r4-discrete`) on `
 | `HOLD_M1_OPEN_BAR_D_UNMET_FRESH_SEAL_INTACT` | Bars (a), (b), and (c) pass on the exported 4-table `UORLUT01` artifacts (`T16_fz` `455 / 14,287`, `T16_rel` `371 / 14,287`), but Bar (d) (`>= 6,324 / 14,287`) is unmet (`m1_close_pass == false`). | Keeps `#2837` and `#2029` open (`OPEN_HELD_AT_STEP_8_PIVOT_REQUIRED`), preserves the `Fresh V2` seal unopened (`UNAVAILABLE_NOT_RUN`), and registers the `CHARTER.md` §4.4 two-path pivot (Path A discrete post-rotation joint-hierarchy D11 export; Path B offline float-trained SpiralCore/FBS trunk exported via `#2818`). |
 | `HOLD_M1_OPEN_BAR_E_UNMET` | Bars (a)–(d) pass across two seeds, but Bar (e) is `UNAVAILABLE_NOT_RUN` or `FAIL_BAR_E_CLOSE_CONFIGURATION`. | Keeps `#2837` and `#2029` open; if `UNAVAILABLE_NOT_RUN`, dispatches `#2841` `d11-scorer fresh-score`; if `FAIL_BAR_E_CLOSE_CONFIGURATION`, closes that configuration (`CHARTER.md` §4.1). |
 
-## 3. Candidate inventory and pinned digests
+## 3. Base artifacts, candidate inventory, and data splits
 
 All saved discrete models on `main` are audited by `canonical_m1_saved_model_audit()`:
 
@@ -40,13 +40,13 @@ All saved discrete models on `main` are audited by `canonical_m1_saved_model_aud
    - Seed 2 checkpoint `9f56c3a4ab6998a180cfbe1cb6cb428749c6984ef11484abff2f5e625a703165`, `UORLUT01` `3e52357b3b7fdcb123db339c5767b5685d7ccbc80511a8431b538ce0936de3a0` (`533,248` B): `d11_dev_top1 = 371`, `top8 = 1_517`, `admitted = 5,009`, `0` row mismatches, `B4` pass, laptop `1,179` prefill / `1,118` decode `tok/s`, GPU `56,935,299` context / `233,284` response `tok/s`.
 3. **Prior / auxiliary discrete checkpoints on `main`:** `K16-A` (`747`), `K16-R` (`359`), `Rung-0 Q4` (`eb43ff38…`, `367`), `#2831` `A8 Q1` (`c6882e43…`, `765`), `#3267` `WithinCellCodeRerankerV1` (`2,135`, side-table `M_code` not in 4-table `UORLUT01`), and `#2844` `TrunkAssemblyV1` (`2,988`–`2,989` `T16_fz` / `2,227`–`2,226` `T16_rel`, trunk tables not in 4-table `UORLUT01`).
 
-## 4. Instrument controls and `CHARTER.md` §4.4 pivot
+## 4. Instrument steps and `CHARTER.md` §4.4 pivot
 
 1. **Five-bar negative-gate tests (`tests/m1_close.rs`):** Setting aside each bar `(a)`, `(b)`, `(c)`, `(d)`, `(e)` (`NOT_RUN`), or the premature-fresh-unsealing check fails `evaluate_m1_closing_bars` / `validate_fresh_transfer_gate`; restoring it passes.
 2. **Path A discrete trunk hierarchy + post-rotation full-writer fix (`crates/uor-r4-discrete/src/trunk.rs`):** `select_level3_joint_hierarchy_admitted`, `select_level3_joint_hierarchy_global`, and `evaluate_joint_hierarchy_full_writer` fix `#2844`'s marginal `64 * c_q` weight inversion and pre-rotation `A_W(q_read) = 5,009` shortlist cap by weighting joint `(query, read)` (`64 * c_qr`) and `(query, rec)` (`32 * c_qc`) above `c_q` (`1 * c_q`) and opening `A_W(q_trunk)` *after* `DiscreteHamiltonGateV1` rotation via `writer_score_full_outer_l1(&q_trunk)`.
 3. **Path B offline float-trained trunk export (`#2818`, `d11-exporter-float-trunk`):** Offline float-trained SpiralCore / FBS multi-layer trunk exported to `UORLUT01` (`CHARTER.md` §3.6 / `D37`).
 
-## 5. Cost, stop rule, and minimum test power
+## 5. Cost, abort condition, and minimum test power
 
 - **Cost:** `$0.00` (`0` GPU hours in `antigravity-105`; all GPU evaluations on `ft/dev` are already sealed in `#2839` and `#2844`).
 - **Stop rule:** Do not mark `#2837` `done` or open `Fresh V2` while `m1_close_pass == false`.
