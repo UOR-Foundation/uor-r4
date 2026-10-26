@@ -651,7 +651,10 @@ mod tests {
             );
             assert_eq!(v["planted_faults"].as_array().map(Vec::len), Some(4));
             assert_eq!(v["real_read_dev_panel"].as_array().map(Vec::len), Some(2));
-            if let Some(ci) = v.get_mut("compiled_identity").and_then(serde_json::Value::as_object_mut) {
+            if let Some(ci) = v
+                .get_mut("compiled_identity")
+                .and_then(serde_json::Value::as_object_mut)
+            {
                 ci.remove("source_sha256");
             }
             strip_timing(&mut v);
