@@ -11,7 +11,7 @@ Lab: kimi. Order: [ORDER.md](ORDER.md). References #2833; this design unit does 
 
 ## What changed
 
-- Added [the object-store successor design](../../../labs/m1-address-as-read/integer-read-successor.md): `AddressDirectory` exact/sieve reads in the existing Stage 0 GPU instrument, with no second store and no integer-crate scope expansion.
+- Added [the object-store successor design](../../../../labs/m1-address-as-read/integer-read-successor.md): `AddressDirectory` exact/sieve reads in the existing Stage 0 GPU instrument, with no second store and no integer-crate scope expansion.
 - Defined no-memory, no-address, deterministic-sieve, true-address and random-address arms. True-address hard emission must be exactly 40/40 current, 20/20 previous and 20/20 typed abstention, with zero wrong-value substitutions.
 - Separated store correctness, oracle assistance, address formation and model generation. Added the baseline-ceiling outcome, `sieve_address_match` apart from `sieve_value_check_pass`, and no-memory/no-address byte identity.
 - Updated the item's start text to link the reviewed design and use the five-arm protocol. Its scope, `status: ready` and done-when are unchanged.
