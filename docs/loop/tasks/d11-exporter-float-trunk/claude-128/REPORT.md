@@ -81,6 +81,27 @@ Equal means bit for bit, at every position: the token, every kept cell in order,
 
 See the exact-head review record on the PR.
 
+**Hardening after the run.** Round 1 of the code review hardened the CLI and the PTX self-test after the qualification:
+- `run` and `windows` refuse empty input;
+- `sequences_sha256` hashes the bytes parsed;
+- the output carries the ptxas report;
+- the self-test probes every forbidden component;
+- `first_difference` reports differing dimensions.
+
+`fbs_core.h` and `evaluator.cu` are unchanged since the run, so the qualified PTX and cubin are the ones built at this head. A header comment that the core trusts the loader's bounds was left out, so as not to touch the qualified source.
+
+**Suites:**
+- integer serving library 326 and no-feature library 55;
+- `fbs_image_matches_its_shape`, now comparing every map's atoms with the snapshot's routes;
+- the instrument's host parity 3/3, on the Mac and on the pod.
+
+**Build checks:**
+- the stub-nvcc CUDA check and clippy of the instrument are clean;
+- `cargo fmt` is clean;
+- the `fbs-synthetic` feature builds without `test` and with no warnings.
+
+**Loop checks:** `loop report --check`, `loop pr-check --local` (PASS, with advisory WARNs for the ORDER's size and the sheet's "Cost and stop rule" heading) and `loop gates --full` (exit 0).
+
 ## Skills used
 
 - **holding-the-goal.** The goal is the artifact's own gap, so this unit built the evaluator with exact parity as its only bar. It did not stop at a GPU number that merely looks plausible.
