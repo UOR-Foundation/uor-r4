@@ -23,7 +23,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
-use candle_core::{DType, Device, Tensor};
+use candle_core::{backprop::GradStore, DType, Device, Tensor};
 use serde::{Deserialize, Serialize};
 
 use crate::geometric_stack::{StackAdamW, StackModel};
@@ -316,7 +316,7 @@ pub fn run_fbs_arm(
 ) -> Result<FbsArmOutput> {
     run_fbs_arm_with(
         arm,
-        false,
+        TrainForward::Plain,
         seed,
         steps,
         batches,
@@ -326,13 +326,61 @@ pub fn run_fbs_arm(
     )
 }
 
-/// [`run_fbs_arm`], with every training step in the D11 mode when `d11_train` (claude-130): the
-/// loss is the D11 forward's, its scored query at Q12, through `hamilton_sheet::with_d11_training`'s
-/// bridges, with the step's backward inside the same mode. The evaluations are unchanged.
+/// How an arm's training steps compute their loss.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrainForward {
+    /// The plain forward, as Stage 3 and Stage 4b train.
+    Plain,
+    /// Every step in the D11 mode, its scored query at Q12, through
+    /// `hamilton_sheet::with_d11_training`'s bridges (claude-130).
+    D11,
+    /// The plain loss plus the D11-mode loss, weighted 1:1, so both forwards are trained
+    /// (claude-131, the decision review after claude-130).
+    Dual,
+}
+
+impl TrainForward {
+    pub fn name(self) -> &'static str {
+        match self {
+            TrainForward::Plain => "plain",
+            TrainForward::D11 => "d11",
+            TrainForward::Dual => "dual",
+        }
+    }
+
+    pub fn parse(name: &str) -> Result<Self> {
+        match name {
+            "plain" => Ok(TrainForward::Plain),
+            "d11" => Ok(TrainForward::D11),
+            "dual" => Ok(TrainForward::Dual),
+            other => Err(invalid(format!("unknown training forward {other}"))),
+        }
+    }
+}
+
+/// `a + b`, tensor by tensor: a gradient in only one of them is kept as it is.
+fn sum_grads(mut a: GradStore, b: &GradStore) -> Result<GradStore> {
+    let ids: Vec<_> = b.get_ids().copied().collect();
+    for id in ids {
+        let Some(gb) = b.get_id(id) else { continue };
+        let sum = match a.get_id(id) {
+            Some(ga) => (ga + gb)?,
+            None => gb.clone(),
+        };
+        a.insert_id(id, sum);
+    }
+    Ok(a)
+}
+
+/// [`run_fbs_arm`], with its training steps' loss as `forward` says. In the D11 mode the loss is
+/// the D11 forward's, its scored query at Q12, through `hamilton_sheet::with_d11_training`'s
+/// bridges, with the step's backward inside the same mode (claude-130). In the dual mode it is
+/// that plus the plain loss, each with its own backward (claude-131). The evaluations are
+/// unchanged.
 #[allow(clippy::too_many_arguments)]
 pub fn run_fbs_arm_with(
     arm: FbsArm,
-    d11_train: bool,
+    forward: TrainForward,
     seed: u64,
     steps: usize,
     batches: &[TrainBatch],
@@ -392,8 +440,8 @@ pub fn run_fbs_arm_with(
     for step in 0..steps {
         let started = Instant::now();
         let (ids, scored, targets) = &batches[step % batches.len()];
-        let loss_and_grads = || -> Result<(f64, candle_core::backprop::GradStore)> {
-            let loss = batch_loss(&model, ids, scored, targets, SHEET_TRAIN_BATCH, d11_train)?;
+        let loss_and_grads = |q12: bool| -> Result<(f64, GradStore)> {
+            let loss = batch_loss(&model, ids, scored, targets, SHEET_TRAIN_BATCH, q12)?;
             let value = f64::from(loss.to_scalar::<f32>()?);
             if !value.is_finite() {
                 return Err(invalid(format!(
@@ -403,10 +451,16 @@ pub fn run_fbs_arm_with(
             }
             Ok((value, loss.backward()?))
         };
-        let (value, grads) = if d11_train {
-            hs::with_d11_training(seed, step, loss_and_grads)?
-        } else {
-            loss_and_grads()?
+        let (value, grads) = match forward {
+            TrainForward::Plain => loss_and_grads(false)?,
+            TrainForward::D11 => hs::with_d11_training(seed, step, || loss_and_grads(true))?,
+            TrainForward::Dual => {
+                // claude-131: each forward's backward runs under its own gate mode (the icosian
+                // gate's backward reads the hook), and the gradients are summed 1:1.
+                let (plain, plain_grads) = loss_and_grads(false)?;
+                let (d11, d11_grads) = hs::with_d11_training(seed, step, || loss_and_grads(true))?;
+                (plain + d11, sum_grads(plain_grads, &d11_grads)?)
+            }
         };
         if step == 0 {
             step0_credit = query_credit_l2(&model, &grads)?;
@@ -1523,14 +1577,35 @@ pub fn run_d11_artifact_gap(
     }))
 }
 
-/// Probe (b) of D11-mode training (claude-130): 32 D11-mode steps of [`D11_EXPORT_ARM`] on seed 1,
-/// the DEV panel at steps 0 and 32, and the projected wall time of the full run (two seeds of
-/// [`STEPS`] steps, each evaluated at [`EVAL_STEPS`]).
-pub fn run_d11_train_probe(data_root: &Path, device: &Device) -> Result<serde_json::Value> {
+/// The prep sheet a D11-trained run answers to.
+fn d11_train_sheet(forward: TrainForward) -> Result<&'static str> {
+    match forward {
+        TrainForward::D11 => {
+            Ok("docs/harness/prep/d11-exporter-float-trunk-d11-train-2026-10-26.md")
+        }
+        TrainForward::Dual => {
+            Ok("docs/harness/prep/d11-exporter-float-trunk-dual-train-2026-10-26.md")
+        }
+        TrainForward::Plain => Err(invalid(
+            "plain training is Stage 4b's (d11-export-gap), not a D11-trained run",
+        )),
+    }
+}
+
+/// Probe (b) of D11-trained training (claude-130, claude-131): 32 steps of [`D11_EXPORT_ARM`] on
+/// seed 1 trained as `forward` says, the DEV panel at steps 0 and 32, and the projected wall time of
+/// the full run (two seeds of [`STEPS`] steps, each evaluated at [`EVAL_STEPS`]). In the dual mode
+/// the training loss is the sum of the plain and D11-mode losses.
+pub fn run_d11_train_probe(
+    data_root: &Path,
+    forward: TrainForward,
+    device: &Device,
+) -> Result<serde_json::Value> {
+    let sheet = d11_train_sheet(forward)?;
     let (batches, dev_windows, dev_docs) = load_inputs(data_root, 32)?;
     let out = run_fbs_arm_with(
         D11_EXPORT_ARM,
-        true,
+        forward,
         1,
         32,
         &batches,
@@ -1551,6 +1626,8 @@ pub fn run_d11_train_probe(data_root: &Path, device: &Device) -> Result<serde_js
     };
     Ok(serde_json::json!({
         "probe": "d11-train-probe",
+        "sheet": sheet,
+        "train_forward": forward.name(),
         "kernels": kernel_identity(),
         "dev_documents": dev_docs,
         "dev_windows": dev_windows.len(),
@@ -1569,21 +1646,24 @@ pub fn run_d11_train_probe(data_root: &Path, device: &Device) -> Result<serde_js
     }))
 }
 
-/// D11-mode training and export (claude-130): [`D11_EXPORT_ARM`] trained on both seeds with every
-/// step in the D11 mode (`run_fbs_arm_with`, `d11_train`), each saved model reloaded and checked
+/// D11-trained training and export (claude-130, claude-131): [`D11_EXPORT_ARM`] trained on both
+/// seeds as `forward` says (`run_fbs_arm_with`), each saved model reloaded and checked
 /// (`I-Save-Load`), and its snapshot and plain float predictions written under
 /// `save_dir/seed-<seed>/` (a directory that must not exist yet) for `fbs-export` and the
 /// artifact-gap scorer. The receipt carries Stage 4b's noise band, read from `stage4b`, and each
-/// seed's float loss, in the shape `run_d11_artifact_gap` reads as its `stage4b` receipt.
+/// seed's float loss and training trajectory, in the shape `run_d11_artifact_gap` reads as its
+/// `stage4b` receipt.
 pub fn run_d11_train_export(
     data_root: &Path,
     save_dir: &Path,
     stage4b: &Path,
+    forward: TrainForward,
     device: &Device,
 ) -> Result<serde_json::Value> {
     use crate::fbs_export::fbs_trunk_snapshot;
     use uor_r4_integer::fbs_snapshot::write_new_file;
 
+    let sheet = d11_train_sheet(forward)?;
     let receipt: serde_json::Value = serde_json::from_slice(&fs::read(stage4b)?)?;
     let noise = receipt["noise_band_dev_loss"]
         .as_f64()
@@ -1595,7 +1675,7 @@ pub fn run_d11_train_export(
     for seed in SEEDS {
         let out = run_fbs_arm_with(
             D11_EXPORT_ARM,
-            true,
+            forward,
             seed,
             STEPS,
             &batches,
@@ -1630,7 +1710,7 @@ pub fn run_d11_train_export(
         seeds.push(serde_json::json!({
             "seed": seed,
             "arm": D11_EXPORT_ARM.name(),
-            "d11_trained": true,
+            "train_forward": forward.name(),
             "float": last.dev_float,
             "export_mode": last.dev_int,
             "loss_float": last.dev_loss_float,
@@ -1638,10 +1718,12 @@ pub fn run_d11_train_export(
             "preds_float_sha256": preds_sha256(&out.preds_float),
             "i_save_load": i_save_load,
             "reloaded_loss_float": reloaded_loss,
+            "run": out.run,
         }));
     }
     Ok(serde_json::json!({
-        "sheet": "docs/harness/prep/d11-exporter-float-trunk-d11-train-2026-10-26.md",
+        "sheet": sheet,
+        "train_forward": forward.name(),
         "kernels": kernel_identity(),
         "dev_documents": dev_docs,
         "dev_windows": dev_windows.len(),
@@ -2079,6 +2161,48 @@ mod tests {
             Some(hs::SHEET_KEPT_CELLS)
         );
         fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    #[test]
+    fn the_training_forwards_name_their_sheets() -> Result<()> {
+        for forward in [TrainForward::Plain, TrainForward::D11, TrainForward::Dual] {
+            assert_eq!(TrainForward::parse(forward.name())?, forward);
+        }
+        assert!(TrainForward::parse("both").is_err());
+        assert!(d11_train_sheet(TrainForward::D11)?.ends_with("d11-train-2026-10-26.md"));
+        assert!(d11_train_sheet(TrainForward::Dual)?.ends_with("dual-train-2026-10-26.md"));
+        // Plain training of the export arm is Stage 4b's run, not a D11-trained one.
+        assert!(d11_train_sheet(TrainForward::Plain).is_err());
+        Ok(())
+    }
+
+    /// On one GPU (claude-131): the dual step's gradient is the plain backward's plus the D11
+    /// backward's, tensor by tensor, and a tensor in only one of them keeps its gradient.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn gpu_dual_gradients_add_tensor_by_tensor() -> Result<()> {
+        use candle_core::Var;
+        let device = Device::new_cuda(0)?;
+        let shared = Var::from_vec(vec![1.0f32, -2.0, 0.5], 3, &device)?;
+        let plain_only = Var::from_vec(vec![3.0f32, 4.0], 2, &device)?;
+        let d11_only = Var::from_vec(vec![-1.0f32], 1, &device)?;
+        let a = ((shared.as_tensor().affine(2.0, 0.0)?.sum_all()?
+            + plain_only.as_tensor().sum_all()?)?)
+        .backward()?;
+        let b = ((shared.as_tensor().affine(3.0, 0.0)?.sum_all()?
+            + d11_only.as_tensor().affine(5.0, 0.0)?.sum_all()?)?)
+        .backward()?;
+        let sum = sum_grads(a, &b)?;
+        let grad = |v: &Var| -> Result<Vec<f32>> {
+            Ok(sum
+                .get(v.as_tensor())
+                .ok_or_else(|| invalid("a gradient is missing"))?
+                .to_vec1::<f32>()?)
+        };
+        assert_eq!(grad(&shared)?, vec![5.0, 5.0, 5.0]);
+        assert_eq!(grad(&plain_only)?, vec![1.0, 1.0]);
+        assert_eq!(grad(&d11_only)?, vec![5.0]);
         Ok(())
     }
 }
