@@ -847,44 +847,15 @@ pub struct FloatTrunkSnapshot {
     pub layers: Vec<FloatTrunkLayer>,
 }
 
-/// Encode a finite scalar as a grid code `±(16 + m) 2^(e - 4)` with `1 <= e + 64 <= 127`.
+/// Encode a finite scalar as a grid code `±(16 + m) 2^(e - 4)` with `1 <= e + 64 <= 127`
+/// (`fbs_snapshot::grid_code`, which the ungated FBS converter also uses).
 pub fn encode_grid_code(value: f64, positive: bool) -> Result<i16, StackError> {
-    if !value.is_finite() || (positive && value <= 0.0) {
-        return Err(StackError::GridCodes("nonfinite or non-positive scalar".to_owned()));
-    }
-    if value.abs() < 1e-18 {
-        if positive {
-            return Err(StackError::GridCodes("zero positive grid scalar".to_owned()));
-        }
-        return Ok(0);
-    }
-    let abs = value.abs();
-    let mut best_code = 0i16;
-    let mut best_err = f64::INFINITY;
-    for field in 1i16..=127 {
-        let e = i32::from(field) - 64;
-        let step = 2f64.powi(e - 4);
-        for m in 0i16..16 {
-            let cand = f64::from(16 + m) * step;
-            let err = (abs - cand).abs();
-            if err < best_err {
-                best_err = err;
-                best_code = (field << 4) | m;
-            }
-        }
-    }
-    Ok(if value < 0.0 { -best_code } else { best_code })
+    crate::fbs_snapshot::grid_code(value, positive).map_err(StackError::GridCodes)
 }
 
-/// Decode a grid code `±(16 + m) 2^(e - 4)` to `f64`.
+/// Decode a grid code `±(16 + m) 2^(e - 4)` to `f64` (`fbs_snapshot::grid_value`).
 pub fn decode_grid_code(code: i16) -> f64 {
-    if code == 0 {
-        return 0.0;
-    }
-    let c = code.unsigned_abs();
-    let e = i32::from(c >> 4) - 64;
-    let mag = f64::from(16 + (c & 15)) * 2f64.powi(e - 4);
-    if code < 0 { -mag } else { mag }
+    crate::fbs_snapshot::grid_value(code)
 }
 
 fn fold_columns_f32(values: &[f32], rows: usize, cols: usize, gain: &[f32]) -> Result<Vec<f32>, StackError> {
@@ -1474,8 +1445,7 @@ fn ref_grid(v: f32, positive: bool, quantized: bool) -> Result<f64, StackError> 
 /// A fixed-point scalar at `2^exp` as the float references read it.
 fn ref_fixed(v: f32, exp: i32, quantized: bool) -> f64 {
     if quantized {
-        let s = 2f64.powi(-exp);
-        ((f64::from(v) * s).round()) * 2f64.powi(exp)
+        crate::fbs_snapshot::fixed_value(v, exp)
     } else {
         f64::from(v)
     }

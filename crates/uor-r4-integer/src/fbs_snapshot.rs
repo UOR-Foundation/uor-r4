@@ -13,6 +13,69 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+/// The fixed-point exponent the exporter stores biases and decay offsets at
+/// (`stack::kernels::RESIDUAL_EXP`, held equal by a stack test).
+pub const FBS_FIXED_EXP: i32 = -16;
+
+/// Encode a finite scalar as a grid code `±(16 + m) 2^(e - 4)` with
+/// `1 <= e + 64 <= 127`: the exporter's form for gains and convolution taps.
+/// `stack::encode_grid_code` wraps it.
+pub fn grid_code(value: f64, positive: bool) -> Result<i16, String> {
+    if !value.is_finite() || (positive && value <= 0.0) {
+        return Err("nonfinite or non-positive scalar".to_owned());
+    }
+    if value.abs() < 1e-18 {
+        if positive {
+            return Err("zero positive grid scalar".to_owned());
+        }
+        return Ok(0);
+    }
+    let abs = value.abs();
+    let mut best_code = 0i16;
+    let mut best_err = f64::INFINITY;
+    for field in 1i16..=127 {
+        let e = i32::from(field) - 64;
+        let step = 2f64.powi(e - 4);
+        for m in 0i16..16 {
+            let cand = f64::from(16 + m) * step;
+            let err = (abs - cand).abs();
+            if err < best_err {
+                best_err = err;
+                best_code = (field << 4) | m;
+            }
+        }
+    }
+    Ok(if value < 0.0 { -best_code } else { best_code })
+}
+
+/// Decode a grid code `±(16 + m) 2^(e - 4)` to `f64`.
+pub fn grid_value(code: i16) -> f64 {
+    if code == 0 {
+        return 0.0;
+    }
+    let c = code.unsigned_abs();
+    let e = i32::from(c >> 4) - 64;
+    let mag = f64::from(16 + (c & 15)) * 2f64.powi(e - 4);
+    if code < 0 {
+        -mag
+    } else {
+        mag
+    }
+}
+
+/// `v` rounded to fixed point at `2^exp`, as the exporter stores it.
+pub fn fixed_value(v: f32, exp: i32) -> f64 {
+    (f64::from(v) * 2f64.powi(-exp)).round() * 2f64.powi(exp)
+}
+
+/// `v` at Q12 in `i16`, as the exporter writes the writer table, or `None`
+/// when it does not fit (the exporter refuses it).
+pub fn q12_value(v: f32) -> Option<f64> {
+    i16::try_from((f64::from(v) * 4096.0).round() as i64)
+        .ok()
+        .map(|k| f64::from(k) / 4096.0)
+}
+
 /// Write `bytes` to a new file at `path`, never leaving a partial file there
 /// and never replacing one. The bytes go to `<path>.partial` first, which is
 /// linked into place only when complete (the link refuses an existing

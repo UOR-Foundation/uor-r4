@@ -2824,6 +2824,60 @@ fn fbs_reference_snaps_default_to_the_integer_path_and_each_switch_is_live() {
 }
 
 #[test]
+fn fbs_exported_roundings_match_the_stack_exporter() {
+    use crate::fbs_snapshot::{fixed_value, q12_value, FBS_FIXED_EXP};
+    // The ungated roundings the float converter's D11 mode reads are the ones
+    // the exporter writes.
+    assert_eq!(FBS_FIXED_EXP, super::kernels::RESIDUAL_EXP);
+    let snap = synthetic_fbs_trunk(20261026);
+    let bytes = super::export_fbs_trunk_uorlut01(&snap).expect("export");
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+    // Every quantized reference output equals the one computed from tables
+    // rounded by these helpers, because the reference reads them through them.
+    let quantized = snap.forward_f32(&[3, 9, 27], true).expect("reference");
+    let mut rounded = snap.clone();
+    let grid = |v: &mut f32| {
+        *v = super::decode_grid_code(super::encode_grid_code(f64::from(*v), false).expect("grid"))
+            as f32
+    };
+    for layer in &mut rounded.layers {
+        layer.rec_norm.iter_mut().for_each(grid);
+        layer.mlp_norm.iter_mut().for_each(grid);
+        layer.conv_taps.iter_mut().for_each(grid);
+        for v in layer
+            .conv_bias
+            .iter_mut()
+            .chain(layer.gate_bias.iter_mut())
+            .chain(layer.decay.iter_mut())
+        {
+            *v = fixed_value(*v, FBS_FIXED_EXP) as f32;
+        }
+    }
+    rounded.final_norm.iter_mut().for_each(grid);
+    for v in &mut rounded.embed {
+        *v = q12_value(*v).expect("fits Q12") as f32;
+    }
+    // Rounding is idempotent: the rounded trunk's plain forward, with its final
+    // query rounded to Q12 as the quantized reference rounds it before the
+    // writer, is the original trunk's quantized forward; and it exports to
+    // the same artifact.
+    let plain = rounded.forward_f32(&[3, 9, 27], false).expect("reference");
+    for (p, q) in plain.iter().zip(&quantized) {
+        let query: Vec<f64> = p
+            .query
+            .iter()
+            .map(|&v| (v * 4096.0).round().clamp(-32768.0, 32767.0) / 4096.0)
+            .collect();
+        assert_eq!(query, q.query);
+        assert_eq!((p.token, &p.kept_cells), (q.token, &q.kept_cells));
+    }
+    assert_eq!(super::export_fbs_trunk_uorlut01(&rounded).expect("export"), bytes);
+    assert!(IntegerStackModel::parse(&bytes).is_ok() && model.session().step_native(3).is_ok());
+    assert_eq!(q12_value(8.0), None);
+    assert_eq!(q12_value(-8.0), Some(-8.0));
+}
+
+#[test]
 fn fbs_trunk_snapshot_json_round_trips_exactly() {
     // The float converter hands the snapshot over as JSON (`fbs-export`); every
     // f32 must read back to the same bits, so the export is the same bytes.
