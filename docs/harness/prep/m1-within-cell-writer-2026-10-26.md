@@ -43,7 +43,7 @@ Every negative gate is proven failing when its check is set aside (`bypass_refus
 4. **`G-Refuse-RelationBound`**: Refuses `|rel[i]| > max_rel_bound` (`status = 14`).
 5. **`G-Refuse-InvalidGateTrit`**: Refuses gate values outside `-1..=1` on host and GPU (`status = 10`).
 6. **`G-Refuse-ZeroNonInertness`**: Refuses any two-pass configuration with `0` non-inert rows.
-- **Finite CUDA Controls `C1–C6`**: `C1` (`256/256` root-pair orbit check: `132/256` V1 vs `256/256` V2 positive vs `0/256` V2 negative), `C2` (multi-level active carry `terms = 5` & antipodal `-1` gates), `C3` (`s[12] = 1` unit-snap & `s[12] = 2` raw residual), `C4` (recent-8 relation cap `rel = 64` & single-copy succession `[3, 1, 2, 3, 1] -> 2`), `C5` (frame-aligned copy succession `[1, 2, 3, 1] -> 2` across distinct frames & 16-token single-cell `FullVectorV1` separation), and `C6` (`16 -> 16` validation remap & bit-exact old-lineage GPU parity against `Device::forward` and `Device::evaluate`).
+- **Finite CUDA Controls `C1–C6`**: `C1` (`256/256` root-pair orbit check: `129/256` V1 vs `256/256` V2 positive vs `0/256` V2 negative), `C2` (multi-level active carry `terms = 5` & antipodal `-1` gates), `C3` (`s[12] = 1` unit-snap & `s[12] = 2` raw residual), `C4` (recent-8 relation cap `rel = 64` & single-copy succession `[3, 1, 2, 3, 1] -> 2`), `C5` (frame-aligned copy succession `[1, 2, 3, 1] -> 2` across distinct frames & 16-token single-cell `FullVectorV1` separation), and `C6` (`16 -> 16` validation remap & bit-exact old-lineage GPU parity against `Device::forward` and `Device::evaluate`).
 
 ## 5. Data, Checkpoints, and SHA-256 Pins
 
