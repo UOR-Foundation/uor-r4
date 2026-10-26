@@ -250,9 +250,9 @@ impl StackShape {
         } else if self.projection_fbs() && self.pattern.bytes().any(|c| c != b'r') {
             Some("SpiralCore/FBS projections serve recurrence layers only")
         } else if self.projection_fbs()
-            && !(self.width.is_multiple_of(8) && self.mlp.is_multiple_of(8))
+            && (self.read_select.is_some() || self.read_weights.is_some() || self.read_binary)
         {
-            Some("SpiralCore/FBS projections need 8-blocks: width and MLP width multiples of 8")
+            Some("SpiralCore/FBS trunks carry no read selection or read weights")
         } else if self.head_native_vector() && !self.projection_fbs() {
             Some("the native vector head requires SpiralCore/FBS projections")
         } else if self.kept_cells.is_some() && !self.head_native_vector() {
@@ -851,8 +851,8 @@ pub struct FloatTrunkSnapshot {
 /// Output block `o` reads input block `atoms[o]`: its channel `j` is
 /// `y[o*8 + j] = ±x[atoms[o]*8 + (code & 7)]`, negated when `code & 8`, where
 /// `code` is the `j`-th code of the 64-state Cl(0,6) signed-axis table at
-/// `states[o]`. This change only exports the routes; the served gather lands
-/// in a later change.
+/// `states[o]`. The integer session serves it as a gather and a sign
+/// (`stack_fbs_gather`).
 #[derive(Clone, Debug)]
 pub struct FbsRoutes {
     /// Input 8-blocks the atoms index.
@@ -1393,20 +1393,19 @@ pub fn export_fbs_trunk_uorlut01(snap: &FbsTrunkSnapshot) -> Result<Vec<u8>, Sta
         head: Some("native_vector".to_owned()),
         kept_cells: Some(snap.kept_cells),
     };
+    // `validate` holds the width and MLP width to multiples of the group (32),
+    // so every route table, the gate rows' `width / 4 + width` included, fills
+    // whole 8-blocks.
     shape.validate()?;
-    let (d, m) = (snap.width, snap.mlp);
-    if !d.is_multiple_of(GROUP) || !m.is_multiple_of(GROUP) {
-        return Err(StackError::Shape(
-            "SpiralCore/FBS trunks need width and MLP width multiples of 32",
-        ));
+    if !(snap.rms_eps.is_finite() && snap.rms_eps > 0.0) {
+        return Err(StackError::Numerics(format!(
+            "rms_eps {} is not finite and positive",
+            snap.rms_eps
+        )));
     }
+    let (d, m) = (snap.width, snap.mlp);
     let lanes = shape.lanes();
     let g = lanes + d;
-    if !g.is_multiple_of(8) {
-        return Err(StackError::Shape(
-            "SpiralCore/FBS gate rows must fill whole 8-blocks",
-        ));
-    }
 
     let mut b = ExportBuilder::new();
     for (l, layer) in snap.layers.iter().enumerate() {
@@ -1461,11 +1460,20 @@ pub fn export_fbs_trunk_uorlut01(snap: &FbsTrunkSnapshot) -> Result<Vec<u8>, Sta
         .collect::<Result<_, _>>()?;
     b.push_i16("final_norm_gain", &final_norm);
     check_f32("writer.table", &snap.embed, shape.vocab * d)?;
+    // Q12 in i16 (about [-8, 8)): a value that does not fit would saturate and
+    // serve another vector than the float trunk's, so it is refused.
     let writer: Vec<i16> = snap
         .embed
         .iter()
-        .map(|&v| (f64::from(v) * 4096.0).round().clamp(-32768.0, 32767.0) as i16)
-        .collect();
+        .enumerate()
+        .map(|(i, &v)| {
+            i16::try_from((f64::from(v) * 4096.0).round() as i64).map_err(|_| {
+                StackError::Numerics(format!(
+                    "writer.table[{i}] = {v} does not fit Q12 in i16"
+                ))
+            })
+        })
+        .collect::<Result<_, _>>()?;
     b.push_i16("writer.table", &writer);
 
     let eps_exp = -48i32;

@@ -2522,8 +2522,9 @@ fn fbs_shape_takes_its_own_schema_and_refuses_unlawful_shapes() {
     // Each unlawful shape is refused for its own reason, so every rule is held.
     const REQUIRE: &str = "SpiralCore/FBS projections require geometric gates, the Hamilton gate, rotations and the native vector head";
     const KEPT: &str = "the native vector head keeps 1 to 16 cells";
+    const READ: &str = "SpiralCore/FBS trunks carry no read selection or read weights";
     type Mutation = fn(&mut StackShape);
-    let refused: [(&str, Mutation, &str); 13] = [
+    let refused: [(&str, Mutation, &str); 16] = [
         (
             "another projection",
             |s| s.projection = Some("dense".to_owned()),
@@ -2555,9 +2556,17 @@ fn fbs_shape_takes_its_own_schema_and_refuses_unlawful_shapes() {
             "SpiralCore/FBS projections serve recurrence layers only",
         ),
         (
-            "an MLP width off the 8-blocks",
-            |s| s.mlp = 36,
-            "SpiralCore/FBS projections need 8-blocks: width and MLP width multiples of 8",
+            "a read selection",
+            |s| s.read_select = Some(super::format::StackReadSelect { window: 4, k: 2 }),
+            READ,
+        ),
+        ("rank read weights", |s| s.read_weights = Some("rank".to_owned()), READ),
+        ("a binary read", |s| s.read_binary = true, READ),
+        // The 8-blocks of every route table follow from the group rule.
+        (
+            "an MLP width off the group",
+            |s| s.mlp = 40,
+            "the MLP width is not a multiple of the group",
         ),
         (
             "the writer without FBS",
@@ -2701,25 +2710,63 @@ fn fbs_trunk_export_refuses_bad_snapshots() {
     let good = synthetic_fbs_trunk(20261026);
     assert!(super::export_fbs_trunk_uorlut01(&good).is_ok());
     type Mutation = fn(&mut super::FbsTrunkSnapshot);
-    let refused: [(&str, Mutation); 5] = [
-        ("atom == in_blocks", |s| {
-            s.layers[0].rec_in.atoms[0] = s.layers[0].rec_in.in_blocks as u16
-        }),
-        ("state 64", |s| s.layers[1].mlp_up.states[0] = 64),
-        ("a short route", |s| {
-            s.layers[0].rec_gate.atoms.pop();
-        }),
-        ("NaN in embed", |s| s.embed[0] = f32::NAN),
-        ("width 40", |s| s.width = 40),
+    type Refusal = fn(&StackError) -> bool;
+    let refused: [(&str, Mutation, Refusal); 8] = [
+        (
+            "atom == in_blocks",
+            |s| s.layers[0].rec_in.atoms[0] = s.layers[0].rec_in.in_blocks as u16,
+            |e| matches!(e, StackError::Numerics(m) if m == "l0.rec_in.fbs[0]: atom 4 is not below 4 input blocks"),
+        ),
+        (
+            "state 64",
+            |s| s.layers[1].mlp_up.states[0] = 64,
+            |e| matches!(e, StackError::Numerics(m) if m == "l1.mlp_up.fbs[0]: state 64 is not below 64"),
+        ),
+        (
+            "a short route",
+            |s| {
+                s.layers[0].rec_gate.atoms.pop();
+            },
+            |e| matches!(e, StackError::TableLength { name, .. } if name == "l0.rec_gate.fbs.atoms"),
+        ),
+        (
+            "NaN in embed",
+            |s| s.embed[0] = f32::NAN,
+            |e| matches!(e, StackError::Numerics(m) if m == "writer.table[0] is not finite"),
+        ),
+        (
+            "embed 8.0 off the Q12 range",
+            |s| s.embed[3] = 8.0,
+            |e| matches!(e, StackError::Numerics(m) if m == "writer.table[3] = 8 does not fit Q12 in i16"),
+        ),
+        (
+            "rms_eps NaN",
+            |s| s.rms_eps = f64::NAN,
+            |e| matches!(e, StackError::Numerics(m) if m == "rms_eps NaN is not finite and positive"),
+        ),
+        (
+            "rms_eps 0",
+            |s| s.rms_eps = 0.0,
+            |e| matches!(e, StackError::Numerics(m) if m == "rms_eps 0 is not finite and positive"),
+        ),
+        (
+            "width 40",
+            |s| s.width = 40,
+            |e| matches!(e, StackError::Shape("the width is not a multiple of 4, of the group and of the heads")),
+        ),
     ];
-    for (what, mutate) in refused {
+    for (what, mutate, refusal) in refused {
         let mut snap = good.clone();
         mutate(&mut snap);
-        assert!(
-            super::export_fbs_trunk_uorlut01(&snap).is_err(),
-            "{what} must be refused"
-        );
+        match super::export_fbs_trunk_uorlut01(&snap) {
+            Err(e) => assert!(refusal(&e), "{what}: refused for another reason: {e:?}"),
+            Ok(_) => panic!("{what} must be refused"),
+        }
     }
+    // The Q12 range is half-open: -8.0 is the i16 minimum and is served.
+    let mut low = good.clone();
+    low.embed[3] = -8.0;
+    assert!(super::export_fbs_trunk_uorlut01(&low).is_ok());
 }
 
 #[test]
@@ -2748,6 +2795,19 @@ fn fbs_trunk_reference_reads_only_kept_cells() {
             .fold(f64::NEG_INFINITY, |m, &(_, s)| m.max(s));
         let first_best = w.candidates.iter().find(|&&(_, s)| s == best).map(|&(c, _)| c);
         assert_eq!(first_best, Some(w.token), "token {tok}");
+        // The kept cells are the best-scoring ones: no cell left out scores higher.
+        let cells = fbs_cell_scores(&w.query);
+        let worst_kept = w
+            .kept_cells
+            .iter()
+            .map(|&c| cells[c as usize])
+            .fold(f64::INFINITY, f64::min);
+        assert!(
+            (0..256u32)
+                .filter(|c| !w.kept_cells.contains(c))
+                .all(|c| cells[c as usize] <= worst_kept),
+            "token {tok}: a cell left out outscores a kept cell"
+        );
     }
     // Too long a sequence and a token outside the vocabulary are refused.
     assert!(snap.forward_f32(&[0; 9], false).is_err());
@@ -2837,14 +2897,9 @@ fn fbs_model_parse_refuses_corrupt_routes() {
 
 /// The reference's own near-tie margin at a position: the smaller of its
 /// best-minus-second candidate score and its kept-cell boundary score gap.
-fn fbs_reference_margin(want: &super::FbsWriterOutput, kept: usize) -> f64 {
-    let mut scores: Vec<f64> = want.candidates.iter().map(|&(_, s)| s).collect();
-    scores.sort_by(|a, b| b.total_cmp(a));
-    let token_margin = match scores.as_slice() {
-        [best, second, ..] => best - second,
-        _ => f64::INFINITY,
-    };
-    let q = &want.query;
+/// The writer's 256 cell scores for a query, recomputed here: the negative L1
+/// distances of its first and last 8-blocks to the 16 orbit roots.
+fn fbs_cell_scores(q: &[f64]) -> Vec<f64> {
     let d = q.len();
     let neg_l1 = |a: &[f64], r: [i32; 8]| -> f64 {
         -a.iter()
@@ -2853,17 +2908,35 @@ fn fbs_reference_margin(want: &super::FbsWriterOutput, kept: usize) -> f64 {
             .sum::<f64>()
     };
     let roots: Vec<[i32; 8]> = (0..16).map(crate::discrete_d11::orbit_root_coords).collect();
-    let mut cells: Vec<f64> = (0..256)
+    (0..256)
         .map(|c| neg_l1(&q[..8], roots[c >> 4]) + neg_l1(&q[d - 8..], roots[c & 15]))
-        .collect();
-    cells.sort_by(|a, b| b.total_cmp(a));
-    token_margin.min(cells[kept - 1] - cells[kept])
+        .collect()
+}
+
+/// How near the reference came to the other choice where the integer session
+/// differs: the margin at the kept-cell boundary when the kept cells differ,
+/// else the margin between its two best candidates.
+fn fbs_reference_margin(want: &super::FbsWriterOutput, kept: usize, cells_agree: bool) -> f64 {
+    if cells_agree {
+        let mut scores: Vec<f64> = want.candidates.iter().map(|&(_, s)| s).collect();
+        scores.sort_by(|a, b| b.total_cmp(a));
+        match scores.as_slice() {
+            [best, second, ..] => best - second,
+            _ => f64::INFINITY,
+        }
+    } else {
+        let mut cells = fbs_cell_scores(&want.query);
+        cells.sort_by(|a, b| b.total_cmp(a));
+        cells[kept - 1] - cells[kept]
+    }
 }
 
 #[test]
 fn fbs_trunk_export_matches_float_reference_across_full_vocabulary() {
     // A reference near-tie below this may break either way under the served
-    // fixed point; anything wider must agree exactly.
+    // fixed point, and is let through as an exception (at most 4). The bar is
+    // strict: a 2-LSB query drift can move a cell score by up to 2^-7, so a
+    // wider tie can still flip, and then fails here rather than passes.
     const TIE: f64 = 1.0 / 1024.0;
     let snap = synthetic_fbs_trunk(20261026);
     let bytes = super::export_fbs_trunk_uorlut01(&snap).expect("export");
@@ -2879,7 +2952,8 @@ fn fbs_trunk_export_matches_float_reference_across_full_vocabulary() {
             );
         }
         if got.kept_cells != want.kept_cells || got.token != want.token {
-            let margin = fbs_reference_margin(want, snap.kept_cells);
+            let margin =
+                fbs_reference_margin(want, snap.kept_cells, got.kept_cells == want.kept_cells);
             assert!(
                 margin < TIE,
                 "{at}: integer token {} cells {:?} against reference {} cells {:?}, reference margin {margin:.3e}",
