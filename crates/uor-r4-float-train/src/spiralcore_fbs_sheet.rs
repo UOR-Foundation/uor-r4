@@ -2074,6 +2074,11 @@ fn compare_snaps(
             "the captures or the trace do not fit the trunk's shape",
         ));
     }
+    // Every snap byte names one of the 120 roots, or is 255 for a zero block.
+    let named = |b: &u8| *b < 120 || *b == u8::MAX;
+    if !trace.iter().all(named) || !captures.iter().flat_map(|c| &c.roots).all(named) {
+        return Err(invalid("a snap byte names no root"));
+    }
     let mut out = SnapComparison {
         per_layer_site: vec![[0; 3]; shape.layers],
         position_root: vec![false; rows],
@@ -2516,6 +2521,7 @@ pub fn run_d11_snap_trace(
             "max": root_margins.last(),
             "below_1e-6": below(1e-6),
             "below_1e-4": below(1e-4),
+            "below_1e-3": below(1e-3),
             "below_1e-2": below(1e-2),
         },
         "i_inputs": i_inputs,
@@ -3438,6 +3444,8 @@ mod tests {
         // The wrong number of calls, or a short trace, is refused.
         assert!(compare_snaps(&captures[..2], &trace, shape).is_err());
         assert!(compare_snaps(&captures, &trace[..5], shape).is_err());
+        // A byte that names no root (the host prefill 0xFE, say) is refused.
+        assert!(compare_snaps(&captures, &[3, 4, 5, 9, 4, 0xFE], shape).is_err());
         assert_eq!(hex_bytes("00ff7A")?, vec![0, 255, 122]);
         assert!(hex_bytes("abc").is_err() && hex_bytes("zz").is_err());
         Ok(())

@@ -201,6 +201,10 @@ pub fn work_bytes(m: &CModel) -> u64 {
     unsafe { fbs_host_work_bytes(m) }
 }
 
+/// The host trace's prefill (claude-134): every byte the core writes is a root below 120 or 255
+/// (a zero raw), so a byte left at 0xFE is a slot the core never wrote.
+pub const TRACE_UNWRITTEN: u8 = 0xFE;
+
 /// The bytes of one position's snap trace (`fbs_trace_stride`, claude-134):
 /// per layer, the transition's icosian root per lane, the output gate's root
 /// per lane, then the feed-forward gate's root per 4 MLP channels; 255 marks a
@@ -281,7 +285,9 @@ pub fn host_trace_sequences(
     let m = host.model();
     let flat: Vec<u32> = sequences.iter().flatten().copied().collect();
     let mut out = Outputs::zeroed(sequences.len(), len, m.kept as usize, m.width as usize);
-    let mut trace = vec![0u8; sequences.len() * len * trace_stride(m) as usize];
+    // Prefilled with a byte the core never writes, so a slot it misses cannot pass for root 0
+    // (and differs from the GPU's zeroed buffer, failing G = H).
+    let mut trace = vec![TRACE_UNWRITTEN; sequences.len() * len * trace_stride(m) as usize];
     // SAFETY: as in `host_sequences`; `trace` has `trace_stride` bytes per position.
     let err = unsafe {
         fbs_host_trace_sequences(

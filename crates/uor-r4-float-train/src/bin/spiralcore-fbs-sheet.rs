@@ -378,18 +378,19 @@ fn main() -> Result<()> {
                 &device,
             )?;
             println!(
-                "[d11-snap-trace] label={} seed={} windows={} rows_differ={} preceded={} same_position={} snap_disagreements={} of {} zero_convention={} margins_below_1e-4={} instruments={}",
+                "[d11-snap-trace] label={} seed={} windows={} rows_differ={} preceded_by_root={} agree_preceded_by_root={} lead={} of {} primaries={} classes={} instruments={} classification={}",
                 value["label"],
                 value["seed"],
                 value["windows"],
-                value["d11_vs_artifact_rows_differ"],
-                value["rows_differ_preceded_by_a_snap_disagreement"],
-                value["rows_differ_with_a_snap_disagreement_at_their_position"],
-                value["snap_disagreements"],
-                value["snap_sites"],
-                value["snap_zero_convention"],
-                value["disagreement_margins"]["below_1e-4"],
+                value["rows_differ"],
+                value["rows_differ_preceded_by_a_root_disagreement"],
+                value["rows_agree_preceded_by_a_root_disagreement"],
+                value["windows_whose_first_flip_leads"],
+                value["windows_with_rows_differ"],
+                value["primaries_windows_with_rows_differ"]["primaries"],
+                value["snap_disagreements_per_class"],
                 value["instruments_pass"],
+                value["classification"],
             );
             write_receipt(&out, &value)
         }

@@ -111,6 +111,11 @@ fn the_snap_trace_leaves_the_outputs_unchanged_and_names_roots() {
             seqs.len() * len * stride,
             "{name}: trace length"
         );
+        // The host buffer is prefilled with a byte the core never writes: none may survive.
+        assert!(
+            !trace.contains(&d11_fbs_evaluator::TRACE_UNWRITTEN),
+            "{name}: a trace slot the core never wrote"
+        );
         assert!(
             trace.iter().all(|&r| r < 120 || r == u8::MAX),
             "{name}: an index past the 120 roots"

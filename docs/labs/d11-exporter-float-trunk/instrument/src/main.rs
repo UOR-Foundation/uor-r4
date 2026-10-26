@@ -266,7 +266,16 @@ fn trace(artifact: &str, sequences_path: &str, out: &str) -> Result<bool, String
     let trace_equal = gpu_trace == host_trace;
     let shape = model.shape();
     let layers = model.fbs_image().ok_or("not an FBS stack")?.layers.len();
-    let stride = gpu_trace.len() / (gpu.sequences * gpu.len).max(1);
+    // The documented layout's stride, held against the buffer the kernel filled.
+    let stride = layers * (2 * (shape.width / 4) + shape.mlp / 4);
+    if gpu_trace.len() != gpu.sequences * gpu.len * stride {
+        return Err(format!(
+            "the trace has {} bytes, not {} sequences × {} positions × {stride}",
+            gpu_trace.len(),
+            gpu.sequences,
+            gpu.len
+        ));
+    }
     eprintln!(
         "{} sequences of {} positions traced in {gpu_ns} ns; outputs G = H {outputs_equal}, trace G = H {trace_equal}",
         gpu.sequences, gpu.len
