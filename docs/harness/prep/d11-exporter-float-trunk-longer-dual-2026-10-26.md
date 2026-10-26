@@ -83,7 +83,7 @@ TEST FITNESS: PENDING. A fresh non-author FIT and a fresh D67 pre-run review are
 
 Source `e77a1f91f0f198de9aee58b7bc20d65a6c12b298`. Build and copy all three binaries, record their SHA-256s, and run them from the session-unique run directory. Inputs are fetched with the store client, checked against the pins, and no host model/parity fallback is allowed.
 
-**Laptop lease boundary:** run `scripts/pod/uor-pod status` first and record the exact free GPU index as `GPU`. If no suitable free 5090 exists, run `scripts/pod/uor-pod up --lab kimi --session longer-dual --purpose "2,048-step dual export-gap FIT run" --hours 2.5 --count 1 --gpu 5090 --ref e77a1f91f0f198de9aee58b7bc20d65a6c12b298 --card https://github.com/UOR-Foundation/uor-r4/issues/2820` and assign `POD` to the exact id it prints. If a free 5090 already exists, replace `up` with `scripts/pod/uor-pod lease "$POD" --lab kimi --session longer-dual --gpus "$GPU" --purpose "2,048-step dual export-gap FIT run" --hours 2.5` and then `scripts/pod/uor-pod bootstrap "$POD" --ref e77a1f91f0f198de9aee58b7bc20d65a6c12b298`. Set `ROOT=/workspace/kimi-longer-dual-$POD`, verify it is empty, and ship the supplied `local/kimi/d11-float-trunk/job.sh` with `scripts/pod/uor-pod ssh "$POD" "cat > '$ROOT/job.sh'" < local/kimi/d11-float-trunk/job.sh`. Run `scripts/pod/uor-pod run "$POD" --lab kimi --session longer-dual --gpu "$GPU" -- bash "$ROOT/job.sh"`.
+**Laptop lease boundary:** run `scripts/pod/uor-pod status` first and record the exact free GPU index as `GPU`. If no suitable free 5090 exists, run `scripts/pod/uor-pod up --lab kimi --session longer-dual --purpose "2,048-step dual export-gap FIT run" --hours 2.5 --count 1 --gpu 5090 --ref e77a1f91f0f198de9aee58b7bc20d65a6c12b298 --card https://github.com/UOR-Foundation/uor-r4/issues/2820`, assign `POD` to the exact id it prints, and set `GPU=0`. If a free 5090 already exists, replace `up` with `scripts/pod/uor-pod lease "$POD" --lab kimi --session longer-dual --gpus "$GPU" --purpose "2,048-step dual export-gap FIT run" --hours 2.5` and then `scripts/pod/uor-pod bootstrap "$POD" --ref e77a1f91f0f198de9aee58b7bc20d65a6c12b298`. Set `ROOT=/workspace/kimi-longer-dual-$POD`, verify it is empty, and ship the supplied `local/kimi/d11-float-trunk/job.sh` with `scripts/pod/uor-pod ssh "$POD" "cat > '$ROOT/job.sh'" < local/kimi/d11-float-trunk/job.sh`. Run `scripts/pod/uor-pod run "$POD" --lab kimi --session longer-dual --gpu "$GPU" -- env POD="$POD" bash "$ROOT/job.sh"`.
 
 The pod job starts with `set -euo pipefail` and this receipt wrapper; every model command and instrument step uses it:
 
@@ -106,17 +106,17 @@ run_step() {
     exit "$code"
   fi
 }
-trap '(cd "$RUN" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && sha256sum -c SHA256SUMS && /root/uor-store put "$RUN" results/kimi/d11-fbs-longer-dual-2026-10-26/ && /root/uor-store ls results/kimi/d11-fbs-longer-dual-2026-10-26/)' EXIT
 mkdir -p "$RUN/bin" "$STAGING" "$RUN/store"
-cp "$ROOT/job.sh" "$RUN/job.sh"
+run_step job-copy cp "$ROOT/job.sh" "$RUN/job.sh"
+trap '(cd "$RUN" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && sha256sum -c SHA256SUMS && /root/uor-store put "$RUN" results/kimi/d11-fbs-longer-dual-2026-10-26/ && /root/uor-store ls results/kimi/d11-fbs-longer-dual-2026-10-26/)' EXIT
 exec > >(tee -a "$RUN/job.log") 2>&1
-cd /root/build/src-$REF
+SRC=/root/build/src-$REF
 export UOR_NVCC_ARCH=compute_120 CARGO_TARGET_DIR=/root/build/target-sm120
-run_step build-sheet cargo build --release --locked -p uor-r4-float-train --features cuda --bin spiralcore-fbs-sheet
-run_step build-export cargo build --release --locked -p uor-r4-integer --features serving-wasm --bin fbs-export
-run_step build-eval cargo build --release --locked --features cuda --bin d11-fbs-eval --manifest-path docs/labs/d11-exporter-float-trunk/instrument/Cargo.toml
-cp /root/build/target-sm120/release/spiralcore-fbs-sheet /root/build/target-sm120/release/fbs-export /root/build/target-sm120/release/d11-fbs-eval "$RUN/bin/"
-sha256sum "$RUN/bin"/* > "$RUN/binary-SHA256SUMS"
+run_step build-sheet cargo build --release --locked --manifest-path "$SRC/Cargo.toml" -p uor-r4-float-train --features cuda --bin spiralcore-fbs-sheet
+run_step build-export cargo build --release --locked --manifest-path "$SRC/Cargo.toml" -p uor-r4-integer --features serving-wasm --bin fbs-export
+run_step build-eval cargo build --release --locked --features cuda --bin d11-fbs-eval --manifest-path "$SRC/docs/labs/d11-exporter-float-trunk/instrument/Cargo.toml"
+run_step copy-binaries cp /root/build/target-sm120/release/spiralcore-fbs-sheet /root/build/target-sm120/release/fbs-export /root/build/target-sm120/release/d11-fbs-eval "$RUN/bin/"
+run_step binary-pins bash -c 'sha256sum "$1"/* > "$1/binary-SHA256SUMS"' _ "$RUN/bin"
 run_step get-inputs /root/uor-store get w2-inputs/2026-10-25/ "$STAGING"
 ln -s "$STAGING/w2-inputs/2026-10-25/driver-data" "$DATA"
 run_step pins bash -c "printf '%s  %s\n' \
@@ -153,9 +153,12 @@ run_step windows "$RUN/bin/spiralcore-fbs-sheet" --mode d11-artifact-windows --d
 for s in 1 2; do
   run_step "export-$s" "$RUN/bin/fbs-export" "$RUN/save/seed-$s/snapshot.json" "$RUN/artifact-seed-$s.uorlut"
   run_step "eval-$s" "$RUN/bin/d11-fbs-eval" run "$RUN/artifact-seed-$s.uorlut" "$RUN/windows.json" "$RUN/run-seed-$s.json" --verify
-  ART=$(sha256sum "$RUN/artifact-seed-$s.uorlut" | cut -d' ' -f1)
-  MODEL=$(sha256sum "$RUN/save/seed-$s/model/model.safetensors" | cut -d' ' -f1)
-  WINDOWS=$(sha256sum "$RUN/windows.json" | cut -d' ' -f1)
+  run_step "hash-artifact-$s" bash -c 'sha256sum "$1" | cut -d" " -f1' _ "$RUN/artifact-seed-$s.uorlut"
+  ART=$(cat "$RUN/hash-artifact-$s.out")
+  run_step "hash-model-$s" bash -c 'sha256sum "$1" | cut -d" " -f1' _ "$RUN/save/seed-$s/model/model.safetensors"
+  MODEL=$(cat "$RUN/hash-model-$s.out")
+  run_step "hash-windows-$s" bash -c 'sha256sum "$1" | cut -d" " -f1' _ "$RUN/windows.json"
+  WINDOWS=$(cat "$RUN/hash-windows-$s.out")
   run_step "gap-$s" "$RUN/bin/spiralcore-fbs-sheet" --mode d11-artifact-gap --steps 2048 --data-root "$DATA" \
     --model-dir "$RUN/save/seed-$s/model" --evaluator "$RUN/run-seed-$s.json" \
     --windows-sha256 "$WINDOWS" --artifact-sha256 "$ART" --model-sha256 "$MODEL" \
@@ -169,7 +172,8 @@ for s in 1 2; do
     --preds-d11-out "$RUN/preds-d11-seed-$s.json"
 done
 # I-Negative: only the artifact pin is wrong; the seed-1 model pin is correct.
-MODEL1=$(sha256sum "$RUN/save/seed-1/model/model.safetensors" | cut -d' ' -f1)
+run_step hash-model-1 bash -c 'sha256sum "$1" | cut -d" " -f1' _ "$RUN/save/seed-1/model/model.safetensors"
+MODEL1=$(cat "$RUN/hash-model-1.out")
 run_step negative "$RUN/bin/spiralcore-fbs-sheet" --mode d11-artifact-gap --steps 2048 --data-root "$DATA" \
   --model-dir "$RUN/save/seed-1/model" --evaluator "$RUN/run-seed-1.json" \
   --windows-sha256 "$WINDOWS" --artifact-sha256 0000000000000000000000000000000000000000000000000000000000000000 \
