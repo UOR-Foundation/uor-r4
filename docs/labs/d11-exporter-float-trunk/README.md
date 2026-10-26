@@ -29,6 +29,6 @@ d11-fbs-eval singles ARTIFACT SINGLES_JSON                 # every token, one pe
 d11-fbs-eval run ARTIFACT SEQUENCES_JSON OUT_JSON --verify # evaluate; hold against both references
 ```
 
-On the Mac, type-check the CUDA build with a stub nvcc (see `run-claude.txt`, PART 4).
+On the Mac, type-check the CUDA build with a stub nvcc: a script that, in `-ptx` mode, writes one `.visible .entry NAME() { ret; }` per `__global__` kernel, and in `-cubin` mode an ELF header. Set it as `NVCC` with `UOR_NVCC_ARCH=compute_120`.
 
 claude-128 qualified it on an RTX 5090: it equals the host twin and the Rust session at all 32,256 positions of the synthetic controls and both Stage 4b artifacts. The record is the [prep sheet](../../harness/prep/d11-exporter-float-trunk-gpu-evaluator-2026-10-26.md) and the [REPORT](../../loop/tasks/d11-exporter-float-trunk/claude-128/REPORT.md).

@@ -13,13 +13,14 @@ References #2820.
   - The first spent about 180k reading before the loop guard refused its first write: a builder needs a suborder (`uor-harness loop suborder`), and none had been written.
   - The second started near the 150k hand-back mark and stopped before writing anything.
   - Every change here was made in the main session instead. The friction log has the convention.
+- **One saved checksum does not verify: `evalq/job.log`.** The job wrote `SHA256SUMS` and only then appended its last log line (`finished, EXIT 0`), so `shasum -c` reports `job.log: FAILED`. The other 74 files of `evalq/`, and `evalq-bin/`, verify. The sealed store is left as written (L-002). The job script for the next run must hash the log after its last line.
 - **`uor-pod down` could not verify the archive over SSH,** as in claude-126. The upload was confirmed with `uor-store ls`, and `down` was re-run with `--confirm-archived`.
 
 ## What changed
 
 Size against `origin/main`:
-- integer crate: +333/−130 across `stack/session.rs`, `synthetic.rs`, `tests.rs`, `mod.rs` and `Cargo.toml`;
-- instrument: about 2,240 lines, of which 425 are its `Cargo.lock`;
+- integer crate: +336/−130 across `stack/session.rs`, `synthetic.rs`, `tests.rs`, `mod.rs` and `Cargo.toml`;
+- instrument: 2,268 lines, of which 425 are its `Cargo.lock`;
 - docs: the ORDER, the prep sheet, the lab README, this REPORT and the notebook row.
 
 **Changes:**
@@ -42,7 +43,7 @@ Size against `origin/main`:
 
 ## Measurements
 
-**The qualification, on one RTX 5090** (driver 595.71.05, nvcc 12.8, `sm_120`):
+**The qualification, on one RTX 5090** (driver 595.71.05, nvcc 12.8, `sm_120`). The binary run was built on the pod from `ac47d01d4aacb94b9f98b5da20320af812e3449c`:
 
 | Gate | Input | Positions | G = H | G = R |
 |---|---|---|---|---|
@@ -69,7 +70,7 @@ Equal means bit for bit, at every position: the token, every kept cell in order,
 - **GPU wall time:** the 54 windows of 192 took 14.46 and 14.39 s. The 4,096 single tokens took 0.085 s.
 - **ptxas:** 104 registers, a 256-byte stack frame, and no spills.
 - **The projection for the full 14,287-row panel.** Its targets lie in 428 DEV windows of 192 (82,176 positions).
-  - The pre-registered linear projection is 82,176 × 1.39 ms ≈ 115 s per seed, an upper bound.
+  - The pre-registered linear projection is 82,176 × 1.395 ms ≈ 115 s per seed. That number is a projection, not a measured bound.
   - The 428 windows fit in one launch of 428 threads, so the expected wall time is close to one window's serial time, about 15 s. That is an inference, not a measurement.
 - **Evidence:** in the HF store at `results/claude/d11-fbs-gpu-evaluator-2026-10-26/`, each folder with a `SHA256SUMS`:
   - `evalq/` holds every step's stdout, stderr and exit code, every output, and `job.log`;
@@ -88,7 +89,7 @@ See the exact-head review record on the PR.
 - the self-test probes every forbidden component;
 - `first_difference` reports differing dimensions.
 
-`fbs_core.h` and `evaluator.cu` are unchanged since the run, so the qualified PTX and cubin are the ones built at this head. A header comment that the core trusts the loader's bounds was left out, so as not to touch the qualified source.
+`fbs_core.h` and `evaluator.cu` are byte-identical to the run's source `ac47d01d4…`, and the nvcc arguments are unchanged. So, by inference, this head builds the qualified PTX and cubin. Nothing was rebuilt on a GPU at this head. A header comment that the core trusts the loader's bounds was left out, so as not to touch the qualified source.
 
 **Suites:**
 - integer serving library 326 and no-feature library 55;
