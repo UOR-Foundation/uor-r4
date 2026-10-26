@@ -2157,6 +2157,22 @@ fn compare_snaps(
     Ok(out)
 }
 
+/// The fewest snaps that must agree at every (layer, site), in percent, for the trace's layout to
+/// stand (`I-Layout`, claude-134). D and A agree on nearly every token, so nearly every snap; a
+/// site read at the wrong offset would agree on about one root in 120.
+const LAYOUT_MIN_AGREE_PERCENT: usize = 50;
+
+/// `I-Layout`: each (layer, site) agrees on at least [`LAYOUT_MIN_AGREE_PERCENT`] of its snaps.
+fn layout_agrees(c: &SnapComparison, shape: SnapShape) -> bool {
+    let rows = shape.windows * shape.len;
+    c.per_layer_site.iter().all(|sites| {
+        (0..3).all(|site| {
+            let snaps = rows * shape.blocks(site);
+            100 * (snaps - sites[site]) >= LAYOUT_MIN_AGREE_PERCENT * snaps
+        })
+    })
+}
+
 /// The D panel's snap captures, one per call over each chunk of [`hs::SHEET_EVAL_BATCH`] windows
 /// in panel order, joined into one per (layer, site) over all the windows.
 fn join_chunk_captures(
@@ -2459,7 +2475,8 @@ pub fn run_d11_snap_trace(
     };
     // I-Finite on the margins: a NaN would otherwise read as an exact tie.
     let i_finite_margins = compared.root_margins.iter().all(|m| m.is_finite());
-    let instruments_pass = i_inputs && i_trace && i_old_run && i_finite_margins;
+    let i_layout = layout_agrees(&compared, shape);
+    let instruments_pass = i_inputs && i_trace && i_old_run && i_finite_margins && i_layout;
     let mut root_margins = compared.root_margins.clone();
     root_margins.sort_by(f32::total_cmp);
     let below = |t: f32| root_margins.iter().filter(|&&m| m < t).count();
@@ -2528,6 +2545,7 @@ pub fn run_d11_snap_trace(
         "i_trace": i_trace,
         "i_old_run": i_old_run,
         "i_finite_margins": i_finite_margins,
+        "i_layout": i_layout,
         "instruments_pass": instruments_pass,
         "classification": if instruments_pass {
             classify_snap_trace(&readings)
@@ -3444,8 +3462,25 @@ mod tests {
         // The wrong number of calls, or a short trace, is refused.
         assert!(compare_snaps(&captures[..2], &trace, shape).is_err());
         assert!(compare_snaps(&captures, &trace[..5], shape).is_err());
-        // A byte that names no root (the host prefill 0xFE, say) is refused.
+        // A byte that names no root (the host prefill 0xFE, say) is refused, on either side.
         assert!(compare_snaps(&captures, &[3, 4, 5, 9, 4, 0xFE], shape).is_err());
+        let mut bad = captures.clone();
+        bad[0].roots[0] = 0xFE;
+        assert!(compare_snaps(&bad, &trace, shape).is_err());
+        // I-Layout: the transition agrees on 1 snap of 2 (50%), the ff gate (a zero block on both
+        // sides) on 1 of 2; a site read at a wrong offset, disagreeing on both, fails.
+        assert!(layout_agrees(
+            &compare_snaps(&captures, &trace, shape)?,
+            shape
+        ));
+        let shifted = [3, 4, 5, 9, 9, u8::MAX];
+        let c = compare_snaps(&captures, &shifted, shape)?;
+        assert_eq!(c.per_layer_site, vec![[1, 1, 1]]);
+        assert!(layout_agrees(&c, shape));
+        let wrong = [9, 4, 9, 9, 4, u8::MAX];
+        let c = compare_snaps(&captures, &wrong, shape)?;
+        assert_eq!(c.per_layer_site, vec![[1, 0, 2]]);
+        assert!(!layout_agrees(&c, shape));
         assert_eq!(hex_bytes("00ff7A")?, vec![0, 255, 122]);
         assert!(hex_bytes("abc").is_err() && hex_bytes("zz").is_err());
         Ok(())

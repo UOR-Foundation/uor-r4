@@ -84,6 +84,9 @@ The bar is per model, over its 32 windows. Every instrument check of section 4 m
 4. **`I-Old-Run`.** For each artifact, the traced build's tokens on the 32 windows equal the stored, qualified run's: claude-129's, claude-130's or claude-131's.
 5. **`I-Inputs`.** Each artifact's, the windows' and each model's sha256 equal their pins (section 5).
 6. **`I-Capture`.** The D panel's snap calls cover its two chunks, three per layer each. A miscount is refused, not read.
+   - **`I-Layout`,** added after code review: each (layer, site) must agree on at least 50% of its snaps.
+   - D and A agree on nearly every token, so nearly every snap. A site read at a wrong offset would agree on about one root in 120.
+   - This catches a layout permutation that still writes every byte, which the host tests and G = H cannot see, because they share one C core. A failure leaves the model unclassified.
 7. **`I-Fetch` and `I-Finite`,** as in claude-132: every fetched file against its folder's `SHA256SUMS`, every step exiting 0, and the log written before `SHA256SUMS`. Every root-disagreement margin must be finite too (`i_finite_margins`), since a NaN would otherwise read as an exact tie.
 
 ## 5. Base artifact and data split
