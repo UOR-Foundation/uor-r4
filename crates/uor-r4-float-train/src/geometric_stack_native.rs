@@ -22,7 +22,7 @@ use std::{collections::BTreeMap, fs, path::Path, sync::Arc};
 #[path = "geometric_stack_native_cuda.rs"]
 pub(crate) mod cuda_ops;
 const CONVOLUTION_WIDTH: usize = 4;
-const RMS_EPSILON: f64 = 1e-5;
+pub(crate) const RMS_EPSILON: f64 = 1e-5;
 const INITIAL_STD: f64 = 0.02;
 const ROTATION_STD: f64 = 0.002;
 pub const QUATERNION_WEIGHTS_FIELD: &str = "quaternion_weights";
@@ -967,7 +967,7 @@ impl StackModel {
         self.native_vector_head = Some(spec);
         Ok(())
     }
-    fn linear(&self, input: &Tensor, weight: &Tensor) -> Result<Tensor> {
+    pub(crate) fn linear(&self, input: &Tensor, weight: &Tensor) -> Result<Tensor> {
         if weight.rank() == 3 {
             let input_width = *input
                 .dims()
@@ -1267,8 +1267,14 @@ impl StackModel {
                     raw.broadcast_mul(&Tensor::new(&[1f32, 1.0, 0.0, 0.0], &self.device)?)?
                 }
             };
-            let norm = raw.sqr()?.sum_keepdim(3)?.affine(1.0, 1e-6)?.sqrt()?;
-            let unit = raw.broadcast_div(&norm)?;
+            // The D11 mode snaps the transition to the 120 icosians, as the
+            // integer path serves it (`hamilton_sheet::with_d11_mode`).
+            let unit = if crate::hamilton_sheet::is_snapping_transition() {
+                crate::hamilton_sheet::icosian_snap_quaternions(&raw)?
+            } else {
+                let norm = raw.sqr()?.sum_keepdim(3)?.affine(1.0, 1e-6)?.sqrt()?;
+                raw.broadcast_div(&norm)?
+            };
             unit.broadcast_mul(&lambda)?
         } else {
             let zeros = Tensor::zeros((batch, time, lanes, 3), DType::F32, &self.device)?;

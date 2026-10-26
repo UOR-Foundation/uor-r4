@@ -22,6 +22,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use super::StackError;
+pub use crate::fbs_snapshot::{FbsRoutes, FbsTrunkLayer, FbsTrunkSnapshot};
 
 /// Container magic.
 pub const MAGIC: &[u8; 8] = b"UORLUT01";
@@ -846,110 +847,15 @@ pub struct FloatTrunkSnapshot {
     pub layers: Vec<FloatTrunkLayer>,
 }
 
-/// SpiralCore/FBS routes of one projection: one `(atom, state)` per output 8-block.
-///
-/// Output block `o` reads input block `atoms[o]`: its channel `j` is
-/// `y[o*8 + j] = ±x[atoms[o]*8 + (code & 7)]`, negated when `code & 8`, where
-/// `code` is the `j`-th code of the 64-state Cl(0,6) signed-axis table at
-/// `states[o]`. The integer session serves it as a gather and a sign
-/// (`stack_fbs_gather`).
-#[derive(Clone, Debug)]
-pub struct FbsRoutes {
-    /// Input 8-blocks the atoms index.
-    pub in_blocks: usize,
-    /// Output 8-blocks, one route each.
-    pub out_blocks: usize,
-    /// `out_blocks` input-block indices, each below `in_blocks`.
-    pub atoms: Vec<u16>,
-    /// `out_blocks` signed-axis states, each below 64.
-    pub states: Vec<u8>,
-}
-
-/// One recurrence layer of a SpiralCore/FBS trunk snapshot (`d = width`,
-/// `m = mlp`, `lanes = d / 4`, `g = lanes + d`).
-#[derive(Clone, Debug)]
-pub struct FbsTrunkLayer {
-    /// `d` RMSNorm gain before the recurrence.
-    pub rec_norm: Vec<f32>,
-    /// `d` RMSNorm gain before the Hamilton feed-forward block.
-    pub mlp_norm: Vec<f32>,
-    /// `d/8 -> 2d/8` drive and output-gate routes.
-    pub rec_in: FbsRoutes,
-    /// `d/8 -> g/8` decay-gate and rotation routes.
-    pub rec_gate: FbsRoutes,
-    /// `d/8 -> d/8` output routes.
-    pub rec_out: FbsRoutes,
-    /// `d/8 -> m/8` feed-forward gate routes.
-    pub mlp_gate: FbsRoutes,
-    /// `d/8 -> m/8` feed-forward up routes.
-    pub mlp_up: FbsRoutes,
-    /// `m/8 -> d/8` feed-forward down routes.
-    pub mlp_down: FbsRoutes,
-    /// `4 * d` causal convolution taps `[tap][channel]`, as [`FloatTrunkRecurrence::conv_taps`].
-    pub conv_taps: Vec<f32>,
-    /// `d` causal convolution biases.
-    pub conv_bias: Vec<f32>,
-    /// `g` gate biases (decay-gate bias then rotation bias).
-    pub gate_bias: Vec<f32>,
-    /// `lanes` learned per-lane decay offsets.
-    pub decay: Vec<f32>,
-}
-
-/// Offline SpiralCore/FBS trunk snapshot handed to [`export_fbs_trunk_uorlut01`].
-#[derive(Clone, Debug)]
-pub struct FbsTrunkSnapshot {
-    pub vocab: usize,
-    pub width: usize,
-    pub mlp: usize,
-    pub context: usize,
-    pub rms_eps: f64,
-    /// Cells the native vector head keeps (1 to 16).
-    pub kept_cells: usize,
-    /// `vocab * width` row-major: the input embedding and the writer table.
-    pub embed: Vec<f32>,
-    /// `width` final RMSNorm gain.
-    pub final_norm: Vec<f32>,
-    pub layers: Vec<FbsTrunkLayer>,
-}
-
-/// Encode a finite scalar as a grid code `±(16 + m) 2^(e - 4)` with `1 <= e + 64 <= 127`.
+/// Encode a finite scalar as a grid code `±(16 + m) 2^(e - 4)` with `1 <= e + 64 <= 127`
+/// (`fbs_snapshot::grid_code`, which the ungated FBS converter also uses).
 pub fn encode_grid_code(value: f64, positive: bool) -> Result<i16, StackError> {
-    if !value.is_finite() || (positive && value <= 0.0) {
-        return Err(StackError::GridCodes("nonfinite or non-positive scalar".to_owned()));
-    }
-    if value.abs() < 1e-18 {
-        if positive {
-            return Err(StackError::GridCodes("zero positive grid scalar".to_owned()));
-        }
-        return Ok(0);
-    }
-    let abs = value.abs();
-    let mut best_code = 0i16;
-    let mut best_err = f64::INFINITY;
-    for field in 1i16..=127 {
-        let e = i32::from(field) - 64;
-        let step = 2f64.powi(e - 4);
-        for m in 0i16..16 {
-            let cand = f64::from(16 + m) * step;
-            let err = (abs - cand).abs();
-            if err < best_err {
-                best_err = err;
-                best_code = (field << 4) | m;
-            }
-        }
-    }
-    Ok(if value < 0.0 { -best_code } else { best_code })
+    crate::fbs_snapshot::grid_code(value, positive).map_err(StackError::GridCodes)
 }
 
-/// Decode a grid code `±(16 + m) 2^(e - 4)` to `f64`.
+/// Decode a grid code `±(16 + m) 2^(e - 4)` to `f64` (`fbs_snapshot::grid_value`).
 pub fn decode_grid_code(code: i16) -> f64 {
-    if code == 0 {
-        return 0.0;
-    }
-    let c = code.unsigned_abs();
-    let e = i32::from(c >> 4) - 64;
-    let mag = f64::from(16 + (c & 15)) * 2f64.powi(e - 4);
-    if code < 0 { -mag } else { mag }
+    crate::fbs_snapshot::grid_value(code)
 }
 
 fn fold_columns_f32(values: &[f32], rows: usize, cols: usize, gain: &[f32]) -> Result<Vec<f32>, StackError> {
@@ -982,7 +888,7 @@ fn pad_matrix_f32(
     Ok(out)
 }
 
-fn quantize_fixed_i32(values: &[f32], expected_len: usize, exp: i32, name: &str) -> Result<Vec<i32>, StackError> {
+pub(super) fn quantize_fixed_i32(values: &[f32], expected_len: usize, exp: i32, name: &str) -> Result<Vec<i32>, StackError> {
     if values.len() != expected_len {
         return Err(StackError::TableLength {
             name: name.to_owned(),
@@ -1539,15 +1445,14 @@ fn ref_grid(v: f32, positive: bool, quantized: bool) -> Result<f64, StackError> 
 /// A fixed-point scalar at `2^exp` as the float references read it.
 fn ref_fixed(v: f32, exp: i32, quantized: bool) -> f64 {
     if quantized {
-        let s = 2f64.powi(-exp);
-        ((f64::from(v) * s).round()) * 2f64.powi(exp)
+        crate::fbs_snapshot::fixed_value(v, exp)
     } else {
         f64::from(v)
     }
 }
 
 /// The nearest of the 120 icosian units to `raw` (largest dot product, ties to the first).
-fn ref_snap_icosian(raw: [f64; 4]) -> [f64; 4] {
+pub(super) fn ref_snap_icosian(raw: [f64; 4]) -> [f64; 4] {
     use crate::h4_classifier::H4_ROOT_COEFFICIENTS;
     let phi = 0.5 * (1.0 + 5.0f64.sqrt());
     let mut best = 0usize;
@@ -1571,8 +1476,102 @@ fn ref_snap_icosian(raw: [f64; 4]) -> [f64; 4] {
     q
 }
 
+/// How near the float reference came to a discrete switch on its way to a
+/// position (claude-125). Where computations of other precisions disagree at
+/// a position, the smallest margin names the near-tie (0 at a tie):
+/// - `transition`: the gap between the best and the second-best icosian at a
+///   transition snap, relative to the rotation's length, counted only where
+///   the transition moves a nonzero state;
+/// - `gate`: the same at a Hamilton gate snap (output or feed-forward);
+/// - `rate`: the distance of a transition rate to a step of its 16-entry
+///   dyadic table.
+///
+/// A switch the snaps do not make (`FbsQuatMode::Normalize`) has no margin
+/// (infinite). `zero_snaps` counts snaps of an all-zero vector, which every
+/// root ties: there the float GPU snap and this reference pick different
+/// roots, a known edge rather than a near-tie.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FbsTieMargins {
+    pub transition: f64,
+    pub gate: f64,
+    pub rate: f64,
+    pub zero_snaps: u32,
+}
+
+impl FbsTieMargins {
+    /// Nothing met yet.
+    const NONE: Self = Self {
+        transition: f64::INFINITY,
+        gate: f64::INFINITY,
+        rate: f64::INFINITY,
+        zero_snaps: 0,
+    };
+
+    /// Fold in the snap of `q` under `mode`, at the transition or at a gate.
+    pub(super) fn note_snap(&mut self, q: [f64; 4], mode: FbsQuatMode, transition: bool) {
+        let raw = match mode {
+            FbsQuatMode::Icosian => q,
+            FbsQuatMode::Q12Icosian => q.map(|v| (v * 4096.0).round().clamp(-32768.0, 32767.0)),
+            FbsQuatMode::Normalize => return,
+        };
+        if raw == [0.0; 4] {
+            self.zero_snaps += 1;
+        }
+        let slot = if transition { &mut self.transition } else { &mut self.gate };
+        *slot = slot.min(icosian_margin(raw));
+    }
+}
+
+thread_local! {
+    /// The margins of the reference forward [`FbsTrunkSnapshot::tie_margins`]
+    /// runs on this thread; `None` (every other forward) records nothing.
+    static TIE_MARGINS: std::cell::Cell<Option<FbsTieMargins>> = const { std::cell::Cell::new(None) };
+}
+
+/// Fold a margin into the running [`FbsTieMargins`], if one is recording.
+fn note_tie(f: impl FnOnce(&mut FbsTieMargins)) {
+    TIE_MARGINS.with(|cell| {
+        if let Some(mut margins) = cell.get() {
+            f(&mut margins);
+            cell.set(Some(margins));
+        }
+    });
+}
+
+/// How near the snap of `raw` to the 120 icosians is to a tie: the gap
+/// between the best and the second-best dot product, over `raw`'s length
+/// (0 for a zero vector). The snap itself is [`ref_snap_icosian`]'s.
+pub(super) fn icosian_margin(raw: [f64; 4]) -> f64 {
+    use crate::h4_classifier::H4_ROOT_COEFFICIENTS;
+    let len = raw.iter().map(|v| v * v).sum::<f64>().sqrt();
+    if len == 0.0 {
+        return 0.0;
+    }
+    let phi = 0.5 * (1.0 + 5.0f64.sqrt());
+    let (mut best, mut second) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for root in H4_ROOT_COEFFICIENTS.iter() {
+        let dot: f64 = (0..4)
+            .map(|c| raw[c] * 0.5 * (f64::from(root[c][0]) + f64::from(root[c][1]) * phi))
+            .sum();
+        if dot > best {
+            (best, second) = (dot, best);
+        } else if dot > second {
+            second = dot;
+        }
+    }
+    (best - second) / len
+}
+
+/// The distance of the transition rate `s` (before its clamp) to the nearest
+/// step of its 16-entry table, `k / 16` for `k` in 1..=15.
+pub(super) fn rate_margin(s: f64) -> f64 {
+    (1..16)
+        .map(|k| (s - f64::from(k) / 16.0).abs())
+        .fold(f64::INFINITY, f64::min)
+}
+
 /// The Hamilton product `a b`.
-fn ref_hamilton(a: [f64; 4], b: [f64; 4]) -> [f64; 4] {
+pub(super) fn ref_hamilton(a: [f64; 4], b: [f64; 4]) -> [f64; 4] {
     [
         a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
         a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2],
@@ -1592,11 +1591,73 @@ fn ref_rms_norm(x: &[f64], eps: f64) -> Vec<f64> {
     x.iter().map(|&v| v * inv).collect()
 }
 
-/// The Hamilton feed-forward gate: `hamilton(snap(g), up)` per 4-block.
-fn ref_hamilton_feed_forward(g: &[f64], up: &[f64]) -> Vec<f64> {
+/// How a float reference treats a quaternion the integer path snaps to the
+/// 120 icosians (d11-exporter-float-trunk, claude-124).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FbsQuatMode {
+    /// Snap to the nearest icosian, as the integer path does.
+    Icosian,
+    /// Round to Q12 steps, then snap: the float sheets' D11 export mode for
+    /// the Hamilton gates (`hamilton_sheet.rs`, `try_hamilton_gate_fwd_cuda`).
+    Q12Icosian,
+    /// Normalize as the float CUDA path does, `q / sqrt(|q|^2 + eps)`.
+    Normalize,
+}
+
+/// Which quaternions [`FbsTrunkSnapshot::forward_f32_with`] snaps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FbsReferenceSnaps {
+    /// The recurrence transition's rotation (normalized with `eps = 1e-6`).
+    pub transition: FbsQuatMode,
+    /// The recurrence output gate and the feed-forward gate (`eps = 1e-12`).
+    pub gates: FbsQuatMode,
+}
+
+impl FbsReferenceSnaps {
+    /// Everything snapped, as the integer path serves it.
+    pub const INTEGER: Self = Self {
+        transition: FbsQuatMode::Icosian,
+        gates: FbsQuatMode::Icosian,
+    };
+    /// Nothing snapped, as the plain float GPU trunk computes.
+    pub const FLOAT: Self = Self {
+        transition: FbsQuatMode::Normalize,
+        gates: FbsQuatMode::Normalize,
+    };
+    /// The float sheets' D11 export mode: Q12-rounded, snapped gates, and a
+    /// continuous transition.
+    pub const FLOAT_EXPORT: Self = Self {
+        transition: FbsQuatMode::Normalize,
+        gates: FbsQuatMode::Q12Icosian,
+    };
+}
+
+/// The epsilon the float CUDA path normalizes the transition with.
+const TRANSITION_EPS: f64 = 1e-6;
+/// The epsilon the float CUDA Hamilton gate normalizes with.
+const GATE_EPS: f64 = 1e-12;
+
+/// A quaternion the integer path snaps, under `mode`.
+pub(super) fn ref_quat_mode(q: [f64; 4], mode: FbsQuatMode, eps: f64) -> [f64; 4] {
+    match mode {
+        FbsQuatMode::Icosian => ref_snap_icosian(q),
+        FbsQuatMode::Q12Icosian => {
+            ref_snap_icosian(q.map(|v| (v * 4096.0).round().clamp(-32768.0, 32767.0)))
+        }
+        FbsQuatMode::Normalize => {
+            let r = (q.iter().map(|v| v * v).sum::<f64>() + eps).sqrt();
+            q.map(|v| v / r)
+        }
+    }
+}
+
+/// The Hamilton feed-forward gate: `hamilton(gate(g), up)` per 4-block, the
+/// gate snapped (or normalized) under `mode`.
+pub(super) fn ref_hamilton_feed_forward(g: &[f64], up: &[f64], mode: FbsQuatMode) -> Vec<f64> {
     let mut h = vec![0.0f64; g.len()];
     for blk in 0..(g.len() / 4) {
-        let prod = ref_hamilton(ref_snap_icosian(ref_quat(g, blk)), ref_quat(up, blk));
+        note_tie(|m| m.note_snap(ref_quat(g, blk), mode, false));
+        let prod = ref_hamilton(ref_quat_mode(ref_quat(g, blk), mode, GATE_EPS), ref_quat(up, blk));
         h[4 * blk..4 * blk + 4].copy_from_slice(&prod);
     }
     h
@@ -1604,7 +1665,7 @@ fn ref_hamilton_feed_forward(g: &[f64], up: &[f64]) -> Vec<f64> {
 
 /// The scalar tables of one geometric recurrence layer, as the float
 /// references read them (`RecGates::Geometric`, Hamilton output gate).
-struct RefRecurrence {
+pub(super) struct RefRecurrence {
     /// `4 * d` taps `[tap][channel]`.
     taps: Vec<f64>,
     conv_bias: Vec<f64>,
@@ -1613,7 +1674,7 @@ struct RefRecurrence {
 }
 
 impl RefRecurrence {
-    fn new(taps: &[f32], conv_bias: &[f32], decay: &[f32], quantized: bool) -> Result<Self, StackError> {
+    pub(super) fn new(taps: &[f32], conv_bias: &[f32], decay: &[f32], quantized: bool) -> Result<Self, StackError> {
         let exp = super::kernels::RESIDUAL_EXP;
         Ok(Self {
             taps: taps
@@ -1629,13 +1690,14 @@ impl RefRecurrence {
     /// rate and icosian transport per lane, then the Hamilton output gate.
     /// `gate_out` is `lanes` decay pre-activations then `d` rotation values
     /// (gate bias already added); `hist` is the `3 * d` convolution history.
-    fn step(
+    pub(super) fn step(
         &self,
         drive: &[f64],
         out_gate: &[f64],
         gate_out: &[f64],
         hist: &mut [f64],
         state: &mut [f64],
+        snaps: FbsReferenceSnaps,
     ) -> Vec<f64> {
         let d = drive.len();
         let lanes = self.decay.len();
@@ -1652,11 +1714,19 @@ impl RefRecurrence {
 
         let (decays, rotations) = gate_out.split_at(lanes);
         for u in 0..lanes {
-            let s = (decays[u] + self.decay[u]).clamp(0.0, 1.0);
+            let rate = decays[u] + self.decay[u];
+            note_tie(|m| {
+                m.rate = m.rate.min(rate_margin(rate));
+                // The transition snap matters only where it moves a state.
+                if ref_quat(state, u).iter().any(|&v| v != 0.0) {
+                    m.note_snap(ref_quat(rotations, u), snaps.transition, true);
+                }
+            });
+            let s = rate.clamp(0.0, 1.0);
             let idx = ((s * 16.0).floor() as usize).min(15);
             let lambda = 2.0f64.powi(-((idx as i32) + 1));
             let keep = (1.0 - lambda * lambda).sqrt();
-            let q_rot = ref_snap_icosian(ref_quat(rotations, u));
+            let q_rot = ref_quat_mode(ref_quat(rotations, u), snaps.transition, TRANSITION_EPS);
             let trans = [
                 lambda * q_rot[0],
                 lambda * q_rot[1],
@@ -1670,7 +1740,11 @@ impl RefRecurrence {
         }
         let mut gated = vec![0.0f64; d];
         for u in 0..lanes {
-            let prod = ref_hamilton(ref_snap_icosian(ref_quat(out_gate, u)), ref_quat(state, u));
+            note_tie(|m| m.note_snap(ref_quat(out_gate, u), snaps.gates, false));
+            let prod = ref_hamilton(
+                ref_quat_mode(ref_quat(out_gate, u), snaps.gates, GATE_EPS),
+                ref_quat(state, u),
+            );
             gated[4 * u..4 * u + 4].copy_from_slice(&prod);
         }
         gated
@@ -1790,6 +1864,7 @@ impl FloatTrunkSnapshot {
                             &gate_out,
                             &mut rec_histories[l],
                             &mut rec_states[l],
+                            FbsReferenceSnaps::INTEGER,
                         );
                         matvec(&rec_out, d, d, &gated)
                     }
@@ -1904,7 +1979,7 @@ impl FloatTrunkSnapshot {
 
                 let g_vec = matvec(&gate_mat, padded_mlp, d, &norm_mlp);
                 let u_vec = matvec(&up_mat, padded_mlp, d, &norm_mlp);
-                let h_mlp = ref_hamilton_feed_forward(&g_vec, &u_vec);
+                let h_mlp = ref_hamilton_feed_forward(&g_vec, &u_vec, FbsQuatMode::Icosian);
                 let down_proj = matvec(&down_mat, d, padded_mlp, &h_mlp);
                 for (xi, di) in x.iter_mut().zip(&down_proj) {
                     *xi += di;
@@ -2016,6 +2091,19 @@ impl FbsTrunkSnapshot {
         tokens: &[u32],
         quantized: bool,
     ) -> Result<Vec<FbsWriterOutput>, StackError> {
+        self.forward_f32_with(tokens, quantized, FbsReferenceSnaps::INTEGER)
+    }
+
+    /// [`Self::forward_f32`] with chosen snaps: [`FbsReferenceSnaps::INTEGER`]
+    /// is the integer path's, [`FbsReferenceSnaps::FLOAT`] the plain float GPU
+    /// trunk's and [`FbsReferenceSnaps::FLOAT_EXPORT`] the float sheets' D11
+    /// export mode, so each float readout has a reference to match.
+    pub fn forward_f32_with(
+        &self,
+        tokens: &[u32],
+        quantized: bool,
+        snaps: FbsReferenceSnaps,
+    ) -> Result<Vec<FbsWriterOutput>, StackError> {
         // Refuse whatever the exporter refuses: the reference only runs
         // snapshots the served path can load.
         export_fbs_trunk_uorlut01(self)?;
@@ -2086,15 +2174,21 @@ impl FbsTrunkSnapshot {
                 let mut gate_out = fbs_reference_gather(&layer.rec_gate, &u);
                 add(&mut gate_out, &p.gate_bias);
                 let (drive, out_gate) = branches.split_at(d);
-                let gated = p
-                    .rec
-                    .step(drive, out_gate, &gate_out, &mut histories[l], &mut states[l]);
+                let gated = p.rec.step(
+                    drive,
+                    out_gate,
+                    &gate_out,
+                    &mut histories[l],
+                    &mut states[l],
+                    snaps,
+                );
                 add(&mut x, &fbs_reference_gather(&layer.rec_out, &gated));
 
                 let u = norm(&x, &p.mlp_norm);
                 let h = ref_hamilton_feed_forward(
                     &fbs_reference_gather(&layer.mlp_gate, &u),
                     &fbs_reference_gather(&layer.mlp_up, &u),
+                    snaps.gates,
                 );
                 add(&mut x, &fbs_reference_gather(&layer.mlp_down, &h));
             }
@@ -2105,5 +2199,21 @@ impl FbsTrunkSnapshot {
             out.push(fbs_native_writer(&q, &table, self.vocab, self.kept_cells)?);
         }
         Ok(out)
+    }
+
+    /// The [`FbsTieMargins`] of [`Self::forward_f32_with`] over `tokens`:
+    /// every snap and rate met up to the last position, the carried state's
+    /// included. A diagnostic, for tracing a disagreement to its near-tie.
+    pub fn tie_margins(
+        &self,
+        tokens: &[u32],
+        quantized: bool,
+        snaps: FbsReferenceSnaps,
+    ) -> Result<FbsTieMargins, StackError> {
+        TIE_MARGINS.with(|cell| cell.set(Some(FbsTieMargins::NONE)));
+        let run = self.forward_f32_with(tokens, quantized, snaps);
+        let margins = TIE_MARGINS.with(|cell| cell.take());
+        run?;
+        margins.ok_or_else(|| StackError::Numerics("the tie margins were not recorded".to_owned()))
     }
 }
