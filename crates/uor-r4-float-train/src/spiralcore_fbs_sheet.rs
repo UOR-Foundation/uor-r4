@@ -107,11 +107,7 @@ fn batch_loss(
     let idx = Tensor::from_vec(scored.to_vec(), scored.len(), model.device())?;
     let query = hidden.index_select(&idx, 0)?;
     let query = if q12_query {
-        query
-            .affine(f64::from(hs::Q12_SCALE), 0.0)?
-            .round()?
-            .clamp(hs::Q12_I16_MIN, hs::Q12_I16_MAX)?
-            .affine(1.0 / f64::from(hs::Q12_SCALE), 0.0)?
+        hs::q12_query(&query)?
     } else {
         query
     };
@@ -318,6 +314,32 @@ pub fn run_fbs_arm(
     eval_steps: &[usize],
     device: &Device,
 ) -> Result<FbsArmOutput> {
+    run_fbs_arm_with(
+        arm,
+        false,
+        seed,
+        steps,
+        batches,
+        dev_windows,
+        eval_steps,
+        device,
+    )
+}
+
+/// [`run_fbs_arm`], with every training step in the D11 mode when `d11_train` (claude-130): the
+/// loss is the D11 forward's, its scored query at Q12, through `hamilton_sheet::with_d11_training`'s
+/// bridges, with the step's backward inside the same mode. The evaluations are unchanged.
+#[allow(clippy::too_many_arguments)]
+pub fn run_fbs_arm_with(
+    arm: FbsArm,
+    d11_train: bool,
+    seed: u64,
+    steps: usize,
+    batches: &[TrainBatch],
+    dev_windows: &[CausalWindow],
+    eval_steps: &[usize],
+    device: &Device,
+) -> Result<FbsArmOutput> {
     if batches.is_empty() {
         return Err(invalid("no training batches"));
     }
@@ -370,15 +392,22 @@ pub fn run_fbs_arm(
     for step in 0..steps {
         let started = Instant::now();
         let (ids, scored, targets) = &batches[step % batches.len()];
-        let loss = batch_loss(&model, ids, scored, targets, SHEET_TRAIN_BATCH, false)?;
-        let value = f64::from(loss.to_scalar::<f32>()?);
-        if !value.is_finite() {
-            return Err(invalid(format!(
-                "I-Finite-CUDA: non-finite training loss at step {step} in {}",
-                arm.name()
-            )));
-        }
-        let grads = loss.backward()?;
+        let loss_and_grads = || -> Result<(f64, candle_core::backprop::GradStore)> {
+            let loss = batch_loss(&model, ids, scored, targets, SHEET_TRAIN_BATCH, d11_train)?;
+            let value = f64::from(loss.to_scalar::<f32>()?);
+            if !value.is_finite() {
+                return Err(invalid(format!(
+                    "I-Finite-CUDA: non-finite training loss at step {step} in {}",
+                    arm.name()
+                )));
+            }
+            Ok((value, loss.backward()?))
+        };
+        let (value, grads) = if d11_train {
+            hs::with_d11_training(seed, step, loss_and_grads)?
+        } else {
+            loss_and_grads()?
+        };
         if step == 0 {
             step0_credit = query_credit_l2(&model, &grads)?;
         }
