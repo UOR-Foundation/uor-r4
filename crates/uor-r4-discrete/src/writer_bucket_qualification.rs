@@ -585,8 +585,8 @@ fn run_device_parity_controls(ordinal: usize) -> Result<Vec<DeviceParityCase>> {
             Parameter::VectorBlock(target0 * blocks),
             Parameter::VectorBlock(target0 * blocks + 1),
             Parameter::VectorBlock(target0 * blocks + (blocks - 1)),
-            Parameter::Route(0),
             Parameter::Gate(0),
+            Parameter::Gate(1),
         ];
         let mut propose_mismatches = 0u32;
         let mut fullscan_propose_us = 0u64;
@@ -1395,9 +1395,9 @@ fn run_real_read_codebook_panel(
     let spec = codebook.spec;
     let seed_model = Device::new_with_initialization(
         spec,
-        ReadSpec::Flock { kept: 8 },
+        ReadSpec::Relation { kept: 8, sweeps: 1 },
         ObjectivePolicy::NearestAddressMarginV1,
-        ReadInitialization::ZeroGatesV1,
+        ReadInitialization::ActiveLeafV1,
         1,
         ordinal,
     )?;
