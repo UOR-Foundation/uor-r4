@@ -66,7 +66,7 @@ Size against `origin/main`: float-train, in `spiralcore_fbs_sheet.rs`, `hamilton
 - **`I-Verify-All`:** G = H = R at all 82,176 window positions on each seed. The evaluator's PTX is `013d19fd…` and its cubin `73eccb70…`, claude-128's qualified ones.
 - **`I-Inputs`:** the windows, each seed's artifact pin (`0ae7dcd4…` and `8394a4d3…`) and the five data and receipt pins all match. Each gap receipt names this sheet as its `training_sheet`.
 - **`I-DEV-Denominator`:** 14,287 rows.
-- **`I-Finite`:** every step exited 0, and all 93 files of `dual/` verify against `SHA256SUMS`, on the pod and again on the laptop.
+- **`I-Finite`:** every step exited 0, and all 92 files listed in `dual/SHA256SUMS` verify, on the pod and again on the laptop.
 
 **The seed spread, read out (the decision review's condition 2):**
 
@@ -85,9 +85,9 @@ The top-1 counts and admitted rates come from `train.json`: `seeds[].float` and 
 - **The artifact against the model's export-mode panel (E).**
   - E is `evaluate_dev_panel(…, export_mode = true)`: the gates at Q12, then snapped, and the query and writer table at Q12. It is not the artifact's emulation. The recurrence transition is not snapped and the tables are not rounded as exported; the D11 panel (`evaluate_dev_panel_d11`) does both, and this run did not compute it.
   - **Seed 1:** F − E is 334 rows and E − A is 19, so most of the gap lies between the plain-float forward and E.
-  - **Seed 2:** F − E is 105 rows and E − A is 126, so most of it lies between E and the artifact. That E − A alone is wider than F_I (70). claude-130's E − A were 25 and 12.
+  - **Seed 2:** F − E is 105 rows and E − A is 126, so most of it lies between E and the artifact. That E − A alone is wider than F_I (70). claude-130's E − A were −25 and −12, the artifact above E.
   - What the seed-2 E − A comes from (the transition snap, the table rounding, or an exporter departure) is not settled by this run. It needs the D11 panel of the saved models; see "Still open".
-- **Against the earlier configurations:** on seed 2, the artifact's 2,897 is the highest yet (claude-129 2,294, claude-130 1,249). On seed 1, its 3,492 is second to claude-130's 3,663. Against claude-129's plain-trained artifacts it is +1,585 and +603 rows.
+- **Against the earlier configurations:** on seed 2, the artifact's 2,897 is the highest of the three configurations (claude-129 2,294, claude-130 1,249). On seed 1, its 3,492 is second to claude-130's 3,663. Against claude-129's plain-trained artifacts it is +1,585 and +603 rows.
 - **The training trajectory** (DEV float loss at steps 0, 256, 512 and 1,024): 2.794, 2.071, 1.986, 1.907 on seed 1; 2.761, 2.123, 1.955, 1.878 on seed 2. Both are still falling at step 1,024.
 - **Gradient clipping** applies to the summed gradient, so it may bind more often than in single-loss training. The run did not record how often it did.
 - **Wall time:** training both seeds, with their in-training evaluations, took 7 m 50 s; each verified evaluator run took about 20 minutes, mostly the CPU verify.
@@ -115,7 +115,7 @@ See the exact-head review record on the PR.
 
 ## Still open
 
-- **The §4.4 pivot note: one decisive run, not now.** Three results on this line (claude-129, claude-130, claude-131) have each passed the loss half and missed the top-1 half, by 1.4 to 5.6 times F_I (nets +81 and +349, +278 and −332, +353 and +231). The decision review (owner log, above) sets the order:
+- **The §4.4 pivot note: one decisive run, not now.** Three results on this line (claude-129, claude-130, claude-131) have each passed the loss half and missed the top-1 half, by 1.35 to 5.6 times F_I (nets +81 and +349, +278 and −332, +353 and +231). The decision review (owner log, above) sets the order:
   1. **The residual check first, as the next unit on this item.** The D11 panel of claude-131's saved models, paired against their artifacts, classifies the seed-2 E − A residual as the D11 forward itself or an exporter departure. Scoring a model is GPU evaluation (§3.5), so this check needs its own sheet with a FIT (§4.5), though it is minutes of GPU. An exporter departure is a repair item, and the repaired artifact is then scored under the unchanged bar.
   2. **The owner's reading of §3.7.** "A gap above the two-seed noise band disqualifies it" can be read as the sheets' paired F_I for top-1, or as the two-seed top-1 spread, 655 to 717 rows. Under the spread reading, all three configurations would pass. Which reading applies is the owner's (§5.1), so one `[claude, for Casey]` note is on #2028, and no old receipt is re-scored.
   3. **The one decisive run, only after both.** Its sheet keeps Stage 4b's bar unless Casey answers, makes one change only (for example longer training at 1:1, since both DEV losses are still falling at step 1,024), and keeps the guard and the seed-spread rule. A PASS closes #2820. A FAIL makes the pivot note's verdict "stop": the item parks, and only the owner can stop the mechanism (§4.1).
