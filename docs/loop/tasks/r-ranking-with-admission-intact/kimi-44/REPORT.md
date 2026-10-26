@@ -17,7 +17,7 @@ Closes #2884 at its unchanged diagnostic done-when only.
 - Added the D67/D68 decision record and superseding kimi-44 ORDER; retained the kimi-43 ORDER and original FIT as history, with the FIT unchanged after its review. D68 owner log: #2884 comment `6424978255`.
 - Closed the item `done` strictly on its existing diagnostic contract, corrected its stale missing-evidence text without changing the done-when, and re-rendered the roadmap.
 - Updated the lab record with the same-row unigram negative, cross-checkpoint labeling, P_succ drop, T2 admission arithmetic and explicit `NOT_RUN` scope; added one negative notebook row.
-- Size: 8 files, `+189 / -13`; 0 code and 0 test lines, documentation `+186 / -10`, generated roadmap `+3 / -3`. The ORDER gave no numeric line estimate; the ratio is not applicable.
+- Size: 8 files, `+192 / -16`; 0 code and 0 test lines, documentation `+189 / -13`, generated roadmap `+3 / -3`. The ORDER gave no numeric line estimate; the ratio is not applicable.
 
 ## Measurements
 
