@@ -15,11 +15,13 @@ References #2833; this unit does not close the item or claim an oracle gain.
 - Added `address_stage0` manifest generation and a GPU-only runner behind `stage0-lab`: pinned artifact/config/receipt validation, corpus-leak scan, two D11 parity passes, sealed `final-dev.json` comparison, teacher-forced and free-running copy, identity and aggregate-preserving stop reports.
 - Added the 40-row manifest (`ea360118…`), protocol and pure parity tests, and the root workspace exclude required by the nested D11 instrument.
 - Recorded the scoped result in `docs/mechanisms/exact-memory.md`, the lab README and `docs/research/notebook/m3-durable-memory.md`.
-- Size at the REPORT commit: 17 files, 8,206 additions and 8 deletions. Code and unit tests 2,750 lines, documentation 202, generated manifest 5,212, dependency/workspace metadata 42. No numeric estimate was set; most additions are the generated manifest and the GPU runner.
+- Size at the REPORT commit: 17 files, 8,208 additions and 8 deletions. Code and unit tests 2,750 lines, documentation 204, generated manifest 5,212, dependency/workspace metadata 42. No numeric estimate was set; most additions are the generated manifest and the GPU runner.
 
 ## Measurements
 
-**GPU, one RTX 5090 (`vast-57806658`) at `97354145ecaf7ea70908ef25922ea3c57dec55fe`:**
+**Verification repeat, registered before dispatch:** the repeat verifies the repaired instrument at its exact pushed commit, with unchanged arms, bars, inputs and stop rules. It cannot reopen or alter the registered `COPY_GATE_FAIL`; any different result is a nondeterminism or instrument discrepancy. The first result tar (`2be4f5ef…`) remains untouched, the new output root is `address-stage0-out-v2`, and its receipt will use a separate HF result path. The live 5090 offer was about `$1.10/h`; actual create-to-down uptime and cost will be recorded below.
+
+**Pre-repair GPU receipt, one RTX 5090 (`vast-57806658`) at `97354145ecaf7ea70908ef25922ea3c57dec55fe`:**
 
 - Parity: **14,287/14,287** rows have status 0 and agree with the sealed original GPU receipt on target position/token, prediction, top-8 and admitted count. The receipt has no ordinal field; row order was used only to join corresponding records. Repeat records are byte-identical (`7f373b3b…`). Aggregate top-1 `455`, top-8 `1,484`, admitted `5,009`; all position-strip deltas are `0`. `parity-report.json` PASS.
 - Copy: exact free-running **0/40 exact matches**, no-hint **0/40**, random-hint **0/40**. Normalized emissions were **12 / 0 / 9** respectively; these are not exact matches. Both primary comparisons have `b = c = 0`, hence `COPY_GATE_FAIL`. Random-hint planted-wrong held on all 9 normalized rows.
