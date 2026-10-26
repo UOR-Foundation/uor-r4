@@ -107,7 +107,7 @@ run_step() {
   fi
 }
 mkdir -p "$RUN/bin" "$STAGING" "$RUN/store"
-trap '(cd "$RUN" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && sha256sum -c SHA256SUMS && /root/uor-store put "$RUN" results/kimi/d11-fbs-longer-dual-2026-10-26/ && /root/uor-store ls results/kimi/d11-fbs-longer-dual-2026-10-26/)' EXIT
+trap '(cd "$RUN" && find . -type f ! -name SHA256SUMS ! -name job.log -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && sha256sum -c SHA256SUMS && /root/uor-store put "$RUN" results/kimi/d11-fbs-longer-dual-2026-10-26/ && /root/uor-store ls results/kimi/d11-fbs-longer-dual-2026-10-26/)' EXIT
 run_step job-copy cp "$ROOT/job.sh" "$RUN/job.sh"
 exec > >(tee -a "$RUN/job.log") 2>&1
 SRC=/root/build/src-$REF
@@ -182,7 +182,7 @@ run_step negative "$RUN/bin/spiralcore-fbs-sheet" --mode d11-artifact-gap --step
 run_step negative-check jq -e '.i_inputs == false and (.gap_inside_band | contains("not counted"))' "$RUN/negative.json"
 ```
 
-After every exit, the job's trap runs `(cd "$RUN" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && sha256sum -c SHA256SUMS && /root/uor-store put "$RUN" results/kimi/d11-fbs-longer-dual-2026-10-26/ && /root/uor-store ls results/kimi/d11-fbs-longer-dual-2026-10-26/)` so failure evidence is preserved too.
+After every exit, the job's trap runs `(cd "$RUN" && find . -type f ! -name SHA256SUMS ! -name job.log -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && sha256sum -c SHA256SUMS && /root/uor-store put "$RUN" results/kimi/d11-fbs-longer-dual-2026-10-26/ && /root/uor-store ls results/kimi/d11-fbs-longer-dual-2026-10-26/)` so failure evidence is preserved too.
 
 On the laptop after the pod job exits, run `scripts/pod/uor-store get results/kimi/d11-fbs-longer-dual-2026-10-26/ local/kimi/d11-float-trunk/readback`, then `(cd local/kimi/d11-float-trunk/readback/results/kimi/d11-fbs-longer-dual-2026-10-26 && sha256sum -c SHA256SUMS)`. Only after every hash matches, run `scripts/pod/uor-pod release "$POD" --lab kimi --session longer-dual` and `scripts/pod/uor-pod down "$POD" --lab kimi --session longer-dual`. Never down before the readback succeeds.
 
