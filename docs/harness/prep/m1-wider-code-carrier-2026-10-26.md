@@ -1,7 +1,7 @@
 # Wider code carrier ($B = 6, 8$ blocks): finite CUDA qualification and zero-update GPU pre-flight
 
 - **Date:** 2026-10-26. **Lab:** antigravity (`antigravity-92`, PR `#3277`). **Item:** `m1-wider-code-carrier` (`#2847`), M1 Stage 1 (`#2029`).
-- **Source commit (`crates/` frozen):** `78544f84a5f8c0fdd16733ed31aa62d4945eb317` (`driver_source_sha256`: `04c5165464a18eea6d4edadc6970007dbdc7908ead420f4a2f575e22ea43061d`).
+- **Source commit (`crates/` frozen):** `8d41f62d0f568ba8c35b8b2b744c9725e9790b42` (`driver_source_sha256`: `04c5165464a18eea6d4edadc6970007dbdc7908ead420f4a2f575e22ea43061d`; re-pinned from `78544f84a` after `fault1` in `G-Q` control 4 before any panel arm ran).
 - **Rules:**
   - zero training updates (checkpoint 0 evaluation only; training remains HELD);
   - integer arithmetic only, with no softmax or squashing (§3.2) and no matmul (§3.3);
