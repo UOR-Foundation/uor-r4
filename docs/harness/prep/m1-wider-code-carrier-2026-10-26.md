@@ -58,7 +58,7 @@ At $B = 4$ blocks (`width = 32`), `FullVectorV1` places only one interior root p
 | `PASS` | at least one wider-carrier treatment clears `G-Cap`, Reach vs `A8-Outer`, and Geometry vs $S$ (with zero within-cell tie mass) | `#2847` done-when is met (`status: done`); wider-carrier vs $B=4$ comparison feeds Stage T / `#2836` |
 | `DIAGNOSTIC_ONLY` | all instrument gates pass, no treatment clears both Reach and Geometry | closes only the tested wider-carrier configuration under D22; `#2834`'s $B=4$ carrier remains primary |
 
-## Data Split, Pinned Tables, Minimum Test Power, Cost, and Stop Rule
+## Data Split, Pinned Tables, Minimum Test Power, Cost, and Stopping Conditions
 
 - **Corpus (`uor-store`):** TRAIN `mw-balp/train` (`tokens.u16`: `3dee858f84b750f507ceb3dc3f393711741950954735efaaf61bf704c017a4c8`, `response_mask.u8`: `b5e7352d67d6883a833155a5fd397a03f6d4f1b2649e3d4ec3e2ea7d95b949e3`, used for host table construction only); DEV `ft/dev` (`tokens.u16`: `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b`, `response_mask.u8`: `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078`, 14,287 rows / 3,847 `P_succ`); `tokenizer.json` (`d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`). No FRESH slice is read.
 - **Tables:** sealed at `caseyallard/uor-r4-store:results/antigravity/m1-wider-code-carrier-2026-10-26/tables/` with `SHA256SUMS` matching the 8 table file SHAs above.

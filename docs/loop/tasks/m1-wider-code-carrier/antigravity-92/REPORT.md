@@ -29,7 +29,7 @@ Closes #2847.
 
 - **Hardware:** 1x NVIDIA GeForce RTX 5090 (`vast-57809208`, driver `580.95.05`, `32,607 MiB`, `sm_120`, `$0.563/h`, torn down immediately after archiving).
 - **Sealed artifacts:**
-  - `docs/labs/m1-wider-code-carrier/wider-carrier-qualification.json`: `sha256: 384ce237403b82e8745b5f6fe3f9525fedb5f852e06dc9a0e087c9f34ac2418f` (`status: "PASS"`, all 4 `G-Q` controls pass on both Build 1 and Build 2; `wider_carrier.cubin` `sha256: bcf76eb6465b759fa73ff1642af2fadabb49bddcd2adc00d6c77ae814a05a5d9`).
+  - `docs/labs/m1-wider-code-carrier/wider-carrier-qualification.json`: `sha256: 384ce237403b82e8745b5f6fe3f9525fedb5f852e06dc9a0e087c9f34ac2418f` (`status: "PASS"`, all 4 `G-Q` controls pass on both Build 1 and Build 2; `wider-carrier.cubin` `sha256: 407b0c08f460a11a2ac83c770b00b111bcad593ba56e5a4bd4f95f791cf1a0d8`, resource report `sha256: bcf76eb6465b759fa73ff1642af2fadabb49bddcd2adc00d6c77ae814a05a5d9`).
   - `docs/labs/m1-wider-code-carrier/grade.json`: `sha256: 7766aae432500f632d4ffb01f9e7fb4f963c1b56c8ca3d81c0968b292a7300e0` (`overall_outcome: "PASS"`).
   - HF store: `caseyallard/uor-r4-store:results/antigravity/m1-wider-code-carrier-2026-10-26/run/` (84 files) and `tables/` (8 files).
 - **Decode speed (`tokens/s` on full 14,287-row DEV panel; `rows/s` on 64-row timed batches):**
