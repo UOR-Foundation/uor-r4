@@ -19,7 +19,7 @@ References #2820.
   | dual-c131, seed 1 | 289 | 2.0% | faithful |
   | dual-c131, seed 2 | 497 | 3.5% | indeterminate |
 
-  - Every d_D is below the 10% departure bound. Four are above the 3% faithful bound, which was calibrated on claude-127's integer residual against its f64 reference.
+  - Every d_D is below the 10% departure bound. Four are above the 3% faithful bound, three times claude-127's measured integer residual against its f64 reference.
   - **What it decides,** under the sheet's indeterminate row: an instrument investigation of those four models' trunks, led by the drift readings. It is never a mechanism result, and **the item does not park until it is settled.** The exporter is therefore not yet cleared as the cause.
 - **The Q12 drift between D's and A's queries is never exact.**
   - On all six models, the faithful two included, no row has D's and A's queries equal (`rows_exact` 0).
@@ -54,11 +54,11 @@ Size against `origin/main`: float-train, in `spiralcore_fbs_sheet.rs`, `hamilton
 
 **Every instrument check was green.**
 - **`I-GPU-Tests`:** the float-train CUDA library passed on the RTX 5090, 61 passed and 5 ignored, with the new head test included.
-- **`I-Fetch`:** all 24 inputs verify against their store folders' `SHA256SUMS`, and the DEV data and the six models against their pins.
+- **`I-Fetch`:** all 26 fetched store files verify against their folders' `SHA256SUMS`, and the 2 DEV files and 6 models against their 8 pins.
 - **The per-model checks, on all six:**
   - `I-Save-Load`: F reproduces the stored predictions;
   - `I-Inputs`: the artifact, windows and model pins match;
-  - `I-Verify-All`: the stored run's two verify checks are equal at all 82,176 positions;
+  - `I-Verify-All`: the stored run's two verify checks are equal at all 82,176 positions (428 windows × 192);
   - `I-DEV-Denominator`: 14,287 rows;
   - `I-D-Determinism`: the D panel repeats exactly;
   - `I-Head`: the head on D's own queries writes D;
@@ -79,7 +79,7 @@ Size against `origin/main`: float-train, in `spiralcore_fbs_sheet.rs`, `hamilton
   | dual-c131, s2 | +231 | +225 | +6 |
 
   - The F − A column reproduces the earlier gap receipts exactly.
-  - In top-1 counts, each FAIL's gap lies between the plain-float forward and the D11 forward. The artifact adds at most 8 rows.
+  - In top-1 counts, each FAIL's gap lies between the plain-float forward and the D11 forward. The artifact moves the net by at most 8.
   - This is a hit-count reading. The FIT required identity, not hit counts, for the classification, so it does not clear the exporter by itself.
 - **The other forwards:**
   - E against D: 4,989 to 9,501 rows differ, so the export-mode panel is far from the D11 forward.
@@ -109,7 +109,7 @@ See the exact-head review record on the PR.
   - **float32 rounding in D.** D is a float32 candle forward. The 3% bound came from the integer path against an **f64** quantized reference.
   - **An exporter departure.**
 
-  claude-127's own residual matters here. The integer session differs from its f64 specification on about 1% of single tokens at 6 layers, and that residual is itself unexplained. Its leading candidate is the artifact's Q16 residual stream. The control that would test it, the f64 reference with its residual rounded to Q16 at the same points, was not built ([claude-127 REPORT](../claude-127/REPORT.md)).
+  claude-127's own residual matters here. The integer session differs from its f64 specification on about 1% of single tokens at 6 layers, and that residual is itself unexplained. One candidate is the artifact's Q16 residual stream, though claude-127 notes that its 1-layer seed-2 differences do not fit accumulation alone. The control that would test it, the f64 reference with its residual rounded to Q16 at the same points, was not built ([claude-127 REPORT](../claude-127/REPORT.md)).
 
   So the investigation is three host checks, needing no new GPU spend:
   1. build that Q16 control;
@@ -125,5 +125,6 @@ See the exact-head review record on the PR.
 
 This checked whether the shipped integer files compute what the model's integer-like mode computes.
 - **The file's final step is exactly right on every model.** It picks the same answers as the model's own head, on all 14,287 rows of all six models.
-- **The answers the files get right match the model's integer-like mode almost exactly,** to within 8 of 14,287 per model. So the earlier failed comparisons come from the model's ordinary float mode against its integer-like mode, not from the export.
-- **The internal numbers still differ more than the pre-agreed limit on four of the six models.** So the export is not yet cleared, and one more check, on the laptop, comes next.
+- **The files get as many answers right as the model's integer-like mode,** to within 8 of 14,287 per model. But the answers they pick still differ from that mode's on 2% to 5% of the rows.
+- **Counted as right answers, the earlier failed comparisons sit almost entirely between the model's ordinary float mode and its integer-like mode.** That is a reading, not a verdict. It does not clear the export.
+- **Four of the six models differ by more than the pre-agreed limit.** So the export is not yet cleared, and one more check, on the laptop, comes next.
