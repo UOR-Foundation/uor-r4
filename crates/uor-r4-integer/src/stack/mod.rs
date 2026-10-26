@@ -82,7 +82,7 @@ pub use kernels::{stack_argmax, stack_memory_select, stack_snap_select, MAX_SELE
 pub use session::{
     sample_mean_sd_t_ci95, student_t_0975, student_t_975, validate_protocol_v3_energy_receipt,
     validate_protocol_v3_energy_receipt_with_mode, verify_step_disassembly_text,
-    IntegerStackModel, IntegerStackSession, ProtocolV3ValidationError, SerializedStackLayerState,
+    IntegerStackModel, IntegerStackSession, NativeStep, ProtocolV3ValidationError, SerializedStackLayerState,
     SerializedStackSession, SnapTraceEntry, StackParameterBreakdown, StackPhaseParameters,
     StepPhaseTimingNs, CONVOLUTION_WIDTH, STACK_SESSION_SCHEMA,
 };

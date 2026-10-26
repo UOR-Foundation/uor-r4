@@ -1921,6 +1921,8 @@ pub struct FbsWriterOutput {
     pub kept_cells: Vec<u32>,
     /// Every candidate token of the kept cells with its score, ascending token id.
     pub candidates: Vec<(u32, f64)>,
+    /// The final query the writer scored (rounded to Q12 when quantized).
+    pub query: Vec<f64>,
 }
 
 /// The FBS gather of `routes` on `v` (`in_blocks * 8` values): output block
@@ -1983,6 +1985,7 @@ fn fbs_native_writer(
         token,
         kept_cells,
         candidates,
+        query: q.to_vec(),
     })
 }
 
