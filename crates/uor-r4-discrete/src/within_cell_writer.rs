@@ -1568,14 +1568,16 @@ mod cuda_impl {
         // With 10 prior occurrences of token 3 + query match, RECENT_MATCH_CAP = 8 caps total matches at 8 * 8 = 64.
         let c4_ok = !res_v1_copy.rows[0].top1_correct
             && res_v2_copy.rows[0].top1_correct
-            && res_v2_copy.rows[0].token_rivals == 0
+            && res_v2_copy.rows[0].within_cell_rivals == 0
+            && res_v2_copy.rows[0].cross_cell_rivals == 0
             && rel_node10 == 64;
         if !c4_ok {
             return Err(invalid(format!(
-                "Control C4 failed: v1_top1={} v2_top1={} v2_rivals={} rel_node10={rel_node10}",
+                "Control C4 failed: v1_top1={} v2_top1={} v2_wc_rivals={} v2_cc_rivals={} rel_node10={rel_node10}",
                 res_v1_copy.rows[0].top1_correct,
                 res_v2_copy.rows[0].top1_correct,
-                res_v2_copy.rows[0].token_rivals
+                res_v2_copy.rows[0].within_cell_rivals,
+                res_v2_copy.rows[0].cross_cell_rivals
             )));
         }
 
@@ -1678,12 +1680,17 @@ mod cuda_impl {
             && int_near != target_int_b
             && int_two == target_int_b
             && res_c5_two.rows[0].top1_correct
-            && res_c5_two.rows[0].token_rivals == 0
+            && res_c5_two.rows[0].within_cell_rivals == 0
+            && res_c5_two.rows[0].cross_cell_rivals == 0
             && struct_diag_count == 16
             && fv_cell0_pairs.len() == 16;
         if !c5_ok {
             return Err(invalid(format!(
-                "Control C5 failed: int_cur={int_cur} int_near={int_near} int_two={int_two} target={target_int_b}"
+                "Control C5 failed: int_cur={int_cur} int_near={int_near} int_two={int_two} target={target_int_b} top1={} wc_rivals={} cc_rivals={} diag={struct_diag_count} fv={}",
+                res_c5_two.rows[0].top1_correct,
+                res_c5_two.rows[0].within_cell_rivals,
+                res_c5_two.rows[0].cross_cell_rivals,
+                fv_cell0_pairs.len()
             )));
         }
 
