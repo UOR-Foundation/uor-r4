@@ -358,7 +358,7 @@ fn stage0_head_must_be_a_full_lowercase_commit() {
 }
 
 #[test]
-fn retained_receipt_and_stage_t_archive_pins_are_registered() {
+fn retained_receipt_and_stage_t_archive_pins_are_registered() -> TestResult {
     assert_eq!(
         RETAINED_RECEIPT_SHA256,
         "a7d23490c511fc7a391c95546646cd6aaef391950a5fb541fd13d2029a6edf8e"
@@ -367,11 +367,13 @@ fn retained_receipt_and_stage_t_archive_pins_are_registered() {
         STAGE_T_ARCHIVE_SHA256,
         "c004db506bf64903231c5c225a07e9969d5e3344c51a67eaec9429265e5f44b6"
     );
+    let retained_config = std::fs::read(pinned_config_path())?;
     assert_eq!(
-        ORIGINAL_CONFIG_SHA256,
-        "43a316bc67bb45fe5b50bd2ceee57f6b919164c02fe45ee9e677f8819fea5d15"
+        format!("{:x}", Sha256::digest(&retained_config)),
+        ORIGINAL_CONFIG_SHA256
     );
     assert!(CONFIG_PATH_NORMALIZATION_NOTE.contains("sed"));
+    Ok(())
 }
 
 fn pinned_config_path() -> PathBuf {

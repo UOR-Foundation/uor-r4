@@ -34,12 +34,14 @@ pub const TRAIN_TOKENS_SHA256: &str =
     "3dee858f84b750f507ceb3dc3f393711741950954735efaaf61bf704c017a4c8";
 pub const TRAIN_MASK_SHA256: &str =
     "b5e7352d67d6883a833155a5fd397a03f6d4f1b2649e3d4ec3e2ea7d95b949e3";
-/// The original Stage T config as retained in the archive. The local job
-/// rewrites its absolute paths with sed; the actual normalized file's SHA is
-/// recorded separately in identity.
+/// The original Stage T config retained in the repository, the staged input
+/// after its absolute paths were rewritten locally, and the normalization
+/// applied on the pod. The actual normalized file's SHA is recorded at runtime.
 pub const ORIGINAL_CONFIG_SHA256: &str =
+    "77d61451125b04827821216e221d548885af188bad6d9d301234d126fefa3b7d";
+pub const STAGED_INPUT_CONFIG_SHA256: &str =
     "43a316bc67bb45fe5b50bd2ceee57f6b919164c02fe45ee9e677f8819fea5d15";
-pub const CONFIG_PATH_NORMALIZATION_NOTE: &str = "The original Stage T config's absolute job paths were rewritten locally with sed; original_config_sha256 is the pre-rewrite retained config and normalized_config_sha256 is the actual normalized file read here.";
+pub const CONFIG_PATH_NORMALIZATION_NOTE: &str = "The retained Stage T config was rewritten locally with sed into the staged input config; a second sed path correction on the pod produced the actual normalized config. original_config_sha256, staged_input_config_sha256 and normalized_config_sha256 distinguish those three files.";
 pub const DEV_ROWS: usize = 14_287;
 /// Prompt tokens must leave room for at least one generated teacher token.
 pub const PROMPT_TOKEN_LIMIT: usize = 192;
@@ -922,7 +924,8 @@ pub mod runner {
         CONFIG_PATH_NORMALIZATION_NOTE, COPY_ROW_SCHEMA, COPY_SCHEMA, DEV_MASK_SHA256, DEV_ROWS,
         DEV_TOKENS_SHA256, IDENTITY_SCHEMA, MANIFEST_SHA256, ORIGINAL_CONFIG_SHA256, PARITY_SCHEMA,
         PROMPT_TOKEN_LIMIT, RETAINED_RECEIPT_SCHEMA, RETAINED_RECEIPT_SHA256, RETAINED_TOP1,
-        RETAINED_TOP8, STAGE0_HEAD_ENV, STAGE_T_ARCHIVE_SHA256, TOKENIZER_SHA256,
+        RETAINED_TOP8, STAGE0_HEAD_ENV, STAGED_INPUT_CONFIG_SHA256, STAGE_T_ARCHIVE_SHA256,
+        TOKENIZER_SHA256,
     };
     use m1_d11_artifact_scorer_instrument as inst;
     use serde_json::{json, Value};
@@ -1223,6 +1226,7 @@ pub mod runner {
             "tokenizer_sha256": TOKENIZER_SHA256,
             "manifest_sha256": MANIFEST_SHA256,
             "original_config_sha256": ORIGINAL_CONFIG_SHA256,
+            "staged_input_config_sha256": STAGED_INPUT_CONFIG_SHA256,
             "normalized_config_sha256": config_sha256,
             "config_path_normalization": CONFIG_PATH_NORMALIZATION_NOTE,
             "dev_tokens_sha256": DEV_TOKENS_SHA256,
@@ -1241,6 +1245,7 @@ pub mod runner {
             "tokenizer_sha256": TOKENIZER_SHA256,
             "manifest_sha256": MANIFEST_SHA256,
             "original_config_sha256": ORIGINAL_CONFIG_SHA256,
+            "staged_input_config_sha256": STAGED_INPUT_CONFIG_SHA256,
             "normalized_config_sha256": config_sha256,
             "config_path_normalization": CONFIG_PATH_NORMALIZATION_NOTE,
             "retained_receipt_path": paths.retained_receipt.display().to_string(),

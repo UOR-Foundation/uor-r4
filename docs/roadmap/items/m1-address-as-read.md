@@ -5,7 +5,7 @@ milestone: M1
 area: mechanism
 status: ready
 open_to: anyone
-needs_gpu: false
+needs_gpu: true
 depends_on: [m1-trunk-assembly-and-training]
 scope: [crates/uor-r4-object-store/**, docs/mechanisms/exact-memory.md, docs/labs/m1-address-as-read/**, docs/harness/prep/m1-address-as-read*]
 ---
