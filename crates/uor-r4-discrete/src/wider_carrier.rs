@@ -785,7 +785,9 @@ pub mod cuda_runner {
                 "artifact_sha256": d11_sha256,
             }));
 
-            // Non-outer address metrics must be refused by D11 export and by propose.
+            let kernels = dev_outer.wider_carrier_kernels()?;
+            // Non-outer address metrics must be refused by D11 export, and foreign
+            // carried batches must be refused by inspect_wider_carrier_rows.
             for metric in [
                 AddressMetric::CellEnvelopeL1V1,
                 AddressMetric::FullVectorCellL1V1,
@@ -796,14 +798,21 @@ pub mod cuda_runner {
                     crate::d11_export::export_d11(&fv_snap).is_err(),
                     "d11_export must refuse non-outer address metric",
                 )?;
-                let batch = dev_fv.carry_windows(&windows)?;
+                let foreign_batch = dev_fv.carry_windows(&windows)?;
                 require(
-                    dev_fv
-                        .propose(&batch, &targets, Parameter::Gate(0))
+                    dev_outer
+                        .inspect_wider_carrier_rows(&foreign_batch, &targets, &kernels)
                         .is_err(),
-                    "Device::propose must refuse non-outer address metric",
+                    "inspect_wider_carrier_rows must refuse foreign CarriedBatch",
                 )?;
             }
+
+            let outer_batch = dev_outer.carry_windows(&windows)?;
+            let _proposal = dev_outer.propose(&outer_batch, &targets, Parameter::Gate(0))?;
+            require(
+                dev_outer.epoch()? == 0,
+                "Device::propose mutated epoch at B = 6 or 8",
+            )?;
 
             let after = dev_outer.snapshot()?;
             require(
@@ -811,7 +820,7 @@ pub mod cuda_runner {
                     && before.routes == after.routes
                     && before.gates == after.gates
                     && before.epoch == after.epoch,
-                "export_token_cells or D11 export mutated device state",
+                "export_token_cells, propose, or D11 export mutated device state",
             )?;
         }
         Ok(json!({
