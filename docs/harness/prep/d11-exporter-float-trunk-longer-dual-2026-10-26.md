@@ -107,8 +107,8 @@ run_step() {
   fi
 }
 mkdir -p "$RUN/bin" "$STAGING" "$RUN/store"
-run_step job-copy cp "$ROOT/job.sh" "$RUN/job.sh"
 trap '(cd "$RUN" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && sha256sum -c SHA256SUMS && /root/uor-store put "$RUN" results/kimi/d11-fbs-longer-dual-2026-10-26/ && /root/uor-store ls results/kimi/d11-fbs-longer-dual-2026-10-26/)' EXIT
+run_step job-copy cp "$ROOT/job.sh" "$RUN/job.sh"
 exec > >(tee -a "$RUN/job.log") 2>&1
 SRC=/root/build/src-$REF
 export UOR_NVCC_ARCH=compute_120 CARGO_TARGET_DIR=/root/build/target-sm120
@@ -118,7 +118,7 @@ run_step build-eval cargo build --release --locked --features cuda --bin d11-fbs
 run_step copy-binaries cp /root/build/target-sm120/release/spiralcore-fbs-sheet /root/build/target-sm120/release/fbs-export /root/build/target-sm120/release/d11-fbs-eval "$RUN/bin/"
 run_step binary-pins bash -c 'sha256sum "$1"/* > "$1/binary-SHA256SUMS"' _ "$RUN/bin"
 run_step get-inputs /root/uor-store get w2-inputs/2026-10-25/ "$STAGING"
-ln -s "$STAGING/w2-inputs/2026-10-25/driver-data" "$DATA"
+run_step link-data ln -s "$STAGING/w2-inputs/2026-10-25/driver-data" "$DATA"
 run_step pins bash -c "printf '%s  %s\n' \
   '3dee858f84b750f507ceb3dc3f393711741950954735efaaf61bf704c017a4c8  mw-balp/train/tokens.u16' \
   'b5e7352d67d6883a833155a5fd397a03f6d4f1b2649e3d4ec3e2ea7d95b949e3  mw-balp/train/response_mask.u8' \
@@ -172,8 +172,8 @@ for s in 1 2; do
     --preds-d11-out "$RUN/preds-d11-seed-$s.json"
 done
 # I-Negative: only the artifact pin is wrong; the seed-1 model pin is correct.
-run_step hash-model-1 bash -c 'sha256sum "$1" | cut -d" " -f1' _ "$RUN/save/seed-1/model/model.safetensors"
-MODEL1=$(cat "$RUN/hash-model-1.out")
+run_step hash-model-1-negative bash -c 'sha256sum "$1" | cut -d" " -f1' _ "$RUN/save/seed-1/model/model.safetensors"
+MODEL1=$(cat "$RUN/hash-model-1-negative.out")
 run_step negative "$RUN/bin/spiralcore-fbs-sheet" --mode d11-artifact-gap --steps 2048 --data-root "$DATA" \
   --model-dir "$RUN/save/seed-1/model" --evaluator "$RUN/run-seed-1.json" \
   --windows-sha256 "$WINDOWS" --artifact-sha256 0000000000000000000000000000000000000000000000000000000000000000 \
