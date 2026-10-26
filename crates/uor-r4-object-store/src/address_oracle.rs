@@ -1307,6 +1307,14 @@ pub fn score_model_arm(row: &PanelRow, arm: Arm, text: Option<&str>) -> Result<A
     })
 }
 
+/// Decode model bytes without turning an invalid emission into an instrument abort.
+pub fn decode_emission_bytes(bytes: &[u8]) -> (String, bool) {
+    match String::from_utf8(bytes.to_vec()) {
+        Ok(text) => (text, true),
+        Err(_) => (String::from_utf8_lossy(bytes).into_owned(), false),
+    }
+}
+
 /// Count actual emitted tokens for rates, never the expected value's length.
 pub fn emission_token_count(
     tokenizer: Option<&ByteBpeTokenizer>,

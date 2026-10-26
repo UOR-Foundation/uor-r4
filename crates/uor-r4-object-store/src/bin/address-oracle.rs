@@ -244,6 +244,7 @@ fn run_oracle(
             };
             let mut generated_tokens = Vec::new();
             let mut fetches = 0usize;
+            let mut emission_utf8 = true;
             let record: ArmRecord = if arm.is_model() {
                 let mut prefix = row.prompt_tokens.clone();
                 if prefix.is_empty() || prefix.len() >= context {
@@ -268,8 +269,11 @@ fn run_oracle(
                     generated.push(scores[0].prediction);
                     prefix.push(scores[0].prediction);
                 }
-                let decoded = String::from_utf8(tokenizer.decode_bytes(&generated))
-                    .map_err(|_| format!("{} model emission is not UTF-8", row.id))?;
+                let (decoded, valid_utf8) =
+                    uor_r4_object_store::address_oracle::decode_emission_bytes(
+                        &tokenizer.decode_bytes(&generated),
+                    );
+                emission_utf8 = valid_utf8;
                 let normalized = normalize_emission(&decoded).unwrap_or(decoded);
                 generated_tokens = generated;
                 if arm == Arm::NoMemory {
@@ -328,6 +332,7 @@ fn run_oracle(
                 "record": record,
                 "generated_tokens": generated_tokens,
                 "emission_token_count": emission_token_count,
+                "emission_utf8": emission_utf8,
                 "elapsed_ns": elapsed_ns,
                 "slots": slots,
                 "backend_fetches": fetches,

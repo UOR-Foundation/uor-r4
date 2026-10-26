@@ -1596,3 +1596,13 @@ fn emission_token_count_uses_actual_store_and_model_emissions() -> TestResult {
     assert_eq!(emission_token_count(Some(&tokenizer), &random, 0)?, 0);
     Ok(())
 }
+
+#[test]
+fn invalid_model_emission_utf8_is_marked_not_fatal() {
+    let (text, valid) = decode_emission_bytes(&[0xff]);
+    assert!(!valid);
+    assert!(text.contains(char::REPLACEMENT_CHARACTER));
+    let (text, valid) = decode_emission_bytes(b"abcdefgh");
+    assert!(valid);
+    assert_eq!(text, "abcdefgh");
+}
