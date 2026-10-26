@@ -6,7 +6,7 @@
 - **Date:** 2026-10-25
 - **Upstream Prerequisites:**
   - `m1-a8-full-dose-rerun` (`#2831`, PR `#3192`, merged `cb2b5748905dc77b122325101b62dd7c29fc1413` — `status: done`)
-  - `m1-bvg-k-stage-t-training` (`#2836`, PR `#3239`, merged `025e6f4f0565855ba08135968466cbdd61b08b89` — `status: done`)
+  - `m1-bvg-k-stage-t-training` (`#2836`, Step 4 of `PLAN.md` — `BVG-K` `K = 16` batched-coordinate training)
 
 ---
 
@@ -89,13 +89,13 @@ All arms run on a single NVIDIA GeForce RTX 5090 (`sm_120`) under the Stage T `B
 - **Stop Conditions:**
   - **Immediate Instrument Stop:** Abort before Step 3 if any finite control `C-R1..C-R7` fails or if Step 2 projects $> 60$ min/run.
   - **Mid-Run Occupancy Stop:** If `occupied_cells < 128` or $\bar{n} > 2 \cdot \bar{n}_A$ at `Q1` (`4,096` batches) on seed 1, abort that arm immediately (`G-Occ` breach).
-  - **Scope & Dependency Gate:** Upstream prerequisites (`#2831`, `#2836`) and scope widening (`#3268`) are complete; D68 decision review (`96f12503-9939-466d-83c0-3268bf63d4ab`, [`#2883` comment `6422813286`](https://github.com/UOR-Foundation/uor-r4/issues/2883#issuecomment-6422813286)) approved grading `FAIL_RANK_GAIN_AT_HIGH_OCC` (`mechanism_negative: false`) against `G-Occ` and the count tables (`docs/labs/r-rank-objective-keeps-cells/rank-objective-grade.json`) under CHARTER §3.5 (*"Spend GPU only where a run can change a decision"*).
+  - **Scope & Dependency Gate:** Execution of Steps 1–3 is held (`status: held`) until `m1-bvg-k-stage-t-training` (`#2836`, Step 4 of `PLAN.md`) completes and `r-rank-objective-keeps-cells` scope is widened to include `crates/uor-r4-discrete/**`.
 
 ---
 
 ## 5. Review Verdict
 
-- **Reviewer:** Fresh-context non-author `research` subagent `de3909b1-e564-4390-8228-77ba6927e041` (`antigravity`, CHARTER §4.5, §5.1, D68); D68 execution decision reviewed by `96f12503-9939-466d-83c0-3268bf63d4ab`
-- **Posted Record:** Issue [`#2883` comment `6396718125`](https://github.com/UOR-Foundation/uor-r4/issues/2883#issuecomment-6396718125) and [`#2883` comment `6422813286`](https://github.com/UOR-Foundation/uor-r4/issues/2883#issuecomment-6422813286)
+- **Reviewer:** Fresh-context non-author `research` subagent `de3909b1-e564-4390-8228-77ba6927e041` (`antigravity`, CHARTER §4.5, §5.1, D68)
+- **Posted Record:** Issue [`#2883` comment `6396718125`](https://github.com/UOR-Foundation/uor-r4/issues/2883#issuecomment-6396718125)
 
 TEST FITNESS: FIT
