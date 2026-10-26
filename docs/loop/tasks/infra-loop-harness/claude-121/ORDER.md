@@ -43,3 +43,10 @@ Class: instrument. Run at `82295caf6`; all must hold, or the unit stops:
 Stop and decide, never stop and wait.
 
 - **The review finds the mechanism page must change in the same PR as the exporter.** Then keep the scope, record the finding on #2820, and note the idle umbrella claim on #2028.
+
+## Cancel probe result
+
+Run at `82295caf6`. All three hold:
+- **Only `docs/mechanisms/lut-serving.md` is shared.** Of the item's nine scope globs, it is the only one that also appears in the umbrella's 38-entry scope.
+- **#3169 does not touch it.** Its files are `PLAN.md`, `docs/integration/DECISIONS.md` and `docs/loop/tasks/infra-loop-harness/codex-1/{ORDER,PLAN,REPORT}.md`. No open PR touches the item or `lut-serving.md`.
+- **The item reads `status: ready`** on `origin/main`.
