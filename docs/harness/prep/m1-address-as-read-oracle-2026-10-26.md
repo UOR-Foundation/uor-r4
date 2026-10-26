@@ -16,7 +16,7 @@ Can the delivered `AddressDirectory` and existing D11 GPU scorer measure the con
 
 ## Arms
 
-1. **No-memory:** model-only control with zero store slots (L-010).
+1. **No-memory:** model-only control whose `slots=0` is a logical arm label (L-010); the process-level store remains populated for the store arms.
 2. **No-address:** model-only control with a populated store but no store read; it must be byte-identical to no-memory. This checks determinism and absence of oracle information, not a store-presence performance effect.
 3. **Sieve:** deterministic prompt-to-`PrimeAddress` query from the versioned lexicon: split words, retain lexicon words in order, take primes, pair adjacent kept words. Use `read_sieve`/`read_sieve_from`. Record `sieve_query_address_match` (formed query equals true address) separately from `sieve_selected_address_match` (selected slot equals true address) and `sieve_value_check_pass`; never substitute selected-slot equality for address formation.
 4. **True-address:** exact `read_exact`/`read_exact_from` with the registered key and `Current`/`Previous` selection. A hit emits verified content marked `ExactStore`; this is oracle assistance, not learned model copy.
@@ -42,7 +42,7 @@ Bind source HEAD and a clean tree, executable/PTX/cubin/geometry/kernel/driver i
 
 ## Cost and storage
 
-Host preparation/build/review is lab time only. One pod at the live offer is estimated <15 min and about $0.30, with a $0.50 projected spend ceiling for this single dispatch; no retry without a new instrument classification. Output reports and row records are bounded to <64 MiB. Preserve the new tar and SHA256SUMS in HF before release/down. Record create/bootstrap/build/run/upload/retry wall time separately, actual create-to-down cost, local temporary/retained storage and available disk. No energy claim.
+Host preparation/build/review is lab time only. One pod at the live offer is estimated <15 min and about $0.30, with a $0.50 projected spend ceiling for this single dispatch; no retry without a new instrument classification. Output reports and row records are bounded to <64 MiB. Preserve the new tar and SHA256SUMS in HF and re-download/cmp them before release/down. Record create/bootstrap from the external pod ledger and build/run/upload/retry wall time separately in the job receipt. `actual_create_to_down_cost` starts as `PENDING_LEAD_LEDGER`; the lead must replace it with the actual uor-pod ledger value before release/down, and the evidence is incomplete until then. Record local temporary/retained storage and available disk. No energy claim.
 
 ## Stop rules
 

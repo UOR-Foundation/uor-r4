@@ -477,8 +477,8 @@ fn sieve_candidate_counts_cover_active_and_evicted_admission() -> TestResult {
     let counts = dir.sieve_candidate_counts(&PrimeAddress::new(&[3, 7])?);
     assert_eq!(counts.active_examined, 1);
     assert_eq!(counts.active_admitted, 1);
-    assert_eq!(counts.evicted_examined, 1);
-    assert_eq!(counts.evicted_admitted, 1);
+    assert_eq!(counts.evicted_examined, 0);
+    assert_eq!(counts.evicted_admitted, 0);
     let counts = dir.sieve_candidate_counts(&PrimeAddress::new(&[2, 11])?);
     assert_eq!(counts.active_admitted, 0);
     assert_eq!(counts.evicted_admitted, 1);

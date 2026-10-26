@@ -1574,3 +1574,25 @@ fn production_manifest_is_pinned_and_structurally_valid() -> TestResult {
     assert_eq!(panel.rows.len(), PANEL_ROWS);
     Ok(())
 }
+
+#[test]
+fn emission_token_count_uses_actual_store_and_model_emissions() -> TestResult {
+    let (tokenizer, panel) = fixture()?;
+    let store = OracleStore::build_with_tokenizer(&panel, &tokenizer)?;
+    let row = &panel.rows[0];
+    let mut random = store.observe_store_arm(row, Arm::RandomAddress)?;
+    random.emitted_text = Some("a".into());
+    let expected_len = row
+        .expected_value()
+        .ok_or("missing expected value")?
+        .tokens
+        .len();
+    let actual = emission_token_count(Some(&tokenizer), &random, 0)?;
+    assert_eq!(actual, tokenizer.encode("a").len());
+    assert_ne!(actual, expected_len);
+    let model = score_model_arm(row, Arm::NoMemory, Some("zzzzzzzz"))?;
+    assert_eq!(emission_token_count(Some(&tokenizer), &model, 7)?, 7);
+    random.emitted_text = None;
+    assert_eq!(emission_token_count(Some(&tokenizer), &random, 0)?, 0);
+    Ok(())
+}

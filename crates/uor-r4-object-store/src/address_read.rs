@@ -433,10 +433,12 @@ impl AddressDirectory {
                 counts.active_admitted += 1;
             }
         }
-        for address in self.evicted.keys() {
-            counts.evicted_examined += 1;
-            if query.gcd_shared_primes(address) > 0 {
-                counts.evicted_admitted += 1;
+        if counts.active_admitted == 0 {
+            for address in self.evicted.keys() {
+                counts.evicted_examined += 1;
+                if query.gcd_shared_primes(address) > 0 {
+                    counts.evicted_admitted += 1;
+                }
             }
         }
         counts

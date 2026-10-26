@@ -234,6 +234,13 @@ fn run_oracle(
     for row in &panel.rows {
         let mut per_arm = serde_json::Map::new();
         for arm in Arm::ALL {
+            let candidate_counts = match arm {
+                Arm::Sieve => {
+                    let query = form_sieve_query(&panel.lexicon, &row.prompt)?;
+                    oracle.directory().sieve_candidate_counts(&query)
+                }
+                _ => Default::default(),
+            };
             let started = Instant::now();
             let mut generated_tokens = Vec::new();
             let mut fetches = 0usize;
@@ -307,23 +314,16 @@ fn run_oracle(
                 score_store_read(row, arm, outcome, Some(&panel.lexicon))?
             };
             let elapsed_ns = started.elapsed().as_nanos() as u64;
-            let candidate_counts = match arm {
-                Arm::Sieve => {
-                    let query = form_sieve_query(&panel.lexicon, &row.prompt)?;
-                    oracle.directory().sieve_candidate_counts(&query)
-                }
-                _ => Default::default(),
-            };
             let slots = if arm == Arm::NoMemory {
                 0
             } else {
                 oracle.directory().len()
             };
-            let emission_token_count = if generated_tokens.is_empty() {
-                row.expected_value().map_or(0, |value| value.tokens.len())
-            } else {
-                generated_tokens.len()
-            };
+            let emission_token_count = uor_r4_object_store::address_oracle::emission_token_count(
+                Some(&tokenizer),
+                &record,
+                generated_tokens.len(),
+            )?;
             let value = serde_json::json!({
                 "record": record,
                 "generated_tokens": generated_tokens,
@@ -395,19 +395,29 @@ fn run_oracle(
     let stage0_identity_sha256 = sha256_hex(&stage0_identity_bytes);
     let stage0_identity: serde_json::Value = serde_json::from_slice(&stage0_identity_bytes)
         .map_err(|e| format!("parse Stage 0 identity: {e}"))?;
+    let nonempty = |key: &str| {
+        stage0_identity
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|value| !value.is_empty())
+    };
     let stage0_runtime_complete = [
         "cubin_sha256",
         "ptx_sha256",
-        "compiled_identity",
         "driver_source_sha256",
-        "cuda_toolkit_version",
-        "device_capability",
         "UOR_NVCC_ARCH",
         "IMAGE_TARGET",
         "RESOURCES",
     ]
-    .iter()
-    .all(|key| stage0_identity.get(*key).is_some());
+    .into_iter()
+    .all(nonempty)
+        && stage0_identity["compiled_identity"]
+            .as_object()
+            .is_some_and(|value| !value.is_empty())
+        && stage0_identity["device_capability"]
+            .as_array()
+            .is_some_and(|value| value.len() == 2)
+        && stage0_identity["cuda_toolkit_version"]["available"].as_bool() == Some(true);
     let serialized_store_bytes = oracle
         .store()
         .export_records()
@@ -435,7 +445,7 @@ fn run_oracle(
         "resident_heap_bytes": "UNVERIFIED",
         "stage0_identity_sha256": stage0_identity_sha256,
         "stage0_runtime_complete": stage0_runtime_complete,
-        "baseline_note": "Both arms are model-only controls; no-memory has zero store slots and no-address has a populated store but performs no read. Byte identity checks determinism, not a store-presence effect.",
+        "baseline_note": "Both arms are model-only controls. No-memory's slots=0 is a logical arm label; the process-level store remains populated for the store arms. No-address performs no store read. Byte identity checks determinism, not a store-presence effect.",
     });
     write_json(&out.join("oracle-identity.json"), &identity)?;
     let required_identity = [

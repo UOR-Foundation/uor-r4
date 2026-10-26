@@ -1307,6 +1307,25 @@ pub fn score_model_arm(row: &PanelRow, arm: Arm, text: Option<&str>) -> Result<A
     })
 }
 
+/// Count actual emitted tokens for rates, never the expected value's length.
+pub fn emission_token_count(
+    tokenizer: Option<&ByteBpeTokenizer>,
+    record: &ArmRecord,
+    model_tokens: usize,
+) -> Result<usize, String> {
+    if record.arm.is_model() {
+        return Ok(model_tokens);
+    }
+    match record.emitted_text.as_deref() {
+        None => Ok(0),
+        Some(text) => {
+            let tokenizer =
+                tokenizer.ok_or_else(|| "store emission needs a tokenizer".to_string())?;
+            Ok(tokenizer.encode(text).len())
+        }
+    }
+}
+
 /// No-memory and no-address records must be emission-identical; arm labels are
 /// deliberately ignored.
 pub fn baseline_records_identical(
