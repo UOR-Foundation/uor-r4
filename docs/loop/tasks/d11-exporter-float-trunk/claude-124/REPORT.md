@@ -18,7 +18,9 @@ References #2820.
     - `with_d11_export_gates` restores the hook when its closure returns an error, but not when it panics. The state is thread-local.
 - **My first parity design proved nothing about the recurrence's memory.** Single tokens from a zero state never reach the transition rotation, convolution taps 1 to 3 or the carried state. The pre-run reviewer caught it. Before any run, the readouts gained 8 fixed full-context sequences (64 positions), and the ORDER's bars were amended, once and before the run, to cover them.
 - **I lost uncommitted edits once, and recovered them.** I set aside a line to build a patch, then ran `git checkout --` on a file that also held my uncommitted sequence edits, which threw them away. The diff I had just written held them, and I restored them from it. Set-asides now run only on a clean, committed tree.
-- **One test does not pin one call site.** The reference-variants test catches a recurrence that ignores its snap switches. It would not catch the feed-forward call ignoring its gate switch, because the recurrence output gate already makes the variants differ. Only the GPU parity reading covers that line: the export readout matches `FLOAT_EXPORT` to 4.6e-7 on every position.
+- **My first switch test did not pin each snap site (round-1 review).** It compared whole reference variants, which differ at more than one site, so either gate site could have ignored its mode and the test would still have passed.
+  - **Fix:** a hand-computed test now checks the feed-forward gate block by block, and a one-lane recurrence over two steps: the output gate from a zero state, then the transition. It runs under four snap settings. Setting aside any one of the three sites fails it.
+  - **Still not pinned by a host test:** that `forward_f32_with` passes `snaps.gates` to the feed-forward call. The GPU parity reading covers it, because the plain readout would miss `FLOAT` otherwise.
 - **Still a random-init trunk.** No trained model ran. The export gap of a trained trunk, the Stage 4 sheet and tok/s are still owed.
 
 ## What changed
@@ -70,7 +72,7 @@ claude-123's 67/256 is therefore the Hamilton gate snap, entirely. At a single p
 | Set-aside 1, route decode without its sign bit | the GPU test fails at its bit-equality assert |
 | Set-aside 2, conv taps reversed in the converter | parity collapses: plain 0/256 (gap 4.87) and 1/64 (gap 4.67); export 1/256 and 0/64 |
 | The causality check without the hook repair | fails, gap 2.33 |
-| Host set-asides | each fails its test: the `Normalize` arm, the Q12 rounding, the recurrence ignoring its snaps, the readout's order check |
+| Host set-asides | each fails its test: the `Normalize` arm; the Q12 rounding; the recurrence ignoring its snaps; the readout's order check; and, one at a time, the transition site, the recurrence output gate site and the feed-forward gate site |
 | Artifact | `fbs-export` exits 0; sha256 `0621616ab3d6a9786be8e1e82569d6bf6539a854fbe8775cd5c47d6622c9447a`, the same as claude-123's |
 | Suites | float-train 31; integer serving-build library 319; no-feature library 55; `m5_full_path_cost_controls` 3/3; `memory_shape` 3/3 |
 | Zero-multiply audit | `FULL PASS`: rlib 56 symbol ranges and 40 call-graph functions; `uor-r4-stack` 44 and 90 |
