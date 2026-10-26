@@ -42,7 +42,7 @@ Size against `origin/main`:
 - tests about +345: the `fbs_export.rs` test module (lines 257–578) and `stack/tests.rs`;
 - docs about +180: the ORDER, this REPORT and the notebook row.
 
-The ORDER gave no line estimate.
+pr-check counts the whole of `fbs_export.rs` as code: code +785/−69, tests +23, docs +169, generated +1. The ORDER gave no line estimate.
 
 - **`uor-r4-integer`:**
   - `fbs_snapshot` (ungated) now holds `FbsRoutes`, `FbsTrunkLayer` and `FbsTrunkSnapshot`, with serde that refuses unknown fields. `stack::format` re-exports them.
@@ -73,6 +73,18 @@ The ORDER gave no line estimate.
 | GPU cost | one RTX 5090 for about 5 minutes, at $1.09/h | Vast `vast-57766451`, deleted |
 
 The GPU evidence is in the HF store at `results/claude/d11-fbs-converter-2026-10-26/`, with a `SHA256SUMS`. The run was at `d93b4977`. Later commits change only the integer gather's code generation (the same values: the FBS control is unchanged) and the docs. The run is repeated at the final head before the merge.
+
+## Checks run at the head
+
+See the exact-head review record on the PR:
+- the converter's host tests, and the float-train suite;
+- the integer serving-build library, and `m5_full_path_cost_controls`;
+- the stub-nvcc `cargo check --features cuda --all-targets`;
+- the GPU test at the final head;
+- clippy (no findings in new files; the eight in `discrete_d11.rs` are pre-existing);
+- `cargo fmt --check`;
+- both audits;
+- `loop report --check`, `loop pr-check --local` and `loop gates --full`.
 
 ## Skills used
 
