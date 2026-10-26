@@ -8,7 +8,7 @@ References #2820.
 
 - **The float GPU trunk and the converted trunk disagree on most tokens, and this unit does not say why.**
   - On a random-init trunk (vocabulary 256, width 32, MLP 32, 2 layers), the float GPU model picks the converted reference's token on 67 of 256 single tokens. The largest gap between the GPU's final hidden vector and the reference's query is 2.825.
-  - Part of this is the known export gap. The integer path, and so the reference, snaps the Hamilton gates and the recurrence rotations to the 120 icosians, while the plain float GPU path keeps them continuous.
+  - Part of this is probably the known export gap, though no run here measured how much. The integer path, and so the reference, snaps the Hamilton gates and the recurrence rotations to the 120 icosians, while the plain float GPU path keeps them continuous.
   - This run cannot separate that gap from a fault in how the converter maps the copied tables. Separating the two is Stage 4's parity proof against the sheets' export mode, so it is now the first thing Stage 4 owes.
   - What is proven exactly is the routes (below). The other tables were checked by reading the float forward, not by a test:
     - the embedding is a plain row lookup, with no scale;
@@ -49,7 +49,7 @@ References #2820.
 Size against `origin/main` at `398edb88`:
 - code +661/−69: the code parts of `fbs_export.rs` (lines 1–315) and `fbs_snapshot.rs` (lines 1–127), the three bins, the other code files and `Cargo.lock`;
 - tests +409: the test modules of `fbs_export.rs` (322 lines) and `fbs_snapshot.rs` (64), and `stack/tests.rs` (23);
-- docs +181: the ORDER, this REPORT and the notebook row.
+- docs: the ORDER, this REPORT and the notebook row (+181 at the code head; the REPORT grew after it, with review notes only).
 
 pr-check counts whole files, so it reports the in-file test modules as code. The ORDER gave no line estimate.
 
@@ -112,6 +112,7 @@ See the exact-head review record on the PR:
 
 - **The parity proof,** first: the float GPU in the sheets' D11 export mode against the converted trunk, to split the export gap from any mapping fault in the copied tables.
 - **The Stage 4 sheet:** a fresh non-author FIT; a two-seed retrain saved with `StackModel::save`; the export gap measured on the trained trunk; laptop tok/s, with decode and context reported separately.
+- **`fbs-compare` should refuse a readout that does not cover every token exactly once.** Today an empty or repeated readout still exits 0 (round-2 review, low). The GPU run's readout covered all 256 tokens once, so its counts stand. Fix it before Stage 4 relies on the tool.
 - **Serving front ends:** native-head paths in the `uor-r4-stack` CLI and the WebAssembly front end.
 - **The pages:** `serving-and-export.md` and the `lut-serving.md` row.
 
