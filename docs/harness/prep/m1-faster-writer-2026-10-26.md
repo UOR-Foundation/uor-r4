@@ -43,7 +43,7 @@ Registered under CHARTER §5.1 and D68 (`docs/loop/tasks/m1-faster-writer/antigr
 
 ## 4. Base artifact
 
-- **Source base:** `origin/main` `bc6d4137949b03824912d84de8d04bd4a0e92347` (`DRIVER_SOURCE_SHA256 = 04c5165464a18eea6d4edadc6970007dbdc7908ead420f4a20575e22ea43061d`).
+- **Source base:** `origin/main` `bc6d4137949b03824912d84de8d04bd4a0e92347` (`DRIVER_SOURCE_SHA256 = 04c5165464a18eea6d4edadc6970007dbdc7908ead420f4a2f575e22ea43061d`).
 - **Pinned `A8` codebook (`V = 4,096, B = 4, C = 192, K = 8`):** `address-structured-v1.json` (`caseyallard/uor-r4-store:vast-archive/vast-56660582/uor-r4/runs/claude/address-cells-preflight-20261019/tables/a8-rebuilt.json`), file SHA-256 `6600bdb1306dbaea4d77f5bf021e717a6bef791e44c1ec7d7c9bb9f0e8cd3cd1`, `table_sha256 = 4122cbab44bd88658743984fc1ab79059bf032c3e2fe526ffcf4ea5f95d9cd74` (`256` occupied cells, `16` tokens per cell, `DEV top1_correct = 133`).
 - **Pinned `PrimeZeta` codebook (`V = 4,096, B = 4, C = 192, K = 8`):** generated deterministically by `prime-zeta-codebook docs/labs/r-prime-zeta-vs-nulls/evidence/spec-v4096-b4-c192-k8.json 0 p8.json prime_zeta`, file SHA-256 `83c1380a8f507e51d0342faa1b089dea6a20561a03552208c093fa640afc124b` (`DEV top1_correct = 38`).
 
@@ -53,7 +53,7 @@ All open choices from the 22 Oct draft are pinned:
 
 1. **Control Group 1 — Seeded `Device` end-to-end parity (`12` models):**
    - `V ∈ {64, 256, 4096}`, `B = 4`, `C = 8`, `K ∈ {8, 16}`, `ReadSpec::Flock { kept: 8 }`, `ReadInitialization::ActiveLeafV1`, across both `ObjectivePolicy::NearestAddressMarginV1` (`s[11] = 0`) and `ObjectivePolicy::OccupiedCellRankHingeV1` (`s[11] = 1`).
-   - Compares `Device::forward` vs `BucketWriterEngine::forward` (`16` rows), `Device::evaluate` vs `BucketWriterEngine::evaluate` (`16` rows), and `Device::propose` vs `BucketWriterEngine::propose` across `5` parameters (`VectorBlock` at block `0`, block `1`, block `B - 1`; `Route(0)`; `Gate(0)`).
+   - Compares `Device::forward` vs `BucketWriterEngine::forward` (`16` rows), `Device::evaluate` vs `BucketWriterEngine::evaluate` (`16` rows), and `Device::propose` vs `BucketWriterEngine::propose` across `5` parameters (`VectorBlock` at block `0`, block `1`, block `B - 1`; `Gate(0)`; `Gate(1)`).
 2. **Control Group 2 — Direct GPU writer seeded sweep (`72` scale/seed cases + `36` virtual-move cases):**
    - Pin Choice 1: **seeded `V ∈ {64, 256, 4096, 16384}` tables** (`random_valid_vocab` from root palettes with interior perturbations), `B ∈ {2, 4}`, `K ∈ {1, 8, 16}`, `seed ∈ {1, 2, 3}`, `32` query rows per case (`2,304` rows), plus virtual `kind == 1` moves on `V ∈ {64, 256}`.
    - Runs `discrete_fullscan_writer_eval` and `discrete_bucket_writer_eval` (`WALK_ID_ORDER` and `WALK_SERVING_PRUNED`) on GPU.

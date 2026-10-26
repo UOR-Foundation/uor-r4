@@ -9,16 +9,16 @@ The item's done-when reads:
 > A writer whose measured per-row comparison count is below the full-vocabulary scan (about 5×10⁶ today), with finite controls that match the full-scan writer, and a CUDA qualification. How far below the scan counts as enough is not yet registered; register it in step 4.
 
 Complete steps 4 and 5 of `m1-faster-writer` (`#2840`):
-1. Register the step-4 `B1`/`B2` bar under `D68`, finalize the pre-registration sheet (`docs/harness/prep/m1-faster-writer-2026-10-26.md`, superseding `docs/harness/prep/m1-faster-writer-DRAFT-2026-10-22.md`) with all open choices pinned (`V = 4,096` and `V = 16,384` seeded tables, plus the 14,287-row `DEV` real-read panel on both pinned `A8` `6600bdb1306dbaea4d77f5bf021e717a6bef791e44c1ec7d7c9bb9f0e8cd3cd1` and pinned `PrimeZeta` `83c1380a8f507e51d0342faa1b089dea6a20561a03552208c093fa640afc124b`), and obtain independent fresh-context `TEST FITNESS: FIT`, `D68` decision review, and `D67` pre-run review.
-2. Implement the ahead-of-time CUDA CSR bucketed writer (`crates/uor-r4-discrete/src/bucket_source.rs`, `writer_bucket_device.rs`, `writer_bucket_qualification.rs`, and `src/bin/writer-bucket-qualify.rs`) without altering `discrete.cu` or `driver_source_sha256`.
-3. Execute the two-build CUDA qualification on `1x RTX 5090`, archive the raw bundle to `caseyallard/uor-r4-store:results/antigravity/m1-faster-writer-2026-10-26/`, record the receipts and mechanism/notebook updates, and mark `m1-faster-writer` `done` (`Closes #2840`).
+1. Register the step-4 `B1`/`B2` bar under `D68`, finalize `docs/harness/prep/m1-faster-writer-2026-10-26.md` (superseding `docs/harness/prep/m1-faster-writer-DRAFT-2026-10-22.md`) with all open choices pinned (`V = 4,096` and `16,384` seeded tables + 14,287-row `DEV` real-read panel on `A8` `6600bdb1306dbaea4d77f5bf021e717a6bef791e44c1ec7d7c9bb9f0e8cd3cd1` and `PrimeZeta` `83c1380a8f507e51d0342faa1b089dea6a20561a03552208c093fa640afc124b`), and obtain fresh-context `FIT`, `D68`, and `D67` reviews.
+2. Implement the ahead-of-time CUDA CSR bucketed writer (`bucket_source.rs`, `writer_bucket_device.rs`, `writer_bucket_qualification.rs`, `src/bin/writer-bucket-qualify.rs`) without altering `discrete.cu` or `driver_source_sha256`.
+3. Run two-build CUDA qualification on `1x RTX 5090`, archive to `caseyallard/uor-r4-store:results/antigravity/m1-faster-writer-2026-10-26/`, record receipts and mechanism/notebook updates, and mark `m1-faster-writer` `done` (`Closes #2840`).
 
 ## Cancel probe (run first)
 
-Ran on worktree `/Users/casey.allard/uor-r4/.worktrees/antigravity-m1-faster-writer` (`HEAD` `47115b060952a3b1facc2aa43f6e3b956be6158d`):
-- `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo test -p uor-r4-discrete --test writer_bucket_controls -- --nocapture`: 6 passed, 0 failed (`claude-34` host CSR index and finite controls intact).
-- `ls -la crates/uor-r4-discrete/src/bucket_source.rs crates/uor-r4-discrete/src/bin/writer-bucket-qualify.rs`: both absent (`No such file or directory`).
-- Classification: **mechanism** work remaining (step 4 sheet/bar registration + step 5 CUDA bucketed writer and qualification). Proceeding.
+Ran on `/Users/casey.allard/uor-r4/.worktrees/antigravity-m1-faster-writer` (`47115b060952a3b1facc2aa43f6e3b956be6158d`):
+- `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo test -p uor-r4-discrete --test writer_bucket_controls`: 6 passed, 0 failed (`claude-34` host CSR index and finite controls intact).
+- `ls crates/uor-r4-discrete/src/bucket_source.rs crates/uor-r4-discrete/src/bin/writer-bucket-qualify.rs`: both absent.
+- Classification: **mechanism** work remaining (step 4 bar/sheet + step 5 CUDA writer and qualification). Proceeding.
 
 ## Files in scope
 

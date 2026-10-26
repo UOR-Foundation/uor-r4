@@ -590,4 +590,73 @@ mod tests {
         assert!(generate(&source.replace("for(U k=0;k<s[3];++k)", "for(U k=0;k<8;++k)")).is_err());
         assert!(generate(&source.replace("// Statuses added", "// statuses")).is_err());
     }
+
+    #[test]
+    fn committed_gpu_qualification_receipts_pass_b1_b2_b3_and_match_across_builds() {
+        use crate::corpus::sha256;
+        fn strip_timing(value: &mut serde_json::Value) {
+            match value {
+                serde_json::Value::Object(map) => {
+                    map.retain(|key, _| {
+                        !key.ends_with("_us")
+                            && !key.ends_with("_tokens_per_s")
+                            && !key.ends_with("report_sha256")
+                            && key != "image_sha256"
+                    });
+                    for child in map.values_mut() {
+                        strip_timing(child);
+                    }
+                }
+                serde_json::Value::Array(items) => {
+                    for child in items {
+                        strip_timing(child);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let build_a_raw =
+            include_str!("../../../docs/labs/m1-faster-writer/qualification-build-a.json");
+        let build_b_raw =
+            include_str!("../../../docs/labs/m1-faster-writer/qualification-build-b.json");
+        let generated = generate(include_str!("discrete.cu")).expect("bucket source generated");
+        let expected_bucket_source_sha = sha256(generated.as_bytes());
+        assert_eq!(
+            expected_bucket_source_sha,
+            "7222ef058a99178fb7080ba8ac64d52d15d3fb078c098d606e8d3ebd78620962"
+        );
+        let mut parsed = Vec::new();
+        for raw in [build_a_raw, build_b_raw] {
+            let mut v: serde_json::Value = serde_json::from_str(raw).expect("valid json receipt");
+            assert_eq!(v["status"], "PASSED");
+            assert_eq!(v["b1_parity_pass"], true);
+            assert_eq!(v["b2_comparison_reduction_pass"], true);
+            assert_eq!(v["negative_controls_pass"], true);
+            assert_eq!(v["direct_seeded_sweep"]["total_mismatches"], 0);
+            assert_eq!(
+                v["driver_source_sha256"],
+                "04c5165464a18eea6d4edadc6970007dbdc7908ead420f4a2f575e22ea43061d"
+            );
+            assert_eq!(
+                v["bucket_image"]["source_sha256"].as_str(),
+                Some(expected_bucket_source_sha.as_str())
+            );
+            assert_eq!(
+                v["bucket_image"]["ptx_sha256"],
+                "e53dbb16cdbbf0a3c7d90e4df17db9934141c0b55949fd0a3d15b2f490410a41"
+            );
+            assert_eq!(
+                v["bucket_image"]["cubin_sha256"],
+                "22e82fe4eb36e8e6e8f54b8062c40ac6bcea81d55685a7e2ad7e3e427c23c556"
+            );
+            assert_eq!(v["planted_faults"].as_array().map(Vec::len), Some(4));
+            assert_eq!(v["real_read_dev_panel"].as_array().map(Vec::len), Some(2));
+            if let Some(ci) = v.get_mut("compiled_identity").and_then(serde_json::Value::as_object_mut) {
+                ci.remove("source_sha256");
+            }
+            strip_timing(&mut v);
+            parsed.push(v);
+        }
+        assert_eq!(parsed[0], parsed[1]);
+    }
 }

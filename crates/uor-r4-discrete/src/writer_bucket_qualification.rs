@@ -4,7 +4,7 @@
 //! 1. `device_end_to_end_parity`: seeded `Device` models across `V in {64, 256, 4096}`,
 //!    `B = 4`, `K in {8, 16}`, and both `ObjectivePolicy` modes (`NearestAddressMarginV1`
 //!    and `OccupiedCellRankHingeV1`), checking exact parity across `forward`, `evaluate`,
-//!    and `propose` (`VectorBlock`, `Route`, `Gate`).
+//!    and `propose` (`VectorBlock`, `Gate`).
 //! 2. `direct_seeded_sweep`: direct GPU writer sweep (`discrete_fullscan_writer_eval` vs
 //!    `discrete_bucket_writer_eval` in `IdOrder` and `ServingPruned` modes) across
 //!    `V in {64, 256, 4096, 16384}`, `B in {2, 4}`, `K in {1, 8, 16}`, `seed in {1, 2, 3}`,
