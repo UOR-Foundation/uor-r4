@@ -1,6 +1,6 @@
 # REPORT: d11-exporter-float-trunk, claude-131
 
-Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [d11-exporter-float-trunk-dual-train-2026-10-26](../../../../harness/prep/d11-exporter-float-trunk-dual-train-2026-10-26.md) (FIT in round 2; D67 pre-run review GO). The decision review that chose this run: [owner log on #2820](https://github.com/UOR-Foundation/uor-r4/issues/2820#issuecomment-6417189833), D2. The decision review on this result: DECISION_REVIEW_LINK.
+Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [d11-exporter-float-trunk-dual-train-2026-10-26](../../../../harness/prep/d11-exporter-float-trunk-dual-train-2026-10-26.md) (FIT in round 2; D67 pre-run review GO). The decision review that chose this run: [owner log on #2820](https://github.com/UOR-Foundation/uor-r4/issues/2820#issuecomment-6417189833), D2. The decision review on this result: [owner log on #2820](https://github.com/UOR-Foundation/uor-r4/issues/2820#issuecomment-6419387874).
 
 References #2820.
 
@@ -75,6 +75,8 @@ Size against `origin/main`: float-train, in `spiralcore_fbs_sheet.rs`, `hamilton
 | 1 | 3,845 | 3,511 | 3,492 | 0.379 | 0.375 |
 | 2 | 3,128 | 3,023 | 2,897 | 0.284 | 0.269 |
 
+The top-1 counts and admitted rates come from `train.json`: `seeds[].float` and `seeds[].export_mode`, fields `top1_hits` and `admitted_target_rate`. The artifact's top-1 comes from each gap receipt's `top1_artifact`.
+
 - **The top-1 spread, |F(1) − F(2)| = 717,** is near plain training's 655 and far from claude-130's 3,024. So the sheet's "the dual loss did not cure the seed instability" reading does not apply.
 - **The loss band, 0.0290,** is above plain training's 0.0230: less stable by the pre-registered rule, as stated above.
 - **The admitted rate** is 0.38 and 0.28 in plain float, against claude-130's 0.354 and 0.091. Seed 2 no longer collapses.
@@ -113,11 +115,11 @@ See the exact-head review record on the PR.
 
 ## Still open
 
-- **The §4.4 pivot note: one decisive run, not now.** Three results on this line (claude-129, claude-130, claude-131) have each passed the loss half and missed the top-1 half by 3 to 5 times F_I. The decision review (owner log, above) sets the order:
-  1. **The residual check first.** The D11 panel of claude-131's saved models, paired against their artifacts, classifies the seed-2 E − A residual as the D11 forward itself or an exporter departure. Scoring a model is GPU evaluation (§3.5), so this check needs its own sheet with a FIT (§4.5), though it is minutes of GPU. An exporter departure is a repair item, and the repaired artifact is then scored under the unchanged bar.
+- **The §4.4 pivot note: one decisive run, not now.** Three results on this line (claude-129, claude-130, claude-131) have each passed the loss half and missed the top-1 half, by 1.4 to 5.6 times F_I (nets +81 and +349, +278 and −332, +353 and +231). The decision review (owner log, above) sets the order:
+  1. **The residual check first, as the next unit on this item.** The D11 panel of claude-131's saved models, paired against their artifacts, classifies the seed-2 E − A residual as the D11 forward itself or an exporter departure. Scoring a model is GPU evaluation (§3.5), so this check needs its own sheet with a FIT (§4.5), though it is minutes of GPU. An exporter departure is a repair item, and the repaired artifact is then scored under the unchanged bar.
   2. **The owner's reading of §3.7.** "A gap above the two-seed noise band disqualifies it" can be read as the sheets' paired F_I for top-1, or as the two-seed top-1 spread, 655 to 717 rows. Under the spread reading, all three configurations would pass. Which reading applies is the owner's (§5.1), so one `[claude, for Casey]` note is on #2028, and no old receipt is re-scored.
   3. **The one decisive run, only after both.** Its sheet keeps Stage 4b's bar unless Casey answers, makes one change only (for example longer training at 1:1, since both DEV losses are still falling at step 1,024), and keeps the guard and the seed-spread rule. A PASS closes #2820. A FAIL makes the pivot note's verdict "stop": the item parks, and only the owner can stop the mechanism (§4.1).
-- **Meanwhile GPU effort moves to the M1 path,** as PLAN.md orders when earlier-path work is free. #2820 stays open with no new training sheet.
+- **After the residual check, the item parks** behind the owner's reading, and GPU effort moves to the M1 path, as PLAN.md orders when earlier-path work is free. #2820 stays open with no new training sheet. The residual check runs first because it does not depend on the owner's answer, and an exporter departure would bear on all three results (§4.2, L-007).
 - **The Q12 clamp mask at the negative edge** (code review, low). The mask tests the scaled value before rounding, so values in [−32768.5, −32768) get no gradient, though the clamp leaves them alone. The band is 0.5/4096 wide; the trained path is left as it ran.
 - **`with_d11_training` leaves the seed and step set** (code review, medium, traced). For this arm it changes no training math: the gate's forward reads the seed only for `RandomGateNull`, its backward reads neither, and only the `step == 0` gate telemetry, which the FBS sheet does not report, reads the step.
 
