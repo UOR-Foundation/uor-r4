@@ -3,12 +3,12 @@ id: m2-pin-train-mask-sheet
 title: Settle whether the pinned M2 TRAIN-mask sheet is live after D37, and re-pin it
 milestone: M2
 area: tooling
-status: ready
+status: done
 open_to: anyone
 needs_gpu: false
 depends_on: [m1-trunk-assembly-and-training, m2-fresh-heldout-panel]
 notebook: docs/research/notebook/m2-grounded-reply.md
-scope: [docs/harness/prep/m2-pin-train-mask-sheet*, docs/harness/milestones.json, docs/labs/m2-pin-train-mask-sheet/**, docs/research/notebook/m2-grounded-reply.md, docs/roadmap/items/m2-pin-train-mask-sheet.md]
+scope: [docs/harness/prep/m2-pin-train-mask-sheet*, docs/harness/milestones.json, docs/labs/m2-pin-train-mask-sheet/**, docs/research/notebook/m2-grounded-reply.md]
 ---
 
 ## Why it matters
