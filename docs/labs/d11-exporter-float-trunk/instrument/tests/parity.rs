@@ -4,8 +4,8 @@
 
 use d11_fbs_evaluator::{first_difference, host_sequences, layouts_agree, session_sequences};
 use uor_r4_integer::stack::synthetic::{
-    fbs_synthetic_non_square, fbs_synthetic_tiny_gain, synthetic_fbs_trunk, synthetic_fbs_trunk_with,
-    Lcg, FBS_SYNTH_NON_SQUARE,
+    fbs_synthetic_non_square, fbs_synthetic_tiny_gain, synthetic_fbs_trunk,
+    synthetic_fbs_trunk_with, Lcg, FBS_SYNTH_NON_SQUARE,
 };
 use uor_r4_integer::stack::{export_fbs_trunk_uorlut01, FbsTrunkSnapshot, IntegerStackModel};
 
@@ -22,7 +22,11 @@ fn single_tokens(vocab: usize) -> Vec<Vec<u32>> {
 fn sequences(vocab: usize, count: usize, len: usize, seed: u64) -> Vec<Vec<u32>> {
     let mut rng = Lcg(seed);
     (0..count)
-        .map(|_| (0..len).map(|_| (rng.next() % vocab as u64) as u32).collect())
+        .map(|_| {
+            (0..len)
+                .map(|_| (rng.next() % vocab as u64) as u32)
+                .collect()
+        })
         .collect()
 }
 
@@ -75,5 +79,9 @@ fn host_twin_equals_the_session_over_sequences() {
         },
     );
     let model = model_of(&long);
-    assert_parity("non-square, 64 positions", &model, &sequences(long.vocab, 8, 64, 11));
+    assert_parity(
+        "non-square, 64 positions",
+        &model,
+        &sequences(long.vocab, 8, 64, 11),
+    );
 }

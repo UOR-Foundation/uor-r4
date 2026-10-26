@@ -83,6 +83,42 @@ typedef struct {
   int32_t *history;  // layers * 3 width
 } fbs_work;
 
+// The bytes of one sequence's `fbs_work`, each buffer 8-byte aligned.
+FBS_FN uint64_t fbs_align8(uint64_t n) {
+  return (n + 7) & ~7ull;
+}
+
+#define FBS_WORK_LAYOUT(X)                                                                     \
+  X(x, int32_t, d) X(scratch, int64_t, wide) X(branches, int32_t, 2 * d) X(gate_out, int32_t, g) \
+  X(wide, int64_t, d) X(act, int16_t, wide) X(proj, int32_t, d) X(gate, int32_t, mlp)           \
+  X(up, int32_t, mlp) X(query, int32_t, d) X(cells, int64_t, FBS_CELLS)                         \
+  X(state, int64_t, (uint64_t)layers * d) X(history, int32_t, (uint64_t)layers * 3 * d)
+
+#define FBS_WORK_DIMS(m)                                                                       \
+  uint64_t d = (m)->width, mlp = (m)->mlp, wide = d > mlp ? d : mlp, g = d / 4 + d,             \
+           layers = (m)->layer_count;                                                           \
+  (void)d; (void)mlp; (void)wide; (void)g; (void)layers
+
+FBS_FN uint64_t fbs_work_bytes(const fbs_model *m) {
+  FBS_WORK_DIMS(m);
+  uint64_t bytes = 0;
+#define FBS_SIZE(name, type, len) bytes += fbs_align8((uint64_t)(len) * sizeof(type));
+  FBS_WORK_LAYOUT(FBS_SIZE)
+#undef FBS_SIZE
+  return bytes;
+}
+
+// Carve one sequence's buffers from `base` (fbs_work_bytes(m) bytes, 8-aligned).
+FBS_FN void fbs_work_carve(const fbs_model *m, uint8_t *base, fbs_work *w) {
+  FBS_WORK_DIMS(m);
+  uint64_t at = 0;
+#define FBS_CARVE(name, type, len)                                                             \
+  w->name = (type *)(base + at);                                                                \
+  at += fbs_align8((uint64_t)(len) * sizeof(type));
+  FBS_WORK_LAYOUT(FBS_CARVE)
+#undef FBS_CARVE
+}
+
 // ---------------------------------------------------------------------------
 // Scalar conventions.
 

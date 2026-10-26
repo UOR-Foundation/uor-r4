@@ -60,9 +60,13 @@ pub struct CModel {
 
 static KEEP_Q31: [u64; 16] = FbsImage::GEOMETRIC_KEEP_Q31;
 
+#[cfg(feature = "cuda")]
+pub mod device;
+
 extern "C" {
     fn fbs_host_sizeof_model() -> i64;
     fn fbs_host_sizeof_layer() -> i64;
+    fn fbs_host_work_bytes(m: *const CModel) -> u64;
     fn fbs_host_sequences(
         m: *const CModel,
         tokens: *const u32,
@@ -178,6 +182,22 @@ impl<'a> CModelHost<'a> {
     }
 }
 
+/// The bytes of one sequence's work in the core's layout (`fbs_work_bytes`),
+/// read from `m`'s scalars only.
+pub fn work_bytes(m: &CModel) -> u64 {
+    // SAFETY: `fbs_work_bytes` reads only `m`'s integer fields.
+    unsafe { fbs_host_work_bytes(m) }
+}
+
+/// SHA-256 of `bytes`, hex.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
 /// Whether the Rust and C layouts of the core's structs agree.
 pub fn layouts_agree() -> bool {
     // SAFETY: the two functions only return `sizeof` constants.
@@ -187,7 +207,10 @@ pub fn layouts_agree() -> bool {
 
 /// The host twin over `sequences` (each of the same length, from a fresh
 /// session). Qualification only: it never scores a panel.
-pub fn host_sequences(model: &IntegerStackModel, sequences: &[Vec<u32>]) -> Result<Outputs, String> {
+pub fn host_sequences(
+    model: &IntegerStackModel,
+    sequences: &[Vec<u32>],
+) -> Result<Outputs, String> {
     if !layouts_agree() {
         return Err("the Rust and C layouts of the FBS core disagree".to_owned());
     }
@@ -222,7 +245,10 @@ pub fn host_sequences(model: &IntegerStackModel, sequences: &[Vec<u32>]) -> Resu
 
 /// The Rust integer session's outputs on the same sequences: the reference
 /// the evaluator must equal bit for bit.
-pub fn session_sequences(model: &IntegerStackModel, sequences: &[Vec<u32>]) -> Result<Outputs, String> {
+pub fn session_sequences(
+    model: &IntegerStackModel,
+    sequences: &[Vec<u32>],
+) -> Result<Outputs, String> {
     let shape = model.shape();
     let kept = model.fbs_image().ok_or("not an FBS stack")?.kept_cells;
     let len = sequences.first().map_or(0, Vec::len);
@@ -246,8 +272,10 @@ pub fn first_difference(a: &Outputs, b: &Outputs) -> Option<(usize, usize)> {
     (0..n)
         .find(|&i| {
             a.tokens[i] != b.tokens[i]
-                || a.kept_cells[i * a.kept..(i + 1) * a.kept] != b.kept_cells[i * b.kept..(i + 1) * b.kept]
-                || a.queries[i * a.width..(i + 1) * a.width] != b.queries[i * b.width..(i + 1) * b.width]
+                || a.kept_cells[i * a.kept..(i + 1) * a.kept]
+                    != b.kept_cells[i * b.kept..(i + 1) * b.kept]
+                || a.queries[i * a.width..(i + 1) * a.width]
+                    != b.queries[i * b.width..(i + 1) * b.width]
         })
         .map(|i| (i / a.len.max(1), i % a.len.max(1)))
 }
