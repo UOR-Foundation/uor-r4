@@ -1240,8 +1240,8 @@ pub fn run_d11_export_gap(
             "paired_float_vs_d11": paired,
             "net_gap_rows": net,
             "f_i": f_i(paired.a_hit_b_miss_c, paired.a_miss_b_hit_b),
-            // The GPU half on this seed: the gate also needs I-D11-Artifact-Agreement.
             "within_band": within,
+            "within_band_scope": "the GPU half on this seed; the gate also needs I-D11-Artifact-Agreement",
             "preds_float_sha256": preds_sha256(&out.preds_float),
             "preds_d11_sha256": preds_sha256(&d11_preds),
             "i_save_load": i_save_load,
