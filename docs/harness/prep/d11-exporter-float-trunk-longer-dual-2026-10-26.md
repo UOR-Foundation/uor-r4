@@ -77,7 +77,7 @@ The two seeds are **initialization seeds on a common fixed batch stream and comm
 
 ## 8. Review
 
-TEST FITNESS: PENDING. A fresh non-author FIT and a fresh D67 pre-run review are required before dispatch.
+`TEST FITNESS: FIT` is recorded in section 10 at `5345b554038954a3d46fdedcf3c30daeeb9d429f`. D67 is still required before dispatch.
 
 ## 9. Exact dispatch and serving manifest
 
@@ -121,7 +121,7 @@ run_step source-pin bash -c 'test "$(git -C "$1" rev-parse HEAD)" = "$2"' _ "$SR
 if ! command -v jq >/dev/null 2>&1; then
   run_step install-jq bash -c 'apt-get update && apt-get install -y jq'
 fi
-run_step disk-gate bash -c 'avail=$(df -BG /workspace | awk "NR==2{gsub(/G/,\"\",$4); print $4}"); test "$avail" -ge 30'
+run_step disk-gate bash -c 'avail=$(df -k /workspace | tail -1 | tr -s " " | cut -d" " -f4); test "$avail" -ge 31457280'
 run_step get-inputs /root/uor-store get w2-inputs/2026-10-25/ "$STAGING"
 run_step link-data ln -s "$STAGING/w2-inputs/2026-10-25/driver-data" "$DATA"
 run_step pins bash -c "printf '%s  %s\n' \
@@ -141,11 +141,11 @@ run_step bridges cargo test --release --locked --manifest-path "$SRC/Cargo.toml"
 run_step probe "$RUN/bin/spiralcore-fbs-sheet" --mode d11-train-probe --train-forward dual --steps 2048 --data-root "$DATA" --out "$RUN/probe.json"
 run_step probe-gate jq -e '.train_learns and .learns and .under_one_hour_per_seed and .probe_steps == 32 and .target_steps == 2048 and .projected_eval_steps == [0,256,512,1024,2048] and .inputs.batch_count == 2048 and .inputs.used_windows == 8192 and .inputs.usable_windows >= 8192 and .inputs.total_windows >= 8192 and .inputs.train_tokens == 7512797 and .inputs.scored_targets > 0 and .inputs.peak_host_rss_bytes > 0' "$RUN/probe.json"
 run_step train "$RUN/bin/spiralcore-fbs-sheet" --mode d11-train-export --train-forward dual --steps 2048 --data-root "$DATA" --save-dir "$RUN/save" --stage4b "$RUN/d11-gap.json" --out "$RUN/train.json"
-run_step train-gate jq -e '.instruments_pass and .steps == 2048 and .train_batches == 2048 and .eval_steps == [0,256,512,1024,2048] and (.seeds | length == 2) and all(.seeds[]; .i_save_load and (.run.eval | length == 5))' "$RUN/train.json"
+run_step train-gate jq -e '.instruments_pass and .steps == 2048 and .train_batches == 2048 and .eval_steps == [0,256,512,1024,2048] and (.seeds | length == 2) and all(.seeds[]; .i_save_load and (.run.eval | map(.step) == [0,256,512,1024,2048]))' "$RUN/train.json"
 run_step prefix jq -e -n --slurpfile new "$RUN/train.json" --slurpfile old "$RUN/train-1024.json" '
   def point: .run.eval[] | select(.step == 1024);
   def close($a; $b): ($a - $b) | abs <= 1e-6;
-  def valid($doc): ($doc.seeds | length == 2) and all($doc.seeds[]; point | type == "object");
+  def valid($doc): ([$doc.seeds[].seed] | sort) == [1,2] and all($doc.seeds[]; (.run.eval | map(select(.step == 1024)) | length == 1));
   valid($new[0]) and valid($old[0]) and
   all($new[0].seeds[]; . as $n | ($old[0].seeds[] | select(.seed == $n.seed)) as $o |
     ($n | point) as $np | ($o | point) as $op |
@@ -194,7 +194,7 @@ run_step negative-check jq -e '.i_inputs == false and (.gap_inside_band | contai
 
 After every exit, the job's trap runs `(cd "$RUN" && find . -type f ! -name SHA256SUMS ! -name job.log -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && sha256sum -c SHA256SUMS && /root/uor-store put "$RUN" results/kimi/d11-fbs-longer-dual-2026-10-26/ && /root/uor-store ls results/kimi/d11-fbs-longer-dual-2026-10-26/)` so failure evidence is preserved too.
 
-On the laptop after the pod job exits, run `scripts/pod/uor-store get results/kimi/d11-fbs-longer-dual-2026-10-26/ local/kimi/d11-float-trunk/readback`, then `(cd local/kimi/d11-float-trunk/readback/results/kimi/d11-fbs-longer-dual-2026-10-26 && sha256sum -c SHA256SUMS)`. Only after every hash matches, run `scripts/pod/uor-pod release "$POD" --lab kimi --session longer-dual` and `scripts/pod/uor-pod down "$POD" --lab kimi --session longer-dual`. Never down before the readback succeeds.
+On the laptop after the pod job exits, require `df -BG --output=avail ~` to report at least 30 GiB before and after readback. Run `scripts/pod/uor-store get results/kimi/d11-fbs-longer-dual-2026-10-26/ local/kimi/d11-float-trunk/readback`, then `(cd local/kimi/d11-float-trunk/readback/results/kimi/d11-fbs-longer-dual-2026-10-26 && sha256sum -c SHA256SUMS)`. Only after every hash matches and the 30 GiB margin still holds, run `scripts/pod/uor-pod release "$POD" --lab kimi --session longer-dual` and `scripts/pod/uor-pod down "$POD" --lab kimi --session longer-dual`. Never down before the readback succeeds.
 
 PASS-only serving: MacBookPro17,1, Apple M1 (4 performance + 4 efficiency cores), 16 GiB, AC power; `fbs-toks` records the OS and its binary SHA. Build with `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo build --release --locked -p uor-r4-integer --features serving-wasm --bin fbs-toks`. For each artifact run `local/target/release/fbs-toks <artifact>`: one warmup and 20 timed runs, 128-token prefill and 64-token greedy decode, median and p95 for context and decode separately. Run `python3 scripts/audit_zero_matmul_serving.py <release-rlib> --stack` and the same command on `local/target/release/uor-r4-stack`, plus `~/.cargo/bin/cargo test -p uor-r4-integer --features serving-wasm --no-fail-fast`.
 
