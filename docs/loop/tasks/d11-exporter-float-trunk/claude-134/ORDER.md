@@ -41,7 +41,13 @@ Cancel if a snap trace of the evaluator, or a snap-choice capture of the float D
 - the open PRs;
 - a search of `origin/main` for a trace in `fbs_core.h` and a snap-index capture in `hamilton_sheet.rs`.
 
-Result: to be run at the first commit after this ORDER.
+Result (26 Oct):
+- No commit after `ea18d5064` touches those paths.
+- The other open PRs are #3288 and #3287 (antigravity), #3283 (kimi) and #3169 (codex). None touches the instrument, float-train, the integer crate or this item. #3287 (`m1-export-gap-and-toks`) holds only its ORDER.
+- `origin/main` has no trace in `fbs_core.h`.
+- The evaluator's qualified PTX hash (`013d19fd…`) is recorded only in receipts and REPORTs, not pinned in code. So the trace's new PTX is qualified on the pod, and its pins are recorded then.
+
+**Not cancelled (instrument: none needed).**
 
 ## Files in scope
 
