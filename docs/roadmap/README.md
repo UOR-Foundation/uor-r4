@@ -20,10 +20,10 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 13 |
+| ready | 12 |
 | held | 12 |
 | decision | 1 |
-| done | 69 |
+| done | 70 |
 | total | 95 |
 
 ## Start here
@@ -69,7 +69,6 @@ These items are ready and open to anyone.
 
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
-| [Repair the discrete M2 sheet's non-executable FIT](items/m2-pin-train-mask-sheet-cli-repair.md) | ready | a lab | no | [m2-pin-train-mask-sheet](items/m2-pin-train-mask-sheet.md) | [#3303](https://github.com/UOR-Foundation/uor-r4/issues/3303) |
 | [Train the student for grounded replies from exact memory](items/m2-train-grounded-replies.md) | ready | a lab | yes | [m2-donor-corpus-generation](items/m2-donor-corpus-generation.md), [m2-fresh-heldout-panel](items/m2-fresh-heldout-panel.md), [m2-pin-train-mask-sheet](items/m2-pin-train-mask-sheet.md), [m1-close-saved-model](items/m1-close-saved-model.md), [m1-d11-exporter-discrete](items/m1-d11-exporter-discrete.md) | [#2853](https://github.com/UOR-Foundation/uor-r4/issues/2853) |
 | [Optimize the driver math and run the ~1M-token pilot (D41 item 3)](items/d41-driver-math-pilot.md) | held | a lab | yes | none | [#2821](https://github.com/UOR-Foundation/uor-r4/issues/2821) |
 | [Generate the one-time offline donor answer corpus (distill-d1)](items/m2-donor-corpus-generation.md) | held | a lab | yes | [d41-driver-math-pilot](items/d41-driver-math-pilot.md) | [#2848](https://github.com/UOR-Foundation/uor-r4/issues/2848) |
@@ -77,6 +76,7 @@ These items are ready and open to anyone.
 | [Assemble and train the full lawful trunk (Stage 3)](items/m1-trunk-assembly-and-training.md) | done | a lab | yes | [m1-position-mechanism](items/m1-position-mechanism.md), [m1-normalization-mechanism](items/m1-normalization-mechanism.md), [m1-bvg-k-stage-t-training](items/m1-bvg-k-stage-t-training.md), [m1-d11-exporter-discrete](items/m1-d11-exporter-discrete.md) | [#2844](https://github.com/UOR-Foundation/uor-r4/issues/2844) |
 | [Build a genuinely fresh held-out reply panel for M2](items/m2-fresh-heldout-panel.md) | done | anyone | no | none | [#2849](https://github.com/UOR-Foundation/uor-r4/issues/2849) |
 | [Settle whether the pinned M2 TRAIN-mask sheet is live after D37, and re-pin it](items/m2-pin-train-mask-sheet.md) | done | anyone | no | [m1-trunk-assembly-and-training](items/m1-trunk-assembly-and-training.md), [m2-fresh-heldout-panel](items/m2-fresh-heldout-panel.md) | [#2851](https://github.com/UOR-Foundation/uor-r4/issues/2851) |
+| [Repair the discrete M2 sheet's non-executable FIT](items/m2-pin-train-mask-sheet-cli-repair.md) | done | a lab | no | [m2-pin-train-mask-sheet](items/m2-pin-train-mask-sheet.md) | [#3303](https://github.com/UOR-Foundation/uor-r4/issues/3303) |
 | [Close the remaining R14 gaps in the deterministic reply grader](items/m2-reply-grading-instrument-r14.md) | done | anyone | no | none | [#2852](https://github.com/UOR-Foundation/uor-r4/issues/2852) |
 
 ## M3

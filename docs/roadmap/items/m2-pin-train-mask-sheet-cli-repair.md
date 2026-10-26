@@ -3,7 +3,7 @@ id: m2-pin-train-mask-sheet-cli-repair
 title: Repair the discrete M2 sheet's non-executable FIT
 milestone: M2
 area: tooling
-status: ready
+status: done
 open_to: lab
 needs_gpu: false
 depends_on: [m2-pin-train-mask-sheet]
