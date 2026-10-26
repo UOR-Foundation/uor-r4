@@ -42,7 +42,7 @@ D and H share one head (`write_q12_rows`), so where they differ, it is because t
 
 | Outcome | It means | It decides |
 |---|---|---|
-| **Faithful on all six** | Each artifact computes its D11 forward: its head is identical, and its tokens differ from D's on at most the integer path's measured residual. The three FAILs' top-1 gaps then lie between the plain-float forward and the D11 forward itself: the gate and transition snaps, the Q12 query and the table rounding. | The exporter is cleared as the cause. The three negatives stand as mechanism results of their configurations. The item parks behind the owner's reading of §3.7 (#2028), and any decisive run targets the float-to-D11 forward gap in training. |
+| **Faithful on all six** | Each artifact computes its D11 forward: its head is identical, and its tokens differ from D's on at most three times the integer path's measured residual. The three FAILs' top-1 gaps then lie between the plain-float forward and the D11 forward itself: the gate and transition snaps, the Q12 query and the table rounding. | The exporter is cleared as the cause. The three negatives stand as mechanism results of their configurations. The item parks behind the owner's reading of §3.7 (#2028), and any decisive run targets the float-to-D11 forward gap in training. |
 | **A departure on any model** | That artifact computes something measurably different from its D11 forward. | An exporter or evaluator defect, so an instrument repair item is opened. The readings say whether it sits in the head (d_H) or the trunk (D against H, and the drift). After the repair, the affected artifacts are re-exported and re-scored under the unchanged bar. No negative stands on an affected artifact until then. |
 | **Indeterminate on any model, with no departure** | A's tokens differ from D's more than the measured residual, but not as a different forward does. | An instrument investigation of that model's trunk, led by the drift readings. It is never a mechanism result, and the item does not park until it is settled. |
 | **An instrument check fails** | The model, its inputs, or the stored run is not the one claimed. | Not counted. That check is repaired first. |
@@ -134,3 +134,16 @@ No training data is read.
 - The instruments catch a wrong model, run or windows.
 - Every pin in section 5 matches its receipt, and every store path exists.
 - The cost is inside the caps, and the change obeys CHARTER §3.
+
+**Round 2 (fresh non-author reviewer, 2026-10-26): FIT.**
+- All five round-1 findings are resolved.
+- `classify_residual` implements the rule at its boundaries: 428 rows is faithful and 429 is indeterminate; 1,428 is indeterminate and 1,429 is a departure.
+- The job passes the pins and flags the binary accepts.
+- The calibration holds against claude-127. The 3% bound sits above a 95% upper limit on 5 of 512 (about 2.3%).
+- **Its low items:**
+  - the faithful row now says "three times" the measured residual;
+  - the job's head placeholder is set at launch;
+  - Stage 4b's stored panel came from `evaluate_dev_panel_d11` (`run_d11_export_gap`, `preds-d11.json`), the function the mode calls.
+- **Its medium note, kept for the REPORT.** D is a float32 forward against an artifact with a Q16 residual stream, so a faithful artifact may land in "indeterminate". If one does, its drift and margins are read first. That outcome costs an investigation, never a false result.
+
+TEST FITNESS: FIT
