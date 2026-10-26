@@ -288,37 +288,76 @@ pub fn fbs_trunk_snapshot(model: &StackModel) -> Result<FbsTrunkSnapshot> {
 /// writer table. The FBS routes are exact and stay as they are. With these
 /// tables, [`FbsReadoutMode::D11`] computes what the artifact computes.
 pub fn round_tables_as_exported(model: &StackModel) -> Result<()> {
-    let grid = |v: f32| -> Result<f32> {
+    for (name, round) in exported_roundings(model) {
+        let (var, _, rounded) = table_and_rounding(model, &name, round)?;
+        let tensor = var.as_tensor();
+        var.set(&Tensor::from_vec(rounded, tensor.shape(), tensor.device())?)?;
+    }
+    Ok(())
+}
+
+/// Refuse a trunk whose tables are not as the exported artifact holds them
+/// ([`round_tables_as_exported`]): only on those does the D11 mode compute
+/// what the artifact computes.
+pub fn check_tables_rounded_as_exported(model: &StackModel) -> Result<()> {
+    for (name, round) in exported_roundings(model) {
+        let (_, values, rounded) = table_and_rounding(model, &name, round)?;
+        if let Some(i) = (0..values.len()).find(|&i| values[i] != rounded[i]) {
+            return Err(invalid(format!(
+                "{name}[{i}] is {}, not its exported {}: the D11 mode needs the tables rounded \
+                 as exported first (round_tables_as_exported)",
+                values[i], rounded[i]
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// A table value's exported rounding.
+type Rounding = fn(f32) -> Result<f32>;
+
+/// A trunk table, its values and their exported rounding.
+type RoundedTable = (candle_core::Var, Vec<f32>, Vec<f32>);
+
+/// Each table the exported artifact holds rounded, with its rounding: grid
+/// codes for the RMS gains and the convolution taps, Q16 for the biases and
+/// decay offsets, Q12 for the embedding.
+fn exported_roundings(model: &StackModel) -> Vec<(String, Rounding)> {
+    fn grid(v: f32) -> Result<f32> {
         Ok(grid_value(grid_code(f64::from(v), false).map_err(invalid)?) as f32)
-    };
-    let fixed = |v: f32| -> Result<f32> { Ok(fixed_value(v, FBS_FIXED_EXP) as f32) };
-    let q12 = |v: f32| -> Result<f32> {
+    }
+    fn fixed(v: f32) -> Result<f32> {
+        Ok(fixed_value(v, FBS_FIXED_EXP) as f32)
+    }
+    fn q12(v: f32) -> Result<f32> {
         q12_value(v)
             .map(|q| q as f32)
             .ok_or_else(|| invalid(format!("embedding value {v} does not fit Q12 in i16")))
-    };
-    let round = |name: &str, f: &dyn Fn(f32) -> Result<f32>| -> Result<()> {
-        let var = model
-            .variables()
-            .get(name)
-            .ok_or_else(|| invalid(format!("the trunk lacks {name}")))?;
-        let tensor = var.as_tensor();
-        let values = finite_table(name, tensor.flatten_all()?.to_vec1::<f32>()?)?;
-        let rounded: Vec<f32> = values.into_iter().map(f).collect::<Result<_>>()?;
-        var.set(&Tensor::from_vec(rounded, tensor.shape(), tensor.device())?)?;
-        Ok(())
-    };
+    }
+    let mut tables: Vec<(String, Rounding)> = Vec::new();
     for layer in 0..model.config.layers() {
-        let at = |suffix: &str| format!("layers.{layer:02}.{suffix}");
         for name in ["rec_norm.weight", "mlp_norm.weight", "rec.conv.weight"] {
-            round(&at(name), &grid)?;
+            tables.push((format!("layers.{layer:02}.{name}"), grid));
         }
         for name in ["rec.conv.bias", "rec.gate.bias", "rec.decay"] {
-            round(&at(name), &fixed)?;
+            tables.push((format!("layers.{layer:02}.{name}"), fixed));
         }
     }
-    round("final_norm.weight", &grid)?;
-    round("embedding.weight", &q12)
+    tables.push(("final_norm.weight".to_owned(), grid));
+    tables.push(("embedding.weight".to_owned(), q12));
+    tables
+}
+
+/// The trunk's table `name`, its values and their exported rounding.
+fn table_and_rounding(model: &StackModel, name: &str, round: Rounding) -> Result<RoundedTable> {
+    let var = model
+        .variables()
+        .get(name)
+        .ok_or_else(|| invalid(format!("the trunk lacks {name}")))?
+        .clone();
+    let values = finite_table(name, var.as_tensor().flatten_all()?.to_vec1::<f32>()?)?;
+    let rounded = values.iter().map(|&v| round(v)).collect::<Result<_>>()?;
+    Ok((var, values, rounded))
 }
 
 /// The float GPU trunk's own output for every single-token input and for
@@ -330,9 +369,12 @@ pub fn round_tables_as_exported(model: &StackModel) -> Result<()> {
 /// - [`FbsReadoutMode::D11`]: the gates and the transition snapped to the 120
 ///   icosians directly, as the integer path does, and the final hidden
 ///   vector rounded to Q12 before the writer. The caller rounds the tables
-///   first ([`round_tables_as_exported`]).
+///   first ([`round_tables_as_exported`]); an unrounded trunk is refused.
 pub fn fbs_float_readout(model: &StackModel, mode: FbsReadoutMode) -> Result<FbsFloatReadout> {
     check_no_sheet_arm()?;
+    if mode == FbsReadoutMode::D11 {
+        check_tables_rounded_as_exported(model)?;
+    }
     let read = || read_float_outputs(model, mode == FbsReadoutMode::D11);
     let readout = match mode {
         FbsReadoutMode::Plain => read(),
@@ -593,7 +635,21 @@ mod tests {
             .keys()
             .map(|name| values(&model, name))
             .collect::<Result<_>>()?;
+        // Every D11 entry refuses the trunk until its tables are rounded; the
+        // refusal comes before any tensor operation, so it holds on the host.
+        use crate::hamilton_sheet::{evaluate_dev_panel_d11, is_snapping_transition};
+        let unrounded =
+            |e: crate::FloatTrainError| e.to_string().contains("rounded as exported first");
+        assert!(check_tables_rounded_as_exported(&model).is_err_and(unrounded));
+        assert!(fbs_float_readout(&model, FbsReadoutMode::D11).is_err_and(unrounded));
+        assert!(evaluate_dev_panel_d11(&model, &[]).is_err_and(unrounded));
         round_tables_as_exported(&model)?;
+        check_tables_rounded_as_exported(&model)?;
+        // Rounded, the panel gets past its guard and stops at its first tensor
+        // operation (CPU model compute is refused), leaving the hook as it was.
+        let past_guard = evaluate_dev_panel_d11(&model, &[]).expect_err("no CPU compute");
+        assert!(!unrounded(past_guard));
+        assert!(!is_snapping_transition());
         for (name, b) in model.variables().keys().zip(&before) {
             // Every table changes; the FBS routes do not.
             let a = values(&model, name)?;
@@ -843,9 +899,10 @@ mod tests {
                 );
             }
         }
-        // Each mode reaches the forward: some hidden vector changes. The D11
-        // mode's sequences differ from export mode's past position 0, where
-        // the transition snap acts.
+        // Each mode reaches the forward: some hidden vector changes. This does
+        // not isolate the transition snap, because the rounded tables and the
+        // unrounded gates already change every position; the run's set-aside
+        // 2 (the snap turned off) is its pin.
         assert!(readout
             .positions
             .iter()
