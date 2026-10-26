@@ -15,7 +15,7 @@ References #2833; this unit does not close the item or claim an oracle gain.
 - Added `address_stage0` manifest generation and a GPU-only runner behind `stage0-lab`: pinned artifact/config/receipt validation, corpus-leak scan, two D11 parity passes, sealed `final-dev.json` comparison, teacher-forced and free-running copy, identity and aggregate-preserving stop reports.
 - Added the 40-row manifest (`ea360118…`), protocol and pure parity tests, and the root workspace exclude required by the nested D11 instrument.
 - Recorded the scoped result in `docs/mechanisms/exact-memory.md`, the lab README and `docs/research/notebook/m3-durable-memory.md`.
-- Size at the REPORT commit: recomputed at the final head below. No numeric estimate was set; most additions are the generated manifest and the GPU runner.
+- Size at the REPORT commit: 16 files, 8,198 additions and 6 deletions. Code and unit tests 2,743 lines, documentation 201, generated manifest 5,212, dependency/workspace metadata 42. No numeric estimate was set; most additions are the generated manifest and the GPU runner.
 
 ## Measurements
 
