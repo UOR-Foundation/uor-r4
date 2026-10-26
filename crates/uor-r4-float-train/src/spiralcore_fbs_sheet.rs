@@ -1962,6 +1962,273 @@ pub fn run_d11_residual(
     }))
 }
 
+/// The shape of the snap trace (claude-134): per layer, `lanes` transition roots, `lanes` output
+/// gate roots, then `ff_blocks` feed-forward gate roots, for each of `windows × len` positions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SnapShape {
+    windows: usize,
+    len: usize,
+    layers: usize,
+    lanes: usize,
+    ff_blocks: usize,
+}
+
+impl SnapShape {
+    fn layer_bytes(self) -> usize {
+        2 * self.lanes + self.ff_blocks
+    }
+    fn stride(self) -> usize {
+        self.layers * self.layer_bytes()
+    }
+    fn blocks(self, site: usize) -> usize {
+        if site == 2 {
+            self.ff_blocks
+        } else {
+            self.lanes
+        }
+    }
+}
+
+/// The D11 forward's snap choices against the artifact's (claude-134).
+#[derive(Clone, Debug, Default, PartialEq)]
+struct SnapComparison {
+    /// Per layer, the disagreements at the transition, the output gate and the feed-forward gate.
+    per_layer_site: Vec<[usize; 3]>,
+    /// Zero blocks: the float forward snaps them to the identity (root 1), the integer path to
+    /// root 0. Counted apart from the other disagreements, and marked at their positions too.
+    zero_convention: usize,
+    /// Every snap compared.
+    sites: usize,
+    /// Per position (`window × len + position`): any disagreement there.
+    position_flip: Vec<bool>,
+    /// The D11 forward's own best-to-second margin at each disagreement other than zero blocks.
+    margins: Vec<f32>,
+}
+
+/// Compares the D11 forward's snap captures (three per layer, in call order, over `windows × len`
+/// rows) with the artifact's trace (`shape.stride()` bytes per position).
+fn compare_snaps(
+    captures: &[hs::SnapCapture],
+    trace: &[u8],
+    shape: SnapShape,
+) -> Result<SnapComparison> {
+    let rows = shape.windows * shape.len;
+    if captures.len() != 3 * shape.layers || trace.len() != rows * shape.stride() {
+        return Err(invalid(
+            "the captures or the trace do not fit the trunk's shape",
+        ));
+    }
+    let mut out = SnapComparison {
+        per_layer_site: vec![[0; 3]; shape.layers],
+        position_flip: vec![false; rows],
+        ..SnapComparison::default()
+    };
+    for layer in 0..shape.layers {
+        for site in 0..3 {
+            let capture = &captures[layer * 3 + site];
+            let blocks = shape.blocks(site);
+            if capture.roots.len() != rows * blocks || capture.margins.len() != rows * blocks {
+                return Err(invalid(format!(
+                    "snap call {} does not cover the rows",
+                    layer * 3 + site
+                )));
+            }
+            let site_offset = site * shape.lanes;
+            for row in 0..rows {
+                let base = row * shape.stride() + layer * shape.layer_bytes() + site_offset;
+                for block in 0..blocks {
+                    let float = capture.roots[row * blocks + block];
+                    let integer = trace[base + block];
+                    out.sites += 1;
+                    if float == u8::MAX {
+                        if integer != 0 {
+                            out.per_layer_site[layer][site] += 1;
+                        } else {
+                            out.zero_convention += 1;
+                        }
+                        out.position_flip[row] = true;
+                    } else if float != integer {
+                        out.per_layer_site[layer][site] += 1;
+                        out.position_flip[row] = true;
+                        out.margins.push(capture.margins[row * blocks + block]);
+                    }
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// The trace file of `d11-fbs-eval trace` (claude-134).
+#[derive(Deserialize)]
+struct EvaluatorTrace {
+    artifact_sha256: String,
+    sequences_sha256: String,
+    sequences: usize,
+    len: usize,
+    width: usize,
+    mlp: usize,
+    layers: usize,
+    trace_stride: usize,
+    tokens: Vec<u32>,
+    outputs_host_equal: bool,
+    trace_host_equal: bool,
+    trace_hex: String,
+    build: serde_json::Value,
+}
+
+/// Snap-flip localisation (claude-134), on the GPU: over the first `windows_count` DEV windows,
+/// the D11 forward's snap choices against the artifact's trace, and where the rows that D and A
+/// disagree on sit relative to the snap disagreements.
+#[allow(clippy::too_many_arguments)]
+pub fn run_d11_snap_trace(
+    data_root: &Path,
+    model_dir: &Path,
+    trace_path: &Path,
+    windows_count: usize,
+    windows_sha256: &str,
+    artifact_sha256: &str,
+    model_sha256_pin: &str,
+    label: &str,
+    seed: u64,
+    device: &Device,
+) -> Result<serde_json::Value> {
+    use crate::fbs_export::round_tables_as_exported;
+
+    let (dev_windows, dev_docs) = load_dev(data_root)?;
+    let windows = dev_windows
+        .get(..windows_count)
+        .ok_or_else(|| invalid("fewer DEV windows than asked for"))?;
+    let trace: EvaluatorTrace = serde_json::from_slice(&fs::read(trace_path)?)?;
+    let loaded = StackModel::load(model_dir, device)?;
+    let model_sha256 = sha256_bytes(&fs::read(model_dir.join("model.safetensors"))?);
+    let config = &loaded.config;
+    let shape = SnapShape {
+        windows: windows_count,
+        len: SHEET_CONTEXT,
+        layers: config.layers(),
+        lanes: config.width / 4,
+        ff_blocks: config.mlp_hidden / 4,
+    };
+    let trace_bytes = hex_bytes(&trace.trace_hex)?;
+    // I-Inputs and I-Trace: the trace is the pinned artifact's, on these windows, with the GPU's
+    // outputs and trace equal to the host twin's, and in this trunk's shape.
+    let i_inputs = trace.artifact_sha256 == artifact_sha256
+        && trace.sequences_sha256 == windows_sha256
+        && model_sha256 == model_sha256_pin;
+    let i_trace = trace.outputs_host_equal
+        && trace.trace_host_equal
+        && trace.sequences == windows_count
+        && trace.len == SHEET_CONTEXT
+        && trace.width == config.width
+        && trace.mlp == config.mlp_hidden
+        && trace.layers == shape.layers
+        && trace.trace_stride == shape.stride()
+        && trace.tokens.len() == windows_count * SHEET_CONTEXT;
+    if !i_trace {
+        return Err(invalid(
+            "the trace does not fit these windows or this trunk (I-Trace)",
+        ));
+    }
+
+    round_tables_as_exported(&loaded)?;
+    let (_, d_preds) = hs::evaluate_dev_panel_d11(&loaded, windows)?;
+    let ids: Vec<u32> = windows
+        .iter()
+        .flat_map(|w| w.input_ids.iter().copied())
+        .collect();
+    let (_, captures) = hs::with_snap_capture(|| {
+        hs::with_d11_mode(|| loaded.hidden(&ids, windows_count, SHEET_CONTEXT))
+    })?;
+    hs::clear_active_arm();
+    let compared = compare_snaps(&captures, &trace_bytes, shape)?;
+
+    // The rows D and A disagree on, each placed relative to the snap disagreements of its window.
+    let mut a_preds = Vec::new();
+    let mut rows_differ = 0usize;
+    let (mut preceded, mut same_position) = (0usize, 0usize);
+    let mut row = 0usize;
+    for (w, window) in windows.iter().enumerate() {
+        for &offset in &window.scored_offsets {
+            let at = w * SHEET_CONTEXT + offset;
+            let a = trace.tokens[at];
+            a_preds.push(a);
+            let d = *d_preds
+                .get(row)
+                .ok_or_else(|| invalid("the D11 panel does not cover the windows"))?;
+            if d != a {
+                rows_differ += 1;
+                let start = w * SHEET_CONTEXT;
+                preceded += usize::from(compared.position_flip[start..=at].iter().any(|&f| f));
+                same_position += usize::from(compared.position_flip[at]);
+            }
+            row += 1;
+        }
+    }
+    let mut margins = compared.margins.clone();
+    margins.sort_by(f32::total_cmp);
+    let below = |t: f32| margins.iter().filter(|&&m| m < t).count();
+    let first_flips: Vec<Option<usize>> = (0..windows_count)
+        .map(|w| {
+            compared.position_flip[w * SHEET_CONTEXT..(w + 1) * SHEET_CONTEXT]
+                .iter()
+                .position(|&f| f)
+        })
+        .collect();
+    let disagreements: usize = compared.per_layer_site.iter().flatten().sum();
+    Ok(serde_json::json!({
+        "sheet": "docs/harness/prep/d11-exporter-float-trunk-snap-trace-2026-10-26.md",
+        "label": label,
+        "seed": seed,
+        "dev_documents": dev_docs,
+        "windows": windows_count,
+        "model_safetensors_sha256": model_sha256,
+        "artifact_sha256": trace.artifact_sha256,
+        "windows_sha256": trace.sequences_sha256,
+        "evaluator_build": trace.build,
+        "scored_rows": a_preds.len(),
+        "d11_vs_artifact_rows_differ": rows_differ,
+        "rows_differ_preceded_by_a_snap_disagreement": preceded,
+        "rows_differ_with_a_snap_disagreement_at_their_position": same_position,
+        "snap_sites": compared.sites,
+        "snap_disagreements": disagreements,
+        "snap_zero_convention": compared.zero_convention,
+        "snap_disagreements_per_layer_site": compared.per_layer_site,
+        "positions_with_a_disagreement": compared.position_flip.iter().filter(|&&f| f).count(),
+        "first_disagreement_position_per_window": first_flips,
+        "disagreement_margins": {
+            "count": margins.len(),
+            "median": margins.get(margins.len() / 2),
+            "max": margins.last(),
+            "below_1e-6": below(1e-6),
+            "below_1e-4": below(1e-4),
+            "below_1e-2": below(1e-2),
+        },
+        "i_inputs": i_inputs,
+        "i_trace": i_trace,
+        "instruments_pass": i_inputs && i_trace,
+    }))
+}
+
+/// Lowercase or uppercase hex to bytes.
+fn hex_bytes(text: &str) -> Result<Vec<u8>> {
+    if !text.len().is_multiple_of(2) {
+        return Err(invalid("odd-length hex"));
+    }
+    let digit = |c: u8| -> Result<u8> {
+        match c {
+            b'0'..=b'9' => Ok(c - b'0'),
+            b'a'..=b'f' => Ok(c - b'a' + 10),
+            b'A'..=b'F' => Ok(c - b'A' + 10),
+            _ => Err(invalid("a non-hex digit")),
+        }
+    };
+    text.as_bytes()
+        .chunks(2)
+        .map(|p| Ok((digit(p[0])? << 4) | digit(p[1])?))
+        .collect()
+}
+
 /// The prep sheet a D11-trained run answers to.
 fn d11_train_sheet(forward: TrainForward) -> Result<&'static str> {
     match forward {
@@ -2796,6 +3063,50 @@ mod tests {
         assert_eq!(flat(&plain)?, flat(&again)?);
         assert_ne!(flat(&plain)?, flat(&control)?);
         assert!(flat(&control)?.iter().all(|v| v.is_finite()));
+        Ok(())
+    }
+
+    #[test]
+    fn the_snap_comparison_places_each_disagreement() -> Result<()> {
+        // One window of 2 positions, 1 layer, 1 lane and 1 feed-forward block: 3 roots per
+        // position, as (transition, output gate, feed-forward gate).
+        let shape = SnapShape {
+            windows: 1,
+            len: 2,
+            layers: 1,
+            lanes: 1,
+            ff_blocks: 1,
+        };
+        assert_eq!((shape.layer_bytes(), shape.stride()), (3, 3));
+        let capture = |roots: [u8; 2], margins: [f32; 2]| hs::SnapCapture {
+            roots: roots.to_vec(),
+            margins: margins.to_vec(),
+        };
+        // Position 0 agrees everywhere. Position 1: the transition disagrees (7 against 9, margin
+        // 0.5), and the feed-forward gate is a zero block, which the integer path snaps to 0.
+        let captures = [
+            capture([3, 7], [1.0, 0.5]),
+            capture([4, 4], [1.0, 1.0]),
+            capture([5, u8::MAX], [1.0, 0.0]),
+        ];
+        let trace = [3, 4, 5, 9, 4, 0];
+        let c = compare_snaps(&captures, &trace, shape)?;
+        assert_eq!(c.sites, 6);
+        assert_eq!(c.per_layer_site, vec![[1, 0, 0]]);
+        assert_eq!(c.zero_convention, 1);
+        assert_eq!(c.position_flip, vec![false, true]);
+        assert_eq!(c.margins, vec![0.5]);
+        // A zero block the integer path does not snap to 0 is a disagreement.
+        let other = [3, 4, 5, 7, 4, 2];
+        assert_eq!(
+            compare_snaps(&captures, &other, shape)?.per_layer_site,
+            vec![[0, 0, 1]]
+        );
+        // The wrong number of calls, or a short trace, is refused.
+        assert!(compare_snaps(&captures[..2], &trace, shape).is_err());
+        assert!(compare_snaps(&captures, &trace[..5], shape).is_err());
+        assert_eq!(hex_bytes("00ff7A")?, vec![0, 255, 122]);
+        assert!(hex_bytes("abc").is_err() && hex_bytes("zz").is_err());
         Ok(())
     }
 
