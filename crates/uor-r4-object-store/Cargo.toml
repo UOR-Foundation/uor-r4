@@ -12,7 +12,7 @@ default = []
 stage0-lab = []
 # Stage 0's GPU path: the D11 scorer instrument (which owns the admitted
 # cubin), the discrete training crate for `DriverConfig`, `compiled_identity`
-# and `driver_source_sha256`, and cudarc for the actual driver version.
+# and `driver_source_sha256`, and cudarc for the CUDA driver API version.
 cuda = [
     "stage0-lab",
     "dep:cudarc",
