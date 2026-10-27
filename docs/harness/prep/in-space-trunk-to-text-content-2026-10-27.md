@@ -1,8 +1,12 @@
 # Prep sheet: a content-keyed read inside the in-space trunk, against no read (in-space-trunk-to-text, claude-145, 27 Oct 2026)
 
-Lab: claude. Item: [in-space-trunk-to-text](../../roadmap/items/in-space-trunk-to-text.md). Order: [claude-145](../../loop/tasks/in-space-trunk-to-text/claude-145/ORDER.md). Code: branch `claude/content-read` at `64daf83806aab85be8afe0f045d65003f775c700`, the probe ladder's build. The run's first step re-runs the CUDA tests on its own build.
+Lab: claude. Item: [in-space-trunk-to-text](../../roadmap/items/in-space-trunk-to-text.md). Order: [claude-145](../../loop/tasks/in-space-trunk-to-text/claude-145/ORDER.md). Code: every pod runs `run.sh 64daf83806aab85be8afe0f045d65003f775c700 SEED`, the probe ladder's commit. Later commits on the branch change only docs, so the binary's sha256 is expected to match the probe's, `288b63d1…`, and each job log records it. The run's first step re-runs the CUDA tests on its own build.
 
-TEST FITNESS: pending (one fresh non-author review covers the FIT and the D67 pre-run review: light gates, per the owner's 27 Oct direction on #2028)
+TEST FITNESS: FIT (one fresh non-author review covers the FIT and the D67 pre-run review: PASS. These are light gates, per the owner's 27 Oct direction on #2028.)
+
+Two findings were fixed before launch:
+- **F1:** `--inspect` on a no-read run was untested, and a failure there would have stopped that pod before its reach readings. It was run on the probe's no-read arm and exits 0. `run.sh` now takes the reach readings first.
+- **F2:** the code line names the exact commit and the expected binary.
 
 ## The question
 
@@ -54,7 +58,7 @@ The two tests:
 
 | | Reach pass | Reach fails |
 |---|---|---|
-| **Openings pass** | **A.** The read lets openings use the prompt. If `T_read ≥ 7,002` too, the item's done-when (1) and (2) are met. Unlocks long runs and the reply text on the read. | **B.** Openings improve from nearer context. Unlocks a unit on which tokens the read keeps. |
+| **Openings pass** | **A.** The read lets openings use the prompt. If `T_read ≥ 7,002` too on each seed that lands in A, the item's done-when (1) and (2) are met. Unlocks long runs and the reply text on the read. | **B.** Openings improve from nearer context. Unlocks a unit on which tokens the read keeps. |
 | **Openings fail** | **C.** The read reaches far, but its payload does not help openings. Unlocks a unit on the payload or the layer. | **D.** The read does not help. If I-3's weight stayed near 0, its start is the cause; otherwise the key or the layer is. |
 
 - **Flag F**, reported beside the cell: `T_read < T_none − 500`, meaning the read costs fit.
@@ -123,7 +127,7 @@ Two seeds per arm, and they must agree; otherwise a third. claude-144's no-read 
 
 - **Pods:** three RTX 5090 pods at `$0.563/h` each, two arms per pod: `$1.69/h` of the `$8/h` cap.
 - **Time and total:** claude-144's arms took 35–37 minutes side by side at these settings. With build and readings, that is about 45 minutes per pod, about `$1.30` in all.
-- The probe ladder's throughput (below) checks that the read does not change this.
+- The probe ladder's throughput (above) projects about 36 minutes per arm.
 
 ## Stop rule
 
