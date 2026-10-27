@@ -1,6 +1,6 @@
 # ORDER: infra-loop-harness, antigravity-114
 
-Lab: antigravity. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `8f8f06dd5`.
+Lab: antigravity. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Setup row: 2. Base: `8f8f06dd5`.
 
 ## Goal
 
