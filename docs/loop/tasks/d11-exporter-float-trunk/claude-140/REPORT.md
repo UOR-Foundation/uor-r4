@@ -43,6 +43,8 @@ The job script is local (`local/claude/claude-140/job.sh`). Its sha256 on the po
 | 1 | 1,934 / 1,553; 0.0558 | 2,483 / 3,197; 0.0179 | 1,780 / 2,914; 0.0118 |
 | 2 | 1,354 / 1,776; 0.0176 | 2,024 / 2,805; 0.0212 | 3,192 / 3,375; 0.0713 |
 
+The training losses differ at every trained point too. Seed 1 at step 1,024 is 3.6156 in R1 against 3.5816 in R2, and seed 2 is 3.5554 against 3.6937.
+
 The bit-level reading agrees. Every `model.safetensors`, `snapshot.json` and `preds-float.json` differs between R1 and R2 on both seeds (`model-sha256.out`). The `config.json` files are identical.
 
 **C2–C4, reported, not interpreted.** All three differ at every trained point on both seeds. At step 1,024 the float top-1 values are:
