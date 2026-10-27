@@ -13,11 +13,12 @@
 //! for each of `heads` heads matching on its own block of coordinates:
 //! 1. **Points.** The key of an earlier position `s` is the shared table's point of token
 //!    `x_{s−1}`, rotated lane by lane by a learned unit quaternion. The query is, for the first
-//!    half of the heads (**copy heads**), the point of the current token `x_t`, rotated by a
-//!    quaternion that starts equal to the key's; for the rest (**type heads**), the residual,
-//!    which must learn what to ask for. Type heads' points are also spun by position: lane `j`
-//!    turns by `t · SPIN_BASE^(−j / lanes)` (the sign codes are not exactly offset-invariant,
-//!    since rotations keep L2, not signs). The value is `x` rotated by a third quaternion.
+//!    half of the heads (**copy heads**), the point of the current token `x_t` through that same
+//!    rotation, so a repeated token is an exact match however the rotation learns; for the rest
+//!    (**type heads**), the residual through a second rotation, which must learn what to ask for.
+//!    No point is turned by position: the owner's direction is SpiralCore's transport spin for
+//!    position, not a rotary code ("we do not need rope", 13 Oct), and the trunk's recurrence
+//!    already carries order. The value is `x` rotated by a third quaternion.
 //! 2. **Codes.** Each coordinate's bit is 1 at or above 0, as [`pack_signs`] packs it. The forward
 //!    pass compares the ±1 codes, so the distance is exactly the Hamming distance
 //!    `popcount(q XOR k)` that serving computes. The backward pass treats the code as the identity
@@ -58,8 +59,6 @@ pub const HAMMING_DEPTHS: [usize; 2] = [2, 6];
 pub const HAMMING_READOUT_DEPTH: usize = HAMMING_DEPTHS[1];
 /// Earlier positions each head keeps.
 pub const HAMMING_KEPT: usize = 16;
-/// Lane `j` of a head spins by `SPIN_BASE^(−j / lanes)` radians per position, RoPE's spacing.
-const SPIN_BASE: f64 = 10_000.0;
 const FILE: &str = "hamming_read.safetensors";
 
 thread_local! {
@@ -284,31 +283,6 @@ impl HammingRead {
         self.heads / 2
     }
 
-    /// The position spin for `batch` windows of `time` positions, as unit quaternions per lane,
-    /// rows `(batch * time, width)`. Lane `j` of each type head turns by
-    /// `t · SPIN_BASE^(−j / lanes)`. Copy heads do not spin, so a repeated token stays an exact
-    /// match wherever it sits.
-    fn spin(&self, batch: usize, time: usize, width: usize, device: &Device) -> Result<Tensor> {
-        let head_lanes = width / self.heads / 4;
-        let copy_lanes = self.copy_heads() * head_lanes;
-        let mut gate = Vec::with_capacity(time * width);
-        for t in 0..time {
-            for lane in 0..width / 4 {
-                if lane < copy_lanes {
-                    gate.extend_from_slice(&[1.0f32, 0.0, 0.0, 0.0]);
-                    continue;
-                }
-                let j = (lane % head_lanes) as f64;
-                let angle = t as f64 * SPIN_BASE.powf(-j / head_lanes as f64);
-                gate.extend_from_slice(&[angle.cos() as f32, angle.sin() as f32, 0.0, 0.0]);
-            }
-        }
-        let gate = Tensor::from_vec(gate, (1, time, width), device)?;
-        Ok(gate
-            .broadcast_as((batch, time, width))?
-            .reshape((batch * time, width))?)
-    }
-
     /// The read applied inside the stream, to the residual `(batch, time, width)` of the windows
     /// `ids`, with token points from the shared `table`: `x + w_c ⊙ c + w_y ⊙ y`. Returns the
     /// same shape.
@@ -356,17 +330,19 @@ impl HammingRead {
         };
         let current = token_points(ids.to_vec())?;
         let previous = token_points(previous)?;
-        // Copy heads ask with the current token's point; type heads ask with the residual.
-        let asked = Tensor::cat(
+        // Copy heads ask with the current token's point through the key's own rotation, so a
+        // repeated token stays an exact match however that rotation learns; type heads ask with
+        // the residual through the query's. Rotations act lane by lane, so each half is cut after.
+        let copy_asks = Self::rotate(&self.key_rotation, &current)?;
+        let type_asks = Self::rotate(&self.query_rotation, &points)?;
+        let query = Tensor::cat(
             &[
-                &current.narrow(1, 0, copy_width)?,
-                &points.narrow(1, copy_width, width - copy_width)?,
+                &copy_asks.narrow(1, 0, copy_width)?,
+                &type_asks.narrow(1, copy_width, width - copy_width)?,
             ],
             1,
         )?;
-        let spin = self.spin(batch, time, width, device)?;
-        let query = hamilton_gate(&spin, &Self::rotate(&self.query_rotation, &asked)?)?;
-        let key = hamilton_gate(&spin, &Self::rotate(&self.key_rotation, &previous)?)?;
+        let key = Self::rotate(&self.key_rotation, &previous)?;
         let value = Self::rotate(&self.value_rotation, &points)?;
         // ±1 by `p ≥ 0` forward, as `pack_signs` packs it, so 0 is a 1 bit; the identity backward.
         let code = |p: &Tensor| -> Result<Tensor> {
@@ -639,6 +615,15 @@ mod tests {
         let copy_only: Vec<f32> = (0..512).map(|i| f32::from(u8::from(i < 256))).collect();
         read.weight
             .set(&Tensor::from_vec(copy_only, (2, 256), &device).unwrap())
+            .unwrap();
+        // Learned rotations, as after training: two different unit quaternions on every lane. A
+        // copy query goes through the key's rotation, so it still matches exactly.
+        let turned = |q: [f32; 4]| Tensor::from_vec(q.repeat(64), (64, 4), &device).unwrap();
+        read.key_rotation
+            .set(&turned([0.6, 0.8, 0.0, 0.0]))
+            .unwrap();
+        read.query_rotation
+            .set(&turned([0.8, 0.0, 0.6, 0.0]))
             .unwrap();
         // Three windows of three tokens; heads 0 and 1 are the copy heads.
         // Window 0, [5 7 5]: at t = 2 the key of s = 1 names token 5, an exact match, so the copy

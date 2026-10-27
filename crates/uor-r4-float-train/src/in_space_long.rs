@@ -1229,6 +1229,10 @@ pub fn run_recall(
     }
     fs::create_dir_all(out)?;
     fs::write(out.join("config.json"), serde_json::to_vec_pretty(config)?)?;
+    // The task itself, for the record: `config.json` holds only the runner's settings.
+    let task =
+        serde_json::json!({ "pairs_per_bucket": pairs_per_bucket, "context": SHEET_CONTEXT });
+    fs::write(out.join("recall.json"), serde_json::to_vec_pretty(&task)?)?;
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
     crate::geometric_stack::set_retention_rates(config.retain_rates);
     crate::geometric_stack::set_folded_scores(config.fold_scores);
@@ -1374,6 +1378,9 @@ pub fn run_recall(
     // The final model and its reads, for the record and for any later reading.
     let directory = out.join(format!("models/step-{:06}", config.steps));
     model.save(&directory)?;
+    if let Some(read) = crate::flock_read::flock_read() {
+        read.save(&directory)?;
+    }
     if let Some(read) = crate::flock_read_content::content_read() {
         read.save(&directory)?;
     }
@@ -1851,6 +1858,11 @@ mod tests {
                 let (low, high) = RECALL_BUCKETS[bucket];
                 assert!((low..=high).contains(&(q - p)), "d = {} in {bucket}", q - p);
             }
+            // No two pairs share a value, so a value names one key only.
+            let mut values = w.scored_targets.clone();
+            values.sort_unstable();
+            values.dedup();
+            assert_eq!(values.len(), w.scored_targets.len(), "window {index}");
             let pair_positions = 4 * w.scored_offsets.len();
             let filler = w
                 .input_ids
