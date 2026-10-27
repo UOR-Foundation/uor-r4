@@ -10,6 +10,10 @@
 //!
 //! `train-in-space --data-root DIR --decode-speed CHECKPOINT [--objective nearest] [--retain-rates 0|1] [--reply-tokens N]`
 //!
+//! `train-in-space --data-root DIR --opening-bound 1`: how well the prompt words a window shows
+//! could name each reply opening, as TRAIN's commonest opening per key scored on DEV. A count
+//! over the corpus that needs no GPU; one JSON line per key.
+//!
 //! Long training of the SpiralCore/FBS geometric trunk in its own space, with text at every
 //! checkpoint (`uor_r4_float_train::in_space_long`). GPU only. `--data-root` holds `tokenizer.json`,
 //! `mw-balp/train/` and `ft/dev/`, each split with `tokens.u16` and `response_mask.u8`. `--out`
@@ -21,8 +25,8 @@ use std::path::PathBuf;
 
 use candle_core::Device;
 use uor_r4_float_train::in_space_long::{
-    context_reach, decode_speed, gradient_norms, inspect_run, root_separation, run_long,
-    LongConfig, PointObjective,
+    context_reach, decode_speed, gradient_norms, inspect_run, opening_bound, root_separation,
+    run_long, LongConfig, PointObjective,
 };
 use uor_r4_float_train::{FloatTrainError, Result};
 
@@ -33,6 +37,7 @@ fn main() -> Result<()> {
     let mut reach = None;
     let mut grad_norms = false;
     let mut decode = None;
+    let mut bound = false;
     let mut config = LongConfig {
         objective: PointObjective::Sheet,
         steps: 32_768,
@@ -71,6 +76,7 @@ fn main() -> Result<()> {
             "--reach" => reach = Some(PathBuf::from(&value)),
             "--grad-norms" => grad_norms = switch(&value)?,
             "--decode-speed" => decode = Some(PathBuf::from(&value)),
+            "--opening-bound" => bound = switch(&value)?,
             "--objective" => {
                 config.objective = match value.as_str() {
                     "sheet" => PointObjective::Sheet,
@@ -119,15 +125,23 @@ fn main() -> Result<()> {
         reach.is_some(),
         grad_norms,
         decode.is_some(),
+        bound,
         out.is_some(),
     ];
     if modes.iter().filter(|&&m| m).count() > 1 {
         return Err(FloatTrainError::Invalid(
-            "give one of --out, --inspect, --reach, --grad-norms 1 or --decode-speed".to_owned(),
+            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed or --opening-bound 1"
+                .to_owned(),
         ));
     }
     let data_root =
         data_root.ok_or_else(|| FloatTrainError::Invalid("--data-root is required".to_owned()))?;
+    if bound {
+        for row in opening_bound(&data_root)? {
+            println!("{}", serde_json::to_string(&row)?);
+        }
+        return Ok(());
+    }
     let device = Device::new_cuda(0)?;
     if let Some(checkpoint) = decode {
         let nearest = config.objective == PointObjective::Nearest;

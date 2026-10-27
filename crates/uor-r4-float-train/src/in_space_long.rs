@@ -427,6 +427,171 @@ fn opens_reply(mask: &[u8], position: usize) -> bool {
     position > 0 && mask[position - 1] == 0
 }
 
+/// How well the prompt words a window shows could name its reply's first token: TRAIN's
+/// commonest opening for each key, scored on DEV's openings ([`opening_bound`]). A count over the
+/// corpus, not a model: it bounds what a read that finds those words could add to the openings.
+#[derive(Clone, Debug, Serialize)]
+pub struct OpeningBound {
+    /// `none`, `first-k` (the first `k` prompt tokens the window shows) or `last-k` (the `k`
+    /// tokens before the opening).
+    pub key: String,
+    pub train_rows: usize,
+    pub train_keys: usize,
+    pub dev_rows: usize,
+    /// DEV openings whose key TRAIN never saw; TRAIN's commonest opening names them.
+    pub dev_unseen: usize,
+    pub dev_hits: usize,
+    /// TRAIN's most frequent keys, decoded, with their commonest opening and its share.
+    pub top: Vec<OpeningKey>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct OpeningKey {
+    pub key: String,
+    pub opening: String,
+    pub train_rows: usize,
+    pub opening_rows: usize,
+}
+
+/// Each opening in `windows`: the prompt tokens its window shows before it, in order, and its
+/// target. The prompt runs back from the opening to the last response token or BOS.
+fn openings(windows: &[CausalWindow], mask: &[u8]) -> Vec<(Vec<u32>, u32)> {
+    let mut rows = Vec::new();
+    for w in windows {
+        let scored = w
+            .scored_offsets
+            .iter()
+            .zip(&w.scored_targets)
+            .zip(&w.scored_corpus_positions);
+        for ((&offset, &target), &position) in scored {
+            if !opens_reply(mask, position) {
+                continue;
+            }
+            // The corpus position of `input_ids[0]`.
+            let base = position - 1 - offset;
+            let mut first = offset + 1;
+            while first > 0 {
+                let i = first - 1;
+                if w.input_ids[i] == hs::SHEET_BOS_ID || mask[base + i] == 1 {
+                    break;
+                }
+                first = i;
+            }
+            rows.push((w.input_ids[first..=offset].to_vec(), target));
+        }
+    }
+    rows
+}
+
+/// The commonest target in `counts` and its count, ties to the smaller token id.
+fn commonest(counts: &std::collections::BTreeMap<u32, usize>) -> Option<(u32, usize)> {
+    counts
+        .iter()
+        .max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0)))
+        .map(|(&t, &c)| (t, c))
+}
+
+/// Which prompt tokens an [`OpeningBound`] keys on.
+#[derive(Clone, Copy, Debug)]
+enum PromptKey {
+    None,
+    First(usize),
+    Last(usize),
+}
+
+impl PromptKey {
+    fn of(self, prompt: &[u32]) -> &[u32] {
+        match self {
+            PromptKey::None => &[],
+            PromptKey::First(k) => &prompt[..k.min(prompt.len())],
+            PromptKey::Last(k) => &prompt[prompt.len() - k.min(prompt.len())..],
+        }
+    }
+
+    fn name(self) -> String {
+        match self {
+            PromptKey::None => "none".to_owned(),
+            PromptKey::First(k) => format!("first-{k}"),
+            PromptKey::Last(k) => format!("last-{k}"),
+        }
+    }
+}
+
+fn bound(
+    key: PromptKey,
+    train: &[(Vec<u32>, u32)],
+    dev: &[(Vec<u32>, u32)],
+    decode: &dyn Fn(&[u32]) -> String,
+) -> OpeningBound {
+    let pick = |prompt| key.of(prompt);
+    let mut table =
+        std::collections::BTreeMap::<Vec<u32>, std::collections::BTreeMap<u32, usize>>::new();
+    let mut overall = std::collections::BTreeMap::<u32, usize>::new();
+    for (prompt, target) in train {
+        *table
+            .entry(pick(prompt).to_vec())
+            .or_default()
+            .entry(*target)
+            .or_default() += 1;
+        *overall.entry(*target).or_default() += 1;
+    }
+    let fallback = commonest(&overall).map(|(t, _)| t);
+    let (mut dev_unseen, mut dev_hits) = (0, 0);
+    for (prompt, target) in dev {
+        let named = match table.get(pick(prompt)) {
+            Some(counts) => commonest(counts).map(|(t, _)| t),
+            None => {
+                dev_unseen += 1;
+                fallback
+            }
+        };
+        dev_hits += usize::from(named == Some(*target));
+    }
+    let mut keys: Vec<(&Vec<u32>, usize)> = table
+        .iter()
+        .map(|(k, counts)| (k, counts.values().sum()))
+        .collect();
+    keys.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+    let top = keys
+        .into_iter()
+        .take(8)
+        .filter_map(|(k, rows)| {
+            let (opening, opening_rows) = commonest(&table[k])?;
+            Some(OpeningKey {
+                key: decode(k),
+                opening: decode(&[opening]),
+                train_rows: rows,
+                opening_rows,
+            })
+        })
+        .collect();
+    OpeningBound {
+        key: key.name(),
+        train_rows: train.len(),
+        train_keys: table.len(),
+        dev_rows: dev.len(),
+        dev_unseen,
+        dev_hits,
+        top,
+    }
+}
+
+/// [`OpeningBound`] for no key, the first 1–8 prompt tokens and the last 1–4.
+pub fn opening_bound(data_root: &Path) -> Result<Vec<OpeningBound>> {
+    let tokenizer = pinned_tokenizer(data_root)?;
+    let decode = |ids: &[u32]| tail(&tokenizer.decode(ids), 80);
+    let (train_tokens, train_mask) = load_train_split(data_root)?;
+    let (train_windows, _) =
+        hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
+    let (dev_windows, dev_mask) = load_dev(data_root)?;
+    let train = openings(&train_windows, &train_mask);
+    let dev = openings(&dev_windows, &dev_mask);
+    let keys = std::iter::once(PromptKey::None)
+        .chain((1..=8).map(PromptKey::First))
+        .chain((1..=4).map(PromptKey::Last));
+    Ok(keys.map(|key| bound(key, &train, &dev, &decode)).collect())
+}
+
 /// `samples` DEV windows spread over the panel whose first scored target opens a reply, with at
 /// least 16 tokens of prompt before it. `mask` is DEV's response mask.
 fn sample_windows<'a>(
@@ -848,8 +1013,21 @@ pub fn inspect_run(
 
 /// The pinned TRAIN split's windows with at least 4 scored targets, each context-long; at least
 /// `batch` of them.
-fn load_train(data_root: &Path, batch: usize) -> Result<Vec<CausalWindow>> {
-    let (train_tokens, train_mask) = hs::load_pinned_uort_split(
+/// The pinned tokenizer.
+fn pinned_tokenizer(data_root: &Path) -> Result<ByteBpeTokenizer> {
+    let tokenizer_bytes = fs::read(data_root.join("tokenizer.json"))?;
+    if sha256_bytes(&tokenizer_bytes) != hs::PINNED_TOKENIZER_SHA256 {
+        return Err(invalid(
+            "tokenizer.json differs from the pinned d36d3e87 tokenizer",
+        ));
+    }
+    ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizer_bytes)
+        .ok_or_else(|| invalid("tokenizer.json is not a byte-level BPE tokenizer"))
+}
+
+/// The pinned TRAIN split's tokens and response mask.
+fn load_train_split(data_root: &Path) -> Result<(Vec<u32>, Vec<u8>)> {
+    hs::load_pinned_uort_split(
         &data_root.join("mw-balp/train/tokens.u16"),
         &data_root.join("mw-balp/train/response_mask.u8"),
         hs::PINNED_TRAIN_TOKENS_SHA256,
@@ -858,7 +1036,11 @@ fn load_train(data_root: &Path, batch: usize) -> Result<Vec<CausalWindow>> {
         hs::EXPECTED_TRAIN_ELIGIBLE_TARGETS,
         hs::SHEET_VOCAB,
         hs::SHEET_BOS_ID,
-    )?;
+    )
+}
+
+fn load_train(data_root: &Path, batch: usize) -> Result<Vec<CausalWindow>> {
+    let (train_tokens, train_mask) = load_train_split(data_root)?;
     let (train_windows, _) =
         hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
     let usable: Vec<CausalWindow> = train_windows
@@ -991,14 +1173,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     fs::create_dir_all(out)?;
     fs::write(out.join("config.json"), serde_json::to_vec_pretty(config)?)?;
 
-    let tokenizer_bytes = fs::read(data_root.join("tokenizer.json"))?;
-    if sha256_bytes(&tokenizer_bytes) != hs::PINNED_TOKENIZER_SHA256 {
-        return Err(invalid(
-            "tokenizer.json differs from the pinned d36d3e87 tokenizer",
-        ));
-    }
-    let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizer_bytes)
-        .ok_or_else(|| invalid("tokenizer.json is not a byte-level BPE tokenizer"))?;
+    let tokenizer = pinned_tokenizer(data_root)?;
 
     let usable = load_train(data_root, config.batch)?;
     let (dev_windows, dev_mask) = load_dev(data_root)?;
@@ -1247,6 +1422,41 @@ mod tests {
         let mask = [0u8, 0, 1, 1, 0, 1];
         let opens: Vec<bool> = [2, 3, 5].iter().map(|&p| opens_reply(&mask, p)).collect();
         assert_eq!(opens, [true, false, true]);
+    }
+
+    #[test]
+    fn openings_carry_the_prompt_their_window_shows_back_to_the_last_reply() {
+        // BOS, a prompt (10 11 12), a reply (20 21), a prompt (13 14), a reply (22).
+        let tokens = [0u32, 10, 11, 12, 20, 21, 13, 14, 22];
+        let mask = [0u8, 0, 0, 0, 1, 1, 0, 0, 1];
+        let (windows, _) = hs::build_document_windows(&tokens, &mask, 16, 0).unwrap();
+        assert_eq!(
+            openings(&windows, &mask),
+            [(vec![10, 11, 12], 20), (vec![13, 14], 22)]
+        );
+    }
+
+    #[test]
+    fn the_bound_names_each_key_by_its_commonest_train_opening() {
+        let train = [
+            (vec![10, 11, 12], 20),
+            (vec![13, 14], 22),
+            (vec![10, 30], 20),
+            (vec![10, 31], 23),
+        ];
+        let dev = [(vec![10, 99], 20), (vec![13, 98], 22), (vec![50], 20)];
+        let decode = |ids: &[u32]| format!("{ids:?}");
+        let first = bound(PromptKey::First(1), &train, &dev, &decode);
+        // Key 10 opens with 20 twice and 23 once; key 13 with 22; key 50 is unseen and takes
+        // TRAIN's commonest opening, 20.
+        assert_eq!(
+            (first.dev_hits, first.dev_unseen, first.train_keys),
+            (3, 1, 2)
+        );
+        assert_eq!(first.top[0].key, "[10]");
+        assert_eq!((first.top[0].train_rows, first.top[0].opening_rows), (3, 2));
+        let none = bound(PromptKey::None, &train, &dev, &decode);
+        assert_eq!((none.dev_hits, none.dev_unseen), (2, 0));
     }
 
     #[cfg(feature = "cuda")]
