@@ -43,7 +43,7 @@ Definitions, per arm: **openings** `O` = `nearest.opening_hits` at step 16,384. 
 
 The four cells are exclusive and cover every outcome. **Flag F**, reported beside the cell and not instead of it: the fold's whole-panel nearest top-1 at step 16,384 is more than 500 below its twin's, so the fold costs fit and its boundary attractors need study before the fold is kept.
 
-Both rates must land in the same cell for the reading to count; a split is inconclusive.
+Both rates must land in the same cell for the reading to count; a split is inconclusive. A missing number (a nonzero exit from an inspect or reach step, or a missing checkpoint) gives no cell: the step is rerun, never read as a fail. `R16` averages over the openings with at least 16 tokens before them and `shift(0)` over all openings; the bias is the same for every arm.
 
 ## Instrument checks
 
