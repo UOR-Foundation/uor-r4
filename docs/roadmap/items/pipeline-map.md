@@ -19,10 +19,10 @@ Casey's direction of 27 Oct 2026, in claude's chat, verbatim:
 >
 > the goal is a local model equivalent to probably gpt4 in ability that can be trained on less resources than a datacenter, and that can be served on a normal laptop with specs about equivalent to an apply m1 (this hardware)."
 
-The same day, claude-146's look-back read went through three forms that sat at chance on its recall probe. Each one's output landed in a domain the next stage did not read:
-- **Keys from the trunk's own state:** Hamming attention keyed on the state never chose the right position. Every arm was at chance in every bucket (claude-146's research note, `docs/loop/tasks/in-space-trunk-to-text/claude-146/RESEARCH.md` on branch `claude/hamming-read`). claude-144's state-keyed Flock read had not moved openings either.
-- **The copied position's residual as payload:** in the commit's words, "a copied token reads as the trunk's own input, not its answer" (`87ade4920`).
-- **The token's point added before the final norm:** next to the stream's larger parts, it "barely moves where the prediction lands" (`6d8bac253`).
+The same day, claude-146's look-back read went through three forms that sat at chance on its recall probe. The first could not learn its match. The other two copied a token into a domain the next stage did not read:
+- **Keys from the trunk's own state:** with Hamming attention keyed on the state, every arm was at chance in every bucket of the recall probe, and openings sat at the 161 floor through step 8,192. The research note's reading is a credit fault: hard top-K gives credit only to the positions it picks, and at the start the right position is no nearer than any other (`docs/loop/tasks/in-space-trunk-to-text/claude-146/RESEARCH.md`, on branch `claude/hamming-read`, #3332). claude-144's state-keyed Flock read did not clear its pre-registered openings bar at either seed ([claude-144 REPORT](../../loop/tasks/in-space-trunk-to-text/claude-144/REPORT.md)).
+- **The copied position's residual as payload:** in the commit's words, "a copied token reads as the trunk's own input, not its answer" (`87ade4920`, on branch `claude/hamming-read`, #3332).
+- **The token's point added before the final norm:** next to the stream's larger parts, it "barely moves where the prediction lands" (`6d8bac253`, on the same branch).
 
 The form claude-146 then moved to (`6d8bac253`) moves the readout itself toward the copied token's table point, the point the decoder compares against. Its result is not yet recorded in the repository (#3332). A map that names each stage's input and output domain is how the next stage is checked before it is built.
 

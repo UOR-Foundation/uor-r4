@@ -18,11 +18,11 @@ Size against `origin/main`: 3 files of docs plus this task folder, with no code.
 
 - **`docs/roadmap/items/pipeline-map.md` (new).** It records:
   - Casey's 27 Oct direction, verbatim;
-  - the three domain mismatches of 27 Oct that motivate it;
+  - the three failed look-back forms of 27 Oct that motivate it;
   - a three-part done-when:
     - the page `docs/model/pipeline-map.md`, with seven fields for every stage;
     - the scale arithmetic, the ranked gaps and an order of work, every number sourced;
-    - the merge, and a `[claude, for Casey]` note on #2028;
+    - the merge, and a `[<lab>, for Casey]` note on #2028;
   - a cancel line, a `host` done class and a scope covering:
     - the page;
     - `docs/model/architecture.md`;
@@ -34,6 +34,12 @@ Size against `origin/main`: 3 files of docs plus this task folder, with no code.
   - **The motivating failures.** The item had credited them to claude-144 and claude-145. They are claude-146's three forms, now quoted from its research note and from commits `87ade4920` and `6d8bac253`.
   - **The readout move.** The item had said it worked. It now says the move is the form claude-146 moved to, and that its result is not yet recorded (#3332).
   - **The note's tag.** The done-when's note on #2028 is now tagged `[<lab>, for Casey]`, because any lab may take the item.
+- **Review round 2** (fresh context, at `157656fb4`) asked for changes to the motivation paragraph. All five fixes are in:
+  - **The first form's cause.** Keying on state is now given as a credit fault, as the research note reads it: hard top-K credits only its picks. Only the two copy forms are said to land in a domain the next stage did not read.
+  - **Measured, not inferred.** "Never chose the right position" is replaced by the two measurements: recall at chance in every bucket, and openings at the 161 floor through step 8,192.
+  - **claude-144.** "Had not moved openings" is replaced by its REPORT's result: the read did not clear its pre-registered openings bar at either seed.
+  - **Branch-only commits.** `87ade4920` and `6d8bac253` are now marked as on `claude/hamming-read` (#3332), since they may not resolve once that branch is merged and deleted.
+  - **This REPORT's tag.** The done-when line above now reads `[<lab>, for Casey]`.
 - **`PLAN.md`:** one row at the top of "Owner directions": the direction's first sentence, verbatim, status `open`, dated 2026-10-27, pointing to the item.
 
 ## Measurements
