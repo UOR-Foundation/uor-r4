@@ -1128,7 +1128,7 @@ impl StackModel {
                     x = q16(read.apply(&x, ids, &table)?)?;
                 }
             }
-            // The Hamming reads (claude-146), when set on this thread: after layers 2 and 4,
+            // The Hamming reads (claude-146), when set on this thread: after layers 2 and 6,
             // keyed on the input tokens' own points.
             if let Some(reads) = crate::flock_read_hamming::hamming_reads() {
                 if let Some(read) = reads.at_depth(layer + 1) {
