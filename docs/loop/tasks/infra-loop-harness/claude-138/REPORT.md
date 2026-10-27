@@ -10,7 +10,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). References #2904.
 - **I misread one failing test as environment-only, and CI caught it.** The test is `each_clients_canary_write_is_refused` (`tests/loop_guard.rs`). It runs every client's canary on the real repository root and accepts only a CHARTER, owner-only or R10 refusal.
   - **Locally,** from a lab worktree, antigravity came first and was refused for a worktree reason: "cross-worktree write refused: .worktrees/claude-drop-codex-registry belongs to another lab". I classed that as an instrument fault and stopped there.
   - **CI's plain checkout at `e08e8848f`** showed the real failure: "codex: unexpected refusal reason: lab \"codex\" is not in docs/harness/labs.json". With codex out of the registry, its canary is refused before its payload reaches the path rule.
-  - **Fix:** the test now runs in `make_uor_fixture`, whose registry lists every adapter. All five adapters, codex included, are refused by the path rule there, and the worktree failure is gone too. The registered labs' canaries still run on the real repository, inside the receipt test.
+  - **Fix:** the test now runs in `make_uor_fixture`, whose registry lists every adapter. All five adapters, codex included, are refused by the path rule there, and the worktree failure is gone too. The registered labs' canaries still run on the real repository, inside the receipt test. That test checks that each one is refused, not why: from a lab worktree the reason is the cross-worktree rule. So the real-repository path-rule reason is no longer asserted (round-2 review, advisory).
 
 ## What changed
 
@@ -43,7 +43,7 @@ The task folder adds the ORDER and this REPORT. The ORDER gave no estimate.
 ## Measurements
 
 None of model behaviour. These are the change's own checks, at head `e08e8848f` unless stated.
-- **Harness suite** (`cargo test -p uor-r4-harness --no-fail-fast`, all 33 targets): 1,153 passed and 1 failed. The failure was the canary test above; after its fix, `tests/loop_guard.rs` passes 13 of 13. These new or changed tests pass:
+- **Harness suite** (`cargo test -p uor-r4-harness --no-fail-fast`, all 33 targets): 1,153 passed and 1 failed. The failure was the canary test above; after its fix, and with the test added after the first review, `tests/loop_guard.rs` passes 14 of 14. These new or changed tests pass:
   - `the_real_registry_lists_exactly_the_four`
   - `an_unregistered_lab_is_refused`
   - `an_unregistered_lab_is_refused_by_heartbeat_with_nothing_written`
