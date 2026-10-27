@@ -10,12 +10,18 @@ kimi-46 ran the D11 dual-forward training of claude-131 for 2,048 steps. It stop
 
 **Which of three causes is it?**
 - **(a) Same-device nondeterminism.** The FBS backward kernels sum gradients with float `atomicAdd`, at `spiralcore_fbs.cu:151` and `:178` and at `spiralcore_fbs_arms.cu:114` and `:141`.
-- **(b) Host-source drift.** The Rust training path changed between the two run commits, `faecaaac5` and `e77a1f91`. The kernels did not:
-  - no `.cu` file or `build.rs` changed;
-  - every NUL-delimited record holding a PTX `.entry` in the two archived binaries is byte-identical: 605,673 bytes, 771 entry points, sha256 `63036c9eb933eac982ccfac9413e6acd3cf6c2ac3194292b3e6f361b7172eb34`;
-  - both were built with `nvcc` 12.8 V12.8.93 (NVVM 20.0.0, `.target sm_120`, PTX 8.7).
+- **(b) Host-source drift.** The Rust training path changed between the two run commits, `faecaaac5` and `e77a1f91`. The kernels and their build did not:
+  - **Source:** `git diff --stat faecaaac5 e77a1f91` lists no `.cu` file under `crates/uor-r4-float-train` and no `build.rs`.
+  - **candle:** `Cargo.lock` pins `candle-core` 0.9.2 at both commits, so the same candle kernels are bundled. The lock only adds the instrument crate.
+  - **Runtime identity:** both runs' receipts carry the same `kernels` block, every field of which is identical. In `5a290fbe…` and `b4ecb87d…`:
+    - `arms_ptx_sha256` `415e0d85ea1285d27c8c8a1087048baf06f7e8f96f8bc5080dbc4a62a6b4839f`;
+    - `arms_kernel_sha256` and `arms_prelude_sha256`;
+    - `cuda_stack_cu_sha256` `c577fce9…`;
+    - `spiralcore_fbs_cu_sha256` `517bffcc…`;
+    - `spiralcore_fbs_rs_sha256` `6eb2b09d…`, the FBS kernels' host wrapper.
+  - **Toolchain:** every PTX module header in both binaries reads `Cuda compilation tools, release 12.8, V12.8.93` (NVVM 20.0.0, `.target sm_120`, PTX 8.7), 15 modules each. Same sources, same `build.rs` flags and the same `nvcc` give the same PTX.
 
-  So a difference in C2 below is host-side source, not the toolchain or the kernels.
+  So a difference in C2 below is host-side Rust source, not the toolchain or the kernels. A byte comparison of the binaries' embedded PTX bodies was not made. An earlier extract held only kernel signatures, so it is not used as evidence (FIT round 2).
 - **(c) Cross-device or driver drift.** The PTX is compiled by the driver at load time. claude-131's pod had driver 595.80; kimi-46's run recorded none.
 
 The step count is not a cause. The loop's learning rate is constant, and its batches are a document-order prefix (`spiralcore_fbs_sheet.rs:461-495`, `hamilton_sheet.rs:1871-1885`). The same holds for any other function of the total step count.
@@ -113,4 +119,12 @@ Its advisories are folded in too:
 - the `UOR_`/`CUDA_` environment recorded per arm;
 - the impossible "all four match" row removed, and C3 and C4 still read under (b).
 
-Round 2: to be filled by a fresh-context reviewer given only this sheet and its sources.
+**Round 2 (at `5d03e065b`): NOT FIT, with one required finding, now fixed.** Round 1's binary-pin finding was resolved.
+- **The finding.** The PTX "identity" extract held only kernel signatures and `.reg` lines, so it did not support "C2 difference means host-source drift".
+- **The fix.** §1(b) now rests on the source, lock, runtime-identity and toolchain evidence, and the extract is withdrawn.
+
+Its advisories are kept:
+- the binaries carry PTX that the driver compiles at load time, with no cubin, which supports cause (c);
+- the job script fails safe.
+
+Round 3: to be filled by a fresh-context reviewer given only this sheet and its sources.
