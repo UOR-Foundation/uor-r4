@@ -9,17 +9,22 @@ kimi-46 ran the D11 dual-forward training of claude-131 for 2,048 steps. It stop
 - **From step 256 on, the runs differ.** Seed 1's float top-1 at step 1,024 is 3,845 in claude-131 and 1,472 in kimi-46.
 
 **Which of three causes is it?**
-- **(a) Same-device nondeterminism.** The FBS backward kernel sums gradients with float `atomicAdd` (`spiralcore_fbs.cu:151`).
-- **(b) Source drift.** The training path changed between the two run commits, `faecaaac5` and `e77a1f91`.
-- **(c) Cross-device or driver drift.** The binaries carry `compute_120` PTX, which the driver compiles at load time.
+- **(a) Same-device nondeterminism.** The FBS backward kernels sum gradients with float `atomicAdd`, at `spiralcore_fbs.cu:151` and `:178` and at `spiralcore_fbs_arms.cu:114` and `:141`.
+- **(b) Host-source drift.** The Rust training path changed between the two run commits, `faecaaac5` and `e77a1f91`. The kernels did not:
+  - no `.cu` file or `build.rs` changed;
+  - every NUL-delimited record holding a PTX `.entry` in the two archived binaries is byte-identical: 605,673 bytes, 771 entry points, sha256 `63036c9eb933eac982ccfac9413e6acd3cf6c2ac3194292b3e6f361b7172eb34`;
+  - both were built with `nvcc` 12.8 V12.8.93 (NVVM 20.0.0, `.target sm_120`, PTX 8.7).
+
+  So a difference in C2 below is host-side source, not the toolchain or the kernels.
+- **(c) Cross-device or driver drift.** The PTX is compiled by the driver at load time. claude-131's pod had driver 595.80; kimi-46's run recorded none.
 
 The step count is not a cause. The loop's learning rate is constant, and its batches are a document-order prefix (`spiralcore_fbs_sheet.rs:461-495`, `hamilton_sheet.rs:1871-1885`). The same holds for any other function of the total step count.
 
 ## 2. Arms and readings
 
 One pod and one RTX 5090. The arms run the two runs' **archived binaries, byte for byte**, with no rebuild:
-- **B_new:** kimi-46's `spiralcore-fbs-sheet`, sha256 `804101684d2ae4702169de4028f6a4ef8f44ba5a9fe0a532cce719aeb261d030`, from `results/kimi/d11-fbs-longer-dual-2026-10-26/attempt-2/bin/`, built at `e77a1f91`.
-- **B_old:** claude-131's, sha256 `a57a752d7dd3b49d210d18ef16c12f1a54bf5238ae8dc674a616e3512efdb9d8`, from `results/claude/d11-fbs-dual-train-2026-10-26/dual-bin/`, built at `faecaaac5`.
+- **B_new:** kimi-46's `spiralcore-fbs-sheet`, sha256 `804101684d2ae4702169de4028f6a4ef8f44ba5a9fe0a532cce719aeb261d030`, from `results/kimi/d11-fbs-longer-dual-2026-10-26/attempt-2/bin/`, built at `e77a1f91`. The pin is that run's own `attempt-2/bin/binary-SHA256SUMS`, and a laptop download re-hashed to it.
+- **B_old:** claude-131's, sha256 `a57a752d7dd3b49d210d18ef16c12f1a54bf5238ae8dc674a616e3512efdb9d8`, from `results/claude/d11-fbs-dual-train-2026-10-26/dual-bin/`, built at `faecaaac5`. The pin is that run's own `dual/binary-sha256.out`, and a laptop download re-hashed to it.
 
 Every arm runs the command both runs used, with the default 1,024 steps and seeds 1 and 2:
 
@@ -39,6 +44,8 @@ Every arm runs the command both runs used, with the default 1,024 steps and seed
 
 Two points **match** when every hit count is equal and every loss is within 1e-6. That is I-Prefix's own test, applied at all four points.
 
+For R1 against R2 there is also a bit-level reading: the sha256 of every saved model file. A C1 match at the readings, with different model bytes, still counts as (a).
+
 **Comparisons:**
 - **C1:** R1 against R2, the same binary twice on the same device.
 - **C2:** R1 against R3, the two binaries on the same device.
@@ -51,10 +58,11 @@ The outcome is decided in this order:
 
 | Result | Class | What it means and unlocks |
 |---|---|---|
-| C1 differs at any point | **(a) same-device nondeterminism** | Exact cross-run equality cannot be reached, so I-Prefix as written is an instrument fault. Next unit: a deterministic gradient reduction in the FBS backward, which changes no math, or a gate that compares within one run. C2 to C4 are reported, not interpreted. |
-| C1 matches; C2 differs | **(b) source drift** | The two commits train differently on one device. Next unit: localise the change between `faecaaac5` and `e77a1f91` in the training path. The 2,048-step dose is confounded by code, not by length. |
+| C1 differs at any point, or R1's and R2's model bytes differ | **(a) same-device nondeterminism** | Exact cross-run equality cannot be reached, so I-Prefix as written is an instrument fault. Next unit: a deterministic gradient reduction for the float atomics in the FBS backward, which changes no math, or a gate that compares within one run. C2 to C4 are reported, not interpreted. |
+| C1 matches; C2 differs | **(b) host-source drift** | The two commits' Rust training path trains differently on one device, with identical kernels. Next unit: localise the change between `faecaaac5` and `e77a1f91`. The 2,048-step dose is confounded by code, not by length. C3 and C4 are still read, because (c) can hold as well. |
 | C1 and C2 match; C3 or C4 differs | **(c) cross-device or driver drift** | The same binary on the same inputs gives a different result on another pod. Next unit: build SASS for `sm_120` ahead of time, or run every compared arm on one pod. |
-| All four match | **none on this pod** | This pod reproduces both archives. kimi-46's pod alone differed (device or driver). Next unit: a same-pod I-Prefix design. |
+
+"All four match" cannot happen. With R1 = R3, R3 matching claude-131's receipt and R1 matching kimi-46's, the two archived receipts would match each other, and they differ at step 256.
 
 The first differing step is recorded for every comparison. So is the largest loss difference, at every point.
 
@@ -62,7 +70,7 @@ The first differing step is recorded for every comparison. So is the largest los
 
 - **I-Bin:** both binaries match their pinned sha256 before they run.
 - **I-Inputs:** the five inputs match the claude-131 pins in §5.
-- **I-Device:** `nvidia-smi` records the GPU and driver, and `nvcc --version` the toolkit.
+- **I-Device:** `nvidia-smi` records the GPU and driver, and `nvcc --version` the toolkit. `env | grep -E '^(UOR_|CUDA_)'` is recorded before each arm, because both binaries read `UOR_CUDA_POISON_UNINIT` and `UOR_CUDA_PROFILE`.
 - **I-Complete:** each arm's `train.json` holds two seeds, each with points 0, 256, 512 and 1,024.
 - **I-Step0:** every arm's step-0 point matches both archived receipts' step-0 points. They matched in kimi-46. A step-0 mismatch means the inputs or binary are wrong, and stops the reading.
 
@@ -95,4 +103,14 @@ The test is deterministic, with no statistics. A single differing hit count, or 
 
 ## 8. Non-author TEST FITNESS review
 
-To be filled by a fresh-context reviewer given only this sheet and its sources.
+**Round 1 (at `fe8411975`): NOT FIT, with two required fixes, both made.**
+- **C2 conflated source with toolchain.** Now §1 records that the two binaries' kernel PTX is byte-identical and was built with the same `nvcc`, so row (b) reads as host-source drift.
+- **B_new's pin was unverified.** Now §2 names each pin's own archived record, and the laptop downloads were re-hashed.
+
+Its advisories are folded in too:
+- the four float-atomic sites;
+- a bit-level model-hash reading for C1;
+- the `UOR_`/`CUDA_` environment recorded per arm;
+- the impossible "all four match" row removed, and C3 and C4 still read under (b).
+
+Round 2: to be filled by a fresh-context reviewer given only this sheet and its sources.
