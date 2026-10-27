@@ -265,11 +265,20 @@ fn batch_loss(
 ) -> Result<Tensor> {
     let hidden = model.hidden(ids, batch, SHEET_CONTEXT)?;
     let idx = Tensor::from_vec(scored.to_vec(), scored.len(), model.device())?;
-    let query = hidden.index_select(&idx, 0)?;
+    query_loss(model, objective, &hidden.index_select(&idx, 0)?, targets)
+}
+
+/// `objective`'s loss for the predicted points `query`, one row per target.
+fn query_loss(
+    model: &StackModel,
+    objective: PointObjective,
+    query: &Tensor,
+    targets: &[u32],
+) -> Result<Tensor> {
     match objective {
-        PointObjective::Sheet => model.native_head_loss(&query, targets, hs::SHEET_RIVALS),
-        PointObjective::Voronoi => voronoi_loss(model, &query, targets, root_separation()?.0 / 2.0),
-        PointObjective::Nearest => nearest_loss(model, &query, targets),
+        PointObjective::Sheet => model.native_head_loss(query, targets, hs::SHEET_RIVALS),
+        PointObjective::Voronoi => voronoi_loss(model, query, targets, root_separation()?.0 / 2.0),
+        PointObjective::Nearest => nearest_loss(model, query, targets),
     }
 }
 
@@ -795,6 +804,35 @@ pub fn gradient_norms(
                 norm: squared.sqrt(),
             });
         }
+    }
+    // The shared table's gradient split by role: the output side alone, from the loss on the
+    // predicted points with the trunk cut off, and the input side, the rest.
+    let table_var = model
+        .variables()
+        .get("embedding.weight")
+        .ok_or_else(|| invalid("the model has no shared vector table"))?;
+    let output_side =
+        hs::with_gate_mode(HamiltonArm::HamiltonActive, config.seed, 0, false, || {
+            let hidden = model.hidden(&ids, config.batch, SHEET_CONTEXT)?;
+            let idx = Tensor::from_vec(scored.clone(), scored.len(), device)?;
+            let query = hidden.index_select(&idx, 0)?.detach();
+            Ok(query_loss(&model, config.objective, &query, &targets)?.backward()?)
+        })?;
+    if let (Some(full), Some(output)) = (
+        grads.get(table_var.as_tensor()),
+        output_side.get(table_var.as_tensor()),
+    ) {
+        let norm = |t: &Tensor| -> Result<f64> {
+            Ok(f64::from(t.sqr()?.sum_all()?.to_scalar::<f32>()?).sqrt())
+        };
+        norms.push(GradientNorm {
+            name: "embedding.weight, output side".to_owned(),
+            norm: norm(output)?,
+        });
+        norms.push(GradientNorm {
+            name: "embedding.weight, input side".to_owned(),
+            norm: norm(&full.sub(output)?)?,
+        });
     }
     norms.sort_by(|a, b| b.norm.total_cmp(&a.norm));
     norms.insert(
