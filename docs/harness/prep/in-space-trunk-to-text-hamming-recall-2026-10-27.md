@@ -2,7 +2,9 @@
 
 Lab: claude. Item: [in-space-trunk-to-text](../../roadmap/items/in-space-trunk-to-text.md). Order: [claude-146](../../loop/tasks/in-space-trunk-to-text/claude-146/ORDER.md). Code: branch `claude/hamming-read` at `39f5cc57af3ffb33aa524b8c02cc74b2fe0dcafc`. Every pod runs `recall.sh 39f5cc57af3ffb33aa524b8c02cc74b2fe0dcafc SEED`, which re-runs the CUDA tests on its own build first.
 
-TEST FITNESS: pending (one fresh non-author review covers the FIT and the D67 pre-run review: light gates, per the owner's 27 Oct direction on #2028)
+TEST FITNESS: FIT after two text fixes. One fresh non-author review covers the FIT and the D67 pre-run review (PASS after the fixes): light gates, per the owner's 27 Oct direction on #2028. The fixes put a number on "the near bucket works", and correct the power to two-arm standard deviations.
+
+The job script, `local/claude/hamming/recall.sh`, sha256 `c81ae656266a2b67eaa826f027718216892a8d694bc565c19abfc50ac553e1f2`, folds the three negative gates into its EXIT: a gate counts only with code 101 and its test named FAILED. Each arm's tokens/s is measured with three arms sharing one GPU.
 
 ## The question
 
@@ -39,8 +41,8 @@ Seeds 1 and 2, one pod each. Every read starts with a zero weight, so each arm's
 - **Recall passes** when, at both seeds, `R_b(hamming) ≥ 0.50` and `R_b(hamming) ≥ R_b(none) + 0.10`, for both far buckets: 33–96 and 97–180.
 - **Pass:** the Hamming read retrieves. Next is the language run, under claude-145's bars (sheet `in-space-trunk-to-text-content-2026-10-27`), with `--hamming-read 4` against no read.
 - **Fail:** no language run. Classify the fail:
-  - **Instrument:** the near bucket (2–8) also fails for every arm, or step-0 readings differ. The recall task or the decode is at fault.
-  - **Mechanism:** the near bucket works, but the far buckets do not reach the bar. The read does not retrieve at this configuration.
+  - **Instrument:** `R_2–8(none) < 0.50`, so the no-read arm cannot recall a value 1–7 tokens back, inside the trunk's own 8–12-token reach; or the step-0 readings differ. The recall task, training or decode is at fault.
+  - **Mechanism:** `R_2–8(none) ≥ 0.50`, so the near bucket works, but the Hamming arm misses the far-bucket bar. The read does not retrieve at this configuration.
 
   Either way, the REPORT records which.
 - **Seeds split:** if one seed passes and one fails, a third seed runs, and two of three decide.
@@ -81,7 +83,7 @@ No trained checkpoint. Every arm starts from `build_fbs_model(OneAtomActive, see
 
 ## Minimum test power
 
-512 held-out queries per bucket per arm. At a recall near 0.5, one standard deviation is about 0.022, so the 0.10 margin is about 4.5 standard deviations. Two seeds must agree.
+512 held-out queries per bucket per arm. At a recall near 0.5, one arm's standard deviation is about 0.022, so the difference between two arms has about 0.031, and the 0.10 margin is about 3.2 standard deviations. Two seeds must agree.
 
 ## Cost
 
