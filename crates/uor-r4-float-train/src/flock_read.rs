@@ -11,7 +11,7 @@
 //!    block, and the key is `h_s` rotated by another. Both are Hamilton products ([`hamilton_gate`]),
 //!    with no matmul.
 //! 2. **Choice.** Keep the `neighbours` earlier positions `s < t` whose keys are nearest the query in
-//!    mean L1. The choice is hard, exact and detached (repeated argmin), with no softmax. A position
+//!    mean L1. The choice is hard, exact and detached (repeated argmin), weighting nothing by score. A position
 //!    with fewer earlier positions keeps fewer.
 //! 3. **Payload.** The shared table's point for the token after each kept `s`, `e(x_{s+1})`, which is
 //!    a known input because `s + 1 ≤ t`: what followed a similar state.
