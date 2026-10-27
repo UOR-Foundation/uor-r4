@@ -1,15 +1,20 @@
+#[cfg(feature = "cuda")]
 use std::fs::OpenOptions;
+#[cfg(feature = "cuda")]
 use std::io::Write;
+#[cfg(feature = "cuda")]
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use uor_r4_object_store::m3_durable_memory::{verify_frozen_panel, PANEL_SHA256};
+#[cfg(feature = "cuda")]
 use uor_r4_object_store::m3_durable_memory::{
-    evaluate_m3_panel_with_scorer, sha256_hex, verify_frozen_panel, ModelStepScore, FT_DEV_MASK_SHA256,
-    FT_DEV_ROWS, FT_DEV_TOKENS_SHA256, M3_IDENTITY_SCHEMA, M3_REPORT_SCHEMA,
-    PANEL_MANIFEST_VERSION, PANEL_SHA256, SEED1_ARTIFACT_SHA256, SEED1_EXPECTED_DEV_ADMITTED,
-    SEED1_EXPECTED_DEV_TOP1, SEED1_EXPECTED_DEV_TOP8, SEED2_ARTIFACT_SHA256,
-    SEED2_EXPECTED_DEV_ADMITTED, SEED2_EXPECTED_DEV_TOP1, SEED2_EXPECTED_DEV_TOP8,
-    TOKENIZER_SHA256,
+    evaluate_m3_panel_with_scorer, sha256_hex, ModelStepScore, FT_DEV_MASK_SHA256, FT_DEV_ROWS,
+    FT_DEV_TOKENS_SHA256, M3_IDENTITY_SCHEMA, M3_REPORT_SCHEMA, PANEL_MANIFEST_VERSION,
+    SEED1_ARTIFACT_SHA256, SEED1_EXPECTED_DEV_ADMITTED, SEED1_EXPECTED_DEV_TOP1,
+    SEED1_EXPECTED_DEV_TOP8, SEED2_ARTIFACT_SHA256, SEED2_EXPECTED_DEV_ADMITTED,
+    SEED2_EXPECTED_DEV_TOP1, SEED2_EXPECTED_DEV_TOP8, TOKENIZER_SHA256,
 };
+#[cfg(feature = "cuda")]
 use uor_r4_tokenizer::ByteBpeTokenizer;
 
 fn main() -> ExitCode {
