@@ -278,22 +278,34 @@ impl HammingRead {
             Ok(p.add(&bits.sub(p)?.detach())?)
         };
         let (query, key) = (code(&query)?, code(&key)?);
-        let starts: Vec<u32> = (0..rows).map(|r| ((r / time) * time) as u32).collect();
-        let starts = Tensor::from_vec(starts, (rows, 1), device)?;
+        let zero = Tensor::new(&[0u32], device)?;
         let one = Tensor::new(&[1u32], device)?;
         let margins = self.margin.as_tensor();
+        // Each candidate weighs `max(0, m − d)` out of a head's most bits times the kept count,
+        // so the weights of a row sum to at most `m / head_width ≤ 1`: a bounded mean, never a
+        // flood of the residual.
+        let scale = 1.0 / (head_width * HAMMING_KEPT) as f64;
         let mut heads = Vec::with_capacity(self.heads);
         for h in 0..self.heads {
             let q = query.narrow(1, h * head_width, head_width)?.contiguous()?;
             let k = key.narrow(1, h * head_width, head_width)?.contiguous()?;
             let (picks, real) = choose_sorted(&q, &k, batch, time, HAMMING_KEPT)?;
-            // A pick that is not real points at its window's start, whose successor is still
-            // inside the window, and carries weight 0.
-            let picks = real.where_cond(&picks, &starts.broadcast_as(picks.shape())?)?;
+            // A pick that is not real points at its window's first position, whose successor is
+            // still inside the window, and carries weight 0.
+            let picks = real.where_cond(&picks, &zero.broadcast_as(picks.shape())?)?;
             let kept = picks.dim(1)?;
-            let flat = picks.flatten_all()?;
+            // Gather inside each window, `(batch, time · kept, head_width)`: the backward then
+            // spreads over windows and coordinates instead of looping over every pick.
+            let index = |offset: &Tensor| -> Result<Tensor> {
+                Ok(picks
+                    .broadcast_add(offset)?
+                    .reshape((batch, time * kept, 1))?
+                    .broadcast_as((batch, time * kept, head_width))?
+                    .contiguous()?)
+            };
             let kept_keys = k
-                .index_select(&flat, 0)?
+                .reshape((batch, time, head_width))?
+                .gather(&index(&zero)?, 1)?
                 .reshape((rows, kept, head_width))?;
             let bits = hamming_bits(&q.unsqueeze(1)?, &kept_keys)?;
             let weights = margins
@@ -301,17 +313,14 @@ impl HammingRead {
                 .reshape((1, 1))?
                 .broadcast_sub(&bits)?
                 .relu()?
-                .affine(1.0 / HAMMING_KEPT as f64, 0.0)?
+                .affine(scale, 0.0)?
                 .mul(&real.to_dtype(DType::F32)?)?;
-            let sources = if h % 2 == 1 {
-                flat.broadcast_add(&one)?
-            } else {
-                flat
-            };
+            let offset = if h % 2 == 1 { &one } else { &zero };
             let payload = value
                 .narrow(1, h * head_width, head_width)?
                 .contiguous()?
-                .index_select(&sources, 0)?
+                .reshape((batch, time, head_width))?
+                .gather(&index(offset)?, 1)?
                 .reshape((rows, kept, head_width))?;
             heads.push(payload.broadcast_mul(&weights.unsqueeze(2)?)?.sum(1)?);
         }
@@ -325,7 +334,8 @@ impl HammingRead {
 const FAR: f32 = 1.0e30;
 
 /// The `neighbours` earlier positions nearest each row of `query` in mean L1, for all `batch`
-/// windows of `time` at once, as global row indices `(batch * time, kept)`, and which are real.
+/// windows of `time` at once, as positions inside the row's own window `(batch * time, kept)`,
+/// and which are real.
 /// One sort per call, where claude-144's choice (`flock_read::choose_nearest`) takes `kept` argmin
 /// rounds per window; the same nearest set, hard and detached. Ties may come out in another order.
 pub(crate) fn choose_sorted(
@@ -353,9 +363,7 @@ pub(crate) fn choose_sorted(
         .narrow(1, 0, kept)?
         .contiguous()?;
     let real = masked.gather(&order, 1)?.lt(FAR / 2.0)?;
-    let starts: Vec<u32> = (0..rows).map(|r| ((r / time) * time) as u32).collect();
-    let starts = Tensor::from_vec(starts, (rows, 1), device)?;
-    Ok((order.broadcast_add(&starts)?, real))
+    Ok((order, real))
 }
 
 /// The Hamming distance between ±1 codes, `(a − b)² / 4` summed over the last dimension: the
@@ -388,7 +396,13 @@ mod tests {
             .map(|i| (((i * 2_654_435_761) % 10_007) as f32) / 997.0)
             .collect();
         let points = Tensor::from_vec(values, (batch * time, width), &device).unwrap();
-        let (fast, fast_real) = choose_sorted(&points, &points, batch, time, 4).unwrap();
+        let (local, fast_real) = choose_sorted(&points, &points, batch, time, 4).unwrap();
+        // The sorted choice gives positions inside each window; claude-144's gives global rows.
+        let starts: Vec<u32> = (0..batch * time)
+            .map(|r| ((r / time) * time) as u32)
+            .collect();
+        let starts = Tensor::from_vec(starts, (batch * time, 1), &device).unwrap();
+        let fast = local.broadcast_add(&starts).unwrap();
         let (slow, slow_real) =
             crate::flock_read::choose_nearest(&points, &points, batch, time, 4).unwrap();
         let sets = |picks: Tensor, real: Tensor| -> Vec<Vec<u32>> {
