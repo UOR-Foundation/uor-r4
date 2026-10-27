@@ -354,7 +354,8 @@ mod tests {
         let real = real.to_vec2::<u8>().unwrap();
         // t = 0 has no earlier position; t = 1 has one.
         assert_eq!(real[0], vec![0, 0]);
-        assert_eq!((picks[1][0], real[1]), (0, vec![1, 0]));
+        assert_eq!(picks[1][0], 0);
+        assert_eq!(real[1], vec![1, 0]);
         // t = 4 (value 2): nearest earlier are 2 (value 1) and 0 (value 0), never 3 (value 9) or 4.
         assert_eq!(picks[4], vec![2, 0]);
         assert_eq!(real[4], vec![1, 1]);
