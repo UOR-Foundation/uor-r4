@@ -104,6 +104,11 @@ impl FlockRead {
         self.neighbours
     }
 
+    /// The mean absolute value of the per-coordinate weight, as a scalar tensor.
+    pub fn weight_mean_abs(&self) -> Result<Tensor> {
+        Ok(self.weight.as_tensor().abs()?.mean_all()?)
+    }
+
     /// The learned parameters, by name.
     pub fn variables(&self) -> [(&'static str, &Var); 3] {
         [

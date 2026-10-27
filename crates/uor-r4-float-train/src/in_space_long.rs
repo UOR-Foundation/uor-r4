@@ -117,6 +117,9 @@ pub struct Inspection {
     pub query_spread: f64,
     pub query_mean_abs: f64,
     pub table_mean_abs: f64,
+    /// The Flock read's per-coordinate weight, mean of its absolute values, when the checkpoint
+    /// has a read.
+    pub flock_weight_mean_abs: Option<f64>,
 }
 
 /// One fixed DEV prompt with the model's greedy reply and the true reply, as text.
@@ -831,6 +834,10 @@ pub fn inspect_run(
                     .abs()?
                     .mean_all()?,
             )?,
+            flock_weight_mean_abs: match crate::flock_read::flock_read() {
+                Some(read) => Some(scalar(read.weight_mean_abs()?)?),
+                None => None,
+            },
         });
     }
     Ok(readings)
