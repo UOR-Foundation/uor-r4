@@ -40,7 +40,14 @@ claude-145's decision table, with the twin now the read without the spin. `O` is
 | **Openings pass** | **A.** The spin lets openings use the prompt. | **B.** Openings improve from nearer context. |
 | **Openings fail** | **C.** The spin reaches farther, but openings do not follow. | **D.** The spin does not help at this configuration. |
 
-- **Flag F**, reported beside the cell: `T < T_twin − 500`, meaning the spin costs fit.
+What each cell decides:
+
+- **A** makes the spin the read's default (`--type-spin` on in every later language run).
+  - If the reading checkpoint also has `T ≥ 7,002` (the M1 count table), it meets the item's done-when 1 and 2: every openings bar is at least `197` and every reach bar at least `0.05`. The item's next unit is then done-when 3 and the serving change to whole-table nearest. U3, the integer Hamming read, then carries the spin.
+- **B** keeps the spin on. The next unit is reach: why the spin's gain is near, read at distances past 16.
+- **C** keeps the spin on. The next unit is the type heads' payload (what they bring back, `v_s`), not position.
+- **D** closes this configuration (the spin as built, at these settings), never the mechanism. The read's default stays without the spin. The next unit is a decision review of what the type heads lack, before any other position form.
+- **Flag F**, reported beside the cell: `T < T_twin − 500`, meaning the spin costs fit. In A, B or C with F set, the next unit first restores fit with the spin on, and the default does not change until it does.
 - Seeds 1 and 2 must land in the same cell for the reading to count. If they split, seed 3 runs and the cell two of three share is the reading. If all three differ, there is no cell.
 - A missing number gives no cell: that step is rerun, never read as a fail.
 
@@ -51,9 +58,10 @@ claude-145's decision table, with the twin now the read without the spin. `O` is
 - **I-1:** the crate's CUDA library tests pass on each pod's build, including the spin's five tests. Two negative gates each set one rule aside and must make their test fail (code 101), each checking first that its patch changed the file:
   - the scan's order reversed (`earlier ⊗ later`): `the_frames_are_the_running_product_of_the_steps`;
   - the inverse dropped (the conjugate's signs all `+1`): `the_relative_frame_ignores_every_step_at_or_before_the_earlier_position`.
-- **I-2:** each arm's step-0 `dev_nearest` equals its twin's (every read starts with a zero weight, so the trunk is the same at step 0): seed 1 nearest 2, openings 0, 730 picks; seed 2 nearest 5, openings 3, 681 picks; seed 3 nearest 0, openings 0, 735 picks.
-- **I-3:** the read's weight moves off 0 (`--inspect`'s `hamming_weight_mean_abs` at step 16,384).
-- **I-4:** no non-finite loss.
+- **I-2:** each arm's step-0 `dev_nearest` equals its twin's (every read starts with a zero weight, so the trunk is the same at step 0): seed 1 nearest 2, openings 0, 730 picks; seed 2 nearest 5, openings 3, 681 picks; seed 3 nearest 0, openings 0, 735 picks. The job checks it at the probe, before the arm, and again on the arm.
+- **I-3:** the read's weight moves off 0: `--inspect`'s `hamming_weight_mean_abs` at step 16,384 is above 0. The job checks it.
+- **I-4:** no non-finite loss: every `train_loss_mean` and `dev_loss` in the arm's progress is a finite number. The job checks it.
+- A failed I-2, I-3 or I-4 is an instrument fault: the arm gives no cell, and is repaired and rerun.
 
 ## Probe ladder
 
