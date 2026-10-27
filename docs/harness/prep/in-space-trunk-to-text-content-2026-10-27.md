@@ -1,6 +1,6 @@
 # Prep sheet: a content-keyed read inside the in-space trunk, against no read (in-space-trunk-to-text, claude-145, 27 Oct 2026)
 
-Lab: claude. Item: [in-space-trunk-to-text](../../roadmap/items/in-space-trunk-to-text.md). Order: [claude-145](../../loop/tasks/in-space-trunk-to-text/claude-145/ORDER.md). Code: branch `claude/content-read` at `CODE_SHA`. The run's first step re-runs the CUDA tests on its own build.
+Lab: claude. Item: [in-space-trunk-to-text](../../roadmap/items/in-space-trunk-to-text.md). Order: [claude-145](../../loop/tasks/in-space-trunk-to-text/claude-145/ORDER.md). Code: branch `claude/content-read` at `64daf83806aab85be8afe0f045d65003f775c700`, the probe ladder's build. The run's first step re-runs the CUDA tests on its own build.
 
 TEST FITNESS: pending (one fresh non-author review covers the FIT and the D67 pre-run review: light gates, per the owner's 27 Oct direction on #2028)
 
@@ -27,6 +27,10 @@ Common to every arm, unchanged from claude-144:
 | `none-s1` | none | 1 | A |
 | `content-s2` | `--content-read 7` | 2 | B |
 | `none-s2` | none | 2 | B |
+| `content-s3` | `--content-read 7` | 3 | C |
+| `none-s3` | none | 3 | C |
+
+Seed 3 runs at the same time as seeds 1 and 2, but it is read only if they split (see the bar). claude-144's twins differed by 71 openings between seeds, so a split is likely enough that running it serially would cost a 45-minute round.
 
 **The read** (`flock_read_content.rs`) runs after layer 3 of 6:
 - **Key:** each earlier position's own token point. **Query:** the residual point. Each is rotated per 4-lane block by a learned unit quaternion and put on S³.
@@ -54,7 +58,7 @@ The two tests:
 | **Openings fail** | **C.** The read reaches far, but its payload does not help openings. Unlocks a unit on the payload or the layer. | **D.** The read does not help. If I-3's weight stayed near 0, its start is the cause; otherwise the key or the layer is. |
 
 - **Flag F**, reported beside the cell: `T_read < T_none − 500`, meaning the read costs fit.
-- Both seeds must land in the same cell for the reading to count. If they split, a third seed (3) runs on both arms, and the cell two of the three share is the reading.
+- Seeds 1 and 2 must land in the same cell for the reading to count. If they split, the cell that two of the three seeds share is the reading. If all three differ, there is no cell, and the REPORT says so.
 - A missing number gives no cell: that step is rerun, never read as a fail.
 
 ## Instrument checks
@@ -69,9 +73,28 @@ The two tests:
 - **I-4:** no non-finite loss; the runner stops on one.
 - **I-5:** the premise count's no-key row equals DEV's commonest-opening count, `161` (done: it does).
 
-## Probe ladder
+## Probe ladder (done before this sheet's review, not a reading)
 
-PROBE_LADDER
+On `vast-57965163` at `64daf838`, binary sha256 `288b63d1…`. Stored with its SHA256SUMS in `caseyallard/uor-r4-store:results/claude/content-read-2026-10-27/probe-ladder/`.
+
+- **(a) The mechanism does its own job.**
+  - CUDA library tests: `101 passed; 0 failed; 5 ignored`.
+  - Flipping the credit factor's sign fails the credit test (exit `101`).
+  - Detaching the payload fails it too (exit `101`, row 0's gradient reads `[0, 0, 0, 0]`). The first payload patch missed a line rustfmt had split; the job log says "payload patch NOT applied", and it was rerun.
+- **(b) Throughput.** With the read alone, 256 steps ran at `40,685` context tokens/s. Side by side, 4,096 steps took `545` s with the read and `501` s without, about 9% more. The run's 16,384 steps project to about 36 minutes per arm.
+- **(c) Read against no read**, seed 1, lr 1e-3 → 0 over 4,096 steps:
+
+  | Step | Openings, read | Openings, none | Nearest, read | Nearest, none | Read's mean `|w|` |
+  |---|---|---|---|---|---|
+  | 0 | `0` | `0` | `2` | `2` | `0` |
+  | 1,024 | `161` | `174` | `4,594` | `4,381` | `0.092` |
+  | 2,048 | `181` | `161` | `6,256` | `6,133` | `0.170` |
+  | 3,072 | `203` | `161` | `7,054` | `7,008` | `0.183` |
+  | 4,096 | `204` | `161` | `7,333` | `7,175` | `0.179` |
+
+  `R16` at step 4,096 is `0.0346 / 1.924 = 0.0180` with the read and `0.0188 / 1.969 = 0.0095` without.
+
+The read trains without a stall, its weight moves, and the step-0 readings match. The probe is too short to read by the bars above; the run decides.
 
 ## Data split (pinned in `hamilton_sheet.rs`, checked at load)
 
@@ -98,7 +121,9 @@ Two seeds per arm, and they must agree; otherwise a third. claude-144's no-read 
 
 ## Cost
 
-COST
+- **Pods:** three RTX 5090 pods at `$0.563/h` each, two arms per pod: `$1.69/h` of the `$8/h` cap.
+- **Time and total:** claude-144's arms took 35–37 minutes side by side at these settings. With build and readings, that is about 45 minutes per pod, about `$1.30` in all.
+- The probe ladder's throughput (below) checks that the read does not change this.
 
 ## Stop rule
 
