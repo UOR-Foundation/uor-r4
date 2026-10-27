@@ -22,7 +22,7 @@ At a reply opening, the right first word depends on the prompt's first words.
 | Starling read (600-cell, kept-7) | The source entered the kept set 73% of the time at peak, but recall stayed at chance | `docs/labs/attention-state-2026-10-18/README.md:19` |
 | Pointer arms | 0.28–0.44, about what an untrained "copy the latest" rule gets (0.36) | [pointer-key](../../../../mechanisms/pointer-key.md) |
 | Today's three trunk reads: the Flock read keyed on state (claude-144), the content read keyed on the position's own token (claude-145), and Hamming attention keyed on state (claude-146) | None moved openings. Hamming attention, after its scale fix, matched its twins on next-word accuracy but sat at the 161 floor through step 8,192 | claude-144, claude-145 REPORTs; this unit |
-| Today's recall probe (seed 2, 4,096 steps) | **Every arm at chance in every bucket, including the no-read arm on values 1–7 tokens back** | `caseyallard/uor-r4-store:results/claude/hamming-read-2026-10-27/` |
+| Today's first recall probe, on the state-keyed form `9d4ca83b` (seed 2, 4,096 steps; the later induction-keyed form's results are in the [REPORT](REPORT.md)) | **Every arm at chance in every bucket, including the no-read arm on values 1–7 tokens back** (key distance 2–8; the value sits one after the key) | `caseyallard/uor-r4-store:results/claude/hamming-read-2026-10-27/` |
 
 ### Outside (each checked against the paper's page)
 
