@@ -32,12 +32,17 @@ Result (2026-10-27T09:40Z, `origin/main` at `f3a6f0f72`):
 
 ## Files in scope
 
-- `crates/uor-r4-float-train/src/in_space_long.rs` (new), `src/bin/train-in-space.rs` (new), `src/lib.rs`, `Cargo.toml`, `Cargo.lock`
-- `crates/uor-r4-float-train/src/geometric_stack_native.rs` (the two switches), `src/secant_descent.rs` (a capture helper for rate entries)
+- `crates/uor-r4-float-train/src/in_space_long.rs` (new)
+- `crates/uor-r4-float-train/src/bin/train-in-space.rs` (new)
+- `crates/uor-r4-float-train/src/lib.rs`
+- `crates/uor-r4-float-train/Cargo.toml`
+- `Cargo.lock`
+- `crates/uor-r4-float-train/src/geometric_stack_native.rs` (the rate-score switches)
+- `crates/uor-r4-float-train/src/secant_descent.rs` (a capture helper for rate entries)
 - `docs/roadmap/items/in-space-trunk-to-text.md` (new), `docs/roadmap/README.md` (rendered)
 - `docs/harness/prep/in-space-trunk-to-text-2026-10-27.md`
 - `docs/research/notebook/float-training.md` (rows)
-- this task folder
+- `docs/loop/tasks/in-space-trunk-to-text/**` (this task folder)
 
 ## Done when
 

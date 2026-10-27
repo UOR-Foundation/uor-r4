@@ -1,12 +1,12 @@
 //! `train-in-space --data-root DIR --out DIR [--objective sheet|voronoi|nearest] [--steps N]
 //! [--batch B] [--eval-every K] [--seed S] [--lr X] [--lr-end X] [--decay-mult X]
-//! [--retain-rates 0|1] [--fold-scores 0|1] [--samples N] [--reply-tokens N]`
+//! [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--samples N] [--reply-tokens N]`
 //!
-//! `train-in-space --data-root DIR --inspect RUN [--retain-rates 0|1] [--fold-scores 0|1] [--seed S]`
+//! `train-in-space --data-root DIR --inspect RUN [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--seed S]`
 //!
-//! `train-in-space --data-root DIR --reach CHECKPOINT [--retain-rates 0|1] [--fold-scores 0|1] [--seed S]`
+//! `train-in-space --data-root DIR --reach CHECKPOINT [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--seed S]`
 //!
-//! `train-in-space --data-root DIR --grad-norms 1 [--objective ...] [--retain-rates 0|1] [--fold-scores 0|1] [--batch B] [--seed S]`
+//! `train-in-space --data-root DIR --grad-norms 1 [--objective ...] [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--batch B] [--seed S]`
 //!
 //! Long training of the SpiralCore/FBS geometric trunk in its own space, with text at every
 //! checkpoint (`uor_r4_float_train::in_space_long`). GPU only. `--data-root` holds `tokenizer.json`,
@@ -41,6 +41,7 @@ fn main() -> Result<()> {
         decay_mult: 20.0,
         retain_rates: false,
         fold_scores: false,
+        reflect_floor: false,
         samples: 6,
         reply_tokens: 48,
     };
@@ -79,6 +80,7 @@ fn main() -> Result<()> {
             "--reply-tokens" => config.reply_tokens = number(&value)?,
             "--retain-rates" => config.retain_rates = number(&value)? == 1,
             "--fold-scores" => config.fold_scores = number(&value)? == 1,
+            "--reflect-floor" => config.reflect_floor = number(&value)? == 1,
             "--lr" | "--lr-end" | "--decay-mult" => {
                 let v: f64 = value
                     .parse()
@@ -114,6 +116,7 @@ fn main() -> Result<()> {
             &checkpoint,
             config.retain_rates,
             config.fold_scores,
+            config.reflect_floor,
             config.seed,
             &device,
         )?;
@@ -136,6 +139,7 @@ fn main() -> Result<()> {
             &run,
             config.retain_rates,
             config.fold_scores,
+            config.reflect_floor,
             config.seed,
             &device,
         )? {

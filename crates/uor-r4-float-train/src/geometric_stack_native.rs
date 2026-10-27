@@ -53,6 +53,21 @@ pub fn folded_scores() -> bool {
     FOLDED_SCORES.load(std::sync::atomic::Ordering::SeqCst)
 }
 
+/// A reflecting floor and a clamped ceiling for the rate score: `min(|x|, 1)`. Under the retention
+/// reading the floor is the shortest memory, so a lane pushed there reflects back with its gradient;
+/// the ceiling stays clamped, as by default. Off by default; the fold, when on, takes precedence.
+static REFLECTED_FLOOR: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Turn the reflecting floor on or off for every recurrence in this process.
+pub fn set_reflected_floor(on: bool) {
+    REFLECTED_FLOOR.store(on, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Whether the rate score has a reflecting floor (see [`set_reflected_floor`]).
+pub fn reflected_floor() -> bool {
+    REFLECTED_FLOOR.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 /// `x` folded into `[0, 1]` by reflections: `1 - |1 - (x mod 2)|`. The period count is taken from a
 /// detached copy, so the gradient is `+1` or `-1` and never zero.
 pub fn fold_unit(x: &Tensor) -> Result<Tensor> {
@@ -1302,6 +1317,8 @@ impl StackModel {
             .broadcast_add(&p.layer(layer, "rec.decay")?.reshape((1, 1, lanes))?)?;
         let score = if folded_scores() {
             fold_unit(&raw_score)?
+        } else if reflected_floor() {
+            raw_score.abs()?.clamp(0., 1.)?
         } else {
             raw_score.clamp(0., 1.)?
         };

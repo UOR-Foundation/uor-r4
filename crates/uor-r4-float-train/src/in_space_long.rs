@@ -64,6 +64,8 @@ pub struct LongConfig {
     pub retain_rates: bool,
     /// Fold the recurrence's rate score into [0, 1] (`geometric_stack::set_folded_scores`).
     pub fold_scores: bool,
+    /// A reflecting floor and clamped ceiling for the rate score (`geometric_stack::set_reflected_floor`).
+    pub reflect_floor: bool,
     pub samples: usize,
     pub reply_tokens: usize,
 }
@@ -128,6 +130,7 @@ impl Drop for ArmGuard {
         arms::set_fbs_arm(None);
         crate::geometric_stack::set_retention_rates(false);
         crate::geometric_stack::set_folded_scores(false);
+        crate::geometric_stack::set_reflected_floor(false);
     }
 }
 
@@ -534,6 +537,7 @@ pub fn context_reach(
     checkpoint: &Path,
     retain_rates: bool,
     fold_scores: bool,
+    reflect_floor: bool,
     seed: u64,
     device: &Device,
 ) -> Result<(Vec<Reach>, Vec<RateBins>)> {
@@ -541,6 +545,7 @@ pub fn context_reach(
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
     crate::geometric_stack::set_retention_rates(retain_rates);
     crate::geometric_stack::set_folded_scores(fold_scores);
+    crate::geometric_stack::set_reflected_floor(reflect_floor);
     let _guard = ArmGuard;
     let model = StackModel::load(checkpoint, device)?;
     let firsts: Vec<(&CausalWindow, usize)> = dev_windows
@@ -635,12 +640,13 @@ pub fn context_reach(
 }
 
 /// Read every checkpoint a `run_long` run saved under `run/models`, in step order, as an
-/// [`Inspection`]. `retain_rates` and `fold_scores` must match the run's.
+/// [`Inspection`]. `retain_rates`, `fold_scores` and `reflect_floor` must match the run's.
 pub fn inspect_run(
     data_root: &Path,
     run: &Path,
     retain_rates: bool,
     fold_scores: bool,
+    reflect_floor: bool,
     seed: u64,
     device: &Device,
 ) -> Result<Vec<Inspection>> {
@@ -648,6 +654,7 @@ pub fn inspect_run(
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
     crate::geometric_stack::set_retention_rates(retain_rates);
     crate::geometric_stack::set_folded_scores(fold_scores);
+    crate::geometric_stack::set_reflected_floor(reflect_floor);
     let _guard = ArmGuard;
     let mut dirs: Vec<PathBuf> = fs::read_dir(run.join("models"))?
         .filter_map(|entry| entry.ok().map(|e| e.path()))
@@ -758,6 +765,7 @@ pub fn gradient_norms(
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
     crate::geometric_stack::set_retention_rates(config.retain_rates);
     crate::geometric_stack::set_folded_scores(config.fold_scores);
+    crate::geometric_stack::set_reflected_floor(config.reflect_floor);
     let _guard = ArmGuard;
     let model = build_fbs_model(FbsArm::OneAtomActive, config.seed, device)?;
     let windows: Vec<&CausalWindow> = usable.iter().take(config.batch).collect();
@@ -845,6 +853,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
     crate::geometric_stack::set_retention_rates(config.retain_rates);
     crate::geometric_stack::set_folded_scores(config.fold_scores);
+    crate::geometric_stack::set_reflected_floor(config.reflect_floor);
     let _guard = ArmGuard;
     let model = build_fbs_model(FbsArm::OneAtomActive, config.seed, device)?;
     let mut opt_main = StackAdamW::new(&model, hs::SHEET_WEIGHT_DECAY, hs::SHEET_CLIP)?;
