@@ -23,26 +23,33 @@ The control arms ran from commit `047af46288fdd93c6ad2346d41f71e00a20bd5eb`, who
 
 - `nearest.hits`: whole-table nearest top-1.
 - `nearest.opening_hits` over `opening_rows` (1,226 rows whose previous corpus token is not a response token), against `commonest_opening_rows` (161: always naming the commonest opening token).
-- `--reach` at step 16,384: the opening point's mean shift when the token `k` places back is replaced by BOS, `k ∈ {0,…,6,8,10,12,16,24,32}`; and each layer's rate-entry histogram.
+- `--reach` at steps 0 and 16,384: the opening point's mean shift when the token `k` places back is replaced by BOS, `k ∈ {0,…,6,8,10,12,16,24,32}`; and each layer's rate-entry histogram.
 - Greedy replies to six fixed DEV prompts at every checkpoint (`samples.md`).
-- Training context tokens per second.
+- Training context tokens per second, reported only: the clamped twins share their GPU three ways and the fold arms two ways, so speeds are not compared between them.
 
-## Decision table (fold arm against its clamped twin, same rate)
+**The clamped twins are re-read with the same binary as the fold arms.** Their own binary (047af46) predates the opening count and `--reach`. After long3 ends, a job on `vast-57919115` builds this sheet's commit and runs `--inspect` on `long3/n-nearest` and `long3/n-nearest-1e-3` (every checkpoint) and `--reach --fold-scores 0` on each twin's `models/step-000000` and `models/step-016384`. Every number in the table below for a twin comes from that re-read.
 
-| Outcome | Reading | What it unlocks |
+## Decision table (fold arm against its clamped twin, same rate, both at step 16,384)
+
+Definitions, per arm: **openings** `O` = `nearest.opening_hits` at step 16,384. **Relative reach** `R16` = `mean_shift(k = 16) / mean_shift(k = 0)`, from the same `--reach`, so a larger hidden scale cannot pass it. The clamped trunk of 27 Oct read `R16 = 0.018 / 5.97 = 0.003`.
+
+- **Openings pass** when `O_fold ≥ max(197, O_twin + 36)`. Here 197 = 161 + 36, and 36 is three binomial standard deviations at the commonest-token rate, `√(1,226 · 0.131 · 0.869) = 11.8`.
+- **Reach pass** when `R16_fold ≥ max(0.05, 2 · R16_twin)`, so a token 16 places back must move the opening point by at least 5% of what its own last token does, and twice the twin's share.
+
+| | Reach pass | Reach fails |
 |---|---|---|
-| Fold openings > 161 and reach at `k = 16` at least 5 × the twin's | Dead clamp lanes were the cause | Longer runs and the reply text on the fold; item done-when (1)–(2) checked |
-| Fold reach longer, openings still 161 | Memory survives, the readout ignores it | The next unit looks at what reaches the opening, not memory length |
-| Fold reach no longer than the twin's | The clamp was not the cause | The next unit tests the gradient's preference for short memory |
-| Fold whole-panel top-1 more than 500 below its twin | The fold costs fit | Keep the clamp; study the fold's boundary attractors |
+| **Openings pass** | **A.** Dead clamp lanes were the cause. Unlocks longer fold runs and the reply text; check item done-when (1)–(2). | **B.** Openings improved from context nearer than 16 tokens. Unlocks a unit that reads which prompt types improved, before any longer-memory work. |
+| **Openings fail** | **C.** Memory survives but the readout ignores it. Unlocks a unit on what reaches the opening point, not on memory length. | **D.** The clamp was not the cause. Unlocks a unit on the gradient's preference for short memory. |
 
-Both rates must agree for a reading to count; a split is inconclusive.
+The four cells are exclusive and cover every outcome. **Flag F**, reported beside the cell and not instead of it: the fold's whole-panel nearest top-1 at step 16,384 is more than 500 below its twin's, so the fold costs fit and its boundary attractors need study before the fold is kept.
+
+Both rates must land in the same cell for the reading to count; a split is inconclusive.
 
 ## Instrument checks
 
 - I-1: the fold's CUDA unit test (`the_fold_reflects_into_the_unit_interval_and_keeps_its_gradient`) passes on the run's build: values `[0.5, 0.3, 0, 0.4, 1, 0.8, 0.7, 1]` for inputs `[-2.5, -0.3, 0, 0.4, 1, 1.2, 2.7, 3]`, slopes ±1.
 - I-2: the clamped arms reproduce the earlier runs' step-0 DEV reading (`nearest 2`, dev loss `2.81055`), so build and data match. The fold arms differ at step 0 only through scores already outside `[0, 1]`.
-- I-3: on the fold arms' step-0 checkpoint, layer 1's rate histogram has less than 33% of positions at entry 0 (the clamp's step-0 share, `64,236 / 196,608`), since folded scores no longer pile up at the ends.
+- I-3: on the fold arms' step-0 checkpoint, the rate histogram of `RateBins.layer = 1` (layers count from 0) has less than 33% of `all_positions` at entry 0. The clamp's step-0 share in that layer was `64,236 / 196,608`. Folded scores no longer pile up at the ends.
 - I-4: no non-finite loss (the runner stops on one).
 
 ## Data (pinned in `hamilton_sheet.rs`, checked at load)
@@ -51,4 +58,4 @@ Both rates must agree for a reading to count; a split is inconclusive.
 
 ## Cost and stop rule
 
-Two arms side by side on one RTX 5090 at `$0.563/h`: about 0.23 s per step each, about 65 minutes, about `$0.70`. Pods together `$1.13/h` of the `$8/h` cap. Stop on a non-finite loss or a crash; a healthy run is never cut short. Results go to `caseyallard/uor-r4-store:results/claude/train-in-space-2026-10-27/long4` before the pod comes down.
+Two arms side by side on one RTX 5090 at `$0.563/h`: about 0.23 s per step each, about 65 minutes, about `$0.70`. Pods together `$1.13/h` of the `$8/h` cap. Stop on a non-finite loss or a crash; a healthy run is never cut short. Results go to `caseyallard/uor-r4-store:results/claude/train-in-space-2026-10-27/long4` (and the twins' re-read to `long3`) by `uor-store put` from the pod, read back with `uor-store ls`, before either pod comes down.
