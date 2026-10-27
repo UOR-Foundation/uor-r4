@@ -55,7 +55,8 @@ pub struct Checkpoint {
     pub dev_scored_rows: usize,
     pub dev_loss: f64,
     pub train_seconds: f64,
-    pub train_tokens_per_second: f64,
+    /// Every context position of every trained window per second (not scored targets).
+    pub train_context_tokens_per_second: f64,
 }
 
 /// One fixed DEV prompt with the model's greedy reply and the true reply, as text.
@@ -269,7 +270,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             dev_scored_rows: dev.scored_rows,
             dev_loss,
             train_seconds,
-            train_tokens_per_second: (step * config.batch * SHEET_CONTEXT) as f64
+            train_context_tokens_per_second: (step * config.batch * SHEET_CONTEXT) as f64
                 / train_seconds.max(1e-9),
         };
         append_line(&progress, &serde_json::to_string(&point)?)?;
@@ -296,11 +297,16 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             let off = window.scored_offsets[0];
             let prompt = &window.input_ids[..=off];
             let reply = greedy_reply(model, prompt, config.reply_tokens, config.seed)?;
+            // The true reply: the scored targets while their offsets stay contiguous from the
+            // prompt's end, so a mask gap or the window's end never splices text together.
             let reference: Vec<u32> = window
-                .scored_targets
+                .scored_offsets
                 .iter()
+                .zip(&window.scored_targets)
+                .enumerate()
+                .take_while(|&(i, (&o, _))| o == off + i)
                 .take(config.reply_tokens)
-                .copied()
+                .map(|(_, (_, &t))| t)
                 .collect();
             let sample = Sample {
                 step,
