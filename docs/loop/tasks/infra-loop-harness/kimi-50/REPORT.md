@@ -10,22 +10,22 @@ References #2904 and #3317. Generated render only; no item completion.
 
 ## What changed
 
-STATE, HANDOFF, LESSONS and the AGENTS lesson block are regenerated at `5709a65072650fccacbd807858fb246eeb46f0b6`. `roadmap render` confirms the current README; no item, bar, threshold, result or code changed. This ORDER/REPORT is the only non-generated addition.
+STATE, HANDOFF, LESSONS and the AGENTS lesson block are regenerated at `7746eec32a854394c2cd03c6edd4efa04f277c89`. `roadmap render` confirms the current README; no item, bar, threshold, result or code changed. This ORDER/REPORT is the only non-generated addition.
 
 ## Measurements
 
-`roadmap check`: 95 items OK (11 ready, 11 held, 1 decision, 72 done), including antigravity-110's M1 close and antigravity-111's fresh-panel completion in the merge base. No experimental measurement or fresh-panel opening by this unit.
+`roadmap check`: 95 items OK (12 ready, 10 held, 1 decision, 72 done), including antigravity-110's M1 close, antigravity-111's fresh-panel completion and the M1-close sheet repair in the merge base. No experimental measurement or fresh-panel opening by this unit.
 
 ## Checks run at the head
 
-- `uor-harness loop render --at 5709a65072650fccacbd807858fb246eeb46f0b6`: all four non-roadmap views written.
+- `uor-harness loop render --at 7746eec32a854394c2cd03c6edd4efa04f277c89`: all four non-roadmap views written.
 - `uor-harness loop render --check`: all four match at that stamp.
 - `~/.cargo/bin/cargo run -q --locked -p xtask -- roadmap render`: README rendered from current inputs.
 - `~/.cargo/bin/cargo run -q --locked -p xtask -- roadmap check`: PASS, 95 items.
 - `~/.cargo/bin/cargo run -q --locked -p xtask -- roadmap render --check`: README current.
-- `uor-harness loop gates --full`: all 11 gates GREEN at `63407a83`.
-- `uor-harness loop pr-check --local`: PASS at `63407a83`, including owner approval for AGENTS.md; generated-view scope is the only advisory WARN.
-- `uor-harness loop report --check --order docs/loop/tasks/infra-loop-harness/kimi-50/ORDER.md`: PASS at `63407a83`.
+- `uor-harness loop gates --full`: all 11 gates GREEN at `f144f4876`.
+- `uor-harness loop pr-check --local`: PASS at `f144f4876`, including owner approval for AGENTS.md; generated-view scope is the only advisory WARN.
+- `uor-harness loop report --check --order docs/loop/tasks/infra-loop-harness/kimi-50/ORDER.md`: PASS at `f144f4876`.
 - Fresh exact-head review, required checks, queue and fresh-main verification are required.
 
 ## Skills used
