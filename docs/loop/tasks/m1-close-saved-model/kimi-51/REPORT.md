@@ -10,7 +10,7 @@ Harness CI on the render PR failed `preprules::tests::the_real_sheets_pass_the_s
 
 ## What changed
 
-The existing checkpoint/control content is under Base artifact, the pinned corpus under Data split, and the GPU protocol under Steps. Cost/power and verdict are renumbered consistently. No result, bar, threshold, evidence, code or issue state changed.
+The existing checkpoint/control content is under Base artifact, the pinned corpus under Data split, and the GPU protocol under Steps. Cost/power and verdict are renumbered consistently. No result, bar, threshold, evidence, code or issue state changed. Size: docs 3 files +78/−6; no generated files. The ORDER gave no numeric estimate, so a ratio is not available.
 
 ## Measurements
 
@@ -35,6 +35,9 @@ No experimental measurement. `cargo test --locked -p uor-r4-harness the_real_she
 
 - Merge this repair forward into #3319 and rerun its harness CI.
 - The closed-#2820/ready-item mismatch remains separate.
+- Pre-existing bar labels (a)–(c) in the sheet differ from the D39/roadmap definitions. This PR does not redefine them or claim the records are the same five-bar claim; any reconciliation needs a separate decision card.
+- The sheet's fresh thresholds (`6,796`, `1,401`, `221`) differ from the fresh-panel/evaluator records (`6,582`, `1,240`, `229`). They are preserved, not silently corrected; which floor was registered before the sealed run needs a separate evidence review.
+- Public README/milestone status differs from the roadmap and executed sheet. This PR does not reconcile that status or claim M1 closure. Those records and the retained 4-table negatives/archive remain untouched.
 
 ## Plain summary
 
