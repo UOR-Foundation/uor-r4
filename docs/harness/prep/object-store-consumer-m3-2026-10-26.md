@@ -11,9 +11,9 @@ On the two-seed M1-selected 19-table `UORLUT01` (`trunk-joint-pointer-v1-d11`, `
 
 ## Base artifact
 
-- **Selected M1 two-seed 19-table `UORLUT01` (`trunk-joint-pointer-v1-d11`, `uor-r4.lut-stack/3`) artifacts** (`caseyallard/uor-r4-store:results/antigravity/m1-trunk-joint-pointer-export-2026-10-26/`):
-  - **Seed 1 (`s1-trunk-joint-pointer-v1-d11.lut`):** `54,284,416` B, SHA-256 `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d`.
-  - **Seed 2 (`s2-trunk-joint-pointer-v1-d11.lut`):** `54,284,416` B, SHA-256 `1b49e8bd823a1021e31de55c767111f9cf43807d3e6d007644e49281935877de`.
+- **Selected M1 two-seed 19-table `UORLUT01` (`trunk-joint-pointer-v1-d11`, `uor-r4.lut-discrete-trunk/1`) artifacts** (`caseyallard/uor-r4-store:results/antigravity/m1-close-saved-model-2026-10-26/outputs/build-a/`):
+  - **Seed 1 (`t16-frozen-zero-seed1-trunk.d11`):** `86,536,132` B, SHA-256 `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d`.
+  - **Seed 2 (`t16-frozen-zero-seed2-trunk.d11`):** `84,943,328` B, SHA-256 `1b49e8bd823a1021e31de55c767111f9cf43807d3e6d007644e49281935877de`.
 - **Pinned tokenizer (`tokenizer.json`):** vocabulary `4,096`, SHA-256 `d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`.
 
 ## Data split
@@ -22,14 +22,14 @@ On the two-seed M1-selected 19-table `UORLUT01` (`trunk-joint-pointer-v1-d11`, `
   - `179,096` bytes, `384` canonical JSONL items (`6` sub-panels $\times$ `64` items).
   - Whole-object SHA-256: `582e38798e66432a79fec340a9f87d6f4cb1bfd8c3d2ab594f8e6e305694f9d1`.
   - Folded `Manifest::version()`: `88c27b94526c32b0f06fed7fabeb7a2abcf0b31a2f2534517b8656240eddce70`.
-- **Gate R `ft/dev` parity split (`caseyallard/uor-r4-store:inputs/stage-t-2026-10-24/corpus/ft/dev/`):**
+- **Gate R `ft/dev` parity split (`caseyallard/uor-r4-store:w2-inputs/2026-10-25/driver-data/`):**
   - `14,287` scored rows (`tokens.bin` SHA-256 `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b`, `mask.bin` SHA-256 `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078`).
 
 ## Steps
 
 - **Step 0 (Gate R parity check on GPU):** Score all `14,287` `ft/dev` rows on the GPU via `m1_d11_artifact_scorer_instrument::device::DeviceScorer` before any M3 item is evaluated:
-  - Seed 1 must reproduce exact `top1 = 7,386`, `top8 = 8,854`, `admitted = 12,175`, `refused = 0`.
-  - Seed 2 must reproduce exact `top1 = 7,374`, `top8 = 8,849`, `admitted = 12,143`, `refused = 0`.
+  - Seed 1 must reproduce exact `top1 = 7,002`, `top8 = 7,485`, `admitted = 9,012`, `refused = 0`.
+  - Seed 2 must reproduce exact `top1 = 7,001`, `top8 = 7,478`, `admitted = 9,010`, `refused = 0`.
 - **Step 1 (384-item M3 durable-memory evaluation per seed on GPU):**
   - `320` single-step GPU prefix evaluations across `provenance` (`64`), `correction` (`64`), `abstention` (`64`), `non_memory_prose` (`64`), and `reset_isolation` (`64`), plus `64` $\times$ (`32` uninterrupted + `32` post-restore) = `4,096` greedy decode steps on `restart_restore` (`4,416` total GPU model steps per seed, `8,832` across both seeds).
 - **Step 2 (Two-build CUDA determinism check):**

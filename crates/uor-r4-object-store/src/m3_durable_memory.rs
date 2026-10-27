@@ -62,19 +62,19 @@ pub const FT_DEV_MASK_SHA256: &str =
 /// Total scored rows on `ft/dev`.
 pub const FT_DEV_ROWS: usize = 14_287;
 
-/// Expected Seed 1 `ft/dev` Gate R top-1 count.
-pub const SEED1_EXPECTED_DEV_TOP1: u64 = 7_386;
-/// Expected Seed 1 `ft/dev` Gate R top-8 count.
-pub const SEED1_EXPECTED_DEV_TOP8: u64 = 8_854;
-/// Expected Seed 1 `ft/dev` Gate R target-admitted count.
-pub const SEED1_EXPECTED_DEV_ADMITTED: u64 = 12_175;
+/// Expected Seed 1 `ft/dev` Gate R top-1 count (`t16-frozen-zero-seed1-trunk.d11`).
+pub const SEED1_EXPECTED_DEV_TOP1: u64 = 7_002;
+/// Expected Seed 1 `ft/dev` Gate R top-8 count (`t16-frozen-zero-seed1-trunk.d11`).
+pub const SEED1_EXPECTED_DEV_TOP8: u64 = 7_485;
+/// Expected Seed 1 `ft/dev` Gate R target-admitted count (`t16-frozen-zero-seed1-trunk.d11`).
+pub const SEED1_EXPECTED_DEV_ADMITTED: u64 = 9_012;
 
-/// Expected Seed 2 `ft/dev` Gate R top-1 count.
-pub const SEED2_EXPECTED_DEV_TOP1: u64 = 7_374;
-/// Expected Seed 2 `ft/dev` Gate R top-8 count.
-pub const SEED2_EXPECTED_DEV_TOP8: u64 = 8_849;
-/// Expected Seed 2 `ft/dev` Gate R target-admitted count.
-pub const SEED2_EXPECTED_DEV_ADMITTED: u64 = 12_143;
+/// Expected Seed 2 `ft/dev` Gate R top-1 count (`t16-frozen-zero-seed2-trunk.d11`).
+pub const SEED2_EXPECTED_DEV_TOP1: u64 = 7_001;
+/// Expected Seed 2 `ft/dev` Gate R top-8 count (`t16-frozen-zero-seed2-trunk.d11`).
+pub const SEED2_EXPECTED_DEV_TOP8: u64 = 7_478;
+/// Expected Seed 2 `ft/dev` Gate R target-admitted count (`t16-frozen-zero-seed2-trunk.d11`).
+pub const SEED2_EXPECTED_DEV_ADMITTED: u64 = 9_010;
 
 /// Owner-registered acceptance floor for `provenance` (`58/64`, `>= 0.90`).
 pub const PROVENANCE_MIN_HITS: usize = 58;
