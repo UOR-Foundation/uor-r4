@@ -10,6 +10,12 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The umbrella item stays open; its done
 - **U5 gets no new item,** by design. The deterministic FBS backward is already the open item `d11-exporter-float-trunk`'s next unit (claude-140's REPORT: "make the FBS backward reduction deterministic"), inside that item's scope.
 - **The first draft made `integer-hamming-read` depend on `d11-exporter-float-trunk`,** which is open, so `loop next` would have held the new item as blocked. It now depends on `float-training-module` and `spiralcore-fbs-offline-float-sheet`, both done, and its body says why the exporter's open export gap is not its gate.
 
+- **The in-unit review asked for three done-when and scope fixes,** all made:
+  - `integer-hamming-read` named only the copy heads. It now names all four heads, and how the type heads' run-time rotations go through D11's tables;
+  - its parity line pointed at a "stated tolerance" that no file states. Its prep sheet now pre-registers the bar for two named numbers;
+  - `one-decoder`'s fail branch moved serving without a serving file in scope. It now records the decision, and the serving change is its own unit.
+- **Both scopes overlap open items** (`integer-hamming-read` sits inside `d11-exporter-float-trunk`'s, and `one-decoder` shares two files with `in-space-trunk-to-text`). Nothing blocks a claim today. Simultaneous claims are refused by `loop claim`'s overlap check, which is the lock.
+
 ## What changed
 
 - **`docs/roadmap/items/one-decoder.md` (new), unit U2:** make the served decoder the measured one. The writer and whole-table nearest disagree on one checkpoint (345 against 7,813); `voronoi`'s satisfiable margin gave the best writer score (7,906 at 16,384 steps), and the writer's collapse after step 16,384 is untested under it. Done when a pre-registered `voronoi` run past step 16,384, at two seeds, reads both decoders at every checkpoint and the REPORT records which decoder serves.

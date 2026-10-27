@@ -27,8 +27,15 @@ It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-
 
 ## Done when
 
-1. The integer runtime runs the read as claude-146's REPORT describes it, under D11's rules (CHARTER §3.6: integer only, no multiply instruction; products through its tables): keys and copy queries from the table's points through the key rotation, packed into 64-bit codes; the match by `popcount(q XOR k)`; the 16 nearest earlier positions `1 ≤ s < t`; the weights `max(0, m − d)/m`; the stream read after layer 2 and the move on the readout.
-2. **Parity:** on a stored checkpoint with the read (claude-146's language runs, `caseyallard/uor-r4-store:results/claude/hamming-read-2026-10-27/`), the integer forward's picks and decoded ids match the float forward's on DEV within the D11 forward's stated tolerance, and the REPORT gives the gap. The float reference is computed on the GPU (CHARTER §3.5); the integer side runs on the laptop, as serving does.
+1. The integer runtime runs the whole read as claude-146's REPORT describes it, all four heads of both reads, under D11's rules (CHARTER §3.6: integer only, no multiply instruction; products through its tables):
+   - **copy heads:** keys and queries from the table's points through the key rotation. These depend only on the token, so their codes can be built once per vocabulary entry;
+   - **type heads:** queries from the residual through the query rotation, and payloads from the residual at `s` through the value rotation. These rotate the state at run time, so each product goes through D11's tables;
+   - the codes packed into 64-bit words; the match by `popcount(q XOR k)`; the 16 nearest earlier positions `1 ≤ s < t`; the weights `max(0, m − d)/m`; the stream read after layer 2 and the move on the readout, each product through the tables.
+2. **Parity,** against the float forward of the same stored checkpoint (claude-146's language runs, `caseyallard/uor-r4-store:results/claude/hamming-read-2026-10-27/`), on DEV. No D11 tolerance exists for this read yet, so the unit's prep sheet pre-registers the bar for two numbers, and the REPORT gives both:
+   - the share of (position, head, read) kept sets equal to float's. One sign flip in an integer rotation changes a code, so this is not assumed to be exact;
+   - top-1 agreement between the integer and float decoded ids.
+   
+   The float reference is computed on the GPU (CHARTER §3.5); the integer side runs on the laptop, as serving does.
 3. **Speed on this laptop:** `fbs-toks` decode tokens/s against context, with the read and without, on the same artifact.
 4. One notebook row; the result on main.
 
