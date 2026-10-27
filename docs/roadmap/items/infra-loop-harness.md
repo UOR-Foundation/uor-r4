@@ -27,7 +27,7 @@ It also renders the shared status pages from committed inputs, so nobody edits t
 - Every `loop …` subcommand on the build plan is on `main`: `next`, `arrive`, `claim`, `gates`, `render`, `review`, `queue`, `close`, `drive`, `guard`, `install` and `onboard`.
 - So are `docs/harness/labs.json`, `gates.json`, the rendered STATE and HANDOFF, and the policy job.
 - Items carry `scope:` and "Cancel if".
-- Each build-plan PR's planted fault is held by a test that passes on `main`.
+- Each build-plan PR's planted fault is held by a test that passes on `main`. Row 5's "one fixture per rule" is shown by test names.
 - The four labs each have a committed onboarding receipt and a merged, verified loop unit.
 
 See `docs/loop/tasks/infra-loop-harness/claude-139/REPORT.md`.
