@@ -798,6 +798,33 @@ fn committed_onboarding_receipts_are_valid_and_canaries_refuse() {
     assert_eq!(verified, registered);
 }
 
+/// An adapter whose lab has left the registry stays a known client, and the guard refuses that lab
+/// inside UOR-R4 (the `CLIENTS` doc; codex, claude-138).
+#[test]
+fn an_adapter_whose_lab_left_the_registry_is_refused_inside_the_repo() {
+    let fixture = make_uor_fixture("claude");
+    let root = fixture.path();
+    let labs_json = root.join("docs/harness/labs.json");
+    let mut doc: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&labs_json).expect("read")).expect("parse");
+    doc["labs"]
+        .as_object_mut()
+        .expect("labs object")
+        .remove("codex");
+    fs::write(&labs_json, doc.to_string()).expect("write");
+    assert!(CLIENTS.contains(&"codex"), "codex keeps its adapter");
+    let payload = canary_payload_for_client(root, "codex");
+    match evaluate_guard(root, "codex", "codex", "PreToolUse", &payload) {
+        GuardOutcome::Refused(reason) => {
+            assert!(
+                reason.contains("\"codex\"") && reason.contains("labs.json"),
+                "{reason}"
+            );
+        }
+        other => panic!("codex must be refused once it leaves the registry: {other:?}"),
+    }
+}
+
 /// A registered lab with no client adapter cannot hold a valid receipt, so the receipt check
 /// refuses it instead of skipping it.
 #[test]

@@ -14,14 +14,13 @@ Lab: claude. Order: [ORDER.md](ORDER.md). References #2904.
 
 ## What changed
 
-Size: 13 files, +400/−41.
+Size, without this task folder: 12 files, +348/−42.
 - Harness code: 4 files, +34/−23.
-- Harness tests: 2 files, +63/−10.
+- Harness tests: 2 files, +97/−11.
 - Docs, registry and item: 4 files, +8/−8.
 - Archive: 2 new files, 209 lines.
-- This task folder.
 
-The ORDER gave no estimate.
+The task folder adds the ORDER and this REPORT. The ORDER gave no estimate.
 
 - **Registry (Casey's edit, `e08e8848f`).** `docs/harness/labs.json` lists antigravity, claude, deepseek and kimi, and its note says "four labs". `jq -e '.labs | keys == [...]'` printed `true`.
 - **Refusing codex.**
@@ -52,6 +51,7 @@ None of model behaviour. These are the change's own checks, at head `e08e8848f` 
   - `an_unknown_lab_fails_and_names_the_registered_labs`
   - `committed_onboarding_receipts_are_valid_and_canaries_refuse`
   - `a_registered_lab_without_a_client_adapter_fails_the_receipt_check`
+  - `an_adapter_whose_lab_left_the_registry_is_refused_inside_the_repo`, added after the first review. With codex left registered in its fixture, it fails on the owner-path reason instead.
 - **Before the registry edit, the tests pinned it.** At `37837239e`, with codex still in `labs.json`, five of them failed:
   - CI's `harness rules and tests`: the two `labs.rs` tests and the onboard test, with 674 passing;
   - locally: the codex heartbeat check in the CLI test.
