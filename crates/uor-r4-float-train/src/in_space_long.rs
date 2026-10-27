@@ -1151,7 +1151,11 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             },
         )?;
         // Linear from `lr` at the first step to `lr_end` at the last.
-        let progress = step as f64 / (config.steps.saturating_sub(1).max(1)) as f64;
+        let progress = if config.steps == 1 {
+            1.0
+        } else {
+            step as f64 / (config.steps - 1) as f64
+        };
         let lr = config.lr + (config.lr_end - config.lr) * progress;
         opt_main.update_filtered(&model, &grads, lr, |name| !name.ends_with("rec.decay"))?;
         opt_decay.update_filtered(&model, &grads, lr * config.decay_mult, |name| {

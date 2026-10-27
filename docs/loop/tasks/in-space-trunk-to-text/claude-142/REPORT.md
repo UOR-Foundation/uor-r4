@@ -10,7 +10,7 @@ The item `in-space-trunk-to-text` is new in this PR; its issue is made at the ne
 - **Training, on one RTX 5090:**
   - the best run (whole-table nearest objective, `lr 1e-3`) did `13,794` context tokens/s, with three runs sharing the GPU;
   - a writer-objective run alone did `35,597`.
-- **Both training figures are biased low.** The code review found that each training step ran under gate step 0, inherited from the checkpoint's reply sampling. The Hamilton gate's backward then ran its step-0 diagnostics, with host syncs, on every step. This PR fixes that. The training math is unchanged, and the figures were not re-measured.
+- **Both training figures are likely biased low, by an amount not measured.** The code review found that each training step ran under gate step 0, inherited from the checkpoint's reply sampling. The Hamilton gate's backward then ran its step-0 diagnostics, with host syncs, on every step. This PR fixes that. The training math is unchanged, because the hook reads the step only for its diagnostics, and the figures were not re-measured.
 
 ## What did not work, first
 
