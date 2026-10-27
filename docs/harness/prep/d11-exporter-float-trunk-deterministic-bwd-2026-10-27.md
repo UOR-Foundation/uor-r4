@@ -18,7 +18,7 @@ The prime suspect is the float `atomicAdd` gradient sums of the pinned FBS backw
 |---|---|---|
 | (a) GPU tests | `cargo test --release --locked -p uor-r4-float-train --features cuda --lib`, then the same with `-- --include-ignored deterministic_backward` | All pass, including `the_deterministic_backward_matches_the_pinned_one_and_repeats_bit_for_bit` and `the_deterministic_backward_keeps_the_pinned_error_codes` |
 | (a′) negative gate | A copy of the source on the pod with the three dispatch lines in `spiralcore_fbs_bwd` removed (`geometric_stack_native_cuda.rs`, `if …is_deterministic_bwd() { return spiralcore_fbs_bwd_det(…) }`), built in its own target folder, then the same two tests | Both **fail**: the marker `deterministic_bwd_calls()` does not move. A pass means the tests pin nothing, and that is an instrument fault |
-| (b) throughput probe | `--mode d11-train-probe --train-forward dual --deterministic-bwd` | `seconds_per_step`, `projected_full_seconds`, `under_one_hour_per_seed` |
+| (b) throughput probe | `--mode d11-train-probe --train-forward dual --deterministic-bwd` | `seconds_per_step`, and `projected_full_seconds` (both seeds), which must be ≤ 2,400, that is 20 minutes per seed |
 | D1 | `--mode d11-train-export --train-forward dual --deterministic-bwd`, with claude-140's inputs, 1,024 steps, seeds 1 and 2 | `train.json`, and the sha256 of every saved file |
 | D2 | the same command again (repeat of D1) | the same |
 
@@ -30,19 +30,24 @@ The prime suspect is the float `atomicAdd` gradient sums of the pinned FBS backw
 
 ## 3. Bar and decision table
 
+The rows are read in this order, so an instrument fault is decided before C1-det is read.
+
 | Result | Class | What it means and unlocks |
 |---|---|---|
+| (a) fails; or (a′) passes, or fewer than both of its tests fail; or any §4 check fails | **Instrument fault** | The kernel, its wrapper, its tests or the run is wrong. D1 and D2 are not read, and the instrument is repaired. |
+| (b) projects more than 20 minutes per seed | **Stop before D1** | The kernel is too slow as written. It is repaired for speed, and no run is made. |
 | (a) passes; C1-det is bit-identical in every reading and every file | **Repeatable** | The float atomics were the whole same-device source. Next unit: I-Prefix's exact gate becomes reachable, within one pod and one binary. The export-gap run kimi-46 set out to do can then be redone under `--deterministic-bwd`. Making the switch the default is a separate D68 decision. |
 | (a) passes; C1-det differs | **Another source remains** | Something besides the FBS atomics is nondeterministic, for example candle's CUDA kernels (reductions or `index_add`) or the AdamW update. The first differing step and file are recorded. Next unit: localise it, again under its own sheet. |
-| (a) fails, or (a′) passes | **Instrument fault** | The kernel, its wrapper or its tests are wrong. D1 and D2 are not read, and the instrument is repaired. |
-| (b) projects more than 1 hour per seed | **Stop before D1** | The kernel is too slow as written. It is repaired for speed, and no run is made. |
 
 ## 4. Instrument checks (each must be green before the bar counts)
 
 - **I-Inputs:** the five inputs match claude-140's pins (§5).
 - **I-Device:** `nvidia-smi`, `nvcc --version`, and the `UOR_`/`CUDA_` environment are recorded before each arm.
-- **I-Receipt:** each `train.json`'s `kernels` block reads `"deterministic_bwd": true` and carries `det_kernel_sha256` and `det_ptx_sha256`. `pins_match_sheet` stays true.
-- **I-Step0:** D1's and D2's step-0 points equal claude-140's R1 step-0 points. Initialisation is unchanged, and the switch acts only in the backward.
+- **I-Receipt:** each `train.json`'s `kernels` block reads `"deterministic_bwd": true` and carries `det_kernel_sha256` and `det_ptx_sha256`, and `pins_match_sheet` stays true.
+  - The switch being on is not enough. **`deterministic_bwd_calls` must be at least 2,048** (1,024 steps × 2 seeds, at least one backward per step), and equal in D1 and D2. That shows the deterministic backward ran, not only that the switch was set.
+- **I-Step0:** D1's and D2's step-0 points are equal to each other, and equal to claude-140's R1 step-0 points.
+  - Step 0 comes before any backward, so this checks the inputs and initialisation only.
+  - The binary differs from R1's, so a mismatch with R1 is classed as an instrument fault, not read as a result.
 - **I-Complete:** each arm has 2 seeds × 4 evaluation points.
 
 ## 5. Base artifact and data split
@@ -67,11 +72,22 @@ The test is deterministic. A single differing hit, loss bit or file byte fails C
 - **Cost:** one RTX 5090 on Vast for about 1 hour (build, tests, probe and two arms), at about $0.6/h. Under $1.
 - **Stop rule:**
   - any failed step stops the job, and what has run is sealed;
-  - (b) projecting more than 1 hour per seed stops before D1;
-  - a hard cap of 2 hours;
+  - (b) projecting more than 20 minutes per seed stops before D1. With four seed-runs that bounds training at 80 minutes, inside the cap;
+  - a hard cap of 2 hours, held by the pod lease (`--hours 2`);
   - no arm is rerun under this sheet.
 - **Results:** sealed under `results/claude/d11-deterministic-bwd-2026-10-27/` with a SHA256SUMS that is read back before `down`. The binary goes there too.
 
 ## 8. Non-author TEST FITNESS review
 
-To be filled by a fresh-context reviewer given only this sheet and its sources.
+**Round 1 (at `2303fa686`): NOT FIT, with three required fixes, all made.**
+1. **I-Receipt showed only that the switch was on.** `kernel_identity` now records `deterministic_bwd_calls`, and §4 requires at least 2,048 calls, equal in D1 and D2.
+2. **Failed §4 checks were not routed to the fault row.** That row now covers them and is read first.
+3. **The stop rule (b) at 1 hour per seed could exceed the 2-hour cap.** It is now 20 minutes per seed.
+
+Its advisories are kept:
+- I-Step0 checks only the forward and initialisation, and a mismatch with R1 is an instrument fault;
+- read (a′)'s build line before its result.
+
+The D67 pre-run review passed at the same head, pending this FIT.
+
+Round 2: to be filled by a fresh-context reviewer given only this sheet and its sources.

@@ -690,6 +690,9 @@ pub fn kernel_identity() -> serde_json::Value {
         "arms_prelude_sha256": arms::arms_prelude_sha256(),
         "arms_ptx_sha256": arms_ptx,
         "deterministic_bwd": is_deterministic_bwd(),
+        // How many times the deterministic backward has run on this thread so far: in a training
+        // receipt, evidence that it ran rather than only that the switch was on (claude-141 FIT).
+        "deterministic_bwd_calls": deterministic_bwd_calls(),
         "det_kernel_sha256": sha256_bytes(include_bytes!("spiralcore_fbs_det.cu")),
         "det_ptx_sha256": det_ptx,
     })
@@ -3818,6 +3821,11 @@ mod tests {
         );
         let inside = with_deterministic_bwd(|| Ok(kernel_identity()))?;
         assert_eq!(inside["deterministic_bwd"], serde_json::json!(true));
+        // No backward ran on the host, so the call count reads as it was.
+        assert_eq!(
+            inside["deterministic_bwd_calls"],
+            serde_json::json!(deterministic_bwd_calls())
+        );
         assert_eq!(
             inside["det_kernel_sha256"],
             serde_json::json!(sha256_bytes(include_bytes!("spiralcore_fbs_det.cu")))
