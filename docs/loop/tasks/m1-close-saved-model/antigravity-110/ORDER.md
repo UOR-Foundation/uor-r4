@@ -15,7 +15,7 @@ The item's done-when reads:
 
 **Cancel probe result (`classification: instrument`):**
 1. `export_and_verify_trunk_artifact` (`trunk.rs:2021`) still called 4-table `export_d11(&base_snap)` instead of 19-table `export_trunk_d11(&base_snap, step_table, norm_frames, tables)`.
-2. `fresh_transfer.rs:51-61` carried hand-expanded trailing hex chars on `DEV_TOKENS_SHA256`, `DEV_MASK_SHA256`, `TRAIN_TOKENS_SHA256`, and `TRAIN_MASK_SHA256` instead of the exact digests from `report.json` (`df5d074a…`) and `w2-inputs/2026-10-25/driver-data/` (`0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b`, `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078`, `3dee858f84b750f507ceb3dc3f393711741950954735efaaf61bf704c017a4c8`, `b5e7352d67d6883a833155a5fd397a03f6d4f1b2649e3d4ec3e2ea7d95b949e3`), and `fresh_rows` (`lib.rs:189`) called `config.validate()` without normalizing `Split::Fresh` to `Split::Dev`. Repaired with failing-first tests before launching the GPU pod.
+2. `fresh_transfer.rs:51-61` carried hand-expanded trailing hex chars on `DEV_TOKENS_SHA256`, `DEV_MASK_SHA256`, `TRAIN_TOKENS_SHA256`, and `TRAIN_MASK_SHA256` instead of the exact digests from `report.json` (`df5d074a…`) and `w2-inputs/2026-10-25/driver-data/` (`0919e90f953e…`, `a838bb1a67e9…`, `3dee858f84b7…`, `b5e7352d67d6…`), and `fresh_rows` (`lib.rs:189`) called `config.validate()` without normalizing `Split::Fresh` to `Split::Dev`. Repaired with failing-first tests before launching the GPU pod.
 
 ## Files in scope
 
