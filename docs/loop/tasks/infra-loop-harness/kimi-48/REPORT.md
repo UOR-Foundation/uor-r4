@@ -22,7 +22,10 @@ References #2904 and #3314. Repair of fresh-main verification after #3313 merged
 - `uor-harness loop render --check`: all four match at that stamp.
 - `~/.cargo/bin/cargo run -q --locked -p xtask -- roadmap check`: PASS, 95 items.
 - `~/.cargo/bin/cargo run -q --locked -p xtask -- roadmap render --check`: README current.
-- Full gates, local policy, fresh exact-head review, required checks, queue and fresh-main verification are required.
+- `uor-harness loop gates --full`: all 11 gates GREEN at `475286080`.
+- `uor-harness loop pr-check --local`: PASS at `475286080`, including owner approval for AGENTS.md; generated-view scope and historical commit-order are advisory WARNs under D76.
+- `uor-harness loop report --check --order docs/loop/tasks/infra-loop-harness/kimi-48/ORDER.md`: PASS at `475286080`.
+- Fresh exact-head review, required checks, queue and fresh-main verification are required.
 
 ## Skills used
 
