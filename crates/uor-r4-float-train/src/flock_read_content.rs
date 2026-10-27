@@ -258,6 +258,9 @@ mod tests {
         // (−0.1342, 0.2683) on x. Descent raises x[0] and lowers x[1], toward the key.
         assert!((grad[2][0] + 0.134_164_1).abs() < 1e-5, "{grad:?}");
         assert!((grad[2][1] - 0.268_328_2).abs() < 1e-5, "{grad:?}");
+        // The payload is live: position 0's residual enters position 2's output at weight 1 and
+        // count 1, and only its axis-2 coordinate is in the loss. A detached payload gives zeros.
+        assert_eq!(grad[0], vec![0.0, 0.0, -1.0, 0.0]);
     }
 
     #[cfg(feature = "cuda")]
