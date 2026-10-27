@@ -13,13 +13,13 @@ References #2820. The item is not done and no `Closes` claim is made.
 
 ## What changed
 
-`loop pr-check --local` reports the final size by class; no generated files changed. The ORDER gave no numeric size estimate, so a ratio is not available.
+`loop pr-check --local` reports code 2 files +757/−89 and docs 6 files +342/−0; tests are included in the code files, and no generated files changed. The ORDER gave no numeric size estimate, so a ratio is not available.
 
 - `--steps` accepts only 1,024 or 2,048 and is validated before CUDA opens. The default remains 1,024; modes that do not consume the option reject it rather than silently ignoring it.
 - Longer training uses the requested batch count and adds the final 2,048 evaluation point without changing the earlier points, learning rates, 1:1 dual loss, seeds or data.
 - Gap and residual scorers bind dose, model identity and saved F/D/A prediction outputs; missing seed losses refuse the receipt. Legacy Stage 4b receipts read their nested 1,024 run steps, while modern 1,024 and 2,048 receipts validate their full dose identity.
 - The prep sheet registers the dose-plus-coverage intervention, exact outcomes, counterfactual, instruments, cost and attempt-specific archival/readback.
-- FIT passed at `5345b554`; D68 passed at `e77a1f91`; D67 passed conditionally on storage at `78a5369a6` and again for attempt 2 at `c719506f`. CI is green at `c719506f`.
+- FIT passed at `5345b554`; D68 passed at `e77a1f91`; D67 passed conditionally on storage at `78a5369a6` and again for attempt 2 at `c719506f`. CI was green at the prior head `c719506f`; fresh checks are required at the delivery head.
 
 ## Measurements
 

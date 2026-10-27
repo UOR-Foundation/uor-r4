@@ -1855,8 +1855,9 @@ fn validate_longer_train_receipt(receipt: &serde_json::Value, steps: usize) -> R
         ));
     }
     if receipt.get("steps").is_none() {
-        if receipt["sheet"].as_str()
-            == Some("docs/harness/prep/d11-exporter-float-trunk-stage4b-2026-10-26.md")
+        if steps == STEPS
+            && receipt["sheet"].as_str()
+                == Some("docs/harness/prep/d11-exporter-float-trunk-stage4b-2026-10-26.md")
         {
             return Ok(());
         }
@@ -4040,6 +4041,13 @@ mod tests {
         let mut mixed = legacy.clone();
         mixed["runs"][1]["steps"] = serde_json::json!(2_048);
         assert!(receipt_trained_steps(&mixed).is_err());
+        let mut legacy_2048 = legacy;
+        for run in legacy_2048["runs"].as_array_mut().unwrap() {
+            run["steps"] = serde_json::json!(2_048);
+        }
+        assert_eq!(receipt_trained_steps(&legacy_2048)?, 2_048);
+        assert!(validate_longer_train_receipt(&legacy_2048, 1_024).is_err());
+        assert!(validate_longer_train_receipt(&legacy_2048, 2_048).is_err());
         Ok(())
     }
 
