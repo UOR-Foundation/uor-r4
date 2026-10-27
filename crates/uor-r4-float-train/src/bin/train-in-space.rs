@@ -8,6 +8,8 @@
 //!
 //! `train-in-space --data-root DIR --grad-norms 1 [--objective ...] [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--batch B] [--seed S]`
 //!
+//! `train-in-space --data-root DIR --decode-speed CHECKPOINT [--objective nearest] [--retain-rates 0|1] [--reply-tokens N]`
+//!
 //! Long training of the SpiralCore/FBS geometric trunk in its own space, with text at every
 //! checkpoint (`uor_r4_float_train::in_space_long`). GPU only. `--data-root` holds `tokenizer.json`,
 //! `mw-balp/train/` and `ft/dev/`, each split with `tokens.u16` and `response_mask.u8`. `--out`
@@ -19,8 +21,8 @@ use std::path::PathBuf;
 
 use candle_core::Device;
 use uor_r4_float_train::in_space_long::{
-    context_reach, gradient_norms, inspect_run, root_separation, run_long, LongConfig,
-    PointObjective,
+    context_reach, decode_speed, gradient_norms, inspect_run, root_separation, run_long,
+    LongConfig, PointObjective,
 };
 use uor_r4_float_train::{FloatTrainError, Result};
 
@@ -30,6 +32,7 @@ fn main() -> Result<()> {
     let mut inspect = None;
     let mut reach = None;
     let mut grad_norms = false;
+    let mut decode = None;
     let mut config = LongConfig {
         objective: PointObjective::Sheet,
         steps: 32_768,
@@ -61,6 +64,7 @@ fn main() -> Result<()> {
             "--inspect" => inspect = Some(PathBuf::from(&value)),
             "--reach" => reach = Some(PathBuf::from(&value)),
             "--grad-norms" => grad_norms = number(&value)? == 1,
+            "--decode-speed" => decode = Some(PathBuf::from(&value)),
             "--objective" => {
                 config.objective = match value.as_str() {
                     "sheet" => PointObjective::Sheet,
@@ -106,6 +110,21 @@ fn main() -> Result<()> {
     let data_root =
         data_root.ok_or_else(|| FloatTrainError::Invalid("--data-root is required".to_owned()))?;
     let device = Device::new_cuda(0)?;
+    if let Some(checkpoint) = decode {
+        let nearest = config.objective == PointObjective::Nearest;
+        for speed in decode_speed(
+            &data_root,
+            &checkpoint,
+            config.retain_rates,
+            nearest,
+            config.reply_tokens,
+            config.seed,
+            &device,
+        )? {
+            println!("{}", serde_json::to_string(&speed)?);
+        }
+        return Ok(());
+    }
     if grad_norms {
         for norm in gradient_norms(&data_root, &config, &device)? {
             println!("{}", serde_json::to_string(&norm)?);

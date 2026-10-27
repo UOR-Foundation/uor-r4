@@ -652,6 +652,66 @@ pub fn context_reach(
     })
 }
 
+/// Greedy decoding speed at one context length ([`decode_speed`]).
+#[derive(Clone, Debug, Serialize)]
+pub struct DecodeSpeed {
+    pub context_tokens: usize,
+    pub decoded_tokens: usize,
+    pub seconds: f64,
+    pub tokens_per_second: f64,
+}
+
+/// Context lengths for [`decode_speed`].
+pub const DECODE_CONTEXTS: [usize; 3] = [16, 64, SHEET_CONTEXT];
+
+/// Greedy decoding speed of the checkpoint in `checkpoint` on one RTX-class GPU: `tokens` tokens
+/// after a prompt of each of [`DECODE_CONTEXTS`] tokens taken from the first context-long DEV
+/// window. Each token re-runs the trunk over the whole window (no carried state), so this times
+/// this runner's decoding, not a served recurrent decode. Nearest decoding under `nearest`, else
+/// the writer's.
+pub fn decode_speed(
+    data_root: &Path,
+    checkpoint: &Path,
+    retain_rates: bool,
+    nearest: bool,
+    tokens: usize,
+    seed: u64,
+    device: &Device,
+) -> Result<Vec<DecodeSpeed>> {
+    let (dev_windows, _) = load_dev(data_root)?;
+    arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
+    crate::geometric_stack::set_retention_rates(retain_rates);
+    let _guard = ArmGuard;
+    let model = StackModel::load(checkpoint, device)?;
+    let source = dev_windows
+        .iter()
+        .find(|w| w.input_ids.iter().all(|&id| id != hs::SHEET_BOS_ID))
+        .unwrap_or(&dev_windows[0]);
+    let objective = if nearest {
+        PointObjective::Nearest
+    } else {
+        PointObjective::Sheet
+    };
+    // One untimed reply first, so no context is charged for kernel loading.
+    greedy_reply(&model, objective, &source.input_ids[..16], 4, seed)?;
+    let mut speeds = Vec::with_capacity(DECODE_CONTEXTS.len());
+    for &context in &DECODE_CONTEXTS {
+        let prompt = &source.input_ids[..context.min(source.input_ids.len())];
+        let started = Instant::now();
+        // BOS stops a reply early; count what was decoded.
+        let reply = greedy_reply(&model, objective, prompt, tokens, seed)?;
+        device.synchronize()?;
+        let seconds = started.elapsed().as_secs_f64();
+        speeds.push(DecodeSpeed {
+            context_tokens: prompt.len(),
+            decoded_tokens: reply.len(),
+            seconds,
+            tokens_per_second: reply.len() as f64 / seconds.max(1e-9),
+        });
+    }
+    Ok(speeds)
+}
+
 /// Read every checkpoint a `run_long` run saved under `run/models`, in step order, as an
 /// [`Inspection`]. `retain_rates`, `fold_scores` and `reflect_floor` must match the run's.
 pub fn inspect_run(
