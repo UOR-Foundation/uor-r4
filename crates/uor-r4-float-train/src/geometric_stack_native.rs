@@ -68,6 +68,24 @@ pub fn reflected_floor() -> bool {
     REFLECTED_FLOOR.load(std::sync::atomic::Ordering::SeqCst)
 }
 
+/// Where the shared vector table learns from. Off (the default): from both its roles, input
+/// encoding and the output points the predicted point is scored against. On (`in_space_long`, 27
+/// Oct 2026): the input reads the same points but passes them no gradient, so only the prediction
+/// places the points and the trunk learns to land on them. On the in-space trunk at step 0 the
+/// output side carries 1/410 of the table's gradient under the clamp, and 1/4,300 under the fold.
+static INPUT_TABLE_FIXED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Turn the input side's gradient into the shared table off (`true`) or on.
+pub fn set_input_table_fixed(on: bool) {
+    INPUT_TABLE_FIXED.store(on, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Whether the input encoding passes no gradient to the shared table (see
+/// [`set_input_table_fixed`]).
+pub fn input_table_fixed() -> bool {
+    INPUT_TABLE_FIXED.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 /// `x` folded into `[0, 1]` by reflections: `1 - |1 - (x mod 2)|`. The period count is taken from a
 /// detached copy, so the gradient is `+1` or `-1` and never zero.
 pub fn fold_unit(x: &Tensor) -> Result<Tensor> {
@@ -1075,10 +1093,13 @@ impl StackModel {
                 "stack forward needs batch*time vocabulary ids within context",
             ));
         }
-        Ok(self
-            .native_vector_writer()?
-            .encode(ids)?
-            .reshape((batch, time, self.config.width))?)
+        let encoded = self.native_vector_writer()?.encode(ids)?;
+        let encoded = if input_table_fixed() {
+            encoded.detach()
+        } else {
+            encoded
+        };
+        Ok(encoded.reshape((batch, time, self.config.width))?)
     }
     pub fn head(&self, hidden: &Tensor) -> Result<Tensor> {
         let p = self.params()?;

@@ -66,6 +66,9 @@ pub struct LongConfig {
     pub fold_scores: bool,
     /// A reflecting floor and clamped ceiling for the rate score (`geometric_stack::set_reflected_floor`).
     pub reflect_floor: bool,
+    /// Pass no gradient from the input encoding into the shared table
+    /// (`geometric_stack::set_input_table_fixed`); it changes training only, never a forward.
+    pub fix_input_table: bool,
     pub samples: usize,
     pub reply_tokens: usize,
 }
@@ -131,6 +134,7 @@ impl Drop for ArmGuard {
         crate::geometric_stack::set_retention_rates(false);
         crate::geometric_stack::set_folded_scores(false);
         crate::geometric_stack::set_reflected_floor(false);
+        crate::geometric_stack::set_input_table_fixed(false);
     }
 }
 
@@ -775,6 +779,7 @@ pub fn gradient_norms(
     crate::geometric_stack::set_retention_rates(config.retain_rates);
     crate::geometric_stack::set_folded_scores(config.fold_scores);
     crate::geometric_stack::set_reflected_floor(config.reflect_floor);
+    crate::geometric_stack::set_input_table_fixed(config.fix_input_table);
     let _guard = ArmGuard;
     let model = build_fbs_model(FbsArm::OneAtomActive, config.seed, device)?;
     let windows: Vec<&CausalWindow> = usable.iter().take(config.batch).collect();
@@ -892,6 +897,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     crate::geometric_stack::set_retention_rates(config.retain_rates);
     crate::geometric_stack::set_folded_scores(config.fold_scores);
     crate::geometric_stack::set_reflected_floor(config.reflect_floor);
+    crate::geometric_stack::set_input_table_fixed(config.fix_input_table);
     let _guard = ArmGuard;
     let model = build_fbs_model(FbsArm::OneAtomActive, config.seed, device)?;
     let mut opt_main = StackAdamW::new(&model, hs::SHEET_WEIGHT_DECAY, hs::SHEET_CLIP)?;

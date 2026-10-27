@@ -1,6 +1,6 @@
 //! `train-in-space --data-root DIR --out DIR [--objective sheet|voronoi|nearest] [--steps N]
 //! [--batch B] [--eval-every K] [--seed S] [--lr X] [--lr-end X] [--decay-mult X]
-//! [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--samples N] [--reply-tokens N]`
+//! [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--fix-input-table 0|1] [--samples N] [--reply-tokens N]`
 //!
 //! `train-in-space --data-root DIR --inspect RUN [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--seed S]`
 //!
@@ -42,6 +42,7 @@ fn main() -> Result<()> {
         retain_rates: false,
         fold_scores: false,
         reflect_floor: false,
+        fix_input_table: false,
         samples: 6,
         reply_tokens: 48,
     };
@@ -81,6 +82,7 @@ fn main() -> Result<()> {
             "--retain-rates" => config.retain_rates = number(&value)? == 1,
             "--fold-scores" => config.fold_scores = number(&value)? == 1,
             "--reflect-floor" => config.reflect_floor = number(&value)? == 1,
+            "--fix-input-table" => config.fix_input_table = number(&value)? == 1,
             "--lr" | "--lr-end" | "--decay-mult" => {
                 let v: f64 = value
                     .parse()
