@@ -19,12 +19,12 @@ Casey's direction of 27 Oct 2026, in claude's chat, verbatim:
 >
 > the goal is a local model equivalent to probably gpt4 in ability that can be trained on less resources than a datacenter, and that can be served on a normal laptop with specs about equivalent to an apply m1 (this hardware)."
 
-The same day, three look-back reads that each worked on their own failed in the trunk, because their output landed in a domain the next stage did not read:
-- claude-144's keys were made from the trunk's own state, so the right position was never chosen.
-- claude-145's payload was the copied position's residual, which the trunk read as its own input.
-- An early claude-146 form added the token's point before the final norm, where it was too small to move the prediction.
+The same day, claude-146's look-back read went through three forms that sat at chance on its recall probe. Each one's output landed in a domain the next stage did not read:
+- **Keys from the trunk's own state:** Hamming attention keyed on the state never chose the right position. Every arm was at chance in every bucket (claude-146's research note, `docs/loop/tasks/in-space-trunk-to-text/claude-146/RESEARCH.md` on branch `claude/hamming-read`). claude-144's state-keyed Flock read had not moved openings either.
+- **The copied position's residual as payload:** in the commit's words, "a copied token reads as the trunk's own input, not its answer" (`87ade4920`).
+- **The token's point added before the final norm:** next to the stream's larger parts, it "barely moves where the prediction lands" (`6d8bac253`).
 
-Only a move in the readout's own space, among the table points the decoder compares against, worked. A map that names each stage's input and output domain is how the next stage is checked before it is built.
+The form claude-146 then moved to (`6d8bac253`) moves the readout itself toward the copied token's table point, the point the decoder compares against. Its result is not yet recorded in the repository (#3332). A map that names each stage's input and output domain is how the next stage is checked before it is built.
 
 ## What is missing
 
@@ -54,7 +54,7 @@ Only a move in the readout's own space, among the table points the decoder compa
    - an order of work, each unit named with what a pass and a fail would unlock.
    
    Every number has a source.
-3. The page is merged on main. One `[claude, for Casey]` note on #2028 carries:
+3. The page is merged on main. One `[<lab>, for Casey]` note on #2028 carries:
    - the page's link;
    - the five biggest gaps;
    - the first unit to run.

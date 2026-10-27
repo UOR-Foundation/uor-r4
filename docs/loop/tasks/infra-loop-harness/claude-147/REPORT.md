@@ -30,6 +30,10 @@ Size against `origin/main`: 3 files of docs plus this task folder, with no code.
     - `PLAN.md`;
     - its own task folder and item file.
 - **`docs/roadmap/README.md`:** the row, rendered by `cargo xtask roadmap render`.
+- **Review round 1** (fresh context, at `73af182d7`) asked for changes. All three fixes are in the item:
+  - **The motivating failures.** The item had credited them to claude-144 and claude-145. They are claude-146's three forms, now quoted from its research note and from commits `87ade4920` and `6d8bac253`.
+  - **The readout move.** The item had said it worked. It now says the move is the form claude-146 moved to, and that its result is not yet recorded (#3332).
+  - **The note's tag.** The done-when's note on #2028 is now tagged `[<lab>, for Casey]`, because any lab may take the item.
 - **`PLAN.md`:** one row at the top of "Owner directions": the direction's first sentence, verbatim, status `open`, dated 2026-10-27, pointing to the item.
 
 ## Measurements
