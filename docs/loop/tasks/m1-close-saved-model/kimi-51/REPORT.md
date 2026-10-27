@@ -20,7 +20,11 @@ No experimental measurement. `cargo test --locked -p uor-r4-harness the_real_she
 
 - Real-sheet tests: 3 passed.
 - `git diff --check`: PASS; only heading/section changes.
-- Full harness, loop gates, local policy, report check, fresh exact-head review, required checks, queue and fresh-main verification are required.
+- `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo test --locked -p uor-r4-harness --no-fail-fast`: 677 passed, 1 ignored, including the formerly failing shape rule.
+- `uor-harness loop gates --full`: all 11 gates GREEN at `839cd7f0f`.
+- `uor-harness loop pr-check --local`: PASS at `839cd7f0f`, with no advisory warnings.
+- `uor-harness loop report --check --order docs/loop/tasks/m1-close-saved-model/kimi-51/ORDER.md`: PASS at `839cd7f0f`.
+- Fresh exact-head review, required checks, queue and fresh-main verification are required.
 
 ## Skills used
 
