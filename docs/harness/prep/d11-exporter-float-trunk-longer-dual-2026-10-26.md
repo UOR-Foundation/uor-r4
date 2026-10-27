@@ -83,16 +83,20 @@ The two seeds are **initialization seeds on a common fixed batch stream and comm
 
 Source `e77a1f91f0f198de9aee58b7bc20d65a6c12b298`. Build and copy all three binaries, record their SHA-256s, and run them from the session-unique run directory. Inputs are fetched with the store client, checked against the pins, and no host model/parity fallback is allowed.
 
-**Laptop lease boundary:** run `scripts/pod/uor-pod status` first and record the exact free GPU index as `GPU`. If no suitable free 5090 exists, run `scripts/pod/uor-pod up --lab kimi --session longer-dual --purpose "2,048-step dual export-gap FIT run" --hours 2.5 --count 1 --gpu 5090 --ref e77a1f91f0f198de9aee58b7bc20d65a6c12b298 --card https://github.com/UOR-Foundation/uor-r4/issues/2820`, assign `POD` to the exact id it prints, and set `GPU=0`. If a free 5090 already exists, replace `up` with `scripts/pod/uor-pod lease "$POD" --lab kimi --session longer-dual --gpus "$GPU" --purpose "2,048-step dual export-gap FIT run" --hours 2.5` and then `scripts/pod/uor-pod bootstrap "$POD" --ref e77a1f91f0f198de9aee58b7bc20d65a6c12b298`. Set `ROOT=/workspace/kimi-longer-dual-$POD`, verify it is empty, and ship the supplied `local/kimi/d11-float-trunk/job.sh` with `scripts/pod/uor-pod ssh "$POD" "cat > '$ROOT/job.sh'" < local/kimi/d11-float-trunk/job.sh`. Run `scripts/pod/uor-pod run "$POD" --lab kimi --session longer-dual --gpu "$GPU" -- env POD="$POD" bash "$ROOT/job.sh"`.
+Attempt 1 stopped before training because the pin manifest used two `printf` placeholders for single hash-and-path arguments. This was an instrument failure, archived and read back at `results/kimi/d11-fbs-longer-dual-2026-10-26/`; it is not a model result. Attempt 2 uses one placeholder per line and attempt-specific pod/store paths so no retry overwrites failure evidence.
+
+**Laptop lease boundary:** run `scripts/pod/uor-pod status` first and record the exact free GPU index as `GPU`. If no suitable free 5090 exists, run `scripts/pod/uor-pod up --lab kimi --session longer-dual --purpose "2,048-step dual export-gap FIT run" --hours 2.5 --count 1 --gpu 5090 --ref e77a1f91f0f198de9aee58b7bc20d65a6c12b298 --card https://github.com/UOR-Foundation/uor-r4/issues/2820`, assign `POD` to the exact id it prints, and set `GPU=0`. If a free 5090 already exists, replace `up` with `scripts/pod/uor-pod lease "$POD" --lab kimi --session longer-dual --gpus "$GPU" --purpose "2,048-step dual export-gap FIT run" --hours 2.5` and then `scripts/pod/uor-pod bootstrap "$POD" --ref e77a1f91f0f198de9aee58b7bc20d65a6c12b298`. Set `ATTEMPT=attempt-2` and `ROOT=/workspace/kimi-longer-dual-$POD-$ATTEMPT`, verify it is empty, and ship the supplied `local/kimi/d11-float-trunk/job.sh` with `scripts/pod/uor-pod ssh "$POD" "cat > '$ROOT/job.sh'" < local/kimi/d11-float-trunk/job.sh`. Run `scripts/pod/uor-pod run "$POD" --lab kimi --session longer-dual --gpu "$GPU" -- env POD="$POD" ATTEMPT="$ATTEMPT" bash "$ROOT/job.sh"`.
 
 The pod job starts with `set -euo pipefail` and this receipt wrapper; every model command and instrument step uses it:
 
 ```sh
+ATTEMPT=${ATTEMPT:?attempt id is required}
 REF=e77a1f91f0f198de9aee58b7bc20d65a6c12b298
-ROOT=/workspace/kimi-longer-dual-$POD
+ROOT=/workspace/kimi-longer-dual-$POD-$ATTEMPT
 RUN=$ROOT/run
 DATA=$ROOT/driver-data
 STAGING=$ROOT/staging
+ARCHIVE=results/kimi/d11-fbs-longer-dual-2026-10-26/$ATTEMPT
 run_step() {
   local name="$1"
   shift
@@ -107,7 +111,7 @@ run_step() {
   fi
 }
 mkdir -p "$RUN/bin" "$STAGING" "$RUN/store"
-trap '(cd "$RUN" && find . -type f ! -name SHA256SUMS ! -name job.log -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && sha256sum -c SHA256SUMS && /root/uor-store put "$RUN" results/kimi/d11-fbs-longer-dual-2026-10-26/ && /root/uor-store ls results/kimi/d11-fbs-longer-dual-2026-10-26/)' EXIT
+trap '(cd "$RUN" && find . -type f ! -name SHA256SUMS ! -name job.log -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && sha256sum -c SHA256SUMS && /root/uor-store put "$RUN" "$ARCHIVE" && /root/uor-store ls "$ARCHIVE")' EXIT
 run_step job-copy cp "$ROOT/job.sh" "$RUN/job.sh"
 exec > >(tee -a "$RUN/job.log") 2>&1
 SRC=/root/build/src-$REF
@@ -124,7 +128,7 @@ fi
 run_step disk-gate bash -c 'avail=$(df -k /workspace | tail -1 | tr -s " " | cut -d" " -f4); test "$avail" -ge 31457280'
 run_step get-inputs /root/uor-store get w2-inputs/2026-10-25/ "$STAGING"
 run_step link-data ln -s "$STAGING/w2-inputs/2026-10-25/driver-data" "$DATA"
-run_step pins bash -c "printf '%s  %s\n' \
+run_step pins bash -c "printf '%s\n' \
   '3dee858f84b750f507ceb3dc3f393711741950954735efaaf61bf704c017a4c8  mw-balp/train/tokens.u16' \
   'b5e7352d67d6883a833155a5fd397a03f6d4f1b2649e3d4ec3e2ea7d95b949e3  mw-balp/train/response_mask.u8' \
   '0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b  ft/dev/tokens.u16' \
@@ -134,7 +138,7 @@ run_step get-gap /root/uor-store get results/claude/d11-fbs-export-gap-2026-10-2
 run_step stage-gap mv "$RUN/store/results/claude/d11-fbs-export-gap-2026-10-26/d11gap/d11-gap.json" "$RUN/d11-gap.json"
 run_step get-prefix /root/uor-store get results/claude/d11-fbs-dual-train-2026-10-26/dual/train.json "$RUN/store"
 run_step stage-prefix mv "$RUN/store/results/claude/d11-fbs-dual-train-2026-10-26/dual/train.json" "$RUN/train-1024.json"
-run_step reference-pins bash -c "printf '%s  %s\n' \
+run_step reference-pins bash -c "printf '%s\n' \
   '88b6a5f988fe144671365a258a100e5cf3935f98e917040b38f90df2637a1e8a  d11-gap.json' \
   '5a290fbe47d8f10495b6d89fa8384110061902001ad9ebdf6b365935e220d9bc  train-1024.json' | (cd \"$RUN\" && sha256sum -c -)"
 run_step bridges cargo test --release --locked --manifest-path "$SRC/Cargo.toml" -p uor-r4-float-train --features cuda --lib
@@ -192,9 +196,9 @@ run_step negative "$RUN/bin/spiralcore-fbs-sheet" --mode d11-artifact-gap --step
 run_step negative-check jq -e '.i_inputs == false and (.gap_inside_band | contains("not counted"))' "$RUN/negative.json"
 ```
 
-After every exit, the job's trap runs `(cd "$RUN" && find . -type f ! -name SHA256SUMS ! -name job.log -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && sha256sum -c SHA256SUMS && /root/uor-store put "$RUN" results/kimi/d11-fbs-longer-dual-2026-10-26/ && /root/uor-store ls results/kimi/d11-fbs-longer-dual-2026-10-26/)` so failure evidence is preserved too.
+After every exit, the job's trap runs `(cd "$RUN" && find . -type f ! -name SHA256SUMS ! -name job.log -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && sha256sum -c SHA256SUMS && /root/uor-store put "$RUN" "$ARCHIVE" && /root/uor-store ls "$ARCHIVE")` so failure evidence is preserved too.
 
-On the laptop after the pod job exits, require `df -k ~ | tail -1 | tr -s " " | cut -d" " -f4` to report at least `31457280` KiB before and after readback. Run `scripts/pod/uor-store get results/kimi/d11-fbs-longer-dual-2026-10-26/ local/kimi/d11-float-trunk/readback`, then `(cd local/kimi/d11-float-trunk/readback/results/kimi/d11-fbs-longer-dual-2026-10-26 && shasum -a 256 -c SHA256SUMS)`. Only after every hash matches and the 30 GiB margin still holds, run `scripts/pod/uor-pod release "$POD" --lab kimi --session longer-dual` and `scripts/pod/uor-pod down "$POD" --lab kimi --session longer-dual`. Never down before the readback succeeds.
+On the laptop after the pod job exits, require `df -k ~ | tail -1 | tr -s " " | cut -d" " -f4` to report at least `31457280` KiB before and after readback. Run `scripts/pod/uor-store get "$ARCHIVE" local/kimi/d11-float-trunk/readback`, then `(cd "local/kimi/d11-float-trunk/readback/$ARCHIVE" && shasum -a 256 -c SHA256SUMS)`. Only after every hash matches and the 30 GiB margin still holds, run `scripts/pod/uor-pod release "$POD" --lab kimi --session longer-dual` and `scripts/pod/uor-pod down "$POD" --lab kimi --session longer-dual`. Never down before the readback succeeds.
 
 PASS-only serving: MacBookPro17,1, Apple M1 (4 performance + 4 efficiency cores), 16 GiB, AC power; `fbs-toks` records the OS and its binary SHA. Build with `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo build --release --locked -p uor-r4-integer --features serving-wasm --bin fbs-toks`. For each artifact run `local/target/release/fbs-toks <artifact>`: one warmup and 20 timed runs, 128-token prefill and 64-token greedy decode, median and p95 for context and decode separately. Run `python3 scripts/audit_zero_matmul_serving.py <release-rlib> --stack` and the same command on `local/target/release/uor-r4-stack`, plus `~/.cargo/bin/cargo test -p uor-r4-integer --features serving-wasm --no-fail-fast`.
 
