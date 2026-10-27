@@ -339,7 +339,7 @@ fn nearest_reading(
             let opens: Vec<bool> = windows
                 .iter()
                 .flat_map(|w| w.scored_corpus_positions.iter())
-                .map(|&p| p > 0 && mask[p - 1] == 0)
+                .map(|&p| opens_reply(mask, p))
                 .collect();
             let hidden = model.hidden(&ids, windows.len(), SHEET_CONTEXT)?;
             let idx = Tensor::from_vec(scored.clone(), scored.len(), model.device())?;
@@ -411,11 +411,27 @@ fn assemble(windows: &[&CausalWindow]) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
     (ids, scored, targets)
 }
 
-/// `samples` DEV windows spread over the panel, each with a prompt before its first reply token.
-fn sample_windows(dev: &[CausalWindow], samples: usize) -> Vec<&CausalWindow> {
+/// Whether the target at corpus `position` opens a reply: the token before it is not a response
+/// token, so the target follows the prompt and not the reply's own earlier words.
+fn opens_reply(mask: &[u8], position: usize) -> bool {
+    position > 0 && mask[position - 1] == 0
+}
+
+/// `samples` DEV windows spread over the panel whose first scored target opens a reply, with at
+/// least 16 tokens of prompt before it. `mask` is DEV's response mask.
+fn sample_windows<'a>(
+    dev: &'a [CausalWindow],
+    mask: &[u8],
+    samples: usize,
+) -> Vec<&'a CausalWindow> {
     let eligible: Vec<&CausalWindow> = dev
         .iter()
         .filter(|w| w.scored_offsets.first().is_some_and(|&off| off >= 16))
+        .filter(|w| {
+            w.scored_corpus_positions
+                .first()
+                .is_some_and(|&p| opens_reply(mask, p))
+        })
         .collect();
     if eligible.is_empty() || samples == 0 {
         return Vec::new();
@@ -567,7 +583,7 @@ pub fn context_reach(
             w.scored_offsets
                 .iter()
                 .zip(&w.scored_corpus_positions)
-                .find(|&(_, &p)| p > 0 && dev_mask[p - 1] == 0)
+                .find(|&(_, &p)| opens_reply(&dev_mask, p))
                 .map(|(&off, _)| (w, off))
         })
         .collect();
@@ -585,8 +601,13 @@ pub fn context_reach(
         };
         let mut reach = Vec::with_capacity(REACH_DISTANCES.len());
         for &distance in &REACH_DISTANCES {
-            let eligible: Vec<&(&CausalWindow, usize)> =
-                firsts.iter().filter(|(_, off)| *off >= distance).collect();
+            let eligible: Vec<&(&CausalWindow, usize)> = firsts
+                .iter()
+                // A row whose replaced token is already BOS would add a zero shift.
+                .filter(|(w, off)| {
+                    *off >= distance && w.input_ids[*off - distance] != hs::SHEET_BOS_ID
+                })
+                .collect();
             let (mut total, mut rows) = (0.0f64, 0usize);
             for chunk in eligible.chunks(hs::SHEET_EVAL_BATCH) {
                 let offs: Vec<usize> = chunk.iter().map(|(_, off)| *off).collect();
@@ -625,7 +646,7 @@ pub fn context_reach(
         })?;
         let lanes = hs::SHEET_WIDTH / 4;
         let per_layer = probe.len() * SHEET_CONTEXT * lanes;
-        if per_layer == 0 || captured.len() % per_layer != 0 {
+        if per_layer == 0 || captured.is_empty() || captured.len() % per_layer != 0 {
             return Err(invalid("rate capture does not split into whole layers"));
         }
         let bins = captured
@@ -640,7 +661,15 @@ pub fn context_reach(
                 for (at, &k) in values.iter().enumerate() {
                     let position = at / lanes;
                     let (b, t) = (position / SHEET_CONTEXT, position % SHEET_CONTEXT);
-                    bins.all_positions[usize::from(k)] += 1;
+                    // BOS padding after a window's last scored target is not text.
+                    if probe[b]
+                        .0
+                        .scored_offsets
+                        .last()
+                        .is_some_and(|&last| t <= last)
+                    {
+                        bins.all_positions[usize::from(k)] += 1;
+                    }
                     if t == probe[b].1 {
                         bins.openings[usize::from(k)] += 1;
                     }
@@ -673,6 +702,8 @@ pub fn decode_speed(
     data_root: &Path,
     checkpoint: &Path,
     retain_rates: bool,
+    fold_scores: bool,
+    reflect_floor: bool,
     nearest: bool,
     tokens: usize,
     seed: u64,
@@ -681,6 +712,8 @@ pub fn decode_speed(
     let (dev_windows, _) = load_dev(data_root)?;
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
     crate::geometric_stack::set_retention_rates(retain_rates);
+    crate::geometric_stack::set_folded_scores(fold_scores);
+    crate::geometric_stack::set_reflected_floor(reflect_floor);
     let _guard = ArmGuard;
     let model = StackModel::load(checkpoint, device)?;
     let source = dev_windows
@@ -702,11 +735,13 @@ pub fn decode_speed(
         let reply = greedy_reply(&model, objective, prompt, tokens, seed)?;
         device.synchronize()?;
         let seconds = started.elapsed().as_secs_f64();
+        // A reply cut short by BOS ran one more forward pass, the one that produced BOS.
+        let passes = (reply.len() + 1).min(tokens);
         speeds.push(DecodeSpeed {
             context_tokens: prompt.len(),
-            decoded_tokens: reply.len(),
+            decoded_tokens: passes,
             seconds,
-            tokens_per_second: reply.len() as f64 / seconds.max(1e-9),
+            tokens_per_second: passes as f64 / seconds.max(1e-9),
         });
     }
     Ok(speeds)
@@ -943,7 +978,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
 
     let usable = load_train(data_root, config.batch)?;
     let (dev_windows, dev_mask) = load_dev(data_root)?;
-    let prompts = sample_windows(&dev_windows, config.samples);
+    let prompts = sample_windows(&dev_windows, &dev_mask, config.samples);
     println!(
         "[in-space] usable TRAIN windows {} (batch {}, {} steps = {:.2} epochs), DEV windows {}",
         usable.len(),
@@ -1092,20 +1127,32 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         cursor += config.batch;
         let (ids, scored, targets) = assemble(&windows);
         let started = Instant::now();
-        let loss = batch_loss(
-            &model,
-            config.objective,
-            &ids,
-            &scored,
-            &targets,
-            config.batch,
+        // The gate hook carries the real step: at step 0 its backward runs diagnostics with host
+        // syncs, and a checkpoint's replies leave it at 0.
+        let (value, grads) = hs::with_gate_mode(
+            HamiltonArm::HamiltonActive,
+            config.seed,
+            step + 1,
+            false,
+            || {
+                let loss = batch_loss(
+                    &model,
+                    config.objective,
+                    &ids,
+                    &scored,
+                    &targets,
+                    config.batch,
+                )?;
+                let value = f64::from(loss.to_scalar::<f32>()?);
+                if !value.is_finite() {
+                    return Err(invalid(format!("non-finite training loss at step {step}")));
+                }
+                Ok((value, loss.backward()?))
+            },
         )?;
-        let value = f64::from(loss.to_scalar::<f32>()?);
-        if !value.is_finite() {
-            return Err(invalid(format!("non-finite training loss at step {step}")));
-        }
-        let grads = loss.backward()?;
-        let lr = config.lr + (config.lr_end - config.lr) * (step as f64 / config.steps as f64);
+        // Linear from `lr` at the first step to `lr_end` at the last.
+        let progress = step as f64 / (config.steps.saturating_sub(1).max(1)) as f64;
+        let lr = config.lr + (config.lr_end - config.lr) * progress;
         opt_main.update_filtered(&model, &grads, lr, |name| !name.ends_with("rec.decay"))?;
         opt_decay.update_filtered(&model, &grads, lr * config.decay_mult, |name| {
             name.ends_with("rec.decay")
@@ -1147,6 +1194,73 @@ mod tests {
         let (nearest, farthest) = root_separation().unwrap();
         println!("address roots: nearest {nearest}, farthest {farthest}");
         assert!(nearest > 0.0 && nearest <= farthest);
+    }
+
+    #[test]
+    fn a_reply_opens_where_the_token_before_is_not_a_response_token() {
+        // prompt, prompt, reply, reply, prompt, reply: the scored targets are the reply tokens
+        // 2, 3 and 5, and the first of each reply opens it.
+        let mask = [0u8, 0, 1, 1, 0, 1];
+        let opens: Vec<bool> = [2, 3, 5].iter().map(|&p| opens_reply(&mask, p)).collect();
+        assert_eq!(opens, [true, false, true]);
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn best_positions_skip_what_is_not_allowed_and_rank_the_rest() {
+        let device = Device::new_cuda(0).unwrap();
+        let scores = Tensor::new(&[[0.9f32, 0.1, 0.8, 0.3, 0.5]], &device).unwrap();
+        let allowed = Tensor::new(&[[0u8, 1, 1, 1, 1]], &device).unwrap();
+        let at = best_positions(&scores, &allowed, 3).unwrap();
+        assert_eq!(at.to_vec2::<u32>().unwrap(), vec![vec![2, 4, 3]]);
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn whole_table_scores_do_not_depend_on_the_chunk() {
+        let device = Device::new_cuda(0).unwrap();
+        let table = Tensor::new(
+            &[[0.0f32, 1.0], [1.0, 0.0], [2.0, 2.0], [-1.0, 0.5]],
+            &device,
+        )
+        .unwrap();
+        let query = Tensor::new(&[[0.0f32, 0.0], [1.0, 1.0], [2.0, -1.0]], &device).unwrap();
+        let whole = nearest_scores(&query, &table)
+            .unwrap()
+            .to_vec2::<f32>()
+            .unwrap();
+        // Row by row, as a chunk of one row gives.
+        for (r, row) in whole.iter().enumerate() {
+            let one = nearest_scores(&query.narrow(0, r, 1).unwrap(), &table)
+                .unwrap()
+                .to_vec2::<f32>()
+                .unwrap();
+            assert_eq!(&one[0], row);
+        }
+        // Negative mean L1: query [0, 0] against [0, 1] is -(0 + 1) / 2.
+        assert_eq!(whole[0][0], -0.5);
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_voronoi_loss_at_margin_one_is_the_writers_margin() {
+        let device = Device::new_cuda(0).unwrap();
+        let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
+        let ids: Vec<u32> = (0..SHEET_CONTEXT as u32).map(|i| (i * 37) % 4096).collect();
+        let hidden = model.hidden(&ids, 1, SHEET_CONTEXT).unwrap();
+        let idx = Tensor::new(&[10u32, 50, 100, 191], &device).unwrap();
+        let query = hidden.index_select(&idx, 0).unwrap();
+        let targets = [11u32, 2000, 7, 300];
+        let writer = model
+            .native_head_loss(&query, &targets, hs::SHEET_RIVALS)
+            .unwrap()
+            .to_scalar::<f32>()
+            .unwrap();
+        let ours = voronoi_loss(&model, &query, &targets, 1.0)
+            .unwrap()
+            .to_scalar::<f32>()
+            .unwrap();
+        assert!((writer - ours).abs() < 1e-6, "{writer} != {ours}");
     }
 
     #[cfg(feature = "cuda")]

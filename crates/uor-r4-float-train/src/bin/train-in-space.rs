@@ -58,12 +58,17 @@ fn main() -> Result<()> {
             v.parse::<usize>()
                 .map_err(|_| FloatTrainError::Invalid(format!("{arg} wants a whole number")))
         };
+        let switch = |v: &str| match v {
+            "0" => Ok(false),
+            "1" => Ok(true),
+            _ => Err(FloatTrainError::Invalid(format!("{arg} wants 0 or 1"))),
+        };
         match arg.as_str() {
             "--data-root" => data_root = Some(PathBuf::from(&value)),
             "--out" => out = Some(PathBuf::from(&value)),
             "--inspect" => inspect = Some(PathBuf::from(&value)),
             "--reach" => reach = Some(PathBuf::from(&value)),
-            "--grad-norms" => grad_norms = number(&value)? == 1,
+            "--grad-norms" => grad_norms = switch(&value)?,
             "--decode-speed" => decode = Some(PathBuf::from(&value)),
             "--objective" => {
                 config.objective = match value.as_str() {
@@ -83,10 +88,10 @@ fn main() -> Result<()> {
             "--seed" => config.seed = number(&value)? as u64,
             "--samples" => config.samples = number(&value)?,
             "--reply-tokens" => config.reply_tokens = number(&value)?,
-            "--retain-rates" => config.retain_rates = number(&value)? == 1,
-            "--fold-scores" => config.fold_scores = number(&value)? == 1,
-            "--reflect-floor" => config.reflect_floor = number(&value)? == 1,
-            "--fix-input-table" => config.fix_input_table = number(&value)? == 1,
+            "--retain-rates" => config.retain_rates = switch(&value)?,
+            "--fold-scores" => config.fold_scores = switch(&value)?,
+            "--reflect-floor" => config.reflect_floor = switch(&value)?,
+            "--fix-input-table" => config.fix_input_table = switch(&value)?,
             "--lr" | "--lr-end" | "--decay-mult" => {
                 let v: f64 = value
                     .parse()
@@ -107,6 +112,18 @@ fn main() -> Result<()> {
     if config.lr_end.is_nan() {
         config.lr_end = config.lr;
     }
+    let modes = [
+        inspect.is_some(),
+        reach.is_some(),
+        grad_norms,
+        decode.is_some(),
+        out.is_some(),
+    ];
+    if modes.iter().filter(|&&m| m).count() > 1 {
+        return Err(FloatTrainError::Invalid(
+            "give one of --out, --inspect, --reach, --grad-norms 1 or --decode-speed".to_owned(),
+        ));
+    }
     let data_root =
         data_root.ok_or_else(|| FloatTrainError::Invalid("--data-root is required".to_owned()))?;
     let device = Device::new_cuda(0)?;
@@ -116,6 +133,8 @@ fn main() -> Result<()> {
             &data_root,
             &checkpoint,
             config.retain_rates,
+            config.fold_scores,
+            config.reflect_floor,
             nearest,
             config.reply_tokens,
             config.seed,
