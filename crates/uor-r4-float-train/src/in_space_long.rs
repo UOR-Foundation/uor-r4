@@ -514,15 +514,25 @@ pub struct Reach {
 
 pub const REACH_DISTANCES: [usize; 13] = [0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 24, 32];
 
-/// [`Reach`] at each of [`REACH_DISTANCES`] for the checkpoint saved in `checkpoint`. Distance 0
-/// replaces the opening's own input token, the end of the prompt.
+/// One recurrence layer's selected rate-table entries over the first 16 DEV windows that open a
+/// reply, at their openings and at every position. Entry `k` read as retention holds about
+/// `2^(k+1)` tokens; read as the default rate, it holds at most a few.
+#[derive(Clone, Debug, Serialize)]
+pub struct RateBins {
+    pub layer: usize,
+    pub openings: [u64; 16],
+    pub all_positions: [u64; 16],
+}
+
+/// [`Reach`] at each of [`REACH_DISTANCES`] for the checkpoint saved in `checkpoint`, and each
+/// layer's [`RateBins`]. Distance 0 replaces the opening's own input token, the end of the prompt.
 pub fn context_reach(
     data_root: &Path,
     checkpoint: &Path,
     retain_rates: bool,
     seed: u64,
     device: &Device,
-) -> Result<Vec<Reach>> {
+) -> Result<(Vec<Reach>, Vec<RateBins>)> {
     let (dev_windows, dev_mask) = load_dev(data_root)?;
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
     crate::geometric_stack::set_retention_rates(retain_rates);
@@ -582,7 +592,40 @@ pub fn context_reach(
                 mean_shift: total / rows.max(1) as f64,
             });
         }
-        Ok(reach)
+        let probe = &firsts[..firsts.len().min(hs::SHEET_EVAL_BATCH)];
+        let ids: Vec<u32> = probe
+            .iter()
+            .flat_map(|(w, _)| w.input_ids.iter().copied())
+            .collect();
+        let (_, captured) = crate::secant_descent::with_rate_indices(|| {
+            model.hidden(&ids, probe.len(), SHEET_CONTEXT)
+        })?;
+        let lanes = hs::SHEET_WIDTH / 4;
+        let per_layer = probe.len() * SHEET_CONTEXT * lanes;
+        if per_layer == 0 || captured.len() % per_layer != 0 {
+            return Err(invalid("rate capture does not split into whole layers"));
+        }
+        let bins = captured
+            .chunks(per_layer)
+            .enumerate()
+            .map(|(layer, values)| {
+                let mut bins = RateBins {
+                    layer,
+                    openings: [0; 16],
+                    all_positions: [0; 16],
+                };
+                for (at, &k) in values.iter().enumerate() {
+                    let position = at / lanes;
+                    let (b, t) = (position / SHEET_CONTEXT, position % SHEET_CONTEXT);
+                    bins.all_positions[usize::from(k)] += 1;
+                    if t == probe[b].1 {
+                        bins.openings[usize::from(k)] += 1;
+                    }
+                }
+                bins
+            })
+            .collect();
+        Ok((reach, bins))
     })
 }
 

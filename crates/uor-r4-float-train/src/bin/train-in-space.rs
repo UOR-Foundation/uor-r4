@@ -96,14 +96,18 @@ fn main() -> Result<()> {
         data_root.ok_or_else(|| FloatTrainError::Invalid("--data-root is required".to_owned()))?;
     let device = Device::new_cuda(0)?;
     if let Some(checkpoint) = reach {
-        for point in context_reach(
+        let (reach, bins) = context_reach(
             &data_root,
             &checkpoint,
             config.retain_rates,
             config.seed,
             &device,
-        )? {
+        )?;
+        for point in reach {
             println!("{}", serde_json::to_string(&point)?);
+        }
+        for layer in bins {
+            println!("{}", serde_json::to_string(&layer)?);
         }
         return Ok(());
     }

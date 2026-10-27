@@ -244,6 +244,22 @@ pub(crate) fn on_rate_select_fwd_values(pairs: &[f32]) {
     });
 }
 
+/// Run `f` with every rate selection's table index recorded, in call order (`in_space_long`).
+pub(crate) fn with_rate_indices<T>(f: impl FnOnce() -> Result<T>) -> Result<(T, Vec<u8>)> {
+    HOOK_STATE.with(|cell| {
+        let mut st = cell.borrow_mut();
+        st.capture_rate_fwd = true;
+        st.captured_rate_indices.clear();
+    });
+    let out = f();
+    let captured = HOOK_STATE.with(|cell| {
+        let mut st = cell.borrow_mut();
+        st.capture_rate_fwd = false;
+        std::mem::take(&mut st.captured_rate_indices)
+    });
+    Ok((out?, captured))
+}
+
 #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
 pub(crate) fn is_capturing_rate_fwd() -> bool {
     HOOK_STATE.with(|cell| cell.borrow().capture_rate_fwd)
