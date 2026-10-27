@@ -630,6 +630,20 @@ thread_local! {
     /// The deterministic-backward switch (claude-141): the FBS backward of the pinned-kernel arms
     /// runs on `src/spiralcore_fbs_det.cu`, fixed-order gathers in place of float atomics.
     static DETERMINISTIC_BWD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// How many times the deterministic backward has started on this thread: a marker that lets a
+    /// test tell which backward ran (claude-141 code review).
+    static DETERMINISTIC_BWD_CALLS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// The number of deterministic-backward calls on this thread so far.
+pub fn deterministic_bwd_calls() -> u64 {
+    DETERMINISTIC_BWD_CALLS.with(|c| c.get())
+}
+
+/// Notes one deterministic-backward call; only `cuda_ops::spiralcore_fbs_bwd_det` calls it.
+#[cfg_attr(not(feature = "cuda"), allow(dead_code))]
+pub(crate) fn count_deterministic_bwd_call() {
+    DETERMINISTIC_BWD_CALLS.with(|c| c.set(c.get() + 1));
 }
 
 /// Runs `f` with the SpiralCore/FBS backward of the `OneAtomActive` and `FrozenQueries` arms on

@@ -300,16 +300,29 @@ mod gpu_tests {
     #[test]
     #[ignore = "needs a CUDA device; run on the pod"]
     fn the_deterministic_backward_matches_the_pinned_one_and_repeats_bit_for_bit() {
-        use crate::spiralcore_fbs_sheet::{is_deterministic_bwd, with_deterministic_bwd};
+        use crate::spiralcore_fbs_sheet::{
+            deterministic_bwd_calls, is_deterministic_bwd, with_deterministic_bwd,
+        };
         let (plan, q, x, device) = setup(1, 51);
         let dy = dy_for(&device, 13);
+        let before_pinned = deterministic_bwd_calls();
         let (y, dq, dx) = run(&plan, &q, &x, FbsArm::OneAtomActive, &dy);
+        assert_eq!(
+            deterministic_bwd_calls(),
+            before_pinned,
+            "with the switch off, the pinned backward runs"
+        );
         let det = || {
             with_deterministic_bwd(|| Ok(run(&plan, &q, &x, FbsArm::OneAtomActive, &dy)))
                 .expect("deterministic run")
         };
         let (y1, dq1, dx1) = det();
         let (y2, dq2, dx2) = det();
+        assert_eq!(
+            deterministic_bwd_calls(),
+            before_pinned + 2,
+            "with the switch on, the deterministic backward runs, once per run"
+        );
         assert!(
             !is_deterministic_bwd(),
             "the switch is restored after each run"
@@ -335,7 +348,7 @@ mod gpu_tests {
     #[test]
     #[ignore = "needs a CUDA device; run on the pod"]
     fn the_deterministic_backward_keeps_the_pinned_error_codes() {
-        use crate::spiralcore_fbs_sheet::with_deterministic_bwd;
+        use crate::spiralcore_fbs_sheet::{deterministic_bwd_calls, with_deterministic_bwd};
         let (plan, q, x, device) = setup(1, 61);
         let mut bad = values(17, ROWS * OUTPUT_ATOMS * 8);
         bad[5] = f32::NAN;
@@ -347,8 +360,14 @@ mod gpu_tests {
             Ok(())
         };
         let pinned = backward().expect_err("the pinned backward refuses a NaN gradient");
+        let calls = deterministic_bwd_calls();
         let det = with_deterministic_bwd(backward)
             .expect_err("the deterministic backward refuses a NaN gradient");
+        assert_eq!(
+            deterministic_bwd_calls(),
+            calls + 1,
+            "the error came from the deterministic backward"
+        );
         assert_eq!(det.to_string(), pinned.to_string(), "the same device error");
     }
 

@@ -643,8 +643,6 @@ struct SpiralcoreFbsDevicePlan {
     roots: CudaSlice<f32>,
 }
 
-// The SpiralCore/FBS sheet arms (`src/spiralcore_fbs_arms.cu`, spiralcore-fbs-offline-float-sheet,
-// claude-119), launched from their own ahead-of-time module (`build.rs`, no runtime compiler).
 // The deterministic FBS backward (claude-141). The same adjoint as the pinned
 // `spiralcore_fbs_bwd`, with its two float-atomic sums replaced by fixed-order gathers: one thread
 // per row adds the input adjoint over the outputs in order, and one thread per output adds the
@@ -660,6 +658,7 @@ pub(crate) fn spiralcore_fbs_bwd_det(
     x: &Tensor,
     grad: &Tensor,
 ) -> CResult<(Tensor, Tensor)> {
+    crate::spiralcore_fbs_sheet::count_deterministic_bwd_call();
     let (q, x, grad) = (q.contiguous()?, x.contiguous()?, grad.contiguous()?);
     if x.dtype() != DType::F32 || grad.dtype() != DType::F32 {
         candle_core::bail!("the deterministic FBS backward runs on F32 carriers only");
@@ -718,6 +717,8 @@ pub(crate) fn spiralcore_fbs_bwd_det(
     crate::secant_descent::transform_spiralcore_fbs_bwd(&q, raw_dq, raw_dx)
 }
 
+// The SpiralCore/FBS sheet arms (`src/spiralcore_fbs_arms.cu`, spiralcore-fbs-offline-float-sheet,
+// claude-119), launched from their own ahead-of-time module (`build.rs`, no runtime compiler).
 // `arm` is 1 (identity transport) or 2 (two routed query paths); F32 carriers only, as qualified
 // execution is F32. The pinned `spiralcore_fbs_fwd`/`spiralcore_fbs_bwd` above are untouched.
 const SPIRALCORE_FBS_ARMS_MODULE: &str = "uor_r4_spiralcore_fbs_arms";
