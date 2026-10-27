@@ -86,7 +86,17 @@ const GAP_OPTIONS: [&str; 20] = [
 /// The one dose the longer-dual sheet registers besides the default.
 const LONGER_STEPS: usize = 2_048;
 
-fn train_steps(extra: &BTreeMap<String, String>) -> Result<usize> {
+fn train_steps(extra: &BTreeMap<String, String>, mode: &str) -> Result<usize> {
+    if extra.contains_key("--steps")
+        && !matches!(
+            mode,
+            "d11-train-probe" | "d11-train-export" | "d11-artifact-gap" | "d11-residual"
+        )
+    {
+        return Err(FloatTrainError::Invalid(format!(
+            "--steps is not valid for {mode}"
+        )));
+    }
     let steps = extra
         .get("--steps")
         .map(|value| {
@@ -223,7 +233,7 @@ fn main() -> Result<()> {
     let train_forward =
         TrainForward::parse(extra.get("--train-forward").map_or("d11", String::as_str))?;
     // Bind and validate the step count before the CUDA device is opened.
-    let steps = train_steps(&extra)?;
+    let steps = train_steps(&extra, &mode)?;
     let device = Device::new_cuda(0)?;
     match mode.as_str() {
         "synthetic-probe" => {
@@ -561,9 +571,9 @@ mod tests {
     #[test]
     fn the_train_step_option_accepts_only_the_two_registered_doses() -> Result<()> {
         let mut extra = BTreeMap::new();
-        assert_eq!(train_steps(&extra)?, 1_024);
+        assert_eq!(train_steps(&extra, "d11-train-export")?, 1_024);
         extra.insert("--steps".to_owned(), "2048".to_owned());
-        assert_eq!(train_steps(&extra)?, 2_048);
+        assert_eq!(train_steps(&extra, "d11-train-export")?, 2_048);
         for invalid in [
             "0",
             "1",
@@ -576,7 +586,28 @@ mod tests {
             "not-a-number",
         ] {
             extra.insert("--steps".to_owned(), invalid.to_owned());
-            assert!(train_steps(&extra).is_err(), "{invalid} must be refused");
+            assert!(
+                train_steps(&extra, "d11-train-export").is_err(),
+                "{invalid} must be refused"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn the_train_step_option_is_rejected_by_modes_that_do_not_consume_it() -> Result<()> {
+        let mut extra = BTreeMap::new();
+        extra.insert("--steps".to_owned(), "2048".to_owned());
+        for mode in [
+            "d11-train-probe",
+            "d11-train-export",
+            "d11-artifact-gap",
+            "d11-residual",
+        ] {
+            assert_eq!(train_steps(&extra, mode)?, 2_048);
+        }
+        for mode in ["full", "d11-export-gap", "d11-snap-trace"] {
+            assert!(train_steps(&extra, mode).is_err(), "{mode}");
         }
         Ok(())
     }

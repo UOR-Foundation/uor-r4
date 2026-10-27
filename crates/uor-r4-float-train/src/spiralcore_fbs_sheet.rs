@@ -1519,10 +1519,7 @@ pub fn run_d11_artifact_gap(
     let noise = receipt["noise_band_dev_loss"]
         .as_f64()
         .ok_or_else(|| invalid("the Stage 4b receipt has no noise band"))?;
-    let trained_steps = receipt["steps"]
-        .as_u64()
-        .map(|value| value as usize)
-        .ok_or_else(|| invalid("the Stage 4b receipt has no steps"))?;
+    let trained_steps = receipt_trained_steps(&receipt)?;
     if trained_steps != steps {
         return Err(invalid("the Stage 4b receipt and evaluation steps differ"));
     }
@@ -1821,27 +1818,70 @@ fn classify_residual(
     }
 }
 
-fn validate_longer_train_receipt(receipt: &serde_json::Value, steps: usize) -> Result<()> {
-    if steps == STEPS {
-        return Ok(());
+fn receipt_trained_steps(receipt: &serde_json::Value) -> Result<usize> {
+    if let Some(value) = receipt.get("steps") {
+        return value
+            .as_u64()
+            .map(|steps| steps as usize)
+            .ok_or_else(|| invalid("the training receipt has an invalid steps field"));
     }
-    if steps != 2_048 {
+    let runs = receipt["runs"]
+        .as_array()
+        .ok_or_else(|| invalid("the legacy Stage 4b receipt has no runs or steps"))?;
+    let mut steps = runs.iter().map(|run| {
+        run["steps"]
+            .as_u64()
+            .map(|steps| steps as usize)
+            .ok_or_else(|| invalid("a legacy Stage 4b run has no steps"))
+    });
+    let first = steps
+        .next()
+        .ok_or_else(|| invalid("the legacy Stage 4b receipt has no runs"))??;
+    for run_steps in steps {
+        if run_steps? != first {
+            return Err(invalid("the legacy Stage 4b runs have different steps"));
+        }
+    }
+    Ok(first)
+}
+
+fn validate_longer_train_receipt(receipt: &serde_json::Value, steps: usize) -> Result<()> {
+    if receipt_trained_steps(receipt)? != steps {
+        return Err(invalid("the training receipt and requested steps differ"));
+    }
+    if steps != STEPS && steps != 2_048 {
         return Err(invalid(
             "only the 1024 and 2048 training receipts are registered",
         ));
     }
-    let expected_sheet = "docs/harness/prep/d11-exporter-float-trunk-longer-dual-2026-10-26.md";
-    let expected_eval = serde_json::json!([0, 256, 512, 1_024, 2_048]);
+    if receipt.get("steps").is_none() {
+        if receipt["sheet"].as_str()
+            == Some("docs/harness/prep/d11-exporter-float-trunk-stage4b-2026-10-26.md")
+        {
+            return Ok(());
+        }
+        return Err(invalid(
+            "a receipt without top-level steps must be the legacy Stage 4b shape",
+        ));
+    }
+    let forward = TrainForward::parse(
+        receipt["train_forward"]
+            .as_str()
+            .ok_or_else(|| invalid("the training receipt has no train_forward"))?,
+    )?;
+    let expected_sheet = d11_train_sheet(forward, steps)?;
     for (field, expected) in [
-        ("steps", serde_json::json!(2_048)),
-        ("train_forward", serde_json::json!("dual")),
-        ("train_batches", serde_json::json!(2_048)),
-        ("eval_steps", expected_eval),
+        ("steps", serde_json::json!(steps)),
+        ("train_batches", serde_json::json!(steps)),
+        (
+            "eval_steps",
+            serde_json::to_value(training_eval_steps(steps)?)?,
+        ),
         ("sheet", serde_json::json!(expected_sheet)),
     ] {
         if receipt.get(field) != Some(&expected) {
             return Err(invalid(format!(
-                "the longer training receipt has the wrong or missing {field}"
+                "the training receipt has the wrong or missing {field}"
             )));
         }
     }
@@ -1864,10 +1904,7 @@ struct Stage4bIdentity {
 fn read_stage4b_identity(path: &Path) -> Result<Stage4bIdentity> {
     let bytes = fs::read(path)?;
     let receipt: serde_json::Value = serde_json::from_slice(&bytes)?;
-    let trained_steps = receipt["steps"]
-        .as_u64()
-        .map(|value| value as usize)
-        .ok_or_else(|| invalid("the Stage 4b receipt has no steps"))?;
+    let trained_steps = receipt_trained_steps(&receipt)?;
     validate_longer_train_receipt(&receipt, trained_steps)?;
     let mut loss_float_by_seed = BTreeMap::new();
     for seed in receipt["seeds"]
@@ -3955,7 +3992,7 @@ mod tests {
             "sheet": "docs/harness/prep/d11-exporter-float-trunk-longer-dual-2026-10-26.md"
         });
         assert!(validate_longer_train_receipt(&valid, 2_048).is_ok());
-        assert!(validate_longer_train_receipt(&valid, 1_024).is_ok());
+        assert!(validate_longer_train_receipt(&valid, 1_024).is_err());
         for (label, key, value) in [
             ("steps", "steps", serde_json::json!(1_024)),
             ("train_forward", "train_forward", serde_json::json!("d11")),
@@ -3976,6 +4013,34 @@ mod tests {
                 "missing {label}"
             );
         }
+    }
+
+    #[test]
+    fn the_1024_receipt_identity_and_legacy_shape_are_exact() -> Result<()> {
+        let current = serde_json::json!({
+            "steps": 1_024,
+            "train_forward": "dual",
+            "train_batches": 1_024,
+            "eval_steps": [0, 256, 512, 1_024],
+            "sheet": "docs/harness/prep/d11-exporter-float-trunk-dual-train-2026-10-26.md"
+        });
+        assert!(validate_longer_train_receipt(&current, 1_024).is_ok());
+        assert!(validate_longer_train_receipt(&current, 2_048).is_err());
+        let mut wrong_batches = current.clone();
+        wrong_batches["train_batches"] = serde_json::json!(2_048);
+        assert!(validate_longer_train_receipt(&wrong_batches, 1_024).is_err());
+
+        let legacy = serde_json::json!({
+            "sheet": "docs/harness/prep/d11-exporter-float-trunk-stage4b-2026-10-26.md",
+            "runs": [{"steps": 1_024}, {"steps": 1_024}]
+        });
+        assert_eq!(receipt_trained_steps(&legacy)?, 1_024);
+        assert!(validate_longer_train_receipt(&legacy, 1_024).is_ok());
+        assert!(validate_longer_train_receipt(&legacy, 2_048).is_err());
+        let mut mixed = legacy.clone();
+        mixed["runs"][1]["steps"] = serde_json::json!(2_048);
+        assert!(receipt_trained_steps(&mixed).is_err());
+        Ok(())
     }
 
     #[test]

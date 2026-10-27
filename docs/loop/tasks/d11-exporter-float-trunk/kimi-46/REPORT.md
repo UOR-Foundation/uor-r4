@@ -13,11 +13,11 @@ References #2820. The item is not done and no `Closes` claim is made.
 
 ## What changed
 
-Diff against `origin/main`: 926 lines added and 89 removed before this REPORT/notebook row. There are 750 changed lines in two float-train source files, including their tests, and 176 lines in the ORDER, decision card and prep sheet. No generated files changed. The ORDER gave no numeric size estimate, so a ratio is not available.
+`loop pr-check --local` reports the final size by class; no generated files changed. The ORDER gave no numeric size estimate, so a ratio is not available.
 
-- `--steps` accepts only 1,024 or 2,048 and is validated before CUDA opens. The default remains 1,024.
+- `--steps` accepts only 1,024 or 2,048 and is validated before CUDA opens. The default remains 1,024; modes that do not consume the option reject it rather than silently ignoring it.
 - Longer training uses the requested batch count and adds the final 2,048 evaluation point without changing the earlier points, learning rates, 1:1 dual loss, seeds or data.
-- Gap and residual scorers bind dose, model identity and saved F/D/A prediction outputs; missing seed losses refuse the receipt.
+- Gap and residual scorers bind dose, model identity and saved F/D/A prediction outputs; missing seed losses refuse the receipt. Legacy Stage 4b receipts read their nested 1,024 run steps, while modern 1,024 and 2,048 receipts validate their full dose identity.
 - The prep sheet registers the dose-plus-coverage intervention, exact outcomes, counterfactual, instruments, cost and attempt-specific archival/readback.
 - FIT passed at `5345b554`; D68 passed at `e77a1f91`; D67 passed conditionally on storage at `78a5369a6` and again for attempt 2 at `c719506f`. CI is green at `c719506f`.
 
@@ -36,15 +36,15 @@ Step-0 export-mode top-1 was also identical (0 and 11). At step 256 the old/new 
 
 **Probe and training instruments.** `train_learns=true`, `learns=true`, `under_one_hour_per_seed=true`; 2,048 batches, 8,192 used windows, 68,218 usable windows and 291,414 scored targets. `instruments_pass=true`; evaluation points are exactly `[0,256,512,1024,2048]`; both `i_save_load=true`.
 
-**Evidence and cost.** Attempt 1 is sealed at `results/kimi/d11-fbs-longer-dual-2026-10-26/`; attempt 2 at `results/kimi/d11-fbs-longer-dual-2026-10-26/attempt-2/`. The latter has 85 hash-verified files. Its `train.json` SHA-256 is `b4ecb87da64916683033cd1098a7c19f1af679549fc5c74dfbd55f438836f342`; the prior receipt remains `5a290fbe47d8f10495b6d89fa8384110061902001ad9ebdf6b365935e220d9bc`. The pod's observed lifetime was about 37 minutes at an offered $0.975/h, about $0.60; the final provider invoice was not read. Agent review, coordination and CI time are additional and not metered.
+**Evidence and cost.** Attempt 1 is sealed at `results/kimi/d11-fbs-longer-dual-2026-10-26/`; attempt 2 at `results/kimi/d11-fbs-longer-dual-2026-10-26/attempt-2/`. Attempt 2 has 85 total files, of which 83 are hash-listed and verified; `SHA256SUMS` and `job.log` are deliberately not self-covered. Attempt 1 likewise has 40 total files and 38 verified entries. See [READBACK.md](READBACK.md) for the local hash, HF-listing and storage receipts. Attempt 2's `train.json` SHA-256 is `b4ecb87da64916683033cd1098a7c19f1af679549fc5c74dfbd55f438836f342`; the prior receipt remains `5a290fbe47d8f10495b6d89fa8384110061902001ad9ebdf6b365935e220d9bc`. The compute ledger's 2,336-second pod lifetime at an offered $0.975/h is a $0.633 proxy, not a final invoice. Agent review, coordination and CI time are additional; their total is NOT_REPORTED.
 
 ## Checks run at the head
 
-- `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo test --release --locked -p uor-r4-float-train --features cuda --lib --no-fail-fast`: 60 passed, 5 ignored on the RTX 5090 at the run source.
-- CLI tests: 3 passed; dependency tests: 2 passed; 12 finite kernel controls passed at the Rust implementation head.
+- Archived `bridges.out` at run source `e77a1f91`: **82 passed, 5 ignored** for `cargo test --release --locked -p uor-r4-float-train --features cuda --lib` on the RTX 5090. The separate earlier host suite had 60 library tests; it is not the archived CUDA count.
+- Host suite after the compatibility repair: **61 library, 4 CLI, 2 dependency and 12 kernel-control tests passed** with `CARGO_TARGET_DIR=local/target ~/.cargo/bin/cargo test --locked -p uor-r4-float-train --no-fail-fast`. The failing-first compatibility controls failed before the repair and pass after it.
 - Attempt 2 `bridges.exit`, `probe-gate.exit`, `train-gate.exit`: all 0. `prefix.exit`: 1, the registered stop.
 - Local harness library suite after the FIT-format repair: 677 passed, 1 ignored. The slower local integration command hit its 900-second tool timeout after the library pass; it is not claimed as a complete local suite.
-- GitHub at `c719506fab6272477afd58149ccd60251c519db9`: harness rules/tests and loop gates full are SUCCESS; no failed or pending checks.
+- GitHub at the pre-repair REPORT head `2e3fbaaec049fd865a4fffa34754a78cbad652e3`: no failed or pending checks. All 11 local loop gates and `uor-harness loop pr-check --local` passed there; both are rerun for the repair before delivery.
 - `bash -n local/kimi/d11-float-trunk/job.sh`: PASS. Both archived `SHA256SUMS` readbacks: PASS. Final `scripts/pod/uor-pod status`: 0 pods, $0/h.
 
 ## Skills used
