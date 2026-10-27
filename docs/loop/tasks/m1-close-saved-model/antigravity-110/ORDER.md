@@ -25,6 +25,9 @@ The item's done-when reads:
 - `docs/labs/m1-close-saved-model/**`
 - `docs/loop/tasks/m1-close-saved-model/**`
 - `docs/research/notebook/m1-discrete-attention.md`
+- `docs/roadmap/items/m1-close-saved-model.md`
+- `docs/roadmap/README.md`
+- `ROADMAP.md`
 
 ## Done when
 

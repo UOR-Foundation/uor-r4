@@ -238,17 +238,18 @@ pub fn mcnemar_floor(min_floor: u64, discordant: u64) -> u64 {
     min_floor.max(k)
 }
 
-/// Exact prefix copy-successor predicate (`evidence::is_copy_successor` on raw
-/// token prefixes): true iff `prefix` has length >= 3 and there exists an index
-/// `i` with `i + 1 < prefix.len()` such that `prefix[i] == query` and
-/// `prefix[i + 1] == target`.
+/// Exact prefix copy-successor predicate (`attention_evidence::is_copy_successor`
+/// on raw token prefixes): true iff `prefix` has at least one prior occurrence
+/// of `query = *prefix.last()` and the most recent prior occurrence (`rposition`)
+/// is immediately followed by `target`.
 pub fn is_prefix_copy_successor(prefix: &[u32], target: u32) -> bool {
     let Some(&query) = prefix.last() else {
         return false;
     };
-    prefix
-        .windows(2)
-        .any(|pair| pair[0] == query && pair[1] == target)
+    prefix[..prefix.len() - 1]
+        .iter()
+        .rposition(|&tok| tok == query)
+        .is_some_and(|index| prefix[index + 1] == target)
 }
 
 /// Builds the frozen TRAIN count tables (`Unigram` and `T2` context-free

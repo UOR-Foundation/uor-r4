@@ -6,7 +6,7 @@
 - Rules: `CHARTER.md` §2 M1, §4.1–§4.5, §4.8 (`D39`), §5.1 (`D67`, `D68`)
 - Mechanism: [`discrete-attention`](../../mechanisms/discrete-attention.md) (`READY`) and [`bvg-k`](../../mechanisms/bvg-k.md) (`READY`)
 - Parent sheets: [`m1-export-gap-and-toks-DRAFT-2026-10-23.md`](m1-export-gap-and-toks-DRAFT-2026-10-23.md), [`m1-fresh-panel-transfer-2026-10-26.md`](m1-fresh-panel-transfer-2026-10-26.md)
-- Status: **REGISTERED — FIVE-BAR GPU EXECUTION (`d11-scorer export-trunk`, `score --reference`, `fresh-score`, `toks` ACROSS BUILD A + BUILD B ON 1x RTX 5090)**
+- Status: **EXECUTED — ALL FIVE M1 BARS (a)–(e) PASS ACROSS BUILD A + BUILD B ON 1x RTX 5090 (`vast-57903382`, `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d` / `1b49e8bd823a1021e31de55c767111f9cf43807d3e6d007644e49281935877de`)**
 
 ## 1. Question
 
@@ -51,9 +51,17 @@ Does the `Stage T` `T16_fz` two-seed model (`seed = 1` and `seed = 2`), exported
 - **Stop rule:** Abort immediately if `Gate R` on `ft/dev` or `mw-balp/train` mismatches `#2839` / `#2844`, if `row_mismatches > 0`, if `planted_fault_control.pass == false`, or if `Build A` and `Build B` disagree. Do not run `fresh-score` unless both seeds clear Bar (d) on `ft/dev`.
 - **Minimum test power:** `2` seeds across `14,287` `ft/dev` rows and `14,479` `Fresh V2` rows (`> 71x` `CHARTER.md` §4.3's `200`-row minimum) plus `3,847` `ft/dev` and `3,594` `Fresh V2` `P_succ` rows (`context = 192`).
 
-## 6. Verdict
+## 6. Verdict and Sealed Execution Record (`antigravity-110`)
 
 - **Prior sheet review (`antigravity-105`):** `c10b800b-35a0-4262-8195-f4029300191e` (`#2837` `#issuecomment-6426547693`, `#2029` `#issuecomment-6426548339`)
-- **Updated GPU protocol FIT + D67 review (`antigravity-110`):** `f3238439-9ed8-4ca8-bb97-348f599481d1` (`#2837` `#issuecomment-6432025772`, `#2841` `#issuecomment-6432026082`).
+- **Updated GPU protocol FIT + D67 review (`antigravity-110`):** `f3238439-9ed8-4ca8-bb97-348f599481d1` (`#2837` `#issuecomment-6432025772`, `#2841` `#issuecomment-6432026082`)
+- **GPU execution (`vast-57903382`, 1x NVIDIA GeForce RTX 5090 `compute_120`, driver `580.178.04`, `nvcc 12.8`, ref `0806df755c09c8fb0330e4457266c9f6f85ed874`):**
+  - `Build A` binary SHA-256: `ce5843b00dee006cf89a1028f80b5125221393dbfb549b09c2273f3e6d3660f4`
+  - `Build B` binary SHA-256: `0357abf8ca70cd463b7976eebef5ddea2dbfb7d9128ef1246246f665e25fed17`
+  - `ptx_sha256`: `5eca26218bde5a74aee90b30d5c5270bbe0146a3ad2a87cf22c8bf770b30dce7`, `cubin_sha256`: `c513559a64fc7fcd83e6ee90e893bc91b2f6452d29cf4605cd8b7e3585235cd1`
+  - Seed 1 19-table `UORLUT01` (`t16-frozen-zero-seed1-trunk.d11`, `86,536,132` B): `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d` (byte-identical on `Build A` and `Build B`)
+  - Seed 2 19-table `UORLUT01` (`t16-frozen-zero-seed2-trunk.d11`, `84,943,328` B): `1b49e8bd823a1021e31de55c767111f9cf43807d3e6d007644e49281935877de` (byte-identical on `Build A` and `Build B`)
+  - HF store archive: `caseyallard/uor-r4-store:results/antigravity/m1-close-saved-model-2026-10-26/outputs` (`m1-close-saved-model-20261026.tar` SHA-256 `a758ca0962d68c43d2796fcf7e43e3af57dccf0d82849f3b11a9f4e2294d1506`)
+  - Outcome: **`PASS_M1_ALL_FIVE_BARS`** (`m1_close_pass = true`, `m1_milestone_status = "CLOSED_PASS"`).
 
 TEST FITNESS: FIT

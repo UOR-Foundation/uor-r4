@@ -465,16 +465,21 @@ fn fresh_transfer_pins_match_sealed_corpora_and_export_trunk_with_scorer_roundtr
         split: Split::Dev,
         tokens: FilePin {
             path: "/nonexistent/tokens.u16".into(),
-            sha256: "1f8bf88d8dee1a5934c4932aa088922638653864de9a4ebfcde6970a5968f840".into(),
+            sha256: "1f8bf88d8deee51574c68ffd8976ce4415fc8aed5602213d6905a37a138517ea".into(),
         },
         mask: FilePin {
             path: "/nonexistent/response_mask.u8".into(),
-            sha256: "fe87363920e12d9320751e3fdcf3b2b665976b70dd225e1e6c96c2a21b93bd6c".into(),
+            sha256: "fe87363920e19bf072e9fe3a7289e6cd2f1abde6c2431caae8f5c8494d3829d5".into(),
         },
-        expected_payload_tokens: 42_552,
+        expected_payload_tokens: 46_669,
         expected_eligible_targets: 14_287,
     };
     assert!(refuse_sealed_fresh_source(&stage3_cut_disguised).is_err());
+    assert!(inst::fresh_transfer::is_prefix_copy_successor(&[0, 7, 12, 7], 12));
+    assert!(
+        !inst::fresh_transfer::is_prefix_copy_successor(&[0, 7, 12, 7, 19, 7], 12),
+        "copy-successor checks only the most recent prior occurrence of query (rposition)"
+    );
 
     // Exercise `export_trunk_with_scorer` end-to-end on a 4-block, 4096-vocab fixture.
     use uor_r4_discrete::normalization_mechanism::orbit_root_coords;
