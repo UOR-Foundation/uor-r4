@@ -1,4 +1,4 @@
-<!-- rendered by uor-harness loop render from 1b8eb131a764fa33378ab8c606a0cb4693a6d3b1; do not edit -->
+<!-- rendered by uor-harness loop render from 149e5f422f805c82622597bc06f7fd37eacb8f80; do not edit -->
 # HANDOFF
 
 Rendered from `docs/roadmap/items/*.md` at the commit in the stamp above. Each open-item row gives the first sentence of the item's `Done when` and `Cancel if` sections; blocked items are listed once, in the blocked table, with their owner; `not recorded` means the item has no such section or key yet.
@@ -7,13 +7,12 @@ Rendered from `docs/roadmap/items/*.md` at the commit in the stamp above. Each o
 
 Items not `held`, `decision` or `done`. Held and decision items are listed once, in the blocked table below.
 
-### ready (13)
+### ready (12)
 
 | Item | Title | Done when | Cancel if | Size | Stands |
 |---|---|---|---|---|---|
 | d11-exporter-float-trunk | Write the D11 exporter for a D37 float trunk | A float-trunk snapshot exports to D11 with the audits green and the export gap measured inside the band. | not recorded | not recorded | ready; after float-training-module, m1-d11-exporter-discrete, owner-decision-float-path-scope |
 | infra-loop-harness | Build the loop harness (the loop subcommands of uor-harness) | Every PR in the build plan on [the loop page](docs/loop/README.md#build-plan) is merged, each with its planted fault turning its gate red. | not recorded | not recorded | ready |
-| m1-close-saved-model | Close M1 with one saved discrete model passing all five bars | One saved discrete model: (a) starting reach at no fewer than 4,894 of 14,287; (b) reach kept on both seeds (G-Adm); (c) more than 16 of 256 cells in use plus the D39 occupancy condition (G-Occ); (d) integer top-1 through the integer export beats the unigram table (1,226) and the next-word table (6,300) on each of two seeds, with tokens per second reported; (e) the gain holds on a fresh sealed panel. | not recorded | not recorded | ready; after m1-a8-full-dose-rerun, m1-bvg-k-stage-t-training, m1-export-gap-and-toks |
 | m1-fresh-panel-transfer | Evaluate the gain on the fresh sealed panel | '(e) Fresh transfer. | not recorded | not recorded | ready; after m1-export-gap-and-toks |
 | m2-train-grounded-replies | Train the student for grounded replies from exact memory | M2 bar: '>= 256/512 saved questions and >= 40% of genuinely fresh ones, with the existing graders unchanged'; the student stays on the discrete path unless the owner decides otherwise (D41); it exports to D11 with the export gap reported (D37). | not recorded | not recorded | ready; after m2-donor-corpus-generation, m2-fresh-heldout-panel, m2-pin-train-mask-sheet, m1-close-saved-model, m1-d11-exporter-discrete |
 | m3-qualify-memory | Qualify durable memory on the selected native model | On the selected artifact: | not recorded | not recorded | ready; after m2-train-grounded-replies, m3-memory-turn-discriminator-gate, m3-policy-precedence-and-sieve-tests |
