@@ -15,9 +15,9 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [one-decoder-2026-10-27](.
 
 ## What did not work, first
 
-- **The writer does not hold at seed 2. It never learned.** Its top-1 peaked at `414` (step 22,528) and ended at `493`, against `6,909` for whole-table nearest on the same model. At step 28,672 it was at 0.475 of its peak (bar 0.70), and it ended 6,416 rows behind nearest (bar 500) and 160 openings behind (bar 36). Nearest learned normally at this seed, so the trunk trained: the writer's cell admission is what failed. Its replies are not language: "The asich is can" for two different prompts.
+- **The writer does not hold at seed 2. It never learned.** Its top-1 never passed `564` (step 30,720) and ended at `493`, against `6,909` for whole-table nearest on the same model. At step 28,672 it was at 0.476 of its running peak (197 of 414; bar 0.70), and it ended 6,416 rows behind nearest (bar 500) and 160 openings behind (bar 36). Nearest learned normally at this seed, so the trunk trained. **What failed is admission, measured:** the target's cell is among the writer's 8 kept cells on only `461`–`714` of the 14,287 rows at steps 4,096, 16,384 and 32,768 (`dev_admitted_hits`), against `8,558`–`9,451` at seed 1. Why admission fails at this seed is not known. Its replies are not language: "The asich is can" for two different prompts.
 - **So the reading is a split, and a split means serve nearest** (sheet, Decision): a decoder that fails at one seed of two is not the one to serve.
-- **Under `voronoi`, whole-table nearest is weaker than in runs trained for it.** On these models nearest reaches `6,762` and `6,909` at step 32,768. The nearest-objective twins of claude-145 reach `8,607` and `8,706` by step 16,384. At seed 1, nearest names a single token at every opening (31 hits). The decision is therefore a pair, not a decoder alone: **train with the nearest objective, and serve whole-table nearest.** That pair is already measured, and it is the one every result on the in-space line, the Hamming read's included, comes from.
+- **Under `voronoi`, whole-table nearest is weaker than in runs trained for it.** On these models nearest reaches `6,762` and `6,909` at step 32,768. The nearest-objective twins of claude-145 reach `8,607` and `8,706` by step 16,384. (Those are different step counts, so this is an observation, not a matched comparison.) At seed 1, nearest names a single token at every opening (31 hits). **My recommendation, beyond the sheet's decision, which is the decoder only:** pair it with the objective it is trained for, the nearest objective. That pair is already measured, and it is the one every result on the in-space line, the Hamming read's included, comes from.
 - **The collapse is only tested at seed 1.** `long2`, the writer objective's collapse, is a single seed-1 run, so whether the writer objective would collapse at seed 2 is unknown.
 
 ## What changed
@@ -44,11 +44,11 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [one-decoder-2026-10-27](.
 | Seed | Lowest writer share of its peak after step 16,384 (≥ 0.70) | Writer against nearest at step 32,768 (≥ −500) | Writer openings against nearest's (≥ −36) | Holds |
 |---|---|---|---|---|
 | 1 | **0.938** (8,053 of 8,581, step 24,576) | `8,430` against `6,762`: +1,668 | `227` against `31`: +196 | **yes** |
-| 2 | 0.475 (197 of 414, step 28,672) | `493` against `6,909`: −6,416 | `6` against `166`: −160 | no |
+| 2 | 0.476 (197 of 414, step 28,672) | `493` against `6,909`: −6,416 | `6` against `166`: −160 | no |
 
 **What worked, at seed 1.**
-- **`voronoi` prevents the writer's collapse at seed 1.** At step 18,432, where the writer objective had fallen to 18% of its peak (`long2`: 7,248 → 1,363), this writer was at 8,028, 97% of its peak. It then set the line's highest writer-decoded top-1, `8,581` at step 22,528, and ended at `8,430`.
-- **The writer's openings are the most varied this line has recorded:** `227` hits with `68` distinct opening picks at step 32,768, against the 161 floor and 1 to 4 picks in every run before. Whole-table nearest on the same model gets 31 openings from 1 pick.
+- **`voronoi` prevents the writer's collapse at seed 1.** At step 18,432, where the writer objective had fallen to 18% of its peak (`long2`: 7,593 at step 12,288, then 1,363), this writer was at 8,028, 97% of its peak. It then set the line's highest writer-decoded top-1, `8,581` at step 22,528, and ended at `8,430`.
+- **The writer's openings are the most varied this line has recorded:** `227` hits with `68` distinct opening picks at step 32,768, against the 161 floor and the 1 to 4 picks of claude-145's and claude-146's language runs at their last checkpoints. Whole-table nearest on the same model gets 31 openings from 1 pick.
 - **Its replies are the most fitting yet:** "Note these down: zundpim is 832, grarkfud is 4217." gets "Got it, thanks for telling me." (true: "Okay, I'll remember all of that.").
 
 **Instrument checks.**
@@ -76,7 +76,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [one-decoder-2026-10-27](.
 ## Still open
 
 - **The serving change:** `fbs-toks` and `stack/session.rs` decode with the writer. Moving them to whole-table nearest, under D11's rules, is its own unit.
-- **The writer at seed 2:** why its admission fails while the trunk learns is not known. At seed 1 the writer under `voronoi` is the line's best decoder at openings; a writer that worked at both seeds would be the cheap index the large vocabulary needs.
+- **The writer at seed 2:** its admission fails (measured, above) while the trunk learns; why is not known. At seed 1 the writer under `voronoi` is the line's best decoder at openings; a writer that worked at both seeds would be the cheap index the large vocabulary needs.
 - **The owner's next unit,** given in claude's chat on 27 Oct while this run was finishing: "After the writer unit closes, go straight back to the Hamming read: give its type heads a position signal from SpiralCore's spin, so replies can use the prompt."
 
 ## Plain summary
