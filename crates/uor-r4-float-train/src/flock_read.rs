@@ -222,10 +222,12 @@ impl FlockRead {
         table: &Tensor,
     ) -> Result<Tensor> {
         let (rows, width) = hidden.dims2()?;
-        if rows != batch * time || ids.len() != rows || time < 2 {
-            return Err(invalid(
-                "the Flock read needs whole windows of at least two tokens",
-            ));
+        if rows != batch * time || ids.len() != rows {
+            return Err(invalid("the Flock read needs whole windows"));
+        }
+        // A window of one token has no earlier position to read.
+        if time < 2 {
+            return Ok(hidden.clone());
         }
         let device = hidden.device();
         let query = self.rotate(&self.query_rotation, hidden)?;
@@ -264,7 +266,8 @@ impl FlockRead {
 
 /// AdamW for the read's three parameters, in tensor arithmetic on their device, with the trunk's
 /// constants (beta1 0.9, beta2 0.95, epsilon 1e-8) and its own global-norm clip at 1. No weight
-/// decay: the rotations are unit quaternions by construction and the weight starts at 0.
+/// decay: [`hamilton_gate`] divides each quaternion by its norm, so the rotations stay unit whatever
+/// their stored scale, and the weight starts at 0.
 pub struct FlockAdamW {
     first: Vec<Tensor>,
     second: Vec<Tensor>,
@@ -421,6 +424,59 @@ mod tests {
         // t = 1 keeps s = 0 too; t = 0 keeps nothing.
         assert_eq!(moved[1], vec![5.0, 0.0, 1.0, 0.0]);
         assert_eq!(moved[0], vec![0.0, 0.0, 0.0, 0.0]);
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_credit_pulls_the_key_of_a_helpful_neighbour_toward_the_query() {
+        let device = Device::new_cuda(0).unwrap();
+        let read = FlockRead::new(1, 4, &device).unwrap();
+        read.weight
+            .set(&Tensor::ones(4, DType::F32, &device).unwrap())
+            .unwrap();
+        // t = 2 (value 1) keeps s = 0 (value 0); its payload is the table row of ids[1] = 2.
+        let hidden = Var::new(
+            &[
+                [0.0f32, 0.0, 0.0, 0.0],
+                [5.0, 0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 0.0],
+            ],
+            &device,
+        )
+        .unwrap();
+        let table = Tensor::new(
+            &[
+                [0.0f32, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            &device,
+        )
+        .unwrap();
+        let out = read
+            .apply(hidden.as_tensor(), &[1, 2, 3], 1, 3, &table)
+            .unwrap();
+        // A loss that rewards that payload's coordinate in row 2: the payload helps.
+        let loss = out
+            .narrow(0, 2, 1)
+            .unwrap()
+            .narrow(1, 2, 1)
+            .unwrap()
+            .neg()
+            .unwrap()
+            .sum_all()
+            .unwrap();
+        let grads = loss.backward().unwrap();
+        let grad = grads
+            .get(hidden.as_tensor())
+            .unwrap()
+            .to_vec2::<f32>()
+            .unwrap();
+        // Descent moves the kept key, row 0, toward the query at 1 along coordinate 0: its gradient
+        // there is negative (1 − (d − d̄) gives dL/dd = −dL/dfactor = +1, and dd/dk = −1/4).
+        assert!(grad[0][0] < 0.0, "{grad:?}");
+        assert!((grad[0][0] + 0.25).abs() < 1e-6, "{grad:?}");
     }
 
     #[cfg(feature = "cuda")]

@@ -9,7 +9,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [in-space-trunk-to-text-fl
 
 ## What did not work, first
 
-- **The Flock read does not lift reply openings or reach.** Both seeds land in the sheet's cell D:
+- **The Flock read does not clear the pre-registered bars at either seed.** Both seeds land in the sheet's cell D. At seed 1 it came close: `+35` openings over its twin, missing the bar by 1 (`235` against `236`), with 1.8 times its twin's `R16`. At seed 2 it was below its twin on openings (`264` against `271`).
 
   | Seed | Arm | Nearest top-1 | Openings | Openings bar | `R16` | Reach bar |
   |---|---|---|---|---|---|---|
@@ -18,7 +18,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [in-space-trunk-to-text-fl
   | 2 | read | `8,609` | `264` | `307` | `0.0885 / 5.689 = 0.0156` | `0.05` |
   | 2 | none | `8,670` | `271` | | `0.0664 / 4.340 = 0.0153` | |
 
-  - **The read is used, so the cause is not its start.** Its weight moved from 0 to a mean of `0.78` and `0.94` (I-3). It simply does not help.
+  - **The read is used, so the cause is not its start.** Its weight moved from 0 to a mean of `0.78` and `0.94` (I-3). The sheet labels cell D "the read is not used"; by its own I-3 rule, the weight having moved means it is used, and only its effect falls short of the bars.
   - **What this closes:** keys from the rotated hidden point, a next-token payload, the straight-through credit, and the read at the end of the trunk. Not the mechanism.
 - **The replies still ignore the prompt.** At step `16,384`, the read arm (seed 2):
 
@@ -28,6 +28,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [in-space-trunk-to-text-fl
   | "Note these down: zundpim is 832, grarkfud is 4217." | "Got it, your dog is  the number is ital of of of of of." | "Okay, I'll remember all of that." |
   | "Add 4 and 2." | "Got it, your dog is Gitalitalitalital…" | "4 plus 2 is 6." |
 
+- **The writer's own DEV columns skip the read.** `dev_top1_hits`, `dev_top8_hits`, `dev_admitted_hits` and `dev_loss` come from `hamilton_sheet::evaluate_dev_panel`, which calls the trunk without the read (code review), so on a read checkpoint they describe the trunk alone. The registered cells read nearest hits, openings and reach, which all go through the read. The writer's top-1 is lower on the read arms (`298` against `351`, `229` against `379`), but that is the trunk with the read taken away, not the read's effect. The columns are now labelled in the code.
 - **Opening counts swing widely between seeds.** The no-read arms read `200` and `271`. A single-seed opening count is weak evidence, claude-142's `220` included.
 - **The first probe build failed to compile its CUDA tests.** A borrow in a new test was caught only on the pod, because the stub-nvcc type check was skipped. The probe was rerun after the check. The failed attempt's folder is kept as `probe-failed-36566f89`.
 
@@ -43,6 +44,8 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [in-space-trunk-to-text-fl
     - the choice is nearest, causal and never itself;
     - a zero weight leaves the points unchanged, and a unit weight adds the payload mean;
     - one AdamW step matches the hand-computed step.
+    - the credit pulls a helpful neighbour's key toward the query (added after the code review; its sign was otherwise unpinned).
+  - After the review: a one-token window returns its points unchanged; the comment on unit rotations names `hamilton_gate`'s normalisation.
 - **`in_space_long.rs`:**
   - every trunk-output call goes through `points()`;
   - `run_long` builds and steps the read when `--flock-read K` is above 0, and saves it;
@@ -85,6 +88,7 @@ CHECKS_LINE
 - **The next design is a read keyed on what the prompt said, not on the local state.** The opening position's hidden point mostly encodes "Assistant:". Its nearest earlier states are other turn boundaries, whose next tokens are earlier openings, not the prompt's type. A read whose key is the content of earlier positions, such as their token points, and whose payload is the earlier hidden state, would let an opening find "Remember" or "Add". That is a new configuration under this item.
 - **Seed variance in openings.** A third seed for both arms of the next design is cheap, and the sheet should plan for it.
 - **Decode speed with the read,** not measured.
+- **The read's optimizer clip is untested** (code review, low): at step 1 AdamW's update does not depend on the gradient's scale, so the one-step test cannot see it.
 
 ## Plain summary
 

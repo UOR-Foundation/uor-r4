@@ -82,6 +82,9 @@ pub struct Checkpoint {
     pub step: usize,
     pub epoch: f64,
     pub train_loss_mean: Option<f64>,
+    /// The writer's own DEV panel (`hamilton_sheet::evaluate_dev_panel`): its top-1, top-8 and
+    /// admitted counts, and `dev_loss` with the token and address margins below, read the trunk
+    /// without the Flock read. `dev_nearest` goes through [`crate::flock_read::points`].
     pub dev_top1_hits: usize,
     pub dev_top8_hits: usize,
     pub dev_admitted_hits: usize,
