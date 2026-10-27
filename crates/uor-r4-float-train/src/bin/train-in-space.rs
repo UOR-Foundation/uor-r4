@@ -4,6 +4,8 @@
 //!
 //! `train-in-space --data-root DIR --inspect RUN [--retain-rates 0|1] [--seed S]`
 //!
+//! `train-in-space --data-root DIR --reach CHECKPOINT [--retain-rates 0|1] [--seed S]`
+//!
 //! Long training of the SpiralCore/FBS geometric trunk in its own space, with text at every
 //! checkpoint (`uor_r4_float_train::in_space_long`). GPU only. `--data-root` holds `tokenizer.json`,
 //! `mw-balp/train/` and `ft/dev/`, each split with `tokens.u16` and `response_mask.u8`. `--out`
@@ -15,7 +17,7 @@ use std::path::PathBuf;
 
 use candle_core::Device;
 use uor_r4_float_train::in_space_long::{
-    inspect_run, root_separation, run_long, LongConfig, PointObjective,
+    context_reach, inspect_run, root_separation, run_long, LongConfig, PointObjective,
 };
 use uor_r4_float_train::{FloatTrainError, Result};
 
@@ -23,6 +25,7 @@ fn main() -> Result<()> {
     let mut data_root = None;
     let mut out = None;
     let mut inspect = None;
+    let mut reach = None;
     let mut config = LongConfig {
         objective: PointObjective::Sheet,
         steps: 32_768,
@@ -49,6 +52,7 @@ fn main() -> Result<()> {
             "--data-root" => data_root = Some(PathBuf::from(&value)),
             "--out" => out = Some(PathBuf::from(&value)),
             "--inspect" => inspect = Some(PathBuf::from(&value)),
+            "--reach" => reach = Some(PathBuf::from(&value)),
             "--objective" => {
                 config.objective = match value.as_str() {
                     "sheet" => PointObjective::Sheet,
@@ -91,6 +95,18 @@ fn main() -> Result<()> {
     let data_root =
         data_root.ok_or_else(|| FloatTrainError::Invalid("--data-root is required".to_owned()))?;
     let device = Device::new_cuda(0)?;
+    if let Some(checkpoint) = reach {
+        for point in context_reach(
+            &data_root,
+            &checkpoint,
+            config.retain_rates,
+            config.seed,
+            &device,
+        )? {
+            println!("{}", serde_json::to_string(&point)?);
+        }
+        return Ok(());
+    }
     if let Some(run) = inspect {
         let (nearest, farthest) = root_separation()?;
         println!(

@@ -502,6 +502,90 @@ fn load_dev(data_root: &Path) -> Result<(Vec<CausalWindow>, Vec<u8>)> {
     Ok((dev_windows, dev_mask))
 }
 
+/// How far back a checkpoint reads from where a reply opens ([`context_reach`]): the opening
+/// point's mean absolute shift per dimension when the token `distance` places before it is
+/// replaced by BOS, over each DEV window's first opening with that many tokens before it.
+#[derive(Clone, Debug, Serialize)]
+pub struct Reach {
+    pub distance: usize,
+    pub rows: usize,
+    pub mean_shift: f64,
+}
+
+pub const REACH_DISTANCES: [usize; 13] = [0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 24, 32];
+
+/// [`Reach`] at each of [`REACH_DISTANCES`] for the checkpoint saved in `checkpoint`. Distance 0
+/// replaces the opening's own input token, the end of the prompt.
+pub fn context_reach(
+    data_root: &Path,
+    checkpoint: &Path,
+    retain_rates: bool,
+    seed: u64,
+    device: &Device,
+) -> Result<Vec<Reach>> {
+    let (dev_windows, dev_mask) = load_dev(data_root)?;
+    arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
+    crate::geometric_stack::set_retention_rates(retain_rates);
+    let _guard = ArmGuard;
+    let model = StackModel::load(checkpoint, device)?;
+    let firsts: Vec<(&CausalWindow, usize)> = dev_windows
+        .iter()
+        .filter_map(|w| {
+            w.scored_offsets
+                .iter()
+                .zip(&w.scored_corpus_positions)
+                .find(|&(_, &p)| p > 0 && dev_mask[p - 1] == 0)
+                .map(|(&off, _)| (w, off))
+        })
+        .collect();
+    hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, 0, false, || {
+        let points = |ids: &[u32], offs: &[usize]| -> Result<Tensor> {
+            let hidden = model.hidden(ids, offs.len(), SHEET_CONTEXT)?;
+            let idx: Vec<u32> = offs
+                .iter()
+                .enumerate()
+                .map(|(b, &off)| (b * SHEET_CONTEXT + off) as u32)
+                .collect();
+            Ok(hidden
+                .index_select(&Tensor::from_vec(idx, offs.len(), device)?, 0)?
+                .detach())
+        };
+        let mut reach = Vec::with_capacity(REACH_DISTANCES.len());
+        for &distance in &REACH_DISTANCES {
+            let eligible: Vec<&(&CausalWindow, usize)> =
+                firsts.iter().filter(|(_, off)| *off >= distance).collect();
+            let (mut total, mut rows) = (0.0f64, 0usize);
+            for chunk in eligible.chunks(hs::SHEET_EVAL_BATCH) {
+                let offs: Vec<usize> = chunk.iter().map(|(_, off)| *off).collect();
+                let mut ids: Vec<u32> = chunk
+                    .iter()
+                    .flat_map(|(w, _)| w.input_ids.iter().copied())
+                    .collect();
+                let base = points(&ids, &offs)?;
+                for (b, off) in offs.iter().enumerate() {
+                    ids[b * SHEET_CONTEXT + off - distance] = hs::SHEET_BOS_ID;
+                }
+                let moved = points(&ids, &offs)?;
+                total += f64::from(
+                    moved
+                        .sub(&base)?
+                        .abs()?
+                        .mean(1)?
+                        .sum_all()?
+                        .to_scalar::<f32>()?,
+                );
+                rows += chunk.len();
+            }
+            reach.push(Reach {
+                distance,
+                rows,
+                mean_shift: total / rows.max(1) as f64,
+            });
+        }
+        Ok(reach)
+    })
+}
+
 /// Read every checkpoint a `run_long` run saved under `run/models`, in step order, as an
 /// [`Inspection`]. `retain_rates` must match the run's.
 pub fn inspect_run(
