@@ -15,7 +15,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item maintenance only: one new roadmap
 - `docs/roadmap/items/in-space-trunk-to-text.md` (new). It is byte-identical to #3327's file at `838b0a73a77cbf6a6ade587812690eb55be03b62`, compared with `diff`. Its contents:
   - its goal: Casey's 27 Oct direction, train in the trunk's own space, decode only at the end, always look at context, show the text;
   - its state on 27 Oct;
-  - a done-when in three parts, all on one checkpoint:
+  - a done-when in three parts, the first two on one checkpoint:
     - reply openings at least `197` (the commonest-token count `161` plus three binomial standard deviations), with top-1 at least `7,002`;
     - relative reach `R16 = shift(16) / shift(0)` at least `0.05`;
     - replies recorded at every checkpoint;
