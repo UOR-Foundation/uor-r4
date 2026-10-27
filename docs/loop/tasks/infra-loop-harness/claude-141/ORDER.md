@@ -1,70 +1,40 @@
-# ORDER: infra-loop-harness, claude-141
+# ORDER: infra-loop-harness, claude-141 (item maintenance: add the in-space-trunk-to-text item)
 
 Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `f3a6f0f72`.
 
 ## Goal
 
-The item's done-when reads:
+**Add one roadmap item file, `docs/roadmap/items/in-space-trunk-to-text.md`, and its rendered row, so that the research unit that does the work can name an item that exists on main.**
 
-> Every PR in the build plan on [the loop page](../../loop/README.md#build-plan) is merged, each with its planted fault turning its gate red. The four labs (Kimi, Claude, DeepSeek, Antigravity) are onboarded, each with a committed onboarding receipt. Each lab has completed one loop task end to end: claim, probe, work, gates, report, review by another vendor, queue, and verify on fresh `main`.
+- The research unit is `in-space-trunk-to-text/claude-142`, PR #3327.
+- `loop pr-check` refuses an ORDER whose item does not exist at the merge base. #3327 adds the item itself, so its `order` rule fails.
+- The roadmap's own rule applies: "A new gap is a new item file, added in a pull request." This unit is that pull request.
+- The item records Casey's 27 Oct direction: train in the trunk's own space, decode at the end, look at context, show the text.
+- It does not move the umbrella's done-when. No harness or loop code changes, so this falls within the harness freeze, which forbids harness and loop development only.
 
 ## Cancel probe (run first)
 
-To fill in.
+Cancel if the item already exists on main, or another open order adds or edits it.
+
+Result (2026-10-27T10:45Z, `origin/main` at `f3a6f0f72`):
+
+- `git ls-tree origin/main docs/roadmap/items/in-space-trunk-to-text.md` finds nothing.
+- The only open PR that touches the file is #3327, this lab's research unit, which adds the same file byte for byte.
+
+**Not cancelled (instrument: none needed).**
 
 ## Files in scope
 
-- `PLAN.md`
-- `docs/roadmap/items/*.md`
-- `crates/uor-r4-harness/src/loopreview.rs`
-- `crates/uor-r4-harness/src/loopnext.rs`
-- `crates/uor-r4-harness/src/loopreport.rs`
-- `crates/uor-r4-harness/src/loopclose.rs`
-- `crates/uor-r4-harness/src/loopclaim.rs`
-- `crates/uor-r4-harness/tests/loop_review*.rs`
-- `crates/uor-r4-harness/tests/loop_next*.rs`
-- `crates/uor-r4-harness/tests/loop_report*.rs`
-- `crates/uor-r4-harness/tests/loop_close*.rs`
-- `crates/uor-r4-harness/tests/loop_claim*.rs`
-- `crates/uor-r4-harness/tests/loop_repair_orders*.rs`
-- `crates/uor-r4-harness/tests/loop_shared_files*.rs`
-- `crates/uor-r4-harness/tests/loop_prcheck.rs`
-- `crates/uor-r4-harness/src/loopbench.rs`
-- `crates/uor-r4-harness/tests/loop_bench*.rs`
-- `docs/harness/d59.json`
-- `docs/harness/owner-paths.json`
-- `docs/integration/DECISIONS.md`
-- `AGENTS.md`
-- `CHARTER.md`
-- `docs/rules/changes.md`
-- `docs/mechanisms/README.md`
-- `docs/mechanisms/lut-serving.md`
-- `docs/mechanisms/hopf-observation.md`
-- `docs/mechanisms/spin-weights.md`
-- `docs/mechanisms/ternary-xor.md`
-- `crates/uor-r4-harness/src/loopdrive.rs`
-- `crates/uor-r4-harness/tests/loop_drive*.rs`
-- `crates/uor-r4-harness/src/prep.rs`
-- `crates/uor-r4-harness/src/preprules.rs`
-- `xtask/src/docs_links.rs`
-- `xtask/src/archive_verify.rs`
-- `xtask/src/figures_charts.rs`
-- `docs/figures/**`
-- `docs/roadmap/issues.json`
-- `docs/harness/prep/read-binding-on-lawful-read-2026-10-25.md`
-- `docs/harness/labs.json`
-- `crates/uor-r4-harness/src/labs.rs`
-- `crates/uor-r4-harness/src/receipt.rs`
-- `crates/uor-r4-harness/tests/lab_registry_cli.rs`
-- `crates/uor-r4-harness/src/onboard.rs`
-- `crates/uor-r4-harness/src/loopguard.rs`
-- `crates/uor-r4-harness/tests/loop_guard.rs`
-- `archive/history/branch-archive/codex-d63-finite-probe-scope-20261026.*`
+- `docs/roadmap/items/in-space-trunk-to-text.md` (new, byte-identical to #3327's at `979e15651`)
+- `docs/roadmap/README.md` (rendered by `cargo xtask roadmap render`)
+- `docs/loop/tasks/infra-loop-harness/claude-141/**` (this task folder)
 
 ## Done when
 
-To fill in.
+1. `cargo xtask roadmap check` passes with the item, and `cargo xtask roadmap render --check` passes.
+2. The item is on main.
+3. After #3327 merges main, its `loop pr-check` `order` rule passes.
 
 ## Stop and ask if
 
-To fill in.
+The item text needs to change from #3327's. If it does, change it in #3327, and keep this file byte-identical to it. Never stop and wait.
