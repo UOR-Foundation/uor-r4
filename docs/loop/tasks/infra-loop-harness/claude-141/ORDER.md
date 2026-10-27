@@ -2,6 +2,8 @@
 
 Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `f3a6f0f72`.
 
+Setup row: 2 (item-file maintenance: a new gap item).
+
 ## Goal
 
 **Add one roadmap item file, `docs/roadmap/items/in-space-trunk-to-text.md`, and its rendered row, so that the research unit that does the work can name an item that exists on main.**
