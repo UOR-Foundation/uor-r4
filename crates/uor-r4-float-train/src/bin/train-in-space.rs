@@ -1,22 +1,30 @@
-//! `train-in-space --data-root DIR --out DIR [--steps N] [--batch B] [--eval-every K] [--seed S]
-//! [--lr X] [--lr-end X] [--decay-mult X] [--retain-rates 0|1] [--samples N] [--reply-tokens N]`
+//! `train-in-space --data-root DIR --out DIR [--objective sheet|voronoi|nearest] [--steps N]
+//! [--batch B] [--eval-every K] [--seed S] [--lr X] [--lr-end X] [--decay-mult X]
+//! [--retain-rates 0|1] [--samples N] [--reply-tokens N]`
+//!
+//! `train-in-space --data-root DIR --inspect RUN [--retain-rates 0|1] [--seed S]`
 //!
 //! Long training of the SpiralCore/FBS geometric trunk in its own space, with text at every
 //! checkpoint (`uor_r4_float_train::in_space_long`). GPU only. `--data-root` holds `tokenizer.json`,
 //! `mw-balp/train/` and `ft/dev/`, each split with `tokens.u16` and `response_mask.u8`. `--out`
 //! must not exist; it receives `config.json`, `progress.jsonl`, `samples.md`, `samples.jsonl` and
-//! `models/step-*/`.
+//! `models/step-*/`. `--inspect` instead reads every checkpoint a run saved and prints one JSON
+//! line each, after one line with the address roots' separation.
 use std::env;
 use std::path::PathBuf;
 
 use candle_core::Device;
-use uor_r4_float_train::in_space_long::{run_long, LongConfig};
+use uor_r4_float_train::in_space_long::{
+    inspect_run, root_separation, run_long, LongConfig, PointObjective,
+};
 use uor_r4_float_train::{FloatTrainError, Result};
 
 fn main() -> Result<()> {
     let mut data_root = None;
     let mut out = None;
+    let mut inspect = None;
     let mut config = LongConfig {
+        objective: PointObjective::Sheet,
         steps: 32_768,
         batch: 16,
         eval_every: 2_048,
@@ -40,6 +48,19 @@ fn main() -> Result<()> {
         match arg.as_str() {
             "--data-root" => data_root = Some(PathBuf::from(&value)),
             "--out" => out = Some(PathBuf::from(&value)),
+            "--inspect" => inspect = Some(PathBuf::from(&value)),
+            "--objective" => {
+                config.objective = match value.as_str() {
+                    "sheet" => PointObjective::Sheet,
+                    "voronoi" => PointObjective::Voronoi,
+                    "nearest" => PointObjective::Nearest,
+                    other => {
+                        return Err(FloatTrainError::Invalid(format!(
+                            "--objective wants sheet, voronoi or nearest, not {other}"
+                        )))
+                    }
+                }
+            }
             "--steps" => config.steps = number(&value)?,
             "--batch" => config.batch = number(&value)?,
             "--eval-every" => config.eval_every = number(&value)?,
@@ -69,7 +90,18 @@ fn main() -> Result<()> {
     }
     let data_root =
         data_root.ok_or_else(|| FloatTrainError::Invalid("--data-root is required".to_owned()))?;
-    let out = out.ok_or_else(|| FloatTrainError::Invalid("--out is required".to_owned()))?;
     let device = Device::new_cuda(0)?;
+    if let Some(run) = inspect {
+        let (nearest, farthest) = root_separation()?;
+        println!(
+            "{}",
+            serde_json::json!({"address_root_separation": {"nearest": nearest, "farthest": farthest}})
+        );
+        for reading in inspect_run(&data_root, &run, config.retain_rates, config.seed, &device)? {
+            println!("{}", serde_json::to_string(&reading)?);
+        }
+        return Ok(());
+    }
+    let out = out.ok_or_else(|| FloatTrainError::Invalid("--out is required".to_owned()))?;
     run_long(&data_root, &out, &config, &device)
 }

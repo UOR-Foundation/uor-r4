@@ -31,9 +31,26 @@ use crate::spiralcore_fbs_arms::{self as arms, FbsArm};
 use crate::spiralcore_fbs_sheet::{build_fbs_model, panel_loss};
 use crate::{invalid, sha256_bytes, Result};
 
+/// What the trunk's predicted point is trained against.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PointObjective {
+    /// The writer's own margin: the token hinge plus the address hinge at margin 1. The 16 roots
+    /// cannot meet that margin: by the triangle inequality a cell beats the cell sharing its other
+    /// port by at most the nearest root separation, 0.5 (`root_separation`).
+    Sheet,
+    /// The same token hinge, with the address hinge's margin at half the nearest root separation,
+    /// which a query port meets inside its target root's Voronoi cell.
+    Voronoi,
+    /// No admission: the target must be nearer than the `SHEET_RIVALS` nearest wrong tokens of the
+    /// whole table, and the reply is the whole table's nearest token.
+    Nearest,
+}
+
 /// One run's settings.
 #[derive(Clone, Debug, Serialize)]
 pub struct LongConfig {
+    pub objective: PointObjective,
     pub steps: usize,
     pub batch: usize,
     pub eval_every: usize,
@@ -58,11 +75,38 @@ pub struct Checkpoint {
     pub dev_top1_hits: usize,
     pub dev_top8_hits: usize,
     pub dev_admitted_hits: usize,
+    /// DEV rows whose target is the whole table's nearest token to the predicted point.
+    pub dev_nearest_top1_hits: usize,
     pub dev_scored_rows: usize,
     pub dev_loss: f64,
+    /// DEV's token hinge: the target's displacement score against the best admitted rivals.
+    pub dev_token_margin: f64,
+    /// DEV's address hinge: the target's cell against the best other admitted cell.
+    pub dev_address_margin: f64,
     pub train_seconds: f64,
     /// Every context position of every trained window per second (not scored targets).
     pub train_context_tokens_per_second: f64,
+}
+
+/// One saved checkpoint's DEV reading, with the loss in its two parts and how varied the
+/// predicted points are across DEV rows (`inspect_run`).
+#[derive(Clone, Debug, Serialize)]
+pub struct Inspection {
+    pub checkpoint: String,
+    pub scored_rows: usize,
+    pub top1_hits: usize,
+    pub nearest_top1_hits: usize,
+    pub admitted_hits: usize,
+    pub token_unviolated_hits: usize,
+    pub token_margin: f64,
+    pub address_margin: f64,
+    /// Over the first DEV windows' scored rows: how many distinct cells are admitted first.
+    pub probe_rows: usize,
+    pub distinct_first_cells: usize,
+    /// Each query dimension's standard deviation across those rows, averaged over dimensions.
+    pub query_spread: f64,
+    pub query_mean_abs: f64,
+    pub table_mean_abs: f64,
 }
 
 /// One fixed DEV prompt with the model's greedy reply and the true reply, as text.
@@ -84,8 +128,130 @@ impl Drop for ArmGuard {
     }
 }
 
+const ABSENT: f32 = -1.0e30;
+/// At most this many F32 elements in one detached whole-table score chunk (256 MiB).
+const NEAREST_CHUNK_ELEMENTS: usize = 64 * 1024 * 1024;
+
+fn table(model: &StackModel) -> Result<Tensor> {
+    let var = model
+        .variables()
+        .get("embedding.weight")
+        .ok_or_else(|| invalid("the model has no shared vector table"))?;
+    Ok(var.as_tensor().clone())
+}
+
+/// `relu(margin + rival − target)`: `rival` is (rows, k), `target` is (rows, 1).
+fn hinge(rival: &Tensor, target: &Tensor, margin: f64) -> Result<Tensor> {
+    Ok(rival.broadcast_sub(target)?.affine(1.0, margin)?.relu()?)
+}
+
+/// The `k` best positions of each row of `scores` among those `allowed` (u8, same shape) keeps,
+/// as (rows, k), by repeated argmax on a detached copy.
+fn best_positions(scores: &Tensor, allowed: &Tensor, k: usize) -> Result<Tensor> {
+    let absent = Tensor::full(ABSENT, scores.shape(), scores.device())?;
+    let mut left = allowed.where_cond(&scores.detach(), &absent)?;
+    let columns = Tensor::arange(0u32, scores.dim(1)? as u32, scores.device())?
+        .unsqueeze(0)?
+        .broadcast_as(scores.shape())?;
+    let mut picks = Vec::with_capacity(k);
+    for _ in 0..k {
+        let at = left.argmax_keepdim(1)?;
+        left = columns.broadcast_eq(&at)?.where_cond(&absent, &left)?;
+        picks.push(at);
+    }
+    Ok(Tensor::cat(&picks, 1)?)
+}
+
+/// The negative mean L1 displacement of each `query` row to every table row, without gradient,
+/// in row chunks: (rows, vocabulary).
+fn nearest_scores(query: &Tensor, table: &Tensor) -> Result<Tensor> {
+    let (rows, width) = query.dims2()?;
+    let chunk = (NEAREST_CHUNK_ELEMENTS / (table.dim(0)? * width)).max(1);
+    let table = table.detach().unsqueeze(0)?;
+    let mut parts = Vec::with_capacity(rows.div_ceil(chunk));
+    let mut start = 0;
+    while start < rows {
+        let n = chunk.min(rows - start);
+        let q = query.narrow(0, start, n)?.detach().unsqueeze(1)?;
+        parts.push(q.broadcast_sub(&table)?.abs()?.mean(2)?.neg()?);
+        start += n;
+    }
+    Ok(Tensor::cat(&parts, 0)?)
+}
+
+/// [`PointObjective::Voronoi`]: the writer's token hinge, and its address hinge at `address_margin`.
+fn voronoi_loss(
+    model: &StackModel,
+    query: &Tensor,
+    targets: &[u32],
+    address_margin: f64,
+) -> Result<Tensor> {
+    let writer = model.native_vector_writer()?;
+    let c = writer.candidates(query)?;
+    let rows = targets.len();
+    let device = query.device();
+    let target_score = query
+        .sub(&writer.encode(targets)?)?
+        .abs()?
+        .mean_keepdim(1)?
+        .neg()?;
+    let target_ids = Tensor::from_vec(targets.to_vec(), (rows, 1), device)?;
+    // Every one of the 256 cells holds 16 real tokens at this vocabulary, so 8 kept cells always
+    // leave at least `SHEET_RIVALS` non-target candidates.
+    let available = c.token_ids().broadcast_ne(&target_ids)?.mul(c.valid())?;
+    let at = best_positions(c.raw_scores(), &available, hs::SHEET_RIVALS)?;
+    let token = hinge(&c.raw_scores().gather(&at, 1)?, &target_score, 1.0)?.mean(1)?;
+    let cells = crate::native_vector_writer::CELLS as u32;
+    let target_cells = Tensor::from_vec(
+        targets.iter().map(|t| t % cells).collect::<Vec<_>>(),
+        (rows, 1),
+        device,
+    )?;
+    let target_address = c.address_scores().gather(&target_cells, 1)?;
+    let admitted = c.address_scores().gather(c.cell_ids(), 1)?;
+    let rival_address = c
+        .cell_ids()
+        .broadcast_ne(&target_cells)?
+        .where_cond(&admitted, &Tensor::full(ABSENT, admitted.shape(), device)?)?
+        .max_keepdim(1)?;
+    let address = hinge(&rival_address, &target_address, address_margin)?;
+    Ok(token.mean_all()?.add(&address.mean_all()?)?)
+}
+
+/// [`PointObjective::Nearest`]: the target against the whole table's `SHEET_RIVALS` nearest
+/// wrong tokens. Their choice carries no gradient; their displacement and the target's do.
+fn nearest_loss(model: &StackModel, query: &Tensor, targets: &[u32]) -> Result<Tensor> {
+    let table = table(model)?;
+    let (rows, width) = query.dims2()?;
+    let device = query.device();
+    let scores = nearest_scores(query, &table)?;
+    let target_ids = Tensor::from_vec(targets.to_vec(), (rows, 1), device)?;
+    let allowed = Tensor::arange(0u32, table.dim(0)? as u32, device)?
+        .unsqueeze(0)?
+        .broadcast_as(scores.shape())?
+        .broadcast_ne(&target_ids)?;
+    let rivals = best_positions(&scores, &allowed, hs::SHEET_RIVALS)?;
+    let rival_vectors =
+        table
+            .index_select(&rivals.flatten_all()?, 0)?
+            .reshape((rows, hs::SHEET_RIVALS, width))?;
+    let rival = query
+        .unsqueeze(1)?
+        .broadcast_sub(&rival_vectors)?
+        .abs()?
+        .mean(2)?
+        .neg()?;
+    let target_score = query
+        .sub(&table.index_select(&target_ids.flatten_all()?, 0)?)?
+        .abs()?
+        .mean_keepdim(1)?
+        .neg()?;
+    Ok(hinge(&rival, &target_score, 1.0)?.mean_all()?)
+}
+
 fn batch_loss(
     model: &StackModel,
+    objective: PointObjective,
     ids: &[u32],
     scored: &[u32],
     targets: &[u32],
@@ -93,7 +259,34 @@ fn batch_loss(
 ) -> Result<Tensor> {
     let hidden = model.hidden(ids, batch, SHEET_CONTEXT)?;
     let idx = Tensor::from_vec(scored.to_vec(), scored.len(), model.device())?;
-    model.native_head_loss(&hidden.index_select(&idx, 0)?, targets, hs::SHEET_RIVALS)
+    let query = hidden.index_select(&idx, 0)?;
+    match objective {
+        PointObjective::Sheet => model.native_head_loss(&query, targets, hs::SHEET_RIVALS),
+        PointObjective::Voronoi => voronoi_loss(model, &query, targets, root_separation()?.0 / 2.0),
+        PointObjective::Nearest => nearest_loss(model, &query, targets),
+    }
+}
+
+/// DEV rows whose target is the whole table's nearest token to the predicted point.
+fn nearest_top1(model: &StackModel, dev: &[CausalWindow], seed: u64, step: usize) -> Result<usize> {
+    let table = table(model)?;
+    hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, step, false, || {
+        let mut hits = 0usize;
+        for chunk in dev.chunks(hs::SHEET_EVAL_BATCH) {
+            let windows: Vec<&CausalWindow> = chunk.iter().collect();
+            let (ids, scored, targets) = assemble(&windows);
+            if scored.is_empty() {
+                continue;
+            }
+            let hidden = model.hidden(&ids, windows.len(), SHEET_CONTEXT)?;
+            let idx = Tensor::from_vec(scored.clone(), scored.len(), model.device())?;
+            let best = nearest_scores(&hidden.index_select(&idx, 0)?, &table)?
+                .argmax(1)?
+                .to_vec1::<u32>()?;
+            hits += best.iter().zip(&targets).filter(|(a, b)| a == b).count();
+        }
+        Ok(hits)
+    })
 }
 
 /// A seeded order of `0..n` (xorshift64*, Fisher-Yates), one per epoch.
@@ -143,19 +336,34 @@ fn sample_windows(dev: &[CausalWindow], samples: usize) -> Vec<&CausalWindow> {
     eligible.into_iter().step_by(stride).take(samples).collect()
 }
 
-/// The model's greedy reply to `prompt`: `reply_tokens` tokens, each the writer's nearest pick on
-/// the last `SHEET_CONTEXT` tokens, stopping early at BOS.
-fn greedy_reply(model: &StackModel, prompt: &[u32], reply_tokens: usize, seed: u64) -> Result<Vec<u32>> {
+/// The model's greedy reply to `prompt`: `reply_tokens` tokens on the last `SHEET_CONTEXT`
+/// tokens, stopping early at BOS. Each is the whole table's nearest token under
+/// [`PointObjective::Nearest`], else the writer's pick among its admitted cells.
+fn greedy_reply(
+    model: &StackModel,
+    objective: PointObjective,
+    prompt: &[u32],
+    reply_tokens: usize,
+    seed: u64,
+) -> Result<Vec<u32>> {
+    let table = table(model)?;
     hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, 0, false, || {
         let mut ids = prompt.to_vec();
         let mut reply = Vec::with_capacity(reply_tokens);
         for _ in 0..reply_tokens {
             let window = &ids[ids.len().saturating_sub(SHEET_CONTEXT)..];
-            let next = model
-                .native_next_token_ids(window, 1, window.len())?
-                .flatten_all()?
-                .to_dtype(DType::U32)?
-                .to_vec1::<u32>()?;
+            let next = if objective == PointObjective::Nearest {
+                let hidden = model.hidden(window, 1, window.len())?;
+                nearest_scores(&hidden.narrow(0, window.len() - 1, 1)?, &table)?
+                    .argmax(1)?
+                    .to_vec1::<u32>()?
+            } else {
+                model
+                    .native_next_token_ids(window, 1, window.len())?
+                    .flatten_all()?
+                    .to_dtype(DType::U32)?
+                    .to_vec1::<u32>()?
+            };
             let token = *next
                 .last()
                 .ok_or_else(|| invalid("the writer returned no token"))?;
@@ -177,9 +385,130 @@ fn append_line(path: &Path, line: &str) -> Result<()> {
 
 /// The last `chars` characters of `text`, on one line.
 fn tail(text: &str, chars: usize) -> String {
-    let flat: String = text.chars().map(|c| if c == '\n' { ' ' } else { c }).collect();
+    let flat: String = text
+        .chars()
+        .map(|c| if c == '\n' { ' ' } else { c })
+        .collect();
     let n = flat.chars().count();
     flat.chars().skip(n.saturating_sub(chars)).collect()
+}
+
+/// The nearest and farthest pair of the writer's 16 address roots, as the mean L1 distance over
+/// a port's 8 coordinates, the unit the address score uses. A query port sitting exactly on its
+/// root beats the next cell sharing the other port by at most the nearest separation.
+pub fn root_separation() -> Result<(f64, f64)> {
+    let roots = crate::spiralcore_fbs::ProjectionPlan::new(8, 8)?
+        .geometry
+        .roots;
+    let (mut nearest, mut farthest) = (f64::INFINITY, 0.0f64);
+    for (i, a) in roots.iter().enumerate() {
+        for b in &roots[i + 1..] {
+            let l1: i32 = a
+                .iter()
+                .zip(b)
+                .map(|(x, y)| (i32::from(*x) - i32::from(*y)).abs())
+                .sum();
+            let mean = f64::from(l1) / a.len() as f64;
+            nearest = nearest.min(mean);
+            farthest = farthest.max(mean);
+        }
+    }
+    Ok((nearest, farthest))
+}
+
+/// The pinned DEV panel's windows.
+fn load_dev(data_root: &Path) -> Result<Vec<CausalWindow>> {
+    let (dev_tokens, dev_mask) = hs::load_pinned_uort_split(
+        &data_root.join("ft/dev/tokens.u16"),
+        &data_root.join("ft/dev/response_mask.u8"),
+        hs::PINNED_DEV_TOKENS_SHA256,
+        hs::PINNED_DEV_MASK_SHA256,
+        hs::EXPECTED_DEV_TOKENS,
+        hs::EXPECTED_DEV_ELIGIBLE_TARGETS,
+        hs::SHEET_VOCAB,
+        hs::SHEET_BOS_ID,
+    )?;
+    let (dev_windows, _) =
+        hs::build_document_windows(&dev_tokens, &dev_mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
+    Ok(dev_windows)
+}
+
+/// Read every checkpoint a `run_long` run saved under `run/models`, in step order, as an
+/// [`Inspection`]. `retain_rates` must match the run's.
+pub fn inspect_run(
+    data_root: &Path,
+    run: &Path,
+    retain_rates: bool,
+    seed: u64,
+    device: &Device,
+) -> Result<Vec<Inspection>> {
+    let dev_windows = load_dev(data_root)?;
+    arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
+    crate::geometric_stack::set_retention_rates(retain_rates);
+    let _guard = ArmGuard;
+    let mut dirs: Vec<PathBuf> = fs::read_dir(run.join("models"))?
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .filter(|path| path.join("model.safetensors").exists())
+        .collect();
+    dirs.sort();
+    let probe: Vec<&CausalWindow> = dev_windows.iter().take(hs::SHEET_EVAL_BATCH).collect();
+    let (ids, scored, _) = assemble(&probe);
+    let mut readings = Vec::with_capacity(dirs.len());
+    for dir in dirs {
+        let name = dir
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let step: usize = name.trim_start_matches("step-").parse().unwrap_or(0);
+        let model = StackModel::load(&dir, device)?;
+        let (dev, _) = hs::evaluate_dev_panel(
+            &model,
+            &dev_windows,
+            HamiltonArm::HamiltonActive,
+            seed,
+            step,
+            false,
+            false,
+        )?;
+        let query = hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, step, false, || {
+            let hidden = model.hidden(&ids, probe.len(), SHEET_CONTEXT)?;
+            let idx = Tensor::from_vec(scored.clone(), scored.len(), device)?;
+            Ok(hidden.index_select(&idx, 0)?)
+        })?;
+        let nearest_hits = nearest_top1(&model, &dev_windows, seed, step)?;
+        let first_cells = model
+            .native_head_candidates(&query)?
+            .cell_ids()
+            .narrow(1, 0, 1)?
+            .flatten_all()?
+            .to_vec1::<u32>()?;
+        let centred = query.broadcast_sub(&query.mean_keepdim(0)?)?;
+        let scalar = |t: Tensor| -> Result<f64> { Ok(f64::from(t.to_scalar::<f32>()?)) };
+        readings.push(Inspection {
+            checkpoint: name,
+            scored_rows: dev.scored_rows,
+            top1_hits: dev.top1_hits,
+            nearest_top1_hits: nearest_hits,
+            admitted_hits: dev.admitted_target_hits,
+            token_unviolated_hits: dev.token_unviolated_hits,
+            token_margin: dev.token_margin,
+            address_margin: dev.address_margin,
+            probe_rows: first_cells.len(),
+            distinct_first_cells: first_cells
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len(),
+            query_spread: scalar(centred.sqr()?.mean(0)?.sqrt()?.mean_all()?)?,
+            query_mean_abs: scalar(query.abs()?.mean_all()?)?,
+            table_mean_abs: scalar(
+                model.variables()["embedding.weight"]
+                    .as_tensor()
+                    .abs()?
+                    .mean_all()?,
+            )?,
+        });
+    }
+    Ok(readings)
 }
 
 /// Train, score, write text and save, as the module documentation says. `out` must not exist.
@@ -188,14 +517,19 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         return Err(invalid("steps, batch and eval-every must be positive"));
     }
     if out.exists() {
-        return Err(invalid(format!("{} exists; a run never writes over one", out.display())));
+        return Err(invalid(format!(
+            "{} exists; a run never writes over one",
+            out.display()
+        )));
     }
     fs::create_dir_all(out)?;
     fs::write(out.join("config.json"), serde_json::to_vec_pretty(config)?)?;
 
     let tokenizer_bytes = fs::read(data_root.join("tokenizer.json"))?;
     if sha256_bytes(&tokenizer_bytes) != hs::PINNED_TOKENIZER_SHA256 {
-        return Err(invalid("tokenizer.json differs from the pinned d36d3e87 tokenizer"));
+        return Err(invalid(
+            "tokenizer.json differs from the pinned d36d3e87 tokenizer",
+        ));
     }
     let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizer_bytes)
         .ok_or_else(|| invalid("tokenizer.json is not a byte-level BPE tokenizer"))?;
@@ -219,18 +553,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     if usable.len() < config.batch || usable.iter().any(|w| w.input_ids.len() != SHEET_CONTEXT) {
         return Err(invalid("TRAIN windows are too few or not context-long"));
     }
-    let (dev_tokens, dev_mask) = hs::load_pinned_uort_split(
-        &data_root.join("ft/dev/tokens.u16"),
-        &data_root.join("ft/dev/response_mask.u8"),
-        hs::PINNED_DEV_TOKENS_SHA256,
-        hs::PINNED_DEV_MASK_SHA256,
-        hs::EXPECTED_DEV_TOKENS,
-        hs::EXPECTED_DEV_ELIGIBLE_TARGETS,
-        hs::SHEET_VOCAB,
-        hs::SHEET_BOS_ID,
-    )?;
-    let (dev_windows, _) =
-        hs::build_document_windows(&dev_tokens, &dev_mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
+    let dev_windows = load_dev(data_root)?;
     let prompts = sample_windows(&dev_windows, config.samples);
     println!(
         "[in-space] usable TRAIN windows {} (batch {}, {} steps = {:.2} epochs), DEV windows {}",
@@ -268,6 +591,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             false,
         )?;
         let dev_loss = panel_loss(model, &dev_windows, config.seed, step, false)?;
+        let nearest_hits = nearest_top1(model, &dev_windows, config.seed, step)?;
         let point = Checkpoint {
             step,
             epoch: (step * config.batch) as f64 / usable.len() as f64,
@@ -275,23 +599,29 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             dev_top1_hits: dev.top1_hits,
             dev_top8_hits: dev.top8_hits,
             dev_admitted_hits: dev.admitted_target_hits,
+            dev_nearest_top1_hits: nearest_hits,
             dev_scored_rows: dev.scored_rows,
             dev_loss,
+            dev_token_margin: dev.token_margin,
+            dev_address_margin: dev.address_margin,
             train_seconds,
             train_context_tokens_per_second: (step * config.batch * SHEET_CONTEXT) as f64
                 / train_seconds.max(1e-9),
         };
         append_line(&progress, &serde_json::to_string(&point)?)?;
         println!(
-            "[in-space] step {} epoch {:.2} train_loss {} dev top-1 {}/{} top-8 {} admitted {} dev_loss {:.5} train {:.0}s",
+            "[in-space] step {} epoch {:.2} train_loss {} dev top-1 {}/{} nearest {} top-8 {} admitted {} dev_loss {:.5} (token {:.5} address {:.5}) train {:.0}s",
             step,
             point.epoch,
             train_loss_mean.map_or("-".to_owned(), |v| format!("{v:.5}")),
             dev.top1_hits,
             dev.scored_rows,
+            nearest_hits,
             dev.top8_hits,
             dev.admitted_target_hits,
             dev_loss,
+            dev.token_margin,
+            dev.address_margin,
             train_seconds
         );
         append_line(
@@ -304,7 +634,13 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         for window in &prompts {
             let off = window.scored_offsets[0];
             let prompt = &window.input_ids[..=off];
-            let reply = greedy_reply(model, prompt, config.reply_tokens, config.seed)?;
+            let reply = greedy_reply(
+                model,
+                config.objective,
+                prompt,
+                config.reply_tokens,
+                config.seed,
+            )?;
             // The true reply: the scored targets while their offsets stay contiguous from the
             // prompt's end, so a mask gap or the window's end never splices text together.
             let reference: Vec<u32> = window
@@ -361,7 +697,14 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         cursor += config.batch;
         let (ids, scored, targets) = assemble(&windows);
         let started = Instant::now();
-        let loss = batch_loss(&model, &ids, &scored, &targets, config.batch)?;
+        let loss = batch_loss(
+            &model,
+            config.objective,
+            &ids,
+            &scored,
+            &targets,
+            config.batch,
+        )?;
         let value = f64::from(loss.to_scalar::<f32>()?);
         if !value.is_finite() {
             return Err(invalid(format!("non-finite training loss at step {step}")));
@@ -369,18 +712,20 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         let grads = loss.backward()?;
         let lr = config.lr + (config.lr_end - config.lr) * (step as f64 / config.steps as f64);
         opt_main.update_filtered(&model, &grads, lr, |name| !name.ends_with("rec.decay"))?;
-        opt_decay.update_filtered(
-            &model,
-            &grads,
-            lr * config.decay_mult,
-            |name| name.ends_with("rec.decay"),
-        )?;
+        opt_decay.update_filtered(&model, &grads, lr * config.decay_mult, |name| {
+            name.ends_with("rec.decay")
+        })?;
         device.synchronize()?;
         train_seconds += started.elapsed().as_secs_f64();
         loss_sum += value;
         loss_steps += 1;
         if (step + 1) % config.eval_every == 0 || step + 1 == config.steps {
-            checkpoint(&model, step + 1, Some(loss_sum / loss_steps as f64), train_seconds)?;
+            checkpoint(
+                &model,
+                step + 1,
+                Some(loss_sum / loss_steps as f64),
+                train_seconds,
+            )?;
             (loss_sum, loss_steps) = (0.0, 0);
         }
     }
@@ -400,6 +745,13 @@ mod tests {
         assert_eq!(a, epoch_order(1_000, 1, 0));
         assert_ne!(a, epoch_order(1_000, 1, 1));
         assert_ne!(a, epoch_order(1_000, 2, 0));
+    }
+
+    #[test]
+    fn root_separation_reads_the_sixteen_roots() {
+        let (nearest, farthest) = root_separation().unwrap();
+        println!("address roots: nearest {nearest}, farthest {farthest}");
+        assert!(nearest > 0.0 && nearest <= farthest);
     }
 
     #[test]
