@@ -23,6 +23,10 @@ The initial sync dry-run/apply changed only `m1-fresh-panel-transfer` from held 
 - `~/.cargo/bin/cargo run -q --locked -p xtask -- roadmap check` and `~/.cargo/bin/cargo run -q --locked -p xtask -- roadmap render --check` pass.
 - REPORT records the sync plan/apply, generated changes, checks and out-of-scope live-record mismatches. Full gates and local policy pass; a fresh exact-head review approves; queue and fresh-main verification complete.
 
+## Owner approval
+
+Casey directed: "Then run the loop as PART 3 of the run file says" and "After it merges, run `~/.cargo/bin/cargo run -q --locked -p xtask -- roadmap sync`, a dry run first, then weekly." This ORDER performs that loop/PM render duty and regenerates the AGENTS lesson block without hand-editing its rules; it changes no owner rule or constraint.
+
 ## Stop and decide if
 
 - Any item metadata, bar, threshold, result or issue state would change. The stale #2841 prose and closed-#2820/ready-item mismatch need separate units, not an incidental render edit.
