@@ -76,7 +76,14 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [in-space-trunk-to-text-fl
 
 ## Checks run at the head
 
-CHECKS_LINE
+All at `aeedd87df61039de335dc51cd838f84536008389`.
+
+- **CUDA library tests, RTX 5090:** `95 passed; 0 failed; 5 ignored` (`cargo test --release --locked -p uor-r4-float-train --features cuda --lib`).
+- **The credit test's negative gate:** with the straight-through factor's sign flipped in a scratch copy, `the_credit_pulls_the_key_of_a_helpful_neighbour_toward_the_query` fails (exit `101`), as it must.
+  - Both outputs are in `caseyallard/uor-r4-store:results/claude/flock-read-trunk-2026-10-27/checks-aeedd87d/`.
+  - The 16 files this REPORT rests on are listed in `SHA256SUMS-claude-144` there (sha256 `63a87fd5a411af418429c4b877cb7d5307ff0715e87e7f6293e548c0b70eea07`).
+- **Host tests:** `cargo test --locked -p uor-r4-float-train --no-fail-fast`, 65 library tests passed, and every other target passed.
+- **`uor-harness loop gates --full`:** 11 of 11 green.
 
 ## Skills used
 
