@@ -41,7 +41,7 @@ References #2904, #2858, #2859, #2862, #2868, #2869.
 - `scope-guard`: Kept changes strictly inside `docs/roadmap/items/*.md`, `docs/roadmap/README.md`, and `docs/loop/tasks/infra-loop-harness/antigravity-114/`.
 - `solution-integrity`: Verified whole-project milestone ordering (`PLAN.md` M1 -> M3 -> M4 -> M5..M8 and `docs/integration/project-track.md:116`) before updating `depends_on:` and `scope:`.
 
-## What is still open
+## Still open
 
 - `infra-loop-harness` (`#2904`) remains `status: ready` as the shared loop umbrella item (`References #2904`).
 - `m3-qualify-memory` (`#2858`) becomes immediately claimable in `uor-harness loop next` once `object-store-consumer-m3` (`#2873`, PR `#3323`) merges, followed by `m4-export-uorlut01-cli` (`#2859`) and `M5`–`M8`.
