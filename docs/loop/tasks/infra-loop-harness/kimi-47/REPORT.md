@@ -27,7 +27,9 @@ The sync was run after #3306 as `~/.cargo/bin/cargo run -q --locked -p xtask -- 
 - `~/.cargo/bin/cargo run -q --locked -p xtask -- roadmap check`: PASS, 95 items.
 - `~/.cargo/bin/cargo run -q --locked -p xtask -- roadmap render --check`: README current.
 - `uor-harness loop gates --full`: all 11 gates GREEN.
-- Fresh exact-head review, local policy and GitHub required checks are required before queue.
+- `uor-harness loop pr-check --local`: PASS at `3874b8dcc`, including owner approval for AGENTS.md. Scope (generated views outside the item's literal globs) and commit-order (the initial generated commit preceded conversion to this ORDER) are advisory WARNs under D76.
+- `uor-harness loop report --check --order docs/loop/tasks/infra-loop-harness/kimi-47/ORDER.md`: PASS.
+- Fresh exact-head review and GitHub required checks are required before queue.
 
 ## Skills used
 
