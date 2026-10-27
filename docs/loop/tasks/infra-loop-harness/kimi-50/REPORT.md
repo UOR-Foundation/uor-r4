@@ -14,7 +14,7 @@ STATE, HANDOFF, LESSONS and the AGENTS lesson block are regenerated at `149e5f42
 
 ## Measurements
 
-`roadmap check`: 95 items OK (13 ready, 11 held, 1 decision, 70 done). No experimental measurement or fresh-panel opening.
+`roadmap check`: 95 items OK (12 ready, 11 held, 1 decision, 71 done), including antigravity-110's M1 close already in the merge base. No experimental measurement or fresh-panel opening by this unit.
 
 ## Checks run at the head
 
