@@ -14,9 +14,9 @@ claude-144 and claude-145 each closed one single-read configuration. Both landed
 1. **Heads:** `H` (4), each on 16 lanes (64 coordinates). Reads after layers 2 and 4.
 2. **Points:**
    - the query, the key and the value are the residual rotated per lane by learned unit quaternions;
-   - keys and queries are spun by position, with SpiralCore's per-lane rotation by position, so the distance depends on relative offset;
+   - keys and queries are spun by position, with SpiralCore's per-lane rotation by position (RoPE's role; the sign codes are not exactly offset-invariant, since rotations keep L2, not signs);
    - half the heads carry the successor's point as payload: a one-step induction head.
-3. **Match:** each head's 64 signs, compared by `popcount(q XOR k)`. The forward pass uses the sign codes; the backward pass is a straight-through L1 on the rotated points.
+3. **Match:** each head's 64 sign bits, compared by `popcount(q XOR k)`. The forward pass uses the ±1 codes; the backward pass passes the distance's gradient straight through the codes to the rotated points.
 4. **Choose:** the 16 nearest earlier positions, hard and detached.
 5. **Weigh:** `max(0, m_h − d) / 16`, with a learned margin per head. No exponential, and no normalisation by a learned sum.
 6. **Add:** through a weight that starts at 0.

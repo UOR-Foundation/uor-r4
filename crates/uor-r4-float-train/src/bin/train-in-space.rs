@@ -13,7 +13,8 @@
 //! `train-in-space --recall PAIRS --out DIR [--steps N] [--batch B] [--eval-every K] [--seed S] [--lr X] [--lr-end X] [--retain-rates 0|1] [--flock-read K] [--content-read K] [--hamming-read H]`:
 //! the multi-query associative recall task (`in_space_long::run_recall`), `PAIRS` key-value pairs
 //! per distance bucket in each 192-token window, fresh every step; held-out recall per bucket goes
-//! to `DIR/recall.jsonl`. Needs no `--data-root`.
+//! to `DIR/recall.jsonl`, and the final model to `DIR/models/`. Needs no `--data-root`, and
+//! ignores it if given.
 //!
 //! `train-in-space --data-root DIR --opening-bound 1`: how well the prompt words a window shows
 //! could name each reply opening, as TRAIN's commonest opening per key scored on DEV. A count

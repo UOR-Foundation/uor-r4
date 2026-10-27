@@ -9,11 +9,14 @@
 //! point `x_t`, and for each of `heads` heads on its own block of coordinates:
 //! 1. **Points.** The query and the key are `x` rotated lane by lane by learned unit quaternions
 //!    (Hamilton products), then spun by their own position: lane `j` of a head turns by
-//!    `t · SPIN_BASE^(−j / lanes)`, so the spin replaces RoPE. The value is `x` rotated by a third
-//!    learned quaternion.
-//! 2. **Codes.** Each coordinate's sign is its bit. The forward pass compares the bits, so the
-//!    distance is exactly the Hamming distance `popcount(q XOR k)` that serving computes
-//!    ([`pack_signs`]). The backward pass treats the sign as the identity (straight through).
+//!    `t · SPIN_BASE^(−j / lanes)`. The spin carries position, RoPE's role. The spins share one
+//!    axis, so they keep L2 distances a function of the offset `s − t` alone, but the sign codes
+//!    below are not rotation-invariant: a head's Hamming distance depends on both positions, not
+//!    only their offset. The value is `x` rotated by a third learned quaternion.
+//! 2. **Codes.** Each coordinate's bit is 1 at or above 0, as [`pack_signs`] packs it. The forward
+//!    pass compares the ±1 codes, so the distance is exactly the Hamming distance
+//!    `popcount(q XOR k)` that serving computes. The backward pass treats the code as the identity
+//!    (straight through), so the distance's gradient `(a − b) / 2` reaches the rotated points.
 //! 3. **Choice.** The [`HAMMING_KEPT`] earlier positions `s < t` nearest in Hamming distance,
 //!    hard and detached (claude-144's choice).
 //! 4. **Weights.** `max(0, m − d) / HAMMING_KEPT`, with `d` in bits and a learned margin `m` per
@@ -120,6 +123,17 @@ impl HammingReads {
             .map(|r| r.weight.as_tensor().abs()?.mean_all())
             .collect::<candle_core::Result<Vec<_>>>()?;
         Ok(Tensor::stack(&parts, 0)?.mean_all()?)
+    }
+
+    /// Every read's margins in bits, read by read and head by head.
+    pub fn margins(&self) -> Result<Vec<f64>> {
+        let mut margins = Vec::new();
+        for read in &self.reads {
+            for m in read.margin.as_tensor().to_vec1::<f32>()? {
+                margins.push(f64::from(m));
+            }
+        }
+        Ok(margins)
     }
 
     /// Write the reads to `directory/hamming_read.safetensors`, with their head count.
@@ -259,8 +273,11 @@ impl HammingRead {
         let query = hamilton_gate(&spin, &Self::rotate(&self.query_rotation, &points)?)?;
         let key = hamilton_gate(&spin, &Self::rotate(&self.key_rotation, &points)?)?;
         let value = Self::rotate(&self.value_rotation, &points)?;
-        // The sign of each coordinate forward, the identity backward.
-        let code = |p: &Tensor| -> Result<Tensor> { Ok(p.add(&p.sign()?.sub(p)?.detach())?) };
+        // ±1 by `p ≥ 0` forward, as `pack_signs` packs it, so 0 is a 1 bit; the identity backward.
+        let code = |p: &Tensor| -> Result<Tensor> {
+            let bits = p.ge(0.0)?.to_dtype(DType::F32)?.affine(2.0, -1.0)?;
+            Ok(p.add(&bits.sub(p)?.detach())?)
+        };
         let (query, key) = (code(&query)?, code(&key)?);
         let starts: Vec<u32> = (0..rows).map(|r| ((r / time) * time) as u32).collect();
         let starts = Tensor::from_vec(starts, (rows, 1), device)?;
@@ -366,6 +383,51 @@ mod tests {
             out.flatten_all().unwrap().to_vec1::<f32>().unwrap(),
             x.flatten_all().unwrap().to_vec1::<f32>().unwrap()
         );
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn each_row_reads_only_earlier_rows_of_its_own_window() {
+        let device = Device::new_cuda(0).unwrap();
+        let reads = HammingReads::new(4, 256, &device).unwrap();
+        let read = &reads.reads[0];
+        read.weight
+            .set(&Tensor::ones(256, DType::F32, &device).unwrap())
+            .unwrap();
+        // Every candidate inside the margin: 64 bits is the most a head can differ.
+        read.margin
+            .set(&Tensor::full(65.0f32, 4, &device).unwrap())
+            .unwrap();
+        // Two windows of two positions. Window 1 is window 0 scaled by 3, so its codes are the
+        // same and every weight matches. Row 1 of each window may keep only row 0 of its own.
+        let rows = [[1.0f32; 256], [-1.0; 256], [3.0; 256], [-3.0; 256]];
+        let flat: Vec<f32> = rows.iter().flatten().copied().collect();
+        let x = Tensor::from_vec(flat, (2, 2, 256), &device).unwrap();
+        let added = read
+            .apply(&x)
+            .unwrap()
+            .sub(&x)
+            .unwrap()
+            .reshape((4, 256))
+            .unwrap()
+            .to_vec2::<f32>()
+            .unwrap();
+        // Head 0 (coordinates 0..64) carries the kept row's value: row 0 (+1), not row 1 itself
+        // (−1). Head 1 (64..128) carries the kept row's successor, row 1 (−1).
+        assert!(
+            added[1][0] > 0.0 && added[1][64] < 0.0,
+            "{:?}",
+            &added[1][..2]
+        );
+        // Window 1 reads its own row 0 (+3), not window 0's (+1): three times window 0's read.
+        for c in [0usize, 64, 128, 192] {
+            assert!(
+                (added[3][c] - 3.0 * added[1][c]).abs() < 1e-4,
+                "coordinate {c}"
+            );
+        }
+        // Row 0 of each window has no earlier row and reads nothing.
+        assert!(added[0].iter().chain(&added[2]).all(|&v| v == 0.0));
     }
 
     #[cfg(feature = "cuda")]
