@@ -714,6 +714,99 @@ pub fn inspect_run(
     Ok(readings)
 }
 
+/// The pinned TRAIN split's windows with at least 4 scored targets, each context-long; at least
+/// `batch` of them.
+fn load_train(data_root: &Path, batch: usize) -> Result<Vec<CausalWindow>> {
+    let (train_tokens, train_mask) = hs::load_pinned_uort_split(
+        &data_root.join("mw-balp/train/tokens.u16"),
+        &data_root.join("mw-balp/train/response_mask.u8"),
+        hs::PINNED_TRAIN_TOKENS_SHA256,
+        hs::PINNED_TRAIN_MASK_SHA256,
+        hs::EXPECTED_TRAIN_TOKENS,
+        hs::EXPECTED_TRAIN_ELIGIBLE_TARGETS,
+        hs::SHEET_VOCAB,
+        hs::SHEET_BOS_ID,
+    )?;
+    let (train_windows, _) =
+        hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
+    let usable: Vec<CausalWindow> = train_windows
+        .into_iter()
+        .filter(|w| w.scored_offsets.len() >= 4)
+        .collect();
+    if usable.len() < batch || usable.iter().any(|w| w.input_ids.len() != SHEET_CONTEXT) {
+        return Err(invalid("TRAIN windows are too few or not context-long"));
+    }
+    Ok(usable)
+}
+
+/// One parameter's gradient norm on the first training batch ([`gradient_norms`]).
+#[derive(Clone, Debug, Serialize)]
+pub struct GradientNorm {
+    pub name: String,
+    pub norm: f64,
+}
+
+/// The L2 norm of every parameter's gradient on the first `config.batch` TRAIN windows of a
+/// freshly built model under `config`'s objective and switches, largest first, after one line
+/// named `total` and one with the norm the main optimizer clips. No update is made.
+pub fn gradient_norms(
+    data_root: &Path,
+    config: &LongConfig,
+    device: &Device,
+) -> Result<Vec<GradientNorm>> {
+    let usable = load_train(data_root, config.batch)?;
+    arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
+    crate::geometric_stack::set_retention_rates(config.retain_rates);
+    crate::geometric_stack::set_folded_scores(config.fold_scores);
+    let _guard = ArmGuard;
+    let model = build_fbs_model(FbsArm::OneAtomActive, config.seed, device)?;
+    let windows: Vec<&CausalWindow> = usable.iter().take(config.batch).collect();
+    let (ids, scored, targets) = assemble(&windows);
+    let grads = hs::with_gate_mode(HamiltonArm::HamiltonActive, config.seed, 0, false, || {
+        Ok(batch_loss(
+            &model,
+            config.objective,
+            &ids,
+            &scored,
+            &targets,
+            config.batch,
+        )?
+        .backward()?)
+    })?;
+    let mut norms = Vec::new();
+    let (mut total, mut main) = (0.0f64, 0.0f64);
+    for (name, var) in model.variables() {
+        if let Some(grad) = grads.get(var.as_tensor()) {
+            let squared = f64::from(grad.sqr()?.sum_all()?.to_scalar::<f32>()?);
+            total += squared;
+            if !name.ends_with("rec.decay") {
+                main += squared;
+            }
+            norms.push(GradientNorm {
+                name: name.clone(),
+                norm: squared.sqrt(),
+            });
+        }
+    }
+    norms.sort_by(|a, b| b.norm.total_cmp(&a.norm));
+    norms.insert(
+        0,
+        GradientNorm {
+            name: "total".to_owned(),
+            norm: total.sqrt(),
+        },
+    );
+    // The main optimizer clips everything but `rec.decay` together (`run_long`).
+    norms.insert(
+        1,
+        GradientNorm {
+            name: "total_without_rec.decay".to_owned(),
+            norm: main.sqrt(),
+        },
+    );
+    Ok(norms)
+}
+
 /// Train, score, write text and save, as the module documentation says. `out` must not exist.
 pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Device) -> Result<()> {
     if config.steps == 0 || config.batch == 0 || config.eval_every == 0 {
@@ -737,25 +830,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizer_bytes)
         .ok_or_else(|| invalid("tokenizer.json is not a byte-level BPE tokenizer"))?;
 
-    let (train_tokens, train_mask) = hs::load_pinned_uort_split(
-        &data_root.join("mw-balp/train/tokens.u16"),
-        &data_root.join("mw-balp/train/response_mask.u8"),
-        hs::PINNED_TRAIN_TOKENS_SHA256,
-        hs::PINNED_TRAIN_MASK_SHA256,
-        hs::EXPECTED_TRAIN_TOKENS,
-        hs::EXPECTED_TRAIN_ELIGIBLE_TARGETS,
-        hs::SHEET_VOCAB,
-        hs::SHEET_BOS_ID,
-    )?;
-    let (train_windows, _) =
-        hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
-    let usable: Vec<CausalWindow> = train_windows
-        .into_iter()
-        .filter(|w| w.scored_offsets.len() >= 4)
-        .collect();
-    if usable.len() < config.batch || usable.iter().any(|w| w.input_ids.len() != SHEET_CONTEXT) {
-        return Err(invalid("TRAIN windows are too few or not context-long"));
-    }
+    let usable = load_train(data_root, config.batch)?;
     let (dev_windows, dev_mask) = load_dev(data_root)?;
     let prompts = sample_windows(&dev_windows, config.samples);
     println!(

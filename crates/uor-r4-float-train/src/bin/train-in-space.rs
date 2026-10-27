@@ -6,6 +6,8 @@
 //!
 //! `train-in-space --data-root DIR --reach CHECKPOINT [--retain-rates 0|1] [--fold-scores 0|1] [--seed S]`
 //!
+//! `train-in-space --data-root DIR --grad-norms 1 [--objective ...] [--retain-rates 0|1] [--fold-scores 0|1] [--batch B] [--seed S]`
+//!
 //! Long training of the SpiralCore/FBS geometric trunk in its own space, with text at every
 //! checkpoint (`uor_r4_float_train::in_space_long`). GPU only. `--data-root` holds `tokenizer.json`,
 //! `mw-balp/train/` and `ft/dev/`, each split with `tokens.u16` and `response_mask.u8`. `--out`
@@ -17,7 +19,8 @@ use std::path::PathBuf;
 
 use candle_core::Device;
 use uor_r4_float_train::in_space_long::{
-    context_reach, inspect_run, root_separation, run_long, LongConfig, PointObjective,
+    context_reach, gradient_norms, inspect_run, root_separation, run_long, LongConfig,
+    PointObjective,
 };
 use uor_r4_float_train::{FloatTrainError, Result};
 
@@ -26,6 +29,7 @@ fn main() -> Result<()> {
     let mut out = None;
     let mut inspect = None;
     let mut reach = None;
+    let mut grad_norms = false;
     let mut config = LongConfig {
         objective: PointObjective::Sheet,
         steps: 32_768,
@@ -54,6 +58,7 @@ fn main() -> Result<()> {
             "--out" => out = Some(PathBuf::from(&value)),
             "--inspect" => inspect = Some(PathBuf::from(&value)),
             "--reach" => reach = Some(PathBuf::from(&value)),
+            "--grad-norms" => grad_norms = number(&value)? == 1,
             "--objective" => {
                 config.objective = match value.as_str() {
                     "sheet" => PointObjective::Sheet,
@@ -97,6 +102,12 @@ fn main() -> Result<()> {
     let data_root =
         data_root.ok_or_else(|| FloatTrainError::Invalid("--data-root is required".to_owned()))?;
     let device = Device::new_cuda(0)?;
+    if grad_norms {
+        for norm in gradient_norms(&data_root, &config, &device)? {
+            println!("{}", serde_json::to_string(&norm)?);
+        }
+        return Ok(());
+    }
     if let Some(checkpoint) = reach {
         let (reach, bins) = context_reach(
             &data_root,
