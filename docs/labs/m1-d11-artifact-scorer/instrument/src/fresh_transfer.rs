@@ -49,9 +49,9 @@ pub const K16_FRESH_MASK_SHA256: &str =
 
 /// Stage 3 `cut_fresh_slice` (`#2844`) 14,287-row slice digests.
 pub const STAGE3_CUT_FRESH_TOKENS_SHA256: &str =
-    "1f8bf88d8dee1a5934c4932aa088922638653864de9a4ebfcde6970a5968f840";
+    "1f8bf88d8deee51574c68ffd8976ce4415fc8aed5602213d6905a37a138517ea";
 pub const STAGE3_CUT_FRESH_MASK_SHA256: &str =
-    "fe87363920e12d9320751e3fdcf3b2b665976b70dd225e1e6c96c2a21b93bd6c";
+    "fe87363920e19bf072e9fe3a7289e6cd2f1abde6c2431caae8f5c8494d3829d5";
 
 /// Registered DEV and TRAIN corpus pins (`CHARTER.md` §4.8 and `report.json` `df5d074a…`).
 pub const DEV_TOKENS_SHA256: &str =
