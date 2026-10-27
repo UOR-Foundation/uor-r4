@@ -10,6 +10,11 @@
 //!
 //! `train-in-space --data-root DIR --decode-speed CHECKPOINT [--objective nearest] [--retain-rates 0|1] [--reply-tokens N]`
 //!
+//! `train-in-space --recall PAIRS --out DIR [--steps N] [--batch B] [--eval-every K] [--seed S] [--lr X] [--lr-end X] [--retain-rates 0|1] [--flock-read K] [--content-read K]`:
+//! the multi-query associative recall task (`in_space_long::run_recall`), `PAIRS` key-value pairs
+//! per distance bucket in each 192-token window, fresh every step; held-out recall per bucket goes
+//! to `DIR/recall.jsonl`. Needs no `--data-root`.
+//!
 //! `train-in-space --data-root DIR --opening-bound 1`: how well the prompt words a window shows
 //! could name each reply opening, as TRAIN's commonest opening per key scored on DEV. A count
 //! over the corpus that needs no GPU; one JSON line per key.
@@ -26,7 +31,7 @@ use std::path::PathBuf;
 use candle_core::Device;
 use uor_r4_float_train::in_space_long::{
     context_reach, decode_speed, gradient_norms, inspect_run, opening_bound, root_separation,
-    run_long, LongConfig, PointObjective,
+    run_long, run_recall, LongConfig, PointObjective,
 };
 use uor_r4_float_train::{FloatTrainError, Result};
 
@@ -38,6 +43,7 @@ fn main() -> Result<()> {
     let mut grad_norms = false;
     let mut decode = None;
     let mut bound = false;
+    let mut recall = 0usize;
     let mut config = LongConfig {
         objective: PointObjective::Sheet,
         steps: 32_768,
@@ -78,6 +84,7 @@ fn main() -> Result<()> {
             "--grad-norms" => grad_norms = switch(&value)?,
             "--decode-speed" => decode = Some(PathBuf::from(&value)),
             "--opening-bound" => bound = switch(&value)?,
+            "--recall" => recall = number(&value)?,
             "--objective" => {
                 config.objective = match value.as_str() {
                     "sheet" => PointObjective::Sheet,
@@ -135,6 +142,16 @@ fn main() -> Result<()> {
             "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed or --opening-bound 1"
                 .to_owned(),
         ));
+    }
+    if recall > 0 {
+        let out = out.ok_or_else(|| FloatTrainError::Invalid("--recall needs --out".to_owned()))?;
+        if modes[..5].iter().any(|&m| m) {
+            return Err(FloatTrainError::Invalid(
+                "--recall trains; it takes --out and no other mode".to_owned(),
+            ));
+        }
+        let device = Device::new_cuda(0)?;
+        return run_recall(&out, &config, recall, &device);
     }
     let data_root =
         data_root.ok_or_else(|| FloatTrainError::Invalid("--data-root is required".to_owned()))?;
