@@ -20,7 +20,10 @@ Three prose lines in `docs/roadmap/items/m1-fresh-panel-transfer.md`: name the D
 
 - `~/.cargo/bin/cargo run -q --locked -p xtask -- roadmap check`: PASS.
 - `git diff --check`: PASS; only the three intended item prose replacements.
-- Full gates, local policy, report check, fresh exact-head review, required checks, queue and fresh-main verification are required.
+- `uor-harness loop gates --full`: all 11 gates GREEN at `5c8f57469`.
+- `uor-harness loop pr-check --local`: PASS at `5c8f57469`, with no advisory warnings.
+- `uor-harness loop report --check --order docs/loop/tasks/infra-loop-harness/kimi-49/ORDER.md`: PASS at `5c8f57469`.
+- Fresh exact-head review, required checks, queue and fresh-main verification are required.
 
 ## Skills used
 
