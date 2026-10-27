@@ -8,9 +8,9 @@
 //! current one: an earlier copy of the current token is then an exact match from the first step.
 //! This read builds that in ([RESEARCH](../../../docs/loop/tasks/in-space-trunk-to-text/claude-146/RESEARCH.md)).
 //!
-//! After layers 2 and 6 of 6 ([`HAMMING_DEPTHS`]; the second just before the final norm, so a
-//! copied point reaches the readout through nothing else), for each position `t` of a window with
-//! residual point `x_t`, and for each of `heads` heads matching on its own block of coordinates:
+//! After layer 2 of 6, inside the stream, and on the final norm's output, the points the nearest
+//! readout decodes ([`HAMMING_DEPTHS`]), for each position `t` of a window with point `x_t`, and
+//! for each of `heads` heads matching on its own block of coordinates:
 //! 1. **Points.** The key of an earlier position `s` is the shared table's point of token
 //!    `x_{s−1}`, rotated lane by lane by a learned unit quaternion. The query is, for the first
 //!    half of the heads (**copy heads**), the point of the current token `x_t`, rotated by a
@@ -34,8 +34,13 @@
 //!    nearest readout names it by (an induction head with a tied readout, built in rather than
 //!    grown; the residual there failed the recall probe, since the trunk reads a token point added
 //!    to its stream as its own input, not as its answer). A type head brings back `v_s`.
-//! 6. **Add.** `x_t + w_c ⊙ c_t + w_y ⊙ y_t`: the copy heads' mean `c_t` and the type heads' mean
-//!    `y_t`, each with its own weight row, both starting at 0, so at step 0 the trunk is unchanged.
+//! 6. **Combine.** `c_t` and `y_t` are the copy and type heads' means over the heads that found a
+//!    candidate, each with its own weight row, both starting at 0, so at step 0 the trunk is
+//!    unchanged. In the stream, `x_t + w_c ⊙ c_t + w_y ⊙ y_t`. On the readout, where a copy head
+//!    found something, `n_t + w_c ⊙ (c_t − n_t) + w_y ⊙ y_t`: a nearest readout names the point a
+//!    prediction is at, so a copy moves the prediction toward the copied point (at `w_c = 1`,
+//!    onto it). Adding the point instead failed the recall probe: next to the stream's larger
+//!    parts it barely moves where the prediction lands.
 //!
 //! The reads are active for the thread that sets them ([`set_hamming_reads`]); every caller of
 //! `StackModel::hidden` on that thread gets them. They train with claude-144's AdamW.
@@ -47,8 +52,10 @@ use candle_core::{DType, Device, Tensor, Var};
 use crate::geometric_stack::hamilton_gate;
 use crate::{invalid, Result};
 
-/// Each read runs after this many of the trunk's 6 layers.
+/// Each read runs after this many of the trunk's 6 layers; the last one, on the readout.
 pub const HAMMING_DEPTHS: [usize; 2] = [2, 6];
+/// The read at this depth runs on the final norm's output ([`HammingRead::apply_readout`]).
+pub const HAMMING_READOUT_DEPTH: usize = HAMMING_DEPTHS[1];
 /// Earlier positions each head keeps.
 pub const HAMMING_KEPT: usize = 16;
 /// Lane `j` of a head spins by `SPIN_BASE^(−j / lanes)` radians per position, RoPE's spacing.
@@ -112,11 +119,22 @@ impl HammingReads {
         Ok(Self { reads })
     }
 
-    /// The read after `depth` layers, if one runs there.
+    /// The read inside the stream after `depth` layers, if one runs there.
     pub fn at_depth(&self, depth: usize) -> Option<&HammingRead> {
+        if depth == HAMMING_READOUT_DEPTH {
+            return None;
+        }
         HAMMING_DEPTHS
             .iter()
             .position(|&d| d == depth)
+            .and_then(|i| self.reads.get(i))
+    }
+
+    /// The read on the final norm's output.
+    pub fn readout(&self) -> Option<&HammingRead> {
+        HAMMING_DEPTHS
+            .iter()
+            .position(|&d| d == HAMMING_READOUT_DEPTH)
             .and_then(|i| self.reads.get(i))
     }
 
@@ -291,9 +309,29 @@ impl HammingRead {
             .reshape((batch * time, width))?)
     }
 
-    /// The read applied to the residual `(batch, time, width)` of the windows `ids`, with token
-    /// points from the shared `table`; returns the same shape.
+    /// The read applied inside the stream, to the residual `(batch, time, width)` of the windows
+    /// `ids`, with token points from the shared `table`: `x + w_c ⊙ c + w_y ⊙ y`. Returns the
+    /// same shape.
     pub fn apply(&self, residual: &Tensor, ids: &[u32], table: &Tensor) -> Result<Tensor> {
+        self.read(residual, ids, table, false)
+    }
+
+    /// The read applied to the final norm's output `(batch, time, width)`, the points the
+    /// nearest readout decodes: where a copy head found an earlier copy of the current token,
+    /// the prediction moves toward the copied point, `n + w_c ⊙ (c − n) + w_y ⊙ y`, and stays
+    /// `n + w_y ⊙ y` where none did. At `w_c = 1` a found copy is decoded exactly. A nearest
+    /// readout names the point a prediction is at, so a copy is a move, not an added term.
+    pub fn apply_readout(&self, output: &Tensor, ids: &[u32], table: &Tensor) -> Result<Tensor> {
+        self.read(output, ids, table, true)
+    }
+
+    fn read(
+        &self,
+        residual: &Tensor,
+        ids: &[u32],
+        table: &Tensor,
+        readout: bool,
+    ) -> Result<Tensor> {
         let (batch, time, width) = residual.dims3()?;
         let rows = batch * time;
         if ids.len() != rows {
@@ -349,6 +387,11 @@ impl HammingRead {
             Tensor::zeros((rows, width), DType::F32, device)?,
             Tensor::zeros((rows, width), DType::F32, device)?,
         ];
+        // How many heads of each kind found any candidate inside their margin, per row.
+        let mut found = [
+            Tensor::zeros((rows, 1), DType::F32, device)?,
+            Tensor::zeros((rows, 1), DType::F32, device)?,
+        ];
         for h in 0..self.heads {
             let q = query.narrow(1, h * head_width, head_width)?.contiguous()?;
             let k = key.narrow(1, h * head_width, head_width)?.contiguous()?;
@@ -398,19 +441,26 @@ impl HammingRead {
                     .sum(1)?
                     .broadcast_div(&count)?,
             )?;
+            found[kind] =
+                found[kind].add(&weights.gt(0.0)?.to_dtype(DType::F32)?.max_keepdim(1)?)?;
         }
-        // Each kind's mean over its heads, weighed coordinate by coordinate by its own row of
-        // `weight`.
-        let counts = [self.copy_heads(), self.heads - self.copy_heads()];
+        // Each kind's mean over the heads that found something, so a head that found nothing does
+        // not dilute one that did.
+        let means = (0..2)
+            .map(|kind| Ok(sums[kind].broadcast_div(&found[kind].maximum(1.0)?)?))
+            .collect::<Result<Vec<_>>>()?;
         let weight = self.weight.as_tensor();
-        let mut added = Tensor::zeros((rows, width), DType::F32, device)?;
-        for kind in 0..2 {
-            added = added.add(
-                &sums[kind]
-                    .affine(1.0 / counts[kind] as f64, 0.0)?
-                    .broadcast_mul(&weight.narrow(0, kind, 1)?)?,
-            )?;
-        }
+        let (copy_weight, type_weight) = (weight.narrow(0, 0, 1)?, weight.narrow(0, 1, 1)?);
+        let copied = if readout {
+            // Only where a copy head found an earlier copy does the prediction move.
+            let matched = found[0].gt(0.0)?.to_dtype(DType::F32)?;
+            means[0].sub(&points)?.broadcast_mul(&matched)?
+        } else {
+            means[0].clone()
+        };
+        let added = copied
+            .broadcast_mul(&copy_weight)?
+            .add(&means[1].broadcast_mul(&type_weight)?)?;
         Ok(points.add(&added)?.reshape((batch, time, width))?)
     }
 }
@@ -617,6 +667,43 @@ mod tests {
         for r in [0usize, 1, 3, 4, 6, 7] {
             assert!(added[r].iter().all(|&v| v == 0.0), "row {r}");
         }
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_readout_moves_onto_a_found_copy_and_leaves_the_rest() {
+        let device = Device::new_cuda(0).unwrap();
+        let reads = HammingReads::new(4, 256, &device).unwrap();
+        let read = reads.readout().unwrap();
+        let copy_only: Vec<f32> = (0..512).map(|i| f32::from(u8::from(i < 256))).collect();
+        read.weight
+            .set(&Tensor::from_vec(copy_only, (2, 256), &device).unwrap())
+            .unwrap();
+        // The windows of the copy test: window 0 finds token 7 at t = 2, window 1 token 11,
+        // window 2 nothing. With the copy weight at 1 the found rows decode exactly as the copied
+        // token's point; every other row is the readout's own point, unchanged.
+        let ids = [5u32, 7, 5, 9, 11, 9, 3, 5, 5];
+        let n = residual(3, 3, 256, &device);
+        let table = table(16, 256, &device);
+        let points = table.to_vec2::<f32>().unwrap();
+        let own = n.reshape((9, 256)).unwrap().to_vec2::<f32>().unwrap();
+        let out = read
+            .apply_readout(&n, &ids, &table)
+            .unwrap()
+            .reshape((9, 256))
+            .unwrap()
+            .to_vec2::<f32>()
+            .unwrap();
+        for c in 0..256 {
+            assert!((out[2][c] - points[7][c]).abs() < 1e-6, "window 0, {c}");
+            assert!((out[5][c] - points[11][c]).abs() < 1e-6, "window 1, {c}");
+        }
+        for r in [0usize, 1, 3, 4, 6, 7, 8] {
+            assert_eq!(out[r], own[r], "row {r}");
+        }
+        // The stream read is the other one; the readout is not offered at its depth.
+        assert!(reads.at_depth(HAMMING_READOUT_DEPTH).is_none());
+        assert!(reads.at_depth(HAMMING_DEPTHS[0]).is_some());
     }
 
     #[cfg(feature = "cuda")]

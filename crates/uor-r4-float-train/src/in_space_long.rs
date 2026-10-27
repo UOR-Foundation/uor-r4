@@ -72,7 +72,7 @@ pub struct LongConfig {
     /// Keep this many earlier positions in a content-keyed read inside the trunk; 0 is no read
     /// (`flock_read_content`).
     pub content_read: usize,
-    /// Hamming flock attention with this many heads after layers 2 and 6; 0 is no read
+    /// Hamming flock attention with this many heads after layer 2 and on the readout; 0 is no read
     /// (`flock_read_hamming`).
     pub hamming_read: usize,
     /// Pass no gradient from the input encoding into the shared table
