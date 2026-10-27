@@ -90,4 +90,11 @@ Its advisories are kept:
 
 The D67 pre-run review passed at the same head, pending this FIT.
 
-Round 2: to be filled by a fresh-context reviewer given only this sheet and its sources.
+**Round 2 (at `fa57c079b`): FIT.** A fresh-context reviewer checked all three fixes in the code and the job script:
+- `deterministic_bwd_calls` is counted only in `spiralcore_fbs_bwd_det`, and the train receipt is built after both seeds;
+- §3 is read fault-first;
+- `projected_full_seconds` covers both seeds.
+
+Its advisory is a thin margin inside the 2-hour lease. Builds, tests and the probe are expected to take about 15 minutes, and D1 and D2 about 15 to 80, so the run stays under the cap.
+
+TEST FITNESS: FIT
