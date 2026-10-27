@@ -7,10 +7,10 @@ Lab: claude. Order: [ORDER.md](ORDER.md). References #2904.
 - **`loop claim` refused the item.** claude-137 (#3307) had put `docs/harness/README.md` and `docs/loop/README.md` in `scope:`. Both are shared registration files, so the claim refused. That was my slip: it passed `xtask roadmap check` and both of claude-137's fresh reviews. This ORDER was written by hand, and the item fix (edit 6) removes both globs. A candidate rule, logged in claude's friction log: `roadmap check` should refuse a shared file in `scope:` as `loop claim` does.
 - **The first run of Casey's command did not land.** Casey's first reply said the edit was pushed. But the branch, the worktree's file and every `claude/*` branch were unchanged, and his Terminal panel did not show the command. On the second run, from this session, it printed `true` and pushed `e08e8848f`.
 - **The installed binary fails the receipt check on the new registry.** `~/.cargo/bin/uor-harness` is built from `origin/main`'s code. On this branch, `loop onboard --check-receipts` prints "FAIL onboarding receipts: codex is not in docs/harness/labs.json". That is the old gate walking `CLIENTS`, and it shows why edit 3 is needed. Until the shared binary is refreshed after this merges, every lab running that check from it sees the same FAIL. Rebuilding it is not a lab's step.
-- **One harness test fails from a lab worktree, for an environment reason.**
-  - The test is `each_clients_canary_write_is_refused` (`tests/loop_guard.rs`). It runs each client's canary on the real repository root. From a lab worktree, antigravity's canary is refused for a different reason: "cross-worktree write refused: .worktrees/claude-drop-codex-registry belongs to another lab (lab is antigravity)". The test accepts only a CHARTER, owner-only or R10 reason.
-  - The failure depends on the path, and this diff touches neither `run_canary` nor that test. CI runs from a plain checkout.
-  - It is an instrument fault, not this change.
+- **I misread one failing test as environment-only, and CI caught it.** The test is `each_clients_canary_write_is_refused` (`tests/loop_guard.rs`). It runs every client's canary on the real repository root and accepts only a CHARTER, owner-only or R10 refusal.
+  - **Locally,** from a lab worktree, antigravity came first and was refused for a worktree reason: "cross-worktree write refused: .worktrees/claude-drop-codex-registry belongs to another lab". I classed that as an instrument fault and stopped there.
+  - **CI's plain checkout at `e08e8848f`** showed the real failure: "codex: unexpected refusal reason: lab \"codex\" is not in docs/harness/labs.json". With codex out of the registry, its canary is refused before its payload reaches the path rule.
+  - **Fix:** the test now runs in `make_uor_fixture`, whose registry lists every adapter. All five adapters, codex included, are refused by the path rule there, and the worktree failure is gone too. The registered labs' canaries still run on the real repository, inside the receipt test.
 
 ## What changed
 
@@ -43,8 +43,8 @@ The ORDER gave no estimate.
 
 ## Measurements
 
-None of model behaviour. These are the change's own checks, at head `e08e8848f`.
-- **Harness suite** (`cargo test -p uor-r4-harness --no-fail-fast`, all 33 targets): 1,153 passed and 1 failed. The failure is the worktree-environment canary test above. These new or changed tests pass:
+None of model behaviour. These are the change's own checks, at head `e08e8848f` unless stated.
+- **Harness suite** (`cargo test -p uor-r4-harness --no-fail-fast`, all 33 targets): 1,153 passed and 1 failed. The failure was the canary test above; after its fix, `tests/loop_guard.rs` passes 13 of 13. These new or changed tests pass:
   - `the_real_registry_lists_exactly_the_four`
   - `an_unregistered_lab_is_refused`
   - `an_unregistered_lab_is_refused_by_heartbeat_with_nothing_written`

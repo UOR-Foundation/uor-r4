@@ -150,9 +150,15 @@ fn make_synthetic_kit() -> tempfile::TempDir {
 }
 
 /// The planted fault for loop PR 9: each client's canary write to a denied path is refused.
+///
+/// It drives every adapter, so it runs in a fixture whose registry lists them all. On the real
+/// repository an adapter whose lab has left (codex, claude-138) is refused for not being
+/// registered, before its payload reaches the path rule. The real-repository canaries of the
+/// registered labs run in `committed_onboarding_receipts_are_valid_and_canaries_refuse`.
 #[test]
 fn each_clients_canary_write_is_refused() {
-    let root = repo_root();
+    let fixture = make_uor_fixture("claude");
+    let root = fixture.path().to_path_buf();
     for client in CLIENTS {
         let reason = run_canary(&root, client)
             .unwrap_or_else(|e| panic!("canary for {client} was not refused: {e}"));
