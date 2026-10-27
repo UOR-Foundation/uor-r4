@@ -1,29 +1,35 @@
-//! Hamming flock attention inside the in-space trunk (in-space-trunk-to-text, claude-146).
+//! The induction-keyed Hamming read inside the in-space trunk (in-space-trunk-to-text, claude-146).
 //!
 //! The trunk is a selective quaternion recurrence: a token 16 back moves the prediction by 1–2%
-//! of what the last token does. claude-144 and claude-145 each added one read, with credit only
-//! to the few positions it picked. This read gives the trunk several cheap look-backs per layer,
-//! with graded credit and position, by the owner's direction of 27 Oct (#2028).
+//! of what the last token does. Reads keyed on the trunk's own state never learned where to look
+//! (claude-144, claude-145, and this read's first form). The project's 26 Sep retrieval head
+//! (`archive/integration/geometric-attention-2026-09-26.md` §3) recalled 100% at 512 pairs with
+//! Hamming codes and hard top-1 because its key named the *previous* token and its query the
+//! current one: an earlier copy of the current token is then an exact match from the first step.
+//! This read builds that in ([RESEARCH](../../../docs/loop/tasks/in-space-trunk-to-text/claude-146/RESEARCH.md)).
 //!
 //! After layers 2 and 4 of 6 ([`HAMMING_DEPTHS`]), for each position `t` of a window with residual
 //! point `x_t`, and for each of `heads` heads on its own block of coordinates:
-//! 1. **Points.** The query and the key are `x` rotated lane by lane by learned unit quaternions
-//!    (Hamilton products), then spun by their own position: lane `j` of a head turns by
-//!    `t · SPIN_BASE^(−j / lanes)`. The spin carries position, RoPE's role. The spins share one
-//!    axis, so they keep L2 distances a function of the offset `s − t` alone, but the sign codes
-//!    below are not rotation-invariant: a head's Hamming distance depends on both positions, not
-//!    only their offset. The value is `x` rotated by a third learned quaternion.
+//! 1. **Points.** The key of an earlier position `s` is the shared table's point of token
+//!    `x_{s−1}`, rotated lane by lane by a learned unit quaternion. The query is, for the first
+//!    half of the heads (**copy heads**), the point of the current token `x_t`, rotated by a
+//!    quaternion that starts equal to the key's; for the rest (**type heads**), the residual,
+//!    which must learn what to ask for. Type heads' points are also spun by position: lane `j`
+//!    turns by `t · SPIN_BASE^(−j / lanes)` (the sign codes are not exactly offset-invariant,
+//!    since rotations keep L2, not signs). The value is `x` rotated by a third quaternion.
 //! 2. **Codes.** Each coordinate's bit is 1 at or above 0, as [`pack_signs`] packs it. The forward
 //!    pass compares the ±1 codes, so the distance is exactly the Hamming distance
 //!    `popcount(q XOR k)` that serving computes. The backward pass treats the code as the identity
 //!    (straight through), so the distance's gradient `(a − b) / 2` reaches the rotated points.
-//! 3. **Choice.** The [`HAMMING_KEPT`] earlier positions `s < t` nearest in Hamming distance,
-//!    hard and detached (claude-144's choice).
-//! 4. **Weights.** `max(0, m − d) / HAMMING_KEPT`, with `d` in bits and a learned margin `m` per
-//!    head: graded, so every kept candidate inside the margin gets credit, and nothing exponential.
-//! 5. **Payload.** Even heads bring back the kept position's value, `v_s`. Odd heads bring its
-//!    successor's, `v_{s+1}`, a known input because `s + 1 ≤ t`: "what followed the earlier match",
-//!    a one-step induction head.
+//! 3. **Choice.** The [`HAMMING_KEPT`] earlier positions `1 ≤ s < t` nearest in Hamming distance,
+//!    hard and detached, by one sort per head ([`choose_sorted`]). Position 0 has no previous token.
+//! 4. **Weights.** `max(0, m − d) / m`, between 0 and 1, with `d` in bits and a learned margin `m`
+//!    per head: an exact match counts in full, every candidate inside the margin gets graded
+//!    credit, and nothing is exponential. A head reports the mean over the candidates it reads (a
+//!    count), and reads nothing when none is inside its margin.
+//! 5. **Payload.** The kept position's value `v_s`. Because the key at `s` named token `s − 1`,
+//!    that is what followed the earlier match: for a copy head, the token after the last copy of
+//!    the current token (an induction head, built in rather than grown).
 //! 6. **Add.** `x_t + w ⊙ c_t`, the weight `w` starting at 0, so at step 0 the trunk is unchanged.
 //!
 //! The reads are active for the thread that sets them ([`set_hamming_reads`]); every caller of
@@ -205,12 +211,23 @@ impl HammingRead {
                 device,
             )?)?)
         };
+        // Copy heads start with a quarter of a head's bits as margin, so only near-exact repeats
+        // count; type heads start with half, so they read widely while they learn what to ask.
+        let margins: Vec<f32> = (0..heads)
+            .map(|h| {
+                if h < heads / 2 {
+                    (head_width / 4) as f32
+                } else {
+                    (head_width / 2) as f32
+                }
+            })
+            .collect();
         Ok(Self {
             heads,
             query_rotation: rotation()?,
             key_rotation: rotation()?,
             value_rotation: rotation()?,
-            margin: Var::from_tensor(&Tensor::full((head_width / 2) as f32, heads, device)?)?,
+            margin: Var::from_tensor(&Tensor::from_vec(margins, heads, device)?)?,
             weight: Var::zeros(width, DType::F32, device)?,
         })
     }
@@ -239,13 +256,25 @@ impl HammingRead {
         hamilton_gate(&gate, points)
     }
 
+    /// The first half of the heads are copy heads; the rest are type heads.
+    fn copy_heads(&self) -> usize {
+        self.heads / 2
+    }
+
     /// The position spin for `batch` windows of `time` positions, as unit quaternions per lane,
-    /// rows `(batch * time, width)`: lane `j` of each head turns by `t · SPIN_BASE^(−j / lanes)`.
+    /// rows `(batch * time, width)`. Lane `j` of each type head turns by
+    /// `t · SPIN_BASE^(−j / lanes)`. Copy heads do not spin, so a repeated token stays an exact
+    /// match wherever it sits.
     fn spin(&self, batch: usize, time: usize, width: usize, device: &Device) -> Result<Tensor> {
         let head_lanes = width / self.heads / 4;
+        let copy_lanes = self.copy_heads() * head_lanes;
         let mut gate = Vec::with_capacity(time * width);
         for t in 0..time {
             for lane in 0..width / 4 {
+                if lane < copy_lanes {
+                    gate.extend_from_slice(&[1.0f32, 0.0, 0.0, 0.0]);
+                    continue;
+                }
                 let j = (lane % head_lanes) as f64;
                 let angle = t as f64 * SPIN_BASE.powf(-j / head_lanes as f64);
                 gate.extend_from_slice(&[angle.cos() as f32, angle.sin() as f32, 0.0, 0.0]);
@@ -257,20 +286,44 @@ impl HammingRead {
             .reshape((batch * time, width))?)
     }
 
-    /// The read applied to the residual `(batch, time, width)`; returns the same shape.
-    pub fn apply(&self, residual: &Tensor) -> Result<Tensor> {
+    /// The read applied to the residual `(batch, time, width)` of the windows `ids`, with token
+    /// points from the shared `table`; returns the same shape.
+    pub fn apply(&self, residual: &Tensor, ids: &[u32], table: &Tensor) -> Result<Tensor> {
         let (batch, time, width) = residual.dims3()?;
+        let rows = batch * time;
+        if ids.len() != rows {
+            return Err(invalid("the Hamming read needs whole windows"));
+        }
         // A window of one token has no earlier position to read.
         if time < 2 {
             return Ok(residual.clone());
         }
         let device = residual.device();
-        let rows = batch * time;
         let head_width = width / self.heads;
+        let copy_width = self.copy_heads() * head_width;
         let points = residual.reshape((rows, width))?;
+        // Each position's own token and the token before it, as the shared table's points,
+        // detached. A window's first position has none and takes its own; it is never a candidate.
+        let previous: Vec<u32> = (0..rows)
+            .map(|r| if r % time == 0 { ids[r] } else { ids[r - 1] })
+            .collect();
+        let table = table.detach();
+        let token_points = |ids: Vec<u32>| -> Result<Tensor> {
+            Ok(table.index_select(&Tensor::from_vec(ids, rows, device)?, 0)?)
+        };
+        let current = token_points(ids.to_vec())?;
+        let previous = token_points(previous)?;
+        // Copy heads ask with the current token's point; type heads ask with the residual.
+        let asked = Tensor::cat(
+            &[
+                &current.narrow(1, 0, copy_width)?,
+                &points.narrow(1, copy_width, width - copy_width)?,
+            ],
+            1,
+        )?;
         let spin = self.spin(batch, time, width, device)?;
-        let query = hamilton_gate(&spin, &Self::rotate(&self.query_rotation, &points)?)?;
-        let key = hamilton_gate(&spin, &Self::rotate(&self.key_rotation, &points)?)?;
+        let query = hamilton_gate(&spin, &Self::rotate(&self.query_rotation, &asked)?)?;
+        let key = hamilton_gate(&spin, &Self::rotate(&self.key_rotation, &previous)?)?;
         let value = Self::rotate(&self.value_rotation, &points)?;
         // ±1 by `p ≥ 0` forward, as `pack_signs` packs it, so 0 is a 1 bit; the identity backward.
         let code = |p: &Tensor| -> Result<Tensor> {
@@ -279,17 +332,14 @@ impl HammingRead {
         };
         let (query, key) = (code(&query)?, code(&key)?);
         let zero = Tensor::new(&[0u32], device)?;
-        let one = Tensor::new(&[1u32], device)?;
         let margins = self.margin.as_tensor();
-        // Each candidate weighs `max(0, m − d)` out of a head's most bits times the kept count,
-        // so the weights of a row sum to at most `m / head_width ≤ 1`: a bounded mean, never a
-        // flood of the residual.
-        let scale = 1.0 / (head_width * HAMMING_KEPT) as f64;
         let mut heads = Vec::with_capacity(self.heads);
         for h in 0..self.heads {
             let q = query.narrow(1, h * head_width, head_width)?.contiguous()?;
             let k = key.narrow(1, h * head_width, head_width)?.contiguous()?;
-            let (picks, real) = choose_sorted(&q, &k, batch, time, HAMMING_KEPT)?;
+            // A window's first position has no previous token, so its key names nothing: the
+            // candidates start at 1.
+            let (picks, real) = choose_sorted(&q, &k, batch, time, HAMMING_KEPT, 1)?;
             // A pick that is not real points at its window's first position, whose successor is
             // still inside the window, and carries weight 0.
             let picks = real.where_cond(&picks, &zero.broadcast_as(picks.shape())?)?;
@@ -308,21 +358,34 @@ impl HammingRead {
                 .gather(&index(&zero)?, 1)?
                 .reshape((rows, kept, head_width))?;
             let bits = hamming_bits(&q.unsqueeze(1)?, &kept_keys)?;
-            let weights = margins
-                .narrow(0, h, 1)?
-                .reshape((1, 1))?
+            // Each candidate weighs `max(0, m − d) / m`, between 0 and 1, so an exact match
+            // (`d = 0`) counts in full. The head reports the mean over the candidates it reads,
+            // a count and not a learned sum, and reads nothing when none is inside its margin.
+            let margin = margins.narrow(0, h, 1)?.reshape((1, 1))?;
+            let weights = margin
                 .broadcast_sub(&bits)?
                 .relu()?
-                .affine(scale, 0.0)?
+                .broadcast_div(&margin.maximum(1.0)?)?
                 .mul(&real.to_dtype(DType::F32)?)?;
-            let offset = if h % 2 == 1 { &one } else { &zero };
+            let count = weights
+                .gt(0.0)?
+                .to_dtype(DType::F32)?
+                .sum_keepdim(1)?
+                .maximum(1.0)?;
+            // The key at `s` names token `s − 1`, so the kept position is already the one after
+            // the earlier match: its own value is what followed.
             let payload = value
                 .narrow(1, h * head_width, head_width)?
                 .contiguous()?
                 .reshape((batch, time, head_width))?
-                .gather(&index(offset)?, 1)?
+                .gather(&index(&zero)?, 1)?
                 .reshape((rows, kept, head_width))?;
-            heads.push(payload.broadcast_mul(&weights.unsqueeze(2)?)?.sum(1)?);
+            heads.push(
+                payload
+                    .broadcast_mul(&weights.unsqueeze(2)?)?
+                    .sum(1)?
+                    .broadcast_div(&count)?,
+            );
         }
         let consensus = Tensor::cat(&heads, 1)?;
         let added = consensus.broadcast_mul(&self.weight.as_tensor().unsqueeze(0)?)?;
@@ -333,17 +396,19 @@ impl HammingRead {
 /// A distance no real pair reaches: positions that are not earlier.
 const FAR: f32 = 1.0e30;
 
-/// The `neighbours` earlier positions nearest each row of `query` in mean L1, for all `batch`
-/// windows of `time` at once, as positions inside the row's own window `(batch * time, kept)`,
-/// and which are real.
+/// The `neighbours` earlier positions `first ≤ s < t` nearest each row `t` of `query` in mean L1,
+/// for all `batch` windows of `time` at once, as positions inside the row's own window
+/// `(batch * time, kept)`, and which are real.
 /// One sort per call, where claude-144's choice (`flock_read::choose_nearest`) takes `kept` argmin
-/// rounds per window; the same nearest set, hard and detached. Ties may come out in another order.
+/// rounds per window; with `first` 0, the same nearest set, hard and detached. Ties may come out in
+/// another order.
 pub(crate) fn choose_sorted(
     query: &Tensor,
     key: &Tensor,
     batch: usize,
     time: usize,
     neighbours: usize,
+    first: usize,
 ) -> Result<(Tensor, Tensor)> {
     let device = query.device();
     let kept = neighbours.min(time.saturating_sub(1)).max(1);
@@ -353,7 +418,7 @@ pub(crate) fn choose_sorted(
     let k = key.detach().reshape((batch, 1, time, width))?;
     let distance = q.broadcast_sub(&k)?.abs()?.mean(3)?.reshape((rows, time))?;
     let earlier: Vec<u8> = (0..rows * time)
-        .map(|i| u8::from(i % time < (i / time) % time))
+        .map(|i| u8::from(i % time >= first && i % time < (i / time) % time))
         .collect();
     let earlier = Tensor::from_vec(earlier, (rows, time), device)?;
     let far = Tensor::full(FAR, (rows, time), device)?;
@@ -396,7 +461,7 @@ mod tests {
             .map(|i| (((i * 2_654_435_761) % 10_007) as f32) / 997.0)
             .collect();
         let points = Tensor::from_vec(values, (batch * time, width), &device).unwrap();
-        let (local, fast_real) = choose_sorted(&points, &points, batch, time, 4).unwrap();
+        let (local, fast_real) = choose_sorted(&points, &points, batch, time, 4, 0).unwrap();
         // The sorted choice gives positions inside each window; claude-144's gives global rows.
         let starts: Vec<u32> = (0..batch * time)
             .map(|r| ((r / time) * time) as u32)
@@ -458,13 +523,32 @@ mod tests {
         Tensor::from_vec(values, (batch, time, width), device).unwrap()
     }
 
+    /// A table of `vocab` token points with independent pseudo-random signs (a splitmix64 hash),
+    /// so two different tokens' codes differ in about half their bits.
+    #[cfg(feature = "cuda")]
+    fn table(vocab: usize, width: usize, device: &Device) -> Tensor {
+        let values: Vec<f32> = (0..vocab * width)
+            .map(|i| {
+                let mut z = (i as u64).wrapping_add(1).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+                z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+                z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+                z ^= z >> 31;
+                ((z >> 40) as f32 / (1u64 << 24) as f32) * 2.0 - 1.0
+            })
+            .collect();
+        Tensor::from_vec(values, (vocab, width), device).unwrap()
+    }
+
     #[cfg(feature = "cuda")]
     #[test]
     fn a_zero_weight_leaves_the_residual_unchanged() {
         let device = Device::new_cuda(0).unwrap();
         let reads = HammingReads::new(4, 256, &device).unwrap();
         let x = residual(2, 24, 256, &device);
-        let out = reads.reads[0].apply(&x).unwrap();
+        let ids: Vec<u32> = (0..48).map(|i| (i % 5) as u32).collect();
+        let out = reads.reads[0]
+            .apply(&x, &ids, &table(8, 256, &device))
+            .unwrap();
         assert_eq!(
             out.flatten_all().unwrap().to_vec1::<f32>().unwrap(),
             x.flatten_all().unwrap().to_vec1::<f32>().unwrap()
@@ -473,47 +557,39 @@ mod tests {
 
     #[cfg(feature = "cuda")]
     #[test]
-    fn each_row_reads_only_earlier_rows_of_its_own_window() {
+    fn a_copy_head_reads_what_followed_the_earlier_copy_of_its_token() {
         let device = Device::new_cuda(0).unwrap();
         let reads = HammingReads::new(4, 256, &device).unwrap();
         let read = &reads.reads[0];
         read.weight
             .set(&Tensor::ones(256, DType::F32, &device).unwrap())
             .unwrap();
-        // Every candidate inside the margin: 64 bits is the most a head can differ.
-        read.margin
-            .set(&Tensor::full(65.0f32, 4, &device).unwrap())
-            .unwrap();
-        // Two windows of two positions. Window 1 is window 0 scaled by 3, so its codes are the
-        // same and every weight matches. Row 1 of each window may keep only row 0 of its own.
-        let rows = [[1.0f32; 256], [-1.0; 256], [3.0; 256], [-3.0; 256]];
-        let flat: Vec<f32> = rows.iter().flatten().copied().collect();
-        let x = Tensor::from_vec(flat, (2, 2, 256), &device).unwrap();
+        // Three windows of three tokens. Heads 0 and 1 (coordinates 0..128) are the copy heads.
+        // Window 0, [5 7 5]: at t = 2 the key of s = 1 names token 5, an exact match, so the copy
+        // heads bring row 1's value, in full and alone (s = 0 names no earlier token).
+        // Window 1, [9 11 9]: the same in its own window, row 4 and not window 0's row 1.
+        // Window 2, [3 5 5]: at t = 2 no earlier key names 5; only t itself would.
+        let ids = [5u32, 7, 5, 9, 11, 9, 3, 5, 5];
+        let x = residual(3, 3, 256, &device);
+        let rows = x.reshape((9, 256)).unwrap().to_vec2::<f32>().unwrap();
         let added = read
-            .apply(&x)
+            .apply(&x, &ids, &table(16, 256, &device))
             .unwrap()
             .sub(&x)
             .unwrap()
-            .reshape((4, 256))
+            .reshape((9, 256))
             .unwrap()
             .to_vec2::<f32>()
             .unwrap();
-        // Head 0 (coordinates 0..64) carries the kept row's value: row 0 (+1), not row 1 itself
-        // (−1). Head 1 (64..128) carries the kept row's successor, row 1 (−1).
-        assert!(
-            added[1][0] > 0.0 && added[1][64] < 0.0,
-            "{:?}",
-            &added[1][..2]
-        );
-        // Window 1 reads its own row 0 (+3), not window 0's (+1): three times window 0's read.
-        for c in [0usize, 64, 128, 192] {
-            assert!(
-                (added[3][c] - 3.0 * added[1][c]).abs() < 1e-4,
-                "coordinate {c}"
-            );
+        for c in 0..128 {
+            assert!((added[2][c] - rows[1][c]).abs() < 1e-6, "window 0, {c}");
+            assert!((added[5][c] - rows[4][c]).abs() < 1e-6, "window 1, {c}");
+            assert_eq!(added[8][c], 0.0, "window 2, {c}");
         }
-        // Row 0 of each window has no earlier row and reads nothing.
-        assert!(added[0].iter().chain(&added[2]).all(|&v| v == 0.0));
+        // Positions 0 and 1 have no candidate (1 ≤ s < t) and read nothing in any head.
+        for r in [0usize, 1, 3, 4, 6, 7] {
+            assert!(added[r].iter().all(|&v| v == 0.0), "row {r}");
+        }
     }
 
     #[cfg(feature = "cuda")]
@@ -526,18 +602,24 @@ mod tests {
             .set(&Tensor::ones(256, DType::F32, &device).unwrap())
             .unwrap();
         let x = residual(1, 24, 256, &device);
+        let table = table(32, 256, &device);
+        // Repeated tokens, so the copy heads have exact matches to read.
+        let ids: Vec<u32> = (0..24).map(|i| (i % 5) as u32 * 3).collect();
         let base = read
-            .apply(&x)
+            .apply(&x, &ids, &table)
             .unwrap()
             .squeeze(0)
             .unwrap()
             .to_vec2::<f32>()
             .unwrap();
-        // Change only the last position: every earlier output must stay exactly as it was.
+        // Change only the last position, its point and its token: every earlier output must stay
+        // exactly as it was.
         let last = Tensor::ones((1, 1, 256), DType::F32, &device).unwrap();
         let changed = Tensor::cat(&[&x.narrow(1, 0, 23).unwrap(), &last], 1).unwrap();
+        let mut changed_ids = ids.clone();
+        changed_ids[23] = 31;
         let moved = read
-            .apply(&changed)
+            .apply(&changed, &changed_ids, &table)
             .unwrap()
             .squeeze(0)
             .unwrap()
@@ -545,11 +627,11 @@ mod tests {
             .unwrap();
         assert_eq!(&moved[..23], &base[..23]);
         assert_ne!(moved[23], base[23]);
-        // A margin of 0 bits weighs every candidate at 0: the read adds nothing.
+        // A margin of 0 bits weighs every candidate at 0, an exact match too: the read adds nothing.
         read.margin
             .set(&Tensor::zeros(4, DType::F32, &device).unwrap())
             .unwrap();
-        let none = read.apply(&x).unwrap();
+        let none = read.apply(&x, &ids, &table).unwrap();
         assert_eq!(
             none.flatten_all().unwrap().to_vec1::<f32>().unwrap(),
             x.flatten_all().unwrap().to_vec1::<f32>().unwrap()
@@ -572,7 +654,13 @@ mod tests {
             .unwrap()
             .affine(1.0, 0.1)
             .unwrap();
-        let out = read.apply(&x).unwrap();
+        // Margins at a head's full 64 bits, so every candidate but a full mismatch is inside it,
+        // and a wider margin raises each one's weight `(m − d) / m` by `d / m²`.
+        read.margin
+            .set(&Tensor::full(64.0f32, 4, &device).unwrap())
+            .unwrap();
+        let ids: Vec<u32> = (0..24).map(|i| (i * 5 % 11) as u32).collect();
+        let out = read.apply(&x, &ids, &table(16, 256, &device)).unwrap();
         let loss = out.sum_all().unwrap().neg().unwrap();
         let grads = loss.backward().unwrap();
         let margin = grads
@@ -594,7 +682,8 @@ mod tests {
             &device,
         )
         .unwrap();
-        let ids: Vec<u32> = (0..32u32).map(|i| (i * 37 + 5) % 4096).collect();
+        // Seven tokens repeated, so the copy heads find exact matches.
+        let ids: Vec<u32> = (0..32u32).map(|i| (i % 7) * 37 + 5).collect();
         let hidden = |m: &crate::geometric_stack::StackModel| {
             crate::hamilton_sheet::with_gate_mode(
                 crate::hamilton_sheet::HamiltonArm::HamiltonActive,
