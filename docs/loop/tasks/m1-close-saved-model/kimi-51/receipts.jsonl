@@ -1,0 +1,11 @@
+{"gate":"claim-wording","verdict":"GREEN","seconds":2.394985041,"commit":"806bbca8fec0fbe9782650aeb5ba18a7403c6282","tree":"ec031b9c4eccbb2a9d7fc09613feeceb8724544f","exit":0,"signal":null,"ts":1793073067}
+{"gate":"fmt-claim-wording","verdict":"GREEN","seconds":0.517197,"commit":"806bbca8fec0fbe9782650aeb5ba18a7403c6282","tree":"ec031b9c4eccbb2a9d7fc09613feeceb8724544f","exit":0,"signal":null,"ts":1793073067}
+{"gate":"fmt-harness","verdict":"GREEN","seconds":1.143665375,"commit":"806bbca8fec0fbe9782650aeb5ba18a7403c6282","tree":"ec031b9c4eccbb2a9d7fc09613feeceb8724544f","exit":0,"signal":null,"ts":1793073067}
+{"gate":"git-hooks","verdict":"GREEN","seconds":2.8319365,"commit":"806bbca8fec0fbe9782650aeb5ba18a7403c6282","tree":"ec031b9c4eccbb2a9d7fc09613feeceb8724544f","exit":0,"signal":null,"ts":1793073067}
+{"gate":"loop-drive","verdict":"GREEN","seconds":3.7494025,"commit":"806bbca8fec0fbe9782650aeb5ba18a7403c6282","tree":"ec031b9c4eccbb2a9d7fc09613feeceb8724544f","exit":0,"signal":null,"ts":1793073067}
+{"gate":"loop-gates-watch","verdict":"GREEN","seconds":1.172631458,"commit":"806bbca8fec0fbe9782650aeb5ba18a7403c6282","tree":"ec031b9c4eccbb2a9d7fc09613feeceb8724544f","exit":0,"signal":null,"ts":1793073067}
+{"gate":"loop-migrate","verdict":"GREEN","seconds":6.327734625,"commit":"806bbca8fec0fbe9782650aeb5ba18a7403c6282","tree":"ec031b9c4eccbb2a9d7fc09613feeceb8724544f","exit":0,"signal":null,"ts":1793073067}
+{"gate":"loop-next-owner-direction","verdict":"GREEN","seconds":3.042380834,"commit":"806bbca8fec0fbe9782650aeb5ba18a7403c6282","tree":"ec031b9c4eccbb2a9d7fc09613feeceb8724544f","exit":0,"signal":null,"ts":1793073067}
+{"gate":"loop-next-sources","verdict":"GREEN","seconds":3.122419083,"commit":"806bbca8fec0fbe9782650aeb5ba18a7403c6282","tree":"ec031b9c4eccbb2a9d7fc09613feeceb8724544f","exit":0,"signal":null,"ts":1793073067}
+{"gate":"loop-next-wait","verdict":"GREEN","seconds":7.455765833,"commit":"806bbca8fec0fbe9782650aeb5ba18a7403c6282","tree":"ec031b9c4eccbb2a9d7fc09613feeceb8724544f","exit":0,"signal":null,"ts":1793073067}
+{"gate":"loop-review-changes-blocks","verdict":"GREEN","seconds":5.684402042,"commit":"806bbca8fec0fbe9782650aeb5ba18a7403c6282","tree":"ec031b9c4eccbb2a9d7fc09613feeceb8724544f","exit":0,"signal":null,"ts":1793073067}
