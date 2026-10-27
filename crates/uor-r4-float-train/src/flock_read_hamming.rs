@@ -20,7 +20,10 @@
 //!    for position, not a rotary code ("we do not need rope", 13 Oct). With the type spin on
 //!    ([`HammingReads::with_type_spin`], claude-151), the type heads compare positions through
 //!    that transport's quaternion form: a frame per position, the running product of each token's
-//!    icosian step, so two positions meet through the steps of the tokens between them. The value is `x` rotated by a third quaternion.
+//!    icosian step, turned out of each position's own frame, so the angle between two positions'
+//!    points depends only on the steps of the tokens between them. Their sign codes also see the
+//!    frame the two share, so the Hamming distance follows those steps on average over it, not
+//!    exactly. The value is `x` rotated by a third quaternion.
 //! 2. **Codes.** Each coordinate's bit is 1 at or above 0, as [`pack_signs`] packs it. The forward
 //!    pass compares the ±1 codes, so the distance is exactly the Hamming distance
 //!    `popcount(q XOR k)` that serving computes. The backward pass treats the code as the identity
@@ -380,7 +383,8 @@ impl HammingRead {
         let key = Self::rotate(&self.key_rotation, &previous)?;
         // The type heads' position signal, when on: each position's frame is the product of its
         // window's icosian steps so far, one per token; a type head's query at `t` and key at `s`
-        // are each turned by their own frame's inverse, so they meet through the steps between.
+        // are each turned by their own frame's inverse, so their angle depends only on the steps
+        // between (the sign codes below also see the frame the two share).
         let (query, key) = match &self.step_rotation {
             None => (query, key),
             Some(step_rotation) => {

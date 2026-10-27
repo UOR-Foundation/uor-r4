@@ -24,7 +24,7 @@ claude-146's Hamming read (`flock_read_hamming.rs`, merged) has two copy heads, 
 
 1. **Step:** at each position `t`, each type-head lane takes `u_t`, the icosian nearest the token `x_t`'s table point through a learned per-lane rotation (straight-through in training).
 2. **Frame:** `F_t = u_t ⊗ u_{t−1} ⊗ … ⊗ u_1` per lane, inside each window, by a parallel prefix scan of Hamilton products (about log₂ 192 = 8 levels).
-3. **Use:** a type head turns its query at `t` by `F_t⁻¹` and its key at `s` by `F_s⁻¹`. Left multiplication by a unit quaternion keeps inner products, so the comparison sees `F_t ⊗ F_s⁻¹ = u_t ⊗ … ⊗ u_{s+1}`: the product of the steps of the tokens between `s` and `t`. Position is what lies between, path-dependent.
+3. **Use:** a type head turns its query at `t` by `F_t⁻¹` and its key at `s` by `F_s⁻¹`. Left multiplication by a unit quaternion keeps inner products, so the angle between the two depends only on `F_t ⊗ F_s⁻¹ = u_t ⊗ … ⊗ u_{s+1}`: the product of the steps of the tokens between `s` and `t`. Position is what lies between, path-dependent. The read compares sign codes, which also see the frame `F_s⁻¹` the two share: each code bit differs with a probability set by that angle only on average over the shared frame, so the Hamming distance carries the steps between on average, not exactly.
 4. **Copy heads are untouched,** so exact copying holds. Off by default (`--type-spin 0`), so every earlier run reproduces.
 
 ## Cancel probe (run first)
