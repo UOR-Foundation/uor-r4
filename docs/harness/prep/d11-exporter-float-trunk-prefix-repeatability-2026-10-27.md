@@ -21,7 +21,9 @@ kimi-46 ran the D11 dual-forward training of claude-131 for 2,048 steps. It stop
     - `spiralcore_fbs_rs_sha256` `6eb2b09d…`, the FBS kernels' host wrapper.
   - **Toolchain:** every PTX module header in both binaries reads `Cuda compilation tools, release 12.8, V12.8.93` (NVVM 20.0.0, `.target sm_120`, PTX 8.7), 15 modules each. Same sources, same `build.rs` flags and the same `nvcc` give the same PTX.
 
-  So a difference in C2 below is host-side Rust source, not the toolchain or the kernels. A byte comparison of the binaries' embedded PTX bodies was not made. An earlier extract held only kernel signatures, so it is not used as evidence (FIT round 2).
+  So a difference in C2 below is host-side Rust source, not the toolchain or the kernels.
+
+  **What the hashes cover.** In `kernel_identity()` (`spiralcore_fbs_sheet.rs:629-647`), only `arms_ptx_sha256` hashes compiled PTX, so the arms module's PTX is byte-identical. The other five fields hash source text. The compiled PTX bodies of `cuda_stack.cu` and `spiralcore_fbs.cu` are therefore not byte-compared; they rest on identical sources and the same `nvcc`. An earlier binary extract held only kernel signatures, so it is not used as evidence (FIT round 2).
 - **(c) Cross-device or driver drift.** The PTX is compiled by the driver at load time. claude-131's pod had driver 595.80; kimi-46's run recorded none.
 
 The step count is not a cause. The loop's learning rate is constant, and its batches are a document-order prefix (`spiralcore_fbs_sheet.rs:461-495`, `hamilton_sheet.rs:1871-1885`). The same holds for any other function of the total step count.
@@ -110,7 +112,7 @@ The test is deterministic, with no statistics. A single differing hit count, or 
 ## 8. Non-author TEST FITNESS review
 
 **Round 1 (at `fe8411975`): NOT FIT, with two required fixes, both made.**
-- **C2 conflated source with toolchain.** Now §1 records that the two binaries' kernel PTX is byte-identical and was built with the same `nvcc`, so row (b) reads as host-source drift.
+- **C2 conflated source with toolchain.** The round-1 fix claimed the binaries' kernel PTX was byte-identical. *Superseded in round 2: that extract held only signatures; see §1(b) for the evidence used now.*
 - **B_new's pin was unverified.** Now §2 names each pin's own archived record, and the laptop downloads were re-hashed.
 
 Its advisories are folded in too:
@@ -127,4 +129,12 @@ Its advisories are kept:
 - the binaries carry PTX that the driver compiles at load time, with no cubin, which supports cause (c);
 - the job script fails safe.
 
-Round 3: to be filled by a fresh-context reviewer given only this sheet and its sources.
+**Round 3 (at `39ee18723`): FIT.** A fresh-context reviewer re-ran the four checks:
+- the `.cu` and `build.rs` diff is empty;
+- `candle-core` and `candle-kernels` are 0.9.2 at both commits;
+- the `kernels` blocks are identical;
+- both binaries carry 15 `nvcc` V12.8.93 headers.
+
+Its two wording advisories are applied: which hashes cover compiled PTX, and the superseded round-1 note.
+
+TEST FITNESS: FIT
