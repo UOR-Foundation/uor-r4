@@ -1,70 +1,27 @@
 # ORDER: infra-loop-harness, kimi-52
 
-Lab: kimi. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `300433f99`.
+Lab: kimi. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `300433f99`. Setup row: 2 (item-file/status maintenance).
 
 ## Goal
 
-The item's done-when reads:
-
-> Every PR in the build plan on [the loop page](../../loop/README.md#build-plan) is merged, each with its planted fault turning its gate red. The four labs (Kimi, Claude, DeepSeek, Antigravity) are onboarded, each with a committed onboarding receipt. Each lab has completed one loop task end to end: claim, probe, work, gates, report, review by another vendor, queue, and verify on fresh `main`.
+Reconcile `PLAN.md`'s milestone count with the merged M1 evidence, after a D68 decision review. Do not close #2029, alter a bar/threshold, or reconcile the other public records in this PR.
 
 ## Cancel probe (run first)
 
-To fill in.
+`PLAN.md` says 0 of 8 complete, while `docs/labs/m1-close-saved-model/evidence/m1-close-grade.json` says `m1_close_pass=true`, `m1_milestone_status=CLOSED_PASS`, and the fresh gate receipt says `PASS_BARS_A_TO_D_TWO_SEEDS` and `PASS_BAR_E_FRESH_TRANSFER`. Both roadmap closing items are `done`. The current artifacts have exact parity, B4, and both seed results. `classification: instrument`. **Not cancelled: review the status correction, not a new experiment.**
 
 ## Files in scope
 
 - `PLAN.md`
-- `docs/roadmap/items/*.md`
-- `crates/uor-r4-harness/src/loopreview.rs`
-- `crates/uor-r4-harness/src/loopnext.rs`
-- `crates/uor-r4-harness/src/loopreport.rs`
-- `crates/uor-r4-harness/src/loopclose.rs`
-- `crates/uor-r4-harness/src/loopclaim.rs`
-- `crates/uor-r4-harness/tests/loop_review*.rs`
-- `crates/uor-r4-harness/tests/loop_next*.rs`
-- `crates/uor-r4-harness/tests/loop_report*.rs`
-- `crates/uor-r4-harness/tests/loop_close*.rs`
-- `crates/uor-r4-harness/tests/loop_claim*.rs`
-- `crates/uor-r4-harness/tests/loop_repair_orders*.rs`
-- `crates/uor-r4-harness/tests/loop_shared_files*.rs`
-- `crates/uor-r4-harness/tests/loop_prcheck.rs`
-- `crates/uor-r4-harness/src/loopbench.rs`
-- `crates/uor-r4-harness/tests/loop_bench*.rs`
-- `docs/harness/d59.json`
-- `docs/harness/owner-paths.json`
-- `docs/integration/DECISIONS.md`
-- `AGENTS.md`
-- `CHARTER.md`
-- `docs/rules/changes.md`
-- `docs/mechanisms/README.md`
-- `docs/mechanisms/lut-serving.md`
-- `docs/mechanisms/hopf-observation.md`
-- `docs/mechanisms/spin-weights.md`
-- `docs/mechanisms/ternary-xor.md`
-- `crates/uor-r4-harness/src/loopdrive.rs`
-- `crates/uor-r4-harness/tests/loop_drive*.rs`
-- `crates/uor-r4-harness/src/prep.rs`
-- `crates/uor-r4-harness/src/preprules.rs`
-- `xtask/src/docs_links.rs`
-- `xtask/src/archive_verify.rs`
-- `xtask/src/figures_charts.rs`
-- `docs/figures/**`
-- `docs/roadmap/issues.json`
-- `docs/harness/prep/read-binding-on-lawful-read-2026-10-25.md`
-- `docs/harness/labs.json`
-- `crates/uor-r4-harness/src/labs.rs`
-- `crates/uor-r4-harness/src/receipt.rs`
-- `crates/uor-r4-harness/tests/lab_registry_cli.rs`
-- `crates/uor-r4-harness/src/onboard.rs`
-- `crates/uor-r4-harness/src/loopguard.rs`
-- `crates/uor-r4-harness/tests/loop_guard.rs`
-- `archive/history/branch-archive/codex-d63-finite-probe-scope-20261026.*`
+- `docs/loop/tasks/infra-loop-harness/kimi-52/**`
 
 ## Done when
 
-To fill in.
+- Fresh D68 confirms that the merged evidence justifies changing only the PLAN milestone count to 1 of 8, and the decision is logged on #2029.
+- PLAN no longer says 0 of 8; no route, bar, threshold, premise or other public record changes.
+- REPORT, roadmap check, full gates/local policy, fresh exact-head review, queue and fresh-main verification complete.
 
-## Stop and ask if
+## Stop and decide if
 
-To fill in.
+- The evidence does not cover every closing bar on both seeds, or the reviewer finds the fresh seal, parity or artifact identity inadequate.
+- Any issue close, bar/threshold change, README/AGENTS/milestones.json edit or other public status change is proposed. Those need separate scoped units.
