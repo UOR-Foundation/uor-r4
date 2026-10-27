@@ -43,6 +43,8 @@ pub struct LongConfig {
     pub lr_end: f64,
     /// The `rec.decay` parameters' rate as a multiple of the main rate (the sheet's is 20).
     pub decay_mult: f64,
+    /// Read the recurrence's rate table as retention (`geometric_stack::set_retention_rates`).
+    pub retain_rates: bool,
     pub samples: usize,
     pub reply_tokens: usize,
 }
@@ -72,12 +74,13 @@ pub struct Sample {
     pub reference: String,
 }
 
-/// Clears the arm hook when the run ends, by any path.
+/// Clears the arm hook and the retention reading when the run ends, by any path.
 struct ArmGuard;
 
 impl Drop for ArmGuard {
     fn drop(&mut self) {
         arms::set_fbs_arm(None);
+        crate::geometric_stack::set_retention_rates(false);
     }
 }
 
@@ -239,6 +242,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     );
 
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
+    crate::geometric_stack::set_retention_rates(config.retain_rates);
     let _guard = ArmGuard;
     let model = build_fbs_model(FbsArm::OneAtomActive, config.seed, device)?;
     let mut opt_main = StackAdamW::new(&model, hs::SHEET_WEIGHT_DECAY, hs::SHEET_CLIP)?;

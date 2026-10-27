@@ -18,6 +18,23 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "cuda")]
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, fs, path::Path, sync::Arc};
+
+/// The recurrence's carried fraction. Off (the default, and every recorded run): a lane carries
+/// `lambda = RATE_TABLE[k] = 2^-(k+1)` of its state each token, at most one half, so no lane holds
+/// more than a few tokens. On (`in_space_long`, 27 Oct 2026): a lane carries `1 - 2^-(k+1)`, so
+/// entry `k` holds about `2^(k+1)` tokens. The table, the selection and its backward are
+/// unchanged; only what the selected entry means is reversed, with `keep = sqrt(1 - lambda^2)`.
+static RETENTION_RATES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Turn the retention reading of the rate table on or off for every recurrence in this process.
+pub fn set_retention_rates(on: bool) {
+    RETENTION_RATES.store(on, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Whether the recurrence reads the rate table as retention (see [`set_retention_rates`]).
+pub fn retention_rates() -> bool {
+    RETENTION_RATES.load(std::sync::atomic::Ordering::SeqCst)
+}
 #[cfg(feature = "cuda")]
 #[path = "geometric_stack_native_cuda.rs"]
 pub(crate) mod cuda_ops;
@@ -1258,7 +1275,15 @@ impl StackModel {
             .broadcast_add(&p.layer(layer, "rec.decay")?.reshape((1, 1, lanes))?)?
             .clamp(0., 1.)?;
         let selected = rate_select(&score)?;
-        let (lambda, keep) = (selected.narrow(3, 0, 1)?, selected.narrow(3, 1, 1)?);
+        let (lambda, keep) = if retention_rates() {
+            // Carry 1 - 2^-(k+1) of the state. `keep` is the norm-preserving input share; it is
+            // held constant in the backward, so the score's credit flows through `lambda` only.
+            let lambda = selected.narrow(3, 0, 1)?.affine(-1.0, 1.0)?;
+            let keep = lambda.sqr()?.affine(-1.0, 1.0)?.clamp(0.0, 1.0)?.sqrt()?.detach();
+            (lambda, keep)
+        } else {
+            (selected.narrow(3, 0, 1)?, selected.narrow(3, 1, 1)?)
+        };
         let transition = if self.config.rotation {
             let raw = gates
                 .narrow(2, lanes, width)?
