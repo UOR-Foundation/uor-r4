@@ -112,7 +112,7 @@ The item `in-space-trunk-to-text` is new in this PR; its issue is made at the ne
 - **The fold test's negative gate, at `9c056f92`:** with `fold_unit` returning the clamp, `the_fold_reflects_into_the_unit_interval_and_keeps_its_gradient` FAILS (exit 101, `gpu-checks/fold-test-negative.out`).
 - **Host tests:** `cargo test -p uor-r4-float-train --lib`, 65 passed.
 - **Gates:** `uor-harness loop gates --full`, 11 green; `uor-harness loop report --check`, PASS.
-- **`loop pr-check --local`:** every hard rule passes except `order`. The item is new in this unit, and the ORDER's item must exist at the merge base, so the item lands first in its own item-maintenance unit.
+- **`loop pr-check --local`:** every hard rule passes. The item is new in this unit, and an ORDER's item must exist at the merge base, so the item landed first in its own item-maintenance unit, #3328 (merged as `1598ef1f`). Main was then merged into this branch. Three advisory warnings remain: the ORDER was written after the work began, as it says; a `## Stop rule` heading in the prep sheet; and the ORDER's size.
 
 ## Skills used
 
