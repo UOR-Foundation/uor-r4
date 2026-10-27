@@ -8,7 +8,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [in-space-trunk-to-text-co
   - `21,820–21,989` context tokens/s with the read;
   - `24,852–25,068` without.
 
-  **The read costs about 12%.** The whole-run figures, `23,086–23,263` against `24,875–25,093`, look smaller only because the no-read arms finished 155–169 s earlier and the read arms then ran alone.
+  **The read costs about 12%.** The whole-run figures, `23,086–23,263` against `24,875–25,093`, look smaller only because the no-read arms finished about 156–158 s of training time earlier (139–140 s by the job logs' exit times) and the read arms then ran alone.
 - **Decode:** not measured for the read.
 
 ## What did not work, first
@@ -41,7 +41,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [in-space-trunk-to-text-co
   | "Add 4 and 2." | "Got it, your friend is G the letter G." | "4 plus 2 is 6." |
   | "Remember, the code word is kandgind." | "Got it, your friend is G the letter." | "Okay, kandgind is the code word." |
 
-  Its `302` openings come from naming "Got" on more of the replies that do open with it, not from replies that follow the prompt.
+  Its `302` openings appear, from the samples, to come from naming "Got" on more of the replies that open with it, not from replies that follow the prompt. No count of the opening tokens was made.
 - **Opening counts swing within a run.** Seed 1's twin went from `169` openings at step `8,192` to `247` at `16,384`. Single-checkpoint opening counts are weak evidence, and the three-seed rule was needed.
 - **Instrument faults, each caught and classified before it was acted on:**
   - **The payload negative gate's first patch never applied.** rustfmt had split the line, and the job log said "payload patch NOT applied". It was rerun with a patch that tolerates the break: exit `101`, as it must.
