@@ -62,6 +62,8 @@ pub struct LongConfig {
     pub decay_mult: f64,
     /// Read the recurrence's rate table as retention (`geometric_stack::set_retention_rates`).
     pub retain_rates: bool,
+    /// Fold the recurrence's rate score into [0, 1] (`geometric_stack::set_folded_scores`).
+    pub fold_scores: bool,
     pub samples: usize,
     pub reply_tokens: usize,
 }
@@ -125,6 +127,7 @@ impl Drop for ArmGuard {
     fn drop(&mut self) {
         arms::set_fbs_arm(None);
         crate::geometric_stack::set_retention_rates(false);
+        crate::geometric_stack::set_folded_scores(false);
     }
 }
 
@@ -530,12 +533,14 @@ pub fn context_reach(
     data_root: &Path,
     checkpoint: &Path,
     retain_rates: bool,
+    fold_scores: bool,
     seed: u64,
     device: &Device,
 ) -> Result<(Vec<Reach>, Vec<RateBins>)> {
     let (dev_windows, dev_mask) = load_dev(data_root)?;
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
     crate::geometric_stack::set_retention_rates(retain_rates);
+    crate::geometric_stack::set_folded_scores(fold_scores);
     let _guard = ArmGuard;
     let model = StackModel::load(checkpoint, device)?;
     let firsts: Vec<(&CausalWindow, usize)> = dev_windows
@@ -630,17 +635,19 @@ pub fn context_reach(
 }
 
 /// Read every checkpoint a `run_long` run saved under `run/models`, in step order, as an
-/// [`Inspection`]. `retain_rates` must match the run's.
+/// [`Inspection`]. `retain_rates` and `fold_scores` must match the run's.
 pub fn inspect_run(
     data_root: &Path,
     run: &Path,
     retain_rates: bool,
+    fold_scores: bool,
     seed: u64,
     device: &Device,
 ) -> Result<Vec<Inspection>> {
     let (dev_windows, dev_mask) = load_dev(data_root)?;
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
     crate::geometric_stack::set_retention_rates(retain_rates);
+    crate::geometric_stack::set_folded_scores(fold_scores);
     let _guard = ArmGuard;
     let mut dirs: Vec<PathBuf> = fs::read_dir(run.join("models"))?
         .filter_map(|entry| entry.ok().map(|e| e.path()))
@@ -762,6 +769,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
 
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
     crate::geometric_stack::set_retention_rates(config.retain_rates);
+    crate::geometric_stack::set_folded_scores(config.fold_scores);
     let _guard = ArmGuard;
     let model = build_fbs_model(FbsArm::OneAtomActive, config.seed, device)?;
     let mut opt_main = StackAdamW::new(&model, hs::SHEET_WEIGHT_DECAY, hs::SHEET_CLIP)?;
@@ -951,6 +959,31 @@ mod tests {
         let (nearest, farthest) = root_separation().unwrap();
         println!("address roots: nearest {nearest}, farthest {farthest}");
         assert!(nearest > 0.0 && nearest <= farthest);
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_fold_reflects_into_the_unit_interval_and_keeps_its_gradient() {
+        let device = Device::new_cuda(0).unwrap();
+        let at = [-2.5f32, -0.3, 0.0, 0.4, 1.0, 1.2, 2.7, 3.0];
+        let x = candle_core::Var::new(&at[..], &device).unwrap();
+        let folded = crate::geometric_stack::fold_unit(x.as_tensor()).unwrap();
+        let got = folded.to_vec1::<f32>().unwrap();
+        let want = [0.5f32, 0.3, 0.0, 0.4, 1.0, 0.8, 0.7, 1.0];
+        for (g, w) in got.iter().zip(&want) {
+            assert!((g - w).abs() < 1e-6, "{got:?} != {want:?}");
+        }
+        let grads = folded.sum_all().unwrap().backward().unwrap();
+        let slope = grads.get(x.as_tensor()).unwrap().to_vec1::<f32>().unwrap();
+        // Away from the fold points the slope is +1 or -1: never zero, unlike a clamp's.
+        for (i, &s) in slope.iter().enumerate() {
+            if [1, 3, 5, 6].contains(&i) {
+                assert_eq!(s.abs(), 1.0, "slope {slope:?}");
+            }
+        }
+        assert_eq!(slope[1], -1.0);
+        assert_eq!(slope[3], 1.0);
+        assert_eq!(slope[5], -1.0);
     }
 
     #[test]

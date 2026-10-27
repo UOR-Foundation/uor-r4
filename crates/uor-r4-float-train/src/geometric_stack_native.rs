@@ -35,6 +35,33 @@ pub fn set_retention_rates(on: bool) {
 pub fn retention_rates() -> bool {
     RETENTION_RATES.load(std::sync::atomic::Ordering::SeqCst)
 }
+
+/// How the recurrence brings its rate score into `[0, 1]`. Off (the default, and every recorded
+/// run before 27 Oct 2026): a clamp, whose gradient is zero outside the interval, so a lane pushed
+/// past either end stops learning there. On (`in_space_long`): a fold, the reflections `x -> -x`
+/// and `x -> 2 - x` repeated until the score lies in `[0, 1]`; it is piecewise linear with slope
+/// +1 or -1 everywhere, so every lane keeps its gradient.
+static FOLDED_SCORES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Turn the folded rate score on or off for every recurrence in this process.
+pub fn set_folded_scores(on: bool) {
+    FOLDED_SCORES.store(on, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Whether the recurrence folds its rate score (see [`set_folded_scores`]).
+pub fn folded_scores() -> bool {
+    FOLDED_SCORES.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// `x` folded into `[0, 1]` by reflections: `1 - |1 - (x mod 2)|`. The period count is taken from a
+/// detached copy, so the gradient is `+1` or `-1` and never zero.
+pub fn fold_unit(x: &Tensor) -> Result<Tensor> {
+    let periods = x.detach().affine(0.5, 0.0)?.floor()?.affine(2.0, 0.0)?;
+    Ok(x.sub(&periods)?
+        .affine(-1.0, 1.0)?
+        .abs()?
+        .affine(-1.0, 1.0)?)
+}
 #[cfg(feature = "cuda")]
 #[path = "geometric_stack_native_cuda.rs"]
 pub(crate) mod cuda_ops;
@@ -1270,16 +1297,25 @@ impl StackModel {
         // softplus and no `exp` in either direction. `RecGates::Historical`
         // keeps the exponential chain so existing configs and checkpoints
         // reproduce exactly (prohibited for new runs).
-        let score = gates
+        let raw_score = gates
             .narrow(2, 0, lanes)?
-            .broadcast_add(&p.layer(layer, "rec.decay")?.reshape((1, 1, lanes))?)?
-            .clamp(0., 1.)?;
+            .broadcast_add(&p.layer(layer, "rec.decay")?.reshape((1, 1, lanes))?)?;
+        let score = if folded_scores() {
+            fold_unit(&raw_score)?
+        } else {
+            raw_score.clamp(0., 1.)?
+        };
         let selected = rate_select(&score)?;
         let (lambda, keep) = if retention_rates() {
             // Carry 1 - 2^-(k+1) of the state. `keep` is the norm-preserving input share; it is
             // held constant in the backward, so the score's credit flows through `lambda` only.
             let lambda = selected.narrow(3, 0, 1)?.affine(-1.0, 1.0)?;
-            let keep = lambda.sqr()?.affine(-1.0, 1.0)?.clamp(0.0, 1.0)?.sqrt()?.detach();
+            let keep = lambda
+                .sqr()?
+                .affine(-1.0, 1.0)?
+                .clamp(0.0, 1.0)?
+                .sqrt()?
+                .detach();
             (lambda, keep)
         } else {
             (selected.narrow(3, 0, 1)?, selected.narrow(3, 1, 1)?)
