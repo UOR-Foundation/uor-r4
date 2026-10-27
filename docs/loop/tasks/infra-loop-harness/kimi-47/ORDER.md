@@ -1,6 +1,6 @@
 # ORDER: infra-loop-harness, kimi-47
 
-Lab: kimi. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `5b560b6fbb35f8df2210ce26ae202123ab99ec90`.
+Lab: kimi. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `5b560b6fbb35f8df2210ce26ae202123ab99ec90`. Setup row: 14.
 
 ## Goal
 
