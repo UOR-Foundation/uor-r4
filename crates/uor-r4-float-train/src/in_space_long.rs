@@ -39,6 +39,10 @@ pub struct LongConfig {
     pub eval_every: usize,
     pub seed: u64,
     pub lr: f64,
+    /// The learning rate falls linearly from `lr` at step 0 to `lr_end` at the last step.
+    pub lr_end: f64,
+    /// The `rec.decay` parameters' rate as a multiple of the main rate (the sheet's is 20).
+    pub decay_mult: f64,
     pub samples: usize,
     pub reply_tokens: usize,
 }
@@ -311,7 +315,14 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             let sample = Sample {
                 step,
                 prompt: tokenizer.decode(prompt),
-                model: tokenizer.decode(&reply),
+                model: {
+                    // A reply ends at its first end-of-turn marker; what follows is not shown.
+                    let text = tokenizer.decode(&reply);
+                    match text.find("<|eos|>") {
+                        Some(at) => text[..at + "<|eos|>".len()].to_owned(),
+                        None => text,
+                    }
+                },
                 reference: tokenizer.decode(&reference),
             };
             append_line(&out.join("samples.jsonl"), &serde_json::to_string(&sample)?)?;
@@ -352,11 +363,12 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             return Err(invalid(format!("non-finite training loss at step {step}")));
         }
         let grads = loss.backward()?;
-        opt_main.update_filtered(&model, &grads, config.lr, |name| !name.ends_with("rec.decay"))?;
+        let lr = config.lr + (config.lr_end - config.lr) * (step as f64 / config.steps as f64);
+        opt_main.update_filtered(&model, &grads, lr, |name| !name.ends_with("rec.decay"))?;
         opt_decay.update_filtered(
             &model,
             &grads,
-            config.lr * hs::SHEET_DECAY_LR_MULT,
+            lr * config.decay_mult,
             |name| name.ends_with("rec.decay"),
         )?;
         device.synchronize()?;

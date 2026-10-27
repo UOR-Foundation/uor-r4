@@ -1,5 +1,5 @@
 //! `train-in-space --data-root DIR --out DIR [--steps N] [--batch B] [--eval-every K] [--seed S]
-//! [--lr X] [--samples N] [--reply-tokens N]`
+//! [--lr X] [--lr-end X] [--decay-mult X] [--samples N] [--reply-tokens N]`
 //!
 //! Long training of the SpiralCore/FBS geometric trunk in its own space, with text at every
 //! checkpoint (`uor_r4_float_train::in_space_long`). GPU only. `--data-root` holds `tokenizer.json`,
@@ -22,6 +22,8 @@ fn main() -> Result<()> {
         eval_every: 2_048,
         seed: 1,
         lr: 0.002,
+        lr_end: f64::NAN,
+        decay_mult: 20.0,
         samples: 6,
         reply_tokens: 48,
     };
@@ -43,10 +45,15 @@ fn main() -> Result<()> {
             "--seed" => config.seed = number(&value)? as u64,
             "--samples" => config.samples = number(&value)?,
             "--reply-tokens" => config.reply_tokens = number(&value)?,
-            "--lr" => {
-                config.lr = value
+            "--lr" | "--lr-end" | "--decay-mult" => {
+                let v: f64 = value
                     .parse()
-                    .map_err(|_| FloatTrainError::Invalid("--lr wants a number".to_owned()))?
+                    .map_err(|_| FloatTrainError::Invalid(format!("{arg} wants a number")))?;
+                match arg.as_str() {
+                    "--lr" => config.lr = v,
+                    "--lr-end" => config.lr_end = v,
+                    _ => config.decay_mult = v,
+                }
             }
             other => {
                 return Err(FloatTrainError::Invalid(format!(
@@ -54,6 +61,9 @@ fn main() -> Result<()> {
                 )))
             }
         }
+    }
+    if config.lr_end.is_nan() {
+        config.lr_end = config.lr;
     }
     let data_root =
         data_root.ok_or_else(|| FloatTrainError::Invalid("--data-root is required".to_owned()))?;
