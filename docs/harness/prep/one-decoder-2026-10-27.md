@@ -16,7 +16,7 @@ One arm, two seeds, one RTX 5090 pod per seed, each arm alone on its GPU:
 
 `train-in-space --objective voronoi --retain-rates 1 --decay-mult 1 --batch 16 --steps 32768 --eval-every 2048 --lr 0.0005 --lr-end 0 --samples 6 --reply-tokens 48 --seed S`, for `S` in 1 and 2.
 
-This is `long2/g-long`'s schedule exactly (its `config.json`: 32,768 steps, batch 16, lr 5e-4 → 0, retention on, decay multiplier 1), with `--objective voronoi` in place of the writer objective. Every checkpoint (17, including step 0) logs, on all 14,287 scored DEV rows:
+This is `long2/g-long`'s schedule exactly (its `config.json`: 32,768 steps, batch 16, lr 5e-4 → 0, retention on, decay multiplier 1), with `--objective voronoi` in place of the writer objective. The runner's options added since `long2` (`--fold-scores`, `--reflect-floor`, `--fix-input-table`, `--flock-read`, `--content-read`, `--hamming-read`) all default off (`train-in-space.rs`, lines 58–63), so the model is `long2`'s with only the objective changed. Every checkpoint (17, including step 0) logs, on all 14,287 scored DEV rows:
 - `dev_top1_hits`: the writer panel's top-1;
 - `dev_writer`: the writer's top-1, openings and distinct opening picks on the same rows and points as `dev_nearest` (new in this unit);
 - `dev_nearest`: whole-table nearest's top-1, openings and distinct opening picks.
@@ -44,14 +44,14 @@ Let `W(s)` be the writer's top-1 at step `s` and `N(s)` whole-table nearest's; `
 ## Instrument checks
 
 - **I-1:** the crate's CUDA library tests pass on each pod's build.
-- **I-2:** `dev_writer.hits = dev_top1_hits` at every checkpoint. A difference is an instrument fault: no bar is read until it is found.
+- **I-2:** `|dev_writer.hits − dev_top1_hits| ≤ 14` (0.1% of the 14,287 rows) at every checkpoint, and equal at most of them. Both decode the same points with the same writer (8 kept cells, set by `set_native_vector_head(SHEET_KEPT_CELLS)`), the same chunks and the same gate draws, but they break exact score ties differently: the panel counts the first of `top_token_ids` (a sort), while `write()`, which the served session uses, takes the smallest token id among tied best scores. Only ties can separate them. A larger difference is an instrument fault, and no bar is read until it is found. The equality holds only with every read off, as in this arm (`dev_nearest` reads through `flock_read::points`, which equals `model.hidden` when no read is set; the panel reads `model.hidden`).
 - **I-3:** each seed's step-0 `dev_nearest` equals claude-145's no-read twin at the same seed (same `build_fbs_model(OneAtomActive, seed)`, nothing trained): seed 1 nearest 2, openings 0, 730 distinct picks; seed 2 nearest 5, openings 3, 681 picks.
 - **I-4:** no non-finite loss (the runner stops on one).
 
 ## Probe ladder
 
 1. **The build and the CUDA tests** on each pod, from the pinned commit.
-2. **A 256-step throughput probe** at seed 1, on the first pod, before the long arms: it projects the wall time and reads I-2 and I-3 at steps 0 and 256.
+2. **A 256-step throughput probe** at seed 1, on the first pod, before the long arms: it projects the wall time and reads I-2 and I-3 at steps 0 and 256. The job stops before the long arm if I-2 fails there.
 3. **The two arms,** one per pod.
 
 ## Data split
@@ -64,7 +64,7 @@ None. Each arm starts from `build_fbs_model(OneAtomActive, seed)`.
 
 ## Minimum test power
 
-DEV has 14,287 scored rows. At a top-1 rate near 0.55 one count's binomial standard deviation is about 60 rows, so the 500-row margin is about 8 of them. The two decoders read the same model's points, so no run-to-run noise enters their difference. Openings: 1,226 rows; 36 is three binomial standard deviations at the commonest opening's rate, as in claude-145's sheet. The collapse test compares a run with its own earlier peak.
+The two decoders read the same model's points, so no run-to-run noise enters their difference: the 500-row and 36-opening margins are **practical-equivalence tolerances**, not noise bounds. 500 rows is 3.5% of DEV's 14,287; one count's binomial standard deviation at a top-1 rate near 0.55 is about 60 rows. 36 openings is carried over from claude-145's sheet, where it is three binomial standard deviations at the commonest opening's rate on 1,226 rows. Either way, a stage-7-sized gap (345 against 7,813) cannot pass, and `long2`'s fall to 18% of its peak fails the 0.7 collapse threshold by far. The collapse test compares a run with its own earlier peak. The collapse is known at seed 1 only (`long2`); seed 2 has no writer-objective reference.
 
 ## Cost
 
