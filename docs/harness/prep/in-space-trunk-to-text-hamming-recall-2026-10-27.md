@@ -73,9 +73,12 @@ Seeds 1 and 2, one pod each. Every read starts with a zero weight, so each arm's
 
 The CUDA tests and the negative gate run first in each job. The run is short, about 15 minutes, so it is its own throughput check: each arm's tokens/s is logged at every checkpoint.
 
-## Data
+## Data split (generated, none from the store)
 
-None from the store: the windows are generated from the seed (`recall_window`, pinned by two host tests).
+- **Training:** fresh windows every step, from `recall_window(seed, step · batch + b)`.
+- **Held out:** 128 windows from `recall_window(seed ^ RECALL_EVAL_SEED, i)`, a different seed, so no held-out window is a training window.
+
+Both are pinned by the generator's host tests.
 
 ## Base artifact
 
