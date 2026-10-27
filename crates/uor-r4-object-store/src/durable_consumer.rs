@@ -222,6 +222,56 @@ impl Ur4Sess1HeaderView {
             layer_count,
         })
     }
+
+    /// Encode a canonical `UR4SESS1` binary session snapshot bound to
+    /// `artifact_sha256`, active `tokens`, and current step `logits` using pure
+    /// integer varint framing.
+    pub fn encode_canonical(
+        artifact_sha256: &str,
+        tokens: &[u32],
+        logits: &[i32],
+    ) -> Result<Vec<u8>> {
+        if artifact_sha256.is_empty() || artifact_sha256.len() > 256 || tokens.is_empty() {
+            return Err(Error::SchemaMismatch);
+        }
+        let mut out = Vec::new();
+        out.extend_from_slice(UR4SESS1_MAGIC);
+        put_str(&mut out, "uor-r4.stack-session/1")?;
+        out.extend_from_slice(&1u32.to_le_bytes());
+        put_str(&mut out, artifact_sha256)?;
+        let pos = tokens.len() as u64;
+        out.extend_from_slice(&pos.to_le_bytes());
+        out.extend_from_slice(&pos.to_le_bytes());
+        out.extend_from_slice(&pos.to_le_bytes());
+        out.extend_from_slice(&65_536i32.to_le_bytes());
+        put_v64(&mut out, logits.len() as u64);
+        for &l in logits {
+            out.extend_from_slice(&l.to_le_bytes());
+        }
+        put_v64(&mut out, tokens.len() as u64);
+        for &t in tokens {
+            out.extend_from_slice(&t.to_le_bytes());
+        }
+        out.push(0); // snap_trace: None
+        put_v64(&mut out, 0); // pointer_keys
+        put_v64(&mut out, 0); // pointer_lifts
+        put_v64(&mut out, 0); // mixture
+        put_v64(&mut out, 0); // layers
+        Ur4Sess1HeaderView::parse(&out)?;
+        Ok(out)
+    }
+}
+
+fn put_v64(out: &mut Vec<u8>, mut v: u64) {
+    loop {
+        let b = (v & 0x7f) as u8;
+        v >>= 7;
+        if v == 0 {
+            out.push(b);
+            return;
+        }
+        out.push(b | 0x80);
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -296,6 +346,27 @@ impl DurableObjectMemoryStore {
         self.scopes
             .get(scope)
             .and_then(|s| s.ur4sess1_bytes.as_deref())
+    }
+
+    /// Parse and verify the active `UR4SESS1` binary snapshot for `scope` against
+    /// `expected_artifact_sha256`, failing closed with [`Error::BindingMismatch`]
+    /// if the snapshot belongs to a different model artifact or has inconsistent
+    /// position state.
+    pub fn restore_verified_session(
+        &self,
+        scope: &IdentityScope,
+        expected_artifact_sha256: &str,
+    ) -> Result<Ur4Sess1HeaderView> {
+        let bytes = self
+            .ur4sess1_snapshot(scope)
+            .ok_or(Error::SchemaMismatch)?;
+        let header = Ur4Sess1HeaderView::parse(bytes)?;
+        if header.artifact_sha256 != expected_artifact_sha256
+            || header.position != header.tokens.len() as u64
+        {
+            return Err(Error::BindingMismatch);
+        }
+        Ok(header)
     }
 
     /// Assert a fact (`FactAction::Assert`) for `(owner, relation)` from `turn_bytes[value_range]`.

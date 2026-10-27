@@ -8,6 +8,7 @@ pub mod address_stage0;
 pub mod bindings;
 pub mod durable_consumer;
 mod hash;
+pub mod m3_durable_memory;
 mod manifest;
 pub mod peer;
 mod record;
