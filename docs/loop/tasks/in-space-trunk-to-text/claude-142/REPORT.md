@@ -6,7 +6,7 @@ The item `in-space-trunk-to-text` is new in this PR; its issue is made at the ne
 
 **Speed.**
 
-- **Decode:** DECODE_SPEED_LINE
+- **Decode:** `395`, `382` and `380` tokens/s of greedy nearest decoding at `16`, `64` and `192` tokens of context. That is 64 tokens each, from the best checkpoint, on one RTX 5090 (`--decode-speed`, `gpu-checks/decode-speed.out`). This runner re-runs the trunk over the whole window for every token and scores the whole 4,096-token table, so the cost is nearly flat in context. A served recurrent decode carries its state and is not measured here.
 - **Training, on one RTX 5090:**
   - the best run (whole-table nearest objective, `lr 1e-3`) did `13,794` context tokens/s, with three runs sharing the GPU;
   - a writer-objective run alone did `35,597`.
@@ -26,10 +26,10 @@ The item `in-space-trunk-to-text` is new in this PR; its issue is made at the ne
   The model has learned the corpus's common reply templates, not what each prompt asks; long replies fall into repetition.
 - **The best model reads about 8–12 tokens back.** Replacing the token `k` places before a reply opening with BOS moves the opening point by `4.37` at `k = 0`. The shift falls to 25% of that at `k = 6`, 10% at `k = 8`, 3% at `k = 12`, and 1% at `k = 16` (`0.049`, `R16 = 0.011`). The writer-objective run reads less, about 6 tokens. The untrained trunk reads much further (`R16 = 0.70`): training cuts the reach about 60–110 times (`0.70 / 0.011`, `0.70 / 0.006`). Item done-when (2) is **not met**.
 - **Lanes end at the shortest memory.** In the best model, 37–75% of lane positions select rate entry 0 after training: 37% in layer 0, and 59–75% in layers 1–5. Every layer starts at 33%.
-- **Three ways to keep memory long all stop training.** Train loss stays at the margin (`1.002–1.004`), and whole-table nearest top-1 stays at `482–1,267`, against the clamped twins' `8,097–8,607`:
+- **Three ways to keep memory long all stop training.** Train loss stays at the margin (`1.002–1.004`), and whole-table nearest top-1 at step `16,384` stays at `482–1,518`, against the clamped twins' `8,097–8,607`:
   - the rate score folded into `[0, 1]` (the registered run: **negative**, cell C with flag F at both rates; its reach "pass" is the untrained trunk's);
   - a reflecting floor `min(|x|, 1)` (exploration);
-  - the shared table placed by the output side only (exploration, with the clamp and with the fold).
+  - the shared table placed by the output side only (exploration): `1,490` with the clamp and `1,518` with the fold, train loss `0.996` and `1.000`.
 - **Two causes I proposed are ruled out:**
   - **The optimizer's global clip,** by argument, not by experiment. The step-0 norms are `12.55` under the fold and `1.24` under the clamp, almost all of it the table's, and Adam normalizes each element by its own scale.
   - **The table's input-side gradient drowning its output side,** by experiment. It does drown it: `1/410` under the clamp and `1/4,260` under the fold. But cutting the input side stalls the clamp too: `1,118` against its twin's `7,425` at step `4,096`.
@@ -66,7 +66,7 @@ The item `in-space-trunk-to-text` is new in this PR; its issue is made at the ne
   - the CLI refuses two modes at once, and any switch value but 0 or 1.
 - Tests:
   - host: epoch order, tail, root separation, the opening rule;
-  - CUDA, run on a pod: CUDA_TESTS_LINE
+  - CUDA, run on one RTX 5090 at the head (`91 passed, 5 ignored, 0 failed`). The fold test fails with `fold_unit` swapped for a clamp (the negative gate):
     - the fold's values and slopes;
     - `best_positions` skipping the excluded position and ranking the rest;
     - whole-table scores not depending on the chunk;
@@ -85,7 +85,9 @@ The item `in-space-trunk-to-text` is new in this PR; its issue is made at the ne
 - `long5`: floor;
 - `long6`: fixed table;
 - `gradnorms` and `gradsplit`;
-- `long3b`: the first reach and inspection of `long2`.
+- `long3b`: the first reach and inspection of `long2`;
+- `gpu-checks` and `gpu-checks-head`: the GPU tests, the negative gate and decode speed;
+- `probe` and `top`: the first 64-step probe, the top-level logs and every job script.
 
 ## Measurements
 
@@ -106,7 +108,11 @@ The item `in-space-trunk-to-text` is new in this PR; its issue is made at the ne
 
 ## Checks run at the head
 
-CHECKS_LINE
+- **CUDA library tests, at `e59f20a061b4fc77283af6e9c1060d4307d31fa8`:** `91 passed, 5 ignored, 0 failed`, on one RTX 5090 (Vast `vast-57919115`). The command was `cargo test --release --locked -p uor-r4-float-train --features cuda --lib -- --test-threads=1`, and the output is `gpu-checks-head/lib-tests.out`.
+- **The fold test's negative gate, at `9c056f92`:** with `fold_unit` returning the clamp, `the_fold_reflects_into_the_unit_interval_and_keeps_its_gradient` FAILS (exit 101, `gpu-checks/fold-test-negative.out`).
+- **Host tests:** `cargo test -p uor-r4-float-train --lib`, 65 passed.
+- **Gates:** `uor-harness loop gates --full`, 11 green; `uor-harness loop report --check`, PASS.
+- **`loop pr-check --local`:** every hard rule passes except `order`. The item is new in this unit, and the ORDER's item must exist at the merge base, so the item lands first in its own item-maintenance unit.
 
 ## Skills used
 
