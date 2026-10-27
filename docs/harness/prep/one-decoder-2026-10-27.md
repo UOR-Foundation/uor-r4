@@ -2,7 +2,7 @@
 
 Lab: claude. Item: [one-decoder](../../roadmap/items/one-decoder.md). Order: [claude-150](../../loop/tasks/one-decoder/claude-150/ORDER.md). Code: branch `claude/one-decoder`. Every pod builds and tests its own binary from the pinned commit first.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT (round 3 of a fresh-context review; with the D67 pre-run review PASS in the same round, light gates per the owner on #2028. Round 1 found I-2 could false-alarm, round 2 that its tie account was wrong; I-2 is now equality, gated at both seeds' probes and over the run.)
 
 ## The question
 
@@ -51,7 +51,7 @@ Let `W(s)` be the writer's top-1 at step `s` and `N(s)` whole-table nearest's; `
 ## Probe ladder
 
 1. **The build and the CUDA tests** on each pod, from the pinned commit.
-2. **A 256-step throughput probe** at seed 1, on the first pod, before the long arms: it projects the wall time and reads I-2 and I-3 at steps 0 and 256. The job stops before the long arm if I-2 fails there.
+2. **A 256-step throughput probe** at each seed, on its own pod, before its long arm: it projects the wall time and reads I-2 and I-3 at steps 0 and 256. The job stops before the long arm if I-2 fails there.
 3. **The two arms,** one per pod.
 
 ## Data split
