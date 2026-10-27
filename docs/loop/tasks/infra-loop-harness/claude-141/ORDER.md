@@ -25,7 +25,7 @@ Result (2026-10-27T10:45Z, `origin/main` at `f3a6f0f72`):
 
 ## Files in scope
 
-- `docs/roadmap/items/in-space-trunk-to-text.md` (new, byte-identical to #3327's at `979e15651`)
+- `docs/roadmap/items/in-space-trunk-to-text.md` (new, byte-identical to #3327's at `838b0a73a`)
 - `docs/roadmap/README.md` (rendered by `cargo xtask roadmap render`)
 - `docs/loop/tasks/infra-loop-harness/claude-141/**` (this task folder)
 
