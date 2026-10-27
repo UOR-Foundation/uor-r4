@@ -4,7 +4,7 @@
 - **Prior decision:** claude-136's bound proves exporter fidelity cannot flip any of the six existing verdicts. The remaining pivot is one decisive longer run, not more residual inspection. claude-131's DEV losses were still falling at step 1,024.
 - **Intervention:** **2,048 steps per seed instead of 1,024**, with the same per-step learning rates (`0.002` base, `20` decay multiplier), weight decay `0.1`, clipping, corpus, dual 1:1 loss, bridges, exporter and GPU evaluator. Evaluation points are exactly `0, 256, 512, 1,024, 2,048`. The first 1,024 batches are claude-131's deterministic document-order batches; the next 1,024 are new windows from the same corpus, so this is a dose-plus-coverage intervention, not a pure optimizer-step isolation.
 - **D68 decision:** `agent-53` PASS at `e77a1f91f0f198de9aee58b7bc20d65a6c12b298`, owner log #2820 comment `6428815813`; full card `docs/loop/tasks/d11-exporter-float-trunk/kimi-46/DECISION.md`. It approves dose-plus-coverage, the exact D counterfactual and the registered floors, with cancellation/marginal readings required.
-- **Status:** `TEST FITNESS: FIT` at `5345b554038954a3d46fdedcf3c30daeeb9d429f`. No compute before D67.
+TEST FITNESS: FIT — agent-50 at `5345b554038954a3d46fdedcf3c30daeeb9d429f`. No compute before D67.
 
 ## 1. Question
 
