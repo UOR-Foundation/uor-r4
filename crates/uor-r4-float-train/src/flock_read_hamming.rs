@@ -285,8 +285,8 @@ impl HammingRead {
         let margins = self.margin.as_tensor();
         let mut heads = Vec::with_capacity(self.heads);
         for h in 0..self.heads {
-            let q = query.narrow(1, h * head_width, head_width)?;
-            let k = key.narrow(1, h * head_width, head_width)?;
+            let q = query.narrow(1, h * head_width, head_width)?.contiguous()?;
+            let k = key.narrow(1, h * head_width, head_width)?.contiguous()?;
             let (picks, real) = choose_nearest(&q, &k, batch, time, HAMMING_KEPT)?;
             // A pick that is not real points at its window's start, whose successor is still
             // inside the window, and carries weight 0.
@@ -311,6 +311,7 @@ impl HammingRead {
             };
             let payload = value
                 .narrow(1, h * head_width, head_width)?
+                .contiguous()?
                 .index_select(&sources, 0)?
                 .reshape((rows, kept, head_width))?;
             heads.push(payload.broadcast_mul(&weights.unsqueeze(2)?)?.sum(1)?);
