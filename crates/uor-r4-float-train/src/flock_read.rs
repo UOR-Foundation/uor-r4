@@ -231,6 +231,11 @@ impl FlockRead {
         let query = self.rotate(&self.query_rotation, hidden)?;
         let key = self.rotate(&self.key_rotation, hidden)?;
         let (picks, real) = self.choose(&query, &key, batch, time)?;
+        // A pick that is not real (a row with fewer earlier positions than kept) points at its
+        // window's first position, so its next-token index stays inside the window; it carries weight 0.
+        let starts: Vec<u32> = (0..rows).map(|r| ((r / time) * time) as u32).collect();
+        let starts = Tensor::from_vec(starts, (rows, 1), device)?.broadcast_as(picks.shape())?;
+        let picks = real.where_cond(&picks, &starts)?;
         let kept = picks.dim(1)?;
         let flat = picks.flatten_all()?;
         let kept_keys = key.index_select(&flat, 0)?.reshape((rows, kept, width))?;
