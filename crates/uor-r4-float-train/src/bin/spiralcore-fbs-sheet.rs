@@ -53,14 +53,16 @@ use candle_core::Device;
 use uor_r4_float_train::spiralcore_fbs_sheet::{
     d11_artifact_windows, run_d11_artifact_gap, run_d11_export_gap, run_d11_forced_snaps,
     run_d11_residual, run_d11_snap_trace, run_d11_train_export, run_d11_train_probe,
-    run_full_sheet, run_synthetic_probe, run_throughput_probe, summarize_forced, write_receipt,
-    TrainForward,
+    run_full_sheet, run_synthetic_probe, run_throughput_probe, summarize_forced,
+    with_deterministic_bwd, write_receipt, TrainForward,
 };
 use uor_r4_float_train::{FloatTrainError, Result};
 
 /// The options of `d11-artifact-gap`, `d11-train-probe`, `d11-train-export`, `d11-residual`,
-/// `d11-snap-trace`, `d11-forced-snaps` and `d11-forced-summary`.
-const GAP_OPTIONS: [&str; 20] = [
+/// `d11-snap-trace`, `d11-forced-snaps` and `d11-forced-summary`. `--deterministic-bwd` alone takes
+/// no value.
+const GAP_OPTIONS: [&str; 21] = [
+    "--deterministic-bwd",
     "--expect-unforced",
     "--receipts",
     "--faithful",
@@ -85,6 +87,29 @@ const GAP_OPTIONS: [&str; 20] = [
 
 /// The one dose the longer-dual sheet registers besides the default.
 const LONGER_STEPS: usize = 2_048;
+
+/// Whether `--deterministic-bwd` was given: the D11 training modes then run their FBS backward on
+/// the deterministic kernels (claude-141). Any other mode refuses it rather than ignoring it.
+fn deterministic_bwd(extra: &BTreeMap<String, String>, mode: &str) -> Result<bool> {
+    if !extra.contains_key("--deterministic-bwd") {
+        return Ok(false);
+    }
+    if !matches!(mode, "d11-train-probe" | "d11-train-export") {
+        return Err(FloatTrainError::Invalid(format!(
+            "--deterministic-bwd is not valid for {mode}"
+        )));
+    }
+    Ok(true)
+}
+
+/// `f` under the deterministic backward when `on`, as it is otherwise.
+fn maybe_deterministic<T>(on: bool, f: impl FnOnce() -> Result<T>) -> Result<T> {
+    if on {
+        with_deterministic_bwd(f)
+    } else {
+        f()
+    }
+}
 
 fn train_steps(extra: &BTreeMap<String, String>, mode: &str) -> Result<usize> {
     if extra.contains_key("--steps")
@@ -208,6 +233,9 @@ fn parse_args() -> Result<Args> {
             "--data-root" => data_root = PathBuf::from(value("--data-root")?),
             "--out" => out = PathBuf::from(value("--out")?),
             "--save-dir" => save_dir = Some(PathBuf::from(value("--save-dir")?)),
+            "--deterministic-bwd" => {
+                extra.insert(arg.clone(), "true".to_owned());
+            }
             name if GAP_OPTIONS.contains(&name) => {
                 let v = value(name)?;
                 extra.insert(name.to_owned(), v);
@@ -232,8 +260,9 @@ fn main() -> Result<()> {
     };
     let train_forward =
         TrainForward::parse(extra.get("--train-forward").map_or("d11", String::as_str))?;
-    // Bind and validate the step count before the CUDA device is opened.
+    // Bind and validate the step count and the backward switch before the CUDA device is opened.
     let steps = train_steps(&extra, &mode)?;
+    let deterministic = deterministic_bwd(&extra, &mode)?;
     let device = Device::new_cuda(0)?;
     match mode.as_str() {
         "synthetic-probe" => {
@@ -317,7 +346,9 @@ fn main() -> Result<()> {
             write_receipt(&out, &value)
         }
         "d11-train-probe" => {
-            let value = run_d11_train_probe(&data_root, train_forward, steps, &device)?;
+            let value = maybe_deterministic(deterministic, || {
+                run_d11_train_probe(&data_root, train_forward, steps, &device)
+            })?;
             println!(
                 "[d11-train-probe] forward={} train_learns={} learns={} train_loss_0={} train_loss_31={} dev_loss_0={} dev_loss_32={} s_per_step={} projected_full_s={} under_one_hour_per_seed={}",
                 value["train_forward"],
@@ -337,14 +368,17 @@ fn main() -> Result<()> {
             let save_dir = save_dir.ok_or_else(|| {
                 FloatTrainError::Invalid("d11-train-export needs --save-dir".to_owned())
             })?;
-            let value = run_d11_train_export(
-                &data_root,
-                &save_dir,
-                &PathBuf::from(option("--stage4b")?),
-                train_forward,
-                steps,
-                &device,
-            )?;
+            let stage4b = PathBuf::from(option("--stage4b")?);
+            let value = maybe_deterministic(deterministic, || {
+                run_d11_train_export(
+                    &data_root,
+                    &save_dir,
+                    &stage4b,
+                    train_forward,
+                    steps,
+                    &device,
+                )
+            })?;
             for s in value["seeds"].as_array().into_iter().flatten() {
                 println!(
                     "[d11-train-export] forward={} seed={} top1_float={} top1_export_mode={} loss_float={} save_load={}",
@@ -609,6 +643,27 @@ mod tests {
         for mode in ["full", "d11-export-gap", "d11-snap-trace"] {
             assert!(train_steps(&extra, mode).is_err(), "{mode}");
         }
+        Ok(())
+    }
+
+    /// claude-141: `--deterministic-bwd` is off unless given, and only the D11 training modes take it.
+    #[test]
+    fn the_deterministic_backward_flag_is_opt_in_and_training_only() -> Result<()> {
+        let mut extra = BTreeMap::new();
+        assert!(!deterministic_bwd(&extra, "d11-train-export")?);
+        extra.insert("--deterministic-bwd".to_owned(), "true".to_owned());
+        for mode in ["d11-train-probe", "d11-train-export"] {
+            assert!(deterministic_bwd(&extra, mode)?, "{mode}");
+        }
+        for mode in [
+            "full",
+            "d11-artifact-gap",
+            "d11-residual",
+            "d11-forced-snaps",
+        ] {
+            assert!(deterministic_bwd(&extra, mode).is_err(), "{mode}");
+        }
+        assert!(GAP_OPTIONS.contains(&"--deterministic-bwd"));
         Ok(())
     }
 

@@ -626,6 +626,32 @@ pub fn export_exactness_check(device: &Device, seed: u64) -> Result<ExportExactn
     })
 }
 
+thread_local! {
+    /// The deterministic-backward switch (claude-141): the FBS backward of the pinned-kernel arms
+    /// runs on `src/spiralcore_fbs_det.cu`, fixed-order gathers in place of float atomics.
+    static DETERMINISTIC_BWD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Runs `f` with the SpiralCore/FBS backward of the `OneAtomActive` and `FrozenQueries` arms on
+/// the deterministic kernels (claude-141), and restores the switch as it was, a panic included.
+/// The adjoint is the pinned kernel's, term for term; only the order of its sums is fixed, so two
+/// runs on one device add in the same order.
+pub fn with_deterministic_bwd<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            DETERMINISTIC_BWD.with(|c| c.set(self.0));
+        }
+    }
+    let _restore = Restore(DETERMINISTIC_BWD.with(|c| c.replace(true)));
+    f()
+}
+
+/// Whether the FBS backward runs on the deterministic kernels on this thread.
+pub fn is_deterministic_bwd() -> bool {
+    DETERMINISTIC_BWD.with(|c| c.get())
+}
+
 /// The pinned source hashes and this module's kernel hashes.
 pub fn kernel_identity() -> serde_json::Value {
     let fbs_cu = sha256_bytes(include_bytes!("spiralcore_fbs.cu"));
@@ -635,6 +661,10 @@ pub fn kernel_identity() -> serde_json::Value {
     let arms_ptx = arms::arms_ptx_sha256();
     #[cfg(not(feature = "cuda"))]
     let arms_ptx = String::from("not built (no cuda feature)");
+    #[cfg(feature = "cuda")]
+    let det_ptx = sha256_bytes(crate::geometric_stack::cuda_ops::SPIRALCORE_FBS_DET_PTX.as_bytes());
+    #[cfg(not(feature = "cuda"))]
+    let det_ptx = String::from("not built (no cuda feature)");
     serde_json::json!({
         "spiralcore_fbs_cu_sha256": fbs_cu,
         "spiralcore_fbs_rs_sha256": fbs_rs,
@@ -645,6 +675,9 @@ pub fn kernel_identity() -> serde_json::Value {
         "arms_kernel_sha256": arms::arms_kernel_sha256(),
         "arms_prelude_sha256": arms::arms_prelude_sha256(),
         "arms_ptx_sha256": arms_ptx,
+        "deterministic_bwd": is_deterministic_bwd(),
+        "det_kernel_sha256": sha256_bytes(include_bytes!("spiralcore_fbs_det.cu")),
+        "det_ptx_sha256": det_ptx,
     })
 }
 
@@ -3758,6 +3791,32 @@ mod tests {
     fn the_pins_are_the_sheets_and_still_match_the_sources() {
         let identity = kernel_identity();
         assert_eq!(identity["pins_match_sheet"], serde_json::json!(true));
+    }
+
+    /// claude-141: the deterministic backward is opt-in, the receipt says which backward ran, and
+    /// the switch is restored when its run ends, an error included.
+    #[test]
+    fn the_deterministic_backward_is_off_by_default_and_recorded() -> Result<()> {
+        assert!(!is_deterministic_bwd(), "the switch defaults off");
+        assert_eq!(
+            kernel_identity()["deterministic_bwd"],
+            serde_json::json!(false)
+        );
+        let inside = with_deterministic_bwd(|| Ok(kernel_identity()))?;
+        assert_eq!(inside["deterministic_bwd"], serde_json::json!(true));
+        assert_eq!(
+            inside["det_kernel_sha256"],
+            serde_json::json!(sha256_bytes(include_bytes!("spiralcore_fbs_det.cu")))
+        );
+        assert_eq!(inside["pins_match_sheet"], serde_json::json!(true));
+        assert!(!is_deterministic_bwd(), "the switch is restored");
+        let failed: Result<()> = with_deterministic_bwd(|| Err(invalid("a failed run")));
+        assert!(failed.is_err());
+        assert!(
+            !is_deterministic_bwd(),
+            "the switch is restored after an error"
+        );
+        Ok(())
     }
 
     #[test]

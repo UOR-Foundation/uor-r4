@@ -318,6 +318,9 @@ pub(crate) fn spiralcore_fbs_bwd(
     x: &Tensor,
     grad: &Tensor,
 ) -> CResult<(Tensor, Tensor)> {
+    if crate::spiralcore_fbs_sheet::is_deterministic_bwd() {
+        return spiralcore_fbs_bwd_det(plan, device, q, x, grad);
+    }
     let (q, x, grad) = (q.contiguous()?, x.contiguous()?, grad.contiguous()?);
     let rows = spiralcore_fbs_rows(plan, q.dims(), x.dims(), x.elem_count())?;
     let mut output_dims = x.dims().to_vec();
@@ -642,6 +645,79 @@ struct SpiralcoreFbsDevicePlan {
 
 // The SpiralCore/FBS sheet arms (`src/spiralcore_fbs_arms.cu`, spiralcore-fbs-offline-float-sheet,
 // claude-119), launched from their own ahead-of-time module (`build.rs`, no runtime compiler).
+// The deterministic FBS backward (claude-141). The same adjoint as the pinned
+// `spiralcore_fbs_bwd`, with its two float-atomic sums replaced by fixed-order gathers: one thread
+// per row adds the input adjoint over the outputs in order, and one thread per output adds the
+// query pullback over the rows in order (src/spiralcore_fbs_det.cu). F32 carriers only. It runs
+// in place of the pinned kernel only under `spiralcore_fbs_sheet::with_deterministic_bwd`.
+const SPIRALCORE_FBS_DET_MODULE: &str = "uor_r4_spiralcore_fbs_det";
+pub(crate) const SPIRALCORE_FBS_DET_PTX: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/spiralcore_fbs_det_f32.ptx"));
+pub(crate) fn spiralcore_fbs_bwd_det(
+    plan: &crate::spiralcore_fbs::ProjectionPlan,
+    device: &CudaDevice,
+    q: &Tensor,
+    x: &Tensor,
+    grad: &Tensor,
+) -> CResult<(Tensor, Tensor)> {
+    let (q, x, grad) = (q.contiguous()?, x.contiguous()?, grad.contiguous()?);
+    if x.dtype() != DType::F32 || grad.dtype() != DType::F32 {
+        candle_core::bail!("the deterministic FBS backward runs on F32 carriers only");
+    }
+    let rows = spiralcore_fbs_rows(plan, q.dims(), x.dims(), x.elem_count())?;
+    let mut output_dims = x.dims().to_vec();
+    let last = output_dims.len() - 1;
+    output_dims[last] = plan.output_blocks * 8;
+    if grad.dims() != output_dims {
+        candle_core::bail!("native projection gradient shape/dtype differs from its output");
+    }
+    let (qs, ql) = q.storage_and_layout();
+    let (xs, xl) = x.storage_and_layout();
+    let (gs, gl) = grad.storage_and_layout();
+    let (Storage::Cuda(qs), Storage::Cuda(xs), Storage::Cuda(gs)) = (&*qs, &*xs, &*gs) else {
+        candle_core::bail!("native adjoint is CUDA-only; no host fallback");
+    };
+    if qs.device.id() != device.id()
+        || xs.device.id() != device.id()
+        || gs.device.id() != device.id()
+    {
+        candle_core::bail!("native adjoint tensors need the same CUDA context");
+    }
+    let Some(query) = input(qs, ql)? else {
+        candle_core::bail!("native query adjoint needs F32 masters");
+    };
+    let metadata = spiralcore_fbs_device_plan(plan, device)?;
+    let dq = zeros::<f32>(device, q.elem_count())?;
+    let dx = zeros::<f32>(device, x.elem_count())?;
+    let error = zeros::<u32>(device, 1)?;
+    let mut args = vec![
+        Arg::F(query),
+        spiralcore_fbs_activation(xs, xl)?,
+        spiralcore_fbs_activation(gs, gl)?,
+    ];
+    args.extend(spiralcore_fbs_metadata(plan, &metadata));
+    args.extend([Arg::f(&dq), Arg::f(&dx), Arg::u(&error)]);
+    args.extend(spiralcore_fbs_dimensions(plan, rows)?);
+    for (kernel, threads) in [
+        ("spiralcore_fbs_det_bwd_input", rows),
+        ("spiralcore_fbs_det_bwd_query", plan.output_blocks),
+    ] {
+        crate::cuda_stack_kernels::cuda::launch_prebuilt(
+            device,
+            SPIRALCORE_FBS_DET_MODULE,
+            SPIRALCORE_FBS_DET_PTX,
+            kernel,
+            threads,
+            &args,
+        )?;
+    }
+    drop(args);
+    spiralcore_fbs_device_error(device, &error)?;
+    let raw_dq = tensor(dq, device, q.shape());
+    let raw_dx = tensor(dx, device, x.shape());
+    crate::secant_descent::transform_spiralcore_fbs_bwd(&q, raw_dq, raw_dx)
+}
+
 // `arm` is 1 (identity transport) or 2 (two routed query paths); F32 carriers only, as qualified
 // execution is F32. The pinned `spiralcore_fbs_fwd`/`spiralcore_fbs_bwd` above are untouched.
 const SPIRALCORE_FBS_ARMS_MODULE: &str = "uor_r4_spiralcore_fbs_arms";

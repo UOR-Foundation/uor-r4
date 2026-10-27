@@ -294,6 +294,64 @@ mod gpu_tests {
         }
     }
 
+    /// claude-141: the deterministic backward is the pinned adjoint with a fixed summation order.
+    /// The fixture maps 48 output blocks onto 32 input atoms over 6 rows, so both sums collide:
+    /// outputs share atoms within a row, and every output collects over the rows.
+    #[test]
+    #[ignore = "needs a CUDA device; run on the pod"]
+    fn the_deterministic_backward_matches_the_pinned_one_and_repeats_bit_for_bit() {
+        use crate::spiralcore_fbs_sheet::{is_deterministic_bwd, with_deterministic_bwd};
+        let (plan, q, x, device) = setup(1, 51);
+        let dy = dy_for(&device, 13);
+        let (y, dq, dx) = run(&plan, &q, &x, FbsArm::OneAtomActive, &dy);
+        let det = || {
+            with_deterministic_bwd(|| Ok(run(&plan, &q, &x, FbsArm::OneAtomActive, &dy)))
+                .expect("deterministic run")
+        };
+        let (y1, dq1, dx1) = det();
+        let (y2, dq2, dx2) = det();
+        assert!(
+            !is_deterministic_bwd(),
+            "the switch is restored after each run"
+        );
+        assert_eq!(y1, y, "the forward does not change");
+        assert!(dq.iter().any(|&v| v != 0.0), "the fixture has query credit");
+        close(
+            &dq1,
+            &dq,
+            "the query pullback matches the pinned kernel to rounding",
+        );
+        close(
+            &dx1,
+            &dx,
+            "the input adjoint matches the pinned kernel to rounding",
+        );
+        assert_eq!(y2, y1, "the forward repeats");
+        assert_eq!(dq2, dq1, "the query pullback repeats bit for bit");
+        assert_eq!(dx2, dx1, "the input adjoint repeats bit for bit");
+    }
+
+    /// claude-141: a non-finite gradient stops both backwards with the same device error.
+    #[test]
+    #[ignore = "needs a CUDA device; run on the pod"]
+    fn the_deterministic_backward_keeps_the_pinned_error_codes() {
+        use crate::spiralcore_fbs_sheet::with_deterministic_bwd;
+        let (plan, q, x, device) = setup(1, 61);
+        let mut bad = values(17, ROWS * OUTPUT_ATOMS * 8);
+        bad[5] = f32::NAN;
+        let dy = Tensor::from_vec(bad, (ROWS, OUTPUT_ATOMS * 8), &device).expect("dy");
+        let backward = || -> crate::Result<()> {
+            let xv = Var::from_tensor(&x)?;
+            let y = project(&plan, q.as_tensor(), xv.as_tensor(), FbsArm::OneAtomActive)?;
+            (&y * &dy)?.sum_all()?.backward()?;
+            Ok(())
+        };
+        let pinned = backward().expect_err("the pinned backward refuses a NaN gradient");
+        let det = with_deterministic_bwd(backward)
+            .expect_err("the deterministic backward refuses a NaN gradient");
+        assert_eq!(det.to_string(), pinned.to_string(), "the same device error");
+    }
+
     #[test]
     #[ignore = "needs a CUDA device; run on the pod"]
     fn identity_transport_selects_the_same_atom_without_transport() {

@@ -23,7 +23,7 @@ struct Module {
 
 const CUDA: &str = "CARGO_FEATURE_CUDA";
 
-const MODULES: [Module; 3] = [
+const MODULES: [Module; 4] = [
     Module {
         sources: &["src/cuda_stack.cu", "src/spiralcore_fbs.cu"],
         ptx: "cuda_stack_f32.ptx",
@@ -48,6 +48,18 @@ const MODULES: [Module; 3] = [
             "src/spiralcore_fbs_arms.cu",
         ],
         ptx: "spiralcore_fbs_arms_f32.ptx",
+        options: &PRECISE,
+        feature: CUDA,
+    },
+    // The deterministic FBS backward (claude-141): fixed-order gathers in place of the pinned
+    // kernel's float atomics, behind an opt-in switch. The pinned sources are included unchanged.
+    Module {
+        sources: &[
+            "src/spiralcore_fbs_arms_prelude.cu",
+            "src/spiralcore_fbs.cu",
+            "src/spiralcore_fbs_det.cu",
+        ],
+        ptx: "spiralcore_fbs_det_f32.ptx",
         options: &PRECISE,
         feature: CUDA,
     },
