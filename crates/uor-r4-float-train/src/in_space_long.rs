@@ -75,8 +75,8 @@ pub struct Checkpoint {
     pub dev_top1_hits: usize,
     pub dev_top8_hits: usize,
     pub dev_admitted_hits: usize,
-    /// DEV rows whose target is the whole table's nearest token to the predicted point.
-    pub dev_nearest_top1_hits: usize,
+    /// DEV decoded as the whole table's nearest token to the predicted point.
+    pub dev_nearest: NearestReading,
     pub dev_scored_rows: usize,
     pub dev_loss: f64,
     /// DEV's token hinge: the target's displacement score against the best admitted rivals.
@@ -95,7 +95,7 @@ pub struct Inspection {
     pub checkpoint: String,
     pub scored_rows: usize,
     pub top1_hits: usize,
-    pub nearest_top1_hits: usize,
+    pub nearest: NearestReading,
     pub admitted_hits: usize,
     pub token_unviolated_hits: usize,
     pub token_margin: f64,
@@ -267,25 +267,56 @@ fn batch_loss(
     }
 }
 
-/// DEV rows whose target is the whole table's nearest token to the predicted point.
-fn nearest_top1(model: &StackModel, dev: &[CausalWindow], seed: u64, step: usize) -> Result<usize> {
+/// Whole-table nearest decoding over DEV. Rows that open a reply are counted apart: their target
+/// follows the prompt, not the reply's own earlier words, so only context can name it.
+#[derive(Clone, Copy, Debug, Default, Serialize)]
+pub struct NearestReading {
+    pub hits: usize,
+    pub opening_rows: usize,
+    pub opening_hits: usize,
+    /// Openings whose target is DEV's most common opening token: what always naming it scores.
+    pub commonest_opening_rows: usize,
+}
+
+/// [`NearestReading`] over the DEV windows; `mask` is DEV's response mask, by corpus position.
+fn nearest_reading(
+    model: &StackModel,
+    dev: &[CausalWindow],
+    mask: &[u8],
+    seed: u64,
+    step: usize,
+) -> Result<NearestReading> {
     let table = table(model)?;
     hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, step, false, || {
-        let mut hits = 0usize;
+        let mut reading = NearestReading::default();
+        let mut openings = std::collections::BTreeMap::<u32, usize>::new();
         for chunk in dev.chunks(hs::SHEET_EVAL_BATCH) {
             let windows: Vec<&CausalWindow> = chunk.iter().collect();
             let (ids, scored, targets) = assemble(&windows);
             if scored.is_empty() {
                 continue;
             }
+            let opens: Vec<bool> = windows
+                .iter()
+                .flat_map(|w| w.scored_corpus_positions.iter())
+                .map(|&p| p > 0 && mask[p - 1] == 0)
+                .collect();
             let hidden = model.hidden(&ids, windows.len(), SHEET_CONTEXT)?;
             let idx = Tensor::from_vec(scored.clone(), scored.len(), model.device())?;
             let best = nearest_scores(&hidden.index_select(&idx, 0)?, &table)?
                 .argmax(1)?
                 .to_vec1::<u32>()?;
-            hits += best.iter().zip(&targets).filter(|(a, b)| a == b).count();
+            for ((pick, target), open) in best.iter().zip(&targets).zip(&opens) {
+                reading.hits += usize::from(pick == target);
+                if *open {
+                    reading.opening_rows += 1;
+                    reading.opening_hits += usize::from(pick == target);
+                    *openings.entry(*target).or_default() += 1;
+                }
+            }
         }
-        Ok(hits)
+        reading.commonest_opening_rows = openings.values().copied().max().unwrap_or(0);
+        Ok(reading)
     })
 }
 
@@ -416,8 +447,8 @@ pub fn root_separation() -> Result<(f64, f64)> {
     Ok((nearest, farthest))
 }
 
-/// The pinned DEV panel's windows.
-fn load_dev(data_root: &Path) -> Result<Vec<CausalWindow>> {
+/// The pinned DEV panel's windows and its response mask.
+fn load_dev(data_root: &Path) -> Result<(Vec<CausalWindow>, Vec<u8>)> {
     let (dev_tokens, dev_mask) = hs::load_pinned_uort_split(
         &data_root.join("ft/dev/tokens.u16"),
         &data_root.join("ft/dev/response_mask.u8"),
@@ -430,7 +461,7 @@ fn load_dev(data_root: &Path) -> Result<Vec<CausalWindow>> {
     )?;
     let (dev_windows, _) =
         hs::build_document_windows(&dev_tokens, &dev_mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
-    Ok(dev_windows)
+    Ok((dev_windows, dev_mask))
 }
 
 /// Read every checkpoint a `run_long` run saved under `run/models`, in step order, as an
@@ -442,7 +473,7 @@ pub fn inspect_run(
     seed: u64,
     device: &Device,
 ) -> Result<Vec<Inspection>> {
-    let dev_windows = load_dev(data_root)?;
+    let (dev_windows, dev_mask) = load_dev(data_root)?;
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
     crate::geometric_stack::set_retention_rates(retain_rates);
     let _guard = ArmGuard;
@@ -475,7 +506,7 @@ pub fn inspect_run(
             let idx = Tensor::from_vec(scored.clone(), scored.len(), device)?;
             Ok(hidden.index_select(&idx, 0)?)
         })?;
-        let nearest_hits = nearest_top1(&model, &dev_windows, seed, step)?;
+        let nearest = nearest_reading(&model, &dev_windows, &dev_mask, seed, step)?;
         let first_cells = model
             .native_head_candidates(&query)?
             .cell_ids()
@@ -488,7 +519,7 @@ pub fn inspect_run(
             checkpoint: name,
             scored_rows: dev.scored_rows,
             top1_hits: dev.top1_hits,
-            nearest_top1_hits: nearest_hits,
+            nearest,
             admitted_hits: dev.admitted_target_hits,
             token_unviolated_hits: dev.token_unviolated_hits,
             token_margin: dev.token_margin,
@@ -553,7 +584,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     if usable.len() < config.batch || usable.iter().any(|w| w.input_ids.len() != SHEET_CONTEXT) {
         return Err(invalid("TRAIN windows are too few or not context-long"));
     }
-    let dev_windows = load_dev(data_root)?;
+    let (dev_windows, dev_mask) = load_dev(data_root)?;
     let prompts = sample_windows(&dev_windows, config.samples);
     println!(
         "[in-space] usable TRAIN windows {} (batch {}, {} steps = {:.2} epochs), DEV windows {}",
@@ -591,7 +622,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             false,
         )?;
         let dev_loss = panel_loss(model, &dev_windows, config.seed, step, false)?;
-        let nearest_hits = nearest_top1(model, &dev_windows, config.seed, step)?;
+        let nearest = nearest_reading(model, &dev_windows, &dev_mask, config.seed, step)?;
         let point = Checkpoint {
             step,
             epoch: (step * config.batch) as f64 / usable.len() as f64,
@@ -599,7 +630,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             dev_top1_hits: dev.top1_hits,
             dev_top8_hits: dev.top8_hits,
             dev_admitted_hits: dev.admitted_target_hits,
-            dev_nearest_top1_hits: nearest_hits,
+            dev_nearest: nearest,
             dev_scored_rows: dev.scored_rows,
             dev_loss,
             dev_token_margin: dev.token_margin,
@@ -610,13 +641,16 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         };
         append_line(&progress, &serde_json::to_string(&point)?)?;
         println!(
-            "[in-space] step {} epoch {:.2} train_loss {} dev top-1 {}/{} nearest {} top-8 {} admitted {} dev_loss {:.5} (token {:.5} address {:.5}) train {:.0}s",
+            "[in-space] step {} epoch {:.2} train_loss {} dev top-1 {}/{} nearest {} (openings {}/{}, commonest {}) top-8 {} admitted {} dev_loss {:.5} (token {:.5} address {:.5}) train {:.0}s",
             step,
             point.epoch,
             train_loss_mean.map_or("-".to_owned(), |v| format!("{v:.5}")),
             dev.top1_hits,
             dev.scored_rows,
-            nearest_hits,
+            nearest.hits,
+            nearest.opening_hits,
+            nearest.opening_rows,
+            nearest.commonest_opening_rows,
             dev.top8_hits,
             dev.admitted_target_hits,
             dev_loss,
