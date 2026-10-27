@@ -4,7 +4,9 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [in-space-trunk-to-text-fl
 
 **Speed.**
 
-- **Training:** `22,756–23,093` context tokens/s with the read and `23,822–24,101` without, two arms per RTX 5090. The read costs about 4%.
+- **Training:** `22,756–23,093` context tokens/s with the read and `23,822–24,101` without, each arm's whole-run figure. Both arms of a seed ran side by side on one RTX 5090, started together (`job.log`).
+  - **The read costs about 7%.** At step `14,336`, with both arms still sharing the GPU, the read arms ran `6.5%` and `7.0%` below their twins.
+  - The whole-run figures show only `4.2%` and `4.5%`. That is because the no-read arms finished `66` and `73` s earlier, and the read arms ran alone for their last stretch.
 - **Decode:** not measured for the read. It re-runs the trunk and the read over the whole window per token, like claude-142's `380–395` tokens/s runner.
 
 ## What did not work, first
@@ -64,7 +66,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [in-space-trunk-to-text-fl
 - I-4: no non-finite loss.
 
 **The item's done-when.**
-- (1): openings at least `197` with top-1 at least `7,002` on one checkpoint. All four arms meet it at one seed each, the no-read arms included, so it is no evidence for the read.
+- (1): openings at least `197` with nearest top-1 at least `7,002` on one checkpoint. Every arm at both seeds meets it, the no-read arms included, so it is no evidence for the read.
 - (2): `R16` at least `0.05` on that same checkpoint. No arm meets it; the highest reading is `0.0171`.
 
 **Evidence.**
@@ -81,7 +83,7 @@ All at `aeedd87df61039de335dc51cd838f84536008389`.
 - **CUDA library tests, RTX 5090:** `95 passed; 0 failed; 5 ignored` (`cargo test --release --locked -p uor-r4-float-train --features cuda --lib`).
 - **The credit test's negative gate:** with the straight-through factor's sign flipped in a scratch copy, `the_credit_pulls_the_key_of_a_helpful_neighbour_toward_the_query` fails (exit `101`), as it must.
   - Both outputs are in `caseyallard/uor-r4-store:results/claude/flock-read-trunk-2026-10-27/checks-aeedd87d/`.
-  - The 16 files this REPORT rests on are listed in `SHA256SUMS-claude-144` there (sha256 `63a87fd5a411af418429c4b877cb7d5307ff0715e87e7f6293e548c0b70eea07`).
+  - The 26 files this REPORT rests on are listed in `SHA256SUMS-claude-144` there (sha256 `3c40e6ee82ce2c4c3c14a78fccd34c31cfe1f7f2430ca47974acdaa5ecea4462`): every arm's training line, `progress.jsonl` and `samples.md`, the `--inspect` and `--reach` outputs, both runs' `job.log`, and both runs' and the head's test outputs.
 - **Host tests:** `cargo test --locked -p uor-r4-float-train --no-fail-fast`, 65 library tests passed, and every other target passed.
 - **`uor-harness loop gates --full`:** 11 of 11 green.
 
@@ -100,7 +102,7 @@ All at `aeedd87df61039de335dc51cd838f84536008389`.
 ## Plain summary
 
 A way for the model to look back at earlier parts of the conversation was added, trained and tested against the same model without it, at two random starting points.
-- **It was used but did not help.** The model still starts most replies the same way, and still looks back only about 8–12 words.
+- **It was used but did not help.** The model still starts most replies the same way, and still looks back only a short way, about as far as before the read was added.
 - **It did not hurt either.** The model's next-word accuracy stayed about 60%.
 - **The test also showed that runs started from different random seeds disagree a lot** on how often the model starts a reply right. Single runs on that measure should not be trusted.
 - **The next attempt should look back by what earlier words were,** not by how similar the model's internal state was.
