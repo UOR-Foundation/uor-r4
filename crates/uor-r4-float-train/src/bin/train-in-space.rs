@@ -1,6 +1,6 @@
 //! `train-in-space --data-root DIR --out DIR [--objective sheet|voronoi|nearest] [--steps N]
 //! [--batch B] [--eval-every K] [--seed S] [--lr X] [--lr-end X] [--decay-mult X]
-//! [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--fix-input-table 0|1] [--flock-read K] [--content-read K] [--samples N] [--reply-tokens N]`
+//! [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--fix-input-table 0|1] [--flock-read K] [--content-read K] [--hamming-read H] [--samples N] [--reply-tokens N]`
 //!
 //! `train-in-space --data-root DIR --inspect RUN [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--seed S]`
 //!
@@ -10,7 +10,7 @@
 //!
 //! `train-in-space --data-root DIR --decode-speed CHECKPOINT [--objective nearest] [--retain-rates 0|1] [--reply-tokens N]`
 //!
-//! `train-in-space --recall PAIRS --out DIR [--steps N] [--batch B] [--eval-every K] [--seed S] [--lr X] [--lr-end X] [--retain-rates 0|1] [--flock-read K] [--content-read K]`:
+//! `train-in-space --recall PAIRS --out DIR [--steps N] [--batch B] [--eval-every K] [--seed S] [--lr X] [--lr-end X] [--retain-rates 0|1] [--flock-read K] [--content-read K] [--hamming-read H]`:
 //! the multi-query associative recall task (`in_space_long::run_recall`), `PAIRS` key-value pairs
 //! per distance bucket in each 192-token window, fresh every step; held-out recall per bucket goes
 //! to `DIR/recall.jsonl`. Needs no `--data-root`.
@@ -59,6 +59,7 @@ fn main() -> Result<()> {
         fix_input_table: false,
         flock_read: 0,
         content_read: 0,
+        hamming_read: 0,
         samples: 6,
         reply_tokens: 48,
     };
@@ -109,6 +110,7 @@ fn main() -> Result<()> {
             "--fix-input-table" => config.fix_input_table = switch(&value)?,
             "--flock-read" => config.flock_read = number(&value)?,
             "--content-read" => config.content_read = number(&value)?,
+            "--hamming-read" => config.hamming_read = number(&value)?,
             "--lr" | "--lr-end" | "--decay-mult" => {
                 let v: f64 = value
                     .parse()

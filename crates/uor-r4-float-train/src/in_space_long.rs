@@ -72,6 +72,9 @@ pub struct LongConfig {
     /// Keep this many earlier positions in a content-keyed read inside the trunk; 0 is no read
     /// (`flock_read_content`).
     pub content_read: usize,
+    /// Hamming flock attention with this many heads after layers 2 and 4; 0 is no read
+    /// (`flock_read_hamming`).
+    pub hamming_read: usize,
     /// Pass no gradient from the input encoding into the shared table
     /// (`geometric_stack::set_input_table_fixed`); it changes training only, never a forward.
     pub fix_input_table: bool,
@@ -129,6 +132,8 @@ pub struct Inspection {
     pub flock_weight_mean_abs: Option<f64>,
     /// The same for the content read, when the checkpoint has one.
     pub content_weight_mean_abs: Option<f64>,
+    /// The same for the Hamming reads, over both depths, when the checkpoint has them.
+    pub hamming_weight_mean_abs: Option<f64>,
 }
 
 /// One fixed DEV prompt with the model's greedy reply and the true reply, as text.
@@ -152,17 +157,41 @@ impl Drop for ArmGuard {
         crate::geometric_stack::set_input_table_fixed(false);
         crate::flock_read::set_flock_read(None);
         crate::flock_read_content::set_content_read(None);
+        crate::flock_read_hamming::set_hamming_reads(None);
     }
 }
 
-/// Set this thread's Flock read and content read from the checkpoint `directory`, each to none
-/// when the checkpoint has none.
+/// Set this thread's Flock read, content read and Hamming reads from the checkpoint `directory`,
+/// each to none when the checkpoint has none.
 fn load_reads(directory: &Path, device: &Device) -> Result<()> {
     crate::flock_read::set_flock_read(crate::flock_read::FlockRead::load(directory, device)?);
     crate::flock_read_content::set_content_read(crate::flock_read_content::ContentRead::load(
         directory, device,
     )?);
+    crate::flock_read_hamming::set_hamming_reads(crate::flock_read_hamming::HammingReads::load(
+        directory, device,
+    )?);
     Ok(())
+}
+
+/// The Hamming reads `config` asks for, set on this thread, with their optimizer; none when off.
+fn start_hamming(
+    config: &LongConfig,
+    device: &Device,
+) -> Result<
+    Option<(
+        crate::flock_read_hamming::HammingReads,
+        crate::flock_read::FlockAdamW,
+    )>,
+> {
+    if config.hamming_read == 0 {
+        return Ok(None);
+    }
+    let reads =
+        crate::flock_read_hamming::HammingReads::new(config.hamming_read, hs::SHEET_WIDTH, device)?;
+    crate::flock_read_hamming::set_hamming_reads(Some(reads.clone()));
+    let opt = crate::flock_read::FlockAdamW::for_vars(&reads.variables())?;
+    Ok(Some((reads, opt)))
 }
 
 const ABSENT: f32 = -1.0e30;
@@ -1027,6 +1056,10 @@ pub fn inspect_run(
                 Some(content) => Some(scalar(content.read.weight_mean_abs()?)?),
                 None => None,
             },
+            hamming_weight_mean_abs: match crate::flock_read_hamming::hamming_reads() {
+                Some(reads) => Some(scalar(reads.weight_mean_abs()?)?),
+                None => None,
+            },
         });
     }
     Ok(readings)
@@ -1041,7 +1074,7 @@ pub const RECALL_BUCKETS: [(usize, usize); 4] = [(2, 8), (9, 32), (33, 96), (97,
 /// Held-out recall windows scored at each checkpoint.
 pub const RECALL_EVAL_WINDOWS: u64 = 128;
 /// The held-out windows' seed offset, so they never repeat a training window.
-const RECALL_EVAL_SEED: u64 = 0x5EED_0F_E7A1;
+const RECALL_EVAL_SEED: u64 = 0x5EED_F00D;
 
 /// One window of the multi-query associative recall task, after
 /// `uor-r4-training/examples/mqar-bench.rs`, and each scored row's distance bucket.
@@ -1208,6 +1241,8 @@ pub fn run_recall(
     } else {
         None
     };
+    // The Hamming reads, when on: their own optimizer, applied inside the trunk.
+    let mut hamming = start_hamming(config, device)?;
     let mut opt_main = StackAdamW::new(&model, hs::SHEET_WEIGHT_DECAY, hs::SHEET_CLIP)?;
     let mut opt_decay = StackAdamW::new(&model, 0.0, hs::SHEET_CLIP)?;
     let held_out: Vec<(CausalWindow, Vec<usize>)> = (0..RECALL_EVAL_WINDOWS)
@@ -1292,6 +1327,9 @@ pub fn run_recall(
         }
         if let Some((read, opt)) = content.as_mut() {
             opt.step(&read.read, &grads, lr)?;
+        }
+        if let Some((reads, opt)) = hamming.as_mut() {
+            opt.step_vars(&reads.variables(), &grads, lr)?;
         }
         opt_decay.update_filtered(&model, &grads, lr * config.decay_mult, |name| {
             name.ends_with("rec.decay")
@@ -1389,6 +1427,7 @@ pub fn gradient_norms(
             )?,
         ));
     }
+    let _hamming = start_hamming(config, device)?;
     let windows: Vec<&CausalWindow> = usable.iter().take(config.batch).collect();
     let (ids, scored, targets) = assemble(&windows);
     let grads = hs::with_gate_mode(HamiltonArm::HamiltonActive, config.seed, 0, false, || {
@@ -1522,6 +1561,8 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     } else {
         None
     };
+    // The Hamming reads, when on: their own optimizer, applied inside the trunk.
+    let mut hamming = start_hamming(config, device)?;
     let mut opt_main = StackAdamW::new(&model, hs::SHEET_WEIGHT_DECAY, hs::SHEET_CLIP)?;
     let mut opt_decay = StackAdamW::new(&model, 0.0, hs::SHEET_CLIP)?;
 
@@ -1641,6 +1682,9 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         if let Some(read) = crate::flock_read_content::content_read() {
             read.save(&directory)?;
         }
+        if let Some(reads) = crate::flock_read_hamming::hamming_reads() {
+            reads.save(&directory)?;
+        }
         Ok(())
     };
 
@@ -1697,6 +1741,9 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         }
         if let Some((content, opt)) = content.as_mut() {
             opt.step(&content.read, &grads, lr)?;
+        }
+        if let Some((reads, opt)) = hamming.as_mut() {
+            opt.step_vars(&reads.variables(), &grads, lr)?;
         }
         opt_decay.update_filtered(&model, &grads, lr * config.decay_mult, |name| {
             name.ends_with("rec.decay")
