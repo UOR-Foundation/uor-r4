@@ -25,7 +25,7 @@ The initial sync dry-run/apply changed only `m1-fresh-panel-transfer` from held 
 
 ## Owner approval
 
-Casey directed: "Then run the loop as PART 3 of the run file says" and "After it merges, run `~/.cargo/bin/cargo run -q --locked -p xtask -- roadmap sync`, a dry run first, then weekly." This ORDER performs that loop/PM render duty and regenerates the AGENTS lesson block without hand-editing its rules; it changes no owner rule or constraint.
+At `2026-10-26T06:34:45Z`, Casey directed: "Then run the loop as PART 3 of the run file says" and "After it merges, run `~/.cargo/bin/cargo run -q --locked -p xtask -- roadmap sync`, a dry run first, then weekly." This ORDER performs that loop/PM render duty and regenerates the AGENTS.md lesson block without hand-editing its rules; it changes no owner rule or constraint.
 
 ## Stop and decide if
 
