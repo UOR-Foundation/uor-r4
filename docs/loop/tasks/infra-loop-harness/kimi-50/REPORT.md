@@ -10,20 +10,23 @@ References #2904 and #3317. Generated render only; no item completion.
 
 ## What changed
 
-STATE, HANDOFF, LESSONS and the AGENTS lesson block are regenerated at `149e5f422f805c82622597bc06f7fd37eacb8f80`. `roadmap render` confirms the current README; no item, bar, threshold, result or code changed. This ORDER/REPORT is the only non-generated addition.
+STATE, HANDOFF, LESSONS and the AGENTS lesson block are regenerated at `5709a65072650fccacbd807858fb246eeb46f0b6`. `roadmap render` confirms the current README; no item, bar, threshold, result or code changed. This ORDER/REPORT is the only non-generated addition.
 
 ## Measurements
 
-`roadmap check`: 95 items OK (12 ready, 11 held, 1 decision, 71 done), including antigravity-110's M1 close already in the merge base. No experimental measurement or fresh-panel opening by this unit.
+`roadmap check`: 95 items OK (11 ready, 11 held, 1 decision, 72 done), including antigravity-110's M1 close and antigravity-111's fresh-panel completion in the merge base. No experimental measurement or fresh-panel opening by this unit.
 
 ## Checks run at the head
 
-- `uor-harness loop render --at 149e5f422f805c82622597bc06f7fd37eacb8f80`: all four non-roadmap views written.
+- `uor-harness loop render --at 5709a65072650fccacbd807858fb246eeb46f0b6`: all four non-roadmap views written.
 - `uor-harness loop render --check`: all four match at that stamp.
 - `~/.cargo/bin/cargo run -q --locked -p xtask -- roadmap render`: README rendered from current inputs.
 - `~/.cargo/bin/cargo run -q --locked -p xtask -- roadmap check`: PASS, 95 items.
 - `~/.cargo/bin/cargo run -q --locked -p xtask -- roadmap render --check`: README current.
-- Full gates, local policy, report check, fresh exact-head review, required checks, queue and fresh-main verification are required.
+- `uor-harness loop gates --full`: all 11 gates GREEN at `63407a83`.
+- `uor-harness loop pr-check --local`: PASS at `63407a83`, including owner approval for AGENTS.md; generated-view scope is the only advisory WARN.
+- `uor-harness loop report --check --order docs/loop/tasks/infra-loop-harness/kimi-50/ORDER.md`: PASS at `63407a83`.
+- Fresh exact-head review, required checks, queue and fresh-main verification are required.
 
 ## Skills used
 

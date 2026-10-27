@@ -1,6 +1,6 @@
 # ORDER: infra-loop-harness, kimi-50
 
-Lab: kimi. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `149e5f422f805c82622597bc06f7fd37eacb8f80`. Setup row: 8 (notes/roadmap migration and render refresh).
+Lab: kimi. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `5709a65072650fccacbd807858fb246eeb46f0b6`. Setup row: 8 (notes/roadmap migration and render refresh).
 
 ## Goal
 
@@ -18,7 +18,7 @@ Render the #3317 fresh-panel item prose update and the other shared views at tha
 
 ## Done when
 
-- All views match their render at `149e5f422f805c82622597bc06f7fd37eacb8f80`; roadmap check and roadmap render --check pass.
+- All views match their render at `5709a65072650fccacbd807858fb246eeb46f0b6`; roadmap check and roadmap render --check pass.
 - Full gates/local policy and REPORT pass; fresh exact-head review, queue and fresh-main verification complete.
 
 ## Owner approval
