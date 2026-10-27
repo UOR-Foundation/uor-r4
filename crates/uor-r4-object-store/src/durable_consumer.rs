@@ -434,16 +434,26 @@ impl DurableObjectMemoryStore {
         }
         let ingested = ingest(store, tokenizer, turn_bytes)?;
         let mut occurrence_indices = Vec::new();
+        let mut cov_start = None;
+        let mut cov_end = None;
         for occ in ingested.bindings.occurrences() {
             let r = occ.byte_range();
             if r.end > value_range.start && r.start < value_range.end {
-                if r.start < value_range.start || r.end > value_range.end {
-                    return Err(Error::BindingMismatch);
+                if let Some(prev_end) = cov_end {
+                    if r.start != prev_end {
+                        return Err(Error::BindingMismatch);
+                    }
+                } else {
+                    cov_start = Some(r.start);
                 }
+                cov_end = Some(r.end);
                 occurrence_indices.push(occ.index());
             }
         }
-        if occurrence_indices.is_empty() {
+        let (Some(c_start), Some(c_end)) = (cov_start, cov_end) else {
+            return Err(Error::BindingMismatch);
+        };
+        if c_start > value_range.start || c_end < value_range.end {
             return Err(Error::BindingMismatch);
         }
         let provenance = FactProvenance {
@@ -695,6 +705,8 @@ fn verify_provenance<B: RecordBackend>(
     let mut assembled = Vec::new();
     let mut token_ids = Vec::new();
     reserve(&mut token_ids, prov.occurrence_indices.len())?;
+    let mut cov_start = None;
+    let mut cov_end = None;
     for &occ_idx in &prov.occurrence_indices {
         let idx = usize::try_from(occ_idx).map_err(|_| Error::InvalidRange)?;
         let occ = prov
@@ -702,15 +714,34 @@ fn verify_provenance<B: RecordBackend>(
             .occurrences()
             .get(idx)
             .ok_or(Error::InvalidRange)?;
+        let r = occ.byte_range();
+        if let Some(prev_end) = cov_end {
+            if r.start != prev_end {
+                return Err(Error::BindingMismatch);
+            }
+        } else {
+            cov_start = Some(r.start);
+        }
+        cov_end = Some(r.end);
         let tok_bytes = tokenizer.token_bytes(occ.token_id(), limits.max_returned_bytes)?;
-        let occ_verified = Store::range_from(backend, &prov.manifest, occ.byte_range(), limits)?;
+        let occ_verified = Store::range_from(backend, &prov.manifest, r, limits)?;
         if occ_verified.bytes() != tok_bytes.as_slice() {
             return Err(Error::BindingMismatch);
         }
         assembled.extend_from_slice(occ_verified.bytes());
         token_ids.push(occ.token_id());
     }
-    if assembled != span_verified.bytes() {
+    let (Some(c_start), Some(c_end)) = (cov_start, cov_end) else {
+        return Err(Error::BindingMismatch);
+    };
+    if c_start > prov.value_range.start || c_end < prov.value_range.end {
+        return Err(Error::BindingMismatch);
+    }
+    let rel_start =
+        usize::try_from(prov.value_range.start - c_start).map_err(|_| Error::InvalidRange)?;
+    let rel_end =
+        usize::try_from(prov.value_range.end - c_start).map_err(|_| Error::InvalidRange)?;
+    if assembled.get(rel_start..rel_end) != Some(span_verified.bytes()) {
         return Err(Error::BindingMismatch);
     }
     Ok((

@@ -442,8 +442,12 @@ pub fn evaluate_m3_panel_with_scorer(
                     ..
                 } = outcome
                 {
+                    let decoded_cover = tokenizer.decode_bytes(token_ids);
                     if value_bytes == expected.as_bytes()
-                        && tokenizer.decode_bytes(token_ids) == expected.as_bytes()
+                        && !token_ids.is_empty()
+                        && decoded_cover
+                            .windows(expected.len())
+                            .any(|w| w == expected.as_bytes())
                         && version == 1
                         && action == FactAction::Assert
                         && !conflict

@@ -298,13 +298,14 @@ fn byte_level_ascii_tokenizer() -> ByteBpeTokenizer {
         vocab.insert((b as char).to_string(), json!(next_id));
         next_id += 1;
     }
+    vocab.insert("ĠL".to_string(), json!(next_id));
     let spec = json!({
         "pre_tokenizer": {"type": "ByteLevel", "add_prefix_space": false},
         "added_tokens": [],
         "model": {
             "type": "BPE",
             "vocab": vocab,
-            "merges": []
+            "merges": ["Ġ L"]
         }
     });
     ByteBpeTokenizer::from_tokenizer_json_bytes(
