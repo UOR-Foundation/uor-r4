@@ -1,8 +1,8 @@
 # Prep sheet: a Flock read on the in-space trunk, against no read (in-space-trunk-to-text, claude-144, 27 Oct 2026)
 
-Lab: claude. Item: [in-space-trunk-to-text](../../roadmap/items/in-space-trunk-to-text.md). Order: [claude-144](../../loop/tasks/in-space-trunk-to-text/claude-144/ORDER.md). Code: branch `claude/flock-read-trunk` at `7c527896f2fbf5acc13726b062a2cc2c33e453fa`. The probe ladder ran `d47e2c1a`, which differs only in `--inspect` reporting the read's weight.
+Lab: claude. Item: [in-space-trunk-to-text](../../roadmap/items/in-space-trunk-to-text.md). Order: [claude-144](../../loop/tasks/in-space-trunk-to-text/claude-144/ORDER.md). Code: branch `claude/flock-read-trunk` at `e7918f9a9914f73e777885f9442ddf730e54e65f`. The probe ladder ran `d47e2c1a`. Since then the code changed in two ways: `--inspect` reports the read's weight, and a pick that is not real points at its window's start. The run's first step re-runs the CUDA tests on its own build.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT (a fresh non-author reviewer, 27 Oct 2026, posted on #2028; D67 pre-run review PASS)
 
 ## The question
 
@@ -32,7 +32,7 @@ Definitions, per arm:
 - **`T`** = `nearest.hits`.
 
 The two tests:
-- **Openings pass** when `O_read ≥ max(197, O_none + 36)`. 36 is three binomial standard deviations at the commonest-token rate, `√(1,226 · 0.131 · 0.869) = 11.8`.
+- **Openings pass** when `O_read ≥ max(197, O_none + 36)`. 36 is three binomial standard deviations of one arm's count at the commonest-token rate, `√(1,226 · 0.131 · 0.869) = 11.8`. That is about 2.2 standard deviations of the difference between two independent arms; the threshold is fixed.
 - **Reach pass** when `R16_read ≥ max(0.05, 2 · R16_none)`.
 
 | | Reach pass | Reach fails |
@@ -41,7 +41,7 @@ The two tests:
 | **Openings fail** | **C.** The read reaches far, but its payload does not help openings. Unlocks a unit on the payload (the earlier point itself, or a carried rotation). | **D.** The read is not used. Unlocks a unit on its credit and its start (I-3 tells which). |
 
 - **Flag F**, reported beside the cell: `T_read < T_none − 500`, meaning the read costs fit.
-- Both seeds must land in the same cell for the reading to count. A split is inconclusive.
+- Both seeds must land in the same cell for the reading to count. If they split, a third seed (3) is run on both arms, and the cell two of the three seeds share is the reading.
 - A missing number gives no cell: the step is rerun, never read as a fail.
 - `R16` averages over openings with at least 16 tokens before them, and `shift(0)` over all openings. The bias is the same for every arm.
 
@@ -53,7 +53,7 @@ The two tests:
   - one AdamW step matches the hand-computed step.
 
   The probe ladder's build passed 94, failed 0.
-- **I-2:** each read arm's step-0 DEV reading equals its twin's exactly: nearest hits, openings and dev loss.
+- **I-2:** each read arm's step-0 DEV reading equals its twin's exactly: nearest hits and openings, which go through the read. The printed dev loss is the writer's panel loss, which does not go through the read, so its match is trivial.
 - **I-3:** the read's weight moves off 0. The mean of `|w|` in the step-16,384 `flock_read.safetensors` is reported. If it stays under `1e-3`, cell D's cause is the start, not the read.
 - **I-4:** no non-finite loss; the runner stops on one.
 
