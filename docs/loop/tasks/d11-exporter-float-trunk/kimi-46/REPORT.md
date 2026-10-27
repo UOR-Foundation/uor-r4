@@ -13,7 +13,7 @@ References #2820. The item is not done and no `Closes` claim is made.
 
 ## What changed
 
-`loop pr-check --local` reports code 2 files +757/−89 and docs 6 files +342/−0; tests are included in the code files, and no generated files changed. The ORDER gave no numeric size estimate, so a ratio is not available.
+`loop pr-check --local` reports code 2 files +765/−89 and docs 6 files +342/−0; tests are included in the code files, and no generated files changed. The ORDER gave no numeric size estimate, so a ratio is not available.
 
 - `--steps` accepts only 1,024 or 2,048 and is validated before CUDA opens. The default remains 1,024; modes that do not consume the option reject it rather than silently ignoring it.
 - Longer training uses the requested batch count and adds the final 2,048 evaluation point without changing the earlier points, learning rates, 1:1 dual loss, seeds or data.
