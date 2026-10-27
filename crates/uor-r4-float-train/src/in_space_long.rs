@@ -69,6 +69,9 @@ pub struct LongConfig {
     /// Keep this many earlier positions in a Flock read on the trunk's points; 0 is no read
     /// (`flock_read`).
     pub flock_read: usize,
+    /// Keep this many earlier positions in a content-keyed read inside the trunk; 0 is no read
+    /// (`flock_read_content`).
+    pub content_read: usize,
     /// Pass no gradient from the input encoding into the shared table
     /// (`geometric_stack::set_input_table_fixed`); it changes training only, never a forward.
     pub fix_input_table: bool,
@@ -84,7 +87,8 @@ pub struct Checkpoint {
     pub train_loss_mean: Option<f64>,
     /// The writer's own DEV panel (`hamilton_sheet::evaluate_dev_panel`): its top-1, top-8 and
     /// admitted counts, and `dev_loss` with the token and address margins below, read the trunk
-    /// without the Flock read. `dev_nearest` goes through [`crate::flock_read::points`].
+    /// without the Flock read (a content read, being inside the trunk, is in them). `dev_nearest`
+    /// goes through [`crate::flock_read::points`].
     pub dev_top1_hits: usize,
     pub dev_top8_hits: usize,
     pub dev_admitted_hits: usize,
@@ -123,6 +127,8 @@ pub struct Inspection {
     /// The Flock read's per-coordinate weight, mean of its absolute values, when the checkpoint
     /// has a read.
     pub flock_weight_mean_abs: Option<f64>,
+    /// The same for the content read, when the checkpoint has one.
+    pub content_weight_mean_abs: Option<f64>,
 }
 
 /// One fixed DEV prompt with the model's greedy reply and the true reply, as text.
@@ -145,7 +151,18 @@ impl Drop for ArmGuard {
         crate::geometric_stack::set_reflected_floor(false);
         crate::geometric_stack::set_input_table_fixed(false);
         crate::flock_read::set_flock_read(None);
+        crate::flock_read_content::set_content_read(None);
     }
+}
+
+/// Set this thread's Flock read and content read from the checkpoint `directory`, each to none
+/// when the checkpoint has none.
+fn load_reads(directory: &Path, device: &Device) -> Result<()> {
+    crate::flock_read::set_flock_read(crate::flock_read::FlockRead::load(directory, device)?);
+    crate::flock_read_content::set_content_read(crate::flock_read_content::ContentRead::load(
+        directory, device,
+    )?);
+    Ok(())
 }
 
 const ABSENT: f32 = -1.0e30;
@@ -752,7 +769,7 @@ pub fn context_reach(
     crate::geometric_stack::set_reflected_floor(reflect_floor);
     let _guard = ArmGuard;
     let model = StackModel::load(checkpoint, device)?;
-    crate::flock_read::set_flock_read(crate::flock_read::FlockRead::load(checkpoint, device)?);
+    load_reads(checkpoint, device)?;
     let firsts: Vec<(&CausalWindow, usize)> = dev_windows
         .iter()
         .filter_map(|w| {
@@ -892,7 +909,7 @@ pub fn decode_speed(
     crate::geometric_stack::set_reflected_floor(reflect_floor);
     let _guard = ArmGuard;
     let model = StackModel::load(checkpoint, device)?;
-    crate::flock_read::set_flock_read(crate::flock_read::FlockRead::load(checkpoint, device)?);
+    load_reads(checkpoint, device)?;
     let source = dev_windows
         .iter()
         .find(|w| w.input_ids.iter().all(|&id| id != hs::SHEET_BOS_ID))
@@ -956,7 +973,7 @@ pub fn inspect_run(
             .unwrap_or_default();
         let step: usize = name.trim_start_matches("step-").parse().unwrap_or(0);
         let model = StackModel::load(&dir, device)?;
-        crate::flock_read::set_flock_read(crate::flock_read::FlockRead::load(&dir, device)?);
+        load_reads(&dir, device)?;
         let (dev, _) = hs::evaluate_dev_panel(
             &model,
             &dev_windows,
@@ -1004,6 +1021,10 @@ pub fn inspect_run(
             )?,
             flock_weight_mean_abs: match crate::flock_read::flock_read() {
                 Some(read) => Some(scalar(read.weight_mean_abs()?)?),
+                None => None,
+            },
+            content_weight_mean_abs: match crate::flock_read_content::content_read() {
+                Some(content) => Some(scalar(content.read.weight_mean_abs()?)?),
                 None => None,
             },
         });
@@ -1082,6 +1103,15 @@ pub fn gradient_norms(
             hs::SHEET_WIDTH,
             device,
         )?));
+    }
+    if config.content_read > 0 {
+        crate::flock_read_content::set_content_read(Some(
+            crate::flock_read_content::ContentRead::new(
+                config.content_read,
+                hs::SHEET_WIDTH,
+                device,
+            )?,
+        ));
     }
     let windows: Vec<&CausalWindow> = usable.iter().take(config.batch).collect();
     let (ids, scored, targets) = assemble(&windows);
@@ -1203,6 +1233,19 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         None
     };
     let mut flock = flock;
+    // The content read, when on: claude-144's parameters and optimizer, applied inside the trunk.
+    let mut content = if config.content_read > 0 {
+        let read = crate::flock_read_content::ContentRead::new(
+            config.content_read,
+            hs::SHEET_WIDTH,
+            device,
+        )?;
+        crate::flock_read_content::set_content_read(Some(read.clone()));
+        let opt = crate::flock_read::FlockAdamW::new(&read.read)?;
+        Some((read, opt))
+    } else {
+        None
+    };
     let mut opt_main = StackAdamW::new(&model, hs::SHEET_WEIGHT_DECAY, hs::SHEET_CLIP)?;
     let mut opt_decay = StackAdamW::new(&model, 0.0, hs::SHEET_CLIP)?;
 
@@ -1319,6 +1362,9 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         if let Some(read) = crate::flock_read::flock_read() {
             read.save(&directory)?;
         }
+        if let Some(read) = crate::flock_read_content::content_read() {
+            read.save(&directory)?;
+        }
         Ok(())
     };
 
@@ -1372,6 +1418,9 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         opt_main.update_filtered(&model, &grads, lr, |name| !name.ends_with("rec.decay"))?;
         if let Some((read, opt)) = flock.as_mut() {
             opt.step(read, &grads, lr)?;
+        }
+        if let Some((content, opt)) = content.as_mut() {
+            opt.step(&content.read, &grads, lr)?;
         }
         opt_decay.update_filtered(&model, &grads, lr * config.decay_mult, |name| {
             name.ends_with("rec.decay")
