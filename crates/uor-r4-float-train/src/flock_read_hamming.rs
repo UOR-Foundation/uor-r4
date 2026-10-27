@@ -33,7 +33,6 @@ use std::path::Path;
 
 use candle_core::{DType, Device, Tensor, Var};
 
-use crate::flock_read::choose_nearest;
 use crate::geometric_stack::hamilton_gate;
 use crate::{invalid, Result};
 
@@ -287,7 +286,7 @@ impl HammingRead {
         for h in 0..self.heads {
             let q = query.narrow(1, h * head_width, head_width)?.contiguous()?;
             let k = key.narrow(1, h * head_width, head_width)?.contiguous()?;
-            let (picks, real) = choose_nearest(&q, &k, batch, time, HAMMING_KEPT)?;
+            let (picks, real) = choose_sorted(&q, &k, batch, time, HAMMING_KEPT)?;
             // A pick that is not real points at its window's start, whose successor is still
             // inside the window, and carries weight 0.
             let picks = real.where_cond(&picks, &starts.broadcast_as(picks.shape())?)?;
@@ -322,6 +321,43 @@ impl HammingRead {
     }
 }
 
+/// A distance no real pair reaches: positions that are not earlier.
+const FAR: f32 = 1.0e30;
+
+/// The `neighbours` earlier positions nearest each row of `query` in mean L1, for all `batch`
+/// windows of `time` at once, as global row indices `(batch * time, kept)`, and which are real.
+/// One sort per call, where claude-144's choice (`flock_read::choose_nearest`) takes `kept` argmin
+/// rounds per window; the same nearest set, hard and detached. Ties may come out in another order.
+pub(crate) fn choose_sorted(
+    query: &Tensor,
+    key: &Tensor,
+    batch: usize,
+    time: usize,
+    neighbours: usize,
+) -> Result<(Tensor, Tensor)> {
+    let device = query.device();
+    let kept = neighbours.min(time.saturating_sub(1)).max(1);
+    let width = query.dim(1)?;
+    let rows = batch * time;
+    let q = query.detach().reshape((batch, time, 1, width))?;
+    let k = key.detach().reshape((batch, 1, time, width))?;
+    let distance = q.broadcast_sub(&k)?.abs()?.mean(3)?.reshape((rows, time))?;
+    let earlier: Vec<u8> = (0..rows * time)
+        .map(|i| u8::from(i % time < (i / time) % time))
+        .collect();
+    let earlier = Tensor::from_vec(earlier, (rows, time), device)?;
+    let far = Tensor::full(FAR, (rows, time), device)?;
+    let masked = earlier.where_cond(&distance, &far)?.contiguous()?;
+    let order = masked
+        .arg_sort_last_dim(true)?
+        .narrow(1, 0, kept)?
+        .contiguous()?;
+    let real = masked.gather(&order, 1)?.lt(FAR / 2.0)?;
+    let starts: Vec<u32> = (0..rows).map(|r| ((r / time) * time) as u32).collect();
+    let starts = Tensor::from_vec(starts, (rows, 1), device)?;
+    Ok((order.broadcast_add(&starts)?, real))
+}
+
 /// The Hamming distance between ±1 codes, `(a − b)² / 4` summed over the last dimension: the
 /// popcount of the XOR forward. Its gradient is zero on agreeing bits and pulls a disagreeing bit
 /// toward the other code.
@@ -341,6 +377,41 @@ mod tests {
         coordinates[63] = 0.0;
         coordinates[65] = 2.0;
         assert_eq!(pack_signs(&coordinates), vec![1 | (1 << 63), 1 << 1]);
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_sorted_choice_keeps_the_same_nearest_set_as_claude_144s() {
+        let device = Device::new_cuda(0).unwrap();
+        let (batch, time, width) = (2, 20, 8);
+        let values: Vec<f32> = (0..batch * time * width)
+            .map(|i| (((i * 2_654_435_761) % 10_007) as f32) / 997.0)
+            .collect();
+        let points = Tensor::from_vec(values, (batch * time, width), &device).unwrap();
+        let (fast, fast_real) = choose_sorted(&points, &points, batch, time, 4).unwrap();
+        let (slow, slow_real) =
+            crate::flock_read::choose_nearest(&points, &points, batch, time, 4).unwrap();
+        let sets = |picks: Tensor, real: Tensor| -> Vec<Vec<u32>> {
+            let (picks, real) = (
+                picks.to_vec2::<u32>().unwrap(),
+                real.to_vec2::<u8>().unwrap(),
+            );
+            picks
+                .into_iter()
+                .zip(real)
+                .map(|(row, ok)| {
+                    let mut kept: Vec<u32> = row
+                        .into_iter()
+                        .zip(ok)
+                        .filter(|(_, o)| *o == 1)
+                        .map(|(p, _)| p)
+                        .collect();
+                    kept.sort_unstable();
+                    kept
+                })
+                .collect()
+        };
+        assert_eq!(sets(fast, fast_real), sets(slow, slow_real));
     }
 
     #[cfg(feature = "cuda")]
