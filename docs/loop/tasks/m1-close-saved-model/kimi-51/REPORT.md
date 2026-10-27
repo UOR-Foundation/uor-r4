@@ -10,7 +10,7 @@ Harness CI on the render PR failed `preprules::tests::the_real_sheets_pass_the_s
 
 ## What changed
 
-The existing checkpoint/control content is under Base artifact, the pinned corpus under Data split, and the GPU protocol under Steps. Cost/power and verdict are renumbered consistently. No result, bar, threshold, evidence, code or issue state changed. Size: docs 3 files +78/−6; no generated files. The ORDER gave no numeric estimate, so a ratio is not available.
+The existing checkpoint/control content is under Base artifact, the pinned corpus under Data split, and the GPU protocol under Steps. Cost/power and verdict are renumbered consistently. No result, bar, threshold, evidence, code or issue state changed. Size: docs 3 files +80/−6 and receipts 1 file +11/−0; no generated files. The ORDER gave no numeric estimate, so a ratio is not available.
 
 ## Measurements
 
