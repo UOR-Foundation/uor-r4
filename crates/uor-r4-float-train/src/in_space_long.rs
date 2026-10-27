@@ -276,6 +276,25 @@ pub struct NearestReading {
     pub opening_hits: usize,
     /// Openings whose target is DEV's most common opening token: what always naming it scores.
     pub commonest_opening_rows: usize,
+    /// How many distinct tokens the openings are decoded as.
+    pub opening_distinct_picks: usize,
+    /// Each query dimension's standard deviation across the opening rows, and across all rows,
+    /// averaged over dimensions: whether the prompt moves the opening point at all.
+    pub opening_query_spread: f64,
+    pub query_spread: f64,
+}
+
+/// Each column's standard deviation across `rows`' rows, averaged over columns.
+fn spread(rows: &Tensor) -> Result<f64> {
+    let centred = rows.broadcast_sub(&rows.mean_keepdim(0)?)?;
+    Ok(f64::from(
+        centred
+            .sqr()?
+            .mean(0)?
+            .sqrt()?
+            .mean_all()?
+            .to_scalar::<f32>()?,
+    ))
 }
 
 /// [`NearestReading`] over the DEV windows; `mask` is DEV's response mask, by corpus position.
@@ -290,6 +309,8 @@ fn nearest_reading(
     hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, step, false, || {
         let mut reading = NearestReading::default();
         let mut openings = std::collections::BTreeMap::<u32, usize>::new();
+        let mut picks = std::collections::BTreeSet::<u32>::new();
+        let (mut all_queries, mut opening_queries) = (Vec::new(), Vec::new());
         for chunk in dev.chunks(hs::SHEET_EVAL_BATCH) {
             let windows: Vec<&CausalWindow> = chunk.iter().collect();
             let (ids, scored, targets) = assemble(&windows);
@@ -303,7 +324,8 @@ fn nearest_reading(
                 .collect();
             let hidden = model.hidden(&ids, windows.len(), SHEET_CONTEXT)?;
             let idx = Tensor::from_vec(scored.clone(), scored.len(), model.device())?;
-            let best = nearest_scores(&hidden.index_select(&idx, 0)?, &table)?
+            let query = hidden.index_select(&idx, 0)?.detach();
+            let best = nearest_scores(&query, &table)?
                 .argmax(1)?
                 .to_vec1::<u32>()?;
             for ((pick, target), open) in best.iter().zip(&targets).zip(&opens) {
@@ -312,10 +334,26 @@ fn nearest_reading(
                     reading.opening_rows += 1;
                     reading.opening_hits += usize::from(pick == target);
                     *openings.entry(*target).or_default() += 1;
+                    picks.insert(*pick);
                 }
             }
+            let at: Vec<u32> = (0..opens.len() as u32)
+                .filter(|&i| opens[i as usize])
+                .collect();
+            if !at.is_empty() {
+                let at = Tensor::from_vec(at.clone(), at.len(), model.device())?;
+                opening_queries.push(query.index_select(&at, 0)?);
+            }
+            all_queries.push(query);
         }
         reading.commonest_opening_rows = openings.values().copied().max().unwrap_or(0);
+        reading.opening_distinct_picks = picks.len();
+        if !opening_queries.is_empty() {
+            reading.opening_query_spread = spread(&Tensor::cat(&opening_queries, 0)?)?;
+        }
+        if !all_queries.is_empty() {
+            reading.query_spread = spread(&Tensor::cat(&all_queries, 0)?)?;
+        }
         Ok(reading)
     })
 }
