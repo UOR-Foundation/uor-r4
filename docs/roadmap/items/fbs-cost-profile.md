@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: true
 depends_on: []
 notebook: docs/research/notebook/float-training.md
-scope: [crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/src/geometric_stack_native.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, docs/harness/prep/fbs-cost-profile*, docs/loop/tasks/fbs-cost-profile/**, docs/research/notebook/float-training.md, docs/roadmap/items/fbs-cost-profile.md]
+scope: [crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/src/geometric_stack_native.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/src/stack/session.rs, docs/harness/prep/fbs-cost-profile*, docs/loop/tasks/fbs-cost-profile/**, docs/research/notebook/float-training.md, docs/roadmap/items/fbs-cost-profile.md]
 ---
 
 ## Why it matters
