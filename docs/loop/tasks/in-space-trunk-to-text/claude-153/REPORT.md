@@ -57,7 +57,8 @@ The reading, by the sheet's bars: **(w), width 512 with 8 read heads on the pinn
   - **Copies:** `2,394` and `3,265`, against (a)'s `1,517` and `2,933`.
   - **`R16`:** `0.034` and `0.032`, against (a)'s `0.020` and `0.010`.
 
-  (a)'s own seeds differ by `1,416` copies and `1,245` in `T`, more than these gains. So the direction favors width, and this unit cannot confirm it. The sheet stated this limit before the runs.
+  - **On copies and `T`,** (a)'s own seeds differ by `1,416` copies and `1,245` in `T`, more than these gains. So the direction favors width, and this unit cannot confirm it. The sheet stated this limit before the runs.
+  - **On `R16`,** the gain is larger than (a)'s spread: (a)'s seeds differ by `0.010`, and (w) leads by `0.014` and `0.022`. `R16` is not one of the sheet's bars, so this changes no cell. It is the one difference here that clears (a)'s seed noise, though it stays below the item's `0.05`.
 - **At width 512, the read carries the copying.** (w) against (w0), the same trunk without the read:
   - copies `+1,363` and `+2,267`;
   - `T` `+1,054` and `+2,141`;
@@ -97,7 +98,7 @@ At step 16,384, seed 1 / seed 2:
 - **I-1:** `123 passed; 0 failed; 5 ignored` on each of the three pods' builds, as on claude-152's pods. The cell objective's negative gate was not rerun: the code and the binary are claude-152's, byte for byte.
 - **I-2:** every arm's step-0 `dev_nearest` equals claude-152's (c) at the same seed: `1/0/756` at seed 1 and `3/1/659` at seed 2. It was checked on each 256-step probe and again on each arm. Each arm's `config.json` records width 512, its head count (`8` or `0`) and `"train_split": null`.
 - **I-3:** (w)'s read weight ends above 0 at both seeds (`0.630` and `0.617`).
-- **I-4:** all 17 losses of every arm are finite.
+- **I-4:** all 17 losses of every arm are finite: 8 training-loss means and 9 DEV losses (`progress.jsonl`; the job log's I-4 line).
 
 ### Evidence
 
@@ -116,13 +117,24 @@ At step 16,384, seed 1 / seed 2:
 - **Cost:** 3.50 pod-hours, about `$2.57` in all. All pods are down.
   - Pods 1 and 2: Vast RTX 5090s at `$0.563/h` (`$0.71` and `$0.62`).
   - Pod 3: an RTX 5090 at `$1.093/h` (`$1.02`).
-  - A fourth create came up exited and was deleted after 12 minutes; the pod ledger counts it at `$0.22`. (w0) seed 2 ran on pod 3 instead, the sheet's fallback.
+  - A fourth create, at `$1.106/h`, came up exited and was deleted after 12 minutes; the pod ledger counts it at `$0.22`. (w0) seed 2 ran on pod 3 instead, the sheet's fallback.
 
 ## Checks run at the head
 
 This unit changes no code. `git diff e2f15d3fc -- crates/ Cargo.lock` is empty at the head; its commits touch only the ORDER, the sheet, this REPORT and the notebook.
 
-TODO-CHECKS
+- **CUDA library tests on an RTX 5090,** on each of the three pods' builds: `123 passed; 0 failed; 5 ignored`.
+- **`uor-harness loop report --check`:** PASS.
+- **`uor-harness loop gates --full`:** 11 of 11 green.
+- **In-unit reviews,** each by a fresh reviewer that never saw the plan:
+  - **FIT round 1: NOT FIT.** The one blocker was flag F at seed 2, inside (a)'s seed spread. It was fixed, with three smaller points (listed in the sheet).
+  - **FIT round 2: FIT, and the pre-run review: PASS.** Its notes are applied (in the sheet).
+  - **The claims check of this REPORT and its notebook row: CHANGES.** It confirmed about 60 claims against the sealed tars and the pod ledger, and found:
+    - one wrong statement: (w)'s `R16` lead was called smaller than (a)'s seed spread, and it is larger. Fixed here and in the notebook row;
+    - one claim it could not confirm: the count of 17 losses in I-4, now stated as 8 training-loss means and 9 DEV losses;
+    - one cosmetic gap: the fourth pod's rate, now given.
+
+    A fresh re-review of the fix at the final head: APPROVE.
 
 ## Skills used
 
@@ -133,7 +145,7 @@ TODO-CHECKS
 
 - **The openings, by the sheet's D.** No arm in two units moves them past the bar. claude-145's probe names `607` openings from the prompt's first 8 tokens, beyond the trunk's reach: `R16` is at most `0.034`, against the item's `0.05`. The next unit carries the prompt's first words to the reply's first token directly, rather than widening the trunk.
 - **Read openings over several checkpoints.** They swing by up to `124` between adjacent checkpoints of one run. A later sheet can bar the mean of the last three checkpoints rather than the last one alone.
-- **The direction for width is unconfirmed.** Seed for seed, (w) is ahead of (a) on fit, copies and reach, by less than (a)'s seed spread. More seeds, or a lower-noise reading, would settle it. By the sheet, width 256 stays until then.
+- **The direction for width is unconfirmed on the bars.** Seed for seed, (w) is ahead of (a) on fit and copies by less than (a)'s seed spread, and on reach by more (`R16`, not a bar). More seeds, or a lower-noise reading, would settle it. By the sheet, width 256 stays until then.
 - **Free replies do not show the copying.** Teacher-forced copies reach 79%, but no greedy reply repeats a number. A decode-side test of copying (does the free reply contain the user's token?) would measure what a user sees.
 - **Growing a trained trunk instead of restarting** waits until the recipe settles (Casey, 28 Oct: "lets settle before we push").
 - **claude-152's four low-severity code-review notes** stay open for the next unit that touches that code.
