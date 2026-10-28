@@ -61,7 +61,7 @@ The reading, by the sheet's bars: **(o), the opening read on the turn's first 8 
   - "Remember, the code word is kandgind." gets "Rem is kandgal.";
   - "Add 4 and 2." gets "A new is asking up with exciting can number wonderful feel when friend like.".
 
-  (oL) seed 2 gets "Got it, your friend is 524." and "Anytime!" for the same two prompts as the last two. The user's numbers come back nearly, not exactly.
+  (oL) seed 2 gets "Got it, your friend is 524." for the lucky-number prompt and "Anytime!" for "Add 4 and 2.". The user's numbers come back nearly, not exactly.
 - **Fit at (o) seed 2 is below (a)'s:** `T = 9,487`, against `10,573` at the same seed (flag F is `T < 8,828`, so it is not set).
 
 ## What worked
@@ -71,7 +71,7 @@ The reading, by the sheet's bars: **(o), the opening read on the turn's first 8 
   - It enters the trunk with no effect at step 0 (I-2), and the evaluation sees it (I-5).
   - Its own tests pass on the GPU, and three negative gates bite.
 - **Copies rose at (o) seed 1:** `1,820` of 4,130, against (a)'s `1,517`. At seed 2 they are `2,081` against `2,933`.
-- **(oL) seed 2 fits best of any width-256 run so far:** `T = 11,055`, against (a)'s best `10,573`. Its seed 1 reads `9,164`, so this is one seed.
+- **(oL) seed 2 fits best of any width-256 final checkpoint on this item:** `T = 11,055`. claude-152's best, (a), read `10,573`, and claude-146's and claude-151's step-16,384 checkpoints read `9,233` or less (claude-152's REPORT). Its seed 1 reads `9,164`, so this is one seed.
 - **The measurement now separates "seen" from "used".** I-5's removal re-score shows how much a trained model depends on a read, at no training cost. It gives the next mechanism a direct check.
 
 ## What changed
@@ -119,7 +119,7 @@ At step 16,384, seed 1 / seed 2:
 - **I-1:** `131 passed; 0 failed; 5 ignored`, as pre-registered, on a CUDA run before any arm and on each of the four pods' builds.
 - **I-2:** every arm's step-0 `dev_nearest` equals (a)'s at the same seed: `2/0/730` and `5/3/681`. It was checked on each 256-step probe and on each arm. Each `config.json` records width 256, 4 Hamming heads, `"opening_read": 8`, its anchor and the pinned TRAIN.
 - **I-3:** both reads' weights end above 0 at every arm (in the table).
-- **I-4:** all 17 losses of every arm are finite.
+- **I-4:** all 17 losses of every arm are finite: 8 training-loss means and 9 DEV losses (`progress.jsonl`; the job log's I-4 line).
 - **I-5:** every arm's re-score without the read differs from its re-score with it (the table above). The in-training evaluations that `Ō` is read from run on the thread where training set the read, as the Hamming read's did in claude-152.
 
 ### Evidence
@@ -138,7 +138,7 @@ At step 16,384, seed 1 / seed 2:
   - `pod3-oL-s1.tar`: `28e36c3da3c6e6227fc97b3332090d18ec8d2bce18545d7967dbe01d830b03e0`;
   - `pod4-oL-s2.tar`: `8e9934e598e6dcd37ae00b75832fbe006e5edf25430d9aed9b53b34c6d5911ed`.
 - **Checks:** every tar was read back from the store to the laptop and checked against the hash the pod wrote, before that pod came down.
-- **Cost:** four Vast RTX 5090 pods, 3.82 pod-hours, about `$3.67` in all. All are down. The cheapest offers ran out after the first, so pods 2 to 4 cost `$0.99–1.11/h`:
+- **Cost:** the runs took four Vast RTX 5090 pods, 3.82 pod-hours, about `$3.68`. The review's GPU checks added `$0.24` over 0.43 pod-hours: `$0.05` for the pod that ran them and `$0.19` for a create that came up exited and was deleted. About `$3.92` in all; every pod is down. The cheapest offers ran out after the first, so pods 2 to 4 cost `$0.99–1.11/h`:
   - pod 1, `$0.37` at `$0.563/h`;
   - pod 2, `$1.59` at `$0.989/h`;
   - pod 3, `$0.72` at `$1.094/h`;
@@ -146,7 +146,34 @@ At step 16,384, seed 1 / seed 2:
 
 ## Checks run at the head
 
-TODO-CHECKS
+**The runs' code is `060ba812`.** After the runs, the in-unit code review led to one more code commit, `4b6eb43d`, which touches only `flock_read_opening.rs`:
+- **Its tests:**
+  - the summary test now covers every position, partial and empty slot lists included, with a general quaternion in every slot and lane;
+  - new tests pin the slot tables' counts and masks (host), that gradients reach the rotation and weight but never the table (CUDA), and that `load` refuses an out-of-range read (host).
+- **`load`** repeats `new`'s range checks on `k` and the width.
+
+A valid read computes exactly what it computed in the runs: `apply`'s host tables moved into `slot_tables` unchanged.
+
+- **CUDA library tests on an RTX 5090 at `4b6eb43d`:** `134 passed; 0 failed; 5 ignored`, all 7 of the read's tests among them. Sealed as `pod5-cuda-gates-4b6eb43d.tar` (sha256 `2e6ff66bafd367d7c5cefe851619d838b2b93f55d72251894d554ef34061a943`), read back and checked.
+- **CUDA tests at the runs' commit `060ba812`:** `131 passed; 0 failed; 5 ignored`, on the pre-run CUDA run and on each of the four pods' builds.
+- **Host at the head:** every host test target of the crate passes: 101 passed, 0 failed (99 at the runs' commit, plus the two new host tests).
+- **Negative gates,** each set aside, run and restored:
+  - host: the turn anchor forced to the window start; the config's skip rules removed; the checkpoint load removed; the slot count taken as `k`; `load`'s range check removed; the anchor check's offset moved by one. Each fails its test with exit 101.
+  - GPU: the slot mask's multiply dropped from `apply` fails the summary test: exit 101, `the_opening_read_adds_the_mean_of_its_turned_slots ... FAILED`.
+- **`uor-harness loop report --check`:** PASS. **`loop gates --full`:** 11 of 11 green.
+- **In-unit reviews,** each by a fresh reviewer that never saw the plan:
+  - **FIT:** FIT in round 1, with four cosmetic notes applied. **Pre-run review:** PASS, with two notes applied. Both are listed in the sheet.
+  - **The code review of the module: CHANGES, for its tests only.** It found no defect in the code. The summary test checked two positions with every slot kept, so a wrong count or a dropped mask would have passed; it also noted axis-only rotations, `load`'s missing range checks and no gradient test. All four are fixed in `4b6eb43d`, with the gates above.
+  - **The code review of the wiring: CHANGES, pending two checks.** It found no missed site.
+    - **The forward hook has no unit test.** I-5 answers this: every arm's re-score with and without the read differs, on the GPU, and the hook is the only place the read reaches the forward pass.
+    - **An old `config.json` might not load.** It cannot happen: `LongConfig` derives only `Serialize` and is never read back.
+    - Its offset gate on the anchor check bites (above).
+  - **The claims check of this REPORT and its notebook row: APPROVE.** It recomputed about 95 claims from the sealed tars and the pod ledger. Its four slips are fixed:
+    - one reply matched to the wrong prompt;
+    - the cost rounded down (`$3.676` is `$3.68`);
+    - I-4's count of 17 with its source;
+    - a "best of any width-256 run" claim, now scoped and cited.
+  - **A fresh re-review at the final head:** APPROVE.
 
 ## Skills used
 
@@ -174,7 +201,7 @@ Casey asked to carry the user prompt's first words to the reply's first token. T
 - **The model learned to ignore it.** Taking the read out of the trained model changes almost nothing: 25 and 19 tokens of 14,287. The same read on the last 8 tokens instead is used more.
 - **So handing the trunk the words is not enough** when they arrive averaged into one point. The next design keeps the prompt's pieces separate and learns which to pick.
 
-The runs cost about `$3.67`, and all pods are down.
+The unit cost about `$3.92` in all, `$3.68` of it the runs, and all pods are down.
 
 ## Done when
 
