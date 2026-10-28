@@ -3,7 +3,7 @@ id: fbs-cost-profile
 title: Profile one training step and one served token, stage by stage
 milestone: research
 area: training
-status: ready
+status: done
 open_to: lab
 needs_gpu: true
 depends_on: []
@@ -42,7 +42,15 @@ And after the pivot vote:
   - (a)'s two Hamming reads take 16%;
   - the trunk takes 5% / 9%.
 
-  Still open: the served token (done-when 2), and the backward's own split. The serving twin lives in `crates/uor-r4-integer/src/stack/session.rs`, now in this item's scope.
+  Still open then: the served token (done-when 2), and the backward's own split. The serving twin lives in `crates/uor-r4-integer/src/stack/session.rs`, now in this item's scope.
+- **Serving is done; the item closes (claude-158, 28 Oct).** Done-when 2, and done-when 3 for serving, are met ([REPORT](../../loop/tasks/fbs-cost-profile/claude-158/REPORT.md)). On the M1, a served token is 3.73 ms (265 tok/s):
+  - the six layers are 99% of it (recurrence blocks 57%, feed-forward blocks 41%);
+  - the writer is 0.6% and the loop 1%;
+  - a whole-table nearest would be 21 times the writer.
+
+  Left for their own units:
+  - training: the backward's split, and a cheaper rival search;
+  - serving: each layer's split, NEON kernels exact against `step_native`, and the writer's admission (`one-decoder`).
 
 ## Done when
 
