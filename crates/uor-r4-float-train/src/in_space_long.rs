@@ -1976,7 +1976,10 @@ pub const PROFILE_WARMUP: usize = 8;
 /// window or when `profile` is 0. The window is the `2 * profile` steps after
 /// [`PROFILE_WARMUP`], profiled and unprofiled in turn.
 pub fn profile_window(step: usize, profile: usize) -> Option<bool> {
-    if profile == 0 || step < PROFILE_WARMUP || step >= PROFILE_WARMUP + 2 * profile {
+    if profile == 0
+        || step < PROFILE_WARMUP
+        || step >= PROFILE_WARMUP.saturating_add(profile.saturating_mul(2))
+    {
         return None;
     }
     Some((step - PROFILE_WARMUP).is_multiple_of(2))
@@ -1989,8 +1992,8 @@ pub struct ProfileRow {
     pub loss: f64,
     /// The step's host time through its closing wait for the GPU, as every step is timed.
     pub step_ms: f64,
-    /// Each stage from the mark before it, in step order; the last, `end`, is the time from the
-    /// last optimizer's launch to its completion.
+    /// Each stage from the mark before it, in step order; the last, `end`, is the closing mark,
+    /// with nothing queued before it since `optimizer.decay`, so about zero GPU time.
     pub stages: Vec<StageTime>,
     /// The stages' GPU times summed: the GPU's span from the step's first mark to its last.
     pub gpu_span_ms: f64,
@@ -2136,13 +2139,19 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     if config.steps == 0 || config.batch == 0 || config.eval_every == 0 {
         return Err(invalid("steps, batch and eval-every must be positive"));
     }
+    // A clock left on by a run that failed mid-step on this thread starts no stage of this one.
+    stage_clock::reset();
     if config.profile > 0 {
-        if config.steps < PROFILE_WARMUP + 2 * config.profile {
+        let window_end = config
+            .profile
+            .checked_mul(2)
+            .and_then(|w| w.checked_add(PROFILE_WARMUP))
+            .ok_or_else(|| invalid(format!("--profile {} is too large", config.profile)))?;
+        if config.steps < window_end {
             return Err(invalid(format!(
-                "--profile {} needs at least {} steps: {PROFILE_WARMUP} of warm-up, then each \
-                 profiled step and the unprofiled step after it",
-                config.profile,
-                PROFILE_WARMUP + 2 * config.profile
+                "--profile {} needs at least {window_end} steps: {PROFILE_WARMUP} of warm-up, \
+                 then each profiled step and the unprofiled step after it",
+                config.profile
             )));
         }
         if !device.is_cuda() {
@@ -2380,7 +2389,9 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
                     &targets,
                     config.batch,
                 )?;
-                // The copy to the host waits for the GPU to finish the forward.
+                // The copy to the host waits for the GPU to finish the forward. Only the nearest
+                // and cell objectives mark their own stages; the sheet's and Voronoi objectives
+                // count in this one.
                 let value = f64::from(loss.to_scalar::<f32>()?);
                 stage_clock::mark("objective.readback");
                 if !value.is_finite() {
@@ -2443,7 +2454,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
                     append_line(&out.join("profile.jsonl"), &serde_json::to_string(&row)?)?;
                     profile_rows.push(row);
                 }
-                if step + 1 == PROFILE_WARMUP + 2 * config.profile {
+                if Some(step + 1) == config.profile.checked_mul(2).map(|w| w + PROFILE_WARMUP) {
                     let summary = summarize_profile(&profile_rows);
                     fs::write(
                         out.join("profile.json"),
@@ -3028,6 +3039,23 @@ mod tests {
         assert!(!over.within_10pct && over.ratio > 1.3);
         let under = summarize_profile(&[profile_row(1.0, 30.0)]);
         assert!(!under.within_10pct && under.ratio < 0.7);
+    }
+
+    #[test]
+    fn a_profiled_run_refuses_a_window_it_cannot_hold_and_a_device_without_cuda() {
+        let missing = std::env::temp_dir().join(format!("claude-157-none-{}", std::process::id()));
+        let refusal = |profile: usize, steps: usize| -> String {
+            let mut config = config(0, None);
+            (config.profile, config.steps) = (profile, steps);
+            match run_long(&missing, &missing.join("out"), &config, &Device::Cpu) {
+                Err(e) => e.to_string(),
+                Ok(()) => "ran".to_string(),
+            }
+        };
+        assert!(refusal(usize::MAX, 72).contains("too large"));
+        assert!(refusal(3, 13).contains("needs at least 14 steps"));
+        assert!(refusal(3, 14).contains("needs a CUDA device"));
+        assert!(!missing.exists());
     }
 
     #[test]

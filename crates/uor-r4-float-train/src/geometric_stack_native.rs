@@ -1847,6 +1847,12 @@ pub mod stage_clock {
         static CLOCK: RefCell<Option<Clock>> = const { RefCell::new(None) };
     }
 
+    /// Turn the clock off with nothing read: a step that failed between `start` and `finish`
+    /// leaves none on for the next run on this thread.
+    pub fn reset() {
+        CLOCK.with(|c| *c.borrow_mut() = None);
+    }
+
     /// Start the clock on this thread for a step on `device`, with its first mark.
     pub fn start(device: &Device) {
         #[cfg(feature = "cuda")]

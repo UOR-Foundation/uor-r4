@@ -3,7 +3,7 @@
 Lab: claude. Order: [ORDER.md](ORDER.md). Sheet: [fbs-cost-profile-2026-10-28](../../../../harness/prep/fbs-cost-profile-2026-10-28.md) (TEST FITNESS: FIT, PRE-RUN: PASS). Run head: `78bbc883fab77f63ab417fb481a9bd726a5dfda8`.
 
 One training step is now split by stage, at claude-152's (a) recipe and at width 512 with no read.
-- **What dominates:** the backward (63% / 54% of a step), then the cell objective's whole-table search (13% / 34%), then, in (a), the two Hamming reads (16%).
+- **What dominates:** the backward (62% / 54% of a step), then the cell objective's whole-table search (13% / 34%), then, in (a), the two Hamming reads (16%).
 - **The six-layer trunk** is 5% / 9% of a step.
 - **The serving half** of the item (done-when 2) goes to its next unit.
 
@@ -62,9 +62,9 @@ The pairing count in I-3 and the 1% rule are arithmetic, not checks (the FIT rev
 | Stage | (a) width 256, 4 heads | (w0) width 512, no read |
 |---|---|---|
 | embedding | 0.43 | 0.68 |
-| each recurrence (×6) | 0.55–0.56 (0.55–0.55; layer 2: 1.69) | 0.84 (0.83–0.84) |
+| each recurrence (×6) | 0.55–0.56 (0.55; the third layer's, index 2, right after the read: 1.69) | 0.84 (0.83–0.84) |
 | each feed-forward (×6) | 0.17–0.18 | 0.20 |
-| Hamming read in the stream, after layer 2 | **7.95** (6.82) | — |
+| Hamming read in the stream, after the second layer (index 1) | **7.95** (6.82) | — |
 | final norm | 0.04 | 0.04 |
 | Hamming readout | **7.94** (6.81) | — |
 | scored rows' selection | 0.01 | 0.01 |
@@ -100,11 +100,11 @@ The pairing count in I-3 and the 1% rule are arithmetic, not checks (the FIT rev
 
   `top3_forward`: the table search, then two recurrences at 0.84 ms each (host 0.99, so host-bound).
 
-The table-search stage holds its setup too: the table's read, the target upload and the mask (the FIT reviewer's note). The loss's copy has a host time of 13 ms (25 ms in (w0)). That is the host waiting for the GPU to finish the forward: the host runs ahead of the GPU everywhere in the forward except the recurrences.
+The table-search stage holds its setup too: the table's read, the target upload and the mask (the FIT reviewer's note). The loss's copy has a host time of 13 ms (26 ms in (w0)). That is the host waiting for the GPU to finish the forward. The host ran ahead of the GPU in the Hamming reads, the final norm and the table search; elsewhere in the forward the two keep pace.
 
 **The cheapest change for each top cost** (item done-when 3):
 1. **The backward** (60.4 / 42.9 ms).
-   - Its host time is 0.98–0.99 of its GPU time, so it waits on the host, through kernel launches or host syncs inside it, not on the GPU's arithmetic.
+   - Its host time is 0.98–0.99 of its GPU time, so it is host-bound by the 0.9 rule. That fits two causes: the host launching kernels while the GPU keeps pace, or the host waiting at a sync inside the backward. This run does not tell them apart.
    - Which of its parts dominates is not measured here. The cheapest change can be named only after a kernel-level profile of the backward with the driver's profiler, which the sheet named as this result's next step.
    - A hint, as a hypothesis: (w0)'s backward is 17.5 ms less than (a)'s, at twice the width with no read. That suggests the reads' backward is at least that large. The two arms differ in two ways, so this is not a measurement.
 2. **The objective's table search** (13.0 ms at width 256, 26.6 ms at 512).
@@ -113,12 +113,12 @@ The table-search stage holds its setup too: the table's read, the target upload 
    - **Effect on prediction:** a hypothesis. A rival set that misses the nearest wrong token weakens the hinge; it must be run against (a).
 3. **(a)'s Hamming reads** (7.9 ms each, 15.9 ms in all).
    - They are GPU-bound, and they cost the same at two different places in the model. That suggests a shared part dominates both, for example the comparison of each position with every earlier one.
-   - **The change:** compute that once per forward and share it, where the two reads use the same keys. It would halve their cost.
+   - **The change:** compute that once per forward and share it, where the two reads use the same keys. If the shared part dominates, that at most halves their cost.
    - **Effect on prediction:** none if exact, checked as an identical loss. That the shared part dominates is a hypothesis.
 
    For (w0) the third cost is the main optimizer (2.2 ms, 3% of the step), host-bound. Fusing its per-parameter updates is the change. Prediction is unchanged if exact.
 
-The recurrence's suspected launch bound is real (host 0.99 of GPU time), but at 0.55–0.84 ms a layer, all six together are 3–6% of a step. It is not where training's time goes.
+The recurrence meets the host-bound rule (host 0.99 of GPU time), as suspected, but at 0.55–0.84 ms a layer, all six together are 3–6% of a step. It is not where training's time goes.
 
 **Sealed:** `caseyallard/uor-r4-store:results/claude/fbs-cost-profile-2026-10-28/`
 - `claude-157-78bbc883.tar` (sha256 `3a057e7ca8921474d54e4c815a5bdd80cef688026e3ae5217a75c7b835eced61`, in `SHA256SUMS-claude-157`), read back with the same sha256;
@@ -130,7 +130,23 @@ The recurrence's suspected launch bound is real (host 0.99 of GPU time), but at 
 - **CUDA tests on the pod's build at the run head:** `149 passed; 0 failed; 5 ignored`.
 - **`cargo clippy -p uor-r4-float-train --no-deps --all-targets -- -D warnings`:** no finding in the lines this unit wrote. Four findings predate it (`in_space_long.rs` `decode_speed`, `spiralcore_fbs_sheet.rs:3506`, `flock_read_register.rs:360` and `:541`).
 - **`cargo fmt --check`:** clean.
-- **`loop report --check`, `loop gates --full`, the fresh in-unit review:** RESULT.
+- **`loop report --check`:** PASS. **`loop gates --full`:** 11 of 11 green.
+- **The fresh in-unit review, in two parts at `2c0f4d15a`:**
+  - **The code:** APPROVE, six low findings. Four are fixed after the run; none touches a measured path:
+    1. `stage_clock::reset()` at `run_long`'s start, so a step that failed mid-way leaves no clock on;
+    2. checked arithmetic for the window's end, so an absurd `--profile` is refused, not wrapped (a new host test covers it and the other two refusals);
+    3. the doc of the `end` stage;
+    4. a note that the sheet's and Voronoi objectives count in `objective.readback`.
+
+    Two are left as notes. `summarize_profile` takes stage names from the first row, which holds while every row has the same stages. And a checkpoint inside the window would precede an unprofiled step; this run's `--eval-every` put none there.
+  - **The numbers against the sealed outputs:** CHANGES, two medium and four low findings, all fixed in the text:
+    - the backward's share is 62%, not 63%;
+    - "host-bound" now names both causes it fits;
+    - the host-ahead sentence names the right stages;
+    - the layer numbering is consistent;
+    - the shared-read saving is stated as at most half, if it holds;
+    - 25.6 ms is rounded to 26.
+- **The code at the PR's head** differs from the run head `78bbc883` only by those four fixes and the new host test: `22 passed; 0 failed` on the host, clippy unchanged.
 
 ## Skills used
 
