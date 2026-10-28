@@ -15,10 +15,10 @@ The item stays open.
 
   | Arm | Model | TRAIN | tokens/s |
   |---|---|---|---|
-  | (a) | width 256, 4 read heads, `cell` | pinned | `32,048` and `32,329` |
-  | (b) | the same | `balp` | `23,899` and `24,101` |
-  | (b0) | width 256, no read | `balp` | `36,039` and `36,480` |
-  | (c) | width 512, 8 read heads | `balp` | `12,512` and `12,522` |
+  | (a) | width 256, 4 read heads, `cell` | pinned | `32,049` and `32,329` |
+  | (b) | the same | `balp` | `23,900` and `24,101` |
+  | (b0) | width 256, no read | `balp` | `36,040` and `36,481` |
+  | (c) | width 512, 8 read heads | `balp` | `12,512` and `12,523` |
 
   - **The cell objective costs nothing measurable.** claude-151's `nearest` twin trained alone at `32,013`.
   - **`balp` costs about 25%** at the same model. 62.5% of `balp`'s tokens are scored reply tokens, against 32% of the pinned TRAIN's. More scored rows per window is the candidate cause; it was not measured.
@@ -27,11 +27,11 @@ The item stays open.
 
   | Model | Seed 1 (16 / 64 / 192 context) | Seed 2 |
   |---|---|---|
-  | width 256, 4 heads, arm (a) | `211 / 198 / 179` tokens/s | `211 / 197 / 179` |
-  | width 256, 4 heads, arm (b) | `212 / 199 / 180` | `211 / 198 / 179` |
+  | width 256, 4 heads, arm (a) | `212 / 198 / 180` tokens/s | `211 / 198 / 180` |
+  | width 256, 4 heads, arm (b) | `212 / 199 / 180` | `212 / 198 / 180` |
   | width 512, 8 heads, arm (c) | `152 / 142 / 122` | `152 / 141 / 121` |
 
-  **Width 512 decodes 28–32% slower.** There is no integer serving path for the read yet, so there is no integer decode figure.
+  **Width 512 decodes 28–33% slower** than (b), seed for seed. There is no integer serving path for the read yet, so there is no integer decode figure.
 
 ## What did not work, first
 
@@ -39,7 +39,7 @@ The item stays open.
 
   | Arm | Seed 1 | Seed 2 | Bar |
   |---|---|---|---|
-  | (a) | `306` | `245` | `343` |
+  | (a) | `306` | `245` | `344` |
   | (b) | `100` | `146` | `352` |
   | (c) | `151` | `165` | `197` |
 
@@ -84,7 +84,7 @@ The item stays open.
   - **Copies** (of 4,130 copied rows): `1,517` (36.7%) and `2,933` (71.0%). The bar against the `nearest` twins is `1,381`, and against the no-read floor `1,173`.
   - **Rest rows:** they gain less (`+3.3` and `+2.1` points, against `+5.5` and `+39.8`), so the copy gain is not general fit.
   - **Fit rose:** `T = 9,328` and `10,573`, `+641` and `+1,864` over the twins. Every step-16,384 checkpoint in claude-146's and claude-151's runs read `9,233` or less.
-  - **Openings spread out.** (a) picks `73` and `80` distinct opening tokens over the 1,226 openings, where the `nearest` twins pick 1 to 4. They spread without becoming more right.
+  - **Openings spread out.** (a) picks `73` and `80` distinct opening tokens over the 1,226 openings, where the re-scored `nearest` twins pick 4 and 3. They spread without becoming more right.
 
   By the sheet, `cell` is the objective for later runs.
 - **The new test separates copying from general fit.** Re-scored at step 16,384 (seeds 1 / 2), copied-row hits are:
@@ -124,7 +124,7 @@ At step 16,384, seed 1 / seed 2:
 |---|---|---|---|---|---|---|---|---|
 | (a) | `9,328 / 10,573` | `306 / 245` | `1,517 / 2,933` | `7,600 / 7,490` | `0.0198 / 0.0098` | `0.508 / 0.559` | `0.604 / 0.618` | C |
 | (b) | `3,684 / 4,069` | `100 / 146` | `2,074 / 2,981` | `1,563 / 1,009` | `0.320 / 0.467` | `1.016 / 1.122` | `1.0004 / 1.0006` | D, flag F |
-| (b0) | `1,004 / 1,046` | `68 / 69` | `76 / 47` | `864 / 936` | — | none | `1.0004 / 1.0005` | floor |
+| (b0) | `1,004 / 1,046` | `68 / 69` | `76 / 47` | `864 / 936` | `0.633 / 0.205` | none | `1.0004 / 1.0005` | floor |
 | (c) | `5,434 / 4,957` | `151 / 165` | `3,342 / 3,330` | `2,002 / 1,531` | `0.611 / 0.752` | `0.321 / 0.283` | `1.0005 / 1.0003` | C |
 
 The references, re-scored here at step 16,384 (seed 1 / seed 2):
@@ -139,10 +139,11 @@ The references, re-scored here at step 16,384 (seed 1 / seed 2):
 
 | Arm | Openings bar | Copies bar, against the reference | Copies bar, against the floor | Copy gain over rest gain (seed 1 / 2) |
 |---|---|---|---|---|
-| (a) | `343` (`298 + 45`) | `1,381` (`1,291 + 89`) | `1,173` (`1,088 + 85`) | `+5.5 > +3.3` / `+39.8 > +2.1` points |
-| (b) | `352` (`306 + 46`) | `3,021` (`2,933 + 87`) | `102` (`76 + 26`) | not reached: fails the reference bar |
-| (c) | `197` (`146 + 34 = 180`, raised to `197`) | `3,068` (`2,981 + 86`) | `102` (`76 + 26`) | `+8.7 > +4.8` / `+8.5 > −0.4` points |
+| (a) | `344` (`298 + 45.1`; the sheet writes `343`) | `1,381` (`1,291 + 89.4`) | `1,173` (`1,088 + 84.9`) | `+5.5 > +3.3` / `+39.8 > +2.1` points |
+| (b) | `352` (`306 + 45.5`) | `3,021` (`2,933 + 87.5`) | `102` (`76 + 25.9`) | not reached: fails the reference bar |
+| (c) | `197` (`146 + 34.0 = 180`, raised to `197`) | `3,068` (`2,981 + 86.4`) | `102` (`76 + 25.9`) | `+8.7 > +4.8` / `+8.5 > −0.4` points |
 
+- **The groups overlap at openings.** A reply's first row is a copied row when its pair already stands in the prompt; 163 of the 1,226 openings are. So copies, rest and openings add up to more than 14,287. Rest rows exclude both.
 - `R16 = shift(16) / shift(0)` from `--reach` on the step-16,384 checkpoint. At step 0 the untrained trunk reads `0.66–0.73` (width 512) and `0.73–0.81` (width 256, claude-151).
 - (a)'s `T` passed both twins' step-16,384 values by step 6,144 at seed 1 (`9,005`) and by step 2,048 at seed 2 (`9,027`). (b)'s peaked early, at `5,878` (step 4,096, seed 1) and `4,698` (step 2,048, seed 2), and then fell.
 
@@ -176,11 +177,24 @@ The code has not changed since the runs' commit, `d102c594d126725c233fe7ebc5cc4e
 
 - **CUDA library tests on an RTX 5090,** on each of the four pods' builds: `123 passed; 0 failed; 5 ignored`, and the negative gate bit on each.
 - **Host:** `cargo test --locked -p uor-r4-float-train --no-fail-fast` at the head: 75 library tests and every other target pass, 93 in all, 0 failed.
-- {{GATES_FULL}}
+- **`uor-harness loop gates --full`:** 11 of 11 green.
 - **In-unit reviews,** each by a fresh reviewer that never saw the plan:
   - two FIT rounds, both NOT FIT, each fixed, and claude's decision review at the two-round limit (listed in the sheet);
-  - {{CODE_REVIEW}}
-  - {{CLAIMS_CHECK}}
+  - **the exact-head code review: APPROVE.** It confirmed:
+    - the cell hinge's axis and shapes, and that the rival set excludes the target;
+    - that `nearest` is unchanged;
+    - `copies_prompt`'s index arithmetic: the pair always sits strictly before the row, inside the window, at prompt positions;
+    - both sha256s checked with no fallback to the pinned TRAIN;
+    - no width-256 assumption left, with reload using the recorded width.
+
+    Its four low-severity notes are in [Still open](#still-open). One changed this REPORT: the width-256 host test compares two entry points that now share one path, so it cannot catch a change from main.
+  - **the claims check of this REPORT** confirmed about 130 claims and found six slips, all fixed:
+    - decode and training rates cut off instead of rounded;
+    - three bar breakdowns whose parts did not add up;
+    - "28–32%" for what reaches 33%;
+    - a plain-summary line stronger than the re-scores;
+    - (b0)'s missing `R16`;
+    - the twins' pick count.
 
 ## Skills used
 
@@ -194,11 +208,16 @@ The code has not changed since the runs' commit, `d102c594d126725c233fe7ebc5cc4e
 - **More text, differently:** `balp` held to dialogue like DEV's (the `mw-balp` part, or chat filtered to short replies), or more steps. (b)'s stall says the mix matters, not that text does not.
 - **Openings:** no arm moves them. The probe's `607` comes from the prompt's first 8 tokens, beyond the trunk's reach of about 6. The copy heads now carry the user's words, but nothing carries the prompt's first words to the reply's first token.
 - **Done-when 3's gap:** write `--train-split`'s token count into the run's config.
+- **The code review's four low-severity notes,** for the next unit that touches these files; no run is affected:
+  1. The copied, opening and rest tally inside `nearest_reading` has no test of its own. The host test pins `copies_prompt`, the predicate. A host-side tally function with counts asserted on the hand-built window would pin the split itself.
+  2. Copied rows can be opening rows (163 of 1,226 here). Make the classes exclusive, or keep reporting the overlap.
+  3. The width-256 host test compares two entry points that share one path. A sha256 of main's seed-1 initial tensors would let it fail.
+  4. `--width` accepts any number; "a multiple of 8" is documented but checked only deep in the model build. Refuse others in the CLI.
 - **The item stays open:** no checkpoint has `R16 ≥ 0.05` together with done-when 1.
 
 ## Plain summary
 
-Casey asked for a better test of whether a reply uses the user's input, and for three retrains of the trunk with the Hamming read. The test counts reply tokens that the user's message already holds as a pair, such as a code word or a number. Before this unit the read named about a quarter of them, barely more than the trunk with no read at all.
+Casey asked for a better test of whether a reply uses the user's input, and for three retrains of the trunk with the Hamming read. The test counts reply tokens that the user's message already holds as a pair, such as a code word or a number. Before this unit the read named 27–37% of them, a few points above the trunk with no read at all (24–26%).
 
 - **The geometric margin objective works:** it scores the target against the single nearest wrong token. The read now names 37% and 71% of those tokens at the two seeds, and overall accuracy rose above every earlier final checkpoint (`9,328` and `10,573` of 14,287). Replies stay fluent but mostly templated. At seed 2 one brings back the user's number ("Hi is 5246."), and the code word does not come back.
 - **13 times more training text, as mixed, hurt.** The model learned to repeat the user's numbers and lost the language. The data was checked and loads correctly; the mix is mostly long general chat, unlike the test's dialogues.
@@ -212,7 +231,7 @@ The next run is the margin objective with the wider trunk on the original text. 
 1. **Met.** `--objective cell` is built. `the_cell_objective_pushes_only_the_nearest_rival` (CUDA) checks that the loss is positive inside the margin and zero beyond it, and that it counts only the nearest rival, where `nearest` averages three. Its negative gate, max replaced by mean, bit on every pod.
 2. **Met.** The copied-row test is in `NearestReading`. A host test pins the split on a hand-built window, and its negative gate, the prompt check widened to the whole window, failed.
 3. **Met, with one gap.** `--train-split` reads `balp`, refused unless both sha256s match. The run's config records the directory and both sha256s, not the token count (in What did not work).
-4. **Met.** `--width N` builds the trunk, the table and every read at `N`. Checkpoints record `width` (`512` in (c)'s, `256` in the others). The width-256 build is unchanged. `the_width_builder_at_256_is_the_sheet_builder` (host) checks every tensor equals the sheet builder's, and I-2's exact step-0 match with claude-146's twins agrees. The suite is green, with the CUDA tests on each pod.
+4. **Met.** `--width N` builds the trunk, the table and every read at `N`. Checkpoints record `width` (`512` in (c)'s, `256` in the others). The width-256 build is what main builds by construction: the old builders now call the new ones at `SHEET_WIDTH`, and the only other change sets `config.width` to that same value. I-2's exact step-0 match with claude-146's twins, built from main, agrees. `the_width_builder_at_256_is_the_sheet_builder` (host) compares the two entry points tensor by tensor. Since they now share one path, it cannot catch a change from main (the code review's note, in Still open). The suite is green, with the CUDA tests on each pod.
 5. **Met.** The pre-registered runs ran under one sheet, with FIT and a pre-run review: (a), (b) and (c) at two seeds each, plus the (b0) control. The sheet's bars decide them.
 6. **Met on merge.** This REPORT leads with tokens/s, and the result has one notebook row ([float-training](../../../../research/notebook/float-training.md)).
 
