@@ -28,7 +28,7 @@ use uor_r4_tokenizer::ByteBpeTokenizer;
 use crate::geometric_stack::{StackAdamW, StackModel};
 use crate::hamilton_sheet::{self as hs, CausalWindow, HamiltonArm, SHEET_CONTEXT};
 use crate::spiralcore_fbs_arms::{self as arms, FbsArm};
-use crate::spiralcore_fbs_sheet::{build_fbs_model, panel_loss};
+use crate::spiralcore_fbs_sheet::{build_fbs_model_at, panel_loss};
 use crate::{invalid, sha256_bytes, Result};
 
 /// What the trunk's predicted point is trained against.
@@ -75,6 +75,9 @@ pub struct LongConfig {
     /// Hamming flock attention with this many heads after layer 2 and on the readout; 0 is no read
     /// (`flock_read_hamming`).
     pub hamming_read: usize,
+    /// The trunk's width: the shared table's columns and every read's width (default 256,
+    /// `hamilton_sheet::SHEET_WIDTH`); a multiple of 8.
+    pub width: usize,
     /// The Hamming read's type heads compare positions through SpiralCore's path-dependent
     /// icosian transport (`HammingReads::with_type_spin`, claude-151); off by default.
     pub type_spin: bool,
@@ -194,7 +197,7 @@ fn start_hamming(
         return Ok(None);
     }
     let mut reads =
-        crate::flock_read_hamming::HammingReads::new(config.hamming_read, hs::SHEET_WIDTH, device)?;
+        crate::flock_read_hamming::HammingReads::new(config.hamming_read, config.width, device)?;
     if config.type_spin {
         reads = reads.with_type_spin()?;
     }
@@ -901,7 +904,7 @@ pub fn context_reach(
         let (_, captured) = crate::secant_descent::with_rate_indices(|| {
             crate::flock_read::points(&model, &ids, probe.len(), SHEET_CONTEXT)
         })?;
-        let lanes = hs::SHEET_WIDTH / 4;
+        let lanes = table(&model)?.dim(1)? / 4;
         let per_layer = probe.len() * SHEET_CONTEXT * lanes;
         if per_layer == 0 || captured.is_empty() || captured.len() % per_layer != 0 {
             return Err(invalid("rate capture does not split into whole layers"));
@@ -1274,9 +1277,9 @@ pub fn run_recall(
     crate::geometric_stack::set_reflected_floor(config.reflect_floor);
     crate::geometric_stack::set_input_table_fixed(config.fix_input_table);
     let _guard = ArmGuard;
-    let model = build_fbs_model(FbsArm::OneAtomActive, config.seed, device)?;
+    let model = build_fbs_model_at(FbsArm::OneAtomActive, config.seed, config.width, device)?;
     let mut flock = if config.flock_read > 0 {
-        let read = crate::flock_read::FlockRead::new(config.flock_read, hs::SHEET_WIDTH, device)?;
+        let read = crate::flock_read::FlockRead::new(config.flock_read, config.width, device)?;
         crate::flock_read::set_flock_read(Some(read.clone()));
         let opt = crate::flock_read::FlockAdamW::new(&read)?;
         Some((read, opt))
@@ -1284,11 +1287,8 @@ pub fn run_recall(
         None
     };
     let mut content = if config.content_read > 0 {
-        let read = crate::flock_read_content::ContentRead::new(
-            config.content_read,
-            hs::SHEET_WIDTH,
-            device,
-        )?;
+        let read =
+            crate::flock_read_content::ContentRead::new(config.content_read, config.width, device)?;
         crate::flock_read_content::set_content_read(Some(read.clone()));
         let opt = crate::flock_read::FlockAdamW::new(&read.read)?;
         Some((read, opt))
@@ -1489,21 +1489,17 @@ pub fn gradient_norms(
     crate::geometric_stack::set_reflected_floor(config.reflect_floor);
     crate::geometric_stack::set_input_table_fixed(config.fix_input_table);
     let _guard = ArmGuard;
-    let model = build_fbs_model(FbsArm::OneAtomActive, config.seed, device)?;
+    let model = build_fbs_model_at(FbsArm::OneAtomActive, config.seed, config.width, device)?;
     if config.flock_read > 0 {
         crate::flock_read::set_flock_read(Some(crate::flock_read::FlockRead::new(
             config.flock_read,
-            hs::SHEET_WIDTH,
+            config.width,
             device,
         )?));
     }
     if config.content_read > 0 {
         crate::flock_read_content::set_content_read(Some(
-            crate::flock_read_content::ContentRead::new(
-                config.content_read,
-                hs::SHEET_WIDTH,
-                device,
-            )?,
+            crate::flock_read_content::ContentRead::new(config.content_read, config.width, device)?,
         ));
     }
     let _hamming = start_hamming(config, device)?;
@@ -1617,10 +1613,10 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     crate::geometric_stack::set_reflected_floor(config.reflect_floor);
     crate::geometric_stack::set_input_table_fixed(config.fix_input_table);
     let _guard = ArmGuard;
-    let model = build_fbs_model(FbsArm::OneAtomActive, config.seed, device)?;
+    let model = build_fbs_model_at(FbsArm::OneAtomActive, config.seed, config.width, device)?;
     // The Flock read, when on: its own parameters and optimizer, applied by `points`.
     let flock = if config.flock_read > 0 {
-        let read = crate::flock_read::FlockRead::new(config.flock_read, hs::SHEET_WIDTH, device)?;
+        let read = crate::flock_read::FlockRead::new(config.flock_read, config.width, device)?;
         crate::flock_read::set_flock_read(Some(read.clone()));
         Some((read.clone(), crate::flock_read::FlockAdamW::new(&read)?))
     } else {
@@ -1629,11 +1625,8 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     let mut flock = flock;
     // The content read, when on: claude-144's parameters and optimizer, applied inside the trunk.
     let mut content = if config.content_read > 0 {
-        let read = crate::flock_read_content::ContentRead::new(
-            config.content_read,
-            hs::SHEET_WIDTH,
-            device,
-        )?;
+        let read =
+            crate::flock_read_content::ContentRead::new(config.content_read, config.width, device)?;
         crate::flock_read_content::set_content_read(Some(read.clone()));
         let opt = crate::flock_read::FlockAdamW::new(&read.read)?;
         Some((read, opt))
@@ -1849,6 +1842,8 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "cuda")]
+    use crate::spiralcore_fbs_sheet::build_fbs_model;
 
     #[test]
     fn each_epoch_order_is_a_seeded_permutation() {
