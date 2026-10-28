@@ -2,6 +2,8 @@
 
 Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md), as the roadmap umbrella: it is the item whose scope holds `PLAN.md` and `docs/roadmap/items/*.md`, as claude-147 used it to add `pipeline-map`. Base: `ac4f445b9`.
 
+Setup row: 2 (item-file maintenance: new gap items and PLAN's owner-direction rows).
+
 ## Goal
 
 The owner's decisions of 28 Oct 2026, in claude's chat, after claude-155's diagnosis (its [REPORT](../../in-space-trunk-to-text/claude-155/REPORT.md), "The pivot"):

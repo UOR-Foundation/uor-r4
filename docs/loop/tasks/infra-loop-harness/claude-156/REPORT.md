@@ -7,6 +7,7 @@ The owner's 28 Oct pivot is now on the roadmap. Three items are `ready`, and PLA
 ## What did not work, first
 
 - **The map could not be revised in place.** `uor-harness loop claim pipeline-map` refused because the item is `done` ("not ready"). So the revision is a new item, `pipeline-map-revision`, depending on `pipeline-map`, as claude-147 did when it added `pipeline-map` through this umbrella.
+- **The ORDER named no `Setup row:`.** `loop review` refused the in-unit review record, because an `infra-loop-harness` ORDER must name its build-plan row. The line `Setup row: 2` (item-file maintenance, as claude-149's) was added after the work. The ORDER's goal and scope did not change.
 - **`uor-harness check` exits 1** at this head, on one error that is not this unit's: `prep.sheet_shape` in `docs/harness/prep/m1-close-saved-model-2026-10-26.md`. No rule names a file this unit wrote.
 
 ## What changed
