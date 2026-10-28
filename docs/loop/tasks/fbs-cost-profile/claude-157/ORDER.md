@@ -21,21 +21,16 @@ The owner, 28 Oct 2026, in claude's chat: "I don't care what we serve at long as
   - A stage's time is the gap between its two events. No synchronization is added between stages, so the profiled step runs as the unprofiled one does.
   - The host gaps beside the GPU gaps show whether a stage waits on kernel launches or on the GPU.
   - The steps are profiled after warm-up and alternate with unprofiled steps, whose time is the "measured step time".
-- **Serving: a stage-timed twin of the FBS session step.** `IntegerStackSession::measure_fbs_step_stages` mirrors `stack_step_fbs`, as `measure_step_phases` mirrors the dense step, and leaves `step` untouched for the zero-multiply audit. It times:
-  - the embedding;
-  - each layer's recurrence and feed-forward;
-  - the final norm;
-  - the writer;
-  - the bookkeeping.
-
-  Beside these it times a whole-table nearest search over the token table, as the readout the cell objective decodes. That search changes no state. `fbs-toks --stages` reports the medians over the protocol's decode steps.
+- **Serving goes to the item's next unit.** The plan was a stage-timed twin of the FBS session step, `IntegerStackSession::measure_fbs_step_stages`. It would mirror `stack_step_fbs`, as `measure_step_phases` mirrors the dense step. It would time the embedding, each layer's recurrence and feed-forward, the final norm, the writer and the bookkeeping, plus a whole-table nearest search beside them. That twin can only live in `session.rs`, and the loop guard reads an item's scope from `origin/main`, where `session.rs` is not yet listed. The item cannot gain it from another unit while this one holds the item file: `loop claim infra-loop-harness` refuses the overlap. So:
+  - this unit adds `session.rs` to the item's scope;
+  - the scope reaches main when this unit merges;
+  - the item's next unit builds the twin and profiles the served token (done-when 2).
 
 ## Instrument checks (before any reading)
 
-- **I-1.** With no new flag, every file a run writes is unchanged (new config keys are skipped when off). `fbs-toks` without `--stages` prints what it printed.
-- **I-2.** A profiled step's loss equals the unprofiled run's loss at the same step and seed, exactly.
+- **I-1.** With no new flag, every file a run writes is unchanged (new config keys are skipped when off).
+- **I-2.** A profiled step's loss equals the unprofiled computation's loss, bit for bit (a CUDA test on one batch).
 - **I-3.** The stage times sum to the GPU span of the profiled step. That span is compared with the unprofiled step time; a gap over 10% is reported as a miss, not hidden.
-- **I-4.** Over the whole `fbs-toks` protocol, `measure_fbs_step_stages` gives the same tokens and the same session state as `step_native` (a host test, and the protocol's reply check at run time).
 
 ## Cancel probe (run first)
 
@@ -51,24 +46,26 @@ All three held.
 - `crates/uor-r4-float-train/src/in_space_long.rs`
 - `crates/uor-r4-float-train/src/bin/train-in-space.rs`
 - `crates/uor-r4-float-train/src/geometric_stack_native.rs`
-- `crates/uor-r4-integer/src/bin/fbs-toks.rs`
-- `crates/uor-r4-integer/src/stack/session.rs`
+- `crates/uor-r4-integer/src/bin/fbs-toks.rs` (not edited in this unit)
 - `docs/harness/prep/fbs-cost-profile*`
 - `docs/loop/tasks/fbs-cost-profile/**`
 - `docs/research/notebook/float-training.md`
 - `docs/roadmap/items/fbs-cost-profile.md`
 
-**Scope change (claude's decision review, 28 Oct).** This unit adds `crates/uor-r4-integer/src/stack/session.rs` to the item's scope.
+**Scope change (claude's decision review, 28 Oct).** This unit adds `crates/uor-r4-integer/src/stack/session.rs` to the item's `scope:`, for the item's next unit.
 - **Why:** the FBS step's stages are private functions in that file, so a stage-timed step can only live there.
-- **Reversal:** the new function is additive, `step` and `stack_step_fbs` are unchanged, and deleting the function reverses it.
+- **Reversal:** the twin will be additive, `step` and `stack_step_fbs` stay unchanged, and removing the line reverses it.
 - **Evidence:** the dense step's twin, `measure_step_phases`, set the pattern.
+
+The item stays `ready` after this unit, because its done-when 2 is still open.
 
 ## Done when
 
-1. The four instrument checks pass, with their output in the REPORT.
-2. The item's done-when 1 to 4 are met: two training recipes profiled on an RTX 5090 and one served token on the M1, each stage summed against the measured time, the top three named, one line each on the cheapest fix.
-3. The run's outputs are sealed in the HF store and read back.
-4. The PR is merged and verified on main.
+1. The three instrument checks pass, with their output in the REPORT.
+2. The item's done-when 1 is met: two training recipes profiled on an RTX 5090, each stage summed against the measured step time, with the top three named.
+3. The item's done-when 3 for training's top three: one line each on the cheapest change that would remove most of it.
+4. The item's done-when 4 for this half: a sheet with a fresh FIT before the GPU part, one notebook row and a REPORT.
+5. The run's outputs are sealed in the HF store and read back, and the PR is merged and verified on main.
 
 ## Stop if
 
