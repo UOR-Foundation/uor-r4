@@ -26,7 +26,10 @@ This unit does those three things, in that order:
    - **copied rows:** top-1 on the reply rows whose target token appears in the same window's prompt, the tokens before the reply. Only a model that reads the prompt can name the code word or the number it was given. Top-1 on the other reply rows is reported beside it.
 3. **The retrains,** each with the Hamming read (`--hamming-read 4`):
    - **the cell margin objective** (`--objective cell`): the predicted point must lie in the target token's cell, a margin nearer the target than the whole table's single nearest wrong token, as `relu(1 + max_r s(r) − s(target))`. The current `nearest` objective averages that hinge over the 8 nearest wrong tokens;
-   - **more training text** (`--extra-train DIR`): TRAIN plus a second split from the same `m-world` generator at a new seed, the same distribution as `mw-balp`. Its sha256 is recorded in each run's config;
+   - **more training text** (`--train-split DIR --train-sha256 HEX`): `balp`, the 99,322,259-token corpus already sealed in the store, in `data/ft-balp.tar` (sha256 `b1d2211377a2e99d5977cc95d46875027023b08867488b1372185b3f62a1473f`, the archive TRAIN's own pin names).
+     - It is `mix-chat-corpus` of TRAIN (`mw-balp`) twice, `mw-orcp` and `chat-v0-p2`, so about 82M of its tokens are general chat.
+     - Same tokenizer (`d36d3e87…`) and the same dialogue protocol 2.
+     - Its tokens sha256 is `13261ba81180d8c59086787d80e34cd8ff2a144d6a818018725777d5a8d6bf62`;
    - **a wider trunk** (`--width 512`): width 256 stays the default, and every existing checkpoint and pin is unchanged.
 
 The item's own done-when (unchanged by this unit):
@@ -76,9 +79,7 @@ The pinned TRAIN, DEV and tokenizer, and every existing pin, stay as they are. A
 
 1. **`--objective cell`,** with a host or CUDA test that the loss is zero exactly when the target is a margin nearer than the nearest wrong token, and positive otherwise. Its negative gate (the max over rivals replaced by their mean, which is `nearest`) must make the test fail.
 2. **The copied-row test** in `NearestReading`, with `copied_rows` and `copied_hits` for reply rows whose target appears in the window's prompt, and the same counts for the other reply rows. A host test pins the split on a hand-built window. Its negative gate (the prompt check widened to the whole window) must make the test fail.
-3. **`--extra-train DIR`:** a second `UORT` split, appended to TRAIN's windows, with its sha256 and token count in the run's config.
-   - The split is built with `m-world` at a new seed, after `m-world` at seed 13 has reproduced `mw-balp`'s pinned sha256. That shows it is the same generator and settings.
-   - Built on the laptop (data prep, CHARTER §3.5), and put in the store with a SHA256SUMS.
+3. **`--train-split DIR --train-sha256 HEX`:** TRAIN read from another `UORT` split, refused unless its tokens hash to `HEX`. Its sha256 and token count go in the run's config. The pinned TRAIN stays the default.
 4. **`--width N`** (default 256): the trunk, the table and every read built at `N`. Checkpoints record their width, and a width-256 build is byte-for-byte what main builds. The suite stays green, including the CUDA tests on a pod.
 5. **The pre-registered runs** (one sheet, a fresh FIT and pre-run review, CHARTER §4.5):
    - (a) the cell objective at width 256 on the pinned TRAIN;
@@ -90,7 +91,6 @@ The pinned TRAIN, DEV and tokenizer, and every existing pin, stay as they are. A
 
 ## Stop and decide (never stop and wait)
 
-- **`m-world` at seed 13 does not reproduce `mw-balp`:** find the protocol and arguments that do, by the first documents' token ids. If none does, use the closest, say so in the sheet, and keep DEV as the pinned one.
 - **Width 512 needs CUDA kernel changes beyond a shape:** if they fit in this unit, make them, re-pin any kernel sha256 they move, and run the full CUDA suite. Otherwise run (a) and (b) here, and give (c) its own unit.
 - **A probe projects a run past about an hour per arm** (run-claude PART 4): fix the code first, or record why the run needs longer, in the sheet.
 - **A run diverges or crashes:** stop it and classify it, instrument or object, then rerun that seed. A missing number is never read as a fail.
