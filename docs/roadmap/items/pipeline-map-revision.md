@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: false
 depends_on: [pipeline-map]
 done_class: host
-scope: [docs/model/pipeline-map.md, docs/loop/tasks/pipeline-map-revision/**, docs/roadmap/items/pipeline-map-revision.md]
+scope: [docs/model/pipeline-map.md, PLAN.md, docs/loop/tasks/pipeline-map-revision/**, docs/roadmap/items/pipeline-map-revision.md]
 ---
 
 ## Why it matters
@@ -59,4 +59,4 @@ On 28 Oct, in claude's chat, after claude-155's diagnosis, the owner decided:
    - what it computed, and what was measured;
    - what it would cost per token today;
    - which of its pieces (Hopf oracle, zeta phases, φ couplings, choice rule) fits which stage, and in which domain.
-3. The revision is merged. One `[claude, for Casey]` note on #2028 gives its link, the re-ranked top five gaps and the first unit.
+3. The revision is merged, and PLAN's 27 Oct refocus direction is set to `done` in the same PR. One `[claude, for Casey]` note on #2028 gives its link, the re-ranked top five gaps and the first unit.

@@ -17,14 +17,14 @@ The owner, 28 Oct 2026, in claude's chat: "ok yes, my vote is to pivot to your d
 
 The charter's mission is a model that predicts text "with geometry … and exact memory" (CHARTER §1). The trunk line (claude-152 to claude-155) tested geometry alone. Its reads route the prompt into the trunk:
 - copies rose (claude-152);
-- the bag is used (claude-155: dropping it costs `189 / 236` openings).
+- the bag is used (claude-155: dropping it costs `189 / 236` openings, [float-training notebook](../../research/notebook/float-training.md), row of 28 Oct).
 
 But openings never passed claude-152's `302.0 / 228.0`. A reply's first token is an association ("Note these down" → "Noted."), and the trunk has `64,000` values to store associations in ([claude-155 REPORT](../../loop/tasks/in-space-trunk-to-text/claude-155/REPORT.md), "The pivot"). Exact memory works on its own: with the true address, `80/80` against `0/80` with no memory (PLAN, the exact-memory premise). It is not connected to the trunk.
 
 ## What is missing
 
 - **No read takes a key from the user's turn into an exact memory.**
-- **The evidence that such a memory carries openings:** claude-145's probe looks up TRAIN's commonest opening by the prompt's first 8 tokens (the turn anchor's slots, `--opening-bound`). It names `607` of DEV's 1,226 openings. TRAIN holds `212,968` openings over `26,450` distinct keys, and `32` DEV keys are unseen.
+- **The evidence that such a memory carries openings:** claude-145's probe looks up TRAIN's commonest opening by the prompt's first 8 tokens (the turn anchor's slots, `--opening-bound`). It names `607` of DEV's 1,226 openings. TRAIN holds `212,968` openings (claude-154) over `26,450` distinct prompt starts (claude-155). How many DEV keys TRAIN never saw is not recorded: the probe prints it as `dev_unseen`, and the unit reports it.
 - **The routing piece that already works:** claude-154's turn anchor. Its first 8 slots equal that key at all 1,226 DEV and 212,968 TRAIN openings.
 - **Where a read must land:** where the readout reads. A point added inside the stream was ignored (claude-154). The Hamming readout's move toward a copied token's table point is the form the decoder sees ([pipeline map](../../model/pipeline-map.md), stage 5).
 - **Cost:** a lookup is a hash and a load, integer-exact and multiplier-free. It is far cheaper per token than the trunk.

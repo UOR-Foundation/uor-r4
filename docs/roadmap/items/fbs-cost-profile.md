@@ -13,9 +13,11 @@ scope: [crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-trai
 
 ## Why it matters
 
-The owner, 28 Oct 2026, in claude's chat:
+The owner, 28 Oct 2026, in claude's chat, asking for the review that led to the pivot (the message's first clause):
 
 > "ok can we review the entire mechanism one more time for what exactly is costing us speed and compute time throughout the whole cycle"
+
+And after the pivot vote:
 
 > "I don't care what we serve at long as it is cheap"
 

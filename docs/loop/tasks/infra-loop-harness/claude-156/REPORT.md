@@ -31,7 +31,12 @@ None: this unit runs nothing. Every number in the three items cites its source R
 
 - **`uor-harness check`:** no rule names this unit's files. The one error is in another lab's sheet, and it predates this unit.
 - **`uor-harness loop report --check`:** PASS. **`loop gates --full`:** 11 of 11 green.
-- **A fresh in-unit review of the doc change:** APPROVE.
+- **A fresh in-unit review of the doc change** (at `869f1f5f`): CHANGES, conditional. Each finding is fixed in the next commit:
+  - **medium:** `189 / 236` cited claude-155's REPORT, but the figure sits in the float-training notebook's 28 Oct row; the citation now names the row.
+  - **low:** `pipeline-map-revision` must close PLAN's 27 Oct direction, so `PLAN.md` is now in its scope and done-when.
+  - **low:** the cost-profile item's first quote is now labelled as the message before the pivot vote.
+
+  The reviewer left five figures unchecked. The top session checked them: 7/512 → 43/512 (`archive/hopf_projection_remediation_306.md:36`), PR #455's 22.81% / 24.54% / 25.91% (its description), and 5,000 to 6,000 times (`docs/model/pipeline-map.md:216`) hold. "`32` DEV keys are unseen" has no recorded source, so it is removed; the probe's `dev_unseen` field is left for the unit to report.
 
 ## Skills used
 
