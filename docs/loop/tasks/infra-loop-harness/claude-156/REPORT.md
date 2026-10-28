@@ -23,11 +23,24 @@ The owner's 28 Oct pivot is now on the roadmap. Three items are `ready`, and PLA
   - the three 28 Oct owner decisions, verbatim, newest first, each `open`;
   - the three items listed in order under the side lines, as the trunk line's pivot.
 
+## Measurements
+
+None: this unit runs nothing. Every number in the three items cites its source REPORT or notebook row.
+
 ## Checks run at the head
 
 - **`uor-harness check`:** no rule names this unit's files. The one error is in another lab's sheet, and it predates this unit.
-- **`uor-harness loop report --check`:** RESULT.
-- **A fresh in-unit review of the doc change:** RESULT.
+- **`uor-harness loop report --check`:** PASS. **`loop gates --full`:** 11 of 11 green.
+- **A fresh in-unit review of the doc change:** APPROVE.
+
+## Skills used
+
+- **holding-the-goal.** The owner voted for "your diagnosed recommended new roadmap". The items are exactly the three steps claude-155's REPORT named, in its order, with the owner's own words in each, and nothing added.
+
+## Still open
+
+- **The three items themselves**, starting with `fbs-cost-profile` and `pipeline-map-revision`, which can run side by side, then `route-plus-memory`.
+- **The 27 Oct refocus direction** stays `open` in PLAN until `pipeline-map-revision` is merged.
 
 ## Done when
 
