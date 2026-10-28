@@ -198,8 +198,9 @@ fn stage_names(layers: usize) -> Vec<String> {
 
 /// The stage profile of the decode steps in `rows`: each stage's median, their
 /// sum against the median step (per mille), the whole-table nearest's median,
-/// and the step against the plain protocol's per-token decode time, whose
-/// difference is the loop's own cost.
+/// and the step against the plain protocol's per-token decode time. Their
+/// difference, `loop_overhead_ns`, is the cost outside the step: the loop, and
+/// `step_native`'s copies of the kept cells and the query into its `NativeStep`.
 fn stage_report(
     rows: &[Vec<u64>],
     plain_decode_ns: u64,

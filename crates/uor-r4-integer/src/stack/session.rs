@@ -3152,6 +3152,7 @@ impl IntegerStackSession<'_> {
         token: u32,
         ns: &mut Vec<u64>,
     ) -> Result<(NativeStep, u32), StackError> {
+        ns.clear();
         let model = self.model;
         let Some(fbs) = &model.fbs else {
             return Err(StackError::Shape(
@@ -4244,6 +4245,7 @@ mod fbs_stage_tests {
             // The embedding, each layer's two blocks, the final norm, the writer, the bookkeeping,
             // the whole step and the nearest search.
             assert_eq!(ns.len(), 2 * fbs.layers.len() + 6);
+            // A sanity check only: the stages tile the step, so the step is at least their sum.
             let stages: u64 = ns[..ns.len() - 2].iter().sum();
             assert!(ns[ns.len() - 2] >= stages, "{ns:?}");
             assert_eq!(nearest, brute_nearest(fbs, vocab, &got.query_q12), "position {i}");

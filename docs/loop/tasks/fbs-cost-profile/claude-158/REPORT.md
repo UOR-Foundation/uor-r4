@@ -2,7 +2,7 @@
 
 Lab: claude. Order: [ORDER.md](ORDER.md). Code: `d1078d5cb02838e3c9b738cdbac902fda02639ec`. Device: the M1 laptop (Apple M1, 4 performance cores, 16 GiB, macOS 27.0, AC power).
 
-One served token is now split by stage. Serving is the opposite of training (claude-157): the six-layer trunk is **99%** of a token on the M1, while the writer is 0.6% and the loop 1%. A whole-table nearest readout would cost 21 times the writer.
+One served token is now split by stage. Within each platform, the costs fall in opposite places from training's (claude-157). On the M1 the six-layer trunk is **98.6%** of a token's step, while the writer is 0.6% and the cost outside the step 1%. A whole-table nearest readout would cost 21 times the writer.
 
 ## What did not work, first
 
@@ -56,7 +56,7 @@ One served token is now split by stage. Serving is the opposite of training (cla
 | bookkeeping | 41 | 0.00% |
 | **stages summed** | **3,709,746** | **99.35%** |
 | **the step** | **3,733,896** | 100% |
-| the loop's own cost (plain per token 3,769,877 less the step) | 35,981 | 0.96% of the plain token |
+| outside the step: the loop, and `step_native`'s copies of the kept cells and query (plain per token 3,769,877 less the step) | 35,981 | 0.95% of the plain token |
 | *beside the step:* a whole-table nearest over 4,096 rows | 486,291 | 13.0%, 21.1× the writer |
 
 So a token costs 3.73 ms, of which 3.68 ms is the six layers: 613 µs a layer. The trunk holds `64,000` learnable values (claude-155), so a token spends about 57 ns per trunk value.
@@ -74,13 +74,17 @@ So a token costs 3.73 ms, of which 3.68 ms is the six layers: 613 µs a layer. T
 2. **The feed-forward blocks.**
    - The block is three route gathers, the gated product and the requantization, also scalar.
    - **The change:** the same NEON work, and the same check.
-   - **The hypothesis:** the gathers dominate both blocks. A layer's routes, `8,448` (claude-155), cost about 72 ns each at today's 613 µs a layer, far above a load and an add.
+   - **The hypothesis:** the gathers dominate both blocks. A layer's routed projections hold `8,448` values (claude-155). At today's 613 µs a layer, that is about 73 ns per routed value: an upper bound by arithmetic, since the layer's time includes the core. Either way it is far above a load and an add.
 3. **The readout.**
    - The writer already costs 0.6% of a token, so the cheap serving choice is the writer, not whole-table nearest, which costs 21 times as much. But on one checkpoint the writer's top-1 is `345` against nearest's `7,813` ([pipeline map](../../../../model/pipeline-map.md), stage 7).
    - **The change:** fix the writer's admission, so the cheap readout predicts as the trained one does (the `one-decoder` line).
    - **Effect on prediction:** that is what the change is for. It is measured there, not here.
 
-**Against training (claude-157):** the trunk is 5% of a training step on the GPU but 99% of a served token on the M1. Training's cost is the objective and the backward, and serving's is the trunk's scalar kernels. Each needs its own fix.
+**Against training (claude-157):** only shares within each platform are compared.
+- **Training:** the trunk's forward is 5% of a training step on the GPU. Its backward sits inside the backward, which is not yet split, so 5% is a lower bound.
+- **Serving:** the six layers are 98.6% of a served token on the M1.
+
+The two also differ in hardware, in number type (float against integer) and in what a step holds. Even so, the costs fall in different places: training's in the objective and the backward, serving's in the trunk's scalar kernels. Each needs its own fix.
 
 **Sealed:** `caseyallard/uor-r4-store:results/claude/fbs-cost-profile-serving-2026-10-28/`:
 - `plain.json` and `stages.json`, the two `fbs-toks` outputs;
@@ -95,7 +99,20 @@ So a token costs 3.73 ms, of which 3.68 ms is the six layers: 613 µs a layer. T
 - **`cargo test -p uor-r4-integer --features serving-wasm --bin fbs-toks`:** `3 passed; 0 failed`.
 - **`cargo clippy -p uor-r4-integer --no-deps --features serving-wasm --all-targets -- -D warnings`:** no finding in either file.
 - **`cargo fmt`:** clean.
-- **`loop report --check`, `loop gates --full`, the fresh in-unit review:** RESULT.
+- **`loop report --check`:** PASS. **`loop gates --full`:** 11 of 11 green.
+- **The fresh in-unit review, in two parts at `40abae097`:**
+  - **The code:** APPROVE, four low findings. Two are fixed in code:
+    - `ns` is cleared before the non-FBS refusal;
+    - `loop_overhead_ns` is documented as the cost outside the step, which includes `step_native`'s copies.
+
+    The test's `>=` check is now marked a sanity check: the stages tile the step, so it cannot fail. The reviewer confirmed by reading that the step time excludes the nearest search. `--stages` matching any argument is left as is.
+  - **The numbers against the sealed outputs:** CHANGES. Every measured number matches; one medium and five low wording findings, all fixed:
+    - **medium:** claude-157's 5% is the trunk's forward only, a lower bound, so the comparison now stays within each platform;
+    - the trunk's share is 98.6%;
+    - the cost outside the step is 0.95% of the plain token;
+    - about 73 ns per routed value, as an upper bound;
+    - "per learnable value", not "per weight";
+    - the item's old "no split" line is dated.
 
 ## Skills used
 
@@ -111,7 +128,7 @@ So a token costs 3.73 ms, of which 3.68 ms is the six layers: 613 µs a layer. T
 ## Done when
 
 1. **Met.** I-1 to I-4 pass, with their outputs above.
-2. **Met.** One served token, by stage, on the M1, summed within 10% (`993` per mille), with the writer and the whole-table nearest each timed. The loop's own cost is 1%.
+2. **Met.** One served token, by stage, on the M1, summed within 10% (`993` per mille), with the writer and the whole-table nearest each timed. The cost outside the step is 1%.
 3. **Met.** One line for each of serving's top three.
 4. **Met.** A notebook row and this REPORT. The item's done-when 1 to 4 are all met (claude-157 and this unit), so the item is `done`.
 5. **Met on merge.**
@@ -119,11 +136,11 @@ So a token costs 3.73 ms, of which 3.68 ms is the six layers: 613 µs a layer. T
 ## Plain summary
 
 On the laptop, a served token takes 3.7 ms, which is 265 tokens a second.
-- Almost all of it, 99%, is the model's six layers, in plain integer code that uses no vector instructions.
+- Almost all of it, 98.6%, is the model's six layers, in plain integer code that uses no vector instructions.
 - Choosing the token afterwards takes well under 1% with the model's own writer. Checking every word in the vocabulary instead would take 21 times as long.
 
 So, to serve cheaply:
-- speed up the six layers' integer code, which is about 57 ns per weight today;
+- speed up the six layers' integer code, which is about 57 ns per learnable value today;
 - make the cheap writer pick as well as the expensive search does.
 
 In training (claude-157) it was the other way round: the layers were cheap, and the backward pass and the vocabulary search were not.
