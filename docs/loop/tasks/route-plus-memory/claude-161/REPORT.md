@@ -19,7 +19,8 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Sheet: [route-plus-memory-2026-10-28](
   - The zero-weight check, which is exact, passed.
   - The test now allows `1e-6`, and the doc says "to within float rounding". Both jobs were rerun from the fixed head `05fbfd5b`, into new folders on the same leased pods (L-002), and the 2 minutes of GPU cost nothing else.
 - **The copies do not rise, and at seed 2 they fall.** (m) names `1,713 / 2,333` of 4,130 copied rows, against (m0)'s `1,750 / 3,029`.
-  - The memory moves only opening rows, which are not copy rows, so this is training's own spread or a side effect of the trunk leaning on the memory. This run cannot tell which.
+  - The memory moves only opening rows, but DEV's opening and copy rows overlap: 163 rows are both (1,226 + 4,130 + 9,094 = 14,450 against 14,287). Taking the memory out costs `42 / 30` copies (`1,713 → 1,671`, `2,333 → 2,303`), and the drop in `T` equals the drop in openings exactly (`513`, `489`), so no other row moves.
+  - The rest of seed 2's gap to (m0), about 700 copies, is training's own spread or a side effect of the trunk leaning on the memory. This run cannot tell which.
   - (a)'s own seeds read `1,517 / 2,933`. No bar was set on copies.
 - **The replies are still templated after their first word.** The memory sets the opening, and the trunk writes the rest:
   - "Got it, the code word is kandg." (seed 2);
@@ -62,7 +63,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Sheet: [route-plus-memory-2026-10-28](
 | I-2 `config.json` | width 256, 4 heads, `turn_memory` 8, (m0) empty, pinned TRAIN | the same |
 | I-3 the table: keys | (m) `26,450`, (m0) `0` | the same |
 | I-3 the read's own hits, TRAIN openings | (m) `212,905 / 212,905`, (m0) `0` | the same |
-| I-3 the read's own hits, DEV openings | (m) `1,194 / 1,226` (32 keys unseen), (m0) `0` | the same |
+| I-3 the read's own hits, DEV openings | (m) `1,194 / 1,226` (32 opening rows whose key TRAIN never saw), (m0) `0` | the same |
 | I-3 the weight's mean magnitude at the end | (m) `0.563`, (m0) `0.0` | (m) `0.656`, (m0) `0.0` |
 | I-4 losses | all 17 finite, every arm | the same |
 | I-5 the removal reading, (m) | openings `597 → 84`, T `9,490 → 8,977` | openings `597 → 108`, T `10,368 → 9,879` |
@@ -78,7 +79,7 @@ The TRAIN hits answer the FIT's note: the table's key (the probe's prompt cut) a
 | (m) seed 2 | 10,368 | 600 / 598 / 597 | **598.3** | 2,333 | 7,512 | 65 |
 | (m0) seed 1 | 9,252 | 273 / 257 / 269 | 266.3 | 1,750 | 7,330 | 81 |
 | (m0) seed 2 | 10,566 | 311 / 254 / 278 | 281.0 | 3,029 | 7,368 | 90 |
-| (a), claude-152 | 9,328 / 10,573 | — | 302.0 / 228.0 | 1,517 / 2,933 | 7,600 / 7,490 | — |
+| (a), claude-152 | 9,328 / 10,573 | — | 302.0 / 228.0 | 1,517 / 2,933 | 7,600 / 7,490 (claude-153's sheet) | — |
 | (g), claude-155 | 8,993 / 9,253 | — | 234.7 / 266.3 | 1,158 / 1,560 | — | — |
 
 **The bar** (the sheet's), for both (m) seeds:
@@ -91,7 +92,7 @@ The largest is `347.3`, and **both seeds pass, at `598.7` and `598.3`.** Flag F 
 **The ceiling:** the probe's lookup alone names `607` of 1,226. The model, with the memory, names about `598`, so the trunk and the memory together reach about 98.6% of what the table can name.
 
 **Cost:**
-- **Training rate:** (m) `31,851 / 29,564` against (m0) `31,852 / 29,543` context tok/s, and (a)'s `32,049`.
+- **Training rate:** (m) `31,851 / 29,564` against (m0) `31,852 / 29,543` context tok/s, and (a)'s `32,049` (claude-152, as the `fbs-cost-profile` item quotes its notebook row).
 - **The runner's decode:** (m) `179 / 116` against (m0) `177 / 116` tok/s.
 - **The table:** `26,450 × (8 + 1) × 4 bytes = 952,200` bytes stored, about 476 KB at u16 ids (arithmetic).
 - **Per token:** at a reply's opening row, a key of 8 ids, a hash lookup, a row load (256 values) and a 256-coordinate move. Other tokens: nothing.
@@ -107,7 +108,20 @@ The largest is `347.3`, and **both seeds pass, at `598.7` and `598.3`.** Flag F 
 - **`cargo test -p uor-r4-float-train --lib -- flock_read_memory in_space_long`** (host): `28 passed; 0 failed`. On the pods, the crate's full CUDA suite: `158 passed`.
 - **`cargo clippy -p uor-r4-float-train --no-deps --all-targets -- -D warnings`:** no finding in this unit's lines. The four that remain predate it.
 - **`cargo fmt --check`:** clean. **The banned-word scan of the diff:** clean.
-- **`loop report --check`, `loop gates --full`, the fresh in-unit review:** RESULT.
+- **`loop report --check`:** PASS. **`loop gates --full`:** 11 of 11 green.
+- **The fresh in-unit review, in two parts at `e06f3b0f2`:**
+  - **The code:** a provisional APPROVE, with no finding above low. The reviewer's four open checks were closed by the top session:
+    - training windows are context-long by `load_train`'s refusal, so `b · SHEET_CONTEXT + offset` is `assemble`'s layout;
+    - `points` requires the same layout on DEV;
+    - the weight is always in the graph, so its gradient exists when no row hits;
+    - sample prompts hold at least 16 tokens.
+
+    Its two cheap guards are added, and neither changes a measured path: a batch that is not context-long is refused, and an empty reply window names no row. Its third note, a forward test of named rows, is covered on GPU by the run's I-5 and by the 212,905 TRAIN hits.
+  - **The numbers against the sealed outputs:** CHANGES. Every listed figure matched; one medium and three low findings, all fixed:
+    - **medium:** opening and copy rows overlap (163 rows), so the memory reaches some copies, `42 / 30`;
+    - "no loss of accuracy" now names seed 2's 200-row gap;
+    - the 32 unseen are opening rows, not keys;
+    - two reference figures are cited.
 
 ## Skills used
 
@@ -117,7 +131,7 @@ The largest is `347.3`, and **both seeds pass, at `598.7` and `598.3`.** Flag F 
 
 - **The move's integer form,** for serving: the integer runtime has no read path yet (R5).
 - **Beyond the opening:** the memory names a reply's first word. The rest of the reply is still the trunk's templates.
-- **The table's reach:** it names openings for keys TRAIN has seen. `32` DEV keys are unseen, and a lookup can only be as good as the commonest opening per key (the `607` ceiling).
+- **The table's reach:** it names openings for keys TRAIN has seen. `32` DEV opening rows have a key TRAIN never saw, and a lookup can only be as good as the commonest opening per key (the `607` ceiling).
 - **The copy drop at seed 2,** unexplained, with no bar on it.
 - **PLAN's 28 Oct pivot direction** ("Done when all three are merged") can now be set `done`. `PLAN.md` is outside this scope, so that is the next item-maintenance unit's.
 
@@ -130,7 +144,7 @@ The largest is `347.3`, and **both seeds pass, at `598.7` and `598.3`.** Flag F 
 ## Plain summary
 
 The model could route a user's message into itself, but it had nowhere to keep the "this kind of question starts its answer with this word" associations. This unit gave it an exact memory, built from the training data: the first 8 words of the user's turn look up how such replies usually start.
-- **The effect:** the model now gets the first word of a reply right about 599 times in 1,226, about twice as often as ever before. That is close to the 607 the lookup itself can manage, with no loss of overall accuracy and no extra training time.
+- **The effect:** the model now gets the first word of a reply right about 599 times in 1,226, about twice as often as ever before. That is close to the 607 the lookup itself can manage, with overall accuracy kept (at seed 2 about 200 rows below (a), inside the pre-registered flag) and no extra training time.
 - **The model relies on it:** with the memory taken away, it gets fewer than 110 right.
 
 The rest of each reply is still weak.

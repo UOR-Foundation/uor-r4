@@ -1104,7 +1104,10 @@ fn greedy_reply(
             let window = &ids[ids.len().saturating_sub(SHEET_CONTEXT)..];
             let next = if objective.decodes_nearest() {
                 // The reply's first step is its opening row, the one the turn memory moves.
-                if reply.is_empty() && crate::flock_read_memory::turn_memory().is_some() {
+                if reply.is_empty()
+                    && !window.is_empty()
+                    && crate::flock_read_memory::turn_memory().is_some()
+                {
                     crate::flock_read_memory::set_memory_rows(Some(vec![window.len() - 1]));
                 }
                 let hidden = crate::flock_read::points(model, window, 1, window.len());
@@ -2553,6 +2556,10 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         }));
         cursor += config.batch;
         let (ids, scored, targets) = assemble(&windows);
+        // The memory's rows are `b · SHEET_CONTEXT + offset`, so every window must be whole.
+        if ids.len() != config.batch * SHEET_CONTEXT {
+            return Err(invalid("a training batch's windows are not context-long"));
+        }
         let profiled = profile_window(step, config.profile);
         let started = Instant::now();
         if profiled == Some(true) {
