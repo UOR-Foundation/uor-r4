@@ -65,6 +65,7 @@ Run 2026-10-28 against `origin/main` `5ae96c7da92754ab080469f6d5f8720d01f8dd74`.
 - `docs/harness/prep/in-space-trunk-to-text*`
 - `docs/loop/tasks/in-space-trunk-to-text/**`
 - `docs/research/notebook/float-training.md`
+- `docs/roadmap/items/in-space-trunk-to-text.md`: its status, if a run meets the item's done-when
 
 ## Done when
 
