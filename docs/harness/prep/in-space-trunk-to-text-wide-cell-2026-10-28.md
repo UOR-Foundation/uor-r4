@@ -2,8 +2,13 @@
 
 Lab: claude. Item: [in-space-trunk-to-text](../../roadmap/items/in-space-trunk-to-text.md). Order: [claude-153](../../loop/tasks/in-space-trunk-to-text/claude-153/ORDER.md), with Casey's words verbatim. Code: main at `e2f15d3fcc91a6042b77fbcf717a79c39eaf215d`, unchanged. Each pod builds and tests its own binary from that commit.
 
-TEST FITNESS: pending round 2 (light gates, per the owner's 27 Oct direction).
+TEST FITNESS: FIT, round 2 (light gates, per the owner's 27 Oct direction). PRE-RUN: PASS. Both by one fresh non-author reviewer, logged on #2028.
 - **Round 1** (NOT FIT, fresh non-author): flag F at seed 2 (`T < 10,073`) sat inside (a)'s own seed spread, so it would fire about half the time with no effect. Three smaller points: the copies false-pass rate was unstated, nothing checked the head count, and one sentence misstated (c)'s fit. All four are fixed below.
+- **Round 2** (FIT) and **pre-run review** (PASS), fresh non-author: all four closed. No finding blocks. Its notes, applied:
+  - flag F's own false-fire rate is now stated;
+  - a rerun goes to a new folder, never the old one (L-002);
+  - I-1 checks the test count, not only the exit code;
+  - every `uor-pod` command exports the Vast adapter, so the cap check sees Vast pods.
 
 ## The question
 
@@ -51,6 +56,7 @@ The rule is claude-152's. Each arm is read against the **better of its reference
 
 - **Flag F:** at either seed, `T` below (a)'s worse seed minus 500: `T < 9,328 − 500 = 8,828`. Fit is lost.
   - This changes claude-152's same-seed rule. Training is nondeterministic, so a seed number pairs nothing: (a)'s own seeds read `9,328` and `10,573`. A seed-2 flag at `10,073` would fire about half the time with no effect.
+  - Its own false-fire rate: if (w) fits like (a) (mean about `9,950`, SD about `880`, from two values), each seed reads below `8,828` about 10% of the time, so either seed does about 19%. A false flag keeps width 256 for one unit.
 - A pass at one seed only is reported as such, and counts as no pass. No third seed runs in this unit.
 - A missing number gives no cell: that step is rerun.
 
@@ -62,7 +68,7 @@ The rule is claude-152's. Each arm is read against the **better of its reference
 
 ## Instrument checks
 
-- **I-1:** the crate's CUDA tests pass on each pod's build (`--features cuda --lib`; claude-152's pods read `123 passed; 0 failed; 5 ignored`).
+- **I-1:** the crate's CUDA tests pass on each pod's build (`--features cuda --lib`), and read `123 passed; 0 failed; 5 ignored` as on claude-152's pods: the code is the same.
   - The cell objective's negative gate is not rerun. The code is byte for byte the code it failed against on all four of claude-152's pods: `git diff d102c594 e2f15d3fc -- crates/ Cargo.lock` is empty.
 - **I-2:** (w)'s and (w0)'s step-0 `dev_nearest` hits, openings and distinct opening picks equal claude-152's width-512 (c) at the same seed: `1/0/756` at seed 1 and `3/1/659` at seed 2 (step 0 of `c-s1` and `c-s2`, sealed in the store).
   - Step 0 depends on neither TRAIN nor the read: claude-152's (a), (b) and (b0), on two TRAINs and with 4 or 0 heads, all equal claude-146's twins at step 0.
