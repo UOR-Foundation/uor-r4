@@ -356,6 +356,26 @@ fn start_register(
 /// How many span positions a register slot weighs when the run names none (claude-155).
 pub const DEFAULT_REGISTER_PICKS: usize = 8;
 
+/// How many of the opening rows `rows` (each a window's index into `windows` and its opening
+/// offsets) the memory's own key finds in its table: `(rows, hits)`.
+fn memory_hits(
+    memory: &crate::flock_read_memory::TurnMemory,
+    windows: &[CausalWindow],
+    rows: &[(usize, Vec<usize>)],
+) -> Result<(usize, usize)> {
+    let (mut total, mut hits) = (0, 0);
+    for (index, offsets) in rows {
+        if offsets.is_empty() {
+            continue;
+        }
+        let ids = &windows[*index].input_ids;
+        let (_, hit) = memory.stored(ids, ids.len(), offsets)?;
+        total += offsets.len();
+        hits += hit.iter().filter(|&&h| h > 0.0).count();
+    }
+    Ok((total, hits))
+}
+
 /// A turn memory as a run starts it, with its own optimizer.
 type MemoryStart = (
     crate::flock_read_memory::TurnMemory,
@@ -2339,6 +2359,34 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     // The turn memory (claude-161), when on: its table from TRAIN, its own optimizer, and each
     // usable window's opening offsets, which name the rows it moves.
     let (mut memory, train_openings) = start_memory(data_root, config, &usable, device)?;
+    // How often the read's own key finds the table at an opening row, on TRAIN's usable windows
+    // and on DEV: the table is keyed from the probe's prompts and read through the turn anchor,
+    // so this is the measured agreement, not one assumed.
+    if let Some((mem, _)) = memory.as_ref() {
+        let train_rows: Vec<(usize, Vec<usize>)> = train_openings
+            .iter()
+            .enumerate()
+            .map(|(i, offsets)| (i, offsets.clone()))
+            .collect();
+        let (rows, hits) = memory_hits(mem, &usable, &train_rows)?;
+        println!("[memory] TRAIN opening rows {rows}, hits {hits}");
+        let dev_rows: Vec<(usize, Vec<usize>)> = dev_windows
+            .iter()
+            .enumerate()
+            .map(|(i, w)| {
+                let offsets = w
+                    .scored_offsets
+                    .iter()
+                    .zip(&w.scored_corpus_positions)
+                    .filter(|(_, &position)| opens_reply(&dev_mask, position))
+                    .map(|(&offset, _)| offset)
+                    .collect();
+                (i, offsets)
+            })
+            .collect();
+        let (rows, hits) = memory_hits(mem, &dev_windows, &dev_rows)?;
+        println!("[memory] DEV opening rows {rows}, hits {hits}");
+    }
     let mut opt_main = StackAdamW::new(&model, hs::SHEET_WEIGHT_DECAY, hs::SHEET_CLIP)?;
     let mut opt_decay = StackAdamW::new(&model, 0.0, hs::SHEET_CLIP)?;
 

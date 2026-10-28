@@ -2,7 +2,9 @@
 
 Lab: claude. Item: [route-plus-memory](../../roadmap/items/route-plus-memory.md). Order: [claude-161](../../loop/tasks/route-plus-memory/claude-161/ORDER.md), with Casey's words verbatim. Code: this unit's head, built and tested on each pod from that exact commit.
 
-TEST FITNESS: PENDING. PRE-RUN: PENDING.
+TEST FITNESS: FIT, round 1. PRE-RUN: PASS. Both by one fresh non-author reviewer, at `29f4d58bf`. Its two notes are applied below:
+- **The lease.** One pod runs (m) and then (m0), each allowed up to 2 hours by the throughput gate, plus the tests, build, probes, reach, inspect and decode: up to about 4.5 hours. The lease is 5 hours, not 3.
+- **The keys agree only as measured.** The table's key comes from the probe's prompt cut (`<|bos|>` or the response mask). The read's comes from the turn anchor (`<|bos|>` or `<|eos|>`). They agree at every opening by claude-154's `anchor_check`, not by construction. So `run_long` now logs the read's own hit count on TRAIN's and DEV's opening rows, and I-3 checks it. A C result can then be told apart from a key that misses.
 
 ## The question
 
@@ -56,6 +58,7 @@ A pass at one seed only counts as no pass, and is reported as such.
 - **I-2.** At step 0, before any update, each arm's DEV reading equals (a)'s step 0 at its seed: the memory's weight is 0. Seed 1: hits 2, opening hits 0, 730 distinct opening picks. Seed 2: hits 5, opening hits 3, 681 distinct picks. `config.json` holds width 256, 4 Hamming heads, `turn_memory` 8 (and `turn_memory_empty` for (m0)), and the pinned TRAIN.
 - **I-3.**
   - **The table:** the run's log names its table. That is about 26,450 keys from 212,968 TRAIN openings for (m), and 0 keys for (m0).
+  - **The hits:** the run logs how many TRAIN and DEV opening rows the read's own key finds in the table. DEV hits must be above 0 for (m), and 0 for (m0).
   - **The weight:** (m)'s weight is non-zero at the end, and (m0)'s stays 0, since it never gets a gradient.
 - **I-4.** Every loss is finite.
 - **I-5.** The removal reading: at the final checkpoint, `--inspect`'s `memory_drop` re-reads DEV with the memory taken out. For (m), that must change the reading, which shows the evaluation used the memory. For (m0), it must change nothing.
@@ -75,9 +78,9 @@ At `p ≈ 0.25`, one seed's openings have a binomial spread of about 15 rows, an
 
 ## Cost
 
-- **Pods:** two RTX 5090 pods on Vast, at about $1.0/h each. Each runs one seed: a 256-step probe and then (m) and (m0) in turn, about 1.5 hours. The total is about $3.
+- **Pods:** two RTX 5090 pods on Vast, at about $1.0/h each. Each runs one seed: a 256-step probe and then (m) and (m0) in turn, about 1.5 hours, and up to about 4.5 at the gate's limit. The total is about $3 to $9.
 - **Throughput:** the probe must project each arm under 2 hours (`≥ 6,991` context tokens/s), or the job stops.
-- **Lease:** 3 hours, inside the caps.
+- **Lease:** 5 hours, inside the caps (FIT note).
 - **Results:** sealed to `results/claude/route-plus-memory-2026-10-28/` and read back before `down`.
 
 ## Stop rule
