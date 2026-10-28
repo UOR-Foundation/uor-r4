@@ -50,7 +50,7 @@ But openings never passed claude-152's `302.0 / 228.0`. A reply's first token is
 ## How to start
 
 Read:
-- the [pipeline map](../../model/pipeline-map.md): its R1, stage 6 (long memory), stage 7 (readout), and "The archived prime and angular router";
+- the [pipeline map](../../model/pipeline-map.md): its R1, stage 5 (the readout move a read makes), stage 6 (long memory), stage 7 (readout), and "The archived prime and angular router";
 - [claude-155's REPORT](../../loop/tasks/in-space-trunk-to-text/claude-155/REPORT.md), "The pivot", and [claude-154's](../../loop/tasks/in-space-trunk-to-text/claude-154/REPORT.md), for the turn anchor and `--opening-bound`;
 - `crates/uor-r4-float-train/src/flock_read_opening.rs` (the turn anchor) and `flock_read_hamming.rs` (the readout move this read copies).
 
@@ -60,7 +60,7 @@ This item runs training on the GPU: a one-page sheet with a fresh FIT and a pre-
 
 ## Rules that apply
 
-- **Geometry only** (CHARTER §3.1–§3.3): no softmax or squashing anywhere, including in the read's weights. No dense matrix multiplication, cumsum or GEMM.
+- **Geometry only** (CHARTER §3.1–§3.3): no softmax or squashing anywhere, including in the read's weights. No dense matrix multiplication or GEMM, including wrappers and hand loops.
 - **A memory gain needs a no-memory control** (L-010): arm (m0), the same read with an empty table.
 - **A negative closes this configuration, never the mechanism** (§4.1). Classify instrument against mechanism before calling it (§4.2).
 - **Serving stays integer** (D11, §3.6): the lookup is a hash and a load, and the readout move must have an exact integer form.

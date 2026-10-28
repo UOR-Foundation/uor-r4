@@ -30,7 +30,17 @@ None: this unit runs nothing.
 ## Checks run at the head
 
 - **`cargo xtask roadmap render --check`:** "README.md is current", exit 0. It failed with 8 problems at the base.
-- **`uor-harness loop report --check`, `uor-harness loop gates --full`, the fresh in-unit review:** RESULT.
+- **`uor-harness loop report --check`:** PASS. **`uor-harness loop gates --full`:** 11 of 11 green.
+- **The fresh in-unit review, at `62ea51b8f`:** CHANGES. It confirmed:
+  - only the title and area changed in the front matter;
+  - all 8 links resolve;
+  - every fact matches its source;
+  - the README agrees with the items' statuses.
+
+  Its findings, all fixed in the next commit:
+  - **medium:** the rules line named "cumsum", which the charter does not. §3.3 bans dense matrix multiplication or GEMM, "including wrappers and hand loops", and the line now says exactly that;
+  - **low:** "the training clock adds no synchronization" is now what claude-157 measured: events on the step's stream, with `clock_overhead` measured;
+  - **low:** How to start names stage 5 for the readout move as well as stage 7.
 
 ## Skills used
 

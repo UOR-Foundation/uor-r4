@@ -74,7 +74,7 @@ The training half runs steps on the GPU, so it needs a one-page sheet with a fre
 
 ## Rules that apply
 
-- **Geometry only** (CHARTER §3.1–§3.3): the instruments change no computation. The training clock adds no synchronization; the serving twin runs the served step's own kernels.
+- **Geometry only** (CHARTER §3.1–§3.3): the instruments change no computation. The training clock records events on the step's stream, and its own cost is measured (`clock_overhead`); the serving twin runs the served step's own kernels.
 - **Claims** (§4.6): each stage time is a measurement with its source. A cheaper change named for a cost is a hypothesis until it is run.
 - **Serving stays integer** (D11, §3.6): `step` and its call graph stay untouched for the zero-multiply audit.
 
