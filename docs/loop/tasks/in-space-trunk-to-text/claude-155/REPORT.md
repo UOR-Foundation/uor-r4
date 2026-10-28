@@ -16,9 +16,9 @@ The readings, by the sheet:
 | (a), claude-152 | `32,049` | `32,329` |
 
 - **The register costs about 61% of the speed.** It gathers `(rows, slots, picks, width)` per forward.
-- **The bag costs about 11%** at seed 1. Seed 2 ran on a slower host.
+- **The bag costs about 11%** at seed 1. Seed 2's pod was slower in every phase, decode included.
 - **Decode** in this runner (float, 64 tokens after 16, 64 and 192 context tokens, re-running the window each token), seed 1 / seed 2:
-  - (r) `141 / 134 / 126` and `142 / 134 / 126`;
+  - (r) `141 / 135 / 126` and `142 / 135 / 126`;
   - (g) `125 / 119 / 111` and `96 / 90 / 75`.
 
   These mix host speed with the reads' host-side work. There is no integer path for either read.
@@ -46,11 +46,11 @@ The readings, by the sheet:
      - The Hamming read builds its keys from the detached token table and trains normally.
      - claude-144's flock read took keys from the trunk's final point and lost no fit.
      - The fix is to detach the keys' input, or take keys at the readout.
-  2. **The slots are not distinct.** Their starting query codes coincide in groups, and identical slots get identical gradients, so they never separate. The per-slot drops are identical within each group: slots `{0, 2, 6}`, `{1, 7}` and `{3, 5}`. The 8 slots act as 4, with doubled weight. The fix is distinct starts, checked by a test.
+  2. **The slots are not distinct.** Their starting query codes coincide in groups, and identical slots get identical gradients, so they never separate. The per-slot drops are identical within each group: slots `{0, 2, 6}`, `{1, 7}` and `{3, 5}`. The 8 slots act as 4 distinct slots, in groups of 3, 2, 2 and 1. The fix is distinct starts, checked by a test.
 - **The bag does not beat (a) on openings.** `Ō` is `234.7` (`212, 275, 217`) and `266.3` (`252, 272, 275`). That is `−67.3` and `+38.3` against (a) seed for seed, and under bar 1 (`347.3`).
 - **No cell for (r) is better than D:**
   - bar 1 is `347.3`;
-  - bar 2 is the best control, (g) seed 2, `266.3 + 43.3 = 309.7`;
+  - bar 2 is the best control, (g) seed 2, `266.33 + 43.32 = 309.7`;
   - (r) reads `0.0 / 3.3`.
 
 ## What worked
@@ -78,11 +78,11 @@ The readings, by the sheet:
 
 Routing the prompt into the trunk works. Copies rose, and the bag is used heavily. Openings, which need stored associations ("Note these down" → "Noted."), do not move.
 
-**The measured reason.** The model has `1,112,576` learnable numbers: the shared token table holds `1,048,576`, and the six-layer trunk only `64,000`. Each layer's routed projections hold about 1,500 numbers; they are signed routings, not weight matrices, which is what makes them free to serve as integers. A lookup of the prompt's first 8 tokens names `607` openings from the same TRAIN, which holds `26,450` distinct prompt starts. The trunk has nowhere to store that many associations.
+**The measured reason.** The trunk and token table hold `1,112,576` learnable numbers (the Hamming read and the register add a few thousand more): the shared token table holds `1,048,576`, and the six-layer trunk only `64,000`. Each routed projection holds 1,024 to 2,048 numbers (8,448 per layer); they are signed routings, not weight matrices, which is what makes them free to serve as integers. A lookup of the prompt's first 8 tokens names `607` openings from the same TRAIN, which holds `26,450` distinct prompt starts. The trunk has nowhere to store that many associations.
 
 The charter's mission is geometry **and exact memory**, and this line has tested geometry alone. Other labs' exact addressed memory is built and passes its oracle (true address `80/80`, no memory `0/80`), but it is not connected to this trunk.
 
-**The owner's decision,** 28 Oct 2026, in claude's chat, after this diagnosis: *"ok yes, my vote is to pivot to your diagnosed recommended new roadmap"*. The serving-format question below is a charter change, so it stays open for his explicit answer.
+**The owner's decision,** 28 Oct 2026, in claude's chat, after this diagnosis: *"ok yes, my vote is to pivot to your diagnosed recommended new roadmap"*. On serving format, he then kept determinism: train in float, export exact integers (below, in Still open).
 
 **Next on this line, in order:**
 1. **A per-stage profile** of one training step and one served token. Estimated from shapes, the whole-vocabulary nearest search costs about `1,000,000` operations per token, against about `25,000` for the trunk, in serving and in the training loss alike. Measured wall-clock by stage is missing.
@@ -133,7 +133,7 @@ At step 16,384, seed 1 / seed 2:
   - (g): `8,993 → 7,479` and `9,253 → 7,605`; openings `217 → 28` and `275 → 39`.
 - **The bars:**
   - bar 1 is `302.0 + 45.3 = 347.3`;
-  - bar 2 is `266.3 + 43.3 = 309.7`, set by the best control, (g) seed 2, above (o)'s `206.0`;
+  - bar 2 is `266.33 + 43.32 = 309.7`, set by the best control, (g) seed 2, above (o)'s `206.0`;
   - flag F is `T < 8,828`.
 
 **Instrument checks,** at every seed:
@@ -164,7 +164,30 @@ At step 16,384, seed 1 / seed 2:
 
 ## Checks run at the head
 
-TODO-CHECKS
+**The runs' code is `7e445dae`.** After the runs, one commit corrected `new`'s doc comment in `flock_read_register.rs`. It now states the known start-rule flaw instead of claiming the starts differ; behaviour is unchanged.
+
+- **CUDA library tests on an RTX 5090 at `7e445dae`:** `145 passed; 0 failed; 5 ignored`, on the first pod's CUDA run and on each of the four pods' builds, the register's 4 CUDA tests among them.
+- **Host:** at `7e445dae`, 90 library tests passed and every host target of the crate passed, 0 failed.
+- **Negative gates,** each set aside, run and restored:
+  - picks from the whole window fail the picks test (exit 101);
+  - the register's `load_reads` line removed fails the checkpoint-load test (exit 101).
+- **`uor-harness loop report --check`:** PASS. **`loop gates --full`:** 11 of 11 green.
+- **In-unit reviews,** each by a fresh reviewer that never saw the plan:
+  - **FIT and pre-run review:** FIT and PASS, with their notes applied (listed in the sheet).
+  - **The module code review: APPROVE.** It confirmed both run findings from the code:
+    - the start rule repeats every 6 lanes, so slot `j + 6` equals slot `j` and slot `j + 3` is its opposite;
+    - the keys' straight-through path into the live stream.
+
+    It found no defect in what the module computes: spans, incremental top-K, gather indices, doubling scan, span sums and zero-weight divide. Its low notes are an f32 cancellation in the bag's prefix sum over long windows, `load` not checking the dtype, and a start-rule test to add before any rerun.
+  - **The wiring code review: APPROVE.** No site is missed; slots are cleared on every forward; the drop restores the register. Its low notes: the forward wiring and the drop have no unit tests (the vendored candle computes nothing on the CPU), and a trunk of fewer than 2 layers would ignore the register silently.
+  - **The claims check of this REPORT, its notebook row and the item's closing note: APPROVE.** It confirmed every cell, bar, flag and done-when claim against the sealed tars, the pod log and the checkpoint's header. Its six minor slips are fixed:
+    - two decode figures cut off, not rounded;
+    - the slot groups (3, 2, 2 and 1);
+    - the parameter count's scope;
+    - the projections' sizes;
+    - an unmeasured "slower host";
+    - bar 2's displayed sum.
+  - **A fresh re-review at the final head:** APPROVE.
 
 ## Skills used
 
@@ -174,7 +197,7 @@ TODO-CHECKS
 ## Still open
 
 - **The next steps of the pivot,** in order: the per-stage profile, the mechanism map for the owner's refocus direction, and the route-plus-memory decisive run.
-- **The owner's question on serving format,** asked in chat on 28 Oct: float serving while the model is built (a change to CHARTER §3.6–3.7, the owner's), or integer serving with an exact integer form for every new piece.
+- **Serving format, answered by the owner** (28 Oct, claude's chat): *"determinism is still probably the goal but like you said we can do the training in float and maybe just export the integer exact... either way it is worth looking into the archived hopf golden ratio complex - riemannian bridge we used for the original prime router or angular router"*. Training stays float and serving stays integer, through an exact export, as CHARTER §3.6–3.7 already say; no charter change. Every new piece needs an exact integer form, and the archived prime and angular router is to be read into the mechanism map. He added: *"I don't care what we serve at long as it is cheap"*. So the map ranks each stage by its cost per token (operations and bytes moved), and the number format is chosen under that.
 - **The vector writer's admission** (bounded output candidates) is built and does not work: its address hinge cannot be met (the item file's 27 Oct state). The whole-vocabulary search is the largest per-token cost, so this is a separate item.
 - **The learned register's two fixes:** detached keys, and distinct slot starts with a test.
 - **No read since claude-144 has an integer serving path.**

@@ -188,7 +188,10 @@ impl PromptRegister {
     /// A register of `q` slots of `picks` picks on a stream of `width` coordinates. Nothing is
     /// random: identity rotations, margins `lanes / 2`, zero weights (so it starts as no read),
     /// and slot `j`'s query on lane `l` is `+1` where `((l·(2j + 1) + j) / 3)` is even and `−1`
-    /// elsewhere, a fixed pattern that differs between slots once there are enough lanes.
+    /// elsewhere. Known flaw (claude-155 REPORT): the pattern repeats every 6 lanes, so slot
+    /// `j + 6` starts equal to slot `j` and slot `j + 3` opposite to it; only 4 starts are
+    /// distinct, and equal slots train as copies. A rerun of the learned select needs a start rule
+    /// that is distinct for every slot, with a test.
     pub fn new(
         q: usize,
         picks: usize,
