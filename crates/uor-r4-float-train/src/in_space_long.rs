@@ -45,6 +45,26 @@ pub enum PointObjective {
     /// No admission: the target must be nearer than the `SHEET_RIVALS` nearest wrong tokens of the
     /// whole table, and the reply is the whole table's nearest token.
     Nearest,
+    /// The target token's cell: the predicted point must be a margin nearer the target than the
+    /// whole table's single nearest wrong token, `relu(1 + max_r s(r) − s(target))`, so only the
+    /// rival that would win is pushed. Decoded as [`PointObjective::Nearest`] is (claude-152).
+    Cell,
+}
+
+impl PointObjective {
+    /// Whether replies decode as the whole table's nearest token, not the writer's pick.
+    pub fn decodes_nearest(self) -> bool {
+        matches!(self, Self::Nearest | Self::Cell)
+    }
+}
+
+/// One TRAIN split other than the pinned one, named by its directory and checked by the sha256s
+/// of its `tokens.u16` and `response_mask.u8` (claude-152).
+#[derive(Clone, Debug, Serialize)]
+pub struct TrainSplit {
+    pub dir: PathBuf,
+    pub tokens_sha256: String,
+    pub mask_sha256: String,
 }
 
 /// One run's settings.
@@ -81,6 +101,8 @@ pub struct LongConfig {
     /// Pass no gradient from the input encoding into the shared table
     /// (`geometric_stack::set_input_table_fixed`); it changes training only, never a forward.
     pub fix_input_table: bool,
+    /// Train on this split in place of the pinned TRAIN; DEV stays the pinned one.
+    pub train_split: Option<TrainSplit>,
     pub samples: usize,
     pub reply_tokens: usize,
 }
@@ -293,9 +315,20 @@ fn voronoi_loss(
     Ok(token.mean_all()?.add(&address.mean_all()?)?)
 }
 
-/// [`PointObjective::Nearest`]: the target against the whole table's `SHEET_RIVALS` nearest
-/// wrong tokens. Their choice carries no gradient; their displacement and the target's do.
-fn nearest_loss(model: &StackModel, query: &Tensor, targets: &[u32]) -> Result<Tensor> {
+/// [`PointObjective::Nearest`] (each of the `rival` scores' hinges, averaged) or
+/// [`PointObjective::Cell`] (only the hinge of the best-scoring rival), against `target`.
+fn rival_hinge(rival: &Tensor, target: &Tensor, cell: bool) -> Result<Tensor> {
+    if cell {
+        Ok(hinge(&rival.max_keepdim(1)?, target, 1.0)?.mean_all()?)
+    } else {
+        Ok(hinge(rival, target, 1.0)?.mean_all()?)
+    }
+}
+
+/// [`PointObjective::Nearest`] or [`PointObjective::Cell`]: the target against the whole table's
+/// `SHEET_RIVALS` nearest wrong tokens. Their choice carries no gradient; their displacement and
+/// the target's do.
+fn nearest_loss(model: &StackModel, query: &Tensor, targets: &[u32], cell: bool) -> Result<Tensor> {
     let table = table(model)?;
     let (rows, width) = query.dims2()?;
     let device = query.device();
@@ -321,7 +354,7 @@ fn nearest_loss(model: &StackModel, query: &Tensor, targets: &[u32]) -> Result<T
         .abs()?
         .mean_keepdim(1)?
         .neg()?;
-    Ok(hinge(&rival, &target_score, 1.0)?.mean_all()?)
+    rival_hinge(&rival, &target_score, cell)
 }
 
 fn batch_loss(
@@ -347,7 +380,8 @@ fn query_loss(
     match objective {
         PointObjective::Sheet => model.native_head_loss(query, targets, hs::SHEET_RIVALS),
         PointObjective::Voronoi => voronoi_loss(model, query, targets, root_separation()?.0 / 2.0),
-        PointObjective::Nearest => nearest_loss(model, query, targets),
+        PointObjective::Nearest => nearest_loss(model, query, targets, false),
+        PointObjective::Cell => nearest_loss(model, query, targets, true),
     }
 }
 
@@ -366,6 +400,35 @@ pub struct NearestReading {
     /// averaged over dimensions: whether the prompt moves the opening point at all.
     pub opening_query_spread: f64,
     pub query_spread: f64,
+    /// Reply rows that copy the prompt ([`copies_prompt`]): the reply's previous token and its
+    /// target stand side by side in the window's prompt, as in a code word or a number the user
+    /// gave. Only a model that reads the prompt names these above chance (claude-152).
+    pub copied_rows: usize,
+    pub copied_hits: usize,
+    /// Reply rows that neither open a reply nor copy the prompt.
+    pub rest_rows: usize,
+    pub rest_hits: usize,
+}
+
+/// Whether the reply row whose input sits at window `offset` (target at corpus `position`) copies
+/// the window's prompt: the row's previous token and its target stand at two adjacent earlier
+/// positions of the window that are both outside any reply. `mask` is the corpus response mask.
+fn copies_prompt(
+    window: &CausalWindow,
+    offset: usize,
+    position: usize,
+    target: u32,
+    mask: &[u8],
+) -> bool {
+    // The window's offset 0 sits at corpus position `position − 1 − offset`.
+    let start = position - 1 - offset;
+    let previous = window.input_ids[offset];
+    (0..offset.saturating_sub(1)).any(|j| {
+        window.input_ids[j] == previous
+            && window.input_ids[j + 1] == target
+            && mask[start + j] == 0
+            && mask[start + j + 1] == 0
+    })
 }
 
 /// The writer's decoding of the same DEV rows as [`NearestReading`]: the token the served
@@ -421,6 +484,16 @@ fn nearest_reading(
                 .flat_map(|w| w.scored_corpus_positions.iter())
                 .map(|&p| opens_reply(mask, p))
                 .collect();
+            let copies: Vec<bool> = windows
+                .iter()
+                .flat_map(|w| {
+                    w.scored_offsets
+                        .iter()
+                        .zip(&w.scored_corpus_positions)
+                        .zip(&w.scored_targets)
+                        .map(move |((&o, &p), &t)| copies_prompt(w, o, p, t, mask))
+                })
+                .collect();
             let hidden = crate::flock_read::points(model, &ids, windows.len(), SHEET_CONTEXT)?;
             let idx = Tensor::from_vec(scored.clone(), scored.len(), model.device())?;
             let query = hidden.index_select(&idx, 0)?.detach();
@@ -433,10 +506,22 @@ fn nearest_reading(
                 .flatten_all()?
                 .to_dtype(DType::U32)?
                 .to_vec1::<u32>()?;
-            let rows = best.iter().zip(&served).zip(&targets).zip(&opens);
-            for (((pick, served), target), open) in rows {
+            let rows = best
+                .iter()
+                .zip(&served)
+                .zip(&targets)
+                .zip(&opens)
+                .zip(&copies);
+            for ((((pick, served), target), open), copy) in rows {
                 reading.hits += usize::from(pick == target);
                 written.hits += usize::from(served == target);
+                if *copy {
+                    reading.copied_rows += 1;
+                    reading.copied_hits += usize::from(pick == target);
+                } else if !*open {
+                    reading.rest_rows += 1;
+                    reading.rest_hits += usize::from(pick == target);
+                }
                 if *open {
                     reading.opening_rows += 1;
                     reading.opening_hits += usize::from(pick == target);
@@ -698,7 +783,8 @@ fn sample_windows<'a>(
 
 /// The model's greedy reply to `prompt`: `reply_tokens` tokens on the last `SHEET_CONTEXT`
 /// tokens, stopping early at BOS. Each is the whole table's nearest token under
-/// [`PointObjective::Nearest`], else the writer's pick among its admitted cells.
+/// [`PointObjective::Nearest`] or [`PointObjective::Cell`], else the writer's pick among its
+/// admitted cells.
 fn greedy_reply(
     model: &StackModel,
     objective: PointObjective,
@@ -712,7 +798,7 @@ fn greedy_reply(
         let mut reply = Vec::with_capacity(reply_tokens);
         for _ in 0..reply_tokens {
             let window = &ids[ids.len().saturating_sub(SHEET_CONTEXT)..];
-            let next = if objective == PointObjective::Nearest {
+            let next = if objective.decodes_nearest() {
                 let hidden = crate::flock_read::points(model, window, 1, window.len())?;
                 nearest_scores(&hidden.narrow(0, window.len() - 1, 1)?, &table)?
                     .argmax(1)?
@@ -1451,10 +1537,63 @@ fn load_train_split(data_root: &Path) -> Result<(Vec<u32>, Vec<u8>)> {
     )
 }
 
-/// The pinned TRAIN split's windows with at least 4 scored targets, each context-long; at least
-/// `batch` of them.
-fn load_train(data_root: &Path, batch: usize) -> Result<Vec<CausalWindow>> {
-    let (train_tokens, train_mask) = load_train_split(data_root)?;
+/// `split`'s tokens and response mask, refused unless both files hash to the sha256s it names,
+/// the tokens carry a `UORT` header whose count matches both payloads, and every token is a
+/// vocabulary id after an opening BOS (claude-152).
+fn load_named_split(split: &TrainSplit) -> Result<(Vec<u32>, Vec<u8>)> {
+    let token_bytes = fs::read(split.dir.join("tokens.u16"))?;
+    let mask = fs::read(split.dir.join("response_mask.u8"))?;
+    for (name, bytes, want) in [
+        ("tokens.u16", &token_bytes, &split.tokens_sha256),
+        ("response_mask.u8", &mask, &split.mask_sha256),
+    ] {
+        let got = sha256_bytes(bytes);
+        if &got != want {
+            return Err(invalid(format!(
+                "{name} in {} hashes to {got}, not {want}",
+                split.dir.display()
+            )));
+        }
+    }
+    const HEADER: usize = 64;
+    if token_bytes.len() < HEADER || &token_bytes[..4] != b"UORT" {
+        return Err(invalid("tokens.u16 lacks its 64-byte UORT header"));
+    }
+    let count = u64::from_le_bytes(
+        token_bytes[8..16]
+            .try_into()
+            .map_err(|_| invalid("a short UORT header"))?,
+    ) as usize;
+    if token_bytes.len() != HEADER + 2 * count || mask.len() != count {
+        return Err(invalid(format!(
+            "the UORT header says {count} tokens; the payload or the mask disagrees"
+        )));
+    }
+    let tokens: Vec<u32> = token_bytes[HEADER..]
+        .chunks_exact(2)
+        .map(|w| u32::from(u16::from_le_bytes([w[0], w[1]])))
+        .collect();
+    if tokens.first() != Some(&hs::SHEET_BOS_ID)
+        || tokens.iter().any(|&t| t as usize >= hs::SHEET_VOCAB)
+    {
+        return Err(invalid(
+            "the split does not open with BOS, or has an id past the vocabulary",
+        ));
+    }
+    Ok((tokens, mask))
+}
+
+/// TRAIN's windows with at least 4 scored targets, each context-long; at least `batch` of them.
+/// TRAIN is the pinned split, or `split` when a run names one.
+fn load_train(
+    data_root: &Path,
+    batch: usize,
+    split: Option<&TrainSplit>,
+) -> Result<Vec<CausalWindow>> {
+    let (train_tokens, train_mask) = match split {
+        None => load_train_split(data_root)?,
+        Some(split) => load_named_split(split)?,
+    };
     let (train_windows, _) =
         hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
     let usable: Vec<CausalWindow> = train_windows
@@ -1482,7 +1621,7 @@ pub fn gradient_norms(
     config: &LongConfig,
     device: &Device,
 ) -> Result<Vec<GradientNorm>> {
-    let usable = load_train(data_root, config.batch)?;
+    let usable = load_train(data_root, config.batch, config.train_split.as_ref())?;
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
     crate::geometric_stack::set_retention_rates(config.retain_rates);
     crate::geometric_stack::set_folded_scores(config.fold_scores);
@@ -1599,7 +1738,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
 
     let tokenizer = pinned_tokenizer(data_root)?;
 
-    let usable = load_train(data_root, config.batch)?;
+    let usable = load_train(data_root, config.batch, config.train_split.as_ref())?;
     let (dev_windows, dev_mask) = load_dev(data_root)?;
     let prompts = sample_windows(&dev_windows, &dev_mask, config.samples);
     println!(
@@ -1875,6 +2014,70 @@ mod tests {
         let mask = [0u8, 0, 1, 1, 0, 1];
         let opens: Vec<bool> = [2, 3, 5].iter().map(|&p| opens_reply(&mask, p)).collect();
         assert_eq!(opens, [true, false, true]);
+    }
+
+    #[test]
+    fn a_copied_row_repeats_a_pair_the_prompt_holds_and_not_one_the_reply_made() {
+        // BOS, a prompt "u q r a", then the reply "k z k z q r". The reply's own "k z" repeats
+        // inside the reply, but only "q r" stands in the prompt.
+        let tokens = [0u32, 5, 9, 10, 6, 7, 8, 7, 8, 9, 10];
+        let mask = [0u8, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1];
+        let (windows, _) = hs::build_document_windows(&tokens, &mask, 16, 0).unwrap();
+        let copied: Vec<usize> = windows
+            .iter()
+            .flat_map(|w| {
+                w.scored_offsets
+                    .iter()
+                    .zip(&w.scored_corpus_positions)
+                    .zip(&w.scored_targets)
+                    .filter(|((&o, &p), &t)| copies_prompt(w, o, p, t, &mask))
+                    .map(|((_, &p), _)| p)
+            })
+            .collect();
+        assert_eq!(copied, [10], "only the reply's \"q r\" copies the prompt");
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_cell_objective_pushes_only_the_nearest_rival() {
+        let device = Device::new_cuda(0).unwrap();
+        // Scores are negative distances: the first rival is the nearest wrong token.
+        let rival = Tensor::new(&[[-1.5f32, -1.8, -4.0]], &device).unwrap();
+        let loss = |target: f32, cell: bool| -> f32 {
+            let target = Tensor::new(&[[target]], &device).unwrap();
+            rival_hinge(&rival, &target, cell)
+                .unwrap()
+                .to_scalar::<f32>()
+                .unwrap()
+        };
+        // The nearest rival's hinge alone: 1 + (−1.5) − (−1.0).
+        assert!((loss(-1.0, true) - 0.5).abs() < 1e-6);
+        // The nearest objective averages all three hinges instead: (0.5 + 0.2 + 0) / 3.
+        assert!((loss(-1.0, false) - 0.7 / 3.0).abs() < 1e-6);
+        // A margin nearer than the nearest rival: inside the target's cell, no loss.
+        assert_eq!(loss(-0.4, true), 0.0);
+    }
+
+    #[test]
+    fn a_named_split_loads_only_under_the_sha256s_it_names() {
+        let dir = std::env::temp_dir().join(format!("claude-152-split-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let mut header = vec![0u8; 64];
+        header[..4].copy_from_slice(b"UORT");
+        header[8..16].copy_from_slice(&3u64.to_le_bytes());
+        let tokens: Vec<u8> = header.into_iter().chain([0u8, 0, 5, 0, 6, 0]).collect();
+        let mask = vec![0u8, 0, 1];
+        fs::write(dir.join("tokens.u16"), &tokens).unwrap();
+        fs::write(dir.join("response_mask.u8"), &mask).unwrap();
+        let split = |tokens_sha256: String| TrainSplit {
+            dir: dir.clone(),
+            tokens_sha256,
+            mask_sha256: sha256_bytes(&mask),
+        };
+        let (ids, m) = load_named_split(&split(sha256_bytes(&tokens))).unwrap();
+        assert_eq!((ids, m), (vec![0, 5, 6], mask.clone()));
+        assert!(load_named_split(&split("0".repeat(64))).is_err());
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
