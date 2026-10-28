@@ -23,7 +23,7 @@ This unit does those three things, in that order:
    What decides a reply's opening sits at the prompt's start, beyond the trunk's reach of about 6 tokens. The best model so far reads `302`. That gap, from about 300 to 607 from the words alone, is what the runs below measure against.
 2. **A better test of whether a reply uses the user's input,** scored at every checkpoint on the pinned DEV:
    - **openings,** read against the `607` a plain lookup of the first 8 prompt tokens gets, not only against `161`;
-   - **copied rows:** top-1 on the reply rows whose target token appears in the same window's prompt, the tokens before the reply. Only a model that reads the prompt can name the code word or the number it was given. Top-1 on the other reply rows is reported beside it.
+   - **copied rows:** top-1 on the reply rows whose previous token and target stand side by side in the same window's prompt, the tokens before the reply. A code word or a number the user gave is such a pair; a single shared token is not enough, since this vocabulary splits words into common pieces. Only a model that reads the prompt can name them above the no-read floor. Top-1 on the other reply rows is reported beside it.
 3. **The retrains,** each with the Hamming read (`--hamming-read 4`):
    - **the cell margin objective** (`--objective cell`): the predicted point must lie in the target token's cell, a margin nearer the target than the whole table's single nearest wrong token, as `relu(1 + max_r s(r) − s(target))`. The current `nearest` objective averages that hinge over the 8 nearest wrong tokens;
    - **more training text** (`--train-split DIR --train-sha256 HEX`): `balp`, the 99,322,259-token corpus already sealed in the store, in `data/ft-balp.tar` (sha256 `b1d2211377a2e99d5977cc95d46875027023b08867488b1372185b3f62a1473f`, the archive TRAIN's own pin names).
@@ -78,7 +78,7 @@ The pinned TRAIN, DEV and tokenizer, and every existing pin, stay as they are. A
 ## Done when
 
 1. **`--objective cell`,** with a host or CUDA test that the loss is zero exactly when the target is a margin nearer than the nearest wrong token, and positive otherwise. Its negative gate (the max over rivals replaced by their mean, which is `nearest`) must make the test fail.
-2. **The copied-row test** in `NearestReading`, with `copied_rows` and `copied_hits` for reply rows whose target appears in the window's prompt, and the same counts for the other reply rows. A host test pins the split on a hand-built window. Its negative gate (the prompt check widened to the whole window) must make the test fail.
+2. **The copied-row test** in `NearestReading`, with `copied_rows` and `copied_hits` for reply rows whose previous token and target stand side by side in the window's prompt, and `rest_rows` and `rest_hits` for reply rows that neither open nor copy. A host test pins the split on a hand-built window. Its negative gate (the prompt check widened to the whole window) must make the test fail.
 3. **`--train-split DIR --train-sha256 HEX`:** TRAIN read from another `UORT` split, refused unless its tokens hash to `HEX`. Its sha256 and token count go in the run's config. The pinned TRAIN stays the default.
 4. **`--width N`** (default 256): the trunk, the table and every read built at `N`. Checkpoints record their width, and a width-256 build is byte-for-byte what main builds. The suite stays green, including the CUDA tests on a pod.
 5. **The pre-registered runs** (one sheet, a fresh FIT and pre-run review, CHARTER §4.5):

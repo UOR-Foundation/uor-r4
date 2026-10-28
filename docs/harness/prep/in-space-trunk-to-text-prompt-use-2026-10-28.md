@@ -32,17 +32,22 @@ Every arm runs `train-in-space --objective cell --hamming-read H --retain-rates 
 | (b) text | TRAIN becomes `balp`, 99,322,259 tokens | `--train-split balp --train-sha256 13261ba8… --train-mask-sha256 19c1a93f…`, `H = 4` | (a) at the same seed |
 | (c) wide | width 512, and 8 read heads, so each head keeps its 64-bit code | (b)'s, plus `--width 512`, `H = 8` | (b) at the same seed |
 
-**The probe, re-scored** for the record, not barred. `--inspect` on stored step-16,384 checkpoints at seeds 1 and 2, with the new test:
-- claude-145's no-read runs;
-- claude-146's Hamming runs;
-- claude-151's spin runs.
+(c) changes two things together, because a head's code is one 64-bit word (`HammingRead::new` refuses wider heads), so 512 needs 8 heads. A D at (c) does not separate the width from the head count.
+
+**The probe, re-scored.** `--inspect` on stored step-16,384 checkpoints at seeds 1 and 2, with the new test:
+- claude-145's no-read runs: the no-read floor for `C`, barred above;
+- claude-146's Hamming runs: (a)'s reference, and I-5;
+- claude-151's spin runs: reported.
 
 It shows how much the read already copies.
 
-## Bar (pre-registered), each arm against its reference at step 16,384, seed by seed
+## Bar (pre-registered), each arm against its reference at step 16,384
 
-- **Copies pass:** `C ≥ C_ref + 3·√(N·p(1−p))`, with `N` the copied rows and `p = C_ref / N`.
-- **Openings pass:** `O ≥ max(197, O_ref + 36)`.
+Training is nondeterministic, and seeds spread far more than one panel's binomial noise: claude-146's twins read openings `298` and `200`, 98 apart. So each arm is read against the **better of its reference's two seeds**, and **both** of the arm's seeds must clear it. Write `best(X_ref)` for the larger of the reference's seed-1 and seed-2 values, and `m(X, N) = 3·√(N·p(1−p))` with `p = best(X_ref)/N`.
+
+- **Openings pass:** at both seeds, `O ≥ max(197, best(O_ref) + m(O, 1,226))`. For (a), the twins give `best = 298` and `m = 45`, so the bar is `343`.
+- **Copies pass:** at both seeds, `C ≥ best(C_ref) + m(C, N)`, where `N` is the panel's copied rows. **And** the copied rows' hit-rate gain over `best`, in points, must exceed the rest rows' gain, `rest_hits / rest_rows`, over their own `best`. A gain that only matches the rest is general fit, not prompt use. That matters most for (b), whose 13 times more text can lift common pairs with no reading.
+- **The no-read floor:** claude-145's no-read runs, re-scored, are the floor for `C`. Their `C` is what pair statistics alone name. An arm whose `C` does not beat the floor's better seed by `m` has no copies pass, whatever its reference reads.
 
 | | Copies pass | Copies fail |
 |---|---|---|
@@ -50,7 +55,7 @@ It shows how much the read already copies.
 | **Openings fail** | **C.** More copying; the same templates. | **D.** No gain in prompt use. |
 
 - **Flag F:** `T < T_ref − 500`, meaning fit is lost.
-- Seeds 1 and 2 must land in the same cell. A split is reported as a split, with no cell, and no third seed runs in this unit.
+- Each pass already needs both seeds. A pass at one seed only is reported as such, as no pass, and no third seed runs in this unit.
 - A missing number gives no cell: that step is rerun.
 
 **What each cell decides:**
@@ -83,9 +88,8 @@ None. Each arm starts from `build_fbs_model_at(OneAtomActive, seed, width)`, whi
 
 ## Minimum test power
 
-- **Copies:** the bar is three binomial standard deviations at the reference's own rate, on the same `N` copied rows. `N` is counted on the panel itself and reported.
-- **Openings:** 36 is three standard deviations at the commonest opening's rate (claude-145's sheet).
-- **Noise:** claude-140 measured this training as nondeterministic, so two seeds must agree.
+- **Panel noise:** each margin is three binomial standard deviations at the better reference seed's rate, on the panel's own row counts (1,226 openings; `N` copied rows, counted on the panel and reported).
+- **Seed noise:** this is larger. claude-140 measured this training as nondeterministic, and claude-146's twins spread 98 openings. The bar handles it by requiring both arm seeds to beat the better reference seed, not a seed-paired difference. Two seeds against two seeds is still weak: a no-effect arm drawn from the twins' spread (mean about 249, standard deviation about 69) clears `343` at both seeds about 1% of the time if the seeds are independent. A real gain smaller than the spread can be missed. A miss here is "keep and iterate", not a close.
 
 ## Cost
 
