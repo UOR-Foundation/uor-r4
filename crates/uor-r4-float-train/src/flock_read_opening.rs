@@ -149,22 +149,7 @@ impl OpeningRead {
         }
         let device = x.device();
         let lanes = width / 4;
-        // Each row's slot positions, on the host; per slot index a token id and a 0/1 mask.
-        let mut slot_ids = vec![vec![0u32; rows]; self.k];
-        let mut slot_mask = vec![vec![0f32; rows]; self.k];
-        let mut count = vec![1f32; rows];
-        for b in 0..batch {
-            let row = &ids[b * time..(b + 1) * time];
-            for (t, slots) in opening_slots(row, self.k, self.anchor).iter().enumerate() {
-                let r = b * time + t;
-                for (j, &s) in slots.iter().enumerate() {
-                    slot_ids[j][r] = row[s];
-                    slot_mask[j][r] = 1.0;
-                }
-                // A position with no slot divides its zero sum by 1.
-                count[r] = slots.len().max(1) as f32;
-            }
-        }
+        let (slot_ids, slot_mask, count) = self.slot_tables(ids, batch, time);
         let table = table.detach();
         let mut sum = Tensor::zeros((rows, lanes, 4), DType::F32, device)?;
         for (j, (slot_ids, slot_mask)) in slot_ids.into_iter().zip(slot_mask).enumerate() {
@@ -179,6 +164,33 @@ impl OpeningRead {
         let count = Tensor::from_vec(count, (rows, 1, 1), device)?;
         let mean = sum.broadcast_div(&count)?.reshape((batch, time, width))?;
         Ok(x.add(&mean.broadcast_mul(self.weight.as_tensor())?)?)
+    }
+
+    /// The host side of [`apply`](Self::apply) for `batch` windows of `time` positions: per slot
+    /// index, each row's token id and a 0/1 mask, and each row's kept-slot count (at least 1, so
+    /// a position with no slot divides its zero sum by 1).
+    fn slot_tables(
+        &self,
+        ids: &[u32],
+        batch: usize,
+        time: usize,
+    ) -> (Vec<Vec<u32>>, Vec<Vec<f32>>, Vec<f32>) {
+        let rows = batch * time;
+        let mut slot_ids = vec![vec![0u32; rows]; self.k];
+        let mut slot_mask = vec![vec![0f32; rows]; self.k];
+        let mut count = vec![1f32; rows];
+        for b in 0..batch {
+            let row = &ids[b * time..(b + 1) * time];
+            for (t, slots) in opening_slots(row, self.k, self.anchor).iter().enumerate() {
+                let r = b * time + t;
+                for (j, &s) in slots.iter().enumerate() {
+                    slot_ids[j][r] = row[s];
+                    slot_mask[j][r] = 1.0;
+                }
+                count[r] = slots.len().max(1) as f32;
+            }
+        }
+        (slot_ids, slot_mask, count)
     }
 
     /// Every learned parameter, in a fixed order for the optimizer.
@@ -232,7 +244,15 @@ impl OpeningRead {
             rotation: Var::from_tensor(get("rotation")?)?,
             weight: Var::from_tensor(get("weight")?)?,
         };
-        if read.rotation.dims() != [read.k, read.weight.dim(0)? / 4, 4] {
+        let width = read.weight.dim(0)?;
+        if !(1..=MAX_SLOTS).contains(&read.k) || width == 0 || !width.is_multiple_of(4) {
+            return Err(invalid(format!(
+                "the saved opening read keeps {} slots over {width} coordinates; it needs 1 to \
+                 {MAX_SLOTS} slots over whole 4-lane blocks",
+                read.k
+            )));
+        }
+        if read.rotation.dims() != [read.k, width / 4, 4] {
             return Err(invalid(
                 "the saved opening read's rotation does not match its k",
             ));
@@ -364,51 +384,130 @@ mod tests {
         let ids: Vec<u32> = ROW.iter().chain(MID.iter()).copied().collect();
         let x = Tensor::from_vec(values(2 * 13 * WIDTH, 7), (2, 13, WIDTH), &device).unwrap();
         let lanes = WIDTH / 4;
-        // Slot 1 turns every lane by `i`; slots 0 and 2 stay the identity.
-        let turn = [0.0f32, 1.0, 0.0, 0.0];
-        let mut rotations = vec![[1.0f32, 0.0, 0.0, 0.0]; 3];
-        rotations[1] = turn;
-        for (anchor, b, t, slots) in [
-            (OpeningAnchor::Turn, 0, 4, [1usize, 2, 3]),
-            (OpeningAnchor::Last, 1, 5, [3usize, 4, 5]),
-        ] {
+        // A general quaternion in every slot and lane, so every term of the product counts; and
+        // every position of both rows, so partial and empty slot lists count too.
+        let rotation = values(3 * lanes * 4, 4);
+        for anchor in [OpeningAnchor::Turn, OpeningAnchor::Last] {
             let read = OpeningRead::new(3, WIDTH, anchor, &device).unwrap();
             read.weight
                 .set(&Tensor::ones(WIDTH, DType::F32, &device).unwrap())
                 .unwrap();
-            let rotation: Vec<f32> = rotations
-                .iter()
-                .flat_map(|q| (0..lanes).flat_map(move |_| *q))
-                .collect();
             read.rotation
-                .set(&Tensor::from_vec(rotation, (3, lanes, 4), &device).unwrap())
+                .set(&Tensor::from_vec(rotation.clone(), (3, lanes, 4), &device).unwrap())
                 .unwrap();
             let out = read.apply(&x, &ids, &table).unwrap();
-            let added = out.sub(&x).unwrap().to_vec3::<f32>().unwrap()[b][t].clone();
-            let row = &ids[b * 13..(b + 1) * 13];
-            let mut expect = vec![0.0f32; WIDTH];
-            for (j, &s) in slots.iter().enumerate() {
-                let point = &table_rows[row[s] as usize];
-                for lane in 0..lanes {
-                    let q = [
-                        point[lane * 4],
-                        point[lane * 4 + 1],
-                        point[lane * 4 + 2],
-                        point[lane * 4 + 3],
-                    ];
-                    let turned = quaternion(rotations[j], q);
-                    for i in 0..4 {
-                        expect[lane * 4 + i] += turned[i] / slots.len() as f32;
+            let added = out.sub(&x).unwrap().to_vec3::<f32>().unwrap();
+            for b in 0..2 {
+                let row = &ids[b * 13..(b + 1) * 13];
+                for (t, slots) in opening_slots(row, 3, anchor).iter().enumerate() {
+                    let mut expect = vec![0.0f32; WIDTH];
+                    for (j, &s) in slots.iter().enumerate() {
+                        let point = &table_rows[row[s] as usize];
+                        for lane in 0..lanes {
+                            let at = (j * lanes + lane) * 4;
+                            let r = [
+                                rotation[at],
+                                rotation[at + 1],
+                                rotation[at + 2],
+                                rotation[at + 3],
+                            ];
+                            let q = [
+                                point[lane * 4],
+                                point[lane * 4 + 1],
+                                point[lane * 4 + 2],
+                                point[lane * 4 + 3],
+                            ];
+                            let turned = quaternion(r, q);
+                            for i in 0..4 {
+                                expect[lane * 4 + i] += turned[i] / slots.len() as f32;
+                            }
+                        }
+                    }
+                    for (a, e) in added[b][t].iter().zip(&expect) {
+                        assert!(
+                            (a - e).abs() < 1e-5,
+                            "{anchor:?} b {b} t {t}: added {:?}, expected {expect:?}",
+                            added[b][t]
+                        );
                     }
                 }
             }
-            for (a, e) in added.iter().zip(&expect) {
-                assert!(
-                    (a - e).abs() < 1e-5,
-                    "{anchor:?}: added {added:?}, expected {expect:?}"
-                );
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_opening_read_trains_its_rotation_and_weight_and_never_the_table() {
+        let device = Device::new_cuda(0).unwrap();
+        let table = Var::from_tensor(&table(&device)).unwrap();
+        let ids: Vec<u32> = ROW.iter().chain(MID.iter()).copied().collect();
+        let x = Tensor::from_vec(values(2 * 13 * WIDTH, 7), (2, 13, WIDTH), &device).unwrap();
+        let read = OpeningRead::new(3, WIDTH, OpeningAnchor::Turn, &device).unwrap();
+        read.weight
+            .set(&Tensor::ones(WIDTH, DType::F32, &device).unwrap())
+            .unwrap();
+        let grads = read
+            .apply(&x, &ids, table.as_tensor())
+            .unwrap()
+            .sum_all()
+            .unwrap()
+            .backward()
+            .unwrap();
+        assert!(grads.get(read.rotation.as_tensor()).is_some());
+        assert!(grads.get(read.weight.as_tensor()).is_some());
+        assert!(grads.get(table.as_tensor()).is_none());
+    }
+
+    #[test]
+    fn the_slot_tables_count_and_mask_each_kept_slot() {
+        let ids: Vec<u32> = ROW.iter().chain(MID.iter()).copied().collect();
+        for anchor in [OpeningAnchor::Turn, OpeningAnchor::Last] {
+            let read = OpeningRead::new(3, WIDTH, anchor, &Device::Cpu).unwrap();
+            let (slot_ids, slot_mask, count) = read.slot_tables(&ids, 2, 13);
+            for b in 0..2 {
+                let row = &ids[b * 13..(b + 1) * 13];
+                for (t, slots) in opening_slots(row, 3, anchor).iter().enumerate() {
+                    let r = b * 13 + t;
+                    assert_eq!(count[r], slots.len().max(1) as f32, "{anchor:?} r {r}");
+                    for j in 0..3 {
+                        let kept = j < slots.len();
+                        assert_eq!(
+                            slot_mask[j][r],
+                            f32::from(u8::from(kept)),
+                            "{anchor:?} r {r} j {j}"
+                        );
+                        if kept {
+                            assert_eq!(slot_ids[j][r], row[slots[j]], "{anchor:?} r {r} j {j}");
+                        }
+                    }
+                }
             }
         }
+    }
+
+    #[test]
+    fn a_saved_opening_read_out_of_range_is_refused() {
+        let device = Device::Cpu;
+        let directory = std::env::temp_dir().join(format!(
+            "uor-opening-read-refused-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let mut tensors = std::collections::HashMap::new();
+        tensors.insert(
+            "rotation".to_owned(),
+            Tensor::from_vec(Vec::<f32>::new(), (0, 2, 4), &device).unwrap(),
+        );
+        tensors.insert(
+            "weight".to_owned(),
+            Tensor::from_vec(values(WIDTH, 1), WIDTH, &device).unwrap(),
+        );
+        tensors.insert("k".to_owned(), Tensor::new(&[0u32], &device).unwrap());
+        tensors.insert("anchor".to_owned(), Tensor::new(&[0u32], &device).unwrap());
+        candle_core::safetensors::save(&tensors, directory.join(FILE)).unwrap();
+        assert!(OpeningRead::load(&directory, &device).is_err());
+        std::fs::remove_dir_all(&directory).unwrap();
     }
 
     #[test]
