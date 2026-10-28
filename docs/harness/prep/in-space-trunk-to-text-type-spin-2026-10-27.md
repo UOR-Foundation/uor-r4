@@ -2,13 +2,17 @@
 
 Lab: claude. Item: [in-space-trunk-to-text](../../roadmap/items/in-space-trunk-to-text.md). Order: [claude-151](../../loop/tasks/in-space-trunk-to-text/claude-151/ORDER.md). Code: branch `claude/type-head-spin`. Every pod builds and tests its own binary from the pinned commit first.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT, after two fresh non-author rounds.
+- **Round 1** found that no cell said what it decides, and that the job left I-2 on the arm, I-3 and I-4 unchecked. Both are fixed.
+- **Round 2** closed those findings. Its D67 pre-run review failed on one point: that the chain is not on PLAN.md. Its brief had pointed it at PLAN.md lines 55–80. The chain is at PLAN.md line 38: the owner's 27 Oct direction row, which names [`docs/model/pipeline-map.md`](../../model/pipeline-map.md). The map's stage 5 and unit U1 are this read, and its line 259 puts U1–U3 first. The claude decision review that passed the run on that record is logged on #2028.
 
 ## The question
 
 **Does a position signal from SpiralCore's spin in the Hamming read's type heads let replies use the prompt, measured against the same read without it?**
 
-The owner's direction (27 Oct): "give its type heads a position signal from SpiralCore's spin, so replies can use the prompt." claude-146's read (`df1d7892`, merged) solves recall through its copy heads, but on language it landed in cell D at two seeds of three: openings passed at seed 1 only, reach at none. The type heads must learn which prompt word matters, and have no position signal. The one hint: the pre-review form, whose type heads were turned by a rotary per-index code, had seed 2 at 214 openings at step 6,144 where the merged form had 161.
+The owner's direction (27 Oct): "give its type heads a position signal from SpiralCore's spin, so replies can use the prompt." claude-146's read (`df1d7892`, merged) solves recall through its copy heads, but on language it landed in cell D at two seeds of three: openings passed at seed 1 only, reach at none. The type heads must learn which prompt word matters, and have no position signal.
+
+**The chain:** PLAN.md's 27 Oct owner-direction row (line 38) leads to [the pipeline map](../../model/pipeline-map.md). There, stage 5 (look-back) is this read, and U1–U3 come first "because nothing downstream means anything until the prompt reaches the reply" (line 259). The one hint: the pre-review form, whose type heads were turned by a rotary per-index code, had seed 2 at 214 openings at step 6,144 where the merged form had 161.
 
 ## Steps: the arms
 
@@ -42,12 +46,13 @@ claude-145's decision table, with the twin now the read without the spin. `O` is
 
 What each cell decides:
 
-- **A** makes the spin the read's default (`--type-spin` on in every later language run).
-  - If the reading checkpoint also has `T ≥ 7,002` (the M1 count table), it meets the item's done-when 1 and 2: every openings bar is at least `197` and every reach bar at least `0.05`. The item's next unit is then done-when 3 and the serving change to whole-table nearest. U3, the integer Hamming read, then carries the spin.
-- **B** keeps the spin on. The next unit is reach: why the spin's gain is near, read at distances past 16.
-- **C** keeps the spin on. The next unit is the type heads' payload (what they bring back, `v_s`), not position.
-- **D** closes this configuration (the spin as built, at these settings), never the mechanism. The read's default stays without the spin. The next unit is a decision review of what the type heads lack, before any other position form.
-- **Flag F**, reported beside the cell: `T < T_twin − 500`, meaning the spin costs fit. In A, B or C with F set, the next unit first restores fit with the spin on, and the default does not change until it does.
+A, B and C each make the spin the read's default (`--type-spin` on in every later language run); D does not. With flag F set, the default waits until fit is restored.
+
+- **A:** the spin lets openings use the prompt. A step-16,384 checkpoint of a seed in A that also has `T ≥ 7,002` (the M1 count table) meets the item's done-when 1 and 2, since every openings bar is at least `197` and every reach bar at least `0.05`. The item's next unit is then done-when 3 and the serving change to whole-table nearest. U3, the integer Hamming read, carries the spin.
+- **B:** the next unit is reach: why the spin's gain is near, read at distances past 16.
+- **C:** the next unit is the type heads' payload (what they bring back, `v_s`), not position.
+- **D** closes this configuration (the spin as built, at these settings), never the mechanism. The next unit is a decision review of what the type heads lack, before any other position form.
+- **Flag F**, reported beside the cell: `T < T_twin − 500`, meaning the spin costs fit. In A, B or C with F set, the next unit first restores fit with the spin on.
 - Seeds 1 and 2 must land in the same cell for the reading to count. If they split, seed 3 runs and the cell two of three share is the reading. If all three differ, there is no cell.
 - A missing number gives no cell: that step is rerun, never read as a fail.
 
