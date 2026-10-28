@@ -2,7 +2,8 @@
 
 Lab: claude. Item: [in-space-trunk-to-text](../../roadmap/items/in-space-trunk-to-text.md). Order: [claude-153](../../loop/tasks/in-space-trunk-to-text/claude-153/ORDER.md), with Casey's words verbatim. Code: main at `e2f15d3fcc91a6042b77fbcf717a79c39eaf215d`, unchanged. Each pod builds and tests its own binary from that commit.
 
-TEST FITNESS: pending (a fresh non-author round, then the pre-run review).
+TEST FITNESS: pending round 2 (light gates, per the owner's 27 Oct direction).
+- **Round 1** (NOT FIT, fresh non-author): flag F at seed 2 (`T < 10,073`) sat inside (a)'s own seed spread, so it would fire about half the time with no effect. Three smaller points: the copies false-pass rate was unstated, nothing checked the head count, and one sentence misstated (c)'s fit. All four are fixed below.
 
 ## The question
 
@@ -10,7 +11,7 @@ TEST FITNESS: pending (a fresh non-author round, then the pre-run review).
 
 What claude-152 left open:
 - **(a)** was cell C: copies rose (`1,517 / 2,933` of 4,130 copied rows) and openings did not (`306 / 245` of 1,226).
-- **Width 512** was run only on `balp`, where fit was lost. There it copied most (`3,342 / 3,330`) but fit worst (`T = 5,434 / 4,957`), so the width's effect on the pinned TRAIN is unmeasured.
+- **Width 512** was run only on `balp`, where fit was lost. There it copied most (`3,342 / 3,330`), but its fit (`T = 5,434 / 4,957`) stayed below (a)'s and below the M1 count table's `7,002`. So the width's effect on the pinned TRAIN is unmeasured.
 
 ## The prompt-use test
 
@@ -48,7 +49,8 @@ The rule is claude-152's. Each arm is read against the **better of its reference
 | **Openings pass** | **A.** The reply reads the prompt for what to say and what to copy. | **B.** The prompt picks the reply; no more copying. |
 | **Openings fail** | **C.** More copying; the same templates. | **D.** No gain in prompt use over (a). |
 
-- **Flag F:** at either seed, `T < T_(a) − 500` at the same seed: `T < 8,828` at seed 1, or `T < 10,073` at seed 2. Fit is lost.
+- **Flag F:** at either seed, `T` below (a)'s worse seed minus 500: `T < 9,328 − 500 = 8,828`. Fit is lost.
+  - This changes claude-152's same-seed rule. Training is nondeterministic, so a seed number pairs nothing: (a)'s own seeds read `9,328` and `10,573`. A seed-2 flag at `10,073` would fire about half the time with no effect.
 - A pass at one seed only is reported as such, and counts as no pass. No third seed runs in this unit.
 - A missing number gives no cell: that step is rerun.
 
@@ -64,6 +66,8 @@ The rule is claude-152's. Each arm is read against the **better of its reference
   - The cell objective's negative gate is not rerun. The code is byte for byte the code it failed against on all four of claude-152's pods: `git diff d102c594 e2f15d3fc -- crates/ Cargo.lock` is empty.
 - **I-2:** (w)'s and (w0)'s step-0 `dev_nearest` hits, openings and distinct opening picks equal claude-152's width-512 (c) at the same seed: `1/0/756` at seed 1 and `3/1/659` at seed 2 (step 0 of `c-s1` and `c-s2`, sealed in the store).
   - Step 0 depends on neither TRAIN nor the read: claude-152's (a), (b) and (b0), on two TRAINs and with 4 or 0 heads, all equal claude-146's twins at step 0.
+  - It is checked first on the 256-step probe, so a wrong build stops in minutes, and again on the arm.
+  - Each arm's `config.json` must also record `"width": 512`, its `"hamming_read"` (`8` or `0`) and `"train_split": null` (the pinned TRAIN). Step 0 cannot see the head count, so this checks it.
   - A failed I-2 stops every reading of that pod.
 - **I-3:** (w)'s read weight is above 0 at step 16,384 (`--inspect`'s `hamming_weight_mean_abs`). (w0) has no read.
 - **I-4:** every loss is finite.
@@ -82,7 +86,10 @@ None. Each arm starts from `build_fbs_model_at(OneAtomActive, seed, 512)`, the s
 
 - **Panel noise:** each margin is three binomial standard deviations at (a)'s better seed, on the panel's own row counts.
 - **Seed noise is larger.** (a)'s two seeds read copies `1,517` and `2,933`, and `T` `9,328` and `10,573`. The bar asks both (w) seeds to beat (a)'s better seed, so a real gain smaller than that spread can be missed. A miss is "keep and iterate", not a close (CHARTER §4.1).
-- **The false-pass rate:** if (w) and (a) come from one distribution, both (w) seeds are the top two of four draws `1` time in `6`, before any margin. The margin cuts that further: it is about `1.05` of (a)'s seed SD on openings, though that SD comes from two values. The decision it drives (the width for later runs) is re-tested by every later run, so the rate is stated and accepted.
+- **The false-pass rate:** if (w) and (a) come from one distribution, both (w) seeds are the top two of four draws `1` time in `6`, before any margin.
+  - **On openings,** the margin is about `1.05` of (a)'s seed SD (`43`, from two values), which cuts that well below `1` in `6`.
+  - **On copies,** it is only about `0.09` of (a)'s seed SD (`1,001`, from two values), so copies bar 1 alone passes by chance about `1` time in `7`. Bars 2 and 3 cut that further, by an amount this sheet cannot state. Copies decide cell C, the likeliest outcome, so C is the weakest reading.
+  - The decision it drives (the width for later runs) is re-tested by every later run, so the rate is stated and accepted.
 
 ## Cost
 
