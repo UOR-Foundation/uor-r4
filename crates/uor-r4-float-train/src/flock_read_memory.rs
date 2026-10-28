@@ -9,7 +9,8 @@
 //! 3. **Move** ([`TurnMemory::apply_readout`]). At an opening row whose key the table holds, the
 //!    readout point `n` moves toward the stored token's table point `c` (detached),
 //!    `n + w ⊙ (c − n)`, with `w` per coordinate and starting at 0. Every other row, and an
-//!    unseen key, is left as it is. At `w = 1` a hit decodes the stored token. A nearest readout
+//!    unseen key, is left as it is. At `w = 1` a hit lands on the stored token's point, to within float rounding, so the
+//!    nearest readout decodes it. A nearest readout
 //!    names the point a prediction is at, so the memory is a move, as the Hamming readout's copy
 //!    is; nothing is exponential.
 //!
@@ -408,14 +409,17 @@ mod tests {
         let before = output.squeeze(0).unwrap().to_vec2::<f32>().unwrap();
         // Zero weight: no read, bit for bit.
         assert_eq!(read(&memory), before);
-        // Weight 1: the hit row becomes the stored token's point exactly; no other row moves.
+        // Weight 1: the hit row lands on the stored token's point, to within float rounding
+        // (n + (c − n) can be one ulp from c); no other row moves at all.
         memory
             .weight
             .set(&Tensor::ones(width, DType::F32, &device).unwrap())
             .unwrap();
         let moved = read(&memory);
         let stored = table.get(6).unwrap().to_vec1::<f32>().unwrap();
-        assert_eq!(moved[2], stored);
+        for (i, (&m, &c)) in moved[2].iter().zip(&stored).enumerate() {
+            assert!((m - c).abs() < 1e-6, "coordinate {i}: {m} != {c}");
+        }
         for r in [0, 1, 3, 4, 5] {
             assert_eq!(moved[r], before[r], "row {r}");
         }
