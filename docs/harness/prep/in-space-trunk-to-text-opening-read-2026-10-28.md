@@ -15,7 +15,9 @@ TEST FITNESS: FIT, round 1, by a fresh non-author reviewer (light gates, per the
 - the per-seed gain over (a) is reported;
 - I-5 is added, a check that the evaluation uses the read.
 
-PRE-RUN: pending.
+PRE-RUN: PASS, by a fresh non-author reviewer. Its two notes:
+- each pod's tar is named by pod and arm, since (o) and (oL) at one seed write same-named folders on different pods;
+- the in-training evaluations that `Ō` is read from run on the thread where training set the read, which the REPORT states.
 
 ## The question
 
