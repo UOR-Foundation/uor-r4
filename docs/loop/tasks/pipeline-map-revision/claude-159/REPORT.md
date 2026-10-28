@@ -43,7 +43,7 @@ The pipeline map is revised. Every stage now leads with its cost per token, meas
 None: this unit runs nothing. Every number in the revision cites its REPORT, notebook row, mechanism page, ADR or PR. Numbers derived from them are labelled proof by arithmetic.
 
 **The archive read, in brief** (the map's new section has the sources):
-- **The bridge.** ADR-0003 §5 is the direction-preserving golden radial bridge: R_φ(z) = φ·E(z), with E : ℂ² → ℝ⁴. Exact in ℤ[φ], a shell step is two integer adds. It is never measured.
+- **The bridge.** ADR-0003 §5 is the direction-preserving golden radial bridge: R_φ(z) = φ·E(z), with E : ℂ² → ℝ⁴. Exact in ℤ[φ], a shell step is one integer add. Its algebra is built and tested, with no language result.
 - **The ancestor.** `projects/research-archives/code/gemini-dev/prime-router/server.py` is a GloVe hypersphere router with an Ollama voice. Its next word is a dense product and an argmax.
 - **Hopf sector routing:** negative, MRR 0.0045 against 0.0743.
 - **The prime-ranked pointer:** the hit rate rose from 0.377 to 0.545, but the answers stayed at 19–23 of 40, against a bar of 25.
@@ -54,7 +54,30 @@ None: this unit runs nothing. Every number in the revision cites its REPORT, not
 
 - **`cargo xtask roadmap render --check`:** `pipeline-map-revision.md` passes. The 8 problems left are in `fbs-cost-profile.md` and `route-plus-memory.md`, outside this scope (above).
 - **`cargo xtask links --json local/claude/links.json`:** no broken link has `pipeline-map.md`, `PLAN.md` or this item as its source. The 1,197 broken links counted repo-wide predate this unit.
-- **`uor-harness loop report --check`, `uor-harness loop gates --full`, the fresh in-unit review:** RESULT.
+- **`uor-harness loop report --check`:** PASS. **`uor-harness loop gates --full`:** 11 of 11 green.
+- **The fresh in-unit review: two claims checks at `81be3903e`, each against the sources.** Both gave CHANGES; all findings are fixed in the next commit.
+  - **Stages and tables (map lines 39–223):** every claude-150 to claude-158 number matches, and all 39 new link targets resolve. Two medium findings:
+    - openings "never passed `302 / 228`" was false at seed 2, so it is now "never beat it by the sheet's margin (bar `347.3`)", also in the gaps;
+    - the writer's admission as the fix is now labelled a hypothesis, with the reason it fails stated as not known.
+
+    Seven low findings were fixed too:
+    - claude-153's copies in seed order;
+    - the read rates labelled a bound across hosts;
+    - the step (3.73 ms) told apart from the decoded token (3.77 ms), and the stated prefill rate removed;
+    - the loop's 1% marked as a share of the plain token;
+    - the layer right after the read (1.69 ms host time) noted, and "host-bound" in place of "waits on launches";
+    - the type spin's seed-2 openings pass noted;
+    - a wrong cross-reference.
+  - **The archive section, the scale arithmetic and the rankings (lines 224–356):** the arithmetic recomputes exactly, and the bridge matches §5 on every point. Three medium findings:
+    - the ℤ[φ] algebra is built and tested (`IMPLEMENTED_SUBSTRATE`, `PASS_SOURCE_FREE`), not "never measured". It has no language result;
+    - the 4.44% figure is #951's, recorded on #958;
+    - the pointer's "because" is a hypothesis.
+
+    Four low findings were fixed too:
+    - one add per shell step, not two;
+    - the normalized exponential samples above temperature 0;
+    - "recorded `NOT_RUN`", not "measured";
+    - "hard coded" is read two ways. #455's fixed baseline (26.42%) beat its learned arms.
 
 ## Skills used
 
@@ -80,4 +103,4 @@ The map of the whole model, from training data to the laptop's reply, now says w
 - **Serving on the laptop is slow in the model's own layers.**
 - **Training is slow in its backward pass and its search of the whole vocabulary.**
 
-The old prime router's "golden ratio bridge" exists: it is ADR-0003 §5. It is a design that changes only a vector's length, with integer arithmetic, and it has never been tested.
+The old prime router's "golden ratio bridge" exists: it is ADR-0003 §5. It changes only a vector's length, with integer arithmetic. Its algebra is built and tested, but it has never been tried in a language model.

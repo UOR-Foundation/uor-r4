@@ -49,7 +49,7 @@ On 28 Oct, in claude's chat, after claude-155's diagnosis, the owner decided:
 
   It found no record of a golden-ratio C4 → R4 projection, of a "complex–Riemannian bridge" by that name (the nearest is ADR-0003's zeta phases), or of a hard-coded choice winning. These need a full read, not the search's summary.
 
-  **Corrected by claude-159's full read.** The bridge is on record: ADR-0003 §5, "Direction-preserving golden radial bridge", is the "complex-to-Riemannian lift" R_φ(z) = φ·E(z) on E : ℂ² → ℝ⁴. It is exact in ℤ[φ] and never measured. The map is from ℂ², not ℂ⁴. No hard-coded choice won: on PR #455, averaging did. The archived Python router is `projects/research-archives/code/gemini-dev/prime-router/server.py`. See the map's section "The archived prime and angular router".
+  **Corrected by claude-159's full read.** The bridge is on record: ADR-0003 §5, "Direction-preserving golden radial bridge", is the "complex-to-Riemannian lift" R_φ(z) = φ·E(z) on E : ℂ² → ℝ⁴. It is exact in ℤ[φ]; its algebra is built and tested, with no language result. The map is from ℂ², not ℂ⁴. No hard-coded choice won: on PR #455, averaging did. The archived Python router is `projects/research-archives/code/gemini-dev/prime-router/server.py`. See the map's section "The archived prime and angular router".
 
 ## Done when
 
