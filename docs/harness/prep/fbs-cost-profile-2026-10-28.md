@@ -2,7 +2,12 @@
 
 Lab: claude. Item: [fbs-cost-profile](../../roadmap/items/fbs-cost-profile.md). Order: [claude-157](../../loop/tasks/fbs-cost-profile/claude-157/ORDER.md), with Casey's words verbatim. Code: this unit's head, built and tested on the pod from that exact commit.
 
-TEST FITNESS: PENDING. PRE-RUN: PENDING.
+TEST FITNESS: FIT, round 1. PRE-RUN: PASS. Both by one fresh non-author reviewer, at `4251b4209`. Its five notes, none blocking, are applied below and in the code at the run's head:
+- **The sum bar nearly holds by construction.** The stages tile the GPU span from the first mark to the last, and both spans start and end with the GPU idle. So `profile.json` now also gives the median profiled step's host time against the unprofiled one (`clock_overhead`). That is the check that the clock does not slow what it times.
+- **"Backward" holds every stage's gradient.** `profile.json` adds `top3_forward`, ranked among the forward and objective stages only, and the unlock rules read that list.
+- **The launch-or-GPU call** needs host time at least 0.9 of GPU time, and leaves out `objective.readback`, whose host time is the wait for the whole forward.
+- **Two checks are arithmetic, not checks.** The pairing count in I-3 and the 1% rule cannot fail, so the REPORT gives them as arithmetic.
+- **The table-search stage also holds its setup:** the table's read, the target upload and the mask. The REPORT says so.
 
 ## The question
 
@@ -42,10 +47,16 @@ Both arms run `train-in-space --objective cell --retain-rates 1 --decay-mult 1 -
 
 The item's done-when 1, per arm:
 - **Sum:** `stage_sum_ms / median_unprofiled_ms` within `[0.90, 1.10]` (`within_10pct` in `profile.json`).
-- **Top three:** the three stages with the largest median GPU time, named.
-- **Launch or GPU:** for each of the top three, its median host time beside its GPU time. If the host time is at least the GPU time, the stage is read as waiting on launches; if it is less, as waiting on the GPU.
+- **The clock's own cost:** `clock_overhead`, the median profiled step against the median unprofiled one, within ±10%. Outside it, the stage times are labelled as distorted by the clock.
+- **Top three:** two lists, each of the three stages with the largest median GPU time:
+  - `top3`, over all stages;
+  - `top3_forward`, over the forward and objective stages only.
+- **Launch or GPU:** for each stage in either list, its median host time beside its GPU time.
+  - Host time at least 0.9 of GPU time: read as waiting on launches.
+  - Below that: read as waiting on the GPU.
+  - `objective.readback` is left out, because its host time is the wait for the whole forward.
 
-A sum outside the band is a miss. It is reported with its ratio, and the stage times are still given, labelled with the miss. It is not a stop.
+A sum or an overhead outside its band is a miss. It is reported with its ratio, and the stage times are still given, labelled with the miss. It is not a stop.
 
 ## Instrument checks
 
@@ -90,9 +101,9 @@ Nothing else stops the run.
 
 ## What each result unlocks
 
-- **The table search is in the top three:** the next training unit makes it cheaper. Candidate changes:
+- **The table search is in `top3_forward`:** the next training unit makes it cheaper. Candidate changes:
   - a coarse search over the 256 writer cells;
   - fewer rivals;
   - a search made every few steps.
-- **The recurrence is in the top three and launch-bound:** fusing its kernels is the cheaper change.
+- **The recurrence is in `top3_forward` and launch-bound:** fusing its kernels is the cheaper change.
 - **The backward dominates:** the next step is a profile of the backward's own stages, with the driver's profiler.

@@ -2023,8 +2023,16 @@ pub struct ProfileSummary {
     pub ratio: f64,
     /// The item's bar: the stages sum to the measured step time within 10%.
     pub within_10pct: bool,
+    /// The median of the profiled steps' host times, timed as the unprofiled ones are.
+    pub median_profiled_ms: f64,
+    /// `median_profiled_ms / median_unprofiled_ms - 1`: what the clock itself adds to a step. The
+    /// stage sum cannot show it, since both spans start and end with the GPU idle.
+    pub clock_overhead: f64,
     /// The three stages with the largest median GPU time, largest first.
     pub top3: Vec<String>,
+    /// The same, among the forward and objective stages only: the backward holds every stage's
+    /// gradient in one time.
+    pub top3_forward: Vec<String>,
 }
 
 /// The median of `values` (the mean of the middle two for an even count); NaN when empty.
@@ -2095,17 +2103,32 @@ pub fn summarize_profile(rows: &[ProfileRow]) -> ProfileSummary {
     let mut unprofiled: Vec<f64> = rows.iter().filter_map(|r| r.next_unprofiled_ms).collect();
     let median_unprofiled_ms = median(&mut unprofiled);
     let ratio = stage_sum_ms / median_unprofiled_ms;
+    let mut profiled: Vec<f64> = rows.iter().map(|r| r.step_ms).collect();
+    let median_profiled_ms = median(&mut profiled);
     let mut ranked: Vec<&StageSummary> = stages.iter().collect();
     ranked.sort_by(|a, b| b.gpu_ms.total_cmp(&a.gpu_ms));
+    let names_of = |keep: &dyn Fn(&str) -> bool| -> Vec<String> {
+        ranked
+            .iter()
+            .filter(|s| keep(&s.name))
+            .take(3)
+            .map(|s| s.name.clone())
+            .collect()
+    };
+    let top3 = names_of(&|_| true);
+    let top3_forward = names_of(&|n| matches!(stage_group(n), "forward" | "objective"));
     ProfileSummary {
         profiled_steps: rows.len(),
-        top3: ranked.iter().take(3).map(|s| s.name.clone()).collect(),
+        top3,
+        top3_forward,
         stages,
         groups,
         stage_sum_ms,
         median_unprofiled_ms,
         ratio,
         within_10pct: (ratio - 1.0).abs() <= 0.10,
+        median_profiled_ms,
+        clock_overhead: median_profiled_ms / median_unprofiled_ms - 1.0,
     }
 }
 
@@ -2428,11 +2451,12 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
                     )?;
                     println!(
                         "[profile] {} steps: stages sum to {:.3} ms against {:.3} ms unprofiled \
-                         (ratio {:.3}); top three {:?}",
+                         (ratio {:.3}); the clock adds {:.3}; top three {:?}",
                         summary.profiled_steps,
                         summary.stage_sum_ms,
                         summary.median_unprofiled_ms,
                         summary.ratio,
+                        summary.clock_overhead,
                         summary.top3
                     );
                 }
@@ -2986,6 +3010,19 @@ mod tests {
             summary.top3,
             ["backward", "layer0.recurrence", "objective.table_search"]
         );
+        assert_eq!(
+            summary.top3_forward,
+            ["layer0.recurrence", "objective.table_search", "embed"]
+        );
+        assert_eq!(
+            (summary.median_profiled_ms, summary.clock_overhead),
+            (20.0, 0.0)
+        );
+        // A clock that slows the profiled steps shows in its overhead, which the sum cannot see.
+        let mut slowed = profile_row(1.0, 20.0);
+        slowed.step_ms = 22.0;
+        let slowed = summarize_profile(&[slowed]);
+        assert!(slowed.within_10pct && (slowed.clock_overhead - 0.1).abs() < 1e-12);
         // The stages summing to far more than an unprofiled step, or far less, misses the bar.
         let over = summarize_profile(&[profile_row(1.0, 15.0), profile_row(1.0, 15.0)]);
         assert!(!over.within_10pct && over.ratio > 1.3);
