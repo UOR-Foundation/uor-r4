@@ -9,11 +9,11 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [in-space-trunk-to-text-ty
 
   | Seed | With the spin (16 / 64 / 192 context) | Twin, no spin |
   |---|---|---|
-  | 1 | `114 / 108 / 101` tokens/s | `124 / 120 / 112` |
-  | 2 | `188 / 177 / 159` | `207 / 195 / 177` |
-  | 3 | `89 / 94 / 105` | `128 / 120 / 113` |
+  | 1 | `114 / 109 / 101` tokens/s | `124 / 120 / 112` |
+  | 2 | `189 / 178 / 159` | `208 / 195 / 177` |
+  | 3 | `89 / 94 / 106` | `128 / 121 / 114` |
 
-  **The spin costs about 8–10% at 7 of 9 points.** At seed 3's two shortest contexts it costs 22–30%. There is no integer serving path for the read yet, so there is no integer decode figure.
+  **The spin costs 7–10% at 7 of 9 points.** At seed 3's two shortest contexts it costs 22–30%. There is no integer serving path for the read yet, so there is no integer decode figure.
 
 ## What did not work, first
 
@@ -132,7 +132,10 @@ The code has not changed since the runs' commit, `2de9d19f4348bc4a41f75a153b00be
 - **Host:** `cargo test --locked -p uor-r4-float-train --no-fail-fast` passes 71 library tests and every other target (12, 4 and 2 tests). Clippy (`--no-deps -D warnings`) reports one error, `decode_speed`'s nine arguments, which is the same on `main`.
 - **No stub-nvcc type check at the head.** The stub no longer passes candle-kernels' frozen PTX export check (logged in FRICTION). It is not needed here: `git diff 2de9d19f -- crates/` is empty, and each pod built and tested that code with the real nvcc.
 - **`uor-harness loop gates --full`:** 11 of 11 green.
-- **In-unit reviews:** two fresh FIT rounds and the D67 pre-run review, listed above. The exact-head review of the diff and the claims check of this REPORT are recorded on the PR.
+- **In-unit reviews,** each by a fresh reviewer that never saw the plan:
+  - two FIT rounds and the D67 pre-run review, listed above;
+  - **the exact-head code review: APPROVE.** It confirmed the algebra (`hamilton_gate(g, u)` is `normalize(g) ⊗ u`, the scan puts later steps on the left, and the conjugate is the inverse), that only the type lanes turn and only before the sign code, that the spin is saved and loaded with the checkpoint, and that gradients reach `step_rotation`. Its three low-severity notes are in [Still open](#still-open);
+  - **the claims check of this REPORT** confirmed about 65 claims. It found two decode-reporting slips, both fixed: truncated decode rates, now rounded; "8–10%", now 7–10%. The second also stands in commit `386e0cf0`'s message.
 
 ## Skills used
 
@@ -151,6 +154,10 @@ The code has not changed since the runs' commit, `2de9d19f4348bc4a41f75a153b00be
   1. **The sign code sees the shared frame.** The relative frame is exact for angles, but each code bit also depends on the frame two positions share. A comparison invariant under the shared frame (the angle itself, or codes taken in a frame the two agree on) is one configuration.
   2. **The type heads' payload,** `v_s`, the kept position's rotated residual. It may carry too little of what a reply needs to name.
   3. **Openings measure templates.** Every arm settles on 1–4 opening tokens. A panel row that scores whether the reply's content comes from the prompt (the code word, the number) would see a type head's effect before openings do.
+- **The code review's three low-severity notes,** left for the next unit that touches the read, since the spin is off by default and no run is affected:
+  1. `--type-spin 1` with `--hamming-read 0` silently does nothing (`in_space_long.rs`, `start_hamming`). An error belongs in `train-in-space.rs`.
+  2. `step_rotation` is stored across every lane, but only the type lanes use it, so the copy-lane rows never change.
+  3. The snap scores the 120 icosians per 4-block by inner product, as `main`'s own icosian snap does (`hamilton_sheet.rs` line 824). It is a nearest-root lookup in a fixed, detached table, not a learned dense layer.
 - **U3, the integer Hamming read** (the pipeline map), does not wait on this. It serves the read without the spin, the default.
 - **The item stays open.** Its done-when needs openings and reach on the same checkpoint (cell A); no checkpoint has `R16 ≥ 0.05`.
 
