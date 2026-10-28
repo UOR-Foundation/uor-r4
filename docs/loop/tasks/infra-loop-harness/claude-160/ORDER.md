@@ -1,70 +1,47 @@
-# ORDER: infra-loop-harness, claude-160
+# ORDER: infra-loop-harness, claude-160 (item maintenance: two items' format)
 
 Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `6ac7659af`.
 
+Setup row: 2 (item-file maintenance: two items' sections, title and area).
+
 ## Goal
 
-The item's done-when reads:
+**Make `cargo xtask roadmap render --check` pass on main, and re-render.**
 
-> Every PR in the build plan on [the loop page](../../loop/README.md#build-plan) is merged, each with its planted fault turning its gate red. The four labs (Kimi, Claude, DeepSeek, Antigravity) are onboarded, each with a committed onboarding receipt. Each lab has completed one loop task end to end: claim, probe, work, gates, report, review by another vendor, queue, and verify on fresh `main`.
+It fails with 8 problems, all in two items claude-156 wrote (found by claude-159's cancel probe):
+- **`fbs-cost-profile.md`:** missing `## How to start`, `## Rules that apply` and `## Sources`.
+- **`route-plus-memory.md`:** its title is 85 characters, over the limit of 80; its area `memory` is not one of the allowed areas; and the same three sections are missing.
+
+This unit fixes the front matter and adds the sections, with no change to either item's goal, scope or done-when. It then runs `roadmap render`, which refuses while the check fails.
+
+`route-plus-memory` is the next unit's item. Its `How to start` names the pipeline map's R1 and the archive's lesson.
 
 ## Cancel probe (run first)
 
-To fill in.
+Cancel if the check already passes on main, or another open order edits either item.
+
+Result (2026-10-28, `origin/main` at `6ac7659af`):
+- `roadmap render --check` fails with the 8 problems above.
+- No open PR touches either item file.
+- `loop claim` accepted this unit, so no open order overlaps it.
+
+**Not cancelled** (instrument: none needed).
 
 ## Files in scope
 
-- `PLAN.md`
-- `docs/roadmap/items/*.md`
-- `crates/uor-r4-harness/src/loopreview.rs`
-- `crates/uor-r4-harness/src/loopnext.rs`
-- `crates/uor-r4-harness/src/loopreport.rs`
-- `crates/uor-r4-harness/src/loopclose.rs`
-- `crates/uor-r4-harness/src/loopclaim.rs`
-- `crates/uor-r4-harness/tests/loop_review*.rs`
-- `crates/uor-r4-harness/tests/loop_next*.rs`
-- `crates/uor-r4-harness/tests/loop_report*.rs`
-- `crates/uor-r4-harness/tests/loop_close*.rs`
-- `crates/uor-r4-harness/tests/loop_claim*.rs`
-- `crates/uor-r4-harness/tests/loop_repair_orders*.rs`
-- `crates/uor-r4-harness/tests/loop_shared_files*.rs`
-- `crates/uor-r4-harness/tests/loop_prcheck.rs`
-- `crates/uor-r4-harness/src/loopbench.rs`
-- `crates/uor-r4-harness/tests/loop_bench*.rs`
-- `docs/harness/d59.json`
-- `docs/harness/owner-paths.json`
-- `docs/integration/DECISIONS.md`
-- `AGENTS.md`
-- `CHARTER.md`
-- `docs/rules/changes.md`
-- `docs/mechanisms/README.md`
-- `docs/mechanisms/lut-serving.md`
-- `docs/mechanisms/hopf-observation.md`
-- `docs/mechanisms/spin-weights.md`
-- `docs/mechanisms/ternary-xor.md`
-- `crates/uor-r4-harness/src/loopdrive.rs`
-- `crates/uor-r4-harness/tests/loop_drive*.rs`
-- `crates/uor-r4-harness/src/prep.rs`
-- `crates/uor-r4-harness/src/preprules.rs`
-- `xtask/src/docs_links.rs`
-- `xtask/src/archive_verify.rs`
-- `xtask/src/figures_charts.rs`
-- `docs/figures/**`
-- `docs/roadmap/issues.json`
-- `docs/harness/prep/read-binding-on-lawful-read-2026-10-25.md`
-- `docs/harness/labs.json`
-- `crates/uor-r4-harness/src/labs.rs`
-- `crates/uor-r4-harness/src/receipt.rs`
-- `crates/uor-r4-harness/tests/lab_registry_cli.rs`
-- `crates/uor-r4-harness/src/onboard.rs`
-- `crates/uor-r4-harness/src/loopguard.rs`
-- `crates/uor-r4-harness/tests/loop_guard.rs`
-- `archive/history/branch-archive/codex-d63-finite-probe-scope-20261026.*`
+- `docs/roadmap/items/fbs-cost-profile.md` (the three sections only)
+- `docs/roadmap/items/route-plus-memory.md` (the title, the area and the three sections only)
+- `docs/roadmap/README.md` and whatever else `roadmap render` writes (rendered)
+- `docs/loop/tasks/infra-loop-harness/claude-160/**`
 
 ## Done when
 
-To fill in.
+1. `cargo xtask roadmap render --check` passes.
+2. `roadmap render` has re-rendered its outputs.
+3. The fix is on main, and `loop claim route-plus-memory` accepts the item.
 
-## Stop and ask if
+## Stop if
 
-To fill in.
+- **The render writes outside the files above.** Note it, and keep it only if it is the render's own output.
+
+No step waits on Casey.
