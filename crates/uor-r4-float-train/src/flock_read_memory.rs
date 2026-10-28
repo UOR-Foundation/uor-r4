@@ -109,9 +109,7 @@ impl TurnMemory {
             return Err(invalid("a turn memory needs a width"));
         }
         if table.keys().any(|key| key.is_empty() || key.len() > k) {
-            return Err(invalid(format!(
-                "a turn memory's keys hold 1 to {k} ids"
-            )));
+            return Err(invalid(format!("a turn memory's keys hold 1 to {k} ids")));
         }
         Ok(Self {
             k,
@@ -181,7 +179,9 @@ impl TurnMemory {
             return Err(invalid("the turn memory needs whole windows"));
         }
         if width != self.weight.dim(0)? {
-            return Err(invalid("the turn memory's width differs from the readout's"));
+            return Err(invalid(
+                "the turn memory's width differs from the readout's",
+            ));
         }
         let device = output.device();
         let (stored, hit) = self.stored(ids, time, rows)?;
@@ -219,7 +219,12 @@ impl TurnMemory {
         let mut keys = Vec::with_capacity(count.max(1) * self.k);
         let mut values = Vec::with_capacity(count.max(1));
         for (key, &value) in &entries {
-            keys.extend(key.iter().copied().chain(std::iter::repeat(PAD)).take(self.k));
+            keys.extend(
+                key.iter()
+                    .copied()
+                    .chain(std::iter::repeat(PAD))
+                    .take(self.k),
+            );
             values.push(value);
         }
         if count == 0 {
@@ -361,7 +366,9 @@ mod tests {
         let mut table = HashMap::new();
         table.insert(vec![1, 2, 3], 4);
         assert!(TurnMemory::new(2, table, 4, &device).is_err());
-        assert!(TurnMemory::new(2, HashMap::new(), 4, &device).unwrap().is_empty());
+        assert!(TurnMemory::new(2, HashMap::new(), 4, &device)
+            .unwrap()
+            .is_empty());
     }
 
     #[cfg(feature = "cuda")]
@@ -370,14 +377,18 @@ mod tests {
         let device = Device::new_cuda(0).unwrap();
         let width = 4;
         let table = Tensor::from_vec(
-            (0..8 * width).map(|v| v as f32 * 0.25 - 3.0).collect::<Vec<_>>(),
+            (0..8 * width)
+                .map(|v| v as f32 * 0.25 - 3.0)
+                .collect::<Vec<_>>(),
             (8, width),
             &device,
         )
         .unwrap();
         let ids = vec![SHEET_BOS_ID, 1 + 2, 4, 5, 6, 7];
         let output = Tensor::from_vec(
-            (0..ids.len() * width).map(|v| (v as f32).sin()).collect::<Vec<_>>(),
+            (0..ids.len() * width)
+                .map(|v| (v as f32).sin())
+                .collect::<Vec<_>>(),
             (1, ids.len(), width),
             &device,
         )
@@ -414,7 +425,11 @@ mod tests {
             .set(&Tensor::full(0.25f32, width, &device).unwrap())
             .unwrap();
         let quarter = read(&memory);
-        for (i, (&q, (&n, &c))) in quarter[2].iter().zip(before[2].iter().zip(&stored)).enumerate() {
+        for (i, (&q, (&n, &c))) in quarter[2]
+            .iter()
+            .zip(before[2].iter().zip(&stored))
+            .enumerate()
+        {
             assert!((q - (n + 0.25 * (c - n))).abs() < 1e-6, "coordinate {i}");
         }
         // The no-memory control moves nothing, even at weight 1.
@@ -433,7 +448,11 @@ mod tests {
             .unwrap()
             .backward()
             .unwrap();
-        let g = grads.get(fresh.weight.as_tensor()).unwrap().to_vec1::<f32>().unwrap();
+        let g = grads
+            .get(fresh.weight.as_tensor())
+            .unwrap()
+            .to_vec1::<f32>()
+            .unwrap();
         let want: Vec<f32> = stored.iter().zip(&before[2]).map(|(c, n)| c - n).collect();
         for (a, b) in g.iter().zip(&want) {
             assert!((a - b).abs() < 1e-5, "{g:?} != {want:?}");
@@ -465,11 +484,15 @@ mod tests {
         let empty = TurnMemory::new(3, HashMap::new(), 4, &device).unwrap();
         let empty_dir = dir.join("empty");
         empty.save(&empty_dir).unwrap();
-        let loaded = TurnMemory::load(&empty_dir, &device).unwrap().expect("saved");
+        let loaded = TurnMemory::load(&empty_dir, &device)
+            .unwrap()
+            .expect("saved");
         assert!(loaded.is_empty());
         assert_eq!(loaded.k(), 3);
         // No file: no memory.
-        assert!(TurnMemory::load(&dir.join("none"), &device).unwrap().is_none());
+        assert!(TurnMemory::load(&dir.join("none"), &device)
+            .unwrap()
+            .is_none());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
