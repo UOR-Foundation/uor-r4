@@ -2,7 +2,11 @@
 
 Lab: claude. Item: [in-space-trunk-to-text](../../roadmap/items/in-space-trunk-to-text.md). Order: [claude-155](../../loop/tasks/in-space-trunk-to-text/claude-155/ORDER.md), with Casey's words verbatim. Code: branch `claude/prompt-register` at `7e445dae83eacf3c3e5c6a7f51c3108ef00c3479`: the register is `06dd98549` and its wiring `7e445dae8`. Host checks at that commit: the crate's host tests pass (90 library tests), two negative gates bite (picks taken from the whole window, and the checkpoint load removed), and the anchor check still agrees at all 1,226 DEV and 212,968 TRAIN openings. Each pod builds and tests its own binary from that commit.
 
-TEST FITNESS: pending (a fresh non-author round, then the pre-run review).
+TEST FITNESS: FIT, and PRE-RUN: PASS, by one fresh non-author reviewer (light gates, per the owner's 27 Oct direction). Its notes:
+- three numbers it did not recompute were checked from their sources: (a)'s `302.0 / 228.0` from claude-152's sealed tars, and flag F's `9,328` from claude-152's REPORT; the test count is checked by I-1;
+- the caps, checked before launch: one pod up, `$0.56/h` of `$8/h`;
+- I-1's wording, fixed below;
+- the tight starting margin, a note: a slot that stays near zero shows as a near-zero drop, which the sheet reports as a finding.
 
 ## The question
 
@@ -75,7 +79,7 @@ The rule is claude-152's and claude-154's. Both of (r)'s seeds must clear the be
 
 ## Instrument checks
 
-- **I-1:** the crate's CUDA tests pass on each pod's build, reading `145 passed; 0 failed; 5 ignored`: claude-154's 134 plus 7 new host tests and 4 new CUDA tests. One CUDA run on the first pod checks this before any arm; a different count is classified first. That run includes the register's four CUDA tests:
+- **I-1:** the crate's CUDA tests pass on each pod's build, reading `145 passed; 0 failed; 5 ignored`: claude-154's 134 plus 7 new host tests and 4 new CUDA tests. One CUDA run on the first pod checks this before any arm, and every pod runs the full suite again before its own arm. A different count is classified first. That run includes the register's four CUDA tests:
   - zero weights change nothing;
   - a slot is the weighted mean of its picks, against an independent reference;
   - the bag weighs its span uniformly;
