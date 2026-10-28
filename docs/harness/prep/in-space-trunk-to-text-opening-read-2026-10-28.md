@@ -9,7 +9,13 @@ Host checks at that commit (laptop):
   - the config's skip rules removed fails the no-flags config test;
   - the checkpoint load removed fails the load test.
 
-TEST FITNESS: pending (a fresh non-author round, then the pre-run review).
+TEST FITNESS: FIT, round 1, by a fresh non-author reviewer (light gates, per the owner's 27 Oct direction). It made four cosmetic notes, all applied:
+- the test count is fixed in advance, not read from the first pod;
+- cell C's reading is narrowed;
+- the per-seed gain over (a) is reported;
+- I-5 is added, a check that the evaluation uses the read.
+
+PRE-RUN: pending.
 
 ## The question
 
@@ -63,7 +69,7 @@ The rule is claude-152's. Both of (o)'s seeds must clear the better reference se
 | | Bar 2 passes: beats (oL) | Bar 2 fails |
 |---|---|---|
 | **Bar 1 passes: beats (a)** | **A.** The prompt's first words reach the opening. | **B.** An extra read path lifts openings; the turn anchor is not shown to be why. |
-| **Bar 1 fails** | **C.** The anchor beats its control, but not (a): the read path costs something. | **D.** No gain in openings from the opening read. |
+| **Bar 1 fails** | **C.** The anchor beats its control; any gain over (a) is under the margin. | **D.** No gain in openings from the opening read. |
 
 - **Flag F:** at either seed, `T` at step 16,384 below (a)'s worse seed minus 500: `T < 9,328 − 500 = 8,828`. Fit is lost.
 - A pass at one seed only counts as no pass. No third seed runs in this unit.
@@ -76,13 +82,14 @@ The rule is claude-152's. Both of (o)'s seeds must clear the better reference se
 - **D:** this configuration closes (CHARTER §4.1). The next unit tries exact memory for the opening: a read of TRAIN's counts keyed on the prompt's first tokens, against a no-memory control (L-010).
 - **Flag F set:** no recipe change until fit is restored, whatever the cell.
 - **The item's done-when,** read on each final checkpoint of (o) and (oL): done-when 1 is `O ≥ 197` with `T ≥ 7,002`; done-when 2 adds `R16 ≥ 0.05`.
+- **Reported, not barred:** each arm's `Ō` gain over (a) at the same seed. Bar 1 asks seed 2 to gain about `119` and seed 1 about `45`, because (a)'s seeds differ, so an uneven real gain can land in C or D.
 
 ## Instrument checks
 
 - **I-A, the anchor:** `--opening-bound` prints at how many DEV and TRAIN openings the read's first 8 slots equal the probe's first-8 key. **Run at `060ba812` on the laptop:**
   - DEV `1,226` of `1,226` agree, and TRAIN `212,968` of `212,968`;
   - the same run reproduces the probe: first-8 names `607`, first-4 `227`, last-4 `161`.
-- **I-1:** the crate's CUDA tests pass on each pod's build. The count is set by one CUDA run on the first pod before any arm. Expected: `131 passed; 0 failed; 5 ignored`, which is claude-152's 123 plus the 8 new library tests, two of them the CUDA tests of the read's `apply`:
+- **I-1:** the crate's CUDA tests pass on each pod's build and read `131 passed; 0 failed; 5 ignored`. One CUDA run on the first pod checks this before any arm; a different count is classified before any run. 131 is claude-152's 123 plus the 8 new library tests, two of them the CUDA tests of the read's `apply`:
   - a zero weight is no read;
   - the read adds the mean of its turned slots.
 - **I-2:**
@@ -92,6 +99,7 @@ The rule is claude-152's. Both of (o)'s seeds must clear the better reference se
   - A failed I-2 stops every reading of that pod.
 - **I-3:** at step 16,384, the opening read's weight (`opening_weight_mean_abs`) and the Hamming read's weight are above 0.
 - **I-4:** every loss is finite.
+- **I-5, the evaluation uses the read:** the final checkpoint is copied without `opening_read.safetensors` and re-scored with `--inspect`. Its `nearest` reading must differ from the same checkpoint's re-score with the read. If they are identical, the read never reached the evaluation, and no cell is read.
 
 ## Data split
 
