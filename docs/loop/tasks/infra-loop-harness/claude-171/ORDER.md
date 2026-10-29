@@ -1,70 +1,48 @@
-# ORDER: infra-loop-harness, claude-171
+# ORDER: infra-loop-harness, claude-171 (item maintenance: the serving follow-ups get an item)
 
 Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `2cc61c247`.
 
+Setup row: 2 (item-file maintenance: a new gap item and PLAN's pivot list).
+
 ## Goal
 
-The item's done-when reads:
+claude-170 (#3358) set `fbs-serving-kernels` done. Its exact structured kernels took the M1's served token from 270 to 3,042–3,044 tok/s. Its fresh decision review approved on a condition: the open follow-ups need a real record, not a line inside a done item (L-001). The follow-ups are a NEON kernel the audit allows, and fewer golden candidates in the snap.
 
-> Every PR in the build plan on [the loop page](../../loop/README.md#build-plan) is merged, each with its planted fault turning its gate red. The four labs (Kimi, Claude, DeepSeek, Antigravity) are onboarded, each with a committed onboarding receipt. Each lab has completed one loop task end to end: claim, probe, work, gates, report, review by another vendor, queue, and verify on fresh `main`.
+The map's gap 3 and R3 also still name NEON kernels as the change, and R3's "pass unlocks" claims a per-value rate near the hardware's, which is not shown. The served step now costs about 5.2 ns a value.
+
+This unit:
+- adds the item `fbs-serving-vector-kernel` (`ready`). Its scope holds the serving files and `docs/model/pipeline-map.md`, and its done-when 1 updates the map's gap 3 and R3. The map is outside this umbrella's scope, and in no open item's.
+- updates PLAN's pivot list: `fbs-serving-kernels` is done, and the new item is its follow-up.
 
 ## Cancel probe (run first)
 
-To fill in.
+Run at `2cc61c247`:
+- **No item** named `fbs-serving-vector-kernel` exists.
+- **No open PR** touches `PLAN.md` or `docs/roadmap/items/`.
+- **The map** is in the scope of no `ready` item: only `pipeline-map` and `pipeline-map-revision` list it, and both are done.
+
+All held. **Not cancelled** (instrument: none needed).
 
 ## Files in scope
 
-- `PLAN.md`
-- `docs/roadmap/items/*.md`
-- `crates/uor-r4-harness/src/loopreview.rs`
-- `crates/uor-r4-harness/src/loopnext.rs`
-- `crates/uor-r4-harness/src/loopreport.rs`
-- `crates/uor-r4-harness/src/loopclose.rs`
-- `crates/uor-r4-harness/src/loopclaim.rs`
-- `crates/uor-r4-harness/tests/loop_review*.rs`
-- `crates/uor-r4-harness/tests/loop_next*.rs`
-- `crates/uor-r4-harness/tests/loop_report*.rs`
-- `crates/uor-r4-harness/tests/loop_close*.rs`
-- `crates/uor-r4-harness/tests/loop_claim*.rs`
-- `crates/uor-r4-harness/tests/loop_repair_orders*.rs`
-- `crates/uor-r4-harness/tests/loop_shared_files*.rs`
-- `crates/uor-r4-harness/tests/loop_prcheck.rs`
-- `crates/uor-r4-harness/src/loopbench.rs`
-- `crates/uor-r4-harness/tests/loop_bench*.rs`
-- `docs/harness/d59.json`
-- `docs/harness/owner-paths.json`
-- `docs/integration/DECISIONS.md`
-- `AGENTS.md`
-- `CHARTER.md`
-- `docs/rules/changes.md`
-- `docs/mechanisms/README.md`
-- `docs/mechanisms/lut-serving.md`
-- `docs/mechanisms/hopf-observation.md`
-- `docs/mechanisms/spin-weights.md`
-- `docs/mechanisms/ternary-xor.md`
-- `crates/uor-r4-harness/src/loopdrive.rs`
-- `crates/uor-r4-harness/tests/loop_drive*.rs`
-- `crates/uor-r4-harness/src/prep.rs`
-- `crates/uor-r4-harness/src/preprules.rs`
-- `xtask/src/docs_links.rs`
-- `xtask/src/archive_verify.rs`
-- `xtask/src/figures_charts.rs`
-- `docs/figures/**`
-- `docs/roadmap/issues.json`
-- `docs/harness/prep/read-binding-on-lawful-read-2026-10-25.md`
-- `docs/harness/labs.json`
-- `crates/uor-r4-harness/src/labs.rs`
-- `crates/uor-r4-harness/src/receipt.rs`
-- `crates/uor-r4-harness/tests/lab_registry_cli.rs`
-- `crates/uor-r4-harness/src/onboard.rs`
-- `crates/uor-r4-harness/src/loopguard.rs`
-- `crates/uor-r4-harness/tests/loop_guard.rs`
-- `archive/history/branch-archive/codex-d63-finite-probe-scope-20261026.*`
+- `docs/roadmap/items/fbs-serving-vector-kernel.md` (new)
+- `PLAN.md` (the pivot list's serving lines)
+- `docs/roadmap/README.md` (rendered)
+- `docs/loop/tasks/infra-loop-harness/claude-171/**`
 
 ## Done when
 
-To fill in.
+1. The new item holds:
+   - the owner's words and the measured gap (claude-169's profile, the 5.2 ns a value);
+   - what is missing, with sources;
+   - a done-when whose first step updates the map's gap 3 and R3;
+   - `## How to start`, `## Rules that apply` and `## Sources`;
+   - a checked scope and `status: ready`.
+2. PLAN's pivot list names `fbs-serving-kernels` done and the new item.
+3. `cargo xtask roadmap render --check` passes. The PR is merged and verified.
 
-## Stop and ask if
+## Stop and decide if
 
-To fill in.
+- **A scope file does not exist and is not a file the item's units create.** Then leave it out.
+
+No step waits on Casey.

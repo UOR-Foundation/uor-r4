@@ -20,11 +20,11 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 16 |
+| ready | 17 |
 | held | 10 |
 | decision | 1 |
 | done | 80 |
-| total | 107 |
+| total | 108 |
 
 ## Start here
 
@@ -134,6 +134,7 @@ These items are ready and open to anyone.
 
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
+| [A NEON kernel and fewer snap candidates for the served FBS step](items/fbs-serving-vector-kernel.md) | ready | a lab | no | [fbs-serving-kernels](items/fbs-serving-kernels.md) | not yet synced |
 | [Serve the Hamming read from the integer artifact on the laptop](items/integer-hamming-read.md) | ready | a lab | yes | [float-training-module](items/float-training-module.md), [spiralcore-fbs-offline-float-sheet](items/spiralcore-fbs-offline-float-sheet.md) | not yet synced |
 | [Split the training backward, and run a cheaper rival search against (a)](items/training-step-cost.md) | ready | a lab | yes | [fbs-cost-profile](items/fbs-cost-profile.md) | not yet synced |
 | [Serve the turn memory from the integer artifact on the laptop](items/turn-memory-integer.md) | ready | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | not yet synced |
@@ -212,6 +213,7 @@ flowchart LR
   n_e8_orbit_memory_sigmoid_free_iteration["e8-orbit-memory-sigmoid-free-iteration"]
   n_fbs_cost_profile["fbs-cost-profile"]
   n_fbs_serving_kernels["fbs-serving-kernels"]
+  n_fbs_serving_vector_kernel["fbs-serving-vector-kernel"]
   n_float_training_module["float-training-module"]
   n_hamilton_gate_offline_float_sheet["hamilton-gate-offline-float-sheet"]
   n_in_space_trunk_to_text["in-space-trunk-to-text"]
@@ -294,6 +296,7 @@ flowchart LR
   n_d41_driver_math_pilot --> n_m2_donor_corpus_generation
   n_fbs_cost_profile --> n_fbs_serving_kernels
   n_fbs_cost_profile --> n_training_step_cost
+  n_fbs_serving_kernels --> n_fbs_serving_vector_kernel
   n_float_training_module --> n_d11_exporter_float_trunk
   n_float_training_module --> n_e8_orbit_memory_sigmoid_free_iteration
   n_float_training_module --> n_hamilton_gate_offline_float_sheet
