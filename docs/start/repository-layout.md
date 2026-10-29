@@ -7,7 +7,7 @@ Every top-level folder has one job. This page lists them, says which ones are ab
 | Folder | What it holds |
 |---|---|
 | `archive/` | Every dated record and retired file, byte for byte as it was. Nothing in it is edited. [`archive/CATALOG.md`](../../archive/CATALOG.md) indexes it. |
-| `crates/` | The Rust code, one crate per folder: the model, the serving runtime, the harness and the tools around them. `crates/uor-r4-wasm-router/` is the browser-facing library (with its tests and server profiles); until 20 October 2026 it was the root package in `src/`, `tests/` and `profiles/`. |
+| `crates/` | The Rust code, one crate per folder: the model, the serving runtime, the harness and the tools around them. `crates/uor-r4-float-train/` is the offline float training crate of the float-trained FBS trunk (D37; never part of serving). `crates/uor-r4-wasm-router/` is the browser-facing library (with its tests and server profiles); until 20 October 2026 it was the root package in `src/`, `tests/` and `profiles/`. |
 | `data/` | The small evaluation panels (`data/panels/`) and four reference tokenizer descriptors that older tests compare against (`data/tokenizers/`, the old top-level `models/`). Large inputs (corpora, checkpoints) live in the private Hugging Face store instead. |
 | `docs/` | The documentation you are reading, the reference documents (indexed in `docs/reference/`), the live lab records under `docs/labs/` and the harness files under `docs/harness/`. |
 | `projects/` | Side projects related to UOR-R4 but not part of the model. See the [projects page](../../projects/README.md). |
@@ -31,7 +31,7 @@ Reference documents (definitions, contracts, decision records and design specifi
 | `.cargo/` | Cargo build settings for the WebAssembly target. |
 | `.devcontainer/` | Editor container settings. Editors look for it at the top level. |
 | `.agents/` | Shared skills for coding agents, in the layout agent tools expect. |
-| `.kimi-code/`, `.codex-lab/` | Onboarding notes for two of the labs. |
+| `.kimi-code/`, `.codex-lab/` | Onboarding notes for the Kimi lab, and a folder kept from the former Codex lab (Codex left the registry). |
 | `.uor-models/` | The runtime's local model store. Only a manifest is tracked; the contents are gitignored. About ninety Rust source files read this path, so it stays. |
 
 ## Files at the top

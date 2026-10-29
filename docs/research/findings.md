@@ -86,7 +86,21 @@ All rows are **measurements** unless the row says otherwise. Terms in the first 
 | E8 memory replacing half the feed-forward blocks: 0.033 BPB worse than the dense control (inside its +0.05 bar) at about 10 times fewer operations; learned product keys beat the fixed E8 addresses by 0.023 | Used a sigmoid gate and 2,000 CPU steps; PARKED | [E8 memory](../../archive/labs/e8-orbit-memory-2026-10-11/README.md) |
 | Quaternion transport beat identity by 0.071 and 0.077 nats at 1,000 updates | Confounded: softmax attention, a sigmoid gate, dense MLPs, and 332,928 fewer parameters in the identity arm | [transport attribution](../../archive/integration/transport-attribution-d1-2026-09-28.md) |
 | The exact store scored 1.000 whenever its register was right | That the same holds for a learned read is a **hypothesis**; none exists yet | [exact memory](../mechanisms/exact-memory.md) |
-| The integer engine is bit-exact and float-free: 44 native symbol ranges and 7 of 7 WebAssembly serving symbols pass the serving audit (multiplier-free until claude-177, which uses the allowed integer multiply and divide) | No lawful trained model has been exported, so the export gap is unmeasured | [WASM runtime](../labs/wasm-serving-runtime-2026-10-18/README.md) (7 of 7); [project track](../integration/project-track.md) (44 native ranges) |
+| The integer engine is bit-exact and float-free: 44 native symbol ranges and 7 of 7 WebAssembly serving symbols pass the serving audit (multiplier-free until claude-177, which uses the allowed integer multiply and divide) | On the discrete path no lawful trained model has been exported; the FBS trunk is in the section below | [WASM runtime](../labs/wasm-serving-runtime-2026-10-18/README.md) (7 of 7); [project track](../integration/project-track.md) (44 native ranges) |
+
+## Since 27 Oct: the FBS trunk line (to 29 Oct)
+
+These rows are **measurements** on the float-trained FBS trunk, a different model path from the discrete rows above (see the [pipeline map](../model/pipeline-map.md)). None is a milestone claim: no closing run has passed the M1 bar.
+
+| Result | Scope and caveat | Source |
+|---|---|---|
+| The trunk can route a prompt but has nowhere to store what each question should produce. About 94% of the model is the word table (4,096 by 256); the trunk is about 64,000 values | The diagnosis behind the 28 Oct pivot to route plus exact memory | [claude-155](../loop/tasks/in-space-trunk-to-text/claude-155/REPORT.md) |
+| Exact turn memory keyed by the user's first 8 tokens named 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds. An empty-table control named 266.3 and 281.0; the prior model 302.0 and 228.0; the ceiling is 607 | DEV panel. It moves only the first word of a reply; after it, replies are still templates | [claude-161](../loop/tasks/route-plus-memory/claude-161/REPORT.md) |
+| The Hamming read (XOR and popcount over 64-bit sign codes) recalled 0.98 to 0.99 in its probe at three seeds | Language openings passed at seed 1 only | [claude-146](../loop/tasks/in-space-trunk-to-text/claude-146/REPORT.md) |
+| Whole-table nearest beat the native writer at seed 2: top-1 6,909 against 493 | The writer's admission failed there. The served session still reads the writer | [claude-150](../loop/tasks/one-decoder/claude-150/REPORT.md) |
+| Two training runs with a fixed-order backward give the same model byte for byte | Determinism only, not a quality result | [claude-179](../loop/tasks/d11-exporter-float-trunk/claude-179/REPORT.md) |
+| Under the unsnapped contract `lut-stack/5`, dual-c131 sits inside the export-gap bar on both seeds (net 6 and -8 against 24) | DEV scope; the gap lives in the 120-root snaps. It serves at 4,217 to 4,320 tok/s | [claude-182](../loop/tasks/d11-exporter-float-trunk/claude-182/REPORT.md) |
+| A served token on the M1 laptop went from 270 to 4,829 tok/s, replies byte-identical, using exact structured kernels and then the integer multiply and divide that D80 and D81 allow | One laptop; no vector (NEON) kernel; floats stay banned in serving. The exact `/5` path runs at 4,217 to 4,504 tok/s | [claude-177](../loop/tasks/integer-mul-div-serving/claude-177/REPORT.md) |
 
 ## Go deeper
 

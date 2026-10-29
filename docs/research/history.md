@@ -85,6 +85,15 @@ Terms follow the [glossary](../start/glossary.md). `#N` is an issue or pull requ
 
 **After the snapshot (15 to 19 October).** The owner re-allowed offline float training on 18 October, with an export-gap check. The K16 runs then completed with no KEEP: the best top-1 was 65 and 463 of 14,287 rows, below a unigram table at 1,226 ([K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md)). The A8 address-cell dose ended at its registered first diagnostic stop ([A8 dose](../labs/a8-dose-2026-10-19/README.md)). Training stays held until the owner releases it (charter §5.1).
 
+## Phase F: the in-space trunk and the pivot (27 to 29 October)
+
+*In plain words: train in the model's own space, find that it has nowhere to store answers, add exact memory, and make serving fast.*
+
+- **27 Oct.** A trunk trained in its own space reached about 60% next word on held-out text, with reply openings at 220 of 1,226. The Hamming read recalled 0.98 to 0.99 in its probe. Whole-table nearest was chosen over the native writer ([claude-150](../loop/tasks/one-decoder/claude-150/REPORT.md)).
+- **28 Oct, the pivot.** The diagnosis ([claude-155](../loop/tasks/in-space-trunk-to-text/claude-155/REPORT.md)) found the storage missing, and the owner chose to pivot to route plus exact memory. Memory named 598.7 and 598.3 of 1,226 openings at two seeds, for the first word only ([claude-161](../loop/tasks/route-plus-memory/claude-161/REPORT.md)). D80 and D81 allowed integer multiply and divide in serving, and a served token went from 270 to 4,829 tok/s ([claude-177](../loop/tasks/integer-mul-div-serving/claude-177/REPORT.md)).
+- **28 to 29 Oct, the export.** A deterministic backward ([claude-179](../loop/tasks/d11-exporter-float-trunk/claude-179/REPORT.md)) and the unsnapped contract `lut-stack/5` put the export gap inside the bar at DEV ([claude-182](../loop/tasks/d11-exporter-float-trunk/claude-182/REPORT.md)).
+- **29 Oct, directions.** One working model end to end, and this documentation refresh. Four labs work in the loop: claude, antigravity, deepseek and kimi. The project is still pre-alpha: 0 of 8 milestones are complete.
+
 ## Where the effort went
 
 ![Bars showing, for each of 14 weeks from 20 July to 19 October, the share of records that were model results. For the eight weeks from 31 August the share is 60%, 79%, 38%, 43%, 80%, 78%, 11% and 13% in order, with a sharp drop in the week of 12 October.](../figures/research/results-share-by-week.svg)
