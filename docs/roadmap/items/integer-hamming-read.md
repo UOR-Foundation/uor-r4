@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: true
 depends_on: [float-training-module, spiralcore-fbs-offline-float-sheet]
 notebook: docs/research/notebook/m4-serving.md
-scope: [crates/uor-r4-integer/src/stack/hamming.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-float-train/src/fbs_export.rs, docs/harness/prep/integer-hamming-read*, docs/loop/tasks/integer-hamming-read/**, docs/research/notebook/m4-serving.md, docs/roadmap/items/integer-hamming-read.md]
+scope: [crates/uor-r4-integer/src/stack/hamming.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-float-train/src/fbs_export.rs, docs/harness/prep/integer-hamming-read*, docs/loop/tasks/integer-hamming-read/**, docs/research/notebook/m4-serving.md, docs/roadmap/items/integer-hamming-read.md]
 ---
 
 ## Why it matters
@@ -24,6 +24,38 @@ It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-
 - The integer runtime (`uor-r4-integer`, the D11 engine) has no Hamming read: no packed sign codes, no popcount match, no hard choice of the nearest earlier positions, no readout move.
 - The exporter does not carry the read's parameters (`hamming_read.safetensors`: rotations, margins, weights).
 - No decode timing with the read on this M1.
+
+**The design the port follows** (claude-187, from `flock_read_hamming.rs` and the integer format; a decision review passed):
+
+- **What a read stores.** There are two reads, at depths `HAMMING_DEPTHS = [2, 6]`: after layer 2 in the stream, and on the readout. Each, in `hamming_read.safetensors` as `d{depth}.{name}`, has:
+  - `query_rotation`, `key_rotation` and `value_rotation`, each `(width / 4, 4)`: one quaternion per lane;
+  - `margin`, `(heads)`, in bits;
+  - `weight`, `(2, width)`: row 0 is `w_c`, the copy heads', and row 1 is `w_y`, the type heads'.
+
+  There is also a `heads` scalar. claude-146 trained `heads = 4` at width 256: 2 copy heads and 2 type heads, each on its own 64 coordinates, one `u64` word. An optional `d{depth}.step_rotation` is claude-151's type spin. claude-146's checkpoints do not have it, and the port refuses it until the type spin is ported.
+- **The artifact.**
+  - `FbsTrunkSnapshot` gains an optional `hamming`. It is `serde(default, skip_serializing_if = "Option::is_none")`, so every existing `snapshot.json` still parses.
+  - `StackShape` gains an optional `hamming` that is likewise skipped when absent, so a read-free export stays `lut-stack/4` or `/5`, byte for byte.
+  - A shape with a read is `uor-r4.lut-stack/6`. The raw flags are kept beside it.
+  - The sections are `hamming.d{depth}.{name}`, each `i32` at an exponent declared in the shape.
+- **Rotations are stored raw, and normalized at serving.**
+  - The float read rotates through `hamilton_gate`, which normalizes `g / |g|`.
+  - The integer read stores each quaternion as exported, at a fixed exponent. It normalizes it by `stack_rotation(g, 1 << 31, GATE_EPSILON)`, the exact integer path `lut-stack/5`'s raw gates use (claude-181). Then it rotates by `stack_hamilton`.
+  - So no second normalization routine is needed.
+- **Codes.** A coordinate's bit is 1 at or above 0, 64 coordinates to a word in coordinate order, as `pack_signs`. Copy-head keys and queries depend only on the token: the shared table's point is the `writer.table` row, which is also the input embedding. So their codes are built once per vocabulary entry, at load.
+- **Choice: the tie rule.**
+  - **Recorded as a decision.** The float `choose_sorted` sorts the masked distances, `arg_sort_last_dim(true)`, and keeps the first `kept`. Its own doc says "Ties may come out in another order".
+  - **The integer read** keeps ascending distance, then ascending position `s`: deterministic, and the order of any stable sort.
+  - **Parity:** it is measured on kept *sets*. A tie's order inside the set does not matter, and a tie across the 16th place is counted, not assumed away.
+  - **Candidates:** `1 ≤ s < t` (`first = 1`; position 0 has no previous token). Only real candidates are kept: the float masks the others to `FAR` and drops them by `real`.
+- **The session refuses what it does not serve.** Until a unit serves a part, an artifact that needs it is refused with a clear error: a read at all, then non-zero type-head weights `w_y`, then a `step_rotation`. So a partial port never silently differs from float.
+- **The order of units:**
+  1. the artifact, with a round-trip and read-free bytes unchanged;
+  2. the copy heads served, with synthetic controls against an exact reference;
+  3. the type heads;
+  4. the exporter reading `hamming_read.safetensors`;
+  5. the float parity on claude-146's checkpoints (GPU, under a prep sheet: the trunk runs only on CUDA);
+  6. the speed.
 
 ## Done when
 
