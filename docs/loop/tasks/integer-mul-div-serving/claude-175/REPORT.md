@@ -17,7 +17,12 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays open. This unit is the 
   - Both builders also started near 115k tokens of context.
   - The Rust builder had already changed `report_output.rs` through a shell edit before the guard stopped it, leaving a partial change that did not compile, uncommitted, in its own worktree.
   - I took that diff as groundwork, finished both halves in the top session, and removed both builder worktrees.
-- **`clippy -D warnings` already fails on `uor-r4-integer` at the base,** with rustc 1.97.1. The errors are in five files this unit does not touch: `discrete_d11.rs` (11), `m6_exact_arithmetic.rs` (2), and `geometric_potential.rs`, `geometric_span.rs` and `lawful_likelihood.rs` (1 each). The three changed Rust files have 0 warnings. Not fixed here: out of scope.
+- **`clippy -D warnings` already fails on `uor-r4-integer` at the base,** with rustc 1.97.1, in files this unit does not touch:
+  - with default features, five files: `discrete_d11.rs` (11), `m6_exact_arithmetic.rs` (2), and `geometric_potential.rs`, `geometric_span.rs` and `lawful_likelihood.rs` (1 each);
+  - with `serving-wasm`, 19 library files, among them `codec.rs` (9), `geometric_source_realizer.rs` (8), `model.rs` (5), `stack/kernels.rs` (2) and `stack/flock.rs` (2).
+
+  None is in this diff, and the three changed Rust files have 0 warnings under either feature set. Not fixed here: out of scope.
+- **The native script allows only the AArch64 scalar forms.** Its stack-mode pattern does not cover the x86-64 general-register multiply and divide that the Rust verifier allows, so an x86-64 stack build would still fail `--stack` on them. That is stricter than the ORDER, not a hole, and today's audited builds are arm64 (its call-graph pass runs `otool`).
 - **The 21 legacy WASM symbols are NOT_FOUND in the serving build,** so a whole-module run exits 1 as before, and the legacy rule is exercised only by the self-test's legacy case.
 - **The public name `verify_step_objdump_zero_mul_zero_float` stays.** Its doc comment now says the name predates D80 and D81.
 
