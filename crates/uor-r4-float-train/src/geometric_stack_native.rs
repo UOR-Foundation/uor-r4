@@ -1198,15 +1198,25 @@ impl StackModel {
         }
         // The turn memory (route-plus-memory, claude-161): at the opening rows the caller named
         // for this forward, the point moves toward the token TRAIN's table stores for the turn.
+        // Its reply table (turn-memory-reply, claude-193) does the same at the later reply rows
+        // the caller named with their keys.
         if let Some(memory) = crate::flock_read_memory::turn_memory() {
-            if let Some(rows) = crate::flock_read_memory::memory_rows() {
+            let rows = crate::flock_read_memory::memory_rows();
+            let reply_rows = crate::flock_read_memory::reply_rows();
+            if rows.is_some() || reply_rows.is_some() {
                 let table = self
                     .variables()
                     .get("embedding.weight")
                     .ok_or_else(|| invalid("the model has no shared vector table"))?
                     .as_tensor()
                     .clone();
-                x = memory.apply_readout(&x, ids, &rows, &table)?;
+                x = memory.apply_readout(
+                    &x,
+                    ids,
+                    &rows.unwrap_or_default(),
+                    &reply_rows.unwrap_or_default(),
+                    &table,
+                )?;
                 stage_clock::mark("readout.memory");
             }
         }

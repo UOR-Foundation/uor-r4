@@ -16,6 +16,14 @@
 //!
 //! The memory, and the opening rows of the next forward, are set per thread
 //! ([`set_turn_memory`], [`set_memory_rows`]).
+//!
+//! **The reply table** (turn-memory-reply, claude-193), optional ([`TurnMemory::with_reply`]):
+//! a second table for the rows past a reply's opening, keyed by the turn's first ids, the reply
+//! position and the last reply id (the `--reply-bound` probe's `turn-8 + position +
+//! reply-last-1`, claude-192). It keeps each key's commonest target only where that target's
+//! share of the key's rows is at least the share it was built at ([`build_reply_table`]). Its
+//! move is the same, with its own weight, at the rows the caller names with their keys
+//! ([`set_reply_rows`]); the caller computes each key, so the read and the probe key alike.
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
@@ -29,12 +37,63 @@ use crate::{invalid, Result};
 /// The longest key a memory may use.
 const MAX_KEY: usize = 16;
 const FILE: &str = "turn_memory.safetensors";
+/// The reply table's own file, written only when the memory has one, so a memory without it
+/// saves exactly the files it saved before (claude-193).
+const REPLY_FILE: &str = "turn_memory_reply.safetensors";
+/// The longest reply key: up to `MAX_KEY` turn ids, two separators, a position and one id.
+pub const MAX_REPLY_KEY: usize = MAX_KEY + 4;
 /// Pads a saved key shorter than `k`; never a token id.
 const PAD: u32 = u32::MAX;
 
 thread_local! {
     static ACTIVE: RefCell<Option<TurnMemory>> = const { RefCell::new(None) };
     static ROWS: RefCell<Option<Vec<usize>>> = const { RefCell::new(None) };
+    static REPLY_ROWS: RefCell<Option<ReplyRows>> = const { RefCell::new(None) };
+}
+
+/// Reply rows named for a forward: each a `batch · time` row index and its reply key.
+pub type ReplyRows = Vec<(usize, Vec<u32>)>;
+
+/// Name the reply rows past their openings for this thread's next forward, each a `batch · time`
+/// row index with its reply key, or none. The reply table moves nothing in a forward with none.
+pub fn set_reply_rows(rows: Option<ReplyRows>) {
+    REPLY_ROWS.with(|cell| *cell.borrow_mut() = rows);
+}
+
+/// The reply rows named for this thread's next forward, if any.
+pub fn reply_rows() -> Option<ReplyRows> {
+    REPLY_ROWS.with(|cell| cell.borrow().clone())
+}
+
+/// The reply table of `rows` (each a reply key and its target): for each key, the commonest
+/// target, ties to the smaller id, kept only where its count is at least `min_share` of the
+/// key's rows (claude-193; the `--reply-bound` probe's rule).
+pub fn build_reply_table(rows: &[(Vec<u32>, u32)], min_share: f64) -> HashMap<Vec<u32>, u32> {
+    let mut counts: HashMap<Vec<u32>, BTreeMap<u32, usize>> = HashMap::new();
+    for (key, target) in rows {
+        *counts
+            .entry(key.clone())
+            .or_default()
+            .entry(*target)
+            .or_default() += 1;
+    }
+    counts
+        .into_iter()
+        .filter_map(|(key, targets)| {
+            let total: usize = targets.values().sum();
+            targets
+                .iter()
+                .max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0)))
+                .filter(|(_, &n)| n as f64 >= min_share * total as f64)
+                .map(|(&token, _)| (key, token))
+        })
+        .collect()
+}
+
+/// Whether `key` is one a reply table can hold and save: 1 to [`MAX_REPLY_KEY`] ids, the last a
+/// token id rather than the pad, so a padded saved key reads back exactly.
+fn reply_key_ok(key: &[u32]) -> bool {
+    !key.is_empty() && key.len() <= MAX_REPLY_KEY && key.last() != Some(&PAD)
 }
 
 /// Make `memory` the turn memory read on this thread, or none.
@@ -92,6 +151,16 @@ pub struct TurnMemory {
     table: Arc<HashMap<Vec<u32>, u32>>,
     /// `(width,)`.
     pub(crate) weight: Var,
+    /// The reply table and its weight (claude-193), when the memory has one.
+    pub(crate) reply: Option<ReplyTable>,
+}
+
+/// The reply table of a [`TurnMemory`] and the per-coordinate weight of its move.
+#[derive(Clone)]
+pub(crate) struct ReplyTable {
+    table: Arc<HashMap<Vec<u32>, u32>>,
+    /// `(width,)`.
+    pub(crate) weight: Var,
 }
 
 impl TurnMemory {
@@ -116,11 +185,38 @@ impl TurnMemory {
             k,
             table: Arc::new(table),
             weight: Var::zeros(width, DType::F32, device)?,
+            reply: None,
         })
+    }
+
+    /// This memory with a reply table (claude-193) and a zero reply weight, so the table starts
+    /// as no read at all. An empty `table` is the no-memory control's.
+    pub fn with_reply(mut self, table: HashMap<Vec<u32>, u32>) -> Result<Self> {
+        if !table.keys().all(|key| reply_key_ok(key)) {
+            return Err(invalid(format!(
+                "a reply table's keys hold 1 to {MAX_REPLY_KEY} ids and end in a token id"
+            )));
+        }
+        let weight = Var::zeros(self.weight.dim(0)?, DType::F32, self.weight.device())?;
+        self.reply = Some(ReplyTable {
+            table: Arc::new(table),
+            weight,
+        });
+        Ok(self)
     }
 
     pub fn k(&self) -> usize {
         self.k
+    }
+
+    /// How many keys the reply table holds, or none when the memory has no reply table.
+    pub fn reply_len(&self) -> Option<usize> {
+        self.reply.as_ref().map(|reply| reply.table.len())
+    }
+
+    /// The reply table's stored token for `key`, if it holds the key.
+    pub fn reply_stored(&self, key: &[u32]) -> Option<u32> {
+        self.reply.as_ref()?.table.get(key).copied()
     }
 
     /// How many keys the table holds.
@@ -164,14 +260,40 @@ impl TurnMemory {
         Ok((stored, hit))
     }
 
+    /// The host side of the reply move for a forward of `total` rows: for every row, the reply
+    /// table's stored token (0 where none) and a 0/1 hit, set only at the named `rows` whose key
+    /// the reply table holds. A memory without a reply table hits nothing.
+    pub fn stored_reply(
+        &self,
+        total: usize,
+        rows: &[(usize, Vec<u32>)],
+    ) -> Result<(Vec<u32>, Vec<f32>)> {
+        let (mut stored, mut hit) = (vec![0u32; total], vec![0f32; total]);
+        for (r, key) in rows {
+            if *r >= total {
+                return Err(invalid(format!(
+                    "reply row {r} is outside the {total} rows of this forward"
+                )));
+            }
+            if let Some(token) = self.reply_stored(key) {
+                stored[*r] = token;
+                hit[*r] = 1.0;
+            }
+        }
+        Ok((stored, hit))
+    }
+
     /// The memory read on the final norm's output `(batch, time, width)` of the windows `ids`,
     /// with token points from the shared `table`: at the opening `rows` whose key the table
-    /// holds, `n + w ⊙ (c − n)`; elsewhere `n`. Returns the same shape.
+    /// holds, `n + w ⊙ (c − n)`; at the named `reply_rows` whose key the reply table holds,
+    /// `n + w_r ⊙ (c_r − n)` (claude-193); elsewhere `n`. The two sets of rows must not share a
+    /// row. Returns the same shape.
     pub fn apply_readout(
         &self,
         output: &Tensor,
         ids: &[u32],
         rows: &[usize],
+        reply_rows: &[(usize, Vec<u32>)],
         table: &Tensor,
     ) -> Result<Tensor> {
         let (batch, time, width) = output.dims3()?;
@@ -195,17 +317,48 @@ impl TurnMemory {
             .sub(&points)?
             .broadcast_mul(&hit)?
             .broadcast_mul(self.weight.as_tensor())?;
-        Ok(points.add(&pull)?.reshape((batch, time, width))?)
+        let mut moved = points.add(&pull)?;
+        if let Some(reply) = self.reply.as_ref().filter(|_| !reply_rows.is_empty()) {
+            if reply_rows.iter().any(|(r, _)| rows.contains(r)) {
+                return Err(invalid(
+                    "a row is named both as an opening and as a later reply row",
+                ));
+            }
+            let (stored, hit) = self.stored_reply(total, reply_rows)?;
+            let target = table
+                .detach()
+                .index_select(&Tensor::from_vec(stored, total, device)?, 0)?;
+            let hit = Tensor::from_vec(hit, (total, 1), device)?;
+            let pull = target
+                .sub(&points)?
+                .broadcast_mul(&hit)?
+                .broadcast_mul(reply.weight.as_tensor())?;
+            moved = moved.add(&pull)?;
+        }
+        Ok(moved.reshape((batch, time, width))?)
     }
 
-    /// Every learned parameter, in a fixed order for the optimizer.
+    /// Every learned parameter, in a fixed order for the optimizer: the weight, then the reply
+    /// weight when the memory has a reply table.
     pub fn variables(&self) -> Vec<&Var> {
-        vec![&self.weight]
+        let mut vars = vec![&self.weight];
+        if let Some(reply) = &self.reply {
+            vars.push(&reply.weight);
+        }
+        vars
     }
 
     /// The mean absolute value of the weight, as a scalar tensor.
     pub fn weight_mean_abs(&self) -> Result<Tensor> {
         Ok(self.weight.as_tensor().abs()?.mean_all()?)
+    }
+
+    /// The mean absolute value of the reply weight, or none without a reply table.
+    pub fn reply_weight_mean_abs(&self) -> Result<Option<Tensor>> {
+        self.reply
+            .as_ref()
+            .map(|reply| Ok(reply.weight.as_tensor().abs()?.mean_all()?))
+            .transpose()
     }
 
     /// Write the memory to `directory/turn_memory.safetensors`: its weight, `k`, and the table
@@ -243,6 +396,9 @@ impl TurnMemory {
         );
         tensors.insert("values".to_owned(), Tensor::from_vec(values, rows, device)?);
         candle_core::safetensors::save(&tensors, directory.join(FILE))?;
+        if let Some(reply) = &self.reply {
+            save_reply(reply, &directory.join(REPLY_FILE))?;
+        }
         Ok(())
     }
 
@@ -286,8 +442,98 @@ impl TurnMemory {
         let weight = Var::from_tensor(get("weight")?)?;
         let mut memory = Self::new(k, table, weight.dim(0)?, device)?;
         memory.weight = weight;
+        let reply_path = directory.join(REPLY_FILE);
+        if reply_path.exists() {
+            let (table, reply_weight) = load_reply(&reply_path, device)?;
+            if reply_weight.dim(0)? != memory.weight.dim(0)? {
+                return Err(invalid(
+                    "the saved reply table's weight differs in width from the memory's",
+                ));
+            }
+            memory = memory.with_reply(table)?;
+            if let Some(reply) = memory.reply.as_mut() {
+                reply.weight = reply_weight;
+            }
+        }
         Ok(Some(memory))
     }
+}
+
+/// Write `reply` to `path`: its weight, and the table as `keys` `(n, MAX_REPLY_KEY)` (padded
+/// with `u32::MAX`) and `values` `(n,)`, sorted by key, with `count`. An empty table is stored
+/// as one padded row with `count` 0.
+fn save_reply(reply: &ReplyTable, path: &Path) -> Result<()> {
+    let device = reply.weight.device();
+    let mut entries: Vec<(&Vec<u32>, &u32)> = reply.table.iter().collect();
+    entries.sort();
+    let count = entries.len();
+    let mut keys = Vec::with_capacity(count.max(1) * MAX_REPLY_KEY);
+    let mut values = Vec::with_capacity(count.max(1));
+    for (key, &value) in &entries {
+        keys.extend(
+            key.iter()
+                .copied()
+                .chain(std::iter::repeat(PAD))
+                .take(MAX_REPLY_KEY),
+        );
+        values.push(value);
+    }
+    if count == 0 {
+        keys.extend(std::iter::repeat_n(PAD, MAX_REPLY_KEY));
+        values.push(PAD);
+    }
+    let rows = values.len();
+    let mut tensors = std::collections::HashMap::new();
+    tensors.insert("weight".to_owned(), reply.weight.as_tensor().clone());
+    tensors.insert("count".to_owned(), Tensor::new(&[count as u32], device)?);
+    tensors.insert(
+        "keys".to_owned(),
+        Tensor::from_vec(keys, (rows, MAX_REPLY_KEY), device)?,
+    );
+    tensors.insert("values".to_owned(), Tensor::from_vec(values, rows, device)?);
+    candle_core::safetensors::save(&tensors, path)?;
+    Ok(())
+}
+
+/// The reply table and weight saved at `path` by [`save_reply`]. A key's trailing pads are cut;
+/// a key ends in a token id, so this reads back exactly what was saved.
+fn load_reply(path: &Path, device: &Device) -> Result<(HashMap<Vec<u32>, u32>, Var)> {
+    let tensors = candle_core::safetensors::load(path, device)?;
+    let get = |name: &str| -> Result<&Tensor> {
+        tensors
+            .get(name)
+            .ok_or_else(|| invalid(format!("the saved reply table has no {name}")))
+    };
+    let count = get("count")?
+        .to_vec1::<u32>()?
+        .first()
+        .map(|&v| v as usize)
+        .ok_or_else(|| invalid("the saved reply table's count is empty"))?;
+    let keys = get("keys")?.to_vec2::<u32>()?;
+    let values = get("values")?.to_vec1::<u32>()?;
+    if keys.len() != values.len()
+        || keys.len() < count
+        || keys.iter().any(|row| row.len() != MAX_REPLY_KEY)
+    {
+        return Err(invalid(
+            "the saved reply table's keys and values do not match its count",
+        ));
+    }
+    let table: HashMap<Vec<u32>, u32> = keys
+        .into_iter()
+        .zip(values)
+        .take(count)
+        .map(|(mut key, value)| {
+            while key.last() == Some(&PAD) {
+                key.pop();
+            }
+            (key, value)
+        })
+        .collect();
+    if table.len() != count {
+        return Err(invalid("the saved reply table repeats a key"));
+    }
+    Ok((table, Var::from_tensor(get("weight")?)?))
 }
 
 #[cfg(test)]
@@ -318,6 +564,111 @@ mod tests {
         assert_eq!(longer[&vec![5, 6, 7]], 40);
         assert_eq!(longer[&vec![5, 6, 9]], 41);
         assert_eq!(longer[&vec![5, 6]], 41);
+    }
+
+    #[test]
+    fn the_reply_table_keeps_each_keys_commonest_target_at_its_share() {
+        let rows = vec![
+            // Key [1]: 7 twice, 8 once, a 2/3 share.
+            (vec![1], 7),
+            (vec![1], 7),
+            (vec![1], 8),
+            // Key [2]: 4 and 2 once each, exactly 1/2; the tie goes to the smaller id.
+            (vec![2], 4),
+            (vec![2], 2),
+            // Key [3]: three targets once each, 1/3.
+            (vec![3], 9),
+            (vec![3], 8),
+            (vec![3], 7),
+        ];
+        let half = build_reply_table(&rows, 0.5);
+        assert_eq!(half.len(), 2);
+        assert_eq!((half[&vec![1]], half[&vec![2]]), (7, 2));
+        // A share exactly at the threshold is kept, and dropped just above it.
+        assert!(!build_reply_table(&rows, 0.51).contains_key(&vec![2]));
+        // At share 0 every key keeps its commonest target.
+        let all = build_reply_table(&rows, 0.0);
+        assert_eq!((all.len(), all[&vec![3]]), (3, 7));
+    }
+
+    #[test]
+    fn a_reply_row_moves_only_when_named_and_its_key_is_held() {
+        let mut table = HashMap::new();
+        table.insert(vec![11, PAD, 2, PAD, 51], 52u32);
+        let memory = TurnMemory::new(2, HashMap::new(), 4, &Device::Cpu)
+            .unwrap()
+            .with_reply(table)
+            .unwrap();
+        assert_eq!(memory.reply_len(), Some(1));
+        let held = vec![11, PAD, 2, PAD, 51];
+        let unseen = vec![11, PAD, 2, PAD, 99];
+        let (stored, hit) = memory
+            .stored_reply(6, &[(4, held.clone()), (5, unseen)])
+            .unwrap();
+        assert_eq!((stored[4], hit[4]), (52, 1.0));
+        assert_eq!(hit.iter().filter(|&&h| h == 1.0).count(), 1);
+        // A row past the forward is refused; a memory with no reply table hits nothing.
+        assert!(memory.stored_reply(6, &[(6, held.clone())]).is_err());
+        let plain = TurnMemory::new(2, HashMap::new(), 4, &Device::Cpu).unwrap();
+        assert_eq!(plain.reply_len(), None);
+        let (_, hit) = plain.stored_reply(6, &[(4, held)]).unwrap();
+        assert!(hit.iter().all(|&h| h == 0.0));
+    }
+
+    #[test]
+    fn a_reply_table_refuses_keys_it_cannot_save() {
+        let plain = || TurnMemory::new(2, HashMap::new(), 4, &Device::Cpu).unwrap();
+        for key in [vec![], vec![1; MAX_REPLY_KEY + 1], vec![1, 2, PAD]] {
+            let mut table = HashMap::new();
+            table.insert(key.clone(), 3u32);
+            assert!(plain().with_reply(table).is_err(), "{key:?}");
+        }
+        let empty = plain().with_reply(HashMap::new()).unwrap();
+        assert_eq!(empty.reply_len(), Some(0));
+        assert_eq!(empty.variables().len(), 2);
+    }
+
+    #[test]
+    fn a_saved_reply_table_loads_and_leaves_the_opening_file_as_it_was() {
+        let device = Device::Cpu;
+        let dir = std::env::temp_dir().join(format!("claude-193-reply-{}", std::process::id()));
+        let mut openings = HashMap::new();
+        openings.insert(vec![3, 4], 6u32);
+        let plain = TurnMemory::new(2, openings, 4, &device).unwrap();
+        let mut table = HashMap::new();
+        table.insert(vec![3, 4, PAD, 1, PAD, 6], 7u32);
+        table.insert(vec![PAD, 2, PAD, 9], 8u32);
+        let with = plain.clone().with_reply(table.clone()).unwrap();
+        let reply_weight = Tensor::new(&[0.5f32, -1.0, 0.0, 2.0], &device).unwrap();
+        with.reply
+            .as_ref()
+            .unwrap()
+            .weight
+            .set(&reply_weight)
+            .unwrap();
+        plain.save(&dir.join("plain")).unwrap();
+        with.save(&dir.join("with")).unwrap();
+        // The opening file is the same bytes with or without a reply table, and only the
+        // memory with one writes the reply file.
+        assert_eq!(
+            std::fs::read(dir.join("plain").join(FILE)).unwrap(),
+            std::fs::read(dir.join("with").join(FILE)).unwrap()
+        );
+        assert!(!dir.join("plain").join(REPLY_FILE).exists());
+        let loaded = TurnMemory::load(&dir.join("with"), &device)
+            .unwrap()
+            .expect("saved");
+        let reply = loaded.reply.as_ref().expect("a reply table");
+        assert_eq!(*reply.table, table);
+        assert_eq!(
+            reply.weight.as_tensor().to_vec1::<f32>().unwrap(),
+            vec![0.5, -1.0, 0.0, 2.0]
+        );
+        let loaded = TurnMemory::load(&dir.join("plain"), &device)
+            .unwrap()
+            .expect("saved");
+        assert!(loaded.reply.is_none());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
@@ -399,7 +750,7 @@ mod tests {
         let memory = TurnMemory::new(2, entries, width, &device).unwrap();
         let rows = [2usize];
         let read = |m: &TurnMemory| -> Vec<Vec<f32>> {
-            m.apply_readout(&output, &ids, &rows, &table)
+            m.apply_readout(&output, &ids, &rows, &[], &table)
                 .unwrap()
                 .squeeze(0)
                 .unwrap()
@@ -446,7 +797,7 @@ mod tests {
         // The gradient reaches the weight only through hit rows.
         let fresh = TurnMemory::new(2, memory.table.as_ref().clone(), width, &device).unwrap();
         let grads = fresh
-            .apply_readout(&output, &ids, &rows, &table)
+            .apply_readout(&output, &ids, &rows, &[], &table)
             .unwrap()
             .sum_all()
             .unwrap()
@@ -458,6 +809,89 @@ mod tests {
             .to_vec1::<f32>()
             .unwrap();
         let want: Vec<f32> = stored.iter().zip(&before[2]).map(|(c, n)| c - n).collect();
+        for (a, b) in g.iter().zip(&want) {
+            assert!((a - b).abs() < 1e-5, "{g:?} != {want:?}");
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn zero_reply_weight_is_no_read_and_the_reply_move_is_its_pull() {
+        let device = Device::new_cuda(0).unwrap();
+        let width = 4;
+        let table = Tensor::from_vec(
+            (0..8 * width)
+                .map(|v| v as f32 * 0.25 - 3.0)
+                .collect::<Vec<_>>(),
+            (8, width),
+            &device,
+        )
+        .unwrap();
+        let ids = vec![SHEET_BOS_ID, 3, 4, 5, 6, 7];
+        let output = Tensor::from_vec(
+            (0..ids.len() * width)
+                .map(|v| (v as f32).cos())
+                .collect::<Vec<_>>(),
+            (1, ids.len(), width),
+            &device,
+        )
+        .unwrap();
+        let key = vec![3, 4, PAD, 2, PAD, 5];
+        let mut entries = HashMap::new();
+        entries.insert(key.clone(), 6u32);
+        let memory = TurnMemory::new(2, HashMap::new(), width, &device)
+            .unwrap()
+            .with_reply(entries)
+            .unwrap();
+        let reply_rows = vec![(4usize, key.clone()), (5usize, vec![9, PAD, 1, PAD, 2])];
+        let read = |m: &TurnMemory| -> Vec<Vec<f32>> {
+            m.apply_readout(&output, &ids, &[], &reply_rows, &table)
+                .unwrap()
+                .squeeze(0)
+                .unwrap()
+                .to_vec2::<f32>()
+                .unwrap()
+        };
+        let before = output.squeeze(0).unwrap().to_vec2::<f32>().unwrap();
+        // Zero reply weight: no read, bit for bit.
+        assert_eq!(read(&memory), before);
+        // Reply weight 1: the held row lands on the stored token's point; the unseen key's row
+        // and every other row do not move.
+        let reply = memory.reply.as_ref().unwrap();
+        reply
+            .weight
+            .set(&Tensor::ones(width, DType::F32, &device).unwrap())
+            .unwrap();
+        let moved = read(&memory);
+        let stored = table.get(6).unwrap().to_vec1::<f32>().unwrap();
+        for (i, (&m, &c)) in moved[4].iter().zip(&stored).enumerate() {
+            assert!((m - c).abs() < 1e-6, "coordinate {i}: {m} != {c}");
+        }
+        for r in [0, 1, 2, 3, 5] {
+            assert_eq!(moved[r], before[r], "row {r}");
+        }
+        // A row named both as an opening and as a reply row is refused.
+        assert!(memory
+            .apply_readout(&output, &ids, &[4], &reply_rows, &table)
+            .is_err());
+        // The gradient reaches the reply weight only through the held row.
+        let fresh = TurnMemory::new(2, HashMap::new(), width, &device)
+            .unwrap()
+            .with_reply(memory.reply.as_ref().unwrap().table.as_ref().clone())
+            .unwrap();
+        let grads = fresh
+            .apply_readout(&output, &ids, &[], &reply_rows, &table)
+            .unwrap()
+            .sum_all()
+            .unwrap()
+            .backward()
+            .unwrap();
+        let g = grads
+            .get(fresh.reply.as_ref().unwrap().weight.as_tensor())
+            .unwrap()
+            .to_vec1::<f32>()
+            .unwrap();
+        let want: Vec<f32> = stored.iter().zip(&before[4]).map(|(c, n)| c - n).collect();
         for (a, b) in g.iter().zip(&want) {
             assert!((a - b).abs() < 1e-5, "{g:?} != {want:?}");
         }
