@@ -42,26 +42,48 @@ The item's done-when reads:
 >    - the read-by-meaning arms: the Flock read, and the type spin.
 > 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
 
+## This unit
+
+The protocol's three scoring instruments (`docs/harness/prep/one-model-end-to-end-protocol-2026-10-29.md`, "The instruments the run needs"):
+- **I-A:** `--score-rows` on an unpinned panel (P-dev);
+- **I-E:** the Flock rank decode;
+- **I-F:** the table hit rate.
+
+I-B and I-C are done (claude-207, `4916350fe`). I-D, I-G and I-H follow. The item stays `ready`.
+
 ## Cancel probe (run first)
 
-To fill in.
+Run at this ORDER's base. **Class: instrument (all three are missing). Go.**
+- **`score_rows` cannot score P-dev.** It reads DEV and the pinned Fresh V2 only, and samples DEV only. `--panel NAME=DIR` exists for the census (`load_unpinned_uort`, claude-204).
+- **No Flock rank decode exists.** `greedy_reply` takes the argmax. The harmonic table is `RAW_RANK_WEIGHTS_Q16` (`crates/uor-r4-integer/src/stack/flock.rs:382`). The integer crate's native root does not export `stack`, so the float side cannot import it.
+- **No hit rate under generation exists.** The decoder forms each later step's key with `greedy_reply_key`. Nothing counts whether the table names it.
 
 ## Files in scope
 
-- `docs/labs/one-model-end-to-end/**`
-- `docs/harness/prep/one-model-end-to-end*`
-- `docs/loop/tasks/one-model-end-to-end/**`
-- `docs/research/notebook/float-training.md`
-- `docs/roadmap/items/one-model-end-to-end.md`
-- `crates/uor-r4-float-train/src/in_space_long.rs`
-- `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`
-- `crates/uor-r4-training/examples/m-world.rs`
+The item's scope. This unit edits `crates/uor-r4-float-train/src/in_space_long.rs`, `crates/uor-r4-float-train/src/bin/train-in-space.rs` and `docs/loop/tasks/one-model-end-to-end/claude-208/**`.
 
 ## Done when
 
-To fill in.
+1. **I-A:** `--score-rows ... --panel NAME=DIR` scores and samples each unpinned panel like DEV, its sha recorded in the output. Its rows are `rows-{name}-{memory|no-memory}.json`.
+2. **I-E:** a Flock rank decode (`DecodeRule::FlockRank`, `decode_reply`), exactly as the protocol specifies:
+   - the 16 nearest table tokens, ranked by score with ties to the smaller id;
+   - a rank drawn by `flock_rank_draw` with the harmonic weights `1/(i+1)` in Q16;
+   - xorshift64*, seeded by the run seed and `sample · 64 + step`.
 
-## Stop and ask if
+   The weights are a copy of `RAW_RANK_WEIGHTS_Q16`'s first 16, pinned to that file by a test. Greedy decoding is unchanged (`greedy_reply` calls `decode_reply` with `Greedy`).
+3. **I-F:** each sample records its reply-table keys and hits, under generation and under teacher forcing on the true reply. The key is `greedy_reply_key`, the decoder's own, and a test pins it equal to the census's `reply_key` on every later row.
+4. **Samples:** greedy with the memory on and off (DEV's file names unchanged), and Flock rank with the memory on, for DEV and each panel.
+5. **Tests:**
+   - a unit test per rule, with negative gates;
+   - the full crate suite;
+   - a stub-nvcc `--features cuda` check.
 
-To fill in.
+   The GPU halves run on the run's pod:
+   - I-A's 16,417 P-dev rows;
+   - I-E's "K = 1 equals greedy" on the model, which the unit test checks on the draw;
+   - I-F on real DEV.
+6. **A REPORT,** negatives first.
+
+## Stop and decide if
+
+- Greedy decoding or the existing files change. Both must stay as they are.
