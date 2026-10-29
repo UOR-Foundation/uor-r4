@@ -2,7 +2,7 @@
 
 Lab: claude. Item: [turn-memory-reply](../../roadmap/items/turn-memory-reply.md), done-when 3. Order: [claude-194](../../loop/tasks/turn-memory-reply/claude-194/ORDER.md). Code: this unit's head, built and tested on each pod from that exact commit.
 
-TEST FITNESS: (to be filled by the fresh non-author review). PRE-RUN: (to be filled).
+TEST FITNESS: FIT, round 2. PRE-RUN: PASS. Both by one fresh non-author reviewer, at `ebc683ea8`. Round 1 (NOT FIT, FAIL) found that the reply table's exact key count was the probe's, which also counts position-0 opening keys; its three changes are applied above (I-3, the probe-log checks, the no-pass cells). Its one remaining note: that the 212,968 TRAIN openings are the rows `start_memory` drops. They are, by construction: `opening_rows` and `reply_rows` mark an opening by the same `opens_reply` test over the same `build_document_windows` of the pinned TRAIN.
 
 ## The question
 
