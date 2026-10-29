@@ -1,4 +1,6 @@
-# ORDER: turn-memory-integer, claude-197 (unit 1: the export carries the memory, or refuses)
+# ORDER: turn-memory-integer, claude-197 (the scope the export needs; unit 1's code is the next unit)
+
+**Amended during the unit.** The session guard enforces the item's scope as it stands on `main`, not an amendment on a branch: an edit to `fbs_snapshot.rs` was refused. So this unit is the scope decision alone, which merges first. The work below, numbered 1 to 5, is the next unit's, claimed under the new scope. Done-when 1 and 8 are this unit's; the rest move to the next unit's ORDER.
 
 Lab: claude. Item: [turn-memory-integer](../../../../roadmap/items/turn-memory-integer.md). Issue: #3392. Base: `48cc5fe83`.
 
