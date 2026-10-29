@@ -3432,9 +3432,10 @@ fn a_trained_fbs_snapshot_matches_its_reference_in_every_combination() {
             }
             drift.sort_unstable();
             eprintln!(
-                "trained fbs {snaps:?} {part}: tokens {same_token}/{n}, kept cells {same_cells}/{n}, query drift median {} max {} LSB",
+                "trained fbs {snaps:?} {part}: tokens {same_token}/{n}, kept cells {same_cells}/{n}, query drift median {} max {} LSB, within 2 LSB {}/{n}",
                 drift[drift.len() / 2],
-                drift[drift.len() - 1]
+                drift[drift.len() - 1],
+                drift.iter().filter(|&&d| d <= 2).count()
             );
             for (what, count) in [("tokens", same_token), ("kept cells", same_cells)] {
                 assert!(count * 100 >= n * 95, "{snaps:?} {part}: {what} agree on {count} of {n}");
@@ -3517,7 +3518,12 @@ fn an_fbs_header_states_its_snaps_consistently() {
     // The flags belong to FBS stacks.
     let dense = super::export_float_trunk_uorlut01(&synthetic_float_trunk(7, "dot")).expect("export");
     let flagged = with_header(&dense, |h| h["shape"]["raw_gates"] = json!(true));
-    assert!(IntegerStackModel::parse(&flagged).is_err());
+    assert!(matches!(
+        IntegerStackModel::parse(&flagged),
+        Err(StackError::Shape(
+            "unsnapped gates and transitions belong to SpiralCore/FBS stacks"
+        ))
+    ));
 }
 
 #[test]

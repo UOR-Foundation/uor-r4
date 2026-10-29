@@ -33,8 +33,12 @@ fn run() -> Result<(), String> {
     let mut paths = Vec::new();
     for arg in std::env::args().skip(1) {
         match arg.as_str() {
-            "--raw-gates" if snaps.gates => snaps.gates = false,
-            "--raw-transition" if snaps.transition => snaps.transition = false,
+            "--raw-gates" if !snaps.gates => return Err("--raw-gates given twice".to_owned()),
+            "--raw-transition" if !snaps.transition => {
+                return Err("--raw-transition given twice".to_owned())
+            }
+            "--raw-gates" => snaps.gates = false,
+            "--raw-transition" => snaps.transition = false,
             flag if flag.starts_with("--") => return Err(format!("{flag}: {USAGE}")),
             _ => paths.push(arg),
         }

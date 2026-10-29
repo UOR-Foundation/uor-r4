@@ -2,7 +2,9 @@
 
 Lab: claude. Order: [ORDER.md](ORDER.md). References #2820. The item is not done: the new artifact's export gap needs the GPU evaluator updated, and that is the next unit.
 
-**Speed.** `fbs-toks` decode tokens/s on this M1 (AC power), claude-126's seed-1 snapshot. Each figure is the median of 20 timed runs, and each form was run twice, alternating:
+**Speed.** `fbs-toks` tokens/s on this M1 (AC power), exporting claude-126's seed-1 snapshot.
+- Each figure is the median of the tool's 20 timed runs, after 1 warmup run (`timed_runs` and `warmup_runs` in each receipt).
+- Each form was run twice, in the order snapped, gates, transition, both, snapped, both, transition, gates.
 
 | Form | Decode tok/s | Context tok/s |
 |---|---|---|
@@ -20,13 +22,15 @@ Lab: claude. Order: [ORDER.md](ORDER.md). References #2820. The item is not done
   - On claude-126 seed 1, the median per-position worst channel is 3 LSB snapped, against 6 to 7 LSB with unsnapped gates.
   - The likely cause is `stack_rotation`'s unit, which is rounded toward zero at Q30, so every gate is a little short. That is not tested here.
   - Token and kept-cell agreement still rise (Measurements).
-- **My first trained-snapshot floor was wrong.** It required 95% of queries within 2 LSB. The snapped contract itself keeps only 1,379 of 4,096 single tokens there, while 98% of its tokens and cells agree.
+- **My first trained-snapshot floor was wrong.** It required 95% of queries within 2 LSB. The snapped contract itself keeps only 1,379 of 4,096 single tokens there (the test prints the count), while 98% of its tokens and cells agree.
   - That floor was dropped before any unsnapped number was read, and query drift became a reading.
   - Single tokens cannot test the transition, which moves a state only from the second token. So 64 sequences of 32 tokens were added.
 - **The WASM serving audit reads 5 of 7, on `origin/main` too.**
   - The build was a plain `cargo build --release --target wasm32-unknown-unknown --features serving-wasm --lib`. With it, `step` and `IntegerStackSession::step` carry 236 and 232 unclassified instructions, the 0xFC (bulk-memory) prefix that is likely this toolchain's default. Both read 14 multiplies, 9 divides and 0 float.
   - This unit's build gives the same counts. claude-175's 7 of 7 did not record its build flags (FRICTION.md).
-- **The whole `uor-r4-integer` suite has 36 failures**, as `main` has (claude-177): tests that need the local chat bundle (`load bundle: NotFound`), and the m7 parity tests.
+- **The whole `uor-r4-integer` suite has 35 failures,** run with `~/.cargo/bin` first on PATH.
+  - Every failure that panics does so on a missing local input: a chat bundle (`load … bundle: Io NotFound`) or `tokenizer.json`.
+  - claude-177 recorded 34 such failures, plus 2 m7 parity tests that fail only under Homebrew `cargo`.
 
 ## What changed
 
@@ -61,20 +65,29 @@ Lab: claude. Order: [ORDER.md](ORDER.md). References #2820. The item is not done
 | transition unsnapped | 4,045 / 4,022; 3 | 2,020 / 2,008; 3 |
 | both unsnapped | 4,087 / 4,085; 6 | 2,048 / 2,044; 6 |
 
-- The largest drift falls from 19,887 and 16,274 LSB (snapped: a snap flipping at a near-tie) to 658 and 1,840 with both unsnapped.
-- The test's floor of 95% agreement holds in every combination.
+- **The largest drift** is 19,887 and 16,274 LSB snapped, single tokens and sequences, where a snap flips at a near-tie.
+  - Both unsnapped: 658 and 1,840.
+  - Gates unsnapped only: 658 and 10,856.
+  - Transition unsnapped only: 19,887 and 21,578.
+- **Queries within 2 LSB:** 1,379 and 482 snapped, against 49 and 9 with both unsnapped.
+- **The floor holds.** At least 95% agree in every combination; the lowest cell is 1,995 of 2,048.
 
 **No regression.**
-- This head's snapped export of claude-126 seed 1 is `314c3909c66b58522a641c3f5b51c25dda4bda5ab2274bcfd0b5ca5038fdb305`, the artifact claude-163 to claude-177 served.
+- This head's snapped export of claude-126 seed 1 is `314c3909c66b58522a641c3f5b51c25dda4bda5ab2274bcfd0b5ca5038fdb305`. That is the artifact claude-163 and claude-164 pin by hash; the later serving units name it as "claude-126's seed-1 export".
 - The unsnapped exports: `5d452a59…0613` (gates), `50b10386…3084` (transition) and `9e80cc6a…8694` (both).
 
 **Audit.** `audit_zero_matmul_serving.py --stack` on the release `uor-r4-stack` (`bf0b3b40…`) gives FULL PASS: 0 forbidden instructions across 44 symbol ranges and 93 reachable functions. The allowed scalar multiplies and divides are 47 and 1 in the ranges, and 65 and 9 in the call graph, as claude-177 read them.
 
-**Negative gate.** With this unit's `session.rs` change set aside (`git diff origin/main`, reversed), `each_unsnapped_choice_changes_the_served_forward` and the parity test both fail: "gates: false … served the snapped forward". They pass with the change restored.
+**Negative gates.** Each was set aside one at a time, with the build line read and the tree restored after.
+- **(a) This unit's `session.rs` change reversed:** `each_unsnapped_choice_changes_the_served_forward` and the parity test both fail ("gates: false … served the snapped forward").
+- **(b) The raw-transition branch made to snap:** both fail.
+- **(c) The exporter made to always write `transport_snap`:** both fail. The parse refuses it: "transport_snap=icosian on a stack whose transition is unsnapped".
+- All pass with the change restored.
 
 ## Checks run at the head
 
-- `cargo test -p uor-r4-integer --features serving-wasm --no-fail-fast`: 549 passed. The 36 failures are `main`'s (above), and every new test passes.
+- `cargo test -p uor-r4-integer --features serving-wasm --no-fail-fast`, with `~/.cargo/bin` first: 550 passed. The 35 failures are missing local inputs (above), and every new test passes.
+- `fbs-export --raw-gates --raw-gates` is refused ("--raw-gates given twice").
 - The ignored trained-snapshot test, run with `UOR_FBS_SNAPSHOT`: passes.
 - `cargo test -p uor-r4-float-train --no-fail-fast`: 104 library tests and the rest pass.
 - `cargo clippy -p uor-r4-integer --features serving-wasm --all-targets`: no warnings in the changed code. Two older hits in `tests.rs` remain, at lines 864 and 1794.
@@ -97,4 +110,4 @@ Lab: claude. Order: [ORDER.md](ORDER.md). References #2820. The item is not done
 
 ## Plain summary
 
-The integer version of the model used to round each of its rotations to the nearest of 120 fixed ones. Now that integer multiply and divide are allowed, it can keep each rotation exactly as the trained model computes it. The model file says which way it was built, and an old file still produces exactly the same bytes and answers. On a trained model, the exact rotations agree with the trained model's arithmetic more often: on every token of the test sequences, against 98% before. They cost some speed, about 4,200 to 4,700 words a second on this laptop, against 4,900. The next step measures, on the GPU, whether this closes the gap between the integer model and the trained one.
+The integer version of the model used to round each of its rotations to the nearest of 120 fixed ones. Now that integer multiply and divide are allowed, it can keep each rotation exactly as the trained model computes it. The model file says which way it was built, and an old file still produces exactly the same bytes and answers. On a trained model, the exact rotations agree with the trained model's arithmetic more often. With both kept exact, the next token agreed at all 2,048 test-sequence positions, against 98% before. They cost some speed: about 4,200 to 4,700 tokens a second on this laptop, against about 4,900. The next step measures, on the GPU, whether this closes the gap between the integer model and the trained one.
