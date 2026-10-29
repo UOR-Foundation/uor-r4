@@ -40,7 +40,7 @@ The owner, 28 Oct 2026, in claude's chat: "determinism is still probably the goa
     - Once the prompt has left the window, a reply row's key has an empty turn and the reply length the window shows, and the trunk was trained with the move at those rows.
     - The greedy decode reads no reply table there: only while `prompt.len() > start` (`in_space_long.rs:1434–1437`).
     - A session keys over its last `context` tokens as training does. The difference from the greedy decode, on rows of replies longer than the window, is a measured item for the parity unit.
-- **The moves:** `n + w ⊙ (c − n)` on the readout point, the opening table's weight at the reply's first step and the reply table's after it, as `apply_readout` (`flock_read_memory.rs`). They have the Hamming readout move's form, and come after it in the step.
+- **The moves:** `n + w ⊙ (c − n)` on the readout point, the opening table's weight at the reply's first step and the reply table's after it, as `apply_readout` (`flock_read_memory.rs`). They have the Hamming readout move's form, and come after it, as in the float trunk (the Hamming readout at `geometric_stack_native.rs:1187`, the turn memory at 1213).
 - **No parity:** the integer reply has not been compared with float's on the same checkpoint.
 
 ## Done when
