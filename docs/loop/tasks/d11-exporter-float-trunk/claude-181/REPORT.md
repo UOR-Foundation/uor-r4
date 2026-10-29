@@ -29,8 +29,8 @@ Lab: claude. Order: [ORDER.md](ORDER.md). References #2820. The item is not done
   - The build was a plain `cargo build --release --target wasm32-unknown-unknown --features serving-wasm --lib`. With it, `step` and `IntegerStackSession::step` carry 236 and 232 unclassified instructions, the 0xFC (bulk-memory) prefix that is likely this toolchain's default. Both read 14 multiplies, 9 divides and 0 float.
   - This unit's build gives the same counts. claude-175's 7 of 7 did not record its build flags (FRICTION.md).
 - **The whole `uor-r4-integer` suite has 35 failures,** run with `~/.cargo/bin` first on PATH.
-  - Every failure that panics does so on a missing local input: a chat bundle (`load … bundle: Io NotFound`) or `tokenizer.json`.
-  - claude-177 recorded 34 such failures, plus 2 m7 parity tests that fail only under Homebrew `cargo`.
+  - All 35 panic on a missing local input: a quaternion, householder or chat bundle, or `tokenizer.json`, either as `NotFound` or as a must-exist assertion.
+  - claude-177 recorded 34 such failures, plus 2 m7 parity tests that fail only under Homebrew `cargo`. The one more here is also a missing input; this unit does not trace which test it is.
 
 ## What changed
 
