@@ -6,7 +6,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays `ready`: this unit meet
 
 ## What did not work, first
 
-- **claude-158's hypothesis was wrong.** It guessed that the route gathers dominate both of a layer's blocks (its REPORT, "The hypothesis"). All 36 gathers (six a layer) are 0.5% of a token, counted with the two residual adds and the feed-forward's requantization. The cost is in two kernels, and they share one inner piece:
+- **claude-158's hypothesis was wrong.** It guessed that the route gathers dominate both of a layer's blocks (its REPORT, "The hypothesis"). All 36 gathers (six a layer) are 0.5% of a token, counted with the residual adds (two a layer) and the feed-forward's requantization. The cost is in two kernels, and they share one inner piece:
   - **the recurrence core,** 56.3% of a token;
   - **the feed-forward's gated product,** 39.8%.
   - Both run the 120-root icosian snap (`stack_snap_rotation`, through `stack_snap_select`), which scores every root with exact `ℤ[φ]` comparisons.
