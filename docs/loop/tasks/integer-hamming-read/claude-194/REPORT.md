@@ -69,6 +69,10 @@ At `7b6e65ec4`, the code head. The later commits change only this folder and the
 - **`cargo clippy -p uor-r4-integer --all-targets`:** no warning in the new code.
 - **`uor-harness loop gates --full`:** 11 of 11 green.
 
+## Skills used
+
+- None was invoked this unit. The done-when was fixed in the ORDER before the code ran, and amended once, also before the code (above), in the spirit of holding-the-goal.
+
 ## Still open
 
 - **Steps 3 to 6 of the design:**
