@@ -57,6 +57,8 @@ The unsnapped contract's extra 30 µs is all in the two parts that run the rotat
 2. **A faster exact change** to the snap site, in either form, or to the Hamilton product. Either form means the snapped selection or the unsnapped `stack_rotation` (claude-185). The change can be fewer golden candidates, a faster exact square root or quotient, or a vector kernel the audit allows.
    - A host test holds the changed kernel equal to the old one.
    - Every reply is byte-identical, on claude-126's export and on dual-c131's `raw_both` artifact (claude-182).
+     - dual-c131's reply under `fbs-toks`'s default prompt is one token repeated (claude-185), so it cannot show a difference.
+     - On that artifact the check also compares something that can differ: the session's final state, the per-step query codes, or a prompt whose reply varies.
    - `scripts/audit_zero_matmul_serving.py --stack` passes on the release binary.
 3. **Speed:** `fbs-toks --parts` against the previous unit's sealed binary, run alternately, on this M1.
 4. One notebook row and a REPORT for each unit. This is host and serving work: no GPU and no sheet (CHARTER §4.5).

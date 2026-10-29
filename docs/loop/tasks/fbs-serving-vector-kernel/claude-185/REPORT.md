@@ -16,6 +16,10 @@ This unit's change was 5% slower on `raw_both`, so it is reverted.
   - **Slower:** alternating with the base binary, `raw_both` decode fell from 3,982 / 3,992 to 3,775 / 3,787 tok/s (−5%). Snapped fell from 4,573 / 4,601 to 4,414 / 4,546.
   - **A likely reason, not measured:** the old numerators `|v| << 46` often fit in 64 bits, which is `__udivti3`'s fast path. The reciprocal's `2^78 / norm` never does, and the reciprocal adds two out-of-line `u128` multiplies per coordinate.
   - By the ORDER's stop rule, the four divides stay. The patch is kept here (`reciprocal.patch`) and in the store.
+- **The `raw_both` reply cannot show a difference,** which the review found.
+  - Under `fbs-toks`'s default prompt, dual-c131's reply is token 1, 65 times over.
+  - So "every reply byte-identical" on that artifact shows almost nothing. This unit's exactness rests on the host test, 1,384,160 cases.
+  - The item's done-when 2 now asks for a check on that artifact that can catch a difference: the session's final state, the per-step query codes, or a prompt whose reply varies.
 - **The machine ran slower during the timing than during the probe:** 4,832 tok/s snapped at the probe, and 4,573–4,601 for the same base binary later. Only the alternating pairs compare like with like, and the REPORT gives no cross-run comparison.
 - **The heredoc I first used to add the test** was refused by the session guard: it read `>> shift` inside the code as a redirect to a file named `shift`. The Edit tool wrote it instead.
 
@@ -59,7 +63,11 @@ Ranges are over the six layers. The other parts (the norms, gathers and requanti
 
 ## Checks run at the head
 
-__CHECKS__
+At `d3714afde`. The code is unchanged from `main`, because the change is reverted.
+- **`cargo test --locked -p uor-r4-integer --features serving-wasm --lib --no-fail-fast`:** 344 passed, 1 ignored.
+- **The reciprocal's own test, during the attempt:** it passed. With the correction set to `+= 0`, it failed (at `[0, 0, 0, 3]`, epsilon 0: 2,147,483,646 against 2,147,483,648). Restored, it passed. Both builds recompiled the crate.
+- **`uor-harness loop gates --full`:** 11 of 11 green.
+- **The fresh review** (decision review and claims check, one reviewer, at `d3714afde`): APPROVE and SUPPORTED. Its Medium finding, the degenerate `raw_both` reply, is disclosed above and folded into the item. Its Low finding, that the map's 3.3 ns is derived, is marked in the map.
 
 ## Skills used
 
