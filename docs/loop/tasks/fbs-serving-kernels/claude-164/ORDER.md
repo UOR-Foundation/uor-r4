@@ -1,40 +1,61 @@
-# ORDER: fbs-serving-kernels, claude-164
+# ORDER: fbs-serving-kernels, claude-164 (an exact sign-compatible icosian snap)
 
 Lab: claude. Item: [fbs-serving-kernels](../../../../roadmap/items/fbs-serving-kernels.md). Base: `d0f79c441`.
 
 ## Goal
 
-The item's done-when reads:
+The owner, 28 Oct 2026, in claude's chat: "I don't care what we serve at long as it is cheap".
 
-> 1. **The split:** each layer's gathers, core, gated product and requantization timed on the M1, by extending `measure_fbs_step_stages` and `fbs-toks --stages`. The parts sum to the layer within 10%.
-> 2. **A vector kernel for the largest part,** written for D11 (CHARTER §3.6: integer, no multiply instruction; products through its tables), in `stack/fbs_simd.rs`, behind a runtime switch (no new cargo feature), with the scalar path kept for WASM and other targets.
->    - A host test holds every token, kept cell, query and session state equal to the scalar `step_native` over a synthetic trunk and a stored artifact.
->    - The kernel is in the audit's kernel list, and `scripts/audit_zero_matmul_serving.py --stack` passes on the release binary.
-> 3. **Speed:** `fbs-toks` decode tokens/s on the M1 with and without the kernel, on claude-126's export, with the same replies.
-> 4. One notebook row and a REPORT. This is host and serving work: no GPU and no sheet (CHARTER §4.5).
+claude-163 split a served token on the M1. Two parts take 96% of it:
+- the recurrence core, 56.3%;
+- the feed-forward's gated product, 39.8%.
+
+Both run the 120-root icosian snap (`stack_snap_select`, `kernels.rs`) several times per layer: twice per 4-channel block in the core, once per 4-unit block in the product. It scores all 120 roots with exact `ℤ[φ]` comparisons and keeps the lowest index on a tie.
+
+**This unit makes the snap score only the roots that can win, with the same result.**
+- **The argument:** the 120 unit icosians are closed under flipping the sign of any coordinate. Take a root whose nonzero coordinate `j` has the opposite sign to the query's nonzero `r_j`. Flipping that coordinate gives another root whose score is higher by `2 |r_j ρ_j| > 0`, so the first root is never a maximizer.
+- **The candidates:** the sign-compatible roots therefore hold every maximizer. Scanning them in index order with the same strict comparison returns the same root as the full scan, the lowest-index tie included.
+- **How many:** for a query with no zero coordinate, 17 of the 120 are compatible. They are one axis root per coordinate (4), one half-root (1), and one golden root per even permutation (12). A zero coordinate frees that sign, and the zero query keeps all 120.
+- **The table:** each of the 81 sign patterns maps to its compatible roots in index order, built at compile time. At run time the snap reads it by the query's signs, with no new arithmetic.
+
+This is a step toward the item's done-when 2 and 3 (a faster exact kernel for the largest part, and its tokens/s), not their completion. The done-when names a vector kernel; the vector kernel and the switch stay open. The item stays `ready`.
 
 ## Cancel probe (run first)
 
-To fill in.
+Run at `d0f79c441`:
+- **No open PR** touches `stack/kernels.rs`, `stack/session.rs` or `h4_classifier.rs`.
+- **`stack_snap_select` still scans all 120 roots** (`for (index, root) in H4_ROOT_COEFFICIENTS.iter().enumerate()`).
+- **The roots are closed under sign flips.** `h4_classifier.rs` builds the 8 axis roots with both signs, the 16 half-roots with every sign, and the 96 golden roots as 12 even permutations with independent signs on their three nonzero coordinates. A test in this unit checks closure over the table itself.
+
+All three held. **Not cancelled** (instrument: none needed).
 
 ## Files in scope
 
-- `crates/uor-r4-integer/src/stack/session.rs`
-- `crates/uor-r4-integer/src/stack/fbs_simd.rs`
-- `crates/uor-r4-integer/src/stack/simd.rs`
 - `crates/uor-r4-integer/src/stack/kernels.rs`
-- `crates/uor-r4-integer/src/stack/mod.rs`
 - `crates/uor-r4-integer/src/stack/tests.rs`
-- `crates/uor-r4-integer/src/bin/fbs-toks.rs`
-- `scripts/audit_zero_matmul_serving.py`
 - `docs/loop/tasks/fbs-serving-kernels/**`
 - `docs/research/notebook/m4-serving.md`
-- `docs/roadmap/items/fbs-serving-kernels.md`
+- `docs/roadmap/items/fbs-serving-kernels.md` (the Progress note)
 
 ## Done when
 
-To fill in.
+1. **Exactness.** `stack_snap_select` returns the full 120-root scan's index on:
+   - every query in `[-6, 6]^4` (28,561, zeros and ties included);
+   - 200,000 pseudo-random queries at magnitudes from 1 to `2^30`;
+   - queries placed on and between roots, scaled.
 
-## Stop and ask if
+   The full scan is kept as the test's reference.
+2. **The table.** A test checks the closure of the root set under sign flips. It checks the sign rule for each root coordinate against the exact `ℤ[φ]` sign (`snap_difference_positive`). It checks that each pattern's list is exactly its compatible roots, in index order.
+3. **Nothing else moves.** The whole `uor-r4-integer` library test suite passes (`--features serving-wasm`, `--no-fail-fast`). `python3 scripts/audit_zero_matmul_serving.py <release uor-r4-stack> --stack` passes.
+4. **Speed, on this M1, on claude-126's seed-1 export:**
+   - The new `fbs-toks --parts` runs alternately with claude-163's sealed binary (sha256 `9c1f1778…6f9a`), two runs each.
+   - Every run's reply is identical to claude-163's.
+   - Measured: decode tok/s, and the core and product parts, before and after.
+5. One row in `docs/research/notebook/m4-serving.md` and a REPORT.
 
-To fill in.
+## Stop and decide if
+
+- **Any query in the exactness test returns a different index.** The argument above is then wrong for this table, so the unit stops and finds why. It never ships an approximate snap.
+- **The audit fails** on an instruction the table read brings in, such as an `fmov` from a packed load. Then the read is rewritten in the style of the existing kernels (`black_box`, explicit loops).
+
+No step waits on Casey.
