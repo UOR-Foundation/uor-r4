@@ -54,13 +54,19 @@ All at the PR head, each with its evidence in the REPORT:
 1. **The kernel against an f64 reference.** The type heads' codes, kept sets and means match a test-side f64 reference of the float read's steps, on synthetic reads over several seeds:
    - every vocabulary key code and every runtime query code equal;
    - every kept set equal with its distances;
-   - every type mean within a bound fixed here: `2^-20` of the hook's input scale.
+   - every type mean within one step of the hook input's grid: `2^-16` in real units at the stream's Q16.
+
+     Amended before any code ran. The first bound, `2^-20` of the input's scale, cannot hold: each payload is rounded half away from zero back to the input's grid, so a mean can be off by up to half a step, `2^-17`.
 2. **The hooks against a reference** (claude-194's method). At every row of a sequence with repeats, each hook equals a test-side i128 combine over the read-free trunk's own integers at the hook:
    - the stream read, at depth 1, with both kinds of head;
    - the readout move, at the layer count, with both kinds of head;
    - type weights alone (copy weights 0) change the queries at some rows, so the test can fail.
 3. **Weight 0 still serves as the read-free trunk,** with type heads present and both weights 0.
-4. **The refusals by their text:** a restore with type heads, and a payload cache past `MAX_READ_CACHE_BYTES`. claude-194's refusal of non-zero type weights is gone, and its test changes to serving.
+4. **The refusals by their text:**
+   - a restore with type heads, through `restore_state`;
+   - a payload cache past `MAX_READ_CACHE_BYTES`, through its check. No legal small synthetic shape reaches 4 GiB, so the check is a function of its own, tested at the limit and one past it, and called at load.
+
+   claude-194's refusal of non-zero type weights is gone, and its test changes to serving.
 5. **The timed steps equal the step,** with both kinds of head.
 6. **Negative gates:** each named piece set aside fails its test: the payload cache write, the value rotation, the type mean in each hook, `popcount_swar`, and the restore refusal.
 7. **Both disassembly audits pass** with the type heads reached: `audit_zero_matmul_serving.py --stack` and `m5_full_path_cost_controls`.

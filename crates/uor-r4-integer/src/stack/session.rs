@@ -606,8 +606,8 @@ fn fbs_model(artifact: &Container, shape: &StackShape) -> Result<FbsModel, Stack
     }
     let writer_table = artifact.table_i16("writer.table")?;
     length("writer.table", writer_table.len(), shape.vocab * d)?;
-    // The reads' copy heads take their points from the writer table, which is also the input
-    // embedding: the float trunk's `embedding.weight`.
+    // The reads' copy and type heads take their keys' points from the writer table, which is also
+    // the input embedding: the float trunk's `embedding.weight`.
     let hamming = match hamming_image(artifact)? {
         Some(image) => Some(ServedHamming::new(
             &image,
@@ -615,6 +615,7 @@ fn fbs_model(artifact: &Container, shape: &StackShape) -> Result<FbsModel, Stack
             shape.vocab,
             d,
             shape.layers(),
+            shape.context,
         )?),
         None => None,
     };
@@ -1261,6 +1262,11 @@ impl IntegerStackModel {
             pointer_at: 0,
             copy_scale_q16: 0,
             tokens: Vec::with_capacity(context),
+            hamming_payloads: self
+                .fbs
+                .as_ref()
+                .and_then(|f| f.hamming.as_ref())
+                .map_or_else(Vec::new, |h| h.payload_caches(context)),
             pointer_keys: vec![0; pointer_dim * context],
             pointer_lifts: if pointer_lorentz {
                 vec![0; context]
@@ -1575,6 +1581,9 @@ pub struct IntegerStackSession<'m> {
     copy_scale_q16: i32,
     /// Sequence of tokens stepped in this session so far.
     tokens: Vec<u32>,
+    /// For each Hamming read with type heads, the payload of every position stepped so far,
+    /// `context * width` (claude-195); empty for a read without them.
+    hamming_payloads: Vec<Vec<i64>>,
     /// The pointer head's keys `[position][dim]` (exponent -16) and Lorentz
     /// key lifts `[position]` (exponent -32), for the whole context.
     pointer_keys: Vec<i32>,
@@ -1913,6 +1922,14 @@ impl IntegerStackSession<'_> {
     /// so that after restoration, subsequent step calls produce bit-for-bit identical
     /// outputs to continuing the original session.
     pub fn restore_state(&mut self, saved: &SerializedStackSession) -> Result<(), StackError> {
+        // A read's type heads keep each position's payload, which a saved session does not carry
+        // (claude-195): restoring would silently differ from continuing, so it is refused.
+        let fbs = self.model.fbs.as_deref();
+        if fbs.and_then(|f| f.hamming.as_ref()).is_some_and(|h| h.has_type_heads()) {
+            return Err(StackError::Shape(
+                "a session of a Hamming read with type heads cannot be restored yet: its per-position payloads are not saved",
+            ));
+        }
         if saved.schema != STACK_SESSION_SCHEMA {
             return Err(StackError::Schema(format!(
                 "expected {STACK_SESSION_SCHEMA}, found {}",
@@ -3026,7 +3043,7 @@ fn stack_step_fbs(
             *x = x.saturating_add(*p);
         }
         if let Some(hamming) = &fbs.hamming {
-            hamming.stream(l + 1, &session.tokens, &fbs.writer_table, &mut b.x);
+            hamming.stream(l + 1, &session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.x);
         }
         #[cfg(test)]
         super::hamming::LAYER_TRACE.with(|trace| {
@@ -3038,7 +3055,7 @@ fn stack_step_fbs(
     stack_rms_norm_fine(&b.x, n.rms_eps, &mut b.scratch[..d]);
     stack_norm_gain(&mut b.scratch[..d], &fbs.final_gain);
     if let Some(hamming) = &fbs.hamming {
-        hamming.readout(&session.tokens, &fbs.writer_table, &mut b.scratch[..d]);
+        hamming.readout(&session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.scratch[..d]);
     }
     for (q, &v) in b.query_q12.iter_mut().zip(&b.scratch[..d]) {
         *q = to_exp_i32(v, NORM_FINE_EXP, Q12_EXP).clamp(-32768, 32767);
@@ -3161,14 +3178,14 @@ fn stack_step_fbs_timed(
         }
         // A Hamming read is timed inside the block it follows, so the stage list is unchanged.
         if let Some(hamming) = &fbs.hamming {
-            hamming.stream(l + 1, &session.tokens, &fbs.writer_table, &mut b.x);
+            hamming.stream(l + 1, &session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.x);
         }
         lap(&mut since, ns);
     }
     stack_rms_norm_fine(&b.x, n.rms_eps, &mut b.scratch[..d]);
     stack_norm_gain(&mut b.scratch[..d], &fbs.final_gain);
     if let Some(hamming) = &fbs.hamming {
-        hamming.readout(&session.tokens, &fbs.writer_table, &mut b.scratch[..d]);
+        hamming.readout(&session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.scratch[..d]);
     }
     for (q, &v) in b.query_q12.iter_mut().zip(&b.scratch[..d]) {
         *q = to_exp_i32(v, NORM_FINE_EXP, Q12_EXP).clamp(-32768, 32767);
