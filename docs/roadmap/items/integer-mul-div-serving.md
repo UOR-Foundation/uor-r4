@@ -9,7 +9,7 @@ needs_gpu: false
 depends_on: [fbs-serving-kernels]
 done_class: host
 notebook: docs/research/notebook/m4-serving.md
-scope: [scripts/audit_zero_matmul_serving.py, scripts/audit_zero_matmul_wasm.py, crates/uor-r4-integer/src/report_output.rs, crates/uor-r4-integer/src/bin/uor-r4-stack.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/tests/m5_full_path_cost_controls.rs, crates/uor-r4-integer/tests/capability_api_tests.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/kernels.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/tests.rs, docs/rules/README.md, docs/rules/decision-map.md, docs/mechanisms/lut-serving.md, docs/mechanisms/README.md, docs/model/serving-and-export.md, docs/model/pipeline-map.md, docs/model/architecture.md, docs/model/gpu-and-cuda.md, docs/loop/tasks/integer-mul-div-serving/**, docs/research/notebook/m4-serving.md, docs/roadmap/items/integer-mul-div-serving.md]
+scope: [scripts/audit_zero_matmul_serving.py, scripts/audit_zero_matmul_wasm.py, crates/uor-r4-integer/src/report_output.rs, crates/uor-r4-integer/src/bin/uor-r4-stack.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/tests/m5_full_path_cost_controls.rs, crates/uor-r4-integer/tests/capability_api_tests.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/kernels.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/tests.rs, docs/rules/README.md, docs/rules/decision-map.md, docs/mechanisms/lut-serving.md, docs/mechanisms/README.md, docs/model/serving-and-export.md, docs/model/pipeline-map.md, docs/model/architecture.md, docs/model/gpu-and-cuda.md, README.md, docs/contributing/HARD-RULES.md, docs/integration/project-track.md, docs/geometry/README.md, docs/start/glossary.md, docs/start/what-is-uor-r4.md, docs/start/where-we-are.md, docs/start/transformer-vs-geometry.md, docs/products/README.md, docs/products/language-model.md, docs/products/releases-and-artifacts.md, docs/products/desktop-client.md, docs/research/findings.md, docs/figures/mechanisms/lut-serving.svg, docs/figures/model/integer-export.svg, docs/figures/start/hero-how-it-thinks.svg, docs/loop/tasks/integer-mul-div-serving/**, docs/research/notebook/m4-serving.md, docs/roadmap/items/integer-mul-div-serving.md]
 ---
 
 ## Why it matters
@@ -29,13 +29,19 @@ The owner, 28 Oct 2026, in claude's chat: "sounds like reverse d11 is the answer
   - `report_output.rs`' disassembly verifiers (`verify_step_disassembly_text`, `verify_step_objdump_zero_mul_zero_float`) refuse `mul`, `sdiv`, `udiv` and the `__udivti3` builtin. The `uor-r4-stack` cost check and `tests/m5_full_path_cost_controls.rs` use them.
   - `scripts/audit_zero_matmul_wasm.py` counts `i64.mul` and `i64.div_u` in the browser build of the same step (`stack::IntegerStackSession::step`, `stack_argmax`) and expects zero. The browser build is served too, so D80 and D81 apply to it.
   - All of them must keep refusing every float instruction.
-- **The docs still state the old rule as current:**
-  - `docs/rules/README.md` (§3.6's plain-language row);
-  - `docs/rules/decision-map.md` (D11 and I1–I5);
-  - `docs/mechanisms/lut-serving.md` (R2);
-  - `docs/mechanisms/README.md` (the D11 row: "An audit proves no multiply instruction");
-  - `docs/model/serving-and-export.md`, `pipeline-map.md` and `architecture.md`;
-  - `docs/model/gpu-and-cuda.md` ("the serving contract, where no multiply instruction may appear at all").
+- **The docs still state the old rule as current.**
+  - **Rule pages:** `docs/rules/README.md` (§3.6's plain-language row), `docs/rules/decision-map.md` (D11 and I1–I5), `docs/contributing/HARD-RULES.md` (the D11 row) and `docs/integration/project-track.md` (its D11 line).
+  - **Mechanism and model pages:**
+    - `docs/mechanisms/lut-serving.md` (R2) and its figure `docs/figures/mechanisms/lut-serving.svg`;
+    - `docs/mechanisms/README.md` (the D11 row: "An audit proves no multiply instruction");
+    - `docs/model/serving-and-export.md`, `pipeline-map.md` and `architecture.md`, and the figure `docs/figures/model/integer-export.svg`;
+    - `docs/model/gpu-and-cuda.md` ("the serving contract, where no multiply instruction may appear at all");
+    - `docs/geometry/README.md` (lines 16 and 93; line 93 prescribes the sixteen-multiples table).
+  - **Summaries:** `README.md`; `docs/start/glossary.md`, `what-is-uor-r4.md`, `where-we-are.md` and `transformer-vs-geometry.md`; the hero figure `docs/figures/start/hero-how-it-thinks.svg`; `docs/products/README.md`, `language-model.md`, `releases-and-artifacts.md` and `desktop-client.md`; and `docs/research/findings.md`. Some state the rule. Others report a zero-multiply audit as the current result, which stops being true once the kernels use the multiplier.
+- **Left out on purpose:**
+  - **Other engines and their checks:** R4G1 and TLA (`docs/transformerless/**`, `docs/inference_contract.md`, `docs/minimal_client.md`); the VSA chat binary's `scripts/serving_multiplier_check.py`; the WASM Hopf engine (`wasm_serve.rs`); and the zero-multiply checks in `uor-r4-core`, `uor-r4-graph-certify`, `uor-r4-wasm-router` and `uor-r4-api`.
+  - **Descriptions of code that still has no multiply:** the comments in `stack/chat.rs`, `stack/flock.rs` and `stack/simd.rs`, and the geometry figures drawn by `docs/figures/geometry/generate.py`.
+  - **History and dated records:** `docs/research/history.md`, the research lines, `docs/integration/current-state.md`, done items, `docs/labs/**`, `docs/loop/tasks/**` and `archive/**`.
 
   The D11 entry in `docs/integration/DECISIONS.md` also lacks an "amended by D80, D81" pointer. That file is an owner path, so the pointer is written by patch under the owner's permission for this change, as D80 and D81 were.
 - **The kernels still use the multiplier-free forms.**
@@ -43,7 +49,7 @@ The owner, 28 Oct 2026, in claude's chat: "sounds like reverse d11 is the answer
 ## Done when
 
 1. **Docs and audits agree with §3.6.**
-   - The docs above say integer multiply and divide are allowed and floats are not.
+   - The rule, mechanism and model pages above say integer multiply and divide are allowed and floats are not.
    - The native and WASM audits allow integer multiply- and divide-class instructions, and keep refusing every float instruction.
    - The native audit keeps refusing `fmov` for now. Float and vector values share one register file, so it cannot tell an integer move from a float one. `fbs-serving-vector-kernel` may revisit this.
    - Host tests show a float instruction still fails each verifier, and an integer `mul` or `udiv` now passes. The Rust verifiers are tested in `tests/m5_full_path_cost_controls.rs`, and each audit script in its own `--self-test`: the WASM audit already has one, and the native audit gains one.
@@ -52,6 +58,7 @@ The owner, 28 Oct 2026, in claude's chat: "sounds like reverse d11 is the answer
    - The snap's `ℤ[φ]` comparison squares by the hardware multiply.
    - The norm's long division uses the hardware divide.
    - Each new kernel equals the old one by exhaustive or random host tests, and every reply on claude-126's export is byte-identical.
+   - The summaries and figures that report a zero-multiply audit are updated with the new audit result in the same unit.
 3. **Speed:** `fbs-toks --parts` on this M1, against claude-169's sealed binary (sha256 `8a7a83c7…805a`), run alternately. Decode tok/s, the parts, and a `sample` profile with its total read from the thread line.
 4. One notebook row and a REPORT for each unit. This is host and serving work: no GPU and no sheet (CHARTER §4.5).
 

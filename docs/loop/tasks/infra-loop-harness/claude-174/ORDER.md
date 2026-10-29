@@ -31,6 +31,7 @@ All held. **Not cancelled** (instrument: none needed).
 - `PLAN.md` (the D81 direction's row, naming the item)
 - `docs/roadmap/README.md` (rendered)
 - `docs/loop/tasks/infra-loop-harness/claude-174/**`
+- Added after the in-unit review found their rule lines stale against D80 and D81: the `ready` items `docs/roadmap/items/fbs-serving-vector-kernel.md`, `integer-hamming-read.md` and `turn-memory-integer.md` (one rule line each, two in `integer-hamming-read.md`)
 
 ## Done when
 
