@@ -73,7 +73,7 @@ Whether these replacements can match a transformer's quality is the open questio
 | Item | State | Source |
 |---|---|---|
 | Milestones complete | 0 of 8 | [STATUS](../../STATUS.md), [NOW](../integration/NOW.md) |
-| Whole-number serving engine | Built. It runs in a browser, and its audit finds no multiply, divide or decimal instruction in 7 of 7 serving functions (**measurement**) | [WASM runtime record](../labs/wasm-serving-runtime-2026-10-18/README.md) |
+| Whole-number serving engine | Built. It runs in a browser, and its audit finds no decimal instruction in 7 of 7 serving functions (**measurement**) | [WASM runtime record](../labs/wasm-serving-runtime-2026-10-18/README.md) |
 | A model trained under today's rules in that engine | None yet (older float stacks were served in October and missed their quality bar). Training is on hold until the owner releases each run | [NOW](../integration/NOW.md), [charter](../../CHARTER.md) section 5 |
 | Best trained model so far | 65 and 463 correct first guesses out of 14,287 on its two seeds. A table of word counts gets 1,226, and a next-word table gets 6,300 (**measurement**) | [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md), [count tables](../../archive/labs/host-diagnostics-2026-10-17/README.md) |
 | Tokens per second for the current model | Never measured | [lut-serving](../mechanisms/lut-serving.md) |

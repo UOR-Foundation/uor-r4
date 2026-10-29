@@ -54,7 +54,7 @@ Route is the base read of every trained artifact, yet it received only 20 learni
 
 **8. Export (missing for any trained model).** The learned table is already integers, so there is no float to round. But no exporter turns a trained snapshot into a D11 artifact, and no export gap has been measured. The existing table engine's schemas /1 and /2 serve softmax through exponent tables, and all three schemas stream dense 4-bit maps with SiLU and GELU tables, so a new table-native schema is likely needed (audit reading, `lut-serving` dossier; **hypothesis**).
 
-**9. Serving (engine built; never used for this model).** The D11 engine runs integer artifacts with no float instruction. Since D80 and D81 (28 Oct 2026) it may use the hardware integer multiply and divide, which today's kernels do not yet use. Its audits pass: 44 native symbol ranges ([project track](../integration/project-track.md), M4) and 7 of 7 WebAssembly serving functions ([WASM runtime record](../labs/wasm-serving-runtime-2026-10-18/README.md)) are free of multiplies. It has served only older models, which missed the milestone bar (the 19.9M-parameter stack reached 0.933 bits per byte against 0.90, "NOT MET by 0.033"). Tokens per second for the discrete model has never been measured ([lut-serving](../mechanisms/lut-serving.md)).
+**9. Serving (engine built; never used for this model).** The D11 engine runs integer artifacts with no float instruction. Since D80 and D81 (28 Oct 2026) it may use the hardware integer multiply and divide, which the stack's kernels use since claude-177. Its audits pass: 44 native symbol ranges ([project track](../integration/project-track.md), M4) and 7 of 7 WebAssembly serving functions ([WASM runtime record](../labs/wasm-serving-runtime-2026-10-18/README.md)) are free of float. They were free of multiplies too until claude-177, which brought in the allowed scalar multiplies and divides ([m4-serving](../research/notebook/m4-serving.md)). It has served only older models, which missed the milestone bar (the 19.9M-parameter stack reached 0.933 bits per byte against 0.90, "NOT MET by 0.033"). Tokens per second for the discrete model has never been measured ([lut-serving](../mechanisms/lut-serving.md)).
 
 ## The missing slots
 
@@ -81,7 +81,7 @@ Two further things are also not built: using an address *as* the read (memory by
 | Rank-margin loss | yes | yes | one variant collapsed to 19 or 20 occupied cells |
 | Discrete learning | yes | yes | no run beat its control |
 | Export | no | no | no exporter |
-| Serving | yes (engine) | no | zero-multiply audits green |
+| Serving | yes (engine) | no | serving audits green |
 
 **The measured result.** On the 14,287-row development panel, a count of the most common next token scores 1,226 top-1 hits and a context-free successor table scores 6,300 ([host diagnostics](../../archive/labs/host-diagnostics-2026-10-17/README.md)). The best trained discrete model scored 65 and 463 on its two seeds, with admission of 2,237 and 3,167, and both fail the admission gate (**measurement**, [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md)). The cause is not established. A census showed that training had broken much of the early aliasing, yet top-1 stayed low, so ranking capacity, the read and the schedule all remain open, as does the address key (the architect review, section 3.2, shows it takes only five values).
 

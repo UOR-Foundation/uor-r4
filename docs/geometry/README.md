@@ -90,7 +90,7 @@ The figure above has fifteen links. Each has its own metric, convention or label
 
 ## Serving without multiplication
 
-A served kernel has no floating point. Under D11 as first written it also had no multiplier instruction, so a product of two runtime values is read from a table. Since D80 and D81 (28 Oct 2026) the hardware integer multiply and divide are allowed, but today's kernels still use the table, described here. Build the sixteen multiples (0 to 15) of one operand by repeated addition, index that table with the radix-16 digits of the other operand, and combine the results with shifts and adds. For example, to compute $37 \times 43$, the table holds 0, 37, 74, …, 555. Write 43 as hex `0x2B`, with digits 2 and 11. Then
+A served kernel has no floating point. Under D11 as first written it also had no multiplier instruction, so a product of two runtime values is read from a table. Since D80 and D81 (28 Oct 2026) the hardware integer multiply and divide are allowed, and since claude-177 the stack's kernels use them. The table method they used before is described here, and it stays the tests' reference. Build the sixteen multiples (0 to 15) of one operand by repeated addition, index that table with the radix-16 digits of the other operand, and combine the results with shifts and adds. For example, to compute $37 \times 43$, the table holds 0, 37, 74, …, 555. Write 43 as hex `0x2B`, with digits 2 and 11. Then
 
 $$37 \times 43 = (T[2] \ll 4) + T[11] = (74 \ll 4) + 407 = 1184 + 407 = 1591.$$
 

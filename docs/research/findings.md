@@ -86,7 +86,7 @@ All rows are **measurements** unless the row says otherwise. Terms in the first 
 | E8 memory replacing half the feed-forward blocks: 0.033 BPB worse than the dense control (inside its +0.05 bar) at about 10 times fewer operations; learned product keys beat the fixed E8 addresses by 0.023 | Used a sigmoid gate and 2,000 CPU steps; PARKED | [E8 memory](../../archive/labs/e8-orbit-memory-2026-10-11/README.md) |
 | Quaternion transport beat identity by 0.071 and 0.077 nats at 1,000 updates | Confounded: softmax attention, a sigmoid gate, dense MLPs, and 332,928 fewer parameters in the identity arm | [transport attribution](../../archive/integration/transport-attribution-d1-2026-09-28.md) |
 | The exact store scored 1.000 whenever its register was right | That the same holds for a learned read is a **hypothesis**; none exists yet | [exact memory](../mechanisms/exact-memory.md) |
-| The integer engine is bit-exact and multiplier-free: 44 native symbol ranges and 7 of 7 WebAssembly serving symbols pass the zero-multiply audit | No lawful trained model has been exported, so the export gap is unmeasured | [WASM runtime](../labs/wasm-serving-runtime-2026-10-18/README.md) (7 of 7); [project track](../integration/project-track.md) (44 native ranges) |
+| The integer engine is bit-exact and float-free: 44 native symbol ranges and 7 of 7 WebAssembly serving symbols pass the serving audit (multiplier-free until claude-177, which uses the allowed integer multiply and divide) | No lawful trained model has been exported, so the export gap is unmeasured | [WASM runtime](../labs/wasm-serving-runtime-2026-10-18/README.md) (7 of 7); [project track](../integration/project-track.md) (44 native ranges) |
 
 ## Go deeper
 
