@@ -25,7 +25,7 @@ flowchart LR
 | Decision | What it said (one sentence) | Fate | Charter home |
 |---|---|---|---|
 | D0 | Serving forbids dense matrix multiplication; first form of the sparsity test, replaced the same day by D0-b. | Retired | Superseded by D0-b; its sparsity test survives as D5 (3.9). |
-| I1 to I5 | Serving efficiency invariants: sparse access, bounded candidates, bytes per token, multiplier-free kernels, exact memory. | Kept | 3.9 |
+| I1 to I5 | Serving efficiency invariants: sparse access, bounded candidates, bytes per token, multiplier-free kernels, exact memory. | Kept | 3.9 (multiplier-free kernels relaxed by D80 and D81, 28 Oct 2026: the integer multiply and divide are allowed) |
 | D0-b | Additive linear maps adopted as a serving stepping stone. | Retired | Superseded by D11 (serving) and D25/D30 (no dense maps). |
 | D1 | Falsify a mechanism before extending it. | Retired | Superseded by D2, D12, D20 and D22; a negative now closes only a configuration (4.1). |
 | D2 | A mechanism's contribution is judged by measured ablation; enablers are a separate class. | Merged | 4.1 (enablers survive as PARKED with reopen conditions) |
@@ -37,7 +37,7 @@ flowchart LR
 | D8 | Correct the training method and reference ladder. | Retired | Superseded by D32/D37 (training) and D28 (no neural reference). |
 | D9 | Prevent experiment loops; a repeat needs new causal evidence. | Merged | 4.4 (pivot note) and 5.3 (intent note) |
 | D10 | A converted open-weight backbone as the interim chat vehicle. | Retired | Superseded by D11. |
-| D11 | One native, multiplier-free, transformerless integer serving contract for every lab. | Kept | 3.6 |
+| D11 | One native, multiplier-free, transformerless integer serving contract for every lab. | Kept | 3.6 (amended by D80 and D81, 28 Oct 2026: the integer multiply and divide are allowed, and floats stay banned) |
 | D12 | Gates promote, never kill; reopen geometric candidates; keep a toolbox. | Merged | 4.1 (ACTIVE, READY, PARKED; no terminal status) |
 | D13 | Record of the 29 September two-track plan. | Retired | Superseded by D14, D18 and D19. |
 | D14 | Durable autonomous labs, GitHub as authority, a three-seat council. | Merged | 5.1 (owner boundaries) and 5.2 (GitHub authority); the council is retired (owner, 19 Oct). |

@@ -75,7 +75,7 @@ flowchart LR
 
 **D-entries (D11, D22, D37 and the rest).** Numbered owner decisions, from D0 to D41, that used to be the project's rulebook. The charter now holds the rules that still bind, and the [decision map](../rules/decision-map.md) says what became of each decision. The ones you will meet most are [D11](#d11), [D22](#d22) and [D37](#d37).
 
-<a id="d11"></a>**D11.** The serving contract: the finished model runs with whole numbers only. It has five rules. Two of them are that the served program uses no floating point and no multiply or divide instruction. See [serving and export](../model/serving-and-export.md).
+<a id="d11"></a>**D11.** The serving contract: the finished model runs with whole numbers only. It has five rules. Two of them are that the served program uses no floating point and no multiply or divide instruction. Since D80 and D81 (28 Oct 2026) the hardware integer multiply and divide are allowed; floating point is still banned. See [serving and export](../model/serving-and-export.md).
 
 **D19 object store.** A store that keeps bytes exactly, in a tree of fingerprinted pieces, so repeats are stored once and any range can be checked. It is built and tested (20 integration tests pass in the delivery record, 60 after later work), but no model uses it yet. See [object store](../mechanisms/object-store.md).
 
@@ -131,7 +131,7 @@ flowchart LR
 
 **Instrument.** A measuring tool, such as a test panel or a checker. If an instrument is faulty, that is a fix, not a negative result about the mechanism. See [what the project knows](../research/findings.md).
 
-**Integer serving.** Running the finished model with whole numbers only: adds, shifts, comparisons and table look-ups. This is [D11](#d11). Zero-multiply audits are green on 44 native symbol ranges and 7 of 7 WebAssembly functions (**measurement**), but no trained model has been served this way. See [serving and export](../model/serving-and-export.md).
+**Integer serving.** Running the finished model with whole numbers only: adds, shifts, comparisons and table look-ups, and since D80 and D81 the integer multiply and divide. This is [D11](#d11). Zero-multiply audits are green on 44 native symbol ranges and 7 of 7 WebAssembly functions (**measurement**), but no trained model has been served this way. See [serving and export](../model/serving-and-export.md).
 
 ## K
 

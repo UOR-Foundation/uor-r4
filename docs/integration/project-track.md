@@ -187,8 +187,8 @@ D39 item 4 releases no hold.
 - **D37.** Float is legal in **offline training only**, in a separate scanned geometric
   module with its own allowlist entry added at pre-registration; the served artifact is D11
   integer, and every float-trained candidate reports its export gap.
-- **D11.** Served computation has no floating point, no transcendental arithmetic and no
-  multiplier instruction.
+- **D11.** Served computation has no floating point and no transcendental arithmetic. Since
+  D80 and D81 (28 Oct) it may use the hardware integer multiply and divide.
 - **D39 item 5.** A float candidate is disqualified when its export gap exceeds the two-seed
   noise band on the same evaluator; the band is fixed per sheet at FIT time. Float scores are
   instrument readings, never decision metrics.

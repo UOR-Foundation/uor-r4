@@ -82,7 +82,7 @@ the tested forms failed or broke a rule while the mechanism stays open.
 | Feed-forward layers (most of the multiplying) | [Hamilton rotation gate](docs/mechanisms/hamilton-gate.md) and [SpiralCore/FBS projection](docs/mechanisms/spiralcore-fbs.md) | READY; never trained |
 | Softmax output and cross-entropy loss | [Admission](docs/mechanisms/admission.md) (open a few address "drawers", called cells) and a [rank-margin hinge](docs/mechanisms/rank-margin.md) | ACTIVE |
 | Backpropagation optimizer | [Discrete learning](docs/mechanisms/discrete-learning.md): try each legal rotation of one entry, keep it only if the score strictly improves | ACTIVE |
-| Matrix-multiply runtime | [Integer serving (D11, the whole-number serving contract)](docs/mechanisms/lut-serving.md): adds, shifts, compares and table reads, no multiply instruction | ACTIVE engine; no model trained under today's rules exported |
+| Matrix-multiply runtime | [Integer serving (D11, the whole-number serving contract)](docs/mechanisms/lut-serving.md): adds, shifts, compares and table reads, and no float; since D80 and D81 (28 Oct 2026) the integer multiply and divide are allowed | ACTIVE engine; no model trained under today's rules exported |
 
 Two transformer parts have **no replacement yet: position and normalization.** No two replacements
 have been trained together into a model that beats the count tables. The board lists 27 mechanisms:
