@@ -2,7 +2,7 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md), done-when 2. Order: [claude-205](../../loop/tasks/one-model-end-to-end/claude-205/ORDER.md). Code: this unit's head, built and tested on the pod from that exact commit. Plan: [the assessment](../../loop/tasks/infra-loop-harness/claude-201/ASSESSMENT.md) §5–§6, step 2.
 
-TEST FITNESS: (to be filled by the fresh reviewer). PRE-RUN: (to be filled).
+TEST FITNESS: FIT. PRE-RUN: PASS. Round 2, at `1bf7e2292`, by a fresh non-author reviewer; round 1 at `244a10d72` (FIT with one condition, PRE-RUN not finished). Both rounds are summarized on #3407 (6509937381). The parity scope decision: DECISION REVIEW: PASS in its second revision, logged on #3407 (6509925608).
 
 ## The question
 
