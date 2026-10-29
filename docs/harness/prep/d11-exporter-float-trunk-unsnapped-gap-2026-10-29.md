@@ -16,7 +16,9 @@ TEST FITNESS: PENDING
 
 **The question:** is the exported unsnapped artifact (A) inside the export gap's bar against its own float trunk (F)? And for which training configuration does that hold on both seeds?
 
-The item's done-when needs the export gap "measured inside the band". So a configuration that passes on both seeds is that measurement.
+The item's done-when needs the export gap "measured inside the band". The pre-named configuration of section 3, passing on both seeds, is that measurement.
+
+**That configuration was chosen from claude-180's readings, on these same saved models and DEV rows.** So a close here is a DEV-scope result informed by that selection, and is reported as one.
 
 ## 2. Base artifacts and arms
 
@@ -67,15 +69,22 @@ The item's done-when needs the export gap "measured inside the band". So a confi
 |---|---|---|
 | **No reading** | fewer than 6 models are counted, or `I-Qualify` fails | An instrument repair, then this run again. |
 | **Close** | dual-c131 passes under `raw_both` | **The done-when's export gap is measured inside the band.** This unit then runs the close checks below, and closes #2820 at DEV scope only if all of them pass. |
-| **Pass elsewhere** | another configuration passes under `raw_both` or `raw_gates` | **The next unit:** a confirming run that names that configuration and arm in its own sheet, before it runs. The item closes on that confirmation. |
+| **Pass elsewhere** | any other configuration-and-arm pair passes under `raw_both` or `raw_gates`, dual-c131 under `raw_gates` included | **The next unit: a confirming run.** Its own sheet names that pair before it runs, and it trains **new seeds** of that configuration. Never the eight models read here: re-scoring them would reproduce this run bit for bit. The item closes only on that confirmation. |
 | **No reading** | fewer than 7 models are counted | An instrument repair first: "Narrowed" and "No change" need at least 7 models. |
 | **Narrowed** | either of two things holds, over the counted models: some `raw_both` or `raw_gates` artifact is inside (one of the 16 is enough); or, for `raw_both` or for `raw_gates`, the sum of \|b − c\| is below the snapped arm's sum | **The next unit trains a configuration against the unsnapped D11 forward:** dual training with D in the unsnapped mode, then this measurement. |
 | **No change** | otherwise | **The next unit: wider codes** for the query and the tables (claude-180's rounding readings), then this measurement. |
 
-**The close checks**, run on the laptop after the pod. Each is a static check or client-device serving (CHARTER §3.6). A red check blocks the close:
-- `python3 scripts/audit_zero_matmul_serving.py <release uor-r4-stack> --stack`, on the `serving-wasm` build at the head (the `lut-stack/5` runtime): FULL PASS.
-- `python3 scripts/audit_zero_matmul_wasm.py <wasm> --serving --call-graph`, on `cargo build --release --target wasm32-unknown-unknown -p uor-r4-integer --features serving-wasm --lib` with `RUSTFLAGS="-C target-feature=-bulk-memory"`: 7 of 7 clean. Without that flag, 0xFC bulk-memory instructions read as unclassified, on `main` too.
-- **Speed:** `fbs-toks` decode and context tokens/s for both dual-c131 `raw_both` artifacts, the synthesis's tokens per second.
+**The close checks**, run on the laptop after the pod, at the head. Each is a static check, a host test, or client-device serving (CHARTER §3.6).
+1. **The serving audit:** `python3 scripts/audit_zero_matmul_serving.py <bin> --stack`, on the binary that `cargo build --release --locked -p uor-r4-integer --features serving-wasm --bin uor-r4-stack` builds. That is the `lut-stack/5` runtime, and the binary is what claude-177 and claude-181 audited. It must read FULL PASS.
+2. **The WASM audit:** `python3 scripts/audit_zero_matmul_wasm.py <wasm> --serving --call-graph --build-commit <head>`. The module comes from `cargo build --release --locked --target wasm32-unknown-unknown -p uor-r4-integer --features serving-wasm --lib` with `RUSTFLAGS="-C target-feature=-bulk-memory"`. It must read 7 of 7 clean. Without that flag, 0xFC bulk-memory instructions read as unclassified, on `main` too.
+3. **The integer serving tests:** `cargo test --locked -p uor-r4-integer --features serving-wasm --no-fail-fast`, with `~/.cargo/bin` first on PATH. It must show no failure beyond the missing-local-input set that `main` has, which claude-181 recorded as 35 tests, all panicking on a missing bundle or `tokenizer.json`.
+4. **Speed:** `fbs-toks` decode and context tokens/s for both dual-c131 `raw_both` artifacts. This is the synthesis's tokens per second. Speed has no bar; only a failed `fbs-toks` run counts as red.
+
+**On a red close check,** the item stays open: the check is repaired and run again, and the close waits on it.
+
+**What a close implies against kimi-46's outcome 2:**
+- **The top-1 floors:** a pass puts A within F_I of F on top-1. dual-c131's F is 3,845 and 3,128 (F_I is at most about 73), so A clears kimi-46's floors of 1,907 and 2,294 on both seeds. Those floors were set on claude-129's plain-c126 artifacts.
+- **D, the counterfactual:** here D is claude-180's float emulation of the same contract, `rounding_only`. It is already inside on both dual-c131 seeds (3 and −9, F_I 24). So the close is not kimi-46's "cancellation" case, where A passes but D fails.
 
 **"DEV scope"** is the scope kimi-46's sheet registered for this item's close ("close #2820 at DEV scope only"). The fresh split is not read.
 
@@ -142,6 +151,7 @@ The item's done-when needs the export gap "measured inside the band". So a confi
 **The job and summary programs** are local files, run in a fresh folder (a non-empty one is refused, with a marker outside it) and copied into the seal, as in claude-180.
 - `job.sh` template: `0c84aebbddb1f2f769e97fbaa5c118c72407c0b4c8894fa1b0a0b5ac4208a608`. The launched copy differs only in its `SHA=` line.
 - `summary.jq`: `b8827c588d2e46e96381cf75c479400735ba82cac81bfdc07150458cb6f0c8e3`. The job checks this pin.
+- `fix.patch`, for B_old: claude-179's `local/claude/claude-179/fix.patch`, at `a2728e80a980c02b034e056199d45f8dc119cf1cf87aaa67434697f9216a9d55`. The job checks this pin too.
 - **The summary reads one record per artifact:** its sha256, its header (schema, flags, snap), the sha256 of its data sections, the stored pin, and the gap receipt's readings. It applies `I-Arm-Header`, `I-Arms-Distinct`, `I-Same-Tables`, `I-Export-Snapped` and `I-Snapped-Recorded` to decide which models are counted, then section 3's table.
 
 ## 7. Minimum test power
@@ -183,5 +193,21 @@ The item's done-when needs the export gap "measured inside the band". So a confi
 9. **Low: the trained parity claim was unsourced.** The tests are named.
 
 **Round 1 confirmed:** the six artifact pins match claude-132's table; the B_old reuse is sound; the cost is inside the caps.
+
+**Round 2 (fresh non-author reviewer, at `7cdc61a54`): NOT FIT. All six findings are fixed.**
+1. **High: "Pass elsewhere" could close on re-scoring the same models.** Its confirming run now trains new seeds of the named pair.
+2. **Medium: the table and `summary.jq` disagreed on dual-c131 under `raw_gates`.** The row now says "any other configuration-and-arm pair, dual-c131 under `raw_gates` included", as `summary.jq` computes it.
+3. **Medium: the tie to kimi-46 borrowed the phrase without its conditions.** The close checks gain the integer serving tests. The sheet states what a close implies for kimi-46's top-1 floors and for D.
+4. **Low: section 1 contradicted section 3.** It now names the pre-named configuration, and notes that the choice came from these same models.
+5. **Low: the close checks were underspecified.** They now give the build commands, `--build-commit`, no bar on speed, and what a red check means.
+6. **Low: `fix.patch` was unnamed in the sheet.** Section 6 names its source and pin.
+
+**Round 2 confirmed:**
+- the program pins and the 12 stored pins;
+- the gap fields `record` copies;
+- the header readers against the writer;
+- `summary.jq`'s order;
+- the pre-named close's justification;
+- the audit usage lines.
 
 The D67 pre-run review is still to come.
