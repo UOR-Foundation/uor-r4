@@ -25,7 +25,7 @@ Snapped, the same models were 353 (73) and 231 (70). The four close checks are g
   - So the close rests on one configuration. It is a DEV-scope result, and that configuration was chosen from claude-180's readings on these same models and rows (sheet §1). It was named before this run, but not before claude-180's.
 - **`raw_gates` alone passes on three models but no configuration's two seeds.** It passes on plain-c126 seed 2, d11-c130 seed 1 and dual-c131 seed 1; dual-c131 seed 2 reads −72 (46). `raw_transition` alone is inside only on plain-c126 seed 1 (−17, F_I 56). By |net| it is worse than snapped on four models and better on four.
 - **The run took 1 h 48 min, not the sheet's estimated hour.**
-  - Each model's four arms took about 12.7 minutes, mostly in `d11-fbs-eval run --verify`.
+  - Each model's four arms took 12.4 to 12.8 minutes (12.6 on average), mostly in `d11-fbs-eval run --verify`.
   - Eight models projected to 11:33Z, against a 2 h lease ending 11:36Z. I renewed the lease to 12:20Z at 10:21Z, while the run was healthy.
 - **The pod stopped answering SSH for about five minutes** (11:23–11:28Z). The job never stopped: the provider showed the pod RUNNING with the job's GPU lock held, and its uptime was four days. The watcher, which counts misses since D67's finding 3, reached 4 of 6 and recovered.
 - **I invented two artifact hashes, and caught them before launch.**
@@ -70,8 +70,8 @@ Snapped, the same models were 353 (73) and 231 (70). The four close checks are g
 
 **Instruments. All green; all eight models are counted.**
 - `I-GPU-Tests`: 163 passed and 6 ignored at the head.
-- **`I-Qualify` (`uor-r4.d11-fbs-eval-qualify/2`):** 32 controls in the four snap choices. On every control the GPU evaluator equals the host twin and the Rust session, over 256 positions.
-- **`I-Verify`:** on all 32 artifacts the GPU evaluator equals the host twin and the Rust session, over all 82,176 positions. That check is most of each model's 12.7 minutes.
+- **`I-Qualify` (`uor-r4.d11-fbs-eval-qualify/2`):** 32 controls in the four snap choices. On every control the GPU evaluator equals the host twin and the Rust session, over 128 to 1,024 positions per control.
+- **`I-Verify`:** on all 32 artifacts the GPU evaluator equals the host twin and the Rust session, over all 82,176 positions. That check is most of each model's 12.6 minutes.
 - **`I-Arm-Header`:** each arm carries its schema and flags. Snapped is `lut-stack/4` with both raw flags off. The raw arms are `lut-stack/5`, and `transport_snap` is null when the transition is raw.
 - **`I-Arms-Distinct`:** four distinct artifact hashes per model.
 - **`I-Same-Tables`:** within a model, the four arms' data sections are byte-identical. Only the header differs.
@@ -99,7 +99,13 @@ Snapped, the same models were 353 (73) and 231 (70). The four close checks are g
 - **Summed |net|** over the 8 models: snapped 2,080, `raw_gates` 562, `raw_both` 492.
 - **Models with an unsnapped arm inside** (`raw_gates` or `raw_both`): 4.
 
-**Against claude-180's float emulation of the same contract** (`rounding_only`): dual-c131 read 3 and −9 there, and 6 and −8 here. plain-c126 seed 1 reads −151 in both. So exporting to the integer contract, with the snaps off, moves top-1 by a few rows at most.
+**Against claude-180's float emulation of the same contract** (`rounding_only`): dual-c131 read 3 and −9 there, and 6 and −8 here. plain-c126 seed 1 reads −151 in both.
+- **Exporting to the integer contract, with the snaps off, moves A's top-1 by 0 to 13 rows against that emulation:**
+  - 13 on d11-c130 seed 1 (3,885 to 3,898);
+  - 6 on bfixed-c179 seed 1;
+  - 3 and 1 on dual-c131;
+  - 0 to 3 on the other four.
+- **No model crosses the bar:** in claude-180's emulation too, only dual-c131 was inside.
 
 **What the close implies against kimi-46's outcome 2.**
 - **A on top-1:** dual-c131's A is 3,839 and 3,136. That is above kimi-46's floors of 1,907 and 2,294.
@@ -115,7 +121,7 @@ Snapped, the same models were 353 (73) and 231 (70). The four close checks are g
    - The module was built with `-C target-feature=-bulk-memory`; its sha256 is `4c271503…10dc`.
 3. **The integer serving tests:**
    - `cargo test --locked -p uor-r4-integer --features serving-wasm --no-fail-fast` gives 550 passed, 35 failed and 4 ignored.
-   - All 35 failures panic on a missing local input: a quaternion or Householder bundle (32), or `tokenizer.json` (3). That is the set claude-181 recorded on `main`.
+   - All 35 failures panic on a missing local input: a quaternion or Householder bundle (32), or `tokenizer.json` (3). That is the same count and kind claude-181 recorded on `main`; claude-181 recorded no test names.
 4. **Speed:** `fbs-toks`, as above. All four runs exited 0.
 
 **Classification.** This is a mechanism result at DEV scope, measured with qualified instruments. The six misses close configurations (plain-c126, d11-c130 and bfixed-c179 under `raw_both`), never the mechanism.
