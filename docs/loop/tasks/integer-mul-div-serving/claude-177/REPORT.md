@@ -49,8 +49,9 @@ Run on this M1 on AC power, claude-126's seed-1 export (sha256 `314c3909…fdb30
 | Final norm | 3,166 | 1,708 | 1.85× |
 | Writer | 19,959 | 19,417 | unchanged |
 | Gathers | 16,383 | 16,424 | unchanged |
+| Requant, embed, bookkeeping | 2,374 | 2,333 | unchanged |
 
-The parts sum to 999 per mille of the step in new 1, and 990 in old 1.
+All stages together sum to 207,087 of the 207,250 ns step in new 1, 999 per mille (`fbs-toks`'s `stage_sum_per_mille_of_step`). In old 1 they sum to 328,817 of 331,916 ns, 990 per mille.
 
 **Profile of the new binary** (`/usr/bin/sample <pid> 8 -mayDie`, started 0.1 s into a plain run; 725 samples on the thread): `stack_snap_select` 333 (46%), `stack_recurrence_core` 81, `stack_native_writer` 64, `stack_snap_rotation` 42, `stack_fbs_gather` (i32) 38, `stack_rms_norm_fine` 35, `stack_lanes` 26, `stack_hamilton` 17 (was 193 of 940 in claude-169).
 
