@@ -54,7 +54,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Refs #3385. The item is not done: this
 All on the laptop, on synthetic trunks; no trained checkpoint.
 
 - **The kernel against f64** (`type_heads_match_the_f64_reference`). A 256-row, 256-wide table and a 4-head read (2 type heads of 64 coordinates), 7 seeds × 48 rows of random ±4 points at Q16. The margins:
-  - two seeds use the synthetic ones, where nothing counts;
+  - two seeds use the synthetic ones (1 to 9 bits of 64), where candidates almost never count;
   - three use wide ones (33 to 39 bits);
   - two mix one wide type head (37 bits) with one synthetic.
 
@@ -84,8 +84,10 @@ All on the laptop, on synthetic trunks; no trained checkpoint.
   - one column more, a third read, and an overflowing product are each refused by the exact text.
 - **The timed steps** (claude-194's test, now with both kinds of head): `measure_fbs_step_stages` and `measure_fbs_step_parts` equal `step_native` at all 40 rows, with the same saved state at the end.
 
-**Negative gates, all at `9ac99efbc`.** The code head is unchanged since, except comments.
-- **What was run:** each set-aside built, its tests failed, and the tree was restored with `git checkout` of the file (`local/claude/neg/ng*.out`). Each command printed the short head and a clean `git status`, and the restored tree passes all 23 (`neg/restore.out`).
+**Negative gates, all at `9ac99efbc`.** Nothing in the code changed after it.
+- **What was run:** each set-aside built, its tests failed, and the tree was restored with `git checkout` of the file (`local/claude/neg/ng*.out`).
+  - The logs hold the test output only. The short head and the clean `git status` were printed by each command in the session, not into the logs.
+  - Every log is timestamped after `9ac99efbc`'s commit, and the restored tree passes all 23 (`neg/restore.out`).
 - **Earlier runs:** the runs at `7b449fbee`, before review round 1, are kept in `neg/pre-round1/`.
 - **Scope:** the failures are counted within the 23 read tests, or, for gate 5, the 4 `m5_full_path_cost_controls` tests.
 
@@ -111,7 +113,7 @@ At `9ac99efbc`, the code head. The later commits change only this folder and the
   - The `m5_full_path_cost_controls` step verifier passes inside the same run.
 - **The 23 read tests:** the Hamming, copy-head and type-head tests all pass.
 - **The serving audit** (`audit_zero_matmul_serving.py --stack` on the release `uor-r4-stack`, `audit-195.out`): FULL PASS. 0 forbidden instructions across 44 symbol ranges and 109 reachable functions, up from claude-194's 106.
-  - `TypeHeads::new`, `mean`, `choose`, `payload` and `queries` are symbols of the audited binary (`nm-195.out`).
+  - `TypeHeads::new`, `mean`, `choose` and `payload` are symbols of the audited binary (`nm-195.out`). `queries` is inlined; only its `collect` closure's instantiation is a symbol.
   - That the audit walks the type mean is shown by gate 5's verifier output, where the closure of `nearest` fails for both kinds of head.
 - **The GPU evaluator's host tests** (`docs/labs/d11-exporter-float-trunk/instrument`, `--target aarch64-apple-darwin`, `instrument-host.out`, at `18c2b945c`; nothing it reads has changed since): 5 passed, 1 ignored (it needs a trained artifact).
 - **`cargo clippy -p uor-r4-integer --all-targets`** (`clippy-195.out`): no warning in `hamming.rs`, `session.rs` or the new tests. Its three `tests.rs` warnings, at lines 864, 1794 and 3672, are older tests on `main` (`15c474a2d`, `9556c1bd3`).
