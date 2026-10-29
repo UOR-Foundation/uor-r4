@@ -48,6 +48,8 @@ It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-
   - **The integer read** keeps ascending distance, then ascending position `s`: deterministic, and the order of any stable sort.
   - **Parity:** it is measured on kept *sets*. A tie's order inside the set does not matter, and a tie across the 16th place is counted, not assumed away.
   - **Candidates:** `1 ≤ s < t` (`first = 1`; position 0 has no previous token). Only real candidates are kept: the float masks the others to `FAR` and drops them by `real`.
+- **Rounding at the hooks.** In the float trunk, the stream read's output is rounded to Q16: `x = q16(read.apply(&x, ids, &table)?)?` (`geometric_stack_native.rs:1148`). The readout read's output is not rounded (`:1187`). Both reads get `table = embedding.weight`, the tensor `fbs_export.rs` writes as `embed`, which is `writer.table`. The integer combine reproduces both.
+- **A zero quaternion.** At `g = 0`, `hamilton_gate`'s `1e-12` and `GATE_EPSILON = 0` both give 0. The round-trip test includes one.
 - **The session refuses what it does not serve.** Until a unit serves a part, an artifact that needs it is refused with a clear error: a read at all, then non-zero type-head weights `w_y`, then a `step_rotation`. So a partial port never silently differs from float.
 - **The order of units:**
   1. the artifact, with a round-trip and read-free bytes unchanged;
