@@ -49,6 +49,10 @@ The three short lines are listed in the [generated archive catalog](../../../arc
 - **Tooling and operations records are large.** `harness-governance`, `compute-ops` and `spiralcore-wire` hold 207 records and no model result. Part of that came from owner decisions that forced a rebuild in October (`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md`, section 3).
 - **The only active modelling line is `m1-discrete-attention`.** Its best trained artifact is below a word-count table (65 and 463 of 14,287 development rows against 1,226).
 
+## Since 27 Oct
+
+**29 Oct 2026.** The table above stops at 19 Oct. Since 27 Oct the current line is the float-trained FBS trunk, which carries the replies. It is not one of the 20 audited lines, and it has no page here. Its units run from claude-142 to claude-189. See [the pipeline map](../../model/pipeline-map.md) for the two model paths (the discrete path and the FBS trunk) and for the cost of each stage. The project is still pre-alpha: 0 of 8 milestones are complete. The "only active modelling line" bullet above describes 19 Oct.
+
 ## Where to go next
 
 - [How research is done now](../README.md), the rules for notebooks, sheets and releases.

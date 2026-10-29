@@ -53,4 +53,8 @@ Hard geometric selection gives unselected keys no gradient, so it needs a traini
 
 Preserved evidence, not a live line. The surviving parts are READY, never trained: [Hamilton gate](../../mechanisms/hamilton-gate.md), [recurrence gates](../../mechanisms/recurrence-gates.md) and [SpiralCore/FBS](../../mechanisms/spiralcore-fbs.md). [Flock read](../../mechanisms/flock-read.md) is ACTIVE on the discrete path and [spin weights](../../mechanisms/spin-weights.md) is PARKED. Archived float sheets return only as new sheets with a fresh review.
 
+## 29 Oct 2026
+
+The float route is live again as the FBS trunk, trained in float on the GPU and exported to integers (owner direction, 28 Oct; D37 keeps float training offline-only). The trunk has about 63,744 trainable values, and the 4,096 by 256 word table holds about 94% of the model. On held-out text it gets about 60% next word, against 44% for word pairs and 49% for the counting model (claude-142). The Hamming read (claude-146) is the copy mechanism. The diagnosis (claude-155) is that the trunk routes but cannot store; exact memory is the storage. Training is deterministic since claude-179. See [the pipeline map](../../model/pipeline-map.md) and [claude-161](../../loop/tasks/route-plus-memory/claude-161/REPORT.md). The starling result above still stands as history. No milestone is claimed.
+
 **Go deeper:** the [generated catalog page](../../../archive/catalog/m1-float-rung0.md) lists all 38 records.

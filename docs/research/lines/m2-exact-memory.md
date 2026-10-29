@@ -54,4 +54,8 @@ Development is not fresh (lesson 4 in [what the project knows](../findings.md)).
 
 M2 is held. These mechanisms are PARKED, each with the conditions that would reopen it: [exact memory](../../mechanisms/exact-memory.md), [read binding](../../mechanisms/read-binding.md), [pointer key](../../mechanisms/pointer-key.md), [carrier credit](../../mechanisms/carrier-credit.md), [legal construction](../../mechanisms/legal-construction.md) and [native geometric](../../mechanisms/native-geometric.md). The next step in the exact-memory dossier is to build the address itself as the read, with an oracle test first. The durable store lives in [the M3 line](m3-durable-memory.md).
 
+## 29 Oct 2026
+
+M2 is blocked on the owner, and its bar is unchanged. Related work on the FBS trunk line: exact turn memory keyed by the user's first 8 tokens names 598.7 and 598.3 of the DEV panel's 1,226 reply openings at two seeds (claude-161, [report](../../loop/tasks/route-plus-memory/claude-161/REPORT.md)), against 266.3 and 281.0 for an empty-table control. It moves only the first word of a reply, and it is not served. This is not M2 progress. See [the pipeline map](../../model/pipeline-map.md).
+
 **Go deeper:** the [generated catalog page](../../../archive/catalog/m2-exact-memory.md) lists all 151 records.
