@@ -1,70 +1,51 @@
-# ORDER: infra-loop-harness, claude-162
+# ORDER: infra-loop-harness, claude-162 (item maintenance: the map's next units as items)
 
 Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `5fee6d037`.
 
+Setup row: 2 (item-file maintenance: new gap items and PLAN's owner-direction rows).
+
 ## Goal
 
-The item's done-when reads:
+The owner, 28 Oct 2026, in claude's chat: "ok yes, my vote is to pivot to your diagnosed recommended new roadmap". PLAN records that direction as done "when all three are merged". All three now are:
+- `fbs-cost-profile` (claude-157, claude-158);
+- `pipeline-map-revision` (claude-159);
+- `route-plus-memory` (claude-161, cell A at both seeds).
 
-> Every PR in the build plan on [the loop page](../../loop/README.md#build-plan) is merged, each with its planted fault turning its gate red. The four labs (Kimi, Claude, DeepSeek, Antigravity) are onboarded, each with a committed onboarding receipt. Each lab has completed one loop task end to end: claim, probe, work, gates, report, review by another vendor, queue, and verify on fresh `main`.
+The revised [pipeline map](../../../../model/pipeline-map.md)'s order of work names the next units, R2 to R5. This unit turns them into items, so `loop claim` can take them:
+- **`writer-admission` (R2):** make the cheap readout correct. claude-150's writer held at seed 1 and never learned at seed 2.
+- **`fbs-serving-kernels` (R3):** split each served layer, then vector kernels exact against `step_native` (claude-158: the trunk is 98.6% of a served token).
+- **`training-step-cost` (R4):** split the backward, and a cheaper rival search (claude-157).
+- **`turn-memory-integer` (R5, the memory's part):** serve claude-161's turn memory from the integer artifact. `integer-hamming-read` already holds the Hamming read's part.
+- **`turn-memory-reply`:** the memory beyond a reply's first word (claude-161's REPORT, "Still open").
+
+It also sets PLAN's pivot direction to `done` and lists the next items in PLAN.
+
+**Each item's `scope:`** lists every file its first unit will touch, checked against the tree at the base. This is claude-157's lesson: an item's scope is read from `origin/main`, so it cannot be widened inside its own unit.
 
 ## Cancel probe (run first)
 
-To fill in.
+Run at `5fee6d037`:
+- **Not already present:** no item named `writer-admission`, `fbs-serving-kernels`, `training-step-cost`, `turn-memory-integer` or `turn-memory-reply` exists.
+- **No overlap:** no open PR touches `PLAN.md` or `docs/roadmap/items/`.
+- **The three pivot items** are `done` on main.
+
+All three held. **Not cancelled** (instrument: none needed).
 
 ## Files in scope
 
-- `PLAN.md`
-- `docs/roadmap/items/*.md`
-- `crates/uor-r4-harness/src/loopreview.rs`
-- `crates/uor-r4-harness/src/loopnext.rs`
-- `crates/uor-r4-harness/src/loopreport.rs`
-- `crates/uor-r4-harness/src/loopclose.rs`
-- `crates/uor-r4-harness/src/loopclaim.rs`
-- `crates/uor-r4-harness/tests/loop_review*.rs`
-- `crates/uor-r4-harness/tests/loop_next*.rs`
-- `crates/uor-r4-harness/tests/loop_report*.rs`
-- `crates/uor-r4-harness/tests/loop_close*.rs`
-- `crates/uor-r4-harness/tests/loop_claim*.rs`
-- `crates/uor-r4-harness/tests/loop_repair_orders*.rs`
-- `crates/uor-r4-harness/tests/loop_shared_files*.rs`
-- `crates/uor-r4-harness/tests/loop_prcheck.rs`
-- `crates/uor-r4-harness/src/loopbench.rs`
-- `crates/uor-r4-harness/tests/loop_bench*.rs`
-- `docs/harness/d59.json`
-- `docs/harness/owner-paths.json`
-- `docs/integration/DECISIONS.md`
-- `AGENTS.md`
-- `CHARTER.md`
-- `docs/rules/changes.md`
-- `docs/mechanisms/README.md`
-- `docs/mechanisms/lut-serving.md`
-- `docs/mechanisms/hopf-observation.md`
-- `docs/mechanisms/spin-weights.md`
-- `docs/mechanisms/ternary-xor.md`
-- `crates/uor-r4-harness/src/loopdrive.rs`
-- `crates/uor-r4-harness/tests/loop_drive*.rs`
-- `crates/uor-r4-harness/src/prep.rs`
-- `crates/uor-r4-harness/src/preprules.rs`
-- `xtask/src/docs_links.rs`
-- `xtask/src/archive_verify.rs`
-- `xtask/src/figures_charts.rs`
-- `docs/figures/**`
-- `docs/roadmap/issues.json`
-- `docs/harness/prep/read-binding-on-lawful-read-2026-10-25.md`
-- `docs/harness/labs.json`
-- `crates/uor-r4-harness/src/labs.rs`
-- `crates/uor-r4-harness/src/receipt.rs`
-- `crates/uor-r4-harness/tests/lab_registry_cli.rs`
-- `crates/uor-r4-harness/src/onboard.rs`
-- `crates/uor-r4-harness/src/loopguard.rs`
-- `crates/uor-r4-harness/tests/loop_guard.rs`
-- `archive/history/branch-archive/codex-d63-finite-probe-scope-20261026.*`
+- `docs/roadmap/items/*.md` (the five new items only)
+- `PLAN.md` (the pivot direction's row and the pivot list)
+- `docs/roadmap/README.md` (rendered)
+- `docs/loop/tasks/infra-loop-harness/claude-162/**`
 
 ## Done when
 
-To fill in.
+1. Five items, each with the owner's words or the measured gap it answers, what is missing with sources, a done-when, `## How to start`, `## Rules that apply`, `## Sources`, a checked scope and `status: ready`.
+2. PLAN's pivot direction is `done`, and PLAN lists the five.
+3. `cargo xtask roadmap render --check` passes. The PR is merged and verified.
 
-## Stop and ask if
+## Stop if
 
-To fill in.
+- **An item's needed file does not exist and is not a new file the unit creates.** Name it as new, or leave it out.
+
+No step waits on Casey.
