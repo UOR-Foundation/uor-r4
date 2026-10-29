@@ -12,7 +12,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). This is a maintenance unit: no model a
 
 ## What changed
 
-- **`PLAN.md`:** two `open` rows at the head of the owner-direction table, with the owner's 29 Oct words verbatim.
+- **`PLAN.md`:** two `open` rows at the head of the owner-direction table, with the owner's 29 Oct words verbatim. The end-to-end row stands first, though it was said earlier in the day: `loop next` reads only the first open row, and that row sets every lab's next unit (the review's Medium).
   - **The documentation refresh:** the item `docs-status-refresh`. The row says it stands in place of D77's "no documentation-clarification unit" for this one item.
   - **One working model, end to end,** with the best mechanism per part. The note gives the order of work:
     1. `turn-memory-reply`;
