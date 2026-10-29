@@ -16,12 +16,13 @@ Every arm runs the command claude-131, kimi-46 and claude-140 used, with the def
 
 | Arm | Binary | Order |
 |---|---|---|
-| O1 | B_old: kimi-46's `spiralcore-fbs-sheet`, sha256 `804101684d2ae4702169de4028f6a4ef8f44ba5a9fe0a532cce719aeb261d030` (claude-140's R1 and R2 binary) | first |
-| N1 | B_fixed: `spiralcore-fbs-sheet` built on the pod at `09040f5be` (or the reviewed head), its sha256 recorded before it runs | second |
-| O2 | B_old | third |
+| O1 | B_base: `spiralcore-fbs-sheet` built on the pod from the same source with `fix.patch` reversed (the three fix files as at `0b441db58`, so float `atomicAdd`), its sha256 recorded | first |
+| N1 | B_fixed: `spiralcore-fbs-sheet` built on the pod at the pushed head, before any revert, from the untouched source; its commit and sha256 recorded | second |
+| O2 | B_base | third |
 | N2 | B_fixed | fourth |
 
-Interleaving the arms keeps any drift over time from favouring either binary.
+- **The two binaries differ only in the backward:** the three fix files. The FIT found that kimi-46's archived binary differs by nine more training-path commits, so it is not used.
+- **Interleaving the arms** keeps any drift over time from favouring either binary.
 
 **Before the arms**, on the same pod:
 - **The kernel test:** `cargo test --release -p uor-r4-float-train --features cuda --lib -- --ignored spiralcore_fbs_arms`. It includes `the_backward_gives_the_same_bits_on_every_run` and the existing arm tests.
@@ -35,21 +36,24 @@ Interleaving the arms keeps any drift over time from favouring either binary.
 
 | Result | Class | What it means and unlocks |
 |---|---|---|
-| N1 = N2 in every model file's sha256 and every reading, and O1 ≠ O2 | **repeatable** | The atomics were the cause, and training is now deterministic on one device. Next unit: the export gap re-measured with repeats (R6's second half). |
-| N1 ≠ N2 | **still nondeterministic** | Another order-dependent source remains: candle's own CUDA kernels, or other atomics in our modules. Next unit: dump per-step weight hashes to find the first step and tensor that differ. This is a configuration negative for R6, not a mechanism result. |
+| N1 = N2 in every model file's sha256 and every reading, and O1 ≠ O2 (any file sha256 or reading differs) | **repeatable** | The binaries differ only in the backward, so its `atomicAdd` sums were the cause, and training is now deterministic on one device. Next unit: the export gap re-measured with repeats (R6's second half). |
+| N1 ≠ N2 in any file sha256 or reading | **still nondeterministic** | Another order-dependent source remains: candle's own CUDA kernels, or other atomics in our modules. Next unit: dump per-step weight hashes to find the first step and tensor that differ. This is a configuration negative for R6, not a mechanism result. |
 | N1 = N2 and O1 = O2 | **no power here** | The old nondeterminism did not show on this pod, so this run cannot tell whether the fix helped. The kernel test still counts; the training reading is inconclusive. Next unit: more steps or a larger batch. |
 
 ## 4. Instrument checks (each must be green before the bar counts)
 
-- **I-Bin:** B_old matches its pin, and B_fixed's sha256 is recorded with its build commit before it runs.
+- **I-Bin:** both binaries' sha256s are recorded with their source (the pushed head, and the same with `fix.patch` reversed) before they run.
 - **I-Inputs:** the five inputs match claude-140's §5 pins: `tokens.u16` `3dee858f…`, `response_mask.u8` `b5e7352d…`, `ft/dev` `0919e90f…` / `a838bb1a…`, and `d11-gap.json` `88b6a5f9…`.
 - **I-Device:** `nvidia-smi`, `nvcc --version`, and `env | grep -E '^(UOR_|CUDA_)'` are recorded before each arm.
 - **I-Complete:** each `train.json` has two seeds with points 0, 256, 512 and 1,024.
-- **I-Step0:** step 0 matches across all four arms and both of claude-140's archived receipts. A mismatch means wrong inputs or binary, and stops the reading.
-- **I-Kernel:** the kernel test passes. If it fails, the fix is wrong, so stop before the arms.
+- **I-Step0:** step 0 matches across all four arms, which share the forward and the inputs. A mismatch means wrong inputs or binary, and stops the reading. claude-140's receipts are compared for information only, since the host code has moved since.
+- **I-Kernel:** the kernel test passes; if it fails, stop before the arms.
+  - **What it covers:** the new same-bits test and the arm tests that relate the arms to the base path (two paths are a scaled sum, input adjoints are the transpose of their forwards, the frozen arm keeps the exact input adjoint).
+  - **What it does not cover:** a GPU-against-CPU parity of the base backward. Its raw output passes through the secant transform before autograd sees it. So a base backward that is deterministic but wrong would still read repeatable. The code review mapped every scratch slot to the old `atomicAdd` target; N's readings are also read beside O's.
+- **The negative gate's reading** counts only an assertion failure in `the_backward_gives_the_same_bits_on_every_run`. A build or load error does not count.
 
 ## 5. Cost and stop rule
 
 - **Cost:** one RTX 5090 on Vast, about 7 minutes per arm (claude-140), plus the build and fetch. That is about 1 hour at about $0.6/h: **about $1**.
-- **Scratch memory:** `rows × outputs × (4·width + 8·lanes)` bytes per projection backward. At the sheet's shapes (batch 4 × context 192 = 768 rows; at most 96 output blocks; width ≤ 64; lanes 8) that is at most about 24 MB per call, so no tiling is needed. The new binary's timing is read from `train.json` beside B_old's.
-- **Stop rule:** one pod, at most 2 hours. Save results off the pod before `down`, to `results/claude/d11-fbs-fixed-order-2026-10-29/`, with `SHA256SUMS` read back. If I-Kernel fails, stop the pod.
+- **Scratch memory:** `rows × outputs × (4·width + 8·lanes)` bytes per projection backward. At the sheet's shapes (batch 4 × context 192 = 768 rows; at most 96 output blocks; width ≤ 64; lanes 8, or 16 with width 128 for the two-path arm) that is at most about 28 MB per call, so no tiling is needed. The new binary's timing is read from `train.json` beside B_base's.
+- **Stop rule:** one pod, at most 2 hours. Save everything off the pod before `down`, the saved model files included, to `results/claude/d11-fbs-fixed-order-2026-10-29/`, with `SHA256SUMS` read back. If I-Kernel fails, stop the pod.
