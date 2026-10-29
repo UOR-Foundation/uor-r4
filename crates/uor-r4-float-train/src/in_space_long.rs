@@ -141,7 +141,17 @@ pub struct LongConfig {
     /// The turn memory with an empty table, the no-memory control (L-010); left out when false.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub turn_memory_empty: bool,
+    /// The turn memory's reply table (turn-memory-reply, claude-193): the rows past each reply's
+    /// opening keyed by `turn-8 + position + reply-last-1` at stored share at least
+    /// [`REPLY_MEMORY_SHARE`]; needs `turn_memory`, and is emptied by `turn_memory_empty`. Left
+    /// out when false.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub turn_memory_reply: bool,
 }
+
+/// The stored share the reply table keeps its keys at: the `--reply-bound` probe's choice
+/// (claude-192).
+pub const REPLY_MEMORY_SHARE: f64 = 0.5;
 
 /// One checkpoint's reading, one line of `progress.jsonl`.
 #[derive(Clone, Debug, Serialize)]
@@ -211,6 +221,9 @@ pub struct Inspection {
     /// The turn memory's weight (claude-161), when the checkpoint has one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memory_weight_mean_abs: Option<f64>,
+    /// The turn memory's reply weight (claude-193), when its memory has a reply table.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_reply_weight_mean_abs: Option<f64>,
     /// The last checkpoint's nearest reading with the turn memory taken out (claude-161).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memory_drop: Option<RegisterDrop>,
@@ -254,6 +267,7 @@ impl Drop for ArmGuard {
         crate::flock_read_register::set_register_slots(None);
         crate::flock_read_memory::set_turn_memory(None);
         crate::flock_read_memory::set_memory_rows(None);
+        crate::flock_read_memory::set_reply_rows(None);
     }
 }
 
@@ -386,18 +400,28 @@ type MemoryStart = (
 /// and each of `usable`'s windows' opening offsets (the input offsets that predict a reply's
 /// first token, by the split's response mask); none and no offsets when off. The table is built
 /// from every TRAIN window, as the `--opening-bound` probe builds it, or left empty for the
-/// no-memory control.
+/// no-memory control. With `turn_memory_reply` it also has the reply table (claude-193), built
+/// from TRAIN's rows past their openings as the `--reply-bound` probe counted them, and returns
+/// each usable window's rows past their openings with their keys.
 fn start_memory(
     data_root: &Path,
     config: &LongConfig,
     usable: &[CausalWindow],
     device: &Device,
-) -> Result<(Option<MemoryStart>, Vec<Vec<usize>>)> {
+) -> Result<(Option<MemoryStart>, Vec<Vec<usize>>, ReplyOffsets)> {
     if config.turn_memory == 0 {
         if config.turn_memory_empty {
             return Err(invalid("--turn-memory-empty needs --turn-memory K"));
         }
-        return Ok((None, Vec::new()));
+        if config.turn_memory_reply {
+            return Err(invalid("--turn-memory-reply needs --turn-memory K"));
+        }
+        return Ok((None, Vec::new(), Vec::new()));
+    }
+    if config.turn_memory_reply && config.turn_memory != TURN_KEY {
+        return Err(invalid(format!(
+            "--turn-memory-reply keys on the turn's first {TURN_KEY} ids, as the probe did: it needs --turn-memory {TURN_KEY}"
+        )));
     }
     let (tokens, mask) = match config.train_split.as_ref() {
         None => load_train_split(data_root)?,
@@ -421,8 +445,29 @@ fn start_memory(
             ""
         }
     );
-    let memory =
+    let mut memory =
         crate::flock_read_memory::TurnMemory::new(config.turn_memory, table, config.width, device)?;
+    // The reply table (claude-193): TRAIN's rows past their openings, at the probe's key and share.
+    let mut replies = Vec::new();
+    if config.turn_memory_reply {
+        let rows: Vec<(Vec<u32>, u32)> = reply_rows(&windows, &mask)
+            .into_iter()
+            .filter(|row| !row.opening)
+            .map(|row| (reply_key(&row), row.target))
+            .collect();
+        let table = if config.turn_memory_empty {
+            std::collections::HashMap::new()
+        } else {
+            crate::flock_read_memory::build_reply_table(&rows, REPLY_MEMORY_SHARE)
+        };
+        println!(
+            "[memory] reply table: TRAIN rows past their openings {}; keys at share {REPLY_MEMORY_SHARE} {}",
+            rows.len(),
+            table.len()
+        );
+        memory = memory.with_reply(table)?;
+        replies = reply_offsets(usable, &mask);
+    }
     crate::flock_read_memory::set_turn_memory(Some(memory.clone()));
     let opt = crate::flock_read::FlockAdamW::for_vars(&memory.variables())?;
     let offsets = usable
@@ -436,7 +481,7 @@ fn start_memory(
                 .collect()
         })
         .collect();
-    Ok((Some((memory, opt)), offsets))
+    Ok((Some((memory, opt)), offsets, replies))
 }
 
 fn is_zero(n: &usize) -> bool {
@@ -727,9 +772,27 @@ fn nearest_reading(
                         .map(|(&row, _)| row as usize)
                         .collect(),
                 ));
+                // Its reply table (claude-193) moves the later reply rows, as training names them:
+                // `reply_rows` reads the chunk in `assemble`'s order, one row per scored row.
+                if crate::flock_read_memory::turn_memory().is_some_and(|m| m.reply_len().is_some())
+                {
+                    let rows = reply_rows(chunk, mask);
+                    if rows.len() != scored.len() {
+                        return Err(invalid("the reply rows do not match the scored rows"));
+                    }
+                    crate::flock_read_memory::set_reply_rows(Some(
+                        scored
+                            .iter()
+                            .zip(&rows)
+                            .filter(|(_, row)| !row.opening)
+                            .map(|(&s, row)| (s as usize, reply_key(row)))
+                            .collect(),
+                    ));
+                }
             }
             let hidden = crate::flock_read::points(model, &ids, windows.len(), SHEET_CONTEXT);
             crate::flock_read_memory::set_memory_rows(None);
+            crate::flock_read_memory::set_reply_rows(None);
             let hidden = hidden?;
             let idx = Tensor::from_vec(scored.clone(), scored.len(), model.device())?;
             let query = hidden.index_select(&idx, 0)?.detach();
@@ -1067,6 +1130,10 @@ pub fn opening_bound(data_root: &Path) -> Result<(Vec<OpeningBound>, Vec<AnchorC
 /// target; and whether it opens the reply or copies the prompt ([`copies_prompt`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct ReplyRow {
+    /// The row's window, an index into the windows it was read from, and the input offset it is
+    /// predicted from.
+    window: usize,
+    offset: usize,
     prompt: Vec<u32>,
     reply: Vec<u32>,
     target: u32,
@@ -1074,9 +1141,45 @@ struct ReplyRow {
     copy: bool,
 }
 
+/// The reply table's key for `row` (claude-193): the probe's `turn-8 + position + reply-last-1`,
+/// so the read keys exactly as the probe counted.
+fn reply_key(row: &ReplyRow) -> Vec<u32> {
+    ReplyKey::TurnPosition(1).of(row)
+}
+
+/// For each of `windows`, its rows past their reply's opening, each as its input offset and its
+/// [`reply_key`]: the rows the reply table is named at (claude-193).
+/// Each window's rows past their openings, as [`reply_offsets`] gives them.
+type ReplyOffsets = Vec<Vec<(usize, Vec<u32>)>>;
+
+fn reply_offsets(windows: &[CausalWindow], mask: &[u8]) -> ReplyOffsets {
+    let mut out = vec![Vec::new(); windows.len()];
+    for row in reply_rows(windows, mask) {
+        if !row.opening {
+            out[row.window].push((row.offset, reply_key(&row)));
+        }
+    }
+    out
+}
+
+/// The reply key a greedy reply's next step reads (claude-193): the turn's first
+/// [`TURN_KEY`] ids, by the turn anchor at the prompt's last token, which equals the probe's
+/// first-8 key at every opening (claude-154), then the reply's length and its last id. `window`
+/// is the step's window and `opening` the window index of the prompt's last token.
+fn greedy_reply_key(window: &[u32], opening: usize, reply: &[u32]) -> Option<Vec<u32>> {
+    use crate::flock_read_opening::{opening_slots, OpeningAnchor};
+    let last = *reply.last()?;
+    let slots = opening_slots(&window[..=opening], TURN_KEY, OpeningAnchor::Turn);
+    let turn = slots[opening].iter().map(|&s| window[s]);
+    Some(
+        turn.chain([u32::MAX, reply.len() as u32, u32::MAX, last])
+            .collect(),
+    )
+}
+
 fn reply_rows(windows: &[CausalWindow], mask: &[u8]) -> Vec<ReplyRow> {
     let mut rows = Vec::new();
-    for w in windows {
+    for (index, w) in windows.iter().enumerate() {
         let scored = w
             .scored_offsets
             .iter()
@@ -1100,6 +1203,8 @@ fn reply_rows(windows: &[CausalWindow], mask: &[u8]) -> Vec<ReplyRow> {
                 first -= 1;
             }
             rows.push(ReplyRow {
+                window: index,
+                offset,
                 prompt: w.input_ids[first..start].to_vec(),
                 reply: w.input_ids[start..=offset].to_vec(),
                 target,
@@ -1328,8 +1433,24 @@ fn greedy_reply(
                 {
                     crate::flock_read_memory::set_memory_rows(Some(vec![window.len() - 1]));
                 }
+                // A later step reads the reply table (claude-193), keyed by the turn at the prompt's
+                // last token, the reply's length and its last id.
+                let start = ids.len().saturating_sub(SHEET_CONTEXT);
+                if !reply.is_empty()
+                    && prompt.len() > start
+                    && crate::flock_read_memory::turn_memory()
+                        .is_some_and(|m| m.reply_len().is_some())
+                {
+                    if let Some(key) = greedy_reply_key(window, prompt.len() - 1 - start, &reply) {
+                        crate::flock_read_memory::set_reply_rows(Some(vec![(
+                            window.len() - 1,
+                            key,
+                        )]));
+                    }
+                }
                 let hidden = crate::flock_read::points(model, window, 1, window.len());
                 crate::flock_read_memory::set_memory_rows(None);
+                crate::flock_read_memory::set_reply_rows(None);
                 let hidden = hidden?;
                 nearest_scores(&hidden.narrow(0, window.len() - 1, 1)?, &table)?
                     .argmax(1)?
@@ -1761,6 +1882,13 @@ pub fn inspect_run(
             register_drop,
             memory_weight_mean_abs: match crate::flock_read_memory::turn_memory() {
                 Some(memory) => Some(scalar(memory.weight_mean_abs()?)?),
+                None => None,
+            },
+            memory_reply_weight_mean_abs: match crate::flock_read_memory::turn_memory() {
+                Some(memory) => match memory.reply_weight_mean_abs()? {
+                    Some(mean) => Some(scalar(mean)?),
+                    None => None,
+                },
                 None => None,
             },
             memory_drop,
@@ -2579,7 +2707,8 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     let mut register = start_register(config, device)?;
     // The turn memory (claude-161), when on: its table from TRAIN, its own optimizer, and each
     // usable window's opening offsets, which name the rows it moves.
-    let (mut memory, train_openings) = start_memory(data_root, config, &usable, device)?;
+    let (mut memory, train_openings, train_replies) =
+        start_memory(data_root, config, &usable, device)?;
     // How often the read's own key finds the table at an opening row, on TRAIN's usable windows
     // and on DEV: the table is keyed from the probe's prompts and read through the turn anchor,
     // so this is the measured agreement, not one assumed.
@@ -2607,6 +2736,21 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             .collect();
         let (rows, hits) = memory_hits(mem, &dev_windows, &dev_rows)?;
         println!("[memory] DEV opening rows {rows}, hits {hits}");
+        // The same for the reply table (claude-193), keyed by the probe's own key.
+        if mem.reply_len().is_some() {
+            let count = |rows: &[Vec<(usize, Vec<u32>)>]| {
+                let named: Vec<&Vec<u32>> = rows.iter().flatten().map(|(_, key)| key).collect();
+                let hits = named
+                    .iter()
+                    .filter(|key| mem.reply_stored(key).is_some())
+                    .count();
+                (named.len(), hits)
+            };
+            let (rows, hits) = count(&train_replies);
+            println!("[memory] TRAIN reply rows past their openings {rows}, hits {hits}");
+            let (rows, hits) = count(&reply_offsets(&dev_windows, &dev_mask));
+            println!("[memory] DEV reply rows past their openings {rows}, hits {hits}");
+        }
     }
     let mut opt_main = StackAdamW::new(&model, hs::SHEET_WEIGHT_DECAY, hs::SHEET_CLIP)?;
     let mut opt_decay = StackAdamW::new(&model, 0.0, hs::SHEET_CLIP)?;
@@ -2772,6 +2916,19 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
                 })
                 .collect()
         }));
+        // Its reply rows past their openings, with their keys (claude-193); none when it has no
+        // reply table.
+        crate::flock_read_memory::set_reply_rows((!train_replies.is_empty()).then(|| {
+            picked
+                .iter()
+                .enumerate()
+                .flat_map(|(b, &i)| {
+                    train_replies[i]
+                        .iter()
+                        .map(move |(offset, key)| (b * SHEET_CONTEXT + offset, key.clone()))
+                })
+                .collect()
+        }));
         cursor += config.batch;
         let (ids, scored, targets) = assemble(&windows);
         // The memory's rows are `b · SHEET_CONTEXT + offset`, so every window must be whole.
@@ -2840,6 +2997,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             opt.step_vars(&mem.variables(), &grads, lr)?;
         }
         crate::flock_read_memory::set_memory_rows(None);
+        crate::flock_read_memory::set_reply_rows(None);
         stage_clock::mark("optimizer.reads");
         opt_decay.update_filtered(&model, &grads, lr * config.decay_mult, |name| {
             name.ends_with("rec.decay")
@@ -3130,6 +3288,7 @@ mod tests {
             profile: 0,
             turn_memory: 0,
             turn_memory_empty: false,
+            turn_memory_reply: false,
         }
     }
 
@@ -3267,7 +3426,9 @@ mod tests {
         let mask = [0u8, 0, 0, 0, 1, 1, 1, 0, 1];
         let (windows, _) = hs::build_document_windows(&tokens, &mask, 16, 0).unwrap();
         let rows = reply_rows(&windows, &mask);
-        let row = |prompt: &[u32], reply: &[u32], target, opening, copy| ReplyRow {
+        let row = |offset, prompt: &[u32], reply: &[u32], target, opening, copy| ReplyRow {
+            window: 0,
+            offset,
             prompt: prompt.to_vec(),
             reply: reply.to_vec(),
             target,
@@ -3277,11 +3438,11 @@ mod tests {
         assert_eq!(
             rows,
             [
-                row(&[10, 11, 12], &[], 11, true, false),
+                row(3, &[10, 11, 12], &[], 11, true, false),
                 // The reply's 11 then 12 stand side by side in the prompt: a copy.
-                row(&[10, 11, 12], &[11], 12, false, true),
-                row(&[10, 11, 12], &[11, 12], 30, false, false),
-                row(&[13], &[], 31, true, false),
+                row(4, &[10, 11, 12], &[11], 12, false, true),
+                row(5, &[10, 11, 12], &[11, 12], 30, false, false),
+                row(7, &[13], &[], 31, true, false),
             ]
         );
         // claude-161's opening key is the turn at position 0; later rows key on their position.
@@ -3299,6 +3460,8 @@ mod tests {
     #[test]
     fn the_reply_bound_keeps_each_keys_commonest_target_at_its_share() {
         let row = |reply: &[u32], target, opening, copy| ReplyRow {
+            window: 0,
+            offset: 0,
             prompt: vec![1],
             reply: reply.to_vec(),
             target,
@@ -3384,6 +3547,8 @@ mod tests {
     #[test]
     fn the_reply_bound_falls_back_to_the_commonest_opening_only_for_openings() {
         let row = |prompt: &[u32], target, opening| ReplyRow {
+            window: 0,
+            offset: 0,
             prompt: prompt.to_vec(),
             reply: Vec::new(),
             target,
@@ -3419,6 +3584,141 @@ mod tests {
                 hits: 0
             }
         );
+    }
+
+    #[test]
+    fn a_row_that_opens_and_copies_counts_in_both_kinds_and_not_the_rest() {
+        let row = ReplyRow {
+            window: 0,
+            offset: 0,
+            prompt: vec![1],
+            reply: Vec::new(),
+            target: 40,
+            opening: true,
+            copy: true,
+        };
+        let counts = reply_bound_rows(
+            ReplyKey::None,
+            std::slice::from_ref(&row),
+            std::slice::from_ref(&row),
+            &[0.0],
+        );
+        let one = KindCount {
+            rows: 1,
+            named: 1,
+            hits: 1,
+        };
+        assert_eq!((counts[0].openings, counts[0].copies), (one, one));
+        assert_eq!(counts[0].rest, KindCount::default());
+        assert_eq!(counts[0].all, one);
+    }
+
+    #[test]
+    fn reply_offsets_name_the_rows_past_each_opening_with_the_probes_key() {
+        // A prompt and a 5-token reply in windows of 4, so the reply runs into a second window.
+        let tokens = [0u32, 10, 11, 20, 21, 22, 23, 24];
+        let mask = [0u8, 0, 0, 1, 1, 1, 1, 1];
+        let (windows, _) = hs::build_document_windows(&tokens, &mask, 4, 0).unwrap();
+        assert!(windows.len() >= 2, "the reply spans two windows");
+        let offsets = reply_offsets(&windows, &mask);
+        let want: Vec<Vec<(usize, Vec<u32>)>> = {
+            let mut want = vec![Vec::new(); windows.len()];
+            for row in reply_rows(&windows, &mask) {
+                if !row.opening {
+                    want[row.window].push((row.offset, reply_key(&row)));
+                }
+            }
+            want
+        };
+        assert_eq!(offsets, want);
+        // The first window sees the turn: the rows after the opening key on [10, 11], their
+        // position and the last reply id.
+        assert_eq!(offsets[0][0].1, [10, 11, u32::MAX, 1, u32::MAX, 20]);
+        // A later window cannot see the turn: its key holds the window's own reply tokens only,
+        // the probe's scope (claude-192's REPORT, "the keys see the window").
+        let later = &offsets[windows.len() - 1];
+        assert!(later.iter().all(|(_, key)| key[0] == u32::MAX));
+    }
+
+    #[test]
+    fn the_greedy_key_equals_the_corpus_key_at_the_same_row() {
+        // BOS, a turn of 3, then the reply 20 21 22.
+        let tokens = [0u32, 10, 11, 12, 20, 21, 22];
+        let mask = [0u8, 0, 0, 0, 1, 1, 1];
+        let (windows, _) = hs::build_document_windows(&tokens, &mask, 16, 0).unwrap();
+        let rows: Vec<ReplyRow> = reply_rows(&windows, &mask)
+            .into_iter()
+            .filter(|row| !row.opening)
+            .collect();
+        assert_eq!(rows.len(), 2);
+        for row in &rows {
+            // The greedy step that predicts this row's target sees the prompt and the reply so
+            // far; the prompt's last token is window index 3.
+            let window = &tokens[..=row.offset];
+            assert_eq!(
+                greedy_reply_key(window, 3, &row.reply),
+                Some(reply_key(row)),
+                "offset {}",
+                row.offset
+            );
+        }
+        // The opening step has no reply yet, so no reply key.
+        assert_eq!(greedy_reply_key(&tokens[..4], 3, &[]), None);
+    }
+
+    #[test]
+    fn the_reply_table_names_what_the_probe_counts() {
+        // BOS, a turn, a reply; another turn with the same start, a reply that differs at its
+        // second token; a third.
+        let tokens = [
+            0u32, 10, 11, 20, 21, 22, 13, 10, 11, 20, 25, 22, 13, 10, 11, 20, 21, 22,
+        ];
+        let mask = [0u8, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1];
+        let (windows, _) = hs::build_document_windows(&tokens, &mask, 32, 0).unwrap();
+        let rows = reply_rows(&windows, &mask);
+        let probe = &reply_bound_rows(ReplyKey::TurnPosition(1), &rows, &rows, &[0.5])[0];
+        let later: Vec<(Vec<u32>, u32)> = rows
+            .iter()
+            .filter(|row| !row.opening)
+            .map(|row| (reply_key(row), row.target))
+            .collect();
+        let table = crate::flock_read_memory::build_reply_table(&later, 0.5);
+        let named = later
+            .iter()
+            .filter(|(key, _)| table.contains_key(key))
+            .count();
+        let hits = later
+            .iter()
+            .filter(|(key, target)| table.get(key) == Some(target))
+            .count();
+        assert_eq!(
+            (named, hits),
+            (
+                probe.all.named - probe.openings.named,
+                probe.all.hits - probe.openings.hits
+            )
+        );
+        assert!(named > 0 && hits < named);
+    }
+
+    #[test]
+    fn a_config_writes_the_reply_table_key_only_when_on_and_refuses_it_without_the_memory() {
+        let mut config = config(0, None);
+        let json = String::from_utf8(serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+        assert!(!json.contains("turn_memory_reply"), "{json}");
+        config.turn_memory_reply = true;
+        let json = String::from_utf8(serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+        assert!(json.contains("\"turn_memory_reply\": true"), "{json}");
+        let missing = std::env::temp_dir().join(format!("claude-193-none-{}", std::process::id()));
+        let refused = |config: &LongConfig| {
+            start_memory(&missing, config, &[], &Device::Cpu)
+                .err()
+                .map(|e| e.to_string())
+                .unwrap_or_default()
+        };
+        assert!(refused(&config).contains("--turn-memory-reply needs"));
+        config.turn_memory = 6;
+        assert!(refused(&config).contains("needs --turn-memory 8"));
     }
 
     #[cfg(feature = "cuda")]
@@ -3671,8 +3971,9 @@ mod tests {
             .map(|e| e.to_string());
         assert!(refused.is_some_and(|e| e.contains("--turn-memory-empty needs")));
         config.turn_memory_empty = false;
-        let (memory, offsets) = start_memory(&missing, &config, &[], &Device::Cpu).unwrap();
-        assert!(memory.is_none() && offsets.is_empty());
+        let (memory, offsets, replies) =
+            start_memory(&missing, &config, &[], &Device::Cpu).unwrap();
+        assert!(memory.is_none() && offsets.is_empty() && replies.is_empty());
     }
 
     #[cfg(feature = "cuda")]
