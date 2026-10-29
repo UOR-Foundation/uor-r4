@@ -31,6 +31,11 @@
 //! over the corpus that needs no GPU; one JSON line per key, then one line per split
 //! (`dev`, `train`) with how many openings the opening read's turn anchor keeps the first-8 key at.
 //!
+//! `train-in-space --data-root DIR --reply-bound 1`: what an exact memory of TRAIN could name
+//! among DEV's reply rows, for each candidate key and stored-share threshold, by kind (openings,
+//! copies, the rest): turn-memory-reply's probe. A count that needs no GPU; one JSON line per
+//! key and threshold.
+//!
 //! Long training of the SpiralCore/FBS geometric trunk in its own space, with text at every
 //! checkpoint (`uor_r4_float_train::in_space_long`). GPU only. `--data-root` holds `tokenizer.json`,
 //! `mw-balp/train/` and `ft/dev/`, each split with `tokens.u16` and `response_mask.u8`. `--out`
@@ -44,8 +49,9 @@ use candle_core::Device;
 use uor_r4_float_train::flock_read_opening::OpeningAnchor;
 use uor_r4_float_train::flock_read_register::RegisterSelect;
 use uor_r4_float_train::in_space_long::{
-    context_reach, decode_speed, gradient_norms, inspect_run, opening_bound, root_separation,
-    run_long, run_recall, LongConfig, PointObjective, TrainSplit, DEFAULT_REGISTER_PICKS,
+    context_reach, decode_speed, gradient_norms, inspect_run, opening_bound, reply_bound,
+    root_separation, run_long, run_recall, LongConfig, PointObjective, TrainSplit,
+    DEFAULT_REGISTER_PICKS,
 };
 use uor_r4_float_train::{FloatTrainError, Result};
 
@@ -57,6 +63,7 @@ fn main() -> Result<()> {
     let mut grad_norms = false;
     let mut decode = None;
     let mut bound = false;
+    let mut reply = false;
     let (mut split_dir, mut split_tokens, mut split_mask) = (None, None, None);
     let mut recall = 0usize;
     let (mut opening_read, mut opening_anchor) = (None, None);
@@ -113,6 +120,7 @@ fn main() -> Result<()> {
             "--grad-norms" => grad_norms = switch(&value)?,
             "--decode-speed" => decode = Some(PathBuf::from(&value)),
             "--opening-bound" => bound = switch(&value)?,
+            "--reply-bound" => reply = switch(&value)?,
             "--recall" => recall = number(&value)?,
             "--objective" => {
                 config.objective = match value.as_str() {
@@ -266,11 +274,12 @@ fn main() -> Result<()> {
         grad_norms,
         decode.is_some(),
         bound,
+        reply,
         out.is_some(),
     ];
     if modes.iter().filter(|&&m| m).count() > 1 {
         return Err(FloatTrainError::Invalid(
-            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed or --opening-bound 1"
+            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1 or --reply-bound 1"
                 .to_owned(),
         ));
     }
@@ -286,6 +295,12 @@ fn main() -> Result<()> {
     }
     let data_root =
         data_root.ok_or_else(|| FloatTrainError::Invalid("--data-root is required".to_owned()))?;
+    if reply {
+        for row in reply_bound(&data_root)? {
+            println!("{}", serde_json::to_string(&row)?);
+        }
+        return Ok(());
+    }
     if bound {
         let (rows, checks) = opening_bound(&data_root)?;
         for row in rows {
