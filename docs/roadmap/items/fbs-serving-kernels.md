@@ -22,13 +22,13 @@ On the M1, a served token is 3.73 ms (265 tok/s). The six layers are 98.6% of it
 
 - **The layer split.** Each block holds three route gathers (`stack_fbs_gather`) and either the recurrence core or the gated product and requantization. Which part dominates is not measured.
 - **Vector kernels for the FBS step.** `stack_step_fbs` is scalar.
-  - `stack/simd.rs` holds the dense-map step's WASM-SIMD kernels (`stack_gemv_pairs`, Arm T, #1172).
+  - `stack/simd.rs` holds the WASM-SIMD forms of the dense-map step's inner loop (`stack_gemv_pairs` in `kernels.rs`; Arm T, #1172).
   - The older frozen engine's NEON and AVX2 kernels are in `crates/uor-r4-simd` (the map, stage 11, through `docs/products/desktop-client.md`).
   - Neither runs in the FBS step.
-- **What the audit allows.** `scripts/audit_zero_matmul_serving.py --stack` refuses every multiply-class instruction, NEON forms included (`mul`, `mla`, `sdot`, `smull`…), and every float or SIMD-to-general register transfer (`fmov`…). Integer lane adds, absolute differences, loads and stores are not on its list.
-  - The scalar gather passes each value through `black_box` because LLVM's own vectorized forms fail the audit (`session.rs`, at `stack_fbs_gather` and at the pointer head's maximum).
-  - A kernel must therefore keep its results in memory, not move a lane into a general register.
-  - The audit finds a kernel by name. An `#[inline(never)]` kernel outside `step`'s range is audited only once it is in the audit's kernel list.
+- **What the audit allows.** `scripts/audit_zero_matmul_serving.py --stack` refuses every multiply-class instruction, NEON forms included (`mul`, `mla`, `sdot`, `smull`…), and every float instruction, `fmov` transfers among them. Integer lane adds, absolute differences, loads and stores are not on its list, nor are `umov` and `smov`.
+  - The scalar gather passes each value through `black_box` because LLVM's own vectorized forms end in an `fmov`, which fails the audit (`session.rs`, at `stack_fbs_gather` and at the pointer head's maximum).
+  - Results kept in memory, or moved to a general register only by `umov`/`smov`, avoid that.
+  - The audit's call-graph walk follows every direct `bl`/`b` from `step`, so the kernels `stack_step_fbs` calls are audited today. It does not follow an indirect call (`blr`). So the runtime switch dispatches by a direct branch, not a function pointer, and the kernel goes in the audit's kernel list so its presence is required.
 - **An exactness check for a faster step.** claude-158's `measure_fbs_step_stages` already runs the served kernels with a clock, and its host test holds the twin equal to `step_native`. A faster step must pass the same equality.
 
 ## Done when
