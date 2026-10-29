@@ -952,11 +952,42 @@ fn snap_add_square_terms(left: u128, right: u128) -> u128 {
     left.wrapping_add(right)
 }
 
+/// Whether `q < d sqrt(5)` for `0 < q < 2^37` and `0 < d <= 2^34`, when the
+/// bounds `2289/1024 < sqrt(5) < 1145/512` decide it (claude-165): `true` when
+/// `1024 q <= 2289 d`, `false` when `512 q >= 1145 d`, and `None` in the band
+/// between, where only the squares can tell. `2289^2 < 5 * 1024^2` and
+/// `1145^2 > 5 * 512^2`. Each product by a constant is shifts and additions,
+/// every term behind `black_box`, so the compiler cannot fold the sum back
+/// into a multiplier instruction.
+#[inline(always)]
+fn below_d_sqrt5(q: u64, d: u64) -> Option<bool> {
+    use core::hint::black_box;
+    // 2289 d = 2048 d + 256 d - 16 d + d.
+    let lower = black_box(d << 11)
+        .wrapping_add(black_box(d << 8))
+        .wrapping_sub(black_box(d << 4))
+        .wrapping_add(black_box(d));
+    if q << 10 <= lower {
+        return Some(true);
+    }
+    // 1145 d = 1024 d + 128 d - 8 d + d.
+    let upper = black_box(d << 10)
+        .wrapping_add(black_box(d << 7))
+        .wrapping_sub(black_box(d << 3))
+        .wrapping_add(black_box(d));
+    if q << 9 >= upper {
+        return Some(false);
+    }
+    None
+}
+
 /// Whether `da + db phi > 0`, exactly, for the bounded score differences of
 /// [`stack_snap_select`] (`|da| <= 2^35, |db| <= 2^34`): with
 /// `P = 2 da + db`, `2 (da + db phi) = P + db sqrt(5)`, and `sqrt(5)` is
 /// irrational, so the sign is decided by `P` and by `P^2` against
-/// `5 db^2` (never equal for nonzero `P, db`).
+/// `5 db^2` (never equal for nonzero `P, db`). When `P` and `db` differ in
+/// sign, the bounds of [`below_d_sqrt5`] decide all but a band 0.04% wide
+/// without the squares.
 fn snap_difference_positive(da: i64, db: i64) -> bool {
     let p = (da << 1).wrapping_add(db);
     if db == 0 {
@@ -967,6 +998,9 @@ fn snap_difference_positive(da: i64, db: i64) -> bool {
         if p >= 0 {
             return true;
         }
+        if let Some(below) = below_d_sqrt5(p.unsigned_abs(), db as u64) {
+            return below;
+        }
         let b_square = stack_mul_u128(db as u128, db as u128);
         let p_square = stack_mul_u128(p.unsigned_abs() as u128, p.unsigned_abs() as u128);
         return snap_add_square_terms(b_square << 2, b_square) > p_square;
@@ -974,6 +1008,9 @@ fn snap_difference_positive(da: i64, db: i64) -> bool {
     // db < 0: P + db sqrt(5) > 0 iff P > 0 and P > -db sqrt(5).
     if p <= 0 {
         return false;
+    }
+    if let Some(below) = below_d_sqrt5(p as u64, db.unsigned_abs()) {
+        return !below;
     }
     let b_square = stack_mul_u128(db.unsigned_abs() as u128, db.unsigned_abs() as u128);
     let p_square = stack_mul_u128(p as u128, p as u128);
@@ -1692,7 +1729,10 @@ mod tests {
                 b = b.wrapping_add(small_mul(v, coefficient[1]));
             }
             if index == 0
-                || snap_difference_positive(a.wrapping_sub(best_a), b.wrapping_sub(best_b))
+                || snap_difference_positive_by_squares(
+                    a.wrapping_sub(best_a),
+                    b.wrapping_sub(best_b),
+                )
             {
                 best = index;
                 best_a = a;
@@ -1700,6 +1740,77 @@ mod tests {
             }
         }
         best
+    }
+
+    /// The square rule `snap_difference_positive` used alone before claude-165,
+    /// in plain `i128` arithmetic, independent of the kernel's products: the
+    /// sign of `P + db sqrt(5)` with `P = 2 da + db`, by `P` and `P^2` against
+    /// `5 db^2`.
+    fn snap_difference_positive_by_squares(da: i64, db: i64) -> bool {
+        let p = 2 * i128::from(da) + i128::from(db);
+        let d = i128::from(db);
+        if d == 0 {
+            p > 0
+        } else if d > 0 {
+            p >= 0 || 5 * d * d > p * p
+        } else {
+            p > 0 && p * p > 5 * d * d
+        }
+    }
+
+    #[test]
+    fn the_bounded_comparison_is_the_square_rule() {
+        let check = |da: i64, db: i64| {
+            assert_eq!(
+                snap_difference_positive(da, db),
+                snap_difference_positive_by_squares(da, db),
+                "da {da}, db {db}"
+            );
+        };
+        // Every small pair.
+        for da in -300..=300 {
+            for db in -300..=300 {
+                check(da, db);
+            }
+        }
+        // Random pairs at the full bounds |da| <= 2^35, |db| <= 2^34.
+        let mut rng = Lcg(0x05ee_d165);
+        for _ in 0..1_000_000 {
+            let da = (rng.next() >> 28) as i64 - (1 << 35);
+            let db = (rng.next() >> 29) as i64 - (1 << 34);
+            check(da, db);
+        }
+        // Pairs at and around sqrt(5)'s convergents h/k (h^2 - 5 k^2 = +-1, by
+        // h' = 4h + h''), where |P| / |db| lies inside the bounds' band, at
+        // many scales and both signs.
+        let (mut h, mut k, mut h0, mut k0) = (9i64, 4i64, 2i64, 1i64);
+        let (mut in_band, mut decided) = (0usize, 0usize);
+        while k <= 1 << 33 {
+            for scale in [1i64, 2, 3, 5, 7, 10, 1_000, 65_537] {
+                let (hp, kd) = (h.saturating_mul(scale), k.saturating_mul(scale));
+                if hp >= 1 << 36 || kd > 1 << 34 {
+                    continue;
+                }
+                for offset in -3..=3 {
+                    for (sp, sd) in [(1, 1), (1, -1), (-1, 1), (-1, -1)] {
+                        let (p, d) = (sp * (hp + offset), sd * kd);
+                        if (p - d) % 2 != 0 {
+                            continue;
+                        }
+                        check((p - d) / 2, d);
+                        if p.signum() != d.signum() {
+                            match below_d_sqrt5(p.unsigned_abs(), d.unsigned_abs()) {
+                                None => in_band += 1,
+                                Some(_) => decided += 1,
+                            }
+                        }
+                    }
+                }
+            }
+            (h, k, h0, k0) = (4 * h + h0, 4 * k + k0, h, k);
+        }
+        // The band and the bounds are both exercised.
+        assert!(in_band > 100 && decided > 100, "in band {in_band}, decided {decided}");
     }
 
     #[test]
