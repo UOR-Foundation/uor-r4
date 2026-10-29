@@ -8,6 +8,10 @@ Most language models learn by working out a smooth slope for every number inside
 
 Labels follow [`docs/formal_vocabulary.md`](../formal_vocabulary.md): **proof** is derived from definitions or code, **measurement** is a recorded run, **hypothesis** is untested. The mechanism page, [discrete-learning](../mechanisms/discrete-learning.md), is the short form of this page and carries the full run history.
 
+## Since 27 October 2026 (as of 29 Oct)
+
+The FBS trunk trains in float on the GPU, offline only (D37). Its backward pass uses a fixed-order reduction, so two training runs give the same model byte for byte ([claude-179](../loop/tasks/d11-exporter-float-trunk/claude-179/REPORT.md)). It trains at 31,851 context tokens per second at one seed and 29,564 at the other, and the exact turn memory adds no measurable cost ([claude-161](../loop/tasks/route-plus-memory/claude-161/REPORT.md)). Everything below this passage describes the older discrete path. The two paths do not join yet ([pipeline map](./pipeline-map.md)).
+
 ## How it works
 
 **What is learned.** The model holds three kinds of *coordinate*. A *vector block* is one of the four 8-number blocks of one token's vector. A *route frame* is one of 64 signed-axis rotations of 8-dimensional space, one per routing stage. A *gate* is a switch that takes the values $-1$, $0$ or $+1$. A vector block is always one of 16 roots of an E8 orbit, so it has 16 legal states, counting "stay as it is" ([architecture](./architecture.md)).
@@ -52,11 +56,11 @@ On 18 October the owner revised the discrete-only rule: **floating point is lega
 - **Float lives in a separate module.** It gets its own scanned entry, added with its pre-registration. It never goes in the discrete crate or in `crates/uor-r4-training`.
 - **The integer artifact is the boundary.** Every float candidate reports its *export gap*, the loss in quality when its weights become the integer file. A gap above the two-seed noise band disqualifies it, and a float score alone qualifies nothing (D39 item 5).
 
-No float sheet is registered. The order set in D39 item 4 is the read-code capacity capture (W2), then BVG-K (W3), then a single float-credit sheet only if W2 points at the learning law and W3 fails. The chief architect expects the export gap to be structurally non-zero, because the table entries are exact roots with no continuous scale (**hypothesis**, `docs/labs/course-correction-2026-10-18/audits/d37-reactivation-architect.md` §3.3).
+As of 19 October, no float sheet was registered. The order set in D39 item 4 is the read-code capacity capture (W2), then BVG-K (W3), then a single float-credit sheet only if W2 points at the learning law and W3 fails. The chief architect expects the export gap to be structurally non-zero, because the table entries are exact roots with no continuous scale (**hypothesis**, `docs/labs/course-correction-2026-10-18/audits/d37-reactivation-architect.md` §3.3).
 
 ### Holds and pre-registration
 
-Training is **held**. The global training hold, the M2 hold and Stage B all stay in force, and a review that finds a plan fit releases nothing ([charter](../../CHARTER.md) §5.1; D37 item 6).
+As of 19 October, training was **held**. The global training hold, the M2 hold and Stage B all stay in force, and a review that finds a plan fit releases nothing ([charter](../../CHARTER.md) §5.1; D37 item 6).
 
 - **Pre-registration.** Before any GPU training or evaluation, and before any run a milestone claim rests on, a one-page sheet states the bar, the noise, the controls, the seeds, the cost and what each outcome decides. A non-author reviews it for `TEST FITNESS: FIT`. A fresh-context subagent counts as non-author. Builds, finite kernel tests and host checks need no sheet.
 - **Release.** One typed owner release per sheet covers all its arms, seeds and stop rules. Casey types it personally with `UOR_LAB` unset. A lab stages the commands and verifies the records, and never types one itself (D40).
