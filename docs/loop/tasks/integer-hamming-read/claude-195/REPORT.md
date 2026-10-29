@@ -83,7 +83,15 @@ All on the laptop, on synthetic trunks; no trained checkpoint.
 
 ## Checks run at the head
 
-To fill at the reviewed head.
+At `7b449fbee`, the code head; the later commits change only this folder and the notebook. Logs are under `local/claude/` in the worktree, and are copied to the lab's folder at merge.
+- **`cargo test --locked -p uor-r4-integer --features serving-wasm --no-fail-fast`**, with `~/.cargo/bin` first on PATH: 572 passed, 35 failed, 4 ignored (`full-integer-tests.out`).
+  - Every failure panics on a missing local input, as on `main`: 32 a bundle, 3 the tokenizer.
+  - 572 is claude-194's 566 and this unit's 6 tests.
+  - The `m5_full_path_cost_controls` step verifier passes inside the same run.
+- **The 23 Hamming and copy- and type-head tests:** all pass.
+- **The serving audit** (`audit_zero_matmul_serving.py --stack` on the release `uor-r4-stack`, `audit-195.out`): FULL PASS. 0 forbidden instructions across 44 symbol ranges and 109 reachable functions, up from 106. `TypeHeads` is in the binary.
+- **The GPU evaluator's host tests** (`docs/labs/d11-exporter-float-trunk/instrument`, `--target aarch64-apple-darwin`, `instrument-host.out`): 5 passed, 1 ignored (it needs a trained artifact).
+- **`cargo clippy -p uor-r4-integer --all-targets`** (`clippy-195.out`): none of its warnings is in `hamming.rs`, `session.rs` or the new tests.
 
 ## Skills used
 
