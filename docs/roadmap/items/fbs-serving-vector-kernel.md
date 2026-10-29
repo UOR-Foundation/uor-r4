@@ -26,16 +26,37 @@ In [claude-169](../../loop/tasks/fbs-serving-kernels/claude-169/REPORT.md)'s pro
 
 ## What is missing
 
-- **The map is stale.** Its gap 3 and R3 ([`docs/model/pipeline-map.md`](../../model/pipeline-map.md)) still name NEON kernels as the change. R3's "pass unlocks" claims a per-value rate near the hardware's, which is not shown.
-- **Fewer golden candidates.** For a query with no zero coordinate, the snap scores 17 sign-compatible roots (claude-164), 12 of them golden. The query's magnitude order may rule some golden roots out exactly, but the lowest-index tie rule must hold.
-- **A NEON kernel.** No vector code runs in the FBS step. The audit refuses every multiply-class instruction and every `fmov`. claude-168 met two `fmov`s from packed lanes, so a kernel must keep its lanes in memory, or leave them by `umov`/`smov`. A kernel outside `step`'s direct-branch call graph must be in the audit's kernel list.
+**State on 29 Oct 2026 (claude-185).** Done-when 1 is met: the map's gap 3 and R3 record exact structured kernels and today's speeds.
+
+Two changes have moved this item since it was written:
+- **The hardware multiply and divide** (claude-177, D80 and D81) took the snapped serve to 4,829 / 4,827 tok/s.
+- **The unsnapped contract** (`lut-stack/5`, claude-181) carries the artifacts that pass the export gap (claude-182). It runs no icosian snap. Each gate and transition site normalises its quaternion in `stack_rotation`, with an integer square root and four `u128` divides by the norm.
+
+**claude-185's profile** (`fbs-toks --parts`, this M1, AC power):
+
+| Artifact | Decode tok/s | Step | `recurrence.core` per layer | `mlp.product` per layer |
+|---|---|---|---|---|
+| claude-126's snapped export | 4,832 | 205 µs | about 15.2 µs | about 9.0 µs |
+| dual-c131's `raw_both` | 4,236 | 235 µs | about 17.9 µs | about 11.4 µs |
+
+The unsnapped contract's extra 30 µs is all in the two parts that run the rotation.
+
+**claude-185's change** was one reciprocal of the norm in place of the four divides. It was exact (1,384,160 cases, replies identical) but 5% slower, so it is reverted, and its patch is in that unit's folder. A likely reason, not measured: the old divides' numerators often fit in 64 bits, which is a library call's fast path. The reciprocal's `2^78 / norm` never does.
+
+**What remains, each a candidate faster exact change:**
+- **The rotation's integer square root** (`stack_isqrt`). It is a digit-by-digit `u128` loop, and it first walks down from `2^126` to the value's top bit. Its share of the rotation is not split yet.
+- **Fewer golden candidates, for the snapped contract.** For a query with no zero coordinate, the snap scores 17 sign-compatible roots (claude-164), 12 of them golden. The query's magnitude order may rule some golden roots out exactly, but the lowest-index tie rule must hold.
+- **A NEON kernel.** No vector code runs in the FBS step.
+  - Since claude-175 the audit allows the scalar integer multiply and divide. Which vector forms it allows has not been checked.
+  - It refuses every `fmov`. claude-168 met two from packed lanes, so a kernel must keep its lanes in memory, or leave them by `umov`/`smov`.
+  - A kernel outside `step`'s direct-branch call graph must be in the audit's kernel list.
 
 ## Done when
 
 1. **The map.** Its gap 3 and R3 record that R3 was met with exact structured kernels (claude-164 to claude-169, about 5.2 ns a value). The per-value claim is restated as an open question.
-2. **A faster exact change** to the snap or the Hamilton product: fewer golden candidates, or a vector kernel the audit allows.
+2. **A faster exact change** to the snap site, in either form, or to the Hamilton product. Either form means the snapped selection or the unsnapped `stack_rotation` (claude-185). The change can be fewer golden candidates, a faster exact square root or quotient, or a vector kernel the audit allows.
    - A host test holds the changed kernel equal to the old one.
-   - On claude-126's export, every reply is byte-identical.
+   - Every reply is byte-identical, on claude-126's export and on dual-c131's `raw_both` artifact (claude-182).
    - `scripts/audit_zero_matmul_serving.py --stack` passes on the release binary.
 3. **Speed:** `fbs-toks --parts` against the previous unit's sealed binary, run alternately, on this M1.
 4. One notebook row and a REPORT for each unit. This is host and serving work: no GPU and no sheet (CHARTER §4.5).
@@ -49,7 +70,11 @@ Read:
 - `stack_snap_select`, `snap_compatible_score` and `stack_hamilton` in `crates/uor-r4-integer/src/stack/kernels.rs`;
 - the audit's forbidden patterns in `scripts/audit_zero_matmul_serving.py`.
 
-The baseline binary is claude-169's, sha256 `8a7a83c76ef83e4302a0fbfb211061c113795fbdb35761bc2e8822123207805a`. The artifact is claude-126's seed-1 export at `caseyallard/uor-r4-store:results/claude/d11-fbs-export-gap-2026-10-26/d11gap/save/seed-1/artifact.uorlut`, sha256 `314c3909…fdb305`.
+**The baseline binary** is the head's `fbs-toks` at `c95dfaea6`, with claude-177's kernels. It is sealed at `caseyallard/uor-r4-store:results/claude/fbs-step-profile-2026-10-29/base/fbs-toks`, sha256 `f78428981f9575c9b688f7d7e2ce21e624299913e5afb91d0ad260236ef1e2a3`. claude-169's binary, `8a7a83c76ef83e4302a0fbfb211061c113795fbdb35761bc2e8822123207805a`, predates the hardware multiply.
+
+**The artifacts:**
+- claude-126's seed-1 export, at `caseyallard/uor-r4-store:results/claude/d11-fbs-export-gap-2026-10-26/d11gap/save/seed-1/artifact.uorlut`, sha256 `314c3909…fdb305`;
+- dual-c131's seed-1 `raw_both`, at `results/claude/d11-unsnapped-gap-2026-10-29/art/dual-c131-seed-1-raw_both.uorlut`, sha256 `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd`.
 
 ## Rules that apply
 
