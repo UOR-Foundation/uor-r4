@@ -2611,83 +2611,47 @@ fn primary_summary(
 }
 
 /// The snap ablation's split of one model's gap (claude-180,
-/// `docs/harness/prep/d11-exporter-float-trunk-snap-ablation-2026-10-29.md`): which part of the
-/// D11 forward carries its gap from the plain-float forward F. Every reading uses the export gap's
-/// own bar against F: the paired top-1 net within `F_I`, and the panel loss within the noise band.
+/// `docs/harness/prep/d11-exporter-float-trunk-snap-ablation-2026-10-29.md`): which change alone
+/// brings the D11 forward inside the export gap's bar against the plain-float forward F (the
+/// paired top-1 net within `F_I`, and the panel loss within the noise band).
+/// - Turning the snaps off leaves the `rounding_only` arm: what an unsnapped contract computes.
+/// - Turning the rounding off leaves `snaps_only`: the limit of ever-wider codes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SnapSplit {
     /// An instrument check failed, so the model is not counted.
     NotCounted,
-    /// D itself is inside the bar, so there is no gap to split.
+    /// D itself is inside the bar: there is no gap for a change to close.
     NoGap,
-    /// The snaps alone carry D's gap, and the rounding alone is inside.
-    SnapCarried,
-    /// The rounding alone carries D's gap, and the snaps alone are inside.
-    RoundingCarried,
-    /// Each part alone carries D's gap, or each is inside and together they make it up.
-    Both,
-    /// The parts do not make up D's gap: they fall short of it, or one runs against it.
-    Interaction,
+    /// `rounding_only` is inside and `snaps_only` is not: turning the snaps off is enough.
+    SnapsOffSuffices,
+    /// `snaps_only` is inside and `rounding_only` is not: turning the rounding off is enough.
+    RoundingOffSuffices,
+    /// Both are inside: either change alone is enough.
+    EitherSuffices,
+    /// Neither is inside: no single change is enough.
+    NeitherSuffices,
 }
 
-/// One arm's comparison with F under the export gap's bar (claude-180). `net` is `b − c`, F's
-/// top-1 advantage over the arm; `loss_delta` is the arm's loss minus F's.
-#[derive(Clone, Copy, Debug)]
-pub struct GapReading {
-    pub net: isize,
-    pub f_i: usize,
-    pub top1_inside: bool,
-    pub loss_delta: f64,
-    pub loss_inside: bool,
-}
-
-impl GapReading {
-    pub fn inside(&self) -> bool {
-        self.top1_inside && self.loss_inside
-    }
-
-    /// Whether this arm is outside the bar on the half where `d` is, in `d`'s direction. Where D
-    /// fails on top-1 that half is top-1, otherwise the loss.
-    fn carries(&self, d: &GapReading) -> bool {
-        if !d.top1_inside {
-            !self.top1_inside && self.net.signum() == d.net.signum()
-        } else {
-            !self.loss_inside && self.loss_delta.signum() == d.loss_delta.signum()
-        }
-    }
-}
-
-/// [`SnapSplit`] from the readings against F of D, the snaps alone and the rounding alone. Two
-/// parts that are each inside still make up D's top-1 gap when their nets, taken in D's
-/// direction, sum to at least `|net_D| − F_I(D)`; on the loss half the same holds with the noise
-/// band `noise`.
+/// [`SnapSplit`] from whether D, `snaps_only` and `rounding_only` are each inside the bar.
 pub fn classify_snap_split(
     instruments_ok: bool,
-    d: &GapReading,
-    snaps: &GapReading,
-    rounding: &GapReading,
-    noise: f64,
+    d_inside: bool,
+    snaps_only_inside: bool,
+    rounding_only_inside: bool,
 ) -> SnapSplit {
-    if !instruments_ok {
-        return SnapSplit::NotCounted;
-    }
-    if d.inside() {
-        return SnapSplit::NoGap;
-    }
-    let make_up_d = if !d.top1_inside {
-        let along = |x: &GapReading| x.net * d.net.signum();
-        along(snaps) + along(rounding) >= d.net.abs() - d.f_i as isize
-    } else {
-        let along = |x: &GapReading| x.loss_delta * d.loss_delta.signum();
-        along(snaps) + along(rounding) >= d.loss_delta.abs() - noise
-    };
-    match (snaps.carries(d), rounding.carries(d)) {
-        (true, true) => SnapSplit::Both,
-        (true, false) if rounding.inside() => SnapSplit::SnapCarried,
-        (false, true) if snaps.inside() => SnapSplit::RoundingCarried,
-        (false, false) if snaps.inside() && rounding.inside() && make_up_d => SnapSplit::Both,
-        _ => SnapSplit::Interaction,
+    match (
+        instruments_ok,
+        d_inside,
+        snaps_only_inside,
+        rounding_only_inside,
+    ) {
+        (false, ..) => SnapSplit::NotCounted,
+        (true, true, ..) => SnapSplit::NoGap,
+        (true, false, false, true) => SnapSplit::SnapsOffSuffices,
+        (true, false, true, false) => SnapSplit::RoundingOffSuffices,
+        (true, false, true, true) => SnapSplit::EitherSuffices,
+        (true, false, false, false) => SnapSplit::NeitherSuffices,
     }
 }
 
@@ -2871,23 +2835,14 @@ pub fn run_d11_snap_ablation(
         && i_d_recorded.unwrap_or(true);
 
     let mut arms = serde_json::Map::new();
-    let mut readings = BTreeMap::new();
+    let mut inside = BTreeMap::new();
     for arm in ABLATION_ARMS {
         let (top1, preds, loss) = &panels[arm.name];
         let p = hs::compute_paired_discordance("float", &f_preds, arm.name, preds, &targets, seed);
         let fi = f_i(p.a_hit_b_miss_c, p.a_miss_b_hit_b);
         let top1_inside = p.net_advantage_rows.unsigned_abs() <= fi;
         let loss_inside = (loss - loss_float).abs() <= noise;
-        readings.insert(
-            arm.name,
-            GapReading {
-                net: p.net_advantage_rows,
-                f_i: fi,
-                top1_inside,
-                loss_delta: loss - loss_float,
-                loss_inside,
-            },
-        );
+        inside.insert(arm.name, top1_inside && loss_inside);
         let vs_d = hs::compute_paired_discordance("d11", d_preds, arm.name, preds, &targets, seed);
         arms.insert(
             arm.name.to_owned(),
@@ -2918,10 +2873,9 @@ pub fn run_d11_snap_ablation(
     }
     let split = classify_snap_split(
         instruments_ok,
-        &readings["d11"],
-        &readings["snaps_only"],
-        &readings["rounding_only"],
-        noise,
+        inside["d11"],
+        inside["snaps_only"],
+        inside["rounding_only"],
     );
     Ok(serde_json::json!({
         "sheet": "docs/harness/prep/d11-exporter-float-trunk-snap-ablation-2026-10-29.md",
@@ -4667,62 +4621,37 @@ mod tests {
     }
 
     #[test]
-    fn the_snap_split_reads_d_then_each_part_in_d_s_direction() {
-        // claude-180, after the FIT: a failed instrument wins, then D inside; a part carries D's
-        // gap only outside the bar in D's direction, and two parts inside the bar that add up to
-        // D's excess are Both, not Interaction.
+    fn the_snap_split_asks_which_change_alone_brings_d_inside() {
+        // claude-180, after FIT round 2: a failed instrument wins, then D inside; otherwise each
+        // change is judged by whether the arm it leaves is inside the bar. `rounding_only` is the
+        // forward with the snaps off, `snaps_only` the forward with the rounding off.
         use SnapSplit::*;
-        let noise = 0.0457;
-        let top1 = |net: isize, f_i: usize| GapReading {
-            net,
-            f_i,
-            top1_inside: net.unsigned_abs() <= f_i,
-            loss_delta: 0.01,
-            loss_inside: true,
-        };
-        let split = |d, s, r| classify_snap_split(true, &d, &s, &r, noise);
-        // plain-c126 seed 1 as claude-136 read it: D 77 rows against F_I 60.
-        let d = top1(77, 60);
-        assert_eq!(classify_snap_split(false, &d, &d, &d, noise), NotCounted);
-        assert_eq!(split(top1(10, 60), top1(70, 55), top1(70, 55)), NoGap);
-        assert_eq!(split(d, top1(70, 55), top1(5, 40)), SnapCarried);
-        assert_eq!(split(d, top1(5, 40), top1(70, 55)), RoundingCarried);
-        assert_eq!(split(d, top1(70, 55), top1(66, 55)), Both);
-        // The FIT's case: 45 and 32 are each inside, and together make up 77 − 60 = 17.
-        assert_eq!(split(d, top1(45, 55), top1(32, 50)), Both);
-        assert_eq!(split(d, top1(9, 55), top1(8, 50)), Both);
-        assert_eq!(split(d, top1(8, 55), top1(8, 50)), Interaction);
-        // A part outside against D's direction carries nothing.
-        assert_eq!(split(d, top1(-70, 55), top1(5, 40)), Interaction);
-        assert_eq!(split(d, top1(70, 55), top1(-66, 55)), Interaction);
-        // D ahead of F (d11-c130 seed 2 read −340 against F_I 58).
-        let ahead = top1(-340, 58);
-        assert_eq!(split(ahead, top1(-300, 58), top1(10, 40)), SnapCarried);
-        assert_eq!(split(ahead, top1(300, 58), top1(10, 40)), Interaction);
-        // D outside on the loss alone: the loss half decides.
-        let on_loss = |loss_delta: f64| GapReading {
-            net: 3,
-            f_i: 24,
-            top1_inside: true,
-            loss_delta,
-            loss_inside: loss_delta.abs() <= noise,
-        };
+        for (d, s, r) in [
+            (true, true, true),
+            (false, false, false),
+            (false, true, false),
+        ] {
+            assert_eq!(classify_snap_split(false, d, s, r), NotCounted);
+        }
+        for (s, r) in [(true, true), (true, false), (false, true), (false, false)] {
+            assert_eq!(classify_snap_split(true, true, s, r), NoGap);
+        }
         assert_eq!(
-            split(on_loss(0.06), on_loss(0.05), on_loss(0.001)),
-            SnapCarried
+            classify_snap_split(true, false, false, true),
+            SnapsOffSuffices
         );
         assert_eq!(
-            split(on_loss(0.06), on_loss(-0.05), on_loss(0.001)),
-            Interaction
+            classify_snap_split(true, false, true, false),
+            RoundingOffSuffices
         );
-        assert_eq!(split(on_loss(0.06), on_loss(0.01), on_loss(0.01)), Both);
+        assert_eq!(classify_snap_split(true, false, true, true), EitherSuffices);
         assert_eq!(
-            split(on_loss(0.09), on_loss(0.01), on_loss(0.01)),
-            Interaction
+            classify_snap_split(true, false, false, false),
+            NeitherSuffices
         );
         assert_eq!(
-            serde_json::to_value(SnapCarried).unwrap(),
-            serde_json::json!("snap_carried")
+            serde_json::to_value(SnapsOffSuffices).unwrap(),
+            serde_json::json!("snaps_off_suffices")
         );
     }
 

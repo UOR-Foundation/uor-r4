@@ -1,4 +1,4 @@
-# Prep sheet: which part of the D11 forward carries its gap from float? (d11-exporter-float-trunk, claude-180), 2026-10-29
+# Prep sheet: which change alone brings the D11 forward inside its gap from float? (d11-exporter-float-trunk, claude-180), 2026-10-29
 
 Lab: claude. Item: `d11-exporter-float-trunk` (#2820). ORDER: `docs/loop/tasks/d11-exporter-float-trunk/claude-180/ORDER.md`. This is R6's second half in `docs/model/pipeline-map.md`, under the owner direction of 29 Oct, "fix the exporter".
 
@@ -15,12 +15,17 @@ TEST FITNESS: PENDING
 2. **The transition snap.** The recurrence transition is snapped to the 120 icosians. F unit-normalizes it.
 3. **The rounding.** The tables are rounded as exported (`round_tables_as_exported`), and the scored query and the writer table are at Q12.
 
-**The question: does F − D come from the snaps, from the rounding, or from both?**
+**The question: which change alone brings the D11 forward inside the export gap's bar against F — turning the snaps off, turning the rounding off, either, or neither?**
+
+**Each change has an arm that computes it exactly** (section 2):
+- **Snaps off** leaves `rounding_only`. That is what an unsnapped D11 contract computes, in float, before export.
+- **Rounding off** leaves `snaps_only`. That is the limit of ever-wider codes, so a real widening such as Q16 lies between D and it.
+- So "is that arm inside the bar?" answers "would that change alone be enough?" without any attribution of shares.
 
 **Why it decides the next unit.** Since D80 and D81 (28 Oct), the served artifact may use the integer multiply and divide.
 - So a served gate or transition no longer has to be an icosian root, whose products are shifts.
 - It can be an integer quaternion. The products become plain integer Hamilton products, and the transition's unit normalization becomes an integer square root and divide.
-- If the snaps carry the gap, the fix is that unsnapped D11 contract. If the rounding carries it, the fix is wider codes, which the multiply makes cheap.
+- Wider codes are cheap with the multiply too.
 
 ## 2. Base artifacts and arms
 
@@ -77,37 +82,32 @@ TEST FITNESS: PENDING
 - **Top-1:** |b − c| ≤ F_I = max(24, ⌈2√(b + c)⌉). Here b counts the rows F hits and X misses, and c the reverse.
 - **Loss:** |L_X − L_F| ≤ Δ = `0.045679637781173676`, Stage 4b's noise band.
 
-**Carrying D's gap.** A part (`snaps_only` or `rounding_only`) **carries** D's gap when it is outside the bar on the half where D is, in D's direction.
-- Where D's top-1 is outside, the part's top-1 must be outside, with a net of D's sign. D's net is positive when F is ahead, and negative when D is (d11-c130 seed 2 reads −340).
-- Where only D's loss is outside, the part's loss must be outside, on D's side of F.
-
-**Making up D's gap.** Two parts that are each inside **make up** D's gap when their values, taken in D's direction, sum to at least D's excess over its noise:
-- on top-1, sign(net_D) · (net_snaps + net_rounding) ≥ |net_D| − F_I(D);
-- on the loss half, the same with Δ in place of F_I(D).
+The bar is symmetric, so an arm is outside whichever of F and the arm is ahead. Each change is judged by the full bar, both halves, on the arm it leaves.
 
 **Each model's split** (`classify_snap_split`, in order):
 1. **Not counted:** an instrument check (section 4) failed.
-2. **No gap:** `d11` is inside.
-3. **Both:** each part carries D's gap.
-4. **Snap-carried:** the snaps carry it, and the rounding alone is inside.
-5. **Rounding-carried:** the rounding carries it, and the snaps alone are inside.
-6. **Both:** each part is inside, and together they make up D's gap. Each part is below the bar, and neither alone accounts for it.
-7. **Interaction:** anything else. That is, the parts fall short of D's gap, or one part is outside against D's direction.
+2. **No gap:** `d11` is inside, so there is nothing for a change to close.
+3. **Snaps off suffices:** `rounding_only` is inside and `snaps_only` is not.
+4. **Rounding off suffices:** `snaps_only` is inside and `rounding_only` is not.
+5. **Either suffices:** both are inside.
+6. **Neither suffices:** neither is inside.
 
-On plain-c126 seed 1 (D 77 rows against F_I 60), snaps at 45 and rounding at 32, each inside, read Both; at 8 and 8 they read Interaction. A host test pins these cases.
+A host test pins every combination.
 
-**The item's reading** is taken over the counted models whose split is not "no gap". The first row that holds applies:
+**The item's reading** is taken over the counted models whose split is not "no gap" (the gap models). "Snaps off works" means every gap model reads Snaps off suffices or Either suffices; "rounding off works" is the same with Rounding off. The first row that holds applies:
 
 | Reading | When | What it decides |
 |---|---|---|
 | **No reading** | fewer than 6 of the 8 models are counted | An instrument repair, then this run again. |
 | **No gap** | no counted model has a gap | D is inside on every model, which contradicts claude-136. Investigate the instrument before reading anything. |
-| **Snaps** | every one reads Snap-carried | **Next unit: the unsnapped D11 contract.** The exporter writes the gates and the transition as integer quaternions, and the integer runtime computes them, with the multiply and divide D80 and D81 allow. The unit includes finite CPU controls and the GPU evaluator, then the export gap on the plain recipe. Which snap goes first comes from `gates_continuous` and `transition_continuous`: one that is inside, or else the one with the smaller \|net\|. |
-| **Rounding** | every one reads Rounding-carried | **Next unit: wider codes** for the query and the tables, with the snaps kept, then the export gap. |
-| **Interaction** | more than half read Interaction | No single part is the fix. **Next unit: localize per layer** on those models before any contract change. |
-| **Both** | otherwise | **Next unit: both changes.** Its sheet runs each change alone and the two together. Any model that reads Interaction is named there and localized as a reading. |
+| **No reading** | 1 to 3 gap models | Too few models to name a change. The six older models' D top-1 is held by `I-D-Recorded`, so it fixes their nets at 77, 353, 275, −340, 359 and 225. So this row arises only if most of them are not counted. |
+| **Snaps off** | snaps off works; and if rounding off works too, the snaps-off arm's \|net\| summed over the gap models is no larger than the rounding-off arm's | **Next unit: the unsnapped D11 contract.** The exporter writes the gates and the transition as integer quaternions, and the integer runtime computes them, with the multiply and divide D80 and D81 allow. The unit includes finite CPU controls and the GPU evaluator, then the export gap on the plain recipe. `gates_continuous` and `transition_continuous` say whether one snap could stay. |
+| **Rounding off** | rounding off works, and the row above does not hold | **Next unit: wider codes** for the query and the tables, with the snaps kept, then the export gap. The arm is the limit of wide codes, so that sheet sets the width from a ladder (Q16 first). |
+| **Both off** | neither change works on every gap model | **Next unit: both changes.** Its sheet runs each change alone and the two together. The models where neither alone suffices are named there. |
 
-A Snaps or Rounding reading names the change for the next unit. It is not a result about the snaps or the rounding as mechanisms, and nothing here closes a mechanism (§4.1).
+The tie-break (when both changes work everywhere) is pre-registered here: the change whose arm sits closer to F over the gap models goes first. On a tie the snaps go first.
+
+A reading names the change for the next unit. It is not a result about the snaps or the rounding as mechanisms, and nothing here closes a mechanism (§4.1).
 
 **Readings, with no bar:**
 - each arm's top-1 and loss;
@@ -148,6 +148,8 @@ A Snaps or Rounding reading names the change for the next unit. It is not a resu
 5. For each of the eight models, run the following, adding `--stored-d11-preds …/preds-d11.json` for plain-c126:
 
    `spiralcore-fbs-sheet --mode d11-snap-ablation --data-root <driver-data> --model-dir <…/model> --model-sha256 <pin> --stored-preds <…/preds-float.json> --stage4b <d11-gap.json> --train-receipt <receipt> --seed <s> --label <label> --out ablation-<label>-seed-<s>.json`
+
+   For the six older models, also add `--expect-d11-top1 <claude-136's D>`. Before the runs, the job checks the four receipts' full pins, and checks that each receipt's `seeds[].i_save_load` is true for both seeds.
 6. Run `I-Negative`.
 7. A `jq` summary over the receipts (`summary.jq`, shipped with the job) gives each split and the item's reading. A model whose step failed has no receipt, so it is not counted.
 8. Seal the run folder to `results/claude/d11-snap-ablation-2026-10-29/` with a `SHA256SUMS`, read it back, then `release` and `down`.
@@ -158,10 +160,12 @@ A Snaps or Rounding reading names the change for the next unit. It is not a resu
 - **14,287 frozen DEV rows per model**, with a paired test for every arm.
 - **The forwards are deterministic.** claude-132 found D repeatable, and `I-D-Same` checks it again. So one pass decides each arm.
 - **Most gaps are far outside, but not all.** claude-136's six read 77 to 359 rows of net against F_I of 58 to 72.
-  - On five of them D is outside by 155 to 287 rows, so a part that carries most of the gap lands well outside.
-  - **plain-c126 seed 1 is near the threshold,** outside by only 17 rows (77 against 60). There, both parts can sit inside the bar. The "make up" rule reads that case as Both, not Interaction.
-  - **The two bfixed-c179 models have no recorded D.** Their gap is measured here for the first time, so either could read No gap, or be near the threshold.
-- **No single model decides the item.** The item reading needs every gap model for Snaps or Rounding, and more than half for Interaction.
+  - On five of them D is outside by 155 to 287 rows.
+  - **plain-c126 seed 1 is near the threshold,** outside by only 17 rows (77 against 60). There, both arms can be inside, which reads Either suffices. That is a true reading, not a fault: on this model, each change alone is enough.
+  - **The two bfixed-c179 models have no recorded D.** Their gap is measured here for the first time, so either could read No gap.
+- **How many models a reading needs.**
+  - A Snaps off or Rounding off reading needs that change to work on every gap model, and at least 4 gap models.
+  - A single model can still decide between those two, where it is the only one on which a change fails. That is the intended strictness, since the next unit's change must close the gap on every model.
 
 ## 8. Cost and stop rule
 
@@ -192,6 +196,19 @@ A Snaps or Rounding reading names the change for the next unit. It is not a resu
 6. **Low: the receipt pins were truncated.** They are in full now, and the job checks them.
 7. **Low: the cost counted 7 panels per run.** It is 8.
 8. **Low: a part's sign was ignored.** A part now carries D's gap only in D's direction.
+
+**Round 2 (fresh non-author reviewer, at `ad6f65485`): NOT FIT. All six findings are fixed.**
+1. **High: the "make up" rule did not match the sheet's own words.** For example, snaps 0 with rounding 17 read Both.
+   - The fault was the framing: splitting shares asked a question no decision needs.
+   - The split now asks only which change alone brings the forward inside the full bar (§3). `rounding_only` and `snaps_only` are exactly the forwards those changes leave.
+   - So no sign, sum or share rule remains.
+2. **Medium: "inside" mixed the halves.** It is gone with the same change. Each arm is judged by both halves of the bar, as D is.
+3. **Medium: one model could set the next unit.**
+   - A reading now needs at least 4 gap models.
+   - §7 says where a single model still decides, and why that strictness is intended.
+4. **Low: claude-179's receipt writer was unconfirmed.** `n1-train.json` was written by `--mode d11-train-export` (claude-179's `arms.sh`, line 49), which is `run_d11_train_export`. All four receipts read `i_save_load: true` on both seeds, and the job now checks this.
+5. **Low: the tolerance.** `reloaded_loss_matches` is `(actual − expected).abs() <= 1e-6` (`spiralcore_fbs_sheet.rs:1907`). That is what §4 says.
+6. **Low: a job step that could not fail** (`receipts-written`) was removed.
 
 **What round 1 confirmed:**
 - each arm computes what section 2 says;
