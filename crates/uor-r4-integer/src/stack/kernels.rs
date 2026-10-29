@@ -871,28 +871,55 @@ pub(crate) fn stack_l2_distance(query: &[i32], key: &[i32]) -> u64 {
 }
 
 /// Hamilton product `a (x) b` of quaternions `(w, x, y, z)`, exactly.
+///
+/// Each `|b_j|` gets one table of its sixteen multiples, read at the radix-16
+/// digits of every `|a_i|` (claude-166): 4 tables in place of the 16 that
+/// separate products would build, and a zero `a_i` is skipped. Each product is
+/// `|a_i| |b_j|` modulo `2^128`, negated when the signs differ, the value
+/// [`mul_i128`] gives, so the result is unchanged. Callers pass the snapped
+/// quaternion as `a`: its Q31 coordinates have few digits and often a zero.
 #[inline(never)]
 pub(crate) fn stack_hamilton(a: [i64; 4], b: [i64; 4]) -> [i128; 4] {
-    let p = |x: i64, y: i64| mul_i128(i128::from(x), i128::from(y));
-    let [a0, a1, a2, a3] = a;
-    let [b0, b1, b2, b3] = b;
+    // An explicit loop, not `array::from_fn` or `map`: a closure there
+    // compiles to a `core::array` symbol of its own, outside the audited
+    // `stack_` names.
+    let mut tables = [[0u128; 16]; 4];
+    for (table, &value) in tables.iter_mut().zip(&b) {
+        *table = multiples_u128(u128::from(value.unsigned_abs()));
+    }
+    // p[i][j] = a_i b_j modulo 2^128.
+    let mut p = [[0i128; 4]; 4];
+    for (row, &x) in p.iter_mut().zip(&a) {
+        let magnitude = x.unsigned_abs();
+        if magnitude == 0 {
+            continue;
+        }
+        for ((slot, table), &y) in row.iter_mut().zip(&tables).zip(&b) {
+            let product = mul_by_u64(table, magnitude);
+            *slot = if (x < 0) != (y < 0) {
+                product.wrapping_neg() as i128
+            } else {
+                product as i128
+            };
+        }
+    }
     [
-        p(a0, b0)
-            .wrapping_sub(p(a1, b1))
-            .wrapping_sub(p(a2, b2))
-            .wrapping_sub(p(a3, b3)),
-        p(a0, b1)
-            .wrapping_add(p(a1, b0))
-            .wrapping_add(p(a2, b3))
-            .wrapping_sub(p(a3, b2)),
-        p(a0, b2)
-            .wrapping_sub(p(a1, b3))
-            .wrapping_add(p(a2, b0))
-            .wrapping_add(p(a3, b1)),
-        p(a0, b3)
-            .wrapping_add(p(a1, b2))
-            .wrapping_sub(p(a2, b1))
-            .wrapping_add(p(a3, b0)),
+        p[0][0]
+            .wrapping_sub(p[1][1])
+            .wrapping_sub(p[2][2])
+            .wrapping_sub(p[3][3]),
+        p[0][1]
+            .wrapping_add(p[1][0])
+            .wrapping_add(p[2][3])
+            .wrapping_sub(p[3][2]),
+        p[0][2]
+            .wrapping_sub(p[1][3])
+            .wrapping_add(p[2][0])
+            .wrapping_add(p[3][1]),
+        p[0][3]
+            .wrapping_add(p[1][2])
+            .wrapping_sub(p[2][1])
+            .wrapping_add(p[3][0]),
     ]
 }
 
@@ -1870,6 +1897,64 @@ mod tests {
         // The 16 sign patterns of a query with no zero coordinate; the zero query keeps all.
         assert_eq!(no_zero, 16);
         assert_eq!(SNAP_CANDIDATES.counts[0], 120);
+    }
+
+    /// The Hamilton product as it was before claude-166: sixteen separate
+    /// `mul_i128` products, each with its own table.
+    fn hamilton_by_products(a: [i64; 4], b: [i64; 4]) -> [i128; 4] {
+        let p = |x: i64, y: i64| mul_i128(i128::from(x), i128::from(y));
+        let [a0, a1, a2, a3] = a;
+        let [b0, b1, b2, b3] = b;
+        [
+            p(a0, b0)
+                .wrapping_sub(p(a1, b1))
+                .wrapping_sub(p(a2, b2))
+                .wrapping_sub(p(a3, b3)),
+            p(a0, b1)
+                .wrapping_add(p(a1, b0))
+                .wrapping_add(p(a2, b3))
+                .wrapping_sub(p(a3, b2)),
+            p(a0, b2)
+                .wrapping_sub(p(a1, b3))
+                .wrapping_add(p(a2, b0))
+                .wrapping_add(p(a3, b1)),
+            p(a0, b3)
+                .wrapping_add(p(a1, b2))
+                .wrapping_sub(p(a2, b1))
+                .wrapping_add(p(a3, b0)),
+        ]
+    }
+
+    #[test]
+    fn the_shared_table_hamilton_product_is_the_sixteen_products() {
+        let edges = [i64::MIN, i64::MIN + 1, -1, 0, 1, i64::MAX - 1, i64::MAX];
+        let mut rng = Lcg(0x05ee_d166);
+        let pick = |rng: &mut Lcg| -> i64 {
+            let draw = rng.next();
+            match draw % 8 {
+                0 => edges[(draw >> 8) as usize % edges.len()],
+                1 => 0,
+                // Magnitudes of every size.
+                _ => (rng.next() as i64) >> ((draw >> 32) % 64),
+            }
+        };
+        for _ in 0..1_000_000 {
+            let a: [i64; 4] = std::array::from_fn(|_| pick(&mut rng));
+            let b: [i64; 4] = std::array::from_fn(|_| pick(&mut rng));
+            assert_eq!(stack_hamilton(a, b), hamilton_by_products(a, b), "{a:?} {b:?}");
+        }
+        // Snapped transitions: every root scaled by a Q31 decay, against random states.
+        for root in &H4_ROOT_COEFFICIENTS {
+            for _ in 0..200 {
+                let raw: [i32; 4] = std::array::from_fn(|c| {
+                    i32::from(root[c][0]) * 1000 + i32::from(root[c][1]) * 1618
+                });
+                let lambda = rng.next() % (1 << 31);
+                let a = stack_snap_rotation(raw, lambda);
+                let b: [i64; 4] = std::array::from_fn(|_| pick(&mut rng));
+                assert_eq!(stack_hamilton(a, b), hamilton_by_products(a, b), "{a:?} {b:?}");
+            }
+        }
     }
 
     #[test]
