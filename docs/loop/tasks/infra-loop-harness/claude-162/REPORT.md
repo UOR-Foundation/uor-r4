@@ -44,3 +44,7 @@ None: no run. Every figure in the five items is quoted from a REPORT or the map,
 
 - **The other two 28 Oct directions stay `open`:** "I don't care what we serve at long as it is cheap" is the standing criterion these items carry, and the float-train, integer-serve direction is carried by `turn-memory-integer` and `integer-hamming-read`.
 - **R6–R8** (deterministic backward, the text path, the scale probe) get items once R2–R5 report, as the map orders.
+
+## Plain summary
+
+Casey voted to pivot to three pieces of work: measure where time goes, revise the map, and test whether a memory of the training replies helps. All three are done, and the memory doubled how often a reply starts with the right word. This writes up the next five pieces of work so they can be picked up: carry the memory past the first word, make the cheap way of choosing a word reliable, speed up the laptop's integer code, cut the cost of a training step, and run the memory on the laptop.
