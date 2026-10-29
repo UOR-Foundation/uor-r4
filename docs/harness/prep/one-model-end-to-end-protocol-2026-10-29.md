@@ -2,7 +2,7 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md), done-when 3. Order: [claude-206](../../loop/tasks/one-model-end-to-end/claude-206/ORDER.md). It builds on [the assessment](../../loop/tasks/infra-loop-harness/claude-201/ASSESSMENT.md) §5–§6 and on step 2's result ([claude-205](../../loop/tasks/one-model-end-to-end/claude-205/REPORT.md): mixed).
 
-TEST FITNESS: (to be filled by the fresh reviewer). Round 1 at `8aec46877` was NOT FIT, with six blockers; this is round 2. What changed is at the end.
+TEST FITNESS: FIT, round 2, at `0e8109f1a`, by a fresh non-author reviewer; its six notes are applied. Round 1 at `8aec46877` was NOT FIT, with six blockers; what changed is at the end. Both rounds are summarized on #3407 (6510727297).
 
 This sheet fixes, before any training run, how the model the project ships is scored, and what each outcome decides. The run needs the instruments listed below, and its own pre-run review (D67) once they exist.
 
@@ -73,8 +73,8 @@ For arm X against arm or control Y, on one stratum, at each seed `s` in {1, 2, 3
 ## The decisions, fixed in advance, in this order
 
 1. **The base recipe to ship: (r) or (r-drop).** Compare (r-drop) with (r):
-   - if (r-drop) is ahead on N-u, it ships; if (r) is ahead on N-u, (r) ships;
-   - else, if either is ahead on U, it ships;
+   - if (r-drop) is ahead of (r) on N-u and not behind on U, it ships; if (r) is ahead on N-u and not behind on U, (r) ships;
+   - else, if either is ahead on U and not behind on N-u, it ships;
    - else (r) ships, the recipe already served in part.
 
    The shipped recipe is always a trained arm.
@@ -88,6 +88,7 @@ For arm X against arm or control Y, on one stratum, at each seed `s` in {1, 2, 3
    - **Learned transport earns its place** if both controls are behind (r) on N-u.
    - **A negative for learned transport in this configuration** if either control is ahead of (r) on N-u.
    - **No decision** otherwise.
+   - U is reported beside N-u, and enters no transport reading.
 
    No arm is cut on this; a negative revisits the map's transport stage.
 4. **The decode rule, on the shipped recipe only: greedy (G) or Flock rank (F).** At each seed, its free generation under each rule is 512 replies: 256 DEV prompts and 256 P-dev prompts. Let `g` and `f` be the counts of complete replies under G and F, and `p = g / 512`.
@@ -99,7 +100,9 @@ For arm X against arm or control Y, on one stratum, at each seed `s` in {1, 2, 3
    Teacher-forced top-1 does not depend on the decode rule.
 5. **The verdict, on the shipped recipe with the shipped decode rule.**
    - **The free-generation tests** use its 256 P-dev replies at each seed, against P-dev's own references for the same prompts. Let `v` be its verbatim-TRAIN share of complete replies, `v_ref` the references' share, and `n_c` its complete count.
-   - **The tolerance** is `tol = max(0.10, 3·√(v_ref(1 − v_ref) / n_c))`, so that it widens when few replies complete.
+   - **What "complete" means.** A reply is complete when it ends in `<|eos|>`. One stopped by BOS or at 64 tokens is not, as the grader counts it today (`generation`).
+   - **The tolerance** is `tol = max(0.10, 3·√(v_ref(1 − v_ref) / n_c))`, so that it widens when few replies complete. At `n_c = 0`, `v` is undefined: the free-generation condition of both verdicts fails, and the verdict is "mixed".
+   - **The references.** The test compares with P-dev's own references after the same prompts, not with DEV's replies as the spec words it. Pairing on the same prompts is the stricter comparison, and is a deliberate departure from the spec.
    - **The verdicts:**
      - **"generalizes":** it is ahead of both (r0) and (S) on U and on N-u; and at every seed, `n_c ≥ 64`, `|v − v_ref| ≤ tol`, and its repeated-4-gram rate is at most the references' + 0.10;
      - **"memorized"** (the spec's AND): it is ahead of (r0) on K, and ahead of neither (r0) nor (S) on U or N-u, and `v − v_ref > tol` at every seed;
@@ -113,7 +116,7 @@ For arm X against arm or control Y, on one stratum, at each seed `s` in {1, 2, 3
   - **The candidates:** the K = 16 table tokens nearest the readout point, by the nearest objective's score, ranked 0 to 15, ties to the smaller id. K is 16, the Hamming read's kept count and one of the Flock selector's top-k values.
   - **The weights:** rank `i` has weight `W_i = RAW_RANK_WEIGHTS_Q16[i]` (`1/(i+1)` in Q16, `crates/uor-r4-integer/src/stack/flock.rs:382`). Their sum is `H = Σ_{i<16} W_i`.
   - **The draw:**
-    - one xorshift64* step, seeded as `epoch_order` seeds (`state = seed·0x9E3779B97F4A7C15 + index·0xD1B54A32D192ED03`, then `| 1`, so it is never zero), with `index` the sample's index times 64 plus its step;
+    - one xorshift64* step, seeded as `epoch_order` seeds (`state = S·0x9E3779B97F4A7C15 + index·0xD1B54A32D192ED03`, then `| 1`, so it is never zero), with `S` the arm's training seed and `index` the sample's index times 64 plus its step;
     - `r = output mod H`;
     - the rank is the first `i` with `W_0 + … + W_i > r`.
 
