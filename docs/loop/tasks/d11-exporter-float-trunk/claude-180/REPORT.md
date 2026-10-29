@@ -9,7 +9,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [d11-exporter-float-trunk-
 - **The registered reading is Both off.** Neither change alone brings every model inside the export bar.
   - Turning the snaps off is enough on 2 of 8 models, and turning the rounding off on 1. Neither alone is enough on the other 5.
   - This is a reading for the next unit's design, not a mechanism result (§4.1).
-- **Turning the snaps off misses the bar on three models by 7, 27 and 28 rows.** Their nets are 31, 56 and 52, against F_I of 24, 29 and 24.
+- **Turning the snaps off misses the bar on six models, three of them narrowly.** The narrow three have |net| of 31, 56 and 52 against F_I of 24, 29 and 24, missing by 7, 27 and 28 rows.
   - When the forward is nearly F's, few rows differ, so F_I is at or near its floor of 24.
   - The bar was not moved.
 - **Attempt 1 could not load six of the eight models.**
@@ -80,12 +80,13 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [d11-exporter-float-trunk-
   - They fall less on the two bfixed models, to 5,166 and 9,673, and on plain-c126 seed 1, to 7,737.
 - **Rounding off leaves the six older models' |net| at 120–366, all outside F_I.**
   - It roughly halves D's on plain-c126 s2 (353 → 152) and d11-c130 s1 (275 → 120).
-  - It changes little on three: d11-c130 s2, and dual-c131 s1 and s2.
+  - It falls by a fifth on d11-c130 s2 (340 → 271), and changes little on dual-c131 s1 and s2 (359 → 366, 225 → 234).
   - It rises on plain-c126 s1 (77 → 133).
   - Their differing rows stay near D's.
   - On the two bfixed models it closes most of the gap (−54 and −10).
-- **On five of eight models, the gate snap carries most of the gap the snaps make.**
+- **On six of eight models, the gate snap carries most of the gap the snaps make.**
   - With the gate snap off, |net| is 14 to 52 on five models, and three of those are inside (plain-c126 s2, d11-c130 s1, dual-c131 s1).
+  - On bfixed-c179 s2, gate snap off goes from 259 to 72, below snaps off's 120, but stays outside F_I (31).
   - On bfixed-c179 s1, gate snap off goes only from 230 to 178. On plain-c126 s1 it overshoots to −164, while transition snap off brings that model inside (7).
   - With only the transition snap off, |net| stays at D's size or above on four models (368, 333, 605, 402).
   - It falls on dual-c131 s2 (225 → 103) and both bfixed models (230 → 132, 259 → 191), but stays outside F_I.
@@ -107,7 +108,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [d11-exporter-float-trunk-
 ## Still open
 
 - **The next unit (the sheet's Both off row): both changes in the integer contract.** Its sheet runs each change alone and the two together.
-  - **The exporter and the integer runtime serve the Hamilton gates unsnapped,** as integer quaternions with D80's multiply. The gate goes first, because it carries most of the snaps' gap on five of eight models. The transition follows, since plain-c126 s1 needs it: its unit normalization needs D81's divide and an integer square root.
+  - **The exporter and the integer runtime serve the Hamilton gates unsnapped,** as integer quaternions with D80's multiply. The gate goes first, because it carries most of the snaps' gap on six of eight models. The transition follows, since plain-c126 s1 needs it: its unit normalization needs D81's divide and an integer square root.
   - **The query and the tables go to wider codes,** a ladder starting at Q16.
   - **Then the export gap of each arm.** Neither change alone is enough on plain-c126 (both seeds), d11-c130 (both seeds) and bfixed-c179 seed 1.
 - **Loading an older checkpoint.** Every checkpoint saved before #3367 needs the pre-#3367 `spiralcore_fbs.cu` to load at `main`. B_old's recipe (sheet §10) is how.
@@ -116,4 +117,4 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [d11-exporter-float-trunk-
 
 ## Plain summary
 
-Earlier work found that the integer version of the model, the one a phone or laptop would run, picks different next words from the trained model, and that the difference comes from the integer version itself, not from the export. That version changes the trained model in two ways: it rounds some rotations to the nearest of 120 fixed ones, and it rounds its numbers to a fixed number of digits. This run tried each change alone on eight trained models. Removing the rounding to 120 rotations brings the integer version much closer to the trained model on seven of the eight, and on five of them the rotation in the gates is the main one. But neither change alone is enough on every model. The next step builds an integer version that keeps the gate rotations exact, now that integer multiplication is allowed, and uses more digits, then measures again.
+Earlier work found that the integer version of the model, the one a phone or laptop would run, picks different next words from the trained model, and that the difference comes from the integer version itself, not from the export. That version changes the trained model in two ways: it rounds some rotations to the nearest of 120 fixed ones, and it rounds its numbers to a fixed number of digits. This run tried each change alone on eight trained models. Removing the rounding to 120 rotations brings the integer version much closer to the trained model on seven of the eight, and on six of them the rotation in the gates is the main one. But neither change alone is enough on every model. The next step builds an integer version that keeps the gate rotations exact, now that integer multiplication is allowed, and uses more digits, then measures again.
