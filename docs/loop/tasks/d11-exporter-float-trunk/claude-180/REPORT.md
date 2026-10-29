@@ -9,7 +9,9 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [d11-exporter-float-trunk-
 - **The registered reading is Both off.** Neither change alone brings every model inside the export bar.
   - Turning the snaps off is enough on 2 of 8 models, and turning the rounding off on 1. Neither alone is enough on the other 5.
   - This is a reading for the next unit's design, not a mechanism result (§4.1).
-- **Turning the snaps off misses the bar narrowly on three models.** Its nets are 31, 56 and 52 rows, against an F_I of 24 to 29. When the forward is nearly F's, few rows differ, so F_I sits at its floor of 24. The bar was not moved.
+- **Turning the snaps off misses the bar on three models by 7, 27 and 28 rows.** Their nets are 31, 56 and 52, against F_I of 24, 29 and 24.
+  - When the forward is nearly F's, few rows differ, so F_I is at or near its floor of 24.
+  - The bar was not moved.
 - **Attempt 1 could not load six of the eight models.**
   - Each FBS plan's fingerprint includes the sha256 of `spiralcore_fbs.cu`, which claude-179 changed. So the head refuses every checkpoint saved before #3367 ("native projection compiler/operator/FBS identity is missing or stale").
   - claude-179 did not flag that consequence. It applies to any lab that loads those checkpoints at `main`.
@@ -39,7 +41,11 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [d11-exporter-float-trunk-
 
 ## Measurements
 
-**The run.** One RTX 5090 on pod `vast-58216485`: driver 580.178.04, CUDA 12.8, $0.563/h. The pod was up about 30 minutes, about $0.28.
+**The run.** One RTX 5090 on pod `vast-58216485`: driver 580.178.04, CUDA 12.8, $0.563/h.
+- The pod was created at about 07:28Z (its bootstrap began at 07:30:24Z, after 119 s waiting for SSH).
+- Attempt 3 ended at 07:53:27Z.
+- The pod was deleted after the seal was read back. No local log records the delete time.
+- So it was up for about 30 to 35 minutes, about $0.3.
 - **Binaries:** `075d88e2…` (the head, `9a6002c9b`) for the two bfixed-c179 models. `7d2705ab…` (B_old: the head plus `fix.patch` reversed, exactly three files apart, with `spiralcore_fbs.cu` at the old pin `517bffcc…`) for the six older models.
 - **Sealed** to `caseyallard/uor-r4-store:results/claude/d11-snap-ablation-2026-10-29/`. That is 379 files across all three attempts. The `SHA256SUMS` sha256 is `4e41463b3ce81339efd4a7e35b608a3d5cabea627535c45d5241b32668c7fdb2`, and it read back with every file verifying.
 
@@ -47,11 +53,13 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [d11-exporter-float-trunk-
 - `I-GPU-Tests`: the head had 163 passed and 6 ignored, including the new ablation test. On B_old, the two D11 GPU tests passed.
 - `I-Fetch`, the receipt pins and each receipt's `i_save_load` all held.
 - `I-Save-Load`, `I-None` and `I-D-Same` held on all 8 models.
-- `I-D-Stored` held on both plain-c126 seeds.
+  - `I-D-Same` runs the same code path as the all-snaps arm a second time. So it shows the D panel is deterministic, not that it is independently D.
+  - The independent ties to earlier units' D are the next two checks.
+- `I-D-Stored` held on both plain-c126 seeds: D matched the predictions Stage 4b stored.
 - `I-D-Recorded` held on all 6 older models: D reproduced claude-136's top-1 exactly.
 - `I-Negative` (attempt 3): a wrong pin gave `i_inputs: false` and `not_counted`.
 
-**Each arm against F: net top-1, with F_I in brackets.** Net is b − c, positive when F is ahead. **Bold** marks an arm inside the top-1 bar. Every arm's loss is inside the band, Δ = 0.0457; the largest |ΔL| is 0.031.
+**Each arm against F: net top-1, with F_I in brackets.** Net is F's top-1 minus the arm's, so it is positive when F is ahead. **Bold** marks an arm inside the top-1 bar. Every arm's loss is inside the band, Δ = 0.0457; the largest |ΔL| is 0.031.
 
 | Model | F top-1 | D | Snaps off | Rounding off | Gate snap off | Transition snap off | Split |
 |---|---|---|---|---|---|---|---|
@@ -68,11 +76,19 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [d11-exporter-float-trunk-
 - **Snaps off closes most of D's gap on 7 of 8 models.**
   - |net| falls 353 → 31, 275 → 56, 340 → 52, 359 → 3, 225 → 9, 230 → 72 and 259 → 120.
   - On plain-c126 seed 1 it overshoots instead, from 77 to −151, which leaves the forward ahead of F.
-  - The rows that differ from F fall from D's 7,516–11,828 to 1,087–3,611 on five models. They stay at 5,166–9,673 on the two bfixed models and 7,737 on plain-c126 seed 1.
-- **Rounding off barely moves the six older models.** Their nets stay at 120–366, and their differing rows stay near D's. On the two bfixed models, though, it closes most of the gap (−54 and −10).
-- **The gate snap carries most of the gap the snaps make.**
+  - The rows that differ from F fall from D's 7,516–11,828 to 1,087–3,611 on five models.
+  - They fall less on the two bfixed models, to 5,166 and 9,673, and on plain-c126 seed 1, to 7,737.
+- **Rounding off leaves the six older models' |net| at 120–366, all outside F_I.**
+  - It roughly halves D's on plain-c126 s2 (353 → 152) and d11-c130 s1 (275 → 120).
+  - It changes little on three: d11-c130 s2, and dual-c131 s1 and s2.
+  - It rises on plain-c126 s1 (77 → 133).
+  - Their differing rows stay near D's.
+  - On the two bfixed models it closes most of the gap (−54 and −10).
+- **On five of eight models, the gate snap carries most of the gap the snaps make.**
   - With the gate snap off, |net| is 14 to 52 on five models, and three of those are inside (plain-c126 s2, d11-c130 s1, dual-c131 s1).
-  - With only the transition snap off, nets stay at D's size or above, except on plain-c126 seed 1 (7, inside).
+  - On bfixed-c179 s1, gate snap off goes only from 230 to 178. On plain-c126 s1 it overshoots to −164, while transition snap off brings that model inside (7).
+  - With only the transition snap off, |net| stays at D's size or above on four models (368, 333, 605, 402).
+  - It falls on dual-c131 s2 (225 → 103) and both bfixed models (230 → 132, 259 → 191), but stays outside F_I.
 - **The tie-break did not apply.** The summed |net| over the eight models is 494 with the snaps off and 1,340 with the rounding off.
 - **The repeatable recipe's first D panel** (bfixed-c179) has D ahead of F by 230 and 259 rows, outside F_I of 45 and 42. So its export gap, at the level of the D11 forward, fails on both seeds, in D's favour.
 
@@ -91,7 +107,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [d11-exporter-float-trunk-
 ## Still open
 
 - **The next unit (the sheet's Both off row): both changes in the integer contract.** Its sheet runs each change alone and the two together.
-  - **The exporter and the integer runtime serve the Hamilton gates unsnapped,** as integer quaternions with D80's multiply. The gate goes first, by the 2×2. The transition follows if needed: its unit normalization needs D81's divide and an integer square root.
+  - **The exporter and the integer runtime serve the Hamilton gates unsnapped,** as integer quaternions with D80's multiply. The gate goes first, because it carries most of the snaps' gap on five of eight models. The transition follows, since plain-c126 s1 needs it: its unit normalization needs D81's divide and an integer square root.
   - **The query and the tables go to wider codes,** a ladder starting at Q16.
   - **Then the export gap of each arm.** Neither change alone is enough on plain-c126 (both seeds), d11-c130 (both seeds) and bfixed-c179 seed 1.
 - **Loading an older checkpoint.** Every checkpoint saved before #3367 needs the pre-#3367 `spiralcore_fbs.cu` to load at `main`. B_old's recipe (sheet §10) is how.
@@ -100,4 +116,4 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [d11-exporter-float-trunk-
 
 ## Plain summary
 
-Earlier work found that the integer version of the model, the one a phone or laptop would run, picks different next words from the trained model, and that the difference comes from the integer version itself, not from the export. That version changes the trained model in two ways: it rounds some rotations to the nearest of 120 fixed ones, and it rounds its numbers to a fixed number of digits. This run tried each change alone on eight trained models. Removing the rounding to 120 rotations, mostly the one in the gates, brings the integer version much closer to the trained model on seven of the eight. But neither change alone is enough on every model. The next step builds an integer version that keeps the gate rotations exact, now that integer multiplication is allowed, and uses more digits, then measures again.
+Earlier work found that the integer version of the model, the one a phone or laptop would run, picks different next words from the trained model, and that the difference comes from the integer version itself, not from the export. That version changes the trained model in two ways: it rounds some rotations to the nearest of 120 fixed ones, and it rounds its numbers to a fixed number of digits. This run tried each change alone on eight trained models. Removing the rounding to 120 rotations brings the integer version much closer to the trained model on seven of the eight, and on five of them the rotation in the gates is the main one. But neither change alone is enough on every model. The next step builds an integer version that keeps the gate rotations exact, now that integer multiplication is allowed, and uses more digits, then measures again.

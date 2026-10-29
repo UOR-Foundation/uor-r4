@@ -4626,12 +4626,9 @@ mod tests {
         // change is judged by whether the arm it leaves is inside the bar. `rounding_only` is the
         // forward with the snaps off, `snaps_only` the forward with the rounding off.
         use SnapSplit::*;
-        for (d, s, r) in [
-            (true, true, true),
-            (false, false, false),
-            (false, true, false),
-        ] {
-            assert_eq!(classify_snap_split(false, d, s, r), NotCounted);
+        for bits in 0..8u8 {
+            let (d, s, r) = (bits & 4 != 0, bits & 2 != 0, bits & 1 != 0);
+            assert_eq!(classify_snap_split(false, d, s, r), NotCounted, "{bits}");
         }
         for (s, r) in [(true, true), (true, false), (false, true), (false, false)] {
             assert_eq!(classify_snap_split(true, true, s, r), NoGap);

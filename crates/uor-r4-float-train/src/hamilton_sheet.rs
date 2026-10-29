@@ -2964,6 +2964,51 @@ mod tests {
         let snaps = |gates, transition| D11Snaps { gates, transition };
         let ico = Some(HamiltonArm::HamiltonIcosianHard);
         let active = Some(HamiltonArm::HamiltonActive);
+        // Every field the D11 mode saves, from a prior state unlike any it sets (claude-180 code
+        // review): each must come back exactly.
+        let saved = || {
+            GATE_HOOK.with(|cell| {
+                let st = cell.borrow();
+                (
+                    st.active_arm,
+                    st.fwd_call_idx,
+                    st.icosian_export_mode,
+                    st.snap_transition,
+                    st.capture_telemetry,
+                )
+            })
+        };
+        let original = saved();
+        GATE_HOOK.with(|cell| {
+            let mut st = cell.borrow_mut();
+            st.active_arm = Some(HamiltonArm::RandomGateNull);
+            st.fwd_call_idx = 7;
+            st.icosian_export_mode = true;
+            st.snap_transition = false;
+            st.capture_telemetry = true;
+        });
+        let prior = saved();
+        for s in [
+            D11Snaps::ALL,
+            snaps(false, true),
+            snaps(true, false),
+            snaps(false, false),
+        ] {
+            with_d11_snaps(s, || Ok(()))?;
+            assert_eq!(saved(), prior, "{s:?}");
+            assert!(with_d11_snaps(s, || -> Result<()> { Err(invalid("inside")) }).is_err());
+            assert_eq!(saved(), prior, "{s:?} after an error");
+        }
+        GATE_HOOK.with(|cell| {
+            let mut st = cell.borrow_mut();
+            (
+                st.active_arm,
+                st.fwd_call_idx,
+                st.icosian_export_mode,
+                st.snap_transition,
+                st.capture_telemetry,
+            ) = original;
+        });
         let before = state();
         assert_eq!(with_d11_mode(|| Ok(state()))?, (ico, true));
         assert_eq!(with_d11_snaps(D11Snaps::ALL, || Ok(state()))?, (ico, true));
