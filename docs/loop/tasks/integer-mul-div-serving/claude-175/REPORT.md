@@ -22,7 +22,10 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays open. This unit is the 
   - with `serving-wasm`, 19 library files, among them `codec.rs` (9), `geometric_source_realizer.rs` (8), `model.rs` (5), `stack/kernels.rs` (2) and `stack/flock.rs` (2).
 
   None is in this diff, and the three changed Rust files have 0 warnings under either feature set. Not fixed here: out of scope.
-- **The native script allows only the AArch64 scalar forms.** Its stack-mode pattern does not cover the x86-64 general-register multiply and divide that the Rust verifier allows, so an x86-64 stack build would still fail `--stack` on them. That is stricter than the ORDER, not a hole, and today's audited builds are arm64 (its call-graph pass runs `otool`).
+- **The native script recognises only AArch64 mnemonics,** before and after this change. On an x86-64 build it would miss scalar multiplies and divides (they pass uncounted), and it would not detect x86-64 vector and float forms either (`pmulld`, `mulsd`).
+  - So x86-64 builds are outside its audited scope. Today's audited builds are arm64, and its call-graph pass runs `otool`.
+  - The Rust verifier does cover x86-64.
+  - This is a gap in the old instrument, not one this change opens.
 - **The 21 legacy WASM symbols are NOT_FOUND in the serving build,** so a whole-module run exits 1 as before, and the legacy rule is exercised only by the self-test's legacy case.
 - **The public name `verify_step_objdump_zero_mul_zero_float` stays.** Its doc comment now says the name predates D80 and D81.
 
