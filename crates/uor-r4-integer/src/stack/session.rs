@@ -45,6 +45,7 @@ use super::kernels::{
     stack_snap_select, stack_square, to_exp_i32, PackedMatrix, ARCOSH_TABLE_LEN, PRODUCT_EXP,
     NORM_FINE_EXP, RESIDUAL_EXP,
 };
+use super::hamming::{hamming_image, ServedHamming};
 use super::StackError;
 
 /// Exponent of the recurrence state.
@@ -299,6 +300,8 @@ struct FbsModel {
     /// The 16 orbit roots at Q12.
     roots_q12: [[i32; 8]; 16],
     kept_cells: usize,
+    /// claude-146's Hamming reads (`lut-stack/6`), their copy heads served (claude-194).
+    hamming: Option<ServedHamming>,
 }
 
 /// A read-only, zero-copy view of a parsed SpiralCore/FBS model's integers,
@@ -603,7 +606,20 @@ fn fbs_model(artifact: &Container, shape: &StackShape) -> Result<FbsModel, Stack
     }
     let writer_table = artifact.table_i16("writer.table")?;
     length("writer.table", writer_table.len(), shape.vocab * d)?;
+    // The reads' copy heads take their points from the writer table, which is also the input
+    // embedding: the float trunk's `embedding.weight`.
+    let hamming = match hamming_image(artifact)? {
+        Some(image) => Some(ServedHamming::new(
+            &image,
+            &writer_table,
+            shape.vocab,
+            d,
+            shape.layers(),
+        )?),
+        None => None,
+    };
     Ok(FbsModel {
+        hamming,
         layers,
         final_gain: codes("final_norm_gain", d)?,
         writer_table,
@@ -668,14 +684,9 @@ impl IntegerStackModel {
     /// caches are bounded too (`MAX_READ_CACHE_BYTES`, 4 GiB), so that
     /// creating a session cannot abort on allocation.
     pub fn parse(bytes: &[u8]) -> Result<Self, StackError> {
+        // A Hamming read (`lut-stack/6`) is served on an FBS shape only, and `Container::parse`
+        // refuses it on any other; `fbs_model` refuses the parts not served yet (claude-194).
         let artifact = Container::parse(bytes)?;
-        // This engine does not serve a Hamming read yet (integer-hamming-read): refuse one rather
-        // than serve the trunk without it (claude-188).
-        if artifact.hamming.is_some() {
-            return Err(StackError::Shape(
-                "this engine does not serve a Hamming read yet (uor-r4.lut-stack/6)",
-            ));
-        }
         if artifact.shape.read_binary() && artifact.shape.head_dim() > BITCODE_LANES {
             return Err(StackError::Shape(
                 "a binary read's head width exceeds the 256-lane sign code",
@@ -956,9 +967,14 @@ impl IntegerStackModel {
     }
 
     /// The parsed SpiralCore/FBS trunk and writer as a read-only view, for an
-    /// out-of-crate evaluator; `None` for a dense stack.
+    /// out-of-crate evaluator; `None` for a dense stack, and for an FBS trunk
+    /// with a Hamming read, which this view does not carry (claude-194): an
+    /// evaluator of the view alone would drop the read.
     pub fn fbs_image(&self) -> Option<FbsImage<'_>> {
         let fbs = self.fbs.as_deref()?;
+        if fbs.hamming.is_some() {
+            return None;
+        }
         let layers = fbs
             .layers
             .iter()
@@ -2957,7 +2973,9 @@ fn stack_native_writer(
 /// One step of a SpiralCore/FBS model: the token's writer-table row in, each
 /// layer's route gathers around the shared recurrence core and the Hamilton
 /// feed-forward block, then the native writer's choice into `b.native_token`,
-/// `b.native_kept` and `b.query_q12`.
+/// `b.native_kept` and `b.query_q12`. A Hamming read (claude-194) runs after
+/// the layer its depth names and on the final norm's output, over the tokens
+/// so far, this one included.
 fn stack_step_fbs(
     session: &mut IntegerStackSession<'_>,
     fbs: &FbsModel,
@@ -2975,12 +2993,14 @@ fn stack_step_fbs(
     if session.position >= s.context {
         return Err(StackError::ContextFull { context: s.context });
     }
+    // The Hamming read at this row needs `x_0..=x_t`.
+    session.tokens.push(token);
     let b = &mut session.b;
     let at = stack_mul_u64(u64::from(token), d as u64) as usize;
     for (x, &t) in b.x.iter_mut().zip(&fbs.writer_table[at..at + d]) {
         *x = to_exp_i32(i64::from(t), Q12_EXP, RESIDUAL_EXP);
     }
-    for (layer, layer_state) in fbs.layers.iter().zip(session.states.iter_mut()) {
+    for (l, (layer, layer_state)) in fbs.layers.iter().zip(session.states.iter_mut()).enumerate() {
         let LayerState::Recurrence { state, history } = layer_state.as_mut() else {
             // `session` builds a recurrence state for every `r` of the pattern.
             debug_assert!(false, "an FBS layer's state is not a recurrence");
@@ -3005,9 +3025,21 @@ fn stack_step_fbs(
         for (x, p) in b.x.iter_mut().zip(&b.proj) {
             *x = x.saturating_add(*p);
         }
+        if let Some(hamming) = &fbs.hamming {
+            hamming.stream(l + 1, &session.tokens, &fbs.writer_table, &mut b.x);
+        }
+        #[cfg(test)]
+        super::hamming::LAYER_TRACE.with(|trace| {
+            if let Some(trace) = trace.borrow_mut().as_mut() {
+                trace.push(b.x.clone());
+            }
+        });
     }
     stack_rms_norm_fine(&b.x, n.rms_eps, &mut b.scratch[..d]);
     stack_norm_gain(&mut b.scratch[..d], &fbs.final_gain);
+    if let Some(hamming) = &fbs.hamming {
+        hamming.readout(&session.tokens, &fbs.writer_table, &mut b.scratch[..d]);
+    }
     for (q, &v) in b.query_q12.iter_mut().zip(&b.scratch[..d]) {
         *q = to_exp_i32(v, NORM_FINE_EXP, Q12_EXP).clamp(-32768, 32767);
     }
@@ -3018,7 +3050,6 @@ fn stack_step_fbs(
         &mut b.cells,
         &mut b.native_kept,
     );
-    session.tokens.push(token);
     session.position += 1;
     session.cache_at += d;
     session.lift_at += heads;
@@ -3089,13 +3120,14 @@ fn stack_step_fbs_timed(
     if session.position >= s.context {
         return Err(StackError::ContextFull { context: s.context });
     }
+    session.tokens.push(token);
     let b = &mut session.b;
     let at = stack_mul_u64(u64::from(token), d as u64) as usize;
     for (x, &t) in b.x.iter_mut().zip(&fbs.writer_table[at..at + d]) {
         *x = to_exp_i32(i64::from(t), Q12_EXP, RESIDUAL_EXP);
     }
     lap(&mut since, ns);
-    for (layer, layer_state) in fbs.layers.iter().zip(session.states.iter_mut()) {
+    for (l, (layer, layer_state)) in fbs.layers.iter().zip(session.states.iter_mut()).enumerate() {
         let LayerState::Recurrence { state, history } = layer_state.as_mut() else {
             debug_assert!(false, "an FBS layer's state is not a recurrence");
             return Err(StackError::SessionState);
@@ -3127,10 +3159,17 @@ fn stack_step_fbs_timed(
         for (x, p) in b.x.iter_mut().zip(&b.proj) {
             *x = x.saturating_add(*p);
         }
+        // A Hamming read is timed inside the block it follows, so the stage list is unchanged.
+        if let Some(hamming) = &fbs.hamming {
+            hamming.stream(l + 1, &session.tokens, &fbs.writer_table, &mut b.x);
+        }
         lap(&mut since, ns);
     }
     stack_rms_norm_fine(&b.x, n.rms_eps, &mut b.scratch[..d]);
     stack_norm_gain(&mut b.scratch[..d], &fbs.final_gain);
+    if let Some(hamming) = &fbs.hamming {
+        hamming.readout(&session.tokens, &fbs.writer_table, &mut b.scratch[..d]);
+    }
     for (q, &v) in b.query_q12.iter_mut().zip(&b.scratch[..d]) {
         *q = to_exp_i32(v, NORM_FINE_EXP, Q12_EXP).clamp(-32768, 32767);
     }
@@ -3143,7 +3182,6 @@ fn stack_step_fbs_timed(
         &mut b.native_kept,
     );
     lap(&mut since, ns);
-    session.tokens.push(token);
     session.position += 1;
     session.cache_at += d;
     session.lift_at += heads;
@@ -4056,6 +4094,16 @@ fn stack_rank_weights(
     Some(total)
 }
 
+/// Test hooks over the FBS step (claude-194).
+#[cfg(test)]
+impl IntegerStackSession<'_> {
+    /// The last FBS step's final norm output at `NORM_FINE_EXP`, its Hamming readout applied:
+    /// nothing after the norm writes `b.scratch` before the next step.
+    pub(super) fn fbs_norm_output(&self) -> &[i64] {
+        &self.b.scratch[..self.model.shape.width]
+    }
+}
+
 /// Test hooks over the rank read.
 #[cfg(test)]
 impl IntegerStackSession<'_> {
@@ -4354,6 +4402,7 @@ mod fbs_stage_tests {
             writer_table: vec![1, 1, 3, 3, -1, -1],
             roots_q12: [[0; 8]; 16],
             kept_cells: 1,
+            hamming: None,
         };
         // Rows 0 and 2 both lie 2 from the origin; rows 0 and 1 both lie 2 from (2, 2).
         assert_eq!(stack_whole_table_nearest(&fbs, 3, &[0, 0]), 0);

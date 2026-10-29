@@ -1,11 +1,13 @@
 //! claude-146's induction-keyed Hamming reads in the integer artifact (claude-188): their
 //! parameters as a `uor-r4.lut-stack/6` container stores them, one read per depth.
 //!
-//! Serving the reads is a later unit of `integer-hamming-read`. Until then
-//! [`super::IntegerStackModel::parse`] refuses such a container, so a read is never dropped.
+//! The FBS session serves the copy heads (claude-194, [`ServedHamming`]): the stream read after
+//! its depth and the move on the readout. The type heads are a later unit of
+//! `integer-hamming-read`. Until then [`super::IntegerStackModel::parse`] refuses a read with a
+//! non-zero type-head weight, so no part of a read is ever dropped.
 
-use super::format::{Container, StackHamming};
-use super::kernels::{stack_div_u64, stack_hamilton};
+use super::format::{Container, StackHamming, HAMMING_WEIGHT_EXP};
+use super::kernels::{stack_div_u64, stack_hamilton, NORM_FINE_EXP, RESIDUAL_EXP};
 use super::session::{stack_rotation, GATE_EPSILON};
 use super::StackError;
 
@@ -210,4 +212,107 @@ impl CopyHeads {
         }
         (found > 0).then(|| sum.into_iter().map(|value| value / found).collect())
     }
+}
+
+/// `w_c ⊙ c` (`2^HAMMING_WEIGHT_EXP` times `2^COPY_MEAN_EXP`) shifted down to the residual's Q16.
+const STREAM_SHIFT: u32 = (RESIDUAL_EXP - HAMMING_WEIGHT_EXP - COPY_MEAN_EXP) as u32;
+/// The final norm's output raised to the copy mean's exponent.
+const NORM_RAISE: u32 = (NORM_FINE_EXP - COPY_MEAN_EXP) as u32;
+/// `w_c ⊙ (c − n)` shifted down to the final norm's exponent.
+const READOUT_SHIFT: u32 = (NORM_FINE_EXP - HAMMING_WEIGHT_EXP - COPY_MEAN_EXP) as u32;
+
+/// `value / 2^shift`, rounded half away from zero, as the float's `round()`.
+fn round_shift(value: i128, shift: u32) -> i128 {
+    let half = 1i128 << (shift - 1);
+    if value >= 0 {
+        (value + half) >> shift
+    } else {
+        -((half - value) >> shift)
+    }
+}
+
+/// One read on the served path: its copy heads and `w_c`, weight row 0.
+struct ServedRead {
+    depth: usize,
+    copy: CopyHeads,
+    /// `width` values at `2^HAMMING_WEIGHT_EXP`.
+    copy_weight: Vec<i32>,
+}
+
+/// A stack's Hamming reads as the FBS session serves them (claude-194): the copy heads of
+/// `flock_read_hamming.rs`'s `read`, at the two hooks of the float trunk
+/// (`geometric_stack_native.rs`), for reads whose type-head weights are all zero.
+pub(crate) struct ServedHamming {
+    reads: Vec<ServedRead>,
+    layers: usize,
+}
+
+impl ServedHamming {
+    /// The reads of `image` over the Q12 `table` of `vocab` rows of `width`, in a trunk of `layers`
+    /// layers. Refuses a read with a non-zero type-head weight (weight row 1): the type heads
+    /// are not served yet, and serving the copy heads alone would differ from the float read.
+    pub(crate) fn new(image: &HammingImage, table: &[i16], vocab: usize, width: usize, layers: usize) -> Result<Self, StackError> {
+        let mut reads = Vec::with_capacity(image.reads.len());
+        for read in &image.reads {
+            let (copy_weight, type_weight) = read.weight.split_at(width);
+            if type_weight.iter().any(|&w| w != 0) {
+                return Err(StackError::Shape(
+                    "a Hamming read's type heads are not served yet: its type-head weights (weight row 1) must be zero",
+                ));
+            }
+            reads.push(ServedRead {
+                depth: read.depth,
+                copy: CopyHeads::new(&image.record, read, table, vocab, width),
+                copy_weight: copy_weight.to_vec(),
+            });
+        }
+        Ok(Self { reads, layers })
+    }
+
+    /// The read inside the stream after `depth` layers, as the float trunk's
+    /// `x = q16(read.apply(&x, ids, &table))`: `x + w_c ⊙ c` at the last row of `tokens`, each
+    /// product rounded to the residual's Q16. A row where no copy head found a candidate adds
+    /// nothing, as the float's `sums / max(found, 1)` is 0 there. A depth with no read, or the
+    /// layer count (the readout's), is left alone.
+    #[inline(never)]
+    pub(crate) fn stream(&self, depth: usize, tokens: &[u32], table: &[i16], x: &mut [i32]) {
+        if depth == self.layers {
+            return;
+        }
+        let Some(read) = self.reads.iter().find(|r| r.depth == depth) else {
+            return;
+        };
+        let Some(mean) = read.copy.mean(tokens, table) else {
+            return;
+        };
+        for ((x, &w), c) in x.iter_mut().zip(&read.copy_weight).zip(mean) {
+            let added = round_shift(i128::from(w) * c, STREAM_SHIFT);
+            *x = x.saturating_add(added.clamp(i128::from(i32::MIN), i128::from(i32::MAX)) as i32);
+        }
+    }
+
+    /// The read on the final norm's output `n` (at `NORM_FINE_EXP`), as the float's
+    /// `apply_readout`: where a copy head found a candidate at the last row of `tokens`,
+    /// `n + w_c ⊙ (c − n)`, rounded once to `n`'s exponent; elsewhere `n`. Not rounded to Q16, as
+    /// the float trunk does not round the readout read.
+    #[inline(never)]
+    pub(crate) fn readout(&self, tokens: &[u32], table: &[i16], n: &mut [i64]) {
+        let Some(read) = self.reads.iter().find(|r| r.depth == self.layers) else {
+            return;
+        };
+        let Some(mean) = read.copy.mean(tokens, table) else {
+            return;
+        };
+        for ((n, &w), c) in n.iter_mut().zip(&read.copy_weight).zip(mean) {
+            let moved = round_shift(i128::from(w) * (c - (i128::from(*n) << NORM_RAISE)), READOUT_SHIFT);
+            *n = (i128::from(*n) + moved).clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64;
+        }
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// While `Some`, the residual after every layer of each FBS step, its read applied, in order
+    /// (claude-194's hook tests). Present in test builds only, and off until a test turns it on.
+    pub(super) static LAYER_TRACE: std::cell::RefCell<Option<Vec<Vec<i32>>>> = const { std::cell::RefCell::new(None) };
 }

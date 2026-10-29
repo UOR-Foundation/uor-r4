@@ -45,10 +45,10 @@ The session follows the float trunk (`geometric_stack_native.rs:1138–1190`) an
 
 All of these hold at the PR head, and the REPORT gives each one's evidence:
 1. **Off at weight 0.** A `/6` FBS artifact whose copy weights are 0 serves every step bit for bit as the same trunk exported without a read: the native choice, its kept cells and its Q12 query, over a sequence with repeats, so the copy heads do find candidates.
-2. **The hooks against a reference.** With non-zero copy weights, both hooks match a test-side i128 reference that runs the read-free trunk's integers and applies the two formulas above, for every step of a sequence with repeats, at both a stream depth and the readout:
-   - every Q12 query equal;
-   - the read changes the query at some step (so the test can fail);
-   - with the read at the readout only, the changed steps are exactly those where a copy head found a candidate.
+2. **The hooks against a reference.** With non-zero copy weights, each hook matches a test-side reference that takes the read-free trunk's own integers at the hook and applies the formula above in i128, with its own rounding, at every step of a sequence with repeats:
+   - **the stream read** (a read at depth 1 only): the residual after layer 1 equals the read-free residual there plus the rounded `w_c ⊙ c`. A layer before the read cannot see it, so the read-free run gives the read's input exactly. The residual is seen through a `#[cfg(test)]` trace of each layer's output, absent from every non-test build;
+   - **the readout move** (a read at the layer count only): the final norm's output equals `n + w_c ⊙ (c − n)` on the read-free `n`, and the Q12 query is that converted;
+   - each read changes the query at some step, so the test can fail, and a step where no copy head found a candidate leaves it unchanged.
 3. **The refusals,** each matched by its error text: no read on a non-FBS shape, no non-zero type weight, no depth 0 or past the layer count.
 4. **The timed step equals the step,** with a read, at every step.
 5. **Negative gates:** each named hook, set aside, makes its test fail; restored, all pass.
