@@ -82,11 +82,11 @@ Both feed the trunk.
 The [map](docs/model/pipeline-map.md)'s order of work goes on with these, each with its cost per token beside its result:
 - `turn-memory-reply` (R1's follow-up): carry the memory past a reply's first word.
 - `writer-admission` (R2): make the native writer's admission hold at every seed, so the cheap readout is right.
-- `fbs-serving-kernels` (R3): split each served layer, then write vector kernels exact against the scalar step. Host work.
+- `fbs-serving-kernels` (R3): **done** (claude-163 to claude-170). Exact structured kernels took the M1's served token from 270 to 3,042–3,044 tok/s, replies byte-identical. Its follow-ups, a NEON kernel and fewer snap candidates, are `fbs-serving-vector-kernel`. Host work.
 - `training-step-cost` (R4): split the training backward, and try a cheaper rival search.
 - `turn-memory-integer` (R5, the memory's part): serve the memory from the integer artifact. `integer-hamming-read` is R5's other part.
 
-The float-side items (the first, second and fourth) share files and run one after the other. `fbs-serving-kernels` and `integer-hamming-read` share `session.rs`, and neither shares a file with the float side, so either can run beside a float-side item. `turn-memory-integer` shares files with both sides and runs alone.
+The float-side items (the first, second and fourth) share files and run one after the other. `fbs-serving-vector-kernel` and `integer-hamming-read` share `session.rs`, and neither shares a file with the float side, so either can run beside a float-side item. `turn-memory-integer` shares files with both sides and runs alone.
 
 ## The route M2–M8
 
