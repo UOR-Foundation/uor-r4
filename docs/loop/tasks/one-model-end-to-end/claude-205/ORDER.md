@@ -42,9 +42,17 @@ The item's done-when reads:
 >    - the read-by-meaning arms: the Flock read, and the type spin.
 > 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
 
+## This unit
+
+Done-when 2, the overturn check. Done-when 1 (the census) is done (claude-202, claude-204). Done-when 3 (the protocol) and 4 follow in later units, so the item stays `ready`.
+
 ## Cancel probe (run first)
 
-To fill in.
+Run at `43818576a`, before any work. **Class: instrument (the scorer is missing). Go.**
+- **No per-row scorer exists.** `git grep` for `score-rows`, `score_rows` and `fn overturn` in `crates/uor-r4-float-train/src` finds nothing. `nearest_reading` (`in_space_long.rs:728`) returns totals only, so paired discordant rows cannot be counted from any existing mode.
+- **The checkpoints exist.** `uor-store ls` lists `step-016384/` for (m), (r) and (r0) at both seeds, under `results/claude/turn-memory-reply-2026-10-29/s{1,2}-fc66ed74/`, each with `model.safetensors`, `hamming_read.safetensors` and `turn_memory.safetensors`, and (r)'s 46 MB `turn_memory_reply.safetensors`.
+- **No other unit holds it.** Open PRs: this one (#3411) and antigravity's #3323 (`m3-durable-memory-close`, `crates/uor-r4-discrete` and its docs), which shares no file. No prep sheet `one-model-end-to-end*` exists.
+- **The memory moves the readout only, and only at rows its tables name** (`flock_read_memory.rs:1-25`). So on the decision rows (r) and (r) memory-off must pick the same token at every row. That becomes one of the sheet's instrument checks, not a finding.
 
 ## Files in scope
 
@@ -58,10 +66,38 @@ To fill in.
 - `crates/uor-r4-float-train/src/flock_read_memory.rs`
 - `crates/uor-r4-training/examples/m-world.rs`
 
+This unit edits only the first five and the two `uor-r4-float-train` files.
+
 ## Done when
 
-To fill in.
+1. **The scorer** (GPU), `train-in-space --score-rows CHECKPOINT --out DIR`:
+   - writes every scored row of DEV, and of Fresh V2 under `--fresh-v2`, as its corpus position, target, nearest pick and writer pick. One file is written with the checkpoint's memory as loaded, and one with it taken out;
+   - writes greedy samples, nearest-decoded, of the reply after each of the first `--samples` sample prompts, with the memory on and off. Each holds prompt, reply and reference ids, and their text;
+   - its per-row picks come from the same loop as `nearest_reading`, so their sums are its readings by construction.
+2. **The grader** (laptop, counts only, over stored GPU outputs), `train-in-space --overturn 1 --scored NAME=DIR ...`:
+   - recomputes the census's decision rows from TRAIN and DEV;
+   - reports each arm's hits on them, on all of DEV and on Fresh V2;
+   - reports the paired `b`, `c`, the band and the cell at each seed, and the verdict;
+   - scores the samples' free-generation measures against TRAIN's replies: verbatim share, new n-grams for n = 4–8, distinct-1 and distinct-2, and the repeated 4-gram rate. DEV's own reference replies are scored the same way.
 
-## Stop and ask if
+   Each rule has a unit test, and every new test passes.
+3. **A prep sheet,** `docs/harness/prep/one-model-end-to-end-overturn-2026-10-29.md`, holds the arms, the rows, the band, the cells and the instrument checks. Its fresh FIT and pre-run review are posted on #3407 before any pod is rented.
+4. **The run:** one RTX 5090 pod, the six step-16,384 checkpoints scored.
+   - The output is sealed to `results/claude/one-model-end-to-end-2026-10-29/` with a `SHA256SUMS`, and graded on the laptop.
+   - The pod is released and down.
+5. **The REPORT,** negatives first, leading with tok/s where it has one. One notebook row.
+6. **The owner log on #3407 for the parity split** (below), with its decision review.
 
-To fill in.
+## The scope call, recorded for decision review
+
+Done-when 2 says the pod "also runs `integer-hamming-read`'s step 5 parity ... with kept sets and first divergence".
+- **What this pod seals.** This unit's pod seals the float side of that parity with the memory off: (r)'s per-row writer and nearest picks on DEV, and its greedy samples.
+- **What it does not seal: kept sets.** Capturing kept sets needs a hook in `flock_read_hamming.rs` (the float side) and in `crates/uor-r4-integer/src/stack/hamming.rs` (the integer side). Neither file is in this item's scope, and the first is in no item's.
+- **Where kept sets go.** Kept sets go to `integer-hamming-read`'s own step 5 unit, which the float picks and samples sealed here make cheaper. That unit adds the hook, and a pod if its float kept sets need one.
+- **Review.** This is a change to a done-when line. It goes ahead on this unit's decision review, logged on #3407 as `[claude] owner log:`.
+
+## Stop and decide if
+
+- **The readings do not reproduce.** The scored totals must equal claude-194's sealed last-checkpoint readings: (r) 11,513 / 11,361; (r) memory out 4,101 / 3,807; (r0) 10,079 / 11,171. If they do not, the instrument is repaired before any cell is read.
+- **The picks differ on the decision rows.** If (r) and (r) memory-off differ on any decision row, classify it before reading the cell. Either the census's rows are not the memory's, or the memory reaches rows it does not name.
+- **The pod costs more than $3,** or projects past 1 hour.
