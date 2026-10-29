@@ -12,22 +12,9 @@ The item also says the D11 entry in `docs/integration/DECISIONS.md` lacks an "am
 
 ## Which lines change here, and which wait
 
-- **Change now:** every line that states the serving rule, or describes the serving audit, as current:
-  - the rule pages (`docs/rules/README.md` §3.6 row, `decision-map.md` D11 and I1–I5 rows, `HARD-RULES.md` D11 row, `project-track.md` D11 line);
-  - D11's R2 wherever it is listed (`lut-serving.md`, `serving-and-export.md`, `language-model.md`, `glossary.md`);
-  - the audit's description (`lut-serving.md`, `mechanisms/README.md`, `serving-and-export.md`);
-  - the geometry guide (`docs/geometry/README.md` lines 16 and 93);
-  - `gpu-and-cuda.md`'s comparison;
-  - `pipeline-map.md`'s rule statements;
-  - `architecture.md` stage 9's rule;
-  - the summaries that state the rule (`README.md`, `CITATION.cff`, `what-is-uor-r4.md`, `products/README.md`, `releases-and-artifacts.md`, `desktop-client.md`).
-- **Wait for the kernels unit** (done-when 2's last bullet):
-  - dated audit results such as "44 native symbol ranges" and "7 of 7 … zero multiply";
-  - descriptions of today's table-based products (`stack_mul_u64`, the sixteen-multiples table);
-  - the three figures.
-
-  All of these stay true until the kernels use the multiplier.
-- **Left as written:** history and dated rows, and names of old things (D11's own title, "the zero-mul audit" as a search term).
+- **Change now:** every line that states the serving rule, or describes the serving audit, as current: the rule pages, D11's R2 wherever listed, the audit's description, the geometry guide, and the summaries that state the rule.
+- **Wait for the kernels unit** (done-when 2's last bullet): dated audit results ("44 native symbol ranges", "7 of 7"), descriptions of today's table-based products, and the three figures. All stay true until the kernels use the multiplier.
+- **Left as written:** history, dated rows, and names of old things.
 
 ## Cancel probe (run first)
 
@@ -56,11 +43,11 @@ All held. **Not cancelled** (instrument: none needed).
 
 Owner path changed: `docs/integration/DECISIONS.md`, one line under D11.
 
-Casey, in Claude's chat, 28 Oct 2026:
-- he chose "Allow integer multiply (Recommended)", then wrote "allow divide, hold on floats for now as you have recommended and fix the exporter";
+Casey, in Claude's chat by 2026-10-29T03:20:23Z:
+- "allow divide, hold on floats for now as you have recommended and fix the exporter";
 - his standing permission for this rule change's owner-path edits, from D80: "i give you permissing to fix the stuff you need to to make this work".
 
-**How the owner path is written:** as for D80 and D81. An edited copy goes under `local/claude/claude-176/`, and its difference is kept as `d11-pointer.patch` in this folder and applied with `git apply`.
+Written as for D81: an edited copy under `local/claude/claude-176/`, its difference kept as `d11-pointer.patch` here and applied with `git apply`.
 
 ## Done when
 

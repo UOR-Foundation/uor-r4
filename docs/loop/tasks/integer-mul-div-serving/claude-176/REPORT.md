@@ -18,7 +18,10 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays open: done-when 1 is no
   - `products/README.md:34, 35`, `language-model.md:3, 34` and `findings.md:89`;
   - the three figures.
 - **Lines left as written:** history and dated rows (`lut-serving.md:21–29, 61, 70, 77–78`), the names of old things (D11's title and anchor, "the zero-mul audit" as a search term on `lut-serving.md:102`), other pages' descriptions (`lut-serving.md:116`), and the GPU note on `pipeline-map.md:220`.
-- **`pipeline-map.md` cites notebook rows by line number, and those numbers drift.** Rows go in at the top of `m4-serving.md`, so each new row moves every row below it down by one. Its four references to "line 17" and one to "line 23" now point at rows that were written after the map. This unit changed only the reference on the line it edited, to "claude-175's row", which cannot drift. The other four are left as found, for a later fix.
+- **`pipeline-map.md` cites notebook rows by line number, and those numbers drift.** Rows go in at the top of `m4-serving.md`, so each new row moves every row below it down by one.
+  - It had four references to "line 17" and one to "line 23". None points at the row it meant: line 17 is now claude-164's snap row, and line 23 claude-135's forced-snap control.
+  - This unit changed only the reference on the line it edited, to "claude-175's row", which cannot drift.
+  - The other four (`pipeline-map.md:64, 205, 208, 216`) are left as found, for a later fix.
 - **The heading "The zero-multiply audit"** in `serving-and-export.md` is now "The serving audit". No page linked to its anchor (`git grep the-zero-multiply-audit` finds nothing).
 
 ## What changed
@@ -34,6 +37,10 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays open: done-when 1 is no
 - **`gpu-and-cuda.md:62`, `pipeline-map.md:217, 338, 361` and `architecture.md:57`:** the rule as amended. Each says the kernels do not use the instructions yet.
 - **Summaries:** `README.md:85`, `CITATION.cff` (its keyword is now "integer-only inference", and the abstract no longer says "no multiplier"), `what-is-uor-r4.md:53`, `products/README.md:25`, `releases-and-artifacts.md:58` and `desktop-client.md:109`.
 - **`docs/integration/DECISIONS.md`:** D11's fate line gains "Amended by D80 and D81 (28 Oct 2026)". It was applied as [`d11-pointer.patch`](d11-pointer.patch) under the owner's permission quoted in the ORDER.
+
+## Measurements
+
+None: this unit changed docs only.
 
 ## Checks run at the head
 
