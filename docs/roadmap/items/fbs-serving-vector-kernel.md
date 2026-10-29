@@ -3,7 +3,7 @@ id: fbs-serving-vector-kernel
 title: A NEON kernel and fewer snap candidates for the served FBS step
 milestone: research
 area: serving
-status: ready
+status: done
 open_to: lab
 needs_gpu: false
 depends_on: [fbs-serving-kernels]
@@ -25,6 +25,14 @@ Its decision review (claude-170) left two follow-ups that need a record of their
 In [claude-169](../../loop/tasks/fbs-serving-kernels/claude-169/REPORT.md)'s profile (940 samples on the thread), `stack_snap_select` holds 32% and `stack_hamilton` 21%.
 
 ## What is missing
+
+**Done on 29 Oct 2026 (claude-186).** Done-when 2 and 3 are met: `stack_isqrt` now starts at the value's top bit, in place of walking down from `2^126`.
+- **Exact:** it equals the walking form on 2,048,961 values.
+- **Replies:** byte-identical on claude-126's export, and on dual-c131's `raw_both` under a prompt whose reply varies (29 distinct tokens of 65).
+- **Faster on the unsnapped contract:** `raw_both` decode rose from 4,176 / 4,195 to 4,491 / 4,504 tok/s, and the step fell from 238.9 / 238.5 to 222.6 / 221.9 µs, alternating against the sealed base. Snapped is unchanged, within noise.
+- **The serving audit** is FULL PASS.
+
+The candidates below stay open for a later item.
 
 **State on 29 Oct 2026 (claude-185).** Done-when 1 is met: the map's gap 3 and R3 record exact structured kernels and today's speeds.
 
