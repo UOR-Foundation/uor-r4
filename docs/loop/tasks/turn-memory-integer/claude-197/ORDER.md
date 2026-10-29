@@ -52,6 +52,7 @@ So claude-194's checkpoints would export as a trunk without its memory. That tru
 - `crates/uor-r4-integer/src/stack/format.rs`
 - `crates/uor-r4-integer/src/stack/tests.rs`
 - `crates/uor-r4-integer/src/fbs_snapshot.rs` (added by this unit's decision)
+- `crates/uor-r4-integer/src/stack/synthetic.rs` (added by the same decision: its struct literal of the snapshot needs the new field)
 - `crates/uor-r4-integer/src/bin/fbs-export.rs`
 - `crates/uor-r4-integer/src/bin/fbs-toks.rs`
 - `crates/uor-r4-float-train/src/fbs_export.rs`
