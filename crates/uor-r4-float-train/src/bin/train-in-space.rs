@@ -373,6 +373,14 @@ fn main() -> Result<()> {
             "--scored needs --overturn 1".to_owned(),
         ));
     }
+    // These modes run the default transport only; another arm would be scored or trained wrong.
+    if (recall > 0 || grad_norms || reach.is_some())
+        && config.fbs_arm != uor_r4_float_train::spiralcore_fbs_arms::FbsArm::OneAtomActive
+    {
+        return Err(FloatTrainError::Invalid(
+            "--fbs-arm applies to training, --score-rows, --inspect and --decode-speed; --recall, --grad-norms and --reach run one-atom only".to_owned(),
+        ));
+    }
     if recall > 0 {
         let out = out.ok_or_else(|| FloatTrainError::Invalid("--recall needs --out".to_owned()))?;
         if modes[..5].iter().any(|&m| m) || score.is_some() || overturn_on {
