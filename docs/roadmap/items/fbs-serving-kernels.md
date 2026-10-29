@@ -66,11 +66,15 @@ On the M1, a served token is 3.73 ms (265 tok/s). The six layers are 98.6% of it
   - Each sign-compatible candidate's score is now a few additions of `|r|`, by its class: axis, half or golden. That replaces 8 `small_mul`s.
   - The step is 1.30–1.33× faster.
   - In the new profile, `stack_hamilton` (38%) leads `stack_snap_select` (25%).
+- **The Hamilton product by shifts where it can (claude-169): decode 2,428–2,435 → 3,042–3,044 tok/s, replies byte-identical.**
+  - Every caller's snapped quaternion is scaled by a power of two, so its axis, half and `1/2` coordinates are `±2^k`, and their products are shifts.
+  - Other coordinates get one table of their own multiples.
+  - The step is 1.24–1.26× faster.
+  - In the new profile, `stack_snap_select` (32%) leads `stack_hamilton` (21%).
 - **What is next:**
-  - **The Hamilton product's digit reads.** Each product reads `|a_i|`'s digits from a table of `|b_j|`, about 8 digits for a Q31 transition.
   - **Fewer snap candidates.** The 12 golden roots can be cut by the query's magnitude order, still exactly.
   - **Then a vector kernel** for what is left.
-  - Each is measured against claude-168's 2,448–2,449 tok/s.
+  - Each is measured against claude-169's 3,042–3,044 tok/s.
 
 ## How to start
 
