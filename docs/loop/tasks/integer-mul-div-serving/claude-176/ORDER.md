@@ -1,76 +1,73 @@
-# ORDER: integer-mul-div-serving, claude-176
+# ORDER: integer-mul-div-serving, claude-176 (the docs say what D80 and D81 allow)
 
 Lab: claude. Item: [integer-mul-div-serving](../../../../roadmap/items/integer-mul-div-serving.md). Base: `de19e3755`.
 
 ## Goal
 
-The item's done-when reads:
+This unit is the **docs half** of the item's done-when 1; claude-175 merged the audit half. The item's words:
 
-> 1. **Docs and audits agree with §3.6.**
->    - Every page listed above that states the rule, summaries included, says integer multiply and divide are allowed and floats are not.
->    - The native and WASM audits allow integer multiply- and divide-class instructions, and keep refusing every float instruction.
->    - The native audit keeps refusing `fmov` for now. Float and vector values share one register file, so it cannot tell an integer move from a float one. `fbs-serving-vector-kernel` may revisit this.
->    - Host tests show a float instruction still fails each verifier, and an integer `mul` or `udiv` now passes. The Rust verifiers are tested in `tests/m5_full_path_cost_controls.rs`, and each audit script in its own `--self-test`: the WASM audit already has one, and the native audit gains one.
-> 2. **The kernels use them, exactly.**
->    - `stack_mul_u64`, `stack_mul_u128`, `mul_i128` and `stack_hamilton`'s products use the hardware multiply.
->    - The snap's `ℤ[φ]` comparison squares by the hardware multiply.
->    - The norm's long division uses the hardware divide.
->    - Each new kernel equals the old one by exhaustive or random host tests, and every reply on claude-126's export is byte-identical.
->    - The summaries and figures that report a zero-multiply audit are updated with the new audit result in the same unit.
-> 3. **Speed:** `fbs-toks --parts` on this M1, against claude-169's sealed binary (sha256 `8a7a83c7…805a`), run alternately. Decode tok/s, the parts, and a `sample` profile with its total read from the thread line.
-> 4. One notebook row and a REPORT for each unit. This is host and serving work: no GPU and no sheet (CHARTER §4.5).
+> - Every page listed above that states the rule, summaries included, says integer multiply and divide are allowed and floats are not.
+
+The item also says the D11 entry in `docs/integration/DECISIONS.md` lacks an "amended by D80, D81" pointer, to be written by patch under the owner's permission.
+
+## Which lines change here, and which wait
+
+- **Change now:** every line that states the serving rule, or describes the serving audit, as current:
+  - the rule pages (`docs/rules/README.md` §3.6 row, `decision-map.md` D11 and I1–I5 rows, `HARD-RULES.md` D11 row, `project-track.md` D11 line);
+  - D11's R2 wherever it is listed (`lut-serving.md`, `serving-and-export.md`, `language-model.md`, `glossary.md`);
+  - the audit's description (`lut-serving.md`, `mechanisms/README.md`, `serving-and-export.md`);
+  - the geometry guide (`docs/geometry/README.md` lines 16 and 93);
+  - `gpu-and-cuda.md`'s comparison;
+  - `pipeline-map.md`'s rule statements;
+  - `architecture.md` stage 9's rule;
+  - the summaries that state the rule (`README.md`, `CITATION.cff`, `what-is-uor-r4.md`, `products/README.md`, `releases-and-artifacts.md`, `desktop-client.md`).
+- **Wait for the kernels unit** (done-when 2's last bullet):
+  - dated audit results such as "44 native symbol ranges" and "7 of 7 … zero multiply";
+  - descriptions of today's table-based products (`stack_mul_u64`, the sixteen-multiples table);
+  - the three figures.
+
+  All of these stay true until the kernels use the multiplier.
+- **Left as written:** history and dated rows, and names of old things (D11's own title, "the zero-mul audit" as a search term).
 
 ## Cancel probe (run first)
 
-To fill in.
+Run at `de19e3755`:
+- **The pages still state the old rule:**
+  - `docs/rules/README.md:41` says "no float, transcendental, multiplier or integer-divide instruction";
+  - `HARD-RULES.md:15` says "no multiplier instruction";
+  - `docs/geometry/README.md:16` and `:93` say "no multiplier instruction".
+- **CHARTER §3.6 and the D80 and D81 rows** in `DECISIONS.md` already state the new rule. The D11 entry (line 72) has no amendment pointer.
+- **No other open PR** touches these pages.
+
+All held. **Not cancelled** (instrument: none needed).
 
 ## Files in scope
 
-- `scripts/audit_zero_matmul_serving.py`
-- `scripts/audit_zero_matmul_wasm.py`
-- `crates/uor-r4-integer/src/report_output.rs`
-- `crates/uor-r4-integer/src/bin/uor-r4-stack.rs`
-- `crates/uor-r4-integer/src/bin/fbs-toks.rs`
-- `crates/uor-r4-integer/tests/m5_full_path_cost_controls.rs`
-- `crates/uor-r4-integer/tests/capability_api_tests.rs`
-- `crates/uor-r4-integer/src/stack/mod.rs`
-- `crates/uor-r4-integer/src/stack/kernels.rs`
-- `crates/uor-r4-integer/src/stack/session.rs`
-- `crates/uor-r4-integer/src/stack/tests.rs`
-- `docs/rules/README.md`
-- `docs/rules/decision-map.md`
-- `docs/mechanisms/lut-serving.md`
-- `docs/mechanisms/README.md`
-- `docs/model/serving-and-export.md`
-- `docs/model/pipeline-map.md`
-- `docs/model/architecture.md`
-- `docs/model/gpu-and-cuda.md`
-- `README.md`
-- `CITATION.cff`
-- `docs/start/faq.md`
-- `docs/contributing/HARD-RULES.md`
-- `docs/integration/project-track.md`
+- `docs/rules/README.md`, `docs/rules/decision-map.md`, `docs/contributing/HARD-RULES.md`, `docs/integration/project-track.md`
+- `docs/mechanisms/lut-serving.md`, `docs/mechanisms/README.md`
+- `docs/model/serving-and-export.md`, `docs/model/pipeline-map.md`, `docs/model/architecture.md`, `docs/model/gpu-and-cuda.md`
 - `docs/geometry/README.md`
-- `docs/start/glossary.md`
-- `docs/start/what-is-uor-r4.md`
-- `docs/start/where-we-are.md`
-- `docs/start/transformer-vs-geometry.md`
-- `docs/products/README.md`
-- `docs/products/language-model.md`
-- `docs/products/releases-and-artifacts.md`
-- `docs/products/desktop-client.md`
-- `docs/research/findings.md`
-- `docs/figures/mechanisms/lut-serving.svg`
-- `docs/figures/model/integer-export.svg`
-- `docs/figures/start/hero-how-it-thinks.svg`
-- `docs/loop/tasks/integer-mul-div-serving/**`
-- `docs/research/notebook/m4-serving.md`
-- `docs/roadmap/items/integer-mul-div-serving.md`
+- `README.md`, `CITATION.cff`, `docs/start/glossary.md`, `docs/start/what-is-uor-r4.md`
+- `docs/products/README.md`, `docs/products/language-model.md`, `docs/products/releases-and-artifacts.md`, `docs/products/desktop-client.md`
+- `docs/integration/DECISIONS.md`: the D11 entry's pointer only. It is an owner path and outside the item's `scope:` list; see below.
+- `docs/loop/tasks/integer-mul-div-serving/claude-176/**`
+
+## Owner approval
+
+Owner path changed: `docs/integration/DECISIONS.md`, one line under D11.
+
+Casey, in Claude's chat, 28 Oct 2026:
+- he chose "Allow integer multiply (Recommended)", then wrote "allow divide, hold on floats for now as you have recommended and fix the exporter";
+- his standing permission for this rule change's owner-path edits, from D80: "i give you permissing to fix the stuff you need to to make this work".
+
+**How the owner path is written:** as for D80 and D81. An edited copy goes under `local/claude/claude-176/`, and its difference is kept as `d11-pointer.patch` in this folder and applied with `git apply`.
 
 ## Done when
 
-To fill in.
+1. Each "change now" line above says that served integer code may use the hardware integer multiply and divide since D80 and D81, and that floats stay banned. No line claims the kernels already use them.
+2. D11's entry in `DECISIONS.md` points to D80 and D81.
+3. `cargo xtask links` and `loop gates --full` pass. A REPORT. No notebook row, since nothing was measured.
 
 ## Stop and ask if
 
-To fill in.
+Stop and decide, never wait: a line is ambiguous between rule and measurement. It is then left for the kernels unit and named in the REPORT.
