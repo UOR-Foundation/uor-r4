@@ -20,11 +20,11 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 14 |
+| ready | 15 |
 | held | 10 |
 | decision | 1 |
 | done | 85 |
-| total | 110 |
+| total | 111 |
 
 ## Start here
 
@@ -135,6 +135,7 @@ These items are ready and open to anyone.
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
 | [Serve the Hamming read from the integer artifact on the laptop](items/integer-hamming-read.md) | ready | a lab | yes | [float-training-module](items/float-training-module.md), [spiralcore-fbs-offline-float-sheet](items/spiralcore-fbs-offline-float-sheet.md) | [#3385](https://github.com/UOR-Foundation/uor-r4/issues/3385) |
+| [Score one model end to end on prompts it has not seen, with tokens per second](items/one-model-end-to-end.md) | ready | a lab | yes | [turn-memory-reply](items/turn-memory-reply.md) | [#3407](https://github.com/UOR-Foundation/uor-r4/issues/3407) |
 | [Split the training backward, and run a cheaper rival search against (a)](items/training-step-cost.md) | ready | a lab | yes | [fbs-cost-profile](items/fbs-cost-profile.md) | [#3391](https://github.com/UOR-Foundation/uor-r4/issues/3391) |
 | [Serve the turn memory from the integer artifact on the laptop](items/turn-memory-integer.md) | ready | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | [#3392](https://github.com/UOR-Foundation/uor-r4/issues/3392) |
 | [Make the native writer's admission hold at every seed](items/writer-admission.md) | ready | a lab | yes | [one-decoder](items/one-decoder.md) | [#3394](https://github.com/UOR-Foundation/uor-r4/issues/3394) |
@@ -280,6 +281,7 @@ flowchart LR
   n_m8_release_packaging["m8-release-packaging"]
   n_object_store_consumer_m3["object-store-consumer-m3"]
   n_one_decoder["one-decoder"]
+  n_one_model_end_to_end["one-model-end-to-end"]
   n_owner_decision_float_path_scope["owner-decision-float-path-scope"]
   n_pipeline_map["pipeline-map"]
   n_pipeline_map_revision["pipeline-map-revision"]
@@ -409,4 +411,5 @@ flowchart LR
   n_route_plus_memory --> n_turn_memory_reply
   n_spiralcore_fbs_offline_float_sheet --> n_in_space_trunk_to_text
   n_spiralcore_fbs_offline_float_sheet --> n_integer_hamming_read
+  n_turn_memory_reply --> n_one_model_end_to_end
 ```
