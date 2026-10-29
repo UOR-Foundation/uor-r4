@@ -25,7 +25,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays open: done-when 2's las
   - The RMS norm's product and the pointer mixture multiply directly, with no multiples table.
   - The names and `#[inline(never)]` stay, as the audit's mandatory symbol list needs them.
   - The multiplier-free forms move under `#[cfg(test)]` as references: `multiples_u128`, `multiples_u64` and `mul_by_u64`, plus `table_mul_u128`, `table_mul_u64`, `table_square`, `long_division_u64`, `long_division_u128` and `table_hamilton`.
-  - New test `hardware_kernels_equal_their_multiplier_free_forms`.
+  - New tests `hardware_kernels_equal_their_multiplier_free_forms`, and `the_hardware_norm_equals_its_multiplier_free_form`, which runs both norm variants against the old body (`table_rms_norm_into`) on 2,000 random vectors. The second was added after the review found that a wrong norm product passed every stack test; it fails with `r + 1` in place of `r`. The pointer mixture's existing test already caught a swap of its two coefficients.
 - **Notebook:** one row in `docs/research/notebook/m4-serving.md`.
 
 ## Measurements
@@ -50,7 +50,7 @@ Run on this M1 on AC power, claude-126's seed-1 export (sha256 `314c3909…fdb30
 | Writer | 19,959 | 19,417 | unchanged |
 | Gathers | 16,383 | 16,424 | unchanged |
 
-The parts sum to 999 per mille of the step.
+The parts sum to 999 per mille of the step in new 1, and 990 in old 1.
 
 **Profile of the new binary** (`/usr/bin/sample <pid> 8 -mayDie`, started 0.1 s into a plain run; 725 samples on the thread): `stack_snap_select` 333 (46%), `stack_recurrence_core` 81, `stack_native_writer` 64, `stack_snap_rotation` 42, `stack_fbs_gather` (i32) 38, `stack_rms_norm_fine` 35, `stack_lanes` 26, `stack_hamilton` 17 (was 193 of 940 in claude-169).
 

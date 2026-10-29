@@ -611,6 +611,50 @@ fn rms_norm_into(x: &[i32], eps: Fixed, scratch: &mut [i64], final_shift: u32, r
     }
 }
 
+/// [`rms_norm_into`]'s multiplier-free form before claude-177: table squares,
+/// restoring long division and seven radix-16 digits of `|v|` read from a table
+/// of `r`'s multiples. The tests' reference.
+#[cfg(test)]
+fn table_rms_norm_into(x: &[i32], eps: Fixed, scratch: &mut [i64], final_shift: u32, round: bool) {
+    let max = stack_max_abs_i32(x);
+    let sh = (bit_length(u64::from(max)) - 24).max(0);
+    let mut sum = 0u64;
+    for (s, &v) in scratch.iter_mut().zip(x) {
+        let y = shift(i64::from(v), sh);
+        *s = y;
+        sum = sum.wrapping_add(table_square(y));
+    }
+    let mean = long_division_u64(sum, x.len().max(1) as u64) as i64;
+    let square_exp = (RESIDUAL_EXP + sh) << 1;
+    let eps_int = shift(eps.mantissa, square_exp - eps.exp).max(0);
+    let ms = mean.wrapping_add(eps_int).max(1) as u128;
+    let s = stack_isqrt(ms << 68).max(1);
+    let r = long_division_u128(1u128 << 96, s);
+    let table = multiples_u128(r);
+    for v in scratch.iter_mut() {
+        let u = v.unsigned_abs();
+        let digit = |s: u32| table[((u >> s) & 15) as usize];
+        let magnitude = digit(0)
+            .wrapping_add(digit(4) << 4)
+            .wrapping_add(digit(8) << 8)
+            .wrapping_add(digit(12) << 12)
+            .wrapping_add(digit(16) << 16)
+            .wrapping_add(digit(20) << 20)
+            .wrapping_add(digit(24) << 24);
+        let product = if *v < 0 {
+            magnitude.wrapping_neg() as i128
+        } else {
+            magnitude as i128
+        };
+        let y = if round {
+            product.wrapping_add(1i128 << (final_shift - 1)) >> final_shift
+        } else {
+            product >> final_shift
+        };
+        *v = y.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64;
+    }
+}
+
 /// The activation tables of a 16-bit vector: for column `c`, entry `u` is
 /// `(u - 8) x[c]`, the product with the offset-binary weight nibble `u`
 /// (shifts, additions and negations only).
@@ -1610,7 +1654,9 @@ mod tests {
             let y = rng.next() >> (rng.next() & 63);
             assert_eq!(stack_mul_u64(x, y), table_mul_u64(x, y), "mul {x} {y}");
             assert_eq!(stack_div_u64(x, y), long_division_u64(x, y), "div {x} {y}");
-            let v = (rng.next() as i64) >> (31 + (rng.next() & 31));
+            // |v| < 2^32, the bound `stack_square` states.
+            let v = ((rng.next() >> 32) >> (rng.next() & 31)) as i64;
+            let v = if rng.next() & 1 == 0 { v } else { -v };
             assert_eq!(stack_square(v), table_square(v), "square {v}");
             let mut q = [0i64; 4];
             let mut r = [0i64; 4];
@@ -1628,6 +1674,33 @@ mod tests {
                 mul_by_u64(&multiples_u128(coefficient), weight),
                 "{weight} {coefficient}"
             );
+        }
+    }
+
+    /// The RMS norm, both forms the step reads (the fine one, rounded, and the
+    /// 16-bit one, truncated), equals its multiplier-free form on random
+    /// vectors of every length up to 300 and every magnitude (claude-177).
+    #[test]
+    fn the_hardware_norm_equals_its_multiplier_free_form() {
+        let mut rng = Lcg(0x0177_2a5e);
+        for case in 0..2_000 {
+            let len = 1 + (rng.next() % 300) as usize;
+            let bits = rng.next() & 31;
+            let x: Vec<i32> = (0..len)
+                .map(|_| (rng.next() as i32) >> bits)
+                .chain(core::iter::once(if case % 7 == 0 { i32::MIN } else { 0 }))
+                .collect();
+            let eps = Fixed {
+                mantissa: (rng.next() >> (rng.next() & 63)) as i64 & i64::MAX,
+                exp: -((rng.next() % 64) as i32),
+            };
+            for (final_shift, round) in [(38, true), (48, false)] {
+                let mut got = vec![0i64; x.len()];
+                let mut want = vec![0i64; x.len()];
+                rms_norm_into(&x, eps, &mut got, final_shift, round);
+                table_rms_norm_into(&x, eps, &mut want, final_shift, round);
+                assert_eq!(got, want, "case {case} shift {final_shift}");
+            }
         }
     }
 

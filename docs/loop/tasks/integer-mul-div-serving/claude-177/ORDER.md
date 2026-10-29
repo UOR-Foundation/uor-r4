@@ -6,7 +6,7 @@ Lab: claude. Item: [integer-mul-div-serving](../../../../roadmap/items/integer-m
 
 The item's done-when 2 and 3: the FBS stack's products and quotients use the hardware integer multiply and divide (D80, D81), exactly, and the speed is measured against claude-169's 3,042–3,044 tok/s.
 
-- **Bodies only.** `stack_mul_u128`, `stack_mul_u64`, `stack_square`, `stack_div_u64`, `stack_div_u128`, `mul_by_u64` and `mul_by_i32` get their hardware form; `stack_hamilton` takes its 16 products as widening multiplies. Every caller (the norm, gathers, pointer, flock read, snap squares) follows.
+- **Bodies only.** `stack_mul_u128`, `stack_mul_u64`, `stack_square`, `stack_div_u64`, `stack_div_u128` and `mul_by_u64`'s callers (the norm, the pointer mixture) get their hardware form; `stack_hamilton` takes its 16 products as widening multiplies. Every caller (the norm, pointer, flock read, snap squares) follows. `mul_by_i32` and the dense read's query tables stay as they are: their `[i64; 16]` type runs through `session.rs`, and an FBS step does not run that read.
 - **Names kept.** The `#[inline(never)]` kernels stay symbols, as the audit's mandatory list requires.
 - **The old table code becomes the test reference.** Each new kernel is tested equal to it, on edge and random inputs.
 
