@@ -300,14 +300,24 @@ fn blocks_against_parts(
         name.starts_with("layer") && BLOCKS.iter().any(|b| name.ends_with(&format!(".{b}")))
     }) {
         let prefix = format!("{block}.");
-        let summed: u64 = parts
+        // The block's kind (`recurrence` or `mlp`) names how many parts it has.
+        let kind = block.rsplit('.').next().unwrap_or_default();
+        let expected = PARTS
+            .iter()
+            .filter(|p| p.starts_with(&format!("{kind}.")))
+            .count();
+        let found: Vec<u64> = parts
             .iter()
             .filter(|(name, _)| name.starts_with(&prefix))
-            .map(|(_, ns)| ns)
-            .sum();
-        if summed == 0 {
-            return Err(format!("no parts were timed for {block}"));
+            .map(|(_, ns)| *ns)
+            .collect();
+        if found.len() != expected {
+            return Err(format!(
+                "{} of {block}'s {expected} parts were timed",
+                found.len()
+            ));
         }
+        let summed: u64 = found.iter().sum();
         let per_mille = summed * 1000 / (*block_ns).max(1);
         within &= (900..=1100).contains(&per_mille);
         rows.push(json!({
@@ -536,6 +546,21 @@ mod tests {
         assert_eq!(read["within_10_percent"], true);
         // A part report that names no part of a block is refused.
         assert!(blocks_against_parts(&blocks, &blocks).is_err());
+        // So is one that holds only some of a block's parts: a second layer's
+        // blocks against a one-layer part report.
+        let two = stage_report(
+            &[vec![5, 100, 200, 100, 200, 1, 1, 1, 700, 9]],
+            &BLOCKS,
+            64 * 500,
+            &[],
+            &[],
+        )
+        .expect("two layers");
+        assert!(blocks_against_parts(&two, &parts).is_err());
+        let mut short = parts.clone();
+        short["stages"].as_array_mut().unwrap().remove(9);
+        let err = blocks_against_parts(&blocks, &short).expect_err("a missing part");
+        assert_eq!(err, "4 of layer0.mlp's 5 parts were timed");
     }
 
     #[test]

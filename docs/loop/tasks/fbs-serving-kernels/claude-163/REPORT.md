@@ -6,11 +6,20 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays `ready`: this unit meet
 
 ## What did not work, first
 
-- **claude-158's hypothesis was wrong.** It guessed that the route gathers dominate both of a layer's blocks. They are 0.5% of a token, with both requantizations. The cost is in two kernels, and they share one inner piece:
+- **claude-158's hypothesis was wrong.** It guessed that the route gathers dominate both of a layer's blocks (its REPORT, "The hypothesis"). All 36 gathers (six a layer) are 0.5% of a token, counted with the two residual adds and the feed-forward's requantization. The cost is in two kernels, and they share one inner piece:
   - **the recurrence core,** 56.3% of a token;
-  - **the feed-forward's gated product,** 39.7%.
-  - Both run the 120-root icosian snap (`stack_snap_select`) once per 4-channel block. It scores every root with exact `ℤ[φ]` comparisons.
-- **The split stops at the part.** How much of the core and of the product the snap takes is not measured. The kernel unit has to time it before choosing what to write. The rest of the core is the lanes' table decay, their `isqrt` and Hamilton products, and the output gate.
+  - **the feed-forward's gated product,** 39.8%.
+  - Both run the 120-root icosian snap (`stack_snap_rotation`, through `stack_snap_select`), which scores every root with exact `ℤ[φ]` comparisons.
+  - The core runs it twice per 4-channel block: once for each lane's transition, and once for the output gate. An FBS export's geometric gates require the icosian transport snap (`format.rs`, "rec_gates=geometric requires transport_snap=icosian").
+  - The product runs it once per 4-unit block (`stack_swiglu`, the Hamilton gate the exporter requires).
+- **The split stops at the part.** How much of the core and of the product the snap takes is not measured. The kernel unit has to time it before choosing what to write.
+  - The rest of the core is: the lanes' table decay and their Hamilton products; the output gate's Hamilton products; and the core's own requantization, which sits inside the core part.
+  - No `isqrt` runs in the lanes of a geometric export. It sits only in the table-law branch.
+- **The code review's notes, taken:**
+  - **Which part a time is credited to is not testable.** A lap touches no model buffer, so the host test pins exactness and the layout, not the attribution. The lap placement was checked by reading, by the author and by the reviewer.
+  - **The band reads a sum of part medians against a block median,** rounded down to whole per mille. For a 10% band, both are within its slack.
+  - **A block missing some of its parts was not refused.** `blocks_against_parts` now requires all four (recurrence) or five (feed-forward). Its test fails with that check weakened to "some parts" (`3 passed; 1 failed`) and passes with it restored.
+  - **A reply that differs from the plain run is reported (`replies_match`), not refused.** Both runs here read `true`.
 - **The first notebook draft gave two ranges wrong** (345–350 µs and 242–254 µs a layer). I caught it against `parts.json` before the review. The ranges are 339–350 µs and 240–246 µs.
 - **The item has no GitHub issue yet**, so the claim note could not be posted there (noted in FRICTION). `issues.json` on main has no row for the five items `claude-162` added.
 
@@ -53,7 +62,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays `ready`: this unit meet
 | Part | ns | Share of the step | Per layer |
 |---|---|---|---|
 | recurrence core | 2,069,060 | **56.3%** | 339–350 µs |
-| feed-forward gated product (snap and Hamilton product) | 1,461,436 | **39.7%** | 240–246 µs |
+| feed-forward gated product (snap and Hamilton product) | 1,461,436 | **39.8%** | 240–246 µs |
 | recurrence norm with gain | 37,166 | 1.0% | 6.2 µs |
 | feed-forward norm with gain | 37,043 | 1.0% | 6.2 µs |
 | recurrence input and gate gathers | 6,498 | 0.2% | 1.1 µs |
