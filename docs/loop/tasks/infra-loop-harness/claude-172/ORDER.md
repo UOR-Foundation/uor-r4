@@ -1,70 +1,59 @@
-# ORDER: infra-loop-harness, claude-172
+# ORDER: infra-loop-harness, claude-172 (D80: integer serving may use the multiply instruction)
 
 Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `ee369b4ca`.
 
+Setup row: 2 (an owner rule change recorded: charter text, decision index, change log, PLAN's owner directions).
+
 ## Goal
 
-The item's done-when reads:
+The owner decided, in Claude's chat, that served integer code may use the hardware integer multiply instruction (words below).
 
-> Every PR in the build plan on [the loop page](../../loop/README.md#build-plan) is merged, each with its planted fault turning its gate red. The four labs (Kimi, Claude, DeepSeek, Antigravity) are onboarded, each with a committed onboarding receipt. Each lab has completed one loop task end to end: claim, probe, work, gates, report, review by another vendor, queue, and verify on fresh `main`.
+The context: the serving engine is integer-only and multiplier-free under D11 (CHARTER §3.6). Six exact units made it 11.3× faster (claude-163 to claude-169). Their profiles show the remaining cost is almost all exact products done without a multiplier: a table of sixteen multiples per operand, then a read per radix-16 digit. A hardware integer multiply computes the same exact product in one instruction.
+
+**What changes (D80):**
+- **§3.6:** the exported artifact still has no float, transcendental or integer-divide instruction. The ban on multiplier instructions is lifted, so a product of two integers may use the hardware multiply.
+- **What stays:** serving stays integer-only and deterministic, since integer products and sums are exact. The dense-matmul ban (§3.3) is unchanged.
+- **§3.9:** the efficiency report names "integer kernels" instead of "multiplier-free kernels".
+
+**What does not change here:** the zero-multiply audit (`scripts/audit_zero_matmul_serving.py`) and the integer crate's zero-multiply checks still refuse multiply instructions. Relaxing them for integer multiply, while they keep refusing float and divide, is a follow-up serving unit. So is using the multiply in the kernels, measured against claude-169's 3,042–3,044 tok/s.
 
 ## Cancel probe (run first)
 
-To fill in.
+Run at `ee369b4ca`:
+- **No open PR** touches `CHARTER.md`, `docs/integration/DECISIONS.md`, `docs/rules/changes.md` or `PLAN.md`.
+- **The last decision** is D79, so this one is D80.
+- **§3.6 reads** "no float, transcendental, multiplier or integer-divide instruction (D11 R1–R5)".
+
+All held. **Not cancelled** (instrument: none needed).
 
 ## Files in scope
 
-- `PLAN.md`
-- `docs/roadmap/items/*.md`
-- `crates/uor-r4-harness/src/loopreview.rs`
-- `crates/uor-r4-harness/src/loopnext.rs`
-- `crates/uor-r4-harness/src/loopreport.rs`
-- `crates/uor-r4-harness/src/loopclose.rs`
-- `crates/uor-r4-harness/src/loopclaim.rs`
-- `crates/uor-r4-harness/tests/loop_review*.rs`
-- `crates/uor-r4-harness/tests/loop_next*.rs`
-- `crates/uor-r4-harness/tests/loop_report*.rs`
-- `crates/uor-r4-harness/tests/loop_close*.rs`
-- `crates/uor-r4-harness/tests/loop_claim*.rs`
-- `crates/uor-r4-harness/tests/loop_repair_orders*.rs`
-- `crates/uor-r4-harness/tests/loop_shared_files*.rs`
-- `crates/uor-r4-harness/tests/loop_prcheck.rs`
-- `crates/uor-r4-harness/src/loopbench.rs`
-- `crates/uor-r4-harness/tests/loop_bench*.rs`
-- `docs/harness/d59.json`
-- `docs/harness/owner-paths.json`
-- `docs/integration/DECISIONS.md`
-- `AGENTS.md`
-- `CHARTER.md`
-- `docs/rules/changes.md`
-- `docs/mechanisms/README.md`
-- `docs/mechanisms/lut-serving.md`
-- `docs/mechanisms/hopf-observation.md`
-- `docs/mechanisms/spin-weights.md`
-- `docs/mechanisms/ternary-xor.md`
-- `crates/uor-r4-harness/src/loopdrive.rs`
-- `crates/uor-r4-harness/tests/loop_drive*.rs`
-- `crates/uor-r4-harness/src/prep.rs`
-- `crates/uor-r4-harness/src/preprules.rs`
-- `xtask/src/docs_links.rs`
-- `xtask/src/archive_verify.rs`
-- `xtask/src/figures_charts.rs`
-- `docs/figures/**`
-- `docs/roadmap/issues.json`
-- `docs/harness/prep/read-binding-on-lawful-read-2026-10-25.md`
-- `docs/harness/labs.json`
-- `crates/uor-r4-harness/src/labs.rs`
-- `crates/uor-r4-harness/src/receipt.rs`
-- `crates/uor-r4-harness/tests/lab_registry_cli.rs`
-- `crates/uor-r4-harness/src/onboard.rs`
-- `crates/uor-r4-harness/src/loopguard.rs`
-- `crates/uor-r4-harness/tests/loop_guard.rs`
-- `archive/history/branch-archive/codex-d63-finite-probe-scope-20261026.*`
+- `CHARTER.md` (§3.6, and §3.9's one word)
+- `docs/integration/DECISIONS.md` (the D80 row)
+- `docs/rules/changes.md` (the dated entry)
+- `PLAN.md` (the owner direction's row)
+- `docs/loop/tasks/infra-loop-harness/claude-172/**`
 
 ## Done when
 
-To fill in.
+1. §3.6 and §3.9 carry D80's text.
+2. `DECISIONS.md` has the D80 row, with the owner's words verbatim.
+3. `docs/rules/changes.md` has its dated entry.
+4. PLAN's owner directions hold the direction, `open` until the audit and kernels follow.
+5. A fresh review confirms that the edits say what the owner chose and change no other rule.
+6. The PR is merged and verified.
 
-## Stop and ask if
+## Stop and decide if
 
-To fill in.
+- **The edit would change any rule beyond the multiply instruction.** For example, it would touch integer divide, floats, or dense matmul. Then narrow it.
+
+No step waits on Casey.
+
+## Owner approval
+
+Owner paths changed: `CHARTER.md`, `docs/rules/changes.md` and `docs/integration/DECISIONS.md`.
+
+Casey, in Claude's chat by 2026-10-29T03:09:43Z:
+- "ok I think the integer serving for determinism that gets us out of matmul is a worthy goal, unless the other mechanism is just ridiculously faster..."
+- "sounds like reverse d11 is the answer".
+- Asked "Which D11 change do you want: keep serving integer-only and deterministic but allow the hardware multiply instruction, or something wider?", he chose "Allow integer multiply (Recommended)".
