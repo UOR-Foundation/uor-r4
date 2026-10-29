@@ -2,6 +2,8 @@
 
 Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `14b2bdccc`.
 
+Setup row: 2 (item-file maintenance: a new item and PLAN's owner directions).
+
 ## Goal
 
 **This unit (claude-190):** record the owner's two 29 Oct directions in PLAN.md's owner-direction table, and add the roadmap item `docs-status-refresh` that carries the documentation refresh. Then `loop next` reads the open direction instead of falling through to "any ready item", which is how `turn-memory-reply`, claude-162's first item, was never offered.
