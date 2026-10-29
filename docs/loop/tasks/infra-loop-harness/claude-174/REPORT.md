@@ -12,16 +12,21 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The umbrella item stays open; its done
   - The new item covers only the checks on the FBS stack's serving step.
 - **CI runs neither audit script** (no match in `.github/workflows`). The audits bind only when a unit runs them. The item's done-when keeps them in each unit.
 - **The D11 entry's "amended by" pointer** sits in an owner path. The item says it goes by patch under the owner's permission, as D80 and D81 did.
+- **The first draft's scope missed three files**, caught by the fresh review:
+  - `scripts/audit_zero_matmul_wasm.py`, which counts `i64.mul` and `i64.div_u` in the browser build of the same step and expects zero;
+  - `docs/mechanisms/README.md` and `docs/model/gpu-and-cuda.md`, which both still say no multiply may appear in serving.
+
+  The review also found that the draft's norm share (11%) had no source; claude-169's profile gives 43 of 940 samples. Both are fixed at this head.
 
 ## What changed
 
 - **`docs/roadmap/items/integer-mul-div-serving.md` (new, `ready`, area serving, `done_class: host`):** the owner's words; what the old rule cost; the audits and docs still stating it; and a four-step done-when.
-  1. Docs and audits agree with §3.6. A float instruction still fails each verifier, and integer `mul` and `udiv` now pass.
+  1. Docs and audits (native and WASM) agree with §3.6. A float instruction still fails each verifier, and integer `mul` and `udiv` now pass, shown by the Rust tests and a `--self-test` in each audit script.
   2. The kernels use the instructions, each exact against the old one, with byte-identical replies.
   3. Speed against claude-169's sealed binary.
   4. A notebook row and a REPORT per unit.
 
-  Its scope lists all 17 files, every one present at the base.
+  Its scope lists 20 existing files, every one present on `origin/main`, plus the item file and its task folder.
 - **`PLAN.md`:** the D81 direction's row names the item.
 - **`docs/roadmap/README.md`:** re-rendered.
 
