@@ -1,67 +1,69 @@
-# ORDER: one-model-end-to-end, claude-204
+# ORDER: one-model-end-to-end, claude-204 (a held-out-phrasing panel, and its census)
 
-Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md). Base: `a36ef5663`.
+Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). Base: `a36ef5663`.
 
 ## Goal
 
-The item's done-when reads:
+The panel the item's "What is missing" names.
+- **Why:** the census (claude-202, `443a980e5`) found that neither DEV nor Fresh V2 holds new templates.
+- **What claude-203 settled:** M-world v2's phrasing split holds by construction. TRAIN draws `Split::Train` only, and paraphrases equal to any template are refused. The split covers user-turn phrasings only; reply templates are shared.
 
-> 1. **The census (laptop, counts only, CHARTER §4.5).** A standalone Rust instrument under `docs/labs/one-model-end-to-end/instrument/` must:
->    - resolve the TRAIN size conflict, and build the TRAIN reply index (exact replies and reply 8- and 13-grams);
->    - report for DEV, Fresh V2 and `m2-fresh256`: the share of reply n-grams in TRAIN replies, the share of prompt templates seen in TRAIN with values masked, and the 8-token key share;
->    - read only the manifest of the K16 fresh slice, and leave the slice unopened.
->
->    It also says which panel, if any, holds new templates.
-> 2. **The overturn check (GPU, under a prep sheet with a fresh FIT and a pre-run review).** Score turn-memory-reply claude-194's (r), (r0), and (r) with its memory off.
->    - **Pinned in the sheet:** the checkpoints by store path, `SHA256SUMS` and step; the binary's sha; a lease and cost inside the caps.
->    - **The pod** also runs `integer-hamming-read`'s step 5 parity. It is pinned to the read alone, with kept sets and first divergence, and the memory off on both sides.
->    - **Rows:** DEV's 3,406 later rows the reply table does not name, and its 32 unkeyed openings, judged pooled (3,438).
->    - **Band, fixed in advance:** `max(2·√(b+c), the two-seed spread)`, where b and c are the paired discordant rows.
->    - **The cells:**
->      - (r) ahead at both seeds, beyond the band: the memory recipe stays the training default;
->      - (r) behind at both seeds, beyond the band: a memory-dropout arm joins the training run;
->      - mixed (the seeds disagree, or either seed is inside the band): both arms train.
->    - **Descriptive only:** Fresh V2, and 64 greedy samples per arm scored against the census index.
-> 3. **The protocol.** A prep sheet, with a fresh FIT, written before the training run of the model to ship. It holds:
->    - **Strata:**
->      - keyed rows;
->      - unkeyed rows;
->      - new-template rows, from a panel no decision has touched. Fresh V2 is never one.
->    - **Arms:** (r), memory-off, (r0), tables only, and a longest-suffix table over TRAIN.
->    - **Scores:**
->      - teacher-forced top-1, per stratum;
->      - free generation: the share of replies that are verbatim TRAIN replies, new n-grams for n = 4–8, distinct-1 and distinct-2, the repeated-n-gram rate, and the table hit rate under generation against teacher forcing;
->      - on the integer artifact: kept-set agreement, first divergence, and tok/s against context.
->    - **Decode rules:** greedy, and a Flock rank rule with the harmonic weights of `stack/flock.rs`.
->    - **The verdict rule, written in advance:**
->      - "memorized": the gains appear only on keyed rows, and generated replies are mostly TRAIN replies;
->      - "generalizes": the model beats (r0) and the longest-suffix table on unkeyed and new-template rows, with novelty near DEV's own replies.
->
->    The training run itself (ASSESSMENT §6, step 5) adds:
->    - the transport controls: frozen and identity SpiralCore routes, under the fixed backward;
->    - the read-by-meaning arms: the Flock read, and the type spin.
-> 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
+1. **The writer.** `m-world corpus world=v2` gains `cell=PHRASING,VALUE`, each `train` or `dev`. The default `train,train` is today's corpus, byte for byte.
+   - A non-default cell draws `conversation_in(rng, Cell::new(..))` under the same probe screen.
+   - It refuses `exclude=` and `chat=`.
+   - It writes under `OUT/<phrasing>_phrasing-<value>_value/`, and the manifest records the cell.
+2. **Three panels.** 400 conversations each, at the default mix, generated with the pinned tokenizer:
+   - **P-dev** (`dev,dev`, seed 2041): the held-out-phrasing panel;
+   - **P-ret** (`train,dev`, seed 2042): trained phrasings, new values;
+   - **P-train** (`train,train`, seed 2043): the positive control, drawn as TRAIN was.
+
+   They go to the HF store under `inputs/claude/heldout-panels-2026-10-29/`, with `SHA256SUMS`, never into the repo.
+3. **The census of each.** `train-in-space --census 1` gains `--panel NAME=DIR` (repeatable). Each extra panel is loaded unpinned: its sha256 is computed and recorded, its header and BOS are checked, and claude-202's M3–M6 are counted.
+
+**The reading, fixed before any panel is generated:**
+- A panel holds new templates if its masked prompt-template share at K = 1,024 is at most 0.5 (claude-202's rule).
+- **The instrument check:** P-train must *not* hold new templates (share above 0.5), as DEV does not. If P-train passes the new-template bar, the census or the writer is at fault, and the unit stops.
+- **P-dev is the held-out-phrasing panel** if it holds new templates.
+- **Its masked reply-template share is reported, not judged.** Reply templates are shared by construction.
+- **The two risks claude-203 named,** both counted, not judged:
+  - **near-duplicate paraphrases:** P-dev's prompt 8-gram share in TRAIN;
+  - **chat-v0 coincidences:** P-dev's exact-prompt share in TRAIN.
 
 ## Cancel probe (run first)
 
-To fill in.
+- **Does a dev-cell writer or panel already exist?** No.
+  - `corpus_v2` hard-codes `Split::Train` (`crates/uor-r4-training/examples/m-world.rs:1210-1217`).
+  - No UORT panel of `dev_phrasing` cells is in the HF store: `scripts/pod/uor-store ls inputs/` lists none.
+- **Classed:** instrument. Nothing cancels the unit.
 
 ## Files in scope
 
-- `docs/labs/one-model-end-to-end/**`
-- `docs/harness/prep/one-model-end-to-end*`
-- `docs/loop/tasks/one-model-end-to-end/**`
-- `docs/research/notebook/float-training.md`
-- `docs/roadmap/items/one-model-end-to-end.md`
+- `crates/uor-r4-training/examples/m-world.rs`
 - `crates/uor-r4-float-train/src/in_space_long.rs`
 - `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`
-- `crates/uor-r4-training/examples/m-world.rs`
+- `docs/labs/one-model-end-to-end/**`
+- `docs/loop/tasks/one-model-end-to-end/**`
+- `docs/research/notebook/float-training.md`
 
 ## Done when
 
-To fill in.
+1. **`cell=` works.**
+   - **Byte-identity:** `cell=train,train` and no `cell=` write byte-identical splits at the same seed. A test, or a sha comparison recorded in the REPORT, shows it.
+   - A non-default cell refuses `exclude=` and `chat=`.
+2. **The three panels exist in the HF store,** with their sha256s in the REPORT.
+3. **The census report** (`docs/labs/one-model-end-to-end/census-panels-2026-10-29.json`) holds the three panels' M3–M6. P-train holds no new templates. P-dev's verdict, P-ret's and both risks are given.
+4. **Tests:**
+   - the cell parser;
+   - `--panel` parsing;
+   - the unpinned loader's header and BOS refusals.
+5. **Checks:**
+   - the float crate's suite and the training crate's `m-world` example build pass;
+   - `loop gates --full` is green;
+   - one notebook row, and a REPORT, negatives first.
 
 ## Stop and ask if
 
-To fill in.
+Stop and decide (never wait) if:
+- P-train passes the new-template bar: an instrument fault, so find it first;
+- P-dev fails the new-template bar: then the phrasing split leaks at the turn level, and the REPORT says so with the risks' counts. The fallback, newly written phrasings, becomes the next unit;
+- the writer needs a library change.
