@@ -9,10 +9,13 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays `ready`. Done-when 2's 
 
 ## What did not work, first
 
-- **claude-164's REPORT named the wrong next target.** It proposed fewer golden candidates, and then a vector kernel for the Hamilton products and lanes.
-  - A `sample` profile of claude-164's binary shows otherwise. 1,919 of 3,158 top-of-stack samples (61%) sit in `stack_mul_u128`, called by `stack_snap_select` through its sign test `snap_difference_positive`.
-  - That test squared both sides by radix-16 table products whenever `P` and `D` differ in sign. That happens on most comparisons in a scan.
-  - The candidates themselves were a smaller cost.
+- **claude-164's REPORT ranked the snap's next step by the wrong part.** It proposed fewer golden candidates first, then a vector kernel for the Hamilton products and lanes. A `sample` profile of claude-164's binary (3,158 top-of-stack samples) ranks them differently.
+  - **The snap was the largest cost**, about 55%, but mostly in its exact comparison, not in the number of candidates.
+    - 1,055 samples (33%) sit in `stack_mul_u128` under `stack_snap_select`, through its sign test `snap_difference_positive`. That test squared both sides by radix-16 table products whenever `P` and `D` differ in sign, which happens on most comparisons in a scan.
+    - The scan itself holds 668 (21%).
+  - **The Hamilton product was already second**, about 27%: 782 `stack_mul_u128` samples under `stack_hamilton`, and 81 in it.
+  - **The lanes:** 82 `stack_mul_u128` samples.
+  - My first draft of this REPORT credited all 1,919 `stack_mul_u128` samples (61%) to the snap. The claims review, tallying callers in the call tree, corrected it.
 - **The cost now sits in the Hamilton product.** In the new profile, `stack_mul_u128` still holds 487 of 1,132 samples (43%). Of those, 444 come from `stack_hamilton` and 43 from `stack_lanes`, none from the snap.
   - `stack_snap_select` itself holds 326 (29%). `stack_square` holds 78, and `stack_hamilton` itself 59.
   - The profile counts samples, not time per call. The ranking is the claim, not a timing.
@@ -64,7 +67,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays `ready`. Done-when 2's 
 
 | Function | claude-164 (3,158 samples) | This unit (1,132 samples) |
 |---|---|---|
-| `stack_mul_u128` | 1,919 (61%), from the snap | 487 (43%): 444 from `stack_hamilton`, 43 from `stack_lanes`, 0 from the snap |
+| `stack_mul_u128` | 1,919 (61%): 1,055 from the snap, 782 from `stack_hamilton`, 82 from `stack_lanes` | 487 (43%): 444 from `stack_hamilton`, 43 from `stack_lanes`, 0 from the snap |
 | `stack_snap_select` | 668 | 326 |
 | `stack_square` | 131 | 78 |
 | `stack_hamilton` | 81 | 59 |
