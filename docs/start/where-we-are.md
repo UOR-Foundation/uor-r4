@@ -8,6 +8,27 @@
 
 Terms are in the [glossary](./glossary.md). Claims are labelled **proof**, **measurement** or **hypothesis** ([`docs/formal_vocabulary.md`](../formal_vocabulary.md)). A passing check shows that code does what it says. It is not a trained capability, and `NOT_RUN` never means passed.
 
+## Status on 29 Oct 2026
+
+Pre-alpha; 0 of 8 milestones complete. M1 is in progress, and no registered closing run has passed its bar (CHARTER 4.8). The scores below are the 19 Oct 2026 discrete path. Since 27 Oct the work is on the float-trained FBS trunk, a second model path that does not join the discrete one yet ([pipeline map](../model/pipeline-map.md)).
+
+- **Found (27-29 Oct):** the trunk can route the prompt but has nowhere to store what each question should produce (claude-155). Exact turn memory keyed by the user's first 8 tokens names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, against 266.3 and 281.0 for an empty-table control (claude-161). It moves only the first word of a reply; after it, replies are still templates.
+- **Decided:** pivot to route + exact memory (28 Oct); serve whole-table nearest as the readout (claude-150); integer multiply and divide are allowed in serving, floats stay banned (D80, D81); train in float, export to integer exactly.
+- **Served:** exact structured kernels took a served token on the M1 laptop from 270 to 3,042 tok/s (claude-163 to 170), and 4,829 tok/s with the integer multiply (claude-177); 4,217 to 4,504 tok/s under the exact `lut-stack/5` contract (claude-182, 185). Replies are byte-identical.
+
+| Part | Mechanism | State on 29 Oct |
+|---|---|---|
+| Tokenizer | BPE-4096 | done |
+| Table | FBS learned table, 4,096 x 256 | trained; served |
+| Position | SpiralCore transport spin (no RoPE) | trained; served |
+| Mixing | FBS recurrence, Hamilton gate, SpiralCore/FBS routes | trained; served under `lut-stack/5` |
+| Copy | Hamming read, copy heads | integer kernel built (claude-189); not yet in the served session |
+| Storage | exact turn memory | trained; first word only; not served |
+| Feed-forward | Hamilton gate | trained; served |
+| Norm | RMS norm, integer square root | served |
+| Readout | whole-table nearest | trained; the served session still reads the native writer |
+| Text in / out | R7 | not built |
+
 ## How the model is scored
 
 The test set is 14,287 positions in 400 held-out documents, called the DEV panel ([count tables record](../../archive/labs/host-diagnostics-2026-10-17/README.md)). At each position the model makes one guess for the next token. A **top-1** score counts how many of those guesses are right.

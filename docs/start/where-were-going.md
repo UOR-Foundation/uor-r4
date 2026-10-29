@@ -23,6 +23,18 @@ Terms are in the [glossary](./glossary.md). Labels are **proof**, **measurement*
 
 Statuses are from the [ROADMAP](../../ROADMAP.md) table, which states each bar in full. A milestone closes only when its bar is met on a saved model.
 
+## Order of work from 29 Oct 2026
+
+The discrete-path stages below stay as the 19 Oct record. The open direction today (PLAN.md) is:
+
+1. `turn-memory-reply`: carry exact memory past a reply's first word. This is the capability blocker.
+2. Serve the model's parts in integers: the Hamming read's session hooks, `turn-memory-integer`, and the served readout (nearest, or `writer-admission`).
+3. R7: a typed question gets a typed reply in `uor-chat --stack`.
+4. One model trained with all of the above, exported, served on the laptop and scored on prompts, with tokens/s.
+5. Then cost: `training-step-cost`, the vector kernel, and float where it is faster.
+
+Pre-alpha, 0 of 8 milestones. Details: [pipeline map](../model/pipeline-map.md) and [PLAN.md](../../PLAN.md).
+
 ## The new M1 bar
 
 M1 closes when **one saved discrete model** passes five conditions ([charter](../../CHARTER.md), section 4.8; [D39](../integration/DECISIONS.md#d39--m1-closing-bar-k16-reachability-gate-post-qualification-sequence-and-lab-self-direction-owner-2026-10-18), item 1):

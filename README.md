@@ -34,6 +34,10 @@ None of the three ships today; each waits on a trained model ([products](docs/pr
 
 ## Where we are
 
+**29 Oct 2026:** pre-alpha, 0 of 8 milestones complete (M1 is in progress; no registered closing run has passed its bar). Since 27 Oct the work is on the float-trained FBS trunk: the trunk **routes** and exact memory **stores** (diagnosis claude-155, owner pivot 28 Oct). Exact turn memory names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, but moves only a reply's first word. Integer multiply and divide are allowed in serving (D80, D81). Next: carry the memory past the first word, serve every part in integers, then a typed question gets a typed reply. See [where we are](docs/start/where-we-are.md) and the [pipeline map](docs/model/pipeline-map.md).
+
+The older K16 table below is the 19 Oct 2026 discrete-path record.
+
 **0 of 8 milestones are complete** ([STATUS](STATUS.md); live tracker
 [#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028)). The test below asks a model to guess
 the next token at 14,287 positions in 400 held-out documents, one guess each (all **measurements**):
@@ -126,7 +130,7 @@ research labs read [CHARTER.md](CHARTER.md) and [AGENTS.md](AGENTS.md).
 - **Yassine Amraoui** ([LinkedIn](https://www.linkedin.com/in/amraoui-yassine/)): research and development work.
 - **Andrew Kadziolka**: development integration, assessment, analysis and conceptual design.
 - **Yazan Barakat** ([@Cyborg-Hawk-AI](https://github.com/Cyborg-Hawk-AI)): research and development work on the WebAssembly D11 integer serving runtime (#1172, PR #2654).
-- **The AI research labs** (Kimi, Claude, Codex, DeepSeek), which do most implementation under the owner's direction; owner and principal investigator Casey Allard.
+- **The AI research labs** (Kimi, Claude, Antigravity, DeepSeek; Codex took part earlier), which do most implementation under the owner's direction; owner and principal investigator Casey Allard.
 
 ## Citation and license
 

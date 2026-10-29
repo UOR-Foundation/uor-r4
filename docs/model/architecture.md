@@ -1,12 +1,41 @@
 # The model, end to end
 
-UOR-R4 turns text into a short list of whole numbers per word, looks back at a few earlier words by walking a small tree of addresses, and picks the stored word nearest to what it found. It never turns scores into probabilities and never multiplies large grids of numbers. This page follows one piece of text through that whole chain and marks each stage as built, trained, or missing. The honest summary is short. Most stages exist and pass small fixed tests. None of them has learned language yet: the best trained model so far is worse than a plain table of word counts ([K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md)). The project is pre-alpha, and 0 of its 8 milestones are complete (`STATUS.md`).
+UOR-R4 turns text into a short list of whole numbers per word, looks back at a few earlier words by walking a small tree of addresses, and picks the stored word nearest to what it found. It never turns scores into probabilities and never multiplies large grids of numbers. This page follows one piece of text through that whole chain and marks each stage as built, trained, or missing. The honest summary is short. Most stages exist and pass small fixed tests. None of them has learned language yet on this discrete path: its best trained model is worse than a plain table of word counts ([K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md)). The model that writes replies is a second, float-trained one, and [the section on 29 October](#the-model-on-29-october-2026) follows it from token to token. The project is pre-alpha, and 0 of its 8 milestones are complete (`STATUS.md`).
 
 ![A left-to-right pipeline of nine boxes: text, tokenizer, token table, ordered context, reads (Route, Flock, Relation), shared writer with admission, rank-margin loss, discrete learning on the GPU, and export to a D11 integer artifact that is then served. Each box is coloured built, trained or missing, and four dashed empty boxes mark the slots with no mechanism: position, normalization, feed-forward on the discrete path, and an exporter for a trained model.](../figures/model/pipeline.svg)
 
 *The current pipeline. Solid boxes exist in `crates/uor-r4-discrete`. Dashed boxes are slots a transformer fills that this model has not filled.*
 
-This page covers the discrete path only, and some of its stages are out of date. For example, an exporter now exists for both paths. [The pipeline map](pipeline-map.md) covers both model paths stage by stage as of 27 October: each stage's domain, size, hardware and measured cost, the scale arithmetic for the goal, the ranked gaps and the order of work.
+Below the next section, this page covers the discrete path, and some of its stages are out of date. For example, an exporter now exists for both paths. [The pipeline map](pipeline-map.md) covers both model paths stage by stage: each stage's domain, size, hardware and measured cost, the scale arithmetic for the goal, the ranked gaps and the order of work.
+
+## The model on 29 October 2026
+
+The sections after this one describe the discrete path, which the first milestone's bar still runs on. The model that writes replies is a different one: the float-trained FBS trunk ([two model paths](pipeline-map.md#two-model-paths)). The two do not join yet. This section follows the FBS model, which the owner's 29 Oct direction ("a working model following our cadences") builds on: one working model, end to end, **token → vector → vector → integer → token**, with the best mechanism for each part.
+
+**The idea (claude-155, the 28 Oct diagnosis).** The trunk *routes*. Exact memory *stores*. About 94% of the model is the word table (4,096 × 256), and the trunk is about 64,000 values. The trunk can route a prompt but has nowhere to keep what each question should produce ([claude-155](../loop/tasks/in-space-trunk-to-text/claude-155/REPORT.md)). On 28 Oct the owner chose the pivot to route plus exact memory, and cost per token as the criterion for every part.
+
+| Step | Part | Mechanism | State on 29 Oct |
+|---|---|---|---|
+| Token | Tokenizer | Byte-level BPE, 4,096 pieces | Done |
+| → vector | Table (id → vector) | Learned FBS table, 4,096 × 256 | Trained; served |
+| → vector | Position | SpiralCore transport spin inside the recurrence (no RoPE) | Trained; served |
+| → vector | Mixing (the router) | FBS recurrence, Hamilton gate, SpiralCore/FBS routes | Trained; served exactly under `lut-stack/5` |
+| → vector | Copy (look-back) | Hamming read: XOR and popcount over 64-bit sign codes, with copy heads ([claude-146](../loop/tasks/in-space-trunk-to-text/claude-146/REPORT.md)) | Trained; integer copy-head kernel built ([claude-189](../loop/tasks/integer-hamming-read/claude-189/REPORT.md)); not yet in the served session |
+| → vector | **Storage** | **Exact turn memory keyed by the user's first 8 tokens** ([claude-161](../loop/tasks/route-plus-memory/claude-161/REPORT.md)) | Trained; names the **first word of a reply only**; not served |
+| → vector | Feed-forward | Hamilton gate | Trained; served |
+| → vector | Norm | RMS norm with an integer square root | Served |
+| → integer | Export | `lut-stack/5`, which keeps the rotations unsnapped and exact ([claude-182](../loop/tasks/d11-exporter-float-trunk/claude-182/REPORT.md)) | Inside the export-gap bar at DEV on both seeds (net 6 and −8 against a limit of 24) |
+| → token | Readout | Whole-table nearest ([claude-150](../loop/tasks/one-decoder/claude-150/REPORT.md)) | Trained; the served session still reads the native writer |
+| Text in and out | R7, the text path | Not built: FBS artifacts take token ids only | Missing |
+
+**What the numbers say (measurement, DEV panel of 14,287 rows).**
+- Exact turn memory names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, against 266.3 and 281.0 for an empty-table control. The ceiling is 607. It moves only the first word of a reply: after it, replies are still templates ([claude-161](../loop/tasks/route-plus-memory/claude-161/REPORT.md)).
+- Training runs in float on the GPU at 31,851 context tokens a second, with no cost from the memory. Since claude-179 its backward is a fixed-order reduction, so two runs give the same model byte for byte ([claude-179](../loop/tasks/d11-exporter-float-trunk/claude-179/REPORT.md)).
+- Served as integers, with the hardware multiply and divide that D80 and D81 allow (floats stay banned), a token takes 4,829 tokens a second on the M1 laptop for the snapped artifact ([claude-177](../loop/tasks/integer-mul-div-serving/claude-177/REPORT.md)), and 4,217 to 4,504 for the exact `lut-stack/5` artifact. Replies are byte-identical.
+
+**What is not true yet.** No model holds a useful conversation, and 0 of 8 milestones are complete. Replies do not answer prompts beyond their first word. The memory, the Hamming read and the nearest readout are not all in the served session, and no typed question gets a typed reply. `lut-stack/6` carries the Hamming reads, and the session refuses it until it serves them ([claude-188](../loop/tasks/integer-hamming-read/claude-188/REPORT.md)).
+
+**The order of work** is the open owner direction in [PLAN.md](../../PLAN.md): carry the memory past a reply's first word (`turn-memory-reply`); serve the parts in integers; give the model a text path; train one model with all of it, export it, serve it on the laptop and score it on prompts with tokens a second; then cost.
 
 ## How to read the status labels
 
@@ -58,7 +87,7 @@ Route is the base read of every trained artifact, yet it received only 20 learni
 
 ## The missing slots
 
-A transformer has parts this model does not. The board lists them as gaps, and no record fills them:
+A transformer has parts this model does not. On the discrete path the board lists them as gaps, and no record fills them. The FBS trunk fills three of them (position, normalization and feed-forward; see the table above):
 
 | Slot | What a transformer does | What exists here | Status |
 |---|---|---|---|

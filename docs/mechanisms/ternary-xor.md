@@ -2,6 +2,8 @@
 
 **Status: READY (owner ruling, 24 Oct 2026, D74).** As proposed, a dense layer of −1/0/+1 weights removes the multiplier but not the sum over every weight, which the owner's no-dense-matrix-multiplication rule still counts against it. It was never trained in. Its two small pieces, bit counting and three-valued switches, already run inside the current model ([`discrete-learning`](./discrete-learning.md)).
 
+**29 Oct 2026.** The XOR/popcount piece is now the **Hamming read** on the float-trained FBS trunk: a read over 64-bit sign codes, used by copy heads and type heads. The recall probe scored 0.98–0.99 at three seeds (claude-146); language openings passed at seed 1 only. Its integer form is `lut-stack/6` (claude-188), and the copy heads' integer kernel matches an f64 reference (claude-189, #3377). The served session refuses `/6` until it serves these reads, so session hooks are next. This page stays READY: the dense ternary form is unchanged. See the [pipeline map](../model/pipeline-map.md).
+
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run, **hypothesis** means an untested idea. See [`docs/formal_vocabulary.md`](../formal_vocabulary.md).
 
 ## In plain words

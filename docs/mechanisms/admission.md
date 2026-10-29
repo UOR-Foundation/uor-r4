@@ -2,6 +2,8 @@
 
 **Status: ACTIVE.** It is the output step of the current model and the first measured binding limit, seen on rung 0 and for the top-8 bar (after K16, the cause of the weak ranking is open): the correct word often is not in the shortlist at all ([attention-state record](../labs/attention-state-2026-10-18/README.md)).
 
+**29 Oct 2026.** On the float-trained FBS trunk, the native writer's admission failed at seed 2: top-1 493 against whole-table nearest's 6,909 (claude-150). The decision is to serve whole-table nearest. The served session still reads the native writer today (`crates/uor-r4-integer/src/stack/session.rs`, `writer.table`), so serving nearest is part of the path forward. `writer-admission` is ready as the next attempt on admission. Details in the [pipeline map](../model/pipeline-map.md).
+
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run, **hypothesis** means an untested idea (see [the charter](../../CHARTER.md), section 4.6). Unfamiliar project terms (K16, A8, admission, NOT_RUN) are in the [glossary](../start/glossary.md).
 
 ## In plain words
