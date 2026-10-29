@@ -139,30 +139,70 @@ pub(crate) fn grid_apply(value: i64, code: i16) -> i64 {
 // ---------------------------------------------------------------------------
 // Products of runtime values: sixteen-multiple tables and radix-16 digits.
 
-/// The multiples `k a`, `k = 0..16`, modulo `2^128`, by repeated addition.
+/// The multiples `k a`, `k = 0..16`, modulo `2^128`, by additions
+/// (claude-167): `a`, `2a`, `4a` and `8a` by shifts, each behind
+/// `black_box`, and every other multiple a sum of those. The four are opaque
+/// to the optimizer, so no sum can be folded back into a multiply; four
+/// guarded values in place of fifteen guarded steps.
 #[inline(always)]
 fn multiples_u128(a: u128) -> [u128; 16] {
-    let zero = black_box(0u128);
-    let mut table = [0u128; 16];
-    let mut acc = 0u128;
-    for slot in table.iter_mut().skip(1) {
-        acc = black_box(acc.wrapping_add(a)) ^ zero;
-        *slot = acc;
-    }
-    table
+    let t1 = black_box(a);
+    let t2 = black_box(a << 1);
+    let t4 = black_box(a << 2);
+    let t8 = black_box(a << 3);
+    let t3 = t2.wrapping_add(t1);
+    let t5 = t4.wrapping_add(t1);
+    let t6 = t4.wrapping_add(t2);
+    let t7 = t4.wrapping_add(t3);
+    [
+        0,
+        t1,
+        t2,
+        t3,
+        t4,
+        t5,
+        t6,
+        t7,
+        t8,
+        t8.wrapping_add(t1),
+        t8.wrapping_add(t2),
+        t8.wrapping_add(t3),
+        t8.wrapping_add(t4),
+        t8.wrapping_add(t5),
+        t8.wrapping_add(t6),
+        t8.wrapping_add(t7),
+    ]
 }
 
-/// The multiples `k a`, `k = 0..16`, modulo `2^64`, by repeated addition.
+/// The multiples `k a`, `k = 0..16`, modulo `2^64`, as [`multiples_u128`].
 #[inline(always)]
 fn multiples_u64(a: u64) -> [u64; 16] {
-    let zero = black_box(0u64);
-    let mut table = [0u64; 16];
-    let mut acc = 0u64;
-    for slot in table.iter_mut().skip(1) {
-        acc = black_box(acc.wrapping_add(a)) ^ zero;
-        *slot = acc;
-    }
-    table
+    let t1 = black_box(a);
+    let t2 = black_box(a << 1);
+    let t4 = black_box(a << 2);
+    let t8 = black_box(a << 3);
+    let t3 = t2.wrapping_add(t1);
+    let t5 = t4.wrapping_add(t1);
+    let t6 = t4.wrapping_add(t2);
+    let t7 = t4.wrapping_add(t3);
+    [
+        0,
+        t1,
+        t2,
+        t3,
+        t4,
+        t5,
+        t6,
+        t7,
+        t8,
+        t8.wrapping_add(t1),
+        t8.wrapping_add(t2),
+        t8.wrapping_add(t3),
+        t8.wrapping_add(t4),
+        t8.wrapping_add(t5),
+        t8.wrapping_add(t6),
+        t8.wrapping_add(t7),
+    ]
 }
 
 /// The multiples `k x`, `k = 0..16`, of a signed value, modulo `2^64`.
@@ -883,10 +923,12 @@ pub(crate) fn stack_hamilton(a: [i64; 4], b: [i64; 4]) -> [i128; 4] {
     // An explicit loop, not `array::from_fn` or `map`: a closure there
     // compiles to a `core::array` symbol of its own, outside the audited
     // `stack_` names.
-    let mut tables = [[0u128; 16]; 4];
-    for (table, &value) in tables.iter_mut().zip(&b) {
-        *table = multiples_u128(u128::from(value.unsigned_abs()));
-    }
+    let tables = [
+        multiples_u128(u128::from(b[0].unsigned_abs())),
+        multiples_u128(u128::from(b[1].unsigned_abs())),
+        multiples_u128(u128::from(b[2].unsigned_abs())),
+        multiples_u128(u128::from(b[3].unsigned_abs())),
+    ];
     // p[i][j] = a_i b_j modulo 2^128.
     let mut p = [[0i128; 4]; 4];
     for (row, &x) in p.iter_mut().zip(&a) {
@@ -1377,6 +1419,41 @@ mod tests {
 
         fn wide(&mut self) -> u128 {
             (u128::from(self.next()) << 64) | u128::from(self.next())
+        }
+    }
+
+    #[test]
+    fn every_table_entry_is_its_multiple() {
+        let check128 = |a: u128| {
+            let table = multiples_u128(a);
+            for (k, &entry) in table.iter().enumerate() {
+                assert_eq!(entry, a.wrapping_mul(k as u128), "{a} x {k}");
+            }
+        };
+        let check64 = |a: u64| {
+            let table = multiples_u64(a);
+            for (k, &entry) in table.iter().enumerate() {
+                assert_eq!(entry, a.wrapping_mul(k as u64), "{a} x {k}");
+            }
+        };
+        for a in [0u128, 1, u128::MAX, u128::MAX - 1, u128::MAX >> 1] {
+            check128(a);
+        }
+        for a in [0u64, 1, u64::MAX, u64::MAX - 1, u64::MAX >> 1] {
+            check64(a);
+        }
+        for shift in 0..128 {
+            check128(1u128 << shift);
+            check128((1u128 << shift).wrapping_sub(1));
+        }
+        for shift in 0..64 {
+            check64(1u64 << shift);
+            check64((1u64 << shift).wrapping_sub(1));
+        }
+        let mut rng = Lcg(0x05ee_d167);
+        for _ in 0..1_000_000 {
+            check128(rng.wide() >> (rng.next() % 128));
+            check64(rng.next() >> (rng.next() % 64));
         }
     }
 
