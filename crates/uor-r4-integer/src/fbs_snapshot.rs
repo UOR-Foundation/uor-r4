@@ -281,6 +281,60 @@ pub struct FbsTrunkSnapshot {
     /// them, so a snapshot written before them still parses (claude-188).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hamming: Option<FbsHammingSnapshot>,
+    /// The turn memory (claude-161, claude-193) the trunk was trained with; absent on a trunk
+    /// without one, so every snapshot written before it still parses (claude-198).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory: Option<FbsMemorySnapshot>,
+}
+
+/// The longest memory key, and the width a reply key is padded to: the float memory's
+/// `MAX_REPLY_KEY` (16 turn ids, two separators, a length and an id).
+pub const MEMORY_REPLY_KEY_LEN: usize = 20;
+/// The most turn ids an opening key may hold (the float memory's `MAX_KEY`).
+pub const MEMORY_MAX_K: usize = 16;
+/// Pads a stored key shorter than its row, and joins a reply key's parts; never a token id.
+pub const MEMORY_PAD: u32 = u32::MAX;
+
+/// The turn memory of `turn_memory.safetensors` and `turn_memory_reply.safetensors`: exact tables
+/// of token ids, and the per-coordinate weights of their moves on the readout point.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FbsMemorySnapshot {
+    /// The turn ids an opening key holds (claude-161's 8).
+    pub k: usize,
+    /// The training window the keys were cut in (`hamilton_sheet`'s `SHEET_CONTEXT`, 192). A
+    /// session keys over blocks of it, whatever its own context (claude-196).
+    pub key_window: usize,
+    /// The opening table: each key, at most `k` turn ids, and the id it names, in ascending key
+    /// order.
+    pub opening: Vec<FbsMemoryEntry>,
+    /// `width`: the opening move's weight.
+    pub opening_weight: Vec<f32>,
+    /// The reply table (claude-193), when the memory has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reply: Option<FbsReplyTable>,
+}
+
+/// One memory table entry: a key of token ids (a reply key joins its parts with `u32::MAX`), and
+/// the token id it names.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FbsMemoryEntry {
+    pub key: Vec<u32>,
+    pub value: u32,
+}
+
+/// The reply table: keys `turn ids, u32::MAX, reply length, u32::MAX, last reply id` in ascending
+/// order, and the reply move's weight.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FbsReplyTable {
+    /// The most turn ids a reply key holds: the float trainer's `TURN_KEY` (8), which does not
+    /// follow the opening table's `k`.
+    pub turn: usize,
+    pub entries: Vec<FbsMemoryEntry>,
+    /// `width`: the reply move's weight.
+    pub weight: Vec<f32>,
 }
 
 /// The Hamming reads of claude-146's `hamming_read.safetensors`: one read per depth.

@@ -13,12 +13,17 @@
 //! the integer crate's serving build; `fbs-export` turns its JSON into the
 //! `UORLUT01` artifact.
 
+use std::path::Path;
+
 use candle_core::Tensor;
 use uor_r4_integer::discrete_d11::{spiralcore_orbit_roots, spiralcore_signed_axes};
 use uor_r4_integer::fbs_snapshot::{
     fixed_value, grid_code, grid_value, q12_value, FbsFloatPosition, FbsFloatReadout,
-    FbsFloatSequence, FbsReadoutMode, FbsRoutes, FbsTrunkLayer, FbsTrunkSnapshot, FBS_FIXED_EXP,
+    FbsFloatSequence, FbsMemoryEntry, FbsMemorySnapshot, FbsReadoutMode, FbsReplyTable, FbsRoutes,
+    FbsTrunkLayer, FbsTrunkSnapshot, FBS_FIXED_EXP,
 };
+
+use crate::flock_read_memory::TurnMemory;
 
 use crate::geometric_stack::{
     Gate, QuaternionWeights, RecGates, RotationGroup, StackArch, StackConfig, StackModel,
@@ -279,8 +284,78 @@ pub fn fbs_trunk_snapshot(model: &StackModel) -> Result<FbsTrunkSnapshot> {
         embed: values("embedding.weight")?,
         final_norm: values("final_norm.weight")?,
         layers,
-        // Reading `hamming_read.safetensors` into the snapshot is a later unit (claude-188).
+        // Reading `hamming_read.safetensors` into the snapshot is `integer-hamming-read`'s step 4;
+        // until then `check_checkpoint_reads` refuses a checkpoint with one (claude-198).
         hamming: None,
+        // The memory is not part of the `StackModel`: `fbs-snapshot` loads it from the checkpoint
+        // directory and sets it with `fbs_memory_snapshot` (claude-198).
+        memory: None,
+    })
+}
+
+/// The safetensors files of a checkpoint directory the export accounts for (claude-198): the
+/// trunk, the optimizer's state (training only, never served), and the turn memory, which it
+/// carries. Any other is a read it does not carry: today the Flock, content, Hamming and opening
+/// reads and the prompt register (`in_space_long`'s final checkpoint).
+const CHECKPOINT_ACCOUNTED: [&str; 4] = [
+    "model.safetensors",
+    "optimizer.safetensors",
+    "turn_memory.safetensors",
+    "turn_memory_reply.safetensors",
+];
+
+/// Refuse a checkpoint directory that holds a read the export does not carry, naming every one,
+/// so the export never serves the trunk without it (claude-198). The Hamming read's export is
+/// `integer-hamming-read`'s step 4. A reply table without its opening table is refused too:
+/// `TurnMemory::load` reads neither without the opening file. A macOS `._*.safetensors` copy
+/// artifact is refused like any unknown file, which is the safe direction.
+pub fn check_checkpoint_reads(directory: &Path) -> Result<()> {
+    if directory.join("turn_memory_reply.safetensors").exists()
+        && !directory.join("turn_memory.safetensors").exists()
+    {
+        return Err(invalid(
+            "the checkpoint holds turn_memory_reply.safetensors without turn_memory.safetensors, so the export would drop the reply table",
+        ));
+    }
+    let mut refused = Vec::new();
+    for entry in std::fs::read_dir(directory)? {
+        let name = entry?.file_name().to_string_lossy().into_owned();
+        if name.ends_with(".safetensors") && !CHECKPOINT_ACCOUNTED.contains(&name.as_str()) {
+            refused.push(name);
+        }
+    }
+    if refused.is_empty() {
+        return Ok(());
+    }
+    refused.sort();
+    Err(invalid(format!(
+        "the checkpoint holds {}, which the export does not carry yet; exporting the trunk without it would serve another model",
+        refused.join(", ")
+    )))
+}
+
+/// The snapshot of a turn memory (claude-161, claude-193): its tables in ascending key order, as
+/// `TurnMemory::save` writes them, its weights, and the training window its keys were cut in
+/// (claude-198).
+pub fn fbs_memory_snapshot(memory: &TurnMemory, key_window: usize) -> Result<FbsMemorySnapshot> {
+    let entries = |rows: Vec<(Vec<u32>, u32)>| -> Vec<FbsMemoryEntry> {
+        rows.into_iter()
+            .map(|(key, value)| FbsMemoryEntry { key, value })
+            .collect()
+    };
+    Ok(FbsMemorySnapshot {
+        k: memory.k(),
+        key_window,
+        opening: entries(memory.opening_entries()),
+        opening_weight: finite_table("turn_memory.weight", memory.opening_weight()?)?,
+        reply: match memory.reply_parts()? {
+            None => None,
+            Some((rows, weight)) => Some(FbsReplyTable {
+                turn: crate::in_space_long::TURN_KEY,
+                entries: entries(rows),
+                weight: finite_table("turn_memory_reply.weight", weight)?,
+            }),
+        },
     })
 }
 
@@ -556,6 +631,147 @@ mod tests {
             }
         }
         y
+    }
+
+    /// claude-198: a saved turn memory snapshots exactly as it loads: both tables in ascending key
+    /// order, both weights, the key window, and the same JSON; a memory without a reply table has
+    /// none, and a weight that is not finite is refused.
+    #[test]
+    fn a_saved_memory_snapshots_as_it_loads() -> Result<()> {
+        use std::collections::HashMap;
+        let device = candle_core::Device::Cpu;
+        let scratch = Scratch::new("claude-198-memory");
+        let dir = &scratch.0;
+        let pad = uor_r4_integer::fbs_snapshot::MEMORY_PAD;
+        let openings: HashMap<Vec<u32>, u32> =
+            [(vec![9, 4], 6), (vec![3], 7), (vec![3, 4], 8)].into_iter().collect();
+        let replies: HashMap<Vec<u32>, u32> = [
+            (vec![3, 4, pad, 1, pad, 6], 7),
+            (vec![pad, 2, pad, 9], 8),
+            (vec![3, pad, 5, pad, 2], 1),
+        ]
+        .into_iter()
+        .collect();
+        let memory = TurnMemory::new(2, openings, 4, &device)?.with_reply(replies)?;
+        memory
+            .weight
+            .set(&Tensor::new(&[0.25f32, -0.5, 1.0, 0.0], &device)?)?;
+        memory
+            .reply
+            .as_ref()
+            .expect("a reply table")
+            .weight
+            .set(&Tensor::new(&[-1.0f32, 0.125, 0.0, 2.0], &device)?)?;
+        memory.save(dir)?;
+        let loaded = TurnMemory::load(dir, &device)?.expect("saved");
+        let before = fbs_memory_snapshot(&memory, 192)?;
+        let after = fbs_memory_snapshot(&loaded, 192)?;
+        assert_eq!(before, after);
+        assert_eq!(serde_json::to_vec(&before)?, serde_json::to_vec(&after)?);
+        assert_eq!((after.k, after.key_window), (2, 192));
+        let keys: Vec<&[u32]> = after.opening.iter().map(|e| e.key.as_slice()).collect();
+        assert_eq!(keys, [&[3][..], &[3, 4], &[9, 4]]);
+        assert_eq!(after.opening[1].value, 8);
+        assert_eq!(after.opening_weight, [0.25, -0.5, 1.0, 0.0]);
+        let reply = after.reply.as_ref().expect("the reply table");
+        assert!(reply.entries.windows(2).all(|w| w[0].key < w[1].key));
+        assert_eq!((reply.turn, reply.entries.len()), (8, 3));
+        assert_eq!(reply.weight, [-1.0, 0.125, 0.0, 2.0]);
+        let parsed: FbsMemorySnapshot = serde_json::from_slice(&serde_json::to_vec(&after)?)?;
+        assert_eq!(parsed, after);
+
+        let plain = TurnMemory::new(2, HashMap::new(), 4, &device)?;
+        assert!(fbs_memory_snapshot(&plain, 192)?.reply.is_none());
+        plain
+            .weight
+            .set(&Tensor::new(&[0.0f32, f32::NAN, 0.0, 0.0], &device)?)?;
+        assert!(fbs_memory_snapshot(&plain, 192).is_err());
+        Ok(())
+    }
+
+    /// A test's scratch directory, emptied before use and removed when dropped, so a failed run
+    /// leaves nothing behind for the next.
+    struct Scratch(std::path::PathBuf);
+
+    impl Scratch {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!("{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            Self(dir)
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// claude-198: a checkpoint of the trunk, its optimizer state and its turn memory exports;
+    /// every other read `in_space_long` saves beside them is refused by name, because the export
+    /// does not carry it yet.
+    #[test]
+    fn a_checkpoint_read_the_export_does_not_carry_is_refused() -> Result<()> {
+        let accounted = [
+            "model.safetensors",
+            "optimizer.safetensors",
+            "turn_memory.safetensors",
+            "turn_memory_reply.safetensors",
+            "config.json",
+        ];
+        // The five reads `in_space_long` saves today, and a read no code writes yet: the check is
+        // an allow-list, so a read added later is refused too.
+        let reads = [
+            "flock_read.safetensors",
+            "content_read.safetensors",
+            "hamming_read.safetensors",
+            "opening_read.safetensors",
+            "prompt_register.safetensors",
+            "future_read.safetensors",
+        ];
+        for read in reads {
+            let scratch = Scratch::new("claude-198-reads");
+            std::fs::create_dir_all(&scratch.0)?;
+            for file in accounted {
+                std::fs::write(scratch.0.join(file), b"")?;
+            }
+            check_checkpoint_reads(&scratch.0)?;
+            std::fs::write(scratch.0.join(read), b"")?;
+            let message = check_checkpoint_reads(&scratch.0)
+                .expect_err(read)
+                .to_string();
+            assert!(message.contains(read), "{message}");
+        }
+        // Three reads at once, written in reverse order, are all named in name order.
+        let scratch = Scratch::new("claude-198-reads");
+        std::fs::create_dir_all(&scratch.0)?;
+        for read in [
+            "prompt_register.safetensors",
+            "opening_read.safetensors",
+            "flock_read.safetensors",
+        ] {
+            std::fs::write(scratch.0.join(read), b"")?;
+        }
+        let message = check_checkpoint_reads(&scratch.0)
+            .expect_err("three reads")
+            .to_string();
+        assert!(
+            message.contains(
+                "flock_read.safetensors, opening_read.safetensors, prompt_register.safetensors"
+            ),
+            "{message}"
+        );
+        // A reply table without its opening table is refused, not dropped.
+        let scratch = Scratch::new("claude-198-reads");
+        std::fs::create_dir_all(&scratch.0)?;
+        for file in ["model.safetensors", "turn_memory_reply.safetensors"] {
+            std::fs::write(scratch.0.join(file), b"")?;
+        }
+        let message = check_checkpoint_reads(&scratch.0)
+            .expect_err("a reply table alone")
+            .to_string();
+        assert!(message.contains("without turn_memory.safetensors"), "{message}");
+        Ok(())
     }
 
     #[test]

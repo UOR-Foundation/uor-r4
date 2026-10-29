@@ -152,6 +152,7 @@ pub fn synthetic_fbs_trunk_with(seed: u64, s: FbsSynth) -> FbsTrunkSnapshot {
         final_norm: rand_pos(&mut rng, d),
         layers,
         hamming: None,
+        memory: None,
     }
 }
 

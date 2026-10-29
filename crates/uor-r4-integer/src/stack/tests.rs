@@ -3696,6 +3696,8 @@ fn snapshots_without_hamming_reads_are_unchanged() {
     let snap = synthetic_fbs_trunk(20261025);
     let value = serde_json::to_value(&snap).expect("serialize");
     assert!(value.get("hamming").is_none());
+    // Nor a memory key (claude-198).
+    assert!(value.get("memory").is_none());
     let back: super::FbsTrunkSnapshot = serde_json::from_value(value).expect("an old snapshot parses");
     assert_eq!(back, snap);
 }
@@ -4569,5 +4571,238 @@ fn the_payload_cache_is_bounded() {
             Err(StackError::Shape(m)) => assert_eq!(m, "the Hamming type heads' payload cache exceeds the session read cache's 4 GiB"),
             other => panic!("({typed}, {context}, {width}): expected the refusal, got {other:?}"),
         }
+    }
+}
+
+/// The session's refusal of a turn memory it does not serve yet (claude-198).
+const MEMORY_REFUSED: &str = "this engine does not serve the turn memory yet (uor-r4.lut-stack/7)";
+/// The record's refusal of a reply turn out of range or apart from its table (claude-198).
+const REPLY_TURN_REFUSED: &str = "a reply table's turn must be from 1 to 16 ids, and only with the table";
+
+/// A synthetic turn memory for a trunk of `vocab` and `width` (claude-198): 40 opening keys of 1
+/// to `k` ids and, with `reply`, 60 reply keys `turn (0 to 8 ids), MAX, length, MAX, last id` (the
+/// float trainer's reply turn is 8 ids, whatever `k`), each table in ascending key order, and
+/// weights in `[-1, 1]`.
+fn synthetic_memory(vocab: usize, width: usize, k: usize, reply: bool, seed: u64) -> super::FbsMemorySnapshot {
+    use super::{FbsMemoryEntry, FbsReplyTable, MEMORY_PAD};
+    let mut rng = Lcg(seed);
+    let weight = |rng: &mut Lcg| -> Vec<f32> {
+        (0..width).map(|_| ((rng.next() % 2001) as f32 - 1000.0) / 1000.0).collect()
+    };
+    let table = |rng: &mut Lcg, count: usize, key: &mut dyn FnMut(&mut Lcg) -> Vec<u32>| {
+        let mut entries: Vec<FbsMemoryEntry> = (0..count)
+            .map(|_| FbsMemoryEntry {
+                key: key(rng),
+                value: (rng.next() % vocab as u64) as u32,
+            })
+            .collect();
+        entries.sort();
+        entries.dedup_by(|a, b| a.key == b.key);
+        entries
+    };
+    let opening = table(&mut rng, 40, &mut |rng| {
+        let len = 1 + (rng.next() % k as u64) as usize;
+        (0..len).map(|_| (rng.next() % vocab as u64) as u32).collect()
+    });
+    let opening_weight = weight(&mut rng);
+    let reply = reply.then(|| {
+        let entries = table(&mut rng, 60, &mut |rng| {
+            let turn = (rng.next() % 9) as usize;
+            let mut key: Vec<u32> = (0..turn).map(|_| (rng.next() % vocab as u64) as u32).collect();
+            key.extend([MEMORY_PAD, 1 + (rng.next() % 192) as u32, MEMORY_PAD, (rng.next() % vocab as u64) as u32]);
+            key
+        });
+        FbsReplyTable {
+            turn: 8,
+            entries,
+            weight: weight(&mut rng),
+        }
+    });
+    super::FbsMemorySnapshot {
+        k,
+        key_window: 192,
+        opening,
+        opening_weight,
+        reply,
+    }
+}
+
+/// claude-198: a trunk with a turn memory exports as `uor-r4.lut-stack/7`, with or without a reply
+/// table, an empty opening table, and Hamming reads beside it. Every key, value and weight reads
+/// back at its exponent, and the session refuses the artifact by name.
+#[test]
+fn memories_round_trip_in_lut_stack_7() {
+    use super::synthetic::synthetic_hamming;
+    let fixed = |values: &[f32]| -> Vec<i32> {
+        values.iter().map(|&v| (f64::from(v) * 2f64.powi(-super::MEMORY_WEIGHT_EXP)).round() as i32).collect()
+    };
+    let base = synthetic_fbs_trunk(20261025);
+    let (vocab, width) = (base.vocab, base.width);
+    let mut empty = synthetic_memory(vocab, width, 8, false, 7);
+    empty.opening.clear();
+    let cases = [
+        ("opening only", synthetic_memory(vocab, width, 8, false, 198), false),
+        ("both tables", synthetic_memory(vocab, width, 8, true, 198), false),
+        ("k = 4 beside reply keys of 8 turn ids", synthetic_memory(vocab, width, 4, true, 200), false),
+        ("an empty opening table", empty, false),
+        ("both tables beside Hamming reads", synthetic_memory(vocab, width, 8, true, 199), true),
+    ];
+    for (what, memory, with_hamming) in cases {
+        let mut snap = base.clone();
+        if with_hamming {
+            let mut read = synthetic_hamming(width, snap.layers.len(), 4, 188);
+            for r in &mut read.reads {
+                r.weight[width..].fill(0.0);
+            }
+            snap.hamming = Some(read);
+        }
+        // The k = 4 case holds reply keys of more turn ids than k, as the float trainer writes them.
+        if let Some(reply) = &memory.reply {
+            assert_eq!(reply.entries.iter().any(|e| e.key.len() - 4 > memory.k), memory.k < 8, "{what}");
+        }
+        snap.memory = Some(memory.clone());
+        let bytes = super::export_fbs_trunk_uorlut01(&snap).expect(what);
+        let len = u64::from_le_bytes(bytes[8..16].try_into().expect("length")) as usize;
+        let header: Value = serde_json::from_slice(&bytes[16..16 + len]).expect("header");
+        assert_eq!(header["schema"], super::STACK_FBS_MEMORY_SCHEMA, "{what}");
+        let image = super::read_memory_uorlut01(&bytes).expect(what).expect("the memory");
+        assert_eq!(
+            image.record,
+            super::StackTurnMemory {
+                k: memory.k,
+                key_window: 192,
+                opening: memory.opening.len(),
+                reply: memory.reply.as_ref().map(|r| r.entries.len()),
+                reply_turn: memory.reply.as_ref().map(|r| r.turn),
+                reply_key_len: super::MEMORY_REPLY_KEY_LEN,
+                weight_exp: super::MEMORY_WEIGHT_EXP,
+            },
+            "{what}"
+        );
+        let keys = |entries: &[super::FbsMemoryEntry]| entries.iter().map(|e| e.key.clone()).collect::<Vec<_>>();
+        let values = |entries: &[super::FbsMemoryEntry]| entries.iter().map(|e| e.value).collect::<Vec<_>>();
+        assert_eq!(image.opening.keys, keys(&memory.opening), "{what}");
+        assert_eq!(image.opening.values, values(&memory.opening), "{what}");
+        assert_eq!(image.opening.weight, fixed(&memory.opening_weight), "{what}");
+        match (&image.reply, &memory.reply) {
+            (None, None) => {}
+            (Some(got), Some(want)) => {
+                assert_eq!(got.keys, keys(&want.entries), "{what}");
+                assert_eq!(got.values, values(&want.entries), "{what}");
+                assert_eq!(got.weight, fixed(&want.weight), "{what}");
+            }
+            _ => panic!("{what}: the reply table did not round-trip"),
+        }
+        assert_eq!(super::read_hamming_uorlut01(&bytes).expect(what).is_some(), with_hamming, "{what}");
+        match IntegerStackModel::parse(&bytes) {
+            Err(StackError::Shape(m)) => assert_eq!(m, MEMORY_REFUSED, "{what}"),
+            other => panic!("{what}: expected the memory refusal, got {:?}", other.err()),
+        }
+    }
+    // The same trunk without the memory is served, and reads back no memory.
+    let plain = super::export_fbs_trunk_uorlut01(&base).expect("export");
+    assert!(super::read_memory_uorlut01(&plain).expect("parse").is_none());
+    IntegerStackModel::parse(&plain).expect("a memory-free trunk is served");
+}
+
+/// claude-198: the export refuses a memory the reader would refuse, each by its reason, because it
+/// re-reads what it wrote; and the reader alone refuses a header whose counts do not match the
+/// sections, and a memory on a dense stack.
+#[test]
+fn malformed_memories_are_refused_by_their_text() {
+    use super::{FbsMemoryEntry, MEMORY_PAD};
+    let base = synthetic_fbs_trunk(20261025);
+    let (vocab, width) = (base.vocab, base.width);
+    let good = synthetic_memory(vocab, width, 8, true, 198);
+    let export = |mutate: &dyn Fn(&mut super::FbsMemorySnapshot)| -> Result<Vec<u8>, StackError> {
+        let mut memory = good.clone();
+        mutate(&mut memory);
+        let mut snap = base.clone();
+        snap.memory = Some(memory);
+        super::export_fbs_trunk_uorlut01(&snap)
+    };
+    let served = export(&|_| {}).expect("the unmodified memory exports");
+    let numerics = |what: &str, mutate: &dyn Fn(&mut super::FbsMemorySnapshot), reason: &str| match export(mutate) {
+        Err(StackError::Numerics(m)) => assert!(m.contains(reason), "{what}: {m}"),
+        other => panic!("{what}: expected a refusal naming {reason:?}, got {:?}", other.err()),
+    };
+    numerics("opening keys out of order", &|m| m.opening.swap(0, 1), "not in strictly ascending order");
+    numerics("a repeated opening key", &|m| m.opening[1].key = m.opening[0].key.clone(), "not in strictly ascending order");
+    numerics("a key id past the vocabulary", &|m| m.opening[0].key[0] = vocab as u32, "is not a key this engine reads");
+    // An empty opening key sorts first and stores as a row of pads; the float memory never has one.
+    numerics("an empty opening key", &|m| m.opening[0].key.clear(), "is not a key this engine reads");
+    numerics("a value past the vocabulary", &|m| m.opening[0].value = vocab as u32, "names an id past the vocabulary");
+    numerics(
+        "a reply key without its separators",
+        &|m| {
+            let reply = m.reply.as_mut().expect("reply");
+            reply.entries.insert(0, FbsMemoryEntry { key: vec![0, 1, 2, 3], value: 0 });
+        },
+        "is not a key this engine reads",
+    );
+    numerics(
+        "a reply length past the key window",
+        &|m| {
+            let reply = m.reply.as_mut().expect("reply");
+            reply.entries.insert(0, FbsMemoryEntry { key: vec![MEMORY_PAD, 193, MEMORY_PAD, 0], value: 0 });
+        },
+        "is not a key this engine reads",
+    );
+    numerics(
+        "a reply turn longer than the record's",
+        &|m| {
+            let reply = m.reply.as_mut().expect("reply");
+            let key = [vec![0; 9], vec![MEMORY_PAD, 1, MEMORY_PAD, 0]].concat();
+            reply.entries.insert(0, FbsMemoryEntry { key, value: 0 });
+        },
+        "is not a key this engine reads",
+    );
+    for turn in [0, 17] {
+        match export(&|m| m.reply.as_mut().expect("reply").turn = turn) {
+            Err(StackError::Shape(m)) => assert_eq!(m, REPLY_TURN_REFUSED, "turn {turn}"),
+            other => panic!("a reply turn of {turn}: expected the record refusal, got {:?}", other.err()),
+        }
+    }
+    numerics("an opening key longer than k", &|m| m.opening[0].key = vec![0; 9], "a key is longer than its row");
+    numerics("a weight that does not fit", &|m| m.opening_weight[0] = 1.0e6, "fixed-point overflow");
+    match export(&|m| m.k = 0) {
+        Err(StackError::Shape(m)) => assert_eq!(m, "a turn memory's k must be from 1 to 16"),
+        other => panic!("k = 0: expected the record refusal, got {:?}", other.err()),
+    }
+    match export(&|m| m.opening_weight.pop().map_or((), |_| ())) {
+        Err(StackError::TableLength { name, .. }) => assert_eq!(name, "memory.opening.weight"),
+        other => panic!("a short weight: expected a length refusal, got {:?}", other.err()),
+    }
+    // The reader alone: a record whose count does not match its sections.
+    let miscounted = with_header(&served, |h| {
+        let n = h["memory"]["opening"].as_u64().expect("count");
+        h["memory"]["opening"] = json!(n + 1);
+    });
+    match super::read_memory_uorlut01(&miscounted) {
+        Err(StackError::TableLength { name, .. }) => assert_eq!(name, "memory.opening.keys"),
+        other => panic!("a miscounted header: expected a length refusal, got {other:?}"),
+    }
+    // A reply count without its turn.
+    let turnless = with_header(&served, |h| h["memory"]["reply_turn"] = Value::Null);
+    match super::read_memory_uorlut01(&turnless) {
+        Err(StackError::Shape(m)) => assert_eq!(m, REPLY_TURN_REFUSED),
+        other => panic!("a reply table without its turn: expected the record refusal, got {other:?}"),
+    }
+    // A memory record on a dense stack.
+    let dense = with_header(&artifact(5), |h| {
+        h["schema"] = json!(super::STACK_FBS_MEMORY_SCHEMA);
+        h["memory"] = json!(super::StackTurnMemory {
+            k: 8,
+            key_window: 192,
+            opening: 0,
+            reply: None,
+            reply_turn: None,
+            reply_key_len: super::MEMORY_REPLY_KEY_LEN,
+            weight_exp: super::MEMORY_WEIGHT_EXP,
+        });
+    });
+    match super::read_memory_uorlut01(&dense) {
+        Err(StackError::Shape(m)) => assert_eq!(m, "a turn memory needs a SpiralCore/FBS stack"),
+        other => panic!("a memory on a dense stack: expected the shape refusal, got {other:?}"),
     }
 }

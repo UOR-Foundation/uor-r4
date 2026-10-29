@@ -16,15 +16,23 @@
 //!
 //! It never replaces or leaves a partial output file, and it prints each
 //! file's sha256.
+//!
+//! The snapshot carries every read the checkpoint holds, or it is refused
+//! (claude-198): the turn memory (`turn_memory*.safetensors`) is carried, and
+//! any other read file (the Flock, content, Hamming and opening reads, the
+//! prompt register) is refused by name until its export exists.
 
 use std::path::Path;
 
 use candle_core::Device;
 use sha2::{Digest, Sha256};
 use uor_r4_float_train::fbs_export::{
-    fbs_float_readout, fbs_trunk_snapshot, round_tables_as_exported,
+    check_checkpoint_reads, fbs_float_readout, fbs_memory_snapshot, fbs_trunk_snapshot,
+    round_tables_as_exported,
 };
+use uor_r4_float_train::flock_read_memory::TurnMemory;
 use uor_r4_float_train::geometric_stack::StackModel;
+use uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT;
 use uor_r4_float_train::Result;
 use uor_r4_integer::fbs_snapshot::{write_new_file, FbsReadoutMode};
 
@@ -45,9 +53,17 @@ fn main() -> Result<()> {
             std::process::exit(2);
         }
     };
+    let dir = Path::new(model_dir);
+    // Every read the checkpoint holds is carried, or the export is refused (claude-198), before
+    // the GPU is opened.
+    check_checkpoint_reads(dir)?;
     let device = Device::new_cuda(0)?;
-    let model = StackModel::load(Path::new(model_dir), &device)?;
-    write(out, &serde_json::to_vec(&fbs_trunk_snapshot(&model)?)?)?;
+    let model = StackModel::load(dir, &device)?;
+    let mut snapshot = fbs_trunk_snapshot(&model)?;
+    snapshot.memory = TurnMemory::load(dir, &device)?
+        .map(|memory| fbs_memory_snapshot(&memory, SHEET_CONTEXT))
+        .transpose()?;
+    write(out, &serde_json::to_vec(&snapshot)?)?;
     for (path, mode) in readouts.iter().zip([
         FbsReadoutMode::Plain,
         FbsReadoutMode::Export,

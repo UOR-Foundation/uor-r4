@@ -56,6 +56,7 @@ pub mod flock;
 mod format;
 mod hamming;
 pub(crate) mod kernels;
+mod memory;
 #[cfg(feature = "serving-wasm")]
 pub mod simd;
 mod session;
@@ -85,6 +86,11 @@ pub use format::{
     FbsHammingRead, FbsHammingSnapshot, StackHamming, HAMMING_KEPT, HAMMING_MARGIN_EXP, HAMMING_ROTATION_EXP,
     HAMMING_WEIGHT_EXP, STACK_FBS_HAMMING_SCHEMA,
 };
+pub use format::{
+    FbsMemoryEntry, FbsMemorySnapshot, FbsReplyTable, StackTurnMemory, MEMORY_MAX_K, MEMORY_PAD, MEMORY_REPLY_KEY_LEN,
+    MEMORY_WEIGHT_EXP, STACK_FBS_MEMORY_SCHEMA,
+};
+pub use memory::{read_memory_uorlut01, MemoryImage, MemoryTableImage};
 pub use hamming::{copy_weight_q31, read_hamming_uorlut01, CopyHeads, HammingImage, HammingReadImage, TypeHeads, COPY_MEAN_EXP};
 pub use kernels::{stack_argmax, stack_memory_select, stack_snap_select, MAX_SELECT_SIDE};
 pub use session::{

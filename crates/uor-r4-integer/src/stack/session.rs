@@ -688,6 +688,14 @@ impl IntegerStackModel {
         // A Hamming read (`lut-stack/6`) is served on an FBS shape only, and `Container::parse`
         // refuses it on any other; `fbs_model` refuses the parts not served yet (claude-194).
         let artifact = Container::parse(bytes)?;
+        // A turn memory (`lut-stack/7`) is checked section by section, then refused: this engine
+        // does not serve it yet (claude-198), and serving the trunk without it would differ from
+        // the float model, which depends on it.
+        if super::memory::memory_image(&artifact)?.is_some() {
+            return Err(StackError::Shape(
+                "this engine does not serve the turn memory yet (uor-r4.lut-stack/7)",
+            ));
+        }
         if artifact.shape.read_binary() && artifact.shape.head_dim() > BITCODE_LANES {
             return Err(StackError::Shape(
                 "a binary read's head width exceeds the 256-lane sign code",

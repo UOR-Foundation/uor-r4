@@ -22,7 +22,10 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use super::StackError;
-pub use crate::fbs_snapshot::{FbsHammingRead, FbsHammingSnapshot, FbsRoutes, FbsTrunkLayer, FbsTrunkSnapshot};
+pub use crate::fbs_snapshot::{
+    FbsHammingRead, FbsHammingSnapshot, FbsMemoryEntry, FbsMemorySnapshot, FbsReplyTable, FbsRoutes, FbsTrunkLayer,
+    FbsTrunkSnapshot, MEMORY_MAX_K, MEMORY_PAD, MEMORY_REPLY_KEY_LEN,
+};
 
 /// Container magic.
 pub const MAGIC: &[u8; 8] = b"UORLUT01";
@@ -56,6 +59,57 @@ pub const HAMMING_MARGIN_EXP: i32 = -16;
 pub const HAMMING_WEIGHT_EXP: i32 = -24;
 /// Earlier positions each Hamming head keeps (the float trunk's `HAMMING_KEPT`).
 pub const HAMMING_KEPT: usize = 16;
+/// Header schema of a SpiralCore/FBS stack that carries the turn memory (claude-198), with or
+/// without Hamming reads: an engine that does not serve the memory refuses it instead of
+/// dropping it.
+pub const STACK_FBS_MEMORY_SCHEMA: &str = "uor-r4.lut-stack/7";
+/// The memory's move weights at `2^MEMORY_WEIGHT_EXP`.
+pub const MEMORY_WEIGHT_EXP: i32 = -24;
+
+/// The header record of a stack's turn memory (claude-198): its key sizes, its table counts, and
+/// the exponent its weights are stored at, in sections `memory.opening.*` and `memory.reply.*`.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StackTurnMemory {
+    /// Turn ids an opening key holds.
+    pub k: usize,
+    /// The training window the keys were cut in.
+    pub key_window: usize,
+    /// The opening table's entries.
+    pub opening: usize,
+    /// The reply table's entries, when the memory has one.
+    pub reply: Option<usize>,
+    /// The most turn ids a reply key holds, with the reply table: the float trainer's `TURN_KEY`.
+    pub reply_turn: Option<usize>,
+    pub reply_key_len: usize,
+    pub weight_exp: i32,
+}
+
+impl StackTurnMemory {
+    /// Refuse a record the stack `shape` cannot carry: a non-FBS stack; `k` of 0 or past
+    /// `MEMORY_MAX_K`; a reply turn without its table, or of 0 or past the reply row's room; a key
+    /// window of 0 or past `MAX_CONTEXT`; or a key length or exponent other than this engine's.
+    pub fn check(&self, shape: &StackShape) -> Result<(), StackError> {
+        if !shape.projection_fbs() {
+            return Err(StackError::Shape("a turn memory needs a SpiralCore/FBS stack"));
+        }
+        if self.k == 0 || self.k > MEMORY_MAX_K {
+            return Err(StackError::Shape("a turn memory's k must be from 1 to 16"));
+        }
+        if self.reply.is_some() != self.reply_turn.is_some()
+            || self.reply_turn.is_some_and(|turn| turn == 0 || turn > MEMORY_REPLY_KEY_LEN - 4)
+        {
+            return Err(StackError::Shape("a reply table's turn must be from 1 to 16 ids, and only with the table"));
+        }
+        if self.key_window == 0 || self.key_window > MAX_CONTEXT {
+            return Err(StackError::Shape("a turn memory's key window must be from 1 to the context limit"));
+        }
+        if self.reply_key_len != MEMORY_REPLY_KEY_LEN || self.weight_exp != MEMORY_WEIGHT_EXP {
+            return Err(StackError::Shape("the turn memory's key length or exponent is not this engine's"));
+        }
+        Ok(())
+    }
+}
 
 /// The header record of a stack's Hamming reads (claude-188): their heads, depths and kept count,
 /// and the exponents their `hamming.d{depth}.*` sections are stored at.
@@ -649,6 +703,9 @@ struct Header {
     /// The Hamming reads, under [`STACK_FBS_HAMMING_SCHEMA`]; absent on a stack without them.
     #[serde(default)]
     hamming: Option<StackHamming>,
+    /// The turn memory, under [`STACK_FBS_MEMORY_SCHEMA`]; absent on a stack without one.
+    #[serde(default)]
+    memory: Option<StackTurnMemory>,
 }
 
 /// One 4-bit matrix of a parsed container, borrowed from its bytes.
@@ -669,6 +726,8 @@ pub(crate) struct Container<'a> {
     pub transport_snap: Option<StackTransportSnap>,
     /// The validated Hamming read record, if the header carries one.
     pub hamming: Option<StackHamming>,
+    /// The validated turn memory record, if the header carries one.
+    pub memory: Option<StackTurnMemory>,
     data: &'a [u8],
     /// Sections by name (unique within each kind).
     matrices: HashMap<String, MatrixEntry>,
@@ -704,10 +763,12 @@ impl<'a> Container<'a> {
             })?;
         let header: Header =
             serde_json::from_slice(&bytes[16..header_end]).map_err(StackError::Header)?;
-        // A stack with Hamming reads is `lut-stack/6`; any other is the schema its shape implies.
-        let expected = match &header.hamming {
-            Some(_) => STACK_FBS_HAMMING_SCHEMA,
-            None => stack_schema_for(&header.shape),
+        // A stack with a turn memory is `lut-stack/7`, one with Hamming reads alone `/6`; any
+        // other is the schema its shape implies.
+        let expected = match (&header.memory, &header.hamming) {
+            (Some(_), _) => STACK_FBS_MEMORY_SCHEMA,
+            (None, Some(_)) => STACK_FBS_HAMMING_SCHEMA,
+            (None, None) => stack_schema_for(&header.shape),
         };
         if header.schema != expected {
             return Err(StackError::Schema(header.schema));
@@ -718,6 +779,9 @@ impl<'a> Container<'a> {
         header.shape.validate()?;
         if let Some(hamming) = &header.hamming {
             hamming.check(&header.shape)?;
+        }
+        if let Some(memory) = &header.memory {
+            memory.check(&header.shape)?;
         }
         if let Some(snap) = &header.transport_snap {
             let known = snap.name == "icosian"
@@ -792,6 +856,7 @@ impl<'a> Container<'a> {
             sha256: hex::encode(Sha256::digest(bytes)),
             transport_snap: header.transport_snap,
             hamming: header.hamming,
+            memory: header.memory,
             data,
             matrices,
             tables,
@@ -1588,6 +1653,44 @@ pub fn export_fbs_trunk_uorlut01_with(
         }
     };
 
+    // The turn memory (claude-198): each table's keys (padded to their row with `MEMORY_PAD`) and
+    // values as `u32`, each weight at `MEMORY_WEIGHT_EXP`, and the header record naming them.
+    let memory = match &snap.memory {
+        None => None,
+        Some(mem) => {
+            let record = StackTurnMemory {
+                k: mem.k,
+                key_window: mem.key_window,
+                opening: mem.opening.len(),
+                reply: mem.reply.as_ref().map(|r| r.entries.len()),
+                reply_turn: mem.reply.as_ref().map(|r| r.turn),
+                reply_key_len: MEMORY_REPLY_KEY_LEN,
+                weight_exp: MEMORY_WEIGHT_EXP,
+            };
+            record.check(&shape)?;
+            let mut table = |kind: &str, entries: &[FbsMemoryEntry], row: usize, weight: &[f32]| -> Result<(), StackError> {
+                let name = |part: &str| format!("memory.{kind}.{part}");
+                let mut keys = Vec::with_capacity(entries.len() * row);
+                for entry in entries {
+                    if entry.key.len() > row {
+                        return Err(StackError::Numerics(format!("{}: a key is longer than its row", name("keys"))));
+                    }
+                    keys.extend(entry.key.iter().copied().chain(std::iter::repeat(MEMORY_PAD)).take(row));
+                }
+                b.push_u32(&name("keys"), &keys);
+                b.push_u32(&name("values"), &entries.iter().map(|e| e.value).collect::<Vec<_>>());
+                check_f32(&name("weight"), weight, d)?;
+                b.push_i32(&name("weight"), &quantize_fixed_i32(weight, d, MEMORY_WEIGHT_EXP, &name("weight"))?);
+                Ok(())
+            };
+            table("opening", &mem.opening, mem.k, &mem.opening_weight)?;
+            if let Some(reply) = &mem.reply {
+                table("reply", &reply.entries, MEMORY_REPLY_KEY_LEN, &reply.weight)?;
+            }
+            Some(record)
+        }
+    };
+
     let eps_exp = -48i32;
     let eps_mantissa = (snap.rms_eps * 2f64.powi(-eps_exp)).round() as i64;
     let score_scale_q30 = ((1.0 / (shape.head_dim() as f64).sqrt()) * 2f64.powi(30))
@@ -1612,9 +1715,10 @@ pub fn export_fbs_trunk_uorlut01_with(
         roots: 120,
         roots_sha256: super::ICOSIAN_ROOTS_SHA256.to_owned(),
     };
-    let schema = match &hamming {
-        Some(_) => STACK_FBS_HAMMING_SCHEMA,
-        None => stack_schema_for(&shape),
+    let schema = match (&memory, &hamming) {
+        (Some(_), _) => STACK_FBS_MEMORY_SCHEMA,
+        (None, Some(_)) => STACK_FBS_HAMMING_SCHEMA,
+        (None, None) => stack_schema_for(&shape),
     };
     let mut header = json!({
         "schema": schema,
@@ -1638,6 +1742,10 @@ pub fn export_fbs_trunk_uorlut01_with(
     if let Some(record) = &hamming {
         header["hamming"] = json!(record);
     }
+    // Likewise only a stack with a turn memory has its key.
+    if let Some(record) = &memory {
+        header["memory"] = json!(record);
+    }
     let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
     let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + b.data.len());
     out.extend_from_slice(MAGIC);
@@ -1645,6 +1753,11 @@ pub fn export_fbs_trunk_uorlut01_with(
     out.extend_from_slice(&header_bytes);
     out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
     out.extend_from_slice(&b.data);
+    // The export never writes a memory the reader would refuse (claude-198): its keys in strictly
+    // ascending order, of the forms the session keys by, and every id inside the vocabulary.
+    if memory.is_some() {
+        super::memory::memory_image(&Container::parse(&out)?)?;
+    }
     Ok(out)
 }
 

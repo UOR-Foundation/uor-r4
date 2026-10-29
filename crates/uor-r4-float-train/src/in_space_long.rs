@@ -1211,8 +1211,10 @@ fn reply_rows(windows: &[CausalWindow], mask: &[u8]) -> Vec<ReplyRow> {
     rows
 }
 
-/// How many of the turn's first prompt tokens a turn key holds, as claude-161's memory.
-const TURN_KEY: usize = 8;
+/// How many of the turn's first prompt tokens a turn key holds, as claude-161's memory. The reply
+/// table's keys hold this many, whatever the opening table's `k`; the export carries it
+/// (claude-198).
+pub(crate) const TURN_KEY: usize = 8;
 
 /// Which part of a [`ReplyRow`] a [`ReplyBound`] keys on.
 #[derive(Clone, Copy, Debug)]
