@@ -16,7 +16,8 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Issue #3393. This unit is the item's d
 
   The share threshold is what makes a key usable.
 - **At share 0.5 the openings fall.** The chosen key names 734 openings and gets 470 right, against 1,194 and 601 at share 0. The extended read should therefore keep claude-161's opening table as it is and add the new key for later rows.
-- **The reach depends on DEV's turns recurring in TRAIN.** 1,194 of DEV's 1,226 opening keys are in TRAIN; the panel's dialogues share their prompts' openings. On a panel whose turns TRAIN never saw, the memory would name far fewer rows. claude-161's result has the same scope.
+- **The keys see the window, not the whole turn.** `hs::build_document_windows` splits a document's targets into windows of 192 (`hamilton_sheet.rs`, about lines 1352–1358). In a later window the walk back stops at the window's first token, so the prompt comes out short or empty, and the position counts from the window's start. "Turn-8 + position" is therefore the turn and position as the window shows them: claude-161's "prompt its window shows", the same in TRAIN and DEV. The read in done-when 2 sees the same window, so the count holds as a ceiling for that read. How many rows this touches is counted in done-when 2's sheet.
+- **The reach depends on DEV's turn openings recurring in TRAIN.** 1,194 of DEV's 1,226 openings have their first-8 prompt prefix in TRAIN. On a panel whose turn openings TRAIN never saw, the memory would name far fewer rows. claude-161's result has the same scope.
 - **The probe cannot say what the trunk gets right on the rows the memory names.** It counts the memory alone. Whether it adds to the trunk is done-when 3's run.
 
 ## What changed
@@ -92,7 +93,7 @@ That is the model, not a lookup, so the two are not additive.
 
 - **Done-when 2:** the read, extended to the chosen key, with host and CUDA tests.
 - **Done-when 3:** a pre-registered two-seed run against an empty-table control, barred on top-1, copies and the rest against claude-161 (m), with the openings held.
-- **The scope note:** the panel's turns recur in TRAIN. A fresh-panel count is part of the run's sheet.
+- **The scope notes:** the window-limited keys, and the turn openings that recur in TRAIN. Both are counted in the run's sheet, the latter on a fresh panel too.
 
 ## Plain summary
 
