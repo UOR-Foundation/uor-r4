@@ -1214,16 +1214,21 @@ fn snap_compatible_score(j: usize, s: &[i64; 4], total: i64) -> (i64, i64) {
 #[inline(never)]
 pub fn stack_snap_select(raw: [i32; 4]) -> usize {
     let lane = |value: i32| usize::from(value > 0) | (usize::from(value < 0) << 1);
-    let pattern = lane(core::hint::black_box(raw[0]))
-        | (lane(core::hint::black_box(raw[1])) << 2)
-        | (lane(core::hint::black_box(raw[2])) << 4)
-        | (lane(core::hint::black_box(raw[3])) << 6);
+    // Each lane's result behind `black_box` too: otherwise the four sign
+    // tests are packed into a NEON register and leave it by `fmov`.
+    let pattern = core::hint::black_box(lane(core::hint::black_box(raw[0])))
+        | (core::hint::black_box(lane(core::hint::black_box(raw[1]))) << 2)
+        | (core::hint::black_box(lane(core::hint::black_box(raw[2]))) << 4)
+        | (core::hint::black_box(lane(core::hint::black_box(raw[3]))) << 6);
     let count = usize::from(SNAP_CANDIDATES.counts[pattern]);
+    // Each magnitude behind `black_box`: packed into a NEON register, the four
+    // and their sum end in a SIMD-to-general transfer (`fmov`), which the
+    // serving audit refuses.
     let s = [
-        i64::from(raw[0].unsigned_abs()),
-        i64::from(raw[1].unsigned_abs()),
-        i64::from(raw[2].unsigned_abs()),
-        i64::from(raw[3].unsigned_abs()),
+        core::hint::black_box(i64::from(raw[0].unsigned_abs())),
+        core::hint::black_box(i64::from(raw[1].unsigned_abs())),
+        core::hint::black_box(i64::from(raw[2].unsigned_abs())),
+        core::hint::black_box(i64::from(raw[3].unsigned_abs())),
     ];
     let total = s[0] + s[1] + s[2] + s[3];
     let mut best = 0usize;
