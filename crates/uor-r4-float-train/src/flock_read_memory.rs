@@ -228,6 +228,26 @@ impl TurnMemory {
         self.table.is_empty()
     }
 
+    /// The opening table's entries in ascending key order, the order [`save`](Self::save) writes
+    /// (claude-198, for the export).
+    pub fn opening_entries(&self) -> Vec<(Vec<u32>, u32)> {
+        sorted_entries(&self.table)
+    }
+
+    /// The opening move's per-coordinate weight.
+    pub fn opening_weight(&self) -> Result<Vec<f32>> {
+        Ok(self.weight.as_tensor().to_vec1::<f32>()?)
+    }
+
+    /// The reply table's entries in ascending key order and the reply move's weight, or none
+    /// when the memory has no reply table (claude-198, for the export).
+    pub fn reply_parts(&self) -> Result<Option<(Vec<(Vec<u32>, u32)>, Vec<f32>)>> {
+        self.reply
+            .as_ref()
+            .map(|reply| Ok((sorted_entries(&reply.table), reply.weight.as_tensor().to_vec1::<f32>()?)))
+            .transpose()
+    }
+
     /// The host side of [`apply_readout`](Self::apply_readout) for windows `ids` of `time`
     /// positions: for every `batch · time` row, the stored token (0 where none) and a 0/1 hit,
     /// set only at the opening `rows` whose key the table holds.
@@ -457,6 +477,13 @@ impl TurnMemory {
         }
         Ok(Some(memory))
     }
+}
+
+/// A table's entries in ascending key order, as `save` and `save_reply` write them.
+fn sorted_entries(table: &HashMap<Vec<u32>, u32>) -> Vec<(Vec<u32>, u32)> {
+    let mut entries: Vec<(Vec<u32>, u32)> = table.iter().map(|(k, &v)| (k.clone(), v)).collect();
+    entries.sort();
+    entries
 }
 
 /// Write `reply` to `path`: its weight, and the table as `keys` `(n, MAX_REPLY_KEY)` (padded

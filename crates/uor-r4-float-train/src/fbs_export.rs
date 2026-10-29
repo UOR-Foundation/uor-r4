@@ -13,12 +13,17 @@
 //! the integer crate's serving build; `fbs-export` turns its JSON into the
 //! `UORLUT01` artifact.
 
+use std::path::Path;
+
 use candle_core::Tensor;
 use uor_r4_integer::discrete_d11::{spiralcore_orbit_roots, spiralcore_signed_axes};
 use uor_r4_integer::fbs_snapshot::{
     fixed_value, grid_code, grid_value, q12_value, FbsFloatPosition, FbsFloatReadout,
-    FbsFloatSequence, FbsReadoutMode, FbsRoutes, FbsTrunkLayer, FbsTrunkSnapshot, FBS_FIXED_EXP,
+    FbsFloatSequence, FbsMemoryEntry, FbsMemorySnapshot, FbsReadoutMode, FbsReplyTable, FbsRoutes,
+    FbsTrunkLayer, FbsTrunkSnapshot, FBS_FIXED_EXP,
 };
+
+use crate::flock_read_memory::TurnMemory;
 
 use crate::geometric_stack::{
     Gate, QuaternionWeights, RecGates, RotationGroup, StackArch, StackConfig, StackModel,
@@ -279,8 +284,57 @@ pub fn fbs_trunk_snapshot(model: &StackModel) -> Result<FbsTrunkSnapshot> {
         embed: values("embedding.weight")?,
         final_norm: values("final_norm.weight")?,
         layers,
-        // Reading `hamming_read.safetensors` into the snapshot is a later unit (claude-188).
+        // Reading `hamming_read.safetensors` into the snapshot is a later unit (claude-188); until
+        // then `check_checkpoint_reads` refuses a checkpoint with one (claude-198).
         hamming: None,
+        // The memory is not part of the `StackModel`: `fbs-snapshot` loads it from the checkpoint
+        // directory and sets it with `fbs_memory_snapshot` (claude-198).
+        memory: None,
+    })
+}
+
+/// The read files a checkpoint directory may hold beside the trunk, and whether the export
+/// carries each (claude-198). A read it does not carry is refused, never dropped.
+const CHECKPOINT_READS: [(&str, bool); 3] = [
+    ("turn_memory.safetensors", true),
+    ("turn_memory_reply.safetensors", true),
+    ("hamming_read.safetensors", false),
+];
+
+/// Refuse a checkpoint directory that holds a read the export does not carry, naming it: today the
+/// Hamming read, whose export is `integer-hamming-read`'s step 4 (claude-198).
+pub fn check_checkpoint_reads(directory: &Path) -> Result<()> {
+    for (file, carried) in CHECKPOINT_READS {
+        if !carried && directory.join(file).exists() {
+            return Err(invalid(format!(
+                "the checkpoint holds {file}, which the export does not carry yet; exporting the trunk without it would serve another model"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// The snapshot of a turn memory (claude-161, claude-193): its tables in ascending key order, as
+/// `TurnMemory::save` writes them, its weights, and the training window its keys were cut in
+/// (claude-198).
+pub fn fbs_memory_snapshot(memory: &TurnMemory, key_window: usize) -> Result<FbsMemorySnapshot> {
+    let entries = |rows: Vec<(Vec<u32>, u32)>| -> Vec<FbsMemoryEntry> {
+        rows.into_iter()
+            .map(|(key, value)| FbsMemoryEntry { key, value })
+            .collect()
+    };
+    Ok(FbsMemorySnapshot {
+        k: memory.k(),
+        key_window,
+        opening: entries(memory.opening_entries()),
+        opening_weight: finite_table("turn_memory.weight", memory.opening_weight()?)?,
+        reply: match memory.reply_parts()? {
+            None => None,
+            Some((rows, weight)) => Some(FbsReplyTable {
+                entries: entries(rows),
+                weight: finite_table("turn_memory_reply.weight", weight)?,
+            }),
+        },
     })
 }
 
