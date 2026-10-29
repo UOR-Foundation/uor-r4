@@ -8,12 +8,12 @@ open_to: lab
 needs_gpu: true
 depends_on: [fbs-cost-profile]
 notebook: docs/research/notebook/float-training.md
-scope: [crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/src/geometric_stack_native.rs, crates/uor-r4-float-train/src/geometric_stack_native_cuda.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, docs/harness/prep/training-step-cost*, docs/loop/tasks/training-step-cost/**, docs/research/notebook/float-training.md, docs/roadmap/items/training-step-cost.md]
+scope: [crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/src/native_vector_writer.rs, crates/uor-r4-float-train/src/geometric_stack_native.rs, crates/uor-r4-float-train/src/geometric_stack_native_cuda.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, docs/harness/prep/training-step-cost*, docs/loop/tasks/training-step-cost/**, docs/research/notebook/float-training.md, docs/roadmap/items/training-step-cost.md]
 ---
 
 ## Why it matters
 
-The owner, 28 Oct 2026, in claude's chat: "ok can we review the entire mechanism one more time for what exactly is costing us speed and compute time throughout the whole cycle". This is the [pipeline map](../../model/pipeline-map.md)'s R4 and its gap 4.
+The owner, 28 Oct 2026, in claude's chat (the message's first clause, recorded in [`fbs-cost-profile`](fbs-cost-profile.md)): "ok can we review the entire mechanism one more time for what exactly is costing us speed and compute time throughout the whole cycle". This is the [pipeline map](../../model/pipeline-map.md)'s R4 and its gap 4.
 
 [claude-157](../../loop/tasks/fbs-cost-profile/claude-157/REPORT.md) split one training step on an RTX 5090:
 - **(a), 96.5 ms:** the backward is 62% (60.4 ms), the cell objective with its whole-table search 14% (13.1 ms), and the trunk's forward 5% (4.8 ms).

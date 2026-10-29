@@ -7,10 +7,23 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The umbrella item stays open; its done
 ## What did not work, first
 
 - **The first `writer-admission` title was 84 characters,** over the roadmap's 80. `roadmap render --check` refused it, and it is now "Make the native writer's admission hold at every seed".
-- **Two figures in the first drafts did not match their sources,** caught by reading each source before the review:
-  - `training-step-cost` gave the cell objective's share in (a) as 13% (claude-157's headline). Its table gives `13.11` ms, 14%. The item now quotes the table, in ms and shares.
-  - `writer-admission` said no run had measured the writer under the cell objective. Nothing on main says that. It now cites the one checkpoint the map does record (`345` against `7,813`, stage 7).
-- **The five items cannot all run side by side.** The three float-side items (`turn-memory-reply`, `writer-admission`, `training-step-cost`) share `in_space_long.rs` and `train-in-space.rs`. The two serving items share `session.rs` with each other and with `integer-hamming-read`. `loop claim`'s overlap check is the lock. PLAN says one float-side and one serving-side item can run at once.
+- **A figure in the first draft did not match its source,** caught before the review: `training-step-cost` gave the cell objective's share in (a) as 13% (claude-157's headline). Its table gives `13.11` ms, 14%. The item now quotes the table, in ms and shares.
+- **My pre-review "fix" to `writer-admission` was wrong, and the claims review caught it.** I replaced "the writer has not been read under the cell objective" with the map's `345` against `7,813` checkpoint. That checkpoint came from the writer's own `MarginHinge` objective (the float-training notebook's 27 Oct "Exploration" row), not the cell objective. The original absence was right, and the item now says so, with the 345 checkpoint's own recipe.
+- **The scope review asked for changes; all are made:**
+  - `turn-memory-integer`'s parity needs each DEV opening row's float id, and claude-161 reports only counts. Its scope now holds `flock_read_memory.rs`, `in_space_long.rs` and `train-in-space.rs`.
+  - `fbs-serving-kernels`' new kernel must be in the audit's kernel list to be audited, so `scripts/audit_zero_matmul_serving.py` is in scope, with `stack/mod.rs` and the kernel's new file `stack/fbs_simd.rs`. Its switch is a runtime one, since `Cargo.toml` is not in scope.
+  - `training-step-cost`'s "writer's kept cells" search needs `native_vector_writer.rs`, now in scope.
+  - The two serving items now write to the serving notebook, `m4-serving.md`, so they share no file with the float-side items.
+- **The claims review's other fixes:**
+  - `fbs-serving-kernels` said `stack/simd.rs` held an older frozen stack's kernels. It holds the dense step's WASM-SIMD kernels; the frozen engine's NEON kernels are in `crates/uor-r4-simd`.
+  - The item now also says what the audit refuses: multiply-class and `fmov` register transfers, which is why the scalar gather uses `black_box`.
+  - `turn-memory-integer` said the artifact holds "the trunk only". It holds the writer's table too, and the exporter refuses a memory.
+  - PLAN's list read as if its goals were met. It is now worded as work to do.
+- **The five items cannot all run side by side.**
+  - The three float-side items (`turn-memory-reply`, `writer-admission`, `training-step-cost`) share `in_space_long.rs` and `train-in-space.rs`.
+  - `fbs-serving-kernels` shares `session.rs` with `integer-hamming-read`. Either of those can run beside a float-side item.
+  - `turn-memory-integer` shares files with both sides, so it runs alone.
+  - `loop claim`'s overlap check is the lock.
 - **No item here is on the M1 path.** All five are `milestone: research`, like the pivot's three. They follow the map's order of work (R1–R5), not a milestone.
 
 ## What changed

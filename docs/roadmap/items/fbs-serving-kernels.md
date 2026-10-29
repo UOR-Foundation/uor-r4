@@ -8,8 +8,8 @@ open_to: lab
 needs_gpu: false
 depends_on: [fbs-cost-profile]
 done_class: host
-notebook: docs/research/notebook/float-training.md
-scope: [crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/simd.rs, crates/uor-r4-integer/src/stack/kernels.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, docs/loop/tasks/fbs-serving-kernels/**, docs/research/notebook/float-training.md, docs/roadmap/items/fbs-serving-kernels.md]
+notebook: docs/research/notebook/m4-serving.md
+scope: [crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/fbs_simd.rs, crates/uor-r4-integer/src/stack/simd.rs, crates/uor-r4-integer/src/stack/kernels.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, scripts/audit_zero_matmul_serving.py, docs/loop/tasks/fbs-serving-kernels/**, docs/research/notebook/m4-serving.md, docs/roadmap/items/fbs-serving-kernels.md]
 ---
 
 ## Why it matters
@@ -21,15 +21,22 @@ On the M1, a served token is 3.73 ms (265 tok/s). The six layers are 98.6% of it
 ## What is missing
 
 - **The layer split.** Each block holds three route gathers (`stack_fbs_gather`) and either the recurrence core or the gated product and requantization. Which part dominates is not measured.
-- **Vector kernels for the FBS step.** `stack/simd.rs` holds kernels for an older frozen stack (the map, stage 11). None run in `stack_step_fbs`.
+- **Vector kernels for the FBS step.** `stack_step_fbs` is scalar.
+  - `stack/simd.rs` holds the dense-map step's WASM-SIMD kernels (`stack_gemv_pairs`, Arm T, #1172).
+  - The older frozen engine's NEON and AVX2 kernels are in `crates/uor-r4-simd` (the map, stage 11, through `docs/products/desktop-client.md`).
+  - Neither runs in the FBS step.
+- **What the audit allows.** `scripts/audit_zero_matmul_serving.py --stack` refuses every multiply-class instruction, NEON forms included (`mul`, `mla`, `sdot`, `smull`…), and every float or SIMD-to-general register transfer (`fmov`…). Integer lane adds, absolute differences, loads and stores are not on its list.
+  - The scalar gather passes each value through `black_box` because LLVM's own vectorized forms fail the audit (`session.rs`, at `stack_fbs_gather` and at the pointer head's maximum).
+  - A kernel must therefore keep its results in memory, not move a lane into a general register.
+  - The audit finds a kernel by name. An `#[inline(never)]` kernel outside `step`'s range is audited only once it is in the audit's kernel list.
 - **An exactness check for a faster step.** claude-158's `measure_fbs_step_stages` already runs the served kernels with a clock, and its host test holds the twin equal to `step_native`. A faster step must pass the same equality.
 
 ## Done when
 
 1. **The split:** each layer's gathers, core, gated product and requantization timed on the M1, by extending `measure_fbs_step_stages` and `fbs-toks --stages`. The parts sum to the layer within 10%.
-2. **A vector kernel for the largest part,** written for D11 (CHARTER §3.6: integer, no multiply instruction; products through its tables), behind a switch.
+2. **A vector kernel for the largest part,** written for D11 (CHARTER §3.6: integer, no multiply instruction; products through its tables), in `stack/fbs_simd.rs`, behind a runtime switch (no new cargo feature), with the scalar path kept for WASM and other targets.
    - A host test holds every token, kept cell, query and session state equal to the scalar `step_native` over a synthetic trunk and a stored artifact.
-   - The zero-multiply audit of `step` still passes.
+   - The kernel is in the audit's kernel list, and `scripts/audit_zero_matmul_serving.py --stack` passes on the release binary.
 3. **Speed:** `fbs-toks` decode tokens/s on the M1 with and without the kernel, on claude-126's export, with the same replies.
 4. One notebook row and a REPORT. This is host and serving work: no GPU and no sheet (CHARTER §4.5).
 
@@ -38,7 +45,8 @@ On the M1, a served token is 3.73 ms (265 tok/s). The six layers are 98.6% of it
 Read:
 - [claude-158's REPORT](../../loop/tasks/fbs-cost-profile/claude-158/REPORT.md);
 - `stack_step_fbs`, `stack_step_fbs_timed`, `stack_fbs_gather` and `stack_recurrence_core` in `crates/uor-r4-integer/src/stack/session.rs`;
-- `crates/uor-r4-integer/src/stack/simd.rs`.
+- `crates/uor-r4-integer/src/stack/simd.rs` and `crates/uor-r4-simd` (vector kernels already written for this project);
+- `scripts/audit_zero_matmul_serving.py` (its forbidden patterns and `STACK_MANDATORY_SYMBOLS`).
 
 The artifact is claude-126's seed-1 export (sha256 `314c3909…fdb305`, in claude-158's REPORT). Build `fbs-toks` with `--features serving-wasm`.
 

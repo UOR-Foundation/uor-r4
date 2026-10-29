@@ -7,19 +7,20 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [route-plus-memory]
-notebook: docs/research/notebook/float-training.md
-scope: [crates/uor-r4-integer/src/stack/memory.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-float-train/src/fbs_export.rs, docs/harness/prep/turn-memory-integer*, docs/loop/tasks/turn-memory-integer/**, docs/research/notebook/float-training.md, docs/roadmap/items/turn-memory-integer.md]
+notebook: docs/research/notebook/m4-serving.md
+scope: [crates/uor-r4-integer/src/stack/memory.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-float-train/src/fbs_export.rs, crates/uor-r4-float-train/src/flock_read_memory.rs, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, docs/harness/prep/turn-memory-integer*, docs/loop/tasks/turn-memory-integer/**, docs/research/notebook/m4-serving.md, docs/roadmap/items/turn-memory-integer.md]
 ---
 
 ## Why it matters
 
-The owner, 28 Oct 2026, in claude's chat: "determinism is still probably the goal but like you said we can do the training in float and maybe just export the integer exact". This is the [pipeline map](../../model/pipeline-map.md)'s R5, for the memory.
+The owner, 28 Oct 2026, in claude's chat: "determinism is still probably the goal but like you said we can do the training in float and maybe just export the integer exact…". This is the [pipeline map](../../model/pipeline-map.md)'s R5, for the memory.
 
 [claude-161](../../loop/tasks/route-plus-memory/claude-161/REPORT.md)'s turn memory doubled reply openings, to `598.7 / 598.3` of 1,226, at no measured training cost. Its key and table are already exact integer ids. Only the move `n + w ⊙ (c − n)` is float, and the integer runtime has no memory.
 
 ## What is missing
 
-- **The artifact** does not carry the memory's table or weight. `fbs-export` writes the trunk only.
+- **The artifact** carries the trunk and the writer's table, not the memory's table or weight. The exporter refuses a model with a memory ("a memory, read selection or read router is not served", `fbs_export.rs`).
+- **No per-row float reading of the memory.** claude-161 reports opening counts, not each opening row's decoded id. Parity needs the ids, so the float side writes them (the three float-train files in this item's scope).
 - **The integer session** has no memory. It needs:
   - the key from the turn anchor's first 8 ids;
   - the lookup;
@@ -44,7 +45,7 @@ Read:
 - `fbs_export.rs` and `fbs-export`;
 - `stack_step_fbs` in `crates/uor-r4-integer/src/stack/session.rs`.
 
-`integer-hamming-read` also edits `session.rs`. The two run one after the other, not side by side.
+`integer-hamming-read` and `fbs-serving-kernels` also edit `session.rs`, and the float-side items edit `in_space_long.rs` and `train-in-space.rs`. This item runs when none of those is claimed.
 
 ## Rules that apply
 

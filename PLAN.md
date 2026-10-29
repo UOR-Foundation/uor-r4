@@ -80,13 +80,13 @@ Both feed the trunk.
 - `route-plus-memory` (claude-161), whose exact turn memory doubled reply openings against an empty-table control.
 
 The [map](docs/model/pipeline-map.md)'s order of work goes on with these, each with its cost per token beside its result:
-- `turn-memory-reply` (R1's follow-up): the memory carried past a reply's first word.
-- `writer-admission` (R2): the native writer's admission held at every seed, so the cheap readout is right.
-- `fbs-serving-kernels` (R3): each served layer split, then vector kernels exact against the scalar step. Host work.
-- `training-step-cost` (R4): the training backward split, and a cheaper rival search.
-- `turn-memory-integer` (R5, the memory's part): the memory served from the integer artifact. `integer-hamming-read` is R5's other part.
+- `turn-memory-reply` (R1's follow-up): carry the memory past a reply's first word.
+- `writer-admission` (R2): make the native writer's admission hold at every seed, so the cheap readout is right.
+- `fbs-serving-kernels` (R3): split each served layer, then write vector kernels exact against the scalar step. Host work.
+- `training-step-cost` (R4): split the training backward, and try a cheaper rival search.
+- `turn-memory-integer` (R5, the memory's part): serve the memory from the integer artifact. `integer-hamming-read` is R5's other part.
 
-The float-side items (the first, second and fourth) share files and run one after the other. So do the serving-side items (the third, the fifth and `integer-hamming-read`). One of each can run side by side.
+The float-side items (the first, second and fourth) share files and run one after the other. `fbs-serving-kernels` and `integer-hamming-read` share `session.rs`, and neither shares a file with the float side, so either can run beside a float-side item. `turn-memory-integer` shares files with both sides and runs alone.
 
 ## The route M2–M8
 
