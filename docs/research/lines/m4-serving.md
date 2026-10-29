@@ -57,8 +57,8 @@ The zero-multiply and bit-exact properties are verified on the old stack and on 
 
 The records above describe the old multiplier-free stack. Since 28 Oct, D80 (integer multiply) and D81 (integer divide) allow the hardware operations in served code. Floats, transcendentals and dense matmul stay banned. Serving the FBS trunk on the M1 laptop now runs:
 
-- 270 to 3,042 tok/s with exact structured kernels, replies byte-identical (claude-163 to 170).
-- 4,829 tok/s snapped, byte-identical (claude-177, [report](../../loop/tasks/integer-mul-div-serving/claude-177/REPORT.md)).
+- 270 to 3,042 tok/s with exact structured kernels, replies byte-identical to the engine before each change (claude-163 to 170).
+- 4,829 tok/s snapped, replies byte-identical to the engine before the multiply and divide (claude-177, [report](../../loop/tasks/integer-mul-div-serving/claude-177/REPORT.md)).
 - The unsnapped contract `lut-stack/5` is inside the export-gap bar on the DEV panel on both seeds, serving at 4,217 to 4,320 tok/s (claude-182, [report](../../loop/tasks/d11-exporter-float-trunk/claude-182/REPORT.md)), then 4,491 and 4,504 tok/s after the integer square root (claude-186).
 - `lut-stack/6` carries the Hamming reads (claude-188, [report](../../loop/tasks/integer-hamming-read/claude-188/REPORT.md)). The copy-head integer kernel matches an f64 reference (claude-189, [report](../../loop/tasks/integer-hamming-read/claude-189/REPORT.md)). The session refuses `/6` until its hooks serve them. Those hooks are next.
 

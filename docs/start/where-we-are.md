@@ -14,7 +14,7 @@ Pre-alpha; 0 of 8 milestones complete. M1 is in progress, and no registered clos
 
 - **Found (27-29 Oct):** the trunk can route the prompt but has nowhere to store what each question should produce (claude-155). Exact turn memory keyed by the user's first 8 tokens names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, against 266.3 and 281.0 for an empty-table control (claude-161). It moves only the first word of a reply; after it, replies are still templates.
 - **Decided:** pivot to route + exact memory (28 Oct); serve whole-table nearest as the readout (claude-150); integer multiply and divide are allowed in serving, floats stay banned (D80, D81); train in float, export to integer exactly.
-- **Served:** exact structured kernels took a served token on the M1 laptop from 270 to 3,042 tok/s (claude-163 to 170), and 4,829 tok/s with the integer multiply (claude-177); 4,217 to 4,504 tok/s under the exact `lut-stack/5` contract (claude-182, 185). Replies are byte-identical.
+- **Served:** exact structured kernels took a served token on the M1 laptop from 270 to 3,042 tok/s (claude-163 to 170), and 4,829 tok/s with the integer multiply (claude-177); 4,217 to 4,504 tok/s under the exact `lut-stack/5` contract (claude-182, 185). At each speed-up the replies stayed byte-identical to the engine before it; the served model is inside the export-gap bar against the trained one (claude-182).
 
 | Part | Mechanism | State on 29 Oct |
 |---|---|---|

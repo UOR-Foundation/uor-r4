@@ -28,7 +28,7 @@ useful conversation yet.** [What UOR-R4 is](docs/start/what-is-uor-r4.md) explai
 
 None of the three ships today; each waits on a trained model ([products](docs/products/README.md)).
 
-- **[The model](docs/products/language-model.md):** one whole-number model file that runs with adds, compares and table look-ups only. Today the serving engine works on a synthetic stand-in model; no model trained under today's rules has been exported into it.
+- **[The model](docs/products/language-model.md):** one whole-number model file that runs with adds, compares and table look-ups only. On 29 Oct 2026 the float-trained FBS trunk is exported into it exactly under `lut-stack/5` and served on the M1 laptop (claude-182); no discrete-path model trained under today's rules has been exported into it.
 - **[Web client](docs/products/web-client.md):** the Studio page (the project's chat-style web interface) in your browser, running the model on your own device as WebAssembly. Today the browser engine and the Studio page both exist but are not yet connected.
 - **[Desktop client](docs/products/desktop-client.md):** a Tauri app (a desktop shell around the same web page), running the model natively with durable memory and offline use on M1-class laptops. Today it is a written specification only.
 

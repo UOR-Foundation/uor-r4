@@ -100,7 +100,7 @@ These rows are **measurements** on the float-trained FBS trunk, a different mode
 | Whole-table nearest beat the native writer at seed 2: top-1 6,909 against 493 | The writer's admission failed there. The served session still reads the writer | [claude-150](../loop/tasks/one-decoder/claude-150/REPORT.md) |
 | Two training runs with a fixed-order backward give the same model byte for byte | Determinism only, not a quality result | [claude-179](../loop/tasks/d11-exporter-float-trunk/claude-179/REPORT.md) |
 | Under the unsnapped contract `lut-stack/5`, dual-c131 sits inside the export-gap bar on both seeds (net 6 and -8 against 24) | DEV scope; the gap lives in the 120-root snaps. It serves at 4,217 to 4,320 tok/s | [claude-182](../loop/tasks/d11-exporter-float-trunk/claude-182/REPORT.md) |
-| A served token on the M1 laptop went from 270 to 4,829 tok/s, replies byte-identical, using exact structured kernels and then the integer multiply and divide that D80 and D81 allow | One laptop; no vector (NEON) kernel; floats stay banned in serving. The exact `/5` path runs at 4,217 to 4,504 tok/s | [claude-177](../loop/tasks/integer-mul-div-serving/claude-177/REPORT.md) |
+| A served token on the M1 laptop went from 270 to 4,829 tok/s (snapped), replies byte-identical to the engine before each change, using exact structured kernels and then the integer multiply and divide that D80 and D81 allow | One laptop; no vector (NEON) kernel; floats stay banned in serving. The exact `/5` path runs at 4,217 to 4,504 tok/s | [claude-177](../loop/tasks/integer-mul-div-serving/claude-177/REPORT.md) |
 
 ## Go deeper
 
