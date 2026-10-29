@@ -37,7 +37,7 @@ Two changes have moved this item since it was written:
 | Artifact | Decode tok/s | Step | `recurrence.core` per layer | `mlp.product` per layer |
 |---|---|---|---|---|
 | claude-126's snapped export | 4,832 | 205 µs | about 15.2 µs | about 9.0 µs |
-| dual-c131's `raw_both` | 4,236 | 235 µs | about 17.9 µs | about 11.4 µs |
+| dual-c131's `raw_both` | 4,236 | 235 µs | about 18.0 µs | about 11.4 µs |
 
 The unsnapped contract's extra 30 µs is all in the two parts that run the rotation.
 
