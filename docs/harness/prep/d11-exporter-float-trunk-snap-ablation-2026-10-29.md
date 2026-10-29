@@ -2,7 +2,7 @@
 
 Lab: claude. Item: `d11-exporter-float-trunk` (#2820). ORDER: `docs/loop/tasks/d11-exporter-float-trunk/claude-180/ORDER.md`. This is R6's second half in `docs/model/pipeline-map.md`, under the owner direction of 29 Oct, "fix the exporter".
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
 
 ## 1. Question
 
@@ -51,6 +51,9 @@ TEST FITNESS: PENDING
 **What the receipts store:**
 - Each receipt's `seeds[].loss_float` is `panel_loss(…, false)` at step 1,024. That is the same computation the mode repeats. Every receipt checked a reload against it exactly when its model was saved (`run_d11_export_gap` and `run_d11_train_export`).
 - All four state the same noise band.
+- **All eight models were trained and saved on RTX 5090 pods**, like the one this run leases.
+  - claude-126 trained on `vast-57786001`; claude-130, claude-131 and claude-179 each on one RTX 5090 (their notebook rows).
+  - claude-132 reproduced the six older models' float panels row for row on a later 5090. A different GPU could break `I-Save-Load`'s 1e-6 loss check, which would waste the run rather than mislead it.
 
 **Beside the models:**
 - Each model's `preds-float.json` sits beside its `model/` folder. plain-c126 also has its Stage 4b `preds-d11.json`.
@@ -101,11 +104,13 @@ A host test pins every combination.
 | **No reading** | fewer than 6 of the 8 models are counted | An instrument repair, then this run again. |
 | **No gap** | no counted model has a gap | D is inside on every model, which contradicts claude-136. Investigate the instrument before reading anything. |
 | **No reading** | 1 to 3 gap models | Too few models to name a change. The six older models' D top-1 is held by `I-D-Recorded`, so it fixes their nets at 77, 353, 275, −340, 359 and 225. So this row arises only if most of them are not counted. |
-| **Snaps off** | snaps off works; and if rounding off works too, the snaps-off arm's \|net\| summed over the gap models is no larger than the rounding-off arm's | **Next unit: the unsnapped D11 contract.** The exporter writes the gates and the transition as integer quaternions, and the integer runtime computes them, with the multiply and divide D80 and D81 allow. The unit includes finite CPU controls and the GPU evaluator, then the export gap on the plain recipe. `gates_continuous` and `transition_continuous` say whether one snap could stay. |
+| **Snaps off** | snaps off works; and if rounding off works too, the snaps-off arm's \|net\| summed over the gap models is no larger than the rounding-off arm's | **Next unit: the unsnapped D11 contract.** The exporter writes the gates and the transition as integer quaternions, and the integer runtime computes them, with the multiply and divide D80 and D81 allow. The unit includes finite CPU controls and the GPU evaluator, then the export gap on the plain recipe. `gates_continuous` and `transition_continuous` say whether one snap could stay. `rounding_only` keeps the gates and transition in float, so their own integer rounding (and the transition's integer square root and divide) is that unit's export-gap question, not this run's. |
 | **Rounding off** | rounding off works, and the row above does not hold | **Next unit: wider codes** for the query and the tables, with the snaps kept, then the export gap. The arm is the limit of wide codes, so that sheet sets the width from a ladder (Q16 first). |
 | **Both off** | neither change works on every gap model | **Next unit: both changes.** Its sheet runs each change alone and the two together. The models where neither alone suffices are named there. |
 
 The tie-break (when both changes work everywhere) is pre-registered here: the change whose arm sits closer to F over the gap models goes first. On a tie the snaps go first.
+
+The two guard rows, "No gap" and "1 to 3 gap models", cannot be reached when 6 models are counted. At least 4 of the six older models are then among them, and `I-D-Recorded` and `I-Save-Load` fix their nets outside F_I. They stay as guards against a broken instrument.
 
 A reading names the change for the next unit. It is not a result about the snaps or the rounding as mechanisms, and nothing here closes a mechanism (§4.1).
 
@@ -131,7 +136,11 @@ A reading names the change for the next unit. It is not a result about the snaps
 8. **`I-D-Recorded`, for the six older models.** The `d11` arm's top-1 equals claude-136's D column: 1,911, 2,290, 3,666, 1,257, 3,486 and 2,903. The job passes each value with `--expect-d11-top1`, and the mode counts the check in `instruments_pass`, so a mismatch leaves that model not counted.
 9. **`I-DEV-Denominator`.** F covers 14,287 rows.
 10. **`I-Negative`.** plain-c126 seed 1 is run once more with a wrong `--model-sha256`. It must give `instruments_pass: false` and the split `not_counted`.
-11. **`I-Finite`.** Every step exits 0, and a non-finite loss is an error in the mode. Each step's stdout, stderr and exit code are saved.
+11. **`I-Finite`.**
+    - Every job-level step exits 0.
+    - A nonzero exit in a model's own run leaves that model uncounted (section 8).
+    - A non-finite loss is an error in the mode.
+    - Each step's stdout, stderr and exit code are saved.
 
 ## 5. Data split
 
@@ -140,6 +149,12 @@ A reading names the change for the next unit. It is not a result about the snaps
 - All eight models were trained on `mw-balp/train` from step 0. The DEV panel is the one their receipts were scored on.
 
 ## 6. Steps
+
+**The job and its summary program** are local files, shipped to the pod's `/workspace/abl-job/`.
+- **`summary.jq` is pinned** at `200425f24393c20f9c6d4f4d2bafb97808e38f61586c863cacd41e152012cf16`. The job checks it before use.
+- **`job.sh` is pinned as a template** at `360a174a938c30ea253a298dbce4b5cfc7586c7ea8d992ec670b62d9cf886ef1`. The launched copy differs only in its `SHA=` line, which takes the pushed head.
+- **The job copies both into the run folder,** so the seal holds the exact programs that produced the reading.
+- **The job refuses to start if its run folder is not empty,** so a retry cannot count a stale receipt.
 
 1. `scripts/pod/uor-pod up --lab claude --session claude-180 --count 1 --gpu 5090 --hours 1.5 --ref <pushed head> --card <#2820>`.
 2. Build `spiralcore-fbs-sheet` (`-p uor-r4-float-train --features cuda`) with nvcc at the pushed head, and copy it out with its sha256.
@@ -185,7 +200,15 @@ A reading names the change for the next unit. It is not a result about the snaps
 
 ## 9. Non-author TEST FITNESS review
 
-**Round 1 (fresh non-author reviewer, at `38c2f5189`): NOT FIT. All eight findings are fixed.**
+**Round 3 (fresh non-author reviewer, at `4be16c024`): FIT.** It found nothing blocking or high, and ran the five relevant CPU tests at that commit (5 passed). Its findings are folded in:
+1. **Medium:** the job and summary program are now pinned, checked and sealed (section 6).
+2. **Medium:** a retry into a used run folder is refused (section 6).
+3. **Low:** I-Finite now separates job-level steps from a model's own run (section 4).
+4. **Low:** the two unreachable guard rows are named as guards (section 3).
+5. **Low:** the Snaps-off row says what `rounding_only` leaves to the next unit (section 3).
+6. **Low:** the training GPUs are recorded (section 2).
+
+**Round 1 (fresh non-author reviewer, at `38c2f5189`): NOT FIT.** Its fixes for findings 1 and 8 were replaced in round 2 by the current rule. The rest stand.
 1. **High: one model could read Interaction while its parts simply add up,** and that one model then decided the item. Fixed:
    - "Make up D's gap" now reads two in-band parts that sum to D's excess as Both.
    - The item reading needs more than half of the gap models for Interaction.
