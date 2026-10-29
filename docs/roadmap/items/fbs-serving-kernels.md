@@ -35,14 +35,16 @@ On the M1, a served token is 3.73 ms (265 tok/s). The six layers are 98.6% of it
 
 1. **The split:** each layer's gathers, core, gated product and requantization timed on the M1, by extending `measure_fbs_step_stages` and `fbs-toks --stages`. The parts sum to the layer within 10%.
 2. **A faster exact kernel for the largest part:** a vector kernel the audit allows, or an exact structured kernel, written for D11 (CHARTER §3.6: integer, no multiply instruction; products through its tables). Amended by claude-170 from "a vector kernel … in `stack/fbs_simd.rs`, behind a runtime switch". The split showed the cost sat in the icosian snap and the Hamilton product, where exact structure gave more than lanes could.
-   - Host tests hold each changed kernel equal to the old one, and the session twin equal to `step_native`. On a stored artifact, every reply is byte-identical.
+   - **Exactness rests on the kernel tests.** Host tests hold each changed kernel equal to the old one, by exhaustive or random inputs.
+   - **The session twin** (`fbs_stage_tests`) holds the timed step equal to `step_native` on a synthetic trunk. Both run the changed kernels, so that test checks the twin, not the kernels.
+   - **On a stored artifact,** only the replies are compared, and they are byte-identical. Kept cells, queries and session state are not compared there.
    - `scripts/audit_zero_matmul_serving.py --stack` passes on the release binary.
 3. **Speed:** `fbs-toks` decode tokens/s on the M1 with and without the change, on claude-126's export, with the same replies. A change of scalar code that runs on every target needs no runtime switch. The "without" arm is the previous unit's sealed binary, run alternately in the same session.
 4. One notebook row and a REPORT. This is host and serving work: no GPU and no sheet (CHARTER §4.5).
 
 **Done (claude-170).** Each done-when is met:
 - **Done-when 1:** claude-163.
-- **Done-when 2 and 3:** claude-164 to claude-169. Each kernel equals its predecessor by exhaustive or random host tests, every reply on claude-126's export is byte-identical, and the audit passes on each release binary. Decode went 270 → 749 → 1,169–1,217 → 1,406–1,410 → 1,829–1,861 → 2,448–2,449 → 3,042–3,044 tok/s.
+- **Done-when 2 and 3:** claude-164 to claude-169. Each kernel equals its predecessor by exhaustive or random host tests, every reply on claude-126's export is byte-identical, and the audit passes on each release binary. Decode went 270 → 749 → 1,169–1,217 → 1,406–1,410 → 1,829–1,861 → 2,448–2,449 → 3,042–3,044 tok/s. The step is 0.33 ms over the trunk's 64,000 learnable values, about 5.2 ns a value, against claude-158's 57 ns.
 - **Done-when 4:** one notebook row and one REPORT per unit.
 
 **Open follow-ups**, not bars:

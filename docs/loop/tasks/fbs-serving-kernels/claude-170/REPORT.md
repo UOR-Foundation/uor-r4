@@ -40,6 +40,16 @@ None: no run.
 
 - **holding-the-goal.** The owner's direction is a cheap served token. The item's purpose is met at 11.3×, exactly, and the lock it held on the serving files is now free for the correctness items.
 
+## The decision review
+
+A fresh decision reviewer read CHARTER §3.6, §4.1–4.2 and §5.1, PLAN's directions and pivot list, the map's gaps and order of work, the item before the change, and claude-163 to claude-169's REPORTs.
+
+**DECISION REVIEW: APPROVE, with two conditions.**
+- **The wording of done-when 2 overstated the evidence.** The session twin and `step_native` both run the changed kernels, so that test cannot catch a kernel defect. On the stored artifact only the replies were compared. Fixed: the item now says exactness rests on the old-against-new kernel tests, and names what was compared on the artifact.
+- **The follow-ups need a real record**, not a line inside a done item (L-001). The map's gap 3 and R3 still name NEON kernels as the change. R3's "pass unlocks" claims a per-value rate near the hardware's, which is not shown: about 5.2 ns a value now.
+  - That record needs a new `ready` item for the follow-ups, plus the map's gap 3 and R3 updated. Neither the new item, PLAN.md nor the map is in this unit's scope.
+  - They are the next unit's: claude-171, under `infra-loop-harness`, taken at once after this merges.
+
 ## Still open
 
 - **A NEON kernel the audit allows, and fewer golden candidates:** open follow-ups, not bars.
