@@ -912,37 +912,51 @@ pub(crate) fn stack_l2_distance(query: &[i32], key: &[i32]) -> u64 {
 
 /// Hamilton product `a (x) b` of quaternions `(w, x, y, z)`, exactly.
 ///
-/// Each `|b_j|` gets one table of its sixteen multiples, read at the radix-16
-/// digits of every `|a_i|` (claude-166): 4 tables in place of the 16 that
-/// separate products would build, and a zero `a_i` is skipped. Each product is
-/// `|a_i| |b_j|` modulo `2^128`, negated when the signs differ, the value
-/// [`mul_i128`] gives, so the result is unchanged. Callers pass the snapped
-/// quaternion as `a`: its Q31 coordinates have few digits and often a zero.
+/// Row by row over `a` (claude-169): a zero `a_i` is skipped, `|a_i| = 2^k`
+/// gives each product as `|b_j| << k`, and any other `|a_i|` gets one table of
+/// its sixteen multiples, read at the radix-16 digits of every `|b_j|`. Each
+/// product is `|a_i| |b_j|` modulo `2^128`, negated when the signs differ, the
+/// value [`mul_i128`] gives, so the result is unchanged. Callers pass a
+/// snapped quaternion scaled by a power of two as `a`, so its axis, half and
+/// `1/2` coordinates take the shift.
 #[inline(never)]
 pub(crate) fn stack_hamilton(a: [i64; 4], b: [i64; 4]) -> [i128; 4] {
-    // An array literal and explicit loops, not `array::from_fn` or `map`: a
-    // closure there compiles to a `core::array` symbol of its own, outside
-    // the audited `stack_` names.
-    let tables = [
-        multiples_u128(u128::from(b[0].unsigned_abs())),
-        multiples_u128(u128::from(b[1].unsigned_abs())),
-        multiples_u128(u128::from(b[2].unsigned_abs())),
-        multiples_u128(u128::from(b[3].unsigned_abs())),
-    ];
-    // p[i][j] = a_i b_j modulo 2^128.
+    // Explicit loops, not `array::from_fn` or `map`: a closure there compiles
+    // to a `core::array` symbol of its own, outside the audited `stack_`
+    // names.
+    // p[i][j] = a_i b_j modulo 2^128, row by row (claude-169):
+    // - a zero `a_i` leaves its row zero;
+    // - `|a_i| = 2^k` gives `|b_j| << k` (callers pass a snapped quaternion
+    //   scaled by a power of two, so axis, half and `1/2` coordinates are
+    //   powers of two);
+    // - any other `|a_i|` gets one table of its multiples, read at each
+    //   `|b_j|`'s digits.
     let mut p = [[0i128; 4]; 4];
     for (row, &x) in p.iter_mut().zip(&a) {
         let magnitude = x.unsigned_abs();
         if magnitude == 0 {
             continue;
         }
-        for ((slot, table), &y) in row.iter_mut().zip(&tables).zip(&b) {
-            let product = mul_by_u64(table, magnitude);
-            *slot = if (x < 0) != (y < 0) {
-                product.wrapping_neg() as i128
-            } else {
-                product as i128
-            };
+        if magnitude & (magnitude - 1) == 0 {
+            let k = magnitude.trailing_zeros();
+            for (slot, &y) in row.iter_mut().zip(&b) {
+                let product = u128::from(y.unsigned_abs()) << k;
+                *slot = if (x < 0) != (y < 0) {
+                    product.wrapping_neg() as i128
+                } else {
+                    product as i128
+                };
+            }
+        } else {
+            let table = multiples_u128(u128::from(magnitude));
+            for (slot, &y) in row.iter_mut().zip(&b) {
+                let product = mul_by_u64(&table, y.unsigned_abs());
+                *slot = if (x < 0) != (y < 0) {
+                    product.wrapping_neg() as i128
+                } else {
+                    product as i128
+                };
+            }
         }
     }
     [
@@ -2086,6 +2100,39 @@ mod tests {
                 let b: [i64; 4] = std::array::from_fn(|_| pick(&mut rng));
                 assert_eq!(stack_hamilton(a, b), hamilton_by_products(a, b), "{a:?} {b:?}");
             }
+        }
+        // As the callers snap (claude-169): every root at every power-of-two decay
+        // the geometric lanes and the gates use, 2^15 to 2^31.
+        let mut shifted_rows = 0;
+        for root in &H4_ROOT_COEFFICIENTS {
+            let raw: [i32; 4] =
+                std::array::from_fn(|c| i32::from(root[c][0]) * 1000 + i32::from(root[c][1]) * 1618);
+            for k in 15..=31 {
+                let a = stack_snap_rotation(raw, 1u64 << k);
+                shifted_rows += a
+                    .iter()
+                    .filter(|x| x.unsigned_abs().is_power_of_two())
+                    .count();
+                for _ in 0..20 {
+                    let b: [i64; 4] = std::array::from_fn(|_| pick(&mut rng));
+                    assert_eq!(stack_hamilton(a, b), hamilton_by_products(a, b), "{a:?} {b:?}");
+                }
+            }
+        }
+        // The shift path is exercised: axis, half and 1/2 coordinates are powers of two.
+        assert!(shifted_rows > 120 * 17, "{shifted_rows}");
+        // Rows of every kind side by side: zero, power of two, other.
+        for _ in 0..100_000 {
+            let a: [i64; 4] = std::array::from_fn(|_| match rng.next() % 3 {
+                0 => 0,
+                1 => {
+                    let k = rng.next() % 63;
+                    if rng.next().is_multiple_of(2) { 1i64 << k } else { -(1i64 << k) }
+                }
+                _ => pick(&mut rng),
+            });
+            let b: [i64; 4] = std::array::from_fn(|_| pick(&mut rng));
+            assert_eq!(stack_hamilton(a, b), hamilton_by_products(a, b), "{a:?} {b:?}");
         }
     }
 
