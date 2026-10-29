@@ -39,6 +39,11 @@
 //! copies, the rest): turn-memory-reply's probe. A count that needs no GPU; one JSON line per
 //! key and threshold.
 //!
+//! `train-in-space --data-root DIR --fresh-v2 DIR --census 1`: one-model-end-to-end's data census
+//! (claude-202). TRAIN's and the panels' sizes, the probe's pinned counts reproduced, step 2's
+//! decision rows, and each panel's exact, n-gram and value-masked template overlap with TRAIN. A
+//! count that needs no GPU; one JSON line.
+//!
 //! Long training of the SpiralCore/FBS geometric trunk in its own space, with text at every
 //! checkpoint (`uor_r4_float_train::in_space_long`). GPU only. `--data-root` holds `tokenizer.json`,
 //! `mw-balp/train/` and `ft/dev/`, each split with `tokens.u16` and `response_mask.u8`. `--out`
@@ -52,7 +57,7 @@ use candle_core::Device;
 use uor_r4_float_train::flock_read_opening::OpeningAnchor;
 use uor_r4_float_train::flock_read_register::RegisterSelect;
 use uor_r4_float_train::in_space_long::{
-    context_reach, decode_speed, gradient_norms, inspect_run, opening_bound, reply_bound,
+    census, context_reach, decode_speed, gradient_norms, inspect_run, opening_bound, reply_bound,
     root_separation, run_long, run_recall, LongConfig, PointObjective, TrainSplit,
     DEFAULT_REGISTER_PICKS,
 };
@@ -67,6 +72,8 @@ fn main() -> Result<()> {
     let mut decode = None;
     let mut bound = false;
     let mut reply = false;
+    let mut census_on = false;
+    let mut fresh_v2 = None;
     let (mut split_dir, mut split_tokens, mut split_mask) = (None, None, None);
     let mut recall = 0usize;
     let (mut opening_read, mut opening_anchor) = (None, None);
@@ -125,6 +132,8 @@ fn main() -> Result<()> {
             "--decode-speed" => decode = Some(PathBuf::from(&value)),
             "--opening-bound" => bound = switch(&value)?,
             "--reply-bound" => reply = switch(&value)?,
+            "--census" => census_on = switch(&value)?,
+            "--fresh-v2" => fresh_v2 = Some(PathBuf::from(&value)),
             "--recall" => recall = number(&value)?,
             "--objective" => {
                 config.objective = match value.as_str() {
@@ -280,11 +289,12 @@ fn main() -> Result<()> {
         decode.is_some(),
         bound,
         reply,
+        census_on,
         out.is_some(),
     ];
     if modes.iter().filter(|&&m| m).count() > 1 {
         return Err(FloatTrainError::Invalid(
-            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1 or --reply-bound 1"
+            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1 or --census 1"
                 .to_owned(),
         ));
     }
@@ -300,6 +310,12 @@ fn main() -> Result<()> {
     }
     let data_root =
         data_root.ok_or_else(|| FloatTrainError::Invalid("--data-root is required".to_owned()))?;
+    if census_on {
+        let fresh_v2 = fresh_v2
+            .ok_or_else(|| FloatTrainError::Invalid("--census needs --fresh-v2 DIR".to_owned()))?;
+        println!("{}", serde_json::to_string(&census(&data_root, &fresh_v2)?)?);
+        return Ok(());
+    }
     if reply {
         for row in reply_bound(&data_root)? {
             println!("{}", serde_json::to_string(&row)?);

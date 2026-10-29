@@ -1285,27 +1285,20 @@ pub struct ReplyBound {
     pub opening_hits_with_fallback: usize,
 }
 
-/// [`ReplyBound`] for `key` at each of `shares`, the table built from `train`.
-fn reply_bound_rows(
-    key: ReplyKey,
-    train: &[ReplyRow],
-    dev: &[ReplyRow],
-    shares: &[f64],
-) -> Vec<ReplyBound> {
+/// TRAIN's table for `key`: each key's commonest target (ties to the smaller id), that target's
+/// count, and the key's rows ([`reply_bound_rows`], and the census's row selection).
+type ReplyTableCounts = std::collections::HashMap<Vec<u32>, (u32, usize, usize)>;
+
+fn reply_table(key: ReplyKey, train: &[ReplyRow]) -> ReplyTableCounts {
     let mut counts = std::collections::HashMap::<Vec<u32>, Vec<(u32, usize)>>::new();
-    let mut openings = std::collections::BTreeMap::<u32, usize>::new();
     for row in train {
         let targets = counts.entry(key.of(row)).or_default();
         match targets.iter_mut().find(|(t, _)| *t == row.target) {
             Some((_, n)) => *n += 1,
             None => targets.push((row.target, 1)),
         }
-        if row.opening {
-            *openings.entry(row.target).or_default() += 1;
-        }
     }
-    // Each key's commonest target, ties to the smaller id, its count and the key's rows.
-    let table: std::collections::HashMap<Vec<u32>, (u32, usize, usize)> = counts
+    counts
         .into_iter()
         .map(|(k, targets)| {
             let rows = targets.iter().map(|(_, n)| n).sum();
@@ -1315,13 +1308,31 @@ fn reply_bound_rows(
                 .unwrap_or((0, 0));
             (k, (target, n, rows))
         })
-        .collect();
+        .collect()
+}
+
+/// Whether a table entry `(target, count, rows)` is kept at `min_share`.
+fn table_keeps(stored: &(u32, usize, usize), min_share: f64) -> bool {
+    stored.1 as f64 >= min_share * stored.2 as f64
+}
+
+/// [`ReplyBound`] for `key` at each of `shares`, the table built from `train`.
+fn reply_bound_rows(
+    key: ReplyKey,
+    train: &[ReplyRow],
+    dev: &[ReplyRow],
+    shares: &[f64],
+) -> Vec<ReplyBound> {
+    let mut openings = std::collections::BTreeMap::<u32, usize>::new();
+    for row in train.iter().filter(|row| row.opening) {
+        *openings.entry(row.target).or_default() += 1;
+    }
+    let table = reply_table(key, train);
     let fallback = commonest(&openings).map(|(t, _)| t);
     shares
         .iter()
         .map(|&min_share| {
-            let kept =
-                |stored: &(u32, usize, usize)| stored.1 as f64 >= min_share * stored.2 as f64;
+            let kept = |stored: &(u32, usize, usize)| table_keeps(stored, min_share);
             let mut out = ReplyBound {
                 key: key.name(),
                 min_share,
@@ -1380,6 +1391,450 @@ pub fn reply_bound(data_root: &Path) -> Result<Vec<ReplyBound>> {
     Ok(keys
         .flat_map(|key| reply_bound_rows(key, &train, &dev, &REPLY_BOUND_SHARES))
         .collect())
+}
+
+/// Pinned SHA-256 of the sealed Fresh V2 panel's `tokens.u16`, opened once for M1 bar (e)
+/// (`docs/harness/prep/m1-fresh-panel-transfer-2026-10-26.md:69`). The census only counts it.
+pub const PINNED_FRESH_V2_TOKENS_SHA256: &str =
+    "0b7e754cfd242bf53145fe9cbca563be8503e6cd75df5449abb325b5c51ee1b8";
+/// Pinned SHA-256 of Fresh V2's `response_mask.u8`.
+pub const PINNED_FRESH_V2_MASK_SHA256: &str =
+    "a1cda5295547bb641b1ea71ba4ebabb58d58c40e6c048cda91f35a878fecbf5e";
+/// Fresh V2's payload tokens and eligible response targets.
+pub const EXPECTED_FRESH_V2_TOKENS: usize = 44_678;
+pub const EXPECTED_FRESH_V2_ELIGIBLE_TARGETS: usize = 14_479;
+
+/// The census's value masks keep TRAIN's K most frequent tokens (one-model-end-to-end, claude-202).
+pub const CENSUS_MASK_KS: [usize; 2] = [256, 1024];
+/// The n-gram lengths the census compares.
+pub const CENSUS_NGRAMS: [usize; 2] = [8, 13];
+/// A panel holds new templates when its value-masked prompt share at K = 1,024 is at most this,
+/// fixed in claude-202's ORDER before any count.
+pub const CENSUS_NEW_TEMPLATE_SHARE: f64 = 0.5;
+/// The precision a no-turn key needs to count as the reply-only control (claude-192's ORDER).
+const CENSUS_CONTROL_PRECISION: f64 = 0.83;
+/// Stands for a masked run in a value-masked sequence; never a token id.
+const CENSUS_MASK: u32 = u32::MAX;
+
+/// One split's size (census M0).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct SplitSize {
+    pub file_bytes: u64,
+    pub payload_tokens: usize,
+    pub eligible_targets: usize,
+    pub documents: usize,
+    pub prompts: usize,
+    pub replies: usize,
+}
+
+/// A split's prompts and replies, each a maximal run of mask-0 or mask-1 tokens inside one
+/// document; `<|bos|>` starts a document and belongs to neither.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Turns {
+    documents: usize,
+    prompts: Vec<Vec<u32>>,
+    replies: Vec<Vec<u32>>,
+}
+
+fn split_turns(tokens: &[u32], mask: &[u8], bos: u32) -> Turns {
+    let mut turns = Turns::default();
+    let mut run: Vec<u32> = Vec::new();
+    let mut run_mask = 0u8;
+    let close = |run: &mut Vec<u32>, run_mask: u8, turns: &mut Turns| {
+        if !run.is_empty() {
+            let done = std::mem::take(run);
+            if run_mask == 1 {
+                turns.replies.push(done);
+            } else {
+                turns.prompts.push(done);
+            }
+        }
+    };
+    for (&t, &m) in tokens.iter().zip(mask) {
+        if t == bos {
+            close(&mut run, run_mask, &mut turns);
+            turns.documents += 1;
+            continue;
+        }
+        if !run.is_empty() && m != run_mask {
+            close(&mut run, run_mask, &mut turns);
+        }
+        run_mask = m;
+        run.push(t);
+    }
+    close(&mut run, run_mask, &mut turns);
+    turns
+}
+
+/// A 128-bit hash of `ids`, two FNV-1a passes with different offsets: the census's set key, so its
+/// n-gram sets fit in memory. Deterministic.
+fn census_hash(ids: &[u32]) -> u128 {
+    let pass = |mut h: u64| {
+        for &id in ids {
+            for b in id.to_le_bytes() {
+                h ^= u64::from(b);
+                h = h.wrapping_mul(0x0100_0000_01b3);
+            }
+        }
+        h ^ (ids.len() as u64)
+    };
+    (u128::from(pass(0xcbf2_9ce4_8422_2325)) << 64) | u128::from(pass(0x84222325_cbf29ce4))
+}
+
+/// The hashes of every `n`-token window inside each run (no window crosses a run).
+fn ngram_set(runs: &[Vec<u32>], n: usize) -> std::collections::HashSet<u128> {
+    runs.iter()
+        .flat_map(|run| run.windows(n).map(census_hash))
+        .collect()
+}
+
+/// The share of `runs`' `n`-token windows that `train` holds, and the window count.
+fn ngram_share(runs: &[Vec<u32>], train: &std::collections::HashSet<u128>, n: usize) -> (f64, usize) {
+    let (mut found, mut total) = (0usize, 0usize);
+    for window in runs.iter().flat_map(|run| run.windows(n)) {
+        total += 1;
+        found += usize::from(train.contains(&census_hash(window)));
+    }
+    (if total == 0 { 0.0 } else { found as f64 / total as f64 }, total)
+}
+
+/// The share of `runs` equal to a run of `train` (as hashed by [`census_hash`]).
+fn exact_share(runs: &[Vec<u32>], train: &std::collections::HashSet<u128>) -> f64 {
+    let found = runs.iter().filter(|run| train.contains(&census_hash(run))).count();
+    if runs.is_empty() { 0.0 } else { found as f64 / runs.len() as f64 }
+}
+
+/// `run` with every token outside `keep` (or in `digits`) replaced by one [`CENSUS_MASK`], and
+/// each run of masks collapsed to one.
+fn value_mask(
+    run: &[u32],
+    keep: &std::collections::HashSet<u32>,
+    digits: &std::collections::HashSet<u32>,
+) -> Vec<u32> {
+    let mut out: Vec<u32> = Vec::with_capacity(run.len());
+    for &t in run {
+        let id = if keep.contains(&t) && !digits.contains(&t) { t } else { CENSUS_MASK };
+        if !(id == CENSUS_MASK && out.last() == Some(&CENSUS_MASK)) {
+            out.push(id);
+        }
+    }
+    out
+}
+
+/// TRAIN's `k` most frequent tokens, ties to the smaller id.
+fn top_tokens(tokens: &[u32], k: usize, bos: u32) -> std::collections::HashSet<u32> {
+    let mut counts = std::collections::HashMap::<u32, usize>::new();
+    for &t in tokens.iter().filter(|&&t| t != bos) {
+        *counts.entry(t).or_default() += 1;
+    }
+    let mut ranked: Vec<(u32, usize)> = counts.into_iter().collect();
+    ranked.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    ranked.into_iter().take(k).map(|(t, _)| t).collect()
+}
+
+/// The ids of the tokenizer's single-digit pieces (a digit, with or without the byte-level space
+/// mark `Ġ` before it): the census masks them as values, since numbers are split into digits.
+fn digit_tokens(tokenizer_json: &str) -> Result<std::collections::HashSet<u32>> {
+    let value: serde_json::Value = serde_json::from_str(tokenizer_json)?;
+    let vocab = value["model"]["vocab"]
+        .as_object()
+        .ok_or_else(|| invalid("tokenizer.json has no model.vocab"))?;
+    Ok(vocab
+        .iter()
+        .filter(|(piece, _)| {
+            let bare = piece.strip_prefix('\u{120}').unwrap_or(piece);
+            bare.len() == 1 && bare.as_bytes()[0].is_ascii_digit()
+        })
+        .filter_map(|(_, id)| id.as_u64().map(|id| id as u32))
+        .collect())
+}
+
+/// One panel's overlap with TRAIN (census M3–M6).
+#[derive(Clone, Debug, Serialize)]
+pub struct PanelOverlap {
+    pub panel: String,
+    pub prompts: usize,
+    pub replies: usize,
+    pub exact_prompt_share: f64,
+    pub exact_reply_share: f64,
+    /// `(n, share, windows)` for each n in [`CENSUS_NGRAMS`].
+    pub prompt_ngram_share: Vec<(usize, f64, usize)>,
+    pub reply_ngram_share: Vec<(usize, f64, usize)>,
+    /// `(k, share)` for each k in [`CENSUS_MASK_KS`].
+    pub prompt_template_share: Vec<(usize, f64)>,
+    pub reply_template_share: Vec<(usize, f64)>,
+    /// Openings whose turn's first-8 key TRAIN's opening table holds, and all openings (M6).
+    pub keyed_openings: usize,
+    pub openings: usize,
+    /// The ORDER's rule: the prompt template share at K = 1,024 is at most
+    /// [`CENSUS_NEW_TEMPLATE_SHARE`].
+    pub new_templates: bool,
+}
+
+/// One no-turn key's later-row count, for the reply-only control (census M1).
+#[derive(Clone, Debug, Serialize)]
+pub struct ControlCell {
+    pub key: String,
+    pub min_share: f64,
+    pub named: usize,
+    pub hits: usize,
+}
+
+/// The pinned numbers the census must reproduce (M1), and step 2's rows (M2).
+#[derive(Clone, Debug, Serialize)]
+pub struct CensusRows {
+    pub dev_openings: usize,
+    pub dev_keyed_openings: usize,
+    /// DEV's later rows (past their openings) the turn-8 + position + reply-last-1 table names at
+    /// share 0.5, and how many it names right.
+    pub later_rows: usize,
+    pub later_named: usize,
+    pub later_hits: usize,
+    /// The most later-row hits among no-turn keys with precision at least 0.83, and the grid.
+    pub reply_only_control: usize,
+    pub reply_only_grid: Vec<ControlCell>,
+    /// DEV corpus positions of the later rows the table does not name and the openings no key
+    /// names: step 2's decision rows, pooled.
+    pub unnamed_later: usize,
+    pub unkeyed_openings: usize,
+    pub decision_positions: Vec<usize>,
+}
+
+/// The data census (one-model-end-to-end, claude-202): every count the ORDER fixes.
+#[derive(Clone, Debug, Serialize)]
+pub struct Census {
+    pub train: SplitSize,
+    pub dev: SplitSize,
+    pub fresh_v2: SplitSize,
+    pub rows: CensusRows,
+    pub panels: Vec<PanelOverlap>,
+}
+
+/// The corpus position of `row`, from its window.
+fn row_position(row: &ReplyRow, windows: &[CausalWindow]) -> Option<usize> {
+    let w = windows.get(row.window)?;
+    let i = w.scored_offsets.iter().position(|&off| off == row.offset)?;
+    w.scored_corpus_positions.get(i).copied()
+}
+
+/// Step 2's rows: DEV's later rows the reply table does not name at share 0.5, and its openings
+/// no first-8 key names, as `(later, openings)` index lists into `dev`.
+fn census_decision_rows(
+    reply: &ReplyTableCounts,
+    opening: &ReplyTableCounts,
+    dev: &[ReplyRow],
+) -> (Vec<usize>, Vec<usize>) {
+    let mut later = Vec::new();
+    let mut openings = Vec::new();
+    for (i, row) in dev.iter().enumerate() {
+        if row.opening {
+            if !opening.contains_key(&ReplyKey::TurnPosition(0).of(row)) {
+                openings.push(i);
+            }
+        } else if !reply
+            .get(&ReplyKey::TurnPosition(1).of(row))
+            .is_some_and(|s| table_keeps(s, REPLY_MEMORY_SHARE))
+        {
+            later.push(i);
+        }
+    }
+    (later, openings)
+}
+
+/// The split's size from its file and turns.
+fn split_size(path: &Path, tokens: &[u32], mask: &[u8], turns: &Turns) -> Result<SplitSize> {
+    Ok(SplitSize {
+        file_bytes: fs::metadata(path)?.len(),
+        payload_tokens: tokens.len(),
+        eligible_targets: tokens
+            .iter()
+            .zip(mask)
+            .enumerate()
+            .filter(|&(p, (&t, &m))| p > 0 && t != hs::SHEET_BOS_ID && m == 1)
+            .count(),
+        documents: turns.documents,
+        prompts: turns.prompts.len(),
+        replies: turns.replies.len(),
+    })
+}
+
+/// The data census of claude-202's ORDER over TRAIN, DEV and the sealed Fresh V2 panel in
+/// `fresh_v2` (its `tokens.u16` and `response_mask.u8`, pinned). Counts only; no model, no GPU.
+pub fn census(data_root: &Path, fresh_v2: &Path) -> Result<Census> {
+    let bos = hs::SHEET_BOS_ID;
+    let (train_tokens, train_mask) = load_train_split(data_root)?;
+    let (dev_tokens, dev_mask) = hs::load_pinned_uort_split(
+        &data_root.join("ft/dev/tokens.u16"),
+        &data_root.join("ft/dev/response_mask.u8"),
+        hs::PINNED_DEV_TOKENS_SHA256,
+        hs::PINNED_DEV_MASK_SHA256,
+        hs::EXPECTED_DEV_TOKENS,
+        hs::EXPECTED_DEV_ELIGIBLE_TARGETS,
+        hs::SHEET_VOCAB,
+        bos,
+    )?;
+    let (fresh_tokens, fresh_mask) = hs::load_pinned_uort_split(
+        &fresh_v2.join("tokens.u16"),
+        &fresh_v2.join("response_mask.u8"),
+        PINNED_FRESH_V2_TOKENS_SHA256,
+        PINNED_FRESH_V2_MASK_SHA256,
+        EXPECTED_FRESH_V2_TOKENS,
+        EXPECTED_FRESH_V2_ELIGIBLE_TARGETS,
+        hs::SHEET_VOCAB,
+        bos,
+    )?;
+    let windows = |tokens: &[u32], mask: &[u8]| -> Result<Vec<CausalWindow>> {
+        Ok(hs::build_document_windows(tokens, mask, SHEET_CONTEXT, bos)?.0)
+    };
+    let (train_w, dev_w, fresh_w) = (
+        windows(&train_tokens, &train_mask)?,
+        windows(&dev_tokens, &dev_mask)?,
+        windows(&fresh_tokens, &fresh_mask)?,
+    );
+    let train_rows = reply_rows(&train_w, &train_mask);
+    let dev_rows = reply_rows(&dev_w, &dev_mask);
+    let fresh_rows = reply_rows(&fresh_w, &fresh_mask);
+
+    // M1 and M2, with the probe's own tables.
+    let opening_table = reply_table(ReplyKey::TurnPosition(0), &train_rows);
+    let reply = reply_table(ReplyKey::TurnPosition(1), &train_rows);
+    let keyed = |rows: &[ReplyRow]| {
+        rows.iter()
+            .filter(|r| r.opening && opening_table.contains_key(&ReplyKey::TurnPosition(0).of(r)))
+            .count()
+    };
+    let later: Vec<&ReplyRow> = dev_rows.iter().filter(|r| !r.opening).collect();
+    let named_later = |table: &ReplyTableCounts, key: ReplyKey, share: f64| {
+        let mut named = 0;
+        let mut hits = 0;
+        for row in &later {
+            if let Some(stored) = table.get(&key.of(row)).filter(|s| table_keeps(s, share)) {
+                named += 1;
+                hits += usize::from(stored.0 == row.target);
+            }
+        }
+        (named, hits)
+    };
+    let (later_named, later_hits) = named_later(&reply, ReplyKey::TurnPosition(1), REPLY_MEMORY_SHARE);
+    let mut grid = Vec::new();
+    for key in std::iter::once(ReplyKey::None).chain((1..=4).map(ReplyKey::Reply)) {
+        let table = reply_table(key, &train_rows);
+        for &share in &REPLY_BOUND_SHARES {
+            let (named, hits) = named_later(&table, key, share);
+            grid.push(ControlCell { key: key.name(), min_share: share, named, hits });
+        }
+    }
+    let reply_only_control = grid
+        .iter()
+        .filter(|c| c.named > 0 && c.hits as f64 >= CENSUS_CONTROL_PRECISION * c.named as f64)
+        .map(|c| c.hits)
+        .max()
+        .unwrap_or(0);
+    let (unnamed, unkeyed) = census_decision_rows(&reply, &opening_table, &dev_rows);
+    let mut decision_positions = unnamed
+        .iter()
+        .chain(&unkeyed)
+        .map(|&i| {
+            row_position(&dev_rows[i], &dev_w)
+                .ok_or_else(|| invalid("a DEV reply row has no corpus position"))
+        })
+        .collect::<Result<Vec<usize>>>()?;
+    decision_positions.sort_unstable();
+    let rows = CensusRows {
+        dev_openings: dev_rows.iter().filter(|r| r.opening).count(),
+        dev_keyed_openings: keyed(&dev_rows),
+        later_rows: later.len(),
+        later_named,
+        later_hits,
+        reply_only_control,
+        reply_only_grid: grid,
+        unnamed_later: unnamed.len(),
+        unkeyed_openings: unkeyed.len(),
+        decision_positions,
+    };
+
+    // M0 and M3–M6.
+    let train_turns = split_turns(&train_tokens, &train_mask, bos);
+    let dev_turns = split_turns(&dev_tokens, &dev_mask, bos);
+    let fresh_turns = split_turns(&fresh_tokens, &fresh_mask, bos);
+    let digits = digit_tokens(&fs::read_to_string(data_root.join("tokenizer.json"))?)?;
+    let exact = |runs: &[Vec<u32>]| runs.iter().map(|r| census_hash(r)).collect();
+    let (train_prompts, train_replies): (std::collections::HashSet<u128>, std::collections::HashSet<u128>) =
+        (exact(&train_turns.prompts), exact(&train_turns.replies));
+    let ngram_sets: Vec<(usize, std::collections::HashSet<u128>, std::collections::HashSet<u128>)> =
+        CENSUS_NGRAMS
+            .iter()
+            .map(|&n| (n, ngram_set(&train_turns.prompts, n), ngram_set(&train_turns.replies, n)))
+            .collect();
+    let masks: Vec<(usize, std::collections::HashSet<u32>)> = CENSUS_MASK_KS
+        .iter()
+        .map(|&k| (k, top_tokens(&train_tokens, k, bos)))
+        .collect();
+    let template_sets: Vec<(usize, std::collections::HashSet<u128>, std::collections::HashSet<u128>)> = masks
+        .iter()
+        .map(|(k, keep)| {
+            let set = |runs: &[Vec<u32>]| {
+                runs.iter().map(|r| census_hash(&value_mask(r, keep, &digits))).collect()
+            };
+            (*k, set(&train_turns.prompts), set(&train_turns.replies))
+        })
+        .collect();
+    let overlap = |panel: &str, turns: &Turns, rows: &[ReplyRow]| {
+        let template = |runs: &[Vec<u32>], prompts: bool| -> Vec<(usize, f64)> {
+            template_sets
+                .iter()
+                .zip(&masks)
+                .map(|((k, p, r), (_, keep))| {
+                    let set = if prompts { p } else { r };
+                    let masked: Vec<Vec<u32>> =
+                        runs.iter().map(|run| value_mask(run, keep, &digits)).collect();
+                    (*k, exact_share(&masked, set))
+                })
+                .collect()
+        };
+        let prompt_template_share = template(&turns.prompts, true);
+        let new_templates = prompt_template_share
+            .iter()
+            .find(|(k, _)| *k == 1024)
+            .is_some_and(|(_, share)| *share <= CENSUS_NEW_TEMPLATE_SHARE);
+        PanelOverlap {
+            panel: panel.to_owned(),
+            prompts: turns.prompts.len(),
+            replies: turns.replies.len(),
+            exact_prompt_share: exact_share(&turns.prompts, &train_prompts),
+            exact_reply_share: exact_share(&turns.replies, &train_replies),
+            prompt_ngram_share: ngram_sets
+                .iter()
+                .map(|(n, p, _)| {
+                    let (share, windows) = ngram_share(&turns.prompts, p, *n);
+                    (*n, share, windows)
+                })
+                .collect(),
+            reply_ngram_share: ngram_sets
+                .iter()
+                .map(|(n, _, r)| {
+                    let (share, windows) = ngram_share(&turns.replies, r, *n);
+                    (*n, share, windows)
+                })
+                .collect(),
+            prompt_template_share,
+            reply_template_share: template(&turns.replies, false),
+            keyed_openings: keyed(rows),
+            openings: rows.iter().filter(|r| r.opening).count(),
+            new_templates,
+        }
+    };
+    let panels = vec![
+        overlap("ft/dev", &dev_turns, &dev_rows),
+        overlap("fresh_v2", &fresh_turns, &fresh_rows),
+    ];
+    Ok(Census {
+        train: split_size(&data_root.join("mw-balp/train/tokens.u16"), &train_tokens, &train_mask, &train_turns)?,
+        dev: split_size(&data_root.join("ft/dev/tokens.u16"), &dev_tokens, &dev_mask, &dev_turns)?,
+        fresh_v2: split_size(&fresh_v2.join("tokens.u16"), &fresh_tokens, &fresh_mask, &fresh_turns)?,
+        rows,
+        panels,
+    })
 }
 
 /// `samples` DEV windows spread over the panel whose first scored target opens a reply, with at
@@ -3453,6 +3908,97 @@ mod tests {
             [10, 11, 12, u32::MAX, 2, u32::MAX, 12]
         );
         assert_eq!(ReplyKey::Reply(4).of(&rows[2]), [11, 12]);
+    }
+
+    /// claude-202: a document starts at BOS, which belongs to neither turn; prompts and replies
+    /// are maximal runs of one mask value inside a document.
+    #[test]
+    fn census_turns_split_at_bos_and_at_each_mask_change() {
+        let tokens = [0, 5, 6, 7, 8, 9, 0, 5, 7, 3];
+        let mask = [0, 0, 0, 1, 1, 0, 0, 0, 1, 1];
+        let turns = split_turns(&tokens, &mask, 0);
+        assert_eq!(turns.documents, 2);
+        assert_eq!(turns.prompts, vec![vec![5, 6], vec![9], vec![5]]);
+        assert_eq!(turns.replies, vec![vec![7, 8], vec![7, 3]]);
+    }
+
+    /// claude-202: n-gram windows never cross a run, and exact matches compare whole runs.
+    #[test]
+    fn census_ngrams_stay_inside_their_run_and_exact_matches_are_whole_runs() {
+        let train = vec![vec![1, 2], vec![3, 4, 5]];
+        let set = ngram_set(&train, 2);
+        // TRAIN's 2-grams: [1, 2], [3, 4], [4, 5]; [2, 3] crosses runs and is absent.
+        assert_eq!(set.len(), 3);
+        let (share, windows) = ngram_share(&[vec![1, 2, 3]], &set, 2);
+        assert_eq!((share, windows), (0.5, 2));
+        let exact: std::collections::HashSet<u128> = train.iter().map(|r| census_hash(r)).collect();
+        assert_eq!(exact_share(&[vec![1, 2], vec![1, 2, 3], vec![3, 4, 5], vec![9]], &exact), 0.5);
+        // The length is part of the hash: [3, 4] and [3, 4, 5] differ.
+        assert_ne!(census_hash(&[3, 4]), census_hash(&[3, 4, 5]));
+    }
+
+    /// claude-202: a value mask keeps the frequent tokens, masks the rest and every digit, and
+    /// collapses each run of masks to one.
+    #[test]
+    fn census_value_masks_keep_frequent_tokens_and_collapse_masks() {
+        let tokens = [0, 1, 1, 1, 2, 2, 4, 5, 3, 3, 3, 3];
+        let keep = top_tokens(&tokens, 2, 0);
+        // 3 is the commonest (4), then 1 (3); 2 (2) is third.
+        assert_eq!(keep, [1u32, 3].into_iter().collect());
+        // BOS is never counted, even when it is the commonest token; ties go to the smaller id.
+        let frequent_bos = [0, 0, 0, 0, 0, 7, 7, 6, 6, 9];
+        assert_eq!(top_tokens(&frequent_bos, 2, 0), [6u32, 7].into_iter().collect());
+        let digits: std::collections::HashSet<u32> = [3u32].into_iter().collect();
+        assert_eq!(
+            value_mask(&[1, 4, 5, 3, 1, 2], &keep, &digits),
+            vec![1, CENSUS_MASK, 1, CENSUS_MASK]
+        );
+        let tokenizer = r#"{"model": {"vocab": {"a": 4, "7": 5, "Ġ9": 6, "12": 7, "Ġx": 8}}}"#;
+        assert_eq!(
+            digit_tokens(tokenizer).unwrap(),
+            [5u32, 6].into_iter().collect()
+        );
+    }
+
+    /// claude-202: step 2's rows are the later rows the turn-8 + position + reply-last-1 table
+    /// does not keep at share 0.5, and the openings no first-8 key names.
+    #[test]
+    fn census_decision_rows_are_the_unnamed_later_rows_and_unkeyed_openings() {
+        let row = |prompt: &[u32], reply: &[u32], target, opening| ReplyRow {
+            window: 0,
+            offset: 0,
+            prompt: prompt.to_vec(),
+            reply: reply.to_vec(),
+            target,
+            opening,
+            copy: false,
+        };
+        let train = [
+            // An opening after the prompt [1, 2], and two later rows after reply [10].
+            row(&[1, 2], &[], 10, true),
+            row(&[1, 2], &[10], 11, false),
+            row(&[1, 2], &[10], 11, false),
+            // After reply [20]: 21 once and 22 once, a 1/2 share, kept at 0.5.
+            row(&[1, 2], &[20], 21, false),
+            row(&[1, 2], &[20], 22, false),
+            // After reply [30]: 31 once, 32 once, 33 once, a 1/3 share, not kept at 0.5.
+            row(&[1, 2], &[30], 31, false),
+            row(&[1, 2], &[30], 32, false),
+            row(&[1, 2], &[30], 33, false),
+        ];
+        let reply = reply_table(ReplyKey::TurnPosition(1), &train);
+        let opening = reply_table(ReplyKey::TurnPosition(0), &train);
+        let dev = [
+            row(&[1, 2], &[], 10, true),
+            row(&[5, 6], &[], 10, true),
+            row(&[1, 2], &[10], 11, false),
+            row(&[1, 2], &[20], 21, false),
+            row(&[1, 2], &[30], 31, false),
+            row(&[1, 2], &[40], 41, false),
+        ];
+        let (later, openings) = census_decision_rows(&reply, &opening, &dev);
+        // Rows 4 ([30], share 1/3) and 5 ([40], unseen) are unnamed; row 1's key is unseen.
+        assert_eq!((later, openings), (vec![4, 5], vec![1]));
     }
 
     #[test]
