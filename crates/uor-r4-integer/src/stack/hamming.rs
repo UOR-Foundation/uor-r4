@@ -1,10 +1,10 @@
 //! claude-146's induction-keyed Hamming reads in the integer artifact (claude-188): their
 //! parameters as a `uor-r4.lut-stack/6` container stores them, one read per depth.
 //!
-//! The FBS session serves the copy heads (claude-194, [`ServedHamming`]): the stream read after
-//! its depth and the move on the readout. The type heads are a later unit of
-//! `integer-hamming-read`. Until then [`super::IntegerStackModel::parse`] refuses a read with a
-//! non-zero type-head weight, so no part of a read is ever dropped.
+//! The FBS session serves the whole read ([`ServedHamming`]): the copy heads (claude-194) and the
+//! type heads (claude-195), at the stream read after its depth and the move on the readout. The
+//! type heads keep each position's payload in the session, which a saved session does not carry,
+//! so `restore_state` refuses a session with them rather than continue differently.
 
 use crate::bitcode::popcount_swar;
 
@@ -299,6 +299,9 @@ impl TypeHeads {
         for ((lane, unit), out) in point.chunks_exact(4).zip(&self.value).zip(out.chunks_exact_mut(4)) {
             let rotated = stack_hamilton(*unit, [lane[0], lane[1], lane[2], lane[3]]);
             for (o, r) in out.iter_mut().zip(rotated) {
+                // A rotation keeps each lane's norm, so a coordinate is at most twice the input's
+                // largest: the clamp can act only on a readout input past 2^62, which a normed,
+                // gained output does not reach.
                 *o = round_shift(r, 31).clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64;
             }
         }
@@ -492,8 +495,9 @@ impl ServedHamming {
 
     /// The read on the final norm's output `n` (at `NORM_FINE_EXP`), as the float's
     /// `apply_readout`: `n + w_c ⊙ (c − n)` where a copy head found a candidate at the last row
-    /// of `tokens`, plus `w_y ⊙ y` where a type head did, the sum rounded once to `n`'s exponent.
-    /// Not rounded to Q16, as the float trunk does not round the readout read.
+    /// of `tokens`, plus `w_y ⊙ y` where a type head did. The type term is pre-rounded 43 bits
+    /// below `n`'s grid ([`readout_sum`]), and the sum then rounded once to `n`'s exponent. Not
+    /// rounded to Q16, as the float trunk does not round the readout read.
     #[inline(never)]
     pub(crate) fn readout(&self, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], n: &mut [i64]) {
         let Some(i) = self.reads.iter().position(|r| r.depth == self.layers) else {

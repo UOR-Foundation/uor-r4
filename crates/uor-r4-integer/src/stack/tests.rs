@@ -4314,21 +4314,30 @@ fn f64_code(raw: &[i32], point: &[f64], h: usize, head_width: usize) -> u64 {
 }
 
 /// claude-195: the type heads' kernel against an f64 reference of the float read's steps on the
-/// quantized values: the key codes of every vocabulary entry, each row's query codes, kept sets
-/// and distances, and the type mean within one step of the input's Q16 grid. Two seeds use the
-/// synthetic margins, where few candidates count, and three use wide ones, where most count with
-/// fractional weights.
+/// quantized values: the key codes of every vocabulary entry, each row's query codes, each
+/// payload within half a step of the f64 rotation on the input's Q16 grid, kept sets and
+/// distances, and the type mean within one step of that grid.
+///
+/// Two seeds use the synthetic margins, where no candidate counts. Three use wide ones, where
+/// most count with fractional weights. Two mix a wide margin on one type head with the synthetic
+/// one on the other, so that rows where exactly one head found a candidate are common. There the
+/// mean is over that one head alone, not over both (review round 1).
 #[test]
 fn type_heads_match_the_f64_reference() {
     let (vocab, width, rows) = (256usize, 256usize, 48usize);
     let (copy, head_width) = (2usize, width / 4);
-    let mut found_rows = 0;
-    for seed in 0..5u64 {
+    let (mut found_rows, mut one_found_rows) = (0, 0);
+    for seed in 0..7u64 {
         let (record, mut read, table) = copy_control(vocab, width, 4, 195 + seed);
-        if seed >= 2 {
-            for (k, m) in read.margin.iter_mut().enumerate() {
-                *m = ((33 + 2 * k as i32) << 16) + 12_345;
+        match seed {
+            0 | 1 => {}
+            2..=4 => {
+                for (k, m) in read.margin.iter_mut().enumerate() {
+                    *m = ((33 + 2 * k as i32) << 16) + 12_345;
+                }
             }
+            // One type head wide (the first or the second), the other left narrow.
+            _ => read.margin[copy + (seed as usize - 5)] = (37 << 16) + 12_345,
         }
         let types = super::TypeHeads::new(&record, &read, &table, vocab, width);
         let point_of = |v: usize| -> Vec<f64> { table[v * width..][..width].iter().map(|&q| f64::from(q) / 4096.0).collect() };
@@ -4351,6 +4360,13 @@ fn type_heads_match_the_f64_reference() {
         let mut cache = vec![0i64; rows * width];
         for t in 0..rows {
             types.payload(&points[t], &mut cache[t * width..][..width]);
+            // Half a step for the rounding, and 2^-10 of a step for the unit quaternion's own Q31
+            // quantization (at inputs within ±4, its error is below 2^-11 of a step). A truncated
+            // payload is up to a whole step off.
+            for (k, (&got, &want)) in cache[t * width..][..width].iter().zip(&payload_ref[t]).enumerate() {
+                let off = (got as f64 - want * 65536.0).abs();
+                assert!(off <= 0.5 + 2f64.powi(-10), "seed {seed}, row {t}, payload {k}: {off} steps off");
+            }
             let queries = types.queries(&points[t]);
             let mut sum = vec![0f64; width];
             let mut found = 0usize;
@@ -4388,6 +4404,7 @@ fn type_heads_match_the_f64_reference() {
                 (None, 0) => {}
                 (Some(got), found) if found > 0 => {
                     found_rows += 1;
+                    one_found_rows += usize::from(found == 1);
                     for (k, (&g, &s)) in got.iter().zip(&sum).enumerate() {
                         let error = (g as f64 / 2f64.powi(16 + 31) - s / found as f64).abs();
                         assert!(error <= 2f64.powi(-16), "seed {seed}, row {t}, coordinate {k}: off by {error}");
@@ -4398,6 +4415,7 @@ fn type_heads_match_the_f64_reference() {
         }
     }
     assert!(found_rows > 100, "the type heads found candidates at {found_rows} rows");
+    assert!(one_found_rows > 40, "exactly one type head found a candidate at {one_found_rows} rows");
 }
 
 /// claude-195: the stream read with type heads, against claude-194's method. At every row the
@@ -4482,6 +4500,8 @@ fn readout_with_type_heads(copy: f32, types: f32) -> (usize, usize) {
                     let nk = i128::from(n[k]);
                     let move_c = c.as_ref().map_or(0, |c| i128::from(w_c[k]) * (c[k] - (nk << 19)));
                     let y = y.as_ref().map_or(0, |y| y[k]);
+                    // The type term's pre-rounding to 2^-67 is the design's, kept to stay inside an
+                    // i128 for any `n`; it is 43 bits below `n`'s grid.
                     let move_y = round_half_away(i128::from(w_y[k]) * y, 12);
                     round_half_away((nk << 43) + move_c + move_y, 43) as i64
                 })

@@ -19,7 +19,7 @@ In integers:
 - a code bit is 1 at or above 0;
 - the payload is rounded half away from zero back to `p`'s exponent;
 - the popcount is `popcount_swar`;
-- each hook's sum is rounded once (claude-194's rule), the stream to Q16 exactly.
+- each hook's sum is rounded once (claude-194's rule), the stream to Q16 exactly. The readout's type term is first rounded 43 bits below `n`'s grid, so that the sum stays inside an i128 for any `n`. That wording was made exact in review round 1.
 
 **What is not served stays refused:**
 - a session restore when a read has type heads. The payload cache is not in the saved session, and the byte codec (`session_codec.rs`) is outside the item's scope, so a restore would silently differ;
