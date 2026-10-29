@@ -1062,6 +1062,224 @@ pub fn opening_bound(data_root: &Path) -> Result<(Vec<OpeningBound>, Vec<AnchorC
     ))
 }
 
+/// One reply row (turn-memory-reply, claude-192): the prompt its window shows for its turn, back
+/// from the reply's start to the last response token or BOS; the reply's own earlier tokens; its
+/// target; and whether it opens the reply or copies the prompt ([`copies_prompt`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ReplyRow {
+    prompt: Vec<u32>,
+    reply: Vec<u32>,
+    target: u32,
+    opening: bool,
+    copy: bool,
+}
+
+fn reply_rows(windows: &[CausalWindow], mask: &[u8]) -> Vec<ReplyRow> {
+    let mut rows = Vec::new();
+    for w in windows {
+        let scored = w
+            .scored_offsets
+            .iter()
+            .zip(&w.scored_targets)
+            .zip(&w.scored_corpus_positions);
+        for ((&offset, &target), &position) in scored {
+            if mask[position] == 0 {
+                continue;
+            }
+            // The corpus position of `input_ids[0]`.
+            let base = position - 1 - offset;
+            let part = |i: usize, reply: bool| {
+                w.input_ids[i] != hs::SHEET_BOS_ID && (mask[base + i] == 1) == reply
+            };
+            let mut start = offset + 1;
+            while start > 0 && part(start - 1, true) {
+                start -= 1;
+            }
+            let mut first = start;
+            while first > 0 && part(first - 1, false) {
+                first -= 1;
+            }
+            rows.push(ReplyRow {
+                prompt: w.input_ids[first..start].to_vec(),
+                reply: w.input_ids[start..=offset].to_vec(),
+                target,
+                opening: opens_reply(mask, position),
+                copy: copies_prompt(w, offset, position, target, mask),
+            });
+        }
+    }
+    rows
+}
+
+/// How many of the turn's first prompt tokens a turn key holds, as claude-161's memory.
+const TURN_KEY: usize = 8;
+
+/// Which part of a [`ReplyRow`] a [`ReplyBound`] keys on.
+#[derive(Clone, Copy, Debug)]
+enum ReplyKey {
+    None,
+    /// The reply's last `j` tokens alone: the control with no turn.
+    Reply(usize),
+    /// The turn's first 8 tokens and the reply's last `j`.
+    Turn(usize),
+    /// The turn's first 8 tokens, the reply position, and the reply's last `j`. At position 0
+    /// this is claude-161's opening key.
+    TurnPosition(usize),
+}
+
+impl ReplyKey {
+    fn of(self, row: &ReplyRow) -> Vec<u32> {
+        let last = |j: usize| &row.reply[row.reply.len() - j.min(row.reply.len())..];
+        let turn = &row.prompt[..TURN_KEY.min(row.prompt.len())];
+        // The parts are joined by `u32::MAX`, which no token id takes.
+        match self {
+            ReplyKey::None => Vec::new(),
+            ReplyKey::Reply(j) => last(j).to_vec(),
+            ReplyKey::Turn(j) => [turn, &[u32::MAX], last(j)].concat(),
+            ReplyKey::TurnPosition(j) => {
+                [turn, &[u32::MAX, row.reply.len() as u32, u32::MAX], last(j)].concat()
+            }
+        }
+    }
+
+    fn name(self) -> String {
+        match self {
+            ReplyKey::None => "none".to_owned(),
+            ReplyKey::Reply(j) => format!("reply-last-{j}"),
+            ReplyKey::Turn(j) => format!("turn-{TURN_KEY}+reply-last-{j}"),
+            ReplyKey::TurnPosition(j) => format!("turn-{TURN_KEY}+position+reply-last-{j}"),
+        }
+    }
+}
+
+/// DEV rows of one kind: how many there are, how many a key the table keeps names, and how many
+/// of those it names right.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct KindCount {
+    pub rows: usize,
+    pub named: usize,
+    pub hits: usize,
+}
+
+/// What an exact memory of TRAIN, keyed by one [`ReplyKey`], could name among DEV's reply rows
+/// (`--reply-bound`). The table keeps, for each key, TRAIN's commonest target (ties to the smaller
+/// id), and only where that target's share of the key's rows is at least `min_share`. A DEV row
+/// whose key is not kept is named by nothing: the trunk alone would decide it. A count over the
+/// corpus, not a model.
+#[derive(Clone, Debug, Serialize)]
+pub struct ReplyBound {
+    pub key: String,
+    pub min_share: f64,
+    pub train_rows: usize,
+    /// Keys the table keeps at `min_share`.
+    pub train_keys: usize,
+    pub all: KindCount,
+    pub openings: KindCount,
+    pub copies: KindCount,
+    /// Rows that neither open a reply nor copy the prompt.
+    pub rest: KindCount,
+    /// Openings named right when an opening whose key is not kept takes TRAIN's commonest
+    /// opening, as [`opening_bound`] counts: claude-161's 607 for the opening key.
+    pub opening_hits_with_fallback: usize,
+}
+
+/// [`ReplyBound`] for `key` at each of `shares`, the table built from `train`.
+fn reply_bound_rows(
+    key: ReplyKey,
+    train: &[ReplyRow],
+    dev: &[ReplyRow],
+    shares: &[f64],
+) -> Vec<ReplyBound> {
+    let mut counts = std::collections::HashMap::<Vec<u32>, Vec<(u32, usize)>>::new();
+    let mut openings = std::collections::BTreeMap::<u32, usize>::new();
+    for row in train {
+        let targets = counts.entry(key.of(row)).or_default();
+        match targets.iter_mut().find(|(t, _)| *t == row.target) {
+            Some((_, n)) => *n += 1,
+            None => targets.push((row.target, 1)),
+        }
+        if row.opening {
+            *openings.entry(row.target).or_default() += 1;
+        }
+    }
+    // Each key's commonest target, ties to the smaller id, its count and the key's rows.
+    let table: std::collections::HashMap<Vec<u32>, (u32, usize, usize)> = counts
+        .into_iter()
+        .map(|(k, targets)| {
+            let rows = targets.iter().map(|(_, n)| n).sum();
+            let (target, n) = targets
+                .into_iter()
+                .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
+                .unwrap_or((0, 0));
+            (k, (target, n, rows))
+        })
+        .collect();
+    let fallback = commonest(&openings).map(|(t, _)| t);
+    shares
+        .iter()
+        .map(|&min_share| {
+            let kept =
+                |stored: &(u32, usize, usize)| stored.1 as f64 >= min_share * stored.2 as f64;
+            let mut out = ReplyBound {
+                key: key.name(),
+                min_share,
+                train_rows: train.len(),
+                train_keys: table.values().filter(|s| kept(s)).count(),
+                all: KindCount::default(),
+                openings: KindCount::default(),
+                copies: KindCount::default(),
+                rest: KindCount::default(),
+                opening_hits_with_fallback: 0,
+            };
+            for row in dev {
+                let named = table.get(&key.of(row)).filter(|s| kept(s)).map(|s| s.0);
+                let mut kinds = vec![&mut out.all];
+                if row.opening {
+                    kinds.push(&mut out.openings);
+                }
+                if row.copy {
+                    kinds.push(&mut out.copies);
+                }
+                if !row.opening && !row.copy {
+                    kinds.push(&mut out.rest);
+                }
+                for kind in kinds {
+                    kind.rows += 1;
+                    kind.named += usize::from(named.is_some());
+                    kind.hits += usize::from(named == Some(row.target));
+                }
+                if row.opening {
+                    out.opening_hits_with_fallback +=
+                        usize::from(named.or(fallback) == Some(row.target));
+                }
+            }
+            out
+        })
+        .collect()
+}
+
+/// The stored-share thresholds `--reply-bound` reports.
+const REPLY_BOUND_SHARES: [f64; 4] = [0.0, 0.5, 0.8, 0.95];
+
+/// [`ReplyBound`] over DEV's reply rows, with TRAIN's table, for each [`ReplyKey`]: none, the
+/// reply's last 1–4 tokens, the turn with the reply's last 0–4, and the turn with the position
+/// and the reply's last 0–1 (turn-memory-reply's probe, claude-192).
+pub fn reply_bound(data_root: &Path) -> Result<Vec<ReplyBound>> {
+    let (train_tokens, train_mask) = load_train_split(data_root)?;
+    let (train_windows, _) =
+        hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
+    let (dev_windows, dev_mask) = load_dev(data_root)?;
+    let train = reply_rows(&train_windows, &train_mask);
+    let dev = reply_rows(&dev_windows, &dev_mask);
+    let keys = std::iter::once(ReplyKey::None)
+        .chain((1..=4).map(ReplyKey::Reply))
+        .chain((0..=4).map(ReplyKey::Turn))
+        .chain((0..=1).map(ReplyKey::TurnPosition));
+    Ok(keys
+        .flat_map(|key| reply_bound_rows(key, &train, &dev, &REPLY_BOUND_SHARES))
+        .collect())
+}
+
 /// `samples` DEV windows spread over the panel whose first scored target opens a reply, with at
 /// least 16 tokens of prompt before it. `mask` is DEV's response mask.
 fn sample_windows<'a>(
@@ -3040,6 +3258,167 @@ mod tests {
         assert_eq!((first.top[0].train_rows, first.top[0].opening_rows), (3, 2));
         let none = bound(PromptKey::None, &train, &dev, &decode);
         assert_eq!((none.dev_hits, none.dev_unseen), (2, 0));
+    }
+
+    #[test]
+    fn reply_rows_carry_the_turn_the_reply_so_far_and_their_kinds() {
+        // BOS, a prompt (10 11 12), a reply (11 12 30), a prompt (13), a reply (31).
+        let tokens = [0u32, 10, 11, 12, 11, 12, 30, 13, 31];
+        let mask = [0u8, 0, 0, 0, 1, 1, 1, 0, 1];
+        let (windows, _) = hs::build_document_windows(&tokens, &mask, 16, 0).unwrap();
+        let rows = reply_rows(&windows, &mask);
+        let row = |prompt: &[u32], reply: &[u32], target, opening, copy| ReplyRow {
+            prompt: prompt.to_vec(),
+            reply: reply.to_vec(),
+            target,
+            opening,
+            copy,
+        };
+        assert_eq!(
+            rows,
+            [
+                row(&[10, 11, 12], &[], 11, true, false),
+                // The reply's 11 then 12 stand side by side in the prompt: a copy.
+                row(&[10, 11, 12], &[11], 12, false, true),
+                row(&[10, 11, 12], &[11, 12], 30, false, false),
+                row(&[13], &[], 31, true, false),
+            ]
+        );
+        // claude-161's opening key is the turn at position 0; later rows key on their position.
+        assert_eq!(
+            ReplyKey::TurnPosition(0).of(&rows[0]),
+            [10, 11, 12, u32::MAX, 0, u32::MAX]
+        );
+        assert_eq!(
+            ReplyKey::TurnPosition(1).of(&rows[2]),
+            [10, 11, 12, u32::MAX, 2, u32::MAX, 12]
+        );
+        assert_eq!(ReplyKey::Reply(4).of(&rows[2]), [11, 12]);
+    }
+
+    #[test]
+    fn the_reply_bound_keeps_each_keys_commonest_target_at_its_share() {
+        let row = |reply: &[u32], target, opening, copy| ReplyRow {
+            prompt: vec![1],
+            reply: reply.to_vec(),
+            target,
+            opening,
+            copy,
+        };
+        let train = [
+            // After 5: 7 twice and 8 once, a 2/3 share.
+            row(&[5], 7, false, false),
+            row(&[5], 7, false, false),
+            row(&[5], 8, false, false),
+            // After 6: always 9.
+            row(&[6], 9, false, true),
+            // After 3: 4 and 2 once each; the tie goes to the smaller id.
+            row(&[3], 4, false, false),
+            row(&[3], 2, false, false),
+            // Openings: 40 twice, 41 once.
+            row(&[], 40, true, false),
+            row(&[], 40, true, false),
+            row(&[], 41, true, false),
+        ];
+        let dev = [
+            row(&[5], 7, false, false),
+            row(&[5], 8, false, false),
+            row(&[6], 9, false, true),
+            row(&[3], 2, false, false),
+            row(&[4], 1, false, false),
+            row(&[], 41, true, false),
+        ];
+        let counts = reply_bound_rows(ReplyKey::Reply(1), &train, &dev, &[0.0, 0.8]);
+        let all = &counts[0];
+        assert_eq!(all.train_keys, 4);
+        // Named: after 5 (twice), 6, 3 and the opening; after 4 is unseen. Right: 7, 9, 2.
+        assert_eq!(
+            (all.all, all.copies, all.openings),
+            (
+                KindCount {
+                    rows: 6,
+                    named: 5,
+                    hits: 3
+                },
+                KindCount {
+                    rows: 1,
+                    named: 1,
+                    hits: 1
+                },
+                KindCount {
+                    rows: 1,
+                    named: 1,
+                    hits: 0
+                },
+            )
+        );
+        assert_eq!(
+            all.rest,
+            KindCount {
+                rows: 4,
+                named: 3,
+                hits: 2
+            }
+        );
+        // At 0.8 only the key after 6 (share 1) is kept; 2/3 and 1/2 shares are dropped.
+        let strict = &counts[1];
+        assert_eq!(strict.train_keys, 1);
+        assert_eq!(
+            strict.all,
+            KindCount {
+                rows: 6,
+                named: 1,
+                hits: 1
+            }
+        );
+        // An opening whose key is not kept takes TRAIN's commonest opening, 40: wrong for 41.
+        assert_eq!(
+            (
+                all.opening_hits_with_fallback,
+                strict.opening_hits_with_fallback
+            ),
+            (0, 0)
+        );
+    }
+
+    #[test]
+    fn the_reply_bound_falls_back_to_the_commonest_opening_only_for_openings() {
+        let row = |prompt: &[u32], target, opening| ReplyRow {
+            prompt: prompt.to_vec(),
+            reply: Vec::new(),
+            target,
+            opening,
+            copy: false,
+        };
+        let train = [
+            row(&[1], 40, true),
+            row(&[2], 40, true),
+            row(&[3], 41, true),
+        ];
+        // Turn 9 is unseen: the fallback names 40, which is right; turn 3 names 41, right.
+        let dev = [
+            row(&[9], 40, true),
+            row(&[3], 41, true),
+            row(&[9], 40, false),
+        ];
+        let counts = reply_bound_rows(ReplyKey::TurnPosition(0), &train, &dev, &[0.0]);
+        assert_eq!(
+            counts[0].openings,
+            KindCount {
+                rows: 2,
+                named: 1,
+                hits: 1
+            }
+        );
+        assert_eq!(counts[0].opening_hits_with_fallback, 2);
+        assert_eq!(
+            counts[0].rest,
+            KindCount {
+                rows: 1,
+                named: 0,
+                hits: 0
+            }
+        );
     }
 
     #[cfg(feature = "cuda")]
