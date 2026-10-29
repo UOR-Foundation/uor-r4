@@ -23,6 +23,18 @@ Terms are in the [glossary](./glossary.md). Labels are **proof**, **measurement*
 
 Statuses are from the [ROADMAP](../../ROADMAP.md) table, which states each bar in full. A milestone closes only when its bar is met on a saved model.
 
+## Order of work from 29 Oct 2026
+
+The discrete-path stages below stay as the 19 Oct record. The open direction today (PLAN.md) is:
+
+1. `turn-memory-reply`: carry exact memory past a reply's first word. This is the capability blocker.
+2. Serve the model's parts in integers: the Hamming read's session hooks, `turn-memory-integer`, and the served readout (nearest, or `writer-admission`).
+3. R7: a typed question gets a typed reply in `uor-chat --stack`.
+4. One model trained with all of the above, exported, served on the laptop and scored on prompts, with tokens/s.
+5. Then cost: `training-step-cost`, the vector kernel, and float where it is faster.
+
+Pre-alpha, 0 of 8 milestones. Details: [pipeline map](../model/pipeline-map.md) and [PLAN.md](../../PLAN.md).
+
 ## The new M1 bar
 
 M1 closes when **one saved discrete model** passes five conditions ([charter](../../CHARTER.md), section 4.8; [D39](../integration/DECISIONS.md#d39--m1-closing-bar-k16-reachability-gate-post-qualification-sequence-and-lab-self-direction-owner-2026-10-18), item 1):
@@ -37,7 +49,7 @@ For scale: the best trained model today scores 65 and 463 (**measurement**, [whe
 
 ## The shortest path to a first conversation
 
-The audit of 19 October laid out the shortest credible path as six stages ([audit synthesis](../labs/repo-renormalization-2026-10-19/audit/synthesis.md), section 4). It is a proposal. The stage order follows the owner's fixed sequence in [D39](../integration/DECISIONS.md#d39--m1-closing-bar-k16-reachability-gate-post-qualification-sequence-and-lab-self-direction-owner-2026-10-18) item 4; changing it is the owner's decision.
+This six-stage path is the discrete path's route to the M1 bar. The 29 Oct order above is the float-trained FBS trunk's route to a working model; the two paths do not join yet. The audit of 19 October laid out the shortest credible path as six stages ([audit synthesis](../labs/repo-renormalization-2026-10-19/audit/synthesis.md), section 4). It is a proposal. The stage order follows the owner's fixed sequence in [D39](../integration/DECISIONS.md#d39--m1-closing-bar-k16-reachability-gate-post-qualification-sequence-and-lab-self-direction-owner-2026-10-18) item 4; changing it is the owner's decision.
 
 **Stage 0. Run what is already FIT'd.** A capacity test (called W2, about $0.91) is FIT-reviewed and queued, awaiting an owner release ([NOW](../integration/NOW.md), row 6). "Capacity" here means how many different words the addresses can tell apart. W2 decides whether the shortfall comes from the *representation* (the addresses cannot tell enough words apart) or the *learning law* (the training method cannot find good addresses). Next comes the rerun of the address-cell model with its reach protected ([controller record](../labs/admission-anchor-controller-2026-10-19/README.md)). *Decides:* fix the addresses, or move on to Stage 2.
 
@@ -86,7 +98,8 @@ Every read that learned well in the older experiments had help from softmax duri
 |---|---|---|
 | Milestones complete | 0 of 8 | [STATUS](../../STATUS.md) |
 | M1 bar | Beat 1,226 and 6,300 through the D11 export, two seeds, tokens per second reported | [charter](../../CHARTER.md) 4.8 |
-| Current stage | Stage 0: W2 FIT'd and queued, awaiting an owner release; address-cell rerun built, its qualification `NOT_RUN` | [NOW](../integration/NOW.md) |
+| Current stage, discrete path | Stage 0 of the six-stage route to the M1 bar: W2 FIT'd and queued, awaiting an owner release; address-cell rerun built, its qualification `NOT_RUN` | [NOW](../integration/NOW.md) |
+| Current work, float-trained FBS trunk | Step 1 of the 29 Oct order: `turn-memory-reply`. Exact turn memory names the first word of a reply (598.7 and 598.3 of 1,226 DEV openings at two seeds); the integer Hamming read is in progress. The two paths do not join yet | [pipeline map](../model/pipeline-map.md) |
 | Stages needing new build work | 1 (wider code, optional), 3, 4 | [audit synthesis](../labs/repo-renormalization-2026-10-19/audit/synthesis.md), section 4 |
 | Products shipped | None | [products](../products/README.md) |
 

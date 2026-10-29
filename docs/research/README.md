@@ -49,12 +49,14 @@ A fresh-context subagent counts as a non-author. Builds, finite kernel tests and
 
 ## The lines of research
 
+The research line that is current is the FBS trunk line, which carries the model's replies. See the [pipeline map](../model/pipeline-map.md) for the two model paths. Four labs work in the loop (claude, antigravity, deepseek and kimi). Its results since 27 Oct are in [what the project knows](./findings.md).
+
 The catalog groups its 1,173 records into 20 lines. The ten largest are below. Counts are catalog records, which mix lab records and lane results, so they show where effort went and not how many experiments ran.
 
 | Line (catalog id) | Records | First to last date | What it covers |
 |---|---:|---|---|
 | `native-geometric-sept` | 294 | 31 Jul to 28 Sep | The September native Rust geometric model and its memory and attention variants |
-| `m1-discrete-attention` | 199 | 7 Aug to 19 Oct | The current discrete model: reads, address cells and the K16 and A8 runs |
+| `m1-discrete-attention` | 199 | 7 Aug to 19 Oct | The discrete model path: reads, address cells and the K16 and A8 runs |
 | `harness-governance` | 185 | 24 Jul to 19 Oct | Research tooling, rules and process |
 | `m2-exact-memory` | 151 | 3 Sep to 12 Oct | Exact memory and grounded replies |
 | `geometric-stack-pretraining` | 84 | 20 Sep to 11 Oct | The deeper float "geometric stack" trained on GPUs |

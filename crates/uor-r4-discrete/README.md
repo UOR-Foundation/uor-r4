@@ -46,5 +46,5 @@ and [integer manifest](../uor-r4-integer/Cargo.toml). Do not substitute old mode
 - [Live M1 issue](https://github.com/UOR-Foundation/uor-r4/issues/2029): successor dispatch and actual outcomes.
 
 D37 permits offline float training without matmul/GEMM or softmax/squashing, while
-this discrete implementation stays integer. D11 multiplier-free serving requires
+this discrete implementation stays integer. D11 integer serving (the hardware integer multiply and divide are allowed, D80/D81; floats stay banned) requires
 its own export and complete-path qualification. Useful conversation is unqualified.

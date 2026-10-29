@@ -28,11 +28,15 @@ useful conversation yet.** [What UOR-R4 is](docs/start/what-is-uor-r4.md) explai
 
 None of the three ships today; each waits on a trained model ([products](docs/products/README.md)).
 
-- **[The model](docs/products/language-model.md):** one whole-number model file that runs with adds, compares and table look-ups only. Today the serving engine works on a synthetic stand-in model; no model trained under today's rules has been exported into it.
+- **[The model](docs/products/language-model.md):** one whole-number model file that runs with adds, compares and table look-ups only. On 29 Oct 2026 the float-trained FBS trunk is exported into it exactly under `lut-stack/5` and served on the M1 laptop (claude-182); no discrete-path model trained under today's rules has been exported into it.
 - **[Web client](docs/products/web-client.md):** the Studio page (the project's chat-style web interface) in your browser, running the model on your own device as WebAssembly. Today the browser engine and the Studio page both exist but are not yet connected.
 - **[Desktop client](docs/products/desktop-client.md):** a Tauri app (a desktop shell around the same web page), running the model natively with durable memory and offline use on M1-class laptops. Today it is a written specification only.
 
 ## Where we are
+
+**29 Oct 2026:** pre-alpha, 0 of 8 milestones complete (M1 is in progress; no registered closing run has passed its bar). Since 27 Oct the work is on the float-trained FBS trunk: the trunk **routes** and exact memory **stores** (diagnosis claude-155, owner pivot 28 Oct). Exact turn memory names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, but moves only a reply's first word. Integer multiply and divide are allowed in serving (D80, D81). Next: carry the memory past the first word, serve every part in integers, then a typed question gets a typed reply. See [where we are](docs/start/where-we-are.md) and the [pipeline map](docs/model/pipeline-map.md).
+
+The older K16 table below is the 19 Oct 2026 discrete-path record.
 
 **0 of 8 milestones are complete** ([STATUS](STATUS.md); live tracker
 [#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028)). The test below asks a model to guess
@@ -65,8 +69,10 @@ audit's shortest path to a first simple conversation has six stages, each run on
 learning law → **3** add the missing parts (a feed-forward layer, a recurrence) → **4** export and
 serve on a laptop → **5** a first simple conversation grounded in exact memory.
 
-After that come laptop energy cost (M5), reasoning and coding (M6), browser and API (M7) and an alpha
+That route is the discrete path's route to the M1 bar. After that come laptop energy cost (M5), reasoning and coding (M6), browser and API (M7) and an alpha
 release (M8). This is a plan, not a promise: [where we're going](docs/start/where-were-going.md).
+
+**29 Oct 2026.** The 27-29 Oct work ran on a second path, the float-trained FBS trunk. The two model paths do not join yet ([pipeline map](docs/model/pipeline-map.md)). The order of work now, from [PLAN.md](PLAN.md): (1) carry the exact turn memory past a reply's first word; (2) serve the model's parts in integers; (3) build the text path (R7), so a typed question gets a typed reply; (4) train one model with all of it, export it, serve it on the laptop and score it on prompts with tokens per second; (5) then cost. No milestone is claimed.
 
 ## How it works
 
@@ -82,16 +88,16 @@ the tested forms failed or broke a rule while the mechanism stays open.
 | Feed-forward layers (most of the multiplying) | [Hamilton rotation gate](docs/mechanisms/hamilton-gate.md) and [SpiralCore/FBS projection](docs/mechanisms/spiralcore-fbs.md) | READY; never trained |
 | Softmax output and cross-entropy loss | [Admission](docs/mechanisms/admission.md) (open a few address "drawers", called cells) and a [rank-margin hinge](docs/mechanisms/rank-margin.md) | ACTIVE |
 | Backpropagation optimizer | [Discrete learning](docs/mechanisms/discrete-learning.md): try each legal rotation of one entry, keep it only if the score strictly improves | ACTIVE |
-| Matrix-multiply runtime | [Integer serving (D11, the whole-number serving contract)](docs/mechanisms/lut-serving.md): adds, shifts, compares and table reads, and no float; since D80 and D81 (28 Oct 2026) the integer multiply and divide are allowed | ACTIVE engine; no model trained under today's rules exported |
+| Matrix-multiply runtime | [Integer serving (D11, the whole-number serving contract)](docs/mechanisms/lut-serving.md): adds, shifts, compares and table reads, and no float; since D80 and D81 (28 Oct 2026) the integer multiply and divide are allowed | ACTIVE engine; `lut-stack/5` exports and serves the FBS trunk exactly (claude-181, claude-182) |
 
-Two transformer parts have **no replacement yet: position and normalization.** No two replacements
-have been trained together into a model that beats the count tables. The board lists 27 mechanisms:
-10 ACTIVE, 4 READY and 13 PARKED. Part by part: [transformer vs geometry](docs/start/transformer-vs-geometry.md).
+Position and normalization now have replacements on the FBS trunk: position is the SpiralCore transport spin, and normalization is RMS norm with an integer square root. Both are trained and served there. No two replacements
+have been trained together into a model that beats the count tables. The board lists 28 mechanisms:
+12 ACTIVE, 5 READY and 11 PARKED. Part by part: [transformer vs geometry](docs/start/transformer-vs-geometry.md).
 
 ## Explore
 
 - **[Start here](docs/start/what-is-uor-r4.md)**, with a [glossary](docs/start/glossary.md) and [FAQ](docs/start/faq.md)
-- **[Mechanism board](docs/mechanisms/README.md):** 27 mechanisms, one page each, with reopen conditions for the PARKED ones
+- **[Mechanism board](docs/mechanisms/README.md):** 28 mechanisms, one page each, with reopen conditions for the PARKED ones
 - **[Geometry](docs/geometry/README.md):** primes and zeta phases, quaternions, E8/H4 and the 600-cell, SpiralCore, the Hopf map
 - **[Research findings](docs/research/findings.md)** and **[open questions](docs/research/open-questions.md)**
 - **[History](docs/research/history.md):** how the project got here, June to October 2026
@@ -126,7 +132,7 @@ research labs read [CHARTER.md](CHARTER.md) and [AGENTS.md](AGENTS.md).
 - **Yassine Amraoui** ([LinkedIn](https://www.linkedin.com/in/amraoui-yassine/)): research and development work.
 - **Andrew Kadziolka**: development integration, assessment, analysis and conceptual design.
 - **Yazan Barakat** ([@Cyborg-Hawk-AI](https://github.com/Cyborg-Hawk-AI)): research and development work on the WebAssembly D11 integer serving runtime (#1172, PR #2654).
-- **The AI research labs** (Kimi, Claude, Codex, DeepSeek), which do most implementation under the owner's direction; owner and principal investigator Casey Allard.
+- **The AI research labs** (Kimi, Claude, Antigravity, DeepSeek; Codex took part earlier and left the registry), which do most implementation under the owner's direction; owner and principal investigator Casey Allard.
 
 ## Citation and license
 

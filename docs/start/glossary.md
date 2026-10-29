@@ -85,6 +85,8 @@ flowchart LR
 
 <a id="d37"></a>**D37.** The owner's rule of 18 October that floating point is legal in offline training. Softmax-like functions and matrix multiplication stay banned, and every float-trained candidate must report its export gap. See [training](../model/training.md).
 
+<a id="d80"></a>**D80, D81.** Owner decisions of 28 Oct 2026: served integer code may use the hardware integer multiply (D80) and divide (D81). Floats, transcendentals and dense matmul stay banned in serving. See [serving and export](../model/serving-and-export.md).
+
 **DEV panel.** The set of 14,287 development rows used to score models while they are being designed. A model's first guess is right on some number of them (see [top-1](#top-1)). The "fresh" panel is a separate sealed set, scored once after the design is chosen. See [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md).
 
 **Diagnostic stop.** A run ended early on purpose, by a stop rule written down beforehand, so the cause can be found. It is not a negative result and not a failure of the mechanism. See [research notebooks](../research/notebook/README.md).
@@ -97,13 +99,17 @@ flowchart LR
 
 **Exact memory.** The idea of writing a fact once under an exact name (a prime-based address) and reading it back exactly, instead of smearing it across weights. The trained forms tested so far missed their bars, so the mechanism is PARKED. See [exact memory](../mechanisms/exact-memory.md).
 
-**Export gap.** The quality lost when a model trained with decimals is snapped into the whole-number file that ships. It is the served score minus the float score on the same evaluator. A float candidate whose gap exceeds the two-seed noise band is disqualified. Nobody has measured it for a model built under today's rules, because none has been exported. See [serving and export](../model/serving-and-export.md).
+**Exact turn memory.** A table keyed by the first 8 tokens of the user's turn that returns the reply's opening word. On DEV it named 598.7 and 598.3 of 1,226 reply openings at two seeds (claude-161). It does not yet carry a reply past its first word and is not served. See [pipeline map](../model/pipeline-map.md).
+
+**Export gap.** The quality lost when a model trained with decimals is snapped into the whole-number file that ships. It is the served score minus the float score on the same evaluator. A float candidate whose gap exceeds the two-seed noise band is disqualified. On the FBS trunk it was measured on 29 Oct 2026: under `lut-stack/5` the served model is inside the bar on both seeds, net 6 and −8 rows against F_I 24 on DEV (claude-182). See [serving and export](../model/serving-and-export.md).
 
 ## F
 
 **FBS.** The project's name for the three-branch tree that holds earlier words in order. The tree is built by [SpiralCore](#spiralcore) and gives the context at most 243 positions ($3^5$). See [SpiralCore](../geometry/spiralcore.md) and [SpiralCore/FBS projection](../mechanisms/spiralcore-fbs.md).
 
 **FIT (TEST FITNESS: FIT).** The verdict of a review, by someone other than the author, that a pre-registered test is fit to answer its question. A fresh-context subagent counts as a non-author. A FIT releases nothing by itself: the owner still has to release the run. See [the rules](../rules/README.md) and [training](../model/training.md).
+
+**Fixed-order backward.** The training backward pass sums in a fixed order, so two training runs give the same model byte for byte (claude-179). See [training](../model/training.md).
 
 **Float.** Decimal (floating-point) arithmetic. Allowed in offline training under [D37](#d37), never in the served model. See [serving and export](../model/serving-and-export.md).
 
@@ -119,9 +125,11 @@ flowchart LR
 
 **Hamming distance.** The number of positions at which two bit strings differ. It costs one XOR and one bit count. The model uses it as a tie-break inside its reads. See [VSA and Hamming distance](../geometry/vsa-and-hamming.md).
 
+**Hamming read.** A look-back that compares 64-bit sign codes with XOR and a bit count, used by the copy heads and type heads (claude-146). The recall probe scored 0.98 to 0.99 at three seeds. Its integer kernel matches an f64 reference (claude-189); it is not yet in the served session. See [Hamming distance](../geometry/vsa-and-hamming.md) and [pipeline map](../model/pipeline-map.md).
+
 <a id="hinge-loss"></a>**Hinge loss.** A loss that asks only whether the right answer beats its strongest rivals by a fixed gap. If it does, the loss is zero. If not, the loss is the shortfall. It needs no probabilities. The live version is an integer hinge. See [rank-margin](../mechanisms/rank-margin.md).
 
-**Hold.** An owner order that stops a kind of work until the owner lifts it. Training, the second milestone's training and rental, and Stage B are all on hold. A FIT review lifts none of them. See [charter](../../CHARTER.md), section 5.1.
+**Hold.** An owner order that stops a kind of work until the owner lifts it. Training, the second milestone's training and rental, and Stage B are held work. Since D65–D69, a lab runs held work on its own pre-run review, which reads the whole project first, and the owner can reverse it (AGENTS.md). A FIT review alone lifts none of them. See [charter](../../CHARTER.md), sections 5.1 and 5.10.
 
 **Hopf map.** A map that takes a point on a four-dimensional sphere (a unit quaternion) to a point on an ordinary sphere. It forgets one angle, called the fibre, so many states cast the same shadow. The kept-fibre idea is built as a helper but is not part of the current read, and the mechanism is PARKED. See [the Hopf map and the kept fibre](../geometry/hopf-observation.md).
 
@@ -141,7 +149,9 @@ flowchart LR
 
 ## L
 
-**Lab.** Any contributor, human or AI, working under the charter. Labs so far include Claude, Codex and DeepSeek, with Kimi in the project-manager seat. Labs choose work from [NOW.md](../integration/NOW.md) and may not type an owner release. See [the rules](../rules/README.md#what-labs-may-do-and-what-they-may-not).
+**Lab.** Any contributor, human or AI, working under the charter. The registry holds four labs: Claude, Antigravity, DeepSeek and Kimi (Codex has left it). Kimi sits in the project-manager seat. Labs choose work from [NOW.md](../integration/NOW.md) and may not type an owner release. See [the rules](../rules/README.md#what-labs-may-do-and-what-they-may-not).
+
+**`lut-stack/5`, `lut-stack/6`.** Versions of the integer file format for the float-trained FBS trunk. `/5` keeps the rotations exact instead of snapping them to the 120 roots, which put the export gap inside its bar on both seeds and serves at 4,217 to 4,504 tok/s on the M1 laptop (claude-180 to 186). `/6` also carries the Hamming reads (claude-188); the session refuses `/6` until it serves them. See [serving and export](../model/serving-and-export.md).
 
 ## M
 
@@ -225,6 +235,8 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 <a id="route-read"></a>**Route read.** An attention replacement that walks a small tree of addresses, stepping toward the nearest branch at each level, and picks up one earlier word at the end. It never scores the whole history. It is the base read of every trained discrete model, but its own contribution is unattributed. See [Route read](../mechanisms/route-read.md).
 
+**Route + exact memory.** The 28 Oct plan after claude-155: the trunk routes the prompt and exact memory stores what each question should produce. Exact turn memory keyed by the user's first 8 tokens named 598.7 and 598.3 of the 1,226 DEV reply openings at two seeds, against about 266 to 281 for an empty-table control (claude-161). It moves only a reply's first word. See [pipeline map](../model/pipeline-map.md).
+
 **Rung 0.** The first full-length run on the discrete path (seed 1, 16,404 updates, scored on the 14,287 development rows). Its bars were unreachable because only 1,920 targets were admitted, which pointed the work at [admission](../mechanisms/admission.md). See [route read](../mechanisms/route-read.md).
 
 ## S
@@ -274,6 +286,8 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 **W2.** The next queued test: FIT-reviewed and awaiting an owner release (cost about $0.91, estimated). It decides whether the wall is the model's representation or its learning law, and includes count-table arms the headline bars lack. See [open questions](../research/open-questions.md).
 
 **WASM (WebAssembly).** A compact, sandboxed machine code that browsers run. The integer serving engine is built for it, with 7 of 7 serving functions free of float instructions (**measurement**). See [web client](../products/web-client.md).
+
+**Whole-table nearest (readout).** The chosen way to turn a final vector into a word: compare the vector with every row of the 4,096-word table and take the nearest. It was chosen over the native writer on 28 Oct because the writer's admission failed at seed 2 (top-1 493 against 6,909 for nearest, claude-150). The served session still reads the native writer today. See [pipeline map](../model/pipeline-map.md).
 
 **Writer (shared vector writer).** The one component that handles a token's vector on the way in, along the carry and on the way out, using the same format everywhere. It builds the cells and picks the nearest token among the admitted ones. See [architecture](../model/architecture.md).
 

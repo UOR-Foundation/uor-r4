@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="960" role="img" aria-labelledby="t d">
 <title id="t">The road from today to the products</title>
-<desc id="d">A left-to-right road with six stops. Stage 0, run what is already FIT'd (W2, A8 rerun, about $0.91), carries a "you are here" pin. Stage 1, make capacity measurable (full-vector address key). Stage 2, pick the learning law (BVG-K, about $12, plus $5 to $10 only if decimal training is needed). Stage 3, add the missing parts (feed-forward, recurrence, reads), a hypothesis. Stage 4, export and serve (exporter, export gap, tokens per second). Stage 5, first simple conversation (exact memory, object store). Stages 1 (optional part), 3 and 4 are tagged new build work. A gate between every pair of stops is labelled owner release. Under the road, milestone M1 spans Stages 2 to 4 with its bar: beat 1,226 and 6,300 on two seeds through the D11 export; M4 sits under Stage 4; M2 under Stage 5; M3 is shown as not yet staged. A lighter second road continues after Stage 5 through M5 laptop cost, M6 reasoning and coding, M7 browser, API and Studio, and M8 alpha, ending at three products: a model file (UORLUT01, integer), a web client and a desktop client (spec only).</desc>
+<desc id="d">A left-to-right road with six stops, the order of work from PLAN.md on 29 October 2026. Stage 0, now: carry the exact turn memory past a reply's first word (turn-memory-reply), carrying the "you are here" pin. Stage 1: serve the parts in integers (Hamming read, turn memory, readout). Stage 2: a typed question gets a typed reply (R7, uor-chat --stack). Stage 3: one model, end to end, trained, exported, served and scored on prompts with tokens per second. Stage 4: then cost (training-step-cost, the vector kernel, float where faster). Stage 5: revisit Flock, reading by meaning, after the one model works. A gate between every pair of stops is labelled own pre-run review. Under the road, milestone M1 spans Stages 2 to 4 with its bar: beat 1,226 and 6,300 on two seeds through the D11 export; M4 sits under Stage 4; M2 under Stage 5; M3 is shown as not yet staged. A lighter second road continues after Stage 5 through M5 laptop cost, M6 reasoning and coding, M7 browser, API and Studio, and M8 alpha, ending at three products: a model file (UORLUT01, integer), a web client and a desktop client (spec only).</desc>
 <style>
 svg { --bg:#ffffff; --ink:#1f2328; --body:#2b3138; --muted:#57606a; --rule:#d0d7de; --panel:#f6f8fa;
       --blue:#0072b2; --sky:#56b4e9; --green:#007a5e; --orange:#e69f00; --verm:#d55e00; --purple:#7a4fa3; --pink:#cc79a7;
@@ -55,7 +55,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <rect class="bg" x="0" y="0" width="960" height="540"/>
 
 <text class="title" x="24" y="36">The road from today to the products</text>
-<text class="sub" x="24" y="58">A plan, not a promise. Every stage that trains a model waits for the owner's release.</text>
+<text class="sub" x="24" y="58">A plan, not a promise. Order of work from PLAN.md, 29 Oct 2026.</text>
 
 <!-- Road, row 1 -->
 <line class="road" x1="40" y1="150" x2="920" y2="150"/>
@@ -64,15 +64,15 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <!-- Owner-release gates between stops -->
 <g>
   <rect class="post" x="161" y="135" width="3" height="30"/><rect class="post" x="176" y="135" width="3" height="30"/><rect class="bar" x="161" y="140" width="18" height="4"/>
-  <text class="gatetext" x="170" y="126" text-anchor="middle">owner release</text>
+  <text class="gatetext" x="170" y="126" text-anchor="middle">own pre-run review</text>
   <rect class="post" x="321" y="135" width="3" height="30"/><rect class="post" x="336" y="135" width="3" height="30"/><rect class="bar" x="321" y="140" width="18" height="4"/>
-  <text class="gatetext" x="330" y="126" text-anchor="middle">owner release</text>
+  <text class="gatetext" x="330" y="126" text-anchor="middle">own pre-run review</text>
   <rect class="post" x="481" y="135" width="3" height="30"/><rect class="post" x="496" y="135" width="3" height="30"/><rect class="bar" x="481" y="140" width="18" height="4"/>
-  <text class="gatetext" x="490" y="126" text-anchor="middle">owner release</text>
+  <text class="gatetext" x="490" y="126" text-anchor="middle">own pre-run review</text>
   <rect class="post" x="641" y="135" width="3" height="30"/><rect class="post" x="656" y="135" width="3" height="30"/><rect class="bar" x="641" y="140" width="18" height="4"/>
-  <text class="gatetext" x="650" y="126" text-anchor="middle">owner release</text>
+  <text class="gatetext" x="650" y="126" text-anchor="middle">own pre-run review</text>
   <rect class="post" x="801" y="135" width="3" height="30"/><rect class="post" x="816" y="135" width="3" height="30"/><rect class="bar" x="801" y="140" width="18" height="4"/>
-  <text class="gatetext" x="810" y="126" text-anchor="middle">owner release</text>
+  <text class="gatetext" x="810" y="126" text-anchor="middle">own pre-run review</text>
 </g>
 
 <!-- You are here -->
@@ -90,46 +90,46 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 
 <!-- Stage 0 -->
 <text class="stage" x="90" y="186" text-anchor="middle">STAGE 0</text>
-<text class="name" x="90" y="204" text-anchor="middle">Run what is</text>
-<text class="name" x="90" y="220" text-anchor="middle">already FIT'd</text>
-<text class="detail" x="90" y="236" text-anchor="middle">W2, A8 rerun</text>
-<rect class="tag" x="62" y="258" width="56" height="20" rx="10"/><text class="tagtext" x="90" y="272" text-anchor="middle">~$0.91</text>
+<text class="name" x="90" y="204" text-anchor="middle">Carry memory past</text>
+<text class="name" x="90" y="220" text-anchor="middle">the first word</text>
+<text class="detail" x="90" y="236" text-anchor="middle">turn-memory-reply</text>
+<rect class="tag" x="62" y="258" width="56" height="20" rx="10"/><text class="tagtext" x="90" y="272" text-anchor="middle">now</text>
 
 <!-- Stage 1 -->
 <text class="stage" x="250" y="186" text-anchor="middle">STAGE 1</text>
-<text class="name" x="250" y="204" text-anchor="middle">Make capacity</text>
-<text class="name" x="250" y="220" text-anchor="middle">measurable</text>
-<text class="detail" x="250" y="236" text-anchor="middle">full-vector</text><text class="detail" x="250" y="250" text-anchor="middle">address key</text>
+<text class="name" x="250" y="204" text-anchor="middle">Serve the parts</text>
+<text class="name" x="250" y="220" text-anchor="middle">in integers</text>
+<text class="detail" x="250" y="236" text-anchor="middle">Hamming read,</text><text class="detail" x="250" y="250" text-anchor="middle">memory, readout</text>
 <rect class="tag-build" x="180" y="258" width="140" height="20" rx="10"/><text class="tag-build-text" x="250" y="272" text-anchor="middle">new build (optional part)</text>
 
 <!-- Stage 2 -->
 <text class="stage" x="410" y="186" text-anchor="middle">STAGE 2</text>
-<text class="name" x="410" y="204" text-anchor="middle">Pick the</text>
-<text class="name" x="410" y="220" text-anchor="middle">learning law</text>
-<text class="detail" x="410" y="236" text-anchor="middle">BVG-K;</text><text class="detail" x="410" y="250" text-anchor="middle">float only if needed</text>
-<rect class="tag" x="342" y="258" width="136" height="20" rx="10"/><text class="tagtext" x="410" y="272" text-anchor="middle">~$12; +$5–10 if float</text>
+<text class="name" x="410" y="204" text-anchor="middle">Typed question,</text>
+<text class="name" x="410" y="220" text-anchor="middle">typed reply (R7)</text>
+<text class="detail" x="410" y="236" text-anchor="middle">uor-chat --stack</text><text class="detail" x="410" y="250" text-anchor="middle"></text>
+<rect class="tag" x="342" y="258" width="136" height="20" rx="10"/><text class="tagtext" x="410" y="272" text-anchor="middle">next</text>
 
 <!-- Stage 3 -->
 <text class="stage" x="570" y="186" text-anchor="middle">STAGE 3</text>
-<text class="name" x="570" y="204" text-anchor="middle">Add the</text>
-<text class="name" x="570" y="220" text-anchor="middle">missing parts</text>
-<text class="detail" x="570" y="236" text-anchor="middle">feed-forward,</text><text class="detail" x="570" y="250" text-anchor="middle">recurrence, reads</text>
+<text class="name" x="570" y="204" text-anchor="middle">One model,</text>
+<text class="name" x="570" y="220" text-anchor="middle">end to end:</text>
+<text class="detail" x="570" y="236" text-anchor="middle">trained, served,</text><text class="detail" x="570" y="250" text-anchor="middle">scored, tokens/s</text>
 <rect class="tag-build" x="500" y="258" width="66" height="20" rx="10"/><text class="tag-build-text" x="533" y="272" text-anchor="middle">new build</text>
 <rect class="tag-hyp" x="572" y="258" width="70" height="20" rx="10"/><text class="tagtext" x="607" y="272" text-anchor="middle">hypothesis</text>
 
 <!-- Stage 4 -->
 <text class="stage" x="730" y="186" text-anchor="middle">STAGE 4</text>
-<text class="name" x="730" y="204" text-anchor="middle">Export</text>
-<text class="name" x="730" y="220" text-anchor="middle">and serve</text>
-<text class="detail" x="730" y="236" text-anchor="middle">exporter, export gap,</text><text class="detail" x="730" y="250" text-anchor="middle">tokens/s</text>
+<text class="name" x="730" y="204" text-anchor="middle">Then cost</text>
+<text class="name" x="730" y="220" text-anchor="middle">(vector kernel)</text>
+<text class="detail" x="730" y="236" text-anchor="middle">training-step-cost,</text><text class="detail" x="730" y="250" text-anchor="middle">float where faster</text>
 <rect class="tag-build" x="697" y="258" width="66" height="20" rx="10"/><text class="tag-build-text" x="730" y="272" text-anchor="middle">new build</text>
 
 <!-- Stage 5 -->
 <text class="stage" x="890" y="186" text-anchor="middle">STAGE 5</text>
-<text class="name" x="890" y="204" text-anchor="middle">First simple</text>
-<text class="name" x="890" y="220" text-anchor="middle">conversation</text>
-<text class="detail" x="890" y="236" text-anchor="middle">exact memory,</text>
-<text class="detail" x="890" y="250" text-anchor="middle">object store</text>
+<text class="name" x="890" y="204" text-anchor="middle">Revisit Flock</text>
+<text class="name" x="890" y="220" text-anchor="middle">(read by meaning)</text>
+<text class="detail" x="890" y="236" text-anchor="middle">after the one</text>
+<text class="detail" x="890" y="250" text-anchor="middle">model works</text>
 
 <!-- Milestones under the road -->
 <line class="rule" x1="24" y1="290" x2="936" y2="290"/>

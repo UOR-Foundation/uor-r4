@@ -8,6 +8,27 @@
 
 Terms are in the [glossary](./glossary.md). Claims are labelled **proof**, **measurement** or **hypothesis** ([`docs/formal_vocabulary.md`](../formal_vocabulary.md)). A passing check shows that code does what it says. It is not a trained capability, and `NOT_RUN` never means passed.
 
+## Status on 29 Oct 2026
+
+Pre-alpha; 0 of 8 milestones complete. M1 is in progress, and no registered closing run has passed its bar (CHARTER 4.8). The scores below are the 19 Oct 2026 discrete path. Since 27 Oct the work is on the float-trained FBS trunk, a second model path that does not join the discrete one yet ([pipeline map](../model/pipeline-map.md)).
+
+- **Found (27-29 Oct):** the trunk can route the prompt but has nowhere to store what each question should produce (claude-155). Exact turn memory keyed by the user's first 8 tokens names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, against 266.3 and 281.0 for an empty-table control (claude-161). It moves only the first word of a reply; after it, replies are still templates.
+- **Decided:** pivot to route + exact memory (28 Oct); serve whole-table nearest as the readout (claude-150); integer multiply and divide are allowed in serving, floats stay banned (D80, D81); train in float, export to integer exactly.
+- **Served:** exact structured kernels took a served token on the M1 laptop from 270 to 3,042 tok/s (claude-163 to 170), and 4,829 tok/s snapped with the integer multiply (claude-177); 4,217 to 4,504 tok/s under the exact `lut-stack/5` contract (claude-182, 185). At each speed-up the replies stayed byte-identical to the engine before it; the served model is inside the export-gap bar against the trained one (claude-182).
+
+| Part | Mechanism | State on 29 Oct |
+|---|---|---|
+| Tokenizer | BPE-4096 | done |
+| Table | FBS learned table, 4,096 x 256 | trained; served |
+| Position | SpiralCore transport spin (no RoPE) | trained; served |
+| Mixing | FBS recurrence, Hamilton gate, SpiralCore/FBS routes | trained; served under `lut-stack/5` |
+| Copy | Hamming read, copy heads | integer kernel built (claude-189); not yet in the served session |
+| Storage | exact turn memory | trained; first word only; not served |
+| Feed-forward | Hamilton gate | trained; served |
+| Norm | RMS norm, integer square root | served |
+| Readout | whole-table nearest | trained; the served session still reads the native writer |
+| Text in / out | R7 | not built |
+
 ## How the model is scored
 
 The test set is 14,287 positions in 400 held-out documents, called the DEV panel ([count tables record](../../archive/labs/host-diagnostics-2026-10-17/README.md)). At each position the model makes one guess for the next token. A **top-1** score counts how many of those guesses are right.
@@ -55,11 +76,11 @@ Variant A is the one the record selects. Its reach fell below the required 4,894
 
 **The newest run stopped early.** The address-cell run (A8) began with the better reach above, but training eroded it. At its first checkpoint the Relation read held 551 reachable positions, below half its starting 1,351, which triggered the registered stop (the control held 857; **measurement**, [A8 dose](../labs/a8-dose-2026-10-19/README.md)). A version that protects the reach is built; its GPU qualification is `NOT_RUN` ([controller record](../labs/admission-anchor-controller-2026-10-19/README.md)).
 
-**No model trained under today's rules has been exported or timed.** No exporter turns a trained discrete model into a D11 file (the older float stacks were exported and served in October), and tokens per second for this model have never been measured ([lut-serving](../mechanisms/lut-serving.md)).
+**On the discrete path, no model trained under today's rules has been exported or timed.** No exporter turns a trained discrete model into a D11 file (the older float stacks were exported and served in October), and tokens per second for this model have never been measured ([lut-serving](../mechanisms/lut-serving.md)).
 
-**Parts are missing.** The current model has no position mechanism, no normalization and no feed-forward layer ([transformer vs geometry](./transformer-vs-geometry.md)).
+**On the FBS trunk (29 Oct 2026), the open gaps are these.** Replies past the first word are still templates, and replies do not answer prompts (claude-161). Text in and out (R7) is not built: a typed question cannot yet get a typed reply. Not every part is served in integers: the Hamming copy heads (kernel built, claude-189), the exact turn memory and the nearest-word readout are not in the served session. The discrete path still has no position mechanism, no normalization and no feed-forward layer ([transformer vs geometry](./transformer-vs-geometry.md)).
 
-**Training is on hold.** Each training run needs a reviewed one-page plan and a release typed by the owner personally ([charter](../../CHARTER.md), section 5).
+**Training runs go ahead on the lab's own pre-run review** (AGENTS.md, CHARTER section 5.1). The owner can reverse them.
 
 ## What about the older models?
 
@@ -75,11 +96,14 @@ Between 12 and 19 October the owner (project lead Casey Allard) made 19 decision
 |---|---|---|
 | Milestones complete | 0 of 8 | [STATUS](../../STATUS.md) |
 | Model that holds a conversation | None | [STATUS](../../STATUS.md) |
-| Best top-1 on DEV, trained model | 65 and 463 of 14,287 | [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md) |
+| Best top-1 on DEV, discrete path (19 Oct) | 65 and 463 of 14,287 | [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md) |
+| Best top-1 on DEV, FBS trunk (29 Oct) | 10,152 and 11,140 of 14,287 (claude-152, 153); 9,490 and 10,368 with exact memory (claude-161) | [pipeline map](../model/pipeline-map.md) |
+| Reply openings named, with exact memory | 598.7 and 598.3 of 1,226; first word only | [pipeline map](../model/pipeline-map.md) |
+| R7 (text in / out) | Not built | [pipeline map](../model/pipeline-map.md) |
 | Unigram table / next-word table | 1,226 / 6,300 of 14,287 | [count tables](../../archive/labs/host-diagnostics-2026-10-17/README.md) |
-| Model trained under today's rules, exported to D11 | None | [lut-serving](../mechanisms/lut-serving.md) |
-| Tokens per second, current model | Not measured | [lut-serving](../mechanisms/lut-serving.md) |
-| Training | Held; each run is released by the owner | [charter](../../CHARTER.md) section 5 |
+| Discrete-path model exported to D11 | None | [lut-serving](../mechanisms/lut-serving.md) |
+| FBS trunk served in integers, M1 laptop | 4,217 to 4,504 tok/s exact (`lut-stack/5`, claude-182, 185); not every part served | [pipeline map](../model/pipeline-map.md) |
+| Training | Goes ahead on the lab's own pre-run review | AGENTS.md, [charter](../../CHARTER.md) section 5.1 |
 
 ## Go deeper
 

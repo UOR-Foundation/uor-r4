@@ -62,7 +62,7 @@ Until M7 and M8 pass, the web page should present itself as what it is: a geomet
 ## Open questions
 
 - How large will the model file be, and is a one-time download of that size acceptable on a phone? Unknown until a model exists.
-- How fast is WebAssembly against native on the same file? No tokens-per-second figure for the browser has been recorded. The only native figures are from older float models: 68 to 80 tokens per second on 8 threads for a 29M model, which is evaluation throughput over 64 scored windows, not free-running decode ([D11 serving record](../../archive/labs/d11-serving-2026-10-10/README.md)). No decode tokens per second exists for any D11 artifact.
+- How fast is WebAssembly against native on the same file? No tokens-per-second figure for the browser has been recorded. The newest native figures are for the FBS trunk on the M1 laptop: 4,829 tok/s snapped (claude-177), and 4,217–4,504 under the exact `lut-stack/5` contract (claude-182, claude-186; 29 Oct 2026). Older figures are from float models: 68 to 80 tokens per second on 8 threads for a 29M model, which is evaluation throughput over 64 scored windows, not free-running decode ([D11 serving record](../../archive/labs/d11-serving-2026-10-10/README.md)). The older figures are not decode speeds.
 - Should the Studio's provenance be settled first? Its source is an import from a companion repository, `Casey-allard/uor-r4-wasm-chat`, which this audit did not inspect.
 
 ## Go deeper

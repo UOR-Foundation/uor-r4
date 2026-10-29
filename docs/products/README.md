@@ -1,6 +1,6 @@
 # The three products
 
-UOR-R4 aims to ship one thing people can use: a small, fast language model that runs on your own laptop or in your own browser, with nothing sent to a server. The owner defined three products around it on 19 October 2026. The first is the **model** itself, saved as one file of whole numbers. The second is a **web client** that runs that file inside a browser tab. The third is a **desktop client**, an installable app that runs the same file natively and remembers your conversations. **None of the three ships today.** The project is pre-alpha: 0 of its 8 milestones are complete and no model holds a useful conversation yet ([STATUS](../../STATUS.md), [NOW](../integration/NOW.md)). Nothing is released until a trained model passes milestones M1 to M8.
+UOR-R4 aims to ship one thing people can use: a small, fast language model that runs on your own laptop or in your own browser, with nothing sent to a server. The owner defined three products around it on 19 October 2026. The first is the **model** itself, saved as one file of whole numbers. The second is a **web client** that runs that file inside a browser tab. The third is a **desktop client**, an installable app that runs the same file natively and remembers your conversations. **None of the three ships today.** As of 29 Oct 2026 the project is pre-alpha: 0 of its 8 milestones are complete and no model holds a useful conversation yet ([STATUS](../../STATUS.md), [NOW](../integration/NOW.md)). Nothing is released until a trained model passes milestones M1 to M8.
 
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run with its artifact, **hypothesis** means an untested idea ([`docs/formal_vocabulary.md`](../formal_vocabulary.md), [glossary](../start/glossary.md)).
 
@@ -12,7 +12,7 @@ Labels used below: **proof** means derived from definitions or code, **measureme
 
 | Product | What it is meant to be | What exists today | Main gate |
 |---|---|---|---|
-| [Language model](./language-model.md) | A geometric language model exported as one checksum-pinned integer file (`UORLUT01`) | The serving engine, tested on a synthetic stand-in model. No trained model has been exported to it | M1 to M4, then M8 |
+| [Language model](./language-model.md) | A geometric language model exported as one checksum-pinned integer file (`UORLUT01`) | The serving engine. The float-trained FBS trunk is exported to it exactly under `lut-stack/5`, at DEV scope (claude-182); no discrete-path model has been exported to it | M1 to M4, then M8 |
 | [Web client](./web-client.md) | A local model in the browser: download the file once, run it in WebAssembly on the device | The Studio interface (`index.html`), a WebAssembly build of the engine (`UOR-Foundation/uor-r4#2654`), and a paused Pages deploy | M7 |
 | [Desktop client](./desktop-client.md) | A Tauri app sharing the web interface, with the native engine, file access, durable memory and offline use on M1-class laptops | [`src-tauri/`](../../src-tauri/) native Rust backend + `--stdio` / `--serve-studio` Studio host + `--features gui` Tauri v2 WebView shell (`#2826`) linking `uor-r4-integer` + `uor-r4-object-store`, offline Studio shims, and 7 integration tests on the synthetic stand-in ([record](../labs/infra-desktop-client-tauri/README.md)) | M3, M5, M7 |
 
@@ -33,12 +33,16 @@ A fourth page, [Releases and artifacts](./releases-and-artifacts.md), covers the
 | Milestones complete | 0 of 8 (**measurement** of the tracker) | [STATUS](../../STATUS.md), [NOW](../integration/NOW.md) |
 | Integer serving engine, native | Built; serving audit green on 44 symbol ranges (47 multiplies and 1 divide used since claude-177, allowed by the audit since claude-175) (**measurement**) | [project track](../integration/project-track.md), M4 |
 | Integer serving engine, WebAssembly | Built; 7 of 7 serving functions with zero float instructions (integer multiplies and divides allowed since claude-175, used since claude-177); save and restore reload identically on a synthetic model (**measurement**) | [record](../labs/wasm-serving-runtime-2026-10-18/README.md) |
-| A trained model in that engine | None. Training is held, and no model built under today's rules has been exported | [NOW](../integration/NOW.md), [lut-serving dossier](../mechanisms/lut-serving.md) |
+| A trained model in that engine | No model that holds a conversation. The float-trained FBS trunk is exported and served in integers on the M1 laptop at 4,217–4,504 tok/s under the exact `lut-stack/5` contract (4,829 snapped, claude-177), but there is no typed chat: R7, the text path, is not built. See the [pipeline map](../model/pipeline-map.md) | [NOW](../integration/NOW.md), [lut-serving dossier](../mechanisms/lut-serving.md) |
 | Studio connected to the new engine | Built on the synthetic stand-in — web worker (`#2818`) and native desktop backend + `--features gui` Tauri v2 shell + offline Studio shim (`#2826`) verified on the synthetic stand-in; no trained model exists | [`index.html`](../../web/studio/index.html), [desktop client record](../labs/infra-desktop-client-tauri/README.md) |
 | Public website deploy | Paused since 15 October; the live site is the 13 October build | [`deploy.yml`](../../.github/workflows/deploy.yml) |
 | Desktop app project | Built in [`src-tauri/`](../../src-tauri/) (`#2826`): native Rust backend + `--stdio` / `--serve-studio` host + `--features gui` Tauri v2 WebView shell (`tauri::Builder`, `#[tauri::command]`, locked in [`src-tauri/Cargo.lock`](../../src-tauri/Cargo.lock)), verified on the `seed = 5` synthetic stand-in (`7/7` integration controls) | [desktop client record](../labs/infra-desktop-client-tauri/README.md) |
 
 A passing audit shows that a forbidden instruction is absent. It is not a trained capability, and it says nothing about how well a model answers.
+
+## Since 27 Oct 2026
+
+The model line moved to a float-trained trunk (FBS) that routes, with exact turn memory that stores. It is exported and served in integers, and typed chat waits for R7. The next work, in order: carry memory past a reply's first word, serve the parts in integers, build R7, then train and score one model end to end. The plan is in [PLAN](../../PLAN.md); the part-by-part state is in the [pipeline map](../model/pipeline-map.md).
 
 ## The order things must happen in
 

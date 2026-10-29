@@ -101,6 +101,22 @@ The map of lawful parts still has gaps that no test can fill until someone build
 
 The charter sets the M1 closing bar: integer top-1 through the D11 export beats both count tables on the same development panel, on each of two seeds, with tokens per second reported. A bits-per-byte bar returns later, once a lawful likelihood exists (charter §4.8). That settles the old open question about scoring a model with no likelihood, for M1 only. For M4, the potential-ratio lawful likelihood (`PRLL`, [`lawful_likelihood.rs`](../../crates/uor-r4-integer/src/lawful_likelihood.rs), `#2945`) and its pre-registration sheet ([`m4-lawful-likelihood-bpb-2026-10-23.md`](../harness/prep/m4-lawful-likelihood-bpb-2026-10-23.md), `#2861`) are now built and registered (`TEST FITNESS: FIT`), while the GPU held-out stream scoring run remains open under `m4-export-uorlut01-cli` (`#2859`). A conversation bar (M2) is further off, and a float student would need a new owner decision (`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md` section 4, stage 5).
 
+## Since 27 Oct: open on the FBS trunk line (29 Oct)
+
+Questions the 27 to 29 Oct work opened or closed. Source for all: the [pipeline map](../model/pipeline-map.md).
+
+- **The memory past the first word** (`turn-memory-reply`). Exact memory names the first word of a reply (598.7 and 598.3 of 1,226 at two seeds, [claude-161](../loop/tasks/route-plus-memory/claude-161/REPORT.md)). After it, replies are still templates. This is the capability blocker.
+- **Whether the writer's admission can hold** (`writer-admission`). It failed at seed 2 ([claude-150](../loop/tasks/one-decoder/claude-150/REPORT.md)). Whole-table nearest is the readout to serve, and the served session still reads the writer.
+- **Serving the Hamming read and the memory in integers.** The copy heads' integer kernel matches an f64 reference. The session hooks and `turn-memory-integer` are next.
+- **R7, the text path.** Not built: FBS artifacts take token ids only, so a typed question gets no typed reply yet.
+- **The two model paths joining.** The discrete path and the FBS trunk do not join yet.
+- **The export gap "with repeats".** The gap is inside the bar at DEV under `lut-stack/5` ([claude-182](../loop/tasks/d11-exporter-float-trunk/claude-182/REPORT.md)). It is not yet measured on a model trained with all of the above.
+
+Answered, 29 Oct:
+
+- **Does float training repeat?** Yes: a fixed-order backward gives the same model byte for byte ([claude-179](../loop/tasks/d11-exporter-float-trunk/claude-179/REPORT.md)).
+- **Can the FBS trunk be exported exactly?** At DEV scope, yes under `lut-stack/5` ([claude-182](../loop/tasks/d11-exporter-float-trunk/claude-182/REPORT.md)). The "lawful exporter" and "export gap" items above describe the discrete path.
+
 ## Go deeper
 
 - [What the project knows](./findings.md) and [how it got here](./history.md).

@@ -73,6 +73,8 @@ These findings concern the supplied draft. They are not a negative language expe
 | [Discrete learning](../mechanisms/discrete-learning.md) | ACTIVE | Learns over the 15 generator moves |
 | [Ternary and XOR](../mechanisms/ternary-xor.md) | PARKED | The ternary binder tree and trit gates; its parts live in discrete learning |
 
+On 29 Oct 2026: SpiralCore transport is the position and routing backbone of the float-trained FBS trunk, and the trunk is served exactly in integers under `lut-stack/5` (claude-182). Only its type-spin configuration closed (claude-151). See the [pipeline map](../model/pipeline-map.md).
+
 ## Where it stands
 
 | Claim | Kind | Source |

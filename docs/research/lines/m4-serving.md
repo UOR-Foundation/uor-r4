@@ -1,6 +1,6 @@
 # Research line: integer serving (M4)
 
-This line is about running a finished model on an ordinary laptop or in a browser using only whole-number arithmetic, adds and table lookups: no floating point and no multiplication. In the records the engine reproduced its float models exactly on the old stack, and the multiply-free audits pass on the WASM serving symbols. What is missing is a trained model worth serving: the models tried scored 1.20 to 1.24 bits per byte against a 0.90 target, and no model that obeys all the current rules has been exported.
+This line is about running a finished model on an ordinary laptop or in a browser using whole-number arithmetic and table lookups, with no floating point. The records below date from when multiplication was also banned (see 29 Oct 2026 at the end). In the records the engine reproduced its float models exactly on the old stack, and the multiply-free audits pass on the WASM serving symbols. What is missing is a trained model worth serving: the models tried scored 1.20 to 1.24 bits per byte against a 0.90 target, and no model that obeys all the current rules has been exported.
 
 | | |
 |---|---|
@@ -11,7 +11,7 @@ This line is about running a finished model on an ordinary laptop or in a browse
 | **Outcomes** | tooling 10 · negative 9 · positive 7 · inconclusive 6 · review 3 · ops 2 · process 2 · blocked 1 · diagnostic-stop 1 · plan 1 |
 | **State** | The D11 engine is ACTIVE ([D11 integer serving](../../mechanisms/lut-serving.md)). M4 is held; the export gap of a lawful model is unmeasured |
 
-Counts: `archive/catalog.jsonl`. D11 is the owner decision that every lab serves under one multiplier-free contract. Terms follow the [glossary](../../start/glossary.md); ACTIVE, READY and PARKED are defined on the [mechanism board](../../mechanisms/README.md).
+Counts: `archive/catalog.jsonl`. D11 is the owner decision that every lab serves under one integer contract (the multiply and divide rule changed on 28 Oct, see below). Terms follow the [glossary](../../start/glossary.md); ACTIVE, READY and PARKED are defined on the [mechanism board](../../mechanisms/README.md).
 
 ```mermaid
 flowchart LR
@@ -51,6 +51,17 @@ Check the instrument before blaming the engine (lesson 1 in [what the project kn
 
 ## Current state
 
-The zero-multiply and bit-exact properties are verified on the old stack and on the WASM serving symbols. The engine has not served any model that obeys the current rules, and the WASM record lists its SIMD kernels as unintegrated fixtures, so its contract is not yet exercised end to end. The 19.9M-parameter stack that missed the old M1 bar read every weight on every token, and two of the integer schemas serve softmax through exponent tables, which the current rules ban (`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md`, section 1). The next step is to export one discrete artifact and measure its export gap ([board](../../mechanisms/README.md)). Product serving, including tokens per second and energy on the laptop, is allowed; panel scoring of an exported artifact is still GPU research compute.
+The zero-multiply and bit-exact properties are verified on the old stack and on the WASM serving symbols. Until 28 Oct the engine had served no model that obeys the current rules; since then it serves the FBS trunk (see the 29 Oct section). The WASM record lists its SIMD kernels as unintegrated fixtures, so its contract is not yet exercised end to end. The 19.9M-parameter stack that missed the old M1 bar read every weight on every token, and two of the integer schemas serve softmax through exponent tables, which the current rules ban (`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md`, section 1). Written 18 Oct: the next step was to export one discrete artifact and measure its export gap ([board](../../mechanisms/README.md)). Product serving, including tokens per second and energy on the laptop, is allowed; panel scoring of an exported artifact is still GPU research compute.
+
+## 29 Oct 2026
+
+The records above describe the old multiplier-free stack. Since 28 Oct, D80 (integer multiply) and D81 (integer divide) allow the hardware operations in served code. Floats, transcendentals and dense matmul stay banned. Serving the FBS trunk on the M1 laptop now runs:
+
+- 270 to 3,042 tok/s with exact structured kernels, replies byte-identical to the engine before each change (claude-163 to 170).
+- 4,829 tok/s snapped, replies byte-identical to the engine before the multiply and divide (claude-177, [report](../../loop/tasks/integer-mul-div-serving/claude-177/REPORT.md)).
+- The unsnapped contract `lut-stack/5` is inside the export-gap bar on the DEV panel on both seeds, serving at 4,217 to 4,320 tok/s (claude-182, [report](../../loop/tasks/d11-exporter-float-trunk/claude-182/REPORT.md)), then 4,491 and 4,504 tok/s after the integer square root (claude-186).
+- `lut-stack/6` carries the Hamming reads (claude-188, [report](../../loop/tasks/integer-hamming-read/claude-188/REPORT.md)). The copy-head integer kernel matches an f64 reference (claude-189, [report](../../loop/tasks/integer-hamming-read/claude-189/REPORT.md)). The session refuses `/6` until its hooks serve them. Those hooks are next.
+
+Not yet: text in and out (R7), exact turn memory served, and the readout (the served session still reads the native writer). No milestone is claimed; M4 is not-started. See [the pipeline map](../../model/pipeline-map.md).
 
 **Go deeper:** the [generated catalog page](../../../archive/catalog/m4-serving.md) lists all 42 records.

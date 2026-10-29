@@ -2,6 +2,15 @@
 
 > **Selected API, 13 October — D29:** Cargo selects `src/native_geometry.rs`, exposing fixed H4 geometry, checked integer primitives and report/config metadata. The historical model/stack/sampling executors and generation binaries described below remain source evidence and are excluded; `historical-runtime` fails compilation. The composed native CUDA graph at `1f1547bfd` passes 31 finite controls on RTX4090, pending protected delivery. No compliant D11 language-serving model is qualified by this facade or those controls; all training holds remain. [Boundary record](../../archive/labs/d29-vendor-boundary-2026-10-13/README.md).
 
+## Status on 29 Oct 2026
+
+This crate serves the float-trained FBS trunk as a D11 integer artifact. Pre-alpha: no milestone is complete and no conversation is established. The model's two paths and their state are in [the pipeline map](../../docs/model/pipeline-map.md); the plan is [PLAN.md](../../PLAN.md).
+
+- **D80 and D81 (28 Oct).** Served integer code may use the hardware integer multiply and divide. Floats, transcendentals and dense matmul stay banned in serving.
+- **`lut-stack/5`.** It keeps the 120-root rotations exact, so the export gap closes (claude-181, claude-182). It serves at 4,217–4,504 tok/s on the M1 laptop (DEV scope).
+- **`lut-stack/6`.** It carries the Hamming reads (claude-188). The session refuses `/6` until it serves them. The copy-head integer kernel matches an f64 reference (claude-189); the session hooks are next.
+- **Speed.** 4,829 tok/s on the M1 with the snapped contract, replies byte-identical to the engine before the multiply and divide (claude-177).
+
 ## Historical implementation and evidence
 
 This crate serves the retained learned recurrent model with full causal context,

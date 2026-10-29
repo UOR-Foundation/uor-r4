@@ -68,7 +68,20 @@ Whether these replacements can match a transformer's quality is the open questio
 
 **Learning means trying the legal moves.** The current model does not use calculus. To learn, it tries all 16 legal values of one block on the graphics card and keeps a change only if a whole-number score strictly improves ([training](../model/training.md), [discrete learning](../mechanisms/discrete-learning.md)).
 
+## The model as of 29 Oct 2026
+
+Since 27 October the work is on a second model path, a float-trained trunk called FBS. It does not join the discrete path described above yet ([pipeline map](../model/pipeline-map.md)). On it, the project's design is now one mechanism per part:
+
+- The trunk **routes**. A recurrence with a Hamilton gate and a SpiralCore rotation carries position. A Hamming read (XOR and popcount over 64-bit codes) copies words seen earlier.
+- Exact memory **stores**. Memory keyed by the user's first 8 tokens names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, against 266.3 and 281.0 for an empty-table control (claude-161). It moves only the first word of a reply. After it, replies are still templates.
+- The model is **served as integers**. On an M1 laptop a served token runs at 4,217 to 4,504 tok/s under the exact `lut-stack/5` contract (claude-182, claude-186). The served model is inside the export-gap bar on both seeds: net 6 and −8 rows against F_I 24 on DEV (claude-182). Not every part is served in integers yet: the copy heads, the memory and the nearest-word readout are not.
+- Text in and out (R7) is not built. The artifacts take token ids only.
+
+No milestone is complete. [Where we are](./where-we-are.md) has the full status.
+
 ## Where it stands
+
+The table below is the 19 Oct 2026 discrete path.
 
 | Item | State | Source |
 |---|---|---|

@@ -1,6 +1,6 @@
 # The language model
 
-The core product is a language model: a program that reads text and predicts what comes next, and so can hold a conversation. Most language models today are transformers that do billions of decimal multiplications per word. UOR-R4 tries a different route. It predicts text with geometry (prime-number addresses, rotations in four dimensions, exact look-up memory), and it ships as one file of whole numbers that an ordinary laptop or browser can run with whole-number arithmetic only, never decimals. That file is meant to be the one thing every client loads. **It does not exist yet.** No trained model has been exported in that form, training is on hold pending review, and 0 of the 8 milestones are complete ([NOW](../integration/NOW.md)). Nothing ships until a trained model passes M1 to M8.
+The core product is a language model: a program that reads text and predicts what comes next, and so can hold a conversation. Most language models today are transformers that do billions of decimal multiplications per word. UOR-R4 tries a different route. It predicts text with geometry (prime-number addresses, rotations in four dimensions, exact look-up memory), and it ships as one file of whole numbers that an ordinary laptop or browser can run with whole-number arithmetic only, never decimals. That file is meant to be the one thing every client loads. **It does not ship yet.** As of 29 Oct 2026 the project is pre-alpha, 0 of the 8 milestones are complete, and no model holds a useful conversation ([NOW](../integration/NOW.md)). Nothing ships until a trained model passes M1 to M8.
 
 Labels used below: **proof** (derived from definitions or code), **measurement** (a recorded run with its artifact), **hypothesis** (untested). See [`docs/formal_vocabulary.md`](../formal_vocabulary.md) and the [glossary](../start/glossary.md).
 
@@ -37,12 +37,20 @@ The deliverable is **one checksum-pinned D11 integer artifact in the `UORLUT01` 
 
 | Question | Answer | Kind | Source |
 |---|---|---|---|
-| Does a trained model exist in `UORLUT01` under today's rules? | No | measurement (absence in the records) | [lut-serving dossier](../mechanisms/lut-serving.md) |
+| Does a trained model exist in `UORLUT01` under today's rules? | No model that holds a conversation. A float-trained trunk (FBS) has been exported to integers, on the DEV panel only (claude-180 to 182), and serves, but it is not the product | measurement | [lut-serving dossier](../mechanisms/lut-serving.md); [pipeline map](../model/pipeline-map.md) |
 | Does the serving engine work? | Yes, on a synthetic stand-in model: native audit 44 symbol ranges clean; WebAssembly 7 of 7 serving functions clean; save and restore reload identically | measurement | [project track](../integration/project-track.md) M4; [WebAssembly record](../labs/wasm-serving-runtime-2026-10-18/README.md) |
 | Is the engine exact? | On older float models it reproduced its float reference almost exactly: engine difference 2.7e-7 BPB on a matched 512-window check | measurement | [criterion-2 record](../../archive/labs/criterion2-protocol-pin-2026-10-09/README.md) |
 | What model is being trained? | The discrete model in `crates/uor-r4-discrete`, integer from end to end on the GPU | — | [training](../model/training.md) |
-| How far is it? | M1 is active. In the latest two-seed run (K16, 18–19 October) the best arm and seed reached top-1 of 463 of 14,287 development rows, and no arm met its bars | measurement | [K16 outcome call](../labs/k16-outcome-call-2026-10-19/README.md) |
-| Is training running? | No. Training, M2 and Stage B are held by the owner; a review does not release a hold | — | [charter](../../CHARTER.md) section 5.1 |
+| How far is it? | M1 is in progress; the reply bar is suspended and M1 closes on the charter 4.8 bar through the saved-model path (D79). In the latest two-seed run (K16, 18–19 October) the best arm and seed reached top-1 of 463 of 14,287 development rows, and no arm met its bars | measurement | [K16 outcome call](../labs/k16-outcome-call-2026-10-19/README.md) |
+| Is training running? | Runs go ahead on the lab's own pre-run review. The latest line, 27 to 29 Oct, trains the FBS trunk on GPUs | — | [charter](../../CHARTER.md) section 5.1 |
+
+### Where it stands on 29 Oct 2026
+
+- **Pre-alpha.** No model holds a useful conversation. M1 is in progress and no registered closing run has passed the charter 4.8 bar.
+- **Served in integers.** The FBS trunk is exported and served in integers on the M1 laptop at 4,829 tok/s (claude-177, snapped; 4,217 to 4,504 tok/s with the exact `lut-stack/5` contract), with replies byte-identical to the engine before the multiply and divide. The served model is inside the export-gap bar against the trained one, not identical to it (claude-182).
+- **No typed chat yet.** R7, the text path, is not built: FBS artifacts take token ids only.
+- **The composition, briefly.** The trunk routes (a learned table, SpiralCore position, a recurrence with a Hamilton gate, Hamming copy heads) and exact turn memory stores. Exact memory names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, but only the first word of a reply (claude-161). The full part-by-part table is the [pipeline map](../model/pipeline-map.md).
+- **Order of work.** First carry the memory past a reply's first word. Then serve the model's parts in integers. Then R7, so a typed question gets a typed reply. Then one model trained with all of it and scored on prompts, with tokens/s. Cost work comes after. See [PLAN](../../PLAN.md).
 
 For scale, the M1 closing bar asks the exported model's integer top-1 to beat two simple count tables on the same panel, the unigram table (1,226 of 14,287) and the successor table (6,300 of 14,287), on two seeds ([charter](../../CHARTER.md), section 4.8). The K16 run was graded on the model's own evaluator, not through the export, so the comparison is a rough guide only.
 
