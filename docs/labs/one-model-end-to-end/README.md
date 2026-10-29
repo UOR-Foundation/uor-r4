@@ -1,4 +1,23 @@
-# one-model-end-to-end: the census and the held-out-phrasing panel (claude-202, claude-204; 29 Oct 2026)
+# one-model-end-to-end: the census, the held-out-phrasing panel and the overturn check (claude-202, claude-204, claude-205; 29 Oct 2026)
+
+## The overturn check (claude-205)
+
+**The question.** Does the trunk that learned to lean on the turn memory read worse than one that never had it, on the rows the memory names none of? The rows are DEV's 3,406 unnamed later rows and 32 unkeyed openings, 3,438 pooled. It is done-when 2, under [its sheet](../../harness/prep/one-model-end-to-end-overturn-2026-10-29.md) (FIT, PRE-RUN PASS).
+
+**How it ran.**
+- **On the GPU:** `train-in-space --score-rows CHECKPOINT --out DIR` (`in_space_long::score_rows`) scored claude-194's step-16,384 (r) and (r0) at both seeds. It wrote every DEV and Fresh V2 row's nearest and writer pick, with the memory on and taken out, and 64 greedy samples.
+- **On the laptop:** `train-in-space --overturn 1 --scored ARM-sSEED=DIR ...` (`in_space_long::overturn`) graded those files into [overturn-2026-10-29.json](overturn-2026-10-29.json).
+- **The outputs** are in the HF store at `results/claude/one-model-end-to-end-2026-10-29/overturn-b6f7bdc9/`.
+
+| Seed | (r) | (r0) | b | c | d | Floor `⌈2√(b+c)⌉` | Band | Cell |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 2,078 | 1,530 | 999 | 451 | +548 | 77 | 915 | inside |
+| 2 | 1,929 | 2,296 | 273 | 640 | −367 | 61 | 915 | inside |
+
+**Verdict: mixed.**
+- **What the seeds say.** They disagree in sign, each past its own paired floor (77 and 61). The two-seed spread, 915, is larger than both floors, so it is the band, and both seeds fall inside it.
+- **What it changes** (the registered outcome). The training run carries (r) and a memory-dropout arm as equal candidates. The REPORT also recommends at least three seeds; that is advice, not part of the rule.
+- **The details** (free generation, the writer's readout, instrument checks) are in the [REPORT](../../loop/tasks/one-model-end-to-end/claude-205/REPORT.md).
 
 ## The held-out-phrasing panel (claude-204)
 
