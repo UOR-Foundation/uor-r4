@@ -6,8 +6,10 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays `ready`. This unit give
 
 ## What did not work, first
 
-- **The first build failed the serving audit.** The table's 120-byte rows made LLVM compute `pattern × 120` with a `umaddl`, a multiply instruction the audit refuses in `stack_snap_select`. Rows of 128 bytes make the offset a shift. The audit then passed with 0 forbidden instructions. A table indexed in an audited kernel needs a power-of-two row stride. That is a candidate convention, noted in FRICTION.
-- **The candidate scan is still about a third of the work it was.** The step is 1.33 ms, of which the core is 54.3% and the product 36.0%.
+- **The first build failed the serving audit.** With 120-byte table rows, the audit's call-graph check failed in `stack_snap_select` on one `umaddl`, a multiply instruction, which computes the row offset `pattern × 120`. Rows of 128 bytes make the offset a shift, and the audit then passed with 0 forbidden instructions.
+  - That failing audit's log was printed in this session but not kept. The sealed log is the passing one.
+  - A table indexed in an audited kernel needs a power-of-two row stride. That is a candidate convention, noted in FRICTION.
+- **The candidate scan is still about 29% of the step.** The step is 1.33 ms, of which the core is 54.3% and the product 36.0%. Together the core and the product take a third of the time they did (3.57 ms → 1.20 ms).
   - A two-point estimate splits each part's time linearly in the number of candidates scored. It is an estimate from two runs (120 and 17 candidates), not a measurement.
   - On it, the candidate scan was about 2.75 ms of the old 3.70 ms step, and is about 0.39 ms of the new 1.33 ms.
   - The rest of the core and the product, about 0.81 ms, is the per-snap fixed cost, the Hamilton products and the lanes.
@@ -29,7 +31,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays `ready`. This unit give
   - `each_sign_pattern_lists_its_compatible_roots_in_index_order`: every pattern's list, 17 for each of the 16 patterns without a zero, and 120 for the zero query.
   - `the_sign_compatible_snap_is_the_full_scan`, against the old scan, kept as the test's `snap_select_full_scan`:
     - all 28,561 queries in `[-6, 6]^4`;
-    - 200,000 pseudo-random queries at magnitudes 1 to `2^30`, with coordinates zeroed at random;
+    - 200,000 pseudo-random queries at magnitudes from 1 up to the full `i32` range, with coordinates zeroed at random;
     - 7,260 queries on each root and halfway between every pair, at scale `2^20`.
 
   With the rule broken (roots with a zero coordinate dropped for a positive query), the last test fails (`0 passed; 1 failed`). It passes once restored. The existing exact-oracle test, `snap_selection_matches_an_independent_exact_oracle`, still passes.
@@ -61,7 +63,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays `ready`. This unit give
 | Check | Result |
 |---|---|
 | The artifact's sha256 against claude-158's and claude-163's | match |
-| Replies of all four runs, and claude-163's sealed reply | one hash, `e484ff962b734ef4…` (`shasum` of the reply) |
+| Replies of all four runs, and claude-163's sealed reply | one hash: SHA-256 `97c8ad41e1cb5cee…` of `jq -r '.timing.reply\|tostring'` |
 | `replies_match` (staged and parted against plain), every run | true |
 | Old binary's decode against claude-163's 272 | 270, 270 (−0.7%) |
 | Serving audit, `python3 scripts/audit_zero_matmul_serving.py <release uor-r4-stack> --stack` (sha256 `162ad79c…3fef`) | FULL PASS: 0 multiplier, divider or float instructions over 44 symbol ranges and 93 reachable functions |
