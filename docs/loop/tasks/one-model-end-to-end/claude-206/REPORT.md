@@ -7,7 +7,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Sheet: [one-model-end-to-end-protocol-
 - which recipe ships;
 - whether it reads the prompt or only recalls TRAIN's templates.
 
-Its decisions are made on rows no table names, on DEV and on P-dev, against the recall controls (T) and (S).
+Its recipe, add-on and transport decisions are made on rows no table names, on DEV and on P-dev, against the recall controls (T) and (S). The decode rule and the verdict also read free generation, and "memorized" reads the keyed rows.
 
 **Speed.** This unit times nothing. The protocol requires decode tok/s against context on the shipped integer artifact, once the serving units have merged.
 
@@ -58,7 +58,7 @@ None new. The protocol builds on these counts, each checked against its source b
 
 ## Checks run at the head
 
-- `uor-harness loop report --check` and `loop pr-check --local`. Their results are on the PR.
+- `uor-harness loop report --check`: PASS. `loop pr-check --local`: PASS. `loop gates --full`: 11 GREEN, at `2c1dbb9b6`.
 - **The FIT, two rounds, fresh non-author reviewers (model claude-opus-5-5).**
   - **Round 1, at `8aec46877`: NOT FIT.**
   - **Round 2, at `0e8109f1a`: FIT,** with six notes, applied:
@@ -77,7 +77,7 @@ None new. The protocol builds on these counts, each checked against its source b
 - I-A P-dev scoring, I-E the Flock rank decode, and I-F the table hit rate: all three are scoring;
 - I-D the controls, and I-G the grader: both run on the laptop.
 
-**Then the training run,** under its own pre-run review: 21 runs, about 12 GPU-hours, about $8–14. Its decisions set the model that the serving units export and serve.
+**Then the training run,** under its own pre-run review: 21 runs, about 12 GPU-hours, about $7–13. Its decisions set the model that the serving units export and serve.
 
 ## Skills used
 

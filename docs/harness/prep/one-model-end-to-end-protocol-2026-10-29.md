@@ -14,7 +14,7 @@ This sheet fixes, before any training run, how the model the project ships is sc
   - the memory recipe and a recipe that trains without it disagree in sign across seeds, on the rows the memory cannot name;
   - (r) loops under greedy decoding;
   - neither trunk puts a rare value from the prompt into its reply.
-- **What this sheet is for.** Every decision below is therefore made on rows no table names, on DEV and on a panel no decision has touched, and against recall controls.
+- **What this sheet is for.** The recipe, add-on and transport decisions below are therefore made on rows no table names, on DEV and on a panel no decision has touched, against recall controls. The decode rule and the verdict also read free generation, and "memorized" reads the keyed rows.
 
 ## The arms
 
@@ -91,7 +91,7 @@ For arm X against arm or control Y, on one stratum, at each seed `s` in {1, 2, 3
    - U is reported beside N-u, and enters no transport reading.
 
    No arm is cut on this; a negative revisits the map's transport stage.
-4. **The decode rule, on the shipped recipe only: greedy (G) or Flock rank (F).** At each seed, its free generation under each rule is 512 replies: 256 DEV prompts and 256 P-dev prompts. Let `g` and `f` be the counts of complete replies under G and F, and `p = g / 512`.
+4. **The decode rule, on the shipped recipe only: greedy (G) or Flock rank (F).** A reply is *complete* when it ends in `<|eos|>` (decision 5 restates it). At each seed, its free generation under each rule is 512 replies: 256 DEV prompts and 256 P-dev prompts. Let `g` and `f` be the counts of complete replies under G and F, and `p = g / 512`.
    - F ships if at all three seeds both hold:
      - F's repeated-4-gram rate is below G's;
      - `f ≥ g − ⌈2·√(512 · p(1 − p))⌉`, a count against a count.
@@ -168,7 +168,7 @@ Each exists, with its check passing, before the run's pre-run review.
 
 ## Cost and stop rule
 
-- **Training.** There are 7 trained arms × 3 seeds = 21 runs. claude-194 trained three arms in about 1.7 h on one RTX 5090 (about 34 min each, at $1.11/h), so 21 runs take about 12 GPU-hours, about $8–14 at $0.6–1.1/h. The Flock arm may run slower; the throughput check prices it.
+- **Training.** There are 7 trained arms × 3 seeds = 21 runs. claude-194 trained three arms in about 1.7 h on one RTX 5090 (about 34 min each; its pods cost $0.975/h and $0.563/h), so 21 runs take about 12 GPU-hours, about $7–13 at $0.6–1.1/h. The Flock arm may run slower; the throughput check prices it.
 - **The pods.** Up to 3 at once, if `uor-pod status` shows room inside the caps (4 pods, $8/h across labs) at lease time.
 - **Scoring.** About 2 minutes per arm per seed for the rows (claude-205: 72–77 s), plus free generation under two rules.
 - **Stops:**
@@ -200,4 +200,4 @@ The round-1 FIT's blockers:
 - I-E's bound is absolute, and the draw is specified (seeding, never zero, mapping to a rank).
 - I-C checks `identity`, and I-H checks reproduction.
 - The table's line is 382.
-- The cost uses 34 minutes and $1.11/h, an arm's stop is per arm, and the room for three pods is checked at lease time.
+- The cost uses 34 minutes per arm and claude-194's own rates, an arm's stop is per arm, and the room for three pods is checked at lease time.

@@ -57,7 +57,7 @@ Run at this ORDER's base, before any work. **Class: instrument (no protocol exis
   - the P-dev panel, in the store at `inputs/claude/heldout-panels-2026-10-29/p-dev` (claude-204);
   - the `FbsArm` transport arms `IdentityTransport` and `FrozenQueries` (`spiralcore_fbs_arms.rs:29-34`);
   - the trainer's `--flock-read K` and `--type-spin 1`;
-  - the harmonic table `RAW_RANK_WEIGHTS_Q16` (`stack/flock.rs:379`).
+  - the harmonic table `RAW_RANK_WEIGHTS_Q16` (`stack/flock.rs:382`).
 - **These tools do not exist:**
   - memory dropout;
   - a flag choosing the `FbsArm` (`in_space_long` sets `OneAtomActive`);
