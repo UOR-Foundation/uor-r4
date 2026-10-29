@@ -331,6 +331,7 @@ pub fn fbs_memory_snapshot(memory: &TurnMemory, key_window: usize) -> Result<Fbs
         reply: match memory.reply_parts()? {
             None => None,
             Some((rows, weight)) => Some(FbsReplyTable {
+                turn: crate::in_space_long::TURN_KEY,
                 entries: entries(rows),
                 weight: finite_table("turn_memory_reply.weight", weight)?,
             }),
@@ -654,7 +655,7 @@ mod tests {
         assert_eq!(after.opening_weight, [0.25, -0.5, 1.0, 0.0]);
         let reply = after.reply.as_ref().expect("the reply table");
         assert!(reply.entries.windows(2).all(|w| w[0].key < w[1].key));
-        assert_eq!(reply.entries.len(), 3);
+        assert_eq!((reply.turn, reply.entries.len()), (8, 3));
         assert_eq!(reply.weight, [-1.0, 0.125, 0.0, 2.0]);
         let parsed: FbsMemorySnapshot = serde_json::from_slice(&serde_json::to_vec(&after)?)?;
         assert_eq!(parsed, after);

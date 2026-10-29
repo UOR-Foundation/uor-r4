@@ -42,17 +42,18 @@ pub(crate) fn memory_image(artifact: &Container<'_>) -> Result<Option<MemoryImag
     let opening = memory_table(artifact, "opening", record.opening, k, width, vocab, &|key| {
         opening_key_ok(key, k, vocab)
     })?;
-    let reply = match record.reply {
-        None => None,
-        Some(count) => Some(memory_table(
+    // The record's check holds the count and the turn together.
+    let reply = match (record.reply, record.reply_turn) {
+        (Some(count), Some(turn)) => Some(memory_table(
             artifact,
             "reply",
             count,
             MEMORY_REPLY_KEY_LEN,
             width,
             vocab,
-            &|key| reply_key_ok(key, k, window, vocab),
+            &|key| reply_key_ok(key, turn, window, vocab),
         )?),
+        _ => None,
     };
     Ok(Some(MemoryImage {
         record,
@@ -61,15 +62,20 @@ pub(crate) fn memory_image(artifact: &Container<'_>) -> Result<Option<MemoryImag
     }))
 }
 
-/// An opening key: at most `k` turn ids, each a token id.
+/// An opening key: 1 to `k` turn ids, each a token id (the float memory never stores an empty one).
 fn opening_key_ok(key: &[u32], k: usize, vocab: usize) -> bool {
-    key.len() <= k && key.iter().all(|&id| (id as usize) < vocab)
+    !key.is_empty() && turn_ok(key, k, vocab)
+}
+
+/// At most `k` turn ids, each a token id.
+fn turn_ok(ids: &[u32], k: usize, vocab: usize) -> bool {
+    ids.len() <= k && ids.iter().all(|&id| (id as usize) < vocab)
 }
 
 /// A reply key, `turn ids, MEMORY_PAD, length, MEMORY_PAD, last id` (the float memory's
-/// `ReplyKey::TurnPosition(1)`): at most `k` turn ids, a reply length from 1 to the key window,
-/// and a last id that is a token id.
-fn reply_key_ok(key: &[u32], k: usize, window: usize, vocab: usize) -> bool {
+/// `ReplyKey::TurnPosition(1)`): 0 to `turn` turn ids (the record's `reply_turn`, not `k`), a reply
+/// length from 1 to the key window, and a last id that is a token id.
+fn reply_key_ok(key: &[u32], turn_len: usize, window: usize, vocab: usize) -> bool {
     let n = key.len();
     if n < 4 {
         return false;
@@ -80,7 +86,7 @@ fn reply_key_ok(key: &[u32], k: usize, window: usize, vocab: usize) -> bool {
         && tail[2] == MEMORY_PAD
         && (1..=window).contains(&length)
         && last < vocab
-        && opening_key_ok(turn, k, vocab)
+        && turn_ok(turn, turn_len, vocab)
 }
 
 /// One table's sections `memory.{kind}.{keys,values,weight}`: `count` keys of `row` ids each

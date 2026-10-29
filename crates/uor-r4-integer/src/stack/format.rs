@@ -79,20 +79,27 @@ pub struct StackTurnMemory {
     pub opening: usize,
     /// The reply table's entries, when the memory has one.
     pub reply: Option<usize>,
+    /// The most turn ids a reply key holds, with the reply table: the float trainer's `TURN_KEY`.
+    pub reply_turn: Option<usize>,
     pub reply_key_len: usize,
     pub weight_exp: i32,
 }
 
 impl StackTurnMemory {
     /// Refuse a record the stack `shape` cannot carry: a non-FBS stack; `k` of 0 or past
-    /// `MEMORY_MAX_K`; a key window of 0 or past `MAX_CONTEXT`; or a key length or exponent other
-    /// than this engine's.
+    /// `MEMORY_MAX_K`; a reply turn without its table, or of 0 or past the reply row's room; a key
+    /// window of 0 or past `MAX_CONTEXT`; or a key length or exponent other than this engine's.
     pub fn check(&self, shape: &StackShape) -> Result<(), StackError> {
         if !shape.projection_fbs() {
             return Err(StackError::Shape("a turn memory needs a SpiralCore/FBS stack"));
         }
         if self.k == 0 || self.k > MEMORY_MAX_K {
             return Err(StackError::Shape("a turn memory's k must be from 1 to 16"));
+        }
+        if self.reply.is_some() != self.reply_turn.is_some()
+            || self.reply_turn.is_some_and(|turn| turn == 0 || turn > MEMORY_REPLY_KEY_LEN - 4)
+        {
+            return Err(StackError::Shape("a reply table's turn must be from 1 to 16 ids, and only with the table"));
         }
         if self.key_window == 0 || self.key_window > MAX_CONTEXT {
             return Err(StackError::Shape("a turn memory's key window must be from 1 to the context limit"));
@@ -1656,6 +1663,7 @@ pub fn export_fbs_trunk_uorlut01_with(
                 key_window: mem.key_window,
                 opening: mem.opening.len(),
                 reply: mem.reply.as_ref().map(|r| r.entries.len()),
+                reply_turn: mem.reply.as_ref().map(|r| r.turn),
                 reply_key_len: MEMORY_REPLY_KEY_LEN,
                 weight_exp: MEMORY_WEIGHT_EXP,
             };

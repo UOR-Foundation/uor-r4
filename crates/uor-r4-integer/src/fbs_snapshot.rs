@@ -329,6 +329,9 @@ pub struct FbsMemoryEntry {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FbsReplyTable {
+    /// The most turn ids a reply key holds: the float trainer's `TURN_KEY` (8), which does not
+    /// follow the opening table's `k`.
+    pub turn: usize,
     pub entries: Vec<FbsMemoryEntry>,
     /// `width`: the reply move's weight.
     pub weight: Vec<f32>,
