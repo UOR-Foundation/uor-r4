@@ -290,3 +290,8 @@ A reading names the change for the next unit. It is not a result about the snaps
   - attempt 1's two receipts are checked against its sealed `SHA256SUMS`;
   - the three-file check now names its folder and also refuses `.orig` and `.rej` leftovers;
   - the job stops if the first older model is still refused at load.
+
+**Attempt 2 stopped on my leftovers check, before any build** (`/workspace/abl2`, kept).
+- The patch had applied cleanly: no offset or fuzz, and exactly three files differ.
+- The check found six `Cargo.toml.orig` files, which are vendored files the head's tree already holds under `third_party/`.
+- **Attempt 3** (`job3.sh`, sha256 `deef27611c3fa78328b39de0a41c236c099812ce9e0c8fac30a1cf6d052b60c0`) is attempt 2 with fresh paths (`/workspace/abl3`, `/root/build/src-old-kernel-3`). It counts only an `.orig` or `.rej` that the copy has and the head lacks. Nothing else changes.
