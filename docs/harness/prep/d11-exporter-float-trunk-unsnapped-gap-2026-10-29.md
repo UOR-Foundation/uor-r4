@@ -10,7 +10,9 @@ TEST FITNESS: PENDING
 - **claude-180** read Both off: on the D11 forward in float, no single change brings every model inside the export bar.
 - **The snaps-off arm** (`rounding_only`) was inside on both seeds of claude-131's dual recipe, with nets 3 and −9.
 - **claude-181** built that change as an integer contract (`raw_gates`, `raw_transition`, `uor-r4.lut-stack/5`), with host parity.
-- **This unit's code** gives the GPU evaluator the same forms. The host twin equals the Rust session bit for bit, in all four snap choices, on the synthetic controls and on claude-126 seed 1's four exports.
+- **This unit's code** gives the GPU evaluator the same forms. The host twin equals the Rust session bit for bit, in all four snap choices.
+  - On the synthetic controls: `tests/parity.rs`, `host_twin_equals_the_session_in_every_snap_choice`.
+  - On claude-126 seed 1's four exports: `tests/trained.rs`, with no difference at 4,096 single tokens and 10,368 DEV-window positions each. Its output is in this unit's REPORT.
 
 **The question:** is the exported unsnapped artifact (A) inside the export gap's bar against its own float trunk (F)? And for which training configuration does that hold on both seeds?
 
@@ -51,18 +53,33 @@ The item's done-when needs the export gap "measured inside the band". So a confi
 - |b − c| ≤ F_I = max(24, ⌈2√(b + c)⌉), with b and c the paired discordant rows between F and A;
 - |L_A − L_F| ≤ Δ = `0.045679637781173676`.
 
-**A configuration passes under an arm** when both of its seeds' artifacts are inside. The configurations are the four training recipes: plain-c126, d11-c130, dual-c131 and bfixed-c179.
+**A configuration passes under an arm** when both of its seeds' artifacts are counted (section 4) and inside. The configurations are the four training recipes: plain-c126, d11-c130, dual-c131 and bfixed-c179.
+
+**The one configuration that can close the item is named here, before the run: dual-c131 under `raw_both`.**
+- In claude-180's float emulation it was the configuration whose snaps-off forward was inside on both seeds (nets 3 and −9, F_I 24).
+- `raw_both` is the full unsnapped contract.
+- Naming one of the 8 configuration-and-arm pairs in advance avoids choosing the winner after the run.
+- A pass anywhere else is a reading, and closes nothing without a confirming run of its own.
 
 **The item's reading.** The first row that holds applies:
 
 | Reading | When | What it decides |
 |---|---|---|
-| **No reading** | an instrument check of section 4 fails on 3 or more models, or `I-Qualify` fails | An instrument repair, then this run again. |
-| **Pass** | a configuration passes under `raw_both` or `raw_gates`, with every instrument of its two models green | **The done-when's export gap is measured inside the band** for that configuration. This unit then measures its artifacts' decode and context tokens/s on the laptop, confirms the audits, and closes #2820 at DEV scope, naming the configuration and arm. `raw_both` is named first if both arms pass. |
-| **Narrowed** | no configuration passes, but some unsnapped artifact is inside, or the unsnapped arms' summed \|net\| over the eight models is below the snapped control's | **The next unit trains a configuration against the unsnapped D11 forward:** dual training with D in the unsnapped mode, then this measurement. |
+| **No reading** | fewer than 6 models are counted, or `I-Qualify` fails | An instrument repair, then this run again. |
+| **Close** | dual-c131 passes under `raw_both` | **The done-when's export gap is measured inside the band.** This unit then runs the close checks below, and closes #2820 at DEV scope only if all of them pass. |
+| **Pass elsewhere** | another configuration passes under `raw_both` or `raw_gates` | **The next unit:** a confirming run that names that configuration and arm in its own sheet, before it runs. The item closes on that confirmation. |
+| **No reading** | fewer than 7 models are counted | An instrument repair first: "Narrowed" and "No change" need at least 7 models. |
+| **Narrowed** | either of two things holds, over the counted models: some `raw_both` or `raw_gates` artifact is inside (one of the 16 is enough); or, for `raw_both` or for `raw_gates`, the sum of \|b − c\| is below the snapped arm's sum | **The next unit trains a configuration against the unsnapped D11 forward:** dual training with D in the unsnapped mode, then this measurement. |
 | **No change** | otherwise | **The next unit: wider codes** for the query and the tables (claude-180's rounding readings), then this measurement. |
 
-`raw_transition` alone is a reading, beside the contract the next unit would serve. A Pass is a result for the named configuration only; nothing here closes or opens a mechanism (§4.1).
+**The close checks**, run on the laptop after the pod. Each is a static check or client-device serving (CHARTER §3.6). A red check blocks the close:
+- `python3 scripts/audit_zero_matmul_serving.py <release uor-r4-stack> --stack`, on the `serving-wasm` build at the head (the `lut-stack/5` runtime): FULL PASS.
+- `python3 scripts/audit_zero_matmul_wasm.py <wasm> --serving --call-graph`, on `cargo build --release --target wasm32-unknown-unknown -p uor-r4-integer --features serving-wasm --lib` with `RUSTFLAGS="-C target-feature=-bulk-memory"`: 7 of 7 clean. Without that flag, 0xFC bulk-memory instructions read as unclassified, on `main` too.
+- **Speed:** `fbs-toks` decode and context tokens/s for both dual-c131 `raw_both` artifacts, the synthesis's tokens per second.
+
+**"DEV scope"** is the scope kimi-46's sheet registered for this item's close ("close #2820 at DEV scope only"). The fresh split is not read.
+
+`raw_transition` alone is a reading. A close is a result for dual-c131's two saved models under `raw_both` only; nothing here closes or opens a mechanism (§4.1).
 
 **Readings, with no bar:**
 - each artifact's top-1, b, c, net, F_I and |ΔL|;
@@ -87,6 +104,14 @@ The item's done-when needs the export gap "measured inside the band". So a confi
    - F reproduces `preds-float.json` and the receipt's loss within 1e-6;
    - there are 14,287 rows.
 8. **`I-Snapped-Recorded`.** For the six older models, the snapped artifact's net and F_I equal claude-136's F against A: 81 (60), 349 (70), 278 (69), −332 (59), 353 (73) and 231 (70).
+   - The two bfixed-c179 models have no earlier artifact. Their snapped arm has no tie to an earlier run, which is a known gap.
+8a. **`I-Arm-Header`.** Each artifact's header carries its arm's schema and flags:
+   - `snapped`: `lut-stack/4`, both flags false, with a transport snap;
+   - `raw_gates`: `/5`, `raw_gates` only, with a snap;
+   - `raw_transition`: `/5`, `raw_transition` only, with no snap;
+   - `raw_both`: `/5`, both flags, with no snap.
+8b. **`I-Arms-Distinct`.** A model's four artifacts have four different sha256s.
+8c. **`I-Same-Tables`.** A model's four artifacts have byte-identical data sections, so they differ in the header only. That makes the gap mode's artifact loss valid for every arm: its own Q12 queries through the same exported head tables. On claude-126 seed 1's four local exports, the four data sections are identical.
 9. **`I-Negative`.** One gap run with a wrong `--artifact-sha256` gives `i_inputs: false`.
 10. **`I-Finite`.**
     - Every job-level step exits 0.
@@ -114,7 +139,10 @@ The item's done-when needs the export gap "measured inside the band". So a confi
 7. A `jq` summary applies section 3.
 8. Seal to `results/claude/d11-unsnapped-gap-2026-10-29/` with a `SHA256SUMS`, read it back, then `release` and `down`.
 
-The job and summary programs are pinned by sha256 here before launch, copied into the seal, and run in a fresh folder, as in claude-180.
+**The job and summary programs** are local files, run in a fresh folder (a non-empty one is refused, with a marker outside it) and copied into the seal, as in claude-180.
+- `job.sh` template: `0c84aebbddb1f2f769e97fbaa5c118c72407c0b4c8894fa1b0a0b5ac4208a608`. The launched copy differs only in its `SHA=` line.
+- `summary.jq`: `b8827c588d2e46e96381cf75c479400735ba82cac81bfdc07150458cb6f0c8e3`. The job checks this pin.
+- **The summary reads one record per artifact:** its sha256, its header (schema, flags, snap), the sha256 of its data sections, the stored pin, and the gap receipt's readings. It applies `I-Arm-Header`, `I-Arms-Distinct`, `I-Same-Tables`, `I-Export-Snapped` and `I-Snapped-Recorded` to decide which models are counted, then section 3's table.
 
 ## 7. Minimum test power
 
@@ -143,4 +171,17 @@ The job and summary programs are pinned by sha256 here before launch, copied int
 
 ## 9. Non-author TEST FITNESS review
 
-To be recorded here, with the D67 pre-run review.
+**Round 1 (fresh non-author reviewer, at `5fc87fbbb`): NOT FIT. All nine findings are fixed.**
+1. **High: "Narrowed" was ambiguous.** It is now defined per arm, over the counted models, with `raw_both` or `raw_gates` only, and one inside artifact enough.
+2. **High: a Pass picked the best of 8.** The one closing configuration is named before the run (dual-c131 under `raw_both`). Any other pass is "Pass elsewhere", a confirming run.
+3. **High: the close step did not name its audits.** The close checks are listed with their commands and targets, and a red one blocks the close.
+4. **Medium: "DEV scope" was untied.** It is tied to kimi-46's sheet.
+5. **Medium: nothing checked that the export flags took effect.** `I-Arm-Header` and `I-Arms-Distinct` now do.
+6. **Medium: the artifact loss assumed the same head tables.** `I-Same-Tables` checks it, and the local exports confirm it.
+7. **Medium: missing models could make a reading.** "Narrowed" and "No change" need 7 counted models.
+8. **Low: the bfixed snapped arm had no tie.** It is named as a known gap.
+9. **Low: the trained parity claim was unsourced.** The tests are named.
+
+**Round 1 confirmed:** the six artifact pins match claude-132's table; the B_old reuse is sound; the cost is inside the caps.
+
+The D67 pre-run review is still to come.
