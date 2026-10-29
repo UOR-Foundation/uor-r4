@@ -1608,6 +1608,46 @@ pub struct Census {
     pub fresh_v2: SplitSize,
     pub rows: CensusRows,
     pub panels: Vec<PanelOverlap>,
+    /// The `--panel` splits (claude-204): each one's name, its `tokens.u16` sha256 and its size.
+    /// They are counted, not pinned.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub extra: Vec<(String, String, SplitSize)>,
+}
+
+/// An unpinned UORT split (census `--panel`, claude-204): `DIR/tokens.u16` and
+/// `DIR/response_mask.u8`, refused unless the header is UORT, the payload and mask lengths match
+/// its count, the first token is BOS and every token is in the sheet's vocabulary. Returns the
+/// tokens, the mask and the token file's sha256.
+fn load_unpinned_uort(dir: &Path) -> Result<(Vec<u32>, Vec<u8>, String)> {
+    let token_bytes = fs::read(dir.join("tokens.u16"))?;
+    let mask = fs::read(dir.join("response_mask.u8"))?;
+    if token_bytes.len() < hs::UORT_HEADER_BYTES || &token_bytes[..4] != b"UORT" {
+        return Err(invalid(format!(
+            "{}: tokens.u16 has no 64-byte UORT header",
+            dir.display()
+        )));
+    }
+    let count = u64::from_le_bytes(token_bytes[8..16].try_into().unwrap()) as usize;
+    let payload = &token_bytes[hs::UORT_HEADER_BYTES..];
+    if payload.len() != count * 2 || mask.len() != count {
+        return Err(invalid(format!(
+            "{}: the UORT payload or mask does not match its count {count}",
+            dir.display()
+        )));
+    }
+    let tokens: Vec<u32> = payload
+        .chunks_exact(2)
+        .map(|w| u32::from(u16::from_le_bytes([w[0], w[1]])))
+        .collect();
+    if tokens.first() != Some(&hs::SHEET_BOS_ID)
+        || tokens.iter().any(|&t| t as usize >= hs::SHEET_VOCAB)
+    {
+        return Err(invalid(format!(
+            "{}: the tokens are out of range or do not start with BOS",
+            dir.display()
+        )));
+    }
+    Ok((tokens, mask, crate::sha256_bytes(&token_bytes)))
 }
 
 /// The corpus position of `row`, from its window.
@@ -1659,8 +1699,9 @@ fn split_size(path: &Path, tokens: &[u32], mask: &[u8], turns: &Turns) -> Result
 }
 
 /// The data census of claude-202's ORDER over TRAIN, DEV and the sealed Fresh V2 panel in
-/// `fresh_v2` (its `tokens.u16` and `response_mask.u8`, pinned). Counts only; no model, no GPU.
-pub fn census(data_root: &Path, fresh_v2: &Path) -> Result<Census> {
+/// `fresh_v2` (its `tokens.u16` and `response_mask.u8`, pinned), and over each `(name, dir)` of
+/// `extra`, unpinned (claude-204). Counts only; no model, no GPU.
+pub fn census(data_root: &Path, fresh_v2: &Path, extra: &[(String, PathBuf)]) -> Result<Census> {
     let bos = hs::SHEET_BOS_ID;
     let (train_tokens, train_mask) = load_train_split(data_root)?;
     let (dev_tokens, dev_mask) = hs::load_pinned_uort_split(
@@ -1824,11 +1865,24 @@ pub fn census(data_root: &Path, fresh_v2: &Path) -> Result<Census> {
             new_templates,
         }
     };
-    let panels = vec![
+    let mut panels = vec![
         overlap("ft/dev", &dev_turns, &dev_rows),
         overlap("fresh_v2", &fresh_turns, &fresh_rows),
     ];
+    let mut extra_sizes = Vec::with_capacity(extra.len());
+    for (name, dir) in extra {
+        let (tokens, mask, sha) = load_unpinned_uort(dir)?;
+        let turns = split_turns(&tokens, &mask, bos);
+        let rows = reply_rows(&windows(&tokens, &mask)?, &mask);
+        panels.push(overlap(name, &turns, &rows));
+        extra_sizes.push((
+            name.clone(),
+            sha,
+            split_size(&dir.join("tokens.u16"), &tokens, &mask, &turns)?,
+        ));
+    }
     Ok(Census {
+        extra: extra_sizes,
         train: split_size(&data_root.join("mw-balp/train/tokens.u16"), &train_tokens, &train_mask, &train_turns)?,
         dev: split_size(&data_root.join("ft/dev/tokens.u16"), &dev_tokens, &dev_mask, &dev_turns)?,
         fresh_v2: split_size(&fresh_v2.join("tokens.u16"), &fresh_tokens, &fresh_mask, &fresh_turns)?,
@@ -3958,6 +4012,37 @@ mod tests {
             digit_tokens(tokenizer).unwrap(),
             [5u32, 6].into_iter().collect()
         );
+    }
+
+    /// claude-204: an unpinned `--panel` split loads only with a UORT header whose count matches
+    /// its payload and mask, a first BOS, and ids inside the vocabulary.
+    #[test]
+    fn an_unpinned_panel_split_is_checked_before_it_is_counted() {
+        let dir = std::env::temp_dir().join(format!("claude-204-panel-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let write = |tokens: &[u16], mask: &[u8], magic: &[u8; 4], count: u64| {
+            let mut bytes = vec![0u8; hs::UORT_HEADER_BYTES];
+            bytes[..4].copy_from_slice(magic);
+            bytes[8..16].copy_from_slice(&count.to_le_bytes());
+            bytes.extend(tokens.iter().flat_map(|t| t.to_le_bytes()));
+            std::fs::write(dir.join("tokens.u16"), bytes).unwrap();
+            std::fs::write(dir.join("response_mask.u8"), mask).unwrap();
+        };
+        write(&[0, 5, 6, 7], &[0, 0, 1, 1], b"UORT", 4);
+        let (tokens, mask, sha) = load_unpinned_uort(&dir).unwrap();
+        assert_eq!((tokens, mask, sha.len()), (vec![0, 5, 6, 7], vec![0, 0, 1, 1], 64));
+        write(&[0, 5, 6, 7], &[0, 0, 1, 1], b"XXXX", 4);
+        assert!(load_unpinned_uort(&dir).is_err(), "no UORT header");
+        write(&[0, 5, 6, 7], &[0, 0, 1, 1], b"UORT", 3);
+        assert!(load_unpinned_uort(&dir).is_err(), "a count that does not match");
+        write(&[0, 5, 6, 7], &[0, 0, 1], b"UORT", 4);
+        assert!(load_unpinned_uort(&dir).is_err(), "a mask shorter than the count");
+        write(&[5, 0, 6, 7], &[0, 0, 1, 1], b"UORT", 4);
+        assert!(load_unpinned_uort(&dir).is_err(), "no first BOS");
+        write(&[0, 5, 9_000, 7], &[0, 0, 1, 1], b"UORT", 4);
+        assert!(load_unpinned_uort(&dir).is_err(), "an id past the vocabulary");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// claude-202: step 2's rows are the later rows the turn-8 + position + reply-last-1 table

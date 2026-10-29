@@ -1,4 +1,40 @@
-# one-model-end-to-end: the data census (claude-202, 29 Oct 2026)
+# one-model-end-to-end: the census and the held-out-phrasing panel (claude-202, claude-204; 29 Oct 2026)
+
+## The held-out-phrasing panel (claude-204)
+
+**How the panels were made.** The writer is [`instrument/`](instrument) (`heldout-panel`), a standalone tool calling M-world v2's live library, `MWorld2::conversation_in` at the default mix, in dialogue protocol 2, with no probe screen. It produced three panels of 400 conversations each. They are in the HF store at `inputs/claude/heldout-panels-2026-10-29/` with `SHA256SUMS`, and counted by `train-in-space --census 1 --panel NAME=DIR` into [census-panels-2026-10-29.json](census-panels-2026-10-29.json).
+
+| Panel | Cell, seed | Tokens / targets / prompts | `tokens.u16` sha256 |
+|---|---|---|---|
+| P-dev | `dev,dev`, 2041 | 51,117 / 16,417 / 1,443 | `790b7e12…` |
+| P-ret | `train,dev`, 2042 | 49,399 / 16,266 / 1,422 | `b4d3bf42…` |
+| P-train (control) | `train,train`, 2043 | 48,983 / 16,222 / 1,425 | `7546c6d7…` |
+
+| Overlap with TRAIN | DEV | **P-train** (control) | P-ret | **P-dev** |
+|---|---|---|---|---|
+| Prompts equal to a TRAIN prompt | 0.608 | 0.608 | 0.541 | **0.000** |
+| Masked prompt templates, K = 256 / 1,024 | 0.644 / 0.642 | 0.644 / 0.638 | 0.604 / 0.585 | **0.049 / 0.000** |
+| Prompt 8-grams / 13-grams | 0.521 / 0.282 | 0.527 / 0.287 | 0.478 / 0.244 | 0.159 / 0.006 |
+| Replies equal to a TRAIN reply | 0.750 | 0.726 | 0.634 | 0.640 |
+| Masked reply templates, K = 256 / 1,024 | 0.781 / 0.766 | 0.768 / 0.757 | 0.731 / 0.710 | 0.726 / 0.705 |
+| Reply 8-grams / 13-grams | 0.605 / 0.367 | 0.626 / 0.470 | 0.558 / 0.388 | 0.569 / 0.393 |
+| Openings keyed by TRAIN's first-8 table | 1,194 / 1,226 | 1,365 / 1,425 | 1,332 / 1,422 | 245 / 1,443 |
+| **New templates** (K = 1,024 prompt share ≤ 0.5) | no | no ✓ | no | **yes** |
+
+**What it shows.**
+- **The control passes, and DEV looks like the generator's train cell.** P-train, drawn as TRAIN was, matches DEV within about 0.01 on every prompt measure. That fits DEV's manifest, which says `split: train`.
+- **P-dev holds new templates.** None of its prompts, and no masked template at K = 1,024, occurs in TRAIN. 13-gram overlap is 0.006.
+- **Its replies still overlap TRAIN's** (0.640 verbatim), as claude-203 predicted: M-world v2 splits user-turn phrasings only, and reply templates are shared. **So P-dev tests reading a new prompt, not writing a new reply.**
+- **The two named risks are small.**
+  - Near-duplicate paraphrases: P-dev's prompt 8-gram share is 0.159 and its 13-gram share 0.006. The 8-gram share includes generic phrases and the role markers.
+  - chat-v0 coincidences: 0 exact prompts.
+- **245 of P-dev's openings are keyed** by TRAIN's first-8 table. A turn key's first 8 ids include the "User:" marker, so common short openings collide. Those rows are the panel's keyed stratum, and the other 1,198 its unkeyed stratum.
+- **The panel writer's first draft failed the control.** Under protocol 1, P-train's exact-prompt share was 0. TRAIN is in protocol 2 (the role marker's space merged into the first word), and the panels above are all protocol 2.
+  - Each document passes `corpus_v2`'s own checks: the spaced meter matches the protocol-2 length, and every document fits the 256-token context.
+  - The panels written with those checks are byte-identical to the ones in the store.
+- **The missing probe screen can only lower P-train's and P-ret's shares, never P-dev's.** TRAIN redrew conversations that share an 8-gram with the sealed probe. The unscreened panels may hold some, and TRAIN never saw those. P-dev's 0.000 cannot go lower, and P-train still matched DEV.
+
+# The data census (claude-202, 29 Oct 2026)
 
 Step 1 of [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md) (#3407), from the [assessment](../../loop/tasks/infra-loop-harness/claude-201/ASSESSMENT.md).
 - **How it ran:** a count with no model and no GPU. `train-in-space --data-root DIR --fresh-v2 DIR --census 1` (`crates/uor-r4-float-train/src/in_space_long.rs`, `census`) took 4.2 s and 1.1 GB on the M1.
