@@ -337,6 +337,19 @@ pub fn check_checkpoint_reads(directory: &Path) -> Result<()> {
     )))
 }
 
+/// Refuse float reference readouts for a checkpoint whose reads they would leave out
+/// (claude-200): the turn memory moves the readout only at rows its caller names, which
+/// `fbs_float_readout` does not compute, so readouts of a checkpoint with a memory would be the
+/// trunk without it. The snapshot alone is still written.
+pub fn check_readout_reads(directory: &Path, readouts: usize) -> Result<()> {
+    if readouts > 0 && directory.join("turn_memory.safetensors").exists() {
+        return Err(invalid(
+            "the float readouts do not apply the turn memory, whose moves need the caller's rows; write the snapshot alone, without readouts",
+        ));
+    }
+    Ok(())
+}
+
 /// The snapshot of a trunk's Hamming reads (claude-146) for a trunk of `layers` layers on points
 /// of `width` coordinates (claude-200): each read's rotations, margin and weight, row-major, as
 /// `hamming_read.safetensors` stores them, at the depths [`HAMMING_DEPTHS`].
@@ -389,6 +402,15 @@ pub fn fbs_hamming_snapshot(
             margin: table("margin", &read.margin, &[heads])?,
             weight: table("weight", &read.weight, &[2, width])?,
         });
+        // A head with a margin at or below 0 never reads in float; the integer read refuses it,
+        // so it is refused here by name, before the JSON handoff.
+        let margin = &out.last().expect("pushed").margin;
+        if let Some(i) = margin.iter().position(|&m| m <= 0.0) {
+            return Err(invalid(format!(
+                "hamming_read.d{depth}.margin[{i}] = {} is not positive, and the integer read refuses it",
+                margin[i]
+            )));
+        }
     }
     Ok(FbsHammingSnapshot {
         heads,
@@ -788,9 +810,13 @@ mod tests {
                 &read.margin,
                 &read.weight,
             ] {
-                let values: Vec<f32> = (0..var.elem_count())
+                let mut values: Vec<f32> = (0..var.elem_count())
                     .map(|_| (rng.next() % 2001) as f32 / 1000.0 - 1.0)
                     .collect();
+                // Margins are in bits and positive, as the integer read requires.
+                if std::ptr::eq(var, &read.margin) {
+                    values.iter_mut().for_each(|m| *m = 1.0 + 8.0 * m.abs());
+                }
                 var.set(&Tensor::from_vec(values, var.shape(), &device)?)?;
             }
         }
@@ -825,6 +851,16 @@ mod tests {
         refused(&loaded, HAMMING_READOUT_DEPTH, 64, "hamming_read.d2.query_rotation has shape");
         let spun = loaded.clone().with_type_spin()?;
         refused(&spun, HAMMING_READOUT_DEPTH, width, "the type spin (step_rotation)");
+        let mut margin = loaded.reads[0].margin.flatten_all()?.to_vec1::<f32>()?;
+        let kept = margin.clone();
+        margin[2] = 0.0;
+        loaded.reads[0]
+            .margin
+            .set(&Tensor::from_vec(margin, heads, &device)?)?;
+        refused(&loaded, HAMMING_READOUT_DEPTH, width, "hamming_read.d2.margin[2] = 0 is not positive");
+        loaded.reads[0]
+            .margin
+            .set(&Tensor::from_vec(kept, heads, &device)?)?;
         let mut weight = loaded.reads[1].weight.flatten_all()?.to_vec1::<f32>()?;
         weight[3] = f32::NAN;
         loaded.reads[1]
@@ -888,6 +924,17 @@ mod tests {
             ),
             "{message}"
         );
+        // Readouts of a checkpoint with a turn memory are refused (claude-200); the snapshot alone
+        // is not, and a checkpoint without a memory may have readouts.
+        let scratch = Scratch::new("claude-200-readouts");
+        std::fs::create_dir_all(&scratch.0)?;
+        check_readout_reads(&scratch.0, 3)?;
+        std::fs::write(scratch.0.join("turn_memory.safetensors"), b"")?;
+        check_readout_reads(&scratch.0, 0)?;
+        let message = check_readout_reads(&scratch.0, 1)
+            .expect_err("readouts beside a memory")
+            .to_string();
+        assert!(message.contains("do not apply the turn memory"), "{message}");
         // A reply table without its opening table is refused, not dropped.
         let scratch = Scratch::new("claude-198-reads");
         std::fs::create_dir_all(&scratch.0)?;

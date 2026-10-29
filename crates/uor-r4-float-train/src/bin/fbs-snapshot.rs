@@ -28,10 +28,10 @@ use std::path::Path;
 use candle_core::Device;
 use sha2::{Digest, Sha256};
 use uor_r4_float_train::fbs_export::{
-    check_checkpoint_reads, fbs_float_readout, fbs_hamming_snapshot, fbs_memory_snapshot,
-    fbs_trunk_snapshot, round_tables_as_exported,
+    check_checkpoint_reads, check_readout_reads, fbs_float_readout, fbs_hamming_snapshot,
+    fbs_memory_snapshot, fbs_trunk_snapshot, round_tables_as_exported,
 };
-use uor_r4_float_train::flock_read_hamming::HammingReads;
+use uor_r4_float_train::flock_read_hamming::{set_hamming_reads, HammingReads};
 use uor_r4_float_train::flock_read_memory::TurnMemory;
 use uor_r4_float_train::geometric_stack::StackModel;
 use uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT;
@@ -59,6 +59,7 @@ fn main() -> Result<()> {
     // Every read the checkpoint holds is carried, or the export is refused (claude-198), before
     // the GPU is opened.
     check_checkpoint_reads(dir)?;
+    check_readout_reads(dir, readouts.len())?;
     let device = Device::new_cuda(0)?;
     let model = StackModel::load(dir, &device)?;
     let mut snapshot = fbs_trunk_snapshot(&model)?;
@@ -70,6 +71,9 @@ fn main() -> Result<()> {
         .transpose()?;
     snapshot.hamming = hamming;
     write(out, &serde_json::to_vec(&snapshot)?)?;
+    // The readouts are the float model with its Hamming reads (claude-200): `StackModel::hidden`
+    // applies the reads set on this thread, here on the trunk's GPU.
+    set_hamming_reads(HammingReads::load(dir, &device)?);
     for (path, mode) in readouts.iter().zip([
         FbsReadoutMode::Plain,
         FbsReadoutMode::Export,
