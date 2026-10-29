@@ -78,14 +78,17 @@ The item's done-when needs the export gap "measured inside the band". The pre-na
 1. **The serving audit:** `python3 scripts/audit_zero_matmul_serving.py <bin> --stack`, on the binary that `cargo build --release --locked -p uor-r4-integer --features serving-wasm --bin uor-r4-stack` builds. That is the `lut-stack/5` runtime, and the binary is what claude-177 and claude-181 audited. It must read FULL PASS.
 2. **The WASM audit:** `python3 scripts/audit_zero_matmul_wasm.py <wasm> --serving --call-graph --build-commit <head>`. The module comes from `cargo build --release --locked --target wasm32-unknown-unknown -p uor-r4-integer --features serving-wasm --lib` with `RUSTFLAGS="-C target-feature=-bulk-memory"`. It must read 7 of 7 clean. Without that flag, 0xFC bulk-memory instructions read as unclassified, on `main` too.
 3. **The integer serving tests:** `cargo test --locked -p uor-r4-integer --features serving-wasm --no-fail-fast`, with `~/.cargo/bin` first on PATH. It must show no failure beyond the missing-local-input set that `main` has, which claude-181 recorded as 35 tests, all panicking on a missing bundle or `tokenizer.json`.
-4. **Speed:** `fbs-toks` decode and context tokens/s for both dual-c131 `raw_both` artifacts. This is the synthesis's tokens per second. Speed has no bar; only a failed `fbs-toks` run counts as red.
+4. **Speed:** decode and context tokens/s for both dual-c131 `raw_both` artifacts. This is the synthesis's tokens per second.
+   - Build: `cargo build --release --locked -p uor-r4-integer --features serving-wasm --bin fbs-toks`.
+   - Run: `fbs-toks <artifact>` with its default prompt, twice per artifact, on AC power, as claude-181 did.
+   - Speed has no bar; only a failed `fbs-toks` run counts as red.
 
 **On a red close check,** the item stays open: the check is repaired and run again, and the close waits on it.
 
 **What a close implies against kimi-46's outcome 2:**
 - **The top-1 floors:** a pass puts A within F_I of F on top-1. dual-c131's F is 3,845 and 3,128 (claude-180's `abl3/summary.json`, `float_top1`).
-  - F_I is at most 204: even if all 10,368 DEV positions disagreed, ⌈2√10,368⌉ = 204.
-  - So a pass puts A at 3,641 or more on seed 1 and 2,924 or more on seed 2. That clears kimi-46's floors of 1,907 and 2,294 on both seeds.
+  - F_I is at most 240: b and c are counted over the 14,287 scored DEV rows, and even if all of them disagreed, ⌈2√14,287⌉ = 240.
+  - So a pass puts A at 3,605 or more on seed 1 and 2,888 or more on seed 2. That clears kimi-46's floors of 1,907 and 2,294 on both seeds.
   - Those floors were set on claude-129's plain-c126 artifacts.
 - **D, the counterfactual:** here D is claude-180's float emulation of the same contract, `rounding_only`. It is already inside on both dual-c131 seeds (3 and −9, F_I 24). So the close is not kimi-46's "cancellation" case, where A passes but D fails.
 
@@ -212,5 +215,18 @@ The item's done-when needs the export gap "measured inside the band". The pre-na
 - `summary.jq`'s order;
 - the pre-named close's justification;
 - the audit usage lines.
+
+**Round 3 (fresh non-author reviewer, at `2054898c9`): TEST FITNESS: FIT.** All six round-2 findings were confirmed fixed. Two new Low findings are folded in:
+1. **The F_I bound used the position count.** It used 10,368 (the parity test's positions) instead of the 14,287 scored rows that b and c count over. It now reads 240, and A at 3,605 / 2,888 or more. Both still clear kimi-46's floors, so no decision changes.
+2. **Close check 4 had no build command or invocation.** It now has both.
+
+**Round 3 confirmed:**
+- every pin;
+- the bar in `export_gap_within`;
+- the artifact loss's validity across arms;
+- `summary.jq`'s reading order, run on synthetic records (close, pass elsewhere, no change, no reading);
+- kimi-46's floors, and D's readings, against their sources;
+- §7's miss counts;
+- the project rules.
 
 The D67 pre-run review is still to come.
