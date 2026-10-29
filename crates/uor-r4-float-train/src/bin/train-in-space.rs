@@ -44,10 +44,11 @@
 //! decision rows, and each panel's exact, n-gram and value-masked template overlap with TRAIN. A
 //! count that needs no GPU; one JSON line.
 //!
-//! `train-in-space --data-root DIR --score-rows CHECKPOINT --out DIR [--fresh-v2 DIR] [--samples N] [--reply-tokens N] [--retain-rates 0|1] [--seed S]`:
+//! `train-in-space --data-root DIR --score-rows CHECKPOINT --out DIR [--fresh-v2 DIR] [--samples N] [--reply-tokens N] [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--seed S]`:
 //! one-model-end-to-end's per-row scorer (claude-205), on the GPU. Every scored DEV row (and
 //! Fresh V2 row) of the step-N checkpoint, with its memory on and taken out, and greedy samples,
-//! as JSON files in `--out` (`in_space_long::score_rows`). Prints one JSON line per file.
+//! as JSON files in `--out` (`in_space_long::score_rows`). Prints one JSON line per file. The rate,
+//! fold and floor flags must be the checkpoint's run's, as for `--inspect`.
 //!
 //! `train-in-space --data-root DIR --overturn 1 --scored ARM-sSEED=DIR ...`: grades the overturn
 //! check from those files, on the laptop (`in_space_long::overturn`). Needs `r-s1`, `r0-s1`,
@@ -334,6 +335,11 @@ fn main() -> Result<()> {
         return Err(FloatTrainError::Invalid(
             "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows or --overturn 1"
                 .to_owned(),
+        ));
+    }
+    if overturn_on && fresh_v2.is_some() {
+        return Err(FloatTrainError::Invalid(
+            "--overturn reads Fresh V2 from the scored files; it takes no --fresh-v2".to_owned(),
         ));
     }
     if !scored.is_empty() && !overturn_on {

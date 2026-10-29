@@ -874,10 +874,20 @@ fn row_picks(
                 .flatten_all()?
                 .to_dtype(DType::U32)?
                 .to_vec1::<u32>()?;
-            let positions = windows
+            let positions: Vec<usize> = windows
                 .iter()
-                .flat_map(|w| w.scored_corpus_positions.iter().copied());
+                .flat_map(|w| w.scored_corpus_positions.iter().copied())
+                .collect();
+            if positions.len() != targets.len() || best.len() != targets.len() {
+                return Err(invalid(format!(
+                    "a batch scores {} rows but has {} positions and {} picks",
+                    targets.len(),
+                    positions.len(),
+                    best.len()
+                )));
+            }
             let rows = positions
+                .into_iter()
                 .zip(&best)
                 .zip(&served)
                 .zip(&targets)
@@ -2682,6 +2692,12 @@ fn paired(
     b: &ScoredRows,
     positions: &std::collections::BTreeSet<usize>,
 ) -> Result<(usize, usize, usize, usize)> {
+    let whole = |s: &ScoredRows| {
+        s.targets.len() == s.positions.len() && s.nearest.len() == s.positions.len()
+    };
+    if !whole(a) || !whole(b) {
+        return Err(invalid("a scored file's lists differ in length"));
+    }
     if a.positions != b.positions || a.targets != b.targets {
         return Err(invalid(format!(
             "{} and {} do not score the same rows",
@@ -2724,7 +2740,8 @@ fn pick_differences(
 }
 
 /// Free-generation measures of a set of replies against TRAIN's (one-model-end-to-end ASSESSMENT
-/// §5). A reply is cut after its first end-of-turn id; a cut reply is complete.
+/// §5). A reply is cut after its first end-of-turn id; a cut reply is complete. A share or rate
+/// with nothing to count (no replies, or none long enough) is 0.0; read it beside `replies`.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Generation {
     pub replies: usize,
@@ -2939,6 +2956,12 @@ pub fn overturn(data_root: &Path, scored: &[(String, PathBuf)]) -> Result<Overtu
     for (name, dir) in scored {
         let on: ScoredRows = read_scored(&dir.join("rows-dev-memory.json"))?;
         let off: ScoredRows = read_scored(&dir.join("rows-dev-no-memory.json"))?;
+        if !on.memory || off.memory || on.split != "dev" || off.split != "dev" {
+            return Err(invalid(format!(
+                "{}: its DEV files do not hold the memory states their names say",
+                dir.display()
+            )));
+        }
         let (decision_hits, _, _, _) = paired(&on, &off, &decision)?;
         let (unkeyed_opening_hits, _, _, _) = paired(&on, &off, &unkeyed)?;
         let fresh = |label: &str| -> Result<Option<usize>> {
@@ -5311,6 +5334,9 @@ mod tests {
         assert_eq!(seed_cell(80, 55, 0), (24, OverturnCell::Ahead));
         assert_eq!(seed_cell(80, 55, 25), (25, OverturnCell::Inside));
         assert_eq!(seed_cell(81, 55, 25), (25, OverturnCell::Ahead));
+        // The same edges on the behind side: −25 is inside a band of 25, −26 is behind it.
+        assert_eq!(seed_cell(55, 80, 25), (25, OverturnCell::Inside));
+        assert_eq!(seed_cell(55, 81, 25), (25, OverturnCell::Behind));
     }
 
     /// claude-205: the verdict is ahead or behind only when both seeds agree beyond their bands.
@@ -5341,10 +5367,16 @@ mod tests {
     #[test]
     fn pairing_counts_discordant_rows_on_the_decision_rows_only() {
         let rows: std::collections::BTreeSet<usize> = [10, 11, 12, 13].into_iter().collect();
-        // a gets rows 10, 11, 14; b gets 10, 12, 14. Row 14 is not a decision row.
-        let (a, b) = (scored(&[1, 2, 0, 0, 5]), scored(&[1, 0, 3, 0, 5]));
-        assert_eq!(paired(&a, &b, &rows).unwrap(), (2, 2, 1, 1));
-        assert_eq!(pick_differences(&a, &b, &rows), 2, "rows 11 and 12");
+        // a gets rows 10, 11, 13, 14; b gets 10, 12, 14. Row 14 is not a decision row. So on the
+        // decision rows a has 3 hits and b 2, with 2 rows only a gets (11, 13) and 1 only b gets
+        // (12): an ordered result, so a swap of the arms or of the counts fails.
+        let (a, b) = (scored(&[1, 2, 0, 4, 5]), scored(&[1, 0, 3, 0, 5]));
+        assert_eq!(paired(&a, &b, &rows).unwrap(), (3, 2, 2, 1));
+        assert_eq!(paired(&b, &a, &rows).unwrap(), (2, 3, 1, 2));
+        assert_eq!(pick_differences(&a, &b, &rows), 3, "rows 11, 12 and 13");
+        let mut short = a.clone();
+        short.nearest.pop();
+        assert!(paired(&short, &b, &rows).is_err(), "a short list is refused, not read past");
         assert_eq!(pick_differences(&a, &a, &rows), 0);
         let mut other = b.clone();
         other.positions[4] = 99;
