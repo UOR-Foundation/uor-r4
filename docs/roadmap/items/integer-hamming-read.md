@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: true
 depends_on: [float-training-module, spiralcore-fbs-offline-float-sheet]
 notebook: docs/research/notebook/m4-serving.md
-scope: [crates/uor-r4-integer/src/stack/hamming.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-float-train/src/fbs_export.rs, docs/harness/prep/integer-hamming-read*, docs/loop/tasks/integer-hamming-read/**, docs/research/notebook/m4-serving.md, docs/roadmap/items/integer-hamming-read.md]
+scope: [crates/uor-r4-integer/src/stack/hamming.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-float-train/src/fbs_export.rs, crates/uor-r4-float-train/src/bin/fbs-snapshot.rs, docs/harness/prep/integer-hamming-read*, docs/loop/tasks/integer-hamming-read/**, docs/research/notebook/m4-serving.md, docs/roadmap/items/integer-hamming-read.md]
 ---
 
 ## Why it matters
@@ -55,7 +55,7 @@ It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-
   1. the artifact, with a round-trip and read-free bytes unchanged;
   2. the copy heads served, with synthetic controls against an exact reference;
   3. the type heads;
-  4. the exporter reading `hamming_read.safetensors`;
+  4. the exporter reading `hamming_read.safetensors`: `fbs-snapshot` (`crates/uor-r4-float-train/src/bin/fbs-snapshot.rs`, the only path from a checkpoint to a snapshot) loads it with `HammingReads::load` and carries it, and `check_checkpoint_reads` stops refusing it. The float readout read sits at `HAMMING_READOUT_DEPTH` (6), so the export maps it to the trunk's layer count, or refuses a trunk of another depth (claude-199);
   5. the float parity on claude-146's checkpoints (GPU, under a prep sheet: the trunk runs only on CUDA);
   6. the speed.
 
