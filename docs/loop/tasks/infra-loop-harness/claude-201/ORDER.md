@@ -2,6 +2,8 @@
 
 Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md), the umbrella that adds roadmap items (as claude-162 did). Base: `d28142f9e`.
 
+Setup row: 2 (item-file maintenance: a new gap item).
+
 ## Goal
 
 Add the roadmap item `one-model-end-to-end` for the last part of the open direction's order: "`turn-memory-reply` first, then the integer serving of the parts, R7, and one model end to end" (`PLAN.md:86`). The item's work comes from the whole-project assessment Casey asked for on 29 Oct (about 20:05Z): "in a smart way that considers the whole project and outside research ... instead of making quick (and wrong) decisions".
