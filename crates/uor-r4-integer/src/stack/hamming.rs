@@ -331,7 +331,8 @@ pub(super) fn stream_sum(x: i32, w: i32, c: i128) -> i32 {
 /// One coordinate of the readout move: `n + w · (c − n)` (`n` at `NORM_FINE_EXP`), the sum
 /// rounded once to `n`'s exponent, half away from zero.
 pub(super) fn readout_sum(n: i64, w: i32, c: i128) -> i64 {
-    // `|n| < 2^63`, so `n · 2^43 < 2^106` and the move `< 2^113`: the sum fits an i128.
+    // `|n| < 2^63`, so `n · 2^43 < 2^106`; `|c − n · 2^19| < 2^83`, so the move `< 2^114`: the sum
+    // fits an i128.
     let moved = i128::from(w) * (c - (i128::from(n) << NORM_RAISE));
     let sum = round_shift((i128::from(n) << READOUT_SHIFT) + moved, READOUT_SHIFT);
     sum.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64
