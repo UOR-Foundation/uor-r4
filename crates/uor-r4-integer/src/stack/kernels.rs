@@ -920,9 +920,9 @@ pub(crate) fn stack_l2_distance(query: &[i32], key: &[i32]) -> u64 {
 /// quaternion as `a`: its Q31 coordinates have few digits and often a zero.
 #[inline(never)]
 pub(crate) fn stack_hamilton(a: [i64; 4], b: [i64; 4]) -> [i128; 4] {
-    // An explicit loop, not `array::from_fn` or `map`: a closure there
-    // compiles to a `core::array` symbol of its own, outside the audited
-    // `stack_` names.
+    // An array literal and explicit loops, not `array::from_fn` or `map`: a
+    // closure there compiles to a `core::array` symbol of its own, outside
+    // the audited `stack_` names.
     let tables = [
         multiples_u128(u128::from(b[0].unsigned_abs())),
         multiples_u128(u128::from(b[1].unsigned_abs())),

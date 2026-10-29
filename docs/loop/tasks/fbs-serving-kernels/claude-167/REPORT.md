@@ -10,7 +10,8 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays `ready`. Done-when 2's 
 ## What did not work, first
 
 - **The gain did not stay inside the Hamilton product.** The ORDER aimed at `stack_hamilton`'s table builds, but `multiples_u128` and `multiples_u64` serve every multiplier-free product in serving. The core and the product are 1.26–1.29× faster, and each norm is 2× faster (37.5 → 18.8 µs over six layers), because its squares read the same tables. That is a measured effect, not one this unit set out to claim.
-- **The snap's scan is now the largest cost.** In the new profile (941 samples), `stack_snap_select` holds 400 (42%) and `stack_hamilton` 284 (30%). Nothing in this unit touches the scan.
+- **The snap's scan is now the largest cost.** In the new profile (956 samples on the thread), `stack_snap_select` holds 400 (42%) and `stack_hamilton` 284 (30%). Nothing in this unit touches the scan.
+- **The profile totals of claude-165 and claude-166 were sums of the rows `sample` lists**, which leaves out functions with fewer than 5 samples. The claims review of this unit caught it here: 941 listed, 956 on the thread. For claude-164's profile the thread holds 3,172 against the 3,158 claude-165 quoted, 0.4% more, so the shares those REPORTs gave stand to the precision given.
 - **Decode tok/s still varies between runs at nearly the same step**, by up to 2.5% here: claude-166's binary read 1,384 and 1,418. The step ratio (1.31–1.33×) is the steadier reading.
 
 ## What changed
@@ -44,9 +45,9 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays `ready`. Done-when 2's 
 | old 1 | 1,384 | 704,917 | 355,480 | 225,312 | 37,541 | yes |
 | new 1 | **1,861** | 537,229 | 278,333 | 179,166 | 18,750 | yes |
 | old 2 | 1,418 | 717,125 | 361,083 | 228,335 | 37,751 | yes |
-| new 2 | **1,829** | 540,416 | 279,916 | 180,165 | 18,791 | yes |
+| new 2 | **1,829** | 540,416 | 279,916 | 180,165 | 18,750 | yes |
 
-The norm column is `mlp.norm`, the feed-forward's. The recurrence's norm reads the same: 18,791 ns in new 2.
+The norm column is `mlp.norm`, the feed-forward's. The recurrence's norm reads nearly the same: 18,791 ns in new 2.
 
 - **The step:** 1.31–1.33× faster.
 - **The core:** 1.28–1.29×.
@@ -54,7 +55,7 @@ The norm column is `mlp.norm`, the feed-forward's. The recurrence's norm reads t
 - **Shares of the new step:** the core 51.8%, the product 33.3%, each norm 3.5%.
 - **Each block's parts** lie at 984–1,007 per mille of the block in the new runs.
 
-**Profile of the new binary** (`/usr/bin/sample <pid> 8 -mayDie` on a plain `fbs-toks` run; 941 top-of-stack samples):
+**Profile of the new binary** (`/usr/bin/sample <pid> 8 -mayDie` on a plain `fbs-toks` run; 956 samples on the thread, of which 941 sit in the functions `sample` lists, those with at least 5):
 
 | Function | Samples |
 |---|---|
