@@ -147,6 +147,110 @@ pub struct LongConfig {
     /// out when false.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub turn_memory_reply: bool,
+    /// Memory dropout (one-model-end-to-end protocol I-B, claude-207), in thousandths: each
+    /// training window is dropped with this chance ([`memory_dropped`]), and in a dropped window
+    /// the turn memory names no row, so the trunk also learns those windows without it. Training
+    /// only: scoring and serving use the memory at every row. 0 is off, and left out of
+    /// `config.json`.
+    #[serde(skip_serializing_if = "is_zero_u32")]
+    pub turn_memory_dropout: u32,
+    /// The SpiralCore/FBS transport arm (protocol I-C, claude-207): `OneAtomActive`, the trained
+    /// transport, by default; `IdentityTransport` or `FrozenQueries` for the transport controls.
+    /// Left out of `config.json` when the default.
+    #[serde(skip_serializing_if = "is_one_atom")]
+    pub fbs_arm: FbsArm,
+}
+
+fn is_zero_u32(n: &u32) -> bool {
+    *n == 0
+}
+
+fn is_one_atom(arm: &FbsArm) -> bool {
+    *arm == FbsArm::OneAtomActive
+}
+
+/// The most [`LongConfig::turn_memory_dropout`] can be: every window dropped.
+pub const MEMORY_DROPOUT_MAX: u32 = 1_000;
+
+/// Whether the turn memory is dropped from training window `b` of step `step` at `permille`
+/// thousandths (protocol I-B): one xorshift64* draw from its own stream, seeded by the run's
+/// seed and the window's place in the run, so the batch order is untouched. 0 drops none and
+/// [`MEMORY_DROPOUT_MAX`] drops all.
+pub fn memory_dropped(seed: u64, step: usize, b: usize, batch: usize, permille: u32) -> bool {
+    if permille == 0 {
+        return false;
+    }
+    if permille >= MEMORY_DROPOUT_MAX {
+        return true;
+    }
+    let index = (step as u64).wrapping_mul(batch as u64).wrapping_add(b as u64);
+    let mut state = seed
+        .wrapping_mul(0xD6E8_FEB8_6659_FD93)
+        .wrapping_add(index.wrapping_mul(0xA076_1D64_78BD_642F))
+        | 1;
+    state ^= state >> 12;
+    state ^= state << 25;
+    state ^= state >> 27;
+    state.wrapping_mul(0x2545_F491_4F6C_DD1D) % u64::from(MEMORY_DROPOUT_MAX) < u64::from(permille)
+}
+
+/// Whether the main optimizer updates the variable `name` under `arm`: never the decay rates,
+/// which have their own optimizer, and never the SpiralCore/FBS routing queries when the arm
+/// keeps them frozen at their seed (`FbsArm::trains_queries`; the registered sheet's runner keeps
+/// them out the same way).
+pub fn main_optimizer_updates(name: &str, arm: FbsArm) -> bool {
+    !name.ends_with("rec.decay") && (arm.trains_queries() || !name.ends_with(".spiralcore_fbs"))
+}
+
+/// The transport arm's command-line name, as `--fbs-arm` takes it.
+pub fn fbs_arm_named(name: &str) -> Option<FbsArm> {
+    match name {
+        "one-atom" => Some(FbsArm::OneAtomActive),
+        "identity" => Some(FbsArm::IdentityTransport),
+        "frozen" => Some(FbsArm::FrozenQueries),
+        _ => None,
+    }
+}
+
+/// Refuse to score a checkpoint under another arm than its run trained with, when the run's
+/// `config.json` is found beside it: at `checkpoint` itself (a run folder) or two levels up (a
+/// `models/step-N` folder). A checkpoint copied without its run's config is scored as asked.
+pub fn check_run_arm(checkpoint: &Path, arm: FbsArm) -> Result<()> {
+    // Absolute, so a relative `step-N` still finds the run two levels up.
+    let checkpoint = checkpoint
+        .canonicalize()
+        .unwrap_or_else(|_| checkpoint.to_path_buf());
+    let candidates = [
+        Some(checkpoint.join("config.json")),
+        checkpoint.parent().and_then(Path::parent).map(|run| run.join("config.json")),
+    ];
+    for path in candidates.into_iter().flatten() {
+        if !path.exists() {
+            continue;
+        }
+        // A config that is there but cannot be read is refused, never skipped.
+        let value: serde_json::Value = serde_json::from_slice(&fs::read(&path)?)
+            .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+        // A run's config has `steps`; a model's own `config.json` does not.
+        if value.get("steps").is_none() {
+            continue;
+        }
+        let trained = match value.get("fbs_arm") {
+            None => FbsArm::OneAtomActive,
+            Some(v) => serde_json::from_value(v.clone())
+                .map_err(|e| invalid(format!("{}: fbs_arm: {e}", path.display())))?,
+        };
+        if trained != arm {
+            return Err(invalid(format!(
+                "{} trained with {}, not {}; pass --fbs-arm to match",
+                path.display(),
+                trained.name(),
+                arm.name()
+            )));
+        }
+        return Ok(());
+    }
+    Ok(())
 }
 
 /// The stored share the reply table keeps its keys at: the `--reply-bound` probe's choice
@@ -415,6 +519,9 @@ fn start_memory(
         }
         if config.turn_memory_reply {
             return Err(invalid("--turn-memory-reply needs --turn-memory K"));
+        }
+        if config.turn_memory_dropout > 0 {
+            return Err(invalid("--turn-memory-dropout needs --turn-memory K"));
         }
         return Ok((None, Vec::new(), Vec::new()));
     }
@@ -2254,10 +2361,12 @@ pub fn decode_speed(
     nearest: bool,
     tokens: usize,
     seed: u64,
+    arm: FbsArm,
     device: &Device,
 ) -> Result<Vec<DecodeSpeed>> {
+    check_run_arm(checkpoint, arm)?;
     let (dev_windows, _) = load_dev(data_root)?;
-    arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
+    arms::set_fbs_arm(Some(arm));
     crate::geometric_stack::set_retention_rates(retain_rates);
     crate::geometric_stack::set_folded_scores(fold_scores);
     crate::geometric_stack::set_reflected_floor(reflect_floor);
@@ -2304,10 +2413,12 @@ pub fn inspect_run(
     fold_scores: bool,
     reflect_floor: bool,
     seed: u64,
+    arm: FbsArm,
     device: &Device,
 ) -> Result<Vec<Inspection>> {
+    check_run_arm(run, arm)?;
     let (dev_windows, dev_mask) = load_dev(data_root)?;
-    arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
+    arms::set_fbs_arm(Some(arm));
     crate::geometric_stack::set_retention_rates(retain_rates);
     crate::geometric_stack::set_folded_scores(fold_scores);
     crate::geometric_stack::set_reflected_floor(reflect_floor);
@@ -2555,8 +2666,10 @@ pub fn score_rows(
     fold_scores: bool,
     reflect_floor: bool,
     seed: u64,
+    arm: FbsArm,
     device: &Device,
 ) -> Result<Vec<ScoredFile>> {
+    check_run_arm(checkpoint, arm)?;
     let step: usize = checkpoint
         .file_name()
         .and_then(|n| n.to_str())
@@ -2573,7 +2686,7 @@ pub fn score_rows(
         splits.push(("fresh-v2", windows, mask));
     }
     fs::create_dir_all(out)?;
-    arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
+    arms::set_fbs_arm(Some(arm));
     crate::geometric_stack::set_retention_rates(retain_rates);
     crate::geometric_stack::set_folded_scores(fold_scores);
     crate::geometric_stack::set_reflected_floor(reflect_floor);
@@ -3813,13 +3926,13 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         dev_windows.len()
     );
 
-    arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
+    arms::set_fbs_arm(Some(config.fbs_arm));
     crate::geometric_stack::set_retention_rates(config.retain_rates);
     crate::geometric_stack::set_folded_scores(config.fold_scores);
     crate::geometric_stack::set_reflected_floor(config.reflect_floor);
     crate::geometric_stack::set_input_table_fixed(config.fix_input_table);
     let _guard = ArmGuard;
-    let model = build_fbs_model_at(FbsArm::OneAtomActive, config.seed, config.width, device)?;
+    let model = build_fbs_model_at(config.fbs_arm, config.seed, config.width, device)?;
     // The Flock read, when on: its own parameters and optimizer, applied by `points`.
     let flock = if config.flock_read > 0 {
         let read = crate::flock_read::FlockRead::new(config.flock_read, config.width, device)?;
@@ -4035,11 +4148,16 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         }
         let picked = &order[cursor..cursor + config.batch];
         let windows: Vec<&CausalWindow> = picked.iter().map(|&i| &usable[i]).collect();
+        // A window the memory is dropped from (protocol I-B) names no memory row below.
+        let kept = |b: usize| {
+            !memory_dropped(config.seed, step, b, config.batch, config.turn_memory_dropout)
+        };
         // The batch's opening rows, which the turn memory moves; none when it is off.
         crate::flock_read_memory::set_memory_rows(memory.as_ref().map(|_| {
             picked
                 .iter()
                 .enumerate()
+                .filter(|&(b, _)| kept(b))
                 .flat_map(|(b, &i)| {
                     train_openings[i]
                         .iter()
@@ -4053,6 +4171,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             picked
                 .iter()
                 .enumerate()
+                .filter(|&(b, _)| kept(b))
                 .flat_map(|(b, &i)| {
                     train_replies[i]
                         .iter()
@@ -4107,7 +4226,9 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             step as f64 / (config.steps - 1) as f64
         };
         let lr = config.lr + (config.lr_end - config.lr) * progress;
-        opt_main.update_filtered(&model, &grads, lr, |name| !name.ends_with("rec.decay"))?;
+        opt_main.update_filtered(&model, &grads, lr, |name| {
+            main_optimizer_updates(name, config.fbs_arm)
+        })?;
         stage_clock::mark("optimizer.main");
         if let Some((read, opt)) = flock.as_mut() {
             opt.step(read, &grads, lr)?;
@@ -4420,6 +4541,8 @@ mod tests {
             turn_memory: 0,
             turn_memory_empty: false,
             turn_memory_reply: false,
+            turn_memory_dropout: 0,
+            fbs_arm: FbsArm::OneAtomActive,
         }
     }
 
@@ -5439,5 +5562,100 @@ mod tests {
         };
         assert_eq!(reference_reply(&window, 10), vec![31, 41, 51]);
         assert_eq!(reference_reply(&window, 2), vec![31, 41]);
+    }
+
+    /// claude-207 (protocol I-B): no window is dropped at 0, every window at 1,000, and about
+    /// half at 500; the draw is a pure function of the seed and the window's place, so it never
+    /// touches the batch order, and seeds differ.
+    #[test]
+    fn memory_dropout_drops_the_share_it_is_given() {
+        let count = |seed: u64, permille: u32| {
+            (0..100)
+                .flat_map(|step| (0..16).map(move |b| (step, b)))
+                .filter(|&(step, b)| memory_dropped(seed, step, b, 16, permille))
+                .count()
+        };
+        assert_eq!(count(1, 0), 0);
+        assert_eq!(count(1, MEMORY_DROPOUT_MAX), 1_600);
+        let half = count(1, 500);
+        // 1,600 windows at p = 0.5: σ = 20, so 4σ either side.
+        assert!((720..=880).contains(&half), "{half}");
+        assert_eq!(count(1, 500), half, "the same draw every time");
+        assert_ne!(
+            (0..64).map(|b| memory_dropped(1, 3, b, 64, 500)).collect::<Vec<_>>(),
+            (0..64).map(|b| memory_dropped(2, 3, b, 64, 500)).collect::<Vec<_>>(),
+            "another seed draws another pattern"
+        );
+        let low = count(1, 100);
+        assert!((100..=220).contains(&low), "{low}");
+    }
+
+    /// claude-207 (protocol I-C): the frozen arm keeps the routing queries out of the main
+    /// optimizer, the other arms train them, and no arm trains the decay rates there.
+    #[test]
+    fn only_the_frozen_arm_keeps_the_routing_queries_out_of_the_optimizer() {
+        let query = "layers.0.attn.q.spiralcore_fbs";
+        for arm in [FbsArm::OneAtomActive, FbsArm::IdentityTransport] {
+            assert!(main_optimizer_updates(query, arm), "{arm:?}");
+            assert!(main_optimizer_updates("embedding.weight", arm));
+            assert!(!main_optimizer_updates("layers.0.rec.decay", arm));
+        }
+        assert!(!main_optimizer_updates(query, FbsArm::FrozenQueries));
+        assert!(main_optimizer_updates("embedding.weight", FbsArm::FrozenQueries));
+        assert!(!main_optimizer_updates("layers.0.rec.decay", FbsArm::FrozenQueries));
+    }
+
+    /// claude-207: `--fbs-arm` takes the three protocol arms by name, and nothing else.
+    #[test]
+    fn the_transport_arm_is_named_on_the_command_line() {
+        assert_eq!(fbs_arm_named("one-atom"), Some(FbsArm::OneAtomActive));
+        assert_eq!(fbs_arm_named("identity"), Some(FbsArm::IdentityTransport));
+        assert_eq!(fbs_arm_named("frozen"), Some(FbsArm::FrozenQueries));
+        assert_eq!(fbs_arm_named("two-atom"), None);
+        assert_eq!(fbs_arm_named("Identity"), None);
+    }
+
+    /// claude-207: a config at the defaults writes neither new key, so a run without them writes
+    /// the same `config.json` as before; set, both are written.
+    #[test]
+    fn a_config_writes_dropout_and_arm_only_when_set() {
+        let json = String::from_utf8(serde_json::to_vec_pretty(&config(0, None)).unwrap()).unwrap();
+        assert!(!json.contains("turn_memory_dropout"), "{json}");
+        assert!(!json.contains("fbs_arm"), "{json}");
+        let mut set = config(0, None);
+        set.turn_memory_dropout = 500;
+        set.fbs_arm = FbsArm::FrozenQueries;
+        let json = serde_json::to_string(&set).unwrap();
+        assert!(json.contains("\"turn_memory_dropout\":500"), "{json}");
+        assert!(json.contains("\"fbs_arm\":\"FrozenQueries\""), "{json}");
+    }
+
+    /// claude-207: scoring refuses an arm other than the run's, read from the run's
+    /// `config.json` beside a run folder or two levels above a `models/step-N` folder; a model's
+    /// own `config.json` (no `steps`) and a missing run config are no refusal.
+    #[test]
+    fn scoring_refuses_another_arm_than_the_runs() {
+        let dir = std::env::temp_dir().join(format!("claude-207-arm-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let step = dir.join("run").join("models").join("step-000256");
+        std::fs::create_dir_all(&step).unwrap();
+        std::fs::write(step.join("config.json"), br#"{"width":256}"#).unwrap();
+        let run = dir.join("run");
+        // No run config yet: scored as asked.
+        assert!(check_run_arm(&step, FbsArm::IdentityTransport).is_ok());
+        std::fs::write(run.join("config.json"), br#"{"steps":256,"fbs_arm":"IdentityTransport"}"#)
+            .unwrap();
+        assert!(check_run_arm(&step, FbsArm::IdentityTransport).is_ok());
+        assert!(check_run_arm(&run, FbsArm::IdentityTransport).is_ok());
+        assert!(check_run_arm(&step, FbsArm::OneAtomActive).is_err());
+        assert!(check_run_arm(&run, FbsArm::FrozenQueries).is_err());
+        // A run config without the key trained the default arm.
+        std::fs::write(run.join("config.json"), br#"{"steps":256}"#).unwrap();
+        assert!(check_run_arm(&step, FbsArm::OneAtomActive).is_ok());
+        assert!(check_run_arm(&step, FbsArm::FrozenQueries).is_err());
+        // A run config cut short is refused, not skipped.
+        std::fs::write(run.join("config.json"), br#"{"steps":256,"fbs_arm":"Ident"#).unwrap();
+        assert!(check_run_arm(&step, FbsArm::OneAtomActive).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
