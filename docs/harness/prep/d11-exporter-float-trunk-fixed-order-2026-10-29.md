@@ -57,3 +57,36 @@ Every arm runs the command claude-131, kimi-46 and claude-140 used, with the def
 - **Cost:** one RTX 5090 on Vast, about 7 minutes per arm (claude-140), plus the build and fetch. That is about 1 hour at about $0.6/h: **about $1**.
 - **Scratch memory:** `rows × outputs × (4·width + 8·lanes)` bytes per projection backward. At the sheet's shapes (batch 4 × context 192 = 768 rows; at most 96 output blocks; width ≤ 64; lanes 8, or 16 with width 128 for the two-path arm) that is at most about 28 MB per call, so no tiling is needed. The new binary's timing is read from `train.json` beside B_base's.
 - **Stop rule:** one pod, at most 2 hours. Save everything off the pod before `down`, the saved model files included, to `results/claude/d11-fbs-fixed-order-2026-10-29/`, with `SHA256SUMS` read back. If I-Kernel fails, stop the pod.
+
+Sections 6 to 8 were added after the run, when CI's sheet-shape rule asked for these blocks by name. They restate what §2 and §4 registered before the run, and record the FIT and the pre-run review. They make no new decision.
+
+## 6. Base artifact and data split
+
+- **Base artifact:** none is loaded. Each arm trains from its seed's initialisation, as claude-131, kimi-46 and claude-140 did. The Stage 4b receipt `d11-gap.json` (`88b6a5f9…`) supplies the export settings.
+- **Data split:**
+  - training on `mw-balp/train` (`tokens.u16` `3dee858f…`, `response_mask.u8` `b5e7352d…`);
+  - evaluation on the 14,287-row `ft/dev` panel (`0919e90f…`, `a838bb1a…`), all from `w2-inputs/2026-10-25/driver-data/`.
+  The pins are claude-140's §5.
+
+## 7. Steps and minimum test power
+
+- **Steps:** 1,024 dual-forward training steps per seed, on seeds 1 and 2, evaluated at steps 0, 256, 512 and 1,024.
+- **Minimum test power:** the test is deterministic. One differing byte in a saved file, or one differing count or loss, decides a comparison.
+  - claude-140's five runs of one binary differed from step 256 on, so the old nondeterminism shows well within 1,024 steps.
+  - O1 against O2 checks that the same holds on this pod.
+  - Two seeds and four points give eight chances per comparison.
+
+## 8. Non-author TEST FITNESS review
+
+**FIT (at `18c4d1b39`), fresh non-author reviewer, posted on #2820.** Its findings are folded into the sheet above:
+- kimi-46's archived binary differs from B_fixed by nine more training-path commits, so the control is B_base, built from the same source with only the fix reversed;
+- a row's "differs" means any file sha256 or reading;
+- step 0 is compared within the run;
+- I-Kernel names what it covers and what it does not;
+- the negative gate counts only an assertion failure;
+- the two-path memory estimate;
+- the model files are sealed.
+
+**D67 pre-run review (at `470b898ed`): GO**, posted on #2820.
+
+TEST FITNESS: FIT

@@ -14,7 +14,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet: [d11-exporter-float-trunk-
 - **No test compares the base backward's GPU output with its CPU reference.** Its raw output goes through the secant transform before autograd sees it. The kernel test covers determinism and the arm tests relate the arms to the base path. Correctness otherwise rests on the code review, which mapped every scratch slot to the old `atomicAdd` target, and on B_fixed learning like B_base.
 - **`nvcc` keeps fused multiply-add on** (`build.rs` sets only `-ftz=false -prec-div=true -prec-sqrt=true`). So GPU and CPU differ in the last bits, and the bar is equal bits across GPU runs, not equality with the CPU.
 - **The device was recorded once per pod, not before each arm** as the sheet's I-Device says; `env` was recorded per arm. On one pod this is enough.
-- **The pod cost $0.975/h, not the sheet's $0.6.** About 46 minutes came to about $0.75.
+- **The pod cost $0.975/h, not the sheet's $0.6.** About 46 minutes came to about $0.75. The job logs cover 05:45 to 06:21Z, and the pod was created at about 05:40Z and deleted at 06:26Z (the local `uor-pod` logs).
 - **`uor-pod down` could not verify the archive over SSH,** as for claude-140. The 145 files were read back from the store first, then `down --confirm-archived` deleted the pod.
 
 ## What changed
@@ -48,7 +48,7 @@ One RTX 5090, pod `vast-58203454`: driver 595.71.05, CUDA 12.8 (V12.8.93). Code 
 | 1 | 882 | 1,475 | 1,627 |
 | 2 | 2,848 | 1,313 | 1,384 |
 
-B_fixed lies inside B_base's spread, and inside claude-140's 745 to 3,845. In every arm, float top-1 peaks at step 512 (seed 1: 3,120 to 3,509) and then falls by step 1,024.
+B_fixed lies inside B_base's spread on seed 1 (882 to 1,627) and 71 below it on seed 2 (1,313 against 1,384 to 2,848). On both seeds it lies inside claude-140's 745 to 3,845. In seven of the eight arm-seed runs, float top-1 peaks at step 512 (seed 1: 3,120 to 3,509) and then falls by step 1,024. O1's seed 2 rises to step 1,024 (1,283, 2,131, 2,848).
 
 ## Checks run at the head
 
@@ -63,7 +63,7 @@ B_fixed lies inside B_base's spread, and inside claude-140's 745 to 3,845. In ev
 ## Still open
 
 - **R6's second half (next unit):** the export gap re-measured with repeats. Because training is now repeatable, a single pair of runs of one recipe is comparable, so the gap can get a verdict against the two-seed band.
-- **Why float top-1 falls between steps 512 and 1,024** in every arm. This is a training-schedule question for the export-gap unit, or for whichever unit owns the recipe.
+- **Why float top-1 falls between steps 512 and 1,024 in seven of eight arm-seed runs** in every arm. This is a training-schedule question for the export-gap unit, or for whichever unit owns the recipe.
 - **A GPU-to-CPU parity test of the base backward,** which would need the raw kernel output before the secant transform.
 - **The mechanism page** `docs/mechanisms/lut-serving.md` is out of this item's scope (claude-121).
 
