@@ -429,6 +429,7 @@ fn stack_disassembly_allows_scalar_integer_mul_div() {
         "100001000: 48 0f af c1 \timulq\t%rcx, %rax",
         "100001000: 48 f7 f1 \tdivq\t%rcx",
         "100001000: c4 e2 e3 f6 c1 \tmulx\t%rcx, %rbx, %rax",
+        "100001000: c4 e2 e3 f6 c1 \tmulxq\t%rcx, %rbx, %rax",
         "100001000: c4 62 63 f6 c1 \tmulxl\t%ecx, %ebx, %eax",
         // Calls to the compiler-rt integer helpers (Mach-O adds a leading `_`).
         "100001000: 94000400 \tbl\t0x100002000 <__multi3>",
