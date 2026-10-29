@@ -10,7 +10,7 @@ Most chat AIs are built from a few standard parts: a way to look back at earlier
 
 | Status | Meaning | Count |
 |---|---|---|
-| **ACTIVE** | On the current model path, `crates/uor-r4-discrete`. For D11 serving, the end-of-pipeline contract once a lawful trained model has been exported through it (D72). | 10 |
+| **ACTIVE** | On the current model path, `crates/uor-r4-discrete`. | 10 |
 | **READY** | Built and tested, but not yet trained into a model. | 7 |
 | **PARKED** | The forms tried so far failed or broke a project rule. The mechanism stays open, and its page lists what would reopen it. | 11 |
 
@@ -92,7 +92,7 @@ Five mechanisms have no recorded parent or child, so they are not drawn: admissi
 | [Admission](admission.md) | Narrows 4,096 words to those in a few opened "drawers". A word in an unopened drawer can never be chosen. | softmax output head | The first measured limit, seen on rung 0 (the cause of weak ranking after K16 is open): one run fell from 5,680 to 1,920 admitted rows ([attention state](../labs/attention-state-2026-10-18/README.md)). | Admission-preserving A8 rerun |
 | [Rank-margin hinge](rank-margin.md) | The loss only asks whether the right answer beats its strongest rivals by a fixed gap. | cross-entropy loss | Integer hinge is the discrete writer's loss. One variant (K16-R) collapsed cell occupancy ([K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md)). | Occupancy-regularised version |
 | [Tokenizer](tokenizer.md) | Cuts text into 4,096 numbered pieces and back. | tokenizer | Every corpus, test and artifact is pinned to it. A 16,384-piece trainer exists as tooling only ([record](../labs/rust-bpe-trainer-2026-10-19/README.md)). | Matched 4,096 versus 16,384 comparison |
-| [D11 integer serving](lut-serving.md) | Runs a finished model with whole numbers, adds, shifts and tables. An audit proves no float instruction; since D80 and D81 it allows the integer multiply and divide. | arithmetic (matmul) | **ACTIVE since 29 Oct, by owner ruling D72's own condition** ("READY until a lawful trained model is exported through it").<br><br>A D37 float-trained SpiralCore/FBS trunk was exported through it (`lut-stack/5`) and scored inside the export-gap bar on both seeds, at DEV scope (claude-182).<br><br>Serving audits are green (44 native symbol ranges, 7 of 7 WebAssembly). They count the allowed integer multiplies and divides since claude-175, which the kernels use since claude-177.<br><br>It is the end-of-pipeline contract, the sense D72 gave its ACTIVE, not the discrete path. | Export a discrete-path model and measure its gap; a confirming run on new dual-c131 seeds |
+| [D11 integer serving](lut-serving.md) | Runs a finished model with whole numbers, adds, shifts and tables. An audit proves no float instruction; since D80 and D81 it allows the integer multiply and divide. | arithmetic (matmul) | **ACTIVE by owner ruling D72's own condition** ("READY until a lawful trained model is exported through it").<br><br>The condition was first met on the discrete path, on 26 Oct. antigravity-96 exported the four Stage T checkpoints through `lut-discrete/1` with an export gap of 0 (#2839).<br><br>A D37 float-trained FBS trunk followed on 29 Oct, inside the export-gap bar on both seeds at DEV scope (claude-182, `lut-stack/5`).<br><br>Serving audits are green (44 native symbol ranges, 7 of 7 WebAssembly with bulk memory off). They count the allowed integer multiplies and divides since claude-175, which the kernels use since claude-177. | A confirming run on new dual-c131 seeds, trained with the fixed-order backward |
 
 ## READY: built and tested, not yet trained in (7)
 
@@ -153,7 +153,10 @@ The two gaps matter. The only position-related result is about recurrent state t
 
 Statuses started as the audit dossiers set them (`docs/labs/repo-renormalization-2026-10-19/audit/mechanisms/`). The owner ruled on the two the audit questioned, and on two PARKED rows, on 24 Oct 2026:
 
-- **D11 integer serving** moved from ACTIVE to READY (D72), because no lawful model has ever been exported through it.
+- **D11 integer serving** moved from ACTIVE to READY (D72), because no lawful model had been exported through it. It is ACTIVE again by D72's own condition.
+  - antigravity-96 exported the Stage T discrete checkpoints through it on 26 Oct, with an export gap of 0.
+  - claude-182 exported a float-trained FBS trunk on 29 Oct.
+  - The status change was recorded on 29 Oct (claude-183).
 - **Hopf observation** was split in two (D72): its kept-fibre map is READY, because it is built and unit-tested and its language test never ran, and sector routing, the form that failed, stays PARKED.
 - **Spin-native weights** and **Ternary/XOR** moved from PARKED to READY (D74), with their caveats kept.
 
