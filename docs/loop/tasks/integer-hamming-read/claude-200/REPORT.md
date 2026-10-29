@@ -65,6 +65,22 @@ None: an export path and its checks.
   - The stub-nvcc check, at `8ef3ade05`, `CUDARC_CUDA_VERSION=12080 NVCC=<stub> UOR_NVCC_ARCH=compute_120 cargo check --offline --locked -p uor-r4-float-train --features cuda --bin fbs-snapshot --lib --tests`: it builds.
   - `uor-harness loop gates --full`, at `8ef3ade05` with this REPORT: green, 11 gates GREEN.
 
+## The review
+
+Fresh context, given the ORDER, the item and the diff.
+- **Round 1, at `2f4f91ae5`: REQUEST CHANGES.**
+  - (1) The float readouts left the read out. Fixed.
+  - (2) Non-positive margins passed the snapshot. Fixed.
+  - (3) `heads` comes from the margin's length. A nit, left: only a corrupt file can make it differ from the saved scalar.
+  - (4) The round-trip test proves the round trip, not layout parity. Named above.
+  - It checked the layouts by reading and found them matching: rotations `w` first, row-major per lane; weight rows `w_c` then `w_y`; copy heads first. It found the depths and the order of `fbs-snapshot` correct.
+- **Round 2, the delta at `f616dc723`: APPROVE WITH NITS.**
+  - The readout fix holds for all three modes, D11 included. The stream read applies after layer 2 and the readout read once. No other thread-local is missing, and the memory refusal is correct.
+  - Its nits, left open:
+    - the `set_hamming_reads` call has no test, since it needs the GPU. Step 5's parity is its check, and deleting the line would leave every unit test green;
+    - D11 mode does not round the read's own parameters. If the integer engine stores them at a fixed point, the D11 readout will not be bit-equal to the artifact. Flagged for step 5;
+    - refusing readouts beside a memory narrows what the binary accepts. No script or prep sheet calls `fbs-snapshot` with readouts (`git grep` over `scripts`, `docs/labs`, `docs/harness/prep` and `crates`).
+
 ## Skills used
 
 - None was invoked this unit.
