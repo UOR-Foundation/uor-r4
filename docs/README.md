@@ -16,7 +16,7 @@ that answers your question. The same pages build into a book site, whose table o
 flowchart LR
   S["Start here<br/>what, where, where next"] --> P["Products<br/>model, web, desktop"]
   S --> M["The model<br/>end to end"]
-  M --> MB["Mechanism board<br/>27 parts, one page each"]
+  M --> MB["Mechanism board<br/>28 parts, one page each"]
   MB --> G["Geometry<br/>the mathematics"]
   M --> R["Research<br/>findings, open questions,<br/>history, lines, notebooks"]
   R --> A["Archive<br/>every dated record"]
@@ -54,7 +54,7 @@ sources.*
 - **Start** (`start/`): six short pages for newcomers. Each opens in plain words and ends with sources.
 - **Products** (`products/`): the three things the project means to ship, and the release format.
 - **The model** (`model/`): the current model path, stage by stage, with what is built and what is missing.
-- **Mechanisms** (`mechanisms/`): the board and 27 mechanism pages, each with the same template: the idea, how it works, where it stands, and what would reopen it if PARKED.
+- **Mechanisms** (`mechanisms/`): the board and 28 mechanism pages, each with the same template: the idea, how it works, where it stands, and what would reopen it if PARKED.
 - **Geometry** (`geometry/`): the mathematics behind the mechanisms, illustrated.
 - **Research** (`research/`): how research is done now, findings, open questions, the history, 17 research-line pages and the notebooks.
 - **Rules** (`rules/`): the charter explained, where each old decision went, and the change log.
@@ -84,9 +84,11 @@ a failed run closes one configuration, never a mechanism ([charter](../CHARTER.m
 |---|---|---|
 | Milestones complete | 0 of 8 | [STATUS](../STATUS.md) |
 | Model that holds a conversation | None | [where we are](start/where-we-are.md) |
-| Mechanisms | 27: 10 ACTIVE, 4 READY, 13 PARKED | [mechanism board](mechanisms/README.md) |
+| Mechanisms | 28: 12 ACTIVE, 5 READY, 11 PARKED | [mechanism board](mechanisms/README.md) |
 | Research lines with their own page | 17 | [research lines](research/lines/README.md) |
 | Records in the archive catalog | 1,173 | [archive catalog](../archive/CATALOG.md) |
+
+**29 Oct 2026.** Pre-alpha, 0 of 8 milestones complete. Route plus exact memory (claude-161) names 598.7 / 598.3 of DEV's 1,226 reply openings at two seeds, but moves only the first word of a reply. `lut-stack/5` exports and serves the FBS trunk (claude-182). The order of work (carry the memory past the first word, serve the parts in integers, build the text path R7, then train, export and score one model) is in [PLAN.md](../PLAN.md).
 
 ## Go deeper
 

@@ -30,9 +30,13 @@ No, by design. The charter says the project is "not a transformer" (section 1), 
 
 No. Zero of the eight milestones are complete ([STATUS](../../STATUS.md)). What works is the parts: for example the integer substrate passes 25 of 25 admitted GPU construction controls (**measurement**, [K16 qualification](../labs/k16-rows-qualification-2026-10-18/README.md)), and the whole-number serving engine runs in a browser and contains no decimal instruction in 7 of 7 serving functions (**measurement**, [WASM record](../labs/wasm-serving-runtime-2026-10-18/README.md)). Passing a control is not a language result. No two replacements have been trained together into a model that beats the count tables ([open questions](../research/open-questions.md)).
 
+Since 27 Oct there is a second path, the float-trained FBS trunk, and as of 29 Oct it is exported and served exactly under `lut-stack/5` (claude-182). It is not a conversation: replies do not answer prompts. The two paths do not join yet ([pipeline map](../model/pipeline-map.md)).
+
 ### 4. How good is the best model so far?
 
 Not good. On 14,287 development rows, the best trained arm (K16-A) got its first guess right 65 and 463 times on its two seeds. A table of overall word counts gets 1,226, and a table that looks up the last word and returns its most common successor gets 6,300 (**measurement**, [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md), [count tables](../../archive/labs/host-diagnostics-2026-10-17/README.md)). The model has to beat both tables before the first milestone can close ([charter](../../CHARTER.md), section 4.8).
+
+On 29 Oct the FBS trunk's best fit reached DEV top-1 of 10,152 and 11,140 of 14,287 on two seeds (claude-152, 153). With exact turn memory (claude-161) it names 598.7 and 598.3 of the 1,226 reply openings, but only the first word of a reply: after it, replies are still templates. This is a development-panel result, not a milestone.
 
 ### 5. Why does it lose to a count table? Do you know the cause?
 
@@ -58,7 +62,7 @@ They are different jobs. Research compute (training, evaluation, qualification) 
 
 ### 10. Why can training use decimals when serving cannot?
 
-Decimals train faster, and only the shipped file has to be integer ([charter](../../CHARTER.md), section 3.7, from decision D37). Any float-trained candidate must report its **export gap**, the quality lost when it is snapped to whole numbers, and a gap above the noise band disqualifies it. The current discrete model avoids the question because it is integer from end to end. See [serving and export](../model/serving-and-export.md).
+Decimals train faster, and only the shipped file has to be integer ([charter](../../CHARTER.md), section 3.7, from decision D37). Any float-trained candidate must report its **export gap**, the quality lost when it is snapped to whole numbers, and a gap above the noise band disqualifies it. The current discrete model avoids the question because it is integer from end to end. For the float-trained FBS trunk the gap is inside the bar at DEV scope under the unsnapped contract `lut-stack/5` (claude-182). See [serving and export](../model/serving-and-export.md).
 
 ### 11. Why primes, zeta zeros, E8 and quaternions? Do they actually help?
 
@@ -72,7 +76,7 @@ A **pre-registration sheet** is a one-page plan written before a run: the bar, t
 
 ### 13. Can I run it?
 
-You can build it and run its checks, but you cannot chat with it, because no model trained under today's rules has been exported to the serving engine. From a clone, with the pinned Rust toolchain, the README's commands are `cargo check --locked -p uor-r4-discrete --lib` and `cargo test --locked -p uor-r4-discrete --lib`. These execute no model ([README](../../README.md)). Training needs CUDA GPUs rented through the project's tools and a personal release by the owner for each run ([training](../model/training.md)).
+You can build it and run its checks, but you cannot chat with it. A model has been exported and served (the FBS trunk, 29 Oct), but there is no typed chat yet, because R7, the text path, is not built. From a clone, with the pinned Rust toolchain, the README's commands are `cargo check --locked -p uor-r4-discrete --lib` and `cargo test --locked -p uor-r4-discrete --lib`. These execute no model ([README](../../README.md)). Training needs CUDA GPUs rented through the project's tools and a personal release by the owner for each run ([training](../model/training.md)).
 
 ### 14. Is there a web or desktop app?
 
@@ -84,7 +88,7 @@ Four 214 million parameter checkpoints are public, but they are historical: trai
 
 ### 16. How fast is it? How much does it cost to train?
 
-Tokens per second is the project's lead metric, and it has never been measured for the current model ([charter](../../CHARTER.md), section 1; [lut-serving](../mechanisms/lut-serving.md)). For cost, the audit quotes the K16 runs at "~1.2 h (~$2)", the chief architect's figure (section 7 of the [architect audit](../labs/course-correction-2026-10-18/audits/d37-reactivation-architect.md)), that is about 1.2 hours and $2 for all four K16 runs together. Spending is capped at 4 rented pods and $8 an hour across all labs ([charter](../../CHARTER.md), section 5.4). These are estimates, not invoices.
+Tokens per second is the project's lead metric, and it has never been measured for the current discrete model ([charter](../../CHARTER.md), section 1; [lut-serving](../mechanisms/lut-serving.md)). For the FBS trunk it has been measured: a served token on the M1 laptop went from 3,042 to 4,829 tok/s once the engine used the hardware integer multiply and divide, with replies byte-identical (claude-169, claude-177). For cost, the audit quotes the K16 runs at "~1.2 h (~$2)", the chief architect's figure (section 7 of the [architect audit](../labs/course-correction-2026-10-18/audits/d37-reactivation-architect.md)), that is about 1.2 hours and $2 for all four K16 runs together. Spending is capped at 4 rented pods and $8 an hour across all labs ([charter](../../CHARTER.md), section 5.4). These are estimates, not invoices.
 
 ## Contributing
 
@@ -94,11 +98,11 @@ Start with the one-page plan, [NOW.md](../integration/NOW.md), then [CONTRIBUTIN
 
 ### 18. What are the labs, and who decides?
 
-A **lab** is any contributor, human or AI, working under the charter. Labs so far include Claude, Codex and DeepSeek, with Kimi in the project-manager seat. The owner, Casey, decides the charter, the constraints, holds, spending, milestone bars and exceptions, and types every run release personally. The project manager sequences work, and labs choose tasks from `NOW.md`. Subagents review and test but never make critical decisions. See [the rules](../rules/README.md#who-decides-what).
+A **lab** is any contributor, human or AI, working under the charter. Four labs are registered: claude, antigravity, deepseek and kimi, with Kimi in the project-manager seat. Codex left the registry (claude-138). The owner, Casey, decides the charter, the constraints, holds, spending, milestone bars and exceptions, and types every run release personally. The project manager sequences work, and labs choose tasks from `NOW.md`. Subagents review and test but never make critical decisions. See [the rules](../rules/README.md#who-decides-what).
 
 ### 19. What do ACTIVE, READY and PARKED mean? Is PARKED dead?
 
-The three statuses describe how far a mechanism has got. **ACTIVE** is on the current model path, **READY** is built and tested but not yet trained in, and **PARKED** means the tested forms failed or broke a rule. PARKED is not dead: owner decision D22 says a negative closes one tested configuration, never a mechanism, and each PARKED page lists what would reopen it. Of 27 mechanisms, 10 are ACTIVE, 4 READY and 13 PARKED. See the [mechanism board](../mechanisms/README.md).
+The three statuses describe how far a mechanism has got. **ACTIVE** is on the current model path, **READY** is built and tested but not yet trained in, and **PARKED** means the tested forms failed or broke a rule. PARKED is not dead: owner decision D22 says a negative closes one tested configuration, never a mechanism, and each PARKED page lists what would reopen it. Of 28 mechanisms, 12 are ACTIVE, 5 READY and 11 PARKED. See the [mechanism board](../mechanisms/README.md).
 
 ## Records
 
