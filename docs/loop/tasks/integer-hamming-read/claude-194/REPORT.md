@@ -88,7 +88,7 @@ At `da0650313`, the code head. The later commits change only this folder and the
 - **The step verifier** (`m5_full_path_cost_controls`, in the full run): 4 of 4 pass.
 - **The GPU evaluator's host tests** (`docs/labs/d11-exporter-float-trunk/instrument`, `--target aarch64-apple-darwin`, `instrument-host.out`): 5 passed, 1 ignored (it needs a trained artifact).
 - **`cargo clippy -p uor-r4-integer --all-targets`** (`clippy-194.out`): none of its warnings is in `hamming.rs`, `session.rs` or the new tests.
-- **`uor-harness loop gates --full`:** 11 of 11 green, at `7b6e65ec4`. It runs no crate code, and is re-run at the PR head before review.
+- **`uor-harness loop gates --full`:** 11 of 11 green, at `7b6e65ec4` and again at `ffcaa1084`, after review round 1. `loop pr-check --local` passes at `ffcaa1084`.
 
 ## Skills used
 
