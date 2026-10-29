@@ -55,7 +55,7 @@ The M8 bar is "one versioned, checksum-pinned `UORLUT01` artifact" that meets th
 
 1. **The model file** with its SHA-256, plus the tokenizer it was trained with.
 2. **Release notes** that bind the code SHA, the file hash, the tokenizer, the training data and seed, every measured score with its panel, the export gap, and the known limits. The charter requires every artifact to bind its data, seed, configuration, parameters and format (section 3.12).
-3. **Binaries:** `uor-chat` for each platform and the WebAssembly bundle, each with a `.sha256`, and each re-passing the serving audit: no float instruction, and no vector or matrix multiply (since D80 and D81 the scalar integer multiply and divide are allowed). At last count it covered 44 native symbol ranges and 7 of 7 WebAssembly functions, both measured before that change ([project track](../integration/project-track.md), M4).
+3. **Binaries:** `uor-chat` for each platform and the WebAssembly bundle, each with a `.sha256`, and each re-passing its engine's serving audit. Every audit refuses float. The FBS stack's audits (`uor-r4-stack` and the WebAssembly serving surface) also refuse vector and matrix multiplies, and since D80 and D81 allow the scalar integer multiply and divide. The other engines' audits, `uor-chat`'s among them, keep the zero-multiply rule. At last count the audits covered 44 native symbol ranges and 7 of 7 WebAssembly functions ([project track](../integration/project-track.md), M4).
 4. **The Studio**, published to `/studio` on the documentation site ([charter](../../CHARTER.md), section 2).
 5. **Independent verification** on consumer hardware.
 

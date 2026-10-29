@@ -34,7 +34,8 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays open: done-when 1 is no
 - **D11's R2** reads "amended by D80 and D81" in `lut-serving.md`, `serving-and-export.md`, `language-model.md` and `glossary.md`.
 - **The audit's description** now says the FBS stack's audits allow scalar integer multiply and divide and still refuse float and vector or matrix multiplies (`lut-serving.md:9, 46`, `mechanisms/README.md:104`, `serving-and-export.md` §"The serving audit"). The last says its numbers were measured before that change.
 - **Geometry guide** (`docs/geometry/README.md:16, 93`): the multiplier-free table is now described as how today's kernels multiply, not as the rule.
-- **`gpu-and-cuda.md:62`, `pipeline-map.md:217, 338, 361` and `architecture.md:57`:** the rule as amended. Each says the kernels do not use the instructions yet.
+- **`gpu-and-cuda.md:62`, `pipeline-map.md:217, 338, 361` and `architecture.md:57`:** the rule as amended. `pipeline-map.md:217` and `architecture.md:57` also say today's kernels do not use the instructions yet.
+- **Where the allowance applies:** `releases-and-artifacts.md:58` and `desktop-client.md:109` say it covers only the FBS stack's audits. The other engines' audits, `uor-chat`'s among them, keep the zero-multiply rule.
 - **Summaries:** `README.md:85`, `CITATION.cff` (its keyword is now "integer-only inference", and the abstract no longer says "no multiplier"), `what-is-uor-r4.md:53`, `products/README.md:25`, `releases-and-artifacts.md:58` and `desktop-client.md:109`.
 - **`docs/integration/DECISIONS.md`:** D11's fate line gains "Amended by D80 and D81 (28 Oct 2026)". It was applied as [`d11-pointer.patch`](d11-pointer.patch) under the owner's permission quoted in the ORDER.
 
@@ -45,7 +46,7 @@ None: this unit changed docs only.
 ## Checks run at the head
 
 - `cargo xtask links`, `loop report --check`, `loop pr-check --local` and `loop gates --full`: in the review record.
-- A re-sweep of the 23 scope pages: every remaining "no multiply" line is in one of the lists above.
+- A re-sweep of the item's 23 doc pages (the ORDER's 19, plus four that hold only measurements): every remaining "no multiply" line is in one of the lists above.
 
 ## Skills used
 
