@@ -152,9 +152,11 @@ A reading names the change for the next unit. It is not a result about the snaps
 
 **The job and its summary program** are local files, shipped to the pod's `/workspace/abl-job/`.
 - **`summary.jq` is pinned** at `200425f24393c20f9c6d4f4d2bafb97808e38f61586c863cacd41e152012cf16`. The job checks it before use.
-- **`job.sh` is pinned as a template** at `360a174a938c30ea253a298dbce4b5cfc7586c7ea8d992ec670b62d9cf886ef1`. The launched copy differs only in its `SHA=` line, which takes the pushed head.
+- **`job.sh` is pinned as a template** at `f5c96ba23e723c3066f923256d7bd700916aa17eaf179bf021bb9983d8fc5c1e`. The launched copy differs only in its `SHA=` line, which takes the pushed head.
 - **The job copies both into the run folder,** so the seal holds the exact programs that produced the reading.
 - **The job refuses to start if its run folder is not empty,** so a retry cannot count a stale receipt.
+  - The refusal writes `/workspace/abl-refused`, outside the run folder.
+  - The watcher ends on that marker, or on `/workspace/abl/EXIT`, whichever appears first.
 
 1. `scripts/pod/uor-pod up --lab claude --session claude-180 --count 1 --gpu 5090 --hours 1.5 --ref <pushed head> --card <#2820>`.
 2. Build `spiralcore-fbs-sheet` (`-p uor-r4-float-train --features cuda`) with nvcc at the pushed head, and copy it out with its sha256.
