@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: true
 depends_on: [route-plus-memory]
 notebook: docs/research/notebook/m4-serving.md
-scope: [crates/uor-r4-integer/src/stack/memory.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-float-train/src/fbs_export.rs, crates/uor-r4-float-train/src/flock_read_memory.rs, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, docs/harness/prep/turn-memory-integer*, docs/loop/tasks/turn-memory-integer/**, docs/research/notebook/m4-serving.md, docs/roadmap/items/turn-memory-integer.md]
+scope: [crates/uor-r4-integer/src/stack/memory.rs, crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-float-train/src/bin/fbs-snapshot.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-float-train/src/fbs_export.rs, crates/uor-r4-float-train/src/flock_read_memory.rs, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, docs/harness/prep/turn-memory-integer*, docs/loop/tasks/turn-memory-integer/**, docs/research/notebook/m4-serving.md, docs/roadmap/items/turn-memory-integer.md]
 ---
 
 ## Why it matters
@@ -83,7 +83,7 @@ Read:
 1. the export of both tables, their weights and the key window;
 2. the session's role signal and keys, against the reference;
 3. the moves at the readout, with the audits;
-4. the parity, under a sheet;
+4. the parity, under a sheet. This comes after `integer-hamming-read`'s step 4 (the exporter carries `hamming_read.safetensors`): claude-194's checkpoints hold a Hamming read, and the export will refuse a read it does not carry, as planned in claude-197's ORDER for unit 1's code. Today it silently drops it;
 5. the cost.
 
 `integer-hamming-read` and `fbs-serving-kernels` also edit `session.rs`, and the float-side items edit `in_space_long.rs` and `train-in-space.rs`. This item runs when none of those is claimed.
