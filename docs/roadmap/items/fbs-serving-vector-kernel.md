@@ -16,7 +16,7 @@ scope: [crates/uor-r4-integer/src/stack/kernels.rs, crates/uor-r4-integer/src/st
 
 The owner, 28 Oct 2026, in claude's chat: "I don't care what we serve at long as it is cheap".
 
-[`fbs-serving-kernels`](fbs-serving-kernels.md) is done (claude-163 to claude-170). Exact structured kernels took a served token on the M1 from 270 to 3,042–3,044 tok/s on claude-126's export, with every reply byte-identical. That is about 5.2 ns per learnable value, against 57 ns before.
+[`fbs-serving-kernels`](fbs-serving-kernels.md) is done (claude-163 to claude-170). Exact structured kernels took a served token on the M1 from 270 to 3,042–3,044 tok/s on claude-126's export, with every reply byte-identical. That is about 5.2 ns per learnable value over a whole token (0.33 ms), against claude-158's 57 ns over the six layers alone (3.68 ms).
 
 Its decision review (claude-170) left two follow-ups that need a record of their own:
 - **a NEON kernel** the serving audit allows;
