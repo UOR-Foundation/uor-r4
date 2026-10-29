@@ -40,6 +40,15 @@ None: an item and its plan.
 - `roadmap render`: README updated.
 - `loop report --check` and `loop pr-check --local`: PASS at this REPORT's commit.
 
+## The review
+
+Fresh context, at `fd0ee6651`, given the ORDER and the diff: **APPROVE WITH NITS**. All 18 numbers it searched for match ASSESSMENT.md. It found no collision with an open ORDER; the only other open PR, #3323, touches the object store. Its findings were fixed at the next commit:
+1. **The cells had dropped the band.** A lead inside the band would have read as "ahead". The cells now say "beyond the band", and the mixed cell includes "inside the band".
+2. **Step 3's done-when was thinner than ASSESSMENT §6.3.** It now lists the strata, the arms, the scores and both verdict definitions. The transport and read-by-meaning arms moved to the training run's own list.
+3. **Step 2's pins** now include the binary's sha, the lease and the cost, and the shared pod with `integer-hamming-read`'s step 5.
+4. **`flock_read_memory.rs`** is added to the scope, for selecting the rows the memory names.
+5. **The four refreshed issue bodies** are confirmed. `gh issue view` shows #3385 and #3392 updated at 20:32Z, from the sync.
+
 ## Skills used
 
 - None was invoked this unit.
