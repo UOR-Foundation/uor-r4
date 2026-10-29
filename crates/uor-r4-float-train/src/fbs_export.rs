@@ -284,8 +284,8 @@ pub fn fbs_trunk_snapshot(model: &StackModel) -> Result<FbsTrunkSnapshot> {
         embed: values("embedding.weight")?,
         final_norm: values("final_norm.weight")?,
         layers,
-        // Reading `hamming_read.safetensors` into the snapshot is a later unit (claude-188); until
-        // then `check_checkpoint_reads` refuses a checkpoint with one (claude-198).
+        // Reading `hamming_read.safetensors` into the snapshot is `integer-hamming-read`'s step 4;
+        // until then `check_checkpoint_reads` refuses a checkpoint with one (claude-198).
         hamming: None,
         // The memory is not part of the `StackModel`: `fbs-snapshot` loads it from the checkpoint
         // directory and sets it with `fbs_memory_snapshot` (claude-198).
@@ -306,8 +306,17 @@ const CHECKPOINT_ACCOUNTED: [&str; 4] = [
 
 /// Refuse a checkpoint directory that holds a read the export does not carry, naming every one,
 /// so the export never serves the trunk without it (claude-198). The Hamming read's export is
-/// `integer-hamming-read`'s step 4.
+/// `integer-hamming-read`'s step 4. A reply table without its opening table is refused too:
+/// `TurnMemory::load` reads neither without the opening file. A macOS `._*.safetensors` copy
+/// artifact is refused like any unknown file, which is the safe direction.
 pub fn check_checkpoint_reads(directory: &Path) -> Result<()> {
+    if directory.join("turn_memory_reply.safetensors").exists()
+        && !directory.join("turn_memory.safetensors").exists()
+    {
+        return Err(invalid(
+            "the checkpoint holds turn_memory_reply.safetensors without turn_memory.safetensors, so the export would drop the reply table",
+        ));
+    }
     let mut refused = Vec::new();
     for entry in std::fs::read_dir(directory)? {
         let name = entry?.file_name().to_string_lossy().into_owned();
@@ -710,12 +719,15 @@ mod tests {
             "turn_memory_reply.safetensors",
             "config.json",
         ];
+        // The five reads `in_space_long` saves today, and a read no code writes yet: the check is
+        // an allow-list, so a read added later is refused too.
         let reads = [
             "flock_read.safetensors",
             "content_read.safetensors",
             "hamming_read.safetensors",
             "opening_read.safetensors",
             "prompt_register.safetensors",
+            "future_read.safetensors",
         ];
         for read in reads {
             let scratch = Scratch::new("claude-198-reads");
@@ -730,19 +742,35 @@ mod tests {
                 .to_string();
             assert!(message.contains(read), "{message}");
         }
-        // Two reads at once are both named.
+        // Three reads at once, written in reverse order, are all named in name order.
         let scratch = Scratch::new("claude-198-reads");
         std::fs::create_dir_all(&scratch.0)?;
-        for read in ["opening_read.safetensors", "hamming_read.safetensors"] {
+        for read in [
+            "prompt_register.safetensors",
+            "opening_read.safetensors",
+            "flock_read.safetensors",
+        ] {
             std::fs::write(scratch.0.join(read), b"")?;
         }
         let message = check_checkpoint_reads(&scratch.0)
-            .expect_err("two reads")
+            .expect_err("three reads")
             .to_string();
         assert!(
-            message.contains("hamming_read.safetensors, opening_read.safetensors"),
+            message.contains(
+                "flock_read.safetensors, opening_read.safetensors, prompt_register.safetensors"
+            ),
             "{message}"
         );
+        // A reply table without its opening table is refused, not dropped.
+        let scratch = Scratch::new("claude-198-reads");
+        std::fs::create_dir_all(&scratch.0)?;
+        for file in ["model.safetensors", "turn_memory_reply.safetensors"] {
+            std::fs::write(scratch.0.join(file), b"")?;
+        }
+        let message = check_checkpoint_reads(&scratch.0)
+            .expect_err("a reply table alone")
+            .to_string();
+        assert!(message.contains("without turn_memory.safetensors"), "{message}");
         Ok(())
     }
 

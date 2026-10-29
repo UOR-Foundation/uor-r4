@@ -53,10 +53,11 @@ fn main() -> Result<()> {
             std::process::exit(2);
         }
     };
-    let device = Device::new_cuda(0)?;
     let dir = Path::new(model_dir);
-    // Every read the checkpoint holds is carried, or the export is refused (claude-198).
+    // Every read the checkpoint holds is carried, or the export is refused (claude-198), before
+    // the GPU is opened.
     check_checkpoint_reads(dir)?;
+    let device = Device::new_cuda(0)?;
     let model = StackModel::load(dir, &device)?;
     let mut snapshot = fbs_trunk_snapshot(&model)?;
     snapshot.memory = TurnMemory::load(dir, &device)?
