@@ -3611,7 +3611,8 @@ fn read_free_fbs_exports_are_unchanged_by_the_hamming_format() {
 
 /// claude-188: a trunk with Hamming reads exports as `uor-r4.lut-stack/6`, and reads back with
 /// every parameter at its declared exponent, a zero quaternion included. The integer session
-/// refuses it, since it does not serve the read yet.
+/// refuses it, since its type-head weights are not zero and the type heads are not served yet
+/// (claude-194).
 #[test]
 fn hamming_reads_round_trip_in_lut_stack_6() {
     use super::synthetic::synthetic_hamming;
@@ -3646,10 +3647,10 @@ fn hamming_reads_round_trip_in_lut_stack_6() {
             assert_eq!(got.key_rotation[..4], [0, 0, 0, 0], "lane 0 is the zero quaternion");
         }
         let refused = match IntegerStackModel::parse(&bytes) {
-            Ok(_) => panic!("the session does not serve the read"),
+            Ok(_) => panic!("the session does not serve the type heads"),
             Err(e) => e,
         };
-        assert!(matches!(refused, StackError::Shape(m) if m.contains("Hamming")));
+        assert!(matches!(refused, StackError::Shape(m) if m == TYPE_HEADS_REFUSED));
         // The same trunk without the read is served, and reads back no read.
         snap.hamming = None;
         let plain = super::export_fbs_trunk_uorlut01_with(&snap, snaps).expect("export");
@@ -4001,4 +4002,262 @@ fn copy_weights_divide_by_at_least_one_bit() {
     assert_eq!(super::copy_weight_q31(4 << 16, 1), 3 << 29, "(4 − 1) / 4");
     assert_eq!(super::copy_weight_q31(4 << 16, 4), 0);
     assert_eq!(super::copy_weight_q31(4 << 16, 9), 0);
+}
+
+/// The session's refusal of a read whose type heads it would drop (claude-194).
+const TYPE_HEADS_REFUSED: &str =
+    "a Hamming read's type heads are not served yet: its type-head weights (weight row 1) must be zero";
+
+/// claude-194's served-read trunk: claude-127's non-square shape (width 64, 3 layers, 4 heads of
+/// 16 coordinates) over 40 positions, and `synthetic_hamming`'s reads at `depths` (a subset of
+/// `[1, 3]`), each with its type-head weights zero and its copy weights times `copy`. Returns the
+/// snapshot, the trunk exported without the reads, and with them.
+fn served_read_trunk(depths: &[usize], copy: f32) -> (super::FbsTrunkSnapshot, Vec<u8>, Vec<u8>) {
+    let shape = super::synthetic::FbsSynth {
+        context: 40,
+        ..super::synthetic::FBS_SYNTH_NON_SQUARE
+    };
+    let mut snap = super::synthetic::synthetic_fbs_trunk_with(20261029, shape);
+    let (width, layers) = (snap.width, snap.layers.len());
+    let plain = super::export_fbs_trunk_uorlut01(&snap).expect("export");
+    let mut read = super::synthetic::synthetic_hamming(width, layers, 4, 194);
+    let all = std::mem::take(&mut read.depths);
+    read.reads = all
+        .iter()
+        .zip(std::mem::take(&mut read.reads))
+        .filter(|(depth, _)| depths.contains(depth))
+        .map(|(_, r)| r)
+        .collect();
+    read.depths = depths.to_vec();
+    for r in &mut read.reads {
+        let (copy_weight, type_weight) = r.weight.split_at_mut(width);
+        copy_weight.iter_mut().for_each(|w| *w *= copy);
+        type_weight.fill(0.0);
+    }
+    snap.hamming = Some(read);
+    let with_read = super::export_fbs_trunk_uorlut01(&snap).expect("export with the reads");
+    (snap, plain, with_read)
+}
+
+/// 40 tokens with exact repeats: an 11-token cycle, six new tokens, then the cycle again.
+fn repeating_tokens() -> Vec<u32> {
+    (0..40u32)
+        .map(|i| if (14..20).contains(&i) { 100 + i } else { (i * 7 + 3) % 11 })
+        .collect()
+}
+
+/// `v / 2^s` rounded half away from zero: the tests' own form of the float `round()`.
+fn round_half_away(v: i128, s: u32) -> i128 {
+    let r = (v.abs() + (1i128 << (s - 1))) >> s;
+    if v < 0 {
+        -r
+    } else {
+        r
+    }
+}
+
+/// The served-read model, the read-free one, the shared Q12 table, and each read with its copy
+/// heads, in depth order, for the hook tests.
+#[allow(clippy::type_complexity)]
+fn served_read_parts(
+    depths: &[usize],
+    copy: f32,
+) -> (IntegerStackModel, IntegerStackModel, Vec<i16>, Vec<(super::HammingReadImage, super::CopyHeads)>) {
+    let (_, plain, with_read) = served_read_trunk(depths, copy);
+    let read = IntegerStackModel::parse(&with_read).expect("a read with no type weights is served");
+    let free = IntegerStackModel::parse(&plain).expect("parse");
+    let table = free.fbs_image().expect("an FBS model").writer_table.to_vec();
+    let image = super::read_hamming_uorlut01(&with_read).expect("parse").expect("the reads");
+    let (vocab, width) = (free.shape().vocab, free.shape().width);
+    let reads = image
+        .reads
+        .iter()
+        .map(|r| (r.clone(), super::CopyHeads::new(&image.record, r, &table, vocab, width)))
+        .collect();
+    (read, free, table, reads)
+}
+
+/// claude-194: a `/6` read whose copy weights are 0 serves every step bit for bit as the same
+/// trunk exported without it, although its copy heads do find candidates. The zero-copy view
+/// refuses the read rather than drop it.
+#[test]
+fn a_read_at_weight_zero_serves_as_the_read_free_trunk() {
+    let (read, free, table, reads) = served_read_parts(&[1, 3], 0.0);
+    assert!(read.fbs_image().is_none(), "the view does not carry the read");
+    let copy_heads = &reads[0].1;
+    assert!(copy_heads.choose(0, &[]).is_empty() && copy_heads.mean(&[], &table).is_none(), "no tokens, no read");
+    let tokens = repeating_tokens();
+    let (mut with, mut without) = (read.session(), free.session());
+    let mut found = [0usize; 2];
+    for t in 0..tokens.len() {
+        let want = without.step_native(tokens[t]).expect("step");
+        assert_eq!(with.step_native(tokens[t]).expect("step"), want, "position {t}");
+        for (count, (_, heads)) in found.iter_mut().zip(&reads) {
+            *count += usize::from(heads.mean(&tokens[..=t], &table).is_some());
+        }
+    }
+    assert!(found.iter().all(|&f| f > 10), "both reads' copy heads find candidates: {found:?} rows");
+}
+
+/// One traced FBS step: the Q12 query and the residual after every layer.
+fn traced_step(session: &mut super::IntegerStackSession<'_>, token: u32) -> (Vec<i32>, Vec<Vec<i32>>) {
+    super::hamming::LAYER_TRACE.with(|trace| *trace.borrow_mut() = Some(Vec::new()));
+    let query = session.step_native(token).expect("step").query_q12;
+    let layers = super::hamming::LAYER_TRACE
+        .with(|trace| trace.borrow_mut().take())
+        .expect("the trace");
+    (query, layers)
+}
+
+/// claude-194: the stream read after layer 1 adds `w_c ⊙ c` to the residual the read-free trunk
+/// has there, each sum rounded half away from zero to the residual's Q16, as the float's `q16`
+/// rounds the sum. A layer before the read cannot see it, so the read-free run gives the read's
+/// input exactly. Rows 0 and 1 have no earlier position `1 ≤ s < t`, so they add nothing.
+#[test]
+fn the_stream_read_adds_the_rounded_copy_to_the_residual() {
+    let (read, free, table, reads) = served_read_parts(&[1], 1.0);
+    let (image, copy_heads) = &reads[0];
+    let width = free.shape().width;
+    let copy_weight = &image.weight[..width];
+    let tokens = repeating_tokens();
+    let (mut with, mut without) = (read.session(), free.session());
+    let (mut moved, mut changed) = (0, 0);
+    for t in 0..tokens.len() {
+        let (query, trace) = traced_step(&mut with, tokens[t]);
+        let (free_query, free_trace) = traced_step(&mut without, tokens[t]);
+        assert_eq!(trace.len(), free.shape().layers());
+        let mean = copy_heads.mean(&tokens[..=t], &table);
+        assert!(t >= 2 || mean.is_none(), "row {t} has no candidate");
+        let want: Vec<i32> = match mean {
+            None => free_trace[0].clone(),
+            // `x` at 2^-16 raised to the product's 2^-24 · 2^-43, the sum back to 2^-16.
+            Some(c) => free_trace[0]
+                .iter()
+                .zip(copy_weight)
+                .zip(&c)
+                .map(|((&x, &w), &c)| round_half_away((i128::from(x) << 51) + i128::from(w) * c, 51) as i32)
+                .collect(),
+        };
+        assert_eq!(trace[0], want, "position {t}");
+        moved += usize::from(trace[0] != free_trace[0]);
+        changed += usize::from(query != free_query);
+    }
+    assert!(moved > 10 && changed > 10, "the read moved {moved} residuals and {changed} queries");
+}
+
+/// claude-194: the readout read moves the final norm's output to `n + w_c ⊙ (c − n)` where a copy
+/// head found a candidate, the sum rounded once to the norm's exponent, and the Q12 query is that
+/// point. The read changes no state, so a row without a candidate (rows 0 and 1 among them) keeps
+/// the read-free query.
+#[test]
+fn the_readout_read_moves_the_norm_output_toward_the_copy() {
+    let layers = super::synthetic::FBS_SYNTH_NON_SQUARE.layers;
+    let (read, free, table, reads) = served_read_parts(&[layers], 1.0);
+    let (image, copy_heads) = &reads[0];
+    let width = free.shape().width;
+    let copy_weight = &image.weight[..width];
+    let tokens = repeating_tokens();
+    let (mut with, mut without) = (read.session(), free.session());
+    let (mut changed, mut none) = (0, 0);
+    for t in 0..tokens.len() {
+        let query = with.step_native(tokens[t]).expect("step").query_q12;
+        let free_query = without.step_native(tokens[t]).expect("step").query_q12;
+        let n = without.fbs_norm_output();
+        let mean = copy_heads.mean(&tokens[..=t], &table);
+        assert!(t >= 2 || mean.is_none(), "row {t} has no candidate");
+        let want: Vec<i64> = match &mean {
+            None => n.to_vec(),
+            // `c` at 2^-43, `n` at 2^-24: the move is at 2^-24 · 2^-43, and the sum goes back to 2^-24.
+            Some(c) => n
+                .iter()
+                .zip(copy_weight)
+                .zip(c)
+                .map(|((&n, &w), &c)| {
+                    let n = i128::from(n);
+                    round_half_away((n << 43) + i128::from(w) * (c - (n << 19)), 43) as i64
+                })
+                .collect(),
+        };
+        assert_eq!(with.fbs_norm_output(), want, "position {t}");
+        let want_query: Vec<i32> = want
+            .iter()
+            .map(|&v| super::kernels::to_exp_i32(v, -24, -12).clamp(-32768, 32767))
+            .collect();
+        assert_eq!(query, want_query, "position {t}");
+        if mean.is_none() {
+            none += 1;
+            assert_eq!(query, free_query, "position {t}: no candidate, no move");
+        }
+        changed += usize::from(query != free_query);
+    }
+    assert!(changed > 10 && none >= 2, "the read moved {changed} queries; {none} rows found nothing");
+}
+
+/// claude-194: the session refuses each part of a read it does not serve, by its own error: a
+/// non-zero type-head weight, a read on a dense stack, and a depth of 0 or past the layers.
+#[test]
+fn the_session_refuses_what_it_does_not_serve_by_name() {
+    let (mut snap, _, served) = served_read_trunk(&[1, 3], 1.0);
+    IntegerStackModel::parse(&served).expect("copy heads alone are served");
+    let refusal = |bytes: &[u8]| match IntegerStackModel::parse(bytes) {
+        Err(StackError::Shape(m)) => m,
+        Err(other) => panic!("expected a shape refusal, got {other:?}"),
+        Ok(_) => panic!("expected a refusal"),
+    };
+    let width = snap.width;
+    snap.hamming.as_mut().expect("the reads").reads[1].weight[width + 5] = 0.25;
+    let typed = super::export_fbs_trunk_uorlut01(&snap).expect("export");
+    assert_eq!(refusal(&typed), TYPE_HEADS_REFUSED);
+    let dense = with_header(&artifact(5), |h| {
+        h["schema"] = json!(super::STACK_FBS_HAMMING_SCHEMA);
+        h["hamming"] = json!(super::StackHamming::new(2, vec![1, 2]));
+    });
+    assert_eq!(refusal(&dense), "a Hamming read needs a SpiralCore/FBS stack");
+    for depths in [json!([0, 3]), json!([1, 4])] {
+        let edited = with_header(&served, |h| h["hamming"]["depths"] = depths.clone());
+        assert_eq!(
+            refusal(&edited),
+            "Hamming read depths must be strictly increasing, from 1 to the layer count",
+            "{depths}"
+        );
+    }
+}
+
+/// claude-194: with a read at both hooks, the stage- and part-timed steps are the served step,
+/// and the read does change what is served.
+#[test]
+fn the_timed_fbs_steps_serve_the_read() {
+    let (read, free, ..) = served_read_parts(&[1, 3], 1.0);
+    let tokens = repeating_tokens();
+    let (mut plain, mut stages, mut parts, mut without) = (read.session(), read.session(), read.session(), free.session());
+    let (mut ns, mut changed) = (Vec::new(), 0);
+    for (t, &token) in tokens.iter().enumerate() {
+        let want = plain.step_native(token).expect("step");
+        let (got, _) = stages.measure_fbs_step_stages(token, &mut ns).expect("stage-timed step");
+        assert_eq!(got, want, "stages, position {t}");
+        let (got, _) = parts.measure_fbs_step_parts(token, &mut ns).expect("part-timed step");
+        assert_eq!(got, want, "parts, position {t}");
+        changed += usize::from(without.step_native(token).expect("step") != want);
+    }
+    assert_eq!(plain.save_state(), stages.save_state());
+    assert_eq!(plain.save_state(), parts.save_state());
+    assert_eq!(plain.tokens(), &tokens[..]);
+    assert!(changed > 10, "the read changed {changed} steps");
+}
+
+/// claude-194: each hook rounds its sum once, as the float's `q16(x + w·c)` does, not the product
+/// before adding it: at an exact half tie the two differ. Rounding the product, `3 − 0.5` would
+/// come out 2; rounding the sum, 2.5 comes out 3.
+#[test]
+fn the_hooks_round_the_sum_not_the_product() {
+    use super::hamming::{readout_sum, stream_sum};
+    // `w · c = ∓2^50` is ∓0.5 at Q16.
+    assert_eq!(stream_sum(3, -1, 1 << 50), 3);
+    assert_eq!(stream_sum(-3, 1, 1 << 50), -3);
+    assert_eq!(stream_sum(3, 1, 1 << 50), 4);
+    // `w · (c − n · 2^19) = ∓2^42` is ∓0.5 at `2^-24`.
+    assert_eq!(readout_sum(3, 1, (3 << 19) - (1 << 42)), 3);
+    assert_eq!(readout_sum(-3, 1, (-3 << 19) + (1 << 42)), -3);
+    // At `w = 2^24` (1.0) the move lands on the copy exactly.
+    assert_eq!(readout_sum(-7, 1 << 24, 5 << 19), 5);
 }
