@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" width="960" role="img" aria-labelledby="t d">
 <title id="t">The model pipeline, stage by stage</title>
-<desc id="d">A left-to-right pipeline. Stages 1 to 7 are the discrete path: tokenizer with 4,096 pieces (built), token table (trained in), ordered context (built), reads Route, Flock and Relation (trained in), writer with admission (trained in), rank-margin loss (trained in) and discrete learning on the GPU. Three boxes above the line, position, feed-forward and normalization, are parts the discrete path lacks; the float-trained FBS trunk fills them with the SpiralCore transport spin, the Hamilton gate and an RMS norm with integer square root. Stage 8, export, is built for the FBS trunk: exact under lut-stack/5 (claude-182). Stage 9, serving, is integer with D80 and D81, at 4,829 tokens per second on the M1. The text path (R7) is not built.</desc>
+<desc id="d">A left-to-right pipeline. Stages 1 to 7 are the discrete path: tokenizer with 4,096 pieces (built), token table (trained in), ordered context (built), reads Route, Flock and Relation (trained in), writer with admission (trained in), rank-margin loss (trained in) and discrete learning on the GPU. Three boxes above the line, position, feed-forward and normalization, are parts the discrete path lacks; the float-trained FBS trunk fills them with the SpiralCore transport spin, the Hamilton gate and an RMS norm with integer square root. Stage 8, export, is built for the FBS trunk: exact under lut-stack/5 (claude-182). Stage 9, serving, is integer with D80 and D81, at 4,217 to 4,504 tokens per second on the M1 under the exact lut-stack/5 contract (4,829 under the snapped one). The text path (R7) is not built.</desc>
 <style>
 svg { --bg:#ffffff; --ink:#1f2328; --body:#2b3138; --muted:#57606a; --rule:#d0d7de; --panel:#f6f8fa;
       --blue:#0072b2; --sky:#56b4e9; --green:#007a5e; --orange:#e69f00; --verm:#d55e00; --purple:#7a4fa3; --pink:#cc79a7;
@@ -151,8 +151,8 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <circle class="badge-b" cx="848" cy="190" r="10"/><text class="badge-t" x="848" y="194" text-anchor="middle">9</text>
 <text class="name" x="890.5" y="224" text-anchor="middle">serving</text>
 <text class="detail" x="890.5" y="248" text-anchor="middle">integer, D80/D81;</text>
-<text class="detail" x="890.5" y="262" text-anchor="middle">4,829 tok/s</text>
-<text class="detail" x="890.5" y="276" text-anchor="middle">on the M1</text>
+<text class="detail" x="890.5" y="262" text-anchor="middle">4,217–4,504</text>
+<text class="detail" x="890.5" y="276" text-anchor="middle">tok/s (/5)</text>
 <text class="tag tag-built" x="890.5" y="302" text-anchor="middle">BUILT</text>
 
 <!-- 7 learning (below the line) -->

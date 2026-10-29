@@ -74,7 +74,7 @@ Since 27 October the work is on a second model path, a float-trained trunk calle
 
 - The trunk **routes**. A recurrence with a Hamilton gate and a SpiralCore rotation carries position. A Hamming read (XOR and popcount over 64-bit codes) copies words seen earlier.
 - Exact memory **stores**. Memory keyed by the user's first 8 tokens names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, against 266.3 and 281.0 for an empty-table control (claude-161). It moves only the first word of a reply. After it, replies are still templates.
-- The model is **served as integers**. On an M1 laptop a served token runs at 4,217 to 4,504 tok/s under the exact `lut-stack/5` contract, byte-identical to the trained model (claude-182, 185). Not every part is served in integers yet: the copy heads, the memory and the nearest-word readout are not.
+- The model is **served as integers**. On an M1 laptop a served token runs at 4,217 to 4,504 tok/s under the exact `lut-stack/5` contract (claude-182, claude-186). The served model is inside the export-gap bar on both seeds: net 6 and −8 rows against F_I 24 on DEV (claude-182). Not every part is served in integers yet: the copy heads, the memory and the nearest-word readout are not.
 - Text in and out (R7) is not built. The artifacts take token ids only.
 
 No milestone is complete. [Where we are](./where-we-are.md) has the full status.

@@ -101,7 +101,7 @@ flowchart LR
 
 **Exact turn memory.** A table keyed by the first 8 tokens of the user's turn that returns the reply's opening word. On DEV it named 598.7 and 598.3 of 1,226 reply openings at two seeds (claude-161). It does not yet carry a reply past its first word and is not served. See [pipeline map](../model/pipeline-map.md).
 
-**Export gap.** The quality lost when a model trained with decimals is snapped into the whole-number file that ships. It is the served score minus the float score on the same evaluator. A float candidate whose gap exceeds the two-seed noise band is disqualified. Nobody has measured it for a model built under today's rules, because none has been exported. See [serving and export](../model/serving-and-export.md).
+**Export gap.** The quality lost when a model trained with decimals is snapped into the whole-number file that ships. It is the served score minus the float score on the same evaluator. A float candidate whose gap exceeds the two-seed noise band is disqualified. On the FBS trunk it was measured on 29 Oct 2026: under `lut-stack/5` the served model is inside the bar on both seeds, net 6 and −8 rows against F_I 24 on DEV (claude-182). See [serving and export](../model/serving-and-export.md).
 
 ## F
 
@@ -129,7 +129,7 @@ flowchart LR
 
 <a id="hinge-loss"></a>**Hinge loss.** A loss that asks only whether the right answer beats its strongest rivals by a fixed gap. If it does, the loss is zero. If not, the loss is the shortfall. It needs no probabilities. The live version is an integer hinge. See [rank-margin](../mechanisms/rank-margin.md).
 
-**Hold.** An owner order that stops a kind of work until the owner lifts it. Training, the second milestone's training and rental, and Stage B are all on hold. A FIT review lifts none of them. See [charter](../../CHARTER.md), section 5.1.
+**Hold.** An owner order that stops a kind of work until the owner lifts it. Training, the second milestone's training and rental, and Stage B are held work. Since D65–D69, a lab runs held work on its own pre-run review, which reads the whole project first, and the owner can reverse it (AGENTS.md). A FIT review alone lifts none of them. See [charter](../../CHARTER.md), sections 5.1 and 5.10.
 
 **Hopf map.** A map that takes a point on a four-dimensional sphere (a unit quaternion) to a point on an ordinary sphere. It forgets one angle, called the fibre, so many states cast the same shadow. The kept-fibre idea is built as a helper but is not part of the current read, and the mechanism is PARKED. See [the Hopf map and the kept fibre](../geometry/hopf-observation.md).
 
@@ -287,7 +287,8 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 **WASM (WebAssembly).** A compact, sandboxed machine code that browsers run. The integer serving engine is built for it, with 7 of 7 serving functions free of float instructions (**measurement**). See [web client](../products/web-client.md).
 
-**Whole-table nearest (readout).** The served way to turn a final vector into a word: compare the vector with every row of the 4,096-word table and take the nearest. It was chosen over the native writer on 28 Oct because the writer's admission failed at seed 2 (top-1 493 against 6,909 for nearest, claude-150). The served session still reads the native writer today. See [pipeline map](../model/pipeline-map.md).
+**Whole-table nearest (readout).** The chosen way to turn a final vector into a word: compare the vector with every row of the 4,096-word table and take the nearest. It was chosen over the native writer on 28 Oct because the writer's admission failed at seed 2 (top-1 493 against 6,909 for nearest, claude-150). The served session still reads the native writer today. See [pipeline map](../model/pipeline-map.md).
+
 **Writer (shared vector writer).** The one component that handles a token's vector on the way in, along the carry and on the way out, using the same format everywhere. It builds the cells and picks the nearest token among the admitted ones. See [architecture](../model/architecture.md).
 
 ## Z

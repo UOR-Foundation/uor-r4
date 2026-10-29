@@ -362,7 +362,7 @@ fn architecture() -> Result<String, Fail> {
             "Readout",
             vec![
                 "whole-table nearest",
-                "(claude-150); served",
+                "(claude-150); chosen",
                 "today: native writer",
             ],
         ),
