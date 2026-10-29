@@ -41,6 +41,25 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Sheet: [one-model-end-to-end-overturn-
 - **No arm names an unkeyed opening.** Of the 32, (r) gets 0 and 0, and (r0) gets 1 and 3.
 - **The read's parity did not run here.** By the decision review (#3407, 6509925608), kept sets and top-1 stay `integer-hamming-read` step 5's. This run sealed the memory-off float picks and samples it may use.
 
+## What changed
+
+- **Code**, in `crates/uor-r4-float-train` (in the item's scope):
+  - `in_space_long.rs`:
+    - **The split:** `nearest_reading` now uses `row_picks` (its loop, unchanged) and `fold_picks` (its counts).
+    - **The scorer:** `score_rows` writes `ScoredRows` and `IdSample` files, never replacing one.
+    - **The grader:** `overturn`, with `paired`, `pick_differences`, `seed_cell`, `two_root_ceil`, `overturn_verdict` and `generation`.
+    - **The shared helpers:** `decision_positions` (shared with `census`), `load_fresh_v2` and `reference_reply` (shared with `run_long`).
+    - **Tests:** 9 new ones.
+  - `bin/train-in-space.rs`: `--score-rows`, `--overturn 1` and `--scored NAME=DIR`, which refuses a name given twice, and `--scored` without `--overturn`.
+- **The census is byte-identical** after the refactor (`cmp` against `census-2026-10-29.json`).
+- **Docs:**
+  - the sheet;
+  - this REPORT;
+  - the grading JSON and a section in `docs/labs/one-model-end-to-end/README.md`;
+  - one notebook row;
+  - done-when 2's parity line, narrowed by the decision review.
+- **The job, watcher and renew loop** are `local/claude/claude-205/{job,watch,renew}.sh` on the laptop, and are not committed.
+
 ## Measurements
 
 ### The decision (pre-registered)
@@ -91,25 +110,6 @@ Fresh V2 is descriptive only. It repeats DEV's pattern: the memory lifts (r) and
   - all 10 checkpoint lines per seed passed `sha256sum -c`;
   - Fresh V2's tar passed its sums and its own sha, and its members passed the code's pins.
 
-## What changed
-
-- **Code**, in `crates/uor-r4-float-train` (in the item's scope):
-  - `in_space_long.rs`:
-    - **The split:** `nearest_reading` now uses `row_picks` (its loop, unchanged) and `fold_picks` (its counts).
-    - **The scorer:** `score_rows` writes `ScoredRows` and `IdSample` files, never replacing one.
-    - **The grader:** `overturn`, with `paired`, `pick_differences`, `seed_cell`, `two_root_ceil`, `overturn_verdict` and `generation`.
-    - **The shared helpers:** `decision_positions` (shared with `census`), `load_fresh_v2` and `reference_reply` (shared with `run_long`).
-    - **Tests:** 9 new ones.
-  - `bin/train-in-space.rs`: `--score-rows`, `--overturn 1` and `--scored NAME=DIR`, which refuses a name given twice, and `--scored` without `--overturn`.
-- **The census is byte-identical** after the refactor (`cmp` against `census-2026-10-29.json`).
-- **Docs:**
-  - the sheet;
-  - this REPORT;
-  - the grading JSON and a section in `docs/labs/one-model-end-to-end/README.md`;
-  - one notebook row;
-  - done-when 2's parity line, narrowed by the decision review.
-- **The job, watcher and renew loop** are `local/claude/claude-205/{job,watch,renew}.sh` on the laptop, and are not committed.
-
 ## Checks run at the head
 
 - **On the laptop:**
@@ -137,6 +137,10 @@ Fresh V2 is descriptive only. It repeats DEV's pattern: the memory lifts (r) and
 - **The new-template stratum.** It should come from a panel no decision has touched. claude-204's P-dev qualifies: 0.000 of its prompt templates are in TRAIN, and nothing here scored it.
 - **Copying values.** Both trunks fail it, so copied rows need a stratum of their own, and the training run's read-by-meaning arms (the Flock read, the type spin) are where a fix would show.
 
+## Skills used
+
+None was invoked this unit. The arms, the band, the cells and the stop rule were fixed in the sheet before the run, and applied as written.
+
 ## Still open
 
 - **Done-when 3:** the protocol, with a fresh FIT, before the training run.
@@ -145,10 +149,6 @@ Fresh V2 is descriptive only. It repeats DEV's pattern: the memory lifts (r) and
   - a scope fix for a float capture hook in `flock_read_hamming.rs`;
   - the memory off on its float side if it uses claude-194's (r).
 - **The served readout:** the integer session decodes with the writer, which is right on 77–1,280 rows here, where nearest is right on 10,079–11,513.
-
-## Skills used
-
-None was invoked this unit. The arms, the band, the cells and the stop rule were fixed in the sheet before the run, and applied as written.
 
 ## Plain summary
 
