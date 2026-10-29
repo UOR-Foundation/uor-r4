@@ -30,7 +30,7 @@ A scope decision for the item's step 4, "the exporter reading `hamming_read.safe
 ## Done when
 
 1. **The item's `scope:`** lists `crates/uor-r4-float-train/src/bin/fbs-snapshot.rs`, and nothing else is added.
-2. **Step 4's text** names the binary, and the depth rule: the float readout read sits at `HAMMING_READOUT_DEPTH`, and the export maps it to the layer count or refuses a trunk of another depth.
+2. **Step 4's text** names the binary, where the conversion lives (`fbs_export.rs`), and the depth rule: the export refuses a trunk whose layer count is not `HAMMING_READOUT_DEPTH` (the decision review's nit; the first wording, mapping 6 to the layer count, would serve the stream read on the readout of a 2-layer trunk).
 3. **A fresh decision review passes.** It reads the item, the export path (`fbs-snapshot.rs`, `fbs_export.rs`, `flock_read_hamming.rs`), CHARTER §5.1 and §5.2, `owner-paths.json`, and the other items' scopes and open claims. The owner log goes on #3385.
 4. **`loop report --check` and `loop pr-check --local` pass.** The item stays `ready`.
 
