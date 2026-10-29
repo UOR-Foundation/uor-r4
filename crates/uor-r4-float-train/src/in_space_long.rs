@@ -2078,7 +2078,7 @@ fn greedy_reply(
     reply_tokens: usize,
     seed: u64,
 ) -> Result<Vec<u32>> {
-    Ok(decode_reply(model, objective, prompt, reply_tokens, seed, DecodeRule::Greedy, 0)?.tokens)
+    Ok(decode_reply(model, objective, prompt, reply_tokens, seed, DecodeRule::Greedy, 0, None)?.tokens)
 }
 
 /// How a reply picks each next token (one-model-end-to-end protocol, "The decode rules").
@@ -2119,7 +2119,12 @@ pub fn flock_rank_draw(seed: u64, index: u64, k: usize) -> usize {
     state ^= state >> 12;
     state ^= state << 25;
     state ^= state >> 27;
-    let r = state.wrapping_mul(0x2545_F491_4F6C_DD1D) % total;
+    harmonic_rank(state.wrapping_mul(0x2545_F491_4F6C_DD1D) % total, weights)
+}
+
+/// The rank a draw `r` (below the weights' sum) lands on: the first whose running weight
+/// exceeds `r`, so rank `i` takes exactly `W_i` of the draws.
+fn harmonic_rank(r: u64, weights: &[u16]) -> usize {
     let mut running = 0u64;
     for (i, &w) in weights.iter().enumerate() {
         running += u64::from(w);
@@ -2128,6 +2133,18 @@ pub fn flock_rank_draw(seed: u64, index: u64, k: usize) -> usize {
         }
     }
     weights.len() - 1
+}
+
+/// The longest reply the Flock rank rule draws for: its draw index is `sample · 64 + step`, so a
+/// longer reply would reuse the next sample's draws.
+pub const FLOCK_MAX_REPLY: usize = 64;
+
+/// `reply` up to and including its first `eos`, the reply as the protocol counts it.
+fn cut_at_eos(reply: &[u32], eos: u32) -> &[u32] {
+    match reply.iter().position(|&t| t == eos) {
+        Some(at) => &reply[..=at],
+        None => reply,
+    }
 }
 
 /// `(id, score)` candidates in rank order: the higher score first, ties to the smaller id.
@@ -2142,7 +2159,8 @@ struct DecodedReply {
 }
 
 /// The model's reply to `prompt` under `rule`: as [`greedy_reply`], with the next token picked
-/// by `rule`. `sample` is the reply's index, which with `seed` seeds the Flock rank draws: draw
+/// by `rule`. The Flock rank rule also stops after `eos` (the protocol); greedy decodes to
+/// BOS or its length, as before. `sample` is the reply's index, which with `seed` seeds the Flock rank draws: draw
 /// `index = sample · 64 + step`. The Flock rank rule needs a nearest objective.
 fn decode_reply(
     model: &StackModel,
@@ -2152,9 +2170,15 @@ fn decode_reply(
     seed: u64,
     rule: DecodeRule,
     sample: usize,
+    eos: Option<u32>,
 ) -> Result<DecodedReply> {
     if rule == DecodeRule::FlockRank && !objective.decodes_nearest() {
         return Err(invalid("the Flock rank rule decodes the nearest table tokens only"));
+    }
+    if rule == DecodeRule::FlockRank && reply_tokens > FLOCK_MAX_REPLY {
+        return Err(invalid(format!(
+            "the Flock rank rule draws for replies of at most {FLOCK_MAX_REPLY} tokens"
+        )));
     }
     let table = table(model)?;
     hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, 0, false, || {
@@ -2224,6 +2248,11 @@ fn decode_reply(
             }
             ids.push(token);
             reply.push(token);
+            // The Flock rank rule stops at its reply's end of turn (the protocol); greedy keeps
+            // decoding to BOS or its length, as it always has.
+            if rule == DecodeRule::FlockRank && Some(token) == eos {
+                break;
+            }
         }
         Ok(DecodedReply { tokens: reply })
     })
@@ -2738,6 +2767,15 @@ pub struct ScoredFile {
     pub panel_sha256: Option<String>,
 }
 
+/// Whether `name` may name a `--panel` split: one file-name part, and never DEV or the sealed Fresh
+/// V2, so no panel is ever read as either.
+fn panel_name_ok(name: &str) -> bool {
+    !name.is_empty()
+        && !["dev", "fresh-v2"].contains(&name)
+        && !name.contains(['/', '\\'])
+        && !name.contains("..")
+}
+
 /// One split [`score_rows`] scores: its name, windows and mask, and an unpinned panel's sha.
 struct ScoreSplit {
     name: String,
@@ -2830,6 +2868,9 @@ pub fn score_rows(
         .and_then(|n| n.parse().ok())
         .ok_or_else(|| invalid("--score-rows wants a run's step-N checkpoint directory"))?;
     let tokenizer = pinned_tokenizer(data_root)?;
+    let eos = tokenizer
+        .token_id("<|eos|>")
+        .ok_or_else(|| invalid("the pinned tokenizer has no <|eos|>"))?;
     let windows_of = |tokens: &[u32], mask: &[u8]| -> Result<Vec<CausalWindow>> {
         Ok(hs::build_document_windows(tokens, mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?.0)
     };
@@ -2852,8 +2893,10 @@ pub fn score_rows(
         });
     }
     for (name, dir) in panels {
-        if splits.iter().any(|s| s.name == *name) {
-            return Err(invalid(format!("--panel {name} names a split already scored")));
+        if !panel_name_ok(name) || splits.iter().any(|s| s.name == *name) {
+            return Err(invalid(format!(
+                "--panel {name}: a panel name is one word, not dev, fresh-v2 or a scored split"
+            )));
         }
         let (tokens, mask, sha) = load_unpinned_uort(dir)?;
         splits.push(ScoreSplit {
@@ -2920,12 +2963,13 @@ pub fn score_rows(
                         seed,
                         rule,
                         index,
+                        Some(eos),
                     )?
                     .tokens;
                     let reference = reference_reply(window, reply_tokens);
-                    let (reply_keys, reply_named) = reply_key_hits(prompt, &reply, named);
+                    let (reply_keys, reply_named) = reply_key_hits(prompt, cut_at_eos(&reply, eos), named);
                     let (reference_keys, reference_named) =
-                        reply_key_hits(prompt, &reference, named);
+                        reply_key_hits(prompt, cut_at_eos(&reference, eos), named);
                     replies.push(IdSample {
                         position: window.scored_corpus_positions[0],
                         prompt: prompt.to_vec(),
@@ -5955,6 +5999,55 @@ mod tests {
         assert_eq!(reply_key_hits(prompt, &reply, |k| keys.contains(k)), (2, 2));
         assert_eq!(reply_key_hits(prompt, &reply, |_| false), (2, 0));
         assert_eq!(reply_key_hits(prompt, &reply[..1], |_| true), (0, 0), "an opening only");
+    }
+
+    /// claude-208 (review): rank `i` takes exactly `W_i` draws: a draw equal to a running sum
+    /// belongs to the next rank, so `>` (not `>=`) is pinned at each boundary.
+    #[test]
+    fn a_draw_on_a_boundary_takes_the_next_rank() {
+        let w = &FLOCK_RANK_WEIGHTS_Q16;
+        assert_eq!(harmonic_rank(0, w), 0);
+        assert_eq!(harmonic_rank(u64::from(w[0]) - 1, w), 0);
+        assert_eq!(harmonic_rank(u64::from(w[0]), w), 1);
+        let first_two = u64::from(w[0]) + u64::from(w[1]);
+        assert_eq!(harmonic_rank(first_two - 1, w), 1);
+        assert_eq!(harmonic_rank(first_two, w), 2);
+        let total: u64 = w.iter().map(|&x| u64::from(x)).sum();
+        assert_eq!(harmonic_rank(total - 1, w), FLOCK_DECODE_K - 1);
+    }
+
+    /// claude-208 (review): a generated reply is counted up to its first end of turn, so the next
+    /// turn's tokens it runs on into add no keys.
+    #[test]
+    fn the_hit_rate_counts_a_reply_up_to_its_end_of_turn() {
+        const EOS: u32 = 2;
+        assert_eq!(cut_at_eos(&[5, 6, EOS, 7, 8], EOS), &[5, 6, EOS]);
+        assert_eq!(cut_at_eos(&[5, 6], EOS), &[5, 6]);
+        let prompt = [0u32, 10, 11, 12];
+        let all = reply_key_hits(&prompt, &[11, 12, EOS, 40, 41, 42], |_| true).0;
+        let cut = reply_key_hits(&prompt, cut_at_eos(&[11, 12, EOS, 40, 41, 42], EOS), |_| true).0;
+        assert_eq!((all, cut), (5, 2), "the 3 steps after the end of turn are not counted");
+    }
+
+    /// claude-208 (review): a reply whose window no longer reaches its prompt forms no key, as the
+    /// decoder forms none there.
+    #[test]
+    fn the_hit_rate_stops_where_the_window_loses_the_prompt() {
+        let prompt: Vec<u32> = (10..20).collect();
+        let reply: Vec<u32> = (100..400).collect();
+        // Step j's window is the last SHEET_CONTEXT of prompt + reply[..j]; it holds the prompt's
+        // last token while 10 + j − SHEET_CONTEXT < 10, that is for j < SHEET_CONTEXT.
+        let (keys, _) = reply_key_hits(&prompt, &reply, |_| true);
+        assert_eq!(keys, SHEET_CONTEXT - 1);
+    }
+
+    /// claude-208 (review): a panel name is one file-name part, and never DEV or Fresh V2.
+    #[test]
+    fn a_panel_name_is_never_dev_fresh_v2_or_a_path() {
+        assert!(panel_name_ok("p-dev"));
+        for bad in ["", "dev", "fresh-v2", "a/b", "..", "x\\y"] {
+            assert!(!panel_name_ok(bad), "{bad:?}");
+        }
     }
 
     /// claude-208: a sample file written before the hit counts still loads, with them at 0.

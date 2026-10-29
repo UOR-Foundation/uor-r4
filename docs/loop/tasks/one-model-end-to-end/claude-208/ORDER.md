@@ -60,7 +60,7 @@ Run at this ORDER's base. **Class: instrument (all three are missing). Go.**
 
 ## Files in scope
 
-The item's scope. This unit edits `crates/uor-r4-float-train/src/in_space_long.rs`, `crates/uor-r4-float-train/src/bin/train-in-space.rs` and `docs/loop/tasks/one-model-end-to-end/claude-208/**`.
+The item's scope. This unit edits `crates/uor-r4-float-train/src/in_space_long.rs`, `crates/uor-r4-float-train/src/bin/train-in-space.rs`, `docs/loop/tasks/one-model-end-to-end/claude-208/**`, and the protocol sheet's I-F row (an instrument-check correction, found in review).
 
 ## Done when
 
@@ -71,7 +71,7 @@ The item's scope. This unit edits `crates/uor-r4-float-train/src/in_space_long.r
    - xorshift64*, seeded by the run seed and `sample · 64 + step`.
 
    The weights are a copy of `RAW_RANK_WEIGHTS_Q16`'s first 16, pinned to that file by a test. Greedy decoding is unchanged (`greedy_reply` calls `decode_reply` with `Greedy`).
-3. **I-F:** each sample records its reply-table keys and hits, under generation and under teacher forcing on the true reply. The key is `greedy_reply_key`, the decoder's own, and a test pins it equal to the census's `reply_key` on every later row.
+3. **I-F:** each sample records its reply-table keys and hits, under generation and under teacher forcing on the true reply. The key is `greedy_reply_key`, the decoder's own, and a test pins it equal to the census's `reply_key` on a fixture's later rows. Every DEV later row is checked in I-G.
 4. **Samples:** greedy with the memory on and off (DEV's file names unchanged), and Flock rank with the memory on, for DEV and each panel.
 5. **Tests:**
    - a unit test per rule, with negative gates;
@@ -81,7 +81,7 @@ The item's scope. This unit edits `crates/uor-r4-float-train/src/in_space_long.r
    The GPU halves run on the run's pod:
    - I-A's 16,417 P-dev rows;
    - I-E's "K = 1 equals greedy" on the model, which the unit test checks on the draw;
-   - I-F on real DEV.
+   - I-F's full count runs on the laptop, in I-G, over every DEV later row.
 6. **A REPORT,** negatives first.
 
 ## Stop and decide if

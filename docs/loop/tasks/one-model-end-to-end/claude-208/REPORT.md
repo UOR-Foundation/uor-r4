@@ -14,10 +14,11 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Protocol: [one-model-end-to-end-protoc
 - **The GPU halves of the checks have not run.** On the run's pod, before any arm:
   - **I-A:** P-dev scores its census's 16,417 rows.
   - **I-E:** on a model, K = 1 decodes as greedy. The unit test checks the draw itself.
-  - **I-F:** on real DEV, the teacher-forced keys name the census's 9,655 later rows.
+  - **I-F, on the laptop, not the pod:** over every one of DEV's 13,061 later rows in its own window, the decoder's key must equal the census's, and the reply table must name exactly 9,655. That needs TRAIN's tables, which the grader unit (I-G) builds, so it runs there. The sampled replies cannot give that count: they are a few prompts' replies, cut at their length and their window.
 
   `decode_reply`'s GPU path (the top-16 sort, the gather) is not executed on the laptop.
-- **The protocol's I-F count of 10,849 is not what this instrument counts.** 10,849 is DEV's 1,194 keyed openings plus its 9,655 named later rows. The hit rate concerns the reply table, whose key includes the reply's own last token; that is what free generation can change. An opening's key is the prompt's alone and does not depend on decoding. So I-F counts later steps, and its DEV check is 9,655. The REPORT names this, and the run's pre-run review reads it.
+- **The protocol's I-F check was wrong, and is corrected in the sheet.** It said "the 10,849 named rows". That is DEV's 1,194 keyed openings plus its 9,655 named later rows. The hit rate concerns the reply table, whose key includes the reply's own last token, and that is what free generation can change. An opening's key is the prompt's alone, and decoding cannot change it. So I-F counts later steps, and the sheet's I-F row now reads 9,655, with the reason. This is an instrument check, not a bar.
+- **In the memory-off sample files,** `reply_named` and `reference_named` are 0 by construction: no table is active. Their key counts are still recorded.
 - **The harmonic weights are a copy.** The integer crate's native root (`native_geometry.rs`) does not export `stack`, so the float side cannot import `RAW_RANK_WEIGHTS_Q16`. The first 16 are copied as `FLOCK_RANK_WEIGHTS_Q16`. A test reads `crates/uor-r4-integer/src/stack/flock.rs` and fails if they differ, and checks that they are `65,536/(i+1)`, the first saturated at `u16::MAX`.
 - **Ties at the 16th place are broken by the GPU sort, not by id.** Within the 16 the order is ties to the smaller id, as the protocol says. A float tie straddling the 16th place is rare.
 - **The Flock rank rule runs with the memory on only,** as the shipped model is served. Greedy runs with the memory on and off.
@@ -71,7 +72,7 @@ None was invoked this unit.
 
 - **The GPU halves of I-A, I-E and I-F,** on the run's pod.
 - **Instruments I-D, I-G and I-H.**
-- **The protocol's I-F count.** It reads 10,849 where the instrument checks 9,655; this REPORT gives the reason.
+- **I-F's laptop count** over every DEV later row, in the grader unit (I-G).
 
 ## Plain summary
 
