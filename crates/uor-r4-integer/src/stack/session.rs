@@ -87,6 +87,9 @@ pub(super) const GEOMETRIC_KEEP_Q31: [u64; 16] = [
 ];
 /// The rotation norm's epsilon, `1e-6`, at exponent -32.
 const ROTATION_EPSILON: u128 = 4_295;
+/// An unsnapped Hamilton gate's norm epsilon at exponent -32 (claude-181): the
+/// float gate's `1e-12` is `0.004` there, so zero.
+const GATE_EPSILON: u128 = 0;
 /// Exponents (matrix bases, the RMSNorm epsilon) are limited to this magnitude
 /// so that no exponent arithmetic can overflow.
 const EXPONENT_LIMIT: i32 = 1 << 10;
@@ -2823,7 +2826,8 @@ fn stack_map_task(task: &mut MapTask<'_>) {
 
 /// `silu(gate) up` per MLP unit at exponent -32, or the icosian-snapped
 /// Hamilton product `q_snap(gate) (x) up` per 4-channel block when
-/// `shape.gate_hamilton()` is enabled.
+/// `shape.gate_hamilton()` is enabled (the unit `gate / |gate|` in place of the
+/// snap under `shape.raw_gates`).
 #[inline(never)]
 fn stack_swiglu(model: &IntegerStackModel, gate: &[i32], up: &[i32], out: &mut [i64]) {
     if model.shape.gate_hamilton() {
@@ -2832,10 +2836,7 @@ fn stack_swiglu(model: &IntegerStackModel, gate: &[i32], up: &[i32], out: &mut [
             .zip(gate.chunks_exact(4))
             .zip(up.chunks_exact(4))
         {
-            let q = stack_snap_rotation(
-                [g_lane[0], g_lane[1], g_lane[2], g_lane[3]],
-                1u64 << 31,
-            );
+            let q = stack_gate_quaternion(model, [g_lane[0], g_lane[1], g_lane[2], g_lane[3]]);
             let rhs = [
                 i64::from(u_lane[0]),
                 i64::from(u_lane[1]),
@@ -3336,10 +3337,7 @@ fn stack_recurrence_core(
             .zip(state.chunks_exact(4))
             .zip(gate.chunks_exact(4))
         {
-            let q = stack_snap_rotation(
-                [g_lane[0], g_lane[1], g_lane[2], g_lane[3]],
-                1u64 << 31,
-            );
+            let q = stack_gate_quaternion(model, [g_lane[0], g_lane[1], g_lane[2], g_lane[3]]);
             let rhs = [
                 shift(h_lane[0], RESIDUAL_EXP - STATE_EXP),
                 shift(h_lane[1], RESIDUAL_EXP - STATE_EXP),
@@ -3426,7 +3424,7 @@ fn stack_lanes(
                 }
                 transition
             } else {
-                stack_rotation(raw, lambda)
+                stack_rotation(raw, lambda, ROTATION_EPSILON)
             }
         } else {
             [lambda as i64, 0, 0, 0]
@@ -3441,16 +3439,31 @@ fn stack_lanes(
     }
 }
 
+/// A Hamilton gate's 4-block as the unit quaternion it is served by, at Q31:
+/// snapped to the nearest of the 120 icosians, or under `shape.raw_gates` the
+/// unit `g / |g|` itself (claude-181), as the plain float trunk normalizes it.
+#[inline(always)]
+fn stack_gate_quaternion(model: &IntegerStackModel, g: [i32; 4]) -> [i64; 4] {
+    if model.shape.raw_gates {
+        stack_rotation(g, 1u64 << 31, GATE_EPSILON)
+    } else {
+        stack_snap_rotation(g, 1u64 << 31)
+    }
+}
+
 /// `lambda raw / |raw|` per coordinate: the unit rotation (Q30, rounded toward
 /// zero as the D10 engine's signed division) times the decay (Q31), at Q31.
+/// `epsilon` is added to `|raw|^2` at exponent -32: [`ROTATION_EPSILON`] for
+/// the transition, [`GATE_EPSILON`] for an unsnapped Hamilton gate. A zero
+/// quaternion under a zero epsilon gives zero, as the division by zero does.
 #[inline(never)]
-fn stack_rotation(raw: [i32; 4], lambda: u64) -> [i64; 4] {
+fn stack_rotation(raw: [i32; 4], lambda: u64, epsilon: u128) -> [i64; 4] {
     let mut square = 0u128;
     for &v in &raw {
         square = square.wrapping_add(u128::from(stack_square(i64::from(v))));
     }
     // |raw| at exponent -32.
-    let norm = stack_isqrt((square + ROTATION_EPSILON) << 32);
+    let norm = stack_isqrt((square + epsilon) << 32);
     // An explicit loop, not `raw.map`: the closure of `map` compiles to a
     // `core::array` symbol of its own, outside the audited `stack_` names.
     let mut transition = [0i64; 4];

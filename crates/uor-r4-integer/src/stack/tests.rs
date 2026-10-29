@@ -277,6 +277,8 @@ fn shapes_whose_read_caches_exceed_the_bound_are_rejected_before_allocation() {
         memory: None,
         rec_gates: None,
         gate: None,
+        raw_gates: false,
+        raw_transition: false,
         projection: None,
         head: None,
         kept_cells: None,
@@ -377,6 +379,8 @@ fn the_l2_read_serves_its_scale_and_offset_without_lifts_or_arcosh() {
         memory: None,
         rec_gates: None,
         gate: None,
+        raw_gates: false,
+        raw_transition: false,
         projection: None,
         head: None,
         kept_cells: None,
@@ -2492,6 +2496,8 @@ fn fbs_shape() -> StackShape {
         memory: None,
         rec_gates: Some("geometric".to_owned()),
         gate: Some("hamilton".to_owned()),
+        raw_gates: false,
+        raw_transition: false,
         projection: Some("spiralcore_fbs".to_owned()),
         head: Some("native_vector".to_owned()),
         kept_cells: Some(2),
@@ -3273,6 +3279,245 @@ fn fbs_trunk_export_matches_float_reference_across_full_vocabulary() {
     .expect("parse");
     assert!(dense.session().step_native(0).is_err());
     assert!(model.session().step(0).expect("step").is_empty());
+}
+
+/// The four snap choices of an FBS export (claude-181), snapped first.
+const FBS_EXPORT_SNAP_CHOICES: [super::FbsExportSnaps; 4] = [
+    super::FbsExportSnaps::SNAPPED,
+    super::FbsExportSnaps {
+        gates: false,
+        transition: true,
+    },
+    super::FbsExportSnaps {
+        gates: true,
+        transition: false,
+    },
+    super::FbsExportSnaps {
+        gates: false,
+        transition: false,
+    },
+];
+
+/// The JSON header of an artifact.
+fn header_of(bytes: &[u8]) -> Value {
+    let len = u64::from_le_bytes(bytes[8..16].try_into().expect("length")) as usize;
+    serde_json::from_slice(&bytes[16..16 + len]).expect("header")
+}
+
+#[test]
+fn fbs_unsnapped_exports_match_their_float_reference_in_every_combination() {
+    // claude-181: with the gates, the transition or both served unsnapped (the unit
+    // quaternion by integer square root and division), the integer session matches the f64
+    // reference that normalizes the same quaternions, under the snapped control's bar above:
+    // every query within 2 LSB at Q12, and at most 4 near-tie exceptions in token or cells.
+    const TIE: f64 = 1.0 / 1024.0;
+    let snap = synthetic_fbs_trunk(20261026);
+    let sequence = [0u32, 5, 11, 19, 3, 27, 14, 31];
+    for snaps in FBS_EXPORT_SNAP_CHOICES {
+        let bytes = super::export_fbs_trunk_uorlut01_with(&snap, snaps).expect("export");
+        let header = header_of(&bytes);
+        let snapped = snaps == super::FbsExportSnaps::SNAPPED;
+        let schema = if snapped {
+            super::STACK_FBS_SCHEMA
+        } else {
+            super::STACK_FBS_RAW_SCHEMA
+        };
+        assert_eq!(header["schema"], json!(schema), "{snaps:?}");
+        assert_eq!(header["transport_snap"].is_null(), !snaps.transition, "{snaps:?}");
+        let model = IntegerStackModel::parse(&bytes).expect("parse");
+        let shape = model.shape();
+        assert_eq!(
+            (shape.raw_gates, shape.raw_transition),
+            (!snaps.gates, !snaps.transition),
+            "{snaps:?}"
+        );
+        let reference = snaps.reference();
+        let mut exceptions: Vec<String> = Vec::new();
+        let mut check = |at: String, got: &super::NativeStep, want: &super::FbsWriterOutput| {
+            assert_eq!(got.query_q12.len(), want.query.len(), "{snaps:?} {at}");
+            for (j, (&g, &w)) in got.query_q12.iter().zip(&want.query).enumerate() {
+                let w = (w * 4096.0).round() as i32;
+                assert!(
+                    (g - w).abs() <= 2,
+                    "{snaps:?} {at}: query channel {j} is {g} against {w} (Q12)"
+                );
+            }
+            if got.kept_cells != want.kept_cells || got.token != want.token {
+                let margin =
+                    fbs_reference_margin(want, snap.kept_cells, got.kept_cells == want.kept_cells);
+                assert!(
+                    margin < TIE,
+                    "{snaps:?} {at}: integer token {} against reference {}, margin {margin:.3e}",
+                    got.token,
+                    want.token
+                );
+                exceptions.push(format!("{at} (margin {margin:.2e})"));
+            }
+        };
+        for tok in 0..snap.vocab as u32 {
+            let got = model.session().step_native(tok).expect("integer step");
+            let want = snap
+                .forward_f32_with(&[tok], true, reference)
+                .expect("reference");
+            check(format!("token {tok}"), &got, &want[0]);
+        }
+        let want = snap
+            .forward_f32_with(&sequence, true, reference)
+            .expect("reference");
+        let mut session = model.session();
+        for (pos, (&tok, want)) in sequence.iter().zip(&want).enumerate() {
+            let got = session.step_native(tok).expect("integer step");
+            check(format!("sequence position {pos}"), &got, want);
+        }
+        eprintln!(
+            "fbs control {snaps:?}: {} near-tie exceptions {exceptions:?}",
+            exceptions.len()
+        );
+        assert!(
+            exceptions.len() <= 4,
+            "{snaps:?}: {} near-tie exceptions: {exceptions:?}",
+            exceptions.len()
+        );
+    }
+}
+
+#[test]
+#[ignore = "reads a trained snapshot from UOR_FBS_SNAPSHOT"]
+fn a_trained_fbs_snapshot_matches_its_reference_in_every_combination() {
+    // claude-181: host parity on a stored trained snapshot (claude-126's seed 1, for one): for
+    // each snap choice, the integer session against the f64 reference with the same snaps,
+    // over every single token and over 64 sequences of 32 tokens (the transition moves a state
+    // only from a sequence's second token). The counts are readings beside the snapped
+    // choice's, with a floor: at least 95% of positions agree in token and in kept cells.
+    // Query drift is a reading only (median and largest per-position worst channel, in Q12
+    // LSB): through six trained layers the snapped contract keeps 1,379 of 4,096 single tokens
+    // within 2 LSB, while 98% of its tokens and cells agree.
+    let path = std::env::var("UOR_FBS_SNAPSHOT").expect("set UOR_FBS_SNAPSHOT");
+    let snap: super::FbsTrunkSnapshot =
+        serde_json::from_slice(&std::fs::read(&path).expect("read the snapshot")).expect("parse");
+    let tokens: Vec<u32> = (0..snap.vocab as u32).collect();
+    let mut lcg = Lcg(181);
+    let sequences: Vec<Vec<u32>> = (0..64)
+        .map(|_| (0..32).map(|_| (lcg.next() % snap.vocab as u64) as u32).collect())
+        .collect();
+    let mut inputs: Vec<&[u32]> = tokens.iter().map(std::slice::from_ref).collect();
+    inputs.extend(sequences.iter().map(Vec::as_slice));
+    for snaps in FBS_EXPORT_SNAP_CHOICES {
+        let model = IntegerStackModel::parse(
+            &super::export_fbs_trunk_uorlut01_with(&snap, snaps).expect("export"),
+        )
+        .expect("parse");
+        let want = snap
+            .forward_f32_each(&inputs, true, snaps.reference())
+            .expect("reference");
+        for (part, range) in [("single tokens", 0..tokens.len()), ("sequences", tokens.len()..inputs.len())] {
+            let (mut same_token, mut same_cells, mut n) = (0usize, 0usize, 0usize);
+            let mut drift = Vec::new();
+            for (input, want) in inputs[range.clone()].iter().zip(&want[range]) {
+                let mut session = model.session();
+                for (&tok, want) in input.iter().zip(want) {
+                    let got = session.step_native(tok).expect("integer step");
+                    n += 1;
+                    same_token += usize::from(got.token == want.token);
+                    same_cells += usize::from(got.kept_cells == want.kept_cells);
+                    drift.push(
+                        got.query_q12
+                            .iter()
+                            .zip(&want.query)
+                            .map(|(&g, &w)| (g - (w * 4096.0).round() as i32).abs())
+                            .max()
+                            .unwrap_or(i32::MAX),
+                    );
+                }
+            }
+            drift.sort_unstable();
+            eprintln!(
+                "trained fbs {snaps:?} {part}: tokens {same_token}/{n}, kept cells {same_cells}/{n}, query drift median {} max {} LSB",
+                drift[drift.len() / 2],
+                drift[drift.len() - 1]
+            );
+            for (what, count) in [("tokens", same_token), ("kept cells", same_cells)] {
+                assert!(count * 100 >= n * 95, "{snaps:?} {part}: {what} agree on {count} of {n}");
+            }
+        }
+    }
+}
+
+#[test]
+fn each_unsnapped_choice_changes_the_served_forward() {
+    // claude-181: the queries of each unsnapped export differ from the snapped export's, so
+    // neither flag is ignored by the session.
+    let snap = synthetic_fbs_trunk(20261026);
+    let queries = |snaps: super::FbsExportSnaps| {
+        let model = IntegerStackModel::parse(
+            &super::export_fbs_trunk_uorlut01_with(&snap, snaps).expect("export"),
+        )
+        .expect("parse");
+        let mut session = model.session();
+        [0u32, 5, 11, 19, 3, 27, 14, 31]
+            .iter()
+            .map(|&tok| session.step_native(tok).expect("step").query_q12)
+            .collect::<Vec<_>>()
+    };
+    let snapped = queries(super::FbsExportSnaps::SNAPPED);
+    for snaps in &FBS_EXPORT_SNAP_CHOICES[1..] {
+        assert_ne!(queries(*snaps), snapped, "{snaps:?} served the snapped forward");
+    }
+}
+
+#[test]
+fn an_fbs_header_states_its_snaps_consistently() {
+    // claude-181: the snapped export is the `lut-stack/4` contract byte for byte, and the
+    // schema, the shape's flags and the transport snap must agree.
+    let snap = synthetic_fbs_trunk(20261026);
+    let snapped = super::export_fbs_trunk_uorlut01(&snap).expect("export");
+    assert_eq!(
+        super::export_fbs_trunk_uorlut01_with(&snap, super::FbsExportSnaps::SNAPPED)
+            .expect("export"),
+        snapped
+    );
+    let header = header_of(&snapped);
+    assert!(header["shape"].get("raw_gates").is_none());
+    assert!(header["shape"].get("raw_transition").is_none());
+    let raw_transition = super::export_fbs_trunk_uorlut01_with(
+        &snap,
+        super::FbsExportSnaps {
+            gates: true,
+            transition: false,
+        },
+    )
+    .expect("export");
+    // An unsnapped transition with a transport snap recorded is refused.
+    let both = with_header(&raw_transition, |h| h["transport_snap"] = snap_record());
+    assert!(matches!(
+        IntegerStackModel::parse(&both),
+        Err(StackError::TransportSnap(_))
+    ));
+    // A raw shape under the snapped schema, or a snapped one under the raw schema, is refused.
+    let old_schema = with_header(&raw_transition, |h| {
+        h["schema"] = json!(super::STACK_FBS_SCHEMA);
+    });
+    assert!(matches!(
+        IntegerStackModel::parse(&old_schema),
+        Err(StackError::Schema(_))
+    ));
+    let new_schema = with_header(&snapped, |h| {
+        h["schema"] = json!(super::STACK_FBS_RAW_SCHEMA);
+    });
+    assert!(matches!(
+        IntegerStackModel::parse(&new_schema),
+        Err(StackError::Schema(_))
+    ));
+    // A snapped transition still needs its record.
+    let no_record = with_header(&snapped, |h| h["transport_snap"] = Value::Null);
+    assert!(matches!(
+        IntegerStackModel::parse(&no_record),
+        Err(StackError::TransportSnap(_))
+    ));
+    // The flags belong to FBS stacks.
+    let dense = super::export_float_trunk_uorlut01(&synthetic_float_trunk(7, "dot")).expect("export");
+    let flagged = with_header(&dense, |h| h["shape"]["raw_gates"] = json!(true));
+    assert!(IntegerStackModel::parse(&flagged).is_err());
 }
 
 #[test]

@@ -40,6 +40,10 @@ pub const STACK_READ_SCHEMA: &str = "uor-r4.lut-stack/3";
 /// and whose head is the native vector writer: an engine that serves only
 /// dense maps refuses it instead of ignoring the route tables.
 pub const STACK_FBS_SCHEMA: &str = "uor-r4.lut-stack/4";
+/// Header schema of a SpiralCore/FBS stack whose Hamilton gates or recurrence
+/// transition are served unsnapped (`raw_gates`, `raw_transition`; claude-181): an
+/// engine that only snaps them to the 120 icosians refuses it instead of snapping.
+pub const STACK_FBS_RAW_SCHEMA: &str = "uor-r4.lut-stack/5";
 /// The native vector writer's limits (`uor-r4-float-train`'s `WriterSpec`).
 pub const WRITER_MIN_VOCAB: usize = 256;
 pub const WRITER_MAX_VOCAB: usize = 8192;
@@ -109,6 +113,18 @@ pub struct StackShape {
     /// icosians of `2I`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gate: Option<String>,
+    /// The two Hamilton gates (the recurrence output gate and the feed-forward
+    /// gate) served unsnapped: each 4-block normalized to a unit quaternion by
+    /// integer square root and division (D80, D81), as the plain float trunk
+    /// normalizes it, instead of snapped to the 120 icosians (claude-181).
+    /// SpiralCore/FBS stacks only, under [`STACK_FBS_RAW_SCHEMA`].
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub raw_gates: bool,
+    /// The recurrence transition served unsnapped, `lambda raw / |raw|`, with no
+    /// `transport_snap` in the header (claude-181). SpiralCore/FBS stacks only,
+    /// under [`STACK_FBS_RAW_SCHEMA`].
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub raw_transition: bool,
     /// Projection law: dense 4-bit maps when absent, or `spiralcore_fbs`
     /// (every map a SpiralCore/FBS route table: each output 8-block one signed
     /// axis permutation of one input 8-block, served as a gather and a sign).
@@ -168,7 +184,9 @@ pub struct StackReadSelect {
 /// geometric recurrence/Hamilton gate, else [`STACK_POINTER_SCHEMA`] with a
 /// pointer head, else [`STACK_SCHEMA`].
 pub fn stack_schema_for(shape: &StackShape) -> &'static str {
-    if shape.projection_fbs() {
+    if shape.projection_fbs() && (shape.raw_gates || shape.raw_transition) {
+        STACK_FBS_RAW_SCHEMA
+    } else if shape.projection_fbs() {
         STACK_FBS_SCHEMA
     } else if shape.read_select.is_some() || shape.rec_geometric() || shape.gate_hamilton() {
         STACK_READ_SCHEMA
@@ -248,6 +266,8 @@ impl StackShape {
                 && self.head_native_vector())
         {
             Some("SpiralCore/FBS projections require geometric gates, the Hamilton gate, rotations and the native vector head")
+        } else if (self.raw_gates || self.raw_transition) && !self.projection_fbs() {
+            Some("unsnapped gates and transitions belong to SpiralCore/FBS stacks")
         } else if self.projection_fbs() && self.pattern.bytes().any(|c| c != b'r') {
             Some("SpiralCore/FBS projections serve recurrence layers only")
         } else if self.projection_fbs()
@@ -621,7 +641,12 @@ impl<'a> Container<'a> {
                     "transport_snap=icosian on a stack without learned rotations".to_owned(),
                 ));
             }
-        } else if header.shape.rec_geometric() {
+            if header.shape.raw_transition {
+                return Err(StackError::TransportSnap(
+                    "transport_snap=icosian on a stack whose transition is unsnapped".to_owned(),
+                ));
+            }
+        } else if header.shape.rec_geometric() && !header.shape.raw_transition {
             return Err(StackError::TransportSnap(
                 "rec_gates=geometric requires transport_snap=icosian".to_owned(),
             ));
@@ -1051,6 +1076,8 @@ pub fn export_float_trunk_uorlut01(snap: &FloatTrunkSnapshot) -> Result<Vec<u8>,
         memory: None,
         rec_gates: Some("geometric".to_owned()),
         gate: Some("hamilton".to_owned()),
+        raw_gates: false,
+        raw_transition: false,
         projection: None,
         head: None,
         kept_cells: None,
@@ -1278,7 +1305,54 @@ fn pack_fbs_routes(
 /// projection as packed FBS routes (no matrices), geometric recurrence gates,
 /// the Hamilton gate, and the native vector writer table built from `embed`.
 /// Width and MLP width must be multiples of 32; they are refused, not padded.
+/// The gates and the transition are snapped to the 120 icosians; see
+/// [`export_fbs_trunk_uorlut01_with`] to serve either unsnapped.
 pub fn export_fbs_trunk_uorlut01(snap: &FbsTrunkSnapshot) -> Result<Vec<u8>, StackError> {
+    export_fbs_trunk_uorlut01_with(snap, FbsExportSnaps::SNAPPED)
+}
+
+/// Which quaternions an FBS export snaps to the 120 icosians (claude-181). An
+/// unsnapped one is served as the unit quaternion of its 4-block, by integer
+/// square root and division, as the plain float trunk normalizes it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FbsExportSnaps {
+    /// The recurrence output gate and the feed-forward gate.
+    pub gates: bool,
+    /// The recurrence transition.
+    pub transition: bool,
+}
+
+impl FbsExportSnaps {
+    /// Everything snapped, the `uor-r4.lut-stack/4` contract.
+    pub const SNAPPED: Self = Self {
+        gates: true,
+        transition: true,
+    };
+
+    /// The reference snaps the integer session serves under these choices.
+    pub fn reference(self) -> FbsReferenceSnaps {
+        let mode = |snapped: bool| {
+            if snapped {
+                FbsQuatMode::Icosian
+            } else {
+                FbsQuatMode::Normalize
+            }
+        };
+        FbsReferenceSnaps {
+            transition: mode(self.transition),
+            gates: mode(self.gates),
+        }
+    }
+}
+
+/// [`export_fbs_trunk_uorlut01`] with chosen snaps. With [`FbsExportSnaps::SNAPPED`]
+/// it writes the same bytes; anything else is written under
+/// [`STACK_FBS_RAW_SCHEMA`], and an unsnapped transition carries no
+/// `transport_snap`.
+pub fn export_fbs_trunk_uorlut01_with(
+    snap: &FbsTrunkSnapshot,
+    snaps: FbsExportSnaps,
+) -> Result<Vec<u8>, StackError> {
     let shape = StackShape {
         vocab: snap.vocab,
         width: snap.width,
@@ -1295,6 +1369,8 @@ pub fn export_fbs_trunk_uorlut01(snap: &FbsTrunkSnapshot) -> Result<Vec<u8>, Sta
         memory: None,
         rec_gates: Some("geometric".to_owned()),
         gate: Some("hamilton".to_owned()),
+        raw_gates: !snaps.gates,
+        raw_transition: !snaps.transition,
         projection: Some("spiralcore_fbs".to_owned()),
         head: Some("native_vector".to_owned()),
         kept_cells: Some(snap.kept_cells),
@@ -1420,7 +1496,9 @@ pub fn export_fbs_trunk_uorlut01(snap: &FbsTrunkSnapshot) -> Result<Vec<u8>, Sta
             "rec_gates": "geometric",
             "gate": "hamilton",
         },
-        "transport_snap": transport_snap,
+        // An unsnapped transition records no snap (null), which the reader
+        // requires of `raw_transition`.
+        "transport_snap": snaps.transition.then_some(transport_snap),
     });
     let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
     let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + b.data.len());
