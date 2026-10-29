@@ -848,26 +848,41 @@ fn is_scalar_float_register_token(tok: &str) -> bool {
     false
 }
 
-/// Check whether `(mnemonic, operands)` is a forbidden Class I (hardware or compiler-rt multiply),
-/// Class II (hardware or compiler-rt divide), Class III (floating-point / SIMD float transfer), or
-/// unresolved indirect subroutine call (`blr` / `call *`) on AArch64 or x86-64.
+/// Whether the first operand of an AArch64 instruction is a general register (`x0..x30`,
+/// `w0..w30`, `xzr`, `wzr`), as in a scalar `mul x8, x9, x10`.
+fn is_general_register_destination(operands: &str) -> bool {
+    let code = operands.split(';').next().unwrap_or(operands);
+    let code = code.split("//").next().unwrap_or(code);
+    let dest = code.split(',').next().unwrap_or("").trim();
+    if matches!(dest, "xzr" | "wzr") {
+        return true;
+    }
+    dest.strip_prefix('x')
+        .or_else(|| dest.strip_prefix('w'))
+        .and_then(|n| n.parse::<u32>().ok())
+        .is_some_and(|n| n <= 30)
+}
+
+/// Whether x86-64 AT&T operands (`%rcx`, `(%rdi)`) name no vector or mask register, as in a
+/// general-register `mul %rcx`. AArch64 operands (no `%`) never qualify.
+fn is_x86_general_register_operands(operands: &str) -> bool {
+    let code = operands.split('#').next().unwrap_or(operands);
+    code.contains('%')
+        && !["%xmm", "%ymm", "%zmm", "%mm", "%k"]
+            .iter()
+            .any(|vector| code.contains(vector))
+}
+
+/// Check whether `(mnemonic, operands)` is forbidden in the served step on AArch64 or x86-64: a
+/// vector, dot-product or matrix multiply (Class I), a vector divide form (Class II), a
+/// floating-point or float-register transfer instruction (Class III, `fmov` included), a call to
+/// a compiler-rt float helper, or an unresolved indirect subroutine call (`blr` / `call *`).
+/// Since D80 and D81 (CHARTER §3.6), scalar general-register integer multiply and divide and the
+/// compiler-rt integer multiply and divide helpers are allowed.
 fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
     const FORBIDDEN_MNEMONICS: &[&str] = &[
-        // AArch64 Class I: hardware multipliers
-        "mul",
-        "madd",
-        "msub",
-        "mneg",
-        "smnegl",
-        "umnegl",
-        "smull",
-        "umull",
-        "smaddl",
-        "umaddl",
-        "smsubl",
-        "umsubl",
-        "smulh",
-        "umulh",
+        // AArch64 Class I: vector, dot-product and matrix multipliers (scalar general-register
+        // multiply and divide are checked against `SCALAR_INTEGER_MUL_DIV` below, D80/D81)
         "sqdmulh",
         "sqrdmulh",
         "sqrdmlah",
@@ -902,9 +917,6 @@ fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
         "smmla",
         "ummla",
         "usmmla",
-        // AArch64 Class II: hardware dividers
-        "sdiv",
-        "udiv",
         // AArch64 Class III: floating-point & scalar float register transfer
         "fmul",
         "fmov",
@@ -972,30 +984,8 @@ fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
         "blrdb",
         "blraa",
         "blrab",
-        // x86-64 integer multipliers & dividers (including AT&T size suffixes)
-        "imul",
-        "imulb",
-        "imulw",
-        "imull",
-        "imulq",
-        "mulb",
-        "mulw",
-        "mull",
-        "mulq",
-        "mulx",
-        "mulxl",
-        "mulxq",
-        "idiv",
-        "idivb",
-        "idivw",
-        "idivl",
-        "idivq",
-        "div",
-        "divb",
-        "divw",
-        "divl",
-        "divq",
-        // x86-64 SSE/AVX float, comparison, conversion & packed integer multipliers
+        // x86-64 SSE/AVX float, comparison, conversion & packed integer multipliers (general-register
+        // `imul*`, `mul*`, `mulx*`, `idiv*` and `div*` are allowed, D80/D81)
         "mulss",
         "mulsd",
         "mulps",
@@ -1116,7 +1106,20 @@ fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
         "vpdpwssds",
     ];
 
+    // D80/D81 (CHARTER §3.6): AArch64 scalar integer multiply and divide pass only with no vector
+    // arrangement suffix (otool `mul.4s v0, v1, v2`) and a general-register destination (GNU
+    // `mul v0.4s, v1.4s, v2.4s` fails); x86-64 AT&T `mul %rcx` passes with no vector register.
+    const SCALAR_INTEGER_MUL_DIV: &[&str] = &[
+        "mul", "madd", "msub", "mneg", "smull", "umull", "smaddl", "umaddl", "smsubl", "umsubl",
+        "smnegl", "umnegl", "smulh", "umulh", "sdiv", "udiv",
+    ];
+
     let base = mnemonic.split('.').next().unwrap_or(mnemonic);
+    if SCALAR_INTEGER_MUL_DIV.contains(&base) {
+        return mnemonic != base
+            || !(is_general_register_destination(operands)
+                || (base == "mul" && is_x86_general_register_operands(operands)));
+    }
     if FORBIDDEN_MNEMONICS.contains(&base) {
         return true;
     }
@@ -1151,18 +1154,10 @@ fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
             return true;
         }
     }
-    // Direct calls to compiler-rt / libgcc software multiply, divide, or float helpers.
+    // Direct calls to compiler-rt / libgcc software float helpers; the integer multiply and divide
+    // helpers (`__multi3`, `__udivti3`, ...) are allowed (D80/D81) and their bodies are checked.
     if matches!(base, "bl" | "b" | "call" | "callq" | "jmp" | "jmpq") {
         const FORBIDDEN_COMPILER_RT: &[&str] = &[
-            "__multi3",
-            "__muldi3",
-            "__mulodi4",
-            "__udivti3",
-            "__divti3",
-            "__umodti3",
-            "__modti3",
-            "__udivdi3",
-            "__divdi3",
             "__floatditf",
             "__floatunditf",
             "__floattidf",
@@ -1182,8 +1177,10 @@ fn is_forbidden_instruction(mnemonic: &str, operands: &str) -> bool {
 /// Verify that disassembled text from `objdump --demangle -d` or `otool -tV` contains
 /// `IntegerStackSession::step`, its 42 mandatory `uor_r4_integer::stack` mixer and kernel callees,
 /// all `uor_r4_integer::stack` closure instantiations, and all non-allowlisted functions reachable
-/// in the transitive call graph (`core`, `alloc`, `compiler_builtins`, `uor_r4_integer`) with zero
-/// Class I (multiply), Class II (divide), or Class III (floating-point / SIMD transfer) instructions.
+/// in the transitive call graph (`core`, `alloc`, `compiler_builtins`, `uor_r4_integer`) with no
+/// instruction [`is_forbidden_instruction`] refuses: no vector, dot-product or matrix multiply, no
+/// floating-point or float-register transfer instruction and no unresolved indirect call. Scalar
+/// general-register integer multiply and divide pass (D80, D81).
 ///
 /// When `require_full_call_graph` is true, requires all 43 mandatory symbols
 /// (`IntegerStackSession::step` + all 42 `STACK_CALL_GRAPH_KERNELS`) with zero missing symbols.
@@ -1356,7 +1353,7 @@ pub fn verify_step_disassembly_text(
     }
     if !violations.is_empty() {
         return Err(format!(
-            "forbidden multiply/divide/float instructions in stack serving call-graph disassembly: {}",
+            "forbidden vector-multiply/float/indirect-call instructions in stack serving call-graph disassembly: {}",
             violations.join("; ")
         ));
     }
@@ -1366,7 +1363,9 @@ pub fn verify_step_disassembly_text(
 /// Run `objdump --demangle -d` (falling back to `otool -tV`) on `binary_path` and verify that
 /// `IntegerStackSession::step`, all 42 mandatory `uor_r4_integer::stack` mixer and kernel symbols,
 /// all stack closure instantiations, and all reachable non-allowlisted callees in the transitive
-/// call graph contain zero multiply, divide, or floating-point instructions.
+/// call graph contain no instruction [`verify_step_disassembly_text`] refuses: no vector or matrix
+/// multiply and no floating-point instruction. Scalar integer multiply and divide pass (D80, D81);
+/// the name predates them.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn verify_step_objdump_zero_mul_zero_float(
     binary_path: &Path,
