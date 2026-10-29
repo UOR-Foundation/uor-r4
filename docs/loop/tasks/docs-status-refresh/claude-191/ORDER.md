@@ -25,7 +25,12 @@ The item's done-when reads:
 
 ## Cancel probe (run first)
 
-To fill in.
+Cancel if the pages already state 29 Oct, or if the issues map is complete.
+- **The generated pictures are stale.** `xtask/src/figures.rs` has `DATE` "13 October 2026".
+- **The issues map is incomplete.** 14 items have no issue (claude-190's count, checked by its review).
+- **The site's pages are stale.** Most of `docs/start/`, `docs/research/` and `docs/research/lines/` were last committed on 20 Oct, before the trunk line's pivot (claude-155, claude-161) and before D80 and D81.
+
+Result: **go.** This probes an instrument, the project's record of itself, not a mechanism.
 
 ## Files in scope
 
@@ -102,8 +107,14 @@ To fill in.
 
 ## Done when
 
-To fill in.
+The item's five, quoted under Goal. The method:
+- **The facts sheet** is at `local/claude/docs-refresh/FACTS.md`; its rules are copied into the REPORT.
+- **One maker per cluster of pages**, each with a `loop suborder` naming only its files, and each reading its pages once against the sheet.
+- **One fresh review** of the whole diff against the sheet.
+- **The issue sync** runs from this tree, which equals `main` outside the refresh's pages.
 
 ## Stop and ask if
 
-To fill in.
+- **A page would need a bar, a milestone status or a decision changed.** Leave it, and record it in the REPORT for a decision row.
+- **A fact a page needs is not on the sheet.** Leave the page's sentence as is, and list it.
+- **The roadmap sync's dry run would change an issue for a reason other than the 14 missing items and the milestone checklists.** Read the reason first; apply only the expected changes.
