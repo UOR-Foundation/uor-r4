@@ -103,7 +103,13 @@ The owner's direction (29 Oct, PLAN.md): a full documentation update, with "thes
 
 ## Checks run at the head
 
-__CHECKS__
+At `bae256482`:
+- **`uor-harness loop gates --full`:** 11 of 11 green. These include `claim-wording`, and `loop-migrate`, which checks the FILEMAP.
+- **`uor-harness loop report --check`:** PASS.
+- **`cargo xtask roadmap check`:** 110 items OK (ready 15, held 10, decision 1, done 84). `roadmap render`: current.
+- **`cargo xtask figures`, `figures-charts` and `figures-math`:** all current.
+- **`cargo fmt -p xtask --check`:** clean in the worktree. The committed tree differs only in `figures_charts.rs`'s one test, which `main` has unformatted (above).
+- **Links, the site build and `book-check`:** as under Measurements.
 
 ## Skills used
 
