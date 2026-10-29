@@ -392,6 +392,7 @@ fn main() -> Result<()> {
                 &option("--artifact-sha256")?,
                 &option("--model-sha256")?,
                 &PathBuf::from(option("--stage4b")?),
+                extra.get("--train-receipt").map(Path::new),
                 &PathBuf::from(option("--stored-preds")?),
                 seed,
                 steps,
