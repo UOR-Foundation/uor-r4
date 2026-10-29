@@ -152,7 +152,7 @@ A reading names the change for the next unit. It is not a result about the snaps
 
 **The job and its summary program** are local files, shipped to the pod's `/workspace/abl-job/`.
 - **`summary.jq` is pinned** at `200425f24393c20f9c6d4f4d2bafb97808e38f61586c863cacd41e152012cf16`. The job checks it before use.
-- **`job.sh` is pinned as a template** at `f5c96ba23e723c3066f923256d7bd700916aa17eaf179bf021bb9983d8fc5c1e`. The launched copy differs only in its `SHA=` line, which takes the pushed head.
+- **`job.sh` is pinned as a template** at `d82e86c27dc75d78d360de3ad2dc689f65bc2d6bda585b788f53a55e94e86f5d`. The launched copy differs only in its `SHA=` line, which takes the pushed head.
 - **The job copies both into the run folder,** so the seal holds the exact programs that produced the reading.
 - **The job refuses to start if its run folder is not empty,** so a retry cannot count a stale receipt.
   - The refusal writes `/workspace/abl-refused`, outside the run folder.
@@ -201,6 +201,18 @@ A reading names the change for the next unit. It is not a result about the snaps
 - Save everything off the pod and read it back before `down`.
 
 ## 9. Non-author TEST FITNESS review
+
+**D67 pre-run review (fresh reviewers): GO in round 2, at `2e98ce155`.**
+- **Round 1, at `cc1696a83`: NO-GO.** It checked the job, the store inputs, the summary program, the FIT record and the caps. Its one fault was that the job's early refusal left no marker, so a watcher could wait out the lease. It ran out of budget before checking the chain.
+- **Round 2 checked the chain:**
+  - pipeline-map gap 5 and R6;
+  - the item's done-when;
+  - claude-136's bound.
+  It found that measuring first is the right order, and that every row names a different next unit, with no mechanism claim. It also confirmed the refusal fix and the job pin.
+- **Its three low findings were done before launch:**
+  - an earlier launch's refusal marker is cleared (job re-pinned);
+  - CHARTER §3.6 reads as the sheet says (D80 integer multiply, D81 integer divide);
+  - all six `--expect-d11-top1` values match claude-136's table.
 
 **Round 3 (fresh non-author reviewer, at `4be16c024`): FIT.** It found nothing blocking or high, and ran the five relevant CPU tests at that commit (5 passed). Its findings are folded in:
 1. **Medium:** the job and summary program are now pinned, checked and sealed (section 6).
