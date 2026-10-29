@@ -14,7 +14,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Sheet: [turn-memory-reply-2026-10-29](
   - So on today's code, the opening memory trades copies for openings. The pre-registered bar compares (r) with (m) and with (r0), and (r) clears both. Read against (m) alone, however, the gains would look larger than they are.
 - **Against no memory, (r)'s gain at seed 2 is thin, and its copies fall.** `T̄(r) − T̄(r0)` is 258.7 rows against a margin of 148.4.
   - (r) copies 3,001.3 rows against (r0)'s 3,315.0: 313.7 fewer, against `m_4130(3,315.0)` = 76.7.
-  - So at seed 2, (r)'s whole gain over no memory is its openings (+265.3) and its rest rows (+271.4), less that copy loss.
+  - At seed 2, against (r0): openings +265.3, rest rows +271.3, copies −313.7. The kinds overlap (163 rows both open a reply and copy), so these do not add up to the total's +258.7.
   - The bar holds copies against (m) only, so this does not change the cell. It is a cost of the memory at that seed.
   - At seed 1, (r) gains 1,533.0 rows over (r0) (margin 164.4), and copies 811.3 more.
 - **The trained trunk now depends on the memory.** Taking the whole memory out of (r) at the final checkpoint (`--inspect`'s `memory_drop`) drops it to 4,101 / 3,807 hits. That is far below the empty control's 10,079 / 11,171. A model served without both tables would be broken, not merely weaker.
