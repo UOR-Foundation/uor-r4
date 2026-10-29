@@ -3,7 +3,7 @@ id: turn-memory-reply
 title: Carry the turn memory past a reply's first word
 milestone: research
 area: mechanism
-status: ready
+status: done
 open_to: lab
 needs_gpu: true
 depends_on: [route-plus-memory]
