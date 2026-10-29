@@ -3588,3 +3588,23 @@ fn fbs_trunk_matches_reference_at_a_non_square_multi_token_shape() {
     assert!(cells >= 496, "kept cells agree on only {cells} of 512");
     assert!(close >= 480, "queries within 2 LSB on only {close} of 512");
 }
+
+/// claude-188: a trunk with no Hamming read exports the same bytes as before the read was added
+/// to the format, snapped (`lut-stack/4`) and with both forms unsnapped (`lut-stack/5`). The
+/// sha256s were taken at `a368b78ef`, before the change.
+#[test]
+fn read_free_fbs_exports_are_unchanged_by_the_hamming_format() {
+    use sha2::{Digest, Sha256};
+    let snap = synthetic_fbs_trunk(20261025);
+    let snapped = super::export_fbs_trunk_uorlut01(&snap).expect("export");
+    let raw = super::export_fbs_trunk_uorlut01_with(
+        &snap,
+        super::FbsExportSnaps {
+            gates: false,
+            transition: false,
+        },
+    )
+    .expect("export");
+    assert_eq!(hex::encode(Sha256::digest(&snapped)), "e377d68f6b3c112ed267a9e3c09ef2ef2210e8f1c9bc4619ae26dd4c68d18e5c");
+    assert_eq!(hex::encode(Sha256::digest(&raw)), "ec5ca212c257a2b2cd73c337029ff8556b454810377801d81addca75c4105965");
+}
