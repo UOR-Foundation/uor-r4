@@ -56,6 +56,10 @@ pub struct CModel {
     pub roots_q12: *const i32,
     pub icosian: *const i8,
     pub keep_q31: *const u64,
+    /// Nonzero serves the two Hamilton gates unsnapped (claude-181's `raw_gates`).
+    pub raw_gates: u32,
+    /// Nonzero serves the transition unsnapped (`raw_transition`).
+    pub raw_transition: u32,
 }
 
 static KEEP_Q31: [u64; 16] = FbsImage::GEOMETRIC_KEEP_Q31;
@@ -177,6 +181,8 @@ impl<'a> CModelHost<'a> {
             roots_q12: image.roots_q12.as_ptr().cast::<i32>(),
             icosian: ICOSIAN.as_ptr().cast::<i8>(),
             keep_q31: KEEP_Q31.as_ptr(),
+            raw_gates: u32::from(shape.raw_gates),
+            raw_transition: u32::from(shape.raw_transition),
         };
         Ok(Self {
             _image: image,

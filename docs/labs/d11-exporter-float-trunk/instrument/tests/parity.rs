@@ -7,7 +7,10 @@ use uor_r4_integer::stack::synthetic::{
     fbs_synthetic_non_square, fbs_synthetic_tiny_gain, synthetic_fbs_trunk,
     synthetic_fbs_trunk_with, Lcg, FBS_SYNTH_NON_SQUARE,
 };
-use uor_r4_integer::stack::{export_fbs_trunk_uorlut01, FbsTrunkSnapshot, IntegerStackModel};
+use uor_r4_integer::stack::{
+    export_fbs_trunk_uorlut01, export_fbs_trunk_uorlut01_with, FbsExportSnaps, FbsTrunkSnapshot,
+    IntegerStackModel,
+};
 
 fn model_of(snap: &FbsTrunkSnapshot) -> IntegerStackModel {
     IntegerStackModel::parse(&export_fbs_trunk_uorlut01(snap).expect("export")).expect("parse")
@@ -85,6 +88,56 @@ fn host_twin_equals_the_session_over_sequences() {
         &model,
         &sequences(long.vocab, 8, 64, 11),
     );
+}
+
+/// claude-181's four snap choices (claude-182): the gates and the transition each snapped to the
+/// icosians or served as the unit quaternion.
+const SNAP_CHOICES: [FbsExportSnaps; 4] = [
+    FbsExportSnaps::SNAPPED,
+    FbsExportSnaps {
+        gates: false,
+        transition: true,
+    },
+    FbsExportSnaps {
+        gates: true,
+        transition: false,
+    },
+    FbsExportSnaps {
+        gates: false,
+        transition: false,
+    },
+];
+
+/// The host twin equals the Rust session bit for bit in every snap choice, on single tokens and
+/// over sequences (the transition moves a state only from a sequence's second token), and each
+/// unsnapped choice changes the outputs.
+#[test]
+fn host_twin_equals_the_session_in_every_snap_choice() {
+    for (name, snap) in [
+        ("small", synthetic_fbs_trunk(20261025)),
+        ("non-square", fbs_synthetic_non_square(20261026)),
+        ("tiny-gain", fbs_synthetic_tiny_gain(20261026)),
+    ] {
+        let seqs = sequences(snap.vocab, 16, snap.context, 7);
+        let snapped = host_sequences(&model_of(&snap), &seqs).expect("host twin");
+        for snaps in SNAP_CHOICES {
+            let model = IntegerStackModel::parse(
+                &export_fbs_trunk_uorlut01_with(&snap, snaps).expect("export"),
+            )
+            .expect("parse");
+            assert_eq!(
+                (model.shape().raw_gates, model.shape().raw_transition),
+                (!snaps.gates, !snaps.transition)
+            );
+            let label = format!("{name} {snaps:?}");
+            assert_parity(&label, &model, &single_tokens(snap.vocab));
+            assert_parity(&label, &model, &seqs);
+            if snaps != FbsExportSnaps::SNAPPED {
+                let host = host_sequences(&model, &seqs).expect("host twin");
+                assert_ne!(host, snapped, "{label} computed the snapped forward");
+            }
+        }
+    }
 }
 
 /// The snap trace (claude-134) changes no output, has `trace_stride` bytes per

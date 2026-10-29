@@ -153,6 +153,8 @@ impl DeviceEvaluator {
             icosian: upload(&stream, &mut arrays, &H4_ROOT_COEFFICIENTS[..])? as *const i8,
             keep_q31: upload(&stream, &mut arrays, &FbsImage::GEOMETRIC_KEEP_Q31[..])?
                 as *const u64,
+            raw_gates: u32::from(shape.raw_gates),
+            raw_transition: u32::from(shape.raw_transition),
         };
         stream.synchronize().map_err(cuda)?;
         Ok(Self {

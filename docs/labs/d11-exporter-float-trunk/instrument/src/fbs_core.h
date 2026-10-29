@@ -8,8 +8,10 @@
 // evaluator's PTX module, and by the host C++ compiler into a twin that only
 // qualifies the port against the Rust session (it never scores a panel).
 //
-// An FBS shape always has geometric gates, the icosian-snapped transport,
-// learned rotations and the Hamilton gate, so only those branches are ported.
+// An FBS shape always has geometric gates, learned rotations and the Hamilton
+// gate, so only those branches are ported. The gates and the transport are
+// snapped to the icosians, or served unsnapped as unit quaternions under
+// `raw_gates` and `raw_transition` (claude-181, ported by claude-182).
 // Products are formed modulo 2^64 or 2^128 exactly as the Rust kernels' table
 // products (equal to wrapping multiplication). No floating point anywhere.
 
@@ -64,6 +66,10 @@ typedef struct {
   const int32_t *roots_q12;    // 16 * 8
   const int8_t *icosian;       // 120 * 4 * 2: H4_ROOT_COEFFICIENTS
   const uint64_t *keep_q31;    // 16: GEOMETRIC_KEEP_Q31
+  // claude-181's unsnapped forms (`uor-r4.lut-stack/5`): nonzero serves the two
+  // Hamilton gates, or the transition, as the unit quaternion instead of a root.
+  uint32_t raw_gates;
+  uint32_t raw_transition;
 } fbs_model;
 
 // One sequence's buffers and state; `fbs_work_len` gives each length.
@@ -438,6 +444,47 @@ FBS_FN uint32_t fbs_snap_rotation(const int8_t *icosian, const int32_t raw[4], u
   return index;
 }
 
+// The epsilons of the unsnapped forms, at exponent -32 (session.rs
+// `ROTATION_EPSILON`, `GATE_EPSILON`; claude-181).
+#define FBS_ROTATION_EPSILON ((fbs_u128)4295)
+#define FBS_GATE_EPSILON ((fbs_u128)0)
+// The trace byte of a site served unsnapped: no root was chosen.
+#define FBS_UNSNAPPED 255u
+
+// `lambda raw / |raw|` per coordinate at Q31 (session.rs `stack_rotation`,
+// claude-181): the unit rotation at Q30, rounded toward zero as a signed
+// division, times `lambda` (Q31). `epsilon` is added to |raw|^2 at exponent
+// -32. A zero quaternion under a zero epsilon gives zero, as the division by
+// zero does.
+FBS_FN void fbs_rotation(const int32_t raw[4], uint64_t lambda, fbs_u128 epsilon, int64_t out[4]) {
+  fbs_u128 square = 0;
+  for (uint32_t c = 0; c < 4; c++) {
+    int64_t v = (int64_t)raw[c];
+    square += (fbs_u128)(uint64_t)(v * v);
+  }
+  // |raw| at exponent -32.
+  fbs_u128 norm = fbs_isqrt((square + epsilon) << 32);
+  for (uint32_t c = 0; c < 4; c++) {
+    int64_t v = (int64_t)raw[c];
+    uint64_t magnitude_abs = (uint64_t)(v < 0 ? -v : v);
+    fbs_i128 magnitude = (fbs_i128)fbs_div_u128((fbs_u128)magnitude_abs << 46, norm);
+    fbs_i128 unit = v < 0 ? -magnitude : magnitude;
+    out[c] = (int64_t)(fbs_mul_i128((fbs_i128)lambda, unit) >> 30);
+  }
+}
+
+// A quaternion as the artifact serves it: snapped to its root (whose index is
+// returned, for the snap trace), or under `raw` the unit `raw / |raw|` itself
+// with [`FBS_UNSNAPPED`] returned.
+FBS_FN uint32_t fbs_serve_rotation(const fbs_model *m, uint32_t raw_form, const int32_t raw[4], uint64_t lambda,
+                                   fbs_u128 epsilon, int64_t out[4]) {
+  if (raw_form) {
+    fbs_rotation(raw, lambda, epsilon, out);
+    return FBS_UNSNAPPED;
+  }
+  return fbs_snap_rotation(m->icosian, raw, lambda, out);
+}
+
 // The bytes of one position's snap trace (claude-134): per layer, the
 // transition's root per lane, the output gate's root per lane, then the
 // feed-forward Hamilton gate's root per 4 MLP channels.
@@ -486,7 +533,7 @@ FBS_FN int32_t fbs_recurrence(const fbs_model *m, const fbs_layer *layer, int64_
     uint64_t lambda = 1ull << (30 - idx), keep = m->keep_q31[idx];
     int32_t raw[4] = {rotations[lane * 4], rotations[lane * 4 + 1], rotations[lane * 4 + 2], rotations[lane * 4 + 3]};
     int64_t transition[4];
-    uint32_t chosen = fbs_snap_rotation(m->icosian, raw, lambda, transition);
+    uint32_t chosen = fbs_serve_rotation(m, m->raw_transition, raw, lambda, FBS_ROTATION_EPSILON, transition);
     if (trace) trace[lane] = fbs_trace_root(raw, chosen);
     int64_t *held = state + lane * 4;
     int64_t h[4] = {held[0], held[1], held[2], held[3]};
@@ -502,7 +549,7 @@ FBS_FN int32_t fbs_recurrence(const fbs_model *m, const fbs_layer *layer, int64_
   for (uint32_t lane = 0; lane < lanes; lane++) {
     int32_t raw[4] = {gate[lane * 4], gate[lane * 4 + 1], gate[lane * 4 + 2], gate[lane * 4 + 3]};
     int64_t q[4];
-    uint32_t chosen = fbs_snap_rotation(m->icosian, raw, 1ull << 31, q);
+    uint32_t chosen = fbs_serve_rotation(m, m->raw_gates, raw, 1ull << 31, FBS_GATE_EPSILON, q);
     if (trace) trace[lanes + lane] = fbs_trace_root(raw, chosen);
     int64_t rhs[4];
     for (uint32_t k = 0; k < 4; k++) rhs[k] = fbs_shift(state[lane * 4 + k], FBS_RESIDUAL_EXP - FBS_STATE_EXP);
@@ -521,7 +568,7 @@ FBS_FN void fbs_hamilton_gate(const fbs_model *m, const int32_t *gate, const int
   for (uint32_t j = 0; j < m->mlp / 4; j++) {
     int32_t raw[4] = {gate[j * 4], gate[j * 4 + 1], gate[j * 4 + 2], gate[j * 4 + 3]};
     int64_t q[4];
-    uint32_t chosen = fbs_snap_rotation(m->icosian, raw, 1ull << 31, q);
+    uint32_t chosen = fbs_serve_rotation(m, m->raw_gates, raw, 1ull << 31, FBS_GATE_EPSILON, q);
     if (trace) trace[j] = fbs_trace_root(raw, chosen);
     int64_t rhs[4] = {(int64_t)up[j * 4], (int64_t)up[j * 4 + 1], (int64_t)up[j * 4 + 2], (int64_t)up[j * 4 + 3]};
     fbs_i128 prod[4];
