@@ -28,7 +28,7 @@ The four step-16,384 checkpoints of claude-194, from `caseyallard/uor-r4-store`:
 - **(r) memory-off** is (r) with its memory taken out at load (`score_rows`'s second pass), not a separate checkpoint.
 - **(m) is not scored.** The question compares a trunk trained with the memory against one trained without, and (m)'s opening-only memory answers neither side.
 
-**How each is scored.** Each checkpoint is scored by `train-in-space --data-root ROOT --score-rows CKPT --out DIR --fresh-v2 FRESH --samples 64 --reply-tokens 64 --retain-rates 1 --seed S`. These are claude-194's `--inspect` flags, at its seed. The binary is built on the pod from this unit's head, `--locked`, and its sha256 is recorded before the first arm (the job's `binary-sha256` step).
+**How each is scored.** Each checkpoint is scored by `train-in-space --data-root ROOT --score-rows CKPT --out DIR --fresh-v2 FRESH --samples 64 --reply-tokens 64 --retain-rates 1 --seed S`. These are claude-194's `--inspect` flags, at its seed (its `job.sh:182`). `--decay-mult` is not passed, as it was not there: it scales only the optimizer's update (`in_space_long.rs:3334`, `:4110`), never a forward. The binary is built on the pod from this unit's head, `--locked`, and its sha256 is recorded before the first arm (the job's `binary-sha256` step).
 
 ## The data
 
@@ -54,10 +54,10 @@ At each seed `s`, on the decision rows:
 | Verdict | When | What it unlocks |
 |---|---|---|
 | **ahead** | ahead at both seeds | The co-adaptation fear is not borne out on DEV's unnamed rows. The memory recipe stays the training default; no memory-dropout arm. |
-| **behind** | behind at both seeds | The trunk reads worse where the memory is silent. The training run carries a memory-dropout arm beside (r) and (r0). |
-| **mixed** | the seeds disagree, or either is inside | No change to the recipe. The training run carries both (r) and a memory-dropout arm. |
+| **behind** | behind at both seeds | The trunk reads worse where the memory is silent. The training run carries a memory-dropout arm, and it becomes the default recipe for the model to ship, with (r) and (r0) as its comparators. |
+| **mixed** | the seeds disagree, or either is inside | No default changes. The training run carries (r) and a memory-dropout arm as equal candidates, and the protocol (done-when 3) chooses between them on its strata. |
 
-Every outcome changes what the training run (step 5 of the assessment) trains, so none is wasted. The grader (`train-in-space --overturn 1`) applies the rule in code, with unit tests for the band (`the_band_floor_is_twice_the_root_rounded_up`), the cells (`a_seed_is_ahead_or_behind_only_beyond_the_band`), the verdict (`the_verdict_needs_every_seed`) and the pairing (`pairing_counts_discordant_rows_on_the_decision_rows_only`).
+Each verdict sets a different training plan (step 5 of the assessment): no dropout arm; the dropout arm as the default; or both as equal candidates. The REPORT gives `b`, `c`, `d` and the band at each seed whatever the cell, since claude-194's seeds differed widely on totals (+1,533 and +259 over (r0)), so the spread term may well decide the cell. The grader (`train-in-space --overturn 1`) applies the rule in code, with unit tests for the band (`the_band_floor_is_twice_the_root_rounded_up`), the cells (`a_seed_is_ahead_or_behind_only_beyond_the_band`), the verdict (`the_verdict_needs_every_seed`) and the pairing (`pairing_counts_discordant_rows_on_the_decision_rows_only`).
 
 ## Descriptive only, with no threshold
 
@@ -69,8 +69,8 @@ Every outcome changes what the training run (step 5 of the assessment) trains, s
   - distinct-1 and distinct-2;
   - the repeated 4-gram rate.
 
-  DEV's own replies after the same prompts are scored the same way, as the anchor.
-- **The writer's picks** for every row, beside the nearest picks. With the memory off, they and the memory-off samples are the float reference for `integer-hamming-read` step 5's top-1 agreement and first divergence. They are sealed here, not read here.
+  DEV's own replies after the same prompts are scored the same way, as the anchor. A TRAIN reply is a mask-1 run, the content and its `<|eos|>` (`dialogue.rs:14`), so a reply counts as complete once cut after its first `<|eos|>`. `greedy_reply` runs its gate at step 0, as `run_long`'s samples always have. The teacher-forced rows run at the checkpoint's step, as `inspect_run` does.
+- **The writer's picks** for every row, beside the nearest picks. With the memory off, they and the memory-off samples are the float reference for `integer-hamming-read` step 5's top-1 agreement and first divergence. They are sealed here, not read here. This replaces the done-when's "the pod also runs `integer-hamming-read`'s step 5 parity": kept sets need hooks outside this item's scope, so the parity (kept sets and top-1, on the checkpoint that item's sheet names) stays that item's step 5, and the first divergence is done-when 3's (decision review on #3407).
 
 ## Instrument checks
 
@@ -84,7 +84,7 @@ Every outcome changes what the training run (step 5 of the assessment) trains, s
   | (r0), seed 1 | 10,079 | 10,079 |
   | (r0), seed 2 | 11,171 | 11,171 |
 
-  Exact equality is expected: the same checkpoint, the same code path (`row_picks` is `nearest_reading`'s loop), and the same flags. If any differs, the REPORT gives the difference, and the cell is read only if every difference is at most 14 rows (0.1% of DEV), classed as GPU float order across hosts. Past that, the instrument is repaired before any cell is read (L-007).
+  Exact equality is expected: the same checkpoint, the same code path (`row_picks` is `nearest_reading`'s loop), and the same flags. `inspect_run` also ran `evaluate_dev_panel` and a probe forward before its reading, and `score_rows` does not; this check is what shows they left no per-thread state. If any differs, the REPORT gives the difference, and the cell is read only if every difference is at most 14 rows (0.1% of DEV), classed as GPU float order across hosts. Past that, the instrument is repaired before any cell is read (L-007).
 - **I-3: the memory names no decision row.** For every arm, the number of decision rows picked differently with the memory taken out (`decision_pick_differences`) is 0. A non-zero count is classified before the cell is read: either the census's rows are not the memory's, or the memory reaches rows it does not name.
 - **I-4: the rows are the census's.** The grader's decision rows number 3,438 (3,406 + 32), and every arm's files score the same 14,287 rows in the same order (`paired` refuses otherwise).
 - **I-5: the inputs are the sealed ones.** Every checkpoint file passes `sha256sum -c` against its seed's sealed `SHA256SUMS` (above), and the data and Fresh V2 pass the code's pins.
