@@ -24,7 +24,7 @@ use sha2::{Digest, Sha256};
 use super::StackError;
 pub use crate::fbs_snapshot::{
     FbsHammingRead, FbsHammingSnapshot, FbsMemoryEntry, FbsMemorySnapshot, FbsReplyTable, FbsRoutes, FbsTrunkLayer,
-    FbsTrunkSnapshot,
+    FbsTrunkSnapshot, MEMORY_MAX_K, MEMORY_PAD, MEMORY_REPLY_KEY_LEN,
 };
 
 /// Container magic.
@@ -65,13 +65,6 @@ pub const HAMMING_KEPT: usize = 16;
 pub const STACK_FBS_MEMORY_SCHEMA: &str = "uor-r4.lut-stack/7";
 /// The memory's move weights at `2^MEMORY_WEIGHT_EXP`.
 pub const MEMORY_WEIGHT_EXP: i32 = -24;
-/// The longest memory key, and the width a reply key is padded to: the float memory's
-/// `MAX_REPLY_KEY` (16 turn ids, two separators, a length and an id).
-pub const MEMORY_REPLY_KEY_LEN: usize = 20;
-/// The most turn ids an opening key may hold (the float memory's `MAX_KEY`).
-pub const MEMORY_MAX_K: usize = 16;
-/// Pads a stored key shorter than its row, and joins a reply key's parts; never a token id.
-pub const MEMORY_PAD: u32 = u32::MAX;
 
 /// The header record of a stack's turn memory (claude-198): its key sizes, its table counts, and
 /// the exponent its weights are stored at, in sections `memory.opening.*` and `memory.reply.*`.

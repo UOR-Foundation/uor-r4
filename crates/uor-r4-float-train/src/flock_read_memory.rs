@@ -737,6 +737,16 @@ mod tests {
         assert_eq!((stored[5], hit[5]), (70, 1.0));
     }
 
+    /// claude-198: the memory's keys fit the integer artifact's rows, so every key this crate can
+    /// save, the export can carry.
+    #[test]
+    fn the_memorys_key_shapes_are_the_integer_artifacts() {
+        use uor_r4_integer::fbs_snapshot::{MEMORY_MAX_K, MEMORY_PAD, MEMORY_REPLY_KEY_LEN};
+        assert_eq!(MAX_KEY, MEMORY_MAX_K);
+        assert_eq!(MAX_REPLY_KEY, MEMORY_REPLY_KEY_LEN);
+        assert_eq!(PAD, MEMORY_PAD);
+    }
+
     #[test]
     fn a_memory_refuses_keys_it_cannot_hold() {
         let device = Device::Cpu;

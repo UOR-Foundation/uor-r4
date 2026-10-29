@@ -287,6 +287,14 @@ pub struct FbsTrunkSnapshot {
     pub memory: Option<FbsMemorySnapshot>,
 }
 
+/// The longest memory key, and the width a reply key is padded to: the float memory's
+/// `MAX_REPLY_KEY` (16 turn ids, two separators, a length and an id).
+pub const MEMORY_REPLY_KEY_LEN: usize = 20;
+/// The most turn ids an opening key may hold (the float memory's `MAX_KEY`).
+pub const MEMORY_MAX_K: usize = 16;
+/// Pads a stored key shorter than its row, and joins a reply key's parts; never a token id.
+pub const MEMORY_PAD: u32 = u32::MAX;
+
 /// The turn memory of `turn_memory.safetensors` and `turn_memory_reply.safetensors`: exact tables
 /// of token ids, and the per-coordinate weights of their moves on the readout point.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

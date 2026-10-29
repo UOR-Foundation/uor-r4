@@ -612,6 +612,81 @@ mod tests {
         y
     }
 
+    /// claude-198: a saved turn memory snapshots exactly as it loads: both tables in ascending key
+    /// order, both weights, the key window, and the same JSON; a memory without a reply table has
+    /// none, and a weight that is not finite is refused.
+    #[test]
+    fn a_saved_memory_snapshots_as_it_loads() -> Result<()> {
+        use std::collections::HashMap;
+        let device = candle_core::Device::Cpu;
+        let dir = std::env::temp_dir().join(format!("claude-198-memory-{}", std::process::id()));
+        let pad = uor_r4_integer::fbs_snapshot::MEMORY_PAD;
+        let openings: HashMap<Vec<u32>, u32> =
+            [(vec![9, 4], 6), (vec![3], 7), (vec![3, 4], 8)].into_iter().collect();
+        let replies: HashMap<Vec<u32>, u32> = [
+            (vec![3, 4, pad, 1, pad, 6], 7),
+            (vec![pad, 2, pad, 9], 8),
+            (vec![3, pad, 5, pad, 2], 1),
+        ]
+        .into_iter()
+        .collect();
+        let memory = TurnMemory::new(2, openings, 4, &device)?.with_reply(replies)?;
+        memory
+            .weight
+            .set(&Tensor::new(&[0.25f32, -0.5, 1.0, 0.0], &device)?)?;
+        memory
+            .reply
+            .as_ref()
+            .expect("a reply table")
+            .weight
+            .set(&Tensor::new(&[-1.0f32, 0.125, 0.0, 2.0], &device)?)?;
+        memory.save(&dir)?;
+        let loaded = TurnMemory::load(&dir, &device)?.expect("saved");
+        let before = fbs_memory_snapshot(&memory, 192)?;
+        let after = fbs_memory_snapshot(&loaded, 192)?;
+        std::fs::remove_dir_all(&dir)?;
+        assert_eq!(before, after);
+        assert_eq!(serde_json::to_vec(&before)?, serde_json::to_vec(&after)?);
+        assert_eq!((after.k, after.key_window), (2, 192));
+        let keys: Vec<&[u32]> = after.opening.iter().map(|e| e.key.as_slice()).collect();
+        assert_eq!(keys, [&[3][..], &[3, 4], &[9, 4]]);
+        assert_eq!(after.opening[1].value, 8);
+        assert_eq!(after.opening_weight, [0.25, -0.5, 1.0, 0.0]);
+        let reply = after.reply.as_ref().expect("the reply table");
+        assert!(reply.entries.windows(2).all(|w| w[0].key < w[1].key));
+        assert_eq!(reply.entries.len(), 3);
+        assert_eq!(reply.weight, [-1.0, 0.125, 0.0, 2.0]);
+        let parsed: FbsMemorySnapshot = serde_json::from_slice(&serde_json::to_vec(&after)?)?;
+        assert_eq!(parsed, after);
+
+        let plain = TurnMemory::new(2, HashMap::new(), 4, &device)?;
+        assert!(fbs_memory_snapshot(&plain, 192)?.reply.is_none());
+        plain
+            .weight
+            .set(&Tensor::new(&[0.0f32, f32::NAN, 0.0, 0.0], &device)?)?;
+        assert!(fbs_memory_snapshot(&plain, 192).is_err());
+        Ok(())
+    }
+
+    /// claude-198: a checkpoint with a turn memory exports; one with a Hamming read is refused by
+    /// name, because the export does not carry it yet.
+    #[test]
+    fn a_checkpoint_read_the_export_does_not_carry_is_refused() -> Result<()> {
+        let dir = std::env::temp_dir().join(format!("claude-198-reads-{}", std::process::id()));
+        std::fs::create_dir_all(&dir)?;
+        check_checkpoint_reads(&dir)?;
+        for file in ["turn_memory.safetensors", "turn_memory_reply.safetensors"] {
+            std::fs::write(dir.join(file), b"")?;
+        }
+        check_checkpoint_reads(&dir)?;
+        std::fs::write(dir.join("hamming_read.safetensors"), b"")?;
+        let refused = check_checkpoint_reads(&dir);
+        std::fs::remove_dir_all(&dir)?;
+        let message = refused.expect_err("a Hamming read is refused").to_string();
+        assert!(message.contains("hamming_read.safetensors"), "{message}");
+        Ok(())
+    }
+
     #[test]
     fn geometry_tables_match_the_integer_crate() {
         check_geometry_tables().expect("the float geometry is the integer crate's");
