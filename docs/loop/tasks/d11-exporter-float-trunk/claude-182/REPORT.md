@@ -122,7 +122,17 @@ Snapped, the same models were 353 (73) and 231 (70). The four close checks are g
 
 ## Checks run at the head
 
-__HEADCHECKS__
+At `80cdb5143`. The code is unchanged since `a2424f49f`, the commit the GPU run built.
+- **`cargo test --locked -p uor-r4-float-train --no-fail-fast`:** 122 passed, 0 failed.
+- **The instrument's tests,** with the stub nvcc and `--target aarch64-apple-darwin`: `parity.rs` 5 passed, and `trained.rs`'s test ignored (it needs `UOR_FBS_ARTIFACT`).
+  - Earlier in the unit, `trained.rs` passed on claude-126 seed 1's four exports.
+  - My first run at this head left out `--target` and did not compile (E0432). The instrument's manifest warns of exactly that: `uor-r4-integer`'s `cdylib` collides in a shared target folder (cargo #6313). This was an instrument fault, repaired by following the manifest.
+- **Negative gate:** with the three call sites set back to `fbs_snap_rotation`, `host_twin_equals_the_session_in_every_snap_choice` fails at `parity.rs:42`. With them restored, it passes. Both builds recompiled the instrument.
+- **Clippy, on the instrument** (`--all-targets --features cuda`): no warnings.
+- **`cargo fmt --check`,** on `uor-r4-float-train` and the instrument: clean.
+- **The harness's real-sheet tests:** 2 passed.
+- **`uor-harness loop gates --full`:** 11 of 11 green.
+- **The close checks** (Measurements): the serving audit, the WASM audit, the integer serving tests and `fbs-toks`.
 
 ## Skills used
 
@@ -138,6 +148,10 @@ __HEADCHECKS__
 - **The `lut-serving.md` mechanism-page row.** It is out of this item's scope (claude-121's scope note), so an infra-loop-harness item-maintenance unit writes it.
 - **`audit_zero_matmul_wasm.py` should classify the bulk-memory opcodes,** so the WASM audit no longer needs `-bulk-memory`.
 - **A speed lever for unsnapped serving:** one reciprocal per block in place of four divides (claude-181).
+- **The code review's three Lows.** They are left in place so the merged instrument is byte-identical to the one the sealed run built:
+  - **The instrument's snap trace** writes byte 255 at an unsnapped site. That byte already means "zero raw", and the session records nothing there. No comparison reads the raw forms' trace yet. Define 255 as "unsnapped", or refuse `trace` on raw shapes.
+  - **`d11-artifact-gap`'s `--stored-preds` is not tied to `--train-receipt`.** Nothing checks that the stored predictions and the receipt's loss belong to the same model. This run read each model's `preds-float.json` from the same checked save folder as its snapshot, and its receipt from that folder's results.
+  - **A stale comment** at `fbs_core.h:548` says "icosian-snapped" of a site that now also serves the unsnapped gate.
 
 ## Plain summary
 
