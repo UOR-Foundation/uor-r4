@@ -50,10 +50,15 @@ On the M1, a served token is 3.73 ms (265 tok/s). The six layers are 98.6% of it
   - `stack_snap_select` scans those, in index order, from a compile-time table. It equals the full scan on every test query, and the serving audit passes.
   - After it, the core is 54.3% of a 1.33 ms token and the product 36.0%.
   - This is a faster exact kernel for the largest part, not done-when 2's vector kernel, which stays open.
+- **The snap's comparison without squares (claude-165): decode 742–744 → 1,169–1,217 tok/s, replies byte-identical.**
+  - A profile of claude-164's binary put 61% of its samples in `stack_mul_u128`, from the snap's exact sign test of `P + D√5`.
+  - The bounds `2289/1024 < √5 < 1145/512` now decide that sign by shifts and additions. The squares run only between the bounds.
+  - The new profile has no `stack_mul_u128` sample from the snap. Its 487 come from `stack_hamilton` (444) and the lanes (43).
 - **What is next:**
-  - Fewer candidates: the 12 golden roots can be cut further by the query's magnitude order, still exactly.
-  - Then a vector kernel for what is left of the core: the lanes' Hamilton products, and the output gate.
-  - Both are measured against claude-164's 749 tok/s.
+  - **The Hamilton product.** Each `stack_hamilton` is 16 table products of `i64` values. A snapped root's coordinates take at most three distinct nonzero magnitudes, and a golden root has a zero. So exact products can be shared, and the zero ones skipped.
+  - **Fewer snap candidates.** The 12 golden roots can be cut by the query's magnitude order, still exactly.
+  - **Then a vector kernel** for what is left.
+  - Each is measured against claude-165's 1,169–1,217 tok/s.
 
 ## How to start
 
