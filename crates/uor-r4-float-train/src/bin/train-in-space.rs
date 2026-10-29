@@ -51,11 +51,14 @@
 //! decision rows, and each panel's exact, n-gram and value-masked template overlap with TRAIN. A
 //! count that needs no GPU; one JSON line.
 //!
-//! `train-in-space --data-root DIR --score-rows CHECKPOINT --out DIR [--fresh-v2 DIR] [--samples N] [--reply-tokens N] [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--seed S]`:
+//! `train-in-space --data-root DIR --score-rows CHECKPOINT --out DIR [--fresh-v2 DIR] [--panel NAME=DIR ...] [--samples N] [--reply-tokens N] [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--seed S]`:
 //! one-model-end-to-end's per-row scorer (claude-205), on the GPU. Every scored DEV row (and
 //! Fresh V2 row) of the step-N checkpoint, with its memory on and taken out, and greedy samples,
 //! as JSON files in `--out` (`in_space_long::score_rows`). Prints one JSON line per file. The rate,
-//! fold and floor flags must be the checkpoint's run's, as for `--inspect`.
+//! fold and floor flags must be the checkpoint's run's, as for `--inspect`. Each `--panel` (an unpinned UORT
+//! split, its sha recorded) is scored and sampled like DEV; the samples come greedy, and under the
+//! Flock rank rule with the memory on, each with its reply-table hits (protocol I-A, I-E, I-F,
+//! claude-208).
 //!
 //! `train-in-space --data-root DIR --overturn 1 --scored ARM-sSEED=DIR ...`: grades the overturn
 //! check from those files, on the laptop (`in_space_long::overturn`). Needs `r-s1`, `r0-s1`,
@@ -431,6 +434,7 @@ fn main() -> Result<()> {
             &checkpoint,
             &out,
             fresh_v2.as_deref(),
+            &extra_panels,
             config.samples,
             config.reply_tokens,
             config.retain_rates,
