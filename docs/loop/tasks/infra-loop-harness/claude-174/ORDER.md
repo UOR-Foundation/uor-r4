@@ -1,70 +1,46 @@
-# ORDER: infra-loop-harness, claude-174
+# ORDER: infra-loop-harness, claude-174 (item maintenance: put D80 and D81 into the serving engine)
 
 Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `e9310cd1f`.
 
+Setup row: 2 (item-file maintenance: a new gap item and PLAN's direction row).
+
 ## Goal
 
-The item's done-when reads:
+D80 and D81 (owner, 28 Oct) let served integer code use the hardware multiply and divide; floats stay banned. The serving engine still enforces the old bans, and docs still state them:
+- `scripts/audit_zero_matmul_serving.py --stack` refuses them.
+- `crates/uor-r4-integer/src/report_output.rs`' disassembly verifiers refuse `mul`, `sdiv`, `udiv` and the `__udivti3` builtin. The `uor-r4-stack` cost check and `tests/m5_full_path_cost_controls.rs` use those verifiers.
+- The rule summaries and model pages listed in claude-172's REPORT still describe the multiplier-free rule as current.
 
-> Every PR in the build plan on [the loop page](../../loop/README.md#build-plan) is merged, each with its planted fault turning its gate red. The four labs (Kimi, Claude, DeepSeek, Antigravity) are onboarded, each with a committed onboarding receipt. Each lab has completed one loop task end to end: claim, probe, work, gates, report, review by another vendor, queue, and verify on fresh `main`.
+No `ready` item's scope covers these docs and audits. This unit adds the item `integer-mul-div-serving`, whose scope covers them and the FBS kernels. Its units:
+1. align the docs and the audits;
+2. use the instructions in the hot products and the norm;
+3. measure against claude-169's 3,042–3,044 tok/s.
 
 ## Cancel probe (run first)
 
-To fill in.
+Run at `e9310cd1f`:
+- **No item** named `integer-mul-div-serving` exists.
+- **No open PR** touches `PLAN.md` or `docs/roadmap/items/`.
+- **All 17 scope files exist.**
+
+All held. **Not cancelled** (instrument: none needed).
 
 ## Files in scope
 
-- `PLAN.md`
-- `docs/roadmap/items/*.md`
-- `crates/uor-r4-harness/src/loopreview.rs`
-- `crates/uor-r4-harness/src/loopnext.rs`
-- `crates/uor-r4-harness/src/loopreport.rs`
-- `crates/uor-r4-harness/src/loopclose.rs`
-- `crates/uor-r4-harness/src/loopclaim.rs`
-- `crates/uor-r4-harness/tests/loop_review*.rs`
-- `crates/uor-r4-harness/tests/loop_next*.rs`
-- `crates/uor-r4-harness/tests/loop_report*.rs`
-- `crates/uor-r4-harness/tests/loop_close*.rs`
-- `crates/uor-r4-harness/tests/loop_claim*.rs`
-- `crates/uor-r4-harness/tests/loop_repair_orders*.rs`
-- `crates/uor-r4-harness/tests/loop_shared_files*.rs`
-- `crates/uor-r4-harness/tests/loop_prcheck.rs`
-- `crates/uor-r4-harness/src/loopbench.rs`
-- `crates/uor-r4-harness/tests/loop_bench*.rs`
-- `docs/harness/d59.json`
-- `docs/harness/owner-paths.json`
-- `docs/integration/DECISIONS.md`
-- `AGENTS.md`
-- `CHARTER.md`
-- `docs/rules/changes.md`
-- `docs/mechanisms/README.md`
-- `docs/mechanisms/lut-serving.md`
-- `docs/mechanisms/hopf-observation.md`
-- `docs/mechanisms/spin-weights.md`
-- `docs/mechanisms/ternary-xor.md`
-- `crates/uor-r4-harness/src/loopdrive.rs`
-- `crates/uor-r4-harness/tests/loop_drive*.rs`
-- `crates/uor-r4-harness/src/prep.rs`
-- `crates/uor-r4-harness/src/preprules.rs`
-- `xtask/src/docs_links.rs`
-- `xtask/src/archive_verify.rs`
-- `xtask/src/figures_charts.rs`
-- `docs/figures/**`
-- `docs/roadmap/issues.json`
-- `docs/harness/prep/read-binding-on-lawful-read-2026-10-25.md`
-- `docs/harness/labs.json`
-- `crates/uor-r4-harness/src/labs.rs`
-- `crates/uor-r4-harness/src/receipt.rs`
-- `crates/uor-r4-harness/tests/lab_registry_cli.rs`
-- `crates/uor-r4-harness/src/onboard.rs`
-- `crates/uor-r4-harness/src/loopguard.rs`
-- `crates/uor-r4-harness/tests/loop_guard.rs`
-- `archive/history/branch-archive/codex-d63-finite-probe-scope-20261026.*`
+- `docs/roadmap/items/integer-mul-div-serving.md` (new)
+- `PLAN.md` (the D81 direction's row, naming the item)
+- `docs/roadmap/README.md` (rendered)
+- `docs/loop/tasks/infra-loop-harness/claude-174/**`
 
 ## Done when
 
-To fill in.
+1. The new item has:
+   - the owner's words and the measured gap;
+   - what is missing, with sources;
+   - a done-when;
+   - `How to start`, `Rules that apply` and `Sources`;
+   - a checked scope and `status: ready`.
+2. PLAN's D81 row names the item.
+3. `roadmap render --check` passes. The PR is merged and verified.
 
-## Stop and ask if
-
-To fill in.
+No step waits on Casey.
