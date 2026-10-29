@@ -269,9 +269,9 @@ A reading names the change for the next unit. It is not a result about the snaps
 
 **Class: instrument.** The run, not the models, was wrong. It had no binary that may load them. claude-179 changed only the backward kernels, and this run evaluates forwards only. The models are the ones sealed by their own runs, with their pins unchanged.
 
-**The repair, `job2.sh` (sha256 `44d2c46edef984f4bdce820e6375e5784601a598486aaddb2845cd072f14c7c9`):** a second binary, B_old, from the same head with claude-179's `fix.patch` reversed. That is how claude-179 built its B_base.
+**The repair, `job2.sh` (sha256 `9582edd7af8f02badf7b84081c039ef1e0eaacc975094f2618e9c9cda9a5228e`):** a second binary, B_old, from the same head with claude-179's `fix.patch` reversed. That is how claude-179 built its B_base.
 - `fix.patch` (sha256 `a2728e80…9d55`) is checked first. Then:
-  - B_old's source differs from the head's in exactly three files;
+  - B_old's `crates/uor-r4-float-train/src` differs from the head's in exactly three files, with no `.orig` or `.rej` leftovers;
   - its `spiralcore_fbs.cu` is `517bffcc…0b0d`, the old pin;
   - the two D11 GPU tests (the ablation's ends, and the head on the D11 queries) pass on it.
 - **B_old scores the six older models** with the same commands and checks as section 6. It also runs `I-Negative`, on a model it loads.
@@ -280,3 +280,13 @@ A reading names the change for the next unit. It is not a result about the snaps
 - Sections 3 and 4 are unchanged.
 
 **One reading was seen before this repair:** the two bfixed-c179 receipts. The repair changes no bar, no arm and no reading rule, and does not touch those two models. It only gives the other six a binary that can load them.
+
+**The repair's fresh pre-run review: GO.**
+- **The patch reverses only the backward.** Every hunk of `fix.patch` sits in the backward kernels or their launchers, and no forward line changes.
+- **The stored forward is pinned twice.** `I-Save-Load` and `I-D-Recorded` pin each model's forward against what it stored.
+- **Section 10 overclaims nothing.**
+- **Its four findings were folded in before launch:**
+  - the summary runs before `I-Negative`;
+  - attempt 1's two receipts are checked against its sealed `SHA256SUMS`;
+  - the three-file check now names its folder and also refuses `.orig` and `.rej` leftovers;
+  - the job stops if the first older model is still refused at load.
