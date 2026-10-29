@@ -131,7 +131,7 @@ flowchart LR
 
 **Instrument.** A measuring tool, such as a test panel or a checker. If an instrument is faulty, that is a fix, not a negative result about the mechanism. See [what the project knows](../research/findings.md).
 
-**Integer serving.** Running the finished model with whole numbers only: adds, shifts, comparisons and table look-ups, and since D80 and D81 the integer multiply and divide. This is [D11](#d11). Serving audits are green on 44 native symbol ranges and 7 of 7 WebAssembly functions, with the allowed integer multiplies and divides counted since claude-177 (**measurement**), but no trained model has been served this way. See [serving and export](../model/serving-and-export.md).
+**Integer serving.** Running the finished model with whole numbers only: adds, shifts, comparisons and table look-ups, and since D80 and D81 the integer multiply and divide. This is [D11](#d11). Serving audits are green on 44 native symbol ranges and 7 of 7 WebAssembly functions, with the allowed integer multiplies and divides counted since claude-175 and used since claude-177 (**measurement**), but no trained model has been served this way. See [serving and export](../model/serving-and-export.md).
 
 ## K
 

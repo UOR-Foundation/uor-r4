@@ -31,8 +31,8 @@ A fourth page, [Releases and artifacts](./releases-and-artifacts.md), covers the
 | Item | State | Source |
 |---|---|---|
 | Milestones complete | 0 of 8 (**measurement** of the tracker) | [STATUS](../../STATUS.md), [NOW](../integration/NOW.md) |
-| Integer serving engine, native | Built; serving audit green on 44 symbol ranges (47 multiplies and 1 divide allowed since claude-177) (**measurement**) | [project track](../integration/project-track.md), M4 |
-| Integer serving engine, WebAssembly | Built; 7 of 7 serving functions with zero float instructions (integer multiplies and divides allowed since claude-177); save and restore reload identically on a synthetic model (**measurement**) | [record](../labs/wasm-serving-runtime-2026-10-18/README.md) |
+| Integer serving engine, native | Built; serving audit green on 44 symbol ranges (47 multiplies and 1 divide used since claude-177, allowed by the audit since claude-175) (**measurement**) | [project track](../integration/project-track.md), M4 |
+| Integer serving engine, WebAssembly | Built; 7 of 7 serving functions with zero float instructions (integer multiplies and divides allowed since claude-175, used since claude-177); save and restore reload identically on a synthetic model (**measurement**) | [record](../labs/wasm-serving-runtime-2026-10-18/README.md) |
 | A trained model in that engine | None. Training is held, and no model built under today's rules has been exported | [NOW](../integration/NOW.md), [lut-serving dossier](../mechanisms/lut-serving.md) |
 | Studio connected to the new engine | Built on the synthetic stand-in — web worker (`#2818`) and native desktop backend + `--features gui` Tauri v2 shell + offline Studio shim (`#2826`) verified on the synthetic stand-in; no trained model exists | [`index.html`](../../web/studio/index.html), [desktop client record](../labs/infra-desktop-client-tauri/README.md) |
 | Public website deploy | Paused since 15 October; the live site is the 13 October build | [`deploy.yml`](../../.github/workflows/deploy.yml) |
