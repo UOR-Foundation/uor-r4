@@ -19,6 +19,9 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The umbrella item stays open; its done
   - The item now also says what the audit refuses: multiply-class and `fmov` register transfers, which is why the scalar gather uses `black_box`.
   - `turn-memory-integer` said the artifact holds "the trunk only". It holds the writer's table too, and the exporter refuses a memory.
   - PLAN's list read as if its goals were met. It is now worded as work to do.
+- **The round-2 review found two audit sentences in `fbs-serving-kernels` wrong,** both now fixed against the script.
+  - I had written that a kernel outside `step` is audited only once it is listed. The `--stack` call-graph walk follows every direct `bl`/`b` from `step`, so today's FBS kernels are audited. What the walk misses is an indirect call (`blr`), so the item now asks for a direct-branch switch, and a list entry so the kernel's presence is required.
+  - I had written that the audit refuses every SIMD-to-general transfer. It refuses `fmov`, not `umov` or `smov`.
 - **The five items cannot all run side by side.**
   - The three float-side items (`turn-memory-reply`, `writer-admission`, `training-step-cost`) share `in_space_long.rs` and `train-in-space.rs`.
   - `fbs-serving-kernels` shares `session.rs` with `integer-hamming-read`. Either of those can run beside a float-side item.
