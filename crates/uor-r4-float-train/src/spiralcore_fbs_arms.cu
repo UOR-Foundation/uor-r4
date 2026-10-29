@@ -65,7 +65,7 @@ extern "C" __global__ void spiralcore_fbs_arm_fwd(
 // Per path, the input adjoint is the exact inverse of that path's action (the identity in
 // arm 1), scaled by the arm's constant; the query pullback is the same declared root-edge
 // secant surrogate as spiralcore_fbs_bwd, paired with this path's share of dL/dy while the
-// other path is held fixed. Batch sharing is summed with device atomics.
+// other path is held fixed. Batch sharing is summed in a fixed order (claude-179).
 extern "C" __global__ void spiralcore_fbs_arm_bwd(
     const float* queries, const act_t* input, const act_t* grad,
     const uint* nodes, const uint* frontier, const uint* axes,

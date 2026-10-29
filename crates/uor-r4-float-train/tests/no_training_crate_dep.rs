@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-const EXPECTED_24_KERNELS: [&str; 26] = [
+const EXPECTED_KERNELS: [&str; 26] = [
     "straight_through_fwd",
     "hamilton_gate_fwd",
     "hamilton_gate_bwd",
@@ -76,10 +76,10 @@ fn cargo_tree_excludes_uor_r4_training_and_candle_nn() {
 }
 
 #[test]
-fn twenty_four_kernel_entry_points_match_cuda_sources_and_pass_d29_scan() {
+fn kernel_entry_points_match_cuda_sources_and_pass_d29_scan() {
     assert_eq!(
         uor_r4_float_train::KERNEL_ENTRY_POINTS,
-        EXPECTED_24_KERNELS,
+        EXPECTED_KERNELS,
         "KERNEL_ENTRY_POINTS must list all 26 kernels in exact order"
     );
 
@@ -105,7 +105,7 @@ fn twenty_four_kernel_entry_points_match_cuda_sources_and_pass_d29_scan() {
         found.len()
     );
     let found_refs: Vec<&str> = found.iter().map(String::as_str).collect();
-    assert_eq!(found_refs, EXPECTED_24_KERNELS);
+    assert_eq!(found_refs, EXPECTED_KERNELS);
 
     let lower = combined.to_ascii_lowercase();
     for banned in [
