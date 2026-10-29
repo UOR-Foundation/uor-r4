@@ -34,7 +34,8 @@
 //! `d11-snap-ablation` is the snap ablation (claude-180,
 //! `docs/harness/prep/d11-exporter-float-trunk-snap-ablation-2026-10-29.md`): one saved model's
 //! plain-float panel against D11 forwards with each icosian snap and the rounding on or off. It takes
-//! `--model-dir`, `--model-sha256`, `--stored-preds`, `--stage4b` (the model's training receipt),
+//! `--model-dir`, `--model-sha256`, `--stored-preds`, `--stage4b` (Stage 4b's receipt, for the
+//! noise band), `--train-receipt` (the model's own training receipt, for its stored float loss),
 //! `--seed`, `--label` and, where the D11 panel was stored at training, `--stored-d11-preds`.
 //!
 //! `d11-snap-trace` is snap-flip localisation (claude-134,
@@ -65,8 +66,9 @@ use uor_r4_float_train::spiralcore_fbs_sheet::{
 use uor_r4_float_train::{FloatTrainError, Result};
 
 /// The options of `d11-artifact-gap`, `d11-train-probe`, `d11-train-export`, `d11-residual`,
-/// `d11-snap-trace`, `d11-forced-snaps` and `d11-forced-summary`.
-const GAP_OPTIONS: [&str; 20] = [
+/// `d11-snap-ablation`, `d11-snap-trace`, `d11-forced-snaps` and `d11-forced-summary`.
+const GAP_OPTIONS: [&str; 21] = [
+    "--train-receipt",
     "--expect-unforced",
     "--receipts",
     "--faithful",
@@ -481,6 +483,7 @@ fn main() -> Result<()> {
                 Path::new(&option("--stored-preds")?),
                 extra.get("--stored-d11-preds").map(Path::new),
                 Path::new(&option("--stage4b")?),
+                Path::new(&option("--train-receipt")?),
                 seed,
                 &option("--label")?,
                 steps,

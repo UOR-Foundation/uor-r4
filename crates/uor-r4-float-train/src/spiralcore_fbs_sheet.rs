@@ -2705,12 +2705,32 @@ const ABLATION_ARMS: [AblationArm; 6] = [
     },
 ];
 
+/// The plain-float DEV loss that a model's training receipt stored for `seed` (claude-180). Any
+/// receipt with `seeds[].seed` and `seeds[].loss_float` is read, since the receipts of claude-126,
+/// claude-130, claude-131 and claude-179 differ in their other fields. A receipt that states a
+/// noise band must state `noise`.
+fn seed_float_loss(receipt: &serde_json::Value, seed: u64, noise: f64) -> Result<f64> {
+    if let Some(band) = receipt.get("noise_band_dev_loss") {
+        if band.as_f64() != Some(noise) {
+            return Err(invalid(
+                "the training receipt's noise band is not the Stage 4b band",
+            ));
+        }
+    }
+    receipt["seeds"]
+        .as_array()
+        .and_then(|seeds| seeds.iter().find(|s| s["seed"].as_u64() == Some(seed)))
+        .and_then(|s| s["loss_float"].as_f64())
+        .ok_or_else(|| invalid("the training receipt has no float loss for this seed"))
+}
+
 /// The snap ablation (claude-180), for one saved model on the GPU:
-/// - the plain-float panel F, which must reproduce `stored_preds` and the receipt's loss;
+/// - the plain-float panel F, which must reproduce `stored_preds` and the training receipt's loss;
 /// - each [`ABLATION_ARMS`] variant of the D11 forward;
 /// - each variant paired against F under the export gap's bar, and the model's [`SnapSplit`].
 ///
-/// `stage4b` is the model's training receipt, which supplies the noise band and the stored loss.
+/// `stage4b` is Stage 4b's receipt, which supplies the noise band; `train_receipt` is the model's
+/// own training receipt, which supplies its stored float loss.
 #[allow(clippy::too_many_arguments)]
 pub fn run_d11_snap_ablation(
     data_root: &Path,
@@ -2719,6 +2739,7 @@ pub fn run_d11_snap_ablation(
     stored_preds: &Path,
     stored_d11_preds: Option<&Path>,
     stage4b: &Path,
+    train_receipt: &Path,
     seed: u64,
     label: &str,
     steps: usize,
@@ -2730,12 +2751,10 @@ pub fn run_d11_snap_ablation(
     if stage4b.trained_steps != steps {
         return Err(invalid("the Stage 4b receipt and evaluation steps differ"));
     }
-    let stored_loss = stage4b
-        .loss_float_by_seed
-        .get(&seed)
-        .copied()
-        .ok_or_else(|| invalid("the Stage 4b receipt has no float loss for this seed"))?;
     let noise = stage4b.noise_band_dev_loss;
+    let train_bytes = fs::read(train_receipt)?;
+    let stored_loss = seed_float_loss(&serde_json::from_slice(&train_bytes)?, seed, noise)?;
+    let train_receipt_sha256 = sha256_bytes(&train_bytes);
     let stored_d11: Option<Vec<u32>> = match stored_d11_preds {
         Some(path) => Some(serde_json::from_slice(&fs::read(path)?)?),
         None => None,
@@ -2852,6 +2871,7 @@ pub fn run_d11_snap_ablation(
         "dev_windows": dev_windows.len(),
         "model_safetensors_sha256": model_sha256,
         "stage4b_sha256": stage4b.sha256,
+        "train_receipt_sha256": train_receipt_sha256,
         "noise_band_dev_loss": noise,
         "float": {
             "top1": f_metrics.top1_hits,
@@ -4608,6 +4628,24 @@ mod tests {
             serde_json::to_value(SnapCarried).unwrap(),
             serde_json::json!("snap_carried")
         );
+    }
+
+    #[test]
+    fn a_training_receipt_gives_its_seed_s_float_loss_under_the_stage4b_band() {
+        // claude-180: claude-130's receipt has no top-level steps, and claude-126's no forward;
+        // only the seed's loss and the band are read.
+        let band = 0.045679637781173676;
+        let receipt = serde_json::json!({
+            "noise_band_dev_loss": band,
+            "seeds": [{"seed": 1, "loss_float": 1.25}, {"seed": 2, "loss_float": 1.5}],
+        });
+        assert_eq!(seed_float_loss(&receipt, 2, band).unwrap(), 1.5);
+        assert!(seed_float_loss(&receipt, 3, band).is_err());
+        assert!(seed_float_loss(&receipt, 1, 0.0457).is_err());
+        let no_band = serde_json::json!({"seeds": [{"seed": 1, "loss_float": 1.25}]});
+        assert_eq!(seed_float_loss(&no_band, 1, band).unwrap(), 1.25);
+        let no_loss = serde_json::json!({"seeds": [{"seed": 1}]});
+        assert!(seed_float_loss(&no_loss, 1, band).is_err());
     }
 
     #[test]
