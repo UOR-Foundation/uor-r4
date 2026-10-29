@@ -30,6 +30,9 @@
   - chat-v0 coincidences: 0 exact prompts.
 - **245 of P-dev's openings are keyed** by TRAIN's first-8 table. A turn key's first 8 ids include the "User:" marker, so common short openings collide. Those rows are the panel's keyed stratum, and the other 1,198 its unkeyed stratum.
 - **The panel writer's first draft failed the control.** Under protocol 1, P-train's exact-prompt share was 0. TRAIN is in protocol 2 (the role marker's space merged into the first word), and the panels above are all protocol 2.
+  - Each document passes `corpus_v2`'s own checks: the spaced meter matches the protocol-2 length, and every document fits the 256-token context.
+  - The panels written with those checks are byte-identical to the ones in the store.
+- **The missing probe screen can only lower P-train's and P-ret's shares, never P-dev's.** TRAIN redrew conversations that share an 8-gram with the sealed probe. The unscreened panels may hold some, and TRAIN never saw those. P-dev's 0.000 cannot go lower, and P-train still matched DEV.
 
 # The data census (claude-202, 29 Oct 2026)
 

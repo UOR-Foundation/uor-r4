@@ -135,7 +135,16 @@ fn main() -> Result<()> {
             "--reply-bound" => reply = switch(&value)?,
             "--census" => census_on = switch(&value)?,
             "--fresh-v2" => fresh_v2 = Some(PathBuf::from(&value)),
-            "--panel" => extra_panels.push(panel_arg(&value)?),
+            "--panel" => {
+                let panel = panel_arg(&value)?;
+                if extra_panels.iter().any(|(name, _)| *name == panel.0) {
+                    return Err(FloatTrainError::Invalid(format!(
+                        "--panel {} is given twice",
+                        panel.0
+                    )));
+                }
+                extra_panels.push(panel);
+            }
             "--recall" => recall = number(&value)?,
             "--objective" => {
                 config.objective = match value.as_str() {

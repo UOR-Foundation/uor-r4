@@ -61,6 +61,20 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Refs #3407. The item stays `ready`, at
 - `cargo test --locked -p uor-r4-float-train --no-fail-fast`: 145 passed, 0 failed.
 - `uor-harness loop gates --full`, at `4dbc586df` with this REPORT: green, 11 gates GREEN.
 
+## The review
+
+Fresh context, at `2a7c143b9`, given the ORDER and the diff: **APPROVE WITH NITS**. Every number it checked with `jq` matched the JSON, and it found no claim overstated.
+- **The writer matches `corpus_v2` on:** the variant (V2), `Mix::default()`, the version-1 meter closure, the encoder, the encoding checks and the vocabulary check.
+- **P-dev's 0.000 is not an artifact.** P-ret (same writer, protocol and dev values) gives 0.541 / 0.585. That rules out "dev values alone" and any encoding artifact across the whole panel. P-dev's own reply-template share, 0.705, rules out a panel-wide tokenization fault.
+- **Its limit:** P-train is close to guaranteed by construction. It checks the encoding and the census, not whether the census can detect novelty. That is what P-ret against P-dev does.
+- **Fixed at the next commit:**
+  1. **The writer now applies `corpus_v2`'s spaced-meter and 256-token context checks.** All 1,200 conversations pass, and the panels written with the checks are byte-identical to the stored ones.
+  2. **The README says the missing probe screen can only lower P-train's and P-ret's shares,** never P-dev's.
+  3. **The loader's test has a mask-only refusal case.** Removing the `mask.len() != count` clause turns it red ("a mask shorter than the count"); checked here, then restored.
+  4. **`--panel` refuses a duplicate name.**
+- **Left as they are:** `Census.extra` serializes as anonymous tuples, and the loader does not read the header's vocabulary field; ids are bounded by `SHEET_VOCAB`.
+- **The protocol-2 evidence,** beyond the control: decoding TRAIN gives `"User: My friend is named Justtros.\nAssistant:"` as `[55, 2728, 28, 2496, …]`, and the reply as `" Nice, …"` (2237). The protocol-1 draft gave a lone space, token 223, before the first word.
+
 ## Skills used
 
 - None was invoked this unit.

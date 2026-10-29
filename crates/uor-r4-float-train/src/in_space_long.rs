@@ -4036,6 +4036,8 @@ mod tests {
         assert!(load_unpinned_uort(&dir).is_err(), "no UORT header");
         write(&[0, 5, 6, 7], &[0, 0, 1, 1], b"UORT", 3);
         assert!(load_unpinned_uort(&dir).is_err(), "a count that does not match");
+        write(&[0, 5, 6, 7], &[0, 0, 1], b"UORT", 4);
+        assert!(load_unpinned_uort(&dir).is_err(), "a mask shorter than the count");
         write(&[5, 0, 6, 7], &[0, 0, 1, 1], b"UORT", 4);
         assert!(load_unpinned_uort(&dir).is_err(), "no first BOS");
         write(&[0, 5, 9_000, 7], &[0, 0, 1, 1], b"UORT", 4);

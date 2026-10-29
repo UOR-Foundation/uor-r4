@@ -45,7 +45,7 @@ use uor_r4_core::native_geometric::mmap_corpus::CorpusWriter;
 use uor_r4_tokenizer::dialogue::{DialogueProtocol, Message};
 use uor_r4_tokenizer::ByteBpeTokenizer;
 use uor_r4_training::milestone_world::{Rng, Split};
-use uor_r4_training::milestone_world_v2::{Cell, MWorld2, Mix};
+use uor_r4_training::milestone_world_v2::{Cell, MWorld2, Meter, Mix, CONTEXT};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -151,6 +151,7 @@ fn main() -> Result<()> {
         .map_err(|e| format!("protocol: {e}"))?;
     let vocab = u32::try_from(tokenizer.vocab_size())?;
     let count = |text: &str| tokenizer.encode(text).len();
+    let spaced_meter = Meter::spaced(&count);
     let mut world = MWorld2::new(&count, Mix::default())?;
     let mut rng = Rng::new(seed);
 
@@ -176,6 +177,27 @@ fn main() -> Result<()> {
         let encoded = encoder.encode_document(&messages);
         if encoded.emitted_turns != messages.len() || encoded.special_token_occurrences != 0 {
             return Err(format!("conversation {index} did not encode").into());
+        }
+        // `corpus_v2`'s checks, as TRAIN was drawn: the conversation is metered under version 1;
+        // a version-2 document must match the spaced meter, and every document fits the context.
+        let metered = if version == 1 {
+            conversation.tokens
+        } else {
+            spaced_meter.document(&conversation.turns)
+        };
+        if encoded.tokens.len() != metered {
+            return Err(format!(
+                "conversation {index}: the meter counted {metered} tokens, the protocol {}",
+                encoded.tokens.len()
+            )
+            .into());
+        }
+        if encoded.tokens.len() > CONTEXT {
+            return Err(format!(
+                "conversation {index} has {} tokens, over the {CONTEXT}-token context",
+                encoded.tokens.len()
+            )
+            .into());
         }
         for &id in &encoded.tokens {
             if id >= vocab {
