@@ -4,6 +4,10 @@ Lab: claude. Item: [integer-hamming-read](../../../../roadmap/items/integer-hamm
 
 ## Goal
 
+
+**This unit (claude-192): a one-link repair, not step 2.** The documentation site has not published since 26 Oct 2026. Every `docs-site` run fails `book-check` on 2 broken links, both from one link in `docs/research/notebook/m4-serving.md` (antigravity-96's row, #3287). That notebook is this item's file. The owner asked on 29 Oct for "all of the documentation on the website updated", and the refresh (#3379) merged without reaching the site. Step 2 of the item is unchanged and is the next unit.
+
+The item's done-when, for reference:
 The item's done-when reads:
 
 > 1. The integer runtime runs the whole read as claude-146's REPORT describes it, all four heads of both reads, under D11's rules (CHARTER §3.6: integer only, no float or transcendental instruction; since D80 and D81 the hardware integer multiply and divide are allowed once [`integer-mul-div-serving`](integer-mul-div-serving.md)'s audits allow them, and until then products go through D11's tables):
@@ -20,7 +24,11 @@ The item's done-when reads:
 
 ## Cancel probe (run first)
 
-To fill in.
+Cancel if the site already publishes, or if the broken links come from somewhere else.
+- **`docs-site` runs:** none succeeded after 2026-10-26T17:02Z; 200 runs were listed. The last, at `54d8a3c36`, failed `book-check` with 2 broken links, both to `harness/prep/m1-export-gap-and-toks-DRAFT-2026-10-23.html`.
+- **The cause:** row 34 has 155 backticks before the link. That odd count makes `book-stage` treat the link as inside an inline code span, so it is not rewritten to GitHub. mdBook still renders it as a link, to a page the book does not stage. The target `docs/harness/prep/m1-export-gap-and-toks-DRAFT-2026-10-23.md` exists.
+
+Result: **go.** An instrument fault, in the site's staging, not a mechanism.
 
 ## Files in scope
 
@@ -41,8 +49,10 @@ To fill in.
 
 ## Done when
 
-To fill in.
+1. The one link is absolute (`https://github.com/UOR-Foundation/uor-r4/blob/main/...`), so `book-stage` passes it through. Nothing else in the row changes.
+2. `book-stage`, `mdbook build` and `book-check` pass locally: 0 broken links. On `main`, the same check gives 2.
+3. After the merge, the `docs-site` run on `main` succeeds.
 
 ## Stop and ask if
 
-To fill in.
+- **Any other change to the record's text is needed.** Then stop and leave the record as written; make only the link change.
