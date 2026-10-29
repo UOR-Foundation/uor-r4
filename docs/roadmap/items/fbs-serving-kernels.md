@@ -40,6 +40,13 @@ On the M1, a served token is 3.73 ms (265 tok/s). The six layers are 98.6% of it
 3. **Speed:** `fbs-toks` decode tokens/s on the M1 with and without the kernel, on claude-126's export, with the same replies.
 4. One notebook row and a REPORT. This is host and serving work: no GPU and no sheet (CHARTER §4.5).
 
+## Progress
+
+- **Done-when 1 is met (claude-163).** `fbs-toks --parts` splits each layer into nine parts. Each block's parts lie at 999–1,003 per mille of the block (the [notebook row](../../research/notebook/m4-serving.md) of 28 Oct).
+  - **The largest part is the recurrence core,** 56.3% of a token. The feed-forward's gated product is 39.7%. The route gathers, which claude-158 guessed dominated, are 0.5% with both requantizations.
+  - **Both large parts hold the 120-root icosian snap** (`stack_snap_select` in `kernels.rs`), one per 4-channel block. It scores every root with exact `ℤ[φ]` comparisons. The snap's share of each part is not measured yet.
+- **The kernel unit (done-when 2) starts there.** It times the snap first. The 120 roots are the 600-cell's vertices, in three coordinate classes, so the root nearest a query can be found among a few candidates instead of all 120. That is exact and geometric, but it must keep the lowest-index tie rule. Its speedup is measured beside a vector kernel's.
+
 ## How to start
 
 Read:
