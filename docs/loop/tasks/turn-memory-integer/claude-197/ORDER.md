@@ -1,33 +1,48 @@
-# ORDER: turn-memory-integer, claude-197
+# ORDER: turn-memory-integer, claude-197 (unit 1: the export carries the memory, or refuses)
 
-Lab: claude. Item: [turn-memory-integer](../../../../roadmap/items/turn-memory-integer.md). Base: `48cc5fe83`.
+Lab: claude. Item: [turn-memory-integer](../../../../roadmap/items/turn-memory-integer.md). Issue: #3392. Base: `48cc5fe83`.
 
 ## Goal
 
-The item's done-when reads:
+Unit 1 of the item's five (claude-196): the export of both memory tables, their weights and the key window. It advances step 2 of PLACE.md's order, and the owner's direction of 29 Oct (18:50Z): "a valid (and somewhat coherent and standardized) training/serving path".
 
-> 1. **Export and session, for both tables.**
->    - The exporter writes each table (keys and values as integer ids), each weight (at the exporter's fixed point, rounded as it rounds), and the memory's key window (192).
->    - The session takes the reply's start from its caller, keys as "The keys" above, and applies the opening move at a reply's first step and the reply move at each later one.
->    - Each key is checked against a test-side reference of the float rule above. The reference rows include:
->      - a reply cut by the window;
->      - a prompt with an internal `<|eos|>`;
->      - a session whose `context` is not 192.
->    - Both disassembly audits pass with the moves reached. The memory is off for an artifact without one.
->    - A session restore with a memory is refused until its turn state is saved.
-> 2. **Parity,** on DEV, against the float forward of claude-194's sealed (r) checkpoints at step 16,384, both seeds.
->    - **Location:** `caseyallard/uor-r4-store:results/claude/turn-memory-reply-2026-10-29/s{1,2}-fc66ed74/r-s{1,2}/models/step-016384/`, five files each: `config.json`, `model.safetensors`, `hamming_read.safetensors`, `turn_memory.safetensors` and `turn_memory_reply.safetensors`.
->    - **Before use,** the sheet checks them against each seed's `SHA256SUMS`.
->    - The share of reply rows (openings and later rows) whose integer and float decoded ids agree.
->    - The integer `T`, `O`, `C` and `R` counts beside float's.
->    - The float reference runs on the GPU (CHARTER §3.5). The integer side runs on the laptop.
->    - The bar is pre-registered in a sheet with a fresh FIT.
-> 3. **Cost on the M1:** `fbs-toks --stages` with the memory, timing its lookup and move beside the writer and the trunk, plus the artifact's added bytes.
-> 4. One notebook row and a REPORT.
+**The standard this unit sets:** a float checkpoint exports through one snapshot that carries every read the checkpoint holds, or the export refuses. Today the export silently drops two reads:
+- `fbs-snapshot` loads the checkpoint with `StackModel::load`, which reads neither `turn_memory*.safetensors` nor `hamming_read.safetensors`;
+- `fbs_trunk_snapshot` writes `hamming: None` (`fbs_export.rs:282`);
+- its memory refusal checks `config.memory`, a different field.
+
+So claude-194's checkpoints would export as a trunk without its memory. That trunk falls to about 4,000 DEV hits (claude-194's REPORT).
+
+**First, a scope decision** (CHARTER §5.1, D68), with its own fresh decision review logged on #3392. The export runs through two files outside the item's scope, which the item's own done-when 1 needs. They are added to the item's scope and to this ORDER's:
+- `crates/uor-r4-float-train/src/bin/fbs-snapshot.rs`, the binary that loads a checkpoint;
+- `crates/uor-r4-integer/src/fbs_snapshot.rs`, where the snapshot types live.
+
+**Then the work:**
+1. **`FbsMemorySnapshot`** in the snapshot, `serde(default, skip_serializing_if)` like `hamming`, so every existing snapshot and read-free export is unchanged. It holds:
+   - `k` and the key window (192);
+   - the opening table (keys, padded with `u32::MAX`, and values) and its weight;
+   - the reply table and its weight, if any.
+2. **The float side:**
+   - accessors on `TurnMemory` (`flock_read_memory.rs`), and `fbs_memory_snapshot` (`fbs_export.rs`);
+   - `fbs-snapshot` loads the memory from the checkpoint directory and carries it;
+   - `fbs-snapshot` refuses a checkpoint that holds `hamming_read.safetensors`, since the Hamming read's export is integer-hamming-read's step 4, so nothing is dropped.
+3. **The integer export** (`format.rs`, `export_fbs_trunk_uorlut01_with`):
+   - sections `memory.opening.{keys,values,weight}` and `memory.reply.{keys,values,weight}`, keys and values as `u32`;
+   - weights as `i32` at a fixed exponent, rounded as the exporter rounds;
+   - a header record (`k`, the key window, the counts, the weight exponent);
+   - a schema of its own, so an engine that does not serve the memory refuses it.
+4. **A reader** (`read_memory_uorlut01`), checking:
+   - every section's length;
+   - keys sorted and unique;
+   - every id below the vocabulary or a pad;
+   - values below the vocabulary.
+5. **The session refuses a memory** until units 2 and 3 serve it, by its text.
 
 ## Cancel probe (run first)
 
-To fill in.
+- **Does the export already carry the memory?** No. At `origin/main` `48cc5fe83`, `fbs_export.rs` and `fbs-snapshot.rs` never read `turn_memory*.safetensors`.
+- **Is the item withdrawn?** No.
+- **Classed:** instrument. Nothing cancels the unit.
 
 ## Files in scope
 
@@ -36,12 +51,14 @@ To fill in.
 - `crates/uor-r4-integer/src/stack/session.rs`
 - `crates/uor-r4-integer/src/stack/format.rs`
 - `crates/uor-r4-integer/src/stack/tests.rs`
+- `crates/uor-r4-integer/src/fbs_snapshot.rs` (added by this unit's decision)
 - `crates/uor-r4-integer/src/bin/fbs-export.rs`
 - `crates/uor-r4-integer/src/bin/fbs-toks.rs`
 - `crates/uor-r4-float-train/src/fbs_export.rs`
 - `crates/uor-r4-float-train/src/flock_read_memory.rs`
 - `crates/uor-r4-float-train/src/in_space_long.rs`
 - `crates/uor-r4-float-train/src/bin/train-in-space.rs`
+- `crates/uor-r4-float-train/src/bin/fbs-snapshot.rs` (added by this unit's decision)
 - `docs/harness/prep/turn-memory-integer*`
 - `docs/loop/tasks/turn-memory-integer/**`
 - `docs/research/notebook/m4-serving.md`
@@ -49,8 +66,26 @@ To fill in.
 
 ## Done when
 
-To fill in.
+1. **The scope decision** passes its fresh review and is logged on #3392. The item's scope lists the two files.
+2. **A round trip.** A snapshot with a memory (synthetic tables and weights, with and without a reply table) exports, reads back every key, value and weight at its exponent, and its record and schema check out.
+3. **Unchanged without a memory.** A snapshot without a memory serializes with no `memory` key, and its exports keep claude-188's pinned sha256s.
+4. **The refusals, by their text:**
+   - the session, on an artifact with a memory;
+   - the reader, on a malformed section (a short section, unsorted keys, an id past the vocabulary);
+   - `fbs-snapshot`'s check, on a checkpoint with `hamming_read.safetensors`.
+5. **The float side:**
+   - `fbs_memory_snapshot` of a `TurnMemory` equals its tables and weights, round-tripped through `save` and `load` on the CPU;
+   - the snapshot's JSON reads back equal.
+6. **Negative gates:** each named check set aside fails its test.
+7. **Checks:**
+   - `cargo test -p uor-r4-integer` shows no new failure against `main`;
+   - `cargo test -p uor-r4-float-train` passes;
+   - the stub-nvcc CUDA check of `fbs-snapshot` builds;
+   - `loop gates --full` is green.
+8. A REPORT. The item stays `ready`.
 
 ## Stop and ask if
 
-To fill in.
+Stop and decide (never wait) if:
+- carrying the memory needs a change to the trunk's own sections: then that is its own unit;
+- the scope decision's review fails on a point that needs the owner: then post once on #2028, and park the item.
