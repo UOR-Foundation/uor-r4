@@ -22,7 +22,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use super::StackError;
-pub use crate::fbs_snapshot::{FbsRoutes, FbsTrunkLayer, FbsTrunkSnapshot};
+pub use crate::fbs_snapshot::{FbsHammingRead, FbsHammingSnapshot, FbsRoutes, FbsTrunkLayer, FbsTrunkSnapshot};
 
 /// Container magic.
 pub const MAGIC: &[u8; 8] = b"UORLUT01";
@@ -44,6 +44,86 @@ pub const STACK_FBS_SCHEMA: &str = "uor-r4.lut-stack/4";
 /// transition are served unsnapped (`raw_gates`, `raw_transition`; claude-181): an
 /// engine that only snaps them to the 120 icosians refuses it instead of snapping.
 pub const STACK_FBS_RAW_SCHEMA: &str = "uor-r4.lut-stack/5";
+/// Header schema of a SpiralCore/FBS stack that carries claude-146's induction-keyed Hamming
+/// reads (claude-188): an engine that does not serve them refuses it instead of dropping them.
+pub const STACK_FBS_HAMMING_SCHEMA: &str = "uor-r4.lut-stack/6";
+/// The Hamming reads' rotations are stored raw at `2^HAMMING_ROTATION_EXP` and normalized at
+/// serving, as the unsnapped gates are.
+pub const HAMMING_ROTATION_EXP: i32 = -24;
+/// The Hamming reads' margins, in bits, at `2^HAMMING_MARGIN_EXP`.
+pub const HAMMING_MARGIN_EXP: i32 = -16;
+/// The Hamming reads' weight rows at `2^HAMMING_WEIGHT_EXP`.
+pub const HAMMING_WEIGHT_EXP: i32 = -24;
+/// Earlier positions each Hamming head keeps (the float trunk's `HAMMING_KEPT`).
+pub const HAMMING_KEPT: usize = 16;
+
+/// The header record of a stack's Hamming reads (claude-188): their heads, depths and kept count,
+/// and the exponents their `hamming.d{depth}.*` sections are stored at.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StackHamming {
+    /// Heads per read: the first half copy heads, the rest type heads.
+    pub heads: usize,
+    /// Each read's depth, strictly increasing: after that many layers, or on the readout at the
+    /// layer count.
+    pub depths: Vec<usize>,
+    /// Earlier positions each head keeps.
+    pub kept: usize,
+    pub rotation_exp: i32,
+    pub margin_exp: i32,
+    pub weight_exp: i32,
+}
+
+impl StackHamming {
+    /// The record the exporter writes for `heads` and `depths`.
+    pub fn new(heads: usize, depths: Vec<usize>) -> Self {
+        Self {
+            heads,
+            depths,
+            kept: HAMMING_KEPT,
+            rotation_exp: HAMMING_ROTATION_EXP,
+            margin_exp: HAMMING_MARGIN_EXP,
+            weight_exp: HAMMING_WEIGHT_EXP,
+        }
+    }
+
+    /// Refuse a record the stack `shape` cannot carry: a non-FBS stack; an odd head count, or one
+    /// that does not split the width into whole 4-lane blocks of at most 64 coordinates (one
+    /// word); depths that are empty, out of order, or beyond the layers; no kept positions; or
+    /// exponents other than the ones this engine reads.
+    pub fn check(&self, shape: &StackShape) -> Result<(), StackError> {
+        if !shape.projection_fbs() {
+            return Err(StackError::Shape("a Hamming read needs a SpiralCore/FBS stack"));
+        }
+        let heads = self.heads;
+        if heads < 2 || heads % 2 != 0 || !shape.width.is_multiple_of(heads) {
+            return Err(StackError::Shape(
+                "a Hamming read needs an even head count of at least 2 that divides the width",
+            ));
+        }
+        let head_width = shape.width / heads;
+        if !head_width.is_multiple_of(4) || head_width > 64 {
+            return Err(StackError::Shape(
+                "a Hamming head needs whole 4-lane blocks and at most 64 coordinates",
+            ));
+        }
+        let ordered = self.depths.windows(2).all(|w| w[0] < w[1]);
+        let inside = self.depths.iter().all(|&d| (1..=shape.layers()).contains(&d));
+        if self.depths.is_empty() || !ordered || !inside {
+            return Err(StackError::Shape(
+                "Hamming read depths must be strictly increasing, from 1 to the layer count",
+            ));
+        }
+        if self.kept == 0 {
+            return Err(StackError::Shape("a Hamming read keeps at least one position"));
+        }
+        let exps = (self.rotation_exp, self.margin_exp, self.weight_exp);
+        if exps != (HAMMING_ROTATION_EXP, HAMMING_MARGIN_EXP, HAMMING_WEIGHT_EXP) {
+            return Err(StackError::Shape("the Hamming read's exponents are not this engine's"));
+        }
+        Ok(())
+    }
+}
 /// The native vector writer's limits (`uor-r4-float-train`'s `WriterSpec`).
 pub const WRITER_MIN_VOCAB: usize = 256;
 pub const WRITER_MAX_VOCAB: usize = 8192;
@@ -566,6 +646,9 @@ struct Header {
     /// The trained-in transport snap; absent on a free-transport artifact.
     #[serde(default)]
     transport_snap: Option<StackTransportSnap>,
+    /// The Hamming reads, under [`STACK_FBS_HAMMING_SCHEMA`]; absent on a stack without them.
+    #[serde(default)]
+    hamming: Option<StackHamming>,
 }
 
 /// One 4-bit matrix of a parsed container, borrowed from its bytes.
@@ -584,6 +667,8 @@ pub(crate) struct Container<'a> {
     pub sha256: String,
     /// The validated transport snap record, if the header carries one.
     pub transport_snap: Option<StackTransportSnap>,
+    /// The validated Hamming read record, if the header carries one.
+    pub hamming: Option<StackHamming>,
     data: &'a [u8],
     /// Sections by name (unique within each kind).
     matrices: HashMap<String, MatrixEntry>,
@@ -619,13 +704,21 @@ impl<'a> Container<'a> {
             })?;
         let header: Header =
             serde_json::from_slice(&bytes[16..header_end]).map_err(StackError::Header)?;
-        if header.schema != stack_schema_for(&header.shape) {
+        // A stack with Hamming reads is `lut-stack/6`; any other is the schema its shape implies.
+        let expected = match &header.hamming {
+            Some(_) => STACK_FBS_HAMMING_SCHEMA,
+            None => stack_schema_for(&header.shape),
+        };
+        if header.schema != expected {
             return Err(StackError::Schema(header.schema));
         }
         if header.group != GROUP {
             return Err(StackError::Group(header.group));
         }
         header.shape.validate()?;
+        if let Some(hamming) = &header.hamming {
+            hamming.check(&header.shape)?;
+        }
         if let Some(snap) = &header.transport_snap {
             let known = snap.name == "icosian"
                 && snap.roots == 120
@@ -698,6 +791,7 @@ impl<'a> Container<'a> {
             numerics: header.numerics,
             sha256: hex::encode(Sha256::digest(bytes)),
             transport_snap: header.transport_snap,
+            hamming: header.hamming,
             data,
             matrices,
             tables,
@@ -1458,6 +1552,42 @@ pub fn export_fbs_trunk_uorlut01_with(
         .collect::<Result<_, _>>()?;
     b.push_i16("writer.table", &writer);
 
+    // The Hamming reads (claude-188): each read's sections, and the header record naming them.
+    // Rotations are stored raw; serving normalizes them, as it does the unsnapped gates.
+    let hamming = match &snap.hamming {
+        None => None,
+        Some(h) => {
+            let record = StackHamming::new(h.heads, h.depths.clone());
+            record.check(&shape)?;
+            if h.reads.len() != h.depths.len() {
+                return Err(StackError::TableLength {
+                    name: "hamming.reads".to_owned(),
+                    len: h.reads.len(),
+                    expected: h.depths.len(),
+                });
+            }
+            for (depth, read) in h.depths.iter().zip(&h.reads) {
+                for (part, values, len, exp) in [
+                    ("query_rotation", &read.query_rotation, lanes * 4, HAMMING_ROTATION_EXP),
+                    ("key_rotation", &read.key_rotation, lanes * 4, HAMMING_ROTATION_EXP),
+                    ("value_rotation", &read.value_rotation, lanes * 4, HAMMING_ROTATION_EXP),
+                    ("margin", &read.margin, h.heads, HAMMING_MARGIN_EXP),
+                    ("weight", &read.weight, 2 * d, HAMMING_WEIGHT_EXP),
+                ] {
+                    let name = format!("hamming.d{depth}.{part}");
+                    check_f32(&name, values, len)?;
+                    let fixed = quantize_fixed_i32(values, len, exp, &name)?;
+                    // A weight is `max(0, m − d) / m`, so a margin must stay positive.
+                    if part == "margin" && fixed.iter().any(|&m| m <= 0) {
+                        return Err(StackError::Numerics(format!("{name}: a margin is not positive")));
+                    }
+                    b.push_i32(&name, &fixed);
+                }
+            }
+            Some(record)
+        }
+    };
+
     let eps_exp = -48i32;
     let eps_mantissa = (snap.rms_eps * 2f64.powi(-eps_exp)).round() as i64;
     let score_scale_q30 = ((1.0 / (shape.head_dim() as f64).sqrt()) * 2f64.powi(30))
@@ -1482,8 +1612,12 @@ pub fn export_fbs_trunk_uorlut01_with(
         roots: 120,
         roots_sha256: super::ICOSIAN_ROOTS_SHA256.to_owned(),
     };
-    let header = json!({
-        "schema": stack_schema_for(&shape),
+    let schema = match &hamming {
+        Some(_) => STACK_FBS_HAMMING_SCHEMA,
+        None => stack_schema_for(&shape),
+    };
+    let mut header = json!({
+        "schema": schema,
         "shape": shape,
         "group": GROUP,
         "numerics": numerics,
@@ -1500,6 +1634,10 @@ pub fn export_fbs_trunk_uorlut01_with(
         // requires of `raw_transition`.
         "transport_snap": snaps.transition.then_some(transport_snap),
     });
+    // Only a stack with Hamming reads has the key, so a read-free header is byte for byte as before.
+    if let Some(record) = &hamming {
+        header["hamming"] = json!(record);
+    }
     let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
     let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + b.data.len());
     out.extend_from_slice(MAGIC);

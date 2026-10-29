@@ -3608,3 +3608,97 @@ fn read_free_fbs_exports_are_unchanged_by_the_hamming_format() {
     assert_eq!(hex::encode(Sha256::digest(&snapped)), "e377d68f6b3c112ed267a9e3c09ef2ef2210e8f1c9bc4619ae26dd4c68d18e5c");
     assert_eq!(hex::encode(Sha256::digest(&raw)), "ec5ca212c257a2b2cd73c337029ff8556b454810377801d81addca75c4105965");
 }
+
+/// claude-188: a trunk with Hamming reads exports as `uor-r4.lut-stack/6`, and reads back with
+/// every parameter at its declared exponent, a zero quaternion included. The integer session
+/// refuses it, since it does not serve the read yet.
+#[test]
+fn hamming_reads_round_trip_in_lut_stack_6() {
+    use super::synthetic::synthetic_hamming;
+    let fixed = |values: &[f32], exp: i32| -> Vec<i32> {
+        values.iter().map(|&v| (f64::from(v) * 2f64.powi(-exp)).round() as i32).collect()
+    };
+    for raw in [false, true] {
+        let mut snap = synthetic_fbs_trunk(20261025);
+        let read = synthetic_hamming(snap.width, snap.layers.len(), 4, 188);
+        snap.hamming = Some(read.clone());
+        let snaps = super::FbsExportSnaps {
+            gates: !raw,
+            transition: !raw,
+        };
+        let bytes = super::export_fbs_trunk_uorlut01_with(&snap, snaps).expect("export");
+        let header_len = u64::from_le_bytes(bytes[8..16].try_into().expect("8 bytes")) as usize;
+        let header: Value = serde_json::from_slice(&bytes[16..16 + header_len]).expect("header");
+        assert_eq!(header["schema"], super::STACK_FBS_HAMMING_SCHEMA);
+        assert_eq!(header["shape"]["raw_gates"].as_bool().unwrap_or(false), raw);
+        let image = super::read_hamming_uorlut01(&bytes)
+            .expect("parse")
+            .expect("the artifact carries the reads");
+        assert_eq!(image.record, super::StackHamming::new(4, vec![1, snap.layers.len()]));
+        assert_eq!(image.reads.len(), 2);
+        for (got, want) in image.reads.iter().zip(&read.reads) {
+            let rot = super::HAMMING_ROTATION_EXP;
+            assert_eq!(got.query_rotation, fixed(&want.query_rotation, rot));
+            assert_eq!(got.key_rotation, fixed(&want.key_rotation, rot));
+            assert_eq!(got.value_rotation, fixed(&want.value_rotation, rot));
+            assert_eq!(got.margin, fixed(&want.margin, super::HAMMING_MARGIN_EXP));
+            assert_eq!(got.weight, fixed(&want.weight, super::HAMMING_WEIGHT_EXP));
+            assert_eq!(got.key_rotation[..4], [0, 0, 0, 0], "lane 0 is the zero quaternion");
+        }
+        let refused = match IntegerStackModel::parse(&bytes) {
+            Ok(_) => panic!("the session does not serve the read"),
+            Err(e) => e,
+        };
+        assert!(matches!(refused, StackError::Shape(m) if m.contains("Hamming")));
+        // The same trunk without the read is served, and reads back no read.
+        snap.hamming = None;
+        let plain = super::export_fbs_trunk_uorlut01_with(&snap, snaps).expect("export");
+        assert!(super::read_hamming_uorlut01(&plain).expect("parse").is_none());
+        IntegerStackModel::parse(&plain).expect("a read-free trunk is served");
+    }
+}
+
+/// claude-188: the exporter refuses a Hamming read the trunk cannot carry.
+#[test]
+fn malformed_hamming_reads_are_refused() {
+    use super::synthetic::synthetic_hamming;
+    let base = synthetic_fbs_trunk(20261025);
+    let layers = base.layers.len();
+    let export = |mutate: &dyn Fn(&mut super::FbsHammingSnapshot)| {
+        let mut snap = base.clone();
+        let mut read = synthetic_hamming(snap.width, layers, 4, 188);
+        mutate(&mut read);
+        snap.hamming = Some(read);
+        super::export_fbs_trunk_uorlut01(&snap)
+    };
+    export(&|_| {}).expect("the unmodified reads export");
+    let cases: [(&str, &dyn Fn(&mut super::FbsHammingSnapshot)); 9] = [
+        ("an odd head count", &|r| r.heads = 3),
+        ("a head wider than one word", &|r| r.heads = 0),
+        ("depths out of order", &|r| r.depths.reverse()),
+        ("a depth beyond the layers", &|r| r.depths[1] = layers + 1),
+        ("a depth of zero", &|r| r.depths[0] = 0),
+        ("a missing read", &|r| {
+            r.reads.pop();
+        }),
+        ("a short rotation", &|r| {
+            r.reads[0].key_rotation.pop();
+        }),
+        ("a zero margin", &|r| r.reads[1].margin[0] = 0.0),
+        ("a weight that does not fit", &|r| r.reads[0].weight[0] = 1.0e6),
+    ];
+    for (what, mutate) in cases {
+        assert!(export(mutate).is_err(), "{what} must be refused");
+    }
+}
+
+/// claude-188: a snapshot written before the Hamming reads (no `hamming` key) still parses, and a
+/// read-free snapshot serializes with no `hamming` key.
+#[test]
+fn snapshots_without_hamming_reads_are_unchanged() {
+    let snap = synthetic_fbs_trunk(20261025);
+    let value = serde_json::to_value(&snap).expect("serialize");
+    assert!(value.get("hamming").is_none());
+    let back: super::FbsTrunkSnapshot = serde_json::from_value(value).expect("an old snapshot parses");
+    assert_eq!(back, snap);
+}
