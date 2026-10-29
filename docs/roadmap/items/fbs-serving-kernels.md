@@ -1,9 +1,9 @@
 ---
 id: fbs-serving-kernels
-title: Split each served FBS layer, then vector kernels exact against the scalar step
+title: Split each served FBS layer, then make its largest parts faster, exactly
 milestone: research
 area: serving
-status: ready
+status: done
 open_to: lab
 needs_gpu: false
 depends_on: [fbs-cost-profile]
@@ -34,11 +34,24 @@ On the M1, a served token is 3.73 ms (265 tok/s). The six layers are 98.6% of it
 ## Done when
 
 1. **The split:** each layer's gathers, core, gated product and requantization timed on the M1, by extending `measure_fbs_step_stages` and `fbs-toks --stages`. The parts sum to the layer within 10%.
-2. **A vector kernel for the largest part,** written for D11 (CHARTER §3.6: integer, no multiply instruction; products through its tables), in `stack/fbs_simd.rs`, behind a runtime switch (no new cargo feature), with the scalar path kept for WASM and other targets.
-   - A host test holds every token, kept cell, query and session state equal to the scalar `step_native` over a synthetic trunk and a stored artifact.
-   - The kernel is in the audit's kernel list, and `scripts/audit_zero_matmul_serving.py --stack` passes on the release binary.
-3. **Speed:** `fbs-toks` decode tokens/s on the M1 with and without the kernel, on claude-126's export, with the same replies.
+2. **A faster exact kernel for the largest part:** a vector kernel the audit allows, or an exact structured kernel, written for D11 (CHARTER §3.6: integer, no multiply instruction; products through its tables). Amended by claude-170 from "a vector kernel … in `stack/fbs_simd.rs`, behind a runtime switch". The split showed the cost sat in the icosian snap and the Hamilton product, where exact structure gave more than lanes could.
+   - **Exactness rests on the kernel tests.** Host tests hold each changed kernel equal to the old one, by exhaustive or random inputs.
+   - **The session twin** (`fbs_stage_tests`) holds the timed step equal to `step_native` on a synthetic trunk. Both run the changed kernels, so that test checks the twin, not the kernels.
+   - **On a stored artifact,** only the replies are compared, and they are byte-identical. Kept cells, queries and session state are not compared there.
+   - `scripts/audit_zero_matmul_serving.py --stack` passes on the release binary.
+3. **Speed:** `fbs-toks` decode tokens/s on the M1 with and without the change, on claude-126's export, with the same replies. A change of scalar code that runs on every target needs no runtime switch. The "without" arm is the previous unit's sealed binary, run alternately in the same session.
 4. One notebook row and a REPORT. This is host and serving work: no GPU and no sheet (CHARTER §4.5).
+
+**Done (claude-170).** Each done-when is met:
+- **Done-when 1:** claude-163.
+- **Done-when 2 and 3:** claude-164 to claude-169. Each kernel equals its predecessor by exhaustive or random host tests, every reply on claude-126's export is byte-identical, and the audit passes on each release binary. Decode went 270 → 749 → 1,169–1,217 → 1,406–1,410 → 1,829–1,861 → 2,448–2,449 → 3,042–3,044 tok/s. The step is 0.33 ms over the trunk's 64,000 learnable values, about 5.2 ns a value, against claude-158's 57 ns.
+- **Done-when 4:** one notebook row and one REPORT per unit.
+
+**Open follow-ups**, not bars:
+- a NEON kernel the audit allows;
+- fewer golden candidates in the snap, by the query's magnitude order.
+
+In claude-169's profile the snap holds 32% and the Hamilton product 21%.
 
 ## Progress
 
