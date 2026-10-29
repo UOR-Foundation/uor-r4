@@ -1153,6 +1153,55 @@ const fn snap_candidates() -> SnapCandidates {
     SnapCandidates { counts, roots }
 }
 
+/// For each of the twelve golden blocks (roots `24 + 8k` to `24 + 8k + 7`: one
+/// even permutation with every sign), the axes holding `phi/2`, `1/2` and
+/// `(phi - 1)/2`, as `[p, q, t]`. Read at compile time from the root table.
+const GOLDEN_AXES: [[u8; 3]; 12] = golden_axes();
+
+const fn golden_axes() -> [[u8; 3]; 12] {
+    let mut axes = [[0u8; 3]; 12];
+    let mut block = 0;
+    while block < 12 {
+        let root = &H4_ROOT_COEFFICIENTS[24 + 8 * block];
+        let mut axis = 0;
+        while axis < 4 {
+            let [a, b] = root[axis];
+            if a == 0 && b != 0 {
+                axes[block][0] = axis as u8;
+            } else if a != 0 && b == 0 {
+                axes[block][1] = axis as u8;
+            } else if a != 0 && b != 0 {
+                axes[block][2] = axis as u8;
+            }
+            axis += 1;
+        }
+        block += 1;
+    }
+    axes
+}
+
+/// The score `(A, B)` of root `j` against a query it is sign-compatible with,
+/// from `s = |raw|` and `total = s_0 + s_1 + s_2 + s_3` (claude-168). On a
+/// compatible root every term `raw_c (a_c, b_c)` is `s_c` times a fixed small
+/// number, so the score is a few additions:
+/// - an axis root, `j < 8`, on axis `j >> 1`: `(2 s_i, 0)`;
+/// - a half-root, `8 <= j < 24`: `(total, 0)`;
+/// - a golden root: `(s_q - s_t, s_p + s_t)` for its block's `[p, q, t]`.
+///
+/// The sums equal the `small_mul` sums over the root's coefficients exactly.
+#[inline(always)]
+fn snap_compatible_score(j: usize, s: &[i64; 4], total: i64) -> (i64, i64) {
+    if j < 8 {
+        (s[(j >> 1) & 3] << 1, 0)
+    } else if j < 24 {
+        (total, 0)
+    } else {
+        let [p, q, t] = GOLDEN_AXES[((j - 24) >> 3).min(11)];
+        let (p, q, t) = (usize::from(p) & 3, usize::from(q) & 3, usize::from(t) & 3);
+        (s[q] - s[t], s[p] + s[t])
+    }
+}
+
 /// The index of the icosian root with the largest exact dot product with the
 /// raw rotation logits `raw` (any common scale; the float reference snaps the
 /// unit quaternion `raw / sqrt(|raw|^2 + 1e-6)`, a positive rescaling, so the
@@ -1165,21 +1214,27 @@ const fn snap_candidates() -> SnapCandidates {
 #[inline(never)]
 pub fn stack_snap_select(raw: [i32; 4]) -> usize {
     let lane = |value: i32| usize::from(value > 0) | (usize::from(value < 0) << 1);
-    let pattern = lane(core::hint::black_box(raw[0]))
-        | (lane(core::hint::black_box(raw[1])) << 2)
-        | (lane(core::hint::black_box(raw[2])) << 4)
-        | (lane(core::hint::black_box(raw[3])) << 6);
+    // Each lane's result behind `black_box` too: otherwise the four sign
+    // tests are packed into a NEON register and leave it by `fmov`.
+    let pattern = core::hint::black_box(lane(core::hint::black_box(raw[0])))
+        | (core::hint::black_box(lane(core::hint::black_box(raw[1]))) << 2)
+        | (core::hint::black_box(lane(core::hint::black_box(raw[2]))) << 4)
+        | (core::hint::black_box(lane(core::hint::black_box(raw[3]))) << 6);
     let count = usize::from(SNAP_CANDIDATES.counts[pattern]);
+    // Each magnitude behind `black_box`: packed into a NEON register, the four
+    // and their sum end in a SIMD-to-general transfer (`fmov`), which the
+    // serving audit refuses.
+    let s = [
+        core::hint::black_box(i64::from(raw[0].unsigned_abs())),
+        core::hint::black_box(i64::from(raw[1].unsigned_abs())),
+        core::hint::black_box(i64::from(raw[2].unsigned_abs())),
+        core::hint::black_box(i64::from(raw[3].unsigned_abs())),
+    ];
+    let total = s[0] + s[1] + s[2] + s[3];
     let mut best = 0usize;
     let (mut best_a, mut best_b) = (0i64, 0i64);
     for (k, &index) in SNAP_CANDIDATES.roots[pattern][..count].iter().enumerate() {
-        let root = &H4_ROOT_COEFFICIENTS[usize::from(index)];
-        let (mut a, mut b) = (0i64, 0i64);
-        for (coefficient, &value) in root.iter().zip(&raw) {
-            let v = i64::from(value);
-            a = a.wrapping_add(small_mul(v, coefficient[0]));
-            b = b.wrapping_add(small_mul(v, coefficient[1]));
-        }
+        let (a, b) = snap_compatible_score(usize::from(index), &s, total);
         if k == 0 || snap_difference_positive(a.wrapping_sub(best_a), b.wrapping_sub(best_b)) {
             best = usize::from(index);
             best_a = a;
@@ -2030,6 +2085,69 @@ mod tests {
                 let a = stack_snap_rotation(raw, lambda);
                 let b: [i64; 4] = std::array::from_fn(|_| pick(&mut rng));
                 assert_eq!(stack_hamilton(a, b), hamilton_by_products(a, b), "{a:?} {b:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_root_table_has_the_layout_the_scores_read() {
+        for (j, root) in H4_ROOT_COEFFICIENTS.iter().enumerate() {
+            let kinds: Vec<(i8, i8)> = root.iter().map(|&[a, b]| (a, b)).collect();
+            if j < 8 {
+                // One coordinate +-1 (a = +-2) on axis j >> 1, the rest zero.
+                for (axis, &(a, b)) in kinds.iter().enumerate() {
+                    let on = axis == j >> 1;
+                    assert_eq!((a.abs(), b), (if on { 2 } else { 0 }, 0), "root {j}");
+                }
+            } else if j < 24 {
+                assert!(kinds.iter().all(|&(a, b)| a.abs() == 1 && b == 0), "root {j}");
+            } else {
+                let [p, q, t] = GOLDEN_AXES[(j - 24) >> 3].map(usize::from);
+                assert!(p != q && q != t && p != t, "root {j}: {p} {q} {t}");
+                for (axis, &(a, b)) in kinds.iter().enumerate() {
+                    let want = if axis == p {
+                        (0, 1)
+                    } else if axis == q {
+                        (1, 0)
+                    } else if axis == t {
+                        (1, 1)
+                    } else {
+                        (0, 0)
+                    };
+                    assert_eq!((a.abs(), b.abs()), want, "root {j} axis {axis}");
+                    if axis == t {
+                        // (phi - 1)/2: a and b of opposite signs.
+                        assert_eq!(a, -b, "root {j}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_compatible_score_is_the_coefficient_sum() {
+        let mut rng = Lcg(0x05ee_d168);
+        for (j, root) in H4_ROOT_COEFFICIENTS.iter().enumerate() {
+            for _ in 0..10_000 {
+                // A query sign-compatible with root j: each coordinate the root's
+                // sign where the root is nonzero, any sign (or zero) elsewhere.
+                let raw: [i32; 4] = std::array::from_fn(|c| {
+                    let draw = rng.next();
+                    let magnitude = ((draw >> 8) as u32 >> (draw % 32)) as i64;
+                    let sign = match root_coordinate_sign(root[c]) {
+                        0 => [1, -1, 0][(draw >> 40) as usize % 3],
+                        s => i64::from(s),
+                    };
+                    (sign * magnitude).clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
+                });
+                let (mut a, mut b) = (0i64, 0i64);
+                for (coefficient, &value) in root.iter().zip(&raw) {
+                    a += small_mul(i64::from(value), coefficient[0]);
+                    b += small_mul(i64::from(value), coefficient[1]);
+                }
+                let s: [i64; 4] = std::array::from_fn(|c| i64::from(raw[c].unsigned_abs()));
+                let total = s.iter().sum();
+                assert_eq!(snap_compatible_score(j, &s, total), (a, b), "root {j}, {raw:?}");
             }
         }
     }
