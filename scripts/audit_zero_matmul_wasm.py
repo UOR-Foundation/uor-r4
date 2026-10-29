@@ -27,6 +27,11 @@ is a decode error, and the symbol fails. The build commit is an input
 (`--build-commit`); the tool never reads the current working tree, because the
 checked-out HEAD is not evidence of the commit that built the artifact.
 
+Since D80 and D81 (CHARTER §3.6) the stack's serving surface
+(`SERVING_WASM_SYMBOLS`) may use Class I and Class II: they are counted and
+reported, and its symbols fail only on Class III, unclassified (SIMD included)
+or decode findings. Every other symbol keeps the zero-multiply rule.
+
 A passing result is a scoped static measurement of the named symbols in one
 artifact. It is not a serving-runtime qualification.
 
@@ -516,8 +521,13 @@ SERVING_WASM_SYMBOLS = [
 
 MANDATORY_WASM_SYMBOLS = LEGACY_WASM_SYMBOLS + SERVING_WASM_SYMBOLS
 
+# D80 and D81 (CHARTER §3.6): the stack's served step may use the integer multiply and divide.
+# Only its serving surface gets the allowance; the legacy symbols keep the zero-multiply rule,
+# and float, unclassified (SIMD included) and decode findings fail every symbol.
+INTEGER_MUL_DIV_ALLOWED = {name for name, _ in SERVING_WASM_SYMBOLS}
 
-def audit_symbol(module, name, pattern, follow_calls):
+
+def audit_symbol(module, name, pattern, follow_calls, allow_integer_mul_div=False):
     alternatives = pattern.split("|")
     roots = [
         index
@@ -528,6 +538,7 @@ def audit_symbol(module, name, pattern, follow_calls):
         "name": name,
         "pattern": pattern,
         "root_functions": roots,
+        "integer_mul_div_allowed": allow_integer_mul_div,
         "audited_functions": 0,
         "instructions": 0,
         "mul": 0,
@@ -594,7 +605,7 @@ def audit_symbol(module, name, pattern, follow_calls):
     result["unclassified_opcodes"] = dict(sorted(unclassified.items()))
     if result["decode_errors"]:
         result["status"] = "DECODE_ERROR"
-    elif result["mul"] or result["div"] or result["float"]:
+    elif result["float"] or (not allow_integer_mul_div and (result["mul"] or result["div"])):
         result["status"] = "FAIL"
     elif result["unclassified"]:
         result["status"] = "UNCLASSIFIED"
@@ -617,6 +628,8 @@ def summarize(result, follow_calls):
         f"mul={result['mul']}, div={result['div']}, float={result['float']}, "
         f"unclassified={result['unclassified']}"
     )
+    if result.get("integer_mul_div_allowed"):
+        counts += " [integer mul/div allowed, D80/D81]"
     extent = f"{result['instructions']} instructions in {result['audited_functions']} fn(s)"
     if follow_calls:
         extent += (
@@ -775,6 +788,31 @@ def run_self_test():
             failures.append(f"call graph: {graph['status']} mul={graph['mul']}")
     except DecodeError as error:
         failures.append(f"module sentinel: {error}")
+
+    # D80 and D81: a serving-surface symbol may reach i64.mul and i64.div_u; a float instruction
+    # still fails it, and a legacy symbol (the default) still fails on the multiply.
+    def module_with_callee(callee_body):
+        code_section = _section(
+            10, _uleb(2) + _uleb(len(callee_body)) + callee_body + _uleb(len(body_call)) + body_call
+        )
+        return Module(b"\x00asm\x01\x00\x00\x00" + types + imports + functions + exports + code_section)
+
+    try:
+        integer = module_with_callee(bytes([0, 0x7E, 0x80, 0x0B]))  # i64.mul, i64.div_u
+        allowed = audit_symbol(integer, "clean_root", "clean_root", True, allow_integer_mul_div=True)
+        if allowed["status"] != "PASS" or allowed["mul"] != 1 or allowed["div"] != 1:
+            failures.append(f"D80/D81 allowance: {allowed['status']} mul={allowed['mul']} div={allowed['div']}")
+        if not allowed["integer_mul_div_allowed"]:
+            failures.append("D80/D81 allowance: the result does not record the allowance")
+        legacy = audit_symbol(integer, "clean_root", "clean_root", True)
+        if legacy["status"] != "FAIL" or legacy["integer_mul_div_allowed"]:
+            failures.append(f"legacy symbol with i64.mul: {legacy['status']}")
+        floating = module_with_callee(bytes([0, 0x7E, 0xA0, 0x0B]))  # i64.mul, f64.add
+        with_float = audit_symbol(floating, "clean_root", "clean_root", True, allow_integer_mul_div=True)
+        if with_float["status"] != "FAIL" or with_float["float"] != 1:
+            failures.append(f"D80/D81 allowance with f64.add: {with_float['status']} float={with_float['float']}")
+    except DecodeError as error:
+        failures.append(f"D80/D81 module sentinel: {error}")
     return failures
 
 
@@ -837,7 +875,9 @@ def main():
     }
     symbols = SERVING_WASM_SYMBOLS if args.serving else MANDATORY_WASM_SYMBOLS
     results = [
-        audit_symbol(module, name, pattern, args.call_graph)
+        audit_symbol(
+            module, name, pattern, args.call_graph, allow_integer_mul_div=name in INTEGER_MUL_DIV_ALLOWED
+        )
         for name, pattern in symbols
     ]
     if args.json:
