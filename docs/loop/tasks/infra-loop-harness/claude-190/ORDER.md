@@ -4,13 +4,23 @@ Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-har
 
 ## Goal
 
+**This unit (claude-190):** record the owner's two 29 Oct directions in PLAN.md's owner-direction table, and add the roadmap item `docs-status-refresh` that carries the documentation refresh. Then `loop next` reads the open direction instead of falling through to "any ready item", which is how `turn-memory-reply`, claude-162's first item, was never offered.
+
+The umbrella item's done-when, for reference:
+
+
 The item's done-when reads:
 
 > Every PR in the build plan on [the loop page](../../loop/README.md#build-plan) is merged, each with its planted fault turning its gate red. The four labs (Kimi, Claude, DeepSeek, Antigravity) are onboarded, each with a committed onboarding receipt. Each lab has completed one loop task end to end: claim, probe, work, gates, report, review by another vendor, queue, and verify on fresh `main`.
 
 ## Cancel probe (run first)
 
-To fill in.
+Cancel if an existing item already covers the status pages, or if PLAN.md already records the 29 Oct directions.
+- **No ready item covers them.** No ready item's `scope:` names `README.md`, `docs/start/`, `docs/model/`, `docs/research/lines/`, `docs/products/` or `xtask/src/figures.rs`. The only items whose scope reaches `docs/figures/**` are this umbrella and the done `infra-loop-pr08-migration`.
+- **PLAN.md has no open owner direction** at `14b2bdccc`: `loop next` prints "PLAN.md has no open owner direction".
+- **The new scope overlaps no open order.** The one other open order, antigravity-113, holds `docs/mechanisms/exact-memory.md` and `docs/mechanisms/object-store.md`, and the new item's scope leaves both out. It names no shared file (`SHARED_FILES` in `loopclaim.rs`).
+
+Result: **go.** This probes an instrument, the loop's record of directions and items, not a mechanism.
 
 ## Files in scope
 
@@ -63,8 +73,12 @@ To fill in.
 
 ## Done when
 
-To fill in.
+1. **PLAN.md's owner-direction table** has the two 29 Oct directions, verbatim and `open`, newest first. The end-to-end row's note gives the order of work, with `turn-memory-reply` first.
+2. **`docs/roadmap/items/docs-status-refresh.md`** exists, `ready`. `cargo xtask roadmap check` passes, and `docs/roadmap/README.md` is re-rendered.
+3. **`loop next` at the head** reads the open owner direction.
+4. **The checks:** `loop gates --quick` is green, one fresh review, and a REPORT.
 
 ## Stop and ask if
 
-To fill in.
+- **A bar, a milestone status or a charter rule would change.** Those are decision rows, not this unit.
+- **The new item's scope overlaps an open order.** Narrow it; do not wait.
