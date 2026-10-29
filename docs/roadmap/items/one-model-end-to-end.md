@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: true
 depends_on: [turn-memory-reply]
 notebook: docs/research/notebook/float-training.md
-scope: [docs/labs/one-model-end-to-end/**, docs/harness/prep/one-model-end-to-end*, docs/loop/tasks/one-model-end-to-end/**, docs/research/notebook/float-training.md, docs/roadmap/items/one-model-end-to-end.md, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/src/flock_read_memory.rs]
+scope: [docs/labs/one-model-end-to-end/**, docs/harness/prep/one-model-end-to-end*, docs/loop/tasks/one-model-end-to-end/**, docs/research/notebook/float-training.md, docs/roadmap/items/one-model-end-to-end.md, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/src/flock_read_memory.rs, crates/uor-r4-training/examples/m-world.rs]
 ---
 
 ## Why it matters
@@ -32,6 +32,13 @@ So before the model the project ships is trained, the scoring must be able to te
   - a TRAIN reply index;
   - which panel, if any, holds templates TRAIN never shows.
 - **The check that could overturn the diagnosis:** whether (r) falls below (r0) where no key matches.
+- **A panel with held-out phrasings** (claude-202's census, `443a980e5`). Neither DEV nor Fresh V2 qualifies: 0.750 and 0.777 of their replies are verbatim TRAIN replies.
+  - M-world v2 already splits phrasings: `dev_phrasing × dev_value` is its development cell (`crates/uor-r4-training/src/milestone_world_v2.rs`, "Cross cells").
+    - **The split covers user-turn phrasings and fillers only.** The assistant's reply templates are shared across splits. They include `MQAR_ACKS`, `MQAR_REPLIES`, `UPDATE_ACKS` and v1's closers and absent replies.
+    - So the panel tests held-out *prompts* with new values, not held-out reply wording. Its census's masked reply-template share is expected to stay high.
+    - **Two risks the panel's census must count:** a TRAIN paraphrase near-equal to a dev template (the generator refuses exact equality only), and chat-v0 turns that coincide with dev phrasings. It also records the `paraphrases=` setting TRAIN was built with.
+  - But `m-world corpus` writes TRAIN conversations only. The writer is a `cell=` option on `corpus world=v2` in `crates/uor-r4-training/examples/m-world.rs`, added to this item's scope by claude-203.
+  - The panel it writes is counted by `train-in-space --census` before it is used.
 - **A scoring protocol, fixed before any training run, with:**
   - strata: keyed, unkeyed, new-template;
   - free-generation measures;
