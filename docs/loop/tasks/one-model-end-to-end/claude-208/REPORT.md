@@ -38,7 +38,7 @@ In `crates/uor-r4-float-train` (the item's scope):
   - a panel's greedy samples are `samples-{name}-greedy-{memory|no-memory}.json`;
   - Flock rank samples are `samples-{split}-flock-memory.json`.
 - **The binary:** `--score-rows` passes its `--panel` list, and its usage docs describe the samples.
-- **Tests, 5 new:**
+- **Tests, 9 new (5, then 4 from the review):**
   - `the_flock_rank_weights_are_the_integer_selectors_table`;
   - `the_flock_rank_draw_follows_the_harmonic_weights`: K = 1 is greedy, and over 10^6 draws each rank is within 0.002 of `W_i/H`;
   - `candidates_rank_by_score_then_smaller_id`;
@@ -51,10 +51,15 @@ None. This unit is code and its tests.
 
 ## Checks run at the head
 
-- `cargo test --locked -p uor-r4-float-train --no-fail-fast`: lib 144 passed, 0 failed (5 new), and every other target passed.
+- `cargo test --locked -p uor-r4-float-train --no-fail-fast`: lib 148 passed, 0 failed (9 new), and every other target passed.
 - **The negative gate:** with `reply_key_hits` keying on `reply[..=j]` in place of `reply[..j]`, `the_hit_rate_keys_…` FAILS; restored and rebuilt, it passes.
 - A stub-nvcc `cargo check --offline --locked -p uor-r4-float-train --features cuda --bin train-in-space --lib --tests` builds.
 - **At `acba137f8`:** `loop report --check` PASS, `loop pr-check --local` PASS, `loop gates --full` 11 GREEN; `git ls-files` lists no `local/` path.
+- **Review round 1, at `f9cfd658b`: two slices, both REQUEST CHANGES.**
+  - **Code:** greedy confirmed byte-identical to the old loop; the Flock rule matches the sheet; candle's `arg_sort_last_dim(false)` sorts descending.
+    - **MAJOR, fixed:** the hit rate counted a generated reply past its first `<|eos|>`. Both replies are now cut there before counting, the Flock rule stops there, and `the_hit_rate_counts_a_reply_up_to_its_end_of_turn` tests it.
+    - **Nits taken:** panel names `dev`, `fresh-v2` and path-like are refused (`panel_name_ok`); Flock replies over 64 tokens are refused; the rank boundary is pinned (`a_draw_on_a_boundary_takes_the_next_rank`; with `>=` in place of `>` it FAILS); the window-truncation branch is tested.
+  - **Docs:** the I-F check is moved to a laptop count over every DEV later row, in I-G, and corrected in the sheet. Memory-off files' zero hits are stated, and the ORDER's "every later row" is narrowed to the fixture.
 
 ## What it unlocks
 
