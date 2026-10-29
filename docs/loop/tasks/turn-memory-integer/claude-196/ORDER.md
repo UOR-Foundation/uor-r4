@@ -13,9 +13,10 @@ The amended item states:
    - The opening table at a reply's first step: the turn's first 8 prompt ids.
    - The reply table at every later reply step: turn-8 + `u32::MAX` + the reply length so far + `u32::MAX` + the last reply id.
    - Each moves the readout point `n + w ⊙ (c − n)` with its own weight, as `flock_read_memory.rs`'s `apply_readout`.
-2. **How a session forms the keys**, matching the float trainer's own greedy decode (`greedy_reply_key`, `in_space_long.rs`). That decode keys over what its window shows, through `opening_slots(.., TURN_KEY, OpeningAnchor::Turn)`.
-   - **A role signal.** The caller marks where the user's turn starts and where the reply starts, since a plain `step(token)` carries no roles. The chat layer has them.
-   - **The window rule.** The key sees only the last `context` tokens, as a training window of the same length does.
+2. **How a session forms the keys**, as the float side forms them (the item's "The keys", corrected in the decision review):
+   - **The turn** comes from the `<|bos|>`/`<|eos|>` anchor of `opening_slots(.., TURN_KEY, OpeningAnchor::Turn)`, which the opening table's training read and the greedy decode both use. The reply rows' mask-based turn agrees at openings as a measured fact, and a test row with an internal `<|eos|>` pins the session's behaviour.
+   - **One role signal:** the caller marks where the reply begins, since a plain `step(token)` carries no roles. The turn is in the token stream.
+   - **The window rule follows training:** a reply row past the window's view of its prompt keys with an empty turn, as training did. The greedy decode's difference there (it reads no reply table) is a measured item for the parity unit.
 3. **The parity checkpoint** becomes claude-194's (r) at step 16,384, `caseyallard/uor-r4-store:results/claude/turn-memory-reply-2026-10-29/`, at both seeds, in place of claude-161's (m). It has both tables, and its trunk is the one that depends on them.
 4. **The order of units:**
    1. the export of both tables and their weights;
