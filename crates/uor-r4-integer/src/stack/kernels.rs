@@ -406,12 +406,14 @@ fn long_division_u128(numerator: u128, denominator: u128) -> u128 {
 /// Floor integer square root, digit by digit (the D10 engine's `isqrt`).
 #[inline(never)]
 pub(crate) fn stack_isqrt(value: u128) -> u128 {
+    if value == 0 {
+        return 0;
+    }
     let mut remainder = value;
     let mut root = 0u128;
-    let mut bit = 1u128 << 126;
-    while bit > value {
-        bit >>= 2;
-    }
+    // The largest power of four at most `value`, from its top bit (claude-186), in place of
+    // walking down from 2^126.
+    let mut bit = 1u128 << ((127 - value.leading_zeros()) & !1);
     while bit != 0 {
         if remainder >= root + bit {
             remainder -= root + bit;
@@ -1833,6 +1835,51 @@ mod tests {
         assert_eq!(stack_div_u64(u64::MAX, u64::MAX), 1);
         assert_eq!(stack_div_u64(7, 0), 0);
         assert_eq!(stack_isqrt(u128::MAX), u128::from(u64::MAX));
+    }
+
+    /// claude-186: `stack_isqrt` starts at the value's top bit, and equals the form that walks
+    /// down from `2^126`, on every value below `2^20`, every power of two with its neighbours,
+    /// `u128::MAX`, and a million seeded values at every bit length.
+    #[test]
+    fn isqrt_from_the_top_bit_equals_the_walking_form() {
+        fn walking(value: u128) -> u128 {
+            let mut remainder = value;
+            let mut root = 0u128;
+            let mut bit = 1u128 << 126;
+            while bit > value {
+                bit >>= 2;
+            }
+            while bit != 0 {
+                if remainder >= root + bit {
+                    remainder -= root + bit;
+                    root = (root >> 1) + bit;
+                } else {
+                    root >>= 1;
+                }
+                bit >>= 2;
+            }
+            root
+        }
+        let mut checked = 0u64;
+        for value in 0..(1u128 << 20) {
+            assert_eq!(stack_isqrt(value), walking(value), "{value}");
+            checked += 1;
+        }
+        for shift in 0..128 {
+            let power = 1u128 << shift;
+            for value in [power - 1, power, power + 1] {
+                assert_eq!(stack_isqrt(value), walking(value), "{value}");
+                checked += 1;
+            }
+        }
+        assert_eq!(stack_isqrt(u128::MAX), walking(u128::MAX));
+        let mut rng = Lcg(186);
+        for _ in 0..1_000_000 {
+            let value = rng.wide() >> (rng.next() % 128);
+            assert_eq!(stack_isqrt(value), walking(value), "{value}");
+            checked += 1;
+        }
+        assert_eq!(checked, (1u64 << 20) + 128 * 3 + 1_000_000);
     }
 
     /// `stack_l2_distance` equals the plain integer definition (native
