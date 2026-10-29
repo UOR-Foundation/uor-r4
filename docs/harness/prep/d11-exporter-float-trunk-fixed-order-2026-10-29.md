@@ -72,7 +72,7 @@ Sections 6 to 8 were added after the run, when CI's sheet-shape rule asked for t
 
 - **Steps:** 1,024 dual-forward training steps per seed, on seeds 1 and 2, evaluated at steps 0, 256, 512 and 1,024.
 - **Minimum test power:** the test is deterministic. One differing byte in a saved file, or one differing count or loss, decides a comparison.
-  - claude-140's five runs of one binary differed from step 256 on, so the old nondeterminism shows well within 1,024 steps.
+  - The two earlier runs claude-140 compared (claude-131's and kimi-46's) differed from step 256 on (its §1), so the old nondeterminism shows well within 1,024 steps.
   - O1 against O2 checks that the same holds on this pod.
   - Two seeds and four points give eight chances per comparison.
 

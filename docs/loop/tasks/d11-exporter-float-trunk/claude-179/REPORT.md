@@ -63,7 +63,7 @@ B_fixed lies inside B_base's spread on seed 1 (882 to 1,627) and 71 below it on 
 ## Still open
 
 - **R6's second half (next unit):** the export gap re-measured with repeats. Because training is now repeatable, a single pair of runs of one recipe is comparable, so the gap can get a verdict against the two-seed band.
-- **Why float top-1 falls between steps 512 and 1,024 in seven of eight arm-seed runs** in every arm. This is a training-schedule question for the export-gap unit, or for whichever unit owns the recipe.
+- **Why float top-1 falls between steps 512 and 1,024 in seven of eight arm-seed runs**. This is a training-schedule question for the export-gap unit, or for whichever unit owns the recipe.
 - **A GPU-to-CPU parity test of the base backward,** which would need the raw kernel output before the secant transform.
 - **The mechanism page** `docs/mechanisms/lut-serving.md` is out of this item's scope (claude-121).
 
