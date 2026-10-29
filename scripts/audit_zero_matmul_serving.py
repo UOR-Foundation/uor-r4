@@ -14,7 +14,15 @@ Usage:
 stack engine (`uor_r4_integer::stack`): its step and kernels become the mandatory
 symbols and the call-graph roots, in place of the retained IntegerModel set. A
 stack audit always runs the call graph and fails unless every stack root is
-found. Other targets audit exactly as before.
+found. Since D80 and D81 (CHARTER §3.6) a stack audit allows the scalar,
+general-register integer multiply and divide (`mul`, `madd`, `umulh`, `sdiv`,
+`udiv`, ...) and reports how many it saw; every vector, dot-product or matrix
+multiply and every Class III instruction (`fmov` included) still fails. Other
+targets audit exactly as before, with the zero-multiply rule.
+
+    python3 scripts/audit_zero_matmul_serving.py --self-test
+
+runs the sentinel, stack-pattern and stack scalar tests without an artifact.
 """
 
 import argparse
@@ -103,6 +111,59 @@ STRICT_FORBIDDEN_PATTERN = re.compile(
 
 # Historical pattern set to strict forbidden pattern
 CORE_FORBIDDEN_PATTERN = STRICT_FORBIDDEN_PATTERN
+
+# D80 and D81 (CHARTER §3.6): the stack's served step may use the scalar, general-register
+# integer multiply and divide. Only stack mode applies this; every vector form (an arrangement
+# suffix such as `mul.4s`, or a vector first operand such as `mul v0.4s, ...`) and every other
+# Class I, II or III instruction stays forbidden there, and the other modes are unchanged.
+SCALAR_MUL_MNEMONICS = (
+    "mul", "madd", "msub", "mneg", "smull", "umull", "smaddl", "umaddl",
+    "smsubl", "umsubl", "smnegl", "umnegl", "smulh", "umulh",
+)
+SCALAR_DIV_MNEMONICS = ("sdiv", "udiv")
+SCALAR_MUL_DIV_PATTERN = re.compile(
+    r"\b(" + "|".join(SCALAR_MUL_MNEMONICS + SCALAR_DIV_MNEMONICS) + r")(\.[0-9]*[a-z]+)?\s+([a-z0-9]+)",
+    re.IGNORECASE,
+)
+GENERAL_REGISTER_PATTERN = re.compile(r"[xw](?:[0-9]|[12][0-9]|30)|xzr|wzr", re.IGNORECASE)
+
+
+def scalar_mul_div_kind(instr):
+    """`"mul"` or `"div"` when `instr` is a scalar general-register integer multiply or divide,
+    else None. Nothing else forbidden may share the line."""
+    m = SCALAR_MUL_DIV_PATTERN.search(instr)
+    if not m or m.group(2) or not GENERAL_REGISTER_PATTERN.fullmatch(m.group(3)):
+        return None
+    if STRICT_FORBIDDEN_PATTERN.search(instr[: m.start(1)] + instr[m.end(1):]):
+        return None
+    return "div" if m.group(1).lower() in SCALAR_DIV_MNEMONICS else "mul"
+
+
+def line_forbidden(instr, stack=False, allowed_counts=None):
+    """A strict-pattern match, unless stack mode allows it as a scalar integer multiply or divide
+    (counted into `allowed_counts` when given)."""
+    if not STRICT_FORBIDDEN_PATTERN.search(instr):
+        return False
+    kind = scalar_mul_div_kind(instr) if stack else None
+    if kind is None:
+        return True
+    if allowed_counts is not None:
+        allowed_counts[kind] = allowed_counts.get(kind, 0) + 1
+    return False
+
+
+def classify_instructions(instrs, stack, results):
+    """Class I, II and III lines of `instrs`. In stack mode the scalar integer multiply and divide
+    lines are taken out of Class I and II and counted in `results` (D80, D81)."""
+    c1 = [i for i in instrs if CLASS_I_PATTERN.search(i)]
+    c2 = [i for i in instrs if CLASS_II_PATTERN.search(i)]
+    c3 = [i for i in instrs if CLASS_III_PATTERN.search(i)]
+    if stack:
+        for kind, lines in (("mul", c1), ("div", c2)):
+            kept = [i for i in lines if scalar_mul_div_kind(i) != kind]
+            results[f"allowed_scalar_{kind}"] += len(lines) - len(kept)
+            lines[:] = kept
+    return c1, c2, c3
 
 # Mandatory serving symbols for library archive (.rlib)
 RLIB_MANDATORY_SYMBOLS = [
@@ -794,6 +855,56 @@ def run_stack_pattern_tests():
             raise AssertionError(f"Stack pattern test failed: {shorter} matches {longer}")
 
 
+def run_stack_scalar_tests():
+    """Stack mode allows the scalar integer multiply and divide (D80, D81) and nothing more; the
+    other modes still refuse them."""
+    allowed = [
+        ("mul x8, x9, x10", "mul"),
+        ("mul\tx8, x9, x10", "mul"),
+        ("madd x0, x1, x2, x3", "mul"),
+        ("msub x0, x1, x2, x3", "mul"),
+        ("smull x0, w1, w2", "mul"),
+        ("umulh x0, x1, x2", "mul"),
+        ("mneg w0, w1, w2", "mul"),
+        ("mul xzr, x1, x2", "mul"),
+        ("sdiv w0, w1, w2", "div"),
+        ("udiv x0, x1, x2", "div"),
+    ]
+    refused = [
+        "mul.4s v0, v1, v2",
+        "mul v0.4s, v1.4s, v2.4s",
+        "smull v0.4s, v1.4h, v2.4h",
+        "smull.4s v0, v1, v2",
+        "smull2 v0.4s, v1.8h, v2.8h",
+        "mla.4s v0, v1, v2",
+        "udot v0.4s, v1.16b, v2.16b",
+        "smmla v0.4s, v1.16b, v2.16b",
+        "fmov d0, x1",
+        "fadd d0, d1, d2",
+        "mul x31, x1, x2",
+    ]
+    for instr, kind in allowed:
+        if scalar_mul_div_kind(instr) != kind:
+            raise AssertionError(f"Stack scalar test failed: {instr!r} is not a scalar {kind}")
+        counts = {}
+        if line_forbidden(instr, stack=True, allowed_counts=counts) or counts != {kind: 1}:
+            raise AssertionError(f"Stack scalar test failed: stack mode refuses {instr!r}")
+        if not line_forbidden(instr, stack=False):
+            raise AssertionError(f"Stack scalar test failed: a non-stack audit allows {instr!r}")
+    for instr in refused:
+        if not line_forbidden(instr, stack=True):
+            raise AssertionError(f"Stack scalar test failed: stack mode allows {instr!r}")
+    results = {"allowed_scalar_mul": 0, "allowed_scalar_div": 0}
+    c1, c2, c3 = classify_instructions(
+        ["mul x8, x9, x10", "udiv x0, x1, x2", "mul.4s v0, v1, v2", "fadd d0, d1, d2"], True, results
+    )
+    if (c1, c2, c3) != (["mul.4s v0, v1, v2"], [], ["fadd d0, d1, d2"]) or results != {
+        "allowed_scalar_mul": 1,
+        "allowed_scalar_div": 1,
+    }:
+        raise AssertionError(f"Stack scalar test failed: classify gave {(c1, c2, c3)} and {results}")
+
+
 def find_target_artifact(user_arg=None):
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     target_dirs = []
@@ -951,6 +1062,8 @@ def run_audit(per_symbol, is_demangled, target_path, strict_arm64=True, git_comm
         "class_i_violations": [],   # Multipliers
         "class_ii_violations": [],  # Dividers
         "class_iii_violations": [], # Floats / transfers
+        "allowed_scalar_mul": 0,    # Stack mode: scalar integer multiplies allowed (D80)
+        "allowed_scalar_div": 0,    # Stack mode: scalar integer divides allowed (D81)
         "all_violations": [],
         "passed_symbols": [],
     }
@@ -1001,9 +1114,7 @@ def run_audit(per_symbol, is_demangled, target_path, strict_arm64=True, git_comm
             results["mandatory_checked"] += 1
             instrs = per_symbol[sym]
 
-            c1 = [i for i in instrs if CLASS_I_PATTERN.search(i)]
-            c2 = [i for i in instrs if CLASS_II_PATTERN.search(i)]
-            c3 = [i for i in instrs if CLASS_III_PATTERN.search(i)]
+            c1, c2, c3 = classify_instructions(instrs, stack, results)
 
             if c1:
                 results["class_i_violations"].append((name, sym, c1, desc))
@@ -1054,9 +1165,7 @@ def run_audit(per_symbol, is_demangled, target_path, strict_arm64=True, git_comm
             audited_syms.add(sym)
             instrs = per_symbol[sym]
 
-            c1 = [i for i in instrs if CLASS_I_PATTERN.search(i)]
-            c2 = [i for i in instrs if CLASS_II_PATTERN.search(i)]
-            c3 = [i for i in instrs if CLASS_III_PATTERN.search(i)]
+            c1, c2, c3 = classify_instructions(instrs, stack, results)
 
             if c1:
                 results["class_i_violations"].append((name, sym, c1, desc))
@@ -1084,6 +1193,12 @@ def print_tap_output(results, tools_found):
     print(f"# Compiler: {results.get('compiler', 'unknown')}")
     print(f"# Compiler Flags: {results.get('flags', 'unknown')}")
     print(f"# Matched symbol ranges checked: {results['symbols_checked']}")
+    if results.get("is_stack"):
+        print(
+            f"# Allowed scalar integer multiply/divide (D80, D81): {results['allowed_scalar_mul']} / "
+            f"{results['allowed_scalar_div']} in the symbol ranges, "
+            f"{results.get('call_graph_allowed_scalar_mul', 0)} / {results.get('call_graph_allowed_scalar_div', 0)} in the call graph"
+        )
     if results.get("call_graph_checked"):
         print(f"# Transitive call-graph reachability checked: {results['call_graph_checked']} functions (0 violations)")
     else:
@@ -1191,6 +1306,13 @@ def print_standard_report(results):
     print(f"Class I (Multipliers) Violations: {len(results['class_i_violations'])}")
     print(f"Class II (Dividers) Violations:    {len(results['class_ii_violations'])}")
     print(f"Class III (Floats) Violations:    {len(results['class_iii_violations'])}")
+    if results.get("is_stack"):
+        print(
+            f"Allowed scalar integer multiply/divide (D80, D81): {results['allowed_scalar_mul']} / "
+            f"{results['allowed_scalar_div']} in the symbol ranges, "
+            f"{results.get('call_graph_allowed_scalar_mul', 0)} / {results.get('call_graph_allowed_scalar_div', 0)} "
+            "in the call graph"
+        )
     print(f"Missing Mandatory Symbols:        {len(results['missing_mandatory'])}")
     print("=" * 80)
 
@@ -1370,13 +1492,15 @@ def find_serving_roots(functions, keywords, extra_roots):
     return roots, missing
 
 
-def run_call_graph_audit(path, disasm_choice="auto", extra_roots=(), extra_allow=()):
+def run_call_graph_audit(path, disasm_choice="auto", extra_roots=(), extra_allow=(), stack=False, allowed_counts=None):
     """Transitive call-graph reachability traversal from serving roots.
     Checks 100% of reachable numerical serving functions in compiled binaries.
     `extra_roots` are (name, compiled pattern) pairs naming further roots (the
     stack set); `extra_allow` are further name patterns the traversal does not
-    enter (the stack set's thread-pool scheduler). Returns the functions visited,
-    the violations and the names of the `extra_roots` that no function matched."""
+    enter (the stack set's thread-pool scheduler). With `stack`, scalar integer
+    multiply and divide lines are allowed (D80, D81) and counted into
+    `allowed_counts`. Returns the functions visited, the violations and the names
+    of the `extra_roots` that no function matched."""
     try:
         output = subprocess.check_output(["otool", "-tvV", path]).decode("utf-8", errors="ignore")
     except Exception as e:
@@ -1475,7 +1599,7 @@ def run_call_graph_audit(path, disasm_choice="auto", extra_roots=(), extra_allow
         lines = functions.get(curr, [])
         if not is_allowlisted(curr):
             for l in lines:
-                if STRICT_FORBIDDEN_PATTERN.search(l):
+                if line_forbidden(l, stack, allowed_counts):
                     violations.append((curr, l.strip()))
         callees = extract_callees(lines)
         for c in callees:
@@ -1492,7 +1616,7 @@ def run_call_graph_audit(path, disasm_choice="auto", extra_roots=(), extra_allow
         for fn in ours:
             if fn not in visited:
                 for l in functions[fn]:
-                    if STRICT_FORBIDDEN_PATTERN.search(l):
+                    if line_forbidden(l, stack, allowed_counts):
                         violations.append((fn, l.strip()))
             if any(v_fn == fn for v_fn, _ in violations):
                 flagged.add(fn)
@@ -1570,11 +1694,21 @@ def main():
         "symbols and call-graph roots (implied for a binary named uor-r4-stack*); the call "
         "graph always runs and every stack root must be found",
     )
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="Run the sentinel, stack-pattern and stack scalar multiply/divide tests only, then exit",
+    )
 
     args = parser.parse_args()
 
     # Always verify sentinel detection before running any audit
     run_sentinel_tests()
+    if args.self_test:
+        run_stack_pattern_tests()
+        run_stack_scalar_tests()
+        print("self-test: PASS (sentinels, stack patterns, stack scalar multiply/divide)")
+        return 0
 
     chosen_target = args.target_opt or args.target
     tools_found = check_tool_availability(args.disassembler)
@@ -1615,12 +1749,17 @@ def main():
     # A stack audit always certifies the call graph of its roots.
     do_call_graph = do_call_graph or stack
     if do_call_graph:
+        cg_allowed = {}
         cg_visited, cg_violations, cg_missing_roots = run_call_graph_audit(
             target_path,
             args.disassembler,
             extra_roots=STACK_CALL_GRAPH_ROOTS if stack else (),
             extra_allow=STACK_SCHEDULER_ALLOW if stack else (),
+            stack=stack,
+            allowed_counts=cg_allowed,
         )
+        results["call_graph_allowed_scalar_mul"] = cg_allowed.get("mul", 0)
+        results["call_graph_allowed_scalar_div"] = cg_allowed.get("div", 0)
         results["call_graph_checked"] = cg_visited
         results["call_graph_violations"] = cg_violations
         if cg_violations:

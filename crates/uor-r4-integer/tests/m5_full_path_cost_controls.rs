@@ -225,10 +225,11 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
     );
 
     // 3c. Cancel probes: planted `fadd` (all-hex mnemonic in GNU objdump, llvm-objdump, and otool
-    // formats), `mul` in `stack_gemv_pairs`, `fmul`, extended opcodes (`fcvtzs`, `frintn`, `smnegl`,
-    // `ldr s0`, `divq`, `mulx`, `mulsd`, `addsd`, `cvtsi2sd`, `pmulld`, `vmulpd`), reachable
-    // non-`stack::` callees (`core::num::helper_div`, `__multi3`), and missing mandatory symbols
-    // when `require_full_call_graph == true`.
+    // formats), a vector `mul.4s` in `stack_gemv_pairs`, extended opcodes (`fcvtzs`, `frintn`,
+    // `ldr s0`, `mulsd`, `addsd`, `cvtsi2sd`, `pmulld`, `vmulpd`, vector and matrix multiplies), reachable
+    // non-`stack::` callees (`core::num::helper_div`, `__floattidf`), and missing mandatory symbols
+    // when `require_full_call_graph == true`. Scalar integer multiply and divide are allowed since
+    // D80 and D81; `stack_disassembly_allows_scalar_integer_mul_div` covers them.
     let clean_disasm = concat!(
         "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n",
         "100001000:\t910003fd\tadd\tx29, sp, #0\n",
@@ -272,39 +273,39 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
         "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n",
         "100001000:\t910003fd\tadd\tx29, sp, #0\n",
         "0000000100002000 <uor_r4_integer::stack::kernels::stack_gemv_pairs>:\n",
-        "100002000:\t9b027c20\tmul\tx0, x1, x2\n",
+        "100002000:\t4ea29c20\tmul.4s\tv0, v1, v2\n",
     );
     let err = verify_step_disassembly_text(poisoned_kernel_disasm, false)
-        .expect_err("mul inside stack_gemv_pairs must fail disassembly check");
+        .expect_err("vector mul inside stack_gemv_pairs must fail disassembly check");
     assert!(
         err.contains("stack_gemv_pairs") && err.contains("mul"),
         "error must identify symbol and instruction, got: {err}"
     );
 
     // Transitive call-graph reachability into a non-`stack::` callee (`core::num::helper_div`,
-    // `alloc::vec::Vec::from_iter`, and compiler-rt `__multi3`).
+    // `alloc::vec::Vec::from_iter`, and compiler-rt `__floattidf`).
     let poisoned_callee_disasm = concat!(
         "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n",
         "100001000: 94000400 \tbl\t0x100002000 <core::num::helper_div>\n",
         "0000000100002000 <core::num::helper_div>:\n",
-        "100002000: 9ac20820 \tudiv\tx0, x1, x2\n",
+        "100002000: 1e622820 \tfadd\td0, d1, d2\n",
     );
     let err_callee = verify_step_disassembly_text(poisoned_callee_disasm, false).expect_err(
-        "udiv inside reachable non-stack callee must fail call-graph disassembly check",
+        "fadd inside reachable non-stack callee must fail call-graph disassembly check",
     );
     assert!(
-        err_callee.contains("core::num::helper_div") && err_callee.contains("udiv"),
-        "error must identify reachable callee and udiv, got: {err_callee}"
+        err_callee.contains("core::num::helper_div") && err_callee.contains("fadd"),
+        "error must identify reachable callee and fadd, got: {err_callee}"
     );
 
     let poisoned_alloc_callee_disasm = concat!(
         "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n",
         "100001000: 94000400 \tbl\t0x100002000 <<alloc::vec::Vec<i32> as alloc::vec::spec_from_iter::SpecFromIter<i32, I>>::from_iter>\n",
         "0000000100002000 <<alloc::vec::Vec<i32> as alloc::vec::spec_from_iter::SpecFromIter<i32, I>>::from_iter>:\n",
-        "100002000: 9b027c20 \tmul\tx0, x1, x2\n",
+        "100002000: 4ea29c20 \tmul.4s\tv0, v1, v2\n",
     );
     let err_alloc_callee = verify_step_disassembly_text(poisoned_alloc_callee_disasm, false)
-        .expect_err("mul inside reachable alloc::vec::Vec::from_iter callee must fail call-graph disassembly check");
+        .expect_err("vector mul inside reachable alloc::vec::Vec::from_iter callee must fail call-graph disassembly check");
     assert!(
         err_alloc_callee.contains("SpecFromIter") && err_alloc_callee.contains("mul"),
         "error must identify alloc::vec::Vec::from_iter and mul, got: {err_alloc_callee}"
@@ -313,16 +314,17 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
     for bad_instr in [
         "100001000: 9e780000 \tfcvtzs\tx0, d0",
         "100001000: 1e644000 \tfrintn\td0, d0",
-        "100001000: 9b22fc20 \tsmnegl\tx0, w1, w2",
+        "100001000: 4ea29c20 \tmul.4s\tv0, v1, v2",
+        "100001000: 4ea29c20 \tmul\tv0.4s, v1.4s, v2.4s",
+        "100001000: 0e62c020 \tsmull.4s\tv0, v1, v2",
+        "100001000: 6e829420 \tudot.4s\tv0, v1, v2",
+        "100001000: 4e82a420 \tsmmla.4s\tv0, v1, v2",
+        "100001000: 9e670020 \tfmov\td0, x1",
         "100001000: 4f828400 \tsqrdmlah.4s\tv0, v0, v2[0]",
         "100001000: 4f828c00 \tsqrdmlsh.4s\tv0, v0, v2[0]",
         "100001000: bd400000 \tldr\ts0, [x0]",
         "100001000: 7d400000 \tldr\th0, [x0]",
         "100001000: d63f0100 \tblr\tx8",
-        "100001000: 48 f7 f1 \tdivq\t%rcx",
-        "100001000: c4 e2 e3 f6 c1 \tmulx\t%rcx, %rbx, %rax",
-        "100001000: c4 e2 e3 f6 c1 \tmulxq\t%rcx, %rbx, %rax",
-        "100001000: c4 62 63 f6 c1 \tmulxl\t%ecx, %ebx, %eax",
         "100001000: f2 0f 59 c1 \tmulsd\t%xmm1, %xmm0",
         "100001000: f2 0f 58 c1 \taddsd\t%xmm1, %xmm0",
         "100001000: f2 0f 51 c1 \tsqrtsd\t%xmm1, %xmm0",
@@ -334,7 +336,8 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
         "100001000: 62 f2 7d 08 50 c1 \tvpdpbusd\t%xmm1, %xmm0, %xmm0",
         "100001000: c5 f9 59 c1 \tvmulpd\t%xmm1, %xmm0, %xmm0",
         "100001000: ff d0 \tcallq\t*%rax",
-        "100001000: 94000400 \tbl\t0x100002000 <__multi3>",
+        "100001000: 94000400 \tbl\t0x100002000 <__floattidf>",
+        "100001000: 94000400 \tbl\t0x100002000 <___floatuntidf>",
     ] {
         let snippet = format!(
             "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n{bad_instr}\n"
@@ -399,6 +402,92 @@ fn test_protocol_v3_validator_rejects_protocol_v2_rnd_receipt_defects() {
         prov_errors.is_empty(),
         "provisional Protocol v3 receipt must pass provisional-mode arithmetic/schema validation with 0 errors, got {prov_errors:?}"
     );
+}
+
+/// D80 and D81 (CHARTER §3.6): the served step may use the hardware integer multiply and divide.
+/// Scalar general-register forms and the compiler-rt integer helpers pass; vector, dot-product and
+/// matrix multiplies, float instructions (`fmov` included) and float helpers still fail.
+#[test]
+fn stack_disassembly_allows_scalar_integer_mul_div() {
+    let step = "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n";
+    for allowed in [
+        // AArch64, otool / llvm-objdump and GNU objdump layouts.
+        "100001000: 9b0a7d28 \tmul\tx8, x9, x10",
+        "100001000:\t9b0a7d28\tmul\tx8, x9, x10",
+        "100001000: 9b0a2d28 \tmadd\tx8, x9, x10, x11",
+        "100001000: 9b0afd28 \tmneg\tx8, x9, x10",
+        "100001000: 9b22fc20 \tsmnegl\tx0, w1, w2",
+        "100001000: 9bca7d28 \tumulh\tx8, x9, x10",
+        "100001000:\t9bca7d28\tumulh\tx8, x9, x10",
+        "100001000: 1aca0d28 \tsdiv\tw8, w9, w10",
+        "100001000: 9aca0928 \tudiv\tx8, x9, x10",
+        "100001000:\t9aca0928\tudiv\tx8, x9, x10",
+        "100001000: 9b0a7d1f \tmul\txzr, x8, x10",
+        // x86-64 general-register forms.
+        "100001000: 48 f7 e1 \tmul\t%rcx",
+        "100001000: 48 f7 27 \tmulq\t(%rdi)",
+        "100001000: 48 0f af c1 \timulq\t%rcx, %rax",
+        "100001000: 48 f7 f1 \tdivq\t%rcx",
+        "100001000: c4 e2 e3 f6 c1 \tmulx\t%rcx, %rbx, %rax",
+        "100001000: c4 e2 e3 f6 c1 \tmulxq\t%rcx, %rbx, %rax",
+        "100001000: c4 62 63 f6 c1 \tmulxl\t%ecx, %ebx, %eax",
+        // Calls to the compiler-rt integer helpers (Mach-O adds a leading `_`).
+        "100001000: 94000400 \tbl\t0x100002000 <__multi3>",
+        "100001000: 94000400 \tbl\t0x100002000 <___udivti3>",
+        "100001000: 94000400 \tbl\t0x100002000 <___umodti3>",
+    ] {
+        let snippet = format!("{step}{allowed}\n");
+        assert!(
+            verify_step_disassembly_text(&snippet, false).is_ok(),
+            "D80/D81: the disassembly check must allow `{allowed}`, got {:?}",
+            verify_step_disassembly_text(&snippet, false)
+        );
+    }
+
+    // The walk follows a helper into its body: scalar `udiv`/`msub`/`umulh` pass, a float
+    // instruction there still fails.
+    let udivti3_clean = concat!(
+        "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n",
+        "100001000: 94000400 \tbl\t0x100002000 <___udivti3>\n",
+        "0000000100002000 <___udivti3>:\n",
+        "100002000: 9ac20820 \tudiv\tx0, x1, x2\n",
+        "100002004: 9b028420 \tmsub\tx0, x1, x2, x1\n",
+        "100002008: 9bc27c20 \tumulh\tx0, x1, x2\n",
+    );
+    assert!(
+        verify_step_disassembly_text(udivti3_clean, false).is_ok(),
+        "a compiler-rt divide body of scalar integer instructions must pass"
+    );
+    let udivti3_float = concat!(
+        "0000000100001000 <uor_r4_integer::stack::session::IntegerStackSession::step>:\n",
+        "100001000: 94000400 \tbl\t0x100002000 <___udivti3>\n",
+        "0000000100002000 <___udivti3>:\n",
+        "100002000: 9ac20820 \tudiv\tx0, x1, x2\n",
+        "100002004: 9e670020 \tfmov\td0, x1\n",
+    );
+    let err = verify_step_disassembly_text(udivti3_float, false)
+        .expect_err("a float instruction inside a reachable compiler-rt helper must fail");
+    assert!(err.contains("fmov"), "error must identify fmov, got: {err}");
+
+    for refused in [
+        "100001000: 4ea29c20 \tmul.4s\tv0, v1, v2",
+        "100001000: 4ea29c20 \tmul\tv0.4s, v1.4s, v2.4s",
+        "100001000: 4e829c20 \tmla.4s\tv0, v1, v2",
+        "100001000: 0e62c020 \tsmull.4s\tv0, v1, v2",
+        "100001000: 0e62c020 \tsmull\tv0.4s, v1.4h, v2.4h",
+        "100001000: 6e829420 \tudot.4s\tv0, v1, v2",
+        "100001000: 4e82a420 \tsmmla.4s\tv0, v1, v2",
+        "100001000: 1e622820 \tfadd\td0, d1, d2",
+        "100001000: 9e670020 \tfmov\td0, x1",
+        "100001000: 66 0f 38 40 c1 \tpmulld\t%xmm1, %xmm0",
+        "100001000: 94000400 \tbl\t0x100002000 <___floattidf>",
+    ] {
+        let snippet = format!("{step}{refused}\n");
+        assert!(
+            verify_step_disassembly_text(&snippet, false).is_err(),
+            "the disassembly check must still reject `{refused}`"
+        );
+    }
 }
 
 #[cfg(feature = "serving-wasm")]

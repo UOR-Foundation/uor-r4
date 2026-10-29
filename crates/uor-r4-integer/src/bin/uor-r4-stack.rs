@@ -612,8 +612,8 @@ fn cost(args: &[String]) -> Result<(), CliError> {
 
     // 0b. Static disassembly gate: verify via `objdump --demangle -d` (or `otool -tV`) on the
     // running executable that `IntegerStackSession::step`, `stack_step`, and all emitted
-    // `uor_r4_integer::stack` mixer and kernel symbols contain zero multiply, divide, or
-    // floating-point instructions.
+    // `uor_r4_integer::stack` mixer and kernel symbols contain no vector or matrix multiply and no
+    // floating-point instruction (scalar integer multiply and divide are allowed, D80 and D81).
     let current_exe = std::env::current_exe()?;
     let (disasm_symbols_checked, disasm_instructions_checked) =
         verify_step_objdump_zero_mul_zero_float(&current_exe)
