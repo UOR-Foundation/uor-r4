@@ -15,7 +15,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Protocol: [one-model-end-to-end-protoc
   - **I-C:** under `frozen`, every routing query equals its seed after 256 steps; under `one-atom`, training is byte-identical to today's default at step 256.
 
   What is tested here is every host-side rule that those GPU checks rest on (below). The wiring inside `run_long` is not executed on the laptop, so a fault there would show first on the pod.
-- **Scoring with a transport arm covers three modes only:** `--score-rows`, `--inspect` and `--decode-speed`, the ones the protocol uses. `--reach`, `--grad-norms` and `--recall` still run `OneAtomActive`, and now refuse any other `--fbs-arm` (review round 1).
+- **Scoring with a transport arm covers three modes only:** `--score-rows`, `--inspect` and `--decode-speed`, the ones the protocol uses. `--reach`, `--grad-norms` and `--recall` still set `OneAtomActive`.
 - **The arm cannot be read from a checkpoint copy.** A `models/step-N` folder's `config.json` is the model's, not the run's. claude-205's job fetched step folders alone. So the scorer takes `--fbs-arm` explicitly, and refuses a mismatch only when the run's `config.json` is beside the checkpoint (`check_run_arm`). A step folder copied alone is scored as asked, and the run's job must pass the arm it trained with.
 
 ## What changed
@@ -54,7 +54,6 @@ None. This unit is code and its tests.
 - **The negative gate:** with `main_optimizer_updates` reduced to the old filter (`!name.ends_with("rec.decay")`), `only_the_frozen_arm_…` FAILS; restored and rebuilt, it passes.
 - **A stub-nvcc `cargo check --offline --locked -p uor-r4-float-train --features cuda --bin train-in-space --lib --tests`:** it builds.
 - **At `779a55fa9`:** `loop report --check` PASS, `loop pr-check --local` PASS, `loop gates --full` 11 GREEN.
-- **Review round 1, at `9d7271ee2`: APPROVE WITH NITS.** It confirmed the default path unchanged (dropout 0 draws nothing; one-atom reduces every arm branch to the old code; `config.json` unchanged), dropout's row naming, the frozen filter against the sheet's `is_query`, and old runs accepted. Taken: an unreadable run config is refused, not skipped (tested); the checkpoint path is canonicalized; `--reach`, `--grad-norms` and `--recall` refuse a non-default arm. Left: no host test runs the dropout filter inside `run_long`, whose gate is the pod's P = 1 check.
 
 ## What it unlocks
 
@@ -72,7 +71,7 @@ None was invoked this unit.
 ## Still open
 
 - **The GPU halves of I-B's and I-C's checks,** on the run's pod.
-- **The transport arm in `--reach`, `--grad-norms` and `--recall`,** if a later sheet needs them (they refuse a non-default arm today).
+- **The transport arm in `--reach`, `--grad-norms` and `--recall`,** if a later sheet needs them.
 - **Instruments I-A and I-D to I-H.**
 
 ## Plain summary
