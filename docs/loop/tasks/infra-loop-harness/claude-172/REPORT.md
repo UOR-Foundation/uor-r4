@@ -37,6 +37,13 @@ None: no run.
 
 ## Still open
 
+- **Docs that still state the multiplier-free rule as current**, found by the fresh fidelity review. A lab reading them could refuse a kernel the charter now allows. Most are outside this ORDER's scope, so the follow-up unit corrects them, and the rule summaries come first:
+  - `docs/rules/README.md:41`: the plain-language §3.6 row, "no float, transcendental, multiplier or integer-divide instruction";
+  - `docs/rules/decision-map.md:40` (the D11 row, "Kept, 3.6") and `:28` (I1–I5, "multiplier-free kernels");
+  - `docs/integration/DECISIONS.md:72–75`: the D11 entry, with no "amended by D80" pointer. It is an owner path, so it goes through the same patch route under the owner's permission;
+  - `docs/mechanisms/lut-serving.md:44` ("R2: no multiply or divide instruction"), `:95` and `:102`;
+  - `docs/model/serving-and-export.md:15` and `:49`, `docs/model/pipeline-map.md:264`, `:321`, `:338` and `:361`, and `docs/model/architecture.md:84`;
+  - `scripts/audit_zero_matmul_serving.py`'s description, lines 2, 6 and 1510.
 - **The follow-up serving unit,** under `fbs-serving-vector-kernel` or a new item:
   - `scripts/audit_zero_matmul_serving.py --stack` and the integer crate's zero-multiply checks allow integer multiply, still refusing float and divide;
   - the hot products (`stack_hamilton`, the snap's comparison, `stack_mul_u64` and `stack_mul_u128`) use the hardware multiply;
