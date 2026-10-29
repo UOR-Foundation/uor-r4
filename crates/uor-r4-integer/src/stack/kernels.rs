@@ -980,24 +980,102 @@ fn snap_difference_positive(da: i64, db: i64) -> bool {
     p_square > snap_add_square_terms(b_square << 2, b_square)
 }
 
+/// The sign of an icosian root coordinate `(a + b phi) / 2`: `1`, `-1` or `0`.
+/// Every coordinate of the table is `0`, `+-1`, `+-1/2`, `+-phi/2` or
+/// `+-(phi - 1)/2`, so its sign is `b`'s when `b != 0` and `a`'s otherwise
+/// (the tests check this against the exact `Z[phi]` sign).
+const fn root_coordinate_sign(coefficient: [i8; 2]) -> i8 {
+    let s = if coefficient[1] != 0 {
+        coefficient[1]
+    } else {
+        coefficient[0]
+    };
+    if s > 0 {
+        1
+    } else if s < 0 {
+        -1
+    } else {
+        0
+    }
+}
+
+/// A query's sign pattern holds two bits per coordinate, coordinate `i` at
+/// bits `2i`: `0` zero, `1` positive, `2` negative (`3` never occurs).
+const SNAP_PATTERNS: usize = 256;
+
+/// For each sign pattern, the icosian roots that agree in sign with the query
+/// on every coordinate where both are nonzero, in index order (claude-164).
+/// A row holds up to 120 roots and is 128 bytes, so that a row's offset is a
+/// shift: a 120-byte row is addressed by a multiply, which the audit refuses.
+struct SnapCandidates {
+    counts: [u8; SNAP_PATTERNS],
+    roots: [[u8; 128]; SNAP_PATTERNS],
+}
+
+/// The 120 unit icosians are closed under the sign flip of any coordinate. A
+/// root whose nonzero coordinate `j` opposes the query's nonzero `r_j` is
+/// therefore beaten by its flip, by `2 |r_j rho_j|`, and is never a maximizer.
+/// The compatible roots hold every maximizer. A query with no zero coordinate
+/// has 17 of them; the zero query keeps all 120. Built at compile time.
+static SNAP_CANDIDATES: SnapCandidates = snap_candidates();
+
+const fn snap_candidates() -> SnapCandidates {
+    let mut counts = [0u8; SNAP_PATTERNS];
+    let mut roots = [[0u8; 128]; SNAP_PATTERNS];
+    let mut pattern = 0;
+    while pattern < SNAP_PATTERNS {
+        let mut index = 0;
+        while index < 120 {
+            let mut compatible = true;
+            let mut axis = 0;
+            while axis < 4 {
+                let query = (pattern >> (axis << 1)) & 3;
+                let root = root_coordinate_sign(H4_ROOT_COEFFICIENTS[index][axis]);
+                if (query == 1 && root < 0) || (query == 2 && root > 0) {
+                    compatible = false;
+                }
+                axis += 1;
+            }
+            if compatible {
+                roots[pattern][counts[pattern] as usize] = index as u8;
+                counts[pattern] += 1;
+            }
+            index += 1;
+        }
+        pattern += 1;
+    }
+    SnapCandidates { counts, roots }
+}
+
 /// The index of the icosian root with the largest exact dot product with the
 /// raw rotation logits `raw` (any common scale; the float reference snaps the
 /// unit quaternion `raw / sqrt(|raw|^2 + 1e-6)`, a positive rescaling, so the
 /// argmax is the same), the lowest index on an exact tie. Exact integer
 /// arithmetic throughout: no normalization, no float, no multiply.
+///
+/// Only the roots compatible with `raw`'s signs are scored ([`SNAP_CANDIDATES`]),
+/// in index order, so the strict comparison keeps the lowest-index maximizer
+/// exactly as a scan of all 120 does.
 #[inline(never)]
 pub fn stack_snap_select(raw: [i32; 4]) -> usize {
+    let lane = |value: i32| usize::from(value > 0) | (usize::from(value < 0) << 1);
+    let pattern = lane(core::hint::black_box(raw[0]))
+        | (lane(core::hint::black_box(raw[1])) << 2)
+        | (lane(core::hint::black_box(raw[2])) << 4)
+        | (lane(core::hint::black_box(raw[3])) << 6);
+    let count = usize::from(SNAP_CANDIDATES.counts[pattern]);
     let mut best = 0usize;
     let (mut best_a, mut best_b) = (0i64, 0i64);
-    for (index, root) in H4_ROOT_COEFFICIENTS.iter().enumerate() {
+    for (k, &index) in SNAP_CANDIDATES.roots[pattern][..count].iter().enumerate() {
+        let root = &H4_ROOT_COEFFICIENTS[usize::from(index)];
         let (mut a, mut b) = (0i64, 0i64);
         for (coefficient, &value) in root.iter().zip(&raw) {
             let v = i64::from(value);
             a = a.wrapping_add(small_mul(v, coefficient[0]));
             b = b.wrapping_add(small_mul(v, coefficient[1]));
         }
-        if index == 0 || snap_difference_positive(a.wrapping_sub(best_a), b.wrapping_sub(best_b)) {
-            best = index;
+        if k == 0 || snap_difference_positive(a.wrapping_sub(best_a), b.wrapping_sub(best_b)) {
+            best = usize::from(index);
             best_a = a;
             best_b = b;
         }
@@ -1599,5 +1677,137 @@ mod tests {
         assert_eq!(stack_argmax(&[3, 9, 9, -1]), 1);
         assert_eq!(stack_argmax(&[i32::MIN, i32::MIN]), 0);
         assert_eq!(stack_argmax(&[]), 0);
+    }
+
+    /// The full scan `stack_snap_select` replaced (claude-164): every root, in
+    /// index order, under the same strict comparison.
+    fn snap_select_full_scan(raw: [i32; 4]) -> usize {
+        let mut best = 0usize;
+        let (mut best_a, mut best_b) = (0i64, 0i64);
+        for (index, root) in H4_ROOT_COEFFICIENTS.iter().enumerate() {
+            let (mut a, mut b) = (0i64, 0i64);
+            for (coefficient, &value) in root.iter().zip(&raw) {
+                let v = i64::from(value);
+                a = a.wrapping_add(small_mul(v, coefficient[0]));
+                b = b.wrapping_add(small_mul(v, coefficient[1]));
+            }
+            if index == 0
+                || snap_difference_positive(a.wrapping_sub(best_a), b.wrapping_sub(best_b))
+            {
+                best = index;
+                best_a = a;
+                best_b = b;
+            }
+        }
+        best
+    }
+
+    #[test]
+    fn the_icosian_roots_are_closed_under_coordinate_sign_flips() {
+        for root in &H4_ROOT_COEFFICIENTS {
+            for axis in 0..4 {
+                let mut flipped = *root;
+                flipped[axis] = [-root[axis][0], -root[axis][1]];
+                assert!(
+                    H4_ROOT_COEFFICIENTS.contains(&flipped),
+                    "{root:?} flipped at {axis}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_root_coordinate_sign_is_its_exact_sign() {
+        for root in &H4_ROOT_COEFFICIENTS {
+            for &[a, b] in root {
+                // (a + b phi) / 2 > 0 exactly when snap_difference_positive(a, b).
+                let exact = if a == 0 && b == 0 {
+                    0
+                } else if snap_difference_positive(i64::from(a), i64::from(b)) {
+                    1
+                } else {
+                    -1
+                };
+                assert_eq!(root_coordinate_sign([a, b]), exact, "[{a}, {b}]");
+            }
+        }
+    }
+
+    #[test]
+    fn each_sign_pattern_lists_its_compatible_roots_in_index_order() {
+        let mut no_zero = 0;
+        for pattern in 0..SNAP_PATTERNS {
+            let query: Vec<usize> = (0..4).map(|axis| (pattern >> (2 * axis)) & 3).collect();
+            if query.contains(&3) {
+                continue;
+            }
+            let want: Vec<u8> = (0..120u8)
+                .filter(|&index| {
+                    (0..4).all(|axis| {
+                        let root = root_coordinate_sign(H4_ROOT_COEFFICIENTS[index as usize][axis]);
+                        !((query[axis] == 1 && root < 0) || (query[axis] == 2 && root > 0))
+                    })
+                })
+                .collect();
+            let count = usize::from(SNAP_CANDIDATES.counts[pattern]);
+            assert_eq!(&SNAP_CANDIDATES.roots[pattern][..count], &want[..], "pattern {pattern}");
+            if !query.contains(&0) {
+                assert_eq!(count, 17, "pattern {pattern}");
+                no_zero += 1;
+            }
+        }
+        // The 16 sign patterns of a query with no zero coordinate; the zero query keeps all.
+        assert_eq!(no_zero, 16);
+        assert_eq!(SNAP_CANDIDATES.counts[0], 120);
+    }
+
+    #[test]
+    fn the_sign_compatible_snap_is_the_full_scan() {
+        // Every query in [-6, 6]^4: zeros, sign changes and exact ties.
+        let mut grid = 0;
+        for w in -6..=6 {
+            for x in -6..=6 {
+                for y in -6..=6 {
+                    for z in -6..=6 {
+                        let raw = [w, x, y, z];
+                        assert_eq!(stack_snap_select(raw), snap_select_full_scan(raw), "{raw:?}");
+                        grid += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(grid, 28_561);
+        // Pseudo-random queries at magnitudes from 1 to 2^30, some coordinates zeroed.
+        let mut rng = Lcg(0x05ee_d164);
+        for _ in 0..200_000 {
+            let shift = rng.next() % 31;
+            let raw: [i32; 4] = std::array::from_fn(|_| {
+                let draw = rng.next();
+                if draw.is_multiple_of(7) {
+                    0
+                } else {
+                    ((draw >> 8) as i32) >> shift
+                }
+            });
+            assert_eq!(stack_snap_select(raw), snap_select_full_scan(raw), "{raw:?}");
+        }
+        // Queries on each root and halfway between pairs of roots, at a large scale,
+        // with phi taken as 1,618,034 / 1,000,000: near-ties between neighbours.
+        let point = |root: &[[i8; 2]; 4], scale: i64| -> [i64; 4] {
+            std::array::from_fn(|c| {
+                let [a, b] = root[c];
+                (i64::from(a) * 1_000_000 + i64::from(b) * 1_618_034) * scale / 2_000_000
+            })
+        };
+        for (i, first) in H4_ROOT_COEFFICIENTS.iter().enumerate() {
+            let on = point(first, 1 << 20);
+            let raw: [i32; 4] = std::array::from_fn(|c| on[c] as i32);
+            assert_eq!(stack_snap_select(raw), snap_select_full_scan(raw), "on {i}");
+            for second in &H4_ROOT_COEFFICIENTS[i + 1..] {
+                let other = point(second, 1 << 20);
+                let raw: [i32; 4] = std::array::from_fn(|c| ((on[c] + other[c]) >> 1) as i32);
+                assert_eq!(stack_snap_select(raw), snap_select_full_scan(raw), "{raw:?}");
+            }
+        }
     }
 }
