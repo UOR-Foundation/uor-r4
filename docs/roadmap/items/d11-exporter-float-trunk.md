@@ -3,7 +3,7 @@ id: d11-exporter-float-trunk
 title: Write the D11 exporter for a D37 float trunk
 milestone: M4
 area: serving
-status: ready
+status: done
 open_to: lab
 needs_gpu: true
 depends_on: [float-training-module, m1-d11-exporter-discrete, owner-decision-float-path-scope]
@@ -15,6 +15,13 @@ scope: [crates/uor-r4-training/**, crates/uor-r4-integer/**, crates/uor-r4-float
 Without it no float-trained trunk can be served, so Stages 3–5 of the float path stop at training. D11 is the serving contract: a whole-number file run with adds, shifts and table look-ups. The exporter is the step between a trained trunk and that file, and it is where the export gap is measured. See [serving and export](../../model/serving-and-export.md). The float path itself is a hypothesis test, not reuse.
 
 ## What is missing
+
+**Done on 29 Oct 2026 at DEV scope (claude-182, #3370).** The unsnapped D11 contract (`lut-stack/5`, claude-181) exports dual-c131's two seeds inside the export-gap bar:
+- seed 1 is net 6 (F_I 24), and seed 2 is −8 (F_I 24);
+- the serving audit and the WASM audit are green;
+- tokens per second are reported for decode and context.
+
+The configuration was named before the run, but chosen from claude-180's readings on the same models. The other three configurations miss. See the [REPORT](../../loop/tasks/d11-exporter-float-trunk/claude-182/REPORT.md). The `lut-serving.md` row is still open (scope note below).
 
 **State on 26 Oct 2026 (claude-120, #3253; D68 owner log on #2820).** antigravity-75 (#3221) merged a float-trunk UORLUT01 exporter, `export_float_trunk_uorlut01`, and its finite controls. It then held this item until the Stage 3 float chain (#2886 → #2890 → #2824 → #2891) produced two-seed checkpoints. That chain is done, and this item is released. Three things are left, and none waits on another lab or the owner.
 
