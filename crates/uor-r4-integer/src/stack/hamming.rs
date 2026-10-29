@@ -225,11 +225,11 @@ impl CopyHeads {
     }
 }
 
-/// `w_c ⊙ c` (`2^HAMMING_WEIGHT_EXP` times `2^COPY_MEAN_EXP`) shifted down to the residual's Q16.
+/// From `w_c ⊙ c`'s exponent (`2^HAMMING_WEIGHT_EXP` times `2^COPY_MEAN_EXP`) to the residual's Q16.
 const STREAM_SHIFT: u32 = (RESIDUAL_EXP - HAMMING_WEIGHT_EXP - COPY_MEAN_EXP) as u32;
 /// The final norm's output raised to the copy mean's exponent.
 const NORM_RAISE: u32 = (NORM_FINE_EXP - COPY_MEAN_EXP) as u32;
-/// `w_c ⊙ (c − n)` shifted down to the final norm's exponent.
+/// From `w_c ⊙ (c − n)`'s exponent to the final norm's.
 const READOUT_SHIFT: u32 = (NORM_FINE_EXP - HAMMING_WEIGHT_EXP - COPY_MEAN_EXP) as u32;
 
 /// `value / 2^shift`, rounded half away from zero, as the float's `round()`.
@@ -282,9 +282,10 @@ impl ServedHamming {
 
     /// The read inside the stream after `depth` layers, as the float trunk's
     /// `x = q16(read.apply(&x, ids, &table))`: `x + w_c ⊙ c` at the last row of `tokens`, each
-    /// product rounded to the residual's Q16. A row where no copy head found a candidate adds
-    /// nothing, as the float's `sums / max(found, 1)` is 0 there. A depth with no read, or the
-    /// layer count (the readout's), is left alone.
+    /// sum rounded once to the residual's Q16, half away from zero, as `q16` rounds the sum (and
+    /// not the product: at a half tie the two differ). A row where no copy head found a
+    /// candidate adds nothing, as the float's `sums / max(found, 1)` is 0 there. A depth with no
+    /// read, or the layer count (the readout's), is left alone.
     #[inline(never)]
     pub(crate) fn stream(&self, depth: usize, tokens: &[u32], table: &[i16], x: &mut [i32]) {
         if depth == self.layers {
@@ -297,15 +298,14 @@ impl ServedHamming {
             return;
         };
         for ((x, &w), c) in x.iter_mut().zip(&read.copy_weight).zip(mean) {
-            let added = round_shift(i128::from(w) * c, STREAM_SHIFT);
-            *x = x.saturating_add(added.clamp(i128::from(i32::MIN), i128::from(i32::MAX)) as i32);
+            *x = stream_sum(*x, w, c);
         }
     }
 
     /// The read on the final norm's output `n` (at `NORM_FINE_EXP`), as the float's
     /// `apply_readout`: where a copy head found a candidate at the last row of `tokens`,
-    /// `n + w_c ⊙ (c − n)`, rounded once to `n`'s exponent; elsewhere `n`. Not rounded to Q16, as
-    /// the float trunk does not round the readout read.
+    /// `n + w_c ⊙ (c − n)`, the sum rounded once to `n`'s exponent; elsewhere `n`. Not rounded to
+    /// Q16, as the float trunk does not round the readout read.
     #[inline(never)]
     pub(crate) fn readout(&self, tokens: &[u32], table: &[i16], n: &mut [i64]) {
         let Some(read) = self.reads.iter().find(|r| r.depth == self.layers) else {
@@ -315,10 +315,26 @@ impl ServedHamming {
             return;
         };
         for ((n, &w), c) in n.iter_mut().zip(&read.copy_weight).zip(mean) {
-            let moved = round_shift(i128::from(w) * (c - (i128::from(*n) << NORM_RAISE)), READOUT_SHIFT);
-            *n = (i128::from(*n) + moved).clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64;
+            *n = readout_sum(*n, w, c);
         }
     }
+}
+
+/// One coordinate of the stream read: `x + w · c` (`x` at Q16, `w` at `2^HAMMING_WEIGHT_EXP`,
+/// `c` at `2^COPY_MEAN_EXP`), the sum rounded once to Q16, half away from zero.
+pub(super) fn stream_sum(x: i32, w: i32, c: i128) -> i32 {
+    // `|x · 2^51| < 2^82` and `|w · c| < 2^77`: the sum fits an i128.
+    let sum = round_shift((i128::from(x) << STREAM_SHIFT) + i128::from(w) * c, STREAM_SHIFT);
+    sum.clamp(i128::from(i32::MIN), i128::from(i32::MAX)) as i32
+}
+
+/// One coordinate of the readout move: `n + w · (c − n)` (`n` at `NORM_FINE_EXP`), the sum
+/// rounded once to `n`'s exponent, half away from zero.
+pub(super) fn readout_sum(n: i64, w: i32, c: i128) -> i64 {
+    // `|n| < 2^63`, so `n · 2^43 < 2^106` and the move `< 2^113`: the sum fits an i128.
+    let moved = i128::from(w) * (c - (i128::from(n) << NORM_RAISE));
+    let sum = round_shift((i128::from(n) << READOUT_SHIFT) + moved, READOUT_SHIFT);
+    sum.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64
 }
 
 #[cfg(test)]

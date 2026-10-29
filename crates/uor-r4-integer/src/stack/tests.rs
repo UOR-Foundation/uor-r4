@@ -4056,17 +4056,25 @@ fn round_half_away(v: i128, s: u32) -> i128 {
     }
 }
 
-/// The served-read model, the read-free one, the shared Q12 table and the read's copy heads
-/// (the read at `depths[0]`), for the hook tests.
-fn served_read_parts(depths: &[usize], copy: f32) -> (IntegerStackModel, IntegerStackModel, Vec<i16>, super::HammingReadImage, super::CopyHeads) {
+/// The served-read model, the read-free one, the shared Q12 table, and each read with its copy
+/// heads, in depth order, for the hook tests.
+#[allow(clippy::type_complexity)]
+fn served_read_parts(
+    depths: &[usize],
+    copy: f32,
+) -> (IntegerStackModel, IntegerStackModel, Vec<i16>, Vec<(super::HammingReadImage, super::CopyHeads)>) {
     let (_, plain, with_read) = served_read_trunk(depths, copy);
     let read = IntegerStackModel::parse(&with_read).expect("a read with no type weights is served");
     let free = IntegerStackModel::parse(&plain).expect("parse");
     let table = free.fbs_image().expect("an FBS model").writer_table.to_vec();
     let image = super::read_hamming_uorlut01(&with_read).expect("parse").expect("the reads");
     let (vocab, width) = (free.shape().vocab, free.shape().width);
-    let copy_heads = super::CopyHeads::new(&image.record, &image.reads[0], &table, vocab, width);
-    (read, free, table, image.reads[0].clone(), copy_heads)
+    let reads = image
+        .reads
+        .iter()
+        .map(|r| (r.clone(), super::CopyHeads::new(&image.record, r, &table, vocab, width)))
+        .collect();
+    (read, free, table, reads)
 }
 
 /// claude-194: a `/6` read whose copy weights are 0 serves every step bit for bit as the same
@@ -4074,18 +4082,21 @@ fn served_read_parts(depths: &[usize], copy: f32) -> (IntegerStackModel, Integer
 /// refuses the read rather than drop it.
 #[test]
 fn a_read_at_weight_zero_serves_as_the_read_free_trunk() {
-    let (read, free, table, _, copy_heads) = served_read_parts(&[1, 3], 0.0);
+    let (read, free, table, reads) = served_read_parts(&[1, 3], 0.0);
     assert!(read.fbs_image().is_none(), "the view does not carry the read");
+    let copy_heads = &reads[0].1;
     assert!(copy_heads.choose(0, &[]).is_empty() && copy_heads.mean(&[], &table).is_none(), "no tokens, no read");
     let tokens = repeating_tokens();
     let (mut with, mut without) = (read.session(), free.session());
-    let mut found = 0;
+    let mut found = [0usize; 2];
     for t in 0..tokens.len() {
         let want = without.step_native(tokens[t]).expect("step");
         assert_eq!(with.step_native(tokens[t]).expect("step"), want, "position {t}");
-        found += usize::from(copy_heads.mean(&tokens[..=t], &table).is_some());
+        for (count, (_, heads)) in found.iter_mut().zip(&reads) {
+            *count += usize::from(heads.mean(&tokens[..=t], &table).is_some());
+        }
     }
-    assert!(found > 10, "the copy heads find candidates at {found} rows");
+    assert!(found.iter().all(|&f| f > 10), "both reads' copy heads find candidates: {found:?} rows");
 }
 
 /// One traced FBS step: the Q12 query and the residual after every layer.
@@ -4098,12 +4109,14 @@ fn traced_step(session: &mut super::IntegerStackSession<'_>, token: u32) -> (Vec
     (query, layers)
 }
 
-/// claude-194: the stream read after layer 1 adds `w_c ⊙ c`, each product rounded half away from
-/// zero to the residual's Q16, to the residual the read-free trunk has there. A layer before the
-/// read cannot see it, so the read-free run gives the read's input exactly.
+/// claude-194: the stream read after layer 1 adds `w_c ⊙ c` to the residual the read-free trunk
+/// has there, each sum rounded half away from zero to the residual's Q16, as the float's `q16`
+/// rounds the sum. A layer before the read cannot see it, so the read-free run gives the read's
+/// input exactly. Rows 0 and 1 have no earlier position `1 ≤ s < t`, so they add nothing.
 #[test]
 fn the_stream_read_adds_the_rounded_copy_to_the_residual() {
-    let (read, free, table, image, copy_heads) = served_read_parts(&[1], 1.0);
+    let (read, free, table, reads) = served_read_parts(&[1], 1.0);
+    let (image, copy_heads) = &reads[0];
     let width = free.shape().width;
     let copy_weight = &image.weight[..width];
     let tokens = repeating_tokens();
@@ -4113,14 +4126,16 @@ fn the_stream_read_adds_the_rounded_copy_to_the_residual() {
         let (query, trace) = traced_step(&mut with, tokens[t]);
         let (free_query, free_trace) = traced_step(&mut without, tokens[t]);
         assert_eq!(trace.len(), free.shape().layers());
-        let want: Vec<i32> = match copy_heads.mean(&tokens[..=t], &table) {
+        let mean = copy_heads.mean(&tokens[..=t], &table);
+        assert!(t >= 2 || mean.is_none(), "row {t} has no candidate");
+        let want: Vec<i32> = match mean {
             None => free_trace[0].clone(),
-            // The product is at 2^-24 · 2^-43; the residual at 2^-16.
+            // `x` at 2^-16 raised to the product's 2^-24 · 2^-43, the sum back to 2^-16.
             Some(c) => free_trace[0]
                 .iter()
                 .zip(copy_weight)
                 .zip(&c)
-                .map(|((&x, &w), &c)| x + round_half_away(i128::from(w) * c, 51) as i32)
+                .map(|((&x, &w), &c)| round_half_away((i128::from(x) << 51) + i128::from(w) * c, 51) as i32)
                 .collect(),
         };
         assert_eq!(trace[0], want, "position {t}");
@@ -4131,12 +4146,14 @@ fn the_stream_read_adds_the_rounded_copy_to_the_residual() {
 }
 
 /// claude-194: the readout read moves the final norm's output to `n + w_c ⊙ (c − n)` where a copy
-/// head found a candidate, rounded once to the norm's exponent, and the Q12 query is that point.
-/// The read changes no state, so a row without a candidate keeps the read-free query.
+/// head found a candidate, the sum rounded once to the norm's exponent, and the Q12 query is that
+/// point. The read changes no state, so a row without a candidate (rows 0 and 1 among them) keeps
+/// the read-free query.
 #[test]
 fn the_readout_read_moves_the_norm_output_toward_the_copy() {
     let layers = super::synthetic::FBS_SYNTH_NON_SQUARE.layers;
-    let (read, free, table, image, copy_heads) = served_read_parts(&[layers], 1.0);
+    let (read, free, table, reads) = served_read_parts(&[layers], 1.0);
+    let (image, copy_heads) = &reads[0];
     let width = free.shape().width;
     let copy_weight = &image.weight[..width];
     let tokens = repeating_tokens();
@@ -4147,14 +4164,18 @@ fn the_readout_read_moves_the_norm_output_toward_the_copy() {
         let free_query = without.step_native(tokens[t]).expect("step").query_q12;
         let n = without.fbs_norm_output();
         let mean = copy_heads.mean(&tokens[..=t], &table);
+        assert!(t >= 2 || mean.is_none(), "row {t} has no candidate");
         let want: Vec<i64> = match &mean {
             None => n.to_vec(),
-            // `c` at 2^-43, `n` at 2^-24: the move is at 2^-24 · 2^-43, back to 2^-24.
+            // `c` at 2^-43, `n` at 2^-24: the move is at 2^-24 · 2^-43, and the sum goes back to 2^-24.
             Some(c) => n
                 .iter()
                 .zip(copy_weight)
                 .zip(c)
-                .map(|((&n, &w), &c)| n + round_half_away(i128::from(w) * (c - (i128::from(n) << 19)), 43) as i64)
+                .map(|((&n, &w), &c)| {
+                    let n = i128::from(n);
+                    round_half_away((n << 43) + i128::from(w) * (c - (n << 19)), 43) as i64
+                })
                 .collect(),
         };
         assert_eq!(with.fbs_norm_output(), want, "position {t}");
@@ -4222,4 +4243,21 @@ fn the_timed_fbs_steps_serve_the_read() {
     assert_eq!(plain.save_state(), parts.save_state());
     assert_eq!(plain.tokens(), &tokens[..]);
     assert!(changed > 10, "the read changed {changed} steps");
+}
+
+/// claude-194: each hook rounds its sum once, as the float's `q16(x + w·c)` does, not the product
+/// before adding it: at an exact half tie the two differ. Rounding the product, `3 − 0.5` would
+/// come out 2; rounding the sum, 2.5 comes out 3.
+#[test]
+fn the_hooks_round_the_sum_not_the_product() {
+    use super::hamming::{readout_sum, stream_sum};
+    // `w · c = ∓2^50` is ∓0.5 at Q16.
+    assert_eq!(stream_sum(3, -1, 1 << 50), 3);
+    assert_eq!(stream_sum(-3, 1, 1 << 50), -3);
+    assert_eq!(stream_sum(3, 1, 1 << 50), 4);
+    // `w · (c − n · 2^19) = ∓2^42` is ∓0.5 at `2^-24`.
+    assert_eq!(readout_sum(3, 1, (3 << 19) - (1 << 42)), 3);
+    assert_eq!(readout_sum(-3, 1, (-3 << 19) + (1 << 42)), -3);
+    // At `w = 2^24` (1.0) the move lands on the copy exactly.
+    assert_eq!(readout_sum(-7, 1 << 24, 5 << 19), 5);
 }
