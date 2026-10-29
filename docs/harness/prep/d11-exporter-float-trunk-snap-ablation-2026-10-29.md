@@ -28,15 +28,26 @@ TEST FITNESS: PENDING
 
 | Label | Seed | Model folder in the store | `model.safetensors` sha256 | Training receipt (`--train-receipt`) |
 |---|---|---|---|---|
-| plain-c126 | 1 | `results/claude/d11-fbs-export-gap-2026-10-26/d11gap/save/seed-1/model/` | `63ae5513ff2da425af564be9ad9b41587a1ba0493f31061c06127a6368aa8e92` | `…/d11gap/d11-gap.json`, `88b6a5f9…1a8a` |
+| plain-c126 | 1 | `results/claude/d11-fbs-export-gap-2026-10-26/d11gap/save/seed-1/model/` | `63ae5513ff2da425af564be9ad9b41587a1ba0493f31061c06127a6368aa8e92` | `…/d11gap/d11-gap.json` |
 | plain-c126 | 2 | `…/d11gap/save/seed-2/model/` | `37aae39685a141fc3dbe2bb0d0be653d002aa739fae9c3b0fcf55f4f06e2e487` | the same |
-| d11-c130 | 1 | `results/claude/d11-fbs-d11-train-2026-10-26/d11t/save/seed-1/model/` | `55f5d6dce5ddb0121ab0a229f4ab62b0947afb61d52a7498879e7201c0843333` | `…/d11t/train.json`, `9576720f…8d5f` |
+| d11-c130 | 1 | `results/claude/d11-fbs-d11-train-2026-10-26/d11t/save/seed-1/model/` | `55f5d6dce5ddb0121ab0a229f4ab62b0947afb61d52a7498879e7201c0843333` | `…/d11t/train.json` |
 | d11-c130 | 2 | `…/d11t/save/seed-2/model/` | `f3c1b2064e885b90eef30b96404c4d17d86179dbaeba3eae37001f0e6316221c` | the same |
-| dual-c131 | 1 | `results/claude/d11-fbs-dual-train-2026-10-26/dual/save/seed-1/model/` | `6861db0fb4a8773cb00ac0b50839c6007783b9de1ebf36d948ab38bf99d93a72` | `…/dual/train.json`, `5a290fbe…d9bc` |
+| dual-c131 | 1 | `results/claude/d11-fbs-dual-train-2026-10-26/dual/save/seed-1/model/` | `6861db0fb4a8773cb00ac0b50839c6007783b9de1ebf36d948ab38bf99d93a72` | `…/dual/train.json` |
 | dual-c131 | 2 | `…/dual/save/seed-2/model/` | `a78ce0b942a906e3460de45f1e07db84b677d99beb09613b9373c9401dfac1cf` | the same |
-| bfixed-c179 | 1 | `results/claude/d11-fbs-fixed-order-2026-10-29/fix-arms/n1/save/seed-1/model/` | `e66c5ca40dd943d386f66ab48b2aa074effef95fcbb3a3b7abda9be84e828ba1` | `…/fix-arms/n1-train.json`, `79a69897…62aa` |
+| bfixed-c179 | 1 | `results/claude/d11-fbs-fixed-order-2026-10-29/fix-arms/n1/save/seed-1/model/` | `e66c5ca40dd943d386f66ab48b2aa074effef95fcbb3a3b7abda9be84e828ba1` | `…/fix-arms/n1-train.json` |
 | bfixed-c179 | 2 | `…/fix-arms/n1/save/seed-2/model/` | `3fb45e442cc187344afe41063634be95f2e04080a7b7b2d5f4e6eb452497bd5b` | the same |
 
+**The training receipts, pinned in full and checked by the job:**
+- `d11-gap.json`: `88b6a5f988fe144671365a258a100e5cf3935f98e917040b38f90df2637a1e8a`. It is also the Stage 4b receipt (`--stage4b`) for every model, the source of the noise band.
+- `d11t/train.json`: `9576720f4d66fe4c4d01baa616135ef227ec36af64da613fb51bf965e19a8d5f`.
+- `dual/train.json`: `5a290fbe47d8f10495b6d89fa8384110061902001ad9ebdf6b365935e220d9bc`.
+- `fix-arms/n1-train.json`: `79a6989761559f11575d4ad415b9e84761a89f55577807ec9e4684fc4f3a62aa`.
+
+**What the receipts store:**
+- Each receipt's `seeds[].loss_float` is `panel_loss(…, false)` at step 1,024. That is the same computation the mode repeats. Every receipt checked a reload against it exactly when its model was saved (`run_d11_export_gap` and `run_d11_train_export`).
+- All four state the same noise band.
+
+**Beside the models:**
 - Each model's `preds-float.json` sits beside its `model/` folder. plain-c126 also has its Stage 4b `preds-d11.json`.
 - Every file above is listed in its folder's `SHA256SUMS`.
 - **What the eight are:**
@@ -66,23 +77,35 @@ TEST FITNESS: PENDING
 - **Top-1:** |b − c| ≤ F_I = max(24, ⌈2√(b + c)⌉). Here b counts the rows F hits and X misses, and c the reverse.
 - **Loss:** |L_X − L_F| ≤ Δ = `0.045679637781173676`, Stage 4b's noise band.
 
+**Carrying D's gap.** A part (`snaps_only` or `rounding_only`) **carries** D's gap when it is outside the bar on the half where D is, in D's direction.
+- Where D's top-1 is outside, the part's top-1 must be outside, with a net of D's sign. D's net is positive when F is ahead, and negative when D is (d11-c130 seed 2 reads −340).
+- Where only D's loss is outside, the part's loss must be outside, on D's side of F.
+
+**Making up D's gap.** Two parts that are each inside **make up** D's gap when their values, taken in D's direction, sum to at least D's excess over its noise:
+- on top-1, sign(net_D) · (net_snaps + net_rounding) ≥ |net_D| − F_I(D);
+- on the loss half, the same with Δ in place of F_I(D).
+
 **Each model's split** (`classify_snap_split`, in order):
 1. **Not counted:** an instrument check (section 4) failed.
 2. **No gap:** `d11` is inside.
-3. **Snap-carried:** `rounding_only` is inside and `snaps_only` is outside.
-4. **Rounding-carried:** `snaps_only` is inside and `rounding_only` is outside.
-5. **Both:** both are outside.
-6. **Interaction:** both are inside, while `d11` is outside.
+3. **Both:** each part carries D's gap.
+4. **Snap-carried:** the snaps carry it, and the rounding alone is inside.
+5. **Rounding-carried:** the rounding carries it, and the snaps alone are inside.
+6. **Both:** each part is inside, and together they make up D's gap. Each part is below the bar, and neither alone accounts for it.
+7. **Interaction:** anything else. That is, the parts fall short of D's gap, or one part is outside against D's direction.
 
-**The item's reading** is taken over the counted models whose split is not "no gap", applying the first row that holds:
+On plain-c126 seed 1 (D 77 rows against F_I 60), snaps at 45 and rounding at 32, each inside, read Both; at 8 and 8 they read Interaction. A host test pins these cases.
+
+**The item's reading** is taken over the counted models whose split is not "no gap". The first row that holds applies:
 
 | Reading | When | What it decides |
 |---|---|---|
 | **No reading** | fewer than 6 of the 8 models are counted | An instrument repair, then this run again. |
-| **Interaction** | any model reads Interaction | No single part is the fix. Next: localize per layer on those models before any contract change. |
-| **Snaps** | every model reads Snap-carried | Next unit: the unsnapped D11 contract. The exporter writes, and the integer runtime computes, the gates and the transition as integer quaternions, using the multiply and divide D80 and D81 allow. It comes with finite CPU controls, the GPU evaluator, and then the export gap on the plain recipe. `gates_continuous` and `transition_continuous` say which snap goes first: an arm that is inside, or else the smaller \|net\|. |
-| **Rounding** | every model reads Rounding-carried | Next unit: wider codes for the query and the tables, with the snaps kept, and then the export gap. |
-| **Both** | otherwise | Next unit: both changes. Its sheet arms each change alone and both together. |
+| **No gap** | no counted model has a gap | D is inside on every model, which contradicts claude-136. Investigate the instrument before reading anything. |
+| **Snaps** | every one reads Snap-carried | **Next unit: the unsnapped D11 contract.** The exporter writes the gates and the transition as integer quaternions, and the integer runtime computes them, with the multiply and divide D80 and D81 allow. The unit includes finite CPU controls and the GPU evaluator, then the export gap on the plain recipe. Which snap goes first comes from `gates_continuous` and `transition_continuous`: one that is inside, or else the one with the smaller \|net\|. |
+| **Rounding** | every one reads Rounding-carried | **Next unit: wider codes** for the query and the tables, with the snaps kept, then the export gap. |
+| **Interaction** | more than half read Interaction | No single part is the fix. **Next unit: localize per layer** on those models before any contract change. |
+| **Both** | otherwise | **Next unit: both changes.** Its sheet runs each change alone and the two together. Any model that reads Interaction is named there and localized as a reading. |
 
 A Snaps or Rounding reading names the change for the next unit. It is not a result about the snaps or the rounding as mechanisms, and nothing here closes a mechanism (§4.1).
 
@@ -105,7 +128,7 @@ A Snaps or Rounding reading names the change for the next unit. It is not a resu
 5. **`I-None`.** The `nothing` arm is F row for row, with its loss within 1e-6. This shows that "off" is the float forward.
 6. **`I-D-Same`.** The `d11` arm is `evaluate_dev_panel_d11`'s panel row for row, with its loss within 1e-6 of `panel_loss_d11`'s. So this D is the D of claude-132 to claude-136.
 7. **`I-D-Stored`, for plain-c126 only.** The `d11` arm equals Stage 4b's stored `preds-d11.json`.
-8. **`I-D-Recorded`, for the six older models (a job check).** The `d11` arm's top-1 equals claude-136's D column: 1,911, 2,290, 3,666, 1,257, 3,486 and 2,903.
+8. **`I-D-Recorded`, for the six older models.** The `d11` arm's top-1 equals claude-136's D column: 1,911, 2,290, 3,666, 1,257, 3,486 and 2,903. The job passes each value with `--expect-d11-top1`, and the mode counts the check in `instruments_pass`, so a mismatch leaves that model not counted.
 9. **`I-DEV-Denominator`.** F covers 14,287 rows.
 10. **`I-Negative`.** plain-c126 seed 1 is run once more with a wrong `--model-sha256`. It must give `instruments_pass: false` and the split `not_counted`.
 11. **`I-Finite`.** Every step exits 0, and a non-finite loss is an error in the mode. Each step's stdout, stderr and exit code are saved.
@@ -126,7 +149,7 @@ A Snaps or Rounding reading names the change for the next unit. It is not a resu
 
    `spiralcore-fbs-sheet --mode d11-snap-ablation --data-root <driver-data> --model-dir <…/model> --model-sha256 <pin> --stored-preds <…/preds-float.json> --stage4b <d11-gap.json> --train-receipt <receipt> --seed <s> --label <label> --out ablation-<label>-seed-<s>.json`
 6. Run `I-Negative`.
-7. A `jq` summary over the eight receipts gives each split, the item's reading and `I-D-Recorded`.
+7. A `jq` summary over the receipts (`summary.jq`, shipped with the job) gives each split and the item's reading. A model whose step failed has no receipt, so it is not counted.
 8. Seal the run folder to `results/claude/d11-snap-ablation-2026-10-29/` with a `SHA256SUMS`, read it back, then `release` and `down`.
 
 ## 7. Minimum test power
@@ -134,7 +157,11 @@ A Snaps or Rounding reading names the change for the next unit. It is not a resu
 - **Eight models:** four configurations, two seeds each.
 - **14,287 frozen DEV rows per model**, with a paired test for every arm.
 - **The forwards are deterministic.** claude-132 found D repeatable, and `I-D-Same` checks it again. So one pass decides each arm.
-- **The gaps are large.** They are 77 to 359 rows of net, against F_I of 58 to 72. A part that carries most of the gap lands far outside, and a part that carries none of it lands near zero, so the split is not a near-threshold call on these models.
+- **Most gaps are far outside, but not all.** claude-136's six read 77 to 359 rows of net against F_I of 58 to 72.
+  - On five of them D is outside by 155 to 287 rows, so a part that carries most of the gap lands well outside.
+  - **plain-c126 seed 1 is near the threshold,** outside by only 17 rows (77 against 60). There, both parts can sit inside the bar. The "make up" rule reads that case as Both, not Interaction.
+  - **The two bfixed-c179 models have no recorded D.** Their gap is measured here for the first time, so either could read No gap, or be near the threshold.
+- **No single model decides the item.** The item reading needs every gap model for Snaps or Rounding, and more than half for Interaction.
 
 ## 8. Cost and stop rule
 
@@ -142,16 +169,35 @@ A Snaps or Rounding reading names the change for the next unit. It is not a resu
 - one RTX 5090 on Vast, about $0.6 to $1.1/h, on a 1.5 h lease;
 - about 3 minutes of build and 2 minutes of GPU tests;
 - about 40 MB of models and receipts to fetch;
-- 9 runs, each with 7 panels and 7 losses. claude-135 measured about 54 s for five D11 panels, so each run should take 2 to 3 minutes.
+- 9 runs, each with 8 panels and 8 losses (F, the six arms, and the second D11 panel for `I-D-Same`). claude-135 measured about 54 s for five D11 panels, so each run should take 2 to 3 minutes.
 - **In all, about 45 minutes, under $1.**
 
 **Stop rule:**
-- Stop and save on a failed `I-GPU-Tests` or `I-Fetch`, or on any nonzero exit.
-- A failed instrument check on one model leaves that model not counted. The others still count, within the "No reading" row.
+- **The whole job stops,** and saves, on a failed build, `I-GPU-Tests`, `I-Fetch`, receipt-pin check, `I-Negative` or summary step.
+- **Each model's own run is not fatal.** A nonzero exit there (a receipt it cannot read, say) writes no receipt, and that model is not counted. A failed instrument check inside a model's run leaves that model not counted too. The others still count, within the "No reading" row.
 - Classify every failure as instrument or mechanism before calling it anything.
 - Renew the lease rather than cancel a healthy run.
 - Save everything off the pod and read it back before `down`.
 
 ## 9. Non-author TEST FITNESS review
 
-To be recorded here, with the D67 pre-run review.
+**Round 1 (fresh non-author reviewer, at `38c2f5189`): NOT FIT. All eight findings are fixed.**
+1. **High: one model could read Interaction while its parts simply add up,** and that one model then decided the item. Fixed:
+   - "Make up D's gap" now reads two in-band parts that sum to D's excess as Both.
+   - The item reading needs more than half of the gap models for Interaction.
+2. **High: §7 claimed no near-threshold calls.** That was wrong. plain-c126 seed 1 is 17 rows outside, and bfixed-c179 has no recorded D. Both are now named.
+3. **Medium: I-D-Recorded was a job check outside `instruments_pass`.** The mode now takes `--expect-d11-top1` and counts the check itself.
+4. **Medium: the stored-loss check was untried.** Each receipt's `seeds[].loss_float` is `panel_loss(…, false)`, and each was checked exactly against a reload at save time. All four state the same band (section 2).
+5. **Medium: the stop rule conflicted with the per-model rule.** Each model's run is now non-fatal (section 8).
+6. **Low: the receipt pins were truncated.** They are in full now, and the job checks them.
+7. **Low: the cost counted 7 panels per run.** It is 8.
+8. **Low: a part's sign was ignored.** A part now carries D's gap only in D's direction.
+
+**What round 1 confirmed:**
+- each arm computes what section 2 says;
+- `nothing` is F and `d11` is D by construction;
+- the transition snap is the only use of `snap_transition` in the forward;
+- the rounding order is enforced;
+- the pins match claude-132's table;
+- I-Negative can fail;
+- no softmax, no matmul, GPU-only.

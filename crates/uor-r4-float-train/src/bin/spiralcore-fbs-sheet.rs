@@ -36,7 +36,8 @@
 //! plain-float panel against D11 forwards with each icosian snap and the rounding on or off. It takes
 //! `--model-dir`, `--model-sha256`, `--stored-preds`, `--stage4b` (Stage 4b's receipt, for the
 //! noise band), `--train-receipt` (the model's own training receipt, for its stored float loss),
-//! `--seed`, `--label` and, where the D11 panel was stored at training, `--stored-d11-preds`.
+//! `--seed`, `--label` and, where earlier units recorded them, `--stored-d11-preds` (the D11 panel
+//! stored at training) and `--expect-d11-top1` (claude-136's D top-1).
 //!
 //! `d11-snap-trace` is snap-flip localisation (claude-134,
 //! `docs/harness/prep/d11-exporter-float-trunk-snap-trace-2026-10-26.md`): over the first
@@ -67,8 +68,9 @@ use uor_r4_float_train::{FloatTrainError, Result};
 
 /// The options of `d11-artifact-gap`, `d11-train-probe`, `d11-train-export`, `d11-residual`,
 /// `d11-snap-ablation`, `d11-snap-trace`, `d11-forced-snaps` and `d11-forced-summary`.
-const GAP_OPTIONS: [&str; 21] = [
+const GAP_OPTIONS: [&str; 22] = [
     "--train-receipt",
+    "--expect-d11-top1",
     "--expect-unforced",
     "--receipts",
     "--faithful",
@@ -476,12 +478,21 @@ fn main() -> Result<()> {
             let seed = option("--seed")?
                 .parse()
                 .map_err(|_| FloatTrainError::Invalid("--seed must be an integer".to_owned()))?;
+            let expect_d11_top1 = extra
+                .get("--expect-d11-top1")
+                .map(|v| {
+                    v.parse().map_err(|_| {
+                        FloatTrainError::Invalid("--expect-d11-top1 must be an integer".to_owned())
+                    })
+                })
+                .transpose()?;
             let value = run_d11_snap_ablation(
                 &data_root,
                 Path::new(&option("--model-dir")?),
                 &option("--model-sha256")?,
                 Path::new(&option("--stored-preds")?),
                 extra.get("--stored-d11-preds").map(Path::new),
+                expect_d11_top1,
                 Path::new(&option("--stage4b")?),
                 Path::new(&option("--train-receipt")?),
                 seed,
