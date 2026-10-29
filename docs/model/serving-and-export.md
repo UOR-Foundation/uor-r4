@@ -5,7 +5,7 @@ A finished model has to leave the lab and run on an ordinary laptop or in a web 
 ## Since 27 October (as of 29 Oct)
 
 - **`lut-stack/5` (claude-182).** The unsnapped contract keeps the rotations exact. On the DEV panel it puts the exported FBS trunk inside the export-gap bar ([claude-181](../loop/tasks/d11-exporter-float-trunk/claude-181/REPORT.md), [claude-182](../loop/tasks/d11-exporter-float-trunk/claude-182/REPORT.md)).
-- **Speed (claude-177).** With the hardware multiply and divide the engine serves 4,829 tokens per second snapped on the M1 laptop, byte-identical ([claude-177](../loop/tasks/integer-mul-div-serving/claude-177/REPORT.md)). Under `/5` it serves 4,217 to 4,504.
+- **Speed (claude-177).** With the hardware multiply and divide the engine serves 4,829 tokens per second snapped on the M1 laptop, with replies byte-identical to the engine before the change ([claude-177](../loop/tasks/integer-mul-div-serving/claude-177/REPORT.md)). Under `/5` it serves 4,217 to 4,504.
 - **`lut-stack/6` (claude-188, claude-189).** It carries the Hamming reads. The copy-head integer kernel is built and matches an f64 reference, but the session refuses `/6` until it serves them ([claude-188](../loop/tasks/integer-hamming-read/claude-188/REPORT.md), [claude-189](../loop/tasks/integer-hamming-read/claude-189/REPORT.md)).
 - **Readout (claude-150).** Whole-table nearest was chosen ([claude-150](../loop/tasks/one-decoder/claude-150/REPORT.md)), but the served session still reads the native writer.
 

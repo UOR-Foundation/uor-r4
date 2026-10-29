@@ -47,7 +47,7 @@ The deliverable is **one checksum-pinned D11 integer artifact in the `UORLUT01` 
 ### Where it stands on 29 Oct 2026
 
 - **Pre-alpha.** No model holds a useful conversation. M1 is in progress and no registered closing run has passed the charter 4.8 bar.
-- **Served in integers.** The FBS trunk is exported and served in integers on the M1 laptop at 4,829 tok/s (claude-177, snapped; 4,217 to 4,504 tok/s with the exact `lut-stack/5` contract), with byte-identical replies.
+- **Served in integers.** The FBS trunk is exported and served in integers on the M1 laptop at 4,829 tok/s (claude-177, snapped; 4,217 to 4,504 tok/s with the exact `lut-stack/5` contract), with replies byte-identical to the engine before the multiply and divide. The served model is inside the export-gap bar against the trained one, not identical to it (claude-182).
 - **No typed chat yet.** R7, the text path, is not built: FBS artifacts take token ids only.
 - **The composition, briefly.** The trunk routes (a learned table, SpiralCore position, a recurrence with a Hamilton gate, Hamming copy heads) and exact turn memory stores. Exact memory names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, but only the first word of a reply (claude-161). The full part-by-part table is the [pipeline map](../model/pipeline-map.md).
 - **Order of work.** First carry the memory past a reply's first word. Then serve the model's parts in integers. Then R7, so a typed question gets a typed reply. Then one model trained with all of it and scored on prompts, with tokens/s. Cost work comes after. See [PLAN](../../PLAN.md).
