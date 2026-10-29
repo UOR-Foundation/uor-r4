@@ -34,7 +34,7 @@ const VERM: &str = "#D55E00";
 const PURPLE: &str = "#7A4FA3";
 const PANEL: &str = "#F6F8FA";
 const RULE: &str = "#D0D7DE";
-const DATE: &str = "13 October 2026";
+const DATE: &str = "29 October 2026";
 
 /// Where a piece of the project stands. "Built" means source built and tested,
 /// not trained; "Held" means it waits on an owner hold.
@@ -47,7 +47,6 @@ enum St {
     Planned,
     Held,
     Paused,
-    Frozen,
 }
 
 impl St {
@@ -60,7 +59,6 @@ impl St {
             St::Planned => "PLANNED",
             St::Held => "HELD",
             St::Paused => "PAUSED",
-            St::Frozen => "FROZEN",
         }
     }
     fn legend(self) -> &'static str {
@@ -72,7 +70,6 @@ impl St {
             St::Planned => "Planned",
             St::Held => "Held by the owner",
             St::Paused => "Paused",
-            St::Frozen => "Frozen",
         }
     }
     /// (fill, stroke, stroke width, dash)
@@ -85,7 +82,6 @@ impl St {
             St::Planned => ("#FFFFFF", "#6E7781", 1.75, Some("6 5")),
             St::Held => ("#F4F0F8", PURPLE, 2.0, Some("9 4")),
             St::Paused => ("#F6F8FA", "#8C959F", 1.75, Some("2 4")),
-            St::Frozen => ("url(#hF)", "#8C959F", 1.5, Some("2 3")),
         }
     }
     /// (fill, stroke, text, dash)
@@ -105,7 +101,6 @@ impl St {
             St::Planned => ("#FFFFFF", "#6E7781", ARROW, Some("4 3")),
             St::Held => (PURPLE, PURPLE, "#FFFFFF", None),
             St::Paused => ("#8C959F", "#8C959F", "#FFFFFF", None),
-            St::Frozen => ("#57606A", "#57606A", "#FFFFFF", None),
         }
     }
 }
@@ -322,193 +317,206 @@ impl Svg {
 /// A separate narrow SVG keeps labels readable without enlarging the desktop art.
 fn architecture() -> Result<String, Fail> {
     let mut s = Svg::new("architecture", 1200.0, 660.0);
-    s.header("UOR-R4: discrete geometric architecture", "18 October 2026 · implemented source; language quality and unified D11 serving remain unqualified");
-    s.section(116.0, "M1 · SHARED REPRESENTATION AND ORDERED READ");
-    s.rect(
+    s.header(
+        "UOR-R4: the FBS trunk, token → vector → integer → token",
+        &format!(
+            "{DATE} · the trunk routes, exact memory stores (claude-155); pre-alpha, no M1 bar met"
+        ),
+    );
+    s.section(116.0, "THE MODEL · ONE MECHANISM PER PART");
+    s.card(
         [190.0, 140.0, 390.0, 64.0],
-        5.0,
-        ("#FFFFFF", BLUE, 1.5, None),
+        St::Working,
+        "FBS table: id → vector",
+        &["learned 4,096 × 256 · trained; served"],
+        false,
     );
-    s.text(
-        [206.0, 165.0],
-        (15.0, 700, INK),
-        "start",
-        "Shared token-vector table V",
-    );
-    s.text(
-        [206.0, 187.0],
-        (14.0, 400, BODY),
-        "start",
-        "8D blocks · 16 carrier roots · 64 signed actions",
-    );
-    s.path("M580,172 H968 V238", ARROW, 1.5, None, true);
+    s.path("M580,172 H990 V238", ARROW, 1.5, None, true);
     s.text(
         [768.0, 161.0],
         (13.0, 400, MUTED),
         "middle",
-        "same table for input and output",
+        "the readout searches the whole table",
     );
     s.arrow(278.0, 204.0, 278.0, 238.0, false);
-    for (x, w, title, lines) in [
-        (40.0, 110.0, "Token IDs", vec!["x₁, …, xₜ"]),
+    for (x, w, st, title, lines) in [
+        (40.0, 110.0, St::Working, "Tokenizer", vec!["BPE-4096"]),
         (
             190.0,
             176.0,
-            "Encode",
-            vec!["table lookup", "discrete_encode"],
+            St::Working,
+            "Position",
+            vec!["SpiralCore transport", "spin · no RoPE"],
         ),
         (
             406.0,
             180.0,
-            "Ordered context",
-            vec!["ternary FBS plans", "preserve order"],
+            St::Working,
+            "Router (mixing)",
+            vec!["FBS recurrence", "+ Hamilton gate", "+ RMS norm"],
         ),
         (
             906.0,
-            154.0,
-            "Shared writer",
-            vec!["cell admission", "integer distance"],
+            170.0,
+            St::Progress,
+            "Readout",
+            vec![
+                "whole-table nearest",
+                "(claude-150); served",
+                "today: native writer",
+            ],
         ),
     ] {
-        s.rect([x, 238.0, w, 82.0], 5.0, ("#FFFFFF", BLUE, 1.5, None));
-        s.fit([x + 12.0, 264.0], (15.0, 700, INK), w - 24.0, title);
-        for (i, line) in lines.iter().enumerate() {
-            s.fit(
-                [x + 12.0, 287.0 + 18.0 * i as f64],
-                (14.0, 400, BODY),
-                w - 24.0,
-                line,
-            );
-        }
+        s.card([x, 238.0, w, 84.0], st, title, &lines, false);
     }
-    s.rect(
-        [626.0, 214.0, 240.0, 130.0],
-        5.0,
-        ("#FFFFFF", BLUE, 1.5, None),
-    );
-    s.text([642.0, 241.0], (15.0, 700, INK), "start", "Read vector");
-    s.text(
-        [642.0, 266.0],
-        (14.0, 400, BODY),
-        "start",
-        "Route: one carrier + transport",
-    );
-    s.path("M642,278 H850", RULE, 1.0, None, false);
-    s.text(
-        [642.0, 299.0],
-        (14.0, 400, BODY),
-        "start",
-        "Flock / Relation: select,",
-    );
-    s.text(
-        [642.0, 321.0],
-        (14.0, 400, BODY),
-        "start",
-        "transport, equal sum → snap",
-    );
-    for (a, b) in [
-        (150.0, 190.0),
-        (366.0, 406.0),
-        (586.0, 626.0),
-        (866.0, 906.0),
-        (1060.0, 1100.0),
-    ] {
-        s.arrow(a, 279.0, b, 279.0, false);
-    }
-    s.circle(1128.0, 279.0, 28.0, "#FFFFFF", BLUE, 1.5);
-    s.text([1128.0, 285.0], (16.0, 700, INK), "middle", "xₜ₊₁");
-    s.text([1128.0, 330.0], (13.0, 400, MUTED), "middle", "selected ID");
-    s.section(386.0, "LEARNING · EXACT VIRTUAL MOVES ON A FIXED BATCH");
-    for (x, title, detail) in [
-        (40.0, "Snapshot + batch", "fixed objective inputs"),
-        (328.0, "Virtual proposals", "rows_v1 is opt-in"),
-        (616.0, "Compare objectives", "exact integer scores"),
-        (904.0, "Accepted snapshot", "improvement + admission"),
-    ] {
-        s.rect([x, 404.0, 256.0, 64.0], 5.0, ("#FFFFFF", BLUE, 1.5, None));
-        s.text([x + 14.0, 430.0], (15.0, 700, INK), "start", title);
-        s.text([x + 14.0, 452.0], (14.0, 400, BODY), "start", detail);
-        if x < 904.0 {
-            s.arrow(x + 256.0, 436.0, x + 288.0, 436.0, false);
-        }
-    }
-    s.section(
-        512.0,
-        "SEPARATE RESEARCH AND SERVING BOUNDARIES · NO INTEGRATION ARROWS",
+    s.card(
+        [626.0, 210.0, 240.0, 62.0],
+        St::Progress,
+        "Copy: Hamming read",
+        &["integer kernel; not yet served"],
+        false,
     );
     s.card(
+        [626.0, 290.0, 240.0, 62.0],
+        St::Progress,
+        "Exact turn memory",
+        &["first word only; not served"],
+        false,
+    );
+    for (a, b) in [(150.0, 190.0), (366.0, 406.0), (1076.0, 1100.0)] {
+        s.arrow(a, 279.0, b, 279.0, false);
+    }
+    s.arrow(586.0, 270.0, 626.0, 242.0, false);
+    s.arrow(586.0, 288.0, 626.0, 320.0, false);
+    s.arrow(866.0, 242.0, 906.0, 270.0, false);
+    s.arrow(866.0, 320.0, 906.0, 288.0, false);
+    s.circle(1128.0, 279.0, 28.0, "#FFFFFF", BLUE, 1.5);
+    s.text([1128.0, 285.0], (16.0, 700, INK), "middle", "xₜ₊₁");
+    s.text([1128.0, 330.0], (13.0, 400, MUTED), "middle", "next token");
+    s.section(
+        386.0,
+        "TRAIN IN FLOAT ON THE GPU · EXPORT EXACTLY · SERVE D11 INTEGERS",
+    );
+    for (x, title, lines) in [
+        (
+            40.0,
+            "Float GPU training",
+            [
+                "fixed-order backward (claude-179)",
+                "31,851 context tok/s (claude-161)",
+            ],
+        ),
+        (
+            328.0,
+            "Export: lut-stack/5",
+            [
+                "unsnapped; rotations exact",
+                "inside the gap bar, DEV, 2 seeds",
+            ],
+        ),
+        (
+            616.0,
+            "D11 integer serving",
+            [
+                "4,829 tok/s snapped, M1 laptop",
+                "4,217–4,504 tok/s exact (/5)",
+            ],
+        ),
+        (
+            904.0,
+            "Serving rules (D80, D81)",
+            ["integer multiply and divide", "allowed; floats banned"],
+        ),
+    ] {
+        s.card([x, 404.0, 256.0, 80.0], St::Working, title, &lines, false);
+        if x < 904.0 {
+            s.arrow(x + 256.0, 444.0, x + 288.0, 444.0, false);
+        }
+    }
+    s.section(512.0, "NOT YET IN THE MODEL · THE PATH FORWARD IN PLAN.md");
+    s.card(
         [40.0, 530.0, 340.0, 66.0],
-        St::Held,
-        "M2 compiler / emitter",
-        &["Held research; outside the current M1 path"],
+        St::Planned,
+        "Memory past the first word",
+        &["turn-memory-reply: map gap 1"],
         false,
     );
     s.card(
         [406.0, 530.0, 350.0, 66.0],
-        St::Planned,
-        "Object store and Hopf / fibre",
-        &["Store not integrated; Hopf helpers offline"],
+        St::Progress,
+        "Parts served in integers",
+        &["Hamming hooks, memory, readout"],
         false,
     );
     s.card(
         [782.0, 530.0, 378.0, 66.0],
         St::Planned,
-        "Unified D11 serving",
-        &["Separate qualification still required"],
+        "Text in / out (R7)",
+        &["not built: FBS takes token ids only"],
         false,
     );
-    s.legend(641.0, &[St::Built, St::Held, St::Planned]);
+    s.fit(
+        [40.0, 613.0],
+        (12.0, 400, MUTED),
+        1120.0,
+        "The key has no \"trained\" state: In progress also marks a part that is trained but not yet served.",
+    );
+    s.legend(645.0, &[St::Working, St::Progress, St::Planned]);
     s.finish(
-        "Current discrete M1 architecture",
-        "discrete_encode looks up token IDs in the shared table to produce encoded blocks. Ordered FBS plans feed Route single-carrier transport or Flock/Relation transported sums and snaps. The same vector table supplies the writer and selected token. Learning compares exact virtual moves on a fixed batch. M2, object-store integration, Hopf fibre tracking and unified D11 serving are separate boundaries. Every current arrow is sourced in docs/architecture.md.",
+        "The FBS trunk model, 29 October 2026",
+        "BPE-4096 token ids are looked up in the learned FBS table. SpiralCore transport spin gives position; the FBS recurrence with the Hamilton gate and RMS norm routes; the Hamming-read copy heads and exact turn memory are trained but not yet served, and the memory moves only a reply's first word. The readout chosen is whole-table nearest; the served session still reads the native writer. Training is float on the GPU with a fixed-order backward; export through lut-stack/5 is exact; D11 integer serving reaches 4,829 tok/s snapped on the M1 laptop, with integer multiply and divide allowed and floats banned.",
     )
 }
 
 fn architecture_narrow() -> Result<String, Fail> {
-    let mut s = Svg::new("architecture-narrow", 380.0, 810.0);
+    let mut s = Svg::new("architecture-narrow", 380.0, 830.0);
     s.text(
         [16.0, 28.0],
         (18.0, 700, INK),
         "start",
-        "Discrete geometric M1",
+        "The FBS trunk model",
     );
-    s.text(
+    s.fit(
         [16.0, 50.0],
         (13.0, 400, MUTED),
-        "start",
-        "Implemented source · 18 October 2026",
+        348.0,
+        &format!("token → vector → token · {DATE}"),
     );
-    s.rect([16.0, 72.0, 348.0, 58.0], 5.0, ("#FFFFFF", BLUE, 1.5, None));
-    s.text(
-        [30.0, 96.0],
-        (15.0, 700, INK),
-        "start",
-        "Shared token-vector table V",
-    );
-    s.text(
-        [30.0, 117.0],
-        (13.0, 400, BODY),
-        "start",
-        "8D blocks · 16 roots · 64 signed actions",
+    s.card(
+        [16.0, 72.0, 348.0, 58.0],
+        St::Working,
+        "FBS table: id → vector",
+        &["learned 4,096 × 256 · trained; served"],
+        false,
     );
     s.arrow(190.0, 130.0, 190.0, 154.0, false);
-    for (y, title, detail) in [
-        (154.0, "Token IDs → encode", "discrete_encode: table lookup"),
-        (236.0, "Ordered context", "ternary FBS plans preserve order"),
+    for (y, st, title, detail) in [
+        (
+            154.0,
+            St::Working,
+            "Tokens → table + position",
+            "BPE-4096; SpiralCore spin, no RoPE",
+        ),
+        (
+            236.0,
+            St::Working,
+            "Router: FBS recurrence",
+            "Hamilton gate · RMS norm · served",
+        ),
         (
             318.0,
-            "Route / Flock / Relation",
-            "one carrier / transported sum → snap",
+            St::Progress,
+            "Copy and exact turn memory",
+            "trained; not served; memory: 1st word",
         ),
         (
             400.0,
-            "Shared writer → selected ID",
-            "address admission + integer distance",
+            St::Progress,
+            "Readout → next token",
+            "nearest chosen; session reads writer",
         ),
     ] {
-        s.rect([32.0, y, 316.0, 58.0], 5.0, ("#FFFFFF", BLUE, 1.5, None));
-        s.text([46.0, y + 24.0], (15.0, 700, INK), "start", title);
-        s.fit([46.0, y + 45.0], (13.0, 400, BODY), 288.0, detail);
+        s.card([32.0, y, 316.0, 58.0], st, title, &[detail], false);
         if y < 400.0 {
             s.arrow(190.0, y + 58.0, 190.0, y + 82.0, false);
         }
@@ -518,33 +526,28 @@ fn architecture_narrow() -> Result<String, Fail> {
         [16.0, 501.0],
         (14.0, 700, BLUE),
         "start",
-        "FIXED-BATCH LEARNING",
+        "TRAIN, EXPORT, SERVE",
     );
     for (x, title, detail) in [
-        (16.0, "Snapshot + batch", "virtual proposals"),
-        (206.0, "Compare → accept", "improvement required"),
+        (16.0, "Float GPU train", "fixed-order backward"),
+        (206.0, "D11 int serving", "4,829 tok/s on M1"),
     ] {
         s.rect([x, 518.0, 158.0, 62.0], 5.0, ("#FFFFFF", BLUE, 1.5, None));
-        s.text([x + 10.0, 543.0], (14.0, 700, INK), "start", title);
-        s.text([x + 10.0, 565.0], (12.5, 400, BODY), "start", detail);
+        s.fit([x + 10.0, 543.0], (14.0, 700, INK), 138.0, title);
+        s.fit([x + 10.0, 565.0], (12.5, 400, BODY), 138.0, detail);
     }
     s.arrow(174.0, 549.0, 206.0, 549.0, false);
-    s.text(
-        [16.0, 618.0],
-        (14.0, 700, BLUE),
-        "start",
-        "SEPARATE BOUNDARIES",
-    );
+    s.text([16.0, 618.0], (14.0, 700, BLUE), "start", "NEXT (PLAN.md)");
     s.rect(
         [16.0, 636.0, 348.0, 48.0],
         5.0,
-        ("#FFFFFF", PURPLE, 1.5, Some("7 4")),
+        ("#FFFFFF", MUTED, 1.25, Some("5 4")),
     );
-    s.text(
+    s.fit(
         [30.0, 665.0],
         (14.0, 400, INK),
-        "start",
-        "M2 compiler / emitter: held research",
+        320.0,
+        "Memory past a reply's first word",
     );
     s.rect(
         [16.0, 698.0, 348.0, 88.0],
@@ -552,28 +555,29 @@ fn architecture_narrow() -> Result<String, Fail> {
         ("#FFFFFF", MUTED, 1.25, Some("5 4")),
     );
     for (i, t) in [
-        "Object store: no model integration",
-        "Hopf / fibre: offline helpers outside M1",
-        "Unified D11 serving: unqualified",
+        "Parts served in integers: in progress",
+        "R7 text in / out: not built",
+        "Serving: integer × ÷ allowed; no floats",
     ]
     .iter()
     .enumerate()
     {
-        s.text(
-            [30.0, 722.0 + 24.0 * i as f64],
-            (14.0, 400, BODY),
-            "start",
-            t,
-        );
+        s.fit([30.0, 722.0 + 24.0 * i as f64], (14.0, 400, BODY), 320.0, t);
     }
-    s.finish("Current discrete M1 architecture, narrow layout", "The same implemented flow as architecture.svg, arranged for narrow Markdown columns. A shared table supplies encoder and writer. Ordered ternary context feeds Route single-carrier transport or Flock/Relation transported sums and snaps. Fixed-batch learning accepts improving admitted moves. M2 is held; object-store integration, offline Hopf utilities and unqualified unified serving are separate boundaries. This is source structure, not a language-quality claim.")
+    s.fit(
+        [16.0, 812.0],
+        (12.0, 400, MUTED),
+        348.0,
+        "Green: served. Hatched: trained, not yet served.",
+    );
+    s.finish("The FBS trunk model, narrow layout", "The same model as architecture.svg, arranged for narrow Markdown columns. BPE-4096 ids are looked up in the learned FBS table; SpiralCore spin gives position; the FBS recurrence with the Hamilton gate and RMS norm routes and is served. The Hamming-read copy and exact turn memory are trained but not served; the readout chosen is whole-table nearest while the session still reads the native writer. Float GPU training; D11 integer serving at 4,829 tok/s snapped on the M1 laptop. This is structure, not a language-quality claim.")
 }
 
 fn compliant_path() -> Result<String, Fail> {
     let mut s = Svg::new("compliant-path", 1200.0, 760.0);
     s.header(
         "Historical float operator path (12–13 October)",
-        "Delivered float source is inactive. Current integer M1 data flow: architecture.svg.",
+        "Delivered float source is inactive. The current model: architecture.svg.",
     );
     s.card(
         [40.0, 150.0, 120.0, 92.0],
@@ -713,7 +717,7 @@ fn compliant_path() -> Result<String, Fail> {
 fn operators() -> Result<String, Fail> {
     let mut s = Svg::new("operators", 1200.0, 600.0);
     s.header(
-        "The three geometric operators of the earlier float trunk (inactive)",
+        "Three geometric operators, first written for the earlier float trunk",
         "Each replaces a banned operation with geometry: a rotation for a squash, a selection for a dense sum, a margin for a softmax.",
     );
     // panel frames
@@ -940,9 +944,9 @@ fn operators() -> Result<String, Fail> {
 fn training_pipeline() -> Result<String, Fail> {
     let mut s = Svg::new("training-pipeline", 1200.0, 680.0);
     s.header(
-        "Training: three gates before any GPU time",
+        "Training: float on the GPU, exported exactly to integers",
         &format!(
-            "Historical operator snapshot, {DATE}. Later discrete pilot/dose evidence: STATUS.md."
+            "{DATE}. Float training is offline only (D37); serving is D11 integers. Unit REPORTs: docs/loop/tasks/."
         ),
     );
     s.section(118.0, "BEFORE THE RUN");
@@ -973,9 +977,12 @@ fn training_pipeline() -> Result<String, Fail> {
     );
     s.card(
         [890.0, 130.0, 270.0, 128.0],
-        St::Held,
-        "Owner hold release",
-        &["training held since 12 Oct;", "FIT alone releases nothing"],
+        St::Working,
+        "Pre-run review",
+        &[
+            "the lab's own whole-project",
+            "review, logged for the owner",
+        ],
         true,
     );
     s.arrow(290.0, 194.0, 320.0, 194.0, false);
@@ -1003,23 +1010,23 @@ fn training_pipeline() -> Result<String, Fail> {
     );
     s.card(
         [320.0, 308.0, 250.0, 132.0],
-        St::Planned,
-        "Train",
+        St::Working,
+        "Train (float, GPU)",
         &[
-            "compliant trunk, rank-margin",
-            "hinge; no CPU model compute,",
-            "no host fallback (D24)",
+            "the FBS trunk; fixed-order",
+            "backward gives the same model",
+            "byte for byte (claude-179)",
         ],
         true,
     );
     s.card(
         [600.0, 308.0, 260.0, 132.0],
-        St::Planned,
+        St::Working,
         "Evaluate",
         &[
-            "raw-score top-1, rank and",
-            "recall@K, the hinge, tokens/s;",
-            "frozen panels, fresh transfer",
+            "DEV top-1 (14,287 rows) and",
+            "reply openings at two seeds;",
+            "tokens/s reported",
         ],
         true,
     );
@@ -1041,46 +1048,46 @@ fn training_pipeline() -> Result<String, Fail> {
     s.section(476.0, "AFTER A KEEP");
     s.card(
         [40.0, 488.0, 530.0, 116.0],
-        St::Planned,
-        "Export to D11",
+        St::Working,
+        "Export to D11: lut-stack/5",
         &[
-            "the integer engine still binds the historical modes and refuses",
-            "the new geometric ones until it is extended",
+            "unsnapped, so the rotations stay exact; inside the export-gap",
+            "bar on DEV at both seeds. /6 carries the Hamming reads.",
         ],
         true,
     );
     s.card(
         [600.0, 488.0, 560.0, 116.0],
-        St::Built,
-        "Milestone panels",
+        St::Progress,
+        "The M1 bar (CHARTER §4.8)",
         &[
-            "chat-grade replies, the v5 memory panel and the native",
-            "512-episode panel: frozen before any run is scored",
+            "integer top-1 must beat the unigram (1,226) and T2 successor",
+            "(6,300) tables on DEV at two seeds; no closing run has passed",
         ],
         true,
     );
-    s.legend(656.0, &[St::Working, St::Built, St::Planned, St::Held]);
+    s.legend(656.0, &[St::Working, St::Built, St::Progress]);
     s.finish(
-        "The gated training pipeline",
-        "Historical operator-phase workflow: data, pre-registration, review, scoped owner release, GPU training/evaluation and artifact preservation. This dated diagram is not the active execution status; see STATUS.md. Unified D11 serving remains unqualified.",
+        "The training pipeline, 29 October 2026",
+        "Data, pre-registration, a non-author TEST FITNESS review and the lab's own pre-run review come before GPU time. The FBS trunk trains in float on a Vast.ai GPU pod with a deterministic fixed-order backward, is evaluated on the DEV panel at two seeds with tokens/s, and its results are kept. The export through lut-stack/5 keeps the rotations exact. No closing run has passed the M1 bar.",
     )
 }
 
 fn serving_pipeline() -> Result<String, Fail> {
     let mut s = Svg::new("serving-pipeline", 1200.0, 660.0);
     s.header(
-        "Historical serving paths and D11 target",
-        "Historical executors below are excluded from the selected build. Unified D11 serving remains unqualified.",
+        "Serving: D11 integers only",
+        &format!("{DATE}. Integer multiply and divide are allowed (D80, D81); floats, transcendentals and dense matmul stay banned."),
     );
     s.section(118.0, "STACK MODEL");
     s.card(
         [40.0, 130.0, 300.0, 128.0],
-        St::Frozen,
+        St::Working,
         "Exported artifacts",
         &[
-            "uor-r4.lut-stack/3; the existing",
-            "ones contain prohibited reads,",
-            "so they are historical evidence",
+            "uor-r4.lut-stack/5: the FBS trunk,",
+            "unsnapped and exact; the session",
+            "refuses /6 until it serves Hamming",
         ],
         true,
     );
@@ -1089,8 +1096,8 @@ fn serving_pipeline() -> Result<String, Fail> {
         St::Working,
         "uor-r4-integer: the D11 engine",
         &[
-            "format, kernels (add / shift / table) and session;",
-            "bit-exact with its float reference on 3,072 targets",
+            "integer kernels with multiply and divide, integer",
+            "square root; replies byte-identical (claude-177)",
         ],
         true,
     );
@@ -1099,14 +1106,14 @@ fn serving_pipeline() -> Result<String, Fail> {
         St::Built,
         "uor-r4-stack, uor-chat --stack",
         &[
-            "generate and chat; greedy argmax over",
-            "integer scores, no sampling",
+            "generate and chat on token ids;",
+            "R7, typed text in and out: not built",
         ],
         true,
     );
     s.arrow(340.0, 194.0, 370.0, 194.0, false);
     s.arrow(790.0, 194.0, 820.0, 194.0, false);
-    s.card([370.0, 276.0, 790.0, 76.0], St::Planned, "Next: export the compliant trunk", &["the engine must first bind the geometric recurrence gates, the SpiralCore/FBS projection and the OP3a head"], false);
+    s.card([370.0, 276.0, 790.0, 76.0], St::Progress, "Next: the model's parts served in integers", &["integer-hamming-read session hooks, turn-memory-integer, and the served readout (nearest, or writer-admission)"], false);
 
     s.section(384.0, "NATIVE LEARNER");
     s.card(
@@ -1133,12 +1140,12 @@ fn serving_pipeline() -> Result<String, Fail> {
     s.arrow(340.0, 448.0, 370.0, 448.0, false);
     s.arrow(790.0, 448.0, 820.0, 448.0, false);
 
-    s.fit([40.0, 540.0], (12.5, 400, MUTED), 1120.0, "Gates: the serving rules R1 to R5; audits scripts/serving_multiplier_check.py and scripts/audit_zero_matmul_serving.py. The Pages Studio runs the");
-    s.fit([40.0, 558.0], (12.5, 400, MUTED), 1120.0, "older R4G1 router in WASM (frozen). Laptop energy per token (M5) and the API/WASM path for the model (M7) are not built yet.");
-    s.legend(636.0, &[St::Working, St::Built, St::Planned, St::Frozen]);
+    s.fit([40.0, 540.0], (12.5, 400, MUTED), 1120.0, "Served speed on the M1 laptop: 270 tok/s, then 3,042 with exact kernels (claude-163 to 170), then 4,829 snapped with integer multiply and divide");
+    s.fit([40.0, 558.0], (12.5, 400, MUTED), 1120.0, "(claude-177); lut-stack/5 exact: 4,217–4,504. No vector kernel yet. The Pages Studio runs the older R4G1 router in WASM (frozen); M5 and M7 not built.");
+    s.legend(636.0, &[St::Working, St::Built, St::Progress]);
     s.finish(
-        "The D11 serving pipeline",
-        "The integer engine serves exported stack artifacts with adds, shifts, compares and table reads and is bit-exact with its float reference; the existing artifacts are historical because they contain prohibited reads, and the compliant trunk cannot be exported until the engine binds its new modes. The native learner has its own integer runtime and terminal chat.",
+        "The D11 serving pipeline, 29 October 2026",
+        "The integer engine serves the FBS trunk exported as lut-stack/5, unsnapped and exact, with integer multiply and divide allowed and floats banned; replies are byte-identical. It reaches 4,829 tok/s snapped on the M1 laptop. Next, the Hamming reads, the turn memory and the chosen readout are served in integers. The native learner has its own integer runtime and terminal chat.",
     )
 }
 
@@ -1146,7 +1153,7 @@ fn milestones() -> Result<String, Fail> {
     let mut s = Svg::new("milestones", 1200.0, 660.0);
     s.header(
         "Progress toward the alpha",
-        &format!("Pre-alpha, 18 October 2026. No model holds a useful conversation yet. Each milestone closes only on a saved model."),
+        &format!("Pre-alpha, {DATE}: 0 of 8 complete. No model holds a useful conversation yet. Each milestone closes only on a saved model."),
     );
     let items: [(&str, &str, St, [&str; 4]); 8] = [
         (
@@ -1154,10 +1161,10 @@ fn milestones() -> Result<String, Fail> {
             "Language base",
             St::Progress,
             [
-                "reply 37/232 suspended",
-                "pilot: 236 updates",
-                "Dose2 stopped at Q1;",
-                "admission collapse",
+                "reply bar 37 of 116:",
+                "suspended; closes on",
+                "the §4.8 bar via a saved",
+                "model (D79); not yet",
             ],
         ),
         (
@@ -1167,7 +1174,7 @@ fn milestones() -> Result<String, Fail> {
             [
                 "437/512 dev replies,",
                 "0/128 fresh transfer;",
-                "training held",
+                "blocked on the owner",
                 "",
             ],
         ),
@@ -1185,8 +1192,13 @@ fn milestones() -> Result<String, Fail> {
         (
             "M4",
             "One served model",
-            St::Held,
-            ["unified D11 model", "and export remain", "unqualified", ""],
+            St::Planned,
+            [
+                "one model end to end,",
+                "served on the laptop:",
+                "not started",
+                "",
+            ],
         ),
         (
             "M5",
@@ -1262,7 +1274,7 @@ fn milestones() -> Result<String, Fail> {
     s.legend(636.0, &[St::Progress, St::Held, St::Paused, St::Planned]);
     s.finish(
         "Milestones M1 to M8",
-        "M1 language base in progress (reply 37 of 232 suspended, pilot 236 updates, Dose2 stopped at Q1 with admission collapse in both arms); M2 grounded reply held (437 of 512 development replies, 0 of 128 on fresh transfer); M3 durable memory paused; M4 one served model held; M5 to M8 not started.",
+        "29 October 2026: 0 of 8 milestones complete. M1 language base in progress (the reply bar, 37 of target 116, is suspended; M1 closes on the CHARTER 4.8 bar via the saved-model path, D79, and no closing run has passed it); M2 grounded reply blocked on the owner (437 of 512 development replies, 0 of 128 on fresh transfer); M3 durable memory paused; M4 to M8 not started.",
     )
 }
 
@@ -1313,14 +1325,14 @@ fn geometry_stack() -> Result<String, Fail> {
         (
             "G2 Hamilton gate",
             "a rotation q(g) ⊗ u, not a squash",
-            St::Historical,
-            "trunk feed-forward and recurrence",
+            St::Working,
+            "FBS trunk; served under lut-stack/5",
         ),
         (
             "SpiralCore / FBS projection",
             "select one carrier, transport by BFS",
-            St::Historical,
-            "every trunk projection",
+            St::Working,
+            "FBS trunk routes; served (/5)",
         ),
         (
             "Geometric recurrence gates",
@@ -1352,8 +1364,8 @@ fn geometry_stack() -> Result<String, Fail> {
     let h = top + row_h * rows.len() as f64 + 110.0;
     let mut s = Svg::new("geometry-stack", 1200.0, h);
     s.header(
-        "Geometric primitives and operators: the historical float form",
-        &format!("Historical operator inventory, {DATE}. Float source is inactive; current M1: architecture.svg."),
+        "Geometric primitives and operators",
+        &format!("Inventory, {DATE}. Historical rows are inactive float source; the current model: architecture.svg."),
     );
     s.text(
         [40.0, 132.0],
@@ -1386,10 +1398,10 @@ fn geometry_stack() -> Result<String, Fail> {
     }
     let y = top + row_h * rows.len() as f64 + 20.0;
     s.fit([40.0, y], (12.5, 400, MUTED), 1120.0, "Shaded rows: the geometric primitives. White rows: operators of the earlier float trunk, written to replace softmax, squashing and dense products.");
-    s.legend(h - 26.0, &[St::Historical, St::Progress]);
+    s.legend(h - 26.0, &[St::Working, St::Historical, St::Progress]);
     s.finish(
         "Geometric primitives and operators",
-        "Thirteen rows: prime addressing, zeta phases, quaternion state, H4/icosian/E8, exact Z[phi], Hopf observation and chirality are the primitives; the G2 Hamilton gate, the SpiralCore/FBS projection, the geometric recurrence gates and the rank-margin objective are written as dormant source for the earlier float trunk; the geometric head is delivered as inactive float source; the starling read is in progress for rung 0b.",
+        "Thirteen rows: prime addressing, zeta phases, quaternion state, H4/icosian/E8, exact Z[phi], Hopf observation and chirality are the primitives; the G2 Hamilton gate and the SpiralCore/FBS projection are trained and served in the FBS trunk under lut-stack/5; the geometric recurrence gates and the rank-margin objective are dormant source for the earlier float trunk; the geometric head is delivered as inactive float source; the starling read is in progress for rung 0b.",
     )
 }
 
