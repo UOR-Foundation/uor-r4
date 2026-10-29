@@ -2,7 +2,7 @@
 
 Lab: claude. Order: [ORDER.md](ORDER.md). Sheet: [turn-memory-reply-2026-10-29](../../../../harness/prep/turn-memory-reply-2026-10-29.md) (TEST FITNESS: FIT, PRE-RUN: PASS, round 2). Code: `fc66ed745`, built and tested on each pod. Closes #3393.
 
-**Result: cell A at both seeds.** The reply table carries the reply past its first word: the later rows carry, the openings and copies hold, and the memory beats no memory.
+**Result: cell A at both seeds.** The reply table carries the reply past its first word: the later rows carry, the openings and copies hold against (m), and the memory beats no memory on the totals.
 
 **Speed.** Decode is the float trainer's greedy decode on the GPU (`--decode-speed`, 64 tokens). It is not the integer serving path, which serves neither table yet. At 192 context tokens, (r) decodes at 176 / 112 tok/s (seed 1 / seed 2) against (m)'s 179 / 118 and (r0)'s 175 / 112. The two seeds ran on different hosts, so only arms within a seed compare.
 
@@ -12,7 +12,11 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Sheet: [turn-memory-reply-2026-10-29](
   - The cause is copies. (m) copies 1,209.3 / 2,404.7 rows against (r0)'s 2,282.3 / 3,315.0 (seed 1 / seed 2).
   - The memory still lifts openings, from (r0)'s 260.3 / 344.7 to (m)'s 597.3 / 598.0.
   - So on today's code, the opening memory trades copies for openings. The pre-registered bar compares (r) with (m) and with (r0), and (r) clears both. Read against (m) alone, however, the gains would look larger than they are.
-- **Against no memory, (r)'s gain at seed 2 is thin.** It is `T̄(r) − T̄(r0)` = 258.7 rows against a margin of 148.4. At seed 1 the gain is 1,533.0 rows, against 164.4.
+- **Against no memory, (r)'s gain at seed 2 is thin, and its copies fall.** `T̄(r) − T̄(r0)` is 258.7 rows against a margin of 148.4.
+  - (r) copies 3,001.3 rows against (r0)'s 3,315.0: 313.7 fewer, against `m_4130(3,315.0)` = 76.7.
+  - So at seed 2, (r)'s whole gain over no memory is its openings (+265.3) and its rest rows (+271.4), less that copy loss.
+  - The bar holds copies against (m) only, so this does not change the cell. It is a cost of the memory at that seed.
+  - At seed 1, (r) gains 1,533.0 rows over (r0) (margin 164.4), and copies 811.3 more.
 - **The trained trunk now depends on the memory.** Taking the whole memory out of (r) at the final checkpoint (`--inspect`'s `memory_drop`) drops it to 4,101 / 3,807 hits. That is far below the empty control's 10,079 / 11,171. A model served without both tables would be broken, not merely weaker.
 - **Reach does not grow in the sense of the earlier bars.**
   - (r)'s `R16` (the mean shift at distance 16 over the shift at distance 0) is 0.133 / 0.275, against (m)'s 0.015 / 0.030 and (r0)'s 0.023 / 0.025.
@@ -64,10 +68,13 @@ The per-checkpoint readings are in `local/claude/claude-194/readings.md` and in 
 ### Instrument checks (all pass, at both seeds)
 
 - **I-1:** the crate's CUDA tests: 177 passed, 0 failed, 6 ignored, the memory's three included.
-- **I-2:** at step 0, every arm equals claude-152's (a): seed 1 hits 2, opening hits 0, 730 distinct picks; seed 2 hits 5, 3, 681. `config.json` is width 256, 4 heads, memory 8 and the pinned TRAIN.
+- **I-2:** at step 0, every arm equals claude-152's (a): seed 1 hits 2, opening hits 0, 730 distinct picks; seed 2 hits 5, 3, 681. Each arm's `config.json` is width 256, 4 heads, memory 8 and the pinned TRAIN, per the job's checks in each sealed `job.log`.
 - **I-3:**
   - **opening table:** 26,450 keys for (m) and (r), 0 for (r0);
-  - **reply table, on the probe log and the training log:** it reads exactly 2,212,957 TRAIN rows past their openings. For (r) it holds 573,801 keys (more than 0 and fewer than the probe's 598,755) and names exactly 9,655 DEV rows. For (r0) it holds 0 keys and names 0;
+  - **reply table, on the probe log and the training log:** it reads exactly 2,212,957 TRAIN rows past their openings.
+    - For (r) it holds 573,801 keys, more than 0 and fewer than the probe's 598,755.
+    - It names exactly 9,655 DEV rows, on the `probe-r` and `r` lines of both seeds' `job.log` ("DEV reply rows past their openings 13061, named 9655").
+    - For (r0) it holds 0 keys and names 0;
   - **weights:** (r)'s reply weight is 0.990 / 0.992 at the end; (r0)'s stays 0.0.
 - **I-4:** all 17 losses finite in every arm.
 - **I-5:** removing the memory changes (m)'s and (r)'s readings, and leaves (r0)'s unchanged.
@@ -82,11 +89,11 @@ The per-checkpoint readings are in `local/claude/claude-194/readings.md` and in 
 
 ### Cost and seal
 
-- **Pods:** two RTX 5090 pods on Vast, about $2.5 in all:
-  - seed 2 on `vast-58276485`, from about 16:36Z to 18:17Z, at about $0.98/h;
+- **Pods:** two RTX 5090 pods on Vast, about $2.45 in all:
+  - seed 2 on `vast-58276485`, for about 1.7 h to 18:17Z, at $0.975/h;
   - seed 1 on `vast-58277706`, from 16:43Z to 18:10Z, at $0.563/h.
 
-  Each ran the CUDA tests, then (m), (r) and (r0), every step exiting 0.
+  The rates are those of the start notes on #2028. Each pod ran the CUDA tests, then (m), (r) and (r0), every step exiting 0. The first seed-1 host never answered SSH and was deleted within minutes; it is not counted.
 - **Sealed** from each pod to the HF store, with a `SHA256SUMS`:
   - `results/claude/turn-memory-reply-2026-10-29/s1-fc66ed74`: 263 files, 667.7 MB, `SHA256SUMS` sha256 `8d40536e162866d0944e85fe8a476042b266f722a1256a91d87001c945017625`;
   - `results/claude/turn-memory-reply-2026-10-29/s2-fc66ed74`: 263 files, 667.7 MB, `e4e5a5f53187e3cec14f20ca193fbb0e5944e92a28a2315b36835bf55204cef2`.
@@ -94,7 +101,9 @@ The per-checkpoint readings are in `local/claude/claude-194/readings.md` and in 
   - seed 1: 13 of 13 logs and readings;
   - seed 2: the same 13, plus `r-s2/models/step-016384/model.safetensors`.
 
-  Every file checked against its `SHA256SUMS`. The seed-2 upload log shows 0 B transferred for its large files: the reply tables are built from TRAIN alone, so they are identical across seeds and were deduplicated. The file read back above confirms the content.
+  Every file checked against its `SHA256SUMS`.
+
+  The seed-2 upload log's last progress line reads "0/121 uploaded (0.00B transferred)" before "Upload completed in 2 commits". The cause is not established. The store holds 667.7 MB for seed 2, as for seed 1, and a seed-2 checkpoint, which differs from seed 1's, reads back with its hash. So the content is there.
 - **Both pods** were released and deleted, with `--confirm-archived` after the store listing. 0 pods remain.
 
 ## What it unlocks
@@ -113,4 +122,4 @@ Cell A's line on the sheet: the memory carries the reply. Next, `turn-memory-int
 
 ## Plain summary
 
-The model now looks up, in an exact table built from the training conversations, what usually comes next at each word of a reply, not only at its first word. On held-out conversations that adds several hundred correct next words at both seeds, against the old memory and against no memory at all. The model has learned to lean on the table, so the integer runtime must serve it next.
+The model now looks up, in an exact table built from the training conversations, what usually comes next at each word of a reply, not only at its first word. On held-out conversations it gets about 900 to 2,600 more next words right than the old memory, and about 260 to 1,500 more than no memory, at the two seeds. At one seed some of that comes at the cost of copying from earlier in the conversation. The model has learned to lean on the table, so the integer runtime must serve it next.
