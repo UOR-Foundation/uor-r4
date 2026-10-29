@@ -54,11 +54,15 @@ On the M1, a served token is 3.73 ms (265 tok/s). The six layers are 98.6% of it
   - A profile of claude-164's binary put 33% of its samples in `stack_mul_u128` under the snap's exact sign test of `P + D√5`. Another 25% sat under the Hamilton product.
   - The bounds `2289/1024 < √5 < 1145/512` now decide that sign by shifts and additions. The squares run only between the bounds.
   - The new profile has no `stack_mul_u128` sample from the snap. Its 487 come from `stack_hamilton` (444) and the lanes (43).
+- **The Hamilton product by shared tables (claude-166): decode 1,142–1,225 → 1,406–1,410 tok/s, replies byte-identical.**
+  - `stack_hamilton` builds 4 tables of multiples (one per `|b_j|`), not 16, and skips a zero `a_i`.
+  - The gain is smaller than the profile suggested: the step is 1.16× faster.
+  - In the new profile, `stack_hamilton` (34%) and `stack_snap_select` (33%) lead.
 - **What is next:**
-  - **The Hamilton product.** Each `stack_hamilton` is 16 table products of `i64` values. A snapped root's coordinates take at most three distinct nonzero magnitudes, and a golden root has a zero. So exact products can be shared, and the zero ones skipped.
+  - **The table builds inside `stack_hamilton`.** Each of the 60 additions passes through `black_box`, which keeps the compiler from folding the chain into a multiply but forces each step through memory. Building from fewer guarded steps may cost less, as long as the audit still passes.
   - **Fewer snap candidates.** The 12 golden roots can be cut by the query's magnitude order, still exactly.
   - **Then a vector kernel** for what is left.
-  - Each is measured against claude-165's 1,169–1,217 tok/s.
+  - Each is measured against claude-166's 1,406–1,410 tok/s.
 
 ## How to start
 
