@@ -62,10 +62,15 @@ On the M1, a served token is 3.73 ms (265 tok/s). The six layers are 98.6% of it
   - The two builders every table product reads now guard only `a`, `2a`, `4a` and `8a`, and sum the rest.
   - The step is 1.31–1.33× faster. The norms, whose squares use the same tables, are 2× faster.
   - In the new profile, `stack_snap_select` leads (42%) and `stack_hamilton` follows (30%).
+- **The snap's scores from `|r|` by additions (claude-168): decode 1,878–1,880 → 2,448–2,449 tok/s, replies byte-identical.**
+  - Each sign-compatible candidate's score is now a few additions of `|r|`, by its class: axis, half or golden. That replaces 8 `small_mul`s.
+  - The step is 1.30–1.33× faster.
+  - In the new profile, `stack_hamilton` (38%) leads `stack_snap_select` (25%).
 - **What is next:**
+  - **The Hamilton product's digit reads.** Each product reads `|a_i|`'s digits from a table of `|b_j|`, about 8 digits for a Q31 transition.
   - **Fewer snap candidates.** The 12 golden roots can be cut by the query's magnitude order, still exactly.
   - **Then a vector kernel** for what is left.
-  - Each is measured against claude-167's 1,829–1,861 tok/s.
+  - Each is measured against claude-168's 2,448–2,449 tok/s.
 
 ## How to start
 
