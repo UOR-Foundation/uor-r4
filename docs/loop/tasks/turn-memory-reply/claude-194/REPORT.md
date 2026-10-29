@@ -21,7 +21,19 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Sheet: [turn-memory-reply-2026-10-29](
 - **The sheet's greedy samples were not produced.** None of the job's commands prints them, so the REPORT has none.
 - **The first seed-1 host never answered SSH,** and `uor-pod` deleted it. Seed 1 ran on a second host, started four minutes after seed 2.
 
-## The bar (pre-registered)
+## What changed
+
+- **No code.** The run uses claude-193's merged read at this unit's head, `fc66ed745`.
+- **This unit adds:**
+  - the sheet ([`turn-memory-reply-2026-10-29.md`](../../../../harness/prep/turn-memory-reply-2026-10-29.md)), with its FIT and pre-run review;
+  - this REPORT;
+  - one notebook row (`docs/research/notebook/float-training.md`);
+  - the item's `status: done`, re-rendered into `docs/roadmap/README.md`.
+- **The job and its watcher** are `local/claude/claude-194/job.sh` and `watch.sh` on the laptop. They are not committed (no ad-hoc scripts in the repository).
+
+## Measurements
+
+### The bar (pre-registered)
 
 `X̄` is the mean over steps 12,288, 14,336 and 16,384. `m_n(X̄) = 3·√(X̄ (1 − X̄/n))`. Computed with `bc` from the sealed `progress.jsonl` (`local/claude/claude-194/readings.md`).
 
@@ -34,7 +46,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Sheet: [turn-memory-reply-2026-10-29](
 | memory against no memory, `T̄(r) ≥ T̄(r0) + m_14287` | 11,526.3 ≥ 10,157.8 (m 164.4) | 11,415.0 ≥ 11,304.7 (m 148.4) |
 | **Cell** | **A** | **A** |
 
-## Readings
+### Readings
 
 DEV: 14,287 rows. `T` is hits; `O` is opening hits of 1,226; `C` is copied hits of 4,130; `R` is rest hits of 9,094. Each is the mean over the three bar checkpoints.
 
@@ -49,7 +61,7 @@ DEV: 14,287 rows. `T` is hits; `O` is opening hits of 1,226; `C` is copied hits 
 
 The per-checkpoint readings are in `local/claude/claude-194/readings.md` and in the sealed `progress.jsonl` files.
 
-## Instrument checks (all pass, at both seeds)
+### Instrument checks (all pass, at both seeds)
 
 - **I-1:** the crate's CUDA tests: 177 passed, 0 failed, 6 ignored, the memory's three included.
 - **I-2:** at step 0, every arm equals claude-152's (a): seed 1 hits 2, opening hits 0, 730 distinct picks; seed 2 hits 5, 3, 681. `config.json` is width 256, 4 heads, memory 8 and the pinned TRAIN.
@@ -60,7 +72,15 @@ The per-checkpoint readings are in `local/claude/claude-194/readings.md` and in 
 - **I-4:** all 17 losses finite in every arm.
 - **I-5:** removing the memory changes (m)'s and (r)'s readings, and leaves (r0)'s unchanged.
 
-## Cost and seal
+## Checks run at the head
+
+- **On each pod, at `fc66ed745`:**
+  - the source was pinned to that commit (the job's `source-pin` step);
+  - the trainer was built with `--locked` and its sha256 recorded (`binary-sha256`);
+  - the crate's CUDA tests passed (I-1).
+- **On the laptop, at this PR's head:** `uor-harness loop report --check` and `loop pr-check --local`. Their results are on the PR.
+
+### Cost and seal
 
 - **Pods:** two RTX 5090 pods on Vast, about $2.5 in all:
   - seed 2 on `vast-58276485`, from about 16:36Z to 18:17Z, at about $0.98/h;
@@ -84,6 +104,12 @@ Cell A's line on the sheet: the memory carries the reply. Next, `turn-memory-int
 ## Skills used
 
 - None was invoked this unit. The bar, the cells and the stop rule were fixed in the sheet before the run, and applied as written.
+
+## Still open
+
+- **`turn-memory-integer`:** serve both tables in the integer runtime. The next step, and a necessary one, since the trunk falls apart without them.
+- **The opening memory against no memory.** On today's code, (m) is below (r0) on totals at both seeds, through copies. Whether the opening table should keep its weight, or act only where the reply table does not, is a question for the next decision on the memory, not this item.
+- **The greedy samples:** the trainer prints none in these modes. A later run that wants them needs the decode to print them.
 
 ## Plain summary
 
