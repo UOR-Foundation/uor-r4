@@ -14,6 +14,18 @@ flowchart LR
 
 An entry gives the date, what changed, which charter clauses it touches, and who decided. The owner's own words are recorded verbatim when they are the reason. Old text is never edited or deleted: it moves unchanged to the `archive/` folder, and the live decision index keeps one line saying where each decision went (see the [decision map](decision-map.md)).
 
+## 28 October 2026: integer serving may use the multiply instruction (D80)
+
+**Decided by:** the owner (Casey), in Claude's chat, by 2026-10-29T03:09:43Z.
+- He wrote: "ok I think the integer serving for determinism that gets us out of matmul is a worthy goal, unless the other mechanism is just ridiculously faster...".
+- Then: "sounds like reverse d11 is the answer".
+- Asked "Which D11 change do you want: keep serving integer-only and deterministic but allow the hardware multiply instruction, or something wider?", he chose "Allow integer multiply (Recommended)".
+
+**What changed:**
+1. **Clause 3.6.** The exported artifact still has "no float, transcendental or integer-divide instruction (D11 R1–R5)". The word "multiplier" leaves that list, and a sentence adds that since D80 the artifact may use the hardware integer multiply. Serving stays integer-only and deterministic.
+2. **Clause 3.9.** The efficiency report names "integer kernels" in place of "multiplier-free kernels".
+3. **No other clause changes.** The dense-matmul ban (3.3), the integer-divide ban and the float ban stand. Relaxing the zero-multiply audit for integer multiply is a follow-up unit, not charter text.
+
 ## 25 October 2026: one plan, and the plan file renamed in the charter (D77)
 
 **Decided by:** the owner (Casey), in Claude's chat, 24 Oct, by 2026-10-25T00:03:59Z: "please reign in the project sprawl and get us back to a workable central source of truth we can run off of". He also wrote "our mandate should be enablement for moving forward and moving forward".

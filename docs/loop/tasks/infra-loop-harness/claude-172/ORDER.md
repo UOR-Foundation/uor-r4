@@ -57,3 +57,6 @@ Casey, in Claude's chat by 2026-10-29T03:09:43Z:
 - "ok I think the integer serving for determinism that gets us out of matmul is a worthy goal, unless the other mechanism is just ridiculously faster..."
 - "sounds like reverse d11 is the answer".
 - Asked "Which D11 change do you want: keep serving integer-only and deterministic but allow the hardware multiply instruction, or something wider?", he chose "Allow integer multiply (Recommended)".
+- The loop guard refuses lab edits to owner paths. Told of that, he wrote: "i give you permissing to fix the stuff you need to to make this work".
+
+**How the owner paths are written.** Each edited copy is made under `local/claude/d80/`. The difference is kept as `d80-owner-paths.patch` in this task folder and applied with `git apply`, under that permission. The patch touches only `CHARTER.md` (§3.6 and §3.9), `docs/integration/DECISIONS.md` (the D80 row) and `docs/rules/changes.md` (the entry). The fresh review checks it line by line against the owner's choice.
