@@ -6,6 +6,8 @@
 //! `integer-hamming-read`. Until then [`super::IntegerStackModel::parse`] refuses a read with a
 //! non-zero type-head weight, so no part of a read is ever dropped.
 
+use crate::bitcode::popcount_swar;
+
 use super::format::{Container, StackHamming, HAMMING_WEIGHT_EXP};
 use super::kernels::{stack_div_u64, stack_hamilton, NORM_FINE_EXP, RESIDUAL_EXP};
 use super::session::{stack_rotation, GATE_EPSILON};
@@ -173,7 +175,9 @@ impl CopyHeads {
         let t = tokens.len() - 1;
         let query = self.code(last, h);
         let mut candidates: Vec<(u32, usize)> = (1..t)
-            .map(|s| ((query ^ self.code(tokens[s - 1], h)).count_ones(), s))
+            // The SWAR popcount, not `count_ones`, which lowers to a NEON `cnt` and `fmov` on arm64
+            // (claude-194: the step's disassembly check refuses them).
+            .map(|s| (popcount_swar(query ^ self.code(tokens[s - 1], h)), s))
             .collect();
         candidates.sort_unstable();
         candidates.truncate(self.kept);
@@ -203,7 +207,10 @@ impl CopyHeads {
                 count += 1;
                 let row = &table[tokens[s] as usize * width..][..width];
                 for (acc, &p) in head.iter_mut().zip(row) {
-                    *acc += i128::from(p) * i128::from(weight);
+                    // Each point behind `black_box`: loaded eight at a time into a NEON register,
+                    // the points end in SIMD-to-general transfers (`fmov`), which the serving
+                    // audit refuses (claude-194).
+                    *acc += i128::from(core::hint::black_box(p)) * i128::from(weight);
                 }
             }
             if count == 0 {
