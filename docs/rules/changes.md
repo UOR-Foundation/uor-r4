@@ -14,6 +14,15 @@ flowchart LR
 
 An entry gives the date, what changed, which charter clauses it touches, and who decided. The owner's own words are recorded verbatim when they are the reason. Old text is never edited or deleted: it moves unchanged to the `archive/` folder, and the live decision index keeps one line saying where each decision went (see the [decision map](decision-map.md)).
 
+## 28 October 2026: integer serving may use the divide instruction; floats stay banned (D81)
+
+**Decided by:** the owner (Casey), in Claude's chat, by 2026-10-29T03:20:23Z, after Claude priced divide and floats: "allow divide, hold on floats for now as you have recommended and fix the exporter".
+
+**What changed:**
+1. **Clause 3.6.** The exported artifact has "no float or transcendental instruction (D11 R1–R5)". The words "or integer-divide" leave that list, and the D80 sentence now reads that the artifact may use the hardware integer multiply and, since D81, the hardware integer divide. Serving stays integer-only and deterministic.
+2. **No other clause changes.** The float ban, the transcendental ban and the dense-matmul ban (3.3) stand.
+3. **Also decided, not charter text:** fixing the FBS exporter (the map's R6) is the next line of work, so that the integer artifact computes what was trained.
+
 ## 28 October 2026: integer serving may use the multiply instruction (D80)
 
 **Decided by:** the owner (Casey), in Claude's chat, by 2026-10-29T03:09:43Z.
