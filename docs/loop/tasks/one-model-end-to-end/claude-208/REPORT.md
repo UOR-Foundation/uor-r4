@@ -53,6 +53,7 @@ None. This unit is code and its tests.
 - `cargo test --locked -p uor-r4-float-train --no-fail-fast`: lib 144 passed, 0 failed (5 new), and every other target passed.
 - **The negative gate:** with `reply_key_hits` keying on `reply[..=j]` in place of `reply[..j]`, `the_hit_rate_keys_…` FAILS; restored and rebuilt, it passes.
 - A stub-nvcc `cargo check --offline --locked -p uor-r4-float-train --features cuda --bin train-in-space --lib --tests` builds.
+- **At `acba137f8`:** `loop report --check` PASS, `loop pr-check --local` PASS, `loop gates --full` 11 GREEN; `git ls-files` lists no `local/` path.
 
 ## What it unlocks
 
