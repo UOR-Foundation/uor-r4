@@ -1,26 +1,35 @@
-# ORDER: integer-hamming-read, claude-195
+# ORDER: integer-hamming-read, claude-195 (the type heads served)
 
-Lab: claude. Item: [integer-hamming-read](../../../../roadmap/items/integer-hamming-read.md). Base: `9bf364855`.
+Lab: claude. Item: [integer-hamming-read](../../../../roadmap/items/integer-hamming-read.md). Issue: #3385. Base: `9bf364855`.
 
 ## Goal
 
-The item's done-when reads:
+Step 3 of the item's design: the Hamming read's type heads, served in the FBS session beside claude-194's copy heads, so that a `/6` read with non-zero type weights is served rather than refused. It advances step 2 of PLACE.md's order (serve the working model's parts in integers). claude-146's checkpoints and claude-194's run train `--hamming-read 4`, two copy heads and two type heads, so parity (step 5) needs them.
 
-> 1. The integer runtime runs the whole read as claude-146's REPORT describes it, all four heads of both reads, under D11's rules (CHARTER §3.6: integer only, no float or transcendental instruction; since D80 and D81 the hardware integer multiply and divide are allowed once [`integer-mul-div-serving`](integer-mul-div-serving.md)'s audits allow them, and until then products go through D11's tables):
->    - **copy heads:** keys and queries from the table's points through the key rotation. These depend only on the token, so their codes can be built once per vocabulary entry;
->    - **type heads:** queries from the residual through the query rotation, and payloads from the residual at `s` through the value rotation. These rotate the state at run time, so each product goes through D11's tables;
->    - the codes packed into 64-bit words; the match by `popcount(q XOR k)`; the 16 nearest earlier positions `1 ≤ s < t`; the weights `max(0, m − d)/m`; the stream read after layer 2 and the move on the readout, each product through the tables.
-> 2. **Parity,** against the float forward of the same stored checkpoint (claude-146's language runs, `caseyallard/uor-r4-store:results/claude/hamming-read-2026-10-27/`), on DEV. No D11 tolerance exists for this read yet, so the unit's prep sheet pre-registers the bar for two numbers, and the REPORT gives both:
->    - the share of (position, head, read) kept sets equal to float's. One sign flip in an integer rotation changes a code, so this is not assumed to be exact;
->    - top-1 agreement between the integer and float decoded ids.
->    
->    The float reference is computed on the GPU (CHARTER §3.5); the integer side runs on the laptop, as serving does.
-> 3. **Speed on this laptop:** `fbs-toks` decode tokens/s against context, with the read and without, on the same artifact.
-> 4. One notebook row; the result on main.
+The float read (`flock_read_hamming.rs`, `read`), for heads `h ≥ heads / 2`, at row `t`, with `p` the hook's input (the residual before the stream read; the final norm's output before the readout move):
+1. **Query:** the code of `p_t` through `query_rotation`, on head `h`'s coordinates.
+2. **Keys:** the code of `x_{s−1}`'s table point through `key_rotation`, as for the copy heads, on head `h`'s coordinates. They depend only on the token, so they are built once per vocabulary entry.
+3. **Choice and weights:** as the copy heads, with the type heads' own margins.
+4. **Payload:** the full-width `p_s` through `value_rotation`. The session keeps it for every position, per read.
+5. **Mean:** each head's `Σ w_s · v_s / max(1, #{w_s > 0})`, then the mean over the type heads that found a candidate: `y`.
+6. **Combine:** the stream adds `w_y ⊙ y`, `q16(x + w_c ⊙ c + w_y ⊙ y)`; the readout adds it unconditionally, `n + [matched] w_c ⊙ (c − n) + w_y ⊙ y`.
+
+In integers:
+- the rotations are `stack_rotation(raw, 2^31, GATE_EPSILON)` and `stack_hamilton`, as the copy heads;
+- a code bit is 1 at or above 0;
+- the payload is rounded half away from zero back to `p`'s exponent;
+- the popcount is `popcount_swar`;
+- each hook's sum is rounded once (claude-194's rule), the stream to Q16 exactly.
+
+**What is not served stays refused:**
+- a session restore when a read has type heads. The payload cache is not in the saved session, and the byte codec (`session_codec.rs`) is outside the item's scope, so a restore would silently differ;
+- a cache too large for `MAX_READ_CACHE_BYTES`.
 
 ## Cancel probe (run first)
 
-To fill in.
+- **The type heads already served on main?** No. At `origin/main` `9bf364855`, `ServedHamming::new` refuses any non-zero type-head weight (claude-194).
+- **The float read withdrawn?** No.
+- **Classed:** instrument. Nothing cancels the unit.
 
 ## Files in scope
 
@@ -41,8 +50,26 @@ To fill in.
 
 ## Done when
 
-To fill in.
+All at the PR head, each with its evidence in the REPORT:
+1. **The kernel against an f64 reference.** The type heads' codes, kept sets and means match a test-side f64 reference of the float read's steps, on synthetic reads over several seeds:
+   - every vocabulary key code and every runtime query code equal;
+   - every kept set equal with its distances;
+   - every type mean within a bound fixed here: `2^-20` of the hook's input scale.
+2. **The hooks against a reference** (claude-194's method). At every row of a sequence with repeats, each hook equals a test-side i128 combine over the read-free trunk's own integers at the hook:
+   - the stream read, at depth 1, with both kinds of head;
+   - the readout move, at the layer count, with both kinds of head;
+   - type weights alone (copy weights 0) change the queries at some rows, so the test can fail.
+3. **Weight 0 still serves as the read-free trunk,** with type heads present and both weights 0.
+4. **The refusals by their text:** a restore with type heads, and a payload cache past `MAX_READ_CACHE_BYTES`. claude-194's refusal of non-zero type weights is gone, and its test changes to serving.
+5. **The timed steps equal the step,** with both kinds of head.
+6. **Negative gates:** each named piece set aside fails its test: the payload cache write, the value rotation, the type mean in each hook, `popcount_swar`, and the restore refusal.
+7. **Both disassembly audits pass** with the type heads reached: `audit_zero_matmul_serving.py --stack` and `m5_full_path_cost_controls`.
+8. `cargo test -p uor-r4-integer` shows no new failure against `main`, and `loop gates --full` is green.
+9. One notebook row. The item stays `ready`: steps 4 to 6 remain.
 
 ## Stop and ask if
 
-To fill in.
+Stop and decide (never wait) if:
+- the type heads need a format change: then it is its own unit;
+- the payload cache cannot be bounded inside the existing session limits;
+- a bound in done-when 1 fails for a reason that is the float's, not the port's. Then the bound is amended in this ORDER with the reason, before any claim.
