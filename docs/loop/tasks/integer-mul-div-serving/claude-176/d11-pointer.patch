@@ -1,0 +1,13 @@
+diff --git a/docs/integration/DECISIONS.md b/docs/integration/DECISIONS.md
+index 88e19335c..2e0422c38 100644
+--- a/docs/integration/DECISIONS.md
++++ b/docs/integration/DECISIONS.md
+@@ -72,7 +72,7 @@ A converted open-weight backbone (SmolLM2) as the interim chat vehicle.
+ ## D11 — Native, multiplier-free, transformerless serving for every lab; D10 superseded
+ 
+ Every lab serves under one native, multiplier-free, transformerless integer contract (ROADMAP §0 R1–R5).
+-→ CHARTER.md §3.6. [Full text][orig]
++→ CHARTER.md §3.6. Amended by D80 and D81 (28 Oct 2026): the hardware integer multiply and divide are allowed, and floats stay banned. [Full text][orig]
+ 
+ ## D12 — Gates promote, never kill; reopen geometric candidates; port the native engine's mechanisms; keep a geometric toolbox
+ 

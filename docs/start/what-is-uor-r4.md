@@ -50,7 +50,7 @@ UOR-R4 replaces each expensive part with something cheaper:
 | Learned grids of decimals | **Rotations** from a fixed, finite set, plus table look-ups |
 | A growing store of every past position | **Exact memory**: write a fact once under an exact name, read it back exactly |
 
-The finished model is meant to run with whole numbers only: adds, subtractions, comparisons and table look-ups, with no multiply instruction at all. This rule is called **D11** ([charter](../../CHARTER.md), section 3.6). The lead measure of success is **tokens per second** on ordinary hardware ([charter](../../CHARTER.md), section 1).
+The finished model is meant to run with whole numbers only, never decimals: adds, subtractions, comparisons, table look-ups and, since 28 October 2026 (D80 and D81), the chip's whole-number multiply and divide. This rule is called **D11** ([charter](../../CHARTER.md), section 3.6). The lead measure of success is **tokens per second** on ordinary hardware ([charter](../../CHARTER.md), section 1).
 
 Whether these replacements can match a transformer's quality is the open question. It is a **hypothesis**. No measurement so far shows it, and the next page says which parts are built and which are missing: [transformer vs geometry](./transformer-vs-geometry.md).
 

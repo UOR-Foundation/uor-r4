@@ -15,7 +15,7 @@ keywords:
   - language model
   - geometric deep learning
   - quaternion
-  - multiplier-free inference
+  - integer-only inference
   - exact addressed memory
   - Rust
 abstract: >-
@@ -23,6 +23,6 @@ abstract: >-
   asks whether geometry (R4/S3/H4 quaternion state and transport, prime
   addressing, exact Z[phi] arithmetic and fixed zeta-zero phases) can replace a
   transformer's run-time machinery. Training is offline Rust; serving uses
-  integer and table lookups with no floating point and no multiplier
-  instruction. The project is pre-alpha: no model holds a useful conversation
+  integer arithmetic and table lookups with no floating point. The project is
+  pre-alpha: no model holds a useful conversation
   yet, and the repository records both positive and negative measured results.

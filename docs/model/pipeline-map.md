@@ -214,7 +214,7 @@ Serving shares are of a step on claude-126's width-256 export ([claude-158](../l
 | Field | Now |
 |---|---|
 | Cost per token | **Measured, one served token by stage** ([claude-158](../loop/tasks/fbs-cost-profile/claude-158/REPORT.md); claude-126's width-256 FBS export, AC power). 3.73 ms a step and 3.77 ms a decoded token (265 tok/s decode): <ul><li>the six layers 3.68 ms (98.6%);</li><li>the writer 23 µs (0.6%);</li><li>the final norm 6 µs;</li><li>the embedding and bookkeeping under 0.1 µs.</li></ul> 36 µs a token falls outside the step. **Other measured rates:** discrete `FrozenZero` decodes at 12,630 and 12,523 tok/s, at top-1 455 of 14,287, and `Relation` at 1,197 and 1,118 ([m4-serving](../research/notebook/m4-serving.md) line 17). The older 29M stack ran 68 to 80 tok/s on 8 threads, teacher-forced ([serving and export](serving-and-export.md) line 82). **Energy:** table-emulated products cost 0.00413 J/token against 0.00096 for float, about 4.3 times as much, on a dense model (line 83). |
-| Mechanism | The D11 engine: integer only, with no multiply instruction. Each product reads a 16-entry table built by repeated addition ([serving and export](serving-and-export.md) line 35). The native build's audit finds 44 symbol ranges free of float, multiply and divide ([m4-serving](../research/notebook/m4-serving.md) line 17). The rule is D11 ([DECISIONS](../integration/DECISIONS.md) line 72, CHARTER §3.6). Merged. |
+| Mechanism | The D11 engine: integer only, with no float. Since D80 and D81 (28 Oct 2026) it may use the hardware integer multiply and divide; today's kernels do not yet. Each product reads a 16-entry table built by repeated addition ([serving and export](serving-and-export.md) line 35). claude-175's audit of the native release build found 44 symbol ranges with no float, and so far no multiply or divide ([m4-serving](../research/notebook/m4-serving.md), claude-175's row). The rule is D11 as amended by D80 and D81 ([DECISIONS](../integration/DECISIONS.md) line 72, CHARTER §3.6). Merged. |
 | Domain | The artifact and prompt ids in; reply ids out. |
 | Size | **Now:** the discrete artifact is 542,260 bytes. **Goal:** fit a capable model in a 16 GiB laptop alongside its store. |
 | Hardware | Training: none; this is a serving stage. Serving: M1 performance cores only, scalar code. Not used: <ul><li>**NEON:** used only by an older frozen stack ([desktop client](../products/desktop-client.md) line 49);</li><li>**GPU:** has no lawful kernel yet. Popcount and L1 nearest need no multiply, so a lawful kernel is possible (hypothesis);</li><li>**Neural Engine:** Core ML exposes it as a tensor engine for convolution and matrix products, so no lawful use under §3.3 is known (hypothesis).</li></ul> |
@@ -335,7 +335,7 @@ GPT-4's own size and training data are not published (GPT-4 Technical Report, ex
 7. **The FBS artifact has no text path.** It takes ids and gives ids (stage 8).
 8. **The two model paths do not join.** The M1 bar rests on the discrete path, the replies on the FBS trunk, and they use different tables, trunks and formats (Two model paths).
 9. **Scale caps, with one data point.** Width 512 fits best (`10,152 / 11,140`), at about half the training speed with 8 heads. The writer allows at most 8,192 identities and width 1,024. The corpus is 7.5M tokens, and no run has measured how ability grows beyond that (stages 1, 4 and 7).
-10. **Greedy decoding only, and the cost of multiplier-free serving.** Neither has a decision: a lawful sampling rule does not exist, and the 4.3-fold energy cost was measured on an older model (stages 8 and 11).
+10. **Greedy decoding only, and the cost of multiplier-free serving.** A lawful sampling rule does not exist and has no decision. The multiplier-free rule has one: D80 and D81 (28 Oct 2026) allow the integer multiply and divide. The 4.3-fold energy cost was measured on an older model under the old rule (stages 8 and 11).
 
 ## Recommended order of work
 
@@ -358,7 +358,7 @@ R1 comes first because it is the one step aimed at the storage gap, and its per-
 
 This is only a proposal. No §3 constraint is relaxed here, and this page waits on no answer.
 
-The multiplier-free rule (D11, CHARTER §3.6) has one measured cost: 4.3 times the energy, on an older dense model (stage 11). claude-158's profile puts 98.6% of a served FBS token in the trunk's scalar kernels. It does not split the share spent in table-emulated products inside them. If the owner wants that share as a number, R3's per-layer split can report it.
+The multiplier-free rule (D11, until D80 and D81 amended CHARTER §3.6 on 28 Oct 2026) had one measured cost: 4.3 times the energy, on an older dense model (stage 11). claude-158's profile puts 98.6% of a served FBS token in the trunk's scalar kernels. It does not split the share spent in table-emulated products inside them. If the owner wants that share as a number, R3's per-layer split can report it.
 
 ## Sources outside the project
 

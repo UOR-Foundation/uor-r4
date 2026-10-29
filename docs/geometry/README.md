@@ -13,7 +13,7 @@ The owner's rule for this project is that the core of the model is built from ge
 These rules shape how the geometry is used.
 
 - **No softmax or squashing, no matrix multiplication.** Softmax, sigmoid, tanh and softplus are banned in every executed model path ([D23](../integration/DECISIONS.md#d23---no-softmax-anywhere-in-the-active-project), D25), and so is matrix multiplication in training and serving (D25, D30). Attention itself is not banned: bounded geometric reads replace it.
-- **Research compute is GPU-only** (D24). Serving the exported D11 integer artifact on a client device (CPU, WASM, Apple silicon) is the product and is allowed. It uses no floating point and no multiplier instruction.
+- **Research compute is GPU-only** (D24). Serving the exported D11 integer artifact on a client device (CPU, WASM, Apple silicon) is the product and is allowed. It uses no floating point. Since D80 and D81 (28 Oct 2026) it may use the hardware integer multiply and divide.
 - **Floating point is for offline training only** ([D37](../integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised)). Float never re-admits softmax, squashing or matrix multiplication. The active discrete path and the served model stay integer (D11), and every float-trained candidate must report its export gap, the quality lost when converting to the integer artifact.
 - **Geometry is a design priority, not a measured advantage.** A failed experiment closes one configuration, never a whole mechanism ([D22](../integration/DECISIONS.md#d22--a-negative-closes-a-configuration-never-a-mechanism-five-closures-reopened)). A passing check on a piece of mathematics does not show that the piece helps a language model.
 
@@ -90,7 +90,7 @@ The figure above has fifteen links. Each has its own metric, convention or label
 
 ## Serving without multiplication
 
-Under D11 a served kernel has no floating point and no multiplier instruction. A product of two runtime values is read from a table instead. Build the sixteen multiples (0 to 15) of one operand by repeated addition, index that table with the radix-16 digits of the other operand, and combine the results with shifts and adds. For example, to compute $37 \times 43$, the table holds 0, 37, 74, …, 555. Write 43 as hex `0x2B`, with digits 2 and 11. Then
+A served kernel has no floating point. Under D11 as first written it also had no multiplier instruction, so a product of two runtime values is read from a table. Since D80 and D81 (28 Oct 2026) the hardware integer multiply and divide are allowed, but today's kernels still use the table, described here. Build the sixteen multiples (0 to 15) of one operand by repeated addition, index that table with the radix-16 digits of the other operand, and combine the results with shifts and adds. For example, to compute $37 \times 43$, the table holds 0, 37, 74, …, 555. Write 43 as hex `0x2B`, with digits 2 and 11. Then
 
 $$37 \times 43 = (T[2] \ll 4) + T[11] = (74 \ll 4) + 407 = 1184 + 407 = 1591.$$
 

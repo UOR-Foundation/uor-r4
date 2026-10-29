@@ -106,7 +106,7 @@ To eliminate all 9 external CDN `<script>` and `<link>` dependencies from [`web/
 2. **Sharing one interface.** The Studio is one 7,107-line HTML file with inline scripts. Does it need to be split into modules before two shells can share it cleanly?
 3. **The terminal command.** Keep it (with consent and folder limits) or drop it from the first release?
 4. **Where memory meets the model.** Which comes first: storing session snapshots in the object store, or exact quotations from the store feeding the model's output? This is the object store's open path to ACTIVE status ([object-store dossier](../mechanisms/object-store.md)).
-5. **Threads and D11.** The five D11 rules say nothing about threads. Whatever kernels the app ships, threaded or vectorized, must still pass the zero-multiply audit.
+5. **Threads and D11.** The five D11 rules say nothing about threads. Whatever kernels the app ships, threaded or vectorized, must still pass their engine's serving audit. Every audit refuses float. The FBS stack's audit also refuses vector and matrix multiplies, and since D80 and D81 allows the scalar integer multiply and divide. The other engines' audits keep the zero-multiply rule.
 6. **Engine format.** The legacy Studio also calls `native_list_local_models`, written for an older model format. The model manager must accept only `UORLUT01`.
 
 ## Go deeper

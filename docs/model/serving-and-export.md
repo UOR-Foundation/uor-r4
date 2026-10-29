@@ -1,6 +1,6 @@
 # Serving and export
 
-A finished model has to leave the lab and run on an ordinary laptop or in a web browser. The project's rule is that the file it ships contains only whole numbers, and that the program running it uses only adds, shifts and table look-ups: no decimal (floating-point) arithmetic and no multiply instruction. The program that does this exists, and a checker has counted its machine instructions. But it has only ever run older models that fell short of their targets, plus a synthetic stand-in. No model built under today's rules has been exported to it yet, so nobody can chat with the project's model on a laptop today.
+A finished model has to leave the lab and run on an ordinary laptop or in a web browser. The project's rule is that the file it ships contains only whole numbers, and that the program running it uses no decimal (floating-point) arithmetic. Until 28 October it was also allowed no multiply instruction, only adds, shifts and table look-ups. Since D80 and D81 it may use the chip's whole-number multiply and divide, though today's kernels do not use them yet. The program that does this exists, and a checker has counted its machine instructions. But it has only ever run older models that fell short of their targets, plus a synthetic stand-in. No model built under today's rules has been exported to it yet, so nobody can chat with the project's model on a laptop today.
 
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run, **hypothesis** means an untested idea. See [`docs/formal_vocabulary.md`](../formal_vocabulary.md) and the [glossary](../start/glossary.md).
 
@@ -17,7 +17,7 @@ Labels used below: **proof** means derived from definitions or code, **measureme
 | Rule | Plain meaning |
 |---|---|
 | R1 | No floating point and no maths library |
-| R2 | No multiply or divide instruction in any served kernel. Products of runtime values use tables or exact geometry |
+| R2 | No multiply or divide instruction in any served kernel; products of runtime values use tables or exact geometry. Amended by D80 and D81 (28 Oct 2026): the hardware integer multiply and divide are allowed, and float stays banned under R1 |
 | R3 | Reading every stored weight for every token is an interim stage, not the end state (D5) |
 | R4 | No transformer backbone |
 | R5 | Energy is claimed only when measured |
@@ -46,9 +46,9 @@ which is exact by the definition of base-16 digits, and each term is a table rea
 
 **Discrete raw-token CLI.** `uor-chat --discrete MODEL.lut --prompt-ids CSV` loads the table-native artifact through `IntegerDiscreteModel` and appends its integer top-1 prediction for a fixed generation budget. The initial prompt must fit the declared context, which then slides during decode. No tokenizer or sampler is used; text chat and discrete `UR4SESS1` sessions are not implemented. The finite control compares two fresh processes with direct `evaluate_prefix` output. This is deterministic artifact-reload evidence, not conversational persistence, trained-model quality, or machine-code coverage of the new CLI root. The existing audit symbol sets do not name that root; the gap and the remaining quality inputs are registered in the [M4 draft sheet](../labs/m4-export-uorlut01-cli/PRE-REGISTRATION.md).
 
-## The zero-multiply audit
+## The serving audit
 
-The audit disassembles the compiled release program and counts three kinds of instruction over the serving functions: Class I multiply, Class II divide, Class III floating point. The scripts are [`audit_zero_matmul_serving.py`](../../scripts/audit_zero_matmul_serving.py) (native) and [`audit_zero_matmul_wasm.py`](../../scripts/audit_zero_matmul_wasm.py) (WebAssembly, with a call-graph mode). They are existing Python scripts; porting them to Rust is an open question.
+The audit disassembles the compiled release program and counts three kinds of instruction over the serving functions: Class I multiply, Class II divide, Class III floating point. Since claude-175 (D80, D81), the FBS stack's audit (`--stack` natively, the serving surface in WebAssembly) allows scalar integer multiply and divide and reports their counts. It still fails on any float instruction (`fmov` included) and on any vector, dot-product or matrix multiply. Other engines' audits keep the zero-multiply rule. The results below were measured before that change. The scripts are [`audit_zero_matmul_serving.py`](../../scripts/audit_zero_matmul_serving.py) (native) and [`audit_zero_matmul_wasm.py`](../../scripts/audit_zero_matmul_wasm.py) (WebAssembly, with a call-graph mode). They are existing Python scripts; porting them to Rust is an open question.
 
 - **Native:** 44 symbol ranges audited, none with a forbidden instruction ([project track](../integration/project-track.md), milestone M4). **Measurement.**
 - **WebAssembly:** 7 of 7 serving functions (not modules) with multiply, divide and float counts all 0, in the runtime merged as `UOR-Foundation/uor-r4#2654` ([record](../labs/wasm-serving-runtime-2026-10-18/README.md)). It was written by an outside contributor and hardened in review before merge. **Measurement.**
