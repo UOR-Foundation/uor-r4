@@ -53,7 +53,7 @@ None. This unit is code and its tests.
 - `cargo test --locked -p uor-r4-float-train --no-fail-fast`: lib 139 passed, 0 failed (5 new). Every other target passed.
 - **The negative gate:** with `main_optimizer_updates` reduced to the old filter (`!name.ends_with("rec.decay")`), `only_the_frozen_arm_…` FAILS; restored and rebuilt, it passes.
 - **A stub-nvcc `cargo check --offline --locked -p uor-r4-float-train --features cuda --bin train-in-space --lib --tests`:** it builds.
-- **`loop report --check`, `loop pr-check --local` and `loop gates --full`:** their results are added below before review.
+- **At `779a55fa9`:** `loop report --check` PASS, `loop pr-check --local` PASS, `loop gates --full` 11 GREEN.
 
 ## What it unlocks
 
