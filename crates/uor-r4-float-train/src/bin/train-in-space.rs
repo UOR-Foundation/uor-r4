@@ -1,11 +1,18 @@
 //! `train-in-space --data-root DIR --out DIR [--objective sheet|voronoi|nearest|cell] [--steps N]
 //! [--train-split DIR --train-sha256 HEX --train-mask-sha256 HEX]
 //! [--batch B] [--eval-every K] [--seed S] [--lr X] [--lr-end X] [--decay-mult X]
-//! [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--fix-input-table 0|1] [--flock-read K] [--content-read K] [--hamming-read H] [--opening-read K] [--opening-anchor turn|last] [--prompt-register Q] [--register-picks K] [--register-select learned|all] [--width N] [--type-spin 0|1] [--samples N] [--reply-tokens N] [--profile K] [--turn-memory K] [--turn-memory-empty 0|1] [--turn-memory-reply 0|1]`
+//! [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--fix-input-table 0|1] [--flock-read K] [--content-read K] [--hamming-read H] [--opening-read K] [--opening-anchor turn|last] [--prompt-register Q] [--register-picks K] [--register-select learned|all] [--width N] [--type-spin 0|1] [--samples N] [--reply-tokens N] [--profile K] [--turn-memory K] [--turn-memory-empty 0|1] [--turn-memory-reply 0|1] [--turn-memory-dropout P] [--fbs-arm one-atom|identity|frozen]`
 //!
 //! `--profile K` times each stage of K training steps on the GPU after 8 of warm-up, each against
 //! the unprofiled step after it, into `DIR/profile.jsonl` and `DIR/profile.json`
 //! (`in_space_long::profile_window`; fbs-cost-profile, claude-157).
+//!
+//! `--turn-memory-dropout P` (thousandths, 0 to 1000; needs `--turn-memory`) drops the memory from
+//! that share of training windows, which then name no memory row (one-model-end-to-end protocol
+//! I-B, claude-207); scoring keeps it everywhere. `--fbs-arm` picks the SpiralCore/FBS transport
+//! arm for training and for `--score-rows`, `--inspect` and `--decode-speed` (I-C): `one-atom`, the
+//! trained transport (default), `identity` or `frozen` (routing queries kept at their seed).
+//! Scoring refuses an arm other than the run's own config.json names.
 //!
 //! `--turn-memory K` keys each reply opening on the first K ids of its turn and moves its readout
 //! point toward the token TRAIN's table stores for that key, through a weight that starts at 0

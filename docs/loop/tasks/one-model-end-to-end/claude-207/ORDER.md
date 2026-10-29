@@ -42,26 +42,42 @@ The item's done-when reads:
 >    - the read-by-meaning arms: the Flock read, and the type spin.
 > 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
 
+## This unit
+
+The protocol's two training instruments (`docs/harness/prep/one-model-end-to-end-protocol-2026-10-29.md`, "The instruments the run needs"):
+- **I-B, memory dropout.**
+- **I-C, the transport arm as a flag,** for training and for the scoring the protocol uses.
+
+The other instruments (I-A, I-D to I-H) are later units. The item stays `ready`.
+
 ## Cancel probe (run first)
 
-To fill in.
+Run at this ORDER's base, before any work. **Class: instrument (both are missing). Go.**
+- **Memory dropout does not exist:** `git grep -n -i dropout` in `crates/uor-r4-float-train/src` finds nothing.
+- **The arm is hard-set.** `run_long` sets `FbsArm::OneAtomActive` and builds with it. So do the scorers (`decode_speed`, `inspect_run`, `score_rows`). The trainer has no flag for it.
+- **The frozen arm needs an optimizer filter.** The registered sheet's runner keeps the routing queries (`.spiralcore_fbs`) out of the optimizer under `FrozenQueries` (`spiralcore_fbs_sheet.rs:497`, `:717`). `run_long`'s main optimizer filters only the decay rates.
 
 ## Files in scope
 
-- `docs/labs/one-model-end-to-end/**`
-- `docs/harness/prep/one-model-end-to-end*`
-- `docs/loop/tasks/one-model-end-to-end/**`
-- `docs/research/notebook/float-training.md`
-- `docs/roadmap/items/one-model-end-to-end.md`
-- `crates/uor-r4-float-train/src/in_space_long.rs`
-- `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`
-- `crates/uor-r4-training/examples/m-world.rs`
+The item's scope. This unit edits `crates/uor-r4-float-train/src/in_space_long.rs`, `crates/uor-r4-float-train/src/bin/train-in-space.rs` and `docs/loop/tasks/one-model-end-to-end/claude-207/**`.
 
 ## Done when
 
-To fill in.
+1. **`--turn-memory-dropout P`** (thousandths, 0–1000, needs `--turn-memory`):
+   - each training window is dropped by a seeded draw from its own stream (`memory_dropped`), and names no opening or reply row;
+   - at P = 0 the batch order, the rows named and `config.json` are unchanged;
+   - scoring keeps the memory at every row.
+2. **`--fbs-arm one-atom|identity|frozen`:**
+   - `run_long` sets the hook, builds the model and filters the main optimizer by the arm. Under `frozen`, no routing query is updated (`main_optimizer_updates`);
+   - `--score-rows`, `--inspect` and `--decode-speed` take the arm, and refuse one other than the run's own `config.json` names (`check_run_arm`);
+   - the default writes the same `config.json` as before.
+3. **Tests:**
+   - a unit test for each rule, every one passing, and a negative gate for the frozen filter;
+   - the crate's full test suite;
+   - a stub-nvcc `cargo check --features cuda`.
+4. **The GPU halves of the protocol's checks are named as the run's probe-ladder steps.** These are I-B's "byte-identical at P = 0", I-B's "the reply weight stays 0.0 at P = 1", and I-C's "frozen queries equal their seed after 256 steps". They need CUDA and data, so they run on the pod before the arms.
+5. **A REPORT,** negatives first.
 
-## Stop and ask if
+## Stop and decide if
 
-To fill in.
+- A change would alter the default path's training or scoring. The default must stay byte-identical.
