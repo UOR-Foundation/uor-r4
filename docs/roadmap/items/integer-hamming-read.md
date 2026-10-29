@@ -27,7 +27,7 @@ It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-
 
 ## Done when
 
-1. The integer runtime runs the whole read as claude-146's REPORT describes it, all four heads of both reads, under D11's rules (CHARTER §3.6: integer only, no float instruction; since D80 and D81 the hardware integer multiply and divide are allowed once [`integer-mul-div-serving`](integer-mul-div-serving.md)'s audits allow them, and until then products go through D11's tables):
+1. The integer runtime runs the whole read as claude-146's REPORT describes it, all four heads of both reads, under D11's rules (CHARTER §3.6: integer only, no float or transcendental instruction; since D80 and D81 the hardware integer multiply and divide are allowed once [`integer-mul-div-serving`](integer-mul-div-serving.md)'s audits allow them, and until then products go through D11's tables):
    - **copy heads:** keys and queries from the table's points through the key rotation. These depend only on the token, so their codes can be built once per vocabulary entry;
    - **type heads:** queries from the residual through the query rotation, and payloads from the residual at `s` through the value rotation. These rotate the state at run time, so each product goes through D11's tables;
    - the codes packed into 64-bit words; the match by `popcount(q XOR k)`; the 16 nearest earlier positions `1 ≤ s < t`; the weights `max(0, m − d)/m`; the stream read after layer 2 and the move on the readout, each product through the tables.
@@ -52,7 +52,7 @@ Read:
 
 ## Rules that apply
 
-- **D11 serving** (CHARTER §3.6, as amended by D80 and D81): integer only, no float in the served path. The hardware integer multiply and divide are allowed once [`integer-mul-div-serving`](integer-mul-div-serving.md)'s audits allow them. Popcount and comparisons need no multiply; until then the weights and the move go through D11's product tables.
+- **D11 serving** (CHARTER §3.6, as amended by D80 and D81): integer only, no float or transcendental instruction in the served path. The hardware integer multiply and divide are allowed once [`integer-mul-div-serving`](integer-mul-div-serving.md)'s audits allow them. Popcount and comparisons need no multiply; until then the weights and the move go through D11's product tables.
 - **Geometry only, no softmax or squashing, no dense products** (§3.1–§3.3).
 - **Serving the exported integer artifact on a client device is allowed** (§3.5–§3.6); the float reference stays on the GPU.
 
