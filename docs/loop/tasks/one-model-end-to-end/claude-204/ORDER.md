@@ -29,6 +29,17 @@ The panel the item's "What is missing" names.
   - **near-duplicate paraphrases:** P-dev's prompt 8-gram share in TRAIN;
   - **chat-v0 coincidences:** P-dev's exact-prompt share in TRAIN.
 
+## Decided during the unit (stop and decide, recorded before the results)
+
+1. **`m-world.rs` cannot carry the writer.** `crates/uor-r4-training/Cargo.toml` sets `autoexamples = false` and declares no `m-world` example. A scratch compile shows its other modes import modules now configured out (`flock`, `stack_dialogue`, `stack_memory_replies`, `stack_tracking`). The probe-screen module, `milestone_world_v2_probe`, is preserved under `#[cfg(any())]`.
+   - **So the writer is a standalone instrument,** `docs/labs/one-model-end-to-end/instrument/` (bin `heldout-panel`), in this item's scope. It calls only the live library (`milestone_world_v2`'s `MWorld2::conversation_in` at `Mix::default()`), with no probe screen.
+   - **Done-when 1 is revised to match:**
+     - the writer's cell parser is tested;
+     - a non-default cell needs neither `exclude=` nor `chat=` (it has none);
+     - the `train,train` control stands in for "byte-identical to the training corpus" by matching TRAIN's census;
+     - the `m-world.rs` edit was reverted.
+2. **The control caught an encoding fault.** Under protocol 1, the default copied from `m-world`, P-train's exact-prompt share was 0. Decoding showed TRAIN in dialogue protocol 2: the role marker's trailing space is merged into the first word. The writer now defaults to protocol 2, and the panels were regenerated under it before any result was read as a finding.
+
 ## Cancel probe (run first)
 
 - **Does a dev-cell writer or panel already exist?** No.

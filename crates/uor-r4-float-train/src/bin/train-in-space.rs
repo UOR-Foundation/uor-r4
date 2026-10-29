@@ -39,7 +39,7 @@
 //! copies, the rest): turn-memory-reply's probe. A count that needs no GPU; one JSON line per
 //! key and threshold.
 //!
-//! `train-in-space --data-root DIR --fresh-v2 DIR --census 1`: one-model-end-to-end's data census
+//! `train-in-space --data-root DIR --fresh-v2 DIR [--panel NAME=DIR ...] --census 1`: one-model-end-to-end's data census
 //! (claude-202). TRAIN's and the panels' sizes, the probe's pinned counts reproduced, step 2's
 //! decision rows, and each panel's exact, n-gram and value-masked template overlap with TRAIN. A
 //! count that needs no GPU; one JSON line.
@@ -74,6 +74,7 @@ fn main() -> Result<()> {
     let mut reply = false;
     let mut census_on = false;
     let mut fresh_v2 = None;
+    let mut extra_panels: Vec<(String, PathBuf)> = Vec::new();
     let (mut split_dir, mut split_tokens, mut split_mask) = (None, None, None);
     let mut recall = 0usize;
     let (mut opening_read, mut opening_anchor) = (None, None);
@@ -134,6 +135,7 @@ fn main() -> Result<()> {
             "--reply-bound" => reply = switch(&value)?,
             "--census" => census_on = switch(&value)?,
             "--fresh-v2" => fresh_v2 = Some(PathBuf::from(&value)),
+            "--panel" => extra_panels.push(panel_arg(&value)?),
             "--recall" => recall = number(&value)?,
             "--objective" => {
                 config.objective = match value.as_str() {
@@ -313,7 +315,10 @@ fn main() -> Result<()> {
     if census_on {
         let fresh_v2 = fresh_v2
             .ok_or_else(|| FloatTrainError::Invalid("--census needs --fresh-v2 DIR".to_owned()))?;
-        println!("{}", serde_json::to_string(&census(&data_root, &fresh_v2)?)?);
+        println!(
+            "{}",
+            serde_json::to_string(&census(&data_root, &fresh_v2, &extra_panels)?)?
+        );
         return Ok(());
     }
     if reply {
@@ -395,4 +400,30 @@ fn main() -> Result<()> {
     }
     let out = out.ok_or_else(|| FloatTrainError::Invalid("--out is required".to_owned()))?;
     run_long(&data_root, &out, &config, &device)
+}
+
+/// `--panel NAME=DIR` (claude-204): an extra UORT split for the census, counted unpinned.
+fn panel_arg(value: &str) -> Result<(String, PathBuf)> {
+    match value.split_once('=') {
+        Some((name, dir)) if !name.is_empty() && !dir.is_empty() => {
+            Ok((name.to_owned(), PathBuf::from(dir)))
+        }
+        _ => Err(FloatTrainError::Invalid(
+            "--panel takes NAME=DIR".to_owned(),
+        )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_panel_argument_is_a_name_and_a_directory() {
+        let (name, dir) = panel_arg("p-dev=/data/p-dev").unwrap();
+        assert_eq!((name.as_str(), dir), ("p-dev", PathBuf::from("/data/p-dev")));
+        assert!(panel_arg("p-dev").is_err());
+        assert!(panel_arg("=dir").is_err());
+        assert!(panel_arg("name=").is_err());
+    }
 }
