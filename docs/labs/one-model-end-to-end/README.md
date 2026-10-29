@@ -15,8 +15,8 @@
 | 2 | 1,929 | 2,296 | 273 | 640 | −367 | 61 | 915 | inside |
 
 **Verdict: mixed.**
-- **What the seeds say.** They disagree in sign, each past its own paired floor, so the two-seed spread is the band.
-- **What it changes.** The training run carries (r) and a memory-dropout arm as equal candidates. It should use at least three seeds.
+- **What the seeds say.** They disagree in sign, each past its own paired floor (77 and 61). The two-seed spread, 915, is larger than both floors, so it is the band, and both seeds fall inside it.
+- **What it changes** (the registered outcome). The training run carries (r) and a memory-dropout arm as equal candidates. The REPORT also recommends at least three seeds; that is advice, not part of the rule.
 - **The details** (free generation, the writer's readout, instrument checks) are in the [REPORT](../../loop/tasks/one-model-end-to-end/claude-205/REPORT.md).
 
 ## The held-out-phrasing panel (claude-204)

@@ -12,12 +12,12 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Sheet: [one-model-end-to-end-overturn-
 
 ## What did not work, first
 
-- **Two seeds cannot say which way co-adaptation goes.** The paired difference changes sign between seeds, and each seed's difference is about seven and six times its own paired floor. At this scale, the trunk's reading of the rows the memory is silent on depends on the seed more than on the memory. A decision this narrow needs more seeds per arm. The training run should carry at least three, so that the band rests on more than one spread.
+- **Two seeds cannot say which way co-adaptation goes.** The paired difference changes sign between seeds, and each seed's difference is about seven and six times its own paired floor. At this scale, the trunk's reading of the rows the memory is silent on depends on the seed more than on the memory. A decision this narrow needs more seeds per arm. The training run should carry at least three (a recommendation, beside the registered outcome), so that the band rests on more than one spread.
 - **(r) without its memory cannot finish a reply.** It finishes 1 and 0 of 64 greedy replies within 64 tokens, against 44 and 41 with the memory and 63 and 56 for (r0). Its repeated-4-gram rate is 0.692 / 0.770. claude-194's totals (4,101 / 3,807 hits without the memory) said the same thing under teacher forcing.
 - **(r) loops even with its memory.**
   - Its repeated-4-gram rate is 0.435 / 0.547. DEV's own replies after the same prompts score 0.000; (r0) scores 0.112 / 0.500.
   - Its high new-n-gram share (0.758 / 0.785 at n = 4, against DEV's 0.328) is mostly those loops, not new phrasing. That measure has to be read beside the repeat rate.
-- **Neither trunk copies rare values from the prompt.** Seed 1's first 6 of 64 samples, prompt by prompt, with the same prompt in each row (`sample_windows` is deterministic). The text is in each arm's `samples-memory.json`, cut here after the first `<|eos|>`:
+- **Neither trunk puts a rare value from the prompt into the right reply.** Seed 1's first 6 of 64 samples, prompt by prompt, with the same prompt in each row (`sample_windows` is deterministic). The text is in each arm's `samples-memory.json`, cut here after the first `<|eos|>`:
 
   | True reply | (r) | (r0) |
   |---|---|---|
@@ -28,8 +28,8 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Sheet: [one-model-end-to-end-overturn-
   | "Okay, I'll remember all of that." | **exact** | "Got it, I'll remember them." |
   | "Okay, I'll remember all of that." | "Got it." | "Okay, I'll remember that." |
 
-  - **What each gets.** Each trunk gets one of the six verbatim, and both produce the generator's acknowledgement templates. (r) reaches the right slot more often ("your dog is …"), then breaks inside the value and runs on. (r0) ends cleanly, but on the wrong template or the wrong value.
-  - **What neither does.** Neither reads a rare value out of the prompt, or answers the one question.
+  - **What each gets.** Each trunk gets one of the six verbatim, and both produce the generator's acknowledgement templates. In the one case where a trunk reached the value's slot ("your dog is …", (r), third row), it broke inside the value and ran on. (r0) ends cleanly, but on the wrong template or the wrong value.
+  - **What neither does.** Neither puts a rare value into the reply that should carry it, or answers the one question. (r) does reproduce "Hirkdoulhaven" once, but inside an echo of the user's own line, not as a reply.
 - **The served writer decodes far below the nearest readout.** Of DEV's 14,287 rows with the memory on:
 
   | | (r), seed 1 | (r0), seed 1 | (r), seed 2 | (r0), seed 2 |
@@ -106,7 +106,7 @@ Fresh V2 is descriptive only. It repeats DEV's pattern: the memory lifts (r) and
 - **I-3:** 0 decision rows pick differently with the memory taken out, in every arm. The memory names none of them, as its module says.
 - **I-4:** the grader recomputes 3,438 decision rows (3,406 + 32), the census's own count, and every arm scores the same 14,287 rows.
 - **I-5:**
-  - each seed's sealed `SHA256SUMS` hashed to its pinned value;
+  - each seed's `SHA256SUMS` was checked against its pinned sha by a fail-closed test in the job (`job.sh`: a mismatch writes `STOPPED` and exits 9), with no log line of its own. The job ended `EXIT 0` with no `STOPPED`. The same two files, fetched to the laptop, hash to the pinned values (round-2 pre-run review);
   - all 10 checkpoint lines per seed passed `sha256sum -c`;
   - Fresh V2's tar passed its sums and its own sha, and its members passed the code's pins.
 
@@ -118,6 +118,11 @@ Fresh V2 is descriptive only. It repeats DEV's pattern: the memory lifts (r) and
   - `cargo xtask roadmap check`: 111 items OK.
   - The grader on fake all-hit and all-miss files gave 3,438 rows and "ahead", in 1.65 s.
 - **On the pod:** I-1, the source pin, and the build with its sha recorded.
+- **The review, round 1** (three fresh slices: the scorer, the grader and these docs):
+  - **The scorer slice: APPROVE WITH NITS.** Taken: a row-count check in `row_picks`, the full flag list in the usage line, and `--fresh-v2` refused with `--overturn`.
+  - **The grader slice: REQUEST CHANGES.** The pairing test was symmetric, so a swap of `b` and `c` would have passed it. Now it asserts an ordered `(3, 2, 2, 1)` and its reverse. **The negative gate:** with `paired`'s counts swapped, the test FAILS; restored and rebuilt, it passes. Also taken: the behind-side band edges, refusals of short lists, and of DEV files whose memory flag does not match their name.
+  - **The docs slice: REQUEST CHANGES.** The copying claim said more than the samples show, and one I-5 check had no log line; both are reworded above. Recommendations are now labelled apart from the registered outcome.
+  - **The grading re-run** with the fixed grader is byte-identical to `overturn-2026-10-29.json`. The lib's 134 tests pass.
 
 ## Cost and seal
 
@@ -132,8 +137,8 @@ Fresh V2 is descriptive only. It repeats DEV's pattern: the memory lifts (r) and
 ## What it unlocks
 
 **Step 3, the protocol (done-when 3).** It now has its arms, and four findings to build on:
-- **The arms.** Its arm list adds a memory-dropout arm beside (r), as an equal candidate. Run at least three seeds per arm, since two seeds disagreed in sign here.
-- **The decode rule.** Greedy loops on these trunks, so the Flock rank rule (`stack/flock.rs`'s harmonic weights) is a needed decode rule, not an extra one.
+- **The arms.** Its arm list adds a memory-dropout arm beside (r), as an equal candidate: the registered outcome. *Recommendation, not part of the rule:* run at least three seeds per arm, since two seeds disagreed in sign here.
+- **The decode rule.** *Recommendation:* greedy loops on these trunks, so the Flock rank rule (`stack/flock.rs`'s harmonic weights) should be weighed as a real alternative, not an extra.
 - **The new-template stratum.** It should come from a panel no decision has touched. claude-204's P-dev qualifies: 0.000 of its prompt templates are in TRAIN, and nothing here scored it.
 - **Copying values.** Both trunks fail it, so copied rows need a stratum of their own, and the training run's read-by-meaning arms (the Flock read, the type spin) are where a fix would show.
 
@@ -154,4 +159,4 @@ None was invoked this unit. The arms, the band, the cells and the stop rule were
 
 The question was whether a model that learned to lean on its exact memory reads worse than one that never had it, on the parts of a reply the memory cannot help with. The two training seeds disagree: one says better, one says worse, each by far more than chance. So the next training run will train both recipes, with more seeds, and let the scoring choose.
 
-The model's own replies also show where it fails. The memory helps it start the right kind of sentence, but neither model copies an unusual name from the conversation. Without the memory, the model cannot finish a reply at all.
+The model's own replies also show where it fails. The memory helps it start the right kind of sentence, but neither model puts an unusual name from the conversation into its answer. Without the memory, the model cannot finish a reply at all.
