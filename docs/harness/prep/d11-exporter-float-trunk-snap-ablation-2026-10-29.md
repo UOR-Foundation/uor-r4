@@ -255,3 +255,28 @@ A reading names the change for the next unit. It is not a result about the snaps
 - the pins match claude-132's table;
 - I-Negative can fail;
 - no softmax, no matmul, GPU-only.
+
+## 10. Attempt 2: the six older models with their own kernel (an instrument repair)
+
+**What attempt 1 showed** (pod `vast-58216485`, binary `075d88e2…`, at `9a6002c9b`).
+- The GPU library tests passed: 163 passed and 6 ignored, the new ablation test among them.
+- The two bfixed-c179 models ran.
+- **The six older models were refused at load.** `StackModel::load` reported "native projection compiler/operator/FBS identity is missing or stale".
+  - Each FBS plan's fingerprint includes `kernel_sha256`, the sha256 of `spiralcore_fbs.cu`, which claude-179 changed (`517bffcc…` → `3fbfc796…`).
+  - So every model saved before #3367 is bound to the old kernel source.
+- The non-fatal per-model rule worked: those six wrote no receipt.
+- **`I-Negative` was also refused at load,** so the job stopped there, before its summary. It never reached the pin it was meant to test.
+
+**Class: instrument.** The run, not the models, was wrong. It had no binary that may load them. claude-179 changed only the backward kernels, and this run evaluates forwards only. The models are the ones sealed by their own runs, with their pins unchanged.
+
+**The repair, `job2.sh` (sha256 `44d2c46edef984f4bdce820e6375e5784601a598486aaddb2845cd072f14c7c9`):** a second binary, B_old, from the same head with claude-179's `fix.patch` reversed. That is how claude-179 built its B_base.
+- `fix.patch` (sha256 `a2728e80…9d55`) is checked first. Then:
+  - B_old's source differs from the head's in exactly three files;
+  - its `spiralcore_fbs.cu` is `517bffcc…0b0d`, the old pin;
+  - the two D11 GPU tests (the ablation's ends, and the head on the D11 queries) pass on it.
+- **B_old scores the six older models** with the same commands and checks as section 6. It also runs `I-Negative`, on a model it loads.
+- **Attempt 1's folder is kept as it is** (L-002). Attempt 2 writes `/workspace/abl2`, re-checks attempt 1's verified inputs against attempt 1's lists, and refuses a non-empty folder.
+- **The summary** runs the same pinned `summary.jq` over all eight receipts: attempt 1's two, and attempt 2's six.
+- Sections 3 and 4 are unchanged.
+
+**One reading was seen before this repair:** the two bfixed-c179 receipts. The repair changes no bar, no arm and no reading rule, and does not touch those two models. It only gives the other six a binary that can load them.
