@@ -82,7 +82,7 @@ This unit edits only the first five and the two `uor-r4-float-train` files.
 
    Each rule has a unit test, and every new test passes.
 3. **A prep sheet,** `docs/harness/prep/one-model-end-to-end-overturn-2026-10-29.md`, holds the arms, the rows, the band, the cells and the instrument checks. Its fresh FIT and pre-run review are posted on #3407 before any pod is rented.
-4. **The run:** one RTX 5090 pod, the six step-16,384 checkpoints scored.
+4. **The run:** one RTX 5090 pod, the four step-16,384 checkpoints of (r) and (r0) scored ((m) answers neither side of the question).
    - The output is sealed to `results/claude/one-model-end-to-end-2026-10-29/` with a `SHA256SUMS`, and graded on the laptop.
    - The pod is released and down.
 5. **The REPORT,** negatives first, leading with tok/s where it has one. One notebook row.
