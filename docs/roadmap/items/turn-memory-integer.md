@@ -83,7 +83,7 @@ Read:
 1. the export of both tables, their weights and the key window;
 2. the session's role signal and keys, against the reference;
 3. the moves at the readout, with the audits;
-4. the parity, under a sheet. This comes after `integer-hamming-read`'s step 4 (the exporter carries `hamming_read.safetensors`): claude-194's checkpoints hold a Hamming read, and the export refuses a read it does not carry (claude-197);
+4. the parity, under a sheet. This comes after `integer-hamming-read`'s step 4 (the exporter carries `hamming_read.safetensors`): claude-194's checkpoints hold a Hamming read, and the export will refuse a read it does not carry, as planned in claude-197's ORDER for unit 1's code. Today it silently drops it;
 5. the cost.
 
 `integer-hamming-read` and `fbs-serving-kernels` also edit `session.rs`, and the float-side items edit `in_space_long.rs` and `train-in-space.rs`. This item runs when none of those is claimed.

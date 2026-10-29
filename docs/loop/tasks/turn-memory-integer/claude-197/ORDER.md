@@ -69,7 +69,7 @@ So claude-194's checkpoints would export as a trunk without its memory. That tru
 
 ## Done when
 
-1. **The scope decision** passes its fresh review and is logged on #3392. The item's scope lists the two files.
+1. **The scope decision** passes its fresh review and is logged on #3392. The item's scope lists three files: the two above, and `crates/uor-r4-integer/src/stack/synthetic.rs`, added after the decision review because its struct literal of the snapshot needs the new field.
 2. **A round trip.** A snapshot with a memory (synthetic tables and weights, with and without a reply table) exports, reads back every key, value and weight at its exponent, and its record and schema check out.
 3. **Unchanged without a memory.** A snapshot without a memory serializes with no `memory` key, and its exports keep claude-188's pinned sha256s.
 4. **The refusals, by their text:**
