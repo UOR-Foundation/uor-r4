@@ -772,20 +772,15 @@ fn nearest_reading(
                         .map(|(&row, _)| row as usize)
                         .collect(),
                 ));
-                // Its reply table (claude-193) moves the later reply rows, as training names them:
-                // `reply_rows` reads the chunk in `assemble`'s order, one row per scored row.
+                // Its reply table (claude-193) moves the later reply rows, as training names them, at
+                // `assemble`'s row for each: the window's index times the context, plus the offset.
                 if crate::flock_read_memory::turn_memory().is_some_and(|m| m.reply_len().is_some())
                 {
-                    let rows = reply_rows(chunk, mask);
-                    if rows.len() != scored.len() {
-                        return Err(invalid("the reply rows do not match the scored rows"));
-                    }
                     crate::flock_read_memory::set_reply_rows(Some(
-                        scored
+                        reply_rows(chunk, mask)
                             .iter()
-                            .zip(&rows)
-                            .filter(|(_, row)| !row.opening)
-                            .map(|(&s, row)| (s as usize, reply_key(row)))
+                            .filter(|row| !row.opening)
+                            .map(|row| (row.window * SHEET_CONTEXT + row.offset, reply_key(row)))
                             .collect(),
                     ));
                 }
@@ -2746,10 +2741,11 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
                     .count();
                 (named.len(), hits)
             };
-            let (rows, hits) = count(&train_replies);
-            println!("[memory] TRAIN reply rows past their openings {rows}, hits {hits}");
-            let (rows, hits) = count(&reply_offsets(&dev_windows, &dev_mask));
-            println!("[memory] DEV reply rows past their openings {rows}, hits {hits}");
+            // "Named": the rows whose key the reply table holds, not the rows it names right.
+            let (rows, held) = count(&train_replies);
+            println!("[memory] TRAIN reply rows past their openings {rows}, named {held}");
+            let (rows, held) = count(&reply_offsets(&dev_windows, &dev_mask));
+            println!("[memory] DEV reply rows past their openings {rows}, named {held}");
         }
     }
     let mut opt_main = StackAdamW::new(&model, hs::SHEET_WEIGHT_DECAY, hs::SHEET_CLIP)?;
@@ -3638,6 +3634,29 @@ mod tests {
         // the probe's scope (claude-192's REPORT, "the keys see the window").
         let later = &offsets[windows.len() - 1];
         assert!(later.iter().all(|(_, key)| key[0] == u32::MAX));
+    }
+
+    #[test]
+    fn reply_rows_land_on_the_rows_assemble_scores() {
+        // Two documents, so two windows: the DEV reading names a reply row at its window's index
+        // times the context plus its offset, which must be the row `assemble` scores.
+        let tokens = [0u32, 10, 11, 20, 21, 22, 0, 12, 13, 23, 24];
+        let mask = [0u8, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1];
+        let (windows, _) =
+            hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID).unwrap();
+        assert_eq!(windows.len(), 2);
+        let refs: Vec<&CausalWindow> = windows.iter().collect();
+        let (_, scored, targets) = assemble(&refs);
+        let rows = reply_rows(&windows, &mask);
+        let named: Vec<u32> = rows
+            .iter()
+            .map(|row| (row.window * SHEET_CONTEXT + row.offset) as u32)
+            .collect();
+        assert_eq!(named, scored);
+        assert_eq!(
+            rows.iter().map(|row| row.target).collect::<Vec<_>>(),
+            targets
+        );
     }
 
     #[test]

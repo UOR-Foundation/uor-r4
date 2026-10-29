@@ -870,7 +870,7 @@ mod tests {
         for r in [0, 1, 2, 3, 5] {
             assert_eq!(moved[r], before[r], "row {r}");
         }
-        // The opening weight leaves reply rows alone, and a row named as both is refused.
+        // A row named both as an opening and as a reply row is refused.
         assert!(memory
             .apply_readout(&output, &ids, &[4], &reply_rows, &table)
             .is_err());

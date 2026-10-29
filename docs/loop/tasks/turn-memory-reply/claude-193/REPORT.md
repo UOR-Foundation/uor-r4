@@ -14,6 +14,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Issue #3393. This unit is the item's d
   - At a later row of a turn shorter than 8 ids, they run on into the reply. A key built that way would differ from the probe's turn-8 key.
   - So training and DEV rows compute the probe's own key (`reply_key`, from the mask), and the memory only looks keys up.
   - A greedy step takes the turn from the anchor at the prompt's last token, the opening row, where the two agree. A test pins that the greedy key equals the corpus key at the same row.
+- **A turn with an end-of-turn token inside its prompt would key differently in a greedy step.** The anchor resets after BOS or EOS, while the probe's prompt runs back to the last reply token or BOS. claude-154's anchor check found the two equal at every DEV and TRAIN opening, so this does not arise on the pinned splits; the greedy test covers a one-turn prompt only.
 - **A later window cannot see its turn.** The windows are 192 tokens, and a reply that runs into a second window keys there on the window's own tokens, as the probe counted (claude-192's scope note). A test pins this, with a reply that spans two windows of 4.
 - **The CUDA tests do not run here.** They compile against the stub `nvcc` (`cargo check --features cuda --tests`), and run on the pod as done-when 3's I-1, as claude-161's did.
 - **Clippy found three issues in this unit's first build:** two complex types and one needless clone. Fixed: `ReplyRows` and `ReplyOffsets` are named types, and the test uses `slice::from_ref`.
@@ -38,8 +39,8 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Issue #3393. This unit is the item's d
   - `REPLY_MEMORY_SHARE` = 0.5, the probe's choice;
   - `LongConfig.turn_memory_reply`, left out of `config.json` when false;
   - `start_memory` builds the reply table from TRAIN's rows past their openings (empty under `--turn-memory-empty`), and refuses the flag without `--turn-memory 8`;
-  - the run logs the reply table's TRAIN rows and keys, and its TRAIN and DEV rows and hits;
-  - training batches, `nearest_reading`'s DEV rows and `greedy_reply`'s later steps all name their reply rows;
+  - the run logs the reply table's TRAIN rows and keys, and its TRAIN and DEV rows and how many of them it names (keys held, not rows named right);
+  - training batches, `nearest_reading`'s DEV rows and `greedy_reply`'s later steps all name their reply rows. Training and DEV name each at `assemble`'s row, the window's index times the context plus the offset, never by list position (the review's Medium);
   - `--inspect` gains `memory_reply_weight_mean_abs`, left out when there is no reply table.
 - **`crates/uor-r4-float-train/src/bin/train-in-space.rs`:** `--turn-memory-reply 0|1`.
 
@@ -57,6 +58,7 @@ No model measurement. The tests, all host unless named:
 | `the_greedy_key_equals_the_corpus_key_at_the_same_row` | The greedy step's key against the corpus row's. |
 | `the_reply_table_names_what_the_probe_counts` | The memory's table names exactly the non-opening rows, and hits, that the probe counts at share 0.5. |
 | `a_row_that_opens_and_copies_counts_in_both_kinds_and_not_the_rest` | The probe's double count (claude-192's review, Low). |
+| `reply_rows_land_on_the_rows_assemble_scores` | Each reply row's named index, the window times the context plus the offset, is the row `assemble` scores, over two windows. |
 | `a_config_writes_the_reply_table_key_only_when_on_and_refuses_it_without_the_memory` | The config key, and both refusals. |
 | `zero_reply_weight_is_no_read_and_the_reply_move_is_its_pull` (CUDA) | Zero weight is no read, bit for bit. At weight 1 the held row lands on the stored point, and no other row moves. A row named twice is refused. The gradient is the pull. |
 
@@ -66,7 +68,7 @@ No model measurement. The tests, all host unless named:
 
 ## Checks run at the head
 
-- **`cargo test --locked -p uor-r4-float-train --no-fail-fast`** (host): 116 library tests and 18 in the test binaries passed, 0 failed. The 116 include the 9 new.
+- **`cargo test --locked -p uor-r4-float-train --no-fail-fast`** (host): 117 library tests and 18 in the test binaries passed, 0 failed. The 117 include the 10 new.
 - **`cargo check --features cuda --tests --target aarch64-apple-darwin`,** with the stub `nvcc`: it compiles, the CUDA test included.
 - **`cargo clippy -p uor-r4-float-train --no-deps --all-targets -- -D warnings`:** no finding in this unit's lines. Those left are `decode_speed` (27 Oct), `flock_read_register.rs` and `spiralcore_fbs_sheet.rs`.
 - **`cargo fmt -p uor-r4-float-train --check`:** clean.
