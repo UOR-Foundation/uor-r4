@@ -9,7 +9,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays `ready`. Done-when 2's 
 
 ## What did not work, first
 
-- **The first two builds failed the serving audit, each on one `fmov`.**
+- **The first two builds failed the serving audit, each on one `fmov`.** Those two audit outputs, and the disassembly quoted below, were read in the session and not kept. The sealed log is the passing one.
   - **The first:** with the four magnitudes `|r_c|` computed beside the sign pattern, the compiler packed them into a NEON register and moved a result back to a general register. Guarding each magnitude with `black_box` did not remove it.
   - **The second build** showed where it came from: the four sign tests of the pattern. The disassembly reads `ushl.4h`, `xtn.4h`, then `fmov x12, d0`. The sign tests had not been packed before, when `raw` was read only coefficient by coefficient.
   - **The fix:** guarding each lane's result with `black_box` as well makes the audit pass, with 0 forbidden instructions.
