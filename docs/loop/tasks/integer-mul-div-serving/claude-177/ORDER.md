@@ -1,76 +1,42 @@
-# ORDER: integer-mul-div-serving, claude-177
+# ORDER: integer-mul-div-serving, claude-177 (the kernels use the hardware multiply and divide)
 
 Lab: claude. Item: [integer-mul-div-serving](../../../../roadmap/items/integer-mul-div-serving.md). Base: `7120c4351`.
 
 ## Goal
 
-The item's done-when reads:
+The item's done-when 2 and 3: the FBS stack's products and quotients use the hardware integer multiply and divide (D80, D81), exactly, and the speed is measured against claude-169's 3,042–3,044 tok/s.
 
-> 1. **Docs and audits agree with §3.6.**
->    - Every page listed above that states the rule, summaries included, says integer multiply and divide are allowed and floats are not.
->    - The native and WASM audits allow integer multiply- and divide-class instructions, and keep refusing every float instruction.
->    - The native audit keeps refusing `fmov` for now. Float and vector values share one register file, so it cannot tell an integer move from a float one. `fbs-serving-vector-kernel` may revisit this.
->    - Host tests show a float instruction still fails each verifier, and an integer `mul` or `udiv` now passes. The Rust verifiers are tested in `tests/m5_full_path_cost_controls.rs`, and each audit script in its own `--self-test`: the WASM audit already has one, and the native audit gains one.
-> 2. **The kernels use them, exactly.**
->    - `stack_mul_u64`, `stack_mul_u128`, `mul_i128` and `stack_hamilton`'s products use the hardware multiply.
->    - The snap's `ℤ[φ]` comparison squares by the hardware multiply.
->    - The norm's long division uses the hardware divide.
->    - Each new kernel equals the old one by exhaustive or random host tests, and every reply on claude-126's export is byte-identical.
->    - The summaries and figures that report a zero-multiply audit are updated with the new audit result in the same unit.
-> 3. **Speed:** `fbs-toks --parts` on this M1, against claude-169's sealed binary (sha256 `8a7a83c7…805a`), run alternately. Decode tok/s, the parts, and a `sample` profile with its total read from the thread line.
-> 4. One notebook row and a REPORT for each unit. This is host and serving work: no GPU and no sheet (CHARTER §4.5).
+- **Bodies only.** `stack_mul_u128`, `stack_mul_u64`, `stack_square`, `stack_div_u64`, `stack_div_u128`, `mul_by_u64` and `mul_by_i32` get their hardware form; `stack_hamilton` takes its 16 products as widening multiplies. Every caller (the norm, gathers, pointer, flock read, snap squares) follows.
+- **Names kept.** The `#[inline(never)]` kernels stay symbols, as the audit's mandatory list requires.
+- **The old table code becomes the test reference.** Each new kernel is tested equal to it, on edge and random inputs.
 
 ## Cancel probe (run first)
 
-To fill in.
+Run at `7120c4351`:
+- `kernels.rs` still builds `multiples_u128` tables in `stack_mul_u128` and `stack_hamilton`.
+- claude-175's audits (merged) allow scalar integer multiply and divide in `--stack` mode and on the WASM serving surface.
+- The baseline exists: claude-169's `fbs-toks` (sha256 `8a7a83c7…805a`) at `local/claude/claude-169/fbs-toks`, and claude-126's seed-1 artifact (sha256 `314c3909…fdb305`) at `local/claude/claude-164/.../seed-1/artifact.uorlut`.
+
+All held. **Not cancelled** (instrument: none needed).
 
 ## Files in scope
 
-- `scripts/audit_zero_matmul_serving.py`
-- `scripts/audit_zero_matmul_wasm.py`
-- `crates/uor-r4-integer/src/report_output.rs`
-- `crates/uor-r4-integer/src/bin/uor-r4-stack.rs`
-- `crates/uor-r4-integer/src/bin/fbs-toks.rs`
-- `crates/uor-r4-integer/tests/m5_full_path_cost_controls.rs`
-- `crates/uor-r4-integer/tests/capability_api_tests.rs`
-- `crates/uor-r4-integer/src/stack/mod.rs`
-- `crates/uor-r4-integer/src/stack/kernels.rs`
-- `crates/uor-r4-integer/src/stack/session.rs`
-- `crates/uor-r4-integer/src/stack/tests.rs`
-- `docs/rules/README.md`
-- `docs/rules/decision-map.md`
-- `docs/mechanisms/lut-serving.md`
-- `docs/mechanisms/README.md`
-- `docs/model/serving-and-export.md`
-- `docs/model/pipeline-map.md`
-- `docs/model/architecture.md`
-- `docs/model/gpu-and-cuda.md`
-- `README.md`
-- `CITATION.cff`
-- `docs/start/faq.md`
-- `docs/contributing/HARD-RULES.md`
-- `docs/integration/project-track.md`
-- `docs/geometry/README.md`
-- `docs/start/glossary.md`
-- `docs/start/what-is-uor-r4.md`
-- `docs/start/where-we-are.md`
-- `docs/start/transformer-vs-geometry.md`
-- `docs/products/README.md`
-- `docs/products/language-model.md`
-- `docs/products/releases-and-artifacts.md`
-- `docs/products/desktop-client.md`
-- `docs/research/findings.md`
-- `docs/figures/mechanisms/lut-serving.svg`
-- `docs/figures/model/integer-export.svg`
-- `docs/figures/start/hero-how-it-thinks.svg`
-- `docs/loop/tasks/integer-mul-div-serving/**`
-- `docs/research/notebook/m4-serving.md`
-- `docs/roadmap/items/integer-mul-div-serving.md`
+- `crates/uor-r4-integer/src/stack/kernels.rs` (bodies and tests)
+- `crates/uor-r4-integer/src/stack/tests.rs`, if a session-level check needs it
+- `docs/research/notebook/m4-serving.md` (one row)
+- `docs/loop/tasks/integer-mul-div-serving/claude-177/**`
+- The measurement lines claude-176 listed, only where this unit's audit result makes them false
 
 ## Done when
 
-To fill in.
+1. Every new kernel equals the old one on edge values and at least 100,000 random inputs. Each test fails with a deliberately wrong kernel.
+2. Replies on claude-126's export are byte-identical to claude-169's (SHA-256 `97c8ad41…`).
+3. `audit_zero_matmul_serving.py --stack` passes on the release `uor-r4-stack` and reports the multiplies and divides it allows. The WASM serving audit passes 7 of 7. `uor-r4-stack`'s own objdump check passes.
+4. Speed: `fbs-toks --parts`, claude-169's binary against this unit's, run alternately, two runs each. Report decode tok/s, the parts, and a `sample` profile with its total read from the thread line. Sealed to the HF store.
+5. m5 and `uor-r4-integer` stack tests pass with `--no-fail-fast`; fmt; `loop gates --full`; a notebook row and a REPORT.
 
 ## Stop and ask if
 
-To fill in.
+Stop and decide, never wait:
+- A reply changes: the kernel is wrong. Fix it; never accept it.
+- The audit refuses an instruction the compiler emits for these bodies (a vector form, `fmov`): keep that kernel's old body and record why.
