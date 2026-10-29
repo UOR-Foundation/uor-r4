@@ -1,66 +1,66 @@
-# ORDER: one-model-end-to-end, claude-202
+# ORDER: one-model-end-to-end, claude-202 (step 1: the data census)
 
-Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md). Base: `f0e4a7a7a`.
+Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). Base: `f0e4a7a7a`.
 
 ## Goal
 
-The item's done-when reads:
+The item's done-when 1, a count with no model and no GPU (CHARTER §4.5), run on the laptop as claude-192's `--reply-bound` probe was. It settles four questions for the [assessment](../../infra-loop-harness/claude-201/ASSESSMENT.md)'s order of work:
+- how big TRAIN is;
+- how much of DEV and Fresh V2 TRAIN already holds;
+- which rows step 2 judges;
+- whether any panel holds new templates.
 
-> 1. **The census (laptop, counts only, CHARTER §4.5).** A standalone Rust instrument under `docs/labs/one-model-end-to-end/instrument/` must:
->    - resolve the TRAIN size conflict, and build the TRAIN reply index (exact replies and reply 8- and 13-grams);
->    - report for DEV, Fresh V2 and `m2-fresh256`: the share of reply n-grams in TRAIN replies, the share of prompt templates seen in TRAIN with values masked, and the 8-token key share;
->    - read only the manifest of the K16 fresh slice, and leave the slice unopened.
->
->    It also says which panel, if any, holds new templates.
-> 2. **The overturn check (GPU, under a prep sheet with a fresh FIT and a pre-run review).** Score turn-memory-reply claude-194's (r), (r0), and (r) with its memory off.
->    - **Pinned in the sheet:** the checkpoints by store path, `SHA256SUMS` and step; the binary's sha; a lease and cost inside the caps.
->    - **The pod** also runs `integer-hamming-read`'s step 5 parity. It is pinned to the read alone, with kept sets and first divergence, and the memory off on both sides.
->    - **Rows:** DEV's 3,406 later rows the reply table does not name, and its 32 unkeyed openings, judged pooled (3,438).
->    - **Band, fixed in advance:** `max(2·√(b+c), the two-seed spread)`, where b and c are the paired discordant rows.
->    - **The cells:**
->      - (r) ahead at both seeds, beyond the band: the memory recipe stays the training default;
->      - (r) behind at both seeds, beyond the band: a memory-dropout arm joins the training run;
->      - mixed (the seeds disagree, or either seed is inside the band): both arms train.
->    - **Descriptive only:** Fresh V2, and 64 greedy samples per arm scored against the census index.
-> 3. **The protocol.** A prep sheet, with a fresh FIT, written before the training run of the model to ship. It holds:
->    - **Strata:**
->      - keyed rows;
->      - unkeyed rows;
->      - new-template rows, from a panel no decision has touched. Fresh V2 is never one.
->    - **Arms:** (r), memory-off, (r0), tables only, and a longest-suffix table over TRAIN.
->    - **Scores:**
->      - teacher-forced top-1, per stratum;
->      - free generation: the share of replies that are verbatim TRAIN replies, new n-grams for n = 4–8, distinct-1 and distinct-2, the repeated-n-gram rate, and the table hit rate under generation against teacher forcing;
->      - on the integer artifact: kept-set agreement, first divergence, and tok/s against context.
->    - **Decode rules:** greedy, and a Flock rank rule with the harmonic weights of `stack/flock.rs`.
->    - **The verdict rule, written in advance:**
->      - "memorized": the gains appear only on keyed rows, and generated replies are mostly TRAIN replies;
->      - "generalizes": the model beats (r0) and the longest-suffix table on unkeyed and new-template rows, with novelty near DEV's own replies.
->
->    The training run itself (ASSESSMENT §6, step 5) adds:
->    - the transport controls: frozen and identity SpiralCore routes, under the fixed backward;
->    - the read-by-meaning arms: the Flock read, and the type spin.
-> 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
+**One new mode, `train-in-space --census 1`** (`in_space_long.rs`, `bin/train-in-space.rs`). It reuses the sheet's loaders and the probe's key code, so its counts are the same counts training and scoring use. It writes one JSON report of counts and row positions, never text.
+
+**The inputs.** Each is pinned by sha, and the census refuses on a mismatch:
+- TRAIN `mw-balp/train` and DEV `ft/dev` come from the HF store (`w2-inputs/2026-10-25/driver-data/`), fetched with `scripts/pod/uor-store get` into the worktree's `local/claude/data/` (gitignored).
+- **Fresh V2** comes from its preservation archive, `codex-attention-dose1-fresh-v2-preservation.tar` in iCloud.
+  - Its `tokens.u16` (`0b7e754c…`) and `response_mask.u8` (`a1cda529…`) are copied read-only into `local/claude/data/fresh-v2/`.
+  - It was opened once, for bar (e), and here it is only counted (descriptive).
+- **`m2-fresh256` is not opened.** It is M2's sealed acceptance panel ("NOT_RUN"). The K16 fresh slice is not opened either.
+
+**The measures.** Every threshold is fixed here, before any count runs.
+
+A document runs from one `<|bos|>` (id 0) to the next. A prompt is a maximal run of mask-0 tokens after the BOS or after a reply. A reply is a maximal run of mask-1 tokens.
+
+| # | What | For |
+|---|---|---|
+| M0 | Header count, payload tokens, eligible targets (`p > 0`, `t ≠ BOS`, mask 1), documents, prompts, replies. For TRAIN, it explains 7,512,797 against the sheet's 26,214,400 | TRAIN, DEV, Fresh V2 |
+| M1 | **Reproduction (the instrument check):** DEV's 1,226 openings and 1,194 keyed; the reply table's 9,655 named rows and 8,822 right; the reply-only control's 8,089 (`float-training.md` rows 14–15). All must match exactly | DEV |
+| M2 | **Step 2's rows:** the positions of DEV's later reply rows the table does not name, and of its unkeyed openings, expected to total 3,406 + 32 = 3,438 | DEV |
+| M3 | The share of replies whose whole token sequence equals a TRAIN reply; the same for prompts | DEV, Fresh V2 |
+| M4 | The share of reply n-grams, and of prompt n-grams, that occur among TRAIN's, for n = 8 and n = 13, counting windows inside one reply or one prompt | DEV, Fresh V2 |
+| M5 | **Value-masked templates.** Mask every token outside TRAIN's K most frequent tokens, and every digit token, then collapse runs of masks. Report the share of prompts and of replies whose masked sequence equals one of TRAIN's, at K = 256 and K = 1,024 | DEV, Fresh V2 |
+| M6 | The 8-token opening-key share, with the probe's anchor | Fresh V2 |
+
+**What decides "new templates".** A panel holds new templates if its M5 prompt-template share at K = 1,024 is at most 0.5. This threshold is fixed here. M5 is reported at both K, so the reading can be checked at the other.
 
 ## Cancel probe (run first)
 
-To fill in.
+- **Does a census already exist?** No.
+  - The only overlap record is Fresh V2's "0 exact full TRAIN/DEV document overlap" (`docs/harness/prep/m1-fresh-panel-transfer-2026-10-26.md:69`).
+  - No n-gram, template or row census exists for the FBS line's TRAIN and DEV (`git grep -n -i "n-gram"` over `docs/research` and `docs/labs` at `f0e4a7a7a`).
+- **Classed:** instrument. Nothing cancels the unit.
 
 ## Files in scope
 
-- `docs/labs/one-model-end-to-end/**`
-- `docs/harness/prep/one-model-end-to-end*`
-- `docs/loop/tasks/one-model-end-to-end/**`
-- `docs/research/notebook/float-training.md`
-- `docs/roadmap/items/one-model-end-to-end.md`
 - `crates/uor-r4-float-train/src/in_space_long.rs`
 - `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`
+- `docs/labs/one-model-end-to-end/**`
+- `docs/loop/tasks/one-model-end-to-end/**`
+- `docs/research/notebook/float-training.md`
 
 ## Done when
 
-To fill in.
+1. **`--census 1`** writes `docs/labs/one-model-end-to-end/census-2026-10-29.json` (counts and positions only) and a README table.
+2. **M1 reproduces every pinned number exactly.** If one does not match, the census is an instrument fault, and the unit stops to find why before reporting anything else.
+3. **Host tests** cover each measure on a tiny synthetic corpus whose answers are known by hand. That includes the masks of M5 and the row selection of M2.
+4. **The REPORT** gives M0–M6, the TRAIN size answer, which panels hold new templates by the rule above, and one notebook row.
+5. **Checks:** the float crate's suite passes, and `loop gates --full` is green. No GPU.
 
 ## Stop and ask if
 
-To fill in.
+Stop and decide (never wait) if:
+- M1 does not reproduce: then classify it (instrument or data) before going on;
+- the Fresh V2 archive is not readable without extracting more than the two named files: then Fresh V2 is reported as NOT REACHED;
+- the census needs a third file outside this scope.
