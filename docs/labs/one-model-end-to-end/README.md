@@ -24,7 +24,9 @@ Step 1 of [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md) (#
 | DEV | 85,776 | 42,856 | 14,287 | 400 | 1,226 | 1,226 |
 | Fresh V2 | 89,420 | 44,678 | 14,479 | 400 | 1,279 | 1,279 |
 
-TRAIN's file is its 64-byte header plus 2 × 7,512,797 bytes. The figure of 26,214,400 tokens for the same sha in `docs/harness/prep/m1-fresh-panel-transfer-2026-10-26.md:62` does not describe this file.
+TRAIN's file is its 64-byte header plus 2 × 7,512,797 bytes. This is the sha pinned at `hamilton_sheet.rs:42–43`.
+
+`docs/harness/prep/m1-fresh-panel-transfer-2026-10-26.md:62` gives 26,214,400 tokens and 10,975,281 eligible targets for the same sha. The census finds 7,512,797 tokens and 2,425,925 targets. The origin of the sheet's figures is not established: they match neither this file's header nor its payload. (26,214,400 is 25 × 2²⁰.) That sheet's own counts are a question for its unit, not for this one.
 
 ## How much of each panel TRAIN already holds (M3–M6)
 
@@ -39,10 +41,16 @@ TRAIN's file is its 64-byte header plus 2 × 7,512,797 bytes. The figure of 26,2
 | Openings whose first-8 key TRAIN holds | 1,194 / 1,226 | 1,234 / 1,279 |
 | **New templates** (K = 1,024 prompt share ≤ 0.5, fixed in the ORDER) | **no** | **no** |
 
-**Step 2's decision rows (M2):** DEV's 3,406 later rows the reply table does not name at share 0.5, and its 32 unkeyed openings. That is 3,438 positions, pooled, listed in the JSON.
+**Step 2's decision rows (M2):** DEV's 3,406 later rows the reply table does not name at share 0.5, and its 32 unkeyed openings. That is 3,438 positions, pooled, listed in the JSON. Each is the corpus position of the row's *target* token, and all are distinct.
+
+**How the shares count:**
+- Exact shares count runs: replies, or prompts.
+- n-gram shares count every window of n tokens inside a run, repeats included. A run shorter than n has no window. For example, only 2,277 reply 13-gram windows exist in DEV; the JSON gives each count.
 
 ## What it means
 
-- **Three quarters of the replies in both panels already occur verbatim in TRAIN.** Fresh V2's "0 exact full TRAIN/DEV document overlap" holds for whole documents, not for turns.
-- **Neither panel can test new phrasings.** The item's next unit builds a panel with held-out templates, with its own census, before the training run's protocol is written.
-- **The panels can still test new values inside known templates,** and the step-2 check runs on DEV's 3,438 unnamed rows as planned.
+- **Three quarters of the *replies* in both panels occur verbatim in TRAIN** (0.750 and 0.777). Fresh V2's "0 exact full TRAIN/DEV document overlap" holds for whole documents, not for turns.
+  - This counts replies, not scored tokens. Long replies are less often verbatim: reply 13-gram shares are 0.367 and 0.460. So a share weighted by tokens would be lower.
+- **Neither panel qualifies as a held-out-template panel by the ORDER's rule.** That verdict does not depend on how rough the value mask is. The mask is a fixed function of each run, so a run that matches exactly also matches after masking, and the masked share can never fall below the exact share. The exact prompt shares alone, 0.608 and 0.639, already exceed the 0.5 bar.
+- **About a third of each panel's prompts have masked forms TRAIN does not hold** (0.358 for DEV, 0.335 for Fresh V2). They are rows a reading of the prompt could still be tested on. The item's next unit builds a panel with held-out templates, with its own census, before the training run's protocol is written.
+- **The panels can still test new values inside known templates.** The step-2 check runs on DEV's 3,438 unnamed rows as planned.

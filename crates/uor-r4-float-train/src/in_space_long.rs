@@ -3943,8 +3943,11 @@ mod tests {
     fn census_value_masks_keep_frequent_tokens_and_collapse_masks() {
         let tokens = [0, 1, 1, 1, 2, 2, 4, 5, 3, 3, 3, 3];
         let keep = top_tokens(&tokens, 2, 0);
-        // 3 is the commonest (4), then 1 (3); 2 (2) is third. BOS is never counted.
+        // 3 is the commonest (4), then 1 (3); 2 (2) is third.
         assert_eq!(keep, [1u32, 3].into_iter().collect());
+        // BOS is never counted, even when it is the commonest token; ties go to the smaller id.
+        let frequent_bos = [0, 0, 0, 0, 0, 7, 7, 6, 6, 9];
+        assert_eq!(top_tokens(&frequent_bos, 2, 0), [6u32, 7].into_iter().collect());
         let digits: std::collections::HashSet<u32> = [3u32].into_iter().collect();
         assert_eq!(
             value_mask(&[1, 4, 5, 3, 1, 2], &keep, &digits),

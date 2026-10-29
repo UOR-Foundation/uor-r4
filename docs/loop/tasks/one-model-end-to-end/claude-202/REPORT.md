@@ -8,9 +8,16 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Refs #3407. The item stays `ready`, at
 
 - **Neither panel can test new phrasings.** By the rule fixed in the ORDER before any count, both fail as held-out-template panels: the value-masked prompt-template share at K = 1,024 must be at most 0.5, and it is 0.642 for DEV and 0.665 for Fresh V2.
 - **Three quarters of each panel's replies are verbatim TRAIN replies:** 0.750 for DEV and 0.777 for Fresh V2. For prompts: 0.608 and 0.639. Fresh V2's recorded "0 exact full TRAIN/DEV document overlap" is true of whole documents, and says nothing about turns.
-- **So every score on these panels so far mostly measures recall.** That includes M1's bar (e), whose fresh-transfer rows come from Fresh V2. That reading is the assessment's, confirmed here; the M1 bar is Casey's call (#2028 `6507594237`).
+- **So a large share of every score on these panels can be earned by recall.** That includes M1's bar (e), whose fresh-transfer rows come from Fresh V2.
+  - The 0.750 counts replies, not scored tokens. Long replies are less often verbatim (reply 13-gram shares are 0.367 and 0.460), so the share weighted by tokens is lower and was not measured.
+  - About a third of each panel's prompts (0.358 and 0.335) have masked forms TRAIN does not hold.
+  - The M1 bar is Casey's call (#2028 `6507594237`).
 - **A first attempt by a subagent wrote nothing.** The guard refuses subagent writes without a suborder, and the subagent's tool list alone filled about 140k of its context. The unit's code was written in the main session.
-- **The value mask is a frequency proxy, not the generator's template.** It keeps TRAIN's K most frequent tokens and masks the rest and every digit. Its shares barely move between K = 256 and K = 1,024 (0.644 against 0.642 for DEV prompts), so the reading does not hang on K. It may still merge templates the generator tells apart. A panel built from held-out templates, the next unit, does not depend on this proxy.
+- **The value mask is a frequency proxy, not the generator's template.** It keeps TRAIN's K most frequent tokens and masks the rest and every digit.
+  - **It cannot change the verdict.** The mask is a fixed function of each run, so the masked share is never below the exact share, and the exact prompt shares (0.608 and 0.639) already exceed the 0.5 bar. This was pointed out by the review.
+  - Its shares also barely move between K = 256 and K = 1,024 (0.644 against 0.642 for DEV prompts).
+  - A panel built from held-out templates, the next unit, does not depend on the proxy.
+- **The 26,214,400 tokens and 10,975,281 targets** that the Fresh V2 sheet (`:62`) gives for TRAIN's sha are of unknown origin. They match neither the file's header nor its payload. That sheet's counts are a question for its own unit.
 
 ## What changed
 
@@ -55,6 +62,23 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Refs #3407. The item stays `ready`, at
 - **`cargo test --locked -p uor-r4-float-train --no-fail-fast`:** 143 passed, 0 failed.
 - **`uor-harness loop gates --full`**, at `44ad0ce4a` with this REPORT: green, 11 gates GREEN.
 
+## The review
+
+Fresh context, at `d8e88a2b8`, given the ORDER and the diff: **APPROVE WITH NITS**. It checked every headline number against the JSON with `jq`, and all are confirmed.
+- **What it found sound:**
+  - the turn splitting, the n-gram boundaries, exact matching and the digit masks (the real tokenizer has 11 single-digit pieces and no multi-digit ones);
+  - the behaviour-preserving refactor;
+  - M1, which uses the probe's own rows and tables, with 8,089 the correct maximum under the 0.83 rule;
+  - M2's selection.
+- **Its limit:** M1 checks the pins and the refactor. It is not an independent check of `reply_rows`.
+- **The hash:** the two FNV passes are not independent. A false match could only raise a share, and its chance is about 1e-8 here.
+- **Its findings, fixed at the next commit:**
+  1. Two overclaims ("cannot test new phrasings", "mostly measures recall") reworded. The README and REPORT now also say the reply share counts replies, not tokens.
+  2. The lower-bound argument added: the masked share is never below the exact share.
+  3. The 26,214,400 / 10,975,281 figures recorded as of unknown origin.
+  4. The test now has a frequent BOS and a tie to the smaller id. Removing `top_tokens`' BOS filter turns it red; checked here, then restored.
+  5. Two definitions made explicit: the decision positions are target positions, and n-gram windows count repeats.
+
 ## Skills used
 
 - None was invoked this unit.
@@ -67,4 +91,4 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Refs #3407. The item stays `ready`, at
 
 ## Plain summary
 
-We counted how much of our test sets the training data already contains. About three quarters of the test replies appear word for word in training. So our scores so far mostly show whether the model remembers training replies, not whether it can handle new ones. The next step is to build a test set the training data has never seen.
+We counted how much of our test sets the training data already contains. About three quarters of the test replies appear word for word in training. So a large part of every score so far can be earned by remembering training replies, and none of our test sets is built from new wording. The next step is to build a test set whose wording the training data has never seen.
