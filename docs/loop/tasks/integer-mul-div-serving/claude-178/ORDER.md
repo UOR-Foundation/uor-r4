@@ -1,76 +1,35 @@
-# ORDER: integer-mul-div-serving, claude-178
+# ORDER: integer-mul-div-serving, claude-178 (the docs report what the engine does now)
 
 Lab: claude. Item: [integer-mul-div-serving](../../../../roadmap/items/integer-mul-div-serving.md). Base: `e0bbacc43`.
 
 ## Goal
 
-The item's done-when reads:
+The last bullet of done-when 2: "The summaries and figures that report a zero-multiply audit are updated with the new audit result in the same unit". claude-177 changed the kernels and left these lines for this short unit.
 
-> 1. **Docs and audits agree with §3.6.**
->    - Every page listed above that states the rule, summaries included, says integer multiply and divide are allowed and floats are not.
->    - The native and WASM audits allow integer multiply- and divide-class instructions, and keep refusing every float instruction.
->    - The native audit keeps refusing `fmov` for now. Float and vector values share one register file, so it cannot tell an integer move from a float one. `fbs-serving-vector-kernel` may revisit this.
->    - Host tests show a float instruction still fails each verifier, and an integer `mul` or `udiv` now passes. The Rust verifiers are tested in `tests/m5_full_path_cost_controls.rs`, and each audit script in its own `--self-test`: the WASM audit already has one, and the native audit gains one.
-> 2. **The kernels use them, exactly.**
->    - `stack_mul_u64`, `stack_mul_u128`, `mul_i128` and `stack_hamilton`'s products use the hardware multiply.
->    - The snap's `ℤ[φ]` comparison squares by the hardware multiply.
->    - The norm's long division uses the hardware divide.
->    - Each new kernel equals the old one by exhaustive or random host tests, and every reply on claude-126's export is byte-identical.
->    - The summaries and figures that report a zero-multiply audit are updated with the new audit result in the same unit.
-> 3. **Speed:** `fbs-toks --parts` on this M1, against claude-169's sealed binary (sha256 `8a7a83c7…805a`), run alternately. Decode tok/s, the parts, and a `sample` profile with its total read from the thread line.
-> 4. One notebook row and a REPORT for each unit. This is host and serving work: no GPU and no sheet (CHARTER §4.5).
+Since claude-177, the FBS stack's step uses the hardware integer multiply and divide.
+- Native `--stack`: 47 multiplies and 1 divide allowed in 44 symbol ranges, no float.
+- WASM: `step` at 14 multiplies and 9 divides, 7 of 7 PASS.
+
+So lines that say today's engine has "no multiply", and descriptions of products read from a sixteen-multiples table, are now false. Dated records stay dated.
 
 ## Cancel probe (run first)
 
-To fill in.
+Run at `e0bbacc43`:
+- claude-177 is merged, and its notebook row holds the new counts.
+- The lines claude-176 listed still state the zero-multiply results as current.
+
+Both held. **Not cancelled.**
 
 ## Files in scope
 
-- `scripts/audit_zero_matmul_serving.py`
-- `scripts/audit_zero_matmul_wasm.py`
-- `crates/uor-r4-integer/src/report_output.rs`
-- `crates/uor-r4-integer/src/bin/uor-r4-stack.rs`
-- `crates/uor-r4-integer/src/bin/fbs-toks.rs`
-- `crates/uor-r4-integer/tests/m5_full_path_cost_controls.rs`
-- `crates/uor-r4-integer/tests/capability_api_tests.rs`
-- `crates/uor-r4-integer/src/stack/mod.rs`
-- `crates/uor-r4-integer/src/stack/kernels.rs`
-- `crates/uor-r4-integer/src/stack/session.rs`
-- `crates/uor-r4-integer/src/stack/tests.rs`
-- `docs/rules/README.md`
-- `docs/rules/decision-map.md`
-- `docs/mechanisms/lut-serving.md`
-- `docs/mechanisms/README.md`
-- `docs/model/serving-and-export.md`
-- `docs/model/pipeline-map.md`
-- `docs/model/architecture.md`
-- `docs/model/gpu-and-cuda.md`
-- `README.md`
-- `CITATION.cff`
-- `docs/start/faq.md`
-- `docs/contributing/HARD-RULES.md`
-- `docs/integration/project-track.md`
-- `docs/geometry/README.md`
-- `docs/start/glossary.md`
-- `docs/start/what-is-uor-r4.md`
-- `docs/start/where-we-are.md`
-- `docs/start/transformer-vs-geometry.md`
-- `docs/products/README.md`
-- `docs/products/language-model.md`
-- `docs/products/releases-and-artifacts.md`
-- `docs/products/desktop-client.md`
-- `docs/research/findings.md`
-- `docs/figures/mechanisms/lut-serving.svg`
-- `docs/figures/model/integer-export.svg`
-- `docs/figures/start/hero-how-it-thinks.svg`
-- `docs/loop/tasks/integer-mul-div-serving/**`
-- `docs/research/notebook/m4-serving.md`
-- `docs/roadmap/items/integer-mul-div-serving.md`
+The pages claude-176's REPORT lists under "What did not work": `lut-serving.md`, `serving-and-export.md`, `pipeline-map.md`, `architecture.md`, `mechanisms/README.md`, `README.md`, `glossary.md`, `what-is-uor-r4.md`, `where-we-are.md`, `faq.md`, `transformer-vs-geometry.md`, `products/README.md`, `language-model.md`, `findings.md`, and the three figures. Also `docs/roadmap/items/integer-mul-div-serving.md` (the status) and this task folder.
 
 ## Done when
 
-To fill in.
+1. Each listed line states the current result, or is dated as a past one.
+2. The item's done-when 1–3 are met, so `status: done` and the README is re-rendered.
+3. `loop gates --full`, a fresh review and a REPORT.
 
 ## Stop and ask if
 
-To fill in.
+Stop and decide, never wait: a line's meaning is unclear. Date it rather than guess.

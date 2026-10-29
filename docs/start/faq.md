@@ -28,7 +28,7 @@ No, by design. The charter says the project is "not a transformer" (section 1), 
 
 ### 3. Does it work yet?
 
-No. Zero of the eight milestones are complete ([STATUS](../../STATUS.md)). What works is the parts: for example the integer substrate passes 25 of 25 admitted GPU construction controls (**measurement**, [K16 qualification](../labs/k16-rows-qualification-2026-10-18/README.md)), and the whole-number serving engine runs in a browser and contains no multiply, divide or decimal instruction in 7 of 7 serving functions (**measurement**, [WASM record](../labs/wasm-serving-runtime-2026-10-18/README.md)). Passing a control is not a language result. No two replacements have been trained together into a model that beats the count tables ([open questions](../research/open-questions.md)).
+No. Zero of the eight milestones are complete ([STATUS](../../STATUS.md)). What works is the parts: for example the integer substrate passes 25 of 25 admitted GPU construction controls (**measurement**, [K16 qualification](../labs/k16-rows-qualification-2026-10-18/README.md)), and the whole-number serving engine runs in a browser and contains no decimal instruction in 7 of 7 serving functions (**measurement**, [WASM record](../labs/wasm-serving-runtime-2026-10-18/README.md)). Passing a control is not a language result. No two replacements have been trained together into a model that beats the count tables ([open questions](../research/open-questions.md)).
 
 ### 4. How good is the best model so far?
 

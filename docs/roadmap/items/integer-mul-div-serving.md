@@ -3,7 +3,7 @@ id: integer-mul-div-serving
 title: Serve with the hardware integer multiply and divide (D80, D81), exactly
 milestone: research
 area: serving
-status: ready
+status: done
 open_to: lab
 needs_gpu: false
 depends_on: [fbs-serving-kernels]

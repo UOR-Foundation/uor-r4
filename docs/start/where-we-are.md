@@ -30,7 +30,7 @@ These parts are built and pass their checks. None of them is a language result. 
 | One shared word table (the writer) | The same table encodes the input, carries memory and ranks the output. Four training runs each completed all 16,404 batches | measurement | [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md) |
 | Distinct starting codes | PrimeZeta gives all 4,096 tokens distinct addresses | measurement | [construction](../../archive/labs/prime-zeta-construction-2026-10-14/README.md) |
 | Address-structured cells | At zero training, 1,351 of 3,847 copy targets are reachable, against 127 before | measurement | [pre-flight](../labs/address-cells-preflight-2026-10-19/README.md) |
-| Whole-number serving engine (D11) | 165 tests pass. In the browser build, 7 of 7 serving functions contain no multiply, divide or decimal instruction. A saved session reloads identically, on a synthetic stand-in model | measurement | [WASM runtime record](../labs/wasm-serving-runtime-2026-10-18/README.md) |
+| Whole-number serving engine (D11) | 165 tests pass. In the browser build, 7 of 7 serving functions contain no decimal instruction. A saved session reloads identically, on a synthetic stand-in model | measurement | [WASM runtime record](../labs/wasm-serving-runtime-2026-10-18/README.md) |
 | Exact storage (object store) | 20 integration tests pass in the delivery record (60 after later peer and fleet work), and a client conformance check pulls 262,144 bytes back byte-identical | measurement | [object store](../../archive/labs/d19-object-store-2026-10-15/README.md), [conformance](../labs/uorobj01-conformance-2026-10-18/README.md) |
 
 ## What does not work yet

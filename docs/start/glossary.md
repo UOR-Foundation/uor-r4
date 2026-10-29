@@ -131,7 +131,7 @@ flowchart LR
 
 **Instrument.** A measuring tool, such as a test panel or a checker. If an instrument is faulty, that is a fix, not a negative result about the mechanism. See [what the project knows](../research/findings.md).
 
-**Integer serving.** Running the finished model with whole numbers only: adds, shifts, comparisons and table look-ups, and since D80 and D81 the integer multiply and divide. This is [D11](#d11). Zero-multiply audits are green on 44 native symbol ranges and 7 of 7 WebAssembly functions (**measurement**), but no trained model has been served this way. See [serving and export](../model/serving-and-export.md).
+**Integer serving.** Running the finished model with whole numbers only: adds, shifts, comparisons and table look-ups, and since D80 and D81 the integer multiply and divide. This is [D11](#d11). Serving audits are green on 44 native symbol ranges and 7 of 7 WebAssembly functions, with the allowed integer multiplies and divides counted since claude-177 (**measurement**), but no trained model has been served this way. See [serving and export](../model/serving-and-export.md).
 
 ## K
 
@@ -273,7 +273,7 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 **W2.** The next queued test: FIT-reviewed and awaiting an owner release (cost about $0.91, estimated). It decides whether the wall is the model's representation or its learning law, and includes count-table arms the headline bars lack. See [open questions](../research/open-questions.md).
 
-**WASM (WebAssembly).** A compact, sandboxed machine code that browsers run. The integer serving engine is built for it, with 7 of 7 serving functions free of multiply, divide and float instructions (**measurement**). See [web client](../products/web-client.md).
+**WASM (WebAssembly).** A compact, sandboxed machine code that browsers run. The integer serving engine is built for it, with 7 of 7 serving functions free of float instructions (**measurement**). See [web client](../products/web-client.md).
 
 **Writer (shared vector writer).** The one component that handles a token's vector on the way in, along the carry and on the way out, using the same format everywhere. It builds the cells and picks the nearest token among the admitted ones. See [architecture](../model/architecture.md).
 

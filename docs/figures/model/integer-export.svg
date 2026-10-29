@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 488" width="960" role="img" aria-labelledby="t d">
 <title id="t">From float weights to an integer file</title>
-<desc id="d">Four boxes left to right. First, a table of float weights trained offline, where float is legal (D37). Second, a snap step that rounds each weight to the nearest of 16 slots, a 4-bit code, with one scale per group of 32 weights (one byte: 4-bit mantissa, 4-bit exponent); a small gap between the exact weight and its slot is where quality can be lost. Third, the integer table file UORLUT01 holding 4-bit codes, scales and small integer tables (square root, decay, SiLU, arcosh, exp). Fourth, the serving engine, which builds 16 multiples of an activation by adding, uses each 4-bit code to pick one, then shifts and adds, with zero multiply instructions. A bracket under the first three boxes marks the export gap: the served score minus the float score, on the same evaluator and the same positions. Below, two past measurements on older float stack models, 0.00883 bits per byte on identical positions and 0.009288 bits per byte on matched runs at 512 windows, with engine differences of about 1e-6 and 2.7e-7. A dashed note says today's model has not been exported, so its gap is unmeasured.</desc>
+<desc id="d">Four boxes left to right. First, a table of float weights trained offline, where float is legal (D37). Second, a snap step that rounds each weight to the nearest of 16 slots, a 4-bit code, with one scale per group of 32 weights (one byte: 4-bit mantissa, 4-bit exponent); a small gap between the exact weight and its slot is where quality can be lost. Third, the integer table file UORLUT01 holding 4-bit codes, scales and small integer tables (square root, decay, SiLU, arcosh, exp). Fourth, the serving engine, which builds 16 multiples of an activation by adding, uses each 4-bit code to pick one, then shifts and adds, with no multiply in this step. A bracket under the first three boxes marks the export gap: the served score minus the float score, on the same evaluator and the same positions. Below, two past measurements on older float stack models, 0.00883 bits per byte on identical positions and 0.009288 bits per byte on matched runs at 512 windows, with engine differences of about 1e-6 and 2.7e-7. A dashed note says today's model has not been exported, so its gap is unmeasured.</desc>
 <style>
 svg { --bg:#ffffff; --ink:#1f2328; --body:#2b3138; --muted:#57606a; --rule:#d0d7de; --panel:#f6f8fa;
       --blue:#0072b2; --sky:#56b4e9; --green:#007a5e; --orange:#e69f00; --verm:#d55e00; --purple:#7a4fa3; --pink:#cc79a7;
@@ -148,7 +148,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <path class="flow-b" d="M884 214 V180" marker-end="url(#ab)"/>
 <path class="flow" d="M884 234 V250" marker-end="url(#a)"/>
 <rect class="chip" x="758" y="250" width="172" height="22" rx="4"/><text class="small" x="844" y="265" text-anchor="middle">shift, then add to the sum</text>
-<text class="tg" x="839" y="300" text-anchor="middle">multiply instructions: 0</text>
+<text class="tg" x="839" y="300" text-anchor="middle">float instructions: 0</text>
 
 <!-- export gap bracket -->
 <path class="bracket" d="M24 326 V334 H694 V326"/>

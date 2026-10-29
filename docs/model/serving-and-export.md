@@ -1,6 +1,6 @@
 # Serving and export
 
-A finished model has to leave the lab and run on an ordinary laptop or in a web browser. The project's rule is that the file it ships contains only whole numbers, and that the program running it uses no decimal (floating-point) arithmetic. Until 28 October it was also allowed no multiply instruction, only adds, shifts and table look-ups. Since D80 and D81 it may use the chip's whole-number multiply and divide, though today's kernels do not use them yet. The program that does this exists, and a checker has counted its machine instructions. But it has only ever run older models that fell short of their targets, plus a synthetic stand-in. No model built under today's rules has been exported to it yet, so nobody can chat with the project's model on a laptop today.
+A finished model has to leave the lab and run on an ordinary laptop or in a web browser. The project's rule is that the file it ships contains only whole numbers, and that the program running it uses no decimal (floating-point) arithmetic. Until 28 October it was also allowed no multiply instruction, only adds, shifts and table look-ups. Since D80 and D81 it may use the chip's whole-number multiply and divide, and since claude-177 the stack's kernels do. The program that does this exists, and a checker has counted its machine instructions. But it has only ever run older models that fell short of their targets, plus a synthetic stand-in. No model built under today's rules has been exported to it yet, so nobody can chat with the project's model on a laptop today.
 
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run, **hypothesis** means an untested idea. See [`docs/formal_vocabulary.md`](../formal_vocabulary.md) and the [glossary](../start/glossary.md).
 
@@ -34,7 +34,7 @@ $$y_i=\sum_j s_{g(j)}\,q_{ij}\,x_j .$$
 
 Instead of multiplying $q_{ij}$ by $x_j$, the engine builds once per activation a 16-entry table $T_j[q]=q\,x_j$ for $q=0,\dots,15$. Each entry comes from the one before by adding $x_j$. Each weight's code then selects an entry, and the group scale is applied with shifts and adds. Four output rows share each table ([`kernels.rs`](../../crates/uor-r4-integer/src/stack/kernels.rs)).
 
-**Two runtime values multiplied together (proof).** A score, a gate or a value mix needs a true product of two numbers that only exist at run time. The engine reads it from a table of the sixteen multiples of one operand, built by repeated addition, indexed by the radix-16 digits (base-16 digits) of the other operand and summed with shifts (`stack_mul_u64` and `stack_mul_u128` in [`kernels.rs`](../../crates/uor-r4-integer/src/stack/kernels.rs)). Write $b=\sum_k 16^k d_k$ with each digit $d_k\in\{0,\dots,15\}$ and let $T_a[q]=q\,a$, built as $T_a[q+1]=T_a[q]+a$. Then
+**Two runtime values multiplied together (proof).** A score, a gate or a value mix needs a true product of two numbers that only exist at run time. Since claude-177 (D80) it is one hardware multiply (`stack_mul_u64` and `stack_mul_u128` in [`kernels.rs`](../../crates/uor-r4-integer/src/stack/kernels.rs)). Before, the engine read it from a table of the sixteen multiples of one operand, built by repeated addition, indexed by the radix-16 digits (base-16 digits) of the other operand and summed with shifts. That form is kept as the tests' reference. Write $b=\sum_k 16^k d_k$ with each digit $d_k\in\{0,\dots,15\}$ and let $T_a[q]=q\,a$, built as $T_a[q+1]=T_a[q]+a$. Then
 
 $$ab=\sum_k 16^k\,T_a[d_k(b)] ,$$
 
@@ -48,9 +48,14 @@ which is exact by the definition of base-16 digits, and each term is a table rea
 
 ## The serving audit
 
-The audit disassembles the compiled release program and counts three kinds of instruction over the serving functions: Class I multiply, Class II divide, Class III floating point. Since claude-175 (D80, D81), the FBS stack's audit (`--stack` natively, the serving surface in WebAssembly) allows scalar integer multiply and divide and reports their counts. It still fails on any float instruction (`fmov` included) and on any vector, dot-product or matrix multiply. Other engines' audits keep the zero-multiply rule. The results below were measured before that change. The scripts are [`audit_zero_matmul_serving.py`](../../scripts/audit_zero_matmul_serving.py) (native) and [`audit_zero_matmul_wasm.py`](../../scripts/audit_zero_matmul_wasm.py) (WebAssembly, with a call-graph mode). They are existing Python scripts; porting them to Rust is an open question.
+The audit disassembles the compiled release program and counts three kinds of instruction over the serving functions: Class I multiply, Class II divide, Class III floating point. Since claude-175 (D80, D81), the FBS stack's audit (`--stack` natively, the serving surface in WebAssembly) allows scalar integer multiply and divide and reports their counts. It still fails on any float instruction (`fmov` included) and on any vector, dot-product or matrix multiply. Other engines' audits keep the zero-multiply rule. The first two results below were measured before that change, and the third after it. The scripts are [`audit_zero_matmul_serving.py`](../../scripts/audit_zero_matmul_serving.py) (native) and [`audit_zero_matmul_wasm.py`](../../scripts/audit_zero_matmul_wasm.py) (WebAssembly, with a call-graph mode). They are existing Python scripts; porting them to Rust is an open question.
 
 - **Native:** 44 symbol ranges audited, none with a forbidden instruction ([project track](../integration/project-track.md), milestone M4). **Measurement.**
+- **Since claude-177 (29 Oct), the stack's step uses the hardware multiply and divide.**
+  - Native `--stack`: FULL PASS on 44 symbol ranges, with 47 multiplies and 1 divide allowed (65 and 9 in the call graph) and no float.
+  - WebAssembly: 7 of 7, with `step` at 14 multiplies and 9 divides.
+
+  **Measurement** ([m4-serving](../research/notebook/m4-serving.md), claude-177's row).
 - **WebAssembly:** 7 of 7 serving functions (not modules) with multiply, divide and float counts all 0, in the runtime merged as `UOR-Foundation/uor-r4#2654` ([record](../labs/wasm-serving-runtime-2026-10-18/README.md)). It was written by an outside contributor and hardened in review before merge. **Measurement.**
 
 What the audit proves is absence: those instructions are not in the audited functions. It says nothing about model quality, and it does not cover every function in the binary. The record also lists three limits. First, the WebAssembly SIMD kernels are fixtures that nothing calls; the serving path still uses the scalar table kernel. Second, the demo in `docs/wasm-serving/` does not run from a clean clone until its bundle is built. Third, the `serving-wasm` build compiles the `model`, `sampling` and `tables` modules unconditionally. Compliance with the "presence counts" rule (D29) rests on the feature defaulting off plus link-time removal, an interpretation that `DECISIONS.md` does not record.
@@ -75,7 +80,7 @@ Two readings follow, both **measurements** on those older models. The integer en
 
 | Item | State | Kind | Source |
 |---|---|---|---|
-| Native zero-multiply audit | Green, 44 symbol ranges | measurement | [project track](../integration/project-track.md) |
+| Native serving audit | Green, 44 symbol ranges; 47 multiplies and 1 divide allowed since claude-177 | measurement | [project track](../integration/project-track.md), [m4-serving](../research/notebook/m4-serving.md) |
 | WebAssembly runtime and audit | 7 of 7 serving functions clean; 165 tests pass; a saved session reloads identically on a synthetic stack | measurement | [`#2654` record](../labs/wasm-serving-runtime-2026-10-18/README.md) |
 | Engine against its reference | No difference on every windowed check of the older models | measurement | [D11 serving](../../archive/labs/d11-serving-2026-10-10/README.md) |
 | Quality of models it served | 1.20138, 1.24402 and 1.24233 BPB, against a 0.90 BPB bar. The record blames the model, not the export | measurement | same record |

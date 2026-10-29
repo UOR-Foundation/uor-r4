@@ -48,7 +48,7 @@ the next token at 14,287 positions in 400 held-out documents, one guess each (al
 is not yet established. Four suspects are still open: the coarse address key (how a word is mapped to the drawers that open), the read (the step that looks back at earlier words), the ranking capacity (how finely the model can order candidate words) and the training schedule. What does work is substrate, not language: an integer model path on the
 GPU that passes 25 of 25 construction checks
 ([qualification](docs/labs/k16-rows-qualification-2026-10-18/README.md)), a browser build of the
-serving engine whose 7 of 7 serving functions contain no multiply, divide or decimal instruction
+serving engine whose 7 of 7 serving functions contain no decimal instruction (they use the integer multiply and divide that D80 and D81 allow)
 ([record](docs/labs/wasm-serving-runtime-2026-10-18/README.md)), and an exact byte store. Four older
 214-million-parameter checkpoints on Hugging Face predate today's rules (they used softmax and
 matrix multiplication) and are kept as historical evidence.
