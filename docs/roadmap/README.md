@@ -134,12 +134,12 @@ These items are ready and open to anyone.
 
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
-| [Bring every status page, picture and tracker up to 29 Oct 2026](items/docs-status-refresh.md) | ready | a lab | no | none | not yet synced |
-| [Serve the Hamming read from the integer artifact on the laptop](items/integer-hamming-read.md) | ready | a lab | yes | [float-training-module](items/float-training-module.md), [spiralcore-fbs-offline-float-sheet](items/spiralcore-fbs-offline-float-sheet.md) | not yet synced |
-| [Split the training backward, and run a cheaper rival search against (a)](items/training-step-cost.md) | ready | a lab | yes | [fbs-cost-profile](items/fbs-cost-profile.md) | not yet synced |
-| [Serve the turn memory from the integer artifact on the laptop](items/turn-memory-integer.md) | ready | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | not yet synced |
-| [Carry the turn memory past a reply's first word](items/turn-memory-reply.md) | ready | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | not yet synced |
-| [Make the native writer's admission hold at every seed](items/writer-admission.md) | ready | a lab | yes | [one-decoder](items/one-decoder.md) | not yet synced |
+| [Bring every status page, picture and tracker up to 29 Oct 2026](items/docs-status-refresh.md) | ready | a lab | no | none | [#3380](https://github.com/UOR-Foundation/uor-r4/issues/3380) |
+| [Serve the Hamming read from the integer artifact on the laptop](items/integer-hamming-read.md) | ready | a lab | yes | [float-training-module](items/float-training-module.md), [spiralcore-fbs-offline-float-sheet](items/spiralcore-fbs-offline-float-sheet.md) | [#3385](https://github.com/UOR-Foundation/uor-r4/issues/3385) |
+| [Split the training backward, and run a cheaper rival search against (a)](items/training-step-cost.md) | ready | a lab | yes | [fbs-cost-profile](items/fbs-cost-profile.md) | [#3391](https://github.com/UOR-Foundation/uor-r4/issues/3391) |
+| [Serve the turn memory from the integer artifact on the laptop](items/turn-memory-integer.md) | ready | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | [#3392](https://github.com/UOR-Foundation/uor-r4/issues/3392) |
+| [Carry the turn memory past a reply's first word](items/turn-memory-reply.md) | ready | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | [#3393](https://github.com/UOR-Foundation/uor-r4/issues/3393) |
+| [Make the native writer's admission hold at every seed](items/writer-admission.md) | ready | a lab | yes | [one-decoder](items/one-decoder.md) | [#3394](https://github.com/UOR-Foundation/uor-r4/issues/3394) |
 | [Build a sigmoid-free gate for E8 orbit memory and rerun it on GPU](items/e8-orbit-memory-sigmoid-free-iteration.md) | held | a lab | yes | [float-training-module](items/float-training-module.md) | [#2822](https://github.com/UOR-Foundation/uor-r4/issues/2822) |
 | [Run the Hopf retained-fibre language test](items/hopf-retained-fibre-test.md) | held | a lab | yes | none | [#2825](https://github.com/UOR-Foundation/uor-r4/issues/2825) |
 | [Re-register the native geometric engine with the hinge loss](items/native-geometric-reregister-hinge.md) | held | a lab | yes | none | [#2871](https://github.com/UOR-Foundation/uor-r4/issues/2871) |
@@ -148,17 +148,17 @@ These items are ready and open to anyone.
 | [Test discrete Hamming binding (VSA) on the current writer](items/r-vsa-hamming-binding.md) | held | a lab | yes | none | [#2888](https://github.com/UOR-Foundation/uor-r4/issues/2888) |
 | [Port read binding to a Flock or Relation read](items/read-binding-on-lawful-read.md) | held | a lab | yes | none | [#2889](https://github.com/UOR-Foundation/uor-r4/issues/2889) |
 | [Build a hard-selection step for carrier credit](items/carrier-credit-hard-selection.md) | done | a lab | yes | none | [#2819](https://github.com/UOR-Foundation/uor-r4/issues/2819) |
-| [Profile one training step and one served token, stage by stage](items/fbs-cost-profile.md) | done | a lab | yes | none | not yet synced |
-| [Split each served FBS layer, then make its largest parts faster, exactly](items/fbs-serving-kernels.md) | done | a lab | no | [fbs-cost-profile](items/fbs-cost-profile.md) | not yet synced |
-| [A NEON kernel and fewer snap candidates for the served FBS step](items/fbs-serving-vector-kernel.md) | done | a lab | no | [fbs-serving-kernels](items/fbs-serving-kernels.md) | not yet synced |
+| [Profile one training step and one served token, stage by stage](items/fbs-cost-profile.md) | done | a lab | yes | none | [#3381](https://github.com/UOR-Foundation/uor-r4/issues/3381) |
+| [Split each served FBS layer, then make its largest parts faster, exactly](items/fbs-serving-kernels.md) | done | a lab | no | [fbs-cost-profile](items/fbs-cost-profile.md) | [#3382](https://github.com/UOR-Foundation/uor-r4/issues/3382) |
+| [A NEON kernel and fewer snap candidates for the served FBS step](items/fbs-serving-vector-kernel.md) | done | a lab | no | [fbs-serving-kernels](items/fbs-serving-kernels.md) | [#3383](https://github.com/UOR-Foundation/uor-r4/issues/3383) |
 | [Run a Hamilton gate offline-float sheet with language fit and export gap](items/hamilton-gate-offline-float-sheet.md) | done | a lab | yes | [float-training-module](items/float-training-module.md), [r-secant-surrogate-descent](items/r-secant-surrogate-descent.md) | [#2824](https://github.com/UOR-Foundation/uor-r4/issues/2824) |
-| [Train the FBS trunk in its own space until its replies read their prompts](items/in-space-trunk-to-text.md) | done | a lab | yes | [float-training-module](items/float-training-module.md), [spiralcore-fbs-offline-float-sheet](items/spiralcore-fbs-offline-float-sheet.md) | not yet synced |
-| [Serve with the hardware integer multiply and divide (D80, D81), exactly](items/integer-mul-div-serving.md) | done | a lab | no | [fbs-serving-kernels](items/fbs-serving-kernels.md) | not yet synced |
+| [Train the FBS trunk in its own space until its replies read their prompts](items/in-space-trunk-to-text.md) | done | a lab | yes | [float-training-module](items/float-training-module.md), [spiralcore-fbs-offline-float-sheet](items/spiralcore-fbs-offline-float-sheet.md) | [#3384](https://github.com/UOR-Foundation/uor-r4/issues/3384) |
+| [Serve with the hardware integer multiply and divide (D80, D81), exactly](items/integer-mul-div-serving.md) | done | a lab | no | [fbs-serving-kernels](items/fbs-serving-kernels.md) | [#3386](https://github.com/UOR-Foundation/uor-r4/issues/3386) |
 | [Solve the saved legal-construction case in exact arithmetic](items/legal-construction-exact-solve.md) | done | anyone | no | none | [#2828](https://github.com/UOR-Foundation/uor-r4/issues/2828) |
-| [Make the decoder that serves the decoder that was measured](items/one-decoder.md) | done | a lab | yes | [float-training-module](items/float-training-module.md) | not yet synced |
+| [Make the decoder that serves the decoder that was measured](items/one-decoder.md) | done | a lab | yes | [float-training-module](items/float-training-module.md) | [#3387](https://github.com/UOR-Foundation/uor-r4/issues/3387) |
 | [Rule on spin-native weights and ternary/XOR, or build a geometric alphabet](items/owner-ruling-spin-ternary-arithmetic.md) | done | a lab | no | none | [#2876](https://github.com/UOR-Foundation/uor-r4/issues/2876) |
-| [Map the model end to end: each stage's domain, size, hardware and cost](items/pipeline-map.md) | done | a lab | no | none | not yet synced |
-| [Revise the pipeline map with claude-149 to claude-155, ranked by cost per token](items/pipeline-map-revision.md) | done | a lab | no | [pipeline-map](items/pipeline-map.md) | not yet synced |
+| [Map the model end to end: each stage's domain, size, hardware and cost](items/pipeline-map.md) | done | a lab | no | none | [#3388](https://github.com/UOR-Foundation/uor-r4/issues/3388) |
+| [Revise the pipeline map with claude-149 to claude-155, ranked by cost per token](items/pipeline-map-revision.md) | done | a lab | no | [pipeline-map](items/pipeline-map.md) | [#3389](https://github.com/UOR-Foundation/uor-r4/issues/3389) |
 | [Train the finite relational head](items/r-finite-relational-head.md) | done | a lab | yes | [m1-a8-full-dose-rerun](items/m1-a8-full-dose-rerun.md), [m1-bvg-k-stage-t-training](items/m1-bvg-k-stage-t-training.md) | [#2877](https://github.com/UOR-Foundation/uor-r4/issues/2877) |
 | [Settle whether a norm-preserving Hamilton gate can suppress a signal](items/r-hamilton-gate-suppression.md) | done | anyone | no | none | [#2879](https://github.com/UOR-Foundation/uor-r4/issues/2879) |
 | [Test the prime-zeta code against injective nulls at zero updates](items/r-prime-zeta-vs-nulls.md) | done | a lab | yes | none | [#2881](https://github.com/UOR-Foundation/uor-r4/issues/2881) |
@@ -169,7 +169,7 @@ These items are ready and open to anyone.
 | [Check whether a secant surrogate gives descent for recurrence gates](items/r-secant-surrogate-descent.md) | done | a lab | yes | [float-training-module](items/float-training-module.md) | [#2886](https://github.com/UOR-Foundation/uor-r4/issues/2886) |
 | [Compare 4,096 and 16,384 tokenizer pieces](items/r-vocab-4096-vs-16384.md) | done | a lab | yes | [m1-faster-writer](items/m1-faster-writer.md) | [#2887](https://github.com/UOR-Foundation/uor-r4/issues/2887) |
 | [Run the six-recurrence fit for the recurrence gates](items/recurrence-gates-six-recurrence-fit.md) | done | a lab | yes | [float-training-module](items/float-training-module.md), [r-secant-surrogate-descent](items/r-secant-surrogate-descent.md) | [#2890](https://github.com/UOR-Foundation/uor-r4/issues/2890) |
-| [Route the user's turn to an exact memory built from TRAIN, read at the readout](items/route-plus-memory.md) | done | a lab | yes | none | not yet synced |
+| [Route the user's turn to an exact memory built from TRAIN, read at the readout](items/route-plus-memory.md) | done | a lab | yes | none | [#3390](https://github.com/UOR-Foundation/uor-r4/issues/3390) |
 | [Measure SpiralCore/FBS descent and tokens per second in a float sheet](items/spiralcore-fbs-offline-float-sheet.md) | done | a lab | yes | [float-training-module](items/float-training-module.md), [r-secant-surrogate-descent](items/r-secant-surrogate-descent.md) | [#2891](https://github.com/UOR-Foundation/uor-r4/issues/2891) |
 
 ## Infrastructure
