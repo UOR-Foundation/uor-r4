@@ -42,26 +42,47 @@ The item's done-when reads:
 >    - the read-by-meaning arms: the Flock read, and the type spin.
 > 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
 
+## This unit
+
+Done-when 3, the protocol: a prep sheet, `docs/harness/prep/one-model-end-to-end-protocol-2026-10-29.md`, with a fresh FIT, written before the training run of the model to ship. Done-when 1 (claude-202, claude-204) and done-when 2 (claude-205, `4e3299bb9`) are done.
+
 ## Cancel probe (run first)
 
-To fill in.
+Run at this ORDER's base, before any work. **Class: instrument (no protocol exists). Go.**
+- **No protocol sheet exists.** `ls docs/harness/prep/ | grep one-model` lists only the overturn sheet.
+- **Step 2's verdict sets the arms.** claude-205's REPORT is MIXED, so the training run carries (r) and a memory-dropout arm as equal candidates (the overturn sheet's rule).
+- **These tools exist:**
+  - `--score-rows` and `--overturn` (claude-205);
+  - the census and its decision rows (claude-202);
+  - the P-dev panel, in the store at `inputs/claude/heldout-panels-2026-10-29/p-dev` (claude-204);
+  - the `FbsArm` transport arms `IdentityTransport` and `FrozenQueries` (`spiralcore_fbs_arms.rs:29-34`);
+  - the trainer's `--flock-read K` and `--type-spin 1`;
+  - the harmonic table `RAW_RANK_WEIGHTS_Q16` (`stack/flock.rs:379`).
+- **These tools do not exist:**
+  - memory dropout;
+  - a flag choosing the `FbsArm` (`in_space_long` sets `OneAtomActive`);
+  - `--score-rows` on an unpinned panel;
+  - the tables-only and longest-suffix controls;
+  - a Flock rank decode;
+  - the table hit rate under generation.
+
+  The sheet names each as an instrument the run needs, with its check. This unit writes the sheet only.
 
 ## Files in scope
 
-- `docs/labs/one-model-end-to-end/**`
-- `docs/harness/prep/one-model-end-to-end*`
-- `docs/loop/tasks/one-model-end-to-end/**`
-- `docs/research/notebook/float-training.md`
-- `docs/roadmap/items/one-model-end-to-end.md`
-- `crates/uor-r4-float-train/src/in_space_long.rs`
-- `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`
-- `crates/uor-r4-training/examples/m-world.rs`
+The item's scope. This unit edits `docs/harness/prep/one-model-end-to-end-protocol-2026-10-29.md`, `docs/loop/tasks/one-model-end-to-end/claude-206/**` and the item file (done-when 3's line only, if the FIT asks).
 
 ## Done when
 
-To fill in.
+1. The protocol sheet holds:
+   - the strata, the arms, the scores, the decode rules and the verdict rule, as the item's done-when 3 lists them;
+   - the training run's added arms (transport controls; the Flock read and the type spin);
+   - each instrument the run needs, with the check that it works;
+   - the seeds, the band, the cost and the stop rule.
+2. A fresh non-author FIT ("TEST FITNESS: FIT") is posted on #3407, and recorded in the sheet.
+3. A REPORT, negatives first. The item stays `ready`: the instruments and the training run follow.
 
-## Stop and ask if
+## Stop and decide if
 
-To fill in.
+- The FIT finds that a stratum or verdict cannot be decided with the data that exists. Then fix the sheet, or name the data unit first.
+- The run's cost projects past the caps ($8/h across labs, 4 pods). Then cut arms, and record which.
