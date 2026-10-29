@@ -137,13 +137,16 @@ pub(crate) fn grid_apply(value: i64, code: i16) -> i64 {
 }
 
 // ---------------------------------------------------------------------------
-// Products of runtime values: sixteen-multiple tables and radix-16 digits.
+// Products of runtime values. Since D80 and D81 (claude-177) they use the
+// hardware integer multiply and divide; the multiplier-free forms they replace
+// (sixteen-multiple tables read at radix-16 digits, restoring long division)
+// stay below as the tests' reference.
 
 /// The multiples `k a`, `k = 0..16`, modulo `2^128`, by additions
 /// (claude-167): `a`, `2a`, `4a` and `8a` by shifts, each behind
-/// `black_box`, and every other multiple a sum of those. The four are opaque
-/// to the optimizer, so no sum can be folded back into a multiply; four
-/// guarded values in place of fifteen guarded steps.
+/// `black_box`, and every other multiple a sum of those. The multiplier-free
+/// form of [`stack_mul_u128`], kept as the tests' reference (claude-177).
+#[cfg(test)]
 #[inline(always)]
 fn multiples_u128(a: u128) -> [u128; 16] {
     let t1 = black_box(a);
@@ -175,6 +178,7 @@ fn multiples_u128(a: u128) -> [u128; 16] {
 }
 
 /// The multiples `k a`, `k = 0..16`, modulo `2^64`, as [`multiples_u128`].
+#[cfg(test)]
 #[inline(always)]
 fn multiples_u64(a: u64) -> [u64; 16] {
     let t1 = black_box(a);
@@ -217,10 +221,11 @@ fn multiples_i64(x: i64, zero: i64) -> [i64; 16] {
     table
 }
 
-/// `a b` modulo `2^128`: the multiples of the larger operand read at the
-/// radix-16 digits of the smaller, most significant first.
-#[inline(never)]
-pub(crate) fn stack_mul_u128(a: u128, b: u128) -> u128 {
+/// [`stack_mul_u128`]'s multiplier-free form: the multiples of the larger
+/// operand read at the radix-16 digits of the smaller, most significant first.
+/// The tests' reference (claude-177).
+#[cfg(test)]
+fn table_mul_u128(a: u128, b: u128) -> u128 {
     let (big, small) = if a >= b { (a, b) } else { (b, a) };
     if small == 0 {
         return 0;
@@ -235,9 +240,9 @@ pub(crate) fn stack_mul_u128(a: u128, b: u128) -> u128 {
     acc
 }
 
-/// `a b` modulo `2^64`, as [`stack_mul_u128`].
-#[inline(never)]
-pub(crate) fn stack_mul_u64(a: u64, b: u64) -> u64 {
+/// [`stack_mul_u64`]'s multiplier-free form, as [`table_mul_u128`].
+#[cfg(test)]
+fn table_mul_u64(a: u64, b: u64) -> u64 {
     let (big, small) = if a >= b { (a, b) } else { (b, a) };
     if small == 0 {
         return 0;
@@ -250,6 +255,36 @@ pub(crate) fn stack_mul_u64(a: u64, b: u64) -> u64 {
         acc = (acc << 4).wrapping_add(table[((small >> (digits << 2)) & 15) as usize]);
     }
     acc
+}
+
+/// [`stack_square`]'s multiplier-free form: multiples of `|v|` at its eight
+/// digits, for `|v| < 2^32`.
+#[cfg(test)]
+fn table_square(v: i64) -> u64 {
+    let u = v.unsigned_abs();
+    let table = multiples_u64(u);
+    let digit = |s: u32| table[((u >> s) & 15) as usize];
+    let low = digit(0)
+        .wrapping_add(digit(4) << 4)
+        .wrapping_add(digit(8) << 8)
+        .wrapping_add(digit(12) << 12);
+    let high = digit(16)
+        .wrapping_add(digit(20) << 4)
+        .wrapping_add(digit(24) << 8)
+        .wrapping_add(digit(28) << 12);
+    low.wrapping_add(high << 16)
+}
+
+/// `a b` modulo `2^128` by the hardware multiply (D80).
+#[inline(never)]
+pub(crate) fn stack_mul_u128(a: u128, b: u128) -> u128 {
+    a.wrapping_mul(b)
+}
+
+/// `a b` modulo `2^64` by the hardware multiply (D80).
+#[inline(never)]
+pub(crate) fn stack_mul_u64(a: u64, b: u64) -> u64 {
+    a.wrapping_mul(b)
 }
 
 /// `a b` modulo `2^128` for signed operands: the product of the magnitudes,
@@ -294,30 +329,35 @@ fn mul_by_i32(table: &[i64; 16], y: i32) -> i64 {
     low.wrapping_add(high << 16).wrapping_sub(sign)
 }
 
-/// `v^2` for `|v| < 2^32`, exactly: multiples of `|v|` at its eight digits.
+/// `v^2` for `|v| < 2^32`, exactly, by the hardware multiply (D80).
 #[inline(never)]
 pub(crate) fn stack_square(v: i64) -> u64 {
     let u = v.unsigned_abs();
-    let table = multiples_u64(u);
-    let digit = |s: u32| table[((u >> s) & 15) as usize];
-    let low = digit(0)
-        .wrapping_add(digit(4) << 4)
-        .wrapping_add(digit(8) << 8)
-        .wrapping_add(digit(12) << 12);
-    let high = digit(16)
-        .wrapping_add(digit(20) << 4)
-        .wrapping_add(digit(24) << 8)
-        .wrapping_add(digit(28) << 12);
-    low.wrapping_add(high << 16)
+    u.wrapping_mul(u)
 }
 
 // ---------------------------------------------------------------------------
 // Quotients and roots.
 
-/// `numerator / denominator` (floor) by restoring long division; zero for a
+/// `numerator / denominator` (floor) by the hardware divide (D81); zero for a
 /// zero denominator, which no caller passes.
 #[inline(never)]
 pub(crate) fn stack_div_u64(numerator: u64, denominator: u64) -> u64 {
+    numerator.checked_div(denominator).unwrap_or(0)
+}
+
+/// `numerator / denominator` (floor) for `u128` by the hardware divide (D81;
+/// the compiler-rt helper `__udivti3` on 64-bit targets); zero for a zero
+/// denominator.
+#[inline(never)]
+pub(crate) fn stack_div_u128(numerator: u128, denominator: u128) -> u128 {
+    numerator.checked_div(denominator).unwrap_or(0)
+}
+
+/// [`stack_div_u64`]'s multiplier-free form, by restoring long division: the
+/// tests' reference (claude-177).
+#[cfg(test)]
+fn long_division_u64(numerator: u64, denominator: u64) -> u64 {
     if denominator == 0 || numerator < denominator {
         return 0;
     }
@@ -339,9 +379,9 @@ pub(crate) fn stack_div_u64(numerator: u64, denominator: u64) -> u64 {
     }
 }
 
-/// `numerator / denominator` (floor) for `u128`, as [`stack_div_u64`].
-#[inline(never)]
-pub(crate) fn stack_div_u128(numerator: u128, denominator: u128) -> u128 {
+/// [`stack_div_u128`]'s multiplier-free form, as [`long_division_u64`].
+#[cfg(test)]
+fn long_division_u128(numerator: u128, denominator: u128) -> u128 {
     if denominator == 0 || numerator < denominator {
         return 0;
     }
@@ -552,18 +592,11 @@ fn rms_norm_into(x: &[i32], eps: Fixed, scratch: &mut [i64], final_shift: u32, r
     // s = sqrt(ms) 2^34 and r = 2^96 / s = 2^62 / sqrt(ms).
     let s = stack_isqrt(ms << 68).max(1);
     let r = stack_div_u128(1u128 << 96, s);
-    let table = multiples_u128(r);
     for v in scratch.iter_mut() {
-        // |v| <= 2^24: seven radix-16 digits.
-        let u = v.unsigned_abs();
-        let digit = |s: u32| table[((u >> s) & 15) as usize];
-        let magnitude = digit(0)
-            .wrapping_add(digit(4) << 4)
-            .wrapping_add(digit(8) << 8)
-            .wrapping_add(digit(12) << 12)
-            .wrapping_add(digit(16) << 16)
-            .wrapping_add(digit(20) << 20)
-            .wrapping_add(digit(24) << 24);
+        // |v| <= 2^24 and r <= 2^96: one hardware multiply (D80), exact. The
+        // multiplier-free form read seven radix-16 digits of |v| from a table
+        // of r's multiples; the tests keep it as the reference.
+        let magnitude = u128::from(v.unsigned_abs()).wrapping_mul(r);
         let product = if *v < 0 {
             magnitude.wrapping_neg() as i128
         } else {
@@ -912,15 +945,48 @@ pub(crate) fn stack_l2_distance(query: &[i32], key: &[i32]) -> u64 {
 
 /// Hamilton product `a (x) b` of quaternions `(w, x, y, z)`, exactly.
 ///
-/// Row by row over `a` (claude-169): a zero `a_i` is skipped, `|a_i| = 2^k`
-/// gives each product as `|b_j| << k`, and any other `|a_i|` gets one table of
-/// its sixteen multiples, read at the radix-16 digits of every `|b_j|`. Each
-/// product is `|a_i| |b_j|` modulo `2^128`, negated when the signs differ, the
-/// value [`mul_i128`] gives, so the result is unchanged. Callers pass a
-/// snapped quaternion scaled by a power of two as `a`, so its axis, half and
-/// `1/2` coordinates take the shift.
+/// Each of the sixteen products `a_i b_j` is one widening hardware multiply
+/// (D80, claude-177). `|a_i|, |b_j| <= 2^63`, so each product fits an `i128`
+/// exactly, and the sums are taken modulo `2^128`, as before.
 #[inline(never)]
 pub(crate) fn stack_hamilton(a: [i64; 4], b: [i64; 4]) -> [i128; 4] {
+    // Explicit loops, not `array::from_fn` or `map`: a closure there compiles
+    // to a `core::array` symbol of its own, outside the audited `stack_` names.
+    let mut p = [[0i128; 4]; 4];
+    for (row, &x) in p.iter_mut().zip(&a) {
+        for (slot, &y) in row.iter_mut().zip(&b) {
+            *slot = i128::from(x).wrapping_mul(i128::from(y));
+        }
+    }
+    [
+        p[0][0]
+            .wrapping_sub(p[1][1])
+            .wrapping_sub(p[2][2])
+            .wrapping_sub(p[3][3]),
+        p[0][1]
+            .wrapping_add(p[1][0])
+            .wrapping_add(p[2][3])
+            .wrapping_sub(p[3][2]),
+        p[0][2]
+            .wrapping_sub(p[1][3])
+            .wrapping_add(p[2][0])
+            .wrapping_add(p[3][1]),
+        p[0][3]
+            .wrapping_add(p[1][2])
+            .wrapping_sub(p[2][1])
+            .wrapping_add(p[3][0]),
+    ]
+}
+
+/// [`stack_hamilton`]'s multiplier-free form (claude-169), kept as the tests'
+/// reference (claude-177).
+///
+/// Row by row over `a`: a zero `a_i` is skipped, `|a_i| = 2^k` gives each
+/// product as `|b_j| << k`, and any other `|a_i|` gets one table of its
+/// sixteen multiples, read at the radix-16 digits of every `|b_j|`. Each
+/// product is `|a_i| |b_j|` modulo `2^128`, negated when the signs differ.
+#[cfg(test)]
+fn table_hamilton(a: [i64; 4], b: [i64; 4]) -> [i128; 4] {
     // Explicit loops, not `array::from_fn` or `map`: a closure there compiles
     // to a `core::array` symbol of its own, outside the audited `stack_`
     // names.
@@ -1289,7 +1355,10 @@ pub(crate) fn stack_snap_rotation(raw: [i32; 4], lambda: u64) -> [i64; 4] {
 
 /// `x c` modulo `2^128` from `table = multiples_u128(c)`: the radix-16
 /// digits of `x`, most significant first (Horner's rule modulo `2^128`, so
-/// equal to `u128::from(x).wrapping_mul(c)`).
+/// equal to `u128::from(x).wrapping_mul(c)`). The multiplier-free form the
+/// norm, the Hamilton product and the pointer mixture used before claude-177,
+/// kept as the tests' reference.
+#[cfg(test)]
 #[inline(always)]
 fn mul_by_u64(table: &[u128; 16], x: u64) -> u128 {
     let mut digits = (67 - x.leading_zeros()) >> 2;
@@ -1303,10 +1372,10 @@ fn mul_by_u64(table: &[u128; 16], x: u64) -> u128 {
 
 /// The pointer mixture in Q30 (the D10 engine's `pointer`):
 /// `out[v] = min((generate[v] G + copy[v] K + 2^62) >> 63, i32::MAX)` with
-/// every product and sum modulo `2^128`, from one multiples table of each of
-/// `G` (`generate_coefficient`) and `K` (`copy_coefficient`) read at the
-/// radix-16 digits of the per-id weights. A zero copy mass contributes
-/// nothing without a table read.
+/// every product and sum modulo `2^128`, each product one hardware multiply
+/// (D80, claude-177; before, a multiples table of `G` and of `K` read at the
+/// radix-16 digits of the per-id weights). A zero copy mass contributes
+/// nothing.
 #[inline(never)]
 pub(crate) fn stack_pointer_mixture(
     generate: &[u64],
@@ -1315,12 +1384,12 @@ pub(crate) fn stack_pointer_mixture(
     copy_coefficient: u128,
     out: &mut [i32],
 ) {
-    let g = multiples_u128(generate_coefficient);
-    let k = multiples_u128(copy_coefficient);
     for ((slot, &u), &m) in out.iter_mut().zip(generate).zip(copy) {
-        let mut sum = mul_by_u64(&g, u).wrapping_add(1u128 << 62);
+        let mut sum = u128::from(u)
+            .wrapping_mul(generate_coefficient)
+            .wrapping_add(1u128 << 62);
         if m != 0 {
-            sum = sum.wrapping_add(mul_by_u64(&k, m));
+            sum = sum.wrapping_add(u128::from(m).wrapping_mul(copy_coefficient));
         }
         let value = sum >> 63;
         *slot = if value > i32::MAX as u128 {
@@ -1488,6 +1557,77 @@ mod tests {
 
         fn wide(&mut self) -> u128 {
             (u128::from(self.next()) << 64) | u128::from(self.next())
+        }
+    }
+
+    /// D80 and D81 (claude-177): every kernel that now uses the hardware
+    /// multiply or divide equals the multiplier-free form it replaced, on edge
+    /// values and on 100,000 random inputs of every magnitude.
+    #[test]
+    fn hardware_kernels_equal_their_multiplier_free_forms() {
+        let edges128 = [
+            0u128,
+            1,
+            2,
+            15,
+            16,
+            17,
+            u128::from(u64::MAX),
+            1 << 64,
+            (1 << 96) - 1,
+            u128::MAX >> 1,
+            u128::MAX - 1,
+            u128::MAX,
+        ];
+        for &a in &edges128 {
+            for &b in &edges128 {
+                assert_eq!(stack_mul_u128(a, b), table_mul_u128(a, b), "mul {a} {b}");
+                assert_eq!(stack_div_u128(a, b), long_division_u128(a, b), "div {a} {b}");
+                let (x, y) = (a as u64, b as u64);
+                assert_eq!(stack_mul_u64(x, y), table_mul_u64(x, y), "mul {x} {y}");
+                assert_eq!(stack_div_u64(x, y), long_division_u64(x, y), "div {x} {y}");
+            }
+        }
+        let edges64 = [0i64, 1, -1, 2, i64::MAX, i64::MIN, i64::MIN + 1, 1 << 62, -(1 << 31)];
+        for &a in &edges64 {
+            for &b in &edges64 {
+                let q = [a, b, b, a];
+                let r = [b, a, a.wrapping_neg(), b];
+                assert_eq!(stack_hamilton(q, r), table_hamilton(q, r), "{q:?} {r:?}");
+            }
+        }
+        for v in [0i64, 1, -1, (1 << 31) - 1, 1 << 31, -(1 << 31), (1 << 32) - 1, 1 - (1 << 32)] {
+            assert_eq!(stack_square(v), table_square(v), "square {v}");
+        }
+        let mut rng = Lcg(0x0177_d80d_81);
+        for _ in 0..100_000 {
+            // Random magnitudes: shift each operand right by 0..127 bits.
+            let a = rng.wide() >> (rng.next() & 127);
+            let b = rng.wide() >> (rng.next() & 127);
+            assert_eq!(stack_mul_u128(a, b), table_mul_u128(a, b), "mul {a} {b}");
+            assert_eq!(stack_div_u128(a, b), long_division_u128(a, b), "div {a} {b}");
+            let x = rng.next() >> (rng.next() & 63);
+            let y = rng.next() >> (rng.next() & 63);
+            assert_eq!(stack_mul_u64(x, y), table_mul_u64(x, y), "mul {x} {y}");
+            assert_eq!(stack_div_u64(x, y), long_division_u64(x, y), "div {x} {y}");
+            let v = (rng.next() as i64) >> (31 + (rng.next() & 31));
+            assert_eq!(stack_square(v), table_square(v), "square {v}");
+            let mut q = [0i64; 4];
+            let mut r = [0i64; 4];
+            for c in q.iter_mut().chain(r.iter_mut()) {
+                *c = (rng.next() as i64) >> (rng.next() & 63);
+            }
+            assert_eq!(stack_hamilton(q, r), table_hamilton(q, r), "{q:?} {r:?}");
+            // The norm's and the pointer mixture's products: a u64 weight or
+            // a value of at most 2^24 times a coefficient below 2^96, as read
+            // from the coefficient's multiples table before claude-177.
+            let coefficient = rng.wide() >> (32 + (rng.next() & 95));
+            let weight = rng.next() >> (rng.next() & 63);
+            assert_eq!(
+                u128::from(weight).wrapping_mul(coefficient),
+                mul_by_u64(&multiples_u128(coefficient), weight),
+                "{weight} {coefficient}"
+            );
         }
     }
 
