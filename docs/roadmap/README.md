@@ -20,11 +20,11 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 17 |
+| ready | 18 |
 | held | 10 |
 | decision | 1 |
 | done | 80 |
-| total | 108 |
+| total | 109 |
 
 ## Start here
 
@@ -136,6 +136,7 @@ These items are ready and open to anyone.
 |---|---|---|---|---|---|
 | [A NEON kernel and fewer snap candidates for the served FBS step](items/fbs-serving-vector-kernel.md) | ready | a lab | no | [fbs-serving-kernels](items/fbs-serving-kernels.md) | not yet synced |
 | [Serve the Hamming read from the integer artifact on the laptop](items/integer-hamming-read.md) | ready | a lab | yes | [float-training-module](items/float-training-module.md), [spiralcore-fbs-offline-float-sheet](items/spiralcore-fbs-offline-float-sheet.md) | not yet synced |
+| [Serve with the hardware integer multiply and divide (D80, D81), exactly](items/integer-mul-div-serving.md) | ready | a lab | no | [fbs-serving-kernels](items/fbs-serving-kernels.md) | not yet synced |
 | [Split the training backward, and run a cheaper rival search against (a)](items/training-step-cost.md) | ready | a lab | yes | [fbs-cost-profile](items/fbs-cost-profile.md) | not yet synced |
 | [Serve the turn memory from the integer artifact on the laptop](items/turn-memory-integer.md) | ready | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | not yet synced |
 | [Carry the turn memory past a reply's first word](items/turn-memory-reply.md) | ready | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | not yet synced |
@@ -234,6 +235,7 @@ flowchart LR
   n_infra_loop_pr12_git_hooks["infra-loop-pr12-git-hooks"]
   n_infra_loop_render_review["infra-loop-render-review"]
   n_integer_hamming_read["integer-hamming-read"]
+  n_integer_mul_div_serving["integer-mul-div-serving"]
   n_loop_render_review_hardening["loop-render-review-hardening"]
   n_m1_a8_finite_cuda_qualification["m1-a8-finite-cuda-qualification"]
   n_m1_a8_full_dose_rerun["m1-a8-full-dose-rerun"]
@@ -297,6 +299,7 @@ flowchart LR
   n_fbs_cost_profile --> n_fbs_serving_kernels
   n_fbs_cost_profile --> n_training_step_cost
   n_fbs_serving_kernels --> n_fbs_serving_vector_kernel
+  n_fbs_serving_kernels --> n_integer_mul_div_serving
   n_float_training_module --> n_d11_exporter_float_trunk
   n_float_training_module --> n_e8_orbit_memory_sigmoid_free_iteration
   n_float_training_module --> n_hamilton_gate_offline_float_sheet

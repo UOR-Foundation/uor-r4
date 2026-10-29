@@ -53,7 +53,7 @@ The baseline binary is claude-169's, sha256 `8a7a83c76ef83e4302a0fbfb211061c1137
 
 ## Rules that apply
 
-- **Serving stays integer and multiplier-free** (D11, CHARTER §3.6). `step` and its call graph keep passing the zero-multiply audit.
+- **Serving stays integer** (CHARTER §3.6, as amended by D80 and D81): no float or transcendental instruction. The hardware integer multiply and divide are allowed once [`integer-mul-div-serving`](integer-mul-div-serving.md)'s audits allow them; until then `step` and its call graph keep passing the zero-multiply audit.
 - **Exact or nothing:** a faster kernel that changes one token, cell or state is a defect, not a trade.
 - **Geometry only, and no dense matrix multiplication** (§3.1, §3.3), including in vector form.
 

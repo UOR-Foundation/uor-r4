@@ -49,7 +49,7 @@ Read:
 
 ## Rules that apply
 
-- **Serving stays integer and multiplier-free** (D11, CHARTER §3.6): the move's products go through the tables, and the lookup is a hash and a load.
+- **Serving stays integer** (CHARTER §3.6, as amended by D80 and D81): no float or transcendental instruction. The hardware integer multiply and divide are allowed once [`integer-mul-div-serving`](integer-mul-div-serving.md)'s audits allow them; until then the move's products go through the tables. The lookup is a hash and a load.
 - **Geometry only, no squashing** (§3.1–§3.2).
 
 ## Sources
