@@ -3674,7 +3674,7 @@ fn malformed_hamming_reads_are_refused() {
     export(&|_| {}).expect("the unmodified reads export");
     let cases: [(&str, &dyn Fn(&mut super::FbsHammingSnapshot)); 9] = [
         ("an odd head count", &|r| r.heads = 3),
-        ("a head wider than one word", &|r| r.heads = 0),
+        ("a head count of zero", &|r| r.heads = 0),
         ("depths out of order", &|r| r.depths.reverse()),
         ("a depth beyond the layers", &|r| r.depths[1] = layers + 1),
         ("a depth of zero", &|r| r.depths[0] = 0),
