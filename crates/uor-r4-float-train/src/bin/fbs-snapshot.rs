@@ -18,18 +18,20 @@
 //! file's sha256.
 //!
 //! The snapshot carries every read the checkpoint holds, or it is refused
-//! (claude-198): the turn memory (`turn_memory*.safetensors`) is carried, and
-//! any other read file (the Flock, content, Hamming and opening reads, the
-//! prompt register) is refused by name until its export exists.
+//! (claude-198): the turn memory (`turn_memory*.safetensors`) and the Hamming
+//! reads (`hamming_read.safetensors`, claude-200) are carried, and any other
+//! read file (the Flock, content and opening reads, the prompt register) is
+//! refused by name until its export exists.
 
 use std::path::Path;
 
 use candle_core::Device;
 use sha2::{Digest, Sha256};
 use uor_r4_float_train::fbs_export::{
-    check_checkpoint_reads, fbs_float_readout, fbs_memory_snapshot, fbs_trunk_snapshot,
-    round_tables_as_exported,
+    check_checkpoint_reads, fbs_float_readout, fbs_hamming_snapshot, fbs_memory_snapshot,
+    fbs_trunk_snapshot, round_tables_as_exported,
 };
+use uor_r4_float_train::flock_read_hamming::HammingReads;
 use uor_r4_float_train::flock_read_memory::TurnMemory;
 use uor_r4_float_train::geometric_stack::StackModel;
 use uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT;
@@ -63,6 +65,10 @@ fn main() -> Result<()> {
     snapshot.memory = TurnMemory::load(dir, &device)?
         .map(|memory| fbs_memory_snapshot(&memory, SHEET_CONTEXT))
         .transpose()?;
+    let hamming = HammingReads::load(dir, &Device::Cpu)?
+        .map(|reads| fbs_hamming_snapshot(&reads, snapshot.layers.len(), snapshot.width))
+        .transpose()?;
+    snapshot.hamming = hamming;
     write(out, &serde_json::to_vec(&snapshot)?)?;
     for (path, mode) in readouts.iter().zip([
         FbsReadoutMode::Plain,

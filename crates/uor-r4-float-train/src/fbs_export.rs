@@ -15,14 +15,15 @@
 
 use std::path::Path;
 
-use candle_core::Tensor;
+use candle_core::{Tensor, Var};
 use uor_r4_integer::discrete_d11::{spiralcore_orbit_roots, spiralcore_signed_axes};
 use uor_r4_integer::fbs_snapshot::{
     fixed_value, grid_code, grid_value, q12_value, FbsFloatPosition, FbsFloatReadout,
-    FbsFloatSequence, FbsMemoryEntry, FbsMemorySnapshot, FbsReadoutMode, FbsReplyTable, FbsRoutes,
-    FbsTrunkLayer, FbsTrunkSnapshot, FBS_FIXED_EXP,
+    FbsFloatSequence, FbsHammingRead, FbsHammingSnapshot, FbsMemoryEntry, FbsMemorySnapshot,
+    FbsReadoutMode, FbsReplyTable, FbsRoutes, FbsTrunkLayer, FbsTrunkSnapshot, FBS_FIXED_EXP,
 };
 
+use crate::flock_read_hamming::{HammingReads, HAMMING_DEPTHS, HAMMING_READOUT_DEPTH};
 use crate::flock_read_memory::TurnMemory;
 
 use crate::geometric_stack::{
@@ -284,8 +285,8 @@ pub fn fbs_trunk_snapshot(model: &StackModel) -> Result<FbsTrunkSnapshot> {
         embed: values("embedding.weight")?,
         final_norm: values("final_norm.weight")?,
         layers,
-        // Reading `hamming_read.safetensors` into the snapshot is `integer-hamming-read`'s step 4;
-        // until then `check_checkpoint_reads` refuses a checkpoint with one (claude-198).
+        // The Hamming reads are not part of the `StackModel` either: `fbs-snapshot` loads them
+        // and sets them with `fbs_hamming_snapshot` (claude-200).
         hamming: None,
         // The memory is not part of the `StackModel`: `fbs-snapshot` loads it from the checkpoint
         // directory and sets it with `fbs_memory_snapshot` (claude-198).
@@ -294,19 +295,21 @@ pub fn fbs_trunk_snapshot(model: &StackModel) -> Result<FbsTrunkSnapshot> {
 }
 
 /// The safetensors files of a checkpoint directory the export accounts for (claude-198): the
-/// trunk, the optimizer's state (training only, never served), and the turn memory, which it
-/// carries. Any other is a read it does not carry: today the Flock, content, Hamming and opening
-/// reads and the prompt register (`in_space_long`'s final checkpoint).
-const CHECKPOINT_ACCOUNTED: [&str; 4] = [
+/// trunk, the optimizer's state (training only, never served), and the reads it carries, the
+/// turn memory and the Hamming reads (claude-200). Any other is a read it does not carry: today
+/// the Flock, content and opening reads and the prompt register (`in_space_long`'s final
+/// checkpoint).
+const CHECKPOINT_ACCOUNTED: [&str; 5] = [
     "model.safetensors",
     "optimizer.safetensors",
     "turn_memory.safetensors",
     "turn_memory_reply.safetensors",
+    "hamming_read.safetensors",
 ];
 
 /// Refuse a checkpoint directory that holds a read the export does not carry, naming every one,
-/// so the export never serves the trunk without it (claude-198). The Hamming read's export is
-/// `integer-hamming-read`'s step 4. A reply table without its opening table is refused too:
+/// so the export never serves the trunk without it (claude-198). A reply table without its
+/// opening table is refused too:
 /// `TurnMemory::load` reads neither without the opening file. A macOS `._*.safetensors` copy
 /// artifact is refused like any unknown file, which is the safe direction.
 pub fn check_checkpoint_reads(directory: &Path) -> Result<()> {
@@ -332,6 +335,66 @@ pub fn check_checkpoint_reads(directory: &Path) -> Result<()> {
         "the checkpoint holds {}, which the export does not carry yet; exporting the trunk without it would serve another model",
         refused.join(", ")
     )))
+}
+
+/// The snapshot of a trunk's Hamming reads (claude-146) for a trunk of `layers` layers on points
+/// of `width` coordinates (claude-200): each read's rotations, margin and weight, row-major, as
+/// `hamming_read.safetensors` stores them, at the depths [`HAMMING_DEPTHS`].
+///
+/// It refuses three things:
+/// - a read with the type spin (`step_rotation`, claude-151), which the integer engine does not
+///   serve;
+/// - a trunk whose layer count is not [`HAMMING_READOUT_DEPTH`]. The float read at that depth runs
+///   on the readout whatever the layer count, and the integer engine takes the read at the layer
+///   count as the readout (claude-199);
+/// - a table of another shape, or one with a value that is not finite.
+pub fn fbs_hamming_snapshot(
+    reads: &HammingReads,
+    layers: usize,
+    width: usize,
+) -> Result<FbsHammingSnapshot> {
+    if layers != HAMMING_READOUT_DEPTH {
+        return Err(invalid(format!(
+            "the Hamming readout read runs at depth {HAMMING_READOUT_DEPTH}, but this trunk has {layers} layers; the export serves it only on a trunk of {HAMMING_READOUT_DEPTH}"
+        )));
+    }
+    if reads.reads.len() != HAMMING_DEPTHS.len() || width == 0 || width % 4 != 0 {
+        return Err(invalid(format!(
+            "a Hamming read needs one read per depth {HAMMING_DEPTHS:?} on a width of whole quaternions"
+        )));
+    }
+    let heads = reads.reads[0].margin.dims().first().copied().unwrap_or(0);
+    let mut out = Vec::with_capacity(reads.reads.len());
+    for (depth, read) in HAMMING_DEPTHS.iter().zip(&reads.reads) {
+        if read.step_rotation.is_some() {
+            return Err(invalid(format!(
+                "hamming_read d{depth} has the type spin (step_rotation), which the integer engine does not serve yet"
+            )));
+        }
+        let table = |name: &str, var: &Var, shape: &[usize]| -> Result<Vec<f32>> {
+            let name = format!("hamming_read.d{depth}.{name}");
+            if var.dims() != shape {
+                return Err(invalid(format!(
+                    "{name} has shape {:?}, not {shape:?}",
+                    var.dims()
+                )));
+            }
+            finite_table(&name, var.as_tensor().flatten_all()?.to_vec1::<f32>()?)
+        };
+        let quaternions = [width / 4, 4];
+        out.push(FbsHammingRead {
+            query_rotation: table("query_rotation", &read.query_rotation, &quaternions)?,
+            key_rotation: table("key_rotation", &read.key_rotation, &quaternions)?,
+            value_rotation: table("value_rotation", &read.value_rotation, &quaternions)?,
+            margin: table("margin", &read.margin, &[heads])?,
+            weight: table("weight", &read.weight, &[2, width])?,
+        });
+    }
+    Ok(FbsHammingSnapshot {
+        heads,
+        depths: HAMMING_DEPTHS.to_vec(),
+        reads: out,
+    })
 }
 
 /// The snapshot of a turn memory (claude-161, claude-193): its tables in ascending key order, as
@@ -707,6 +770,70 @@ mod tests {
         }
     }
 
+    /// claude-200: saved Hamming reads snapshot exactly as they load, row-major, at the depths
+    /// `HAMMING_DEPTHS`, and the JSON reads back equal. A trunk of another depth, a read with the
+    /// type spin, a table of another width and a value that is not finite are refused by text.
+    #[test]
+    fn saved_hamming_reads_snapshot_as_they_load() -> Result<()> {
+        let device = candle_core::Device::Cpu;
+        let (heads, width) = (4, 32);
+        let scratch = Scratch::new("claude-200-hamming");
+        let reads = HammingReads::new(heads, width, &device)?;
+        let mut rng = Lcg(200);
+        for read in &reads.reads {
+            for var in [
+                &read.query_rotation,
+                &read.key_rotation,
+                &read.value_rotation,
+                &read.margin,
+                &read.weight,
+            ] {
+                let values: Vec<f32> = (0..var.elem_count())
+                    .map(|_| (rng.next() % 2001) as f32 / 1000.0 - 1.0)
+                    .collect();
+                var.set(&Tensor::from_vec(values, var.shape(), &device)?)?;
+            }
+        }
+        reads.save(&scratch.0)?;
+        let loaded = HammingReads::load(&scratch.0, &device)?.expect("saved");
+        let before = fbs_hamming_snapshot(&reads, HAMMING_READOUT_DEPTH, width)?;
+        let after = fbs_hamming_snapshot(&loaded, HAMMING_READOUT_DEPTH, width)?;
+        assert_eq!(before, after);
+        assert_eq!((after.heads, after.depths.as_slice()), (heads, &HAMMING_DEPTHS[..]));
+        for (snap, read) in after.reads.iter().zip(&reads.reads) {
+            let values = |var: &Var| var.flatten_all().unwrap().to_vec1::<f32>().unwrap();
+            assert_eq!(snap.query_rotation, values(&read.query_rotation));
+            assert_eq!(snap.key_rotation, values(&read.key_rotation));
+            assert_eq!(snap.value_rotation, values(&read.value_rotation));
+            assert_eq!(snap.margin, values(&read.margin));
+            assert_eq!(snap.weight, values(&read.weight));
+            assert_eq!(
+                (snap.query_rotation.len(), snap.margin.len(), snap.weight.len()),
+                (width, heads, 2 * width)
+            );
+        }
+        let parsed: FbsHammingSnapshot = serde_json::from_slice(&serde_json::to_vec(&after)?)?;
+        assert_eq!(parsed, after);
+
+        let refused = |reads: &HammingReads, layers: usize, width: usize, reason: &str| {
+            let message = fbs_hamming_snapshot(reads, layers, width)
+                .expect_err(reason)
+                .to_string();
+            assert!(message.contains(reason), "{message}");
+        };
+        refused(&loaded, 4, width, "this trunk has 4 layers");
+        refused(&loaded, HAMMING_READOUT_DEPTH, 64, "hamming_read.d2.query_rotation has shape");
+        let spun = loaded.clone().with_type_spin()?;
+        refused(&spun, HAMMING_READOUT_DEPTH, width, "the type spin (step_rotation)");
+        let mut weight = loaded.reads[1].weight.flatten_all()?.to_vec1::<f32>()?;
+        weight[3] = f32::NAN;
+        loaded.reads[1]
+            .weight
+            .set(&Tensor::from_vec(weight, (2, width), &device)?)?;
+        refused(&loaded, HAMMING_READOUT_DEPTH, width, "hamming_read.d6.weight[3]");
+        Ok(())
+    }
+
     /// claude-198: a checkpoint of the trunk, its optimizer state and its turn memory exports;
     /// every other read `in_space_long` saves beside them is refused by name, because the export
     /// does not carry it yet.
@@ -717,14 +844,14 @@ mod tests {
             "optimizer.safetensors",
             "turn_memory.safetensors",
             "turn_memory_reply.safetensors",
+            "hamming_read.safetensors",
             "config.json",
         ];
-        // The five reads `in_space_long` saves today, and a read no code writes yet: the check is
-        // an allow-list, so a read added later is refused too.
+        // The four reads `in_space_long` saves that the export does not carry, and a read no code
+        // writes yet: the check is an allow-list, so a read added later is refused too.
         let reads = [
             "flock_read.safetensors",
             "content_read.safetensors",
-            "hamming_read.safetensors",
             "opening_read.safetensors",
             "prompt_register.safetensors",
             "future_read.safetensors",
