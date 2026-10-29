@@ -3,7 +3,7 @@ id: docs-status-refresh
 title: Bring every status page, picture and tracker up to 29 Oct 2026
 milestone: research
 area: tooling
-status: ready
+status: done
 open_to: lab
 needs_gpu: false
 depends_on: []
