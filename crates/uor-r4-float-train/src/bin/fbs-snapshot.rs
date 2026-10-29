@@ -19,8 +19,8 @@
 //!
 //! The snapshot carries every read the checkpoint holds, or it is refused
 //! (claude-198): the turn memory (`turn_memory*.safetensors`) is carried, and
-//! a Hamming read (`hamming_read.safetensors`) is refused until its export
-//! exists.
+//! any other read file (the Flock, content, Hamming and opening reads, the
+//! prompt register) is refused by name until its export exists.
 
 use std::path::Path;
 

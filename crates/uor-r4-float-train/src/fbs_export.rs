@@ -293,25 +293,36 @@ pub fn fbs_trunk_snapshot(model: &StackModel) -> Result<FbsTrunkSnapshot> {
     })
 }
 
-/// The read files a checkpoint directory may hold beside the trunk, and whether the export
-/// carries each (claude-198). A read it does not carry is refused, never dropped.
-const CHECKPOINT_READS: [(&str, bool); 3] = [
-    ("turn_memory.safetensors", true),
-    ("turn_memory_reply.safetensors", true),
-    ("hamming_read.safetensors", false),
+/// The safetensors files of a checkpoint directory the export accounts for (claude-198): the
+/// trunk, the optimizer's state (training only, never served), and the turn memory, which it
+/// carries. Any other is a read it does not carry: today the Flock, content, Hamming and opening
+/// reads and the prompt register (`in_space_long`'s final checkpoint).
+const CHECKPOINT_ACCOUNTED: [&str; 4] = [
+    "model.safetensors",
+    "optimizer.safetensors",
+    "turn_memory.safetensors",
+    "turn_memory_reply.safetensors",
 ];
 
-/// Refuse a checkpoint directory that holds a read the export does not carry, naming it: today the
-/// Hamming read, whose export is `integer-hamming-read`'s step 4 (claude-198).
+/// Refuse a checkpoint directory that holds a read the export does not carry, naming every one,
+/// so the export never serves the trunk without it (claude-198). The Hamming read's export is
+/// `integer-hamming-read`'s step 4.
 pub fn check_checkpoint_reads(directory: &Path) -> Result<()> {
-    for (file, carried) in CHECKPOINT_READS {
-        if !carried && directory.join(file).exists() {
-            return Err(invalid(format!(
-                "the checkpoint holds {file}, which the export does not carry yet; exporting the trunk without it would serve another model"
-            )));
+    let mut refused = Vec::new();
+    for entry in std::fs::read_dir(directory)? {
+        let name = entry?.file_name().to_string_lossy().into_owned();
+        if name.ends_with(".safetensors") && !CHECKPOINT_ACCOUNTED.contains(&name.as_str()) {
+            refused.push(name);
         }
     }
-    Ok(())
+    if refused.is_empty() {
+        return Ok(());
+    }
+    refused.sort();
+    Err(invalid(format!(
+        "the checkpoint holds {}, which the export does not carry yet; exporting the trunk without it would serve another model",
+        refused.join(", ")
+    )))
 }
 
 /// The snapshot of a turn memory (claude-161, claude-193): its tables in ascending key order, as
@@ -620,7 +631,8 @@ mod tests {
     fn a_saved_memory_snapshots_as_it_loads() -> Result<()> {
         use std::collections::HashMap;
         let device = candle_core::Device::Cpu;
-        let dir = std::env::temp_dir().join(format!("claude-198-memory-{}", std::process::id()));
+        let scratch = Scratch::new("claude-198-memory");
+        let dir = &scratch.0;
         let pad = uor_r4_integer::fbs_snapshot::MEMORY_PAD;
         let openings: HashMap<Vec<u32>, u32> =
             [(vec![9, 4], 6), (vec![3], 7), (vec![3, 4], 8)].into_iter().collect();
@@ -641,11 +653,10 @@ mod tests {
             .expect("a reply table")
             .weight
             .set(&Tensor::new(&[-1.0f32, 0.125, 0.0, 2.0], &device)?)?;
-        memory.save(&dir)?;
-        let loaded = TurnMemory::load(&dir, &device)?.expect("saved");
+        memory.save(dir)?;
+        let loaded = TurnMemory::load(dir, &device)?.expect("saved");
         let before = fbs_memory_snapshot(&memory, 192)?;
         let after = fbs_memory_snapshot(&loaded, 192)?;
-        std::fs::remove_dir_all(&dir)?;
         assert_eq!(before, after);
         assert_eq!(serde_json::to_vec(&before)?, serde_json::to_vec(&after)?);
         assert_eq!((after.k, after.key_window), (2, 192));
@@ -669,22 +680,69 @@ mod tests {
         Ok(())
     }
 
-    /// claude-198: a checkpoint with a turn memory exports; one with a Hamming read is refused by
-    /// name, because the export does not carry it yet.
+    /// A test's scratch directory, emptied before use and removed when dropped, so a failed run
+    /// leaves nothing behind for the next.
+    struct Scratch(std::path::PathBuf);
+
+    impl Scratch {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!("{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            Self(dir)
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// claude-198: a checkpoint of the trunk, its optimizer state and its turn memory exports;
+    /// every other read `in_space_long` saves beside them is refused by name, because the export
+    /// does not carry it yet.
     #[test]
     fn a_checkpoint_read_the_export_does_not_carry_is_refused() -> Result<()> {
-        let dir = std::env::temp_dir().join(format!("claude-198-reads-{}", std::process::id()));
-        std::fs::create_dir_all(&dir)?;
-        check_checkpoint_reads(&dir)?;
-        for file in ["turn_memory.safetensors", "turn_memory_reply.safetensors"] {
-            std::fs::write(dir.join(file), b"")?;
+        let accounted = [
+            "model.safetensors",
+            "optimizer.safetensors",
+            "turn_memory.safetensors",
+            "turn_memory_reply.safetensors",
+            "config.json",
+        ];
+        let reads = [
+            "flock_read.safetensors",
+            "content_read.safetensors",
+            "hamming_read.safetensors",
+            "opening_read.safetensors",
+            "prompt_register.safetensors",
+        ];
+        for read in reads {
+            let scratch = Scratch::new("claude-198-reads");
+            std::fs::create_dir_all(&scratch.0)?;
+            for file in accounted {
+                std::fs::write(scratch.0.join(file), b"")?;
+            }
+            check_checkpoint_reads(&scratch.0)?;
+            std::fs::write(scratch.0.join(read), b"")?;
+            let message = check_checkpoint_reads(&scratch.0)
+                .expect_err(read)
+                .to_string();
+            assert!(message.contains(read), "{message}");
         }
-        check_checkpoint_reads(&dir)?;
-        std::fs::write(dir.join("hamming_read.safetensors"), b"")?;
-        let refused = check_checkpoint_reads(&dir);
-        std::fs::remove_dir_all(&dir)?;
-        let message = refused.expect_err("a Hamming read is refused").to_string();
-        assert!(message.contains("hamming_read.safetensors"), "{message}");
+        // Two reads at once are both named.
+        let scratch = Scratch::new("claude-198-reads");
+        std::fs::create_dir_all(&scratch.0)?;
+        for read in ["opening_read.safetensors", "hamming_read.safetensors"] {
+            std::fs::write(scratch.0.join(read), b"")?;
+        }
+        let message = check_checkpoint_reads(&scratch.0)
+            .expect_err("two reads")
+            .to_string();
+        assert!(
+            message.contains("hamming_read.safetensors, opening_read.safetensors"),
+            "{message}"
+        );
         Ok(())
     }
 
