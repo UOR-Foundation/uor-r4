@@ -71,10 +71,12 @@ extern "C" __global__ void spiralcore_fbs_arm_bwd(
     const uint* nodes, const uint* frontier, const uint* axes,
     const uint* compose, const uint* root_of_state, const uint* bfs_actions,
     const uint* branch_targets, const float* roots,
-    float* d_queries, float* d_input, uint* error,
+    float* dq_items, float* dx_values, uint* dx_slots, uint* error,
     uint rows, uint outputs, uint inputs, uint stages, uint frontier_count, uint identity,
     uint arm
 ) {
+    // As `spiralcore_fbs_bwd` (claude-179): contributions go to scratch, path
+    // by path, and `spiralcore_fbs_reduce_dx`/`_dq` add them in item order.
     uint item = blockIdx.x * blockDim.x + threadIdx.x;
     if (item >= rows * outputs) return;
     if (arm != SC_ARM_IDENTITY && arm != SC_ARM_TWO) { atomicExch(error, 5u); return; }
@@ -95,7 +97,7 @@ extern "C" __global__ void spiralcore_fbs_arm_bwd(
     }
     for (uint path = 0; path < paths; ++path) {
         const float* q = q_all + path * stages * 8;
-        float* dq = d_queries + (u64)output * paths * stages * 8 + path * stages * 8;
+        float* dq = dq_items + (u64)item * paths * stages * 8 + path * stages * 8;
         ScFbsRoute selected = sc_fbs_route(t, q, SC_FBS_ABSENT, 0);
         if (selected.atom == SC_FBS_ABSENT || selected.atom >= inputs) {
             atomicExch(error, 2u); return;
@@ -111,8 +113,9 @@ extern "C" __global__ void spiralcore_fbs_arm_bwd(
                 target = code & 7;
                 if (code & 8) value = -value;
             }
-            float prior = atomicAdd(d_input + (u64)row * inputs * 8 + selected.atom * 8 + target, value);
-            if (!isfinite(prior + value)) { atomicExch(error, 4u); return; }
+            u64 lane = ((u64)item * paths + path) * 8 + axis;
+            dx_values[lane] = value;
+            dx_slots[lane] = selected.atom * 8 + target;
         }
         for (uint stage = 0; stage < selected.count; ++stage) {
             uint count = stage == 0 ? frontier_count : 3;
@@ -137,9 +140,9 @@ extern "C" __global__ void spiralcore_fbs_arm_bwd(
                 float directional = contrast / squared_edge;
                 for (uint axis = 0; axis < 8; ++axis) {
                     float edge = roots[goal * 8 + axis] - roots[old_goal * 8 + axis];
-                    float value = directional * edge;
-                    float prior = atomicAdd(dq + stage * 8 + axis, value);
-                    if (!isfinite(prior + value)) { atomicExch(error, 4u); return; }
+                    float sum = dq[stage * 8 + axis] + directional * edge;
+                    if (!isfinite(sum)) { atomicExch(error, 4u); return; }
+                    dq[stage * 8 + axis] = sum;
                 }
             }
         }

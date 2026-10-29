@@ -1,12 +1,12 @@
 //! Guard tests from the D37 reactivation architect review (`#2823`):
 //! 1. `cargo tree -p uor-r4-float-train` must never list `uor-r4-training` or `candle-nn`.
-//! 2. `uor-r4-float-train` carries all 24 kernel entry points (`22` in `src/cuda_stack.cu` +
-//!    `2` in `src/spiralcore_fbs.cu`) and zero banned PTX/source tokens.
+//! 2. `uor-r4-float-train` carries all 26 kernel entry points (`22` in `src/cuda_stack.cu` +
+//!    `4` in `src/spiralcore_fbs.cu`, two of them claude-179's fixed-order reductions) and zero banned PTX/source tokens.
 
 use std::path::PathBuf;
 use std::process::Command;
 
-const EXPECTED_24_KERNELS: [&str; 24] = [
+const EXPECTED_24_KERNELS: [&str; 26] = [
     "straight_through_fwd",
     "hamilton_gate_fwd",
     "hamilton_gate_bwd",
@@ -31,6 +31,8 @@ const EXPECTED_24_KERNELS: [&str; 24] = [
     "sq_tree",
     "spiralcore_fbs_fwd",
     "spiralcore_fbs_bwd",
+    "spiralcore_fbs_reduce_dx",
+    "spiralcore_fbs_reduce_dq",
 ];
 
 fn cargo_bin() -> PathBuf {
@@ -78,7 +80,7 @@ fn twenty_four_kernel_entry_points_match_cuda_sources_and_pass_d29_scan() {
     assert_eq!(
         uor_r4_float_train::KERNEL_ENTRY_POINTS,
         EXPECTED_24_KERNELS,
-        "KERNEL_ENTRY_POINTS must list all 24 kernels in exact order"
+        "KERNEL_ENTRY_POINTS must list all 26 kernels in exact order"
     );
 
     let cuda_stack = include_str!("../src/cuda_stack.cu");
@@ -98,8 +100,8 @@ fn twenty_four_kernel_entry_points_match_cuda_sources_and_pass_d29_scan() {
     }
     assert_eq!(
         found.len(),
-        24,
-        "expected 24 __global__ kernels across cuda_stack.cu + spiralcore_fbs.cu, found {}: {found:?}",
+        26,
+        "expected 26 __global__ kernels across cuda_stack.cu + spiralcore_fbs.cu, found {}: {found:?}",
         found.len()
     );
     let found_refs: Vec<&str> = found.iter().map(String::as_str).collect();

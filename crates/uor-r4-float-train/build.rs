@@ -1,7 +1,7 @@
 //! Ahead-of-time CUDA kernels for the D37 offline float training module (CHARTER §3.4 / D29).
 //!
 //! Runtime CUDA compilation (NVRTC) is banned project-wide. When compiled with `--features cuda`,
-//! `nvcc` compiles the 24-kernel extract (`src/cuda_stack.cu` + `src/spiralcore_fbs.cu`) ahead of
+//! `nvcc` compiles the 26-kernel extract (`src/cuda_stack.cu` + `src/spiralcore_fbs.cu`) ahead of
 //! time into `cuda_stack_f32.ptx` and `cuda_stack_bf16.ptx` inside `OUT_DIR`. The SpiralCore/FBS
 //! sheet arms (`src/spiralcore_fbs_arms.cu`) build as their own module, `spiralcore_fbs_arms_f32.ptx`,
 //! from a prelude, the unchanged `src/spiralcore_fbs.cu` (for its route helpers) and the arms. On

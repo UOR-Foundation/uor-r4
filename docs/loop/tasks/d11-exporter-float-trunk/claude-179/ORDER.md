@@ -13,7 +13,7 @@ Casey: "fix the exporter". claude-140 found the float trunk's training nondeterm
 - Two new kernels add them in a fixed order:
   - `d_input`: one thread per row, over outputs in order;
   - `d_queries`: one thread per `(output, path, stage, axis)`, over rows in order.
-- The CPU references (`kernel_controls.rs`) take the same association, so the GPU result can be checked **bitwise**.
+- **The bar is GPU bits equal across repeats.** `build.rs` keeps `nvcc`'s default fused multiply-add on (only `-ftz=false -prec-div=true -prec-sqrt=true` are set), so GPU and CPU differ in the last bits. The CPU references keep their tolerance.
 
 ## Cancel probe (run first)
 
@@ -36,7 +36,8 @@ All held. **Not cancelled.**
 
 1. **Code.** Both backwards are fixed-order, with no float `atomicAdd` left on a gradient. The stub-nvcc `cargo check --features cuda` passes on the Mac, and the CPU references and their tests pass.
 2. **GPU, under a FIT'd prep sheet and a pre-run review.**
-   - The new backward is bitwise equal to the CPU reference and to itself across repeats.
+   - The new backward gives the same bits across repeats (`the_backward_gives_the_same_bits_on_every_run`, base and arm kernels).
+   - The existing pod tests pass.
    - Two trainings of the same recipe on one device give byte-identical checkpoints. If not, the cause is classified as candle's kernels versus ours.
 3. One notebook row and a REPORT. The export gap re-measurement with repeats is the next unit.
 

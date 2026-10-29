@@ -1,7 +1,7 @@
 //! D37 scanned offline float training module (`crates/uor-r4-float-train`, `#2823`).
 //!
-//! Hosts the 24-kernel geometric stack extract (`22` `__global__` kernels in `src/cuda_stack.cu`
-//! and `2` `__global__` kernels in `src/spiralcore_fbs.cu`) and its native geometric stack modules
+//! Hosts the 26-kernel geometric stack extract (`22` `__global__` kernels in `src/cuda_stack.cu`
+//! and `4` `__global__` kernels in `src/spiralcore_fbs.cu`) and its native geometric stack modules
 //! with **zero dependency edge** on `crates/uor-r4-training` (`CHARTER §3.4, §3.7`, D23, D25/D30,
 //! D29, D32, D37).
 
@@ -30,9 +30,10 @@ pub mod spiralcore_fbs;
 pub mod spiralcore_fbs_arms;
 pub mod spiralcore_fbs_sheet;
 
-/// The 24 `__global__` CUDA kernel entry points in the D37 float-training extract
-/// (`22` in `src/cuda_stack.cu` + `2` in `src/spiralcore_fbs.cu`), in declaration order.
-pub const KERNEL_ENTRY_POINTS: [&str; 24] = [
+/// The 26 `__global__` CUDA kernel entry points in the D37 float-training extract
+/// (`22` in `src/cuda_stack.cu` + `4` in `src/spiralcore_fbs.cu`, the two fixed-order
+/// backward reductions added by claude-179), in declaration order.
+pub const KERNEL_ENTRY_POINTS: [&str; 26] = [
     "straight_through_fwd",
     "hamilton_gate_fwd",
     "hamilton_gate_bwd",
@@ -57,6 +58,8 @@ pub const KERNEL_ENTRY_POINTS: [&str; 24] = [
     "sq_tree",
     "spiralcore_fbs_fwd",
     "spiralcore_fbs_bwd",
+    "spiralcore_fbs_reduce_dx",
+    "spiralcore_fbs_reduce_dq",
 ];
 
 /// Error type for the D37 offline float training module.
