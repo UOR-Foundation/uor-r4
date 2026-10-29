@@ -18,7 +18,7 @@ This run measures whether it adds to the model.
 
 The turn memory ([`flock_read_memory.rs`](../../../crates/uor-r4-float-train/src/flock_read_memory.rs)) has two tables. Both move the readout point `n` toward a stored token's table point `c` (detached), `n + w ⊙ (c − n)`, each with its own per-coordinate weight starting at 0. Every other row is unchanged.
 - **The opening table** (claude-161, unchanged): at a row that predicts a reply's first token, keyed by the turn's first 8 ids. About 26,450 keys.
-- **The reply table** (claude-193): at every row past the opening, keyed by `turn-8 + position + reply-last-1`, the probe's key exactly, at share ≥ 0.5. About 598,755 keys, from TRAIN's 2,425,925 reply rows less its openings.
+- **The reply table** (claude-193): at every row past the opening, keyed by `turn-8 + position + reply-last-1`, the probe's key exactly, at share ≥ 0.5. It is built from TRAIN's 2,212,957 rows past their openings (2,425,925 reply rows less 212,968 openings). It holds somewhat fewer than the probe's 598,755 keys, which also count the position-0 opening keys that pass share 0.5. Opening keys and later keys never collide, so on DEV it names exactly the probe's 9,655 rows past their openings.
 
 ## Steps: the arms
 
@@ -58,7 +58,13 @@ At **both** seeds:
 | **Later rows carry, and the memory beats no memory** | **A.** The reply table carries the reply past its first word. | **B.** It does, at a cost on openings or copies. |
 | **Later rows do not carry** | **C.** If `T̄(r)` is within `m` of `T̄(m)`: the lookup does not add to the trunk on these rows. | **D.** If `T̄(r) < T̄(m) − m`: it hurts. |
 
-A pass at one seed only counts as no pass, and is reported as such.
+A or B needs "the later rows carry" (both of its parts) and "the memory against no memory", all at both seeds. **Every other combination is no pass:**
+- `R̄` carries but `T̄(r)` misses `T̄(m) + m`;
+- `T̄(r) ≥ T̄(m) + m` but `R̄` misses;
+- the later rows carry but the memory against no memory fails;
+- a pass at one seed only.
+
+Each is reported as no pass, with its readings. C and D name only the cases their own conditions describe; a no pass outside both is reported as "no pass, no cell".
 
 **Readings, not bars,** reported for every arm and seed:
 - the reply weight's mean magnitude;
@@ -82,8 +88,12 @@ A pass at one seed only counts as no pass, and is reported as such.
 
   `config.json` holds width 256, 4 Hamming heads, `turn_memory` 8, and the pinned TRAIN. It holds `turn_memory_reply` for (r) and (r0), and `turn_memory_empty` for (r0) only.
 - **I-3.**
-  - **The tables:** the opening table has about 26,450 keys for (m) and (r), and 0 for (r0). The reply table has 598,755 keys for (r), and 0 for (r0); (m) has none.
-  - **The DEV rows the reply table names:** **9,655** for (r), which is the probe's count, and 0 for (r0).
+  - **The opening table:** about 26,450 keys for (m) and (r), and 0 for (r0).
+  - **The reply table,** checked on each arm's 256-step probe log before it trains, and again on its training log:
+    - for (r) and (r0), it reads exactly **2,212,957** TRAIN rows past their openings;
+    - for (r), it holds more than 0 and fewer than 598,755 keys. That is the probe's count, which includes the position-0 opening keys. It names exactly **9,655** of DEV's rows past their openings, the probe's count;
+    - for (r0), it holds 0 keys and names 0 rows;
+    - (m) has none.
   - **The weights:** (r)'s reply weight is non-zero at the end, and (r0)'s stays 0.
 - **I-4.** Every loss is finite.
 - **I-5.** The removal reading: at the final checkpoint, `--inspect`'s `memory_drop` re-reads DEV with the whole memory taken out. For (m) and (r) that must change the reading. For (r0) it must change nothing.
@@ -116,13 +126,16 @@ None. Each arm starts from its seed's initialization, as (a) did.
 - **Time:** each arm is 16,384 steps of 16 × 192 tokens. At claude-161's 31,851 context tokens/s that is about 26 minutes, plus reach, inspect and decode. That is about 2.5 hours a pod, and up to about 6.5 at the throughput gate's limit.
 - **The total:** about $5 to $15.
 - **Throughput:** each arm's probe must project it under 2 hours (`≥ 6,991` context tokens/s), or the job stops.
-- **Lease:** 7 hours, inside the caps: 2 of 4 pods, about $2.2/h of $8/h.
+- **Lease:** 8 hours, renewed rather than cut if a healthy run needs longer, inside the caps: 2 of 4 pods, about $2.2/h of $8/h.
 - **Results:** sealed to `results/claude/turn-memory-reply-2026-10-29/` and read back before `down`.
 
 ## Stop rule
 
 - **I-1 or I-2 fails:** stop. The read is not off at weight 0, or the build is not the head's.
-- **I-3's DEV count for (r) is not 9,655:** stop. The run's key is not the probe's; check the instrument before any reading.
+- **Any of I-3's reply-table checks fails,** on the probe's log or the training log: stop. Check the instrument before any reading.
+  - TRAIN rows other than 2,212,957: the table is not built from the right rows.
+  - Keys outside the bound: the share rule is not the probe's.
+  - A DEV count other than 9,655: the run's key is not the probe's.
 - **A probe projects past 2 hours:** stop and profile.
 - **The pod fails or the lease would pass the caps:** stop, seal what exists, and report.
 
