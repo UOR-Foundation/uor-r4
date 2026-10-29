@@ -164,10 +164,14 @@ impl CopyHeads {
     /// Copy head `h`'s kept positions at the last row `t` of `tokens` (`x_0..=x_t`): the
     /// `min(kept, t − 1)` positions `1 ≤ s < t` nearest by `popcount(q XOR k_s)`, with their
     /// distances, in ascending distance and then ascending `s` (the design's tie rule; the
-    /// float `choose_sorted` leaves the order of ties open). Position 0 has no previous token.
+    /// float `choose_sorted` leaves the order of ties open). Position 0 has no previous token, and
+    /// an empty `tokens` keeps nothing.
     pub fn choose(&self, h: usize, tokens: &[u32]) -> Vec<(usize, u32)> {
-        let t = tokens.len().saturating_sub(1);
-        let query = self.code(tokens[t], h);
+        let Some(&last) = tokens.last() else {
+            return Vec::new();
+        };
+        let t = tokens.len() - 1;
+        let query = self.code(last, h);
         let mut candidates: Vec<(u32, usize)> = (1..t)
             .map(|s| ((query ^ self.code(tokens[s - 1], h)).count_ones(), s))
             .collect();

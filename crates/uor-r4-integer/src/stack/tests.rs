@@ -4076,6 +4076,7 @@ fn served_read_parts(depths: &[usize], copy: f32) -> (IntegerStackModel, Integer
 fn a_read_at_weight_zero_serves_as_the_read_free_trunk() {
     let (read, free, table, _, copy_heads) = served_read_parts(&[1, 3], 0.0);
     assert!(read.fbs_image().is_none(), "the view does not carry the read");
+    assert!(copy_heads.choose(0, &[]).is_empty() && copy_heads.mean(&[], &table).is_none(), "no tokens, no read");
     let tokens = repeating_tokens();
     let (mut with, mut without) = (read.session(), free.session());
     let mut found = 0;
