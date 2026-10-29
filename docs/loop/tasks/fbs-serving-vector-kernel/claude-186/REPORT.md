@@ -20,7 +20,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item's done-when is met: 1 by clau
 
 ## Measurements
 
-**Exactness.** The new `stack_isqrt` equals the walking form on 2,048,961 values:
+**Exactness.** The new `stack_isqrt` equals the walking form in 2,048,961 checks. Some values repeat across the groups (the powers of two below `2^20`, and small seeded draws). The checks are:
 - every value below `2^20`;
 - every power of two `2^0`..`2^127`, with its two neighbours;
 - `u128::MAX`;
@@ -57,7 +57,14 @@ Snapped run 2's new step median (219.8 µs) is above its own decode rate's impli
 
 ## Checks run at the head
 
-__CHECKS__
+At `9cc8d0dd2`, and then the review fixes at the head (docs only):
+- **`cargo test --locked -p uor-r4-integer --features serving-wasm --no-fail-fast`:** 551 passed, 35 failed, 4 ignored. All 35 panic on a missing local input (a bundle, 32, or `tokenizer.json`, 3), the same messages as claude-182's run. The new test passes.
+- **`cargo fmt -p uor-r4-integer --check`:** clean.
+- **`uor-harness loop gates --full`:** 11 of 11 green.
+- **`uor-harness loop pr-check --local`:** PASS.
+- **The fresh review** (code and claims, one reviewer, at `9cc8d0dd2`):
+  - **Code:** it proved the start bit equal to the walking loop's for every `u128` (0, 1–3, and values at or above `2^127`). It checked the test's reference against `origin/main` verbatim, found no caller that can differ, and re-ran the test.
+  - **Claims:** it rejected on "six pairs", which are five. The Lows were the count wording, the binary hash and the candidates' home. All are fixed or listed here.
 
 ## Skills used
 
@@ -71,6 +78,8 @@ __CHECKS__
   - fewer golden candidates for the snapped contract;
   - a vector kernel the audit allows.
 - **The unsnapped contract is still about 15 µs a token behind snapped.**
+- **These candidates have no item yet,** since this one is `done`. They are named on #2028 for a follow-up item.
+- **`fbs-toks` records no binary hash in its output** (the review). The base and new runs are told apart only by file name and step median. A later unit should add the binary's sha256 to the JSON, so alternation is checkable from the evidence alone.
 - **The map's gap 5** is still stale (claude-185's list).
 
 ## Plain summary
