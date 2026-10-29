@@ -39,18 +39,20 @@ The owner, 28 Oct 2026, in claude's chat: "determinism is still probably the goa
   - **The window rule: the session follows training.** Training keys over what a 192-token window shows (`SHEET_CONTEXT`).
     - Once the prompt has left the window, a reply row's key has an empty turn and the reply length the window shows, and the trunk was trained with the move at those rows.
     - The greedy decode reads no reply table there: only while `prompt.len() > start` (`in_space_long.rs:1434–1437`).
-    - **The keys always use the trained window,** whatever the session's own `context`: the 192 tokens of training's windows, carried in the artifact as the memory's key window.
-      - With `context` = 64, a 70-token reply would otherwise lose its turn, which training kept.
-      - Above 192, the keys would grow longer than any training produced.
-      - The decode lengths in use differ (`DECODE_CONTEXTS` = 16, 64, 192, `in_space_long.rs:1684`), so this matters.
-    - The difference from the greedy decode, on rows of replies longer than the window, is a measured item for the parity unit.
+    - **The keys always use training's window rule,** whatever the session's own `context`. The window is 192 tokens, carried in the artifact as the memory's key window.
+      - **The rule is training's blocks, not a sliding window.** Training cuts each document's targets into back-to-back chunks of 192 from its `<|bos|>`, and a row of a full chunk sees from that chunk's start (`hamilton_sheet.rs:1351–1360`). So the session keys a row over the tokens from the start of its 192-block, counted from the conversation's `<|bos|>`.
+      - **Why not the session's `context`.** The decode lengths in use differ (`DECODE_CONTEXTS` = 16, 64, 192, `in_space_long.rs:1684`). With `context` = 64, a reply inside one block would otherwise lose its turn, which training kept. Above 192, keys would grow longer than any training produced.
+      - **What the session tracks.** The key needs only the turn state: where the anchor is, the first 8 turn ids, and the reply's start and length. So the session tracks these from every step and needs no 192 tokens held.
+    - **Measured items for the parity unit:**
+      - a document's last, partial chunk in training reaches back up to 192 tokens before itself, which a session cannot know to do, since it does not know where the conversation ends;
+      - the greedy decode slides over the last 192 tokens (`in_space_long.rs:1433`), and reads no reply table once the prompt has slid out.
 - **The moves:** `n + w ⊙ (c − n)` on the readout point, the opening table's weight at the reply's first step and the reply table's after it, as `apply_readout` (`flock_read_memory.rs`). They have the Hamming readout move's form, and come after it, as in the float trunk (the Hamming readout at `geometric_stack_native.rs:1187`, the turn memory at 1213).
 - **No parity:** the integer reply has not been compared with float's on the same checkpoint.
 
 ## Done when
 
 1. **Export and session, for both tables.**
-   - The exporter writes each table (keys and values as integer ids) and each weight (at the exporter's fixed point, rounded as it rounds).
+   - The exporter writes each table (keys and values as integer ids), each weight (at the exporter's fixed point, rounded as it rounds), and the memory's key window (192).
    - The session takes the reply's start from its caller, keys as "The keys" above, and applies the opening move at a reply's first step and the reply move at each later one.
    - Each key is checked against a test-side reference of the float rule above. The reference rows include:
      - a reply cut by the window;
@@ -78,7 +80,7 @@ Read:
 - `stack_step_fbs` in `crates/uor-r4-integer/src/stack/session.rs`, and the Hamming readout move before it.
 
 **The order of units** (claude-196):
-1. the export of both tables and weights;
+1. the export of both tables, their weights and the key window;
 2. the session's role signal and keys, against the reference;
 3. the moves at the readout, with the audits;
 4. the parity, under a sheet;

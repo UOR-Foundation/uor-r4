@@ -17,10 +17,10 @@ The amended item states:
    - **The turn** comes from the `<|bos|>`/`<|eos|>` anchor of `opening_slots(.., TURN_KEY, OpeningAnchor::Turn)`, which the opening table's training read and the greedy decode both use. The reply rows' mask-based turn agrees at openings as a measured fact, and a test row with an internal `<|eos|>` pins the session's behaviour.
    - **One role signal:** the caller marks where the reply begins, since a plain `step(token)` carries no roles. The turn is in the token stream.
    - **The window rule follows training:** a reply row past the window's view of its prompt keys with an empty turn, as training did. The greedy decode's difference there (it reads no reply table) is a measured item for the parity unit.
-   - **The key window is the trained 192 tokens,** carried in the artifact, whatever the session's own `context` (decision review round 2).
+   - **The key window is training's 192-token blocks** from the conversation's `<|bos|>`, carried in the artifact, whatever the session's own `context` (decision review rounds 2 and 3). Training's last-chunk reach-back and the greedy decode's sliding window are measured items for parity.
 3. **The parity checkpoint** becomes claude-194's (r) at step 16,384, `caseyallard/uor-r4-store:results/claude/turn-memory-reply-2026-10-29/`, at both seeds, in place of claude-161's (m). It has both tables, and its trunk is the one that depends on them.
 4. **The order of units:**
-   1. the export of both tables and their weights;
+   1. the export of both tables, their weights and the key window;
    2. the session's role signal and keys, against a test-side reference of the float key rule;
    3. the move at the readout, with the audits;
    4. the parity, under a sheet;
