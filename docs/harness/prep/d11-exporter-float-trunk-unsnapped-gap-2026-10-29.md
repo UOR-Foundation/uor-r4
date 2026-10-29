@@ -83,7 +83,10 @@ The item's done-when needs the export gap "measured inside the band". The pre-na
 **On a red close check,** the item stays open: the check is repaired and run again, and the close waits on it.
 
 **What a close implies against kimi-46's outcome 2:**
-- **The top-1 floors:** a pass puts A within F_I of F on top-1. dual-c131's F is 3,845 and 3,128 (F_I is at most about 73), so A clears kimi-46's floors of 1,907 and 2,294 on both seeds. Those floors were set on claude-129's plain-c126 artifacts.
+- **The top-1 floors:** a pass puts A within F_I of F on top-1. dual-c131's F is 3,845 and 3,128 (claude-180's `abl3/summary.json`, `float_top1`).
+  - F_I is at most 204: even if all 10,368 DEV positions disagreed, ⌈2√10,368⌉ = 204.
+  - So a pass puts A at 3,641 or more on seed 1 and 2,924 or more on seed 2. That clears kimi-46's floors of 1,907 and 2,294 on both seeds.
+  - Those floors were set on claude-129's plain-c126 artifacts.
 - **D, the counterfactual:** here D is claude-180's float emulation of the same contract, `rounding_only`. It is already inside on both dual-c131 seeds (3 and −9, F_I 24). So the close is not kimi-46's "cancellation" case, where A passes but D fails.
 
 **"DEV scope"** is the scope kimi-46's sheet registered for this item's close ("close #2820 at DEV scope only"). The fresh split is not read.
