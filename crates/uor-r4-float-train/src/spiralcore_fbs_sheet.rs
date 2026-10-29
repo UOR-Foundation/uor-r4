@@ -43,8 +43,12 @@ pub const SEEDS: [u64; 2] = [1, 2];
 pub const EVAL_STEPS: [usize; 4] = [0, 256, 512, 1_024];
 /// One fresh training batch per step.
 pub const TRAIN_BATCHES: usize = STEPS;
+/// `spiralcore_fbs.cu` since claude-179 (#3367), whose backward adds each gradient in a fixed
+/// order (`docs/harness/prep/d11-exporter-float-trunk-fixed-order-2026-10-29.md`). The 25 Oct
+/// sheet registered `517bffcc…0b0d`, the same kernels with float `atomicAdd` sums. claude-180
+/// moved this pin, which claude-179 had left behind.
 pub const PINNED_SPIRALCORE_FBS_CU_SHA256: &str =
-    "517bffcc3c2029ddd171e75fd8fc1eb532755b30e683c66bd230382416480b0d";
+    "3fbfc796bc61d519495ae4bb2bcf52f05a058990ea2463c0210d4f73de9d38e8";
 pub const PINNED_SPIRALCORE_FBS_RS_SHA256: &str =
     "6eb2b09d5602322b7628a83f4cd3c2ee35c59d78786cb349fd92c4519ebbe3cd";
 pub const PINNED_CUDA_STACK_CU_SHA256: &str =
@@ -2606,6 +2610,266 @@ fn primary_summary(
     ((count, exact_ties, median), record)
 }
 
+/// The snap ablation's split of one model's gap (claude-180,
+/// `docs/harness/prep/d11-exporter-float-trunk-snap-ablation-2026-10-29.md`): which part of the
+/// D11 forward carries its gap from the plain-float forward F. Every reading uses the export gap's
+/// own bar against F: the paired top-1 net within `F_I`, and the panel loss within the noise band.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SnapSplit {
+    /// An instrument check failed, so the model is not counted.
+    NotCounted,
+    /// D itself is inside the bar, so there is no gap to split.
+    NoGap,
+    /// The rounding alone is inside, and the snaps alone are outside.
+    SnapCarried,
+    /// The snaps alone are inside, and the rounding alone is outside.
+    RoundingCarried,
+    /// Each part alone is outside.
+    Both,
+    /// Each part alone is inside, and the two together are outside.
+    Interaction,
+}
+
+/// [`SnapSplit`] from the readings against F of D, the rounding alone and the snaps alone, each
+/// `true` when inside the bar.
+pub fn classify_snap_split(
+    instruments_ok: bool,
+    d_inside: bool,
+    rounding_inside: bool,
+    snaps_inside: bool,
+) -> SnapSplit {
+    match (instruments_ok, d_inside, rounding_inside, snaps_inside) {
+        (false, ..) => SnapSplit::NotCounted,
+        (true, true, ..) => SnapSplit::NoGap,
+        (true, false, true, false) => SnapSplit::SnapCarried,
+        (true, false, false, true) => SnapSplit::RoundingCarried,
+        (true, false, false, false) => SnapSplit::Both,
+        (true, false, true, true) => SnapSplit::Interaction,
+    }
+}
+
+/// One D11 variant of the snap ablation: which snaps run, and whether D's rounding is on. The
+/// rounding is the tables rounded as exported, with the query and the writer at Q12.
+#[derive(Clone, Copy, Debug)]
+struct AblationArm {
+    name: &'static str,
+    snaps: hs::D11Snaps,
+    rounding: bool,
+}
+
+const NO_SNAPS: hs::D11Snaps = hs::D11Snaps {
+    gates: false,
+    transition: false,
+};
+
+/// The arms in the order they run: on the tables as trained first, then rounded, since rounding
+/// changes the model in place. `nothing` must be F row for row (`I-None`), and `d11` must be
+/// [`hs::evaluate_dev_panel_d11`]'s panel (`I-D-Same`).
+const ABLATION_ARMS: [AblationArm; 6] = [
+    AblationArm {
+        name: "nothing",
+        snaps: NO_SNAPS,
+        rounding: false,
+    },
+    AblationArm {
+        name: "snaps_only",
+        snaps: hs::D11Snaps::ALL,
+        rounding: false,
+    },
+    AblationArm {
+        name: "d11",
+        snaps: hs::D11Snaps::ALL,
+        rounding: true,
+    },
+    AblationArm {
+        name: "gates_continuous",
+        snaps: hs::D11Snaps {
+            gates: false,
+            transition: true,
+        },
+        rounding: true,
+    },
+    AblationArm {
+        name: "transition_continuous",
+        snaps: hs::D11Snaps {
+            gates: true,
+            transition: false,
+        },
+        rounding: true,
+    },
+    AblationArm {
+        name: "rounding_only",
+        snaps: NO_SNAPS,
+        rounding: true,
+    },
+];
+
+/// The snap ablation (claude-180), for one saved model on the GPU:
+/// - the plain-float panel F, which must reproduce `stored_preds` and the receipt's loss;
+/// - each [`ABLATION_ARMS`] variant of the D11 forward;
+/// - each variant paired against F under the export gap's bar, and the model's [`SnapSplit`].
+///
+/// `stage4b` is the model's training receipt, which supplies the noise band and the stored loss.
+#[allow(clippy::too_many_arguments)]
+pub fn run_d11_snap_ablation(
+    data_root: &Path,
+    model_dir: &Path,
+    model_sha256_pin: &str,
+    stored_preds: &Path,
+    stored_d11_preds: Option<&Path>,
+    stage4b: &Path,
+    seed: u64,
+    label: &str,
+    steps: usize,
+    device: &Device,
+) -> Result<serde_json::Value> {
+    use crate::fbs_export::round_tables_as_exported;
+
+    let stage4b = read_stage4b_identity(stage4b)?;
+    if stage4b.trained_steps != steps {
+        return Err(invalid("the Stage 4b receipt and evaluation steps differ"));
+    }
+    let stored_loss = stage4b
+        .loss_float_by_seed
+        .get(&seed)
+        .copied()
+        .ok_or_else(|| invalid("the Stage 4b receipt has no float loss for this seed"))?;
+    let noise = stage4b.noise_band_dev_loss;
+    let stored_d11: Option<Vec<u32>> = match stored_d11_preds {
+        Some(path) => Some(serde_json::from_slice(&fs::read(path)?)?),
+        None => None,
+    };
+    let (dev_windows, dev_docs) = load_dev(data_root)?;
+    let targets: Vec<u32> = dev_windows
+        .iter()
+        .flat_map(|w| w.scored_targets.iter().copied())
+        .collect();
+    let stored: Vec<u32> = serde_json::from_slice(&fs::read(stored_preds)?)?;
+    let loaded = StackModel::load(model_dir, device)?;
+    let model_sha256 = sha256_bytes(&fs::read(model_dir.join("model.safetensors"))?);
+    let i_inputs = model_sha256 == model_sha256_pin;
+
+    let (f_metrics, f_preds) = hs::evaluate_dev_panel(
+        &loaded,
+        &dev_windows,
+        HamiltonArm::HamiltonActive,
+        seed,
+        steps,
+        false,
+        false,
+    )?;
+    let loss_float = panel_loss(&loaded, &dev_windows, seed, steps, false)?;
+    hs::clear_active_arm();
+    let i_save_load = f_preds == stored && reloaded_loss_matches(Some(stored_loss), loss_float);
+    let i_dev = f_preds.len() == hs::EXPECTED_DEV_ELIGIBLE_TARGETS;
+
+    let mut panels = BTreeMap::new();
+    let mut rounded = false;
+    for arm in ABLATION_ARMS {
+        if arm.rounding && !rounded {
+            round_tables_as_exported(&loaded)?;
+            rounded = true;
+        } else if !arm.rounding && rounded {
+            return Err(invalid(
+                "an unrounded arm runs after the tables were rounded",
+            ));
+        }
+        let (metrics, preds) =
+            hs::evaluate_dev_panel_d11_snaps(&loaded, &dev_windows, arm.snaps, arm.rounding)?;
+        let loss = hs::with_d11_snaps(arm.snaps, || {
+            scored_panel_loss(&loaded, &dev_windows, arm.rounding)
+        })?;
+        if preds.len() != f_preds.len() {
+            return Err(invalid("an ablation panel does not cover F's rows"));
+        }
+        panels.insert(arm.name, (metrics.top1_hits, preds, loss));
+    }
+    // I-D-Same: the all-snaps rounded arm is the D11 panel and loss as the residual check computes
+    // them, so the ablation's D is the D of claude-132 to claude-136.
+    let (_, d_again) = hs::evaluate_dev_panel_d11(&loaded, &dev_windows)?;
+    let loss_d11 = panel_loss_d11(&loaded, &dev_windows)?;
+    hs::clear_active_arm();
+    let (_, d_preds, d_loss) = &panels["d11"];
+    let i_d_same = *d_preds == d_again && (d_loss - loss_d11).abs() <= 1e-6;
+    let i_d_stored = stored_d11.as_ref().map(|s| s == d_preds);
+    // I-None: with no snap and no rounding the variant is F itself.
+    let (_, none_preds, none_loss) = &panels["nothing"];
+    let i_none = *none_preds == f_preds && (none_loss - loss_float).abs() <= 1e-6;
+    let instruments_ok =
+        i_inputs && i_save_load && i_dev && i_d_same && i_none && i_d_stored.unwrap_or(true);
+
+    let mut arms = serde_json::Map::new();
+    let mut inside = BTreeMap::new();
+    for arm in ABLATION_ARMS {
+        let (top1, preds, loss) = &panels[arm.name];
+        let p = hs::compute_paired_discordance("float", &f_preds, arm.name, preds, &targets, seed);
+        let fi = f_i(p.a_hit_b_miss_c, p.a_miss_b_hit_b);
+        let top1_inside = p.net_advantage_rows.unsigned_abs() <= fi;
+        let loss_inside = (loss - loss_float).abs() <= noise;
+        inside.insert(arm.name, top1_inside && loss_inside);
+        let vs_d = hs::compute_paired_discordance("d11", d_preds, arm.name, preds, &targets, seed);
+        arms.insert(
+            arm.name.to_owned(),
+            serde_json::json!({
+                "gate_snap": arm.snaps.gates,
+                "transition_snap": arm.snaps.transition,
+                "rounding": arm.rounding,
+                "top1": top1,
+                "loss": loss,
+                "vs_float": {
+                    "b": p.a_hit_b_miss_c,
+                    "c": p.a_miss_b_hit_b,
+                    "net": p.net_advantage_rows,
+                    "f_i": fi,
+                    "top1_inside": top1_inside,
+                    "loss_delta": loss - loss_float,
+                    "loss_inside": loss_inside,
+                    "inside": top1_inside && loss_inside,
+                    "rows_differ": rows_differ(&f_preds, preds),
+                },
+                "vs_d11": {
+                    "net": vs_d.net_advantage_rows,
+                    "rows_differ": rows_differ(d_preds, preds),
+                },
+                "preds_sha256": preds_sha256(preds),
+            }),
+        );
+    }
+    let split = classify_snap_split(
+        instruments_ok,
+        inside["d11"],
+        inside["rounding_only"],
+        inside["snaps_only"],
+    );
+    Ok(serde_json::json!({
+        "sheet": "docs/harness/prep/d11-exporter-float-trunk-snap-ablation-2026-10-29.md",
+        "label": label,
+        "seed": seed,
+        "steps": steps,
+        "arm": D11_EXPORT_ARM.name(),
+        "dev_documents": dev_docs,
+        "dev_windows": dev_windows.len(),
+        "model_safetensors_sha256": model_sha256,
+        "stage4b_sha256": stage4b.sha256,
+        "noise_band_dev_loss": noise,
+        "float": {
+            "top1": f_metrics.top1_hits,
+            "loss": loss_float,
+            "preds_sha256": preds_sha256(&f_preds),
+        },
+        "arms": arms,
+        "i_inputs": i_inputs,
+        "i_save_load": i_save_load,
+        "i_dev_denominator": i_dev,
+        "i_d_same": i_d_same,
+        "i_d_stored": i_d_stored,
+        "i_none": i_none,
+        "instruments_pass": instruments_ok,
+        "split": split,
+    }))
+}
+
 /// The trace file of `d11-fbs-eval trace` (claude-134).
 #[derive(Deserialize)]
 struct EvaluatorTrace {
@@ -4315,6 +4579,125 @@ mod tests {
         assert!(d_queries
             .iter()
             .all(|&v| (v * 4096.0 - (v * 4096.0).round()).abs() == 0.0));
+        hs::clear_active_arm();
+        Ok(())
+    }
+
+    #[test]
+    fn the_snap_split_reads_d_then_each_part_alone() {
+        // claude-180: a failed instrument wins, then D inside; otherwise the parts alone decide.
+        use SnapSplit::*;
+        for (d, r, s) in [
+            (true, true, true),
+            (false, false, false),
+            (true, false, true),
+        ] {
+            assert_eq!(classify_snap_split(false, d, r, s), NotCounted);
+        }
+        for (r, s) in [(true, true), (true, false), (false, true), (false, false)] {
+            assert_eq!(classify_snap_split(true, true, r, s), NoGap);
+        }
+        assert_eq!(classify_snap_split(true, false, true, false), SnapCarried);
+        assert_eq!(
+            classify_snap_split(true, false, false, true),
+            RoundingCarried
+        );
+        assert_eq!(classify_snap_split(true, false, false, false), Both);
+        assert_eq!(classify_snap_split(true, false, true, true), Interaction);
+        assert_eq!(
+            serde_json::to_value(SnapCarried).unwrap(),
+            serde_json::json!("snap_carried")
+        );
+    }
+
+    #[test]
+    fn the_ablation_arms_run_unrounded_first_and_hold_each_part() {
+        // claude-180: rounding changes the model in place, so no unrounded arm may follow a
+        // rounded one; the controls and the three readings the split needs are all present.
+        let first_rounded = ABLATION_ARMS.iter().position(|a| a.rounding).unwrap();
+        assert!(ABLATION_ARMS[first_rounded..].iter().all(|a| a.rounding));
+        let arm = |name: &str| *ABLATION_ARMS.iter().find(|a| a.name == name).unwrap();
+        let is = |a: AblationArm, gates, transition, rounding| {
+            a.snaps == hs::D11Snaps { gates, transition } && a.rounding == rounding
+        };
+        assert!(is(arm("nothing"), false, false, false));
+        assert!(is(arm("snaps_only"), true, true, false));
+        assert!(is(arm("d11"), true, true, true));
+        assert!(is(arm("gates_continuous"), false, true, true));
+        assert!(is(arm("transition_continuous"), true, false, true));
+        assert!(is(arm("rounding_only"), false, false, true));
+        let mut names: Vec<_> = ABLATION_ARMS.iter().map(|a| a.name).collect();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), ABLATION_ARMS.len());
+    }
+
+    /// On one GPU (claude-180): the ablation's all-snaps rounded arm is the D11 panel, its empty
+    /// arm is the plain-float panel, and turning either snap off changes the D11 queries.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn gpu_the_ablation_ends_are_d_and_f_and_each_snap_moves_the_queries() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let model = build_fbs_model(D11_EXPORT_ARM, 1, &device)?;
+        let batches = synthetic_batches(1, 11);
+        let (ids, _, _) = &batches[0];
+        let windows: Vec<CausalWindow> = ids
+            .chunks(SHEET_CONTEXT)
+            .take(4)
+            .enumerate()
+            .map(|(doc_id, input)| {
+                let scored_offsets: Vec<usize> = (0..SHEET_CONTEXT - 1).step_by(5).collect();
+                CausalWindow {
+                    doc_id,
+                    input_ids: input.to_vec(),
+                    scored_targets: scored_offsets.iter().map(|&o| input[o + 1]).collect(),
+                    scored_corpus_positions: scored_offsets.clone(),
+                    scored_offsets,
+                }
+            })
+            .collect();
+        let (_, f_preds) = hs::evaluate_dev_panel(
+            &model,
+            &windows,
+            HamiltonArm::HamiltonActive,
+            1,
+            0,
+            false,
+            false,
+        )?;
+        hs::clear_active_arm();
+        let (_, none_preds) = hs::evaluate_dev_panel_d11_snaps(&model, &windows, NO_SNAPS, false)?;
+        assert_eq!(none_preds, f_preds);
+        crate::fbs_export::round_tables_as_exported(&model)?;
+        let (_, d_preds) = hs::evaluate_dev_panel_d11(&model, &windows)?;
+        let (_, all_preds) =
+            hs::evaluate_dev_panel_d11_snaps(&model, &windows, hs::D11Snaps::ALL, true)?;
+        assert!(!d_preds.is_empty());
+        assert_eq!(all_preds, d_preds);
+        let queries = |snaps: hs::D11Snaps| {
+            hs::with_d11_snaps(snaps, || hs::dev_panel_q12_queries(&model, &windows))
+        };
+        let d_queries = queries(hs::D11Snaps::ALL)?;
+        assert_eq!(
+            d_queries,
+            hs::with_d11_mode(|| hs::dev_panel_q12_queries(&model, &windows))?
+        );
+        for snaps in [
+            hs::D11Snaps {
+                gates: false,
+                transition: true,
+            },
+            hs::D11Snaps {
+                gates: true,
+                transition: false,
+            },
+        ] {
+            assert_ne!(
+                queries(snaps)?,
+                d_queries,
+                "{snaps:?} must change the forward"
+            );
+        }
         hs::clear_active_arm();
         Ok(())
     }
