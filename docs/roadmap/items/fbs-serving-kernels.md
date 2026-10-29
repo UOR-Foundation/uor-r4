@@ -67,7 +67,7 @@ On the M1, a served token is 3.73 ms (265 tok/s). The six layers are 98.6% of it
   - The step is 1.30–1.33× faster.
   - In the new profile, `stack_hamilton` (38%) leads `stack_snap_select` (25%).
 - **The Hamilton product by shifts where it can (claude-169): decode 2,428–2,435 → 3,042–3,044 tok/s, replies byte-identical.**
-  - Every caller's snapped quaternion is scaled by a power of two, so its axis, half and `1/2` coordinates are `±2^k`, and their products are shifts.
+  - For an FBS export, every caller's snapped quaternion is scaled by a power of two, so its axis, half and `1/2` coordinates are `±2^k`, and their products are shifts.
   - Other coordinates get one table of their own multiples.
   - The step is 1.24–1.26× faster.
   - In the new profile, `stack_snap_select` (32%) leads `stack_hamilton` (21%).

@@ -912,12 +912,13 @@ pub(crate) fn stack_l2_distance(query: &[i32], key: &[i32]) -> u64 {
 
 /// Hamilton product `a (x) b` of quaternions `(w, x, y, z)`, exactly.
 ///
-/// Each `|b_j|` gets one table of its sixteen multiples, read at the radix-16
-/// digits of every `|a_i|` (claude-166): 4 tables in place of the 16 that
-/// separate products would build, and a zero `a_i` is skipped. Each product is
-/// `|a_i| |b_j|` modulo `2^128`, negated when the signs differ, the value
-/// [`mul_i128`] gives, so the result is unchanged. Callers pass the snapped
-/// quaternion as `a`: its Q31 coordinates have few digits and often a zero.
+/// Row by row over `a` (claude-169): a zero `a_i` is skipped, `|a_i| = 2^k`
+/// gives each product as `|b_j| << k`, and any other `|a_i|` gets one table of
+/// its sixteen multiples, read at the radix-16 digits of every `|b_j|`. Each
+/// product is `|a_i| |b_j|` modulo `2^128`, negated when the signs differ, the
+/// value [`mul_i128`] gives, so the result is unchanged. Callers pass a
+/// snapped quaternion scaled by a power of two as `a`, so its axis, half and
+/// `1/2` coordinates take the shift.
 #[inline(never)]
 pub(crate) fn stack_hamilton(a: [i64; 4], b: [i64; 4]) -> [i128; 4] {
     // Explicit loops, not `array::from_fn` or `map`: a closure there compiles

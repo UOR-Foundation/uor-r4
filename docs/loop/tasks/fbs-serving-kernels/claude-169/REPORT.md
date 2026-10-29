@@ -14,7 +14,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays `ready`. Done-when 2's 
   - **The second:** run on a `--parts` run, it credited 3,059 of 6,007 samples to `stack_step_fbs_timed` itself. A plain run's profile has no such frame, so its ranking cannot be compared with the earlier units'.
   - **The sealed profile** is the third: a plain run, sampled from 0.1 s, with 940 samples on the thread. Neither earlier profile is kept.
 - **The snap's scan leads again.** `stack_snap_select` holds 300 (32%) and `stack_hamilton` 193 (21%). The product part got the larger gain (1.50–1.52×): its Hamilton product is a gate snapped at `λ = 2^31`, and every one of its zero, axis, half and `1/2` coordinates is now a shift or skipped.
-- **Why only the product part gained so much is not measured here.** The core's lanes use a smaller `λ = 2^(30−idx)` and the same golden coordinates. Which roots the model picks, and so how many coordinates take the shift path, is not counted by `fbs-toks`.
+- **Why only the product part gained so much is not measured here.** The core's geometric lanes use a smaller `λ = 2^(30−idx)`, and the same golden coordinates. Which roots the model picks, and so how many coordinates take the shift path, is not counted by `fbs-toks`.
 
 ## What changed
 
@@ -25,7 +25,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item stays `ready`. Done-when 2's 
 
   The sign is `mul_i128`'s throughout. There are no shared `b` tables anymore.
 - **Why it is exact.** Each product is still `|a_i| |b_j| mod 2^128`. A shift by `k <= 63` of a value below `2^64` is exact in `u128`, and the table read gives the same product, whichever operand is tabulated.
-- **Why the shift path is taken.** All three callers pass `stack_snap_rotation(raw, λ)` with `λ` a power of two: `1u64 << 31` at `session.rs` lines 2835 and 3339, and `1u64 << (30 − idx)` in the geometric lanes at line 3422. `shift(x, 1) = (x + 1) >> 1` is exact on even `x`, so:
+- **Why the shift path is taken.** For an FBS export, all three callers pass `stack_snap_rotation(raw, λ)` with `λ` a power of two. The exporter refuses non-geometric recurrence gates (`fbs_export.rs`), so the lanes take their geometric branch. A non-geometric stack's lanes take `λ` from `stack_exp_neg` and the table path. The values: `1u64 << 31` at `session.rs` lines 2835 and 3339, and `1u64 << (30 − idx)` in the geometric lanes at line 3422. `shift(x, 1) = (x + 1) >> 1` is exact on even `x`, so:
   - an axis coordinate is `±λ`;
   - a half or `1/2` coordinate is `±λ/2`.
 
