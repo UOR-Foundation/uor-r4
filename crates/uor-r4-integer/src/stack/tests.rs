@@ -3611,8 +3611,7 @@ fn read_free_fbs_exports_are_unchanged_by_the_hamming_format() {
 
 /// claude-188: a trunk with Hamming reads exports as `uor-r4.lut-stack/6`, and reads back with
 /// every parameter at its declared exponent, a zero quaternion included. The integer session
-/// refuses it, since its type-head weights are not zero and the type heads are not served yet
-/// (claude-194).
+/// serves it, type heads included (claude-195).
 #[test]
 fn hamming_reads_round_trip_in_lut_stack_6() {
     use super::synthetic::synthetic_hamming;
@@ -3646,11 +3645,8 @@ fn hamming_reads_round_trip_in_lut_stack_6() {
             assert_eq!(got.weight, fixed(&want.weight, super::HAMMING_WEIGHT_EXP));
             assert_eq!(got.key_rotation[..4], [0, 0, 0, 0], "lane 0 is the zero quaternion");
         }
-        let refused = match IntegerStackModel::parse(&bytes) {
-            Ok(_) => panic!("the session does not serve the type heads"),
-            Err(e) => e,
-        };
-        assert!(matches!(refused, StackError::Shape(m) if m == TYPE_HEADS_REFUSED));
+        // Its type-head weights are not zero, and the session serves them (claude-195).
+        IntegerStackModel::parse(&bytes).expect("a read with type heads is served");
         // The same trunk without the read is served, and reads back no read.
         snap.hamming = None;
         let plain = super::export_fbs_trunk_uorlut01_with(&snap, snaps).expect("export");
@@ -4004,15 +4000,12 @@ fn copy_weights_divide_by_at_least_one_bit() {
     assert_eq!(super::copy_weight_q31(4 << 16, 9), 0);
 }
 
-/// The session's refusal of a read whose type heads it would drop (claude-194).
-const TYPE_HEADS_REFUSED: &str =
-    "a Hamming read's type heads are not served yet: its type-head weights (weight row 1) must be zero";
-
 /// claude-194's served-read trunk: claude-127's non-square shape (width 64, 3 layers, 4 heads of
 /// 16 coordinates) over 40 positions, and `synthetic_hamming`'s reads at `depths` (a subset of
-/// `[1, 3]`), each with its type-head weights zero and its copy weights times `copy`. Returns the
-/// snapshot, the trunk exported without the reads, and with them.
-fn served_read_trunk(depths: &[usize], copy: f32) -> (super::FbsTrunkSnapshot, Vec<u8>, Vec<u8>) {
+/// `[1, 3]`), each with its copy weights times `copy` and its type weights times `types`
+/// (claude-195; 0 serves the copy heads alone). Returns the snapshot, the trunk exported without
+/// the reads, and with them.
+fn served_read_trunk(depths: &[usize], copy: f32, types: f32) -> (super::FbsTrunkSnapshot, Vec<u8>, Vec<u8>) {
     let shape = super::synthetic::FbsSynth {
         context: 40,
         ..super::synthetic::FBS_SYNTH_NON_SQUARE
@@ -4032,7 +4025,7 @@ fn served_read_trunk(depths: &[usize], copy: f32) -> (super::FbsTrunkSnapshot, V
     for r in &mut read.reads {
         let (copy_weight, type_weight) = r.weight.split_at_mut(width);
         copy_weight.iter_mut().for_each(|w| *w *= copy);
-        type_weight.fill(0.0);
+        type_weight.iter_mut().for_each(|w| *w *= types);
     }
     snap.hamming = Some(read);
     let with_read = super::export_fbs_trunk_uorlut01(&snap).expect("export with the reads");
@@ -4057,14 +4050,15 @@ fn round_half_away(v: i128, s: u32) -> i128 {
 }
 
 /// The served-read model, the read-free one, the shared Q12 table, and each read with its copy
-/// heads, in depth order, for the hook tests.
+/// heads, in depth order, for the hook tests; the type weights scaled by `types`.
 #[allow(clippy::type_complexity)]
 fn served_read_parts(
     depths: &[usize],
     copy: f32,
+    types: f32,
 ) -> (IntegerStackModel, IntegerStackModel, Vec<i16>, Vec<(super::HammingReadImage, super::CopyHeads)>) {
-    let (_, plain, with_read) = served_read_trunk(depths, copy);
-    let read = IntegerStackModel::parse(&with_read).expect("a read with no type weights is served");
+    let (_, plain, with_read) = served_read_trunk(depths, copy, types);
+    let read = IntegerStackModel::parse(&with_read).expect("the read is served");
     let free = IntegerStackModel::parse(&plain).expect("parse");
     let table = free.fbs_image().expect("an FBS model").writer_table.to_vec();
     let image = super::read_hamming_uorlut01(&with_read).expect("parse").expect("the reads");
@@ -4082,7 +4076,7 @@ fn served_read_parts(
 /// refuses the read rather than drop it.
 #[test]
 fn a_read_at_weight_zero_serves_as_the_read_free_trunk() {
-    let (read, free, table, reads) = served_read_parts(&[1, 3], 0.0);
+    let (read, free, table, reads) = served_read_parts(&[1, 3], 0.0, 0.0);
     assert!(read.fbs_image().is_none(), "the view does not carry the read");
     let copy_heads = &reads[0].1;
     assert!(copy_heads.choose(0, &[]).is_empty() && copy_heads.mean(&[], &table).is_none(), "no tokens, no read");
@@ -4115,7 +4109,7 @@ fn traced_step(session: &mut super::IntegerStackSession<'_>, token: u32) -> (Vec
 /// input exactly. Rows 0 and 1 have no earlier position `1 ≤ s < t`, so they add nothing.
 #[test]
 fn the_stream_read_adds_the_rounded_copy_to_the_residual() {
-    let (read, free, table, reads) = served_read_parts(&[1], 1.0);
+    let (read, free, table, reads) = served_read_parts(&[1], 1.0, 0.0);
     let (image, copy_heads) = &reads[0];
     let width = free.shape().width;
     let copy_weight = &image.weight[..width];
@@ -4152,7 +4146,7 @@ fn the_stream_read_adds_the_rounded_copy_to_the_residual() {
 #[test]
 fn the_readout_read_moves_the_norm_output_toward_the_copy() {
     let layers = super::synthetic::FBS_SYNTH_NON_SQUARE.layers;
-    let (read, free, table, reads) = served_read_parts(&[layers], 1.0);
+    let (read, free, table, reads) = served_read_parts(&[layers], 1.0, 0.0);
     let (image, copy_heads) = &reads[0];
     let width = free.shape().width;
     let copy_weight = &image.weight[..width];
@@ -4194,10 +4188,11 @@ fn the_readout_read_moves_the_norm_output_toward_the_copy() {
 }
 
 /// claude-194: the session refuses each part of a read it does not serve, by its own error: a
-/// non-zero type-head weight, a read on a dense stack, and a depth of 0 or past the layers.
+/// read on a dense stack, and a depth of 0 or past the layers. A non-zero type-head weight, once
+/// refused, is served since claude-195.
 #[test]
 fn the_session_refuses_what_it_does_not_serve_by_name() {
-    let (mut snap, _, served) = served_read_trunk(&[1, 3], 1.0);
+    let (mut snap, _, served) = served_read_trunk(&[1, 3], 1.0, 0.0);
     IntegerStackModel::parse(&served).expect("copy heads alone are served");
     let refusal = |bytes: &[u8]| match IntegerStackModel::parse(bytes) {
         Err(StackError::Shape(m)) => m,
@@ -4207,7 +4202,7 @@ fn the_session_refuses_what_it_does_not_serve_by_name() {
     let width = snap.width;
     snap.hamming.as_mut().expect("the reads").reads[1].weight[width + 5] = 0.25;
     let typed = super::export_fbs_trunk_uorlut01(&snap).expect("export");
-    assert_eq!(refusal(&typed), TYPE_HEADS_REFUSED);
+    IntegerStackModel::parse(&typed).expect("a non-zero type weight is served");
     let dense = with_header(&artifact(5), |h| {
         h["schema"] = json!(super::STACK_FBS_HAMMING_SCHEMA);
         h["hamming"] = json!(super::StackHamming::new(2, vec![1, 2]));
@@ -4224,10 +4219,10 @@ fn the_session_refuses_what_it_does_not_serve_by_name() {
 }
 
 /// claude-194: with a read at both hooks, the stage- and part-timed steps are the served step,
-/// and the read does change what is served.
+/// and the read does change what is served. Both kinds of head run (claude-195).
 #[test]
 fn the_timed_fbs_steps_serve_the_read() {
-    let (read, free, ..) = served_read_parts(&[1, 3], 1.0);
+    let (read, free, ..) = served_read_parts(&[1, 3], 1.0, 1.0);
     let tokens = repeating_tokens();
     let (mut plain, mut stages, mut parts, mut without) = (read.session(), read.session(), read.session(), free.session());
     let (mut ns, mut changed) = (Vec::new(), 0);
@@ -4251,13 +4246,328 @@ fn the_timed_fbs_steps_serve_the_read() {
 #[test]
 fn the_hooks_round_the_sum_not_the_product() {
     use super::hamming::{readout_sum, stream_sum};
-    // `w · c = ∓2^50` is ∓0.5 at Q16.
-    assert_eq!(stream_sum(3, -1, 1 << 50), 3);
-    assert_eq!(stream_sum(-3, 1, 1 << 50), -3);
-    assert_eq!(stream_sum(3, 1, 1 << 50), 4);
+    // `w_c · c = ∓2^50` is ∓0.5 at Q16.
+    assert_eq!(stream_sum(3, -1, 1 << 50, 0, 0), 3);
+    assert_eq!(stream_sum(-3, 1, 1 << 50, 0, 0), -3);
+    assert_eq!(stream_sum(3, 1, 1 << 50, 0, 0), 4);
     // `w · (c − n · 2^19) = ∓2^42` is ∓0.5 at `2^-24`.
-    assert_eq!(readout_sum(3, 1, (3 << 19) - (1 << 42)), 3);
-    assert_eq!(readout_sum(-3, 1, (-3 << 19) + (1 << 42)), -3);
+    assert_eq!(readout_sum(3, 1, Some((3 << 19) - (1 << 42)), 0, 0), 3);
+    assert_eq!(readout_sum(-3, 1, Some((-3 << 19) + (1 << 42)), 0, 0), -3);
     // At `w = 2^24` (1.0) the move lands on the copy exactly.
-    assert_eq!(readout_sum(-7, 1 << 24, 5 << 19), 5);
+    assert_eq!(readout_sum(-7, 1 << 24, Some(5 << 19), 0, 0), 5);
+}
+
+/// claude-195: the type term joins the same single rounding. In the stream, `w_y · y = −2^54` is
+/// −0.5 at Q16, so `3 − 0.5` rounds to 3, and a copy and a type term of 0.25 each make `3.5 → 4`,
+/// where rounding each term apart would give 3. On the readout a type term moves `n` with no copy
+/// match, and the copy weight is then unused.
+#[test]
+fn the_type_term_joins_the_single_rounding() {
+    use super::hamming::{readout_sum, stream_sum};
+    assert_eq!(stream_sum(3, 0, 0, -1, 1 << 54), 3);
+    assert_eq!(stream_sum(-3, 0, 0, 1, 1 << 54), -3);
+    assert_eq!(stream_sum(3, 1, 1 << 49, 1, 1 << 53), 4);
+    // `w_y · y = 2^54` at `2^-79` is 0.5 at `2^-24`.
+    assert_eq!(readout_sum(3, 5, None, 1, 1 << 54), 4);
+    assert_eq!(readout_sum(3, 5, None, -1, 1 << 54), 3);
+    assert_eq!(readout_sum(3, 5, None, 0, 1 << 54), 3);
+}
+
+/// One lane of `raw` (quaternions at `2^HAMMING_ROTATION_EXP`) as the f64 unit `g / |g|`, the
+/// float `hamilton_gate`'s normalization; the zero quaternion stays zero.
+fn f64_unit(raw: &[i32], lane: usize) -> [f64; 4] {
+    let g: Vec<f64> = raw[4 * lane..4 * lane + 4]
+        .iter()
+        .map(|&v| f64::from(v) * 2f64.powi(super::HAMMING_ROTATION_EXP))
+        .collect();
+    let r = g.iter().map(|v| v * v).sum::<f64>().sqrt();
+    if r == 0.0 {
+        [0.0; 4]
+    } else {
+        [g[0] / r, g[1] / r, g[2] / r, g[3] / r]
+    }
+}
+
+/// The Hamilton product `a ⊗ b` in f64.
+fn f64_hamilton(a: [f64; 4], b: [f64; 4]) -> [f64; 4] {
+    [
+        a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
+        a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2],
+        a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1],
+        a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0],
+    ]
+}
+
+/// `point` (real values) through the rotation `raw`, lane by lane, in f64.
+fn f64_rotated(raw: &[i32], point: &[f64]) -> Vec<f64> {
+    point
+        .chunks_exact(4)
+        .enumerate()
+        .flat_map(|(lane, p)| f64_hamilton(f64_unit(raw, lane), [p[0], p[1], p[2], p[3]]))
+        .collect()
+}
+
+/// Head `h`'s f64 sign code of `point` through `raw`: a bit is 1 at or above 0.
+fn f64_code(raw: &[i32], point: &[f64], h: usize, head_width: usize) -> u64 {
+    let rotated = f64_rotated(raw, point);
+    (0..head_width).fold(0u64, |word, c| if rotated[h * head_width + c] >= 0.0 { word | (1u64 << c) } else { word })
+}
+
+/// claude-195: the type heads' kernel against an f64 reference of the float read's steps on the
+/// quantized values: the key codes of every vocabulary entry, each row's query codes, each
+/// payload within half a step of the f64 rotation on the input's Q16 grid, kept sets and
+/// distances, and the type mean within one step of that grid.
+///
+/// Two seeds use the synthetic margins, where no candidate counts. Three use wide ones, where
+/// most count with fractional weights. Two mix a wide margin on one type head with the synthetic
+/// one on the other, so that rows where exactly one head found a candidate are common. There the
+/// mean is over that one head alone, not over both (review round 1).
+#[test]
+fn type_heads_match_the_f64_reference() {
+    let (vocab, width, rows) = (256usize, 256usize, 48usize);
+    let (copy, head_width) = (2usize, width / 4);
+    let (mut found_rows, mut one_found_rows) = (0, 0);
+    for seed in 0..7u64 {
+        let (record, mut read, table) = copy_control(vocab, width, 4, 195 + seed);
+        match seed {
+            0 | 1 => {}
+            2..=4 => {
+                for (k, m) in read.margin.iter_mut().enumerate() {
+                    *m = ((33 + 2 * k as i32) << 16) + 12_345;
+                }
+            }
+            // One type head wide (the first or the second), the other left narrow.
+            _ => read.margin[copy + (seed as usize - 5)] = (37 << 16) + 12_345,
+        }
+        let types = super::TypeHeads::new(&record, &read, &table, vocab, width);
+        let point_of = |v: usize| -> Vec<f64> { table[v * width..][..width].iter().map(|&q| f64::from(q) / 4096.0).collect() };
+        let key_ref: Vec<[u64; 2]> = (0..vocab)
+            .map(|v| [0, 1].map(|j| f64_code(&read.key_rotation, &point_of(v), copy + j, head_width)))
+            .collect();
+        for (v, keys) in key_ref.iter().enumerate() {
+            for (j, &key) in keys.iter().enumerate() {
+                assert_eq!(types.key(v as u32, j), key, "seed {seed}, entry {v}, type head {j}");
+            }
+        }
+        let mut rng = Lcg(seed + 7);
+        let tokens: Vec<u32> = (0..rows).map(|_| (rng.next() % 12) as u32).collect();
+        // Points within ±4 at Q16, as a residual is.
+        let points: Vec<Vec<i64>> = (0..rows)
+            .map(|_| (0..width).map(|_| (rng.next() % 524_289) as i64 - 262_144).collect())
+            .collect();
+        let real = |p: &[i64]| -> Vec<f64> { p.iter().map(|&v| v as f64 / 65536.0).collect() };
+        let payload_ref: Vec<Vec<f64>> = points.iter().map(|p| f64_rotated(&read.value_rotation, &real(p))).collect();
+        let mut cache = vec![0i64; rows * width];
+        for t in 0..rows {
+            types.payload(&points[t], &mut cache[t * width..][..width]);
+            // Half a step for the rounding, and 2^-10 of a step for the unit quaternion's own Q31
+            // quantization (at inputs within ±4, its error is below 2^-11 of a step). A truncated
+            // payload is up to a whole step off.
+            for (k, (&got, &want)) in cache[t * width..][..width].iter().zip(&payload_ref[t]).enumerate() {
+                let off = (got as f64 - want * 65536.0).abs();
+                assert!(off <= 0.5 + 2f64.powi(-10), "seed {seed}, row {t}, payload {k}: {off} steps off");
+            }
+            let queries = types.queries(&points[t]);
+            let mut sum = vec![0f64; width];
+            let mut found = 0usize;
+            for j in 0..2 {
+                let query = f64_code(&read.query_rotation, &real(&points[t]), copy + j, head_width);
+                assert_eq!(queries[j], query, "seed {seed}, row {t}, type head {j}");
+                let mut candidates: Vec<(u32, usize)> = (1..t)
+                    .map(|s| ((query ^ key_ref[tokens[s - 1] as usize][j]).count_ones(), s))
+                    .collect();
+                candidates.sort_unstable();
+                candidates.truncate(record.kept);
+                let kept: Vec<(usize, u32)> = candidates.into_iter().map(|(d, s)| (s, d)).collect();
+                assert_eq!(types.choose(j, queries[j], &tokens[..=t]), kept, "seed {seed}, row {t}, type head {j}");
+                let margin = f64::from(read.margin[copy + j]) / 65536.0;
+                let mut head = vec![0f64; width];
+                let mut count = 0usize;
+                for &(s, d) in &kept {
+                    let weight = (margin - f64::from(d)).max(0.0) / margin.max(1.0);
+                    if weight > 0.0 {
+                        count += 1;
+                        for (acc, &v) in head.iter_mut().zip(&payload_ref[s]) {
+                            *acc += weight * v;
+                        }
+                    }
+                }
+                if count > 0 {
+                    found += 1;
+                    for (acc, value) in sum.iter_mut().zip(head) {
+                        *acc += value / count as f64;
+                    }
+                }
+            }
+            let got = types.mean(&queries, &tokens[..=t], &cache[..(t + 1) * width]);
+            match (got, found) {
+                (None, 0) => {}
+                (Some(got), found) if found > 0 => {
+                    found_rows += 1;
+                    one_found_rows += usize::from(found == 1);
+                    for (k, (&g, &s)) in got.iter().zip(&sum).enumerate() {
+                        let error = (g as f64 / 2f64.powi(16 + 31) - s / found as f64).abs();
+                        assert!(error <= 2f64.powi(-16), "seed {seed}, row {t}, coordinate {k}: off by {error}");
+                    }
+                }
+                (got, found) => panic!("seed {seed}, row {t}: integer {} against {found} heads found", got.is_some()),
+            }
+        }
+    }
+    assert!(found_rows > 100, "the type heads found candidates at {found_rows} rows");
+    assert!(one_found_rows > 40, "exactly one type head found a candidate at {one_found_rows} rows");
+}
+
+/// claude-195: the stream read with type heads, against claude-194's method. At every row the
+/// residual after layer 1 equals the read-free residual `x` there plus `w_c ⊙ c + w_y ⊙ y`, the sum
+/// rounded once to Q16, where `y` is the type mean over the payloads of the read-free residuals
+/// so far (a layer before the read cannot see it). Returns the rows the read moved and the rows
+/// where a type head found a candidate.
+fn stream_with_type_heads(copy: f32, types: f32) -> (usize, usize) {
+    let (read, free, table, reads) = served_read_parts(&[1], copy, types);
+    let (image, copy_heads) = &reads[0];
+    let (vocab, width) = (free.shape().vocab, free.shape().width);
+    let type_heads = super::TypeHeads::new(&super::StackHamming::new(4, vec![1]), image, &table, vocab, width);
+    let (w_c, w_y) = image.weight.split_at(width);
+    let tokens = repeating_tokens();
+    let mut cache = vec![0i64; tokens.len() * width];
+    let (mut with, mut without) = (read.session(), free.session());
+    let (mut moved, mut typed) = (0, 0);
+    for t in 0..tokens.len() {
+        let (_, trace) = traced_step(&mut with, tokens[t]);
+        let (_, free_trace) = traced_step(&mut without, tokens[t]);
+        let x: Vec<i64> = free_trace[0].iter().map(|&v| i64::from(v)).collect();
+        type_heads.payload(&x, &mut cache[t * width..][..width]);
+        let y = type_heads.mean(&type_heads.queries(&x), &tokens[..=t], &cache[..(t + 1) * width]);
+        let c = copy_heads.mean(&tokens[..=t], &table);
+        typed += usize::from(y.is_some());
+        let want: Vec<i32> = if c.is_none() && y.is_none() {
+            free_trace[0].clone()
+        } else {
+            (0..width)
+                .map(|k| {
+                    // `x` at 2^-16, `w_c · c` at 2^-67 and `w_y · y` at 2^-71: the sum at 2^-71.
+                    let c = c.as_ref().map_or(0, |c| c[k]);
+                    let y = y.as_ref().map_or(0, |y| y[k]);
+                    let sum = (i128::from(x[k]) << 55) + ((i128::from(w_c[k]) * c) << 4) + i128::from(w_y[k]) * y;
+                    round_half_away(sum, 55) as i32
+                })
+                .collect()
+        };
+        assert_eq!(trace[0], want, "copy {copy}, types {types}, position {t}");
+        moved += usize::from(trace[0] != free_trace[0]);
+    }
+    (moved, typed)
+}
+
+#[test]
+fn the_stream_read_adds_both_kinds_of_head() {
+    let (moved, typed) = stream_with_type_heads(1.0, 1.0);
+    assert!(moved > 10 && typed > 10, "moved {moved} rows; type heads found candidates at {typed}");
+    // The type heads alone, copy weights 0, still move the residual.
+    let (moved, typed) = stream_with_type_heads(0.0, 1.0);
+    assert!(moved > 10 && typed > 10, "type heads alone moved {moved} rows; found at {typed}");
+}
+
+/// claude-195: the readout move with type heads: `n + [matched] w_c ⊙ (c − n) + w_y ⊙ y` on the
+/// read-free final norm output `n`, the type term rounded to the copy move's `2^-67` and the sum
+/// once to `n`'s `2^-24`; the Q12 query is that point. Returns the rows whose query moved and the
+/// rows where a type head found a candidate.
+fn readout_with_type_heads(copy: f32, types: f32) -> (usize, usize) {
+    let layers = super::synthetic::FBS_SYNTH_NON_SQUARE.layers;
+    let (read, free, table, reads) = served_read_parts(&[layers], copy, types);
+    let (image, copy_heads) = &reads[0];
+    let (vocab, width) = (free.shape().vocab, free.shape().width);
+    let type_heads = super::TypeHeads::new(&super::StackHamming::new(4, vec![layers]), image, &table, vocab, width);
+    let (w_c, w_y) = image.weight.split_at(width);
+    let tokens = repeating_tokens();
+    let mut cache = vec![0i64; tokens.len() * width];
+    let (mut with, mut without) = (read.session(), free.session());
+    let (mut moved, mut typed) = (0, 0);
+    for t in 0..tokens.len() {
+        let query = with.step_native(tokens[t]).expect("step").query_q12;
+        let free_query = without.step_native(tokens[t]).expect("step").query_q12;
+        let n = without.fbs_norm_output().to_vec();
+        type_heads.payload(&n, &mut cache[t * width..][..width]);
+        let y = type_heads.mean(&type_heads.queries(&n), &tokens[..=t], &cache[..(t + 1) * width]);
+        let c = copy_heads.mean(&tokens[..=t], &table);
+        typed += usize::from(y.is_some());
+        let want: Vec<i64> = if c.is_none() && y.is_none() {
+            n.clone()
+        } else {
+            (0..width)
+                .map(|k| {
+                    let nk = i128::from(n[k]);
+                    let move_c = c.as_ref().map_or(0, |c| i128::from(w_c[k]) * (c[k] - (nk << 19)));
+                    let y = y.as_ref().map_or(0, |y| y[k]);
+                    // The type term's pre-rounding to 2^-67 is the design's, kept to stay inside an
+                    // i128 for any `n`; it is 43 bits below `n`'s grid.
+                    let move_y = round_half_away(i128::from(w_y[k]) * y, 12);
+                    round_half_away((nk << 43) + move_c + move_y, 43) as i64
+                })
+                .collect()
+        };
+        assert_eq!(with.fbs_norm_output(), want, "copy {copy}, types {types}, position {t}");
+        let want_query: Vec<i32> = want
+            .iter()
+            .map(|&v| super::kernels::to_exp_i32(v, -24, -12).clamp(-32768, 32767))
+            .collect();
+        assert_eq!(query, want_query, "copy {copy}, types {types}, position {t}");
+        moved += usize::from(query != free_query);
+    }
+    (moved, typed)
+}
+
+#[test]
+fn the_readout_read_adds_both_kinds_of_head() {
+    let (moved, typed) = readout_with_type_heads(1.0, 1.0);
+    assert!(moved > 10 && typed > 10, "moved {moved} queries; type heads found candidates at {typed}");
+    let (moved, typed) = readout_with_type_heads(0.0, 1.0);
+    assert!(moved > 10 && typed > 10, "type heads alone moved {moved} queries; found at {typed}");
+}
+
+/// claude-195: a session of a read with type heads is refused at restore, by its text, since the
+/// saved session does not carry the payloads; a read with copy heads alone, whose state is the
+/// tokens, restores and continues bit for bit.
+#[test]
+fn a_session_with_type_heads_is_not_restored() {
+    let tokens = repeating_tokens();
+    let (typed, ..) = served_read_parts(&[1, 3], 1.0, 1.0);
+    let mut session = typed.session();
+    for &token in &tokens[..8] {
+        session.step_native(token).expect("step");
+    }
+    match typed.session().restore_state(&session.save_state()) {
+        Err(StackError::Shape(m)) => assert_eq!(
+            m,
+            "a session of a Hamming read with type heads cannot be restored yet: its per-position payloads are not saved"
+        ),
+        other => panic!("expected the restore refusal, got {:?}", other.err()),
+    }
+    let (copied, ..) = served_read_parts(&[1, 3], 1.0, 0.0);
+    let mut first = copied.session();
+    for &token in &tokens[..8] {
+        first.step_native(token).expect("step");
+    }
+    let mut second = copied.session();
+    second.restore_state(&first.save_state()).expect("a copy-only session restores");
+    for (t, &token) in tokens.iter().enumerate().skip(8) {
+        assert_eq!(first.step_native(token).expect("step"), second.step_native(token).expect("step"), "position {t}");
+    }
+}
+
+/// claude-195: the payload cache is held to the session read cache's 4 GiB, at its limit and one
+/// past it, and an overflowing product is refused too.
+#[test]
+fn the_payload_cache_is_bounded() {
+    use super::hamming::check_payload_cache;
+    check_payload_cache(1, 1 << 16, 1 << 13).expect("4 GiB exactly");
+    check_payload_cache(2, 1 << 16, 1 << 12).expect("4 GiB exactly");
+    check_payload_cache(0, usize::MAX, usize::MAX).expect("no type heads, no cache");
+    for (typed, context, width) in [(1, 1 << 16, (1 << 13) + 1), (3, 1 << 16, 1 << 12), (usize::MAX, 2, 2)] {
+        match check_payload_cache(typed, context, width) {
+            Err(StackError::Shape(m)) => assert_eq!(m, "the Hamming type heads' payload cache exceeds the session read cache's 4 GiB"),
+            other => panic!("({typed}, {context}, {width}): expected the refusal, got {other:?}"),
+        }
+    }
 }

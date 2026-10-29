@@ -85,7 +85,7 @@ pub use format::{
     FbsHammingRead, FbsHammingSnapshot, StackHamming, HAMMING_KEPT, HAMMING_MARGIN_EXP, HAMMING_ROTATION_EXP,
     HAMMING_WEIGHT_EXP, STACK_FBS_HAMMING_SCHEMA,
 };
-pub use hamming::{copy_weight_q31, read_hamming_uorlut01, CopyHeads, HammingImage, HammingReadImage, COPY_MEAN_EXP};
+pub use hamming::{copy_weight_q31, read_hamming_uorlut01, CopyHeads, HammingImage, HammingReadImage, TypeHeads, COPY_MEAN_EXP};
 pub use kernels::{stack_argmax, stack_memory_select, stack_snap_select, MAX_SELECT_SIDE};
 pub use session::{
     sample_mean_sd_t_ci95, student_t_0975, student_t_975, validate_protocol_v3_energy_receipt,
