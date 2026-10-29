@@ -1510,7 +1510,9 @@ struct EvaluatorRun {
 /// is the same `MarginHinge(rivals = 8)` the D11 mode scores (`panel_loss_d11`), applied to the
 /// evaluator's Q12 query with the tables rounded as exported. `stage4b` is claude-126's receipt,
 /// for the two-seed noise band and the stored float predictions' loss; `stored_preds` its
-/// `preds-float.json` for this seed. GPU only.
+/// `preds-float.json` for this seed. When `train_receipt` is given (claude-182), the stored loss
+/// is that receipt's for this seed instead, so a model trained by a later sheet is checked
+/// against its own receipt while the band stays Stage 4b's. GPU only.
 #[allow(clippy::too_many_arguments)]
 pub fn run_d11_artifact_gap(
     data_root: &Path,
@@ -1520,6 +1522,7 @@ pub fn run_d11_artifact_gap(
     artifact_sha256: &str,
     model_sha256_pin: &str,
     stage4b: &Path,
+    train_receipt: Option<&Path>,
     stored_preds: &Path,
     seed: u64,
     steps: usize,
@@ -1542,9 +1545,19 @@ pub fn run_d11_artifact_gap(
         .as_array()
         .and_then(|s| s.iter().find(|v| v["seed"].as_u64() == Some(seed)))
         .ok_or_else(|| invalid(format!("the Stage 4b receipt has no seed {seed}")))?;
-    let stored_loss = stage4b_seed["loss_float"]
-        .as_f64()
-        .ok_or_else(|| invalid("the Stage 4b receipt has no float loss"))?;
+    let (stored_loss, train_receipt_sha256) = match train_receipt {
+        Some(path) => {
+            let bytes = fs::read(path)?;
+            let loss = seed_float_loss(&serde_json::from_slice(&bytes)?, seed, noise)?;
+            (loss, Some(sha256_bytes(&bytes)))
+        }
+        None => (
+            stage4b_seed["loss_float"]
+                .as_f64()
+                .ok_or_else(|| invalid("the Stage 4b receipt has no float loss"))?,
+            None,
+        ),
+    };
     let stored: Vec<u32> = serde_json::from_slice(&fs::read(stored_preds)?)?;
 
     let (dev_windows, dev_docs) = load_dev(data_root)?;
@@ -1631,6 +1644,7 @@ pub fn run_d11_artifact_gap(
         "trained_steps": trained_steps,
         "eval_step": steps,
         "stage4b_sha256": stage4b_sha256,
+        "train_receipt_sha256": train_receipt_sha256,
         "dev_documents": dev_docs,
         "dev_windows": dev_windows.len(),
         "artifact_sha256": run.artifact_sha256,

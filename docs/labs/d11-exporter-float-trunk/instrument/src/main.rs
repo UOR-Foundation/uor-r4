@@ -33,7 +33,7 @@ use uor_r4_integer::stack::synthetic::{
     fbs_synthetic_non_square, fbs_synthetic_tiny_gain, synthetic_fbs_trunk,
     synthetic_fbs_trunk_with, FbsSynth, Lcg, FBS_SYNTH_NON_SQUARE,
 };
-use uor_r4_integer::stack::{export_fbs_trunk_uorlut01, IntegerStackModel};
+use uor_r4_integer::stack::{export_fbs_trunk_uorlut01_with, FbsExportSnaps, IntegerStackModel};
 
 const USAGE: &str = "usage: d11-fbs-eval qualify OUT_JSON | run ARTIFACT SEQUENCES_JSON OUT_JSON [--verify] | windows READOUT_JSON OUT_JSON | singles ARTIFACT OUT_JSON | trace ARTIFACT SEQUENCES_JSON OUT_JSON";
 
@@ -115,39 +115,58 @@ fn qualify(out: &str) -> Result<bool, String> {
     let mut records = Vec::new();
     let mut pass = true;
     let mut shared = Value::Null;
+    // claude-182: every control in each of claude-181's four snap choices.
+    let choices = [
+        FbsExportSnaps::SNAPPED,
+        FbsExportSnaps {
+            gates: false,
+            transition: true,
+        },
+        FbsExportSnaps {
+            gates: true,
+            transition: false,
+        },
+        FbsExportSnaps {
+            gates: false,
+            transition: false,
+        },
+    ];
     for (name, snap) in &controls {
-        let bytes = export_fbs_trunk_uorlut01(snap).map_err(|e| e.to_string())?;
-        let model = IntegerStackModel::parse(&bytes).map_err(|e| e.to_string())?;
-        let evaluator = DeviceEvaluator::new(0, &model)?;
-        shared = hashes(&evaluator);
-        let singles: Vec<Vec<u32>> = (0..snap.vocab as u32).map(|t| vec![t]).collect();
-        let runs = [
-            ("single tokens", singles),
-            ("sequences", draw(snap.vocab, 16, snap.context, 7)),
-        ];
-        for (kind, sequences) in runs {
-            let start = Instant::now();
-            let gpu = evaluator.evaluate(&sequences)?;
-            let gpu_ns = start.elapsed().as_nanos() as u64;
-            let checks = verify(&model, &sequences, &gpu)?;
-            let equal = all_equal(&checks);
-            pass &= equal;
-            eprintln!(
-                "{name}, {kind}: {} positions, equal {equal}",
-                gpu.sequences * gpu.len
-            );
-            records.push(json!({
-                "control": name,
-                "kind": kind,
-                "artifact_sha256": sha256_hex(&bytes),
-                "gpu_ns": gpu_ns,
-                "checks": checks,
-            }));
+        for snaps in choices {
+            let bytes = export_fbs_trunk_uorlut01_with(snap, snaps).map_err(|e| e.to_string())?;
+            let model = IntegerStackModel::parse(&bytes).map_err(|e| e.to_string())?;
+            let evaluator = DeviceEvaluator::new(0, &model)?;
+            shared = hashes(&evaluator);
+            let singles: Vec<Vec<u32>> = (0..snap.vocab as u32).map(|t| vec![t]).collect();
+            let runs = [
+                ("single tokens", singles),
+                ("sequences", draw(snap.vocab, 16, snap.context, 7)),
+            ];
+            for (kind, sequences) in runs {
+                let start = Instant::now();
+                let gpu = evaluator.evaluate(&sequences)?;
+                let gpu_ns = start.elapsed().as_nanos() as u64;
+                let checks = verify(&model, &sequences, &gpu)?;
+                let equal = all_equal(&checks);
+                pass &= equal;
+                eprintln!(
+                    "{name} {snaps:?}, {kind}: {} positions, equal {equal}",
+                    gpu.sequences * gpu.len
+                );
+                records.push(json!({
+                    "control": name,
+                    "snaps": {"gates": snaps.gates, "transition": snaps.transition},
+                    "kind": kind,
+                    "artifact_sha256": sha256_hex(&bytes),
+                    "gpu_ns": gpu_ns,
+                    "checks": checks,
+                }));
+            }
         }
     }
     write_new(
         out,
-        &json!({"schema": "uor-r4.d11-fbs-eval-qualify/1", "pass": pass, "build": shared, "controls": records}),
+        &json!({"schema": "uor-r4.d11-fbs-eval-qualify/2", "pass": pass, "build": shared, "controls": records}),
     )?;
     Ok(pass)
 }

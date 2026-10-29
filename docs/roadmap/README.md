@@ -20,10 +20,10 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 17 |
+| ready | 16 |
 | held | 10 |
 | decision | 1 |
-| done | 81 |
+| done | 82 |
 | total | 109 |
 
 ## Start here
@@ -95,8 +95,8 @@ These items are ready and open to anyone.
 
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
-| [Write the D11 exporter for a D37 float trunk](items/d11-exporter-float-trunk.md) | ready | a lab | yes | [float-training-module](items/float-training-module.md), [m1-d11-exporter-discrete](items/m1-d11-exporter-discrete.md), [owner-decision-float-path-scope](items/owner-decision-float-path-scope.md) | [#2820](https://github.com/UOR-Foundation/uor-r4/issues/2820) |
 | [Serve the chosen model as UORLUT01 through the uor-chat CLI](items/m4-export-uorlut01-cli.md) | ready | a lab | yes | [m1-d11-exporter-discrete](items/m1-d11-exporter-discrete.md), [m4-lawful-likelihood-bpb](items/m4-lawful-likelihood-bpb.md), [m1-close-saved-model](items/m1-close-saved-model.md), [m3-qualify-memory](items/m3-qualify-memory.md) | [#2859](https://github.com/UOR-Foundation/uor-r4/issues/2859) |
+| [Write the D11 exporter for a D37 float trunk](items/d11-exporter-float-trunk.md) | done | a lab | yes | [float-training-module](items/float-training-module.md), [m1-d11-exporter-discrete](items/m1-d11-exporter-discrete.md), [owner-decision-float-path-scope](items/owner-decision-float-path-scope.md) | [#2820](https://github.com/UOR-Foundation/uor-r4/issues/2820) |
 | [Finish the flock-coupling pre-registration](items/m4-flock-coupling-prereg.md) | done | anyone | no | none | [#2860](https://github.com/UOR-Foundation/uor-r4/issues/2860) |
 | [Build a lawful likelihood so bits per byte can be scored](items/m4-lawful-likelihood-bpb.md) | done | a lab | no | none | [#2861](https://github.com/UOR-Foundation/uor-r4/issues/2861) |
 
