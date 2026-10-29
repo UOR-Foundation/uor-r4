@@ -1005,9 +1005,11 @@ const SNAP_PATTERNS: usize = 256;
 
 /// For each sign pattern, the icosian roots that agree in sign with the query
 /// on every coordinate where both are nonzero, in index order (claude-164).
+/// A row holds up to 120 roots and is 128 bytes, so that a row's offset is a
+/// shift: a 120-byte row is addressed by a multiply, which the audit refuses.
 struct SnapCandidates {
     counts: [u8; SNAP_PATTERNS],
-    roots: [[u8; 120]; SNAP_PATTERNS],
+    roots: [[u8; 128]; SNAP_PATTERNS],
 }
 
 /// The 120 unit icosians are closed under the sign flip of any coordinate. A
@@ -1019,7 +1021,7 @@ static SNAP_CANDIDATES: SnapCandidates = snap_candidates();
 
 const fn snap_candidates() -> SnapCandidates {
     let mut counts = [0u8; SNAP_PATTERNS];
-    let mut roots = [[0u8; 120]; SNAP_PATTERNS];
+    let mut roots = [[0u8; 128]; SNAP_PATTERNS];
     let mut pattern = 0;
     while pattern < SNAP_PATTERNS {
         let mut index = 0;
