@@ -32,6 +32,8 @@ fn shape(memory: Option<StackMemory>) -> StackShape {
         memory,
         rec_gates: None,
         gate: None,
+        raw_gates: false,
+        raw_transition: false,
         projection: None,
         head: None,
         kept_cells: None,
