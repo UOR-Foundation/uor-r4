@@ -89,7 +89,7 @@ pub(super) const GEOMETRIC_KEEP_Q31: [u64; 16] = [
 const ROTATION_EPSILON: u128 = 4_295;
 /// An unsnapped Hamilton gate's norm epsilon at exponent -32 (claude-181): the
 /// float gate's `1e-12` is `0.004` there, so zero.
-const GATE_EPSILON: u128 = 0;
+pub(super) const GATE_EPSILON: u128 = 0;
 /// Exponents (matrix bases, the RMSNorm epsilon) are limited to this magnitude
 /// so that no exponent arithmetic can overflow.
 const EXPONENT_LIMIT: i32 = 1 << 10;
@@ -3464,7 +3464,7 @@ fn stack_gate_quaternion(model: &IntegerStackModel, g: [i32; 4]) -> [i64; 4] {
 /// the transition, [`GATE_EPSILON`] for an unsnapped Hamilton gate. A zero
 /// quaternion under a zero epsilon gives zero, as the division by zero does.
 #[inline(never)]
-fn stack_rotation(raw: [i32; 4], lambda: u64, epsilon: u128) -> [i64; 4] {
+pub(super) fn stack_rotation(raw: [i32; 4], lambda: u64, epsilon: u128) -> [i64; 4] {
     let mut square = 0u128;
     for &v in &raw {
         square = square.wrapping_add(u128::from(stack_square(i64::from(v))));

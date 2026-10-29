@@ -3794,3 +3794,211 @@ fn hamming_record_checks_name_their_reason() {
     let dense = IntegerStackModel::parse(&artifact(5)).expect("parse").shape().clone();
     assert!(reason(&dense, record(2, vec![1, 2])).contains("SpiralCore/FBS"));
 }
+
+/// A copy-head control (claude-189): a Q12 table of `vocab` rows of `width`, and one read of
+/// `heads` heads quantized as the exporter writes it, from `synthetic_hamming`.
+fn copy_control(vocab: usize, width: usize, heads: usize, seed: u64) -> (super::StackHamming, super::HammingReadImage, Vec<i16>) {
+    let mut rng = Lcg(seed);
+    let table: Vec<i16> = (0..vocab * width)
+        .map(|_| ((rng.next() % 12_289) as i32 - 6_144) as i16)
+        .collect();
+    let read = &super::synthetic::synthetic_hamming(width, 2, heads, seed).reads[0];
+    let fixed = |values: &[f32], exp: i32| -> Vec<i32> {
+        values.iter().map(|&v| (f64::from(v) * 2f64.powi(-exp)).round() as i32).collect()
+    };
+    let image = super::HammingReadImage {
+        depth: 1,
+        query_rotation: fixed(&read.query_rotation, super::HAMMING_ROTATION_EXP),
+        key_rotation: fixed(&read.key_rotation, super::HAMMING_ROTATION_EXP),
+        value_rotation: fixed(&read.value_rotation, super::HAMMING_ROTATION_EXP),
+        margin: fixed(&read.margin, super::HAMMING_MARGIN_EXP),
+        weight: fixed(&read.weight, super::HAMMING_WEIGHT_EXP),
+    };
+    (super::StackHamming::new(heads, vec![1, 2]), image, table)
+}
+
+/// The f64 reference of the copy heads' read (claude-189): the float read's steps on the
+/// quantized values, `(g / |g|) ⊗ p` in f64 and its signs, the same distances and tie rule, and
+/// the weights and means in f64. Returns the codes `vocab * copy`, and per row the kept sets
+/// and the mean.
+#[allow(clippy::type_complexity)]
+fn reference_copy(
+    record: &super::StackHamming,
+    read: &super::HammingReadImage,
+    table: &[i16],
+    width: usize,
+    tokens: &[u32],
+) -> (Vec<u64>, Vec<(Vec<Vec<(usize, u32)>>, Option<Vec<f64>>)>) {
+    let (copy, head_width) = (record.heads / 2, width / record.heads);
+    let vocab = table.len() / width;
+    let units: Vec<[f64; 4]> = read
+        .key_rotation
+        .chunks_exact(4)
+        .map(|g| {
+            let g = [g[0], g[1], g[2], g[3]].map(|v| f64::from(v) * 2f64.powi(super::HAMMING_ROTATION_EXP));
+            let r = g.iter().map(|v| v * v).sum::<f64>().sqrt();
+            if r == 0.0 {
+                [0.0; 4]
+            } else {
+                g.map(|v| v / r)
+            }
+        })
+        .collect();
+    let hamilton = |a: [f64; 4], b: [f64; 4]| {
+        [
+            a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
+            a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2],
+            a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1],
+            a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0],
+        ]
+    };
+    let point = |v: usize, at: usize| -> f64 { f64::from(table[v * width + at]) / 4096.0 };
+    let mut codes = vec![0u64; vocab * copy];
+    for v in 0..vocab {
+        for h in 0..copy {
+            let mut word = 0u64;
+            for c in (0..head_width).step_by(4) {
+                let at = h * head_width + c;
+                let p = [point(v, at), point(v, at + 1), point(v, at + 2), point(v, at + 3)];
+                for (i, value) in hamilton(units[at / 4], p).into_iter().enumerate() {
+                    if value >= 0.0 {
+                        word |= 1u64 << (c + i);
+                    }
+                }
+            }
+            codes[v * copy + h] = word;
+        }
+    }
+    let margins: Vec<f64> = read.margin[..copy].iter().map(|&m| f64::from(m) / 65536.0).collect();
+    let rows = (0..tokens.len())
+        .map(|t| {
+            let mut kept_sets = Vec::with_capacity(copy);
+            let mut sum = vec![0.0f64; width];
+            let mut found = 0usize;
+            for h in 0..copy {
+                let q = codes[tokens[t] as usize * copy + h];
+                let mut candidates: Vec<(u32, usize)> = (1..t)
+                    .map(|s| ((q ^ codes[tokens[s - 1] as usize * copy + h]).count_ones(), s))
+                    .collect();
+                candidates.sort_unstable();
+                candidates.truncate(record.kept);
+                let kept: Vec<(usize, u32)> = candidates.into_iter().map(|(d, s)| (s, d)).collect();
+                let mut head = vec![0.0f64; width];
+                let mut count = 0usize;
+                for &(s, d) in &kept {
+                    let weight = (margins[h] - f64::from(d)).max(0.0) / margins[h].max(1.0);
+                    if weight > 0.0 {
+                        count += 1;
+                        for (c, acc) in head.iter_mut().enumerate() {
+                            *acc += weight * point(tokens[s] as usize, c);
+                        }
+                    }
+                }
+                if count > 0 {
+                    found += 1;
+                    for (acc, value) in sum.iter_mut().zip(head) {
+                        *acc += value / count as f64;
+                    }
+                }
+                kept_sets.push(kept);
+            }
+            let mean = (found > 0).then(|| sum.into_iter().map(|v| v / found as f64).collect());
+            (kept_sets, mean)
+        })
+        .collect();
+    (codes, rows)
+}
+
+/// claude-189: the copy heads' integer read equals the f64 reference of the same quantized steps
+/// on a 256-wide, 64-coordinates-a-head read: every code, every kept set with its distances, and
+/// every copy mean within `2^-23`. The bar was fixed in the ORDER before this test ran.
+#[test]
+fn copy_heads_match_the_f64_reference() {
+    let (vocab, width) = (256, 256);
+    // Narrow margins, where only repeats count, and wide ones (33 to 41 bits, fractional), where
+    // most candidates fall inside with fractional weights, testing the Q31 weights and means.
+    for (seed, wide) in [(189u64, false), (190, false), (191, false), (194, true), (195, true)] {
+        let (record, mut read, table) = copy_control(vocab, width, 4, seed);
+        if wide {
+            for (h, m) in read.margin.iter_mut().enumerate() {
+                *m = ((33 + 2 * h as i32) << 16) + 12_345 * (h as i32 + 1);
+            }
+        }
+        let heads = super::CopyHeads::new(&record, &read, &table, vocab, width);
+        let mut rng = Lcg(seed ^ 0x5eed);
+        // Draws from a small subset, so repeats and near matches are common.
+        let tokens: Vec<u32> = (0..48).map(|_| (rng.next() % 12) as u32 * 21).collect();
+        let (codes, rows) = reference_copy(&record, &read, &table, width, &tokens);
+        for v in 0..vocab as u32 {
+            for h in 0..2 {
+                assert_eq!(heads.code(v, h), codes[v as usize * 2 + h], "code of {v}, head {h}");
+            }
+        }
+        for (t, (kept_sets, mean)) in rows.iter().enumerate() {
+            let prefix = &tokens[..=t];
+            for (h, kept) in kept_sets.iter().enumerate() {
+                assert_eq!(&heads.choose(h, prefix), kept, "seed {seed}, row {t}, head {h}");
+            }
+            let got = heads.mean(prefix, &table);
+            assert_eq!(got.is_some(), mean.is_some(), "seed {seed}, row {t}: found");
+            if let (Some(got), Some(want)) = (got, mean) {
+                for (c, (&g, &w)) in got.iter().zip(want).enumerate() {
+                    let g = g as f64 * 2f64.powi(super::COPY_MEAN_EXP);
+                    assert!((g - w).abs() <= 2f64.powi(-23), "seed {seed}, row {t}, coordinate {c}: {g} against {w}");
+                }
+            }
+        }
+    }
+}
+
+/// claude-189: the recall control. Wherever `x_t` repeats an earlier `x_j` with `j + 1 < t`,
+/// every copy head keeps `s = j + 1` at distance 0. Under one-bit margins only a distance of 0
+/// counts, so with a single earlier copy the copy mean is exactly the point of `x_{j+1}`, the
+/// token that followed it.
+#[test]
+fn copy_heads_recall_the_token_after_an_earlier_copy() {
+    let (vocab, width) = (256, 256);
+    let (record, mut read, table) = copy_control(vocab, width, 4, 192);
+    read.margin.fill(1 << 16);
+    let heads = super::CopyHeads::new(&record, &read, &table, vocab, width);
+    // Distinct tokens, then a repeat of position 5: the copy of 5 is followed by token 6.
+    let mut tokens: Vec<u32> = (0..20u32).map(|i| i * 11 + 3).collect();
+    tokens.push(tokens[5]);
+    let t = tokens.len() - 1;
+    for h in 0..2 {
+        assert!(heads.choose(h, &tokens).contains(&(6, 0)), "head {h} keeps the position after the copy");
+    }
+    let mean = heads.mean(&tokens, &table).expect("the copy is found");
+    let follower = &table[tokens[6] as usize * width..][..width];
+    for (&m, &p) in mean.iter().zip(follower) {
+        assert_eq!(m, i128::from(p) << 31, "the copy mean is the follower's point");
+    }
+    // Every repeat in a sequence with many is kept at distance 0, when it fits the kept count.
+    let mut rng = Lcg(193);
+    let repeats: Vec<u32> = (0..40).map(|_| (rng.next() % 6) as u32 * 37).collect();
+    for t in 2..repeats.len() {
+        let prefix = &repeats[..=t];
+        for h in 0..2 {
+            let kept = heads.choose(h, prefix);
+            let zeros: Vec<usize> = (0..t - 1).filter(|&j| repeats[j] == repeats[t]).map(|j| j + 1).collect();
+            if zeros.len() <= record.kept {
+                for s in zeros {
+                    assert!(kept.contains(&(s, 0)), "row {t}, head {h}: the copy at {} is kept", s - 1);
+                }
+            }
+        }
+    }
+    let _ = t;
+}
+
+/// claude-189: a candidate's weight divides by `max(m, 1)`, the float's `margin.maximum(1.0)`, so
+/// a margin below one bit does not inflate it.
+#[test]
+fn copy_weights_divide_by_at_least_one_bit() {
+    let half_bit = 1 << 15;
+    assert_eq!(super::copy_weight_q31(half_bit, 0), 1 << 30, "0.5 / max(0.5, 1) = 0.5");
+    assert_eq!(super::copy_weight_q31(1 << 16, 0), 1 << 31);
+    assert_eq!(super::copy_weight_q31(4 << 16, 1), 3 << 29, "(4 − 1) / 4");
+    assert_eq!(super::copy_weight_q31(4 << 16, 4), 0);
+    assert_eq!(super::copy_weight_q31(4 << 16, 9), 0);
+}
