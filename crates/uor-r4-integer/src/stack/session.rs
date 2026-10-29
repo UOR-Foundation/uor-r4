@@ -669,6 +669,13 @@ impl IntegerStackModel {
     /// creating a session cannot abort on allocation.
     pub fn parse(bytes: &[u8]) -> Result<Self, StackError> {
         let artifact = Container::parse(bytes)?;
+        // This engine does not serve a Hamming read yet (integer-hamming-read): refuse one rather
+        // than serve the trunk without it (claude-188).
+        if artifact.hamming.is_some() {
+            return Err(StackError::Shape(
+                "this engine does not serve a Hamming read yet (uor-r4.lut-stack/6)",
+            ));
+        }
         if artifact.shape.read_binary() && artifact.shape.head_dim() > BITCODE_LANES {
             return Err(StackError::Shape(
                 "a binary read's head width exceeds the 256-lane sign code",

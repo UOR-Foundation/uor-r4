@@ -277,6 +277,41 @@ pub struct FbsTrunkSnapshot {
     /// `width` final RMSNorm gain.
     pub final_norm: Vec<f32>,
     pub layers: Vec<FbsTrunkLayer>,
+    /// The induction-keyed Hamming reads (claude-146) the trunk serves; absent on a trunk without
+    /// them, so a snapshot written before them still parses (claude-188).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hamming: Option<FbsHammingSnapshot>,
+}
+
+/// The Hamming reads of claude-146's `hamming_read.safetensors`: one read per depth.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FbsHammingSnapshot {
+    /// Heads per read: the first half copy heads, the rest type heads, each matching on its own
+    /// `width / heads` coordinates.
+    pub heads: usize,
+    /// Each read's depth, in the float trunk's `HAMMING_DEPTHS` order: a read after that many
+    /// layers, inside the stream, or on the final norm's output at the layer count.
+    pub depths: Vec<usize>,
+    /// One read per depth, in the same order.
+    pub reads: Vec<FbsHammingRead>,
+}
+
+/// One Hamming read's learned parameters, as `hamming_read.safetensors` stores them under
+/// `d{depth}.{name}`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FbsHammingRead {
+    /// `width / 4` quaternions `[w, x, y, z]`, row-major: the type heads' query rotation.
+    pub query_rotation: Vec<f32>,
+    /// `width / 4` quaternions: the key rotation, which the copy heads' queries share.
+    pub key_rotation: Vec<f32>,
+    /// `width / 4` quaternions: the type heads' value rotation.
+    pub value_rotation: Vec<f32>,
+    /// `heads` margins, in bits.
+    pub margin: Vec<f32>,
+    /// `2 * width`: row 0 the copy heads' weights `w_c`, row 1 the type heads' `w_y`.
+    pub weight: Vec<f32>,
 }
 
 #[cfg(test)]

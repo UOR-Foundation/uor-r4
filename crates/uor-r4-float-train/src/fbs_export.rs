@@ -279,6 +279,8 @@ pub fn fbs_trunk_snapshot(model: &StackModel) -> Result<FbsTrunkSnapshot> {
         embed: values("embedding.weight")?,
         final_norm: values("final_norm.weight")?,
         layers,
+        // Reading `hamming_read.safetensors` into the snapshot is a later unit (claude-188).
+        hamming: None,
     })
 }
 

@@ -3,7 +3,7 @@
 //! must reproduce `step_native` on the same trunks (claude-128's GPU
 //! evaluator, through the `fbs-synthetic` feature). Test inputs, not a model.
 
-use super::{FbsRoutes, FbsTrunkLayer, FbsTrunkSnapshot};
+use super::{FbsHammingRead, FbsHammingSnapshot, FbsRoutes, FbsTrunkLayer, FbsTrunkSnapshot};
 
 /// The tests' linear congruential generator.
 pub struct Lcg(pub u64);
@@ -151,5 +151,40 @@ pub fn synthetic_fbs_trunk_with(seed: u64, s: FbsSynth) -> FbsTrunkSnapshot {
         embed: rand_vec(&mut rng, vocab * d, 1.5),
         final_norm: rand_pos(&mut rng, d),
         layers,
+        hamming: None,
     }
+}
+
+/// Synthetic Hamming reads for a trunk of `width` and `layers` (claude-188): `heads` heads, one
+/// read inside the stream after the first layer and one on the readout. The rotations are
+/// random, but each read's lane 0 is the zero quaternion. The margins are positive, and the
+/// weights random in `[-1, 1]`.
+pub fn synthetic_hamming(width: usize, layers: usize, heads: usize, seed: u64) -> FbsHammingSnapshot {
+    let mut rng = Lcg(seed);
+    let mut uniform = |len: usize| -> Vec<f32> {
+        (0..len)
+            .map(|_| ((rng.next() % 2001) as i32 - 1000) as f32 / 1000.0)
+            .collect()
+    };
+    let depths = vec![1, layers];
+    let reads = depths
+        .iter()
+        .map(|_| {
+            let mut rotation = || {
+                let mut q = uniform(width);
+                q[..4].fill(0.0);
+                q
+            };
+            let (query_rotation, key_rotation, value_rotation) = (rotation(), rotation(), rotation());
+            let margin = uniform(heads).iter().map(|v| 1.0 + 8.0 * v.abs()).collect();
+            FbsHammingRead {
+                query_rotation,
+                key_rotation,
+                value_rotation,
+                margin,
+                weight: uniform(2 * width),
+            }
+        })
+        .collect();
+    FbsHammingSnapshot { heads, depths, reads }
 }
