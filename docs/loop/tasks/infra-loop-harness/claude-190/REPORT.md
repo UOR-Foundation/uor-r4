@@ -26,7 +26,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). This is a maintenance unit: no model a
   One paragraph under "The trunk line's pivot" points to that order and says why `loop next` never offered `turn-memory-reply`.
 - **`docs/roadmap/items/docs-status-refresh.md` (new, `ready`, `needs_gpu: false`).**
   - **Scope:** the README, the site's start, model, product, geometry, research and research-line pages, the mechanism pages, `docs/figures/**`, `xtask/src/figures.rs`, the crate READMEs and `docs/roadmap/issues.json`.
-  - **Left out:** `docs/mechanisms/exact-memory.md` and `docs/mechanisms/object-store.md`, which antigravity-113's open order holds, and every shared file.
+  - **Left out:** `docs/mechanisms/exact-memory.md`, `docs/mechanisms/object-store.md` and `crates/uor-r4-object-store/README.md`, which antigravity-113's open order holds, and every shared file. The crate READMEs are listed one by one for that reason. `crates/uor-r4-float-train/README.md`, which the trunk line's crate lacks, may be created.
   - **Done-when:**
     - the status pages state 29 Oct with a source for each number;
     - the generated pictures are redrawn and `cargo xtask figures` passes;

@@ -18,7 +18,7 @@ The item's done-when reads:
 Cancel if an existing item already covers the status pages, or if PLAN.md already records the 29 Oct directions.
 - **No ready item covers them.** No ready item's `scope:` names `README.md`, `docs/start/`, `docs/model/`, `docs/research/lines/`, `docs/products/` or `xtask/src/figures.rs`. The only items whose scope reaches `docs/figures/**` are this umbrella and the done `infra-loop-pr08-migration`.
 - **PLAN.md has no open owner direction** at `14b2bdccc`: `loop next` prints "PLAN.md has no open owner direction".
-- **The new scope overlaps no open order.** The one other open order, antigravity-113, holds `docs/mechanisms/exact-memory.md` and `docs/mechanisms/object-store.md`, and the new item's scope leaves both out. It names no shared file (`SHARED_FILES` in `loopclaim.rs`).
+- **The new scope overlaps no open order.** The one other open order, antigravity-113, holds `docs/mechanisms/exact-memory.md` and `docs/mechanisms/object-store.md`, and the new item's scope leaves both out. It lists the crate READMEs one by one, because a glob would take in `crates/uor-r4-object-store/README.md`, which lies inside antigravity's `crates/uor-r4-object-store/**`. It names no shared file (`SHARED_FILES` in `loopclaim.rs`).
 
 Result: **go.** This probes an instrument, the loop's record of directions and items, not a mechanism.
 
