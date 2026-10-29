@@ -1,26 +1,28 @@
-# ORDER: integer-hamming-read, claude-194
+# ORDER: integer-hamming-read, claude-194 (the copy heads served in the session)
 
-Lab: claude. Item: [integer-hamming-read](../../../../roadmap/items/integer-hamming-read.md). Base: `c6e2e19bf`.
+Lab: claude. Item: [integer-hamming-read](../../../../roadmap/items/integer-hamming-read.md). Issue: #3385. Base: `c6e2e19bf`.
 
 ## Goal
 
-The item's done-when reads:
+This is the second half of step 2 of the item's design: claude-189's copy-head kernel (`CopyHeads`, `stack/hamming.rs`) put on the served path of the FBS session. It advances step 2 of the owner's order in PLACE.md: serve the working model's parts in integers.
 
-> 1. The integer runtime runs the whole read as claude-146's REPORT describes it, all four heads of both reads, under D11's rules (CHARTER §3.6: integer only, no float or transcendental instruction; since D80 and D81 the hardware integer multiply and divide are allowed once [`integer-mul-div-serving`](integer-mul-div-serving.md)'s audits allow them, and until then products go through D11's tables):
->    - **copy heads:** keys and queries from the table's points through the key rotation. These depend only on the token, so their codes can be built once per vocabulary entry;
->    - **type heads:** queries from the residual through the query rotation, and payloads from the residual at `s` through the value rotation. These rotate the state at run time, so each product goes through D11's tables;
->    - the codes packed into 64-bit words; the match by `popcount(q XOR k)`; the 16 nearest earlier positions `1 ≤ s < t`; the weights `max(0, m − d)/m`; the stream read after layer 2 and the move on the readout, each product through the tables.
-> 2. **Parity,** against the float forward of the same stored checkpoint (claude-146's language runs, `caseyallard/uor-r4-store:results/claude/hamming-read-2026-10-27/`), on DEV. No D11 tolerance exists for this read yet, so the unit's prep sheet pre-registers the bar for two numbers, and the REPORT gives both:
->    - the share of (position, head, read) kept sets equal to float's. One sign flip in an integer rotation changes a code, so this is not assumed to be exact;
->    - top-1 agreement between the integer and float decoded ids.
->    
->    The float reference is computed on the GPU (CHARTER §3.5); the integer side runs on the laptop, as serving does.
-> 3. **Speed on this laptop:** `fbs-toks` decode tokens/s against context, with the read and without, on the same artifact.
-> 4. One notebook row; the result on main.
+The session follows the float trunk (`geometric_stack_native.rs:1138–1190`) and the float read (`flock_read_hamming.rs`, `read`) for a read whose type-head weights are all zero:
+1. **The stream read.** After the layer whose count is a read's depth `δ` (`1 ≤ δ < layers`), the residual takes `x + w_c ⊙ c`, rounded to Q16 as the float's `q16(read.apply(...))`. `c` is the copy mean at the current row, at `COPY_MEAN_EXP`. A row where no copy head found a candidate adds nothing, as the float's `sums / max(found, 1)` is 0 there.
+2. **The readout move.** For a read at depth `δ = layers`, on the final norm's output `n` (after the final gain, before the Q12 query): `n + w_c ⊙ (c − n)` where a copy head found a candidate, and `n` elsewhere. It is not rounded to Q16, as the float's line 1187 is not; it lands at the norm's own exponent.
+3. **The tokens the read sees.** The read at row `t` needs `x_0..=x_t`. The session keeps each position's token before its layers run, so the read sees the current one.
+4. **The refusals** (the design's rule: refuse what is not served, so a partial port never silently differs from float):
+   - a Hamming read on a shape that is not FBS;
+   - a read with any non-zero type-head weight (`w_y`, weight row 1): the type heads are step 3;
+   - a read at depth 0, or past the layer count.
+
+   claude-188's review asks that the tests match each error, not only `is_err()`.
+5. **The timed step** (`stack_step_fbs_timed`) runs the same hooks, so it stays equal to the step.
 
 ## Cancel probe (run first)
 
-To fill in.
+- **The integer runtime already has a Hamming read on main?** No. At `origin/main` `c6e2e19bf`, `IntegerStackModel::parse` still refuses every `/6` artifact ("this engine does not serve a Hamming read yet (uor-r4.lut-stack/6)", `session.rs:672–678`).
+- **The float read withdrawn?** No. `flock_read_hamming.rs` is on main, and claude-146's read is the copy part of PLACE.md's composition table.
+- **Classed:** instrument. Nothing cancels the unit.
 
 ## Files in scope
 
@@ -41,8 +43,22 @@ To fill in.
 
 ## Done when
 
-To fill in.
+All of these hold at the PR head, and the REPORT gives each one's evidence:
+1. **Off at weight 0.** A `/6` FBS artifact whose copy weights are 0 serves every step bit for bit as the same trunk exported without a read: the native choice, its kept cells and its Q12 query, over a sequence with repeats, so the copy heads do find candidates.
+2. **The hooks against a reference.** With non-zero copy weights, both hooks match a test-side i128 reference that runs the read-free trunk's integers and applies the two formulas above, for every step of a sequence with repeats, at both a stream depth and the readout:
+   - every Q12 query equal;
+   - the read changes the query at some step (so the test can fail);
+   - with the read at the readout only, the changed steps are exactly those where a copy head found a candidate.
+3. **The refusals,** each matched by its error text: no read on a non-FBS shape, no non-zero type weight, no depth 0 or past the layer count.
+4. **The timed step equals the step,** with a read, at every step.
+5. **Negative gates:** each named hook, set aside, makes its test fail; restored, all pass.
+6. **The serving audit** (`audit_zero_matmul_serving.py --stack` on the release `uor-r4-stack`) passes, and its reachable functions now include the copy read (claude-189's Low: its roots did not reach `CopyHeads::mean`).
+7. `cargo test -p uor-r4-integer` shows no new failure against `main`; `uor-harness loop gates --full` is green.
+8. One notebook row in `docs/research/notebook/m4-serving.md`. The item stays `ready`: steps 3 to 6 remain.
 
 ## Stop and ask if
 
-To fill in.
+Stop and decide (never wait) if:
+- serving a read needs an artifact format change. Then the format change is its own unit, and this one serves what `/6` already stores;
+- the float's rounding or depth semantics turn out not to be what lines 1138–1190 show. Then the float wins, and the ORDER is amended before the code;
+- the audit cannot reach the read without editing `scripts/audit_zero_matmul_serving.py`, which is outside this scope. Then the REPORT records the gap, and a separate item takes it.
