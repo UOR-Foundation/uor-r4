@@ -311,6 +311,78 @@ pub(crate) fn spiralcore_fbs_fwd(
     spiralcore_fbs_device_error(device, &error)?;
     Ok((storage, Shape::from_dims(&dims)))
 }
+/// Launches one kernel of an FBS backward's module by name over `threads` threads.
+type FbsLaunch<'a> = dyn Fn(&str, usize, &[Arg<'_>]) -> CResult<()> + 'a;
+
+/// Scratch of one fixed-order FBS backward (claude-179, R6): per item (one row
+/// and output block), its per-slot query sums (`width` floats) and one input
+/// slot and value per lane (`lanes`: paths x 8).
+struct FbsBackwardScratch {
+    dq_items: CudaSlice<f32>,
+    dx_values: CudaSlice<f32>,
+    dx_slots: CudaSlice<u32>,
+    lanes: usize,
+}
+
+impl FbsBackwardScratch {
+    fn new(device: &CudaDevice, items: usize, width: usize, lanes: usize) -> CResult<Self> {
+        Ok(Self {
+            dq_items: zeros::<f32>(device, items * width)?,
+            dx_values: zeros::<f32>(device, items * lanes)?,
+            dx_slots: zeros::<u32>(device, items * lanes)?,
+            lanes,
+        })
+    }
+
+    /// `(d_queries, d_input)` from the scratch, each added in item order by
+    /// `spiralcore_fbs_reduce_dq` (one thread per query slot, over rows) and
+    /// `spiralcore_fbs_reduce_dx` (one thread per row, over output blocks), so
+    /// the same inputs always give the same bits.
+    #[allow(clippy::too_many_arguments)]
+    fn reduce(
+        &self,
+        device: &CudaDevice,
+        run: &FbsLaunch<'_>,
+        error: &CudaSlice<u32>,
+        rows: usize,
+        plan: &crate::spiralcore_fbs::ProjectionPlan,
+        width: usize,
+        (dq_len, dx_len): (usize, usize),
+    ) -> CResult<(CudaSlice<f32>, CudaSlice<f32>)> {
+        let dq = zeros::<f32>(device, dq_len)?;
+        let dx = zeros::<f32>(device, dx_len)?;
+        let rows32 = u32_of(rows, "rows")?;
+        let outputs = u32_of(plan.output_blocks, "outputs")?;
+        run(
+            "spiralcore_fbs_reduce_dx",
+            rows,
+            &[
+                Arg::f(&self.dx_values),
+                Arg::u(&self.dx_slots),
+                Arg::f(&dx),
+                Arg::u(error),
+                Arg::U32(rows32),
+                Arg::U32(outputs),
+                Arg::U32(u32_of(plan.input_blocks, "inputs")?),
+                Arg::U32(u32_of(self.lanes, "lanes")?),
+            ],
+        )?;
+        run(
+            "spiralcore_fbs_reduce_dq",
+            dq_len,
+            &[
+                Arg::f(&self.dq_items),
+                Arg::f(&dq),
+                Arg::u(error),
+                Arg::U32(rows32),
+                Arg::U32(outputs),
+                Arg::U32(u32_of(width, "width")?),
+            ],
+        )?;
+        Ok((dq, dx))
+    }
+}
+
 pub(crate) fn spiralcore_fbs_bwd(
     plan: &crate::spiralcore_fbs::ProjectionPlan,
     device: &CudaDevice,
@@ -342,8 +414,8 @@ pub(crate) fn spiralcore_fbs_bwd(
         candle_core::bail!("native query adjoint needs F32 masters");
     };
     let metadata = spiralcore_fbs_device_plan(plan, device)?;
-    let dq = zeros::<f32>(device, q.elem_count())?;
-    let dx = zeros::<f32>(device, x.elem_count())?;
+    let width = plan.stages * 8;
+    let scratch = FbsBackwardScratch::new(device, rows * plan.output_blocks, width, 8)?;
     let error = zeros::<u32>(device, 1)?;
     let mut args = vec![
         Arg::F(query),
@@ -351,24 +423,33 @@ pub(crate) fn spiralcore_fbs_bwd(
         spiralcore_fbs_activation(gs, gl)?,
     ];
     args.extend(spiralcore_fbs_metadata(plan, &metadata));
-    args.extend([Arg::f(&dq), Arg::f(&dx), Arg::u(&error)]);
+    args.extend([
+        Arg::f(&scratch.dq_items),
+        Arg::f(&scratch.dx_values),
+        Arg::u(&scratch.dx_slots),
+        Arg::u(&error),
+    ]);
     args.extend(spiralcore_fbs_dimensions(plan, rows)?);
-    if x.dtype() == DType::BF16 {
-        crate::cuda_stack_kernels::cuda::launch_bf16(
-            device,
-            "spiralcore_fbs_bwd",
-            rows * plan.output_blocks,
-            &args,
-        )?;
-    } else {
-        launch(
-            device,
-            "spiralcore_fbs_bwd",
-            rows * plan.output_blocks,
-            &args,
-        )?;
-    }
+    let bf16 = x.dtype() == DType::BF16;
+    let run = |name: &str, threads: usize, args: &[Arg<'_>]| -> CResult<()> {
+        if bf16 {
+            crate::cuda_stack_kernels::cuda::launch_bf16(device, name, threads, args)?;
+        } else {
+            launch(device, name, threads, args)?;
+        }
+        Ok(())
+    };
+    run("spiralcore_fbs_bwd", rows * plan.output_blocks, &args)?;
     drop(args);
+    let (dq, dx) = scratch.reduce(
+        device,
+        &run,
+        &error,
+        rows,
+        plan,
+        width,
+        (q.elem_count(), x.elem_count()),
+    )?;
     spiralcore_fbs_device_error(device, &error)?;
     let raw_dq = tensor(dq, device, q.shape());
     let raw_dx = tensor(dx, device, x.shape()).to_dtype(x.dtype())?;
@@ -762,8 +843,9 @@ pub(crate) fn spiralcore_fbs_arm_bwd(
         candle_core::bail!("arm query adjoint needs F32 masters");
     };
     let metadata = spiralcore_fbs_device_plan(plan, device)?;
-    let dq = zeros::<f32>(device, q.elem_count())?;
-    let dx = zeros::<f32>(device, x.elem_count())?;
+    let paths = paths as usize;
+    let width = paths * plan.stages * 8;
+    let scratch = FbsBackwardScratch::new(device, rows * plan.output_blocks, width, paths * 8)?;
     let error = zeros::<u32>(device, 1)?;
     let mut args = vec![
         Arg::F(query),
@@ -771,18 +853,36 @@ pub(crate) fn spiralcore_fbs_arm_bwd(
         spiralcore_fbs_activation(gs, gl)?,
     ];
     args.extend(spiralcore_fbs_metadata(plan, &metadata));
-    args.extend([Arg::f(&dq), Arg::f(&dx), Arg::u(&error)]);
+    args.extend([
+        Arg::f(&scratch.dq_items),
+        Arg::f(&scratch.dx_values),
+        Arg::u(&scratch.dx_slots),
+        Arg::u(&error),
+    ]);
     args.extend(spiralcore_fbs_dimensions(plan, rows)?);
     args.push(Arg::U32(arm));
-    crate::cuda_stack_kernels::cuda::launch_prebuilt(
-        device,
-        SPIRALCORE_FBS_ARMS_MODULE,
-        SPIRALCORE_FBS_ARMS_PTX,
-        "spiralcore_fbs_arm_bwd",
-        rows * plan.output_blocks,
-        &args,
-    )?;
+    let run = |name: &str, threads: usize, args: &[Arg<'_>]| -> CResult<()> {
+        crate::cuda_stack_kernels::cuda::launch_prebuilt(
+            device,
+            SPIRALCORE_FBS_ARMS_MODULE,
+            SPIRALCORE_FBS_ARMS_PTX,
+            name,
+            threads,
+            args,
+        )?;
+        Ok(())
+    };
+    run("spiralcore_fbs_arm_bwd", rows * plan.output_blocks, &args)?;
     drop(args);
+    let (dq, dx) = scratch.reduce(
+        device,
+        &run,
+        &error,
+        rows,
+        plan,
+        width,
+        (q.elem_count(), x.elem_count()),
+    )?;
     spiralcore_fbs_device_error(device, &error)?;
     Ok((tensor(dq, device, q.shape()), tensor(dx, device, x.shape())))
 }

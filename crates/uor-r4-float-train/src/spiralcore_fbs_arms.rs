@@ -284,6 +284,40 @@ mod gpu_tests {
         .expect("dy")
     }
 
+    /// The fixed-order backward (claude-179, R6) gives the same bits on every
+    /// run: the base kernel (`OneAtomActive`) and the arm kernel with one and
+    /// two paths. With 48 output blocks over 32 input atoms, blocks share atoms
+    /// and every row adds into each query, so the float `atomicAdd` sums it
+    /// replaces could round differently from run to run.
+    #[test]
+    #[ignore = "needs a CUDA device; run on the pod"]
+    fn the_backward_gives_the_same_bits_on_every_run() {
+        for (arm, paths) in [
+            (FbsArm::OneAtomActive, 1),
+            (FbsArm::IdentityTransport, 1),
+            (FbsArm::TwoAtomMix, 2),
+        ] {
+            let (plan, q, x, device) = setup(paths, 31);
+            let dy = dy_for(&device, 7);
+            let (_, dq0, dx0) = run(&plan, &q, &x, arm, &dy);
+            assert!(!dq0.is_empty() && !dx0.is_empty(), "{arm:?}: no gradients");
+            let bits = |v: &[f32]| v.iter().map(|f| f.to_bits()).collect::<Vec<_>>();
+            for repeat in 1..20 {
+                let (_, dq, dx) = run(&plan, &q, &x, arm, &dy);
+                assert_eq!(
+                    bits(&dq),
+                    bits(&dq0),
+                    "{arm:?}: d_queries changed on run {repeat}"
+                );
+                assert_eq!(
+                    bits(&dx),
+                    bits(&dx0),
+                    "{arm:?}: d_input changed on run {repeat}"
+                );
+            }
+        }
+    }
+
     fn close(a: &[f32], b: &[f32], what: &str) {
         assert_eq!(a.len(), b.len(), "{what}: lengths");
         for (i, (p, q)) in a.iter().zip(b).enumerate() {

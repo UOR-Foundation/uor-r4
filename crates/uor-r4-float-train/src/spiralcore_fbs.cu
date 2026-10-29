@@ -120,13 +120,18 @@ extern "C" __global__ void spiralcore_fbs_fwd(
 // derivative of discontinuous hard selection. For each lawful sibling it pairs
 // dL/dy with the complete counterfactual carrier displacement, then resolves that
 // loss contrast along the fixed root edge. No probabilities, exponentials or
-// learned coefficient grid occur. Batch sharing is summed with device atomics.
+// learned coefficient grid occur. Batch sharing is summed in a fixed order
+// (claude-179, R6): this kernel writes each item's contributions to scratch
+// (`dx_values`/`dx_slots`: one input slot per axis; `dq_items`: the per-stage
+// sums over siblings in sibling order), and `spiralcore_fbs_reduce_dx` and
+// `spiralcore_fbs_reduce_dq` add them in item order. Float `atomicAdd` made the
+// sum's order, and so its rounding, change from run to run.
 extern "C" __global__ void spiralcore_fbs_bwd(
     const float* queries, const act_t* input, const act_t* grad,
     const uint* nodes, const uint* frontier, const uint* axes,
     const uint* compose, const uint* root_of_state, const uint* bfs_actions,
     const uint* branch_targets, const float* roots,
-    float* d_queries, float* d_input, uint* error,
+    float* dq_items, float* dx_values, uint* dx_slots, uint* error,
     uint rows, uint outputs, uint inputs, uint stages, uint frontier_count, uint identity
 ) {
     uint item = blockIdx.x * blockDim.x + threadIdx.x;
@@ -148,9 +153,10 @@ extern "C" __global__ void spiralcore_fbs_bwd(
         if (!isfinite(dy[axis]) || !isfinite(y[axis])) { atomicExch(error, 3u); return; }
         uint code = axes[selected.state * 8 + axis];
         float value = code & 8 ? -dy[axis] : dy[axis];
-        float prior = atomicAdd(d_input + (u64)row * inputs * 8 + selected.atom * 8 + (code & 7), value);
-        if (!isfinite(prior + value)) { atomicExch(error, 4u); return; }
+        dx_values[(u64)item * 8 + axis] = value;
+        dx_slots[(u64)item * 8 + axis] = selected.atom * 8 + (code & 7);
     }
+    float* dq = dq_items + (u64)item * stages * 8;
     for (uint stage = 0; stage < selected.count; ++stage) {
         uint count = stage == 0 ? frontier_count : 3;
         uint root = root_of_state[selected.before[stage]];
@@ -174,10 +180,48 @@ extern "C" __global__ void spiralcore_fbs_bwd(
             float directional = contrast / squared_edge;
             for (uint axis = 0; axis < 8; ++axis) {
                 float edge = roots[goal * 8 + axis] - roots[old_goal * 8 + axis];
-                float value = directional * edge;
-                float prior = atomicAdd(d_queries + (u64)output * stages * 8 + stage * 8 + axis, value);
-                if (!isfinite(prior + value)) { atomicExch(error, 4u); return; }
+                float sum = dq[stage * 8 + axis] + directional * edge;
+                if (!isfinite(sum)) { atomicExch(error, 4u); return; }
+                dq[stage * 8 + axis] = sum;
             }
         }
     }
+}
+
+// `d_input` for one row: its items' slot contributions added in output order,
+// then axis order (claude-179). Each row's slots belong to that row alone.
+extern "C" __global__ void spiralcore_fbs_reduce_dx(
+    const float* dx_values, const uint* dx_slots, float* d_input, uint* error,
+    uint rows, uint outputs, uint inputs, uint lanes
+) {
+    uint row = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row >= rows) return;
+    float* d = d_input + (u64)row * inputs * 8;
+    for (uint output = 0; output < outputs; ++output) {
+        u64 base = ((u64)row * outputs + output) * lanes;
+        for (uint lane = 0; lane < lanes; ++lane) {
+            uint slot = dx_slots[base + lane];
+            if (slot >= inputs * 8) { atomicExch(error, 2u); return; }
+            float sum = d[slot] + dx_values[base + lane];
+            if (!isfinite(sum)) { atomicExch(error, 4u); return; }
+            d[slot] = sum;
+        }
+    }
+}
+
+// `d_queries`, one slot per thread: the items' contributions added in row order
+// (claude-179). `width` is the slots of one output (paths x stages x 8).
+extern "C" __global__ void spiralcore_fbs_reduce_dq(
+    const float* dq_items, float* d_queries, uint* error,
+    uint rows, uint outputs, uint width
+) {
+    uint slot = blockIdx.x * blockDim.x + threadIdx.x;
+    if (slot >= outputs * width) return;
+    uint output = slot / width, i = slot % width;
+    float sum = 0.0f;
+    for (uint row = 0; row < rows; ++row) {
+        sum += dq_items[((u64)row * outputs + output) * width + i];
+    }
+    if (!isfinite(sum)) { atomicExch(error, 4u); return; }
+    d_queries[slot] = sum;
 }
