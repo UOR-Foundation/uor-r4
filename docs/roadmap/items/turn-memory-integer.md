@@ -34,12 +34,16 @@ The owner, 28 Oct 2026, in claude's chat: "determinism is still probably the goa
     - The two agree at the corpus's openings as a measured fact (claude-154, quoted in `greedy_reply_key`'s doc), not by construction. They can differ for a prompt with an `<|eos|>` inside it.
     - The session uses the anchor for both tables. Done-when 1's reference test includes a prompt with an internal `<|eos|>`, and the parity unit measures any gap.
   - **The opening table's key** is the turn's ids alone, at the reply's first step.
-  - **The reply table's key**, at each later reply step, is the turn's ids, `u32::MAX`, the reply's length so far, `u32::MAX`, and the reply's last id (`ReplyKey::TurnPosition(1)`, `in_space_long.rs:1239–1242`). It is named only where TRAIN's commonest next id holds a share of at least 0.5 (`flock_read_memory.rs:87`).
+  - **The reply table's key**, at each later reply step, is the turn's ids, `u32::MAX`, the reply's length so far, `u32::MAX`, and the reply's last id (`ReplyKey::TurnPosition(1)`, `in_space_long.rs:1239–1242`). It is named only where TRAIN's commonest next id holds a share of at least `REPLY_MEMORY_SHARE` = 0.5 (`in_space_long.rs:154`; the rule itself is `min_share` in `flock_read_memory.rs:87`).
   - **One role signal.** The turn is in the token stream, by `<|bos|>`/`<|eos|>`. The reply's start is not: training reads it from the response mask (`opens_reply`, `in_space_long.rs:886`). So the session takes one signal from its caller, where the reply begins. A decode loop knows it, since every token it generates is reply.
   - **The window rule: the session follows training.** Training keys over what a 192-token window shows (`SHEET_CONTEXT`).
     - Once the prompt has left the window, a reply row's key has an empty turn and the reply length the window shows, and the trunk was trained with the move at those rows.
     - The greedy decode reads no reply table there: only while `prompt.len() > start` (`in_space_long.rs:1434–1437`).
-    - A session keys over its last `context` tokens as training does. The difference from the greedy decode, on rows of replies longer than the window, is a measured item for the parity unit.
+    - **The keys always use the trained window,** whatever the session's own `context`: the 192 tokens of training's windows, carried in the artifact as the memory's key window.
+      - With `context` = 64, a 70-token reply would otherwise lose its turn, which training kept.
+      - Above 192, the keys would grow longer than any training produced.
+      - The decode lengths in use differ (`DECODE_CONTEXTS` = 16, 64, 192, `in_space_long.rs:1684`), so this matters.
+    - The difference from the greedy decode, on rows of replies longer than the window, is a measured item for the parity unit.
 - **The moves:** `n + w ⊙ (c − n)` on the readout point, the opening table's weight at the reply's first step and the reply table's after it, as `apply_readout` (`flock_read_memory.rs`). They have the Hamming readout move's form, and come after it, as in the float trunk (the Hamming readout at `geometric_stack_native.rs:1187`, the turn memory at 1213).
 - **No parity:** the integer reply has not been compared with float's on the same checkpoint.
 
@@ -48,7 +52,10 @@ The owner, 28 Oct 2026, in claude's chat: "determinism is still probably the goa
 1. **Export and session, for both tables.**
    - The exporter writes each table (keys and values as integer ids) and each weight (at the exporter's fixed point, rounded as it rounds).
    - The session takes the reply's start from its caller, keys as "The keys" above, and applies the opening move at a reply's first step and the reply move at each later one.
-   - Each key is checked against a test-side reference of the float rule above, including a reply cut by the window and a prompt with an internal `<|eos|>`.
+   - Each key is checked against a test-side reference of the float rule above. The reference rows include:
+     - a reply cut by the window;
+     - a prompt with an internal `<|eos|>`;
+     - a session whose `context` is not 192.
    - Both disassembly audits pass with the moves reached. The memory is off for an artifact without one.
    - A session restore with a memory is refused until its turn state is saved.
 2. **Parity,** on DEV, against the float forward of claude-194's sealed (r) checkpoints at step 16,384, both seeds.
