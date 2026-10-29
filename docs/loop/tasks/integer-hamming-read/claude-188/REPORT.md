@@ -10,6 +10,12 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item is not done: this is step 1 o
   - Two of them are in `crates/uor-r4-integer/tests/memory_shape.rs`, outside the item's scope.
   - It goes in the artifact's header instead, beside claude-181's optional `transport_snap`. `StackShape` is unchanged.
 - **My first command to set the format aside for the negative gate** wrote a scratch copy to `local/format.rs.keep`. The guard refused it, since `local/<name>` reads as another lab's folder. The copy went under `local/claude/claude-188/`.
+- **The first review asked for changes: the loader and parser refusals were not pinned.**
+  - Every refusal test went through the exporter. A regression in the loader's schema check, which expects `/6` exactly when the record is present, would have passed them all.
+  - Two tests now cover it (below), and the reviewer's negative gate shows they catch it.
+- **My first run of that negative gate was invalid.**
+  - The `sed` pattern also matched the exporter's identical `Some(_) => STACK_FBS_HAMMING_SCHEMA,` line, so the set-aside build did not compile (`cannot find value header`).
+  - A failed build proves nothing. The gate was rerun on the loader's line alone, after checking the one-line diff.
 - **A stray `git stash list` in one command** was refused by the guard; this loop forbids stash commands, even read-only ones. Nothing ran, and the command was rerun without it.
 
 ## What changed
@@ -31,16 +37,34 @@ Lab: claude. Order: [ORDER.md](ORDER.md). The item is not done: this is step 1 o
 - **`crates/uor-r4-integer/src/stack/session.rs`:** `IntegerStackModel::parse` refuses a `/6` artifact ("this engine does not serve a Hamming read yet"), so a read is never silently dropped.
 - **`crates/uor-r4-integer/src/stack/synthetic.rs`:** `synthetic_hamming`, with random rotations whose lane 0 is the zero quaternion, positive margins, and random weights.
 - **`crates/uor-r4-float-train/src/fbs_export.rs`:** `hamming: None`. Reading `hamming_read.safetensors` is a later unit.
-- **Four tests** (`crates/uor-r4-integer/src/stack/tests.rs`):
+- **Six tests** (`crates/uor-r4-integer/src/stack/tests.rs`):
   - `read_free_fbs_exports_are_unchanged_by_the_hamming_format`;
   - `hamming_reads_round_trip_in_lut_stack_6`;
-  - `malformed_hamming_reads_are_refused`;
-  - `snapshots_without_hamming_reads_are_unchanged`.
+  - `malformed_hamming_reads_are_refused` (at the exporter);
+  - `snapshots_without_hamming_reads_are_unchanged`;
+  - `hamming_schema_and_sections_are_checked_at_parse`, at the loader and parser. Both `read_hamming_uorlut01` and `IntegerStackModel::parse` refuse:
+    - a `/6` header without the record;
+    - the record under `/4`;
+    - the record on a dense stack;
+    - a record whose heads disagree with the margin section;
+    - a foreign exponent;
+    - a margin zeroed in the data;
+  - `hamming_record_checks_name_their_reason`: `StackHamming::check` refuses each rule's violation, matched by its message. The cases are:
+    - an odd head count (width 48, 3 heads), and zero heads;
+    - a head wider than 64 coordinates (width 256, 2 heads);
+    - a head not in whole 4-lane blocks (width 40, 4 heads);
+    - four bad depth lists;
+    - no kept positions;
+    - a foreign exponent;
+    - a dense stack.
 
 ## Measurements
 
 - **Read-free bytes pinned at the base `a368b78ef`,** before any change: the synthetic trunk's snapped export is `e377d68f6b3c112ed267a9e3c09ef2ef2210e8f1c9bc4619ae26dd4c68d18e5c`, and its both-raw export is `ec5ca212c257a2b2cd73c337029ff8556b454810377801d81addca75c4105965`. Both still match at the head.
 - **Negative gate:** writing the `hamming` key always (as `null` when absent) changes the snapped export to `cf7929e2…0ba3`, and the pin fails. Restored, it passes, and both builds recompiled.
+- **The loader's schema check is pinned.**
+  - With its expectation set back to `stack_schema_for(shape)`, ignoring the record (a one-line set-aside, which built cleanly), `hamming_schema_and_sections_are_checked_at_parse` fails at once: the valid `/6` export is refused, `Schema("uor-r4.lut-stack/6")`.
+  - Restored, it passes, and both builds recompiled.
 - **The round trip, snapped and both-raw:**
   - every rotation, margin and weight reads back as `round(v · 2^−exp)`;
   - the zero quaternion reads back as `[0, 0, 0, 0]`;
@@ -67,6 +91,10 @@ At `340560e59`, and after one test-label fix:
 - **The GPU evaluator's host tests** (`docs/labs/d11-exporter-float-trunk/instrument`, which links this crate; stub nvcc, `--target aarch64-apple-darwin`): parity 5 passed.
 - **`cargo fmt --check`,** on both crates: clean.
 - **`uor-harness loop gates --full`:** 11 of 11 green.
+- **After the review's two tests, at the head:**
+  - `cargo test -p uor-r4-integer --features serving-wasm --lib --no-fail-fast`: 351 passed, 1 ignored.
+  - `cargo fmt --check`: clean.
+  - The changes since `340560e59` are tests only.
 - **The test-label fix:** `malformed_hamming_reads_are_refused`'s case "a head wider than one word" set `heads = 0`, which is refused for being below 2. It is renamed "a head count of zero". With width 32, no head can exceed one word. The test passes.
 
 ## Skills used

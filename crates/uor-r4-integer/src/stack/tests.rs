@@ -3702,3 +3702,95 @@ fn snapshots_without_hamming_reads_are_unchanged() {
     let back: super::FbsTrunkSnapshot = serde_json::from_value(value).expect("an old snapshot parses");
     assert_eq!(back, snap);
 }
+
+/// claude-188: the loader and the parser, not only the exporter, hold a `lut-stack/6` artifact
+/// to its schema and sections. Each edit of a valid export is refused by both
+/// `read_hamming_uorlut01` and `IntegerStackModel::parse`.
+#[test]
+fn hamming_schema_and_sections_are_checked_at_parse() {
+    use super::synthetic::synthetic_hamming;
+    let mut snap = synthetic_fbs_trunk(20261025);
+    snap.hamming = Some(synthetic_hamming(snap.width, snap.layers.len(), 4, 188));
+    let bytes = super::export_fbs_trunk_uorlut01(&snap).expect("export");
+    super::read_hamming_uorlut01(&bytes).expect("the valid export parses");
+    let refused_by_both = |bytes: &[u8], what: &str| -> StackError {
+        let parsed = super::read_hamming_uorlut01(bytes).expect_err(what);
+        assert!(IntegerStackModel::parse(bytes).is_err(), "{what}: the session must refuse it too");
+        parsed
+    };
+    // `/6` without the record, and the record under another schema.
+    let missing = with_header(&bytes, |h| {
+        h.as_object_mut().expect("object").remove("hamming");
+    });
+    assert!(matches!(refused_by_both(&missing, "a /6 header without the record"), StackError::Schema(_)));
+    let other = with_header(&bytes, |h| h["schema"] = json!(super::STACK_FBS_SCHEMA));
+    assert!(matches!(refused_by_both(&other, "the record under /4"), StackError::Schema(_)));
+    // The record on a stack without FBS projections.
+    let dense = with_header(&artifact(5), |h| {
+        h["schema"] = json!(super::STACK_FBS_HAMMING_SCHEMA);
+        h["hamming"] = json!(super::StackHamming::new(2, vec![1, 2]));
+    });
+    assert!(matches!(
+        refused_by_both(&dense, "the record on a dense stack"),
+        StackError::Shape(m) if m.contains("SpiralCore/FBS")
+    ));
+    // A record whose heads disagree with the margin section, and a foreign exponent.
+    let heads = with_header(&bytes, |h| h["hamming"]["heads"] = json!(2));
+    assert!(matches!(
+        refused_by_both(&heads, "a margin section of the wrong length"),
+        StackError::TableLength { .. }
+    ));
+    let exp = with_header(&bytes, |h| h["hamming"]["rotation_exp"] = json!(-20));
+    assert!(matches!(
+        refused_by_both(&exp, "a foreign exponent"),
+        StackError::Shape(m) if m.contains("exponents")
+    ));
+    // A margin of zero in the data.
+    let len = u64::from_le_bytes(bytes[8..16].try_into().expect("length")) as usize;
+    let header: Value = serde_json::from_slice(&bytes[16..16 + len]).expect("header");
+    let entry = header["tables"]
+        .as_array()
+        .expect("tables")
+        .iter()
+        .find(|t| t["name"] == "hamming.d1.margin")
+        .expect("the margin section");
+    let offset = (16 + len).div_ceil(64) * 64 + entry["span"]["offset"].as_u64().expect("offset") as usize;
+    let mut zeroed = bytes.clone();
+    zeroed[offset..offset + 4].fill(0);
+    assert!(matches!(
+        refused_by_both(&zeroed, "a margin of zero"),
+        StackError::Numerics(m) if m.contains("margin")
+    ));
+}
+
+/// claude-188: `StackHamming::check` refuses each rule's violation for that rule's reason.
+#[test]
+fn hamming_record_checks_name_their_reason() {
+    let plain = super::export_fbs_trunk_uorlut01(&synthetic_fbs_trunk(20261025)).expect("export");
+    let base = IntegerStackModel::parse(&plain).expect("parse").shape().clone();
+    let layers = base.layers();
+    let reason = |shape: &StackShape, record: super::StackHamming| -> &'static str {
+        match record.check(shape) {
+            Err(StackError::Shape(m)) => m,
+            other => panic!("expected a shape refusal, got {other:?}"),
+        }
+    };
+    let record = |heads: usize, depths: Vec<usize>| super::StackHamming::new(heads, depths);
+    let wide = |width: usize| StackShape { width, ..base.clone() };
+    record(4, vec![1, layers]).check(&base).expect("a valid record");
+    assert!(reason(&wide(48), record(3, vec![1, layers])).contains("even head count"));
+    assert!(reason(&base, record(0, vec![1, layers])).contains("even head count"));
+    assert!(reason(&wide(256), record(2, vec![1, layers])).contains("at most 64 coordinates"));
+    assert!(reason(&wide(40), record(4, vec![1, layers])).contains("whole 4-lane blocks"));
+    for depths in [vec![], vec![layers, 1], vec![0, layers], vec![1, layers + 1]] {
+        assert!(reason(&base, record(4, depths.clone())).contains("strictly increasing"), "{depths:?}");
+    }
+    let mut none_kept = record(4, vec![1, layers]);
+    none_kept.kept = 0;
+    assert!(reason(&base, none_kept).contains("at least one position"));
+    let mut foreign = record(4, vec![1, layers]);
+    foreign.weight_exp = -16;
+    assert!(reason(&base, foreign).contains("exponents"));
+    let dense = IntegerStackModel::parse(&artifact(5)).expect("parse").shape().clone();
+    assert!(reason(&dense, record(2, vec![1, 2])).contains("SpiralCore/FBS"));
+}
