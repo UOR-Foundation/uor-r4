@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use candle_core::{DType, Device, Tensor};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uor_r4_tokenizer::ByteBpeTokenizer;
 
 use crate::geometric_stack::stage_clock::{self, StageTime};
@@ -723,6 +723,18 @@ fn spread(rows: &Tensor) -> Result<f64> {
     ))
 }
 
+/// One scored row as a checkpoint decodes it ([`row_picks`]): its corpus position and target,
+/// the whole table's nearest token, the served writer's pick, and its kinds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct RowPick {
+    position: usize,
+    target: u32,
+    nearest: u32,
+    writer: u32,
+    opens: bool,
+    copies: bool,
+}
+
 /// [`NearestReading`] over the DEV windows, and the writer's [`WriterReading`] of the same rows
 /// from the same points; `mask` is DEV's response mask, by corpus position.
 fn nearest_reading(
@@ -732,15 +744,77 @@ fn nearest_reading(
     seed: u64,
     step: usize,
 ) -> Result<(NearestReading, WriterReading)> {
+    let (mut all_queries, mut opening_queries) = (Vec::new(), Vec::new());
+    let picks = row_picks(model, dev, mask, seed, step, |query, opens| {
+        let at: Vec<u32> = (0..opens.len() as u32)
+            .filter(|&i| opens[i as usize])
+            .collect();
+        if !at.is_empty() {
+            let at = Tensor::from_vec(at.clone(), at.len(), model.device())?;
+            opening_queries.push(query.index_select(&at, 0)?);
+        }
+        all_queries.push(query.clone());
+        Ok(())
+    })?;
+    let (mut reading, written) = fold_picks(&picks);
+    if !opening_queries.is_empty() {
+        reading.opening_query_spread = spread(&Tensor::cat(&opening_queries, 0)?)?;
+    }
+    if !all_queries.is_empty() {
+        reading.query_spread = spread(&Tensor::cat(&all_queries, 0)?)?;
+    }
+    Ok((reading, written))
+}
+
+/// [`nearest_reading`]'s counts from its rows' picks (all but the two spreads).
+fn fold_picks(picks: &[RowPick]) -> (NearestReading, WriterReading) {
+    let mut reading = NearestReading::default();
+    let mut written = WriterReading::default();
+    let mut openings = std::collections::BTreeMap::<u32, usize>::new();
+    let mut nearest_picks = std::collections::BTreeSet::<u32>::new();
+    let mut written_picks = std::collections::BTreeSet::<u32>::new();
+    for row in picks {
+        let hit = row.nearest == row.target;
+        reading.hits += usize::from(hit);
+        written.hits += usize::from(row.writer == row.target);
+        if row.copies {
+            reading.copied_rows += 1;
+            reading.copied_hits += usize::from(hit);
+        } else if !row.opens {
+            reading.rest_rows += 1;
+            reading.rest_hits += usize::from(hit);
+        }
+        if row.opens {
+            reading.opening_rows += 1;
+            reading.opening_hits += usize::from(hit);
+            written.opening_hits += usize::from(row.writer == row.target);
+            *openings.entry(row.target).or_default() += 1;
+            nearest_picks.insert(row.nearest);
+            written_picks.insert(row.writer);
+        }
+    }
+    reading.commonest_opening_rows = openings.values().copied().max().unwrap_or(0);
+    reading.opening_distinct_picks = nearest_picks.len();
+    written.opening_distinct_picks = written_picks.len();
+    (reading, written)
+}
+
+/// Every scored row of `dev` decoded by `model`, in panel order: the nearest token and the
+/// writer's pick from the same points, with the turn memory named at the rows training names
+/// (its openings, and its reply table's later rows). `on_query` sees each batch's query rows
+/// and which of them open a reply.
+fn row_picks(
+    model: &StackModel,
+    dev: &[CausalWindow],
+    mask: &[u8],
+    seed: u64,
+    step: usize,
+    mut on_query: impl FnMut(&Tensor, &[bool]) -> Result<()>,
+) -> Result<Vec<RowPick>> {
     let table = table(model)?;
     let writer = model.native_vector_writer()?;
     hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, step, false, || {
-        let mut reading = NearestReading::default();
-        let mut written = WriterReading::default();
-        let mut openings = std::collections::BTreeMap::<u32, usize>::new();
-        let mut picks = std::collections::BTreeSet::<u32>::new();
-        let mut written_picks = std::collections::BTreeSet::<u32>::new();
-        let (mut all_queries, mut opening_queries) = (Vec::new(), Vec::new());
+        let mut out = Vec::new();
         for chunk in dev.chunks(hs::SHEET_EVAL_BATCH) {
             let windows: Vec<&CausalWindow> = chunk.iter().collect();
             let (ids, scored, targets) = assemble(&windows);
@@ -800,50 +874,28 @@ fn nearest_reading(
                 .flatten_all()?
                 .to_dtype(DType::U32)?
                 .to_vec1::<u32>()?;
-            let rows = best
+            let positions = windows
                 .iter()
+                .flat_map(|w| w.scored_corpus_positions.iter().copied());
+            let rows = positions
+                .zip(&best)
                 .zip(&served)
                 .zip(&targets)
                 .zip(&opens)
                 .zip(&copies);
-            for ((((pick, served), target), open), copy) in rows {
-                reading.hits += usize::from(pick == target);
-                written.hits += usize::from(served == target);
-                if *copy {
-                    reading.copied_rows += 1;
-                    reading.copied_hits += usize::from(pick == target);
-                } else if !*open {
-                    reading.rest_rows += 1;
-                    reading.rest_hits += usize::from(pick == target);
-                }
-                if *open {
-                    reading.opening_rows += 1;
-                    reading.opening_hits += usize::from(pick == target);
-                    written.opening_hits += usize::from(served == target);
-                    *openings.entry(*target).or_default() += 1;
-                    picks.insert(*pick);
-                    written_picks.insert(*served);
-                }
+            for (((((position, &nearest), &served), &target), &open), &copy) in rows {
+                out.push(RowPick {
+                    position,
+                    target,
+                    nearest,
+                    writer: served,
+                    opens: open,
+                    copies: copy,
+                });
             }
-            let at: Vec<u32> = (0..opens.len() as u32)
-                .filter(|&i| opens[i as usize])
-                .collect();
-            if !at.is_empty() {
-                let at = Tensor::from_vec(at.clone(), at.len(), model.device())?;
-                opening_queries.push(query.index_select(&at, 0)?);
-            }
-            all_queries.push(query);
+            on_query(&query, &opens)?;
         }
-        reading.commonest_opening_rows = openings.values().copied().max().unwrap_or(0);
-        reading.opening_distinct_picks = picks.len();
-        written.opening_distinct_picks = written_picks.len();
-        if !opening_queries.is_empty() {
-            reading.opening_query_spread = spread(&Tensor::cat(&opening_queries, 0)?)?;
-        }
-        if !all_queries.is_empty() {
-            reading.query_spread = spread(&Tensor::cat(&all_queries, 0)?)?;
-        }
-        Ok((reading, written))
+        Ok(out)
     })
 }
 
@@ -1714,16 +1766,7 @@ pub fn census(data_root: &Path, fresh_v2: &Path, extra: &[(String, PathBuf)]) ->
         hs::SHEET_VOCAB,
         bos,
     )?;
-    let (fresh_tokens, fresh_mask) = hs::load_pinned_uort_split(
-        &fresh_v2.join("tokens.u16"),
-        &fresh_v2.join("response_mask.u8"),
-        PINNED_FRESH_V2_TOKENS_SHA256,
-        PINNED_FRESH_V2_MASK_SHA256,
-        EXPECTED_FRESH_V2_TOKENS,
-        EXPECTED_FRESH_V2_ELIGIBLE_TARGETS,
-        hs::SHEET_VOCAB,
-        bos,
-    )?;
+    let (fresh_tokens, fresh_mask) = load_fresh_v2(fresh_v2)?;
     let windows = |tokens: &[u32], mask: &[u8]| -> Result<Vec<CausalWindow>> {
         Ok(hs::build_document_windows(tokens, mask, SHEET_CONTEXT, bos)?.0)
     };
@@ -1771,16 +1814,9 @@ pub fn census(data_root: &Path, fresh_v2: &Path, extra: &[(String, PathBuf)]) ->
         .map(|c| c.hits)
         .max()
         .unwrap_or(0);
-    let (unnamed, unkeyed) = census_decision_rows(&reply, &opening_table, &dev_rows);
-    let mut decision_positions = unnamed
-        .iter()
-        .chain(&unkeyed)
-        .map(|&i| {
-            row_position(&dev_rows[i], &dev_w)
-                .ok_or_else(|| invalid("a DEV reply row has no corpus position"))
-        })
-        .collect::<Result<Vec<usize>>>()?;
-    decision_positions.sort_unstable();
+    let (unnamed, unkeyed) = decision_positions(&reply, &opening_table, &dev_rows, &dev_w)?;
+    let mut pooled: Vec<usize> = unnamed.iter().chain(&unkeyed).copied().collect();
+    pooled.sort_unstable();
     let rows = CensusRows {
         dev_openings: dev_rows.iter().filter(|r| r.opening).count(),
         dev_keyed_openings: keyed(&dev_rows),
@@ -1791,7 +1827,7 @@ pub fn census(data_root: &Path, fresh_v2: &Path, extra: &[(String, PathBuf)]) ->
         reply_only_grid: grid,
         unnamed_later: unnamed.len(),
         unkeyed_openings: unkeyed.len(),
-        decision_positions,
+        decision_positions: pooled,
     };
 
     // M0 and M3–M6.
@@ -2401,6 +2437,581 @@ pub fn inspect_run(
         });
     }
     Ok(readings)
+}
+
+/// One split's scored rows as one checkpoint decodes them ([`score_rows`], one-model-end-to-end
+/// claude-205): parallel lists, one entry per scored row in panel order.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScoredRows {
+    pub split: String,
+    /// Whether the checkpoint's turn memory was on.
+    pub memory: bool,
+    pub positions: Vec<usize>,
+    pub targets: Vec<u32>,
+    /// The whole table's nearest token: the reading the bars count.
+    pub nearest: Vec<u32>,
+    /// The served writer's pick from the same points: the float reference for the integer
+    /// artifact's top-1.
+    pub writer: Vec<u32>,
+}
+
+impl ScoredRows {
+    fn hits(&self) -> usize {
+        self.nearest.iter().zip(&self.targets).filter(|(p, t)| p == t).count()
+    }
+}
+
+/// One greedy reply ([`score_rows`]): ids, for the grader, and text, to read.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IdSample {
+    /// The corpus position of the reply's first target.
+    pub position: usize,
+    pub prompt: Vec<u32>,
+    pub reply: Vec<u32>,
+    pub reference: Vec<u32>,
+    pub reply_text: String,
+    pub reference_text: String,
+}
+
+/// One file [`score_rows`] wrote, with its nearest and writer hits when it holds rows.
+#[derive(Clone, Debug, Serialize)]
+pub struct ScoredFile {
+    pub file: String,
+    pub rows: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nearest_hits: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub writer_hits: Option<usize>,
+}
+
+/// Write `bytes` to a new file at `path`; an existing file is refused, never replaced.
+fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+    file.write_all(bytes)?;
+    Ok(())
+}
+
+/// The sealed Fresh V2 panel in `dir`, pinned: its tokens and response mask.
+fn load_fresh_v2(dir: &Path) -> Result<(Vec<u32>, Vec<u8>)> {
+    hs::load_pinned_uort_split(
+        &dir.join("tokens.u16"),
+        &dir.join("response_mask.u8"),
+        PINNED_FRESH_V2_TOKENS_SHA256,
+        PINNED_FRESH_V2_MASK_SHA256,
+        EXPECTED_FRESH_V2_TOKENS,
+        EXPECTED_FRESH_V2_ELIGIBLE_TARGETS,
+        hs::SHEET_VOCAB,
+        hs::SHEET_BOS_ID,
+    )
+}
+
+/// The true reply after `window`'s prompt, which ends at its first scored offset: the scored
+/// targets while their offsets stay contiguous from there, so a mask gap or the window's end
+/// never splices text, at most `tokens` of them.
+fn reference_reply(window: &CausalWindow, tokens: usize) -> Vec<u32> {
+    let off = window.scored_offsets.first().copied().unwrap_or(0);
+    window
+        .scored_offsets
+        .iter()
+        .zip(&window.scored_targets)
+        .enumerate()
+        .take_while(|&(i, (&o, _))| o == off + i)
+        .take(tokens)
+        .map(|(_, (_, &t))| t)
+        .collect()
+}
+
+/// Score one saved checkpoint row by row (one-model-end-to-end done-when 2, claude-205), on the
+/// GPU. For DEV, and for the sealed Fresh V2 panel in `fresh_v2` when given, it writes every
+/// scored row's nearest and writer picks ([`ScoredRows`]) to `out/rows-{split}-memory.json`
+/// with the checkpoint's turn memory as loaded, and to `rows-{split}-no-memory.json` with it
+/// taken out. It writes `samples` greedy replies of `reply_tokens` nearest-decoded tokens
+/// ([`IdSample`]) after [`sample_windows`]' prompts, to `samples-memory.json` and
+/// `samples-no-memory.json`. The rows come from [`nearest_reading`]'s own loop, so their sums
+/// are its readings. `checkpoint` is a `step-N` directory; the flags must match its run's.
+#[allow(clippy::too_many_arguments)]
+pub fn score_rows(
+    data_root: &Path,
+    checkpoint: &Path,
+    out: &Path,
+    fresh_v2: Option<&Path>,
+    samples: usize,
+    reply_tokens: usize,
+    retain_rates: bool,
+    fold_scores: bool,
+    reflect_floor: bool,
+    seed: u64,
+    device: &Device,
+) -> Result<Vec<ScoredFile>> {
+    let step: usize = checkpoint
+        .file_name()
+        .and_then(|n| n.to_str())
+        .and_then(|n| n.strip_prefix("step-"))
+        .and_then(|n| n.parse().ok())
+        .ok_or_else(|| invalid("--score-rows wants a run's step-N checkpoint directory"))?;
+    let tokenizer = pinned_tokenizer(data_root)?;
+    let (dev_windows, dev_mask) = load_dev(data_root)?;
+    let mut splits = vec![("dev", dev_windows, dev_mask)];
+    if let Some(dir) = fresh_v2 {
+        let (tokens, mask) = load_fresh_v2(dir)?;
+        let (windows, _) =
+            hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
+        splits.push(("fresh-v2", windows, mask));
+    }
+    fs::create_dir_all(out)?;
+    arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
+    crate::geometric_stack::set_retention_rates(retain_rates);
+    crate::geometric_stack::set_folded_scores(fold_scores);
+    crate::geometric_stack::set_reflected_floor(reflect_floor);
+    let _guard = ArmGuard;
+    let model = StackModel::load(checkpoint, device)?;
+    load_reads(checkpoint, device)?;
+    let memory = crate::flock_read_memory::turn_memory();
+    let prompts = sample_windows(&splits[0].1, &splits[0].2, samples);
+    let mut written = Vec::new();
+    for on in [true, false] {
+        crate::flock_read_memory::set_turn_memory(if on { memory.clone() } else { None });
+        let label = if on { "memory" } else { "no-memory" };
+        for (split, windows, mask) in &splits {
+            let picks = row_picks(&model, windows, mask, seed, step, |_, _| Ok(()))?;
+            let rows = ScoredRows {
+                split: (*split).to_owned(),
+                memory: on,
+                positions: picks.iter().map(|p| p.position).collect(),
+                targets: picks.iter().map(|p| p.target).collect(),
+                nearest: picks.iter().map(|p| p.nearest).collect(),
+                writer: picks.iter().map(|p| p.writer).collect(),
+            };
+            let file = format!("rows-{split}-{label}.json");
+            write_new(&out.join(&file), &serde_json::to_vec(&rows)?)?;
+            written.push(ScoredFile {
+                file,
+                rows: picks.len(),
+                nearest_hits: Some(rows.hits()),
+                writer_hits: Some(picks.iter().filter(|p| p.writer == p.target).count()),
+            });
+        }
+        let mut replies = Vec::with_capacity(prompts.len());
+        for window in &prompts {
+            let off = window.scored_offsets[0];
+            let prompt = &window.input_ids[..=off];
+            let reply = greedy_reply(&model, PointObjective::Cell, prompt, reply_tokens, seed)?;
+            let reference = reference_reply(window, reply_tokens);
+            replies.push(IdSample {
+                position: window.scored_corpus_positions[0],
+                prompt: prompt.to_vec(),
+                reply_text: tokenizer.decode(&reply),
+                reference_text: tokenizer.decode(&reference),
+                reply,
+                reference,
+            });
+        }
+        let file = format!("samples-{label}.json");
+        write_new(&out.join(&file), &serde_json::to_vec(&replies)?)?;
+        written.push(ScoredFile {
+            file,
+            rows: replies.len(),
+            nearest_hits: None,
+            writer_hits: None,
+        });
+    }
+    Ok(written)
+}
+
+/// Where one arm stands against another at one seed of the overturn check.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OverturnCell {
+    /// Ahead by more than the band.
+    Ahead,
+    /// Behind by more than the band.
+    Behind,
+    /// Within the band.
+    Inside,
+}
+
+/// `⌈2·√n⌉`, exactly, in integers: the paired band's floor for `n = b + c` discordant rows.
+fn two_root_ceil(n: usize) -> usize {
+    let four = 4 * n;
+    let mut k = (four as f64).sqrt() as usize;
+    while k * k < four {
+        k += 1;
+    }
+    while k > 0 && (k - 1) * (k - 1) >= four {
+        k -= 1;
+    }
+    k
+}
+
+/// One seed's cell: `b` rows only the first arm gets, `c` rows only the second gets, the band
+/// `max(⌈2·√(b+c)⌉, spread)`, and ahead or behind only beyond it.
+fn seed_cell(b: usize, c: usize, spread: usize) -> (usize, OverturnCell) {
+    let band = two_root_ceil(b + c).max(spread);
+    let difference = b as i64 - c as i64;
+    let cell = if difference > band as i64 {
+        OverturnCell::Ahead
+    } else if difference < -(band as i64) {
+        OverturnCell::Behind
+    } else {
+        OverturnCell::Inside
+    };
+    (band, cell)
+}
+
+/// The verdict over the seeds' cells: `ahead` or `behind` only when every seed says so, else
+/// `mixed` (the seeds disagree, or one is within its band).
+fn overturn_verdict(cells: &[OverturnCell]) -> &'static str {
+    if !cells.is_empty() && cells.iter().all(|&c| c == OverturnCell::Ahead) {
+        "ahead"
+    } else if !cells.is_empty() && cells.iter().all(|&c| c == OverturnCell::Behind) {
+        "behind"
+    } else {
+        "mixed"
+    }
+}
+
+/// On the rows at `positions`, the hits of `a` and of `b` and the paired discordant counts: rows
+/// only `a` gets, and rows only `b` gets. Both must list the same rows in the same order, and
+/// hold every one of `positions`.
+fn paired(
+    a: &ScoredRows,
+    b: &ScoredRows,
+    positions: &std::collections::BTreeSet<usize>,
+) -> Result<(usize, usize, usize, usize)> {
+    if a.positions != b.positions || a.targets != b.targets {
+        return Err(invalid(format!(
+            "{} and {} do not score the same rows",
+            a.split, b.split
+        )));
+    }
+    let (mut a_hits, mut b_hits, mut only_a, mut only_b, mut seen) = (0, 0, 0, 0, 0);
+    for (i, p) in a.positions.iter().enumerate() {
+        if !positions.contains(p) {
+            continue;
+        }
+        seen += 1;
+        let (x, y) = (a.nearest[i] == a.targets[i], b.nearest[i] == b.targets[i]);
+        a_hits += usize::from(x);
+        b_hits += usize::from(y);
+        only_a += usize::from(x && !y);
+        only_b += usize::from(y && !x);
+    }
+    if seen != positions.len() {
+        return Err(invalid(format!(
+            "the scored rows hold {seen} of the {} decision rows",
+            positions.len()
+        )));
+    }
+    Ok((a_hits, b_hits, only_a, only_b))
+}
+
+/// How many rows at `positions` `a` and `b` pick differently: the memory taken out against left
+/// in, where the memory names none of them, must be 0.
+fn pick_differences(
+    a: &ScoredRows,
+    b: &ScoredRows,
+    positions: &std::collections::BTreeSet<usize>,
+) -> usize {
+    a.positions
+        .iter()
+        .zip(a.nearest.iter().zip(&b.nearest))
+        .filter(|(p, (x, y))| positions.contains(p) && x != y)
+        .count()
+}
+
+/// Free-generation measures of a set of replies against TRAIN's (one-model-end-to-end ASSESSMENT
+/// §5). A reply is cut after its first end-of-turn id; a cut reply is complete.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Generation {
+    pub replies: usize,
+    pub complete: usize,
+    /// Complete replies equal to a TRAIN reply.
+    pub verbatim_train: usize,
+    /// For n = 4 to 8: the share of the replies' n-grams that no TRAIN reply holds.
+    pub new_ngram_share: Vec<f64>,
+    pub distinct_1: f64,
+    pub distinct_2: f64,
+    /// The share of each reply's 4-grams that repeat an earlier 4-gram of the same reply.
+    pub repeated_4gram_rate: f64,
+}
+
+/// The n-gram lengths [`Generation::new_ngram_share`] counts.
+pub const GENERATION_NGRAMS: std::ops::RangeInclusive<usize> = 4..=8;
+
+/// [`Generation`] for `replies` against `train` (TRAIN's replies, each ending at its `eos`).
+fn generation(replies: &[Vec<u32>], train: &[Vec<u32>], eos: u32) -> Generation {
+    use std::collections::HashSet;
+    let cut: Vec<&[u32]> = replies
+        .iter()
+        .map(|r| match r.iter().position(|&t| t == eos) {
+            Some(at) => &r[..=at],
+            None => &r[..],
+        })
+        .collect();
+    let complete: Vec<&[u32]> = cut.iter().copied().filter(|r| r.last() == Some(&eos)).collect();
+    let exact: HashSet<u128> = complete.iter().map(|r| census_hash(r)).collect();
+    let mut found_exact = HashSet::new();
+    for reply in train {
+        let h = census_hash(reply);
+        if exact.contains(&h) {
+            found_exact.insert(h);
+        }
+    }
+    let verbatim_train = complete
+        .iter()
+        .filter(|r| found_exact.contains(&census_hash(r)))
+        .count();
+    let mut new_ngram_share = Vec::new();
+    for n in GENERATION_NGRAMS {
+        let wanted: HashSet<u128> = cut.iter().flat_map(|r| r.windows(n).map(census_hash)).collect();
+        let mut seen = HashSet::new();
+        for window in train.iter().flat_map(|r| r.windows(n)) {
+            let h = census_hash(window);
+            if wanted.contains(&h) {
+                seen.insert(h);
+            }
+        }
+        let (mut new, mut total) = (0usize, 0usize);
+        for window in cut.iter().flat_map(|r| r.windows(n)) {
+            total += 1;
+            new += usize::from(!seen.contains(&census_hash(window)));
+        }
+        new_ngram_share.push(if total == 0 { 0.0 } else { new as f64 / total as f64 });
+    }
+    let share = |n: usize| {
+        let total: usize = cut.iter().map(|r| r.len().saturating_sub(n - 1)).sum();
+        let distinct: HashSet<&[u32]> = cut.iter().flat_map(|r| r.windows(n)).collect();
+        if total == 0 { 0.0 } else { distinct.len() as f64 / total as f64 }
+    };
+    let (mut repeated, mut grams) = (0usize, 0usize);
+    for reply in &cut {
+        let mut earlier = HashSet::new();
+        for window in reply.windows(4) {
+            grams += 1;
+            repeated += usize::from(!earlier.insert(window));
+        }
+    }
+    Generation {
+        replies: replies.len(),
+        complete: complete.len(),
+        verbatim_train,
+        new_ngram_share,
+        distinct_1: share(1),
+        distinct_2: share(2),
+        repeated_4gram_rate: if grams == 0 { 0.0 } else { repeated as f64 / grams as f64 },
+    }
+}
+
+/// One scored arm's readings in the overturn check ([`overturn`]).
+#[derive(Clone, Debug, Serialize)]
+pub struct OverturnArm {
+    /// `r-s1`, `r0-s2` and the like: the arm and its seed.
+    pub name: String,
+    pub dev_hits: usize,
+    pub dev_hits_no_memory: usize,
+    pub decision_hits: usize,
+    pub unkeyed_opening_hits: usize,
+    /// Decision rows picked differently with the memory taken out: 0, since the memory names
+    /// none of them.
+    pub decision_pick_differences: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fresh_v2_hits: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fresh_v2_hits_no_memory: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub samples: Option<Generation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub samples_no_memory: Option<Generation>,
+}
+
+/// One seed's comparison of (r) against (r0) on the decision rows.
+#[derive(Clone, Debug, Serialize)]
+pub struct OverturnSeed {
+    pub seed: u8,
+    pub r_hits: usize,
+    pub r0_hits: usize,
+    /// Rows only (r) gets, and rows only (r0) gets.
+    pub b: usize,
+    pub c: usize,
+    pub band: usize,
+    pub cell: OverturnCell,
+}
+
+/// The overturn check (one-model-end-to-end done-when 2), graded from stored scores.
+#[derive(Clone, Debug, Serialize)]
+pub struct Overturn {
+    pub decision_rows: usize,
+    pub unnamed_later: usize,
+    pub unkeyed_openings: usize,
+    /// `|(b − c) at seed 1 − (b − c) at seed 2|`.
+    pub two_seed_spread: usize,
+    pub seeds: Vec<OverturnSeed>,
+    pub verdict: &'static str,
+    pub arms: Vec<OverturnArm>,
+    /// DEV's own replies after the same prompts, cut at the reply length the samples had.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub references: Option<Generation>,
+}
+
+/// The decision rows' DEV positions, as the census counts them from the reply and opening
+/// tables: `(later, openings)`, the later rows the reply table does not name and the openings no
+/// first-8 key names, each sorted.
+fn decision_positions(
+    reply: &ReplyTableCounts,
+    opening: &ReplyTableCounts,
+    dev_rows: &[ReplyRow],
+    dev_windows: &[CausalWindow],
+) -> Result<(Vec<usize>, Vec<usize>)> {
+    let (unnamed, unkeyed) = census_decision_rows(reply, opening, dev_rows);
+    let positions = |rows: &[usize]| -> Result<Vec<usize>> {
+        let mut out = rows
+            .iter()
+            .map(|&i| {
+                row_position(&dev_rows[i], dev_windows)
+                    .ok_or_else(|| invalid("a DEV reply row has no corpus position"))
+            })
+            .collect::<Result<Vec<usize>>>()?;
+        out.sort_unstable();
+        Ok(out)
+    };
+    Ok((positions(&unnamed)?, positions(&unkeyed)?))
+}
+
+/// Read a JSON file [`score_rows`] wrote.
+fn read_scored<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
+    serde_json::from_slice(&fs::read(path)?)
+        .map_err(|e| invalid(format!("{}: {e}", path.display())))
+}
+
+/// Grade the overturn check (one-model-end-to-end done-when 2) on the laptop, from the stored
+/// outputs of [`score_rows`]: `scored` names each arm's output directory as `ARM-sSEED`, and
+/// must hold `r-s1`, `r0-s1`, `r-s2` and `r0-s2`. It recomputes the census's decision rows from
+/// TRAIN and DEV, compares (r) with (r0) on them at each seed with the band
+/// `max(⌈2·√(b+c)⌉, two-seed spread)`, and scores every arm's samples, and DEV's own replies
+/// after the same prompts, against TRAIN's replies. Counts only; no model.
+pub fn overturn(data_root: &Path, scored: &[(String, PathBuf)]) -> Result<Overturn> {
+    use std::collections::BTreeSet;
+    let bos = hs::SHEET_BOS_ID;
+    for (name, _) in scored {
+        let ok = name
+            .split_once("-s")
+            .is_some_and(|(arm, seed)| !arm.is_empty() && matches!(seed, "1" | "2"));
+        if !ok {
+            return Err(invalid(format!("--scored {name}: names are ARM-s1 or ARM-s2")));
+        }
+    }
+    let (train_tokens, train_mask) = load_train_split(data_root)?;
+    let (dev_tokens, dev_mask) = hs::load_pinned_uort_split(
+        &data_root.join("ft/dev/tokens.u16"),
+        &data_root.join("ft/dev/response_mask.u8"),
+        hs::PINNED_DEV_TOKENS_SHA256,
+        hs::PINNED_DEV_MASK_SHA256,
+        hs::EXPECTED_DEV_TOKENS,
+        hs::EXPECTED_DEV_ELIGIBLE_TARGETS,
+        hs::SHEET_VOCAB,
+        bos,
+    )?;
+    let (train_w, _) = hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, bos)?;
+    let (dev_w, _) = hs::build_document_windows(&dev_tokens, &dev_mask, SHEET_CONTEXT, bos)?;
+    let train_rows = reply_rows(&train_w, &train_mask);
+    let dev_rows = reply_rows(&dev_w, &dev_mask);
+    let (later, openings) = decision_positions(
+        &reply_table(ReplyKey::TurnPosition(1), &train_rows),
+        &reply_table(ReplyKey::TurnPosition(0), &train_rows),
+        &dev_rows,
+        &dev_w,
+    )?;
+    drop((train_w, train_rows, dev_w, dev_rows));
+    let decision: BTreeSet<usize> = later.iter().chain(&openings).copied().collect();
+    let unkeyed: BTreeSet<usize> = openings.iter().copied().collect();
+    let train_replies = split_turns(&train_tokens, &train_mask, bos).replies;
+    let eos = pinned_tokenizer(data_root)?
+        .token_id("<|eos|>")
+        .ok_or_else(|| invalid("the pinned tokenizer has no <|eos|>"))?;
+
+    let mut arms = Vec::with_capacity(scored.len());
+    let mut references = None;
+    let mut dev_of = std::collections::BTreeMap::new();
+    for (name, dir) in scored {
+        let on: ScoredRows = read_scored(&dir.join("rows-dev-memory.json"))?;
+        let off: ScoredRows = read_scored(&dir.join("rows-dev-no-memory.json"))?;
+        let (decision_hits, _, _, _) = paired(&on, &off, &decision)?;
+        let (unkeyed_opening_hits, _, _, _) = paired(&on, &off, &unkeyed)?;
+        let fresh = |label: &str| -> Result<Option<usize>> {
+            let path = dir.join(format!("rows-fresh-v2-{label}.json"));
+            Ok(match path.exists() {
+                true => Some(read_scored::<ScoredRows>(&path)?.hits()),
+                false => None,
+            })
+        };
+        let samples = |label: &str| -> Result<Option<Vec<IdSample>>> {
+            let path = dir.join(format!("samples-{label}.json"));
+            Ok(match path.exists() {
+                true => Some(read_scored(&path)?),
+                false => None,
+            })
+        };
+        let (with, without) = (samples("memory")?, samples("no-memory")?);
+        if references.is_none() {
+            if let Some(list) = &with {
+                let refs: Vec<Vec<u32>> = list.iter().map(|s| s.reference.clone()).collect();
+                references = Some(generation(&refs, &train_replies, eos));
+            }
+        }
+        let grade = |list: Option<Vec<IdSample>>| {
+            list.map(|l| {
+                let replies: Vec<Vec<u32>> = l.into_iter().map(|s| s.reply).collect();
+                generation(&replies, &train_replies, eos)
+            })
+        };
+        arms.push(OverturnArm {
+            name: name.clone(),
+            dev_hits: on.hits(),
+            dev_hits_no_memory: off.hits(),
+            decision_hits,
+            unkeyed_opening_hits,
+            decision_pick_differences: pick_differences(&on, &off, &decision),
+            fresh_v2_hits: fresh("memory")?,
+            fresh_v2_hits_no_memory: fresh("no-memory")?,
+            samples: grade(with),
+            samples_no_memory: grade(without),
+        });
+        dev_of.insert(name.clone(), on);
+    }
+    let arm = |name: String| {
+        dev_of
+            .get(&name)
+            .ok_or_else(|| invalid(format!("--overturn needs --scored {name}=DIR")))
+    };
+    let mut counts = Vec::new();
+    for seed in [1u8, 2] {
+        let (r, r0) = (arm(format!("r-s{seed}"))?, arm(format!("r0-s{seed}"))?);
+        counts.push((seed, paired(r, r0, &decision)?));
+    }
+    let difference = |(_, (_, _, b, c)): &(u8, (usize, usize, usize, usize))| *b as i64 - *c as i64;
+    let two_seed_spread = (difference(&counts[0]) - difference(&counts[1])).unsigned_abs() as usize;
+    let seeds: Vec<OverturnSeed> = counts
+        .iter()
+        .map(|&(seed, (r_hits, r0_hits, b, c))| {
+            let (band, cell) = seed_cell(b, c, two_seed_spread);
+            OverturnSeed { seed, r_hits, r0_hits, b, c, band, cell }
+        })
+        .collect();
+    let cells: Vec<OverturnCell> = seeds.iter().map(|s| s.cell).collect();
+    Ok(Overturn {
+        decision_rows: decision.len(),
+        unnamed_later: later.len(),
+        unkeyed_openings: openings.len(),
+        two_seed_spread,
+        verdict: overturn_verdict(&cells),
+        seeds,
+        arms,
+        references,
+    })
 }
 
 /// Key, value and filler token ranges for the recall task: disjoint, and clear of BOS (0).
@@ -3337,17 +3948,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
                 config.reply_tokens,
                 config.seed,
             )?;
-            // The true reply: the scored targets while their offsets stay contiguous from the
-            // prompt's end, so a mask gap or the window's end never splices text together.
-            let reference: Vec<u32> = window
-                .scored_offsets
-                .iter()
-                .zip(&window.scored_targets)
-                .enumerate()
-                .take_while(|&(i, (&o, _))| o == off + i)
-                .take(config.reply_tokens)
-                .map(|(_, (_, &t))| t)
-                .collect();
+            let reference = reference_reply(window, config.reply_tokens);
             let sample = Sample {
                 step,
                 prompt: tokenizer.decode(prompt),
@@ -4657,5 +5258,154 @@ mod tests {
     fn tail_keeps_the_last_characters_on_one_line() {
         assert_eq!(tail("ab\ncdé", 3), "cdé");
         assert_eq!(tail("ab", 10), "ab");
+    }
+
+    fn pick(position: usize, target: u32, nearest: u32, writer: u32, opens: bool, copies: bool) -> RowPick {
+        RowPick { position, target, nearest, writer, opens, copies }
+    }
+
+    /// claude-205: the per-row picks fold into `nearest_reading`'s counts exactly as its loop
+    /// counted them, kind by kind.
+    #[test]
+    fn row_picks_fold_into_the_nearest_reading() {
+        let picks = [
+            pick(3, 7, 7, 7, true, false),  // an opening hit, the writer too
+            pick(4, 7, 9, 7, true, true),   // an opening that copies, missed by nearest
+            pick(5, 8, 8, 1, true, false),  // an opening hit, the writer missing
+            pick(6, 2, 2, 2, false, true),  // a copied hit
+            pick(7, 5, 5, 4, false, false), // a rest hit
+            pick(8, 6, 1, 6, false, false), // a rest miss the writer gets
+        ];
+        let (reading, written) = fold_picks(&picks);
+        assert_eq!(reading.hits, 4);
+        assert_eq!((reading.opening_rows, reading.opening_hits), (3, 2));
+        assert_eq!((reading.copied_rows, reading.copied_hits), (2, 1));
+        assert_eq!((reading.rest_rows, reading.rest_hits), (2, 1));
+        assert_eq!(reading.commonest_opening_rows, 2, "target 7 opens twice");
+        assert_eq!(reading.opening_distinct_picks, 3, "7, 9 and 8");
+        assert_eq!((written.hits, written.opening_hits), (4, 2));
+        assert_eq!(written.opening_distinct_picks, 2, "7 and 1");
+    }
+
+    /// claude-205: the band's floor is `⌈2·√n⌉` exactly, at and between squares.
+    #[test]
+    fn the_band_floor_is_twice_the_root_rounded_up() {
+        for (n, want) in [(0, 0), (1, 2), (4, 4), (5, 5), (6, 5), (150, 25), (3_438, 118)] {
+            assert_eq!(two_root_ceil(n), want, "n = {n}");
+            let k = two_root_ceil(n);
+            assert!(k * k >= 4 * n && (k == 0 || (k - 1) * (k - 1) < 4 * n));
+        }
+    }
+
+    /// claude-205: a seed is ahead or behind only beyond `max(⌈2·√(b+c)⌉, spread)`, and at the
+    /// band itself it is inside.
+    #[test]
+    fn a_seed_is_ahead_or_behind_only_beyond_the_band() {
+        // b + c = 150, floor 25.
+        assert_eq!(seed_cell(100, 50, 10), (25, OverturnCell::Ahead));
+        assert_eq!(seed_cell(50, 100, 10), (25, OverturnCell::Behind));
+        assert_eq!(seed_cell(85, 65, 10), (25, OverturnCell::Inside));
+        // The spread, when wider, is the band.
+        assert_eq!(seed_cell(100, 50, 60), (60, OverturnCell::Inside));
+        // b + c = 135, floor 24: b − c = 25 is beyond it, but not beyond a spread of 25.
+        assert_eq!(seed_cell(80, 55, 0), (24, OverturnCell::Ahead));
+        assert_eq!(seed_cell(80, 55, 25), (25, OverturnCell::Inside));
+        assert_eq!(seed_cell(81, 55, 25), (25, OverturnCell::Ahead));
+    }
+
+    /// claude-205: the verdict is ahead or behind only when both seeds agree beyond their bands.
+    #[test]
+    fn the_verdict_needs_every_seed() {
+        use OverturnCell::{Ahead, Behind, Inside};
+        assert_eq!(overturn_verdict(&[Ahead, Ahead]), "ahead");
+        assert_eq!(overturn_verdict(&[Behind, Behind]), "behind");
+        assert_eq!(overturn_verdict(&[Ahead, Behind]), "mixed");
+        assert_eq!(overturn_verdict(&[Ahead, Inside]), "mixed");
+        assert_eq!(overturn_verdict(&[Inside, Inside]), "mixed");
+        assert_eq!(overturn_verdict(&[]), "mixed");
+    }
+
+    fn scored(nearest: &[u32]) -> ScoredRows {
+        ScoredRows {
+            split: "dev".into(),
+            memory: true,
+            positions: vec![10, 11, 12, 13, 14],
+            targets: vec![1, 2, 3, 4, 5],
+            nearest: nearest.to_vec(),
+            writer: nearest.to_vec(),
+        }
+    }
+
+    /// claude-205: the pairing counts hits and discordant rows on the decision rows only, and
+    /// refuses arms that score other rows, or rows that miss a decision row.
+    #[test]
+    fn pairing_counts_discordant_rows_on_the_decision_rows_only() {
+        let rows: std::collections::BTreeSet<usize> = [10, 11, 12, 13].into_iter().collect();
+        // a gets rows 10, 11, 14; b gets 10, 12, 14. Row 14 is not a decision row.
+        let (a, b) = (scored(&[1, 2, 0, 0, 5]), scored(&[1, 0, 3, 0, 5]));
+        assert_eq!(paired(&a, &b, &rows).unwrap(), (2, 2, 1, 1));
+        assert_eq!(pick_differences(&a, &b, &rows), 2, "rows 11 and 12");
+        assert_eq!(pick_differences(&a, &a, &rows), 0);
+        let mut other = b.clone();
+        other.positions[4] = 99;
+        assert!(paired(&a, &other, &rows).is_err(), "different rows");
+        let missing: std::collections::BTreeSet<usize> = [10, 50].into_iter().collect();
+        assert!(paired(&a, &b, &missing).is_err(), "a decision row neither scores");
+    }
+
+    /// claude-205: replies are cut after their first end-of-turn id; only complete ones can be
+    /// verbatim; new n-grams are those no TRAIN reply holds; distinct and repeat rates count
+    /// within the cut replies.
+    #[test]
+    fn generation_measures_count_against_trains_replies() {
+        const EOS: u32 = 2;
+        let train = vec![vec![10, 11, 12, 13, EOS], vec![20, 21, 22, 23, 24, EOS]];
+        let replies = vec![
+            vec![10, 11, 12, 13, EOS, 99, 99], // verbatim, cut after EOS
+            vec![20, 21, 22, 23, 30, EOS],     // complete, not verbatim
+            vec![5, 5, 5, 5, 5, 5],            // never ends
+        ];
+        let g = generation(&replies, &train, EOS);
+        assert_eq!((g.replies, g.complete, g.verbatim_train), (3, 2, 1));
+        assert_eq!(g.new_ngram_share.len(), 5);
+        // 4-grams: reply 0 has 2, both in TRAIN; reply 1 has 3, the first in TRAIN; reply 2 has
+        // 3, none in TRAIN. New: 2 + 3 of 8.
+        assert!((g.new_ngram_share[0] - 5.0 / 8.0).abs() < 1e-12);
+        // Unigrams: 5 + 6 + 6 = 17 tokens; distinct {10..13, 2, 20..23, 30, 5} = 11.
+        assert!((g.distinct_1 - 11.0 / 17.0).abs() < 1e-12);
+        // Bigrams: 4 + 5 + 5 = 14; distinct: 4 + 5 + 1 ((5, 5)) = 10.
+        assert!((g.distinct_2 - 10.0 / 14.0).abs() < 1e-12);
+        // Repeated 4-grams: only reply 2's second and third repeat its first, of 8.
+        assert!((g.repeated_4gram_rate - 2.0 / 8.0).abs() < 1e-12);
+        let none = generation(&[], &train, EOS);
+        assert_eq!((none.replies, none.distinct_1, none.repeated_4gram_rate), (0, 0.0, 0.0));
+    }
+
+    /// claude-205: a scorer's output is never replaced.
+    #[test]
+    fn a_scored_file_is_never_replaced() {
+        let dir = std::env::temp_dir().join(format!("claude-205-new-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("rows-dev-memory.json");
+        write_new(&path, b"first").unwrap();
+        assert!(write_new(&path, b"second").is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"first");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// claude-205: the reference reply runs from the first scored offset, and stops at the first
+    /// gap in the offsets and at its length.
+    #[test]
+    fn the_reference_reply_stops_at_a_gap() {
+        let window = CausalWindow {
+            doc_id: 0,
+            input_ids: vec![0; 12],
+            scored_offsets: vec![3, 4, 5, 8, 9],
+            scored_targets: vec![31, 41, 51, 81, 91],
+            scored_corpus_positions: vec![4, 5, 6, 9, 10],
+        };
+        assert_eq!(reference_reply(&window, 10), vec![31, 41, 51]);
+        assert_eq!(reference_reply(&window, 2), vec![31, 41]);
     }
 }

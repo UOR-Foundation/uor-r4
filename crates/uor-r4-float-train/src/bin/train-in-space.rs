@@ -44,6 +44,15 @@
 //! decision rows, and each panel's exact, n-gram and value-masked template overlap with TRAIN. A
 //! count that needs no GPU; one JSON line.
 //!
+//! `train-in-space --data-root DIR --score-rows CHECKPOINT --out DIR [--fresh-v2 DIR] [--samples N] [--reply-tokens N] [--retain-rates 0|1] [--seed S]`:
+//! one-model-end-to-end's per-row scorer (claude-205), on the GPU. Every scored DEV row (and
+//! Fresh V2 row) of the step-N checkpoint, with its memory on and taken out, and greedy samples,
+//! as JSON files in `--out` (`in_space_long::score_rows`). Prints one JSON line per file.
+//!
+//! `train-in-space --data-root DIR --overturn 1 --scored ARM-sSEED=DIR ...`: grades the overturn
+//! check from those files, on the laptop (`in_space_long::overturn`). Needs `r-s1`, `r0-s1`,
+//! `r-s2` and `r0-s2`; counts only; one JSON line.
+//!
 //! Long training of the SpiralCore/FBS geometric trunk in its own space, with text at every
 //! checkpoint (`uor_r4_float_train::in_space_long`). GPU only. `--data-root` holds `tokenizer.json`,
 //! `mw-balp/train/` and `ft/dev/`, each split with `tokens.u16` and `response_mask.u8`. `--out`
@@ -57,9 +66,9 @@ use candle_core::Device;
 use uor_r4_float_train::flock_read_opening::OpeningAnchor;
 use uor_r4_float_train::flock_read_register::RegisterSelect;
 use uor_r4_float_train::in_space_long::{
-    census, context_reach, decode_speed, gradient_norms, inspect_run, opening_bound, reply_bound,
-    root_separation, run_long, run_recall, LongConfig, PointObjective, TrainSplit,
-    DEFAULT_REGISTER_PICKS,
+    census, context_reach, decode_speed, gradient_norms, inspect_run, opening_bound, overturn,
+    reply_bound, root_separation, run_long, run_recall, score_rows, LongConfig, PointObjective,
+    TrainSplit, DEFAULT_REGISTER_PICKS,
 };
 use uor_r4_float_train::{FloatTrainError, Result};
 
@@ -75,6 +84,9 @@ fn main() -> Result<()> {
     let mut census_on = false;
     let mut fresh_v2 = None;
     let mut extra_panels: Vec<(String, PathBuf)> = Vec::new();
+    let mut score = None;
+    let mut overturn_on = false;
+    let mut scored: Vec<(String, PathBuf)> = Vec::new();
     let (mut split_dir, mut split_tokens, mut split_mask) = (None, None, None);
     let mut recall = 0usize;
     let (mut opening_read, mut opening_anchor) = (None, None);
@@ -134,6 +146,18 @@ fn main() -> Result<()> {
             "--opening-bound" => bound = switch(&value)?,
             "--reply-bound" => reply = switch(&value)?,
             "--census" => census_on = switch(&value)?,
+            "--score-rows" => score = Some(PathBuf::from(&value)),
+            "--overturn" => overturn_on = switch(&value)?,
+            "--scored" => {
+                let arm = panel_arg(&value)?;
+                if scored.iter().any(|(name, _)| *name == arm.0) {
+                    return Err(FloatTrainError::Invalid(format!(
+                        "--scored {} is given twice",
+                        arm.0
+                    )));
+                }
+                scored.push(arm);
+            }
             "--fresh-v2" => fresh_v2 = Some(PathBuf::from(&value)),
             "--panel" => {
                 let panel = panel_arg(&value)?;
@@ -301,17 +325,25 @@ fn main() -> Result<()> {
         bound,
         reply,
         census_on,
-        out.is_some(),
+        // `--score-rows` writes to `--out` without training.
+        out.is_some() && score.is_none(),
+        score.is_some(),
+        overturn_on,
     ];
     if modes.iter().filter(|&&m| m).count() > 1 {
         return Err(FloatTrainError::Invalid(
-            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1 or --census 1"
+            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows or --overturn 1"
                 .to_owned(),
+        ));
+    }
+    if !scored.is_empty() && !overturn_on {
+        return Err(FloatTrainError::Invalid(
+            "--scored needs --overturn 1".to_owned(),
         ));
     }
     if recall > 0 {
         let out = out.ok_or_else(|| FloatTrainError::Invalid("--recall needs --out".to_owned()))?;
-        if modes[..5].iter().any(|&m| m) {
+        if modes[..5].iter().any(|&m| m) || score.is_some() || overturn_on {
             return Err(FloatTrainError::Invalid(
                 "--recall trains; it takes --out and no other mode".to_owned(),
             ));
@@ -321,6 +353,10 @@ fn main() -> Result<()> {
     }
     let data_root =
         data_root.ok_or_else(|| FloatTrainError::Invalid("--data-root is required".to_owned()))?;
+    if overturn_on {
+        println!("{}", serde_json::to_string(&overturn(&data_root, &scored)?)?);
+        return Ok(());
+    }
     if census_on {
         let fresh_v2 = fresh_v2
             .ok_or_else(|| FloatTrainError::Invalid("--census needs --fresh-v2 DIR".to_owned()))?;
@@ -347,6 +383,26 @@ fn main() -> Result<()> {
         return Ok(());
     }
     let device = Device::new_cuda(0)?;
+    if let Some(checkpoint) = score {
+        let out = out
+            .ok_or_else(|| FloatTrainError::Invalid("--score-rows needs --out DIR".to_owned()))?;
+        for file in score_rows(
+            &data_root,
+            &checkpoint,
+            &out,
+            fresh_v2.as_deref(),
+            config.samples,
+            config.reply_tokens,
+            config.retain_rates,
+            config.fold_scores,
+            config.reflect_floor,
+            config.seed,
+            &device,
+        )? {
+            println!("{}", serde_json::to_string(&file)?);
+        }
+        return Ok(());
+    }
     if let Some(checkpoint) = decode {
         let nearest = config.objective.decodes_nearest();
         for speed in decode_speed(
