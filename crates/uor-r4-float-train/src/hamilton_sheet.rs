@@ -1604,6 +1604,19 @@ pub fn evaluate_dev_panel_d11(
     with_d11_mode(|| score_dev_panel(model, dev_windows, true))
 }
 
+/// The DEV panel under [`with_d11_snaps`] (claude-180), the writer at Q12 when `q12_writer`. It
+/// does not check the tables' rounding: the snap ablation scores the snaps on the tables as
+/// trained too. With [`D11Snaps::ALL`], `q12_writer` and rounded tables it is
+/// [`evaluate_dev_panel_d11`].
+pub fn evaluate_dev_panel_d11_snaps(
+    model: &StackModel,
+    dev_windows: &[CausalWindow],
+    snaps: D11Snaps,
+    q12_writer: bool,
+) -> Result<(DevEvalMetrics, Vec<u32>)> {
+    with_d11_snaps(snaps, || score_dev_panel(model, dev_windows, q12_writer))
+}
+
 /// The DEV panel's scored queries at Q12 (`code / 4096`, rows × width, in panel order) under the
 /// gate hook as it is set: the `eval_hidden` that [`score_dev_panel`] writes with `q12_writer`
 /// (claude-132). Under [`with_d11_mode`] they are the D11 panel's queries. GPU.
@@ -2033,6 +2046,32 @@ pub fn with_d11_export_gates<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
 /// rounded as exported (`fbs_export::round_tables_as_exported`), a forward in
 /// this mode computes what the exported artifact computes, in float.
 pub fn with_d11_mode<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
+    with_d11_snaps(D11Snaps::ALL, f)
+}
+
+/// Which of the D11 forward's two icosian snaps run (claude-180, the snap ablation). It is for
+/// evaluation forwards only; training keeps [`with_d11_mode`] and [`with_d11_training`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct D11Snaps {
+    /// Both Hamilton gates snapped to the 120 icosians, as `Hamilton_IcosianHard` does. Off, the
+    /// gates stay continuous, as the plain-float forward computes them (`Hamilton_Active`).
+    pub gates: bool,
+    /// The recurrence transition snapped to the 120 icosians. Off, it is unit-normalized, as in
+    /// the plain-float forward.
+    pub transition: bool,
+}
+
+impl D11Snaps {
+    /// The D11 mode as the integer path serves it.
+    pub const ALL: D11Snaps = D11Snaps {
+        gates: true,
+        transition: true,
+    };
+}
+
+/// [`with_d11_mode`] with each snap chosen by `snaps`. With [`D11Snaps::ALL`] it is
+/// [`with_d11_mode`]. It restores the gate hook exactly as it was.
+pub fn with_d11_snaps<T>(snaps: D11Snaps, f: impl FnOnce() -> Result<T>) -> Result<T> {
     let prior = GATE_HOOK.with(|cell| {
         let mut st = cell.borrow_mut();
         let prior = (
@@ -2042,10 +2081,14 @@ pub fn with_d11_mode<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
             st.snap_transition,
             st.capture_telemetry,
         );
-        st.active_arm = Some(HamiltonArm::HamiltonIcosianHard);
+        st.active_arm = Some(if snaps.gates {
+            HamiltonArm::HamiltonIcosianHard
+        } else {
+            HamiltonArm::HamiltonActive
+        });
         st.fwd_call_idx = 0;
         st.icosian_export_mode = false;
-        st.snap_transition = true;
+        st.snap_transition = snaps.transition;
         st.capture_telemetry = false;
         prior
     });
@@ -2905,6 +2948,88 @@ mod tests {
             std::panic::catch_unwind(|| with_q16_residual(|| -> Result<()> { panic!("inside") }));
         assert!(panicked.is_err());
         assert!(!is_rounding_residual_q16());
+        Ok(())
+    }
+
+    #[test]
+    fn each_d11_snap_is_set_on_its_own_and_the_hook_restored() -> Result<()> {
+        // claude-180: `with_d11_snaps` sets the gate snap and the transition snap apart, `ALL` is
+        // `with_d11_mode`, and the hook comes back as it was, after an error too.
+        let state = || {
+            GATE_HOOK.with(|cell| {
+                let st = cell.borrow();
+                (st.active_arm, st.snap_transition)
+            })
+        };
+        let snaps = |gates, transition| D11Snaps { gates, transition };
+        let ico = Some(HamiltonArm::HamiltonIcosianHard);
+        let active = Some(HamiltonArm::HamiltonActive);
+        // Every field the D11 mode saves, from a prior state unlike any it sets (claude-180 code
+        // review): each must come back exactly.
+        let saved = || {
+            GATE_HOOK.with(|cell| {
+                let st = cell.borrow();
+                (
+                    st.active_arm,
+                    st.fwd_call_idx,
+                    st.icosian_export_mode,
+                    st.snap_transition,
+                    st.capture_telemetry,
+                )
+            })
+        };
+        let original = saved();
+        GATE_HOOK.with(|cell| {
+            let mut st = cell.borrow_mut();
+            st.active_arm = Some(HamiltonArm::RandomGateNull);
+            st.fwd_call_idx = 7;
+            st.icosian_export_mode = true;
+            st.snap_transition = false;
+            st.capture_telemetry = true;
+        });
+        let prior = saved();
+        for s in [
+            D11Snaps::ALL,
+            snaps(false, true),
+            snaps(true, false),
+            snaps(false, false),
+        ] {
+            with_d11_snaps(s, || Ok(()))?;
+            assert_eq!(saved(), prior, "{s:?}");
+            assert!(with_d11_snaps(s, || -> Result<()> { Err(invalid("inside")) }).is_err());
+            assert_eq!(saved(), prior, "{s:?} after an error");
+        }
+        GATE_HOOK.with(|cell| {
+            let mut st = cell.borrow_mut();
+            (
+                st.active_arm,
+                st.fwd_call_idx,
+                st.icosian_export_mode,
+                st.snap_transition,
+                st.capture_telemetry,
+            ) = original;
+        });
+        let before = state();
+        assert_eq!(with_d11_mode(|| Ok(state()))?, (ico, true));
+        assert_eq!(with_d11_snaps(D11Snaps::ALL, || Ok(state()))?, (ico, true));
+        assert_eq!(
+            with_d11_snaps(snaps(false, true), || Ok(state()))?,
+            (active, true)
+        );
+        assert_eq!(
+            with_d11_snaps(snaps(true, false), || Ok(state()))?,
+            (ico, false)
+        );
+        assert_eq!(
+            with_d11_snaps(snaps(false, false), || Ok(state()))?,
+            (active, false)
+        );
+        assert_eq!(state(), before);
+        let failed = with_d11_snaps(snaps(false, true), || -> Result<()> {
+            Err(invalid("inside"))
+        });
+        assert!(failed.is_err());
+        assert_eq!(state(), before);
         Ok(())
     }
 
