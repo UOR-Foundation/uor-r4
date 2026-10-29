@@ -2,7 +2,7 @@
 
 Lab: claude. Item: `d11-exporter-float-trunk` (#2820). ORDER: `docs/loop/tasks/d11-exporter-float-trunk/claude-182/ORDER.md`. Owner direction of 29 Oct: "fix the exporter".
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
 
 ## 1. Question
 
@@ -229,4 +229,15 @@ The item's done-when needs the export gap "measured inside the band". The pre-na
 - §7's miss counts;
 - the project rules.
 
-The D67 pre-run review is still to come.
+**The D67 pre-run review (fresh, at `a47c50175`): GO.** It confirmed the five points:
+- the chain;
+- that every code path, pin, store folder and the pushed head exists;
+- that every outcome changes a decision, in `summary.jq`'s order;
+- the FIT;
+- the lease inside the caps.
+
+Its findings:
+1. **Medium: this file's header still read PENDING.** Now FIT.
+2. **Low: the lease length disagreed.** The lease is 2 h, as section 8 says.
+3. **Low: a host loss writes neither terminal marker.** The watcher also ends when the pod stops answering.
+4. **Low: the negative check reads one model's own evaluator output.** If that model's eval fails, the run reports red and is classified as an instrument fault.
