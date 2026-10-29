@@ -67,9 +67,9 @@ use candle_core::Device;
 use uor_r4_float_train::flock_read_opening::OpeningAnchor;
 use uor_r4_float_train::flock_read_register::RegisterSelect;
 use uor_r4_float_train::in_space_long::{
-    census, context_reach, decode_speed, gradient_norms, inspect_run, opening_bound, overturn,
-    reply_bound, root_separation, run_long, run_recall, score_rows, LongConfig, PointObjective,
-    TrainSplit, DEFAULT_REGISTER_PICKS,
+    census, context_reach, decode_speed, fbs_arm_named, gradient_norms, inspect_run, opening_bound,
+    overturn, reply_bound, root_separation, run_long, run_recall, score_rows, LongConfig,
+    PointObjective, TrainSplit, DEFAULT_REGISTER_PICKS, MEMORY_DROPOUT_MAX,
 };
 use uor_r4_float_train::{FloatTrainError, Result};
 
@@ -122,6 +122,8 @@ fn main() -> Result<()> {
         turn_memory: 0,
         turn_memory_empty: false,
         turn_memory_reply: false,
+        turn_memory_dropout: 0,
+        fbs_arm: uor_r4_float_train::spiralcore_fbs_arms::FbsArm::OneAtomActive,
     };
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -189,6 +191,23 @@ fn main() -> Result<()> {
             "--turn-memory" => config.turn_memory = number(&value)?,
             "--turn-memory-empty" => config.turn_memory_empty = switch(&value)?,
             "--turn-memory-reply" => config.turn_memory_reply = switch(&value)?,
+            "--turn-memory-dropout" => {
+                config.turn_memory_dropout = u32::try_from(number(&value)?)
+                    .ok()
+                    .filter(|&p| p <= MEMORY_DROPOUT_MAX)
+                    .ok_or_else(|| {
+                        FloatTrainError::Invalid(
+                            "--turn-memory-dropout wants thousandths, 0 to 1000".to_owned(),
+                        )
+                    })?
+            }
+            "--fbs-arm" => {
+                config.fbs_arm = fbs_arm_named(&value).ok_or_else(|| {
+                    FloatTrainError::Invalid(format!(
+                        "--fbs-arm wants one-atom, identity or frozen, not {value}"
+                    ))
+                })?
+            }
             "--batch" => config.batch = number(&value)?,
             "--eval-every" => config.eval_every = number(&value)?,
             "--seed" => config.seed = number(&value)? as u64,
@@ -403,6 +422,7 @@ fn main() -> Result<()> {
             config.fold_scores,
             config.reflect_floor,
             config.seed,
+            config.fbs_arm,
             &device,
         )? {
             println!("{}", serde_json::to_string(&file)?);
@@ -420,6 +440,7 @@ fn main() -> Result<()> {
             nearest,
             config.reply_tokens,
             config.seed,
+            config.fbs_arm,
             &device,
         )? {
             println!("{}", serde_json::to_string(&speed)?);
@@ -463,6 +484,7 @@ fn main() -> Result<()> {
             config.fold_scores,
             config.reflect_floor,
             config.seed,
+            config.fbs_arm,
             &device,
         )? {
             println!("{}", serde_json::to_string(&reading)?);
