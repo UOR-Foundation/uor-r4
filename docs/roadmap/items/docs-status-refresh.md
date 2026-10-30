@@ -1,60 +1,54 @@
 ---
 id: docs-status-refresh
-title: Bring every status page, picture and tracker up to 29 Oct 2026
+title: Bring every status page, picture and tracker up to 30 Oct 2026
 milestone: research
 area: tooling
-status: done
+status: ready
 open_to: lab
 needs_gpu: false
 depends_on: []
 done_class: host
-scope: [README.md, docs/README.md, docs/SUMMARY.md, docs/start/*.md, docs/products/*.md, docs/model/*.md, docs/geometry/*.md, docs/research/README.md, docs/research/findings.md, docs/research/open-questions.md, docs/research/history.md, docs/research/lines/*.md, docs/mechanisms/README.md, docs/mechanisms/address-cells.md, docs/mechanisms/admission.md, docs/mechanisms/carrier-credit.md, docs/mechanisms/discrete-geometric-learning.md, docs/mechanisms/discrete-learning.md, docs/mechanisms/e8-orbit-memory.md, docs/mechanisms/exact-addressed-memory.md, docs/mechanisms/finite-relational-head.md, docs/mechanisms/flock-rank-reads.md, docs/mechanisms/flock-read.md, docs/mechanisms/geometric-stack.md, docs/mechanisms/hamilton-gate.md, docs/mechanisms/hopf-observation.md, docs/mechanisms/invariant-addressed-read.md, docs/mechanisms/legal-construction.md, docs/mechanisms/lut-serving.md, docs/mechanisms/native-geometric.md, docs/mechanisms/pointer-identity-key.md, docs/mechanisms/pointer-key.md, docs/mechanisms/prime-zeta-codebook.md, docs/mechanisms/prime-zeta-complex-routing.md, docs/mechanisms/protected-legal-construction.md, docs/mechanisms/r4g1-graph.md, docs/mechanisms/rank-margin-objective.md, docs/mechanisms/rank-margin.md, docs/mechanisms/read-binding.md, docs/mechanisms/recurrence-gates.md, docs/mechanisms/relation-read.md, docs/mechanisms/route-read.md, docs/mechanisms/spin-native-weights.md, docs/mechanisms/spin-weights.md, docs/mechanisms/spiralcore-fbs-projection.md, docs/mechanisms/spiralcore-fbs.md, docs/mechanisms/starling-read.md, docs/mechanisms/ternary-xor-arithmetic.md, docs/mechanisms/ternary-xor-evidence-factsheet.md, docs/mechanisms/ternary-xor.md, docs/mechanisms/tokenizer.md, docs/mechanisms/unified-geometric-carrier-credit.md, docs/mechanisms/vsa.md, docs/figures/**, xtask/src/figures.rs, crates/uor-r4-api/README.md, crates/uor-r4-core/README.md, crates/uor-r4-discrete/README.md, crates/uor-r4-float-train/README.md, crates/uor-r4-graph-compiler/README.md, crates/uor-r4-graph-format/README.md, crates/uor-r4-integer/README.md, crates/uor-r4-lut/README.md, crates/uor-r4-pod-provider/README.md, crates/uor-r4-proof-model/README.md, crates/uor-r4-router/README.md, crates/uor-r4-training/README.md, docs/roadmap/issues.json, docs/loop/tasks/docs-status-refresh/**, docs/roadmap/items/docs-status-refresh.md]
+scope: [README.md, CONTRIBUTING.md, ROADMAP.md, PLAN.md, AGENTS.md, CHARTER.md, docs/README.md, docs/SUMMARY.md, docs/start/*.md, docs/products/*.md, docs/model/*.md, docs/geometry/*.md, docs/research/README.md, docs/research/findings.md, docs/research/open-questions.md, docs/research/history.md, docs/research/lines/README.md, docs/research/lines/*.md, docs/research/notebook/README.md, docs/mechanisms/README.md, docs/mechanisms/address-cells.md, docs/mechanisms/admission.md, docs/mechanisms/carrier-credit.md, docs/mechanisms/discrete-geometric-learning.md, docs/mechanisms/discrete-learning.md, docs/mechanisms/e8-orbit-memory.md, docs/mechanisms/exact-addressed-memory.md, docs/mechanisms/finite-relational-head.md, docs/mechanisms/flock-rank-reads.md, docs/mechanisms/flock-read.md, docs/mechanisms/geometric-stack.md, docs/mechanisms/hamilton-gate.md, docs/mechanisms/hopf-observation.md, docs/mechanisms/invariant-addressed-read.md, docs/mechanisms/legal-construction.md, docs/mechanisms/lut-serving.md, docs/mechanisms/native-geometric.md, docs/mechanisms/pointer-identity-key.md, docs/mechanisms/pointer-key.md, docs/mechanisms/prime-zeta-codebook.md, docs/mechanisms/prime-zeta-complex-routing.md, docs/mechanisms/protected-legal-construction.md, docs/mechanisms/r4g1-graph.md, docs/mechanisms/rank-margin-objective.md, docs/mechanisms/rank-margin.md, docs/mechanisms/read-binding.md, docs/mechanisms/recurrence-gates.md, docs/mechanisms/relation-read.md, docs/mechanisms/route-read.md, docs/mechanisms/spin-native-weights.md, docs/mechanisms/spin-weights.md, docs/mechanisms/spiralcore-fbs-projection.md, docs/mechanisms/spiralcore-fbs.md, docs/mechanisms/starling-read.md, docs/mechanisms/ternary-xor-arithmetic.md, docs/mechanisms/ternary-xor-evidence-factsheet.md, docs/mechanisms/ternary-xor.md, docs/mechanisms/tokenizer.md, docs/mechanisms/unified-geometric-carrier-credit.md, docs/mechanisms/vsa.md, docs/integration/project-track.md, docs/integration/DECISIONS.md, docs/rules/README.md, docs/rules/changes.md, docs/harness/milestones.json, docs/figures/**, xtask/src/figures.rs, xtask/src/figures_charts.rs, xtask/src/figures_math.rs, crates/*/README.md, web/README.md, web/studio/index.html, web/studio/verify_studio_worker.mjs, docs/roadmap/issues.json, docs/roadmap/items/one-model-end-to-end.md, docs/roadmap/items/m1-close-saved-model.md, docs/roadmap/items/m1-heldout-phrasing-transfer.md, docs/loop/tasks/docs-status-refresh/kimi-1/**, docs/loop/tasks/docs-status-refresh/kimi-2/**, docs/loop/tasks/docs-status-refresh/kimi-3/**, docs/loop/tasks/docs-status-refresh/kimi-4/**, docs/roadmap/items/docs-status-refresh.md]
 ---
 
 ## Why it matters
 
 The owner, 29 Oct 2026, in claude's chat: "can you please dispatch subagents to go a full repo documentation update including all of the readme's and issues and PR tracking that we have completely let lapse? make sure they all include these latest decisions from last night and the planned path forward - update all documentation that this touches to give a real status of the current project (with the pictures updated as needed and all of the documentation on the website updated if needed too)".
 
+On 30 Oct the owner assigned Kimi the follow-up: "Please make sure the documentation on the github repo is updated so that it accurately reflects where the project currently is (I think we may have M1 completed now). All readme's especially the main one, must be kept clean, up to date, and accurate (plus engaging like it currently is since this is an open research project). If you are able to update the pictures, that would probably be good too because some of them are out of date. There is a large amount of linked documentation that I think is mostly correct, but having all of that cleaned up would be great as well. Claude is currently working on the project, but I am assigning you the job of housekeeping. Please try hard not to make mistakes as this is a highly complex coordination and execution task. Please ask me if you have questions or need something".
+
 ## What is missing
 
-The front door, the site and the trackers lag the work.
-- **The status pictures** are generated by `cargo xtask figures` from `xtask/src/figures.rs`, which is still dated 13 October.
-- **Fourteen roadmap items have no GitHub issue:** every item opened since 27 Oct, including the whole of the trunk line's pivot (`docs/roadmap/issues.json`).
-- **Most of `docs/start/`, `docs/model/` and `docs/research/`** were last written on 20 Oct. They say nothing of the route + exact-memory pivot (claude-155, claude-161), of D80 and D81, or of the order of work that follows.
+- **M1 closed after the 29 Oct refresh.** #2029 and claude-211 record two saved integer artifacts passing all six bars, but the README, root roadmap, book, milestone cache, status figures, crate READMEs and Studio text still carry earlier states. The older `m1-close-grade.json` covers bars (a)–(e); claude-211's `panel-score.json` and REPORT supply bar (f), and both parts belong in the cancel probe.
+- **Current pages and tracker inputs mix dates and model paths.** K16's dated negative is sometimes presented as the current best; the saved discrete M1 model is conflated with the separate float-trained FBS trunk; `m1-close-saved-model` still says five bars and `m1-heldout-phrasing-transfer` still says M1 stays open.
+- **The previous refresh left named negatives and holds.** Two book links from `docs/research/notebook/m4-serving.md` were already broken; `docs/mechanisms/exact-memory.md` and `object-store.md` were held for antigravity-113 and are excluded here. `docs/integration/current-state.md` is a dated log, not a page to rewrite.
+- **Generated state needs its own delivery path.** `STATE.md`, `HANDOFF.md` and `docs/roadmap/README.md` must follow their committed inputs through the render workflow, not be hand-edited in a lab PR.
 
 ## Done when
 
-1. **Every status page in scope states the project as of 29 Oct 2026, with a source for each number:** the README, the site's start, model, product, mechanism and research pages, and the crate READMEs. That covers:
-   - the trunk line's chain from claude-142 to claude-189;
-   - the model's mechanism per part, and the state of each part (trained, served, missing);
-   - the decisions:
-     - the 28 Oct pivot to route + exact memory;
-     - serving whole-table nearest (claude-150);
-     - D80 and D81;
-     - cost per token as the criterion;
-     - float training with an exact integer export;
-     - the deterministic backward;
-   - the order of work in PLAN.md's open owner direction of 29 Oct;
-   - the milestones as `docs/harness/milestones.json` gives them. No bar or status changes here: those are decision rows.
-2. **The generated pictures are redrawn from `xtask/src/figures.rs`,** with a current date and the current composition, and `cargo xtask figures` passes. A hand-drawn picture that states status is corrected.
-3. **Every roadmap item has its issue.** That means `cargo xtask roadmap sync --apply`, run from a tree equal to `main`, with `docs/roadmap/issues.json` committed. The milestone checklists are current, and a stale open PR is named on #2028 to its own lab.
-4. **The site builds** (`mdbook build`), and the docs link check passes.
-5. **One fresh review** of the whole diff, against the facts sheet the unit writes, and one REPORT.
+1. **Every living status page in scope states the project as of 30 Oct 2026, with a source for each number:** pre-alpha, 1 of 8 milestones complete, M1's two-seed DEV/Fresh V2/p-f evidence and serving rates, and the p-f reference-reply limitation. M1 is not useful-chat qualification; the saved discrete model and FBS trunk stay distinct; current work comes only from merged evidence, including claude-217's 14–19% new-phrasing reply-opening result against about 80% on later tokens.
+2. **Every non-archive README is inventoried.** Living project READMEs with stale current claims are corrected; dated evidence and unrelated vendor/side-project history are left intact.
+3. **The generated pictures are redrawn from the three figure sources,** with current data and accessible descriptions. `cargo run -q --locked -p xtask -- figures`, `figures-math` and `figures-charts` pass; genuinely hand-maintained status pictures and their captions are corrected and visually checked.
+4. **The trackers agree.** `docs/harness/milestones.json` and the M1 roadmap item inputs reflect the six-bar close without changing any bar. Current headlines/statuses move to current fields, while historical counts, negatives and holds remain in explicit history fields rather than being deleted. Roadmap sync runs from fresh `main`, milestone checklists are current, and `STATE.md`, `HANDOFF.md` and `docs/roadmap/README.md` are refreshed through the normal render workflow.
+5. **The site source and Studio status build and check cleanly:** `mdbook build`, `cargo run -q --locked -p xtask -- book-check`, the docs link check with no new broken links, and the existing Studio status checks. Any pre-existing broken links remain named in the REPORT rather than being attributed to this unit.
+6. **A source-linked facts sheet, one fresh exact-head review and one REPORT** cover the whole diff, the negative scope and any unrun checks.
 
 ## How to start
 
-- Read the claude lab's place record, which has the chain on one page, and PLAN.md's owner directions.
-- Write the facts sheet first: every number and decision the pages may state, each with its REPORT.
-- Then give each cluster of pages to one maker with a narrow suborder (`loop suborder`). A maker reads its pages once against the sheet and edits them in the same pass.
+- After the scope PR merges, reopen #3380 manually with `gh issue reopen 3380`, then run roadmap sync; sync does not reopen closed issues. Write the facts sheet from #2029, claude-211 and the latest merged REPORTs before editing public prose.
+- Inventory living pages and edit them in coherent front-door, book, figure and tracker commits. Do not race Claude's active research, antigravity-113's two held mechanism pages, or a competing documentation draft.
+- Deliver the content PR, verify it on fresh `main`, then synchronize issues and render the generated views.
 
 ## Rules that apply
 
-- **Owner paths are not edited** (`docs/harness/owner-paths.json`): CHARTER, AGENTS, DECISIONS, the change log, `.github/**`, `labs.json`.
-- **A record keeps its date.** Notebooks, REPORTs, `docs/labs/**` and `archive/` are history and are not rewritten.
-- **Scoped claims** (CHARTER §5.6). A number names its run, its seed count and its panel, and nothing reads as a milestone claim that the bar has not met.
+- **Owner paths are status-only here.** The owner's 30 Oct request and explicit approval of the documentation plan authorize recording M1's close in `AGENTS.md`, `CHARTER.md`, `docs/integration/DECISIONS.md` and, because CHARTER's mission status changes, the dated `docs/rules/changes.md`. No acceptance bar, technical rule, GPU cap, `.github/**` or `labs.json` change follows.
+- **A record keeps its date.** Notebook rows, REPORTs, `docs/labs/**`, prior task folders, `docs/integration/current-state.md` and `archive/` are history and are not rewritten. Only the named Kimi task folders are new records. Claude's active code, prep, lab-result, task and notebook files, and antigravity-113's `exact-memory.md`/`object-store.md`, are outside this unit.
+- **Rendered views are not hand-edited.** `STATE.md`, `HANDOFF.md` and `docs/roadmap/README.md` follow the render workflow after their inputs merge.
+- **Scoped claims** (CHARTER §5.6). A number names its run, seed count and panel; p-f's 62.5% reference-reply overlap is not a generated-copy rate; no milestone claim exceeds the evidence.
 
 ## Sources
 
-- The owner's words, 29 Oct 2026, in claude's chat (quoted above).
-- `docs/roadmap/issues.json` against `docs/roadmap/items/`, on 29 Oct: 14 items without an issue.
-- `xtask/src/figures.rs` (`DATE`).
+- The owner's words of 29 and 30 Oct 2026 (quoted above).
+- Closed M1 #2029; `docs/labs/m1-close-saved-model/evidence/m1-close-grade.json` for bars (a)–(e); `docs/labs/m1-heldout-phrasing-transfer/evidence/panel-score.json` and `docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md` for bar (f).
+- Latest merged end-to-end evidence, including `docs/loop/tasks/one-model-end-to-end/claude-217/REPORT.md`.
+- `xtask/src/figures.rs`, `xtask/src/figures_charts.rs`, `xtask/src/figures_math.rs` and `docs/harness/milestones.json`.
