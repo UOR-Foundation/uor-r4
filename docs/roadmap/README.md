@@ -20,11 +20,11 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 15 |
+| ready | 16 |
 | held | 10 |
 | decision | 1 |
 | done | 85 |
-| total | 111 |
+| total | 112 |
 
 ## Start here
 
@@ -42,6 +42,7 @@ These items are ready and open to anyone.
 
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
+| [Pass M1's held-out-phrasing bar (f) on the saved model](items/m1-heldout-phrasing-transfer.md) | ready | a lab | yes | [m1-close-saved-model](items/m1-close-saved-model.md) | not yet synced |
 | [Register and run one float-credit training sheet (W4)](items/m1-w4-float-credit-sheet.md) | held | a lab | yes | [m1-w2-capacity-capture](items/m1-w2-capacity-capture.md), [m1-bvg-k-stage-t-training](items/m1-bvg-k-stage-t-training.md) | [#2846](https://github.com/UOR-Foundation/uor-r4/issues/2846) |
 | [Diagnose A8 reach erosion from retained checkpoints](items/m1-a8-erosion-diagnosis.md) | done | a lab | no | none | [#2829](https://github.com/UOR-Foundation/uor-r4/issues/2829) |
 | [Run A8 admission-anchor controller CUDA qualification and restoration](items/m1-a8-finite-cuda-qualification.md) | done | a lab | yes | [m1-a8-registration-and-runbook-staging](items/m1-a8-registration-and-runbook-staging.md) | [#2830](https://github.com/UOR-Foundation/uor-r4/issues/2830) |
@@ -251,6 +252,7 @@ flowchart LR
   n_m1_export_gap_and_toks["m1-export-gap-and-toks"]
   n_m1_faster_writer["m1-faster-writer"]
   n_m1_fresh_panel_transfer["m1-fresh-panel-transfer"]
+  n_m1_heldout_phrasing_transfer["m1-heldout-phrasing-transfer"]
   n_m1_normalization_mechanism["m1-normalization-mechanism"]
   n_m1_position_mechanism["m1-position-mechanism"]
   n_m1_trunk_assembly_and_training["m1-trunk-assembly-and-training"]
@@ -351,6 +353,7 @@ flowchart LR
   n_m1_bvg_k_stage_t_training --> n_r_finite_relational_head
   n_m1_bvg_k_stage_t_training --> n_r_rank_objective_keeps_cells
   n_m1_bvg_k_stage_t_training --> n_r_ranking_with_admission_intact
+  n_m1_close_saved_model --> n_m1_heldout_phrasing_transfer
   n_m1_close_saved_model --> n_m2_train_grounded_replies
   n_m1_close_saved_model --> n_m3_qualify_memory
   n_m1_close_saved_model --> n_m4_export_uorlut01_cli
