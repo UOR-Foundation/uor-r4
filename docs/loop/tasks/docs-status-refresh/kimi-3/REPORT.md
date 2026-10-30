@@ -20,7 +20,7 @@ Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-ref
 - Corrected the reopen sequence everywhere: after this scope PR merges, Kimi manually runs `gh issue reopen 3380`, then roadmap sync. Sync itself does not reopen closed issues.
 - Added the scope ORDER, decision card, two repair ORDERs and this active REPORT. The item and PLAN owner-direction rows are the only public-facing status prose changed; no figure, web, model, owner-path, bar, technical-rule or production-state edit is present. The item/PLAN status rows are the reversible workflow change.
 
-Diff size after the second repair: seven files (three ORDERs, DECISION, this REPORT, item, PLAN), about 200 changed lines against the approximately 180-line estimate (about 1.1×), with no line cap (D48). The exact shortstat is recorded in the final commit. No production code or dependency changed.
+Diff size after the second repair: seven files (three ORDERs, DECISION, this REPORT, item, PLAN), 185 insertions and 35 deletions (220 changed lines) against the approximately 180-line estimate (about 1.22×), with no line cap (D48). No production code or dependency changed.
 
 ## Measurements and cancel probe
 
@@ -37,7 +37,8 @@ Diff size after the second repair: seven files (three ORDERs, DECISION, this REP
 - `cargo run -q --locked -p xtask -- roadmap check` — **PASS**, 112 items.
 - `cargo run -q --locked -p uor-r4-claim-wording -- .` — **PASS**, supported Markdown surface only; not a whole-repository scan.
 - `git diff --check` — **PASS**.
-- `uor-harness loop report --check` and `uor-harness loop pr-check --local` — results recorded in the final review commit after execution; no pass is assumed here.
+- `uor-harness loop report --check` — **PASS**.
+- `uor-harness loop pr-check --local` — **PASS verdict**. ORDER, REPORT, owner-paths, banned-presence, rule-sources, rendered-lock, read-path and FILEMAP pass. Only D76-advisory scope and commit-order warnings remain for this scope PR.
 - Codex preservation refs verified at `ed54006e7615a5e14335a2b501c5c7ba14e14eee`; GitHub #3380 remains CLOSED until the manual post-merge reopen.
 - A new fresh exact-head review is required before ready/queue. Earlier reviews are not reused as approval.
 
