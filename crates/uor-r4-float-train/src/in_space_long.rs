@@ -1574,7 +1574,8 @@ fn opening_points(
 
 /// For each row of `query`, the row of `table` nearest under L1 (the mean `|q − t|` over the
 /// coordinates, as the cell objective scores), as its index and distance: computed on the device
-/// in blocks, with no dot product. A tie keeps the earlier row.
+/// in blocks, with no dot product. A tie keeps the earlier row, inside a block (the first index
+/// at the minimum, not the reduction's pick) and across blocks.
 fn l1_nearest(query: &Tensor, table: &Tensor) -> Result<Vec<(u32, f32)>> {
     const QUERIES: usize = 64;
     const ROWS: usize = 4096;
@@ -1584,10 +1585,24 @@ fn l1_nearest(query: &Tensor, table: &Tensor) -> Result<Vec<(u32, f32)>> {
     for q0 in (0..nq).step_by(QUERIES) {
         let q = query.narrow(0, q0, QUERIES.min(nq - q0))?.unsqueeze(1)?;
         for t0 in (0..nt).step_by(ROWS) {
-            let t = table.narrow(0, t0, ROWS.min(nt - t0))?.unsqueeze(0)?;
+            let rows = ROWS.min(nt - t0);
+            let t = table.narrow(0, t0, rows)?.unsqueeze(0)?;
             let d = q.broadcast_sub(&t)?.abs()?.mean(2)?;
-            let at = d.argmin(1)?.to_vec1::<u32>()?;
-            let low = d.min(1)?.to_vec1::<f32>()?;
+            let low_each = d.min_keepdim(1)?;
+            // The first row at the minimum: every row index where the distance equals it, the
+            // rest pushed past the block, and the smallest taken.
+            let index = Tensor::arange(0u32, rows as u32, d.device())?
+                .to_dtype(DType::F32)?
+                .unsqueeze(0)?
+                .broadcast_as(d.shape())?;
+            let past = Tensor::full(ROWS as f32, d.shape(), d.device())?;
+            let at = d
+                .broadcast_eq(&low_each)?
+                .where_cond(&index, &past)?
+                .min(1)?
+                .to_dtype(DType::U32)?
+                .to_vec1::<u32>()?;
+            let low = low_each.squeeze(1)?.to_vec1::<f32>()?;
             for (i, (&j, &m)) in at.iter().zip(&low).enumerate() {
                 let slot = &mut best[q0 + i];
                 if m < slot.1 {
@@ -2755,6 +2770,10 @@ fn decode_reply(
             if let Some(token) = forced_opening().filter(|_| reply.is_empty()) {
                 reply.push(token);
                 ids.push(token);
+                // A forced end of turn or BOS ends the reply, as a decoded one would.
+                if Some(token) == eos || token == hs::SHEET_BOS_ID {
+                    break;
+                }
                 continue;
             }
             let window = &ids[ids.len().saturating_sub(SHEET_CONTEXT)..];
@@ -3740,7 +3759,8 @@ pub fn score_rows(
                     });
                 }
                 let file = format!("samples-{}-forced-{label}.json", split.name);
-                let decoded = replies.iter().map(|r| r.reply.len()).sum();
+                // The forced token had no forward, so the speed counts only the decoded ones.
+                let decoded = replies.iter().map(|r| r.reply.len().saturating_sub(1)).sum();
                 let seconds = started.elapsed().as_secs_f64();
                 write_new(&out.join(&file), &serde_json::to_vec(&replies)?)?;
                 written.push(ScoredFile {
@@ -3767,11 +3787,13 @@ pub fn score_rows(
             let keyed = opening_keys(&split.name, &query, targets, positions, &train, &train_targets)?;
             let file = format!("keys-{}.json", split.name);
             write_new(&out.join(&file), &serde_json::to_vec(&keyed)?)?;
+            // The keys' hits are in the file itself; the nearest and writer fields name the
+            // trunk's and the writer's picks, so they stay empty here.
             written.push(ScoredFile {
                 file,
                 rows: keyed.positions.len(),
-                nearest_hits: Some(keyed.point_target.iter().zip(&keyed.targets).filter(|(a, b)| a == b).count()),
-                writer_hits: Some(keyed.sign_target.iter().zip(&keyed.targets).filter(|(a, b)| a == b).count()),
+                nearest_hits: None,
+                writer_hits: None,
                 panel_sha256: split.sha256.clone(),
                 tables: None,
                 decode: None,
@@ -8840,6 +8862,12 @@ mod tests {
         let near = l1_nearest(&query, &train).unwrap();
         assert_eq!(near.iter().map(|&(i, _)| i).collect::<Vec<_>>(), [4500, 0, 4095]);
         assert!((near[0].1 - 0.1).abs() < 1e-3 && (near[1].1 - 1.5).abs() < 1e-6, "{near:?}");
+        // A tie inside one block keeps the earlier row: rows 100 and 3,000 are both (5, 0), every
+        // other row (100, 0), so the query (5, 0) is at distance 0 from both.
+        let rows: Vec<f32> = (0..4096).flat_map(|r| [if r == 100 || r == 3000 { 5.0 } else { 100.0 }, 0.0]).collect();
+        let tied = Tensor::from_vec(rows, (4096, 2), &device).unwrap();
+        let at = Tensor::from_vec(vec![5.0f32, 0.0], (1, 2), &device).unwrap();
+        assert_eq!(l1_nearest(&at, &tied).unwrap(), [(100, 0.0)], "an in-block tie keeps the earlier row");
         // The sign code: 0/1 per coordinate, zero counting as positive.
         let points = Tensor::from_vec(vec![0.5f32, -0.2, -1.0, 0.0], (2, 2), &device).unwrap();
         let code = sign_code(&points).unwrap().to_vec2::<f32>().unwrap();
