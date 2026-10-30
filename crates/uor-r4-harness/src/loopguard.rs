@@ -1072,23 +1072,219 @@ fn check_command(
         );
     }
 
-    let segments = tokenize_shell_segments(trimmed);
+    // A heredoc's body is data, not commands, unless the line feeds it to a shell.
+    let (stripped, heredocs) = split_heredocs(trimmed);
+    for (line, body) in &heredocs {
+        if feeds_a_shell(line) {
+            check_command(roots, lab, subagent, cwd, body)?;
+        }
+    }
+    let segments = tokenize_shell_segments(&stripped);
     let mut effective_cwd = cwd.to_path_buf();
+    // Variables the command itself sets (`F=path && ... > "$F"`), so their targets are checked
+    // as written; any other `$NAME` stays unexpanded and is checked as it is.
+    let mut vars: HashMap<String, String> = HashMap::new();
+    if let Some(home) = std::env::var_os("HOME") {
+        vars.insert("HOME".to_owned(), home.to_string_lossy().into_owned());
+    }
     for seg in &segments {
         for sub in &seg.subshells {
             check_command(roots, lab, subagent, &effective_cwd, sub)?;
         }
         for redir in &seg.redirects {
             let target = redir.trim_matches('"').trim_matches('\'');
+            let target = expand_known_vars(target, &vars);
             if !target.is_empty() && !target.starts_with("/dev/") && !target.starts_with('&') {
-                check_write_path(roots, lab, subagent, &effective_cwd, target)?;
+                check_write_path(roots, lab, subagent, &effective_cwd, &target)?;
             }
         }
         if !seg.tokens.is_empty() {
-            check_command_segment(roots, lab, subagent, &mut effective_cwd, &seg.tokens)?;
+            let tokens: Vec<String> = seg
+                .tokens
+                .iter()
+                .map(|t| expand_known_vars(t, &vars))
+                .collect();
+            check_command_segment(roots, lab, subagent, &mut effective_cwd, &tokens)?;
+            record_assignments(&seg.tokens, &mut vars);
         }
     }
     Ok(())
+}
+
+/// Record a segment's `NAME=value` assignments (alone, or after `export`) into `vars`, with
+/// `$NAME` references in the value expanded from what is already known. A segment that runs a
+/// command records nothing: its leading assignments are that command's environment only.
+fn record_assignments(tokens: &[String], vars: &mut HashMap<String, String>) {
+    let rest = match tokens.first().map(String::as_str) {
+        Some("export") => &tokens[1..],
+        _ => tokens,
+    };
+    if rest.is_empty() || !rest.iter().all(|t| split_env_assignment(t).is_some()) {
+        return;
+    }
+    for tok in rest {
+        if let Some((k, v)) = split_env_assignment(tok) {
+            let value = expand_known_vars(v, vars);
+            vars.insert(k.to_owned(), value);
+        }
+    }
+}
+
+/// `text` with each `$NAME` or `${NAME}` that `vars` holds replaced by its value. Other
+/// references, and every other `${...}` form, are left as they are.
+fn expand_known_vars(text: &str, vars: &HashMap<String, String>) -> String {
+    if !text.contains('$') {
+        return text.to_owned();
+    }
+    let mut out = String::with_capacity(text.len());
+    let bytes = text.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] != b'$' {
+            let ch = text[i..].chars().next().unwrap_or_default();
+            out.push(ch);
+            i += ch.len_utf8().max(1);
+            continue;
+        }
+        let braced = bytes.get(i + 1) == Some(&b'{');
+        let start = if braced { i + 2 } else { i + 1 };
+        let mut end = start;
+        while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+            end += 1;
+        }
+        let name = &text[start..end];
+        let closes = !braced || bytes.get(end) == Some(&b'}');
+        match vars.get(name) {
+            Some(value) if !name.is_empty() && closes => {
+                out.push_str(value);
+                i = if braced { end + 1 } else { end };
+            }
+            _ => {
+                out.push('$');
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
+/// The command `cmd` with every heredoc body taken out, and each body beside the line that
+/// opened it. A body runs from the line after `<<WORD` (or `<<-WORD`, `<<'WORD'`, `<<"WORD"`) to
+/// the line that is exactly `WORD` (after leading tabs, for `<<-`). A `<<` inside quotes, and a
+/// here-string `<<<`, open nothing. An unterminated heredoc keeps its body in the command, as
+/// before.
+fn split_heredocs(cmd: &str) -> (String, Vec<(String, String)>) {
+    let lines: Vec<&str> = cmd.split('\n').collect();
+    let mut kept: Vec<&str> = Vec::with_capacity(lines.len());
+    let mut bodies = Vec::new();
+    let mut i = 0usize;
+    while i < lines.len() {
+        let line = lines[i];
+        kept.push(line);
+        i += 1;
+        for (delim, strip_tabs) in heredoc_openers(line) {
+            let mut body = Vec::new();
+            let mut closed = false;
+            while i < lines.len() {
+                let candidate = if strip_tabs {
+                    lines[i].trim_start_matches('\t')
+                } else {
+                    lines[i]
+                };
+                i += 1;
+                if candidate == delim {
+                    closed = true;
+                    break;
+                }
+                body.push(lines[i - 1]);
+            }
+            if closed {
+                bodies.push((line.to_owned(), body.join("\n")));
+            } else {
+                // Unterminated: leave the text in the command, to be checked as commands.
+                kept.extend(body);
+            }
+        }
+    }
+    (kept.join("\n"), bodies)
+}
+
+/// The heredoc delimiters `line` opens, in order, outside quotes: `(word, strips_tabs)`.
+fn heredoc_openers(line: &str) -> Vec<(String, bool)> {
+    let chars: Vec<char> = line.chars().collect();
+    let mut out = Vec::new();
+    let (mut single, mut double) = (false, false);
+    let mut i = 0usize;
+    while i < chars.len() {
+        let c = chars[i];
+        match c {
+            '\\' if !single => {
+                i += 2;
+                continue;
+            }
+            '\'' if !double => single = !single,
+            '"' if !single => double = !double,
+            '<' if !single && !double && chars.get(i + 1) == Some(&'<') => {
+                if chars.get(i + 2) == Some(&'<') {
+                    i += 3;
+                    continue;
+                }
+                let mut j = i + 2;
+                let strip_tabs = chars.get(j) == Some(&'-');
+                if strip_tabs {
+                    j += 1;
+                }
+                while chars.get(j).is_some_and(|c| *c == ' ' || *c == '\t') {
+                    j += 1;
+                }
+                let mut word = String::new();
+                match chars.get(j) {
+                    Some(&q) if q == '\'' || q == '"' => {
+                        j += 1;
+                        while let Some(&d) = chars.get(j) {
+                            j += 1;
+                            if d == q {
+                                break;
+                            }
+                            word.push(d);
+                        }
+                    }
+                    _ => {
+                        while let Some(&d) = chars.get(j) {
+                            if d.is_whitespace() || ";&|<>()".contains(d) {
+                                break;
+                            }
+                            if d != '\\' {
+                                word.push(d);
+                            }
+                            j += 1;
+                        }
+                    }
+                }
+                if !word.is_empty() {
+                    out.push((word, strip_tabs));
+                }
+                i = j;
+                continue;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    out
+}
+
+/// Whether the line that opened a heredoc feeds its body to a shell, so the body runs as
+/// commands: a shell or `eval`/`source` among the line's words.
+fn feeds_a_shell(line: &str) -> bool {
+    line.split(|c: char| c.is_whitespace() || ";&|()".contains(c))
+        .map(|w| w.rsplit('/').next().unwrap_or(w))
+        .any(|w| {
+            matches!(
+                w,
+                "bash" | "sh" | "zsh" | "dash" | "ksh" | "fish" | "eval" | "source" | "."
+            )
+        })
 }
 
 /// Check a single tokenized command segment after unwrapping assignments and command wrappers.
@@ -2760,13 +2956,22 @@ fn check_repo_rel_write(
         ));
     }
 
-    // 2. Owner-only paths (`docs/harness/owner-paths.json`).
+    // 2. Owner-only paths (`docs/harness/owner-paths.json`). The lab's main session may write
+    //    one when its active ORDER's `## Owner approval` names it, the record `loop pr-check`
+    //    already requires; the list itself never opens this way, and a subagent never does.
     let owner_globs = load_owner_globs(&roots.worktree_root)?;
     for g in &owner_globs {
         if crate::loopprcheck::glob_match(g, rel) {
-            return Err(format!(
-                "{rel} is an owner-only path ({g} in docs/harness/owner-paths.json)"
-            ));
+            let approved = rel != "docs/harness/owner-paths.json"
+                && matches!(subagent, SubagentContext::TopLevel)
+                && find_active_order(roots, lab).is_some_and(|(_, _, order_text)| {
+                    crate::loopprcheck::owner_approval_missing(&order_text, &[rel]).is_empty()
+                });
+            if !approved {
+                return Err(format!(
+                    "{rel} is an owner-only path ({g} in docs/harness/owner-paths.json); an ORDER whose `## Owner approval` names it, with the owner's words, opens it"
+                ));
+            }
         }
     }
 
