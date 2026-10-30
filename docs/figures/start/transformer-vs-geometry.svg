@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 716" width="960" role="img" aria-labelledby="t d">
 <title id="t">Transformer parts and their geometric replacements</title>
-<desc id="d">Two aligned columns. The left column lists fourteen parts of a transformer from input to output: tokenizer, embedding, position, attention (what to read), attention (mixing), copy heads, context memory (KV cache), feed-forward, gates and activations, normalization, output head (softmax), loss (cross-entropy), optimizer (backprop) and runtime. An arrow from each part points to the UOR-R4 mechanisms meant to replace it, drawn as chips whose outline and label give the status: solid green ACTIVE, dotted purple PARKED. Position and normalization are drawn as green ACTIVE chips: filled on the FBS trunk by the SpiralCore transport spin and by an RMS norm with integer square root. The discrete M1 composition separately includes a discrete quaternion recurrence and Hamilton gate, so the older claim that the discrete path has no position or feed-forward mechanism is not current. Hamilton gate and SpiralCore/FBS are ACTIVE on the board (29 October 2026).</desc>
+<desc id="d">Two aligned columns. The left column lists fourteen parts of a transformer from input to output: tokenizer, embedding, position, attention (what to read), attention (mixing), copy heads, context memory (KV cache), feed-forward, gates and activations, normalization, output head (softmax), loss (cross-entropy), optimizer (backprop) and runtime. An arrow from each part points to the UOR-R4 mechanisms meant to replace it, drawn as chips whose outline and label give the status: solid green ACTIVE, dotted purple PARKED. Position and normalization are drawn as green ACTIVE chips: filled on the FBS trunk by the SpiralCore transport spin and by an RMS norm with integer square root. The discrete M1 composition separately includes a discrete quaternion recurrence and Hamilton gate, so the older claim that the discrete path has no position or feed-forward mechanism is not current. Hamilton gate and SpiralCore/FBS are ACTIVE on the board (30 October 2026).</desc>
 <style>
 svg { --bg:#ffffff; --ink:#1f2328; --body:#2b3138; --muted:#57606a; --rule:#d0d7de; --panel:#f6f8fa;
       --blue:#0072b2; --sky:#56b4e9; --green:#007a5e; --orange:#e69f00; --verm:#d55e00; --purple:#7a4fa3; --pink:#cc79a7;
@@ -122,9 +122,12 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <rect class="part" x="24" y="436" width="270" height="29" rx="6"/>
 <text class="lbl" x="38" y="455">Gates and activations</text>
 <line class="flow" x1="300" y1="450" x2="334" y2="450" marker-end="url(#arr)"/>
-<rect class="chip-active" x="344" y="436" width="286" height="29" rx="6"/>
-<text class="lbl" x="354" y="455">Hamilton gate · recurrence gates</text>
-<text class="st st-active" x="620" y="454" text-anchor="end">ACTIVE</text>
+<rect class="chip-active" x="344" y="436" width="140" height="29" rx="6"/>
+<text class="lbl" x="354" y="455">Hamilton gate</text>
+<text class="st st-active" x="474" y="454" text-anchor="end">ACTIVE</text>
+<rect class="chip-ready" x="492" y="436" width="170" height="29" rx="6"/>
+<text class="lbl" x="502" y="455">recurrence gates</text>
+<text class="st st-ready" x="652" y="454" text-anchor="end">READY</text>
 <rect class="part" x="24" y="473" width="270" height="29" rx="6"/>
 <text class="lbl strong" x="38" y="492">Normalization</text>
 <line class="flow" x1="300" y1="487" x2="334" y2="487" marker-end="url(#arr)"/>

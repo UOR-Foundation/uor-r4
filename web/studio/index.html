@@ -5568,8 +5568,8 @@
         let modelWorker = null;
 
         // =====================================================================
-        // DIRECT HIGH-PERFORMANCE WEBGPU APPLE SILICON PIPELINE
-        // Provides direct Metal acceleration when running in WKWebView/Browser
+        // LEGACY GRAPHICS ADAPTER PROBE, not the integer model runtime.
+        // The integer model path uses WebAssembly in a Web Worker.
         // =====================================================================
         let directWebGPUPipeline = null;
         let directWebGPUModelId = null;
@@ -5581,7 +5581,7 @@
                     const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
                     if (adapter) {
                         isDirectWebGPUAvailable = true;
-                        console.log("⚡ Direct Apple Silicon Metal WebGPU Adapter Acquired:", adapter);
+                        console.log("Legacy graphics adapter (not the integer model runtime): Metal/WebGPU adapter acquired.", adapter);
                     }
                 } catch(e) {
                     console.warn("Direct WebGPU adapter probe:", e);

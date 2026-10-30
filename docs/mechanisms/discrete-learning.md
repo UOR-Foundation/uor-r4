@@ -36,7 +36,7 @@ The 15 non-identity moves are bivector rotations. The step picks $m^*=\arg\min_m
 
 **Speed-ups.** The row-parallel kernel (`rows_v1`) computes the baseline once per row and each candidate once per row and lane, instead of replaying every row serially per candidate. It reproduces the serial losses on every checked case (**measurement**: Route read 3.843 s to 0.0691 s per proposal, 55.6 times faster, 64 rows; Route-mode index coverage was widened after review). BVG-K (batched verified coordinates) scores up to 64 coordinates per launch and commits a block only if its joint loss beats the best single move.
 
-**Rule check.** No softmax, exp, softplus, sigmoid or tanh (D23), and no matrix multiplication (D30): the choice is an integer minimum, distances are integer L1 and Hamming, and moves are table lookups. The snapshot is integer, but it has not been exported or audited against the D11 serving form, no serving engine for it exists and no export gap or tokens per second has been measured. D37 allows offline float training; that would need a separate scanned module and a reported export gap.
+**Rule check.** No softmax, exp, softplus, sigmoid or tanh (D23), and no matrix multiplication (D30): the choice is an integer minimum, distances are integer L1 and Hamming, and moves are table lookups. The saved 19-table discrete model exports through `uor-r4.lut-discrete-trunk/1` with exact 14,287-row agreement and B4 pass, and serves at 10,876 / 10,566 native decode tok/s on Apple M1. D37 allows offline float training; that needs a separate scanned module and a reported export gap.
 
 ## What has been tried
 
@@ -67,10 +67,10 @@ $P_{succ}$ is the 3,847-row copy-successor sub-panel (see [relation-read](./rela
 - A collision-free start together with a wide enough shortlist ($K$ of about 34 or more, or cells placed by address structure).
 - The admission-preserving rule actually running on a GPU.
 - Frequent-token revisits and a full corpus pass (one 16,404-coordinate pass uses 1,049,856 of 2,425,925 training targets).
-- The BVG-K learning law as a training run, and Flock reads trained in at dose.
+- The independent effects of BVG-K and Flock reads at dose; both were used in the M1 composition without isolated attribution.
 - All 240 E8 roots, the icosian and quaternion adapters, and $\mathbb{Z}[\varphi]$ pairs.
-- Any generated text, reply grade, bits per byte or tokens per second from a trained discrete model.
-- An integer serving engine for the snapshot, and fresh-slice transfer for any run (the fresh slice is sealed and unopened).
+- Useful generated conversation, complete correct replies and M2 acceptance. M1 has exact export agreement and Apple M1 decode measured, but that is not useful chat.
+- Fresh-slice transfer for the older runs; M1's Fresh V2 and p-f transfer have now been measured.
 - A float credit sheet on the same geometry (D37 allows it; none is registered).
 
 ## Also known as
@@ -80,7 +80,7 @@ SpiralCore/FBS discrete learning; counterfactual-choose-apply-validate training;
 ## Code
 
 - [`discrete.cu`](../../crates/uor-r4-discrete/src/discrete.cu): forward pass, 16-lane counterfactual, choose, apply, validate, shared writer.
-- [`device.rs`](../../crates/uor-r4-discrete/src/device.rs) and [`training.rs`](../../crates/uor-r4-discrete/src/training.rs): `propose`, `apply`, the corpus driver and the training hold.
+- [`device.rs`](../../crates/uor-r4-discrete/src/device.rs) and [`training.rs`](../../crates/uor-r4-discrete/src/training.rs): `propose`, `apply`, the corpus driver and the D67 pre-run review.
 - [`rows_source.rs`](../../crates/uor-r4-discrete/src/rows_source.rs) and [`bvgk_source.rs`](../../crates/uor-r4-discrete/src/bvgk_source.rs): row-parallel counterfactual and BVG-K.
 - [`attention_audited.rs`](../../crates/uor-r4-discrete/src/attention_audited.rs): the admission-preserving controller. [`spiralcore_operator.rs`](../../crates/uor-r4-core/src/spiralcore_operator.rs): the 64-element group.
 - [`wider_carrier_source.rs`](../../crates/uor-r4-discrete/src/wider_carrier_source.rs) and [`wider_carrier.rs`](../../crates/uor-r4-discrete/src/wider_carrier.rs): wider code carrier ($B = 6, 8$ blocks) CUDA qualification kernels and zero-training capacity grader.

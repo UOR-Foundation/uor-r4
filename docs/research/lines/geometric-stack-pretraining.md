@@ -1,6 +1,6 @@
 # Research line: the geometric stack
 
-The "geometric stack" was a layered float model whose layers carried state with quaternion rotations. It was trained offline and then converted to 4-bit integers for serving. It matched an ordinary transformer on loss, served bit-exactly, and still wrote useless prose. It also used softmax, SiLU and matrix multiplication in training, so the owner's later bans made it a historical form. Some of its pieces live on as READY mechanisms that have never been trained.
+The "geometric stack" was a layered float model whose layers carried state with quaternion rotations. It was trained offline and then converted to 4-bit integers for serving. It matched an ordinary transformer on loss, served bit-exactly, and still wrote useless prose. It also used softmax, SiLU and matrix multiplication in training, so the owner's later bans made it a historical form. Some of its pieces now have trained descendants on the discrete M1 and FBS paths.
 
 | | |
 |---|---|
@@ -51,6 +51,6 @@ Loss and prose are different things: a good number coexisted with 0 of 5 stories
 
 ## Current state
 
-PARKED as a whole model. Its lawful pieces are tracked separately: the [Hamilton gate](../../mechanisms/hamilton-gate.md) and [recurrence gates](../../mechanisms/recurrence-gates.md) are READY but never trained. The next step in the dossier is a rebuild from lawful parts under D37 (offline float training, no matmul or softmax) with an exporter, which does not yet exist.
+PARKED as a whole model. Its lawful pieces are tracked separately: [Hamilton gate](../../mechanisms/hamilton-gate.md) and [SpiralCore/FBS](../../mechanisms/spiralcore-fbs.md) are ACTIVE and trained on the discrete M1 and/or FBS paths; [recurrence gates](../../mechanisms/recurrence-gates.md) is READY with its fit/export measured. The M1 table-native and FBS `lut-stack/5` exporters exist at their declared scopes. A rebuild remains a separate research question, not a missing exporter.
 
 **Go deeper:** the [generated catalog page](../../../archive/catalog/geometric-stack-pretraining.md) lists all 84 records.

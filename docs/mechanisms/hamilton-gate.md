@@ -59,13 +59,13 @@ with $d$ the incoming adjoint and $\bar q$ the quaternion conjugate. No `exp`, s
 - **A matched comparison against the frozen pre-ban artifact's stored outputs** at full rung scale.
 - **Cross-block mixing downstream of `Gate::Hamilton`** (where relative quaternion phases between distinct 4-blocks can cancel in sum, unlike single-atom `SpiralcoreFbs` routing).
 
-## What would reopen it
+## What comes next
 
-The gate is READY, so these are the steps to make it ACTIVE.
+The gate is ACTIVE: the discrete M1 composition includes a discrete Hamilton gate, and the FBS trunk serves its icosian-snapped form exactly under `lut-stack/5` at DEV scope.
 
 1. A new D37 offline-float sheet in a separately scanned module, with a fresh test-fitness review and the lab's pre-run review (D67). D41's donor pass is the named owner-at-dispatch exception.
 2. A matched comparison of `gate=hamilton` against the SwiGLU gate and the frozen pre-ban artifact, at equal width, steps and data, with at least 2 seeds or 200 fresh rows and fresh transfer for any KEEP. The sigmoid arm is banned for new runs, so the comparison must use the stored outputs of the frozen artifact, not a fresh SwiGLU run.
-3. The three open items from the owner's card: the icosian snap, the hard-forward geometry with its gradient bridge, and a table-served form, with the export gap measured on the same evaluator.
+3. Fresh transfer and the joined served session, with the export gap measured on the same evaluator. The icosian snap and table-served form already exist at their declared scopes.
 4. A real-run check of the near-zero gate hazard.
 5. A named, device-qualified parity receipt for the gate tests.
 

@@ -500,6 +500,7 @@ assert(indexHtml.includes('1/8') && indexHtml.includes('10,876') && indexHtml.in
 assert(!indexHtml.includes('0/8') && !indexHtml.includes('D11 decode <code>tok/s</code> on a qualified model is unmeasured'), 'stale 0/8 or unmeasured-decode status must not appear in index.html');
 assert(indexHtml.includes('self-hosted assets') && !indexHtml.includes('UI assets load from CDNs') && !indexHtml.includes('UTF-8 byte-mod stand-in prompt tokenizer'), 'Studio status must describe self-hosted assets and the stack-bound tokenizer without stale tier text');
 assert(!indexHtml.includes('All neural models run 100% in-browser on WebGPU') && !indexHtml.includes('Sovereign CI Model Packaging & CDN Streaming') && !indexHtml.includes('Autonomous GitHub Actions workers package and stage quantized model crates directly on our sovereign CDN'), 'stale WebGPU/CDN model-manager copy must not appear in index.html');
+assert(indexHtml.includes('not the integer model runtime'), 'legacy graphics adapter probe must be labelled as unrelated to the integer model runtime');
 assert(!indexHtml.includes('35.1%</code> tok/s') && !indexHtml.includes('35.1% tok/s'), 'unsourced "35.1% tok/s" must not appear in index.html');
 assert(!indexHtml.includes('en.wikipedia.org/w/api.php'), 'live Wikipedia search fetch must be removed from index.html');
 assert(!indexHtml.includes('api.duckduckgo.com'), 'live DuckDuckGo search fetch must be removed from index.html');

@@ -29,11 +29,11 @@ The rates are exact powers of two, from $1/2$ down to $2^{-16}$, and $\kappa$ is
 3. **Carry (unchanged).** The quaternion scan above.
 4. **Output gate (Definition).** The [Hamilton rotation gate](./hamilton-gate.md) on the recurrence output, replacing a tanh-shaped gate.
 
-**Credit through a hard choice (Definition).** Picking a table entry has zero derivative almost everywhere, so nothing would train without a bridge. The backward pass uses a declared **secant surrogate**: it pairs the incoming adjoints for $(\lambda,\kappa)$ with the full counterfactual change in the table between the selected entry and each neighbour, and resolves the contrast along the fixed edge of length $1/16$, half to each side and the whole weight to the single neighbour at either end. No probability or exponential is involved. It is a rule, not the derivative of hard selection. The 256-step descent check passed at its scope; full-rung fit and export remain separate questions.
+**Credit through a hard choice (Definition).** Picking a table entry has zero derivative almost everywhere, so nothing would train without a bridge. The backward pass uses a declared **secant surrogate**: it pairs the incoming adjoints for $(\lambda,\kappa)$ with the full counterfactual change in the table between the selected entry and each neighbour, and resolves the contrast along the fixed edge of length $1/16$, half to each side and the whole weight to the single neighbour at either end. No probability or exponential is involved. It is a rule, not the derivative of hard selection. The 256-step descent check passed, and the later 1,024-step six-recurrence fit and D11 export ran with mixed transport/export-gap outcomes.
 
 **A reading of the source (proof from the table, not a recorded finding).** Every table entry satisfies $\lambda\le\tfrac12$, so a step keeps at most half of the old state times a rotation. The historical rate $\lambda=\exp(8\,\sigma(g)\log\sigma(d))$ can approach 1 as the opening goes to 0. Whether a table capped at one half per step keeps enough long memory is untested.
 
-The mode refuses non-GPU devices, export and quantisation-aware training. The historical mode stays the default so old artifacts reproduce.
+The historical mode refused non-GPU devices, export and quantisation-aware training. The pre-registered fit and D11 export have now run; `lut-stack/5` carries the FBS recurrence exactly at DEV scope. The historical mode stays the default so old artifacts reproduce.
 
 **Rule check.**
 - *D11 (integer serving):* designed for it, since the rates are table reads, the opening is a clamp and the scan is rotations. The FBS `lut-stack/5` export now carries this geometric recurrence exactly at DEV scope; the older blocked-export note is historical.

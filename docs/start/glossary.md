@@ -55,7 +55,7 @@ flowchart LR
 
 **BPE (byte-pair encoding).** The way the tokenizer builds its pieces. It starts from the 256 single bytes and repeatedly glues the most common neighbouring pair into a new piece. The pinned tokenizer has 4,096 pieces: 3 special ones, 256 bytes and 3,837 merges. See [tokenizer](../mechanisms/tokenizer.md) and [data and tokenizer](../model/data-and-tokenizer.md).
 
-**BVG-K (batched verified coordinates).** A faster version of the learning step. It scores K table entries in one GPU launch and commits them together only if their joint loss beats the best single move. Scoring was about 16 times faster at K=16 (**measurement**), but it has never run as a learning law. See [training](../model/training.md).
+**BVG-K (batched verified coordinates).** A faster version of the learning step. It scores K table entries in one GPU launch and commits them together only if their joint loss beats the best single move. Scoring was about 16 times faster at K=16 (**measurement**), and BVG-K was used in Stage T and the saved M1 model; its independent effect is not isolated. See [training](../model/training.md).
 
 ## C
 
@@ -75,9 +75,9 @@ flowchart LR
 
 **D-entries (D11, D22, D37 and the rest).** Numbered owner decisions, from D0 to D41, that used to be the project's rulebook. The charter now holds the rules that still bind, and the [decision map](../rules/decision-map.md) says what became of each decision. The ones you will meet most are [D11](#d11), [D22](#d22) and [D37](#d37).
 
-<a id="d11"></a>**D11.** The serving contract: the finished model runs with whole numbers only. It has five rules. Two of them are that the served program uses no floating point and no multiply or divide instruction. Since D80 and D81 (28 Oct 2026) the hardware integer multiply and divide are allowed; floating point is still banned. See [serving and export](../model/serving-and-export.md).
+<a id="d11"></a>**D11.** The serving contract: the finished model runs with whole numbers only. It has five rules covering arithmetic, access, architecture and evidence. No floating point, transcendental arithmetic, dense matrix multiplication or transformer backbone is allowed; D80 and D81 (28 Oct 2026) permit the hardware integer multiply and divide. See [serving and export](../model/serving-and-export.md).
 
-**D19 object store.** A store that keeps bytes exactly, in a tree of fingerprinted pieces, so repeats are stored once and any range can be checked. It is built and tested (20 integration tests pass in the delivery record, 60 after later work), but no model uses it yet. See [object store](../mechanisms/object-store.md).
+**D19 object store.** A store that keeps bytes exactly, in a tree of fingerprinted pieces, so repeats are stored once and any range can be checked. It is built and tested (20 integration tests pass in the delivery record, 60 after later work). Joining it to the selected model is in progress; M3 is not qualified. See [object store](../mechanisms/object-store.md).
 
 <a id="d22"></a>**D22.** The owner's rule that a negative result closes one tested configuration, never a mechanism. Stopping a mechanism needs the owner. This is why no mechanism has a "retired" status. See [the rules](../rules/README.md) and [decision map](../rules/decision-map.md).
 
@@ -107,7 +107,7 @@ flowchart LR
 
 **FBS.** The project's name for the three-branch tree that holds earlier words in order. The tree is built by [SpiralCore](#spiralcore) and gives the context at most 243 positions ($3^5$). See [SpiralCore](../geometry/spiralcore.md) and [SpiralCore/FBS projection](../mechanisms/spiralcore-fbs.md).
 
-**FIT (TEST FITNESS: FIT).** The verdict of a review, by someone other than the author, that a pre-registered test is fit to answer its question. A fresh-context subagent counts as a non-author. A FIT releases nothing by itself: the owner still has to release the run. See [the rules](../rules/README.md) and [training](../model/training.md).
+**FIT (TEST FITNESS: FIT).** The verdict of a review, by someone other than the author, that a pre-registered test is fit to answer its question. A fresh-context subagent counts as a non-author. A FIT releases nothing by itself: the lab's D67 pre-run review is also required, and D41's donor pass still needs the owner at dispatch. See [the rules](../rules/README.md) and [training](../model/training.md).
 
 **Fixed-order backward.** The training backward pass sums in a fixed order, so two training runs give the same model byte for byte (claude-179). See [training](../model/training.md).
 
@@ -121,7 +121,7 @@ flowchart LR
 
 **H4.** The symmetry group of the 600-cell, a regular solid in four dimensions. Its 120 roots are the [icosians](#icosian). See [E8, H4 and the 600-cell](../geometry/e8-h4-and-the-600-cell.md).
 
-<a id="hamilton-gate"></a>**Hamilton gate.** A gate for a feed-forward layer that turns the gate signal into a rotation in four dimensions and rotates the value by it, so no sigmoid is needed. A rotation keeps a vector's length, so the gate steers a signal rather than switching it off. It is built and tested (READY), and has never been trained. See [Hamilton gate](../mechanisms/hamilton-gate.md).
+<a id="hamilton-gate"></a>**Hamilton gate.** A gate for a feed-forward layer that turns the gate signal into a rotation in four dimensions and rotates the value by it, so no sigmoid is needed. A rotation keeps a vector's length, so the gate steers a signal rather than switching it off. It is ACTIVE and trained in the discrete M1 composition and on the FBS trunk. See [Hamilton gate](../mechanisms/hamilton-gate.md).
 
 **Hamming distance.** The number of positions at which two bit strings differ. It costs one XOR and one bit count. The model uses it as a tie-break inside its reads. See [VSA and Hamming distance](../geometry/vsa-and-hamming.md).
 
@@ -155,7 +155,7 @@ flowchart LR
 
 ## M
 
-**M1 to M8 (milestones).** The eight GitHub milestones that define the road to an alpha release. None is complete. In plain words:
+**M1 to M8 (milestones).** The eight GitHub milestones that define the road to an alpha release. **M1 is complete; M2 and M3 are in progress; M4–M8 are not complete.** In plain words:
 
 | # | Meaning |
 |---|---|
@@ -172,16 +172,16 @@ Source: [language model](../products/language-model.md) and [where we're going](
 
 **Matmul (matrix multiplication, GEMM).** Multiplying a long list of numbers by a large grid of learned numbers. It is nearly all the arithmetic of a transformer, and the project bans it everywhere: training, tests, tools and serving. A geometric feed-forward block is allowed. A dense one is not. See [charter](../../CHARTER.md), section 3.3.
 
-**Mechanism.** One geometric replacement for one part of a transformer, such as the read, the loss or the optimiser. The project tracks 27, each with its own page. See the [mechanism board](../mechanisms/README.md).
+**Mechanism.** One geometric replacement for one part of a transformer, such as the read, the loss or the optimiser. The project tracks 28, each with its own page. See the [mechanism board](../mechanisms/README.md).
 
 <a id="mechanism-status"></a>**Mechanism status (ACTIVE, READY, PARKED).** The only three statuses a mechanism can have:
-- **ACTIVE**: on the current model path (10 mechanisms).
-- **READY**: built and tested but not yet trained into a model (4).
-- **PARKED**: the tested forms failed or broke a rule, and the page lists what would reopen it (13).
+- **ACTIVE**: on the current model path (12 mechanisms).
+- **READY**: built and tested but not yet trained into a model (5).
+- **PARKED**: the tested forms failed or broke a rule, and the page lists what would reopen it (11).
 
 There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mechanisms/README.md).
 
-**MLP (feed-forward layer).** The block in a transformer that processes each token after attention, usually with big grids of multiplications and a gate. UOR-R4's candidates are the [Hamilton gate](#hamilton-gate) and the [SpiralCore/FBS projection](../mechanisms/spiralcore-fbs.md); neither has been trained.
+**MLP (feed-forward layer).** The block in a transformer that processes each token after attention, usually with big grids of multiplications and a gate. UOR-R4's candidates include the [Hamilton gate](#hamilton-gate) and [SpiralCore/FBS projection](../mechanisms/spiralcore-fbs.md), trained on the discrete M1 and FBS paths.
 
 ## N
 
@@ -195,7 +195,7 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 <a id="orbit"></a>**Orbit.** A set of points that one group of moves carries into one another. The model uses a single orbit of 16 E8 roots, each a signed rearrangement of (2, 2, 0, 0, 0, 0, 0, 0). See [E8, H4 and the 600-cell](../geometry/e8-h4-and-the-600-cell.md).
 
-**Owner.** Casey Allard, the project lead. He sets the charter, the holds, the spending and the milestone bars, and personally types each run release.
+**Owner.** Casey Allard, the project lead. He sets the charter, technical constraints and GPU caps. Runs go through the lab's own D67 pre-run review; D41's donor pass is the named owner-at-dispatch exception.
 
 **Owner release.** An owner approval in the lab's own chat, recorded verbatim with its time. Since D67, GPU/training runs go through the lab's own pre-run review rather than a blanket owner release; D41's donor pass is the named owner-at-dispatch exception. See [charter](../../CHARTER.md), section 5.1.
 

@@ -4,8 +4,11 @@
 long-form record of the milestone definitions and current state behind it. Where they disagree,
 `PLAN.md` and the live milestone issues are right, and this page is the thing to fix.
 
-Older K16/A8 routes and the pre-charter implementation sequence are preserved in the archive, not
-presented as the active plan.
+Older K16/A8 routes and the pre-charter implementation sequence are historical, not the active plan.
+Their 18–19 October plan and negative evidence remains in [`current-state.md`](current-state.md)
+and dated lab records, especially [K16's outcome](../labs/k16-outcome-call-2026-10-19/README.md)
+and the [A8 dose](../labs/a8-dose-2026-10-19/README.md). The 18 October archive snapshot alone is
+not presented as containing those later paragraphs.
 
 ## Objective
 

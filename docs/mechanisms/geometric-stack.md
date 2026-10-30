@@ -89,7 +89,7 @@ where $\otimes$ is the Hamilton product, $u_t$ is a unit quaternion computed fro
 
 ## What would reopen it
 
-1. **A new pre-registered sheet that rebuilds the stack from allowed parts only**, in its own scanned module, with the owner's release (D37). It needs a `TEST FITNESS: FIT` review first.
+1. **A new pre-registered sheet that rebuilds the stack from allowed parts only**, in its own scanned module, with a `TEST FITNESS: FIT` review and the lab's D67 pre-run review. D41's donor pass is the only owner-at-dispatch exception.
 2. **Report the export gap** on the same evaluator as the float score, and aim at the served bar (at most 0.90 bits per byte on the chat held-out stream).
 3. **At least 2 seeds or 200 fresh rows** (D22), compared only with earlier native rungs and count-table references (D28).
 4. **Replace the dense hotspots** (feed-forward 39.6%, recurrence projections 31.0%) with addressed or exact-geometry reads, and show that tokens per second move on the product path.

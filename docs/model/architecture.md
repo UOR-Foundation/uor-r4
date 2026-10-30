@@ -71,7 +71,7 @@ but content is underpowered and greedy remains the decode. On p-s, reply opening
 and 18.6% at three seeds, against 80.8%, 80.2% and 79.9% on later tokens. Exact-reference replies
 are only 3, 1 and 4 of 256, and exact-key memory finds little on new phrasing
 ([claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)). Claude-218's offline
-sign-key probe then gained +46/+37/+33 on p-u's 1,218 missed rows at three seeds. The next unit
+teacher-forced sign-key probe then gained +46/+37/+33 on p-u's 1,218 missed rows at three seeds. The next unit
 trains and serves that key and tests free generation on another fresh panel; no served-key result
 is established ([claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md)).
 

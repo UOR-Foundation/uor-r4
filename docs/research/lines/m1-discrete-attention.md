@@ -55,8 +55,9 @@ transfer, and held-out-phrasing transfer ([CHARTER §4.8](../../../CHARTER.md#4-
    two seeded `UORLUT01` artifacts with exact export agreement. DEV scored 7,002 and 7,001; Fresh V2
    scored 7,215 and 7,228, at both seeds above both controls.
 8. **Held-out phrasing (30 Oct).** p-f has no prompt value-masked templates in TRAIN at K = 1,024.
-   The saved model scored 7,850 and 7,872 against T2's 7,375, beyond paired band 81, with exact
-   parity and Apple M1 decode at 10,876 and 10,566 tok/s. M1 closed at all six bars.
+   The saved model scored 7,850 and 7,872 of 15,953 against T2's 7,375, beyond paired band 81.
+   Its separate DEV export agreement was exact on 14,287 rows; Apple M1 decode is 10,876 and
+   10,566 tok/s. M1 closed at all six bars.
 9. **The next failure (30 Oct).** On the separate FBS generation path, claude-217's cycle step ends
    every registered loop but content is underpowered. On p-s, reply openings are 17.4%, 13.7% and
    18.6% at three seeds, against about 80% on later tokens. Exact-key memory misses reworded prompts.

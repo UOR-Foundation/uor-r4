@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 548" width="960" role="img" aria-labelledby="t d">
 <title id="t">Web client architecture</title>
-<desc id="d">A browser window with three stacked layers. Top: the Studio page (index.html) with three panes, editor, chat and model manager, connected to the integer worker and verified on a synthetic stand-in. Middle: a Web Worker holding the WebAssembly engine (uor-r4-integer, serving-wasm feature) with its calls init, loadStack, step, saveSession and restoreSession, tested on a synthetic model. Bottom: browser storage holding the model file (model.uorlut01) and session snapshots (UR4SESS1), also verified on the synthetic stand-in. Solid wiring means verified on that stand-in; accepted-model parity remains open. Outside the window on the left, a static file host sends one dashed arrow in, labelled first visit only: page and model file, check SHA-256. On the right, an arrow to a model server is crossed out: no prompts leave the device.</desc>
+<desc id="d">A browser window with three stacked layers. Top: the Studio page (index.html) with three panes, editor, chat and model manager, connected to the integer worker and verified on a synthetic stand-in. Middle: a Web Worker holding the WebAssembly engine (uor-r4-integer, serving-wasm feature) with its calls init, loadStack, step, saveSession and restoreSession, tested on a synthetic model. Bottom: browser storage holding the model file (model.uorlut01) and session snapshots (UR4SESS1), also verified on the synthetic stand-in. Solid wiring means verified on that stand-in; accepted-model parity remains open. Integer adds, shifts and table look-ups are used, with hardware integer multiply and divide allowed by D80 and D81. Outside the window on the left, a static file host sends one dashed arrow in, labelled first visit only: page and model file, check SHA-256. On the right, an arrow to a model server is crossed out: no prompts leave the device.</desc>
 <style>
 svg { --bg:#ffffff; --ink:#1f2328; --body:#2b3138; --muted:#57606a; --rule:#d0d7de; --panel:#f6f8fa;
       --blue:#0072b2; --sky:#56b4e9; --green:#007a5e; --orange:#e69f00; --verm:#d55e00; --purple:#7a4fa3; --pink:#cc79a7;
@@ -67,8 +67,8 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <text class="pane-text" x="656" y="186" text-anchor="middle">model manager</text>
 
 <!-- Wiring Studio <-> worker (verified on the stand-in) -->
-<line class="flow-plan" x1="440" y1="222" x2="440" y2="256" marker-end="url(#arr)"/>
-<line class="flow-plan" x1="470" y1="256" x2="470" y2="222" marker-end="url(#arr)"/>
+<line class="flow" x1="440" y1="222" x2="440" y2="256" marker-end="url(#arr)"/>
+<line class="flow" x1="470" y1="256" x2="470" y2="222" marker-end="url(#arr)"/>
 <text class="note-plan" x="486" y="244">wiring: synthetic verified</text>
 
 <!-- Layer 2: Web Worker + engine (built) -->
@@ -83,12 +83,12 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <rect class="call" x="412" y="334" width="48" height="24" rx="12"/><text class="mono" x="436" y="350" text-anchor="middle">step</text>
 <rect class="call" x="468" y="334" width="100" height="24" rx="12"/><text class="mono" x="518" y="350" text-anchor="middle">saveSession</text>
 <rect class="call" x="576" y="334" width="124" height="24" rx="12"/><text class="mono" x="638" y="350" text-anchor="middle">restoreSession</text>
-<text class="note" x="262" y="376">integer adds, shifts and table look-ups only</text>
+<text class="note" x="262" y="376">integer adds, shifts, table look-ups, and allowed integer multiply/divide (D80/D81)</text>
 
 <!-- Worker <-> storage (verified on the stand-in) -->
-<line class="flow-plan" x1="400" y1="434" x2="400" y2="400" marker-end="url(#arr)"/>
+<line class="flow" x1="400" y1="434" x2="400" y2="400" marker-end="url(#arr)"/>
 <text class="note" x="390" y="422" text-anchor="end">load model</text>
-<line class="flow-plan" x1="580" y1="400" x2="580" y2="434" marker-end="url(#arr)"/>
+<line class="flow" x1="580" y1="400" x2="580" y2="434" marker-end="url(#arr)"/>
 <text class="note" x="590" y="422">save session</text>
 
 <!-- Layer 3: browser storage (verified on the stand-in) -->
