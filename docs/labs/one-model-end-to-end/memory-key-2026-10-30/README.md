@@ -49,6 +49,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../roadmap/items/one-model-end-t
   - claude-211's 15 registered files reproduced byte for byte;
   - in the grade: the anchor check on every split, the panels' token and mask sha256s, the forced arm opening on its reference's token, and the memory moving no missed row.
 - **The levels**, chosen on p-s and committed before p-u was read ([grade-p-s-levels.json](grade-p-s-levels.json), at `dfa703c36`): sign at level 2, hsign at level 1, point at level 10 (always fires).
+  - hsign's net gain on p-s is tied at 105 across levels 1–4, so the registered tie rule (the lower level) chose level 1.
 - **The decision on p-u:** [grade-p-u.json](grade-p-u.json), by `--key-grade 1 … --key-levels sign=2,hsign=1,point=10`.
 
 ### Tokens per second
