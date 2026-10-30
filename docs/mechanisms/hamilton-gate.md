@@ -63,7 +63,7 @@ with $d$ the incoming adjoint and $\bar q$ the quaternion conjugate. No `exp`, s
 
 The gate is READY, so these are the steps to make it ACTIVE.
 
-1. A new D37 offline-float sheet in a separately scanned module, with a fresh test-fitness review and the owner release that applies. The training holds still apply.
+1. A new D37 offline-float sheet in a separately scanned module, with a fresh test-fitness review and the lab's pre-run review (D67). D41's donor pass is the named owner-at-dispatch exception.
 2. A matched comparison of `gate=hamilton` against the SwiGLU gate and the frozen pre-ban artifact, at equal width, steps and data, with at least 2 seeds or 200 fresh rows and fresh transfer for any KEEP. The sigmoid arm is banned for new runs, so the comparison must use the stored outputs of the frozen artifact, not a fresh SwiGLU run.
 3. The three open items from the owner's card: the icosian snap, the hard-forward geometry with its gradient bridge, and a table-served form, with the export gap measured on the same evaluator.
 4. A real-run check of the near-zero gate hazard.

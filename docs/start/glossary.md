@@ -1,6 +1,6 @@
 # Glossary
 
-**In one paragraph.** UOR-R4 uses a lot of words that come from three places: language models (token, softmax, BPB), geometry (quaternion, E8, icosian) and the project's own rulebook (FIT, KEEP, PARKED). This page defines each one in a sentence or two and links to the page that explains it properly. Words are in alphabetical order. If you meet a code name such as K16 or A8 in a record, look for it here too. The project is pre-alpha: 0 of its 8 milestones are complete and no model holds a useful conversation yet ([STATUS](../../STATUS.md)).
+**In one paragraph.** UOR-R4 uses a lot of words that come from three places: language models (token, softmax, BPB), geometry (quaternion, E8, icosian) and the project's own rulebook (FIT, KEEP, PARKED). This page defines each one in a sentence or two and links to the page that explains it properly. Words are in alphabetical order. If you meet a code name such as K16 or A8 in a record, look for it here too. The project is pre-alpha: 1 of its 8 milestones is complete and no model holds a useful conversation yet ([STATUS](../../STATUS.md)).
 
 ```mermaid
 flowchart LR
@@ -139,7 +139,7 @@ flowchart LR
 
 **Instrument.** A measuring tool, such as a test panel or a checker. If an instrument is faulty, that is a fix, not a negative result about the mechanism. See [what the project knows](../research/findings.md).
 
-**Integer serving.** Running the finished model with whole numbers only: adds, shifts, comparisons and table look-ups, and since D80 and D81 the integer multiply and divide. This is [D11](#d11). Serving audits are green on 44 native symbol ranges and 7 of 7 WebAssembly functions, with the allowed integer multiplies and divides counted since claude-175 and used since claude-177 (**measurement**), but no trained model has been served this way. See [serving and export](../model/serving-and-export.md).
+**Integer serving.** Running the finished model with whole numbers only: adds, shifts, comparisons and table look-ups, and since D80 and D81 the integer multiply and divide. This is [D11](#d11). Serving audits are green on 44 native symbol ranges and 7 of 7 WebAssembly functions, with the allowed integer multiplies and divides counted since claude-175 and used since claude-177 (**measurement**). The discrete M1 pair and the separate FBS trunk have been served this way. See [serving and export](../model/serving-and-export.md).
 
 ## K
 
@@ -149,7 +149,7 @@ flowchart LR
 
 ## L
 
-**Lab.** Any contributor, human or AI, working under the charter. The registry holds four labs: Claude, Antigravity, DeepSeek and Kimi (Codex has left it). Kimi sits in the project-manager seat. Labs choose work from [NOW.md](../integration/NOW.md) and may not type an owner release. See [the rules](../rules/README.md#what-labs-may-do-and-what-they-may-not).
+**Lab.** Any contributor, human or AI, working under the charter. The registry holds four labs: Claude, Antigravity, DeepSeek and Kimi (Codex has left it). Kimi sits in the project-manager seat. Labs choose work from [PLAN.md](../../PLAN.md). See [the rules](../rules/README.md#what-labs-may-do-and-what-they-may-not).
 
 **`lut-stack/5`, `lut-stack/6`.** Versions of the integer file format for the float-trained FBS trunk. `/5` keeps the rotations exact instead of snapping them to the 120 roots, which put the export gap inside its bar on both seeds and serves at 4,217 to 4,504 tok/s on the M1 laptop (claude-180 to 186). `/6` also carries the Hamming reads (claude-188); the session refuses `/6` until it serves them. See [serving and export](../model/serving-and-export.md).
 
@@ -197,15 +197,15 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 **Owner.** Casey Allard, the project lead. He sets the charter, the holds, the spending and the milestone bars, and personally types each run release.
 
-**Owner release.** The typed phrase by which the owner personally lets one pre-registered run start. One release covers all arms and seeds of one sheet. No lab types it. See [charter](../../CHARTER.md), section 5.1.
+**Owner release.** An owner approval in the lab's own chat, recorded verbatim with its time. Since D67, GPU/training runs go through the lab's own pre-run review rather than a blanket owner release; D41's donor pass is the named owner-at-dispatch exception. See [charter](../../CHARTER.md), section 5.1.
 
 ## P
 
 **PARKED.** A mechanism status. See [mechanism status](#mechanism-status).
 
-**PM seat.** The project-manager role: it sequences work and keeps [NOW.md](../integration/NOW.md). Kimi holds it, with a cover lab named by the owner. See [the rules](../rules/README.md#who-decides-what).
+**PM seat.** The project-manager role: it sequences work and keeps [PLAN.md](../../PLAN.md). Kimi holds it, with a cover lab named by the owner. See [the rules](../rules/README.md#who-decides-what).
 
-**Pre-alpha.** The project's honest stage. Parts are built and tested, but 0 of 8 milestones are complete and no model holds a useful conversation. See [STATUS](../../STATUS.md).
+**Pre-alpha.** The project's honest stage. M1 is complete (1 of 8 milestones), but no model holds a useful conversation and no alpha release exists. See [STATUS](../../STATUS.md).
 
 **Pre-registration (sheet).** A one-page plan, written before a run, that states the bar, the noise, the controls, the seeds, the cost and what each outcome would decide. It is needed only before GPU training or evaluation and before any run a milestone claim rests on. See [the rules](../rules/README.md).
 
@@ -271,7 +271,7 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 ## U
 
-<a id="unigram"></a>**Unigram.** A table of word counts that ignores context and always guesses by overall frequency. It gets 1,226 of the 14,287 DEV first guesses right. The best trained discrete model got 65 and 463 (**measurement**). See [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md).
+<a id="unigram"></a>**Unigram.** A table of word counts that ignores context and always guesses by overall frequency. It gets 1,226 of the 14,287 DEV first guesses right. The saved M1 discrete model got 7,002 and 7,001; older K16-A got 65 and 463 (**measurement**). See [M1 close](../labs/m1-close-saved-model/README.md) and [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md).
 
 **UOR.** Short for Universal Object Reference, the foundation named as copyright holder in the project's MIT licence ([LICENSE](../../LICENSE)). A "UOR address" in this project is the prime-based name described under [prime address](#prime-address).
 
@@ -283,7 +283,7 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 ## W
 
-**W2.** The next queued test: FIT-reviewed and awaiting an owner release (cost about $0.91, estimated). It decides whether the wall is the model's representation or its learning law, and includes count-table arms the headline bars lack. See [open questions](../research/open-questions.md).
+**W2.** The completed read-code capacity capture from the pre-M1 sequence. It helped distinguish representation limits from learning-law limits and included count-table arms. The saved model has since passed M1; see [open questions](../research/open-questions.md).
 
 **WASM (WebAssembly).** A compact, sandboxed machine code that browsers run. The integer serving engine is built for it, with 7 of 7 serving functions free of float instructions (**measurement**). See [web client](../products/web-client.md).
 

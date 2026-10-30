@@ -47,11 +47,11 @@ The three short lines are listed in the [generated archive catalog](../../../arc
 - **Two lines hold 42% of the records.** `native-geometric-sept` (294) and `m1-discrete-attention` (199) together hold 493 of 1,173 (arithmetic from the table).
 - **The "Results" column counts every recorded result, including ones scored on authored or exposed panels.** Read it with [what the project knows](../findings.md): development is not fresh, and a pass on a built panel is not a language result.
 - **Tooling and operations records are large.** `harness-governance`, `compute-ops` and `spiralcore-wire` hold 207 records and no model result. Part of that came from owner decisions that forced a rebuild in October (`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md`, section 3).
-- **The only active modelling line is `m1-discrete-attention`.** Its best trained artifact is below a word-count table (65 and 463 of 14,287 development rows against 1,226).
+- **`m1-discrete-attention` has now closed at M1 scope.** The saved model scores 7,002 and 7,001 of 14,287 on DEV, above T2's 6,300 and unigram's 1,226. K16's older 65 and 463 are history, not the current best.
 
 ## Since 27 Oct
 
-**29 Oct 2026.** The table above stops at 19 Oct. Since 27 Oct the current line is the float-trained FBS trunk, which carries the replies. It is not one of the 20 audited lines, and it has no page here. Its units run from claude-142 to claude-189. See [the pipeline map](../../model/pipeline-map.md) for the two model paths (the discrete path and the FBS trunk) and for the cost of each stage. The project is still pre-alpha: 0 of 8 milestones are complete. The "only active modelling line" bullet above describes 19 Oct.
+**30 Oct 2026.** The table above stops at 19 Oct. The discrete path has since closed M1, while the float-trained FBS trunk carries current complete-reply research. See [the pipeline map](../../model/pipeline-map.md) for both paths and [the M1 research line](./m1-discrete-attention.md) for the close. The project is pre-alpha: 1 of 8 milestones is complete. Current work is new-phrasing reply opening and a memory key that reworded known questions can reach.
 
 ## Where to go next
 

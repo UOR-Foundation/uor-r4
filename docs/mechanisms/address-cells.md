@@ -1,6 +1,6 @@
 # Address-structured cells
 
-**Status: ACTIVE.** This is the starting table of the live attention line. At zero training it lifted the number of next-word targets the reader can reach from 127 to 1,351 of 3,847. Training then eroded that gain, and the first learning run stopped at its first checkpoint. No paired verdict exists, and the admission-preserving controller built to fix the erosion has not yet run on a GPU ([A8 dose](../labs/a8-dose-2026-10-19/README.md), [pre-flight](../labs/address-cells-preflight-2026-10-19/README.md)).
+**Status: ACTIVE.** This is the starting table of the live attention line. At zero training it lifted reachable next-word targets from 127 to 1,351 of 3,847. The early dose eroded that gain and is preserved as a dated configuration negative. The admission-preserving controller, rerun and M1 export have since completed at their declared scopes: the saved 19-table model passes all six bars at two seeds. The independent effect of this placement on language and learned address formation remains open ([A8 dose](../labs/a8-dose-2026-10-19/README.md), [pre-flight](../labs/address-cells-preflight-2026-10-19/README.md), [M1 close](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run, **hypothesis** means an untested idea (see [the charter](../../CHARTER.md), section 4.6). Unfamiliar project terms (K16, A8, admission, NOT_RUN) are in the [glossary](../start/glossary.md).
 
@@ -57,7 +57,7 @@ Every number in the last four rows is a count of reachable target words on the d
 
 ## What has never been tested
 
-- Whether the reader can learn on a well-placed table at all. No run has produced a paired development verdict.
+- The independent effect of this placement on language and learned address formation. M1 is a whole-model result, not an A8 ablation.
 - Any accuracy, ranking, bits-per-byte or reply quality for this table.
 - Placement that also uses successor edges. Version 1 lets only already-placed predecessors pull a word.
 - Placement keyed on the real read centre instead of the last word's cell.
@@ -68,7 +68,7 @@ Every number in the last four rows is a count of reachable target words on the d
 
 ## What comes next
 
-The mechanism is ACTIVE, so this is a plan, not a reopening. First comes the GPU qualification of the merged controller, then the admission-preserving rerun of the learned dose. Two risks are on the record. The rule could turn into a no-op if it rejects more than half the intervals, or three full intervals in a row. And $K=8$ may be too small as occupancy grows. A relation arm must also beat the successor-table comparator (top-1 on 6,300 of 14,287 development rows) to count as learning.
+The mechanism is ACTIVE, so this is a plan, not a reopening. The controller qualification, admission-preserving rerun and M1 export are complete; there is no need to repeat them for this refresh. Next is independent evidence of address formation and of the placement's effect on complete replies. The early no-op and $K=8$ occupancy risks remain in the record, and Relation's independent effect still needs a paired ablation on the current model.
 
 ## Also known as
 

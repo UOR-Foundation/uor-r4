@@ -47,6 +47,6 @@ An interface can be specified, reviewed and even delivered while the thing behin
 
 ## Current state
 
-M7 is not met. The runtime is delivered; the selected model bundle is not yet reachable through it, and only a local API exists ([ROADMAP](../../../ROADMAP.md)). The demo is not runnable from a clean clone ([WASM record](../../labs/wasm-serving-runtime-2026-10-18/README.md)). Pre-alpha: 0 of 8 milestones are complete.
+M7 is not met. The integer runtime, Studio worker and parity harness are delivered and verified on a synthetic stand-in; the accepted model bundle and its parity are still open. The demo requires a local bundle build and self-hosted assets, not a claim of product deployment. Pre-alpha: 1 of 8 milestones is complete ([ROADMAP](../../../ROADMAP.md), [web client](../../products/web-client.md)).
 
 **Go deeper:** the [generated catalog page](../../../archive/catalog/m7-distribution.md) lists all 8 records.

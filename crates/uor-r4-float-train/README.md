@@ -1,6 +1,6 @@
 # UOR-R4 Geometric Language Model: offline float training
 
-> **Status on 29 Oct 2026:** pre-alpha. No milestone is complete and no model holds a useful conversation yet. This crate trains the float FBS trunk that the replies run on; it is not the serving path.
+> **Status on 30 Oct 2026:** pre-alpha, 1 of 8 milestones complete; no model holds a useful conversation yet. This crate trains the separate float FBS trunk for the current complete-reply research; it is not the saved discrete M1 model or the serving path.
 
 ## What this crate is
 
@@ -23,7 +23,7 @@ Training uses no squashing of any kind and no dense matmul. Research compute is 
 
 ## Where this stands
 
-The 27–29 Oct line trained the trunk in its own space, added the Hamming read and the turn memory, and exported it to integer. The turn memory names the first word of a reply (598.7 and 598.3 of DEV's 1,226 openings at two seeds, claude-161). After that word, replies are still templates. Carrying the memory past it is the next step. Details are in [the pipeline map](../../docs/model/pipeline-map.md) and [PLAN.md](../../PLAN.md).
+The 27–30 Oct line trained the trunk in its own space, added the Hamming read and the turn memory, and exported it to integer. The turn memory names the first word of a reply on familiar DEV prompts (598.7 and 598.3 of 1,226 openings at two seeds, claude-161), but its exact-token key finds little on new phrasing. Claude-217's p-s reply openings are only 17.4%, 13.7% and 18.6% at three seeds, against about 80% on later tokens. The next problem is reply opening and a memory key that reworded known questions can reach. Details are in [the pipeline map](../../docs/model/pipeline-map.md) and [PLAN.md](../../PLAN.md).
 
 ## Build and test
 

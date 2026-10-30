@@ -40,7 +40,7 @@ A crowded cell counts once, and $R=0$ exactly when the target's cell is among th
 
 **Consequence (proof, from the definition).** The weights 8 and $w=32$ are powers of two, so the numerator needs only adds, compares and shifts. Because the loss is a weighted sum, its total and the visible ranks can disagree: the pilot's token term fell while its address term rose by more.
 
-**Rule check.** Compliant with D23 by construction: no exp, log-sum-exp, softplus, sigmoid or tanh. The older pooled-rank run used softplus on a log-ratio and is not compliant. It is the historical precursor only. No matrix multiplication (D30). The integer form already fits the integer serving contract (D11). The float form's export gap has never been measured, and under D37 it returns only as a new pre-registration with a fresh test-fitness review and an owner release.
+**Rule check.** Compliant with D23 by construction: no exp, log-sum-exp, softplus, sigmoid or tanh. The older pooled-rank run used softplus on a log-ratio and is not compliant. It is the historical precursor only. No matrix multiplication (D30). The integer form already fits the integer serving contract (D11). The float form's export gap has never been measured, and under D37 it returns only as a new pre-registration with a fresh test-fitness review and the lab's pre-run review (D67).
 
 ## What has been tried
 

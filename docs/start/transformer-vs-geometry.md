@@ -1,83 +1,70 @@
 # Transformer parts and their geometric replacements
 
-**In one paragraph.** A transformer is built from a handful of standard parts: a tokenizer, an embedding table, a position signal, attention, feed-forward layers, normalization, an output layer, a loss and an optimizer. UOR-R4 tries to replace each part with a geometric or exact mechanism that avoids softmax and matrix multiplication. This page puts each transformer part beside the project's replacement and says how far that replacement has got. The short version: most parts have a candidate, and several candidates are built and tested. **On 29 Oct 2026, every part has a candidate on the float-trained FBS trunk.** Position is the SpiralCore transport spin and normalization is an RMS norm with an integer square root. Only the discrete path still lacks both (see "The two gaps"). The trunk routes and exact memory stores ([pipeline map](../model/pipeline-map.md)). No model yet holds a useful conversation, and no milestone is complete.
+**In one paragraph.** A transformer is built from standard parts: a tokenizer, embedding table,
+position signal, attention, feed-forward layers, normalization, output layer, loss and optimizer.
+UOR-R4 replaces those parts with geometric or exact mechanisms that avoid softmax and dense matrix
+multiplication. **M1 is complete (1 of 8)**: the saved discrete model passed all six bars at two
+seeds. Useful conversation is still open, and the separate FBS complete-reply line shows why.
 
-![Two columns joined by arrows. The left column lists the parts of a transformer from input to output: tokenizer, embedding, position, attention, copy heads, context memory, feed-forward, gates, normalization, output head, loss, optimizer and runtime. The right column shows the UOR-R4 mechanism for each, coloured by status: green for ACTIVE, amber for READY, grey for PARKED. Two right-hand boxes, beside "position" and "normalization", are empty, drawn with dashed red outlines and labelled "no mechanism".](../figures/start/transformer-vs-geometry.svg)
+## The replacements at their current scope
 
-*Each transformer part beside its replacement. Colour gives the status. The figure shows the discrete path as of October: the two dashed boxes are gaps on that path only. The FBS trunk fills them, as the table below says (29 Oct 2026).*
-
-Terms are in the [glossary](./glossary.md). Labels follow [`docs/formal_vocabulary.md`](../formal_vocabulary.md): **proof**, **measurement** or **hypothesis**.
-
-## How to read the status
-
-Every mechanism has exactly one of three statuses, set on the [mechanism board](../mechanisms/README.md):
-
-- **ACTIVE**: on a current model path: the discrete path (`crates/uor-r4-discrete`) or the float-trained FBS trunk.
-- **READY**: built and tested, but never trained into a model.
-- **PARKED**: the forms tried so far failed or broke a rule. The mechanism stays open, and its page lists what would reopen it.
-
-There is no "retired" or "dead" status. A failed run closes one configuration, never a mechanism ([charter](../../CHARTER.md), section 4.1). On 29 Oct 2026 the board has **12 ACTIVE, 5 READY and 11 PARKED** mechanisms; the Hamilton gate and SpiralCore/FBS are ACTIVE.
-
-A passing test shows that code does what it claims. It is not a trained capability, and a test marked `NOT_RUN` is not a pass.
-
-## Part by part
-
-| Transformer part | What it does | UOR-R4 replacement (status) | Where it stands |
-|---|---|---|---|
-| Tokenizer | Cuts text into numbered pieces | [tokenizer](../mechanisms/tokenizer.md) (ACTIVE) | 4,096 pieces, pinned in every corpus and artifact. No other vocabulary size has been compared |
-| Embedding table | Gives each token a starting vector | [prime-zeta codebook](../mechanisms/prime-zeta-codebook.md) (ACTIVE), [address cells](../mechanisms/address-cells.md) (ACTIVE) | PrimeZeta gives 4,096 of 4,096 tokens distinct vectors (**measurement**, [record](../../archive/labs/prime-zeta-construction-2026-10-14/README.md)). Address cells raised zero-training reach from 127 to 1,351 of 3,847 rows; training then eroded it to 551, below the control's 857 (**measurement**, [pre-flight](../labs/address-cells-preflight-2026-10-19/README.md), [dose](../labs/a8-dose-2026-10-19/README.md)) |
-| **Position signal** | Tells the model the order of tokens | SpiralCore transport spin in the recurrence, no RoPE ([SpiralCore/FBS](../mechanisms/spiralcore-fbs.md), ACTIVE) | Trained and served on the FBS trunk (29 Oct 2026). The discrete path has none: see "Gap 1" |
-| Attention: what to read | Picks which earlier tokens matter | [route read](../mechanisms/route-read.md), [flock read](../mechanisms/flock-read.md), [relation read](../mechanisms/relation-read.md), [admission](../mechanisms/admission.md) (all ACTIVE); [Hopf observation](../mechanisms/hopf-observation.md) (PARKED) | Flock passes its 6 of the 25 shared GPU construction checks (11 Route, 6 Flock, 8 driver) (**measurement**, [record](../../archive/labs/discrete-driver-cost-2026-10-13/README.md)). No read's own value has been measured: Route received 20 learning proposals in 16,404 batches ([attention state](../labs/attention-state-2026-10-18/README.md)) |
-| Attention: mixing what was read | Combines the chosen tokens | [flock read](../mechanisms/flock-read.md) (ACTIVE) | Rotates a few nearby earlier tokens into one frame and moves toward their consensus |
-| Copy heads | Copies a word seen earlier | Hamming read: XOR and popcount over 64-bit sign codes (claude-146); [relation read](../mechanisms/relation-read.md) (ACTIVE), [pointer key](../mechanisms/pointer-key.md) (PARKED) | Hamming copy heads are trained: recall probe 0.98 to 0.99 at three seeds. The integer kernel is built and matches an f64 reference (claude-189); the served session does not use it yet |
-| Context memory (key-value cache), storage | Stores what a question should produce | Exact turn memory keyed by the user's first 8 tokens (claude-161); [exact memory](../mechanisms/exact-memory.md), [VSA](../mechanisms/vsa.md), [read binding](../mechanisms/read-binding.md) (PARKED) | Trained, first word of a reply only: it names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, against 266.3 and 281.0 for an empty-table control. After the first word, replies are still templates. Not served |
-| Durable memory outside the model | Not a transformer part | [object store](../mechanisms/object-store.md) (READY) | 20 integration tests at delivery (60 after later work) and a conformance pass. Nothing uses it yet |
-| Feed-forward layer | Processes each token on its own; most of the multiplication | [Hamilton gate](../mechanisms/hamilton-gate.md) and [SpiralCore/FBS](../mechanisms/spiralcore-fbs.md) (ACTIVE); [E8 orbit memory](../mechanisms/e8-orbit-memory.md) (PARKED) | The Hamilton gate is trained and served on the FBS trunk (29 Oct 2026). The discrete path has no feed-forward layer |
-| Gates and activation functions | Squash signals with sigmoid, tanh and the like | [Hamilton gate](../mechanisms/hamilton-gate.md), [recurrence gates](../mechanisms/recurrence-gates.md) (READY) | Turn the gate into a rotation, or use tables of powers of two. 18 GPU construction checks pass; never trained |
-| Recurrent mixing (in hybrids) | Carries a running state forward | [recurrence gates](../mechanisms/recurrence-gates.md) (READY), [geometric stack](../mechanisms/geometric-stack.md) (PARKED) | The old stack trained, but used softmax and matrix multiplication |
-| Matrix arithmetic | Multiplies by learned grids | [D11 integer serving](../mechanisms/lut-serving.md) (ACTIVE), [SpiralCore/FBS](../mechanisms/spiralcore-fbs.md) (ACTIVE); [spin weights](../mechanisms/spin-weights.md), [ternary/XOR](../mechanisms/ternary-xor.md) (READY) | Integer engine's audits are green. The FBS trunk is exported into it exactly under `lut-stack/5` (claude-182); no discrete-path model built under today's rules is |
-| **Normalization** | Rescales signals between layers | RMS norm with an integer square root | Served on the FBS trunk (29 Oct 2026). The discrete path has none: see "Gap 2" |
-| Output head (softmax over all words) | Scores every word and picks one | Whole-table nearest (claude-150); [admission](../mechanisms/admission.md), [discrete learning](../mechanisms/discrete-learning.md) (ACTIVE) | Whole-table nearest is the readout to serve. The served session still reads the native writer today. Best discrete-path result (19 Oct): 65 and 463 of 14,287 correct, against 1,226 and 6,300 for two count tables (**measurement**, [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md)) |
-| Loss (cross-entropy) | Measures how wrong a guess was | [rank-margin hinge](../mechanisms/rank-margin.md) (ACTIVE); [read binding](../mechanisms/read-binding.md) (PARKED) | Asks only whether the right word beats its strongest rivals by a gap. It gives no probability, so no bits-per-byte score |
-| Optimizer (backpropagation) | Adjusts the learned numbers | [discrete learning](../mechanisms/discrete-learning.md) (ACTIVE); [carrier credit](../mechanisms/carrier-credit.md), [legal construction](../mechanisms/legal-construction.md) (PARKED) | Tries every legal move for one entry and keeps it only if the score strictly improves. A full run accepts about 130 to 410 moves |
-| Runtime | Runs the finished model | [D11 integer serving](../mechanisms/lut-serving.md) (ACTIVE); [R4G1 graph](../mechanisms/r4g1-graph.md) (PARKED) | Runs in a browser with no float instruction in 7 of 7 serving functions (**measurement**, [record](../labs/wasm-serving-runtime-2026-10-18/README.md)) |
-
-Sources: the [mechanism board](../mechanisms/README.md) slot map and the audit's stitching map ([synthesis](../labs/repo-renormalization-2026-10-19/audit/synthesis.md), section 1), which cite each record. The move counts are from the [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md) (130, 129, 407 and 410 accepted moves).
-
-One status is disputed. The board keeps D11 integer serving as ACTIVE, as its own page says, and since 29 Oct 2026 a lawful model is exported through it: the FBS trunk under `lut-stack/5` (claude-182). No discrete-path model is exported through it yet ([mechanism board](../mechanisms/README.md), contradictions).
-
-## The two gaps (discrete path only)
-
-On the float-trained FBS trunk both gaps are filled as of 29 Oct 2026: position by the SpiralCore transport spin, normalization by an RMS norm with an integer square root. The text below is about the discrete path, which has neither.
-
-**Gap 1: position.** A transformer adds a signal that says where each token sits in the sequence. No UOR-R4 mechanism is assigned to this job, and no lawful evidence exists for one. The current model keeps the most recent tokens in order at the leaves of a small tree, so order is present in its layout, but nothing is learned about it ([the model page](../model/architecture.md)). The nearest result is about carrying a running state by quaternion rotation. It beat no rotation by 0.071 and 0.077 nats (a nat is a unit of prediction error; lower is better), but in a model that still used softmax attention, a sigmoid gate and dense layers, with 332,928 fewer parameters in the comparison arm ([transport record](../../archive/integration/transport-attribution-d1-2026-09-28.md)). So "rotation can carry order" is a **hypothesis**.
-
-**Gap 2: normalization.** A transformer rescales its signals between layers so they stay in a workable range. UOR-R4 has no designed mechanism for this. Snapping each block back to one of its fixed lattice points might play that role, but no record says so or tests it ([mechanism board](../mechanisms/README.md)). This is also a **hypothesis**.
-
-## What "replaces" does not mean yet
-
-Having a replacement on paper is not the same as having a working model:
-
-- **No replacement has matched its transformer part on quality.** Every attention-style read that learned well in the older decimal experiments had help from softmax during training, and the best softmax-free read was rejected ([softmax-free read](../../archive/labs/softmax-free-read-2026-10-10/README.md); audit synthesis (`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md`), section 1).
-- **No two parts have been trained together** except on the current discrete path. That path has no feed-forward layer and no position mechanism, and it scores below a table of word counts (**measurement**, [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md)).
-- **Several other things are not built:** using an exact address as the read, any consumer of the object store, an exporter that turns a trained model into a D11 file, and an output step that avoids scanning the whole vocabulary ([audit synthesis](../labs/repo-renormalization-2026-10-19/audit/synthesis.md), section 1).
-
-The project does not compare its models against transformers. It compares them against count tables and earlier geometric models, and grades them with fixed, deterministic checks ([charter](../../CHARTER.md), sections 3.10 and 4.4).
-
-## Where it stands
-
-| Measure | Value | Source |
+| Transformer part | Geometric or exact replacement in UOR-R4 | Current state |
 |---|---|---|
-| Mechanisms (29 Oct 2026) | 28: 12 ACTIVE, 5 READY, 11 PARKED | [mechanism board](../mechanisms/README.md) |
-| Transformer parts with no mechanism | None on the FBS trunk; position and normalization on the discrete path | [pipeline map](../model/pipeline-map.md) |
-| Parts not yet served in integers | Hamming copy heads (kernel built), exact turn memory, whole-table nearest readout | [pipeline map](../model/pipeline-map.md) |
-| Parts trained together | Only the discrete path: tokenizer, codebook or cells, reads, admission, hinge, discrete learning | [the model page](../model/architecture.md) |
-| Best trained result vs count tables | 65 and 463 vs 1,226 and 6,300, of 14,287 | [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md), [count tables](../../archive/labs/host-diagnostics-2026-10-17/README.md) |
+| Tokenizer | [Byte-level BPE](../mechanisms/tokenizer.md), 4,096 pieces, identity `d36d3e87` | ACTIVE; pinned to corpora, panels and artifacts |
+| Embedding table | [Prime-zeta codebook](../mechanisms/prime-zeta-codebook.md) and [address cells](../mechanisms/address-cells.md): prime/zeta addresses on a 16×16 board | ACTIVE; construction and placement results exist, independent language effects remain open |
+| Position | SpiralCore transport spin on the FBS trunk; discrete quaternion recurrence in the M1 composition | Trained and served in their respective models; independent order effects remain open |
+| Attention / look-back | [Route](../mechanisms/route-read.md), [Flock](../mechanisms/flock-read.md) and [Relation](../mechanisms/relation-read.md) reads: tree walk, neighbour consensus and copy links | ACTIVE; independent effects are not all isolated |
+| Feed-forward | [Hamilton rotation gate](../mechanisms/hamilton-gate.md) and [SpiralCore/FBS projection](../mechanisms/spiralcore-fbs.md) | ACTIVE on the FBS trunk and in the M1 composition |
+| Normalization | RMS norm with integer square root on the FBS trunk; discrete scale-matched mechanisms on the discrete path | Served on FBS; discrete independent effects remain open |
+| Output head | [Admission](../mechanisms/admission.md): open a few address cells, then rank inside them | ACTIVE; M1's 19-table readout is measured |
+| Loss | [Rank-margin hinge](../mechanisms/rank-margin.md): right token must beat its strongest rival by a fixed gap | ACTIVE; no likelihood is formed |
+| Optimizer | [Discrete learning](../mechanisms/discrete-learning.md): try every legal rotation and keep only strict improvements, including BVG-K | ACTIVE; produced the M1 model |
+| Matrix-multiply runtime | [D11 integer serving](../mechanisms/lut-serving.md): integer adds, shifts, tables, multiply and divide, but no float or dense matmul | ACTIVE; the M1 pair and a separate FBS export serve |
+| Exact memory | Exact addressed object store and exact turn memory | Oracle and familiar-DEV gains exist; new-phrasing key formation remains the blocker |
+
+A replacement being ACTIVE means it is on a current model path, not that it has proved an
+independent advantage. READY means built and tested but not trained in; PARKED means tested forms
+failed or broke a rule while the mechanism stays open. See the [mechanism board](../mechanisms/README.md).
+
+## What M1 established
+
+The saved discrete 19-table model has exact export/reference agreement and passes B4. It scores:
+
+- DEV **7,002 / 7,001** of 14,287 against unigram 1,226 and T2 6,300;
+- Fresh V2 **7,215 / 7,228** of 14,479 against unigram 1,279 and T2 6,582;
+- p-f **7,850 / 7,872** of 15,953 against unigram 1,409 and T2 7,375, beyond paired band 81;
+- Apple M1 decode **10,876 / 10,566 tok/s** under the bar-f protocol.
+
+p-f has no prompt value-masked templates in TRAIN at K = 1,024, so the model reads new prompt
+phrasings into known reply kinds. But 62.5% of p-f's reference replies are verbatim TRAIN replies.
+That is not new reply kinds or useful conversation
+([closing report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
+
+## The remaining gaps
+
+**Reply opening on new phrasing.** On the separate FBS path, claude-217's p-s openings are 17.4%,
+13.7% and 18.6% at three seeds, against about 80% on later tokens. Exact turn memory keys on exact
+first token ids and misses reworded prompts. A cycle step ends loops but does not repair the opening.
+
+**A joined model and M4.** The discrete M1 artifact and the FBS trunk do not share a table, trunk
+or served session. M4 needs the accepted model's full quality, CLI, session and audit path; `PRLL`
+is built and registered, but GPU held-out scoring remains open.
+
+**M5 and M7.** Full-path laptop cost and accepted-model browser/library/CLI parity are unmeasured.
+Native M1 serving does not establish browser parity or energy.
+
+**M2 and M3.** Next-token ranking is not complete correct replies or durable memory. The true-address
+80/80 oracle is exact-read evidence, not learned address formation.
+
+## Historical K16
+
+K16-A scored 65 and 463 of 14,287, below unigram 1,226 and T2 6,300. K16-R collapsed to 19 or 20
+cells. These are dated configuration negatives, not the current best and not a reason to repeat the
+same test without new causal evidence ([K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md)).
 
 ## Go deeper
 
-- [What UOR-R4 is](./what-is-uor-r4.md) and [where we are](./where-we-are.md).
-- [The model, end to end](../model/architecture.md): the current pipeline stage by stage.
-- [Mechanism board](../mechanisms/README.md): one page per mechanism, with reopen conditions for PARKED ones.
-- [Geometry](../geometry/README.md): the mathematics behind the replacements.
-- [Open questions](../research/open-questions.md) and the [history](../research/history.md) of how each part was tried.
+- [Where we are](./where-we-are.md) and [where we're going](./where-were-going.md).
+- [The model, end to end](../model/architecture.md) and [pipeline map](../model/pipeline-map.md).
+- [Mechanism board](../mechanisms/README.md): every replacement, its evidence and reopen conditions.
+- [Open questions](../research/open-questions.md): reply opening, joined serving, cost and distribution.

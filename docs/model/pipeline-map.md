@@ -11,9 +11,10 @@ This page follows one token from the training data to the last word of a reply s
 
 It answers the owner's direction of 27 October 2026 (recorded verbatim in the item [`pipeline-map`](../roadmap/items/pipeline-map.md)). The goal is a local model of about GPT-4's ability, trained on less than a datacenter and served on a laptop like this one.
 
-**This revision (claude-159, 28 Oct)** adds:
+**This revision (30 Oct)** retains claude-159's cost-per-token map and adds:
 - claude-149 to claude-158, as listed under [what changed since the first map](#what-changed-since-the-first-map);
-- the owner's 28 Oct criterion: "I don't care what we serve at long as it is cheap". Every stage now leads with its cost per token, and the gaps are ranked by what blocks a cheap, capable model first;
+- the owner's 28 Oct criterion: "I don't care what we serve at long as it is cheap";
+- the saved discrete M1 close and claude-211's bar-f result, and claude-217's current new-phrasing opening failure;
 - a section on [the archived prime and angular router](#the-archived-prime-and-angular-router).
 
 The page ends with:
@@ -65,14 +66,14 @@ The repository trains two different models, and they do not meet:
 | Code | [`crates/uor-r4-float-train`](../../crates/uor-r4-float-train) | [`crates/uor-r4-discrete`](../../crates/uor-r4-discrete/README.md) |
 | What it carries | The replies: DEV text at every checkpoint ([float-training notebook](../research/notebook/float-training.md), row of 27 Oct "Exploration") | The M1 bar ([PLAN](../../PLAN.md), "The path to M1") |
 | Table | 4,096 × 256 float values | 4,096 tokens × 4 blocks of 8 integers, each block one of 16 E8 roots ([the model, end to end](architecture.md), stage 2) |
-| Export | `uor-r4.lut-stack/5` (unsnapped, claude-181 and claude-182), through `fbs-export` | `uor-r4.lut-discrete/1` |
-| Best DEV top-1 of 14,287 | **11,140** whole-table nearest, float, width 512 with 8 Hamming heads, cell objective, seed 2 ([claude-153](../loop/tasks/in-space-trunk-to-text/claude-153/REPORT.md)) | **455** writer, integer, Stage T `FrozenZero` ([m4-serving](../research/notebook/m4-serving.md) line 17) |
+| Export | `uor-r4.lut-stack/5` (unsnapped, claude-181 and claude-182), through `fbs-export` | `uor-r4.lut-discrete-trunk/1`, the M1 19-table pair |
+| Best DEV top-1 of 14,287 | **11,140** whole-table nearest, float, width 512 with 8 Hamming heads, cell objective, seed 2 ([claude-153](../loop/tasks/in-space-trunk-to-text/claude-153/REPORT.md)) | **7,002 / 7,001** integer top-1, the saved M1 pair ([M1 close](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)) |
 
 They share:
 - the tokenizer and the data;
 - the D11 runtime crate, [`crates/uor-r4-integer`](../../crates/uor-r4-integer).
 
-They share no table, no trunk and no artifact format. This page follows the FBS trunk, because it is the one that writes replies. Where the discrete path differs, the stage says so.
+They share no table, no trunk and no artifact format. This page follows the FBS trunk for the current complete-reply work, while the discrete path supplies the M1 result. The M1 pair also scores 7,215 / 7,228 on Fresh V2 and 7,850 / 7,872 on p-f at two seeds, with exact export agreement and Apple M1 decode at 10,876 / 10,566 tok/s. The p-f reference replies are 62.5% verbatim TRAIN replies, so M1 is not useful-chat qualification.
 
 ## The chain at a glance
 
@@ -87,7 +88,7 @@ They share no table, no trunk and no artifact format. This page follows the FBS 
 | 7 | Readout | writer **23 µs, 0.6%**; whole-table nearest **486 µs** | whole-table search **13.0 ms, 13%** | a query point in ℝ²⁵⁶ → a token id | yes. The decision is to serve nearest (claude-150), at 21 times the writer's cost |
 | 8 | Decode loop | **36 µs outside the step, 1% of the plain token** | none | an id → the next id, greedy | ids only: the FBS artifact has no text path |
 | 9 | Training | none | **96.5 ms a step, 31,718 context tok/s** at (a) | windows → float weights | yes |
-| 10 | Integer export | once per model | none | a float snapshot → a `UORLUT01` integer artifact | discrete: exact. FBS: the export gap fails |
+| 10 | Integer export | once per model | none | a float snapshot → a `UORLUT01` integer artifact | discrete M1: exact 14,287-row agreement and B4 pass. FBS `/5`: inside the export-gap bar at DEV scope |
 | 11 | Serving on M1 | **3.77 ms a token (the step 3.73), 265 tok/s** | none | the artifact and prompt ids → reply ids | — |
 
 Serving shares are of a step on claude-126's width-256 export ([claude-158](../loop/tasks/fbs-cost-profile/claude-158/REPORT.md)); training shares are of claude-152's (a) step ([claude-157](../loop/tasks/fbs-cost-profile/claude-157/REPORT.md)). The two platforms differ in hardware, number type and what a step holds, so shares are compared only within each column.
@@ -325,7 +326,7 @@ GPT-4's own size and training data are not published (GPT-4 Technical Report, ex
 
 ## The gaps, ranked by what blocks a cheap, capable model first
 
-1. **Storage: the trunk cannot hold the associations that pick a reply.** Routing the turn in works: dropping the bag costs `189 / 236` openings. But openings never beat `302 / 228` by the sheet's margin (bar `347.3`), while a lookup of the turn's first 8 tokens names 607. The trunk has 64,000 values beside a 1,048,576-value table (stages 4, 5 and 6). Exact memory works with the true address, and since claude-161 it is connected for the opening: it names `598.7 / 598.3` of 1,226 openings at two seeds. The storage works for the first word; the rest of the reply is open (`turn-memory-reply`). **The rest of the reply blocks capability first, and its fix is cheap per token** (stage 6, by arithmetic).
+1. **Reply opening on new phrasing and the memory key that cannot reach it.** Routing the turn works on familiar wording: exact turn memory names `598.7 / 598.3` of 1,226 DEV openings at two seeds. But its key is the turn's exact first token ids, so a reworded known question can find no stored key. On p-s, teacher-forced reply openings are only 17.4%, 13.7% and 18.6% at three seeds, against 80.8%, 80.2% and 79.9% on later tokens; the memory adds only 14–16 of 1,400 openings. The cycle step ends every registered loop but leaves content underpowered, so greedy stays the decode. **The capability blocker is starting the right reply on new phrasing, not merely continuing or stopping a loop** (claude-217, stages 5 and 6). claude-218 is active on the memory key, with no result claimed.
 2. **The served decoder: correct and expensive, or cheap and unreliable.**
    - Whole-table nearest is the decision (claude-150). It costs 21 times the writer on the M1 (13% of a token) and 13–34% of a training step, and it grows with the vocabulary (stage 7).
    - The writer costs 0.6% of a token, but its admission failed at one seed of two.
@@ -337,7 +338,7 @@ GPT-4's own size and training data are not published (GPT-4 Technical Report, ex
    - One reciprocal in place of the rotation's four divides was exact but 5% slower (claude-185).
    - **Open question:** whether a vector kernel brings the per-value rate near the hardware's. Nothing has shown it.
 4. **Training cost: the backward is 54–62% of a step and host-bound, and the whole-table search is 13–34%** (stage 9). Splitting the backward with the driver's profiler names the next change. A rival search over a subset, such as the writer's kept cells, removes most of the search's cost; its effect on prediction must be run.
-5. **The FBS export gap now passes at DEV scope, and training repeats.** Under `lut-stack/5` the export gap is inside the bar on both seeds (claude-182), and the backward is fixed-order, so two runs give the same model byte for byte (claude-179). The "with repeats" confirming run is still open. The discrete export is exact, but that model scores 455 (stages 9 and 10).
+5. **The FBS export gap now passes at DEV scope, and training repeats.** Under `lut-stack/5` the export gap is inside the bar on both seeds (claude-182), and the backward is fixed-order, so two runs give the same model byte for byte (claude-179). The "with repeats" confirming run is still open. The discrete M1 export is exact too: 14,287-row agreement, DEV 7,002 / 7,001, Fresh V2 7,215 / 7,228 and p-f 7,850 / 7,872 (stages 9 and 10).
 6. **The serving session cannot slide its 192-token window, and the integer runtime has no look-back** (stages 5 and 8). Long context, the geometry's main claim, cannot be served yet.
 7. **The FBS artifact has no text path.** It takes ids and gives ids (stage 8).
 8. **The two model paths do not join.** The M1 bar rests on the discrete path, the replies on the FBS trunk, and they use different tables, trunks and formats (Two model paths).
@@ -359,9 +360,9 @@ Each unit is one loop session. "Pass" and "fail" say what each outcome unlocks. 
 | R7 | A text path for the FBS artifact: the tokenizer, the dialogue protocol and the turn-end token, in `uor-chat --stack`. | A typed question gets a typed reply on this laptop. | The protocol bundle needs porting first. |
 | R8 | A scale probe: width 1,024 (the writer's limit), and a corpus beyond 7.5M tokens that fits the test's dialogues. `distill-d1` needs the owner's release. | A measured slope of ability against size: the first number for the goal arithmetic. | The architecture's scaling becomes the open question before anything larger is trained. |
 
-R1 comes first because it is the one step aimed at the storage gap, and its per-token cost is far below the trunk's. R2 and R3 make the served model cheap: the readout and the kernels. R4 makes every later run cheaper. R2 to R4 can run beside R1, since they touch other files.
+R1 comes first because reply opening on new phrasing is the measured capability blocker, and exact memory is the cheapest place to address it. R2 and R3 make the served model cheap: the readout and kernels. R4 makes every later run cheaper. R2 to R4 can run beside R1 when their files do not overlap.
 
-**The order now in force (29 Oct):** PLAN.md's open owner direction of 29 Oct ("a working model following our cadences") sets the sequence: `turn-memory-reply`, then the model's parts served in integers, then R7, then one trained and scored model, then cost. See [PLAN.md](../../PLAN.md).
+**The order now in force (30 Oct):** claude-217 is done and leaves greedy in place. The active work is claude-218's memory key for reworded known questions, then every part served in integers, R7, and one model trained/exported/served and scored on fresh prompts with tokens per second. Cost work follows. See [PLAN.md](../../PLAN.md).
 
 ## Proposal for the owner's queue
 

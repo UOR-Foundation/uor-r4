@@ -82,7 +82,7 @@ $$\gcd(q,\pi_j)>1 ,$$
 
 1. **Run the forced-copy oracle on a lawful pointer.** Supply the true slot address or span to bound the possible gain, using a softmax-free, matmul-free pointer or stored outputs only. A new execution of the existing softmax pointer artifact is not allowed (D23, D30; see the [mechanism board](./README.md)).
 2. **Then train a slot-address key.** A parsed or learned key (entity prime times attribute prime), trained in from the start of the dialogue fine-tune, with matched controls, at least 3 seeds and at least 120 memory rows. The bar is a gain of at least 5 rows of 40 over the control.
-3. **Remove the softmax.** Give the copy distribution a rank table, a hard select, or exact admission plus a learned ranking, so the head can be registered under the no-softmax and no-matrix-multiplication rules. That is a new offline float sheet (D37) or a discrete sheet (D32), with a fresh `TEST FITNESS: FIT` review and an owner release.
+3. **Remove the softmax.** Give the copy distribution a rank table, a hard select, or exact admission plus a learned ranking, so the head can be registered under the no-softmax and no-matrix-multiplication rules. That is a new offline float sheet (D37) or a discrete sheet (D32), with a fresh `TEST FITNESS: FIT` review and the lab's pre-run review (D67).
 4. **Serve it as integers.** Route by gcd or n-let equality with no float score, and report the export gap.
 
 ## Also known as

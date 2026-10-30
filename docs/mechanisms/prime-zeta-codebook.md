@@ -1,6 +1,6 @@
 # Prime-zeta codebook
 
-**Status: ACTIVE.** The constructor is built and qualified, and its table is wired in as the start for new training lineages. No trained artifact has started from it yet: rung 0 and K16 began from a seeded 16-vector table. It is the baseline arm of the 19 October pre-flights and the fallback cell inside the [address-structured table](./address-cells.md). No run has yet trained it against its two matched controls. That comparison is `NOT_RUN` and held ([construction record](../../archive/labs/prime-zeta-construction-2026-10-14/README.md)).
+**Status: ACTIVE.** The constructor is built and qualified, and its table is wired in as the start for new training lineages. Rung 0 and K16 began from a seeded 16-vector table, so their early failures are not PrimeZeta verdicts. It is the baseline arm of the 19 October pre-flights and the fallback cell inside the [address-structured table](./address-cells.md). The registered zero-update comparison against injective nulls is complete (`r-prime-zeta-vs-nulls`, #2881); a trained semantic advantage remains unproven ([construction record](../../archive/labs/prime-zeta-construction-2026-10-14/README.md)).
 
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run, **hypothesis** means an untested idea (see [the charter](../../CHARTER.md), section 4.6). Unfamiliar project terms (K16, A8, admission, NOT_RUN) are in the [glossary](../start/glossary.md).
 
@@ -69,7 +69,7 @@ Almost all of the evidence concerns construction and admission. No row measures 
 
 ## What comes next
 
-The mechanism is ACTIVE, so this is a plan, not a reopening. A trained-in comparison needs its own pre-registered sheet that passes `TEST FITNESS: FIT`, plus the owner's training release. The sheet should report admission, top-1 and top-8, separated hinge losses and fresh transfer. Since the address-structured table now places words by their predecessors, a second question is whether this table still earns its place as the fallback, or whether a random injective table would do the same job.
+The mechanism is ACTIVE, so this is a plan, not a reopening. The registered zero-update null comparison is done; a trained-in comparison now needs its own pre-registered sheet with a fresh FIT and the lab's pre-run review under D67. It should report admission, top-1/top-8, separated hinge losses and fresh transfer. Since the address-structured table places words by their predecessors, a second question is whether this table still earns its fallback place or whether a random injective table would do the same job.
 
 ## Also known as
 

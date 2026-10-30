@@ -16,13 +16,13 @@ flowchart LR
   I --> J["Sealed artifacts and<br/>old records go to archive/"]
 ```
 
-*The path of one piece of work. Only the right-hand branch needs a sheet, a review and an owner release.*
+*The path of one piece of work. Only the right-hand branch needs a sheet, a FIT review and the lab's pre-run review.*
 
 Terms follow the [glossary](../start/glossary.md). Claims are labelled **proof**, **measurement** or **hypothesis** as defined in [`formal_vocabulary.md`](../formal_vocabulary.md). The rules below are the research clauses of the [charter](../../CHARTER.md); section numbers point there.
 
 ## The working rules
 
-**One notebook per research line (charter §5.6).** A *line* is one sustained question, such as "how the discrete model reads context". Its notebook lives at `docs/research/notebook/<line>.md`. Each result is one row: date, what ran, the number, the bar it was tested against, the verdict and a link to the artifact. A dated evidence folder is kept only when a run seals artifacts. The one-page plan for the whole project is [`NOW.md`](../integration/NOW.md); with the notebooks, it replaces the old running log (`current-state.md`).
+**One notebook per research line (charter §5.6).** A *line* is one sustained question, such as "how the discrete model reads context". Its notebook lives at `docs/research/notebook/<line>.md`. Each result is one row: date, what ran, the number, the bar it was tested against, the verdict and a link to the artifact. A dated evidence folder is kept only when a run seals artifacts. The one plan for the whole project is [`PLAN.md`](../../PLAN.md); with the notebooks and rendered STATE/HANDOFF, it replaces the old running log (`current-state.md`).
 
 **A sheet only where it decides spend (§4.5).** A *sheet* is a pre-registration of one page: the bar, the noise, the controls, the seeds, the cost and what each outcome would decide. It needs a review by a non-author, called a FIT review, before:
 
@@ -31,7 +31,7 @@ Terms follow the [glossary](../start/glossary.md). Claims are labelled **proof**
 
 A fresh-context subagent counts as a non-author. Builds, finite kernel tests and host checks need no sheet. Old float sheets come back only as new sheets with a new FIT. A FIT review releases nothing by itself.
 
-**One owner release per sheet (§5.1).** The owner types one release phrase personally for each sheet. It covers all the sheet's arms, seeds and registered stop rules. Labs stage the commands and then check the records; no lab types a release for the owner.
+**A pre-run review for each run (§5.1, D67).** A GPU or training run goes ahead on the lab's own whole-project pre-run review, inside the caps. D41's donor pass is the named owner-at-dispatch exception; there is no blanket owner release for every sheet. Labs stage the commands and check the records.
 
 **Mechanism statuses (§4.1).** Every mechanism is **ACTIVE** (on the model path), **READY** (built and tested but not yet trained in) or **PARKED** (the tested forms failed or broke a rule). A PARKED page lists what would reopen it. There is no terminal status. The [mechanism board](../mechanisms/README.md) shows the current state. This is the rule from decision D22 (a negative closes a configuration, never a mechanism).
 

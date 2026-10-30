@@ -83,7 +83,7 @@ The mechanism is ACTIVE, so this is a plan, not a reopening.
 2. **Soft-to-hard selection (C2).** Use a rank-consistent hinge and a linear anneal, with no temperature exponential, ending at the exact integer rank. Score it by how often the source is in the flock, and by rank-1-when-kept by distance bucket.
 3. **Tree read (C3).** Use the tree for $O(\log n)$ reads, only after C1 shows the coupling learns, and with tokens per second reported first.
 
-Any retry of the float starling or rank-table forms needs a fresh fitness review, an owner release, a separately scanned float module, a D11 integer export and no softmax surrogate.
+Any retry of the float starling or rank-table forms needs a fresh fitness review, the lab's pre-run review under D67, a separately scanned float module, a D11 integer export and no softmax surrogate.
 
 ## Also known as
 

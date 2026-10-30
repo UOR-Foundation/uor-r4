@@ -77,21 +77,19 @@ Since 27 October the work is on a second model path, a float-trained trunk calle
 - The model is **served as integers**. On an M1 laptop a served token runs at 4,217 to 4,504 tok/s under the exact `lut-stack/5` contract (claude-182, claude-186). The served model is inside the export-gap bar on both seeds: net 6 and −8 rows against F_I 24 on DEV (claude-182). Not every part is served in integers yet: the copy heads, the memory and the nearest-word readout are not.
 - Text in and out (R7) is not built. The artifacts take token ids only.
 
-No milestone is complete. [Where we are](./where-we-are.md) has the full status.
+M1 is complete. [Where we are](./where-we-are.md) has the full status and its limits.
 
 ## Where it stands
 
-The table below is the 19 Oct 2026 discrete path.
-
 | Item | State | Source |
 |---|---|---|
-| Milestones complete | 0 of 8 | [STATUS](../../STATUS.md), [NOW](../integration/NOW.md) |
-| Whole-number serving engine | Built. It runs in a browser, and its audit finds no decimal instruction in 7 of 7 serving functions (**measurement**) | [WASM runtime record](../labs/wasm-serving-runtime-2026-10-18/README.md) |
-| A model trained under today's rules in that engine | None yet (older float stacks were served in October and missed their quality bar). Training is on hold until the owner releases each run | [NOW](../integration/NOW.md), [charter](../../CHARTER.md) section 5 |
-| Best trained model so far | 65 and 463 correct first guesses out of 14,287 on its two seeds. A table of word counts gets 1,226, and a next-word table gets 6,300 (**measurement**) | [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md), [count tables](../../archive/labs/host-diagnostics-2026-10-17/README.md) |
-| Tokens per second for the current model | Never measured | [lut-serving](../mechanisms/lut-serving.md) |
+| Milestones complete | **1 of 8 (M1)** | [STATUS](../../STATUS.md), [PLAN](../../PLAN.md) |
+| Whole-number serving engine | Built. Native and WebAssembly audits pass; integer multiply and divide are allowed, floats remain banned | [WASM runtime record](../labs/wasm-serving-runtime-2026-10-18/README.md), [serving dossier](../mechanisms/lut-serving.md) |
+| A model trained under today's rules in that engine | The saved discrete M1 pair and a separate FBS export exist; neither is useful chat or a released product. New work uses the lab's pre-run review, not a blanket owner hold | [where we are](./where-we-are.md), [charter](../../CHARTER.md) section 5 |
+| Saved M1 model | 7,002 and 7,001 correct first guesses out of 14,287 on DEV, above unigram 1,226 and T2 6,300; p-f 7,850 and 7,872 | [M1 close](../labs/m1-close-saved-model/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
+| Apple M1 decode for the M1 pair | 10,876 and 10,566 tokens per second, with a 192-token prefill and 64-token decode | [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
 
-The model is currently worse than two simple tables of word counts, and the cause is not established. [Where we are](./where-we-are.md) explains the numbers.
+M1 reads new prompt phrasings into known reply kinds; 62.5% of p-f's reference replies are verbatim TRAIN replies, so this is not useful conversation. K16's older 65 and 463 are history, not the current best. [Where we are](./where-we-are.md) explains both the result and its limits.
 
 ## Go deeper
 

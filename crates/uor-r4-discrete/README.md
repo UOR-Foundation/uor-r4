@@ -30,9 +30,8 @@ cargo test --locked -p uor-r4-discrete --lib
 These are intended for metadata and construction tests; the default feature set
 has no CUDA model execution. The `cuda` feature requires CUDA12.8-compatible build
 and driver tooling. Device qualification, evaluation and learning are GPU-only,
-under the admitted runner, exact sheet and applicable scoped release. Commands
-above are not permission to launch a dose. The generic training entry remains held;
-controller-specific releases are separately bound.
+under the admitted runner, exact sheet and the lab's pre-run review (D67). Commands
+above are not permission to launch a dose. D41's donor pass is the named owner-at-dispatch exception.
 
 The selected core dependency uses `native_support.rs`, not historical `lib.rs`;
 integer selects `native_geometry.rs`. See their [manifests](../uor-r4-core/Cargo.toml)
@@ -43,8 +42,8 @@ and [integer manifest](../uor-r4-integer/Cargo.toml). Do not substitute old mode
 - [D33 pilot](../../archive/labs/a2-pilot-2026-10-14/README.md): 1,640 batches, 236 accepted updates; mixed DEV measurements.
 - [Original paired attention dose](../../docs/labs/attention-dose1-strategic-stop-2026-10-18/README.md): owner-stopped before Q1, partials preserved.
 - [Rows parity attempt3](../../docs/labs/counterfactual-rows-parity-2026-10-18/evidence/attempt3/rows-parity.json): 1,085 finite cases, zero updates; proposal timing is non-gating (`qualified=false`).
-- [Live M1 issue](https://github.com/UOR-Foundation/uor-r4/issues/2029): successor dispatch and actual outcomes.
+- [M1 close](../../docs/labs/m1-close-saved-model/README.md): the saved 19-table model passes bars (a)–(e) at two seeds.
+- [M1 bar (f)](../../docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md): p-f 7,850 / 7,872 against T2 7,375, band 81, closing all six bars. Apple M1 decode is 10,876 / 10,566 tok/s; useful conversation remains unqualified.
 
 D37 permits offline float training without matmul/GEMM or softmax/squashing, while
-this discrete implementation stays integer. D11 integer serving (the hardware integer multiply and divide are allowed, D80/D81; floats stay banned) requires
-its own export and complete-path qualification. Useful conversation is unqualified.
+this discrete implementation stays integer. D11 integer serving (the hardware integer multiply and divide are allowed, D80/D81; floats stay banned) has exact table-native exports for the M1 pair and a separate FBS trunk. The accepted M4 full-path qualification remains open.

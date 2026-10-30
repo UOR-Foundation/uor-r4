@@ -17,13 +17,13 @@ flowchart TD
   doit --> row
 ```
 
-*How work moves from an idea to a recorded result. Only the Yes branch that needs GPU spend or a milestone claim goes through a sheet, a review and an owner release.*
+*How work moves from an idea to a recorded result. Only the Yes branch that needs GPU spend or a milestone claim goes through a sheet, a FIT review and the lab's pre-run review.*
 
 ## Why there are rules at all
 
 The owner's stated goal behind every ban, in his own words from 18 October 2026, is "to ban expensive operations" and to optimise for "fast local ai that can train fast and run fast" and reaches "almost frontier level capability" (`CHARTER.md` §1, from decision D37). Each rule removes a cost that a dense neural network pays, or protects the evidence that tells the project whether its geometric replacement works. When a case is unclear, the charter says to choose what trains and serves fastest on a laptop through the geometric path, and to write the choice down.
 
-The project's headline metric is tokens per second: how fast the model reads and writes text, with decode speed and context speed measured separately. A small quality gap is acceptable (`CHARTER.md` §1). The project is pre-alpha, 0 of its 8 milestones are complete, and no model holds a useful conversation yet (`STATUS.md`; see [the mechanism board](../mechanisms/README.md)).
+The project's headline metric is tokens per second: how fast the model reads and writes text, with decode speed and context speed measured separately. A small quality gap is acceptable (`CHARTER.md` §1). The project is pre-alpha, 1 of its 8 milestones is complete, and no model holds a useful conversation yet (`STATUS.md`; see [the mechanism board](../mechanisms/README.md)).
 
 These are rules, so the labels "proof", "measurement" and "hypothesis" from `docs/formal_vocabulary.md` do not apply to them. The "why" given for each rule below is the reason the charter itself states. It is not a measured result.
 
@@ -99,8 +99,8 @@ Section 4 of the charter is about not fooling ourselves.
 |---|---|---|
 | Charter | Adopted 19 October 2026 by the owner at checkpoint 1 of the repository renormalisation. | `CHARTER.md`; [change log](changes.md) |
 | Old rules D0 to D41 and the long `AGENTS.md` | Replaced by the charter. Each decision keeps its heading and a one-sentence fate in the live index; full text is preserved unchanged in the archive. | [`decision-map.md`](decision-map.md); [archived original](../../archive/integration/DECISIONS-2026-10-19.md) |
-| Training, M2 and Stage B | Remain HELD until the owner releases them. | `CHARTER.md` §5.1 |
-| Pre-alpha status | 0 of 8 milestones complete; no useful conversation yet. | `STATUS.md` |
+| Training, M2 and Stage B | Go through the lab's own whole-project pre-run review under D67; D41's donor pass is the named owner-at-dispatch exception. | `CHARTER.md` §5.1, §5.10 |
+| Pre-alpha status | 1 of 8 milestones complete (M1); no useful conversation yet. | `STATUS.md`, `PLAN.md` |
 
 ## Go deeper
 

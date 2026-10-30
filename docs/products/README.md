@@ -1,66 +1,80 @@
 # The three products
 
-UOR-R4 aims to ship one thing people can use: a small, fast language model that runs on your own laptop or in your own browser, with nothing sent to a server. The owner defined three products around it on 19 October 2026. The first is the **model** itself, saved as one file of whole numbers. The second is a **web client** that runs that file inside a browser tab. The third is a **desktop client**, an installable app that runs the same file natively and remembers your conversations. **None of the three ships today.** As of 29 Oct 2026 the project is pre-alpha: 0 of its 8 milestones are complete and no model holds a useful conversation yet ([STATUS](../../STATUS.md), [NOW](../integration/NOW.md)). Nothing is released until a trained model passes milestones M1 to M8.
+UOR-R4 aims to ship one thing people can use: a small, fast language model that runs on your own
+laptop or in your browser, with nothing sent to a server. The three products are the **model** in
+one integer file, a **web client** that runs it in a browser tab, and a **desktop client** that runs
+it natively with durable memory. **None ships today.** M1 is complete (1 of 8), but no useful
+conversation, integrated qualified product or alpha release exists.
 
-Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run with its artifact, **hypothesis** means an untested idea ([`docs/formal_vocabulary.md`](../formal_vocabulary.md), [glossary](../start/glossary.md)).
+Labels: **proof**, **measurement**, **hypothesis** ([`docs/formal_vocabulary.md`](../formal_vocabulary.md), [glossary](../start/glossary.md)).
 
-![One file in the middle, labelled "model artifact (UORLUT01, integer only)". Two arrows leave it. The left arrow goes to a browser window labelled "web client: WebAssembly in a tab, Studio shell". The right arrow goes to a laptop labelled "desktop client: Tauri app, native engine, durable memory, offline". Both clients share one user interface, drawn as the same Studio panel inside each. A dashed border around everything reads "on your device; no model server".](../figures/products/product-family.svg)
+![One integer model file feeding a browser-based web client and a native desktop client, with everything running on the user's device and no model server.](../figures/products/product-family.svg)
 
-*One model file feeds two clients that share one interface. Everything inside the dashed line runs on the user's own device.*
+*One model file is intended to feed two clients sharing one interface and local storage.*
 
 ## The three at a glance
 
 | Product | What it is meant to be | What exists today | Main gate |
 |---|---|---|---|
-| [Language model](./language-model.md) | A geometric language model exported as one checksum-pinned integer file (`UORLUT01`) | The serving engine. The float-trained FBS trunk is exported to it exactly under `lut-stack/5`, at DEV scope (claude-182); no discrete-path model has been exported to it | M1 to M4, then M8 |
-| [Web client](./web-client.md) | A local model in the browser: download the file once, run it in WebAssembly on the device | The Studio interface (`index.html`), a WebAssembly build of the engine (`UOR-Foundation/uor-r4#2654`), and a paused Pages deploy | M7 |
-| [Desktop client](./desktop-client.md) | A Tauri app sharing the web interface, with the native engine, file access, durable memory and offline use on M1-class laptops | [`src-tauri/`](../../src-tauri/) native Rust backend + `--stdio` / `--serve-studio` Studio host + `--features gui` Tauri v2 WebView shell (`#2826`) linking `uor-r4-integer` + `uor-r4-object-store`, offline Studio shims, and 7 integration tests on the synthetic stand-in ([record](../labs/infra-desktop-client-tauri/README.md)) | M3, M5, M7 |
+| [Language model](./language-model.md) | A geometric language model exported as one checksum-pinned `UORLUT01` file | The discrete M1 pair and a separate exact FBS `lut-stack/5` export, with serving evidence; no conversational product release | M2–M4, then M8 |
+| [Web client](./web-client.md) | A local model in the browser: download once, run in WebAssembly on the device | Studio connected to the integer worker, self-hosted assets and stack-bound tokenizer, all verified on a synthetic stand-in; no qualified bundle | M7 |
+| [Desktop client](./desktop-client.md) | A Tauri app sharing the interface, with native engine, file access, durable memory and offline use | [`src-tauri/`](../../src-tauri/) backend, Studio host and GUI shell with seven integration controls on the synthetic stand-in; no qualified bundle | M3, M5, M7 |
 
-A fourth page, [Releases and artifacts](./releases-and-artifacts.md), covers the model file format, how a release would be cut, the Hugging Face repositories and how checksums tie them together.
+[Releases and artifacts](./releases-and-artifacts.md) covers the file format, future M8 release,
+Hugging Face repositories and checksum binding.
 
 ## Why the products look like this
 
-**Local by design.** The mission is "fast local AI": a model that trains fast, runs fast and approaches frontier capability on ordinary hardware ([charter](../../CHARTER.md), section 1). The lead metric is tokens per second. A product that needs a data centre would defeat the point.
+**Local by design.** The mission is fast local AI, and the lead metric is tokens per second. A
+product that needs a data centre would defeat the point.
 
-**One file, many hosts.** The served model obeys one contract, called D11: no decimal (floating-point) arithmetic and no transcendental functions, only whole-number operations ([D11](../integration/DECISIONS.md#d11--native-multiplier-free-transformerless-serving-for-every-lab-d10-superseded)). Until 28 October it also allowed no multiply or divide instruction, only adds, shifts and table look-ups. D80 and D81 now allow the integer multiply and divide. A file that needs nothing more exotic than integer arithmetic can run the same way in a browser, on a laptop processor or on Apple silicon. The charter says serving this file on the user's device is the product and is allowed. The rule that research compute must run on a GPU (D24) does not apply to it ([charter](../../CHARTER.md), section 3.6).
+**One file, many hosts.** D11 bans float and transcendental arithmetic and excludes dense matmul.
+D80 and D81 allow integer multiply and divide. That lets one integer artifact run natively, in a
+browser or on Apple silicon. Serving the exported artifact on the user's device is the product and
+is allowed ([charter](../../CHARTER.md), section 3.6).
 
-**One interface, two shells.** The Studio, a single-page interface already in the repository, is the shell for both clients. The browser runs the engine as WebAssembly. The desktop app wraps the same page and runs the engine as native code, which should be faster (a **hypothesis**; no side-by-side timing exists).
+**One interface, two shells.** The browser runs the engine as WebAssembly; the desktop app wraps
+the same Studio and runs native Rust. Native being faster is a **hypothesis** until a same-file
+comparison exists.
 
 ## Where each product stands
 
 | Item | State | Source |
 |---|---|---|
-| Milestones complete | 0 of 8 (**measurement** of the tracker) | [STATUS](../../STATUS.md), [NOW](../integration/NOW.md) |
-| Integer serving engine, native | Built; serving audit green on 44 symbol ranges (47 multiplies and 1 divide used since claude-177, allowed by the audit since claude-175) (**measurement**) | [project track](../integration/project-track.md), M4 |
-| Integer serving engine, WebAssembly | Built; 7 of 7 serving functions with zero float instructions (integer multiplies and divides allowed since claude-175, used since claude-177); save and restore reload identically on a synthetic model (**measurement**) | [record](../labs/wasm-serving-runtime-2026-10-18/README.md) |
-| A trained model in that engine | No model that holds a conversation. The float-trained FBS trunk is exported and served in integers on the M1 laptop at 4,217–4,504 tok/s under the exact `lut-stack/5` contract (4,829 snapped, claude-177), but there is no typed chat: R7, the text path, is not built. See the [pipeline map](../model/pipeline-map.md) | [NOW](../integration/NOW.md), [lut-serving dossier](../mechanisms/lut-serving.md) |
-| Studio connected to the new engine | Built on the synthetic stand-in — web worker (`#2818`) and native desktop backend + `--features gui` Tauri v2 shell + offline Studio shim (`#2826`) verified on the synthetic stand-in; no trained model exists | [`index.html`](../../web/studio/index.html), [desktop client record](../labs/infra-desktop-client-tauri/README.md) |
-| Public website deploy | Paused since 15 October; the live site is the 13 October build | [`deploy.yml`](../../.github/workflows/deploy.yml) |
-| Desktop app project | Built in [`src-tauri/`](../../src-tauri/) (`#2826`): native Rust backend + `--stdio` / `--serve-studio` host + `--features gui` Tauri v2 WebView shell (`tauri::Builder`, `#[tauri::command]`, locked in [`src-tauri/Cargo.lock`](../../src-tauri/Cargo.lock)), verified on the `seed = 5` synthetic stand-in (`7/7` integration controls) | [desktop client record](../labs/infra-desktop-client-tauri/README.md) |
+| Milestones complete | **1 of 8 (M1)** | [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) |
+| Saved discrete M1 model | DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228; p-f 7,850 / 7,872; Apple M1 decode 10,876 / 10,566 tok/s | [M1 close](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
+| Separate FBS trunk | Exact `lut-stack/5` export at DEV scope; not joined to the M1 artifact | [pipeline map](../model/pipeline-map.md) |
+| Integer serving engine, native and WebAssembly | Audits green; integer multiply and divide allowed; float remains banned | [serving dossier](../mechanisms/lut-serving.md) |
+| Studio connected to the integer engine | Worker and native desktop backend verified on the synthetic stand-in; no qualified model bundle | [web client](./web-client.md), [desktop client](./desktop-client.md) |
+| Public website deploy | Old Studio deploy paused; mdBook preview publishes on main, production only by manual dispatch | [`deploy.yml`](../../.github/workflows/deploy.yml), [`docs-site.yml`](../../.github/workflows/docs-site.yml) |
 
-A passing audit shows that a forbidden instruction is absent. It is not a trained capability, and it says nothing about how well a model answers.
+A passing audit shows that a forbidden instruction is absent. It is not a trained capability, and
+M1's result does not qualify useful conversation.
 
-## Since 27 Oct 2026
+## Since M1 closed
 
-The model line moved to a float-trained trunk (FBS) that routes, with exact turn memory that stores. It is exported and served in integers, and typed chat waits for R7. The next work, in order: carry memory past a reply's first word, serve the parts in integers, build R7, then train and score one model end to end. The plan is in [PLAN](../../PLAN.md); the part-by-part state is in the [pipeline map](../model/pipeline-map.md).
+The open research problem is complete replies on new phrasing. Claude-217's cycle step ends every
+registered loop but leaves content underpowered, so greedy remains the decode. On p-s, reply
+openings are 17.4%, 13.7% and 18.6% at three seeds, against about 80% on later tokens. Exact turn
+memory keys on exact first token ids and misses reworded prompts. The next work is a memory key
+that new phrasings can reach, then one joined model through integer serving and M2–M4
+([claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)).
 
 ## The order things must happen in
 
-The products depend on the model, and the model depends on milestones. Roughly:
+1. **M2 and M3** produce complete grounded replies and durable memory on the selected model.
+2. **M4** exports and qualifies that model through D11 and the command line.
+3. **M5** measures laptop cost, **M6** adds reasoning and coding on the same model.
+4. **M7** proves library/CLI/browser parity and truthful client-only Studio behavior.
+5. **M8** releases one versioned, checksum-pinned model that meets every earlier bar.
 
-1. **M1 to M3** give a model that predicts text, answers from exact memory, and keeps memory across sessions.
-2. **M4** exports that model through D11 and serves it from the command line.
-3. **M5** measures its cost on a laptop, and **M6** adds reasoning and coding on the same model.
-4. **M7** makes the browser worker, the command line and the Rust library produce bit-identical tokens. That is the web client's gate.
-5. **M8** is the alpha release: one versioned, checksum-pinned model file that meets every earlier bar.
-
-The desktop client has no milestone of its own yet. It rides on M3 for memory, M5 for laptop cost and M7 for the shared interface. The full definitions are in the [project track](../integration/project-track.md).
+The desktop client rides on M3 for memory, M5 for laptop cost and M7 for the shared interface.
+Full definitions are in the [project track](../integration/project-track.md).
 
 ## Go deeper
 
-- [Language model](./language-model.md): what the model is and the M1 to M8 path in plain words.
-- [Web client](./web-client.md) and [desktop client](./desktop-client.md): architectures, what exists and what is missing.
-- [Releases and artifacts](./releases-and-artifacts.md): `UORLUT01`, the release workflow, Hugging Face, checksums.
-- [Serving and export](../model/serving-and-export.md): how the integer engine computes without a multiply.
-- Mechanism dossiers: [integer table serving](../mechanisms/lut-serving.md), [exact object store](../mechanisms/object-store.md).
-- The [charter](../../CHARTER.md), sections 2 (products) and 3.6 (serving on the user's device).
+- [Language model](./language-model.md): the artifact, M1 evidence and M1–M8 path.
+- [Web client](./web-client.md) and [desktop client](./desktop-client.md): architectures and remaining gaps.
+- [Releases and artifacts](./releases-and-artifacts.md): `UORLUT01`, future release machinery, Hugging Face and checksums.
+- [Serving and export](../model/serving-and-export.md) and the [integer serving dossier](../mechanisms/lut-serving.md).
+- [Charter](../../CHARTER.md), sections 2 and 3.6.

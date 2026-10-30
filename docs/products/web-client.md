@@ -1,73 +1,87 @@
 # The web client
 
-The web client is meant to be a language model that lives in a browser tab. You open a web page once, it downloads the model file, and from then on the model runs on your own computer, inside the browser, in a sandboxed form of machine code called WebAssembly. Your prompts and the model's replies never leave the device, because there is no model server to send them to. The page you would use is the Studio, an editor-and-chat interface already in the repository. Today the pieces exist separately and are not joined: the browser engine works on a synthetic test model, the Studio still points at an older engine that was retired, the public site is frozen, and there is no trained model to download. **Until milestones M7 and M8 pass, the web client is a geometry explorer and demonstration, not a product.**
+The web client is meant to put a language model in a browser tab: open a page once, download the
+model, then run it locally in WebAssembly with no model server. The Studio interface and the integer
+worker already exist and are connected **on a synthetic stand-in**. No qualified model is bundled,
+and accepted-model M7 parity is not established. **M1 is complete, but the web client is still a
+demonstration, not a product.**
 
-Labels used below: **proof** (derived from definitions or code), **measurement** (a recorded run with its artifact), **hypothesis** (untested). See [`docs/formal_vocabulary.md`](../formal_vocabulary.md) and the [glossary](../start/glossary.md).
+Labels: **proof**, **measurement**, **hypothesis**. See [`docs/formal_vocabulary.md`](../formal_vocabulary.md) and the [glossary](../start/glossary.md).
 
-![A browser window with three layers. Top: the Studio page (editor, chat panel, model manager). Middle: a Web Worker box holding the WebAssembly engine with its calls loadStack, step, saveSession and restoreSession. Bottom: browser storage holding the downloaded UORLUT01 model file and saved sessions (UR4SESS1). One arrow, drawn only once and labelled "first visit: download model, check SHA-256", comes in from a static file host. A crossed-out arrow to a "model server" shows that no prompt leaves the device.](../figures/products/web-client-architecture.svg)
+![A browser window with three layers: the Studio interface, a Web Worker holding the integer engine, and browser storage for the model and saved sessions. A crossed-out model-server arrow shows that prompts do not leave the device.](../figures/products/web-client-architecture.svg)
 
-*One download, then everything runs in the tab. The only network traffic is fetching the static page and the model file.*
+*The intended design: one verified download, then local computation in the tab.*
 
 ## How it is meant to work
 
-1. **Load the page.** The Studio is static HTML, JavaScript and CSS. The charter places it at `/studio` on the project's documentation site ([charter](../../CHARTER.md), section 2).
-2. **Download the model once.** The page fetches one `UORLUT01` file and checks its SHA-256 against the hash published with the release ([releases](./releases-and-artifacts.md)). It then keeps the file in browser storage so later visits work offline. This cache is planned, not built (from reading the repository).
-3. **Start the engine in a Web Worker.** A worker is a background thread of the page, so typing stays smooth while the model computes. The worker loads the WebAssembly build of `crates/uor-r4-integer` and calls `init`, then `loadStack` on the model bytes.
-4. **Generate.** For each token the worker calls `step`. The engine uses only integer adds, shifts and table look-ups (the D11 contract), so the same file gives the same tokens in every browser. That is a design property; M7 has to measure it.
-5. **Save and resume.** `saveSession` writes the conversation state as a `UR4SESS1` snapshot, and `restoreSession` brings it back byte for byte.
+1. **Load the static Studio.** The charter places it at `/studio` on the documentation site.
+2. **Download one `UORLUT01` file and verify its SHA-256.** A release pin identifies the model. A
+   download-once browser-storage cache is planned, not claimed as delivered.
+3. **Start the integer engine in a Web Worker.** The worker loads `pkg/uor_r4_integer.js` and calls
+   `init` and `loadStack` on the model bytes.
+4. **Generate.** Each token calls `step`. The D11 engine uses integer arithmetic; integer multiply
+   and divide are allowed, while floats, transcendentals and dense matmul stay banned. Accepted-model
+   cross-browser parity is an M7 measurement, not an assumption.
+5. **Save and resume.** `saveSession` emits a `UR4SESS1` snapshot and `restoreSession` loads it.
 
-These function names are the real exports of the WebAssembly build: `init`, `tickClock`, `loadStack`, `step`, `saveSession`, `restoreSession`, `weightsPerToken`, `allocEvents`, `leakedModels` ([record](../labs/wasm-serving-runtime-2026-10-18/README.md); **proof** by reading [`wasm_bindgen_exports.rs`](../../crates/uor-r4-integer/src/wasm_bindgen_exports.rs)).
-
-**Why serving in the browser is allowed.** Research compute must run on a GPU (D24). On 15 October that rule paused the browser engine, because serving in a browser runs on the user's processor ([D36](../integration/DECISIONS.md#d36--github-pages-keep-the-last-good-deploy-live-deploy-job-skipped-until-a-d11-served-wasm-engine-lands)). The owner resolved this on 19 October: serving the exported D11 file on client devices, including browser WebAssembly, is the product, and D24 does not apply to it ([charter](../../CHARTER.md), section 3.6).
+The real exports are `init`, `tickClock`, `loadStack`, `step`, `saveSession`, `restoreSession`,
+`weightsPerToken`, `allocEvents` and `leakedModels`
+([`wasm_bindgen_exports.rs`](../../crates/uor-r4-integer/src/wasm_bindgen_exports.rs)). Serving an
+exported D11 artifact on a client device is allowed; the GPU-only research-compute rule does not
+apply to product serving ([charter](../../CHARTER.md), section 3.6).
 
 ## What exists today
 
-| Piece | Where | State | Source |
-|---|---|---|---|
-| Studio interface | [`index.html`](../../web/studio/index.html), `index.css`, [`assets/js/uor_model_worker.js`](../../web/studio/assets/js/uor_model_worker.js), [`assets/js/uor_tokenizer_artifact.js`](../../web/studio/assets/js/uor_tokenizer_artifact.js), [`r4_worker.js`](../../web/studio/r4_worker.js), [`verify_studio_worker.mjs`](../../web/studio/verify_studio_worker.mjs) | Editor (Monaco loader replaced by the #2990 offline shim), file tree, chat, model manager, local folder access, GitHub chooser. The model worker imports `pkg/uor_r4_integer.js` (`serving-wasm`: `loadStack`, `step`, `saveSession`, `restoreSession`), reports only header- and engine-derived capability fields (`"synthetic stand-in"` for the synthetic fixture, plus a stack-bound `ByteLevel` BPE tokenizer artifact (`uor-r4.studio-tokenizer/1`, `mode: "byte-bpe"`, bundled as `DEFAULT_STACK_TOKENIZER_ARTIFACT` in `assets/js/uor_tokenizer_artifact.js` and generated into `pkg/tokenizer.json` by `web/studio/tools/make_tokenizer.mjs` for both `uor-r4.lut-stack/1` and `uor-r4.lut-discrete/1` headers; its label says `stack-bound byte-bpe tokenizer (vocab N, stack sha256 …)` and replaces the `rawBytes[i] % vocabSize` stand-in on bound stacks, with the unbound byte-mod fallback labelled explicitly), and shows the D36 banner (`0/8` milestones complete, A8 preflight checkpoint-0 `P_succ = 35.1%`, D11 decode `tok/s` unmeasured, Pages deploy frozen); page-load resources on `index.html` are machine-checked on-origin both statically (`web/studio/verify_studio_page.mjs`) and at runtime in headless Chrome (`web/studio/verify_studio_page_load.mjs`: 6 requests, 0 external; the trap auto-attaches to worker targets and self-tests inline, worker and late requests); the router demo page's three CDN loads are **self-hosted** (`assets/css/router_demo_offline.css`, a static Tailwind subset built from the page's own inline config, plus local icon rules and system-font fallbacks); `web/studio/verify_studio_worker.mjs` auto-builds the `wasm-pack` bundle and `seed = 5` `synthetic-stack.lut` from a clean clone, and both page-load traps report **zero external requests on both pages** | [`index.html`](../../web/studio/index.html), banner `d36EngineStatusBanner`, [Studio WASM wiring record](../labs/m7-studio-connect-wasm-engine/README.md) (`#2868`), and [Studio page-load & tokenizer record](../labs/m7-studio-self-host-page-assets/README.md) (`#3075`) |
-| WebAssembly integer engine | [`crates/uor-r4-integer/src/wasm_serve.rs`](../../crates/uor-r4-integer/src/wasm_serve.rs), `wasm_bindgen_exports.rs`, `session_codec.rs` | Built behind the `serving-wasm` feature; merged as `UOR-Foundation/uor-r4#2654` | [record](../labs/wasm-serving-runtime-2026-10-18/README.md) |
-| Its checks | same record | 165 crate tests pass; 7 of 7 serving functions with 0 multiply, 0 divide and 0 float instructions; a Node.js run of 32 steps, save, restore and 16 more steps matches a fresh 48-step run (`reloadIdentical: true`) on a synthetic model (**measurement**) | [record](../labs/wasm-serving-runtime-2026-10-18/README.md) |
-| Browser and Node harnesses | `docs/wasm-serving/wasm_serve_demo.html`, `verify.mjs`, [`web/studio/verify_m7_parity.mjs`](../../web/studio/verify_m7_parity.mjs), [`m7_parity_library_cli_browser.rs`](../../crates/uor-r4-integer/tests/m7_parity_library_cli_browser.rs) | `verify_m7_parity.mjs` and `m7_parity_library_cli_browser.rs` auto-build the `wasm-pack` output and `seed = 5` `synthetic-stack.lut` from a clean clone and verify `8 / 8` prompt bit-identity (`48` uninterrupted tokens and `32 + 16` fresh-process `UR4SESS1` save/restore) across the Rust library, `uor-chat --stack` CLI, and Studio Web Worker ([parity record](../labs/m7-parity-library-cli-browser/README.md), `#2867`) | [record](../labs/wasm-serving-runtime-2026-10-18/README.md) and [M7 parity record](../labs/m7-parity-library-cli-browser/README.md) |
-| Public deploy | [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml) | Job disabled (`if: false`) by owner decision on 15 October; the live site is the last good build, 13 October 18:28Z | [D36](../integration/DECISIONS.md#d36--github-pages-keep-the-last-good-deploy-live-deploy-job-skipped-until-a-d11-served-wasm-engine-lands) |
-| Geometry explorer | `web/studio/geometric_prime_router_webapp.html` | A standalone demo page, separate from the Studio; not verified in this audit | [`index.html`](../../web/studio/index.html) and the `web/studio/` files |
-| Cross-origin isolation helper | `web/studio/coi-serviceworker.js` | Vendored third-party file (v0.1.7, MIT) | [`index.html`](../../web/studio/index.html) and the `web/studio/` files |
+| Piece | Current state | Source |
+|---|---|---|
+| Studio interface | Editor, file tree, chat UI, model manager and local folder access, with self-hosted vendor shims | [`web/studio/index.html`](../../web/studio/index.html) |
+| Integer worker connection | `loadStack`, `step`, save/restore, header/engine-derived capabilities and a stack-bound ByteLevel BPE tokenizer, verified on a synthetic stand-in | [#2868 record](../labs/m7-studio-connect-wasm-engine/README.md) |
+| Offline assets and tokenizer | Main page and router demo make zero external page-load requests; the tokenizer artifact replaces the old byte-mod fallback on bound stacks | [#3075 record](../labs/m7-studio-self-host-page-assets/README.md) |
+| WebAssembly integer engine | `serving-wasm` build and 7-of-7 serving-function audit; save/restore identity on the synthetic model | [runtime record](../labs/wasm-serving-runtime-2026-10-18/README.md) |
+| Parity harness | Eight-prompt native/CLI/browser bit-identity on the seed-5 synthetic stack, with fresh-process restore | [M7 parity record](../labs/m7-parity-library-cli-browser/README.md) |
+| Status text | Pre-alpha, 1 of 8 milestones complete; M1 decode measured separately from the synthetic stand-in; no qualified model bundled | [`index.html`](../../web/studio/index.html) |
+| Public deploy | Old Studio deploy remains paused. The separate mdBook workflow publishes preview on main and production only by manual dispatch | [`deploy.yml`](../../.github/workflows/deploy.yml), [`docs-site.yml`](../../.github/workflows/docs-site.yml) |
 
-Three limits from the engine's own record matter for a reader. The WebAssembly SIMD kernels are test fixtures that nothing calls yet; the engine still runs its scalar table kernel. The demo needs a local build first. And the `serving-wasm` build compiles some modules unconditionally, so its compliance with the "presence counts" rule (D29) rests on an interpretation that `DECISIONS.md` does not record ([record](../labs/wasm-serving-runtime-2026-10-18/README.md), maintainer annotation).
+The SIMD kernels in the WebAssembly build are fixtures, not the hot path; the engine currently uses
+its scalar table kernel. These implementation limits do not negate the M1 model's native results,
+but they are not a browser qualification of that model.
 
-## What is missing
+## What is still missing
 
-| Missing piece | Needed for |
-|---|---|
-| A trained model exported to `UORLUT01` | Anything to download (M4, `#2032`) |
-| Studio rewired from the retired engine to the integer engine's exports, through a Web Worker | Model worker path rewired and verified on the synthetic stand-in (`#2868`, [record](../labs/m7-studio-connect-wasm-engine/README.md)); item `done` 2026-10-23 (kimi-27, PR #3072); a qualified model artifact is still M4's |
-| A download-once loader with a checksum check and a browser-storage cache | Offline use after the first visit |
-| Bit-identical token and session parity across the Rust library, `uor-chat` and the browser worker, on the real model | Three-host parity harness verified on the `seed = 5` `mk-synthetic-stack` across the 8-prompt `m7-parity-prompts-v1` panel (`#2867`, [record](../labs/m7-parity-library-cli-browser/README.md)); bar registered as `m7-parity-prompts-v1` ([panel](../harness/panels/m7-parity.json)); item stays `ready` until re-execution on an accepted M4 `UORLUT01` model artifact |
-| Truthful capability reporting in the Studio and zero remote model calls | Model worker path verified on synthetic stand-in via `web/studio/verify_studio_worker.mjs` (`#2868`); awaits real model |
-| Re-enabled Pages deploy (D36 says remove the `if` in the PR that lands a D11 served engine) | Public access |
-| Self-hosted copies of every CDN asset and stack-bound tokenizer | **Delivered (`#3075`, [record](../labs/m7-studio-self-host-page-assets/README.md)).** `#2990` replaced the main page's CDN loads with `assets/css/uor_offline_fonts.css` and `assets/js/uor_offline_vendor.js`; `deepseek-61` self-hosted the router demo page's Tailwind, Font Awesome and Google Fonts loads (`assets/css/router_demo_offline.css` static Tailwind subset from the page's own inline config, local unicode icon rules, system-font fallbacks); `antigravity-60` replaced the worker's `byte-mod` stand-in with the stack-bound `ByteLevel` BPE tokenizer artifact (`uor-r4.studio-tokenizer/1`, `mode: "byte-bpe"`, bundled in `assets/js/uor_tokenizer_artifact.js` and generated into `pkg/tokenizer.json` by `web/studio/tools/make_tokenizer.mjs` for both `uor-r4.lut-stack/1` and `uor-r4.lut-discrete/1` headers) and added clean-checkout bootstrap to `web/studio/verify_studio_worker.mjs`. `web/studio/verify_studio_page.mjs --strict-router`, `web/studio/verify_studio_page_load.mjs --strict-router` and `web/studio/verify_studio_worker.mjs` all pass on a clean clone with zero external requests |
-| Honest screenshots taken after behaviour checks | Documentation |
+- **A qualified model bundle for the web product.** M1's native artifacts do not by themselves prove
+  browser parity or M7 distribution.
+- **The accepted M4 model and its browser export.** Full quality, session and audit bars come before
+  M7's accepted-model parity check.
+- **A download-once cache and release loader.**
+- **Bit-identical tokens and sessions on the real model across library, CLI and browser.** The
+  synthetic harness passing is an instrument result, not M7 completion.
+- **Production publication of the updated Studio.** No manual production `gh-pages` deployment is
+  implied by this documentation refresh.
 
-The M7 bar sums it up: the qualified model "produces bit-identical token completions and session snapshots across the Rust library, the `uor-chat` CLI and the browser `serving-wasm` worker", and the Studio "runs entirely client-side in a Web Worker with truthful capability reporting and zero remote model calls" ([project track](../integration/project-track.md), M7). The `.wasm` audit criterion is green and will be re-run on the shipped bundle; the rest of M7 (rewiring the Studio, three-host parity, client-side Studio) is open.
+## Privacy and integrity
 
-## Until then: an explorer, honestly labelled
+- **The engine computes locally.** No prompt or reply needs a model server. Today that is trivially
+  true because there is no remote model to call.
+- **Page-load resources are self-hosted.** The static and headless-Chrome checks report zero external
+  requests on both Studio pages. User-initiated GitHub features are a separate, explicit action and
+  are refused in Tauri/offline mode.
+- **A checksum proves integrity, not secrecy or quality.** The model is public; a hash identifies
+  the released bytes, not who made them or whether they answer well.
 
-Until M7 and M8 pass, the web page should present itself as what it is: a geometry explorer and a demonstration of the serving engine on a synthetic model. It must not offer a chat box that implies a working assistant. The Studio's engine-status banner already says so. Showing the engine's real exports (`weightsPerToken`, `allocEvents`) on a synthetic model is fair. Showing chat replies is not, until there is a trained model behind them.
-
-## Privacy model
-
-- **The model computes only on the device.** No prompt or reply is sent anywhere by the engine. That is the M7 bar, and today it holds trivially, because there is no remote model to call.
-- **Network use is not yet limited to static files.** The target is the page and the model file only. Since `#2990` the main Studio page loads no CDN code or fonts (offline shims under `web/studio/assets/`), and the Wikipedia/DuckDuckGo prompt search is disabled (`index.html`, `isWebSearchActive = false`). Since deepseek-61 the router demo page's three CDN loads are self-hosted too: the static scan and the headless-Chrome runtime trap report **zero external page-load references/requests on both Studio pages** (`--strict-router`). What remains is **user-initiated** GitHub features talking to `api.github.com` (refused under Tauri/offline), which are not page-load requests; the position is recorded on [`m7-studio-self-host-page-assets`](../roadmap/items/m7-studio-self-host-page-assets.md). None of that is model compute.
-- **Integrity, not secrecy, of the model file.** The SHA-256 check proves the file is the released one. The model is public, so there is nothing to hide in it.
+Until M7 and M8 pass, the page must remain a geometry explorer and synthetic-engine demonstration,
+not pretend to be a working assistant. M1's language-base result is real, but it does not change
+that product boundary.
 
 ## Open questions
 
-- How large will the model file be, and is a one-time download of that size acceptable on a phone? Unknown until a model exists.
-- How fast is WebAssembly against native on the same file? No tokens-per-second figure for the browser has been recorded. The newest native figures are for the FBS trunk on the M1 laptop: 4,829 tok/s snapped (claude-177), and 4,217–4,504 under the exact `lut-stack/5` contract (claude-182, claude-186; 29 Oct 2026). Older figures are from float models: 68 to 80 tokens per second on 8 threads for a 29M model, which is evaluation throughput over 64 scored windows, not free-running decode ([D11 serving record](../../archive/labs/d11-serving-2026-10-10/README.md)). The older figures are not decode speeds.
-- Should the Studio's provenance be settled first? Its source is an import from a companion repository, `Casey-allard/uor-r4-wasm-chat`, which this audit did not inspect.
+- How large will the accepted model file be, and is a one-time download acceptable on a phone?
+- How fast is WebAssembly against native on the same file? The M1 pair's native 10,876/10,566 tok/s
+  does not answer that. Older FBS native rates and older evaluation throughput are not browser rates.
+- Which remaining served-memory/readout parts are needed for the accepted model's full browser path?
 
 ## Go deeper
 
-- [Desktop client](./desktop-client.md), which shares this interface.
+- [Desktop client](./desktop-client.md), which shares the interface.
 - [Serving and export](../model/serving-and-export.md) and the [integer serving dossier](../mechanisms/lut-serving.md).
-- The [WebAssembly runtime record](../labs/wasm-serving-runtime-2026-10-18/README.md) (`UOR-Foundation/uor-r4#2654`, tracking issue `#1172`).
-- [D36](../integration/DECISIONS.md#d36--github-pages-keep-the-last-good-deploy-live-deploy-job-skipped-until-a-d11-served-wasm-engine-lands) and the [charter](../../CHARTER.md), section 3.6.
+- [WebAssembly runtime record](../labs/wasm-serving-runtime-2026-10-18/README.md).
+- [D36](../integration/DECISIONS.md#d36--github-pages-keep-the-last-good-deploy-live-deploy-job-skipped-until-a-d11-served-wasm-engine-lands) and [charter](../../CHARTER.md), section 3.6.

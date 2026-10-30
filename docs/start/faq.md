@@ -28,19 +28,19 @@ No, by design. The charter says the project is "not a transformer" (section 1), 
 
 ### 3. Does it work yet?
 
-No. Zero of the eight milestones are complete ([STATUS](../../STATUS.md)). What works is the parts: for example the integer substrate passes 25 of 25 admitted GPU construction controls (**measurement**, [K16 qualification](../labs/k16-rows-qualification-2026-10-18/README.md)), and the whole-number serving engine runs in a browser and contains no decimal instruction in 7 of 7 serving functions (**measurement**, [WASM record](../labs/wasm-serving-runtime-2026-10-18/README.md)). Passing a control is not a language result. No two replacements have been trained together into a model that beats the count tables ([open questions](../research/open-questions.md)).
+Yes. M1 is complete. The saved discrete model beats both count tables at both seeds through its integer export, with exact export/reference agreement and tokens per second reported. The integer serving engine, exact object-store oracle, Studio worker and desktop shell also work at their declared scopes. A passing construction control alone is not a language result; M1 is a panel result, not useful chat ([open questions](../research/open-questions.md)).
 
-Since 27 Oct there is a second path, the float-trained FBS trunk, and as of 29 Oct it is exported and served exactly under `lut-stack/5` (claude-182). It is not a conversation: replies do not answer prompts. The two paths do not join yet ([pipeline map](../model/pipeline-map.md)).
+The separate float-trained FBS `lut-stack/5` trunk is also exported and served exactly at DEV scope. The two model paths do not join, and complete correct replies remain open ([pipeline map](../model/pipeline-map.md)).
 
 ### 4. How good is the best model so far?
 
-Not good. On 14,287 development rows, the best trained arm (K16-A) got its first guess right 65 and 463 times on its two seeds. A table of overall word counts gets 1,226, and a table that looks up the last word and returns its most common successor gets 6,300 (**measurement**, [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md), [count tables](../../archive/labs/host-diagnostics-2026-10-17/README.md)). The model has to beat both tables before the first milestone can close ([charter](../../CHARTER.md), section 4.8).
+At M1's next-token bars, strong enough to pass: 7,002 and 7,001 of 14,287 DEV first guesses, above unigram 1,226 and T2 6,300. Fresh V2 scores 7,215 and 7,228, and p-f scores 7,850 and 7,872, at both seeds. Apple M1 decode is 10,876 and 10,566 tok/s under the bar-f protocol (**measurement**, [M1 close](../labs/m1-close-saved-model/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 
-On 29 Oct the FBS trunk's best fit reached DEV top-1 of 10,152 and 11,140 of 14,287 on two seeds (claude-152, 153). With exact turn memory (claude-161) it names 598.7 and 598.3 of the 1,226 reply openings, but only the first word of a reply: after it, replies are still templates. This is a development-panel result, not a milestone.
+That is not a conversational result. The p-f reference replies are 62.5% verbatim TRAIN replies, and the separate FBS generation line still struggles on new phrasing. K16's older 65 and 463 are historical, not the current best.
 
-### 5. Why does it lose to a count table? Do you know the cause?
+### 5. Why did K16 lose to a count table, and what is the open problem now?
 
-The cause is not established. One early suspect, that too few distinct starting vectors capped the score, was tested and did not explain it: training broke much of the aliasing and the score stayed low ([K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md)). The open candidates are how well the output step can rank, the read, the address key (it takes only 5 values to order up to 256 cells, a **proof** from the kernel source in the architect's audit; whether that causes the low score is a **hypothesis**) and the training schedule (one pass sees under half the training targets). The next test, W2 (FIT-reviewed and queued, awaiting an owner release), decides whether the wall is the representation or the learning law ([open questions](../research/open-questions.md)).
+K16 was a dated configuration failure, not a verdict on the whole mechanism family. The later saved model passed M1. The current open problem is complete replies on new phrasing: claude-217's p-s openings are only 17.4%, 13.7% and 18.6% at three seeds, against about 80% on later tokens. Exact turn memory keys on the turn's exact first token ids, so a reworded known question can find no stored key. The next work is a reachable memory key and complete correct replies ([open questions](../research/open-questions.md)).
 
 ### 6. Will it reach frontier capability?
 

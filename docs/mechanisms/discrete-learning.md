@@ -1,6 +1,6 @@
 # Discrete geometric learning (exact-move counterfactual training)
 
-**Status: ACTIVE.** It is the learning rule of the only live model path, `crates/uor-r4-discrete`. It has trained a short pilot, a full K=8 dose, the four K16 runs (runs with a shortlist of K=16 cells; see the [glossary](../start/glossary.md)) and the Relation runs that stopped at the first checkpoint. None has shown a language gain or beaten its frozen control, and training stays held until the owner releases each run ([K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md)).
+**Status: ACTIVE.** It is the learning rule of the live discrete model path, `crates/uor-r4-discrete`. The pilot, K=8 dose, four K16 runs and Relation stops are preserved as negative or diagnostic history. Stage T and the later 19-table joint-pointer Hamilton trunk then produced the saved M1 model: DEV 7,002 / 7,001, Fresh V2 7,215 / 7,228 and p-f 7,850 / 7,872 at two seeds, with exact export agreement. That is a whole-model M1 result, not an independent ablation for this learning rule or useful chat. New training goes through the lab's pre-run review (D67), not a blanket owner hold ([M1 close](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run, **hypothesis** means an untested idea. See [`docs/formal_vocabulary.md`](../formal_vocabulary.md).
 

@@ -90,7 +90,7 @@ $$3+256+3837=4096 .$$
 | Other scripts and languages | Never tested; the corpora are English chat | none | [tokenizer page](../mechanisms/tokenizer.md) |
 | `distill-d1` | Registered, not generated, no capability claim | hypothesis | [sheet](../harness/prep/m1-distill-d1-donor-corpus-DRAFT-2026-10-19.md) |
 
-No model holds a useful conversation yet, and 0 of 8 milestones are complete ([project track](../integration/project-track.md)).
+No model holds a useful conversation yet, and 1 of 8 milestones is complete ([project track](../integration/project-track.md)).
 
 ## Go deeper
 

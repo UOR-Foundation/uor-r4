@@ -97,9 +97,9 @@ The laptop does non-model work: editing, compiling CPU-only builds, static check
 | Active kernels and PTX admission | Built and qualified on pods. The 19 October A8 dose trained two arms and was stopped for diagnosis, which the record says is not a mechanism negative | measurement | [A8 record](../labs/a8-dose-2026-10-19/README.md), [discrete crate](../../crates/uor-r4-discrete/README.md) |
 | NVRTC | Banned and removed from the active path | status | [D29](../integration/DECISIONS.md#d29--no-banned-mechanism-in-any-compiled-or-loaded-module-vendor-runtime-content-counts) |
 | Float training kernels | Held, with no PTX audit | status | [compute guide](../labs/compute.md) |
-| Training | Held; a run starts only on the owner's own typed release (D40) | status | [A8 record](../labs/a8-dose-2026-10-19/README.md) |
+| Training | Goes through the lab's own pre-run review (D67); D41's donor pass is the named owner-at-dispatch exception | status | [A8 record](../labs/a8-dose-2026-10-19/README.md), [charter](../../CHARTER.md) §5.1 |
 | CUDA in CI | None; qualification is on pods | status | `.github/workflows/` |
-| A trained language model from these GPUs | **Does not exist**. 0 of 8 milestones are complete | status | [project track](../integration/project-track.md) |
+| A trained language model from these GPUs | **Exists and has closed M1**: the saved discrete pair passes all six bars at two seeds; useful conversation remains unqualified | measurement | [M1 close](../labs/m1-close-saved-model/README.md), [project track](../integration/project-track.md) |
 
 ## Go deeper
 

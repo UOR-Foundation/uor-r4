@@ -67,8 +67,8 @@ with $c$ the per-boundary cost and $s$ the recorded score of the parameter event
 2. One coherent typed binding, frame and native credit boundary, qualified first, so carriers and prototypes change under a readout trained with them.
 3. A panel that is not component-only, with at least two seeds and a fresh draw of at least 128 rows.
 4. A matched ON against OFF comparison with identical active parameters, all 4,096 answer choices and physical copy aliases scored, and carriers rebuilt after each update.
-5. A D37 float re-registration (fresh review, owner release, scanned module, export gap against the D11 form) or an integer counterfactual form on the discrete path.
-6. Owner release of the separate hold on training and rental for milestone M2 (answering from memory; see the [milestones](../start/glossary.md)).
+5. A D37 float re-registration (fresh review, the lab's pre-run review under D67, scanned module, export gap against the D11 form) or an integer counterfactual form on the discrete path.
+6. A fresh pre-run review under D67 for any new training or rental. The blanket M2 owner hold is retired; D41's donor pass is the named owner-at-dispatch exception.
 
 ## Also known as
 

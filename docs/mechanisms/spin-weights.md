@@ -75,7 +75,7 @@ All training rows below are small: width 256, a recurrence-heavy stack, 2,000 st
 
 ## What would reopen it
 
-1. A table or Cayley-product path (120×120 read, shifts, adds) with no dense all-input contraction, for example applying the block product only to blocks chosen by routing, as the SpiralCore/FBS projection (PR #2279) does. It must be a new D37 sheet: fresh test-fitness review, owner release, a separately scanned float module, and an export gap.
+1. A table or Cayley-product path (120×120 read, shifts, adds) with no dense all-input contraction, for example applying the block product only to blocks chosen by routing, as the SpiralCore/FBS projection (PR #2279) does. It must be a new D37 sheet: fresh test-fitness review, the lab's pre-run review under D67, a separately scanned float module, and an export gap.
 2. An explicit architecture decision for a Hamilton-block trunk. The 18 October architect audit says the active discrete model has no dense projections to replace, so this is a new architecture. "Spinor/quaternion adapters" are already listed as a conditional item, to be considered only at a measured ceiling.
 3. A soft-to-hard activation-snap schedule, blending $\alpha\cdot\text{snap}+(1-\alpha)\,x$ with $\alpha$ rising to 1, compared with the +0.0196 BPB post-hoc cost, before any negative on activation snapping counts.
 4. A served-form table kernel measured in tokens per second on the same CUDA harness, with weight bytes per token held equal to the dense control (8.55 MB against 8.62 MB in the rung-0 study).
