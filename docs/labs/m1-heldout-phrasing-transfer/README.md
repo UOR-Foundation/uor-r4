@@ -1,0 +1,37 @@
+# M1 bar (f): the held-out-phrasing panel
+
+Lab: claude. Item: [m1-heldout-phrasing-transfer](../../roadmap/items/m1-heldout-phrasing-transfer.md). Order: [claude-211](../../loop/tasks/m1-heldout-phrasing-transfer/claude-211/ORDER.md).
+
+Bar (f) (D82, CHARTER §4 item 8): the saved model beats TRAIN's unigram and T2 bigram tables on a fresh held-out-phrasing panel, with bar (e)'s paired band. This page records the panel. It is opened once, for bar (f), and enters no other decision.
+
+## The panel and its control
+
+Both were drawn on 30 Oct by claude-204's `heldout-panel` (`docs/labs/one-model-end-to-end/instrument/`), with the pinned tokenizer of `w2-inputs/2026-10-25/driver-data/`. Each seed is one no unit has used; claude-204 used 2041–2043.
+
+```text
+heldout-panel out=p-f       tokenizer=TOKENIZER cell=dev,dev     conversations=400 seed=2051 protocol=2
+heldout-panel out=p-f-train tokenizer=TOKENIZER cell=train,train conversations=400 seed=2052 protocol=2
+```
+
+| Panel | Cell | Seed | Tokens | Reply targets | `tokens.u16` sha256 | `response_mask.u8` sha256 |
+|---|---|---|---|---|---|---|
+| **p-f** (bar (f)) | `dev,dev` | 2051 | 50,061 | 15,953 | `e6abbdf0dd2f2fff1810d5e1fd95f6cfa20582c57c98e990a1d9c852e5e43fef` | `c63c625a9897b4ee42043028addb3f9f831d7ecc28976cae8223ba0050e5c910` |
+| **p-f-train** (control) | `train,train` | 2052 | 50,950 | 16,800 | `b3bae826a3e25b18e163ea6d785593344af42e7076a1138c2c65a94e20a319a4` | `00c9b3b3e3e4208fc5e7de4f43a568cf88edd8a0fc9f76996dfdf453096d7934` |
+
+**Where they are stored:** the HF store at `inputs/claude/heldout-panels-2026-10-30/`, with a `SHA256SUMS` and the census.
+
+## The census, against the saved model's TRAIN
+
+- **TRAIN** is `mw-balp/train` under `w2-inputs/2026-10-25/driver-data/`. It is pinned by `hamilton_sheet.rs:41-46`: `tokens.u16` `3dee858f84b750f507ceb3dc3f393711741950954735efaaf61bf704c017a4c8`, `response_mask.u8` `b5e7352d67d6883a833155a5fd397a03f6d4f1b2649e3d4ec3e2ea7d95b949e3`.
+- **It is the same file the M1 sheets pin** (`m1-fresh-panel-transfer-2026-10-26.md:62-64`). That sheet gives it 26,214,400 tokens; the census reads the file as it is, 7,512,797 tokens, as the item asks.
+- **Command:** `train-in-space --data-root DATA --census 1 --fresh-v2 FRESH --panel p-f=DIR --panel p-f-train=DIR`. Output: [census-2026-10-30.json](census-2026-10-30.json).
+
+| Panel | Prompts | Exact prompts in TRAIN | Value-masked prompt templates in TRAIN, K = 1,024 | New-template (≤ 0.5)? |
+|---|---|---|---|---|
+| **p-f** | 1,409 | 0.000 | **0.000** | **yes** |
+| **p-f-train** (control) | 1,482 | 0.611 | 0.637 | no, as a control must |
+| DEV, for scale | 1,226 | 0.608 | 0.642 | no |
+| Fresh V2 (bar (e)'s panel) | 1,279 | 0.639 | 0.665 | no |
+
+- **No p-f prompt reuses a TRAIN phrasing,** even with its values masked. Fresh V2, bar (e)'s panel, reuses 0.665 of them.
+- **Replies are still template-shared:** 0.625 of p-f's replies are verbatim TRAIN replies. The generator shares reply templates across phrasings (claude-204 found the same on P-dev). So bar (f) tests reading a new prompt into a known kind of reply.
