@@ -3,6 +3,7 @@
 //! `d11-scorer rows CONFIG_JSON OUT_JSON`
 //! `d11-scorer score ARTIFACT_LUT CONFIG_JSON REPORT_JSON ROWS_JSONL [--reference] [--train-eval TRAIN_EVAL_JSON GAP_REPORT_JSON]`
 //! `d11-scorer fresh-score SEED1_LUT SEED2_LUT FRESH_CONFIG_JSON DECISION_RECEIPT_JSON REPORT_JSON`
+//! `d11-scorer panel-score SEED1_LUT SEED2_LUT PANEL_CONFIG_JSON DECISION_RECEIPT_JSON REPORT_JSON`
 //! `d11-scorer m1-close-grade OUT_GRADE_JSON OUT_FRESH_GATE_JSON`
 //! `d11-scorer toks ARTIFACT_LUT REPORT_JSON [--prompt TOKENS_JSON]`
 //!
@@ -105,7 +106,12 @@ fn run(args: &[String]) -> Result<(), String> {
         [command, seed1_lut, seed2_lut, fresh_config, decision_receipt, report]
             if command == "fresh-score" =>
         {
-            fresh_score(seed1_lut, seed2_lut, fresh_config, decision_receipt, report)
+            score_two_seeds(seed1_lut, seed2_lut, fresh_config, decision_receipt, report, false)
+        }
+        [command, seed1_lut, seed2_lut, panel_config, decision_receipt, report]
+            if command == "panel-score" =>
+        {
+            score_two_seeds(seed1_lut, seed2_lut, panel_config, decision_receipt, report, true)
         }
         [command, out_grade, out_fresh_gate] if command == "m1-close-grade" => {
             refuse_existing(&[out_grade, out_fresh_gate])?;
@@ -154,6 +160,7 @@ fn run(args: &[String]) -> Result<(), String> {
                   | export-trunk CHECKPOINT_JSON CONFIG_JSON OUT_LUT REPORT_JSON | rows CONFIG_JSON OUT_JSON \
                   | score ARTIFACT_LUT CONFIG_JSON REPORT_JSON ROWS_JSONL [--reference] [--train-eval TRAIN_EVAL_JSON GAP_REPORT_JSON] \
                   | fresh-score SEED1_LUT SEED2_LUT FRESH_CONFIG_JSON DECISION_RECEIPT_JSON REPORT_JSON \
+                  | panel-score SEED1_LUT SEED2_LUT PANEL_CONFIG_JSON DECISION_RECEIPT_JSON REPORT_JSON \
                   | m1-close-grade OUT_GRADE_JSON OUT_FRESH_GATE_JSON \
                   | toks ARTIFACT_LUT REPORT_JSON [--prompt TOKENS_JSON]"
             .into()),
@@ -192,65 +199,81 @@ fn export_trunk(checkpoint: &str, config: &str, out: &str, report: &str) -> Resu
     Ok(())
 }
 
+/// The gate both two-seed scorings check for each seed's artifact before any
+/// panel byte is read: Fresh V2's (`fresh-score`, bar (e)), or the receipt and
+/// a panel of bar (f)'s own (`panel-score`, claude-211).
+fn two_seed_gate(
+    receipt: &Value,
+    artifact_sha256: &str,
+    config: &DriverConfig,
+    panel: bool,
+) -> Result<(), String> {
+    if panel {
+        inst::fresh_transfer::validate_decision_receipt(receipt, artifact_sha256)?;
+        inst::fresh_transfer::refuse_reserved_panel(&config.dev)
+    } else {
+        inst::fresh_transfer::validate_fresh_transfer_gate(receipt, artifact_sha256, &config.dev)
+    }
+}
+
 #[cfg(not(feature = "cuda"))]
-fn fresh_score(
+fn score_two_seeds(
     seed1_lut: &str,
     seed2_lut: &str,
-    fresh_config: &str,
+    config_path: &str,
     decision_receipt: &str,
     report: &str,
+    panel: bool,
 ) -> Result<(), String> {
     use inst::artifact::ArtifactTables;
     refuse_existing(&[report])?;
     let receipt = read_json(decision_receipt)?;
-    let config: DriverConfig = serde_json::from_value(read_json(fresh_config)?)
-        .map_err(|e| format!("{fresh_config}: {e}"))?;
+    let config: DriverConfig = serde_json::from_value(read_json(config_path)?)
+        .map_err(|e| format!("{config_path}: {e}"))?;
     let bytes1 = std::fs::read(seed1_lut).map_err(|e| format!("{seed1_lut}: {e}"))?;
     let (tables1, _) = ArtifactTables::from_bytes(&bytes1)?;
     let bytes2 = std::fs::read(seed2_lut).map_err(|e| format!("{seed2_lut}: {e}"))?;
     let (tables2, _) = ArtifactTables::from_bytes(&bytes2)?;
-    inst::fresh_transfer::validate_fresh_transfer_gate(
-        &receipt,
-        &tables1.artifact_sha256,
-        &config.dev,
-    )?;
-    inst::fresh_transfer::validate_fresh_transfer_gate(
-        &receipt,
-        &tables2.artifact_sha256,
-        &config.dev,
-    )?;
-    Err("fresh-score runs on the GPU: build with --features cuda (and UOR_NVCC_ARCH)".into())
+    two_seed_gate(&receipt, &tables1.artifact_sha256, &config, panel)?;
+    two_seed_gate(&receipt, &tables2.artifact_sha256, &config, panel)?;
+    let command = if panel { "panel-score" } else { "fresh-score" };
+    Err(format!("{command} runs on the GPU: build with --features cuda (and UOR_NVCC_ARCH)"))
 }
 
 #[cfg(feature = "cuda")]
-fn fresh_score(
+fn score_two_seeds(
     seed1_lut: &str,
     seed2_lut: &str,
-    fresh_config: &str,
+    config_path: &str,
     decision_receipt: &str,
     report: &str,
+    panel: bool,
 ) -> Result<(), String> {
     use inst::artifact::ArtifactTables;
     use inst::device::DeviceScorer;
     use inst::fresh_transfer::{
-        build_train_count_tables, evaluate_fresh_transfer_two_seeds,
-        score_fresh_against_count_tables, validate_fresh_transfer_gate, MATCHED_TRAIN_BATCHES,
+        build_train_count_tables, evaluate_fresh_transfer_two_seeds, evaluate_panel_two_seeds,
+        score_fresh_against_count_tables, MATCHED_TRAIN_BATCHES,
     };
     use uor_r4_discrete::corpus::PreparedCorpus;
 
     refuse_existing(&[report])?;
     let receipt = read_json(decision_receipt)?;
-    let config: DriverConfig = serde_json::from_value(read_json(fresh_config)?)
-        .map_err(|e| format!("{fresh_config}: {e}"))?;
+    let config: DriverConfig = serde_json::from_value(read_json(config_path)?)
+        .map_err(|e| format!("{config_path}: {e}"))?;
     let bytes1 = std::fs::read(seed1_lut).map_err(|e| format!("{seed1_lut}: {e}"))?;
     let (tables1, model1) = ArtifactTables::from_bytes(&bytes1)?;
     let bytes2 = std::fs::read(seed2_lut).map_err(|e| format!("{seed2_lut}: {e}"))?;
     let (tables2, model2) = ArtifactTables::from_bytes(&bytes2)?;
 
-    validate_fresh_transfer_gate(&receipt, &tables1.artifact_sha256, &config.dev)?;
-    validate_fresh_transfer_gate(&receipt, &tables2.artifact_sha256, &config.dev)?;
+    two_seed_gate(&receipt, &tables1.artifact_sha256, &config, panel)?;
+    two_seed_gate(&receipt, &tables2.artifact_sha256, &config, panel)?;
 
-    let rows = inst::fresh_rows(&config, &receipt, &tables1.artifact_sha256)?;
+    let rows = if panel {
+        inst::panel_rows(&config, &receipt, &tables1.artifact_sha256)?
+    } else {
+        inst::fresh_rows(&config, &receipt, &tables1.artifact_sha256)?
+    };
     let train_corpus = PreparedCorpus::load(&config.train, config.spec.vocabulary, &config.bos)
         .map_err(|e| e.to_string())?;
     let count_tables = build_train_count_tables(
@@ -307,10 +330,20 @@ fn fresh_score(
         b4_2_ok,
     )?;
 
-    let out = evaluate_fresh_transfer_two_seeds(&seed1_score, &seed2_score)?;
+    let out = if panel {
+        evaluate_panel_two_seeds(
+            &seed1_score,
+            &seed2_score,
+            &config.dev.tokens.sha256,
+            &config.dev.mask.sha256,
+        )?
+    } else {
+        evaluate_fresh_transfer_two_seeds(&seed1_score, &seed2_score)?
+    };
     write_new(report, &json_bytes(&out)?)?;
     println!(
-        "fresh-score: outcome {}, seed1 top1 {}, seed2 top1 {}, unigram {}, t2 {}",
+        "{}: outcome {}, seed1 top1 {}, seed2 top1 {}, unigram {}, t2 {}",
+        if panel { "panel-score" } else { "fresh-score" },
         out["outcome"],
         seed1_score.model_top1,
         seed2_score.model_top1,

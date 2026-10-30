@@ -117,6 +117,29 @@ pub fn validate_fresh_transfer_gate(
     artifact_sha256: &str,
     fresh_source: &CorpusSource,
 ) -> Result<(), String> {
+    validate_decision_receipt(decision_receipt, artifact_sha256)?;
+    if fresh_source.tokens.sha256 != FRESH_V2_TOKENS_SHA256
+        || fresh_source.mask.sha256 != FRESH_V2_MASK_SHA256
+        || fresh_source.expected_payload_tokens != FRESH_V2_PAYLOAD_TOKENS
+        || fresh_source.expected_eligible_targets != FRESH_V2_ELIGIBLE_TARGETS
+    {
+        return Err(
+            "SEALED_FRESH_PANEL_REFUSED: fresh source does not match pinned Fresh V2 (0b7e754c… / a1cda529…, 44,678 tokens, 14,479 targets)"
+                .into(),
+        );
+    }
+    Ok(())
+}
+
+/// The decision receipt's own checks, without the Fresh V2 source pins
+/// (claude-211, M1 bar (f)): the two-seed DEV bar-(a)–(d) PASS, the TRAIN pins,
+/// both seeds' records, the reviews, and `artifact_sha256` bound to one seed.
+/// Bar (f)'s held-out-phrasing panel is gated by this receipt too, so only the
+/// artifacts that passed (a)–(d) are ever scored on it.
+pub fn validate_decision_receipt(
+    decision_receipt: &Value,
+    artifact_sha256: &str,
+) -> Result<(), String> {
     if decision_receipt["schema"].as_str() != Some(FRESH_TRANSFER_GATE_SCHEMA) {
         return Err(format!(
             "SEALED_FRESH_PANEL_REFUSED: decision receipt schema must be {FRESH_TRANSFER_GATE_SCHEMA}"
@@ -214,17 +237,80 @@ pub fn validate_fresh_transfer_gate(
                 .into(),
         );
     }
-    if fresh_source.tokens.sha256 != FRESH_V2_TOKENS_SHA256
-        || fresh_source.mask.sha256 != FRESH_V2_MASK_SHA256
-        || fresh_source.expected_payload_tokens != FRESH_V2_PAYLOAD_TOKENS
-        || fresh_source.expected_eligible_targets != FRESH_V2_ELIGIBLE_TARGETS
-    {
-        return Err(
-            "SEALED_FRESH_PANEL_REFUSED: fresh source does not match pinned Fresh V2 (0b7e754c… / a1cda529…, 44,678 tokens, 14,479 targets)"
-                .into(),
-        );
+    Ok(())
+}
+
+/// P-dev's `tokens.u16` sha256: the held-out-phrasing panel reserved for
+/// one-model-end-to-end's training-run decisions (claude-204), never bar (f)'s.
+pub const P_DEV_TOKENS_SHA256: &str =
+    "790b7e12934a241f07ec5c04fc6e929c86e970583ba5dee9a8646f7d235266cd";
+
+/// The report schema of `d11-scorer panel-score` (M1 bar (f)).
+pub const PANEL_REPORT_SCHEMA: &str = "uor-r4.m1-heldout-phrasing-report/1";
+
+/// Refuses, as bar (f)'s panel, any source that is a sealed fresh panel, the
+/// reserved P-dev, DEV or TRAIN (claude-211): bar (f) needs a panel of its own.
+pub fn refuse_reserved_panel(source: &CorpusSource) -> Result<(), String> {
+    refuse_sealed_fresh_source(source)?;
+    let tok = source.tokens.sha256.as_str();
+    if tok == P_DEV_TOKENS_SHA256 || tok == DEV_TOKENS_SHA256 || tok == TRAIN_TOKENS_SHA256 {
+        return Err(format!(
+            "RESERVED_PANEL_REFUSED: {tok} is P-dev, DEV or TRAIN, not a panel of bar (f)'s own"
+        ));
+    }
+    if !is_lower_hex_64(tok) || !is_lower_hex_64(&source.mask.sha256) {
+        return Err("RESERVED_PANEL_REFUSED: the panel's sha256s must be 64 lower-case hex".into());
     }
     Ok(())
+}
+
+/// M1 bar (f) (D82) from the two seeds' records on a held-out-phrasing panel:
+/// at each seed the model's top-1 beats the unigram and T2 by bar (e)'s band,
+/// `max(24, ⌈2√(b+c)⌉, |M(1) − M(2)|)`, with parity. Bar (e)'s copy-successor
+/// condition is reported, not required: D82 names the unigram and T2 only.
+pub fn evaluate_panel_two_seeds(
+    seed1: &FreshSeedScore,
+    seed2: &FreshSeedScore,
+    panel_tokens_sha256: &str,
+    panel_mask_sha256: &str,
+) -> Result<Value, String> {
+    let mut out = evaluate_fresh_transfer_two_seeds(seed1, seed2)?;
+    let seed_pass = |s: &Value| {
+        s["beats_unigram"].as_bool() == Some(true)
+            && s["beats_t2"].as_bool() == Some(true)
+            && s["parity_ok"].as_bool() == Some(true)
+    };
+    let both = seed_pass(&out["seed_1"]) && seed_pass(&out["seed_2"]);
+    let fields = out
+        .as_object_mut()
+        .ok_or("the two-seed evaluation is not an object")?;
+    for key in [
+        "fresh_tokens_sha256",
+        "fresh_mask_sha256",
+        "fresh_seal_sha256",
+        "fresh_row_binding_sha256",
+        "bar_e_pass",
+    ] {
+        fields.remove(key);
+    }
+    for seed in ["seed_1", "seed_2"] {
+        let pass = seed_pass(&fields[seed]);
+        if let Some(s) = fields.get_mut(seed).and_then(Value::as_object_mut) {
+            s.remove("seed_pass");
+            s.insert("bar_f_seed_pass".into(), json!(pass));
+        }
+    }
+    fields.insert("schema".into(), json!(PANEL_REPORT_SCHEMA));
+    fields.insert("panel_tokens_sha256".into(), json!(panel_tokens_sha256));
+    fields.insert("panel_mask_sha256".into(), json!(panel_mask_sha256));
+    fields.insert("bar_f_pass".into(), json!(both));
+    let outcome = if both {
+        "PASS_BAR_F_HELDOUT_PHRASING"
+    } else {
+        "FAIL_BAR_F_CLOSE_CONFIGURATION"
+    };
+    fields.insert("outcome".into(), json!(outcome));
+    Ok(out)
 }
 
 /// Exact integer `max(min_floor, ceil(2 * sqrt(discordant)))`.
