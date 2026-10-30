@@ -248,14 +248,38 @@ pub const P_DEV_TOKENS_SHA256: &str =
 /// The report schema of `d11-scorer panel-score` (M1 bar (f)).
 pub const PANEL_REPORT_SCHEMA: &str = "uor-r4.m1-heldout-phrasing-report/1";
 
+/// Bar (f)'s panel, p-f (claude-211, `docs/labs/m1-heldout-phrasing-transfer/`):
+/// `dev,dev` at seed 2051, 15,953 rows, 0.000 of its prompt templates in TRAIN.
+/// M1's close grade accepts a bar (f) report on this panel only, as bar (e)
+/// pins Fresh V2.
+pub const P_F_TOKENS_SHA256: &str =
+    "e6abbdf0dd2f2fff1810d5e1fd95f6cfa20582c57c98e990a1d9c852e5e43fef";
+pub const P_F_MASK_SHA256: &str =
+    "c63c625a9897b4ee42043028addb3f9f831d7ecc28976cae8223ba0050e5c910";
+
+/// Panels that share TRAIN's prompt templates, so they can never stand for bar
+/// (f): claude-204's P-train (`train,train`) and P-ret, and p-f's own control
+/// p-f-train (`train,train`, 0.637 of its prompt templates in TRAIN).
+pub const TEMPLATE_SHARED_PANEL_TOKENS_SHA256: [&str; 3] = [
+    "7546c6d73b9314af8376de811a83f9b1a2c8d90625a5f3d948baee3a3217bac8",
+    "b4d3bf4295cea585b13e9577d2c6464cf8c528c9c7f4037a7c34ba5daa124c98",
+    "b3bae826a3e25b18e163ea6d785593344af42e7076a1138c2c65a94e20a319a4",
+];
+
 /// Refuses, as bar (f)'s panel, any source that is a sealed fresh panel, the
-/// reserved P-dev, DEV or TRAIN (claude-211): bar (f) needs a panel of its own.
+/// reserved P-dev, DEV, TRAIN, or a panel that shares TRAIN's prompt templates
+/// (claude-211): bar (f) needs a new-template panel of its own.
 pub fn refuse_reserved_panel(source: &CorpusSource) -> Result<(), String> {
     refuse_sealed_fresh_source(source)?;
     let tok = source.tokens.sha256.as_str();
     if tok == P_DEV_TOKENS_SHA256 || tok == DEV_TOKENS_SHA256 || tok == TRAIN_TOKENS_SHA256 {
         return Err(format!(
             "RESERVED_PANEL_REFUSED: {tok} is P-dev, DEV or TRAIN, not a panel of bar (f)'s own"
+        ));
+    }
+    if TEMPLATE_SHARED_PANEL_TOKENS_SHA256.contains(&tok) {
+        return Err(format!(
+            "RESERVED_PANEL_REFUSED: {tok} shares TRAIN's prompt templates, so it is no held-out-phrasing panel"
         ));
     }
     if !is_lower_hex_64(tok) || !is_lower_hex_64(&source.mask.sha256) {

@@ -17,7 +17,7 @@ use crate::fresh_transfer::{
     FRESH_TRANSFER_GATE_SCHEMA, FRESH_TRANSFER_REPORT_SCHEMA, FRESH_V2_ELIGIBLE_TARGETS,
     FRESH_V2_MANIFEST_SHA256, FRESH_V2_MASK_SHA256, FRESH_V2_PAYLOAD_TOKENS, FRESH_V2_PSUCC_ROWS,
     FRESH_V2_ROW_BINDING_SHA256, FRESH_V2_SEAL_SHA256, FRESH_V2_TOKENS_SHA256,
-    FULL_PANEL_NOISE_FLOOR, PANEL_REPORT_SCHEMA, PSUCC_NOISE_FLOOR, P_DEV_TOKENS_SHA256,
+    FULL_PANEL_NOISE_FLOOR, PANEL_REPORT_SCHEMA, PSUCC_NOISE_FLOOR, P_F_MASK_SHA256, P_F_TOKENS_SHA256,
     TRAIN_MASK_SHA256, TRAIN_TOKENS_SHA256,
 };
 
@@ -365,13 +365,14 @@ pub fn evaluate_m1_closing_bars(input: &M1CloseCandidateInput) -> Result<M1BarVe
                     "heldout_phrasing_report schema must be {PANEL_REPORT_SCHEMA}"
                 ));
             }
-            let panel = rep["panel_tokens_sha256"].as_str().unwrap_or("");
-            if !is_lower_hex_64(panel)
-                || [FRESH_V2_TOKENS_SHA256, P_DEV_TOKENS_SHA256, DEV_TOKENS_SHA256, TRAIN_TOKENS_SHA256]
-                    .contains(&panel)
+            // Bar (f)'s own panel only, as bar (e) pins Fresh V2: a report on any other panel,
+            // a template-sharing control included, cannot close M1 (claude-211 review).
+            if rep["panel_tokens_sha256"].as_str() != Some(P_F_TOKENS_SHA256)
+                || rep["panel_mask_sha256"].as_str() != Some(P_F_MASK_SHA256)
             {
                 return Err(
-                    "heldout_phrasing_report panel is reserved or not a 64-hex sha256".into(),
+                    "heldout_phrasing_report panel is not bar (f)'s p-f (e6abbdf0… / c63c625a…)"
+                        .into(),
                 );
             }
             if rep["seed_1"]["artifact_sha256"].as_str() != Some(s1.artifact_sha256.as_str())

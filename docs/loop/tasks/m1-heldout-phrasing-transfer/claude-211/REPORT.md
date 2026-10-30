@@ -30,7 +30,7 @@ antigravity-110's two saved `UORLUT01` integer artifacts serve at a median **10,
 - **M1's close grade** (`m1_close.rs`, done-when 3):
   - M1 now closes on (a) to (d), and (e), and (f), as `PASS_M1_ALL_SIX_BARS`;
   - with only (f) missing it holds as `HOLD_M1_OPEN_BAR_F_UNMET`;
-  - a bar (f) report for other artifacts, or on a reserved panel, is refused;
+  - a bar (f) report for other artifacts, or on any panel but p-f (pinned by its sha256s, as bar (e) pins Fresh V2), is refused. From the review: a report on a template-sharing control such as P-train could otherwise have closed M1. `panel-score` also refuses those controls, and a test pins both. The pin's negative gate fails as it should;
   - the canonical saved model carries the committed bar (f) report, and `d11-scorer m1-close-grade` prints `m1_close_pass true`, status `CLOSED_PASS`.
   - Its negative gate passes: with bar (f) set aside, the test fails.
 - **All 26 of the crate's laptop tests pass** (`--target aarch64-apple-darwin`). On the pod, the CUDA build's tests passed too.
@@ -58,7 +58,7 @@ antigravity-110's two saved `UORLUT01` integer artifacts serve at a median **10,
   - build A first reproduced the saved model's DEV top-1, 7,002 and 7,001 of 14,287;
   - builds A (`09605454…`) and B (`bcba3577…`) gave byte-identical reports;
   - every input matched its pin, the receipt included.
-- **The seal** is at `results/claude/m1-heldout-phrasing-transfer-2026-10-30/run-74675bb3/`: 61 files with a `SHA256SUMS`. The pod was released and taken down.
+- **The seal** is at `results/claude/m1-heldout-phrasing-transfer-2026-10-30/run-74675bb3/`: a `SHA256SUMS` over 61 files. The pod was released and taken down.
 - **Cost:** about $0.20.
 
 ## Checks run at the head
@@ -86,5 +86,5 @@ None.
 - **(r-drop),** from one-model-end-to-end's training run, can be scored on p-f as evidence once its checkpoints are sealed. It enters no bar.
 ## Plain summary
 
-M1's last bar, (f), passes. On a fresh panel of prompts phrased in ways the training data never shows, the saved integer model beats the bigram table by 475 and 497 rows at its two seeds, against a required margin of 81. M1's close grade now needs all six bars, and it reads `CLOSED_PASS`.
+M1's last bar, (f), passes. On a fresh panel whose prompt phrasings the training data does not hold (0.000 of its value-masked templates at K = 1,024, 0.050 at K = 256), the saved integer model beats the bigram table by 475 and 497 rows at its two seeds, against a required margin of 81. M1's close grade now needs all six bars, and it reads `CLOSED_PASS`.
 

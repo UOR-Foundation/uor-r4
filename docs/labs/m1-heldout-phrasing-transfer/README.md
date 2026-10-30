@@ -33,7 +33,7 @@ heldout-panel out=p-f-train tokenizer=TOKENIZER cell=train,train conversations=4
 | DEV, for scale | 1,226 | 0.608 | 0.642 | no |
 | Fresh V2 (bar (e)'s panel) | 1,279 | 0.639 | 0.665 | no |
 
-- **No p-f prompt reuses a TRAIN phrasing,** even with its values masked. Fresh V2, bar (e)'s panel, reuses 0.665 of them.
+- **At K = 1,024, no p-f prompt's value-masked template occurs in TRAIN.** At K = 256, 0.050 do. Fresh V2, bar (e)'s panel, has 0.665 at K = 1,024.
 - **Replies are still template-shared:** 0.625 of p-f's replies are verbatim TRAIN replies. The generator shares reply templates across phrasings (claude-204 found the same on P-dev). So bar (f) tests reading a new prompt into a known kind of reply.
 
 ## The result: bar (f) passes (30 Oct, `74675bb3f`)
@@ -56,4 +56,6 @@ heldout-panel out=p-f-train tokenizer=TOKENIZER cell=train,train conversations=4
 - **Bar (e)'s copy-successor condition, reported only:** the model gets 1,903 and 1,904 of the 4,077 copy-successor rows, against T2's 1,260. So it passes that condition too.
 - **The first attempt was an instrument fault.** It built without `--target` and failed to compile, `E0463`, before reading any panel byte. It was repaired, and is not counted.
 - **The seal** is at `results/claude/m1-heldout-phrasing-transfer-2026-10-30/run-74675bb3/` in the HF store, with a `SHA256SUMS` of 61 files.
-- **What this shows:** a model that passed (a) to (e) also beats both count tables on prompts whose phrasing templates TRAIN never shows, at both seeds, by six times the band against T2. Its replies still come from templates TRAIN shares (0.625 verbatim), so this is reading new prompts into known kinds of reply.
+- **What this shows:** a model that passed (a) to (e) also beats both count tables on prompts whose phrasing templates TRAIN does not hold (0.000 at K = 1,024, 0.050 at K = 256). It does so at both seeds, by 5.9 and 6.1 times the band against T2.
+- **Its close grade pins this panel.** M1's close grade accepts a bar (f) report on p-f only (`P_F_TOKENS_SHA256` and `P_F_MASK_SHA256`), as bar (e) pins Fresh V2. `panel-score` refuses the template-sharing controls (P-train, P-ret, p-f-train). Both rules come from the review.
+- **The grade reads flags, not margins.** Like bar (e)'s, it trusts the report's `bar_f_pass` and `outcome`, and does not recompute the margins from the per-seed numbers. Its replies still come from templates TRAIN shares (0.625 verbatim), so this is reading new prompts into known kinds of reply.

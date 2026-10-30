@@ -8,7 +8,8 @@ use uor_r4_discrete::corpus::{CorpusSource, FilePin, Split};
 use inst::fresh_transfer::{
     evaluate_panel_two_seeds, refuse_reserved_panel, validate_decision_receipt,
     validate_fresh_transfer_gate, FreshSeedScore, DEV_TOKENS_SHA256, FRESH_V2_MASK_SHA256,
-    FRESH_V2_TOKENS_SHA256, P_DEV_TOKENS_SHA256, TRAIN_TOKENS_SHA256,
+    FRESH_V2_TOKENS_SHA256, P_DEV_TOKENS_SHA256, TEMPLATE_SHARED_PANEL_TOKENS_SHA256,
+    TRAIN_TOKENS_SHA256,
 };
 
 /// p-f, the bar (f) panel drawn on 30 Oct (docs/labs/m1-heldout-phrasing-transfer/README.md).
@@ -54,6 +55,10 @@ fn the_receipt_binds_the_saved_artifacts_and_the_fresh_gate_keeps_its_pins() {
 fn panel_score_refuses_the_reserved_panels() {
     refuse_reserved_panel(&source(P_F_TOKENS, P_F_MASK, 50_061, 15_953)).expect("p-f is admitted");
     for tokens in [P_DEV_TOKENS_SHA256, DEV_TOKENS_SHA256, TRAIN_TOKENS_SHA256, FRESH_V2_TOKENS_SHA256] {
+        assert!(refuse_reserved_panel(&source(tokens, P_F_MASK, 1, 1)).is_err(), "{tokens}");
+    }
+    // A panel that shares TRAIN's prompt templates is no held-out-phrasing panel.
+    for tokens in TEMPLATE_SHARED_PANEL_TOKENS_SHA256 {
         assert!(refuse_reserved_panel(&source(tokens, P_F_MASK, 1, 1)).is_err(), "{tokens}");
     }
     assert!(refuse_reserved_panel(&source(P_F_TOKENS, FRESH_V2_MASK_SHA256, 1, 1)).is_err());

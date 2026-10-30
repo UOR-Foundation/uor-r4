@@ -306,6 +306,11 @@ fn negative_gate_checks_on_each_of_five_m1_bars_and_prospective_fresh_seal() {
     reserved.heldout_phrasing_report.as_mut().unwrap()["panel_tokens_sha256"] =
         serde_json::json!(FRESH_V2_TOKENS_SHA256);
     assert!(evaluate_m1_closing_bars(&reserved).is_err());
+    // A report on a template-sharing control, P-train (train,train), cannot close M1 either.
+    let mut control = passing.clone();
+    control.heldout_phrasing_report.as_mut().unwrap()["panel_tokens_sha256"] =
+        serde_json::json!("7546c6d73b9314af8376de811a83f9b1a2c8d90625a5f3d948baee3a3217bac8");
+    assert!(evaluate_m1_closing_bars(&control).is_err());
 }
 
 #[test]
