@@ -49,9 +49,13 @@ underpowered and greedy remains the decode. On p-s:
 - exact turn memory keys on exact first token ids and adds only 14–16 of 1,400 openings on p-s,
   against 322–337 of 1,226 on DEV.
 
-The next work is a memory key that reworded known questions can reach, then every required part in
-integer serving and one joined model scored on fresh prompts. Claude-218 is active; no result is
-claimed. See [PLAN.md](../../PLAN.md) and the [pipeline map](../model/pipeline-map.md).
+Claude-218 has now passed its registered offline key probe. On p-u's 1,218 exact-memory misses,
+the sign key gains +46, +37 and +33 at three seeds; the point key gains +125, +185 and +114. Row
+3 selects the cheapest passing sign key. The next unit trains and serves it and tests free
+generation on another fresh panel; no served-key or useful-chat result is established
+([claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md)). Then every required part
+must run in integer serving and one joined model must be scored on fresh prompts. See
+[PLAN.md](../../PLAN.md) and the [pipeline map](../model/pipeline-map.md).
 
 ## Milestones M1–M8 — definitions of done
 

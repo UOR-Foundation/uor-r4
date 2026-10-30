@@ -45,13 +45,16 @@ kinds of reply, not inventing new kinds of reply or carrying a conversation.
 
 ### The live research question
 
-The separate float-trained FBS trunk is working toward complete replies. Its latest merged
-cycle-step experiment ends every registered loop, but the content decision is underpowered and
-greedy stays the decode. On held-out p-s, reply openings are right only **17.4%, 13.7% and 18.6%**
-at three seeds, against **80.8%, 80.2% and 79.9%** on later tokens. Exact turn memory keys on the
-turn's exact first token ids, so reworded questions can find no stored key. The next problem is
-therefore reply opening on new phrasing, not just loop suppression
-([claude-217](docs/loop/tasks/one-model-end-to-end/claude-217/REPORT.md)). No unmerged result is claimed.
+The separate float-trained FBS trunk is working toward complete replies. Claude-217's cycle-step
+experiment ends every registered loop, but the content decision is underpowered and greedy stays
+the decode. Exact turn memory also misses reworded questions: its key is the turn's exact first
+token ids ([claude-217](docs/loop/tasks/one-model-end-to-end/claude-217/REPORT.md)).
+
+Claude-218 has now tested trunk-state memory keys offline on fresh p-u. On its **1,218 exact-memory
+misses**, the sign key's net opening gains are **+46, +37 and +33** at three seeds; the point key
+gains **+125, +185 and +114**. The registered next step is to train and serve the sign key and
+test free generation on another fresh panel. This is not yet a served-key or useful-chat result
+([claude-218](docs/loop/tasks/one-model-end-to-end/claude-218/REPORT.md)).
 
 ## The three products
 

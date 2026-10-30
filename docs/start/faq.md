@@ -40,7 +40,7 @@ That is not a conversational result. The p-f reference replies are 62.5% verbati
 
 ### 5. Why did K16 lose to a count table, and what is the open problem now?
 
-K16 was a dated configuration failure, not a verdict on the whole mechanism family. The later saved model passed M1. The current open problem is complete replies on new phrasing: claude-217's p-s openings are only 17.4%, 13.7% and 18.6% at three seeds, against about 80% on later tokens. Exact turn memory keys on the turn's exact first token ids, so a reworded known question can find no stored key. The next work is a reachable memory key and complete correct replies ([open questions](../research/open-questions.md)).
+K16 was a dated configuration failure, not a verdict on the whole mechanism family. The later saved model passed M1. The current open problem is complete replies on new phrasing: claude-217's p-s openings are only 17.4%, 13.7% and 18.6% at three seeds, against about 80% on later tokens. Exact turn memory keys on the turn's exact first token ids, so a reworded known question can find no stored key. Claude-218's offline sign-key probe passed on p-u with net gains of +46/+37/+33 on 1,218 missed rows at three seeds; the next work trains and serves that key and tests free generation on another fresh panel. No served-key or useful-chat result is established ([claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md), [open questions](../research/open-questions.md)).
 
 ### 6. Will it reach frontier capability?
 

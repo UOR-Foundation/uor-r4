@@ -30,12 +30,16 @@ Every public number in this refresh must link to this sheet's committed evidence
 ## 2. Separate FBS trunk and current open research
 
 - The float-trained FBS trunk is a different path from the saved discrete M1 model. `lut-stack/5` exports/serves it exactly at DEV scope; D80/D81 allow integer multiply and divide while floats remain banned in serving. Its earlier M1 rates were 4,217–4,504 tok/s; do not mix those rates with the saved M1 artifacts' 10,876/10,566 tok/s.
-- **Latest merged result: claude-217**, `docs/loop/tasks/one-model-end-to-end/claude-217/REPORT.md`:
+- **claude-217**, `docs/loop/tasks/one-model-end-to-end/claude-217/REPORT.md`:
   - The cycle/echo steps end every registered loop, but every content decision is **underpowered (content)**; greedy remains the served decode. Loop removal is not a quality result.
   - On held-out p-s, exact-reference replies are only 3, 1 and 4 of 256 at seeds 1–3, against 38–40 on DEV.
   - Teacher-forced p-s reply openings are **17.4%, 13.7%, 18.6%**, against **80.8%, 80.2%, 79.9%** on later tokens. On p-t the openings are 18.7%, 12.2%, 17.9% against 80.8–81.1%.
   - Exact turn memory keys on the turn's exact first token ids, so a new phrasing of a known question can find no stored key. On p-s it adds only 14–16 of 1,400 openings; on DEV it adds 322–337 of 1,226.
-  - The working inference is that new-phrasing reply opening is the larger failure, not merely decode looping. The next design must address that opening/memory-key problem; no unmerged claude-218 result is claimed.
+- **Latest merged result: claude-218**, [memory-key report](../../one-model-end-to-end/claude-218/REPORT.md), merged as `5ec6e36a8f69d3b0c9acf993cc3e09acc7be4646`:
+  - p-s became the development panel; fresh p-u was read once for this decision. The exact key fires on 248 of 1,466 p-u openings, leaving 1,218 missed rows.
+  - On those missed rows, the sign key gains **+46/+37/+33** and the point key **+125/+185/+114** at three seeds. All three keys pass row 3; the cheapest passing sign key is selected. The point key's larger gain remains an explicit tradeoff, not hidden evidence.
+  - A forced correct first token lifts exact replies from 4/0/0 to 54/49/52 of 256. These are teacher-forced key readings and a forced-opening arm, not a served key or free-generation result.
+  - The next unit trains and serves the sign key with an opening bar on another fresh panel. Useful conversation remains unestablished.
 - **D67:** no blanket owner release holds every training step. The D41 donor pass is the remaining named owner-at-dispatch exception. Do not restore retired "every training step is held" language.
 
 ## 3. Historical facts to preserve, not present as current
@@ -72,8 +76,8 @@ Every public number in this refresh must link to this sheet's committed evidence
 
 ## 7. Active collaboration boundaries at the baseline
 
-- #3430 (claude-218): active memory-key research files, prep, lab result and ORDER are excluded; only merged claude-217 is used here.
-- #3426: touches `xtask/src/figures_charts.rs` and `figures_math.rs`; merge its fixes forward if it lands and do not overwrite them.
+- #3430 (claude-218) was active at the baseline and merged at `5ec6e36a8f69d3b0c9acf993cc3e09acc7be4646` during verification. Its sealed result is now included; its research files remain Claude's and are not edited by this unit.
+- #3426's figure tooling fixes landed through #3438 and were merged forward before figure regeneration.
 - #3435/#3424: discrete/source-interface code only, no documentation overlap at baseline.
 - #3323 (antigravity-113): `exact-memory.md` and `object-store.md` stay untouched even though they were once considered by the older documentation refresh.
 
@@ -82,7 +86,7 @@ Every public number in this refresh must link to this sheet's committed evidence
 - [M1 close README](../../../../labs/m1-close-saved-model/README.md)
 - [M1 bar-f REPORT](../../m1-heldout-phrasing-transfer/claude-211/REPORT.md)
 - [M1 bar-f panel score](../../../../labs/m1-heldout-phrasing-transfer/evidence/panel-score.json)
-- [Latest merged one-model REPORT](../../one-model-end-to-end/claude-217/REPORT.md)
+- [Latest merged one-model REPORT](../../one-model-end-to-end/claude-218/REPORT.md)
 - [Pipeline map](../../../../model/pipeline-map.md)
 - [Mechanism board](../../../../mechanisms/README.md)
 - [Studio wiring record](../../../../labs/m7-studio-connect-wasm-engine/README.md)

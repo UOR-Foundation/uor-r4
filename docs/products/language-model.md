@@ -65,11 +65,13 @@ conversation.
 - **The float-trained FBS trunk** trains offline under D37 and exports exactly under `lut-stack/5`
   at DEV scope. It is the current complete-reply research line, not the M1 artifact.
 
-The FBS line's latest merged cycle-step experiment ends every registered loop but leaves content
-underpowered, so greedy remains the decode. On p-s, reply openings are 17.4%, 13.7% and 18.6% at
-three seeds, against about 80% on later tokens. Exact turn memory keys on exact first token ids and
-misses reworded prompts. The next problem is new-phrasing reply opening and a reachable memory key
-([claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)).
+Claude-217's cycle-step experiment ends every registered loop but leaves content underpowered, so
+greedy remains the decode. Exact turn memory keys on exact first token ids and misses reworded
+prompts ([claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)). Claude-218's
+offline sign-key probe then gained +46/+37/+33 on p-u's 1,218 missed rows at three seeds; the next
+unit trains and serves that key and tests free generation on another fresh panel. This is not yet
+a served-key or useful-chat result
+([claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md)).
 
 ## The artifact format and serving boundary
 

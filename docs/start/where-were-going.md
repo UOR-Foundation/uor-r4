@@ -45,9 +45,11 @@ conversation. See [CHARTER §4.8](../../CHARTER.md#4-evidence) and the [closing 
 
 ## The current order of work
 
-1. **Make reply opening work on new phrasing.** Exact turn memory currently keys on the turn's
-   exact first token ids. A reworded known question can therefore find no stored key. Claude-218 is
-   active on a memory key that reworded questions can reach; no result is claimed.
+1. **Train and serve the new-phrasing memory key.** Claude-218's offline sign-key probe passed on
+   p-u: net gains of +46, +37 and +33 on 1,218 exact-memory misses at three seeds. The point key
+   gained more (+125, +185 and +114), but the registered row 3 selects the cheapest passing sign
+   key. Next is a served key and free generation on another fresh panel; neither is established
+   ([report](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md)).
 2. **Serve every required part in integers.** Finish the served read, memory and readout rather
    than treating an export or an audit alone as the whole model.
 3. **Train and score one model end to end.** Measure complete generated replies on untouched
@@ -56,7 +58,7 @@ conversation. See [CHARTER §4.8](../../CHARTER.md#4-evidence) and the [closing 
    model's full serving contract. After that come laptop cost, reasoning/coding, distribution and
    the alpha release.
 
-The latest merged result explains why this order matters. Claude-217's cycle step ends every
+The preceding claude-217 result explains why this order matters. Its cycle step ends every
 registered loop, but its content decision is underpowered and greedy remains the decode. On p-s,
 reply openings are 17.4%, 13.7% and 18.6% at three seeds, against about 80% on later tokens.
 Stopping a loop does not repair a reply that began wrong
@@ -89,8 +91,8 @@ artifact on the user's device is the product and is allowed; research compute re
 
 Can the model start a correct reply when the user's phrasing is new, rather than only retrieve or
 continue a familiar template? M1 answered the narrower next-token count-table question. It did not
-answer that broader generation question. The strongest current evidence is the opening failure on
-p-s and the exact-key memory miss on reworded prompts. A loop-free decode is not enough.
+answer that broader generation question. Claude-218's offline sign-key probe improves the opening,
+but a trained, served key and correct free generation on another fresh panel remain unproven.
 
 ## Where it stands
 
@@ -98,7 +100,7 @@ p-s and the exact-key memory miss on reworded prompts. A loop-free decode is not
 |---|---|---|
 | Milestones complete | **1 of 8 (M1)** | [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) |
 | Next milestone | M2: grounded complete replies | [PLAN](../../PLAN.md) |
-| Immediate problem | New-phrasing reply opening and a reachable memory key | [claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md) |
+| Immediate problem | Train and serve the sign key; test free generation on fresh phrasing | [claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md) |
 | M4 | Lawful likelihood built; full accepted-model serving and held-out score open | [serving and export](../model/serving-and-export.md) |
 | Products shipped | None | [products](../products/README.md) |
 

@@ -29,7 +29,7 @@ Two model paths remain distinct. The saved discrete 19-table model has closed M1
 - **Readout:** whole-table nearest (claude-150). The joined served session remains open.
 - **Reading by meaning:** Flock, with cell D closed at claude-144. Its independent effect remains a question for the joined model.
 
-M1 does not prove each mechanism's independent effect or useful conversation. Claude-217's p-s reply openings are 17.4%, 13.7% and 18.6% at three seeds, against about 80% on later tokens. The next work is a memory key that reworded known questions can reach. The parts, costs and current order are in the [pipeline map](../model/pipeline-map.md).
+M1 does not prove each mechanism's independent effect or useful conversation. Claude-217's p-s reply openings are 17.4%, 13.7% and 18.6% at three seeds, against about 80% on later tokens. Claude-218's offline sign-key probe then gained +46/+37/+33 on p-u's 1,218 missed rows at three seeds. The next work trains and serves that key and tests free generation; no served-key result is established. The parts, costs and current order are in the [pipeline map](../model/pipeline-map.md).
 
 ## The family tree
 

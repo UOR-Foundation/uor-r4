@@ -66,12 +66,14 @@ The FBS path trains offline in float under D37 and exports to integer D11. It is
 | → token | Readout | Whole-table nearest chosen; the joined served session is not complete |
 | Text in/out | R7 and accepted-model text/chat distribution | Open |
 
-**Current failure.** Claude-217's cycle and echo steps end every registered loop, but content is
-underpowered and greedy remains the decode. On p-s, reply openings are 17.4%, 13.7% and 18.6% at
-three seeds, against 80.8%, 80.2% and 79.9% on later tokens. Exact-reference replies are only 3, 1
-and 4 of 256. The exact-key memory finds little on new phrasing. The next problem is reply opening
-and a memory key that reworded known questions can reach
-([claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)).
+**Current failure and latest probe.** Claude-217's cycle and echo steps end every registered loop,
+but content is underpowered and greedy remains the decode. On p-s, reply openings are 17.4%, 13.7%
+and 18.6% at three seeds, against 80.8%, 80.2% and 79.9% on later tokens. Exact-reference replies
+are only 3, 1 and 4 of 256, and exact-key memory finds little on new phrasing
+([claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)). Claude-218's offline
+sign-key probe then gained +46/+37/+33 on p-u's 1,218 missed rows at three seeds. The next unit
+trains and serves that key and tests free generation on another fresh panel; no served-key result
+is established ([claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md)).
 
 ## What remains unbuilt or unqualified
 

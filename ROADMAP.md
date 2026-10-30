@@ -23,6 +23,7 @@ closes only when its full bar is met on a saved model. The evidence and limitati
 M1's two-seed results are **7,002 / 7,001** on DEV (T2 6,300), **7,215 / 7,228** on Fresh V2
 (T2 6,582), and **7,850 / 7,872** on the held-out-phrasing p-f panel (T2 7,375). The p-f panel's
 62.5% reference-reply overlap with TRAIN means this is a scoped language-base result, not useful
-conversation. M2 is the next capability milestone; current work targets new-phrasing reply opening
-and the exact-memory key that reworded questions can reach. Every run goes ahead on its own
-pre-run review (D67, [charter](CHARTER.md) §5.1). The one plan is [PLAN.md](PLAN.md) (D77).
+conversation. M2 is the next capability milestone. Claude-218's offline sign-key probe passed on
+p-u; current work trains and serves that key and tests free generation on another fresh panel.
+Every run goes ahead on its own pre-run review (D67, [charter](CHARTER.md) §5.1). The one plan is
+[PLAN.md](PLAN.md) (D77).

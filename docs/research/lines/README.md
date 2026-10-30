@@ -51,7 +51,7 @@ The three short lines are listed in the [generated archive catalog](../../../arc
 
 ## Since 27 Oct
 
-**30 Oct 2026.** The table above stops at 19 Oct. The discrete path has since closed M1, while the float-trained FBS trunk carries current complete-reply research. See [the pipeline map](../../model/pipeline-map.md) for both paths and [the M1 research line](./m1-discrete-attention.md) for the close. The project is pre-alpha: 1 of 8 milestones is complete. Current work is new-phrasing reply opening and a memory key that reworded known questions can reach.
+**30 Oct 2026.** The table above stops at 19 Oct. The discrete path has since closed M1, while the float-trained FBS trunk carries current complete-reply research. See [the pipeline map](../../model/pipeline-map.md) for both paths and [the M1 research line](./m1-discrete-attention.md) for the close. The project is pre-alpha: 1 of 8 milestones is complete. Claude-218's offline sign-key probe passed on p-u; current work trains and serves that key and tests free generation on another fresh panel.
 
 ## Where to go next
 

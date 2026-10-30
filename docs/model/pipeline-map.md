@@ -326,7 +326,7 @@ GPT-4's own size and training data are not published (GPT-4 Technical Report, ex
 
 ## The gaps, ranked by what blocks a cheap, capable model first
 
-1. **Reply opening on new phrasing and the memory key that cannot reach it.** Routing the turn works on familiar wording: exact turn memory names `598.7 / 598.3` of 1,226 DEV openings at two seeds. But its key is the turn's exact first token ids, so a reworded known question can find no stored key. On p-s, teacher-forced reply openings are only 17.4%, 13.7% and 18.6% at three seeds, against 80.8%, 80.2% and 79.9% on later tokens; the memory adds only 14–16 of 1,400 openings. The cycle step ends every registered loop but leaves content underpowered, so greedy stays the decode. **The capability blocker is starting the right reply on new phrasing, not merely continuing or stopping a loop** (claude-217, stages 5 and 6). claude-218 is active on the memory key, with no result claimed.
+1. **Reply opening on new phrasing and the memory key that cannot reach it.** Routing the turn works on familiar wording: exact turn memory names `598.7 / 598.3` of 1,226 DEV openings at two seeds. But its key is the turn's exact first token ids, so a reworded known question can find no stored key. On p-s, teacher-forced reply openings are only 17.4%, 13.7% and 18.6% at three seeds, against 80.8%, 80.2% and 79.9% on later tokens; the memory adds only 14–16 of 1,400 openings. The cycle step ends every registered loop but leaves content underpowered, so greedy stays the decode. **The capability blocker is starting the right reply on new phrasing, not merely continuing or stopping a loop** (claude-217, stages 5 and 6). Claude-218's offline sign-key probe then gained +46/+37/+33 on p-u's 1,218 missed rows at three seeds, with the point key at +125/+185/+114; the next unit trains and serves the cheapest passing sign key and tests free generation on another fresh panel ([claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md)).
 2. **The served decoder: correct and expensive, or cheap and unreliable.**
    - Whole-table nearest is the decision (claude-150). It costs 21 times the writer on the M1 (13% of a token) and 13–34% of a training step, and it grows with the vocabulary (stage 7).
    - The writer costs 0.6% of a token, but its admission failed at one seed of two.
@@ -362,7 +362,7 @@ Each unit is one loop session. "Pass" and "fail" say what each outcome unlocks. 
 
 R1 comes first because reply opening on new phrasing is the measured capability blocker, and exact memory is the cheapest place to address it. R2 and R3 make the served model cheap: the readout and kernels. R4 makes every later run cheaper. R2 to R4 can run beside R1 when their files do not overlap.
 
-**The order now in force (30 Oct):** claude-217 is done and leaves greedy in place. The active work is claude-218's memory key for reworded known questions, then every part served in integers, R7, and one model trained/exported/served and scored on fresh prompts with tokens per second. Cost work follows. See [PLAN.md](../../PLAN.md).
+**The order now in force (30 Oct):** claude-217 is done and leaves greedy in place. Claude-218's offline sign-key probe has passed on p-u; the next unit trains and serves that key and tests free generation on another fresh panel, then every part served in integers, R7, and one model trained/exported/served and scored on fresh prompts with tokens per second. Cost work follows. See [PLAN.md](../../PLAN.md).
 
 ## Proposal for the owner's queue
 

@@ -8,7 +8,7 @@ on new phrasing, remember across sessions, and run as one product. That remains 
 ```mermaid
 flowchart TD
   A["M1: saved integer model<br/>beats count tables"] --> B{"Can it start the right reply<br/>on new phrasing?"}
-  B -- "no evidence yet" --> M["Make the memory key<br/>reachable on reworded questions"]
+  B -- "no served evidence yet" --> M["Train and serve the sign key<br/>test free generation on new phrasing"]
   M --> R["Complete correct replies<br/>and durable memory"]
   R --> S["Full serving, cost,<br/>distribution and release"]
 ```
@@ -45,9 +45,11 @@ Claude-217 gives the sharpest current measurement:
 - The cycle step ends every registered loop, yet every content decision is underpowered and greedy
   remains the decode.
 
-So a loop-free reply is not necessarily a correct reply. The next question is which exact or
-geometric memory key lets a reworded known question retrieve the right opening. Claude-218 is active;
-no result is claimed ([claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)).
+So a loop-free reply is not necessarily a correct reply. Claude-218's offline sign-key probe has
+now passed on p-u, gaining +46/+37/+33 on 1,218 exact-memory misses at three seeds; the point key
+gained +125/+185/+114. The open question is whether training and serving the selected sign key
+produces correct free-generated replies on another fresh panel. No served-key result is established
+([claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md)).
 
 ## What remains open beyond that key
 

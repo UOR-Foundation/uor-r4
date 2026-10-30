@@ -52,9 +52,9 @@ The float-trained FBS trunk is a second model path; it has not joined the saved 
 Its `lut-stack/5` export is exact at DEV scope. The current work is complete replies on new
 phrasings, not another replay of M1.
 
-The latest merged experiment, [claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md),
-found that cycle and echo decode steps end every registered loop, but every content decision is
-**underpowered**, so greedy remains the decode. On held-out p-s:
+[Claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md) found that cycle and echo
+decode steps end every registered loop, but every content decision is **underpowered**, so greedy
+remains the decode. On held-out p-s:
 
 - Exact-reference replies are only **3, 1 and 4 of 256** at three seeds, against 38–40 on DEV.
 - Teacher-forced reply openings are **17.4%, 13.7% and 18.6%**, against **80.8%, 80.2% and 79.9%**
@@ -62,8 +62,11 @@ found that cycle and echo decode steps end every registered loop, but every cont
 - Exact turn memory keys on the turn's exact first token ids. It adds 322–337 of 1,226 openings on
   DEV but only 14–16 of 1,400 on p-s, so a reworded known question can find no stored key.
 
-The working inference is that **new-phrasing reply opening and the memory key** are the larger
-problem, not just loop suppression. Claude-218 is active on that problem; no result is claimed here.
+The latest merged experiment, [claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md),
+then passed its offline key probe. On p-u's **1,218 exact-memory misses**, the sign key gains
+**+46, +37 and +33** at three seeds; the point key gains **+125, +185 and +114**. The next unit
+trains and serves the cheapest passing sign key and tests free generation on another fresh panel.
+This is not yet a served-key or useful-chat result.
 
 ## What does not work yet
 
