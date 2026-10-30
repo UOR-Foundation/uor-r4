@@ -42,26 +42,44 @@ The item's done-when reads:
 >    - the read-by-meaning arms: the Flock read, and the type spin.
 > 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
 
+## This unit
+
+**The training run the protocol registers** (`docs/harness/prep/one-model-end-to-end-protocol-2026-10-29.md`): 7 arms × 3 seeds. The sheet for it is `docs/harness/prep/one-model-end-to-end-training-2026-10-29.md`.
+
+While the pods train, the laptop builds and runs:
+- **I-D:** the controls (T) and (S);
+- **I-G:** the grader's strata and the five decisions, I-C's tensor check, and I-F's full count over DEV's later rows.
+
+**Also in this unit:** the two earlier sheets' headings, renamed so the prep-sheet shape test passes. It was red on `main` since claude-205.
+
 ## Cancel probe (run first)
 
-To fill in.
+- **Every training flag the arms need is on `main`:** `--turn-memory-dropout` and `--fbs-arm` (claude-207); `--score-rows --panel`, the Flock rank decode and the hit counts (claude-208).
+- **The checkpoints' inputs exist in the store:** TRAIN, DEV and the tokenizer (`w2-inputs`), Fresh V2's tar and sums, and P-dev with its `SHA256SUMS`.
+- **The caps allow it:** 0 pods running, 18 RTX 5090 offers.
+
+**Class: none needed. Go.**
 
 ## Files in scope
 
-- `docs/labs/one-model-end-to-end/**`
-- `docs/harness/prep/one-model-end-to-end*`
-- `docs/loop/tasks/one-model-end-to-end/**`
-- `docs/research/notebook/float-training.md`
-- `docs/roadmap/items/one-model-end-to-end.md`
-- `crates/uor-r4-float-train/src/in_space_long.rs`
-- `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`
-- `crates/uor-r4-training/examples/m-world.rs`
+The item's scope. This unit edits:
+- `docs/harness/prep/one-model-end-to-end-*`;
+- `crates/uor-r4-float-train/src/in_space_long.rs` and `bin/train-in-space.rs` (I-D, I-G);
+- `docs/labs/one-model-end-to-end/**`;
+- `docs/research/notebook/float-training.md`;
+- `docs/loop/tasks/one-model-end-to-end/claude-211/**`.
 
 ## Done when
 
-To fill in.
+1. **The sheet** has a fresh FIT and pre-run review, posted on #3407 before any pod.
+2. **The run:**
+   - the 21 runs trained and scored, with seed 1's probe ladder first;
+   - everything sealed to the store with `SHA256SUMS`, and read back;
+   - the pods released and down.
+3. **I-D and I-G** each pass their check, with tests.
+4. **The protocol's five decisions,** applied as it fixes them, and I-H reported.
+5. **A REPORT,** negatives first, leading with tok/s, with one notebook row. Then a fresh review.
 
-## Stop and ask if
+## Stop and decide if
 
-To fill in.
+The sheet's stop rule: one arm stops alone if its probe projects past 1 hour; the whole run stops at $20, or if a CUDA test or a data check fails.
