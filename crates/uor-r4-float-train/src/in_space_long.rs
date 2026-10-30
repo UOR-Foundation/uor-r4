@@ -1304,7 +1304,7 @@ fn opening_rows(windows: &[CausalWindow], mask: &[u8]) -> Vec<OpeningRow> {
 /// `prompt[..8]` ([`opening_bound`]).
 #[derive(Clone, Debug, Serialize)]
 pub struct AnchorCheck {
-    /// The split, `dev` or `train`.
+    /// The split: `dev`, a panel's name, or `train`.
     pub anchor_check: String,
     pub openings: usize,
     pub agree: usize,
@@ -2796,10 +2796,14 @@ fn decode_reply(
             // A forced opening (claude-218) is the reply's first token, taken without a forward,
             // so no opening row is read or moved for it.
             if let Some(token) = forced_opening().filter(|_| reply.is_empty()) {
+                // As a decoded token would: BOS ends the reply unkept, and an end of turn is kept
+                // and ends it under the Flock rules only.
+                if token == hs::SHEET_BOS_ID {
+                    break;
+                }
                 reply.push(token);
                 ids.push(token);
-                // A forced end of turn or BOS ends the reply, as a decoded one would.
-                if Some(token) == eos || token == hs::SHEET_BOS_ID {
+                if flock && Some(token) == eos {
                     break;
                 }
                 continue;
