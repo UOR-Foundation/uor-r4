@@ -35,3 +35,7 @@ Every numbered done-when in the item is met: sourced M1/current-status prose, a 
 ## Stop list
 
 No model/GPU experiment, paid compute, new dependency, workflow edit, direct main push, force push, destructive deletion or production `gh-pages` publication. Do not edit outside the item's scope; STOP and re-scope first. Do not treat claim-wording's supported Markdown surface as a whole-repository scan: run a separate changed-public-prose check for the other paths.
+
+## Scope decision: required branch claim
+
+After `loop pr-check --local` reported the D76 advisory, the top Kimi session reviewed the whole project context, item, ORDER, claim diff and delivery rules. `docs/harness/claims.json` is added to the item scope solely to carry this branch's existing Kimi claim. No other claim, lab state, rule, bar or capability changes. Approved in this top session on 30 Oct 2026; reverse by removing that scope entry and claim together.
