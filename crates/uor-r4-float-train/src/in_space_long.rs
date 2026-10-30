@@ -2824,9 +2824,9 @@ fn served_parity(
 
 /// The served sheet's row (claude-220): 1 where any split's parity fails ([`ServedParity::holds`]),
 /// else [`keyed_outcome`]'s row for the served arm's `(p-w, DEV)` readings at seeds 1–3, except
-/// that row 4 is never read from a seed below the bar on its templates alone: with every seed
-/// harmless on bars (b)–(d) ([`KeyedReading::harmless`]) and the seeds pooled beyond their band on
-/// p-w's templates, the reading is row 3 (FIT rounds 1 and 2). A seed with a harm keeps row 4.
+/// that row 3 is read only where every seed is harmless on bars (b)–(d) ([`KeyedReading::harmless`]):
+/// then a row 4 whose seeds pooled gain beyond their band on p-w's templates is row 3 (FIT rounds 1
+/// and 2), and wherever a seed has a harm, a row 3 is row 4 (round 3).
 fn served_outcome(
     forced: &[ForcedReading],
     by_seed: Vec<(KeyedReading, KeyedReading)>,
@@ -2836,11 +2836,13 @@ fn served_outcome(
         let (pb, pc) = p.template.unwrap_or((0, 0));
         (b + pb, c + pc)
     });
-    let pooled_gain = b as f64 - c as f64 > 2.0 * ((b + c) as f64).sqrt()
-        && by_seed.iter().all(|(p, d)| p.harmless(d));
+    let harmless = by_seed.iter().all(|(p, d)| p.harmless(d));
+    let pooled_gain = b as f64 - c as f64 > 2.0 * ((b + c) as f64).sqrt() && harmless;
     match keyed_outcome(forced, &[("point", by_seed)]).0 {
         _ if !parity.iter().all(ServedParity::holds) => 1,
         4 if pooled_gain => 3,
+        // A thin seed beside a harmed one is a harm, not a power shortfall (FIT round 3).
+        3 if !harmless => 4,
         row => row,
     }
 }
@@ -2849,9 +2851,9 @@ fn served_outcome(
 /// the forced arm against greedy on p-w; the served key's parity with the run's keys file
 /// ([`served_parity`]); the served arm against greedy, read by [`keyed_reading`] by its own
 /// tokens, which refuses any reply its opening does not fix; and the protocol's free-generation
-/// measures ([`generation`]) for greedy and the served arm. With the sheet's decision: parity or
-/// the forced arm failing is row 1, then [`keyed_outcome`]'s rows on p-w, with row 4 only where
-/// the seeds pooled show no gain beyond its band (else row 3).
+/// measures ([`generation`]) for greedy and the served arm. With the sheet's decision
+/// ([`served_outcome`]): parity or the forced arm failing is row 1, then [`keyed_outcome`]'s rows
+/// on p-w, with row 3 only where every seed is harmless.
 #[derive(Clone, Debug, Serialize)]
 pub struct ServedGrade {
     pub parity: Vec<ServedParity>,
@@ -10888,6 +10890,12 @@ mod tests {
         let mut harmed = seeds([(20, 0), (20, 0), (25, 3)]);
         harmed[2].0.loops = Some((12, 2));
         assert_eq!(served_outcome(&forced, harmed, &[held(10, 10)]), 4);
+        // Nor does a thin seed make a harm underpowered (FIT round 3): one thin seed, one seed
+        // with a loop harm, one that carries, is row 4.
+        let mut thin_and_harmed = seeds([(4, 2), (30, 0), (20, 0)]);
+        thin_and_harmed[1].0.loops = Some((30, 2));
+        assert_eq!(served_outcome(&forced, thin_and_harmed, &[held(10, 10)]), 4);
+        assert_eq!(served_outcome(&forced, seeds([(4, 2), (20, 0), (20, 0)]), &[held(10, 10)]), 3, "thin alone is row 3");
         assert!(!held(0, 0).holds(), "no served opening is no parity");
     }
 

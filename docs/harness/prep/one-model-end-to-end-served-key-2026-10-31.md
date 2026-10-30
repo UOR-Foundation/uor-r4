@@ -2,7 +2,13 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md). Order: [claude-220](../../loop/tasks/one-model-end-to-end/claude-220/ORDER.md), written by hand on Casey's word: "screw kimi forge ahead as you were before with your plan for the single serving model". Decision: [DECISION.md](../../loop/tasks/one-model-end-to-end/claude-220/DECISION.md), APPROVE on five conditions. It follows claude-219 ([result](../../labs/one-model-end-to-end/keyed-opening-2026-10-30/README.md)).
 
-TEST FITNESS: PENDING (round 3; a fresh non-author reviewer reads this sheet and its sources before any pod).
+TEST FITNESS: PENDING (round 4; a fresh non-author reviewer reads this sheet and its sources before any pod).
+
+Round 3 was NOT FIT (a fresh non-author reviewer, 31 Oct, at `40af9ad68`), on one blocking point, repaired here before any model read p-w:
+- **A harm could still read as underpowered, through the thin path.** `keyed_outcome` gives row 3 whenever a seed is thin, so a thin seed beside a harmed one read as "a larger panel".
+- **Repaired:** `served_outcome` turns a row 3 into row 4 wherever some seed is not harmless, and a unit case pins it. The row-3 texts in this sheet and in the grade's doc say row 3 needs every seed harmless.
+
+Round 3 found round 2's repair holding, and `carries`' meaning in claude-219's grade unchanged.
 
 Round 2 was NOT FIT (a fresh non-author reviewer, 31 Oct, at `cad0ae00f`), on one blocking point, repaired here before any model read p-w:
 - **The pooled guard could label a harm as "underpowered."** Any row 4 turned to row 3 when the pooled templates gained, even where a seed failed on loops, exact replies or DEV, which a larger panel cannot fix.
@@ -40,7 +46,7 @@ Its non-blocking notes are taken in:
 **What each outcome unlocks** is set out in the decision table under Bar:
 - **the served key carries:** the one float model serves it; next comes its integer export, under its own item;
 - **it does not carry, even pooled:** claude-219's reading stands alone, and the next unit trains the trunk's opening point;
-- **too thin, or below the bar at a seed while the pooled seeds gain:** a larger panel;
+- **too thin, or below the bar at a seed while the pooled seeds gain, with every seed harmless:** a larger panel;
 - **the forced arm does not lift, or parity fails:** an instrument repair.
 
 **These are float research evaluations** (CHARTER §3.5, §3.7), on the GPU. Their tok/s is the GPU float decode's, not the served speed (the decision's condition (a)).
@@ -113,7 +119,7 @@ Its non-blocking notes are taken in:
 **The decision table**, read in order on p-w (`served_outcome`):
 1. **Parity fails at some split and seed** (more than 1% of the served openings name otherwise than the keys file), **or F does not lift on p-w at some seed** (its exact pair not beyond its band with b + c ≥ 10): an instrument check. Repair.
 2. **S carries:** the one float model serves the point key. The next unit is its integer export, under its own roadmap item (the decision's condition (d)), with a bar measured on the integer trunk's own points (condition (b)); then the integer model end to end.
-3. **S is thin** (template b + c under 10) at some seed, **or it would be row 4 while every seed is harmless on bars (b)–(d) and the seeds pooled show a template gain beyond their band:** underpowered at some seed. Next: a larger panel, or the seeds pooled under a fresh sheet. A seed that fails (b), (c) or (d) is a harm, and keeps row 4.
+3. **Every seed is harmless on bars (b)–(d), and either S is thin** (template b + c under 10) at some seed **or it would be row 4 while the seeds pooled show a template gain beyond their band:** underpowered at some seed. Next: a larger panel, or the seeds pooled under a fresh sheet. A seed that fails (b), (c) or (d) is a harm, and the reading is row 4, thin seeds or not.
 4. **Otherwise:** the served key does not carry on a second fresh panel, even pooled, and claude-219's p-v reading stands alone. Next: train the trunk's opening point to gather paraphrases.
 
 **Instrument checks.** The grade or the job refuses on any of these. Each is an instrument fault, repaired, never a negative (CHARTER §4.1):
