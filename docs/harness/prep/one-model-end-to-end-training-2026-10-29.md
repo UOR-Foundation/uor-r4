@@ -53,8 +53,9 @@ One pod per seed. Each runs one job, in this order:
      - its training time projects to under 1 hour for 16,384 steps, as `train_seconds` × 64. Start-up and evaluations are not in it, so claude-194's 37 s wall probe no longer projects 39 minutes for a 26-minute run.
      - An arm that fails either is skipped on that pod alone.
    - **I-B at P = 0 and I-C under `one-atom`:** each is (r)'s config, so each must be (r)'s run: the same `progress.jsonl` without its two timing fields, and the same step-256 checkpoint, byte for byte.
-     - A second run of (r) is the control (`I-H0`). If it too differs, training is not reproducible on that GPU, and the two checks cannot be byte checks.
+     - A second run of (r) is the control (`I-H0`). If it too differs, training is not reproducible on that GPU, and the two checks cannot be byte checks. They are then recorded INCONCLUSIVE, each with its DEV top-1 gap from (r) beside (r)'s own gap from itself.
      - If only the flag's run differs, the flag's wiring changes training.
+     - **Why byte identity is a fair test:** every checkpoint file is written deterministically. `safetensors` orders its tensors by dtype, then name, and the turn memory sorts its entries before saving (`flock_read_memory.rs:387`). The model's `config.json` is its own, with no path or time in it. So `diff -r` differs only when training does.
    - **I-B at P = 1000:** a further run of (r) with `--turn-memory-dropout 1000`. Its reply weight stays 0.0 at step 256 (`--inspect`'s `memory_reply_weight_mean_abs`).
    - **I-C under `frozen`:** the arm probe's step-0 and step-256 checkpoints are kept, and every `.spiralcore_fbs` tensor must be equal between them. The grader makes this check on the laptop.
    - **I-A:** the (r) probe's step-256 checkpoint is scored with `--panel p-dev=PDEV --samples 8`. P-dev must score its census's 16,417 rows, with the memory on and out. A miss stops the pod, since every arm's N-u reading rests on it. Its sample prompts, each opening a reply, are checked by the grader in every arm's 256 stored samples.
@@ -69,11 +70,19 @@ One pod per seed. Each runs one job, in this order:
    - the rows on DEV, Fresh V2 and P-dev, with the memory on and out;
    - DEV and P-dev samples, greedy with the memory on and out, and Flock rank with it on;
    - their hit counts.
+
+   **It passes no training flag, and needs none.** `load_reads` (`in_space_long.rs:380`) restores from the checkpoint every read the arm trained with, each to none when absent:
+   - the Flock read with its neighbour count (r-flock);
+   - the Hamming reads, with the type spin's `step_rotation` when present (`flock_read_hamming.rs:237`, r-spin);
+   - the opening read and the prompt register;
+   - the turn memory and its reply table, empty for (r0).
+
+   `--fbs-arm` is the one setting a checkpoint does not carry. So it is passed for (r-ident) and (r-frozen), and `check_run_arm` refuses a mismatch with the run's `config.json`.
 6. **I-H, reproduction.** (r) and (r0) at seeds 1 and 2 are compared with claude-194's sealed step-16,384 DEV readings: 11,513 / 11,361 and 10,079 / 11,171.
    - A miss is an instrument finding: training is not reproducible across builds. It is reported first. It does not void this run's comparisons, which all use one binary.
 7. **The seal.** Everything under the job's output folder goes off the pod, then into the store at `results/claude/one-model-end-to-end-2026-10-29/training-<sha8>/s<S>/`, with a `SHA256SUMS`, and is read back. Only then is the pod released and `down`.
 
-**The job** is `local/claude/claude-211/job.sh` in this unit's worktree, sha256 `a1e3e1cf9784575583788ddba0bf3213b26c3261b57d9a26364f568ad40080d9`, shipped to each pod as `/workspace/job.sh` and run as `job.sh <head> <seed>`. `job.log` carries row counts and exit codes, never a hit count.
+**The job** is `local/claude/claude-211/job.sh` in this unit's worktree, sha256 `45c384e643ed5da3199752c5e73824751b3af2d8b1dc595282a1b7a2fe6f0ad5`, shipped to each pod as `/workspace/job.sh` and run as `job.sh <head> <seed>`. `job.log` carries row counts and exit codes, never a hit count.
 
 **I-D is built and checked** (`008b40413`, `--controls`, on the laptop in 13 s):
 - **(T):** on DEV, it names exactly 1,194 openings and 9,655 later rows, and gets the census's 8,822 of the later rows, as the protocol requires.
@@ -96,7 +105,7 @@ The protocol's band: the floor `⌈2·√(b+c)⌉`, two paired standard errors, 
 
 - **One arm stops alone** if its 256-step probe projects past 1 hour for 16,384 steps. The others go on, and the REPORT names it.
 - **A pod stops** if any CUDA test, data check, I-A or the disk check fails on it.
-- **The whole run stops** at $20 across the pods.
+- **The whole run stops** at $20 across the pods. This unit's laptop watcher enforces it: each pass, it adds every pod's hourly price from `uor-pod status` over the time since that pod came up, and past $20 it saves each pod's output and takes the pods down.
 - **Each pod's EXIT** is 0 only when all 7 arms trained and scored. Otherwise it is 5, with the missing steps in `ARMS_FAILED`, or 9 after a stop.
 - **A small miss on a bar** is "keep and iterate", not a stop.
 
