@@ -17,7 +17,8 @@ Lab: claude. Item: [one-model-end-to-end](../../../roadmap/items/one-model-end-t
 
 ## Tokens per second
 
-- **Every rule decodes at 58–60 tok/s per process,** with three processes sharing the one GPU, about 180 tok/s together. This is the float GPU path with the memory on, at a context of up to 192.
+- **Every rule decodes at 58–60 tok/s per process while all three seeds share the one GPU,** about 180 tok/s together. This is the float GPU path with the memory on, at a context of up to 192.
+  - **One exception:** seed 1's last file was decoded after the other two had finished, and ran at 108 tok/s.
 - **The cell rule costs nothing over `FLOCK_END`:** both read the same top-16 sort.
 - **Nothing here is the served speed.** The integer path for (r-drop) is not built yet.
 
@@ -51,8 +52,18 @@ On DEV, whose prompts are TRAIN-templated (`v_ref` 0.57), the same shape holds:
 ## What it shows
 
 - **The objective's own margin admits almost all 16.** The model has not separated its top tokens by the 1.0 it was trained to: within 0.25 of the nearest there are still 9–12 candidates.
-- **`v` and the repeat rate rise together along the ladder.** No margin is both TRAIN-like and loop-free, at any seed, on either split. Narrowing the draw moves along one curve from `FLOCK_END` (no loops, no TRAIN-like replies) to greedy (both).
-- **The loops are not near-ties.** At 0.031, with 2–3 candidates admitted, the repeat rate is greedy's own (0.55–0.61). The steps where greedy loops are ones where the nearest token is already well ahead, so a narrowing that only breaks ties cannot break them.
+- **`v` and the repeat rate rise together, broadly, along the ladder.** No margin is both TRAIN-like and loop-free, at any seed, on either split. Narrowing the draw moves along one curve from `FLOCK_END` (no loops, no TRAIN-like replies) toward greedy (both). At the narrowest margin, 0.031, the repeat rate (0.553–0.614) is near greedy's (0.559–0.628), and below it at seeds 2 and 3.
+- **Inside a loop, the nearest token is confident.** This is measured from the replies' recorded admitted counts. A step is a loop step when the 4-gram ending at it occurred earlier in the same reply.
+
+  | Split, margin | Loop steps admitting one, at seeds 1–3 | Other steps admitting one, at seeds 1–3 |
+  |---|---|---|
+  | p-c, 0.25 | 98.5%, 97.1%, 98.2% | 22.5%, 19.7%, 20.5% |
+  | p-c, 0.031 | 99.6%, 99.5%, 99.4% | 70.3%, 62.4%, 64.0% |
+  | DEV, 0.25 | 99.0%, 95.9%, 98.5% | 29.9%, 23.7%, 25.8% |
+  | DEV, 0.031 | 99.4%, 99.2%, 99.5% | 89.4%, 84.5%, 84.8% |
+
+  At 0.25, where an ordinary step admits about 12 candidates, a loop step admits about one. In loops, the nearest is more than the margin ahead of every other token, so the draw has nothing to choose among, and narrowing the margin further cannot break the loop.
+  - **The scope:** steps inside loops, on the cell rule's own replies. The steps that enter a loop, and greedy's own replies, were not read.
 - **What a narrowed draw does fix,** in the fixed reading of seed 1's first 20 p-c replies:
   - **Two replies become the reference's kind of reply:** reply 3 is "Okay, I'll remember that." and reply 17 is "That's great news about the bike!". Under `FLOCK_END` they were "Okayist coneBilly" and "That's greatist bark'teded legs2setchund.".
   - **Nine of the 20 are character for character `FLOCK_END`'s salad** (replies 0, 4, 5, 8, 11, 12, 14, 16 and 18).
@@ -64,5 +75,5 @@ On DEV, whose prompts are TRAIN-templated (`v_ref` 0.57), the same shape holds:
 As the sheet registered for "narrows":
 - **The cell rule stays the Flock candidate, and it is iterated.**
 - **The next narrowing comes from the same geometry:** the Hamming read's address cell in place of a score margin.
-- **The design input for that unit is the loop finding above.** The loops sit where the nearest is confident, so the next rule has to act on those steps too, not only on ties.
+- **The design input for that unit is the loop measurement above.** Inside loops, the nearest is more than the margin ahead, so the next rule has to act on those confident steps, not only on ties.
 - **The score-margin cell at these six margins is a negative for this configuration only:** (r-drop) at step 16,384, top-16, harmonic weights.

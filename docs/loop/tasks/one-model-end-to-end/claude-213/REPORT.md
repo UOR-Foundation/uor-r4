@@ -4,7 +4,8 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 ## Tokens per second
 
-- **Every rule decodes at 58–60 tok/s per process** on one RTX 5090, with three processes sharing it, about 180 tok/s together. This is the float GPU path with the memory on.
+- **Every rule decodes at 58–60 tok/s per process** on one RTX 5090, while all three seeds share it, about 180 tok/s together. This is the float GPU path with the memory on.
+  - **One exception:** seed 1's last file was decoded alone, after the others finished, and ran at 108 tok/s.
 - **The cell rule adds no cost over `FLOCK_END`,** which reads the same top-16 sort.
 - **This is not the served speed.** The integer path for (r-drop) is not built.
 
@@ -12,9 +13,15 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 - **No margin of the ladder is close, at any seed, on DEV or p-c.** "Close" is the free-generation condition: a verbatim share within `tol` of the references', and a repeat rate within 0.10 of theirs.
   - **The registered "improves" outcome is not met.** The score-margin cell at these six margins is a negative for this configuration only: (r-drop) at step 16,384, top-16, harmonic weights.
-- **Narrowing the draw trades salad for loops; it does not remove both.** On p-c, the verbatim share `v` and the repeated-4-gram rate rise together, from margin 1.0 (`v` 0.016–0.035, repeat 0.001) to 0.031 (`v` 0.343–0.353, repeat 0.553–0.614, greedy's level). The references sit at `v` 0.59 and repeat 0.00.
+- **Narrowing the draw trades salad for loops; it does not remove both.** On p-c, the verbatim share `v` and the repeated-4-gram rate rise together, broadly:
+  - at margin 1.0, `v` is 0.016–0.035 and the repeat rate 0.001;
+  - at 0.031, `v` is 0.343–0.353 and the repeat rate 0.553–0.614, near greedy's 0.559–0.628 and below it at seeds 2 and 3;
+  - the references sit at `v` 0.59 and repeat 0.00.
 - **The objective's own margin is no narrowing.** At 1.0, the margin the run trained to, 15.1–15.2 of the 16 candidates are admitted, and 195–209 of 256 p-c replies are identical to `FLOCK_END`'s.
-- **The loops are not near-ties.** With 2–3 candidates admitted (margin 0.031), the repeat rate equals greedy's. Greedy's loops sit at steps where the nearest token is already well ahead, so no tie-breaking rule reaches them.
+- **Inside a loop, the nearest token is confident, so narrowing cannot break the loop.** This is measured from the recorded admitted counts, where a loop step is one whose 4-gram occurred earlier in the same reply.
+  - At margin 0.25, 95.9–99.0% of loop steps admit exactly one candidate, across both splits and all three seeds, against 19.7–29.9% of other steps.
+  - At 0.031, 99.2–99.6% of loop steps admit one.
+  - **The scope:** steps inside loops, on the cell rule's own replies. Loop entries and greedy's replies were not read.
 - **The selected margin still gives mostly salad.** At 0.25, 59–101 of 256 p-c replies are character for character `FLOCK_END`'s. In the fixed reading of seed 1's first 20 p-c replies:
   - nine are `FLOCK_END`'s salad unchanged;
   - two loop;
@@ -62,7 +69,7 @@ None.
 ## Still open
 
 - **The next narrowing (the registered "narrows" row):** the Hamming read's address cell in place of a score margin.
-  - **Its design input:** the loops sit at steps where the nearest is confident, so the rule must act there too, not only on near-ties.
+  - **Its design input:** inside loops, the nearest is more than the margin ahead at 95.9–99.6% of steps, so the rule must act on those confident steps, not only on near-ties.
 - **No decode rule tried yet meets the free-generation condition** on new phrasings. Greedy loops, `FLOCK_END` is salad, and the cell rule trades one for the other. No rule yet makes replies both complete and TRAIN-like.
 - **Serving (r-drop) in integers,** then its decode tok/s.
 - **p-c has now been opened once,** by this decision. A later decision needs a new panel.
@@ -71,4 +78,4 @@ None.
 
 Casey asked to improve Flock's decode rather than drop it. I built a version that only draws among the tokens the model can't tell apart from its top pick, measured at six widths on three seeds and a fresh panel.
 
-It helps a little: at the selected width, replies finish and some become sensible. But mostly it trades word salad for greedy's loops, and no width gives both clean and on-topic replies. The loops come from confident steps, not near-ties, so the next attempt has to act on those steps.
+It helps a little: at the selected width, replies finish and some become sensible. But mostly it trades word salad for greedy's loops, and no width gives both clean and on-topic replies. Inside a loop, the model is confident in the repeated token, so there is nothing to draw among; the next attempt has to act on those steps.

@@ -2223,7 +2223,8 @@ fn rank_order(mut candidates: Vec<(u32, f32)>) -> Vec<(u32, f32)> {
 /// One decoded reply ([`decode_reply`]).
 struct DecodedReply {
     tokens: Vec<u32>,
-    /// Under [`DecodeRule::FlockCell`], each step's admitted count; empty under any other rule.
+    /// Under [`DecodeRule::FlockCell`], each drawn step's admitted count, a final step that
+    /// drew BOS included; empty under any other rule.
     admitted: Vec<u8>,
 }
 
@@ -2837,8 +2838,10 @@ pub struct IdSample {
     pub reference_keys: usize,
     #[serde(default)]
     pub reference_named: usize,
-    /// Under [`DecodeRule::FlockCell`], each step's admitted count ([`cell_admitted`],
-    /// claude-213). Empty, and not written, under every other rule, so their files are as before.
+    /// Under [`DecodeRule::FlockCell`], each drawn step's admitted count ([`cell_admitted`],
+    /// claude-213), a step that drew BOS and ended the reply included, so it can hold one more
+    /// count than `reply` has tokens. Empty, and not written, under every other rule, so their
+    /// files are as before.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub admitted: Vec<u8>,
 }
@@ -4623,6 +4626,9 @@ pub fn cell_grade(data_root: &Path, runs: &Path, panel: &str, margins: &[u32]) -
     if margins.is_empty() || !cells_ok(margins) {
         return Err(invalid("--cell-grade wants --flock-cell's distinct margins"));
     }
+    if panel == "dev" {
+        return Err(invalid("--cell-grade's confirming panel cannot be DEV, which selects"));
+    }
     let (train_tokens, train_mask) = load_train_split(data_root)?;
     let train_replies = split_turns(&train_tokens, &train_mask, hs::SHEET_BOS_ID).replies;
     drop((train_tokens, train_mask));
@@ -4647,6 +4653,7 @@ pub fn cell_grade(data_root: &Path, runs: &Path, panel: &str, margins: &[u32]) -
     for split in ["dev", panel] {
         for seed in 1..=3u8 {
             let mut greedy: Option<Generation> = None;
+            let mut prompts: Option<Vec<(usize, Vec<u32>)>> = None;
             for rule in &rules {
                 let file = match (split, rule.as_str()) {
                     ("dev", "greedy") => "samples-memory.json".to_owned(),
@@ -4654,6 +4661,18 @@ pub fn cell_grade(data_root: &Path, runs: &Path, panel: &str, margins: &[u32]) -
                     _ => format!("samples-{split}-{rule}-memory.json"),
                 };
                 let list = samples(seed, &file)?;
+                // Every rule answers greedy's prompts, sample by sample, or nothing compares.
+                let these: Vec<(usize, Vec<u32>)> =
+                    list.iter().map(|s| (s.position, s.prompt.clone())).collect();
+                match &prompts {
+                    None => prompts = Some(these),
+                    Some(first) if *first != these => {
+                        return Err(invalid(format!(
+                            "r-drop-s{seed}/{file}: its prompts are not greedy's on {split}"
+                        )));
+                    }
+                    Some(_) => {}
+                }
                 let replies: Vec<Vec<u32>> = list.iter().map(|s| s.reply.clone()).collect();
                 let references: Vec<Vec<u32>> = list.iter().map(|s| s.reference.clone()).collect();
                 let made = generation(&replies, &train_replies, eos);
@@ -7459,6 +7478,11 @@ mod tests {
             select_margin(&margins([(1_000, &salad), (250, &off), (31, &loops)])),
             (Some(250), "closest, not qualified")
         );
+        // Equal mean gaps: the tie goes to the wider margin, whatever the order given.
+        assert_eq!(
+            select_margin(&margins([(125, &off), (250, &off), (31, &loops)])),
+            (Some(250), "closest, not qualified")
+        );
         // One seed of three failing decision 4 rules a margin out.
         let mixed = vec![(500u32, vec![&good, &good, &loops])];
         assert_eq!(select_margin(&mixed), (None, "none holds decision 4"));
@@ -7468,6 +7492,23 @@ mod tests {
         assert_eq!(panel_outcome(&three(&salad), &three(&off)), "no gain", "farther than FLOCK_END");
         assert_eq!(panel_outcome(&three(&loops), &three(&salad)), "no gain", "decision 4 fails");
         assert_eq!(panel_outcome(&three(&good)[..2], &three(&salad)), "no gain", "two seeds");
+        assert_eq!(
+            panel_outcome(&three(&off), &three(&salad)[..2]),
+            "no gain",
+            "FLOCK_END at two seeds is no comparison"
+        );
+        // FLOCK_END with nothing complete has no share at all, so any share is nearer.
+        let silent = CellReading {
+            reading: VerdictSeed {
+                complete: 0,
+                v: None,
+                tol: None,
+                ..salad.reading.clone()
+            },
+            ..salad.clone()
+        };
+        assert!(silent.gap().is_none());
+        assert_eq!(panel_outcome(&three(&off), &three(&silent)), "narrows");
     }
 
     /// claude-213 (its GPU half): on a model, the cell rule at margin 0 decodes exactly as
