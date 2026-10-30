@@ -15,7 +15,7 @@ Adopts @sharmis-tp's PR #3426; the fork PR is thanked, credited and closed after
 ## What changed
 
 - **Adopted** @sharmis-tp's three-file figure/flock/catalog repair unchanged (`+177/−29`): `docs_catalog.rs`, `figures_math.rs`, `figures_charts.rs`.
-- **Merge-forward** of `origin/main` (records PR #3434, then #3424 and #3425 once they land).
+- **Merge-forward** of `origin/main`: records PR #3434, then adoption #3424 (#3435), then adoption #3425 (#3437); no conflicts, and `docs_catalog.rs` carries both repairs' hunks. The `xtask` suite at this final head is 220 passed (211 base + 6 from #3425 + 3 from this repair).
 - **Set item #3433 to `done`** (status-only edit) and this PR says `Closes #3433`.
 - **Added:** this ORDER and REPORT in `docs/loop/tasks/infra-outsider-repairs/deepseek-77/`.
 - **Not changed:** no committed figure, catalog page, bar, panel, status, §3 rule or owner path.
@@ -23,7 +23,7 @@ Adopts @sharmis-tp's PR #3426; the fork PR is thanked, credited and closed after
 
 ## Measurements
 
-- `cargo test -p xtask`: `214 passed; 0 failed; 0 ignored` (base 211 + 3 new). Measured in a separate target directory: a shared target directory had wrongly reused another worktree's `xtask` artifact earlier, so the count was re-taken from a clean build.
+- `cargo test -p xtask`: `214 passed; 0 failed; 0 ignored` at the pre-#3425 head (base 211 + 3 new), and `220 passed; 0 failed; 0 ignored` at this final head once #3425's six tests are merged (211 + 6 + 3). Measured in separate target directories: a shared target directory had wrongly reused another worktree's `xtask` artifact earlier, so the counts were re-taken from clean builds.
 - `cargo fmt -p xtask -- --check`: green at this head (this repair makes main's pre-existing fmt red go away).
 - `cargo clippy -p xtask --all-targets -- -D warnings`: 2 pre-existing errors, no new error.
 - `docs-catalog --check`: `1175 records, 20 lines, 0 paths not found`.
