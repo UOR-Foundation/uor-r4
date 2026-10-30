@@ -5,8 +5,8 @@ Order: [ORDER.md](ORDER.md). References #2028, #2029 and #3407.
 
 ## What did not work, first
 
-The selected cloud environment remained starting; a command probe reported no
-usable execution environment. No local Cargo, mdBook, full link check, model
+The selected cloud environment failed to start (executor configuration capability
+query/preparation failure); a command probe reported no usable execution environment. No local Cargo, mdBook, full link check, model
 evaluation or experiment is claimed. Documentation edits used the authenticated
 GitHub connector. The lab registry and credentials are unchanged; any required
 maintainer adoption or formal review remains a real delivery gate.
@@ -20,6 +20,8 @@ claude-217 review records FIT, GO and launch, not success.
 
 - README: 1/8 milestones, the six-bar saved-model M1 result, DEV 7,002 / 7,001,
   p-f 7,850 / 7,872, and their scope. K16's 19 Oct table remains dated history.
+  The Hamilton/SpiralCore row now matches the mechanism board's trained/served
+  FBS status of 29 Oct, following the independent review's finding.
 - PLAN: only the documentation-direction row's status/note reconciled with
   the done docs-status-refresh item and merged #3379; the owner's quote is kept.
 - one-model-end-to-end: replace the never-scored assertion with dated generation
@@ -46,6 +48,14 @@ without treating compatibility acknowledgements as executed model tests.
 
 ## Still open
 
-Independent exact-head review, real required checks and normal protected delivery.
+The initial head's docs archive/link CI passed. Its actual loop-gates test job
+refused before tests: lab codex is absent from docs/harness/labs.json, whose
+registered labs are antigravity, claude, deepseek and kimi. A new lab is an owner
+decision. The five green transport acknowledgements do not waive that failure.
+Independent review passed the changed content and identified the corrected
+FBS row; replacement-head review and CI are reported separately on the PR.
+A legitimate registered-maintainer adoption or owner registry decision is needed
+for the blocked gate; this contribution does not make either change. Normal
+protected delivery remains blocked, not waived.
 No approval is submitted by the author; no registry or issue state is changed.
 The broader end-to-end protocol and integer-serving work remain pending.
