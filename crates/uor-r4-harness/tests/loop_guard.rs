@@ -1752,19 +1752,37 @@ fn a_heredoc_body_is_data_unless_a_shell_runs_it() {
     let fixture = make_uor_fixture("codex");
     let root = fixture.path();
     let data = "cat > local/codex/note.md <<'EOF'\nrestore with: git checkout -- CHARTER.md\necho x > CHARTER.md\nEOF";
-    assert!(!bash_verdict(root, data), "a body that only mentions a write is not refused");
+    assert!(
+        !bash_verdict(root, data),
+        "a body that only mentions a write is not refused"
+    );
     let unquoted = "cat > local/codex/note.md <<EOF\necho x > CHARTER.md\nEOF\necho done";
     assert!(!bash_verdict(root, unquoted));
     let dashed = "cat > local/codex/note.md <<-END\n\techo x > CHARTER.md\n\tEND";
-    assert!(!bash_verdict(root, dashed), "<<- ends at a tab-indented delimiter");
+    assert!(
+        !bash_verdict(root, dashed),
+        "<<- ends at a tab-indented delimiter"
+    );
     let shell = "bash <<'EOF'\necho x > CHARTER.md\nEOF";
-    assert!(bash_verdict(root, shell), "a body fed to bash runs, so it is checked");
+    assert!(
+        bash_verdict(root, shell),
+        "a body fed to bash runs, so it is checked"
+    );
     let unterminated = "cat > local/codex/note.md <<EOF\necho x > CHARTER.md";
-    assert!(bash_verdict(root, unterminated), "an unterminated heredoc is checked as commands");
+    assert!(
+        bash_verdict(root, unterminated),
+        "an unterminated heredoc is checked as commands"
+    );
     let after = "cat > local/codex/note.md <<'EOF'\nfine\nEOF\necho x > CHARTER.md";
-    assert!(bash_verdict(root, after), "a command after the body is checked");
+    assert!(
+        bash_verdict(root, after),
+        "a command after the body is checked"
+    );
     let quoted = "perl -e 'print \"<<EOF\"' > local/codex/x\necho x > CHARTER.md";
-    assert!(bash_verdict(root, quoted), "a << inside quotes opens nothing");
+    assert!(
+        bash_verdict(root, quoted),
+        "a << inside quotes opens nothing"
+    );
 }
 
 /// claude-210: a target named by a variable the same command sets is checked as its value.
@@ -1773,17 +1791,29 @@ fn a_variable_set_in_the_command_names_its_target() {
     let fixture = make_uor_fixture("codex");
     let root = fixture.path();
     let in_scope = "F=crates/uor-r4-harness/src/loopguard.rs && echo x > \"${F}\"";
-    assert!(!bash_verdict(root, in_scope), "an in-scope target through a variable is allowed");
+    assert!(
+        !bash_verdict(root, in_scope),
+        "an in-scope target through a variable is allowed"
+    );
     let plain = "F=crates/uor-r4-harness/src/loopguard.rs; echo x >> $F";
     assert!(!bash_verdict(root, plain));
     let exported = "export F=crates/uor-r4-harness/tests/x.rs && rm -f \"$F\"";
     assert!(!bash_verdict(root, exported));
     let owner = "F=CHARTER.md && echo x > \"${F}\"";
-    assert!(bash_verdict(root, owner), "an owner path through a variable is still refused");
+    assert!(
+        bash_verdict(root, owner),
+        "an owner path through a variable is still refused"
+    );
     let unknown = "echo x > \"${NOT_SET_HERE}\"";
-    assert!(bash_verdict(root, unknown), "an unknown variable stays refused");
+    assert!(
+        bash_verdict(root, unknown),
+        "an unknown variable stays refused"
+    );
     let env_only = "F=crates/uor-r4-harness/src/loopguard.rs echo x > \"$F\"";
-    assert!(bash_verdict(root, env_only), "a command's own environment is not a shell variable");
+    assert!(
+        bash_verdict(root, env_only),
+        "a command's own environment is not a shell variable"
+    );
 }
 
 /// claude-210: an owner path opens to the lab's main session when its active ORDER's
@@ -1793,18 +1823,31 @@ fn an_owner_path_opens_with_the_orders_recorded_approval() {
     let fixture = make_uor_fixture("codex");
     let root = fixture.path();
     let order = root.join("docs/loop/tasks/infra-loop-harness/codex-1/ORDER.md");
-    assert!(bash_verdict(root, "echo x > CHARTER.md"), "no approval: refused");
+    assert!(
+        bash_verdict(root, "echo x > CHARTER.md"),
+        "no approval: refused"
+    );
     // An approval section without the owner's time is no approval (`owner_approval_missing`).
     let mut timeless = fs::read_to_string(&order).unwrap();
     timeless.push_str("\n## Owner approval\n\nOwner paths changed: `CHARTER.md`.\n");
     fs::write(&order, &timeless).unwrap();
-    assert!(bash_verdict(root, "echo x > CHARTER.md"), "an approval with no time: refused");
-    let base = timeless.split("\n## Owner approval").next().unwrap().to_owned();
+    assert!(
+        bash_verdict(root, "echo x > CHARTER.md"),
+        "an approval with no time: refused"
+    );
+    let base = timeless
+        .split("\n## Owner approval")
+        .next()
+        .unwrap()
+        .to_owned();
     fs::write(&order, &base).unwrap();
     let mut text = fs::read_to_string(&order).unwrap();
     text.push_str("- `CHARTER.md`\n- `docs/harness/owner-paths.json`\n\n## Owner approval\n\nOwner paths changed: `CHARTER.md` and `docs/harness/owner-paths.json`.\n\nCasey, in chat, 2026-10-29T21:00Z: \"yes\".\n");
     fs::write(&order, text).unwrap();
-    assert!(!bash_verdict(root, "echo x > CHARTER.md"), "named in the approval: allowed");
+    assert!(
+        !bash_verdict(root, "echo x > CHARTER.md"),
+        "named in the approval: allowed"
+    );
     assert!(
         bash_verdict(root, "echo x > AGENTS.md"),
         "an owner path the approval does not name stays refused"
