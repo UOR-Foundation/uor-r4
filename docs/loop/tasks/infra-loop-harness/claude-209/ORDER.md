@@ -56,3 +56,22 @@ Run at this ORDER's base. **Class: none needed (a record). Go.**
 ## Stop and decide if
 
 - The charter or decision text would say more than Casey's words. Then quote his words and keep the rule to them.
+
+## Owner approval
+
+Owner paths changed: `CHARTER.md`, `docs/rules/changes.md` and `docs/integration/DECISIONS.md`.
+
+**The decision.** Casey, in Claude's chat, 2026-10-29, answered "Yes, add the bar (Recommended)" (words above).
+
+**The owner paths.** The loop guard refuses lab edits to owner paths. Asked at 2026-10-30T00:06:57Z:
+
+> "May I write D82's text into the three owner-only files, as you allowed for D80? The loop guard refuses lab edits to CHARTER.md, docs/integration/DECISIONS.md and docs/rules/changes.md. For D80 you gave permission, and the edits went in as one patch, applied with git apply and checked line by line by a fresh reviewer against your words. D82's text adds only bar (f) to CHARTER §4 item 8, the D82 row and its dated log entry, quoting your answer. Note: antigravity-110 already passed all five current M1 bars, so bar (f) keeps M1 open until that saved model also passes on a held-out-phrasing panel."
+
+Casey chose **"Yes, write them (Recommended)"**. That option read: "Same route as D80: an edited copy under local/claude/, a patch kept in the task folder, git apply, and a fresh line-by-line review against your words before merge."
+
+**How the owner paths are written.** Each edited copy is made under `local/claude/d82/`. The difference is kept as `d82-owner-paths.patch` in this task folder, and applied with `git apply` under that permission. The patch touches only:
+- `CHARTER.md`: §4 item 8, bar (f);
+- `docs/integration/DECISIONS.md`: the D82 row;
+- `docs/rules/changes.md`: the entry.
+
+The fresh review checks it line by line against the owner's words.

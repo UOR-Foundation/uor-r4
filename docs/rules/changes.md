@@ -14,6 +14,15 @@ flowchart LR
 
 An entry gives the date, what changed, which charter clauses it touches, and who decided. The owner's own words are recorded verbatim when they are the reason. Old text is never edited or deleted: it moves unchanged to the `archive/` folder, and the live decision index keeps one line saying where each decision went (see the [decision map](decision-map.md)).
 
+## 29 October 2026: M1 adds a held-out-phrasing bar (D82)
+
+**Decided by:** the owner (Casey), in Claude's chat, 2026-10-29 (recorded on #2028, 6511159403). He was asked "Should M1 also require a held-out-phrasing panel?", and chose "Yes, add the bar (Recommended)": "M1 also requires beating the T2 bigram and unigram on a fresh held-out-phrasing panel (drawn by heldout-panel at a new seed, with its own census), with the same paired band as bar (e). It proves the model reads new phrasings, not just recalls templates."
+
+**What changed:**
+1. **Clause 4.8.** After D39's bars, a bar (f): on a fresh held-out-phrasing panel, the same saved model's integer top-1 beats both the unigram table and the T2 successor table, on each of two seeds, with bar (e)'s paired band. The panel is drawn by `heldout-panel` at a new seed, with its own census.
+2. **No other clause changes.** Bars (a) to (e) stand as D39 set them.
+3. **What it means for M1:** antigravity-110 passed (a)–(e), so M1 stays open until its saved model also passes (f). The roadmap item `m1-heldout-phrasing-transfer` measures it.
+
 ## 28 October 2026: integer serving may use the divide instruction; floats stay banned (D81)
 
 **Decided by:** the owner (Casey), in Claude's chat, by 2026-10-29T03:20:23Z, after Claude priced divide and floats: "allow divide, hold on floats for now as you have recommended and fix the exporter".
