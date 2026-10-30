@@ -90,6 +90,14 @@
 //! under L1 and by sign pattern (`keys-{split}.json`), and a forced-opening greedy arm, each
 //! reply's first token given as its reference's (`samples-{split}-forced-memory.json`).
 //!
+//! `--keyed-decode sign=T,hsign=T,point=T`, with `--opening-keys 1`, adds a keyed arm per trunk key
+//! (claude-219): greedy with the memory on, the reply's first token the key's name where the
+//! memory's exact key misses the opening and the key's distance is at most τ (`inf`: wherever it
+//! misses), each forced token kept as the sample's `keyed` (`samples-{split}-keyed-{key}-memory.json`).
+//! `train-in-space --data-root DIR --keyed-grade 1 --runs DIR [--keys-runs DIR] --panel p-v=DIR`
+//! grades them against greedy on the laptop (`in_space_long::keyed_grade`); with `--panel p-u=DIR`
+//! on claude-218's run, it predicts their exact replies, the sheet's power check. One JSON line.
+//!
 //! `train-in-space --data-root DIR --controls 1 --out DIR [--fresh-v2 DIR] [--panel NAME=DIR ...]`: the
 //! protocol's recall controls (I-D, claude-211) on the laptop: (T) the memory's tables and (S) the
 //! longest suffix over TRAIN, as rows files the grader pairs with the arms.
@@ -116,7 +124,7 @@ use candle_core::Device;
 use uor_r4_float_train::flock_read_opening::OpeningAnchor;
 use uor_r4_float_train::flock_read_register::RegisterSelect;
 use uor_r4_float_train::in_space_long::{
-    cell_grade, cells_ok, census, context_reach, controls, cut_grade, cycle_grade, decode_speed, key_grade, fbs_arm_named, grade,
+    cell_grade, cells_ok, census, context_reach, controls, cut_grade, cycle_grade, decode_speed, key_grade, keyed_grade, fbs_arm_named, grade,
     gradient_norms, inspect_run, opening_bound, overturn, read_grade, reply_bound, root_separation,
     run_long, run_recall, score_rows, scopes_ok, DecodeRule, LongConfig, PointObjective, ReadScope,
     TrainSplit, DEFAULT_REGISTER_PICKS, MEMORY_DROPOUT_MAX,
@@ -146,8 +154,10 @@ fn main() -> Result<()> {
     let mut cut_grade_on = false;
     let mut cycle_on = false;
     let mut keys_on = false;
+    let mut keyed: Vec<(String, f32)> = Vec::new();
     let mut cycle_grade_on = false;
     let mut key_grade_on = false;
+    let mut keyed_grade_on = false;
     let mut key_levels: Vec<(String, u8)> = Vec::new();
     let mut keys_runs: Option<PathBuf> = None;
     let mut scopes: Vec<ReadScope> = Vec::new();
@@ -225,8 +235,10 @@ fn main() -> Result<()> {
             "--cut-grade" => cut_grade_on = switch(&value)?,
             "--cycle-step" => cycle_on = switch(&value)?,
             "--opening-keys" => keys_on = switch(&value)?,
+            "--keyed-decode" => keyed = keyed_decode_arg(&value)?,
             "--cycle-grade" => cycle_grade_on = switch(&value)?,
             "--key-grade" => key_grade_on = switch(&value)?,
+            "--keyed-grade" => keyed_grade_on = switch(&value)?,
             "--key-levels" => key_levels = key_levels_arg(&value)?,
             "--keys-runs" => keys_runs = Some(PathBuf::from(&value)),
             "--reply-read-train" => {
@@ -481,10 +493,11 @@ fn main() -> Result<()> {
         cut_grade_on,
         cycle_grade_on,
         key_grade_on,
+        keyed_grade_on,
     ];
     if modes.iter().filter(|&&m| m).count() > 1 {
         return Err(FloatTrainError::Invalid(
-            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1, --grade 1, --cell-grade 1, --read-grade 1, --cut-grade 1, --cycle-grade 1 or --key-grade 1"
+            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1, --grade 1, --cell-grade 1, --read-grade 1, --cut-grade 1, --cycle-grade 1, --key-grade 1 or --keyed-grade 1"
                 .to_owned(),
         ));
     }
@@ -522,6 +535,7 @@ fn main() -> Result<()> {
             || keys_on
             || cycle_grade_on
             || key_grade_on
+            || keyed_grade_on
             || config.reply_read_train.is_some()
             || !scopes.is_empty()
         {
@@ -559,6 +573,11 @@ fn main() -> Result<()> {
             "--opening-keys applies to --score-rows only".to_owned(),
         ));
     }
+    if !keyed.is_empty() && !keys_on {
+        return Err(FloatTrainError::Invalid(
+            "--keyed-decode applies to --score-rows with --opening-keys 1 only".to_owned(),
+        ));
+    }
     if cycle_grade_on {
         let runs = runs
             .ok_or_else(|| FloatTrainError::Invalid("--cycle-grade needs --runs DIR".to_owned()))?;
@@ -578,9 +597,21 @@ fn main() -> Result<()> {
         println!("{}", serde_json::to_string(&graded)?);
         return Ok(());
     }
+    if keyed_grade_on {
+        if !key_levels.is_empty() {
+            return Err(FloatTrainError::Invalid(
+                "--keyed-grade reads its τ from the sheet; it takes no --key-levels".to_owned(),
+            ));
+        }
+        let runs = runs
+            .ok_or_else(|| FloatTrainError::Invalid("--keyed-grade needs --runs DIR".to_owned()))?;
+        let graded = keyed_grade(&data_root, &runs, keys_runs.as_deref(), &extra_panels)?;
+        println!("{}", serde_json::to_string(&graded)?);
+        return Ok(());
+    }
     if !key_levels.is_empty() || keys_runs.is_some() {
         return Err(FloatTrainError::Invalid(
-            "--key-levels and --keys-runs apply to --key-grade only".to_owned(),
+            "--key-levels and --keys-runs apply to --key-grade (and --keys-runs to --keyed-grade) only".to_owned(),
         ));
     }
     // A run trains with the cut; scoring reads it back from the run's own config.
@@ -712,6 +743,7 @@ fn main() -> Result<()> {
             &scopes,
             cycle_on,
             keys_on,
+            &keyed,
             &device,
         )? {
             println!("{}", serde_json::to_string(&file)?);
@@ -810,9 +842,41 @@ fn key_levels_arg(value: &str) -> Result<Vec<(String, u8)>> {
         .collect()
 }
 
+/// `--keyed-decode sign=T,hsign=T,point=T` (claude-219): the keyed arms, each trunk key with its
+/// τ, a distance of 0 or more, or `inf` to fire at every opening the exact key misses.
+fn keyed_decode_arg(value: &str) -> Result<Vec<(String, f32)>> {
+    let keyed: Vec<(String, f32)> = value
+        .split(',')
+        .map(|part| match part.split_once('=') {
+            Some((key, tau)) if ["sign", "hsign", "point"].contains(&key) => match tau.parse::<f32>() {
+                Ok(t) if t >= 0.0 => Ok((key.to_owned(), t)),
+                _ => Err(FloatTrainError::Invalid(format!("--keyed-decode: {part} wants a τ of 0 or more, or inf"))),
+            },
+            _ => Err(FloatTrainError::Invalid("--keyed-decode takes sign=T,hsign=T,point=T".to_owned())),
+        })
+        .collect::<Result<_>>()?;
+    if keyed.iter().enumerate().any(|(i, (k, _))| keyed[..i].iter().any(|(j, _)| j == k)) {
+        return Err(FloatTrainError::Invalid("--keyed-decode names each trunk key once".to_owned()));
+    }
+    Ok(keyed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keyed_decode_names_each_trunk_key_once_with_a_tau_of_0_or_more() {
+        assert_eq!(
+            keyed_decode_arg("sign=0.0078125,hsign=0,point=inf").unwrap(),
+            [("sign".to_owned(), 0.0078125), ("hsign".to_owned(), 0.0), ("point".to_owned(), f32::INFINITY)]
+        );
+        assert!(keyed_decode_arg("sign=-0.5").is_err());
+        assert!(keyed_decode_arg("sign=NaN").is_err());
+        assert!(keyed_decode_arg("sign=x").is_err());
+        assert!(keyed_decode_arg("exact=0").is_err());
+        assert!(keyed_decode_arg("sign=0,sign=1").is_err());
+    }
 
     #[test]
     fn key_levels_name_each_trunk_key_once_with_a_level_from_1_to_10() {
