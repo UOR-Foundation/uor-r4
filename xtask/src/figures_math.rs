@@ -201,14 +201,25 @@ fn project<const N: usize>(v: &V<N>, (b1, b2): (&V<N>, &V<N>)) -> (f64, f64) {
     (dot(v, b1), dot(v, b2))
 }
 
-/// Points grouped by distance from the origin: (radius, member indexes), inner first.
-/// A float sort key rounded to 1e-9, so values equal in exact arithmetic but
-/// apart in their last bits (platform `sin`/`cos`/`atan2` differ there) tie,
-/// and the tie-breaker decides the same way on every platform.
-fn key(x: f64) -> i64 {
-    (x * 1e9).round() as i64
+/// Values closer than this count as equal when ranking.
+const TIE: f64 = 1e-7;
+
+/// The rank of each value, where values within `TIE` of their neighbour in
+/// sorted order share a rank. Values equal in exact arithmetic but apart in
+/// their last bits (platform `sin`/`cos`/`atan2` differ there) tie, so the
+/// tie-breaker decides the same way on every platform. Rounding to a grid
+/// would split such a pair whenever it straddles a rounding boundary.
+fn tie_ranks(xs: &[f64]) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..xs.len()).collect();
+    order.sort_by(|&a, &b| xs[a].total_cmp(&xs[b]));
+    let mut rank = vec![0; xs.len()];
+    for w in order.windows(2) {
+        rank[w[1]] = rank[w[0]] + usize::from(xs[w[1]] - xs[w[0]] >= TIE);
+    }
+    rank
 }
 
+/// Points grouped by distance from the origin: (radius, member indexes), inner first.
 fn rings(xy: &[(f64, f64)]) -> Vec<(f64, Vec<usize>)> {
     let mut order: Vec<usize> = (0..xy.len()).collect();
     let r = |i: usize| xy[i].0.hypot(xy[i].1);
@@ -1096,11 +1107,11 @@ fn flock_choice(cell: &Cell600) -> Result<(usize, Vec<usize>, Vec<usize>), Strin
         let d = (a - target).rem_euclid(2.0 * PI);
         d.min(2.0 * PI - d)
     };
-    let q = *rg[3]
-        .1
-        .iter()
-        .min_by_key(|&&a| (key(gap(a)), a))
-        .unwrap_or(&0);
+    let ring = &rg[3].1;
+    let gap_rank = tie_ranks(&ring.iter().map(|&a| gap(a)).collect::<Vec<_>>());
+    let q = (0..ring.len())
+        .min_by_key(|&i| (gap_rank[i], ring[i]))
+        .map_or(0, |i| ring[i]);
     let c = phi() / 2.0;
     let nb: Vec<usize> = (0..cell.v.len())
         .filter(|&j| (dot(&cell.v[q], &cell.v[j]) - c).abs() < EPS)
@@ -1113,9 +1124,10 @@ fn flock_choice(cell: &Cell600) -> Result<(usize, Vec<usize>, Vec<usize>), Strin
     }
     let rel = |j: usize| turned(cell, q, j);
     let lead = rel(nb[0]);
-    let mut kept = nb.clone();
-    kept.sort_by_key(|&a| (std::cmp::Reverse(key(dot(&rel(a), &lead))), a));
-    kept.truncate(7);
+    let dot_rank = tie_ranks(&nb.iter().map(|&a| dot(&rel(a), &lead)).collect::<Vec<_>>());
+    let mut order: Vec<usize> = (0..nb.len()).collect();
+    order.sort_by_key(|&i| (std::cmp::Reverse(dot_rank[i]), nb[i]));
+    let mut kept: Vec<usize> = order[..7].iter().map(|&i| nb[i]).collect();
     kept.sort_unstable();
     Ok((q, nb, kept))
 }
@@ -1996,10 +2008,12 @@ fn svg_tokens(s: &str) -> Vec<(bool, &str)> {
 }
 
 /// Whether a committed SVG matches a freshly generated one. Text must be
-/// identical; numbers may differ by one unit in the second decimal, because
-/// `sin`, `cos` and the eigen-solve differ in their last bits between platform
-/// maths libraries, and a value near a rounding boundary can then print one
-/// digit apart (seen on Linux CI against macOS for the 600-cell).
+/// identical; numbers inside attribute values (coordinates) may differ by one
+/// unit in the second decimal, because `sin`, `cos` and the eigen-solve differ
+/// in their last bits between platform maths libraries, and a value near a
+/// rounding boundary can then print one digit apart (seen on Linux CI against
+/// macOS for the 600-cell). Numbers in text content, such as `<text>` and
+/// `<desc>` prose, must be identical.
 pub(crate) fn svg_matches(committed: &str, generated: &str) -> bool {
     svg_mismatch(committed, generated).is_none()
 }
@@ -2008,16 +2022,32 @@ pub(crate) fn svg_matches(committed: &str, generated: &str) -> bool {
 /// check's error output; `None` when they match.
 pub(crate) fn svg_mismatch(committed: &str, generated: &str) -> Option<String> {
     let (a, b) = (svg_tokens(committed), svg_tokens(generated));
+    // Markup state before each token: inside a tag, and inside a quoted value.
+    let mut in_tag = false;
+    let mut quote: Option<u8> = None;
     for (k, (&(na, ta), &(nb, tb))) in a.iter().zip(&b).enumerate() {
         let same = na == nb
             && (ta == tb
                 || (na
+                    && quote.is_some()
                     && matches!(
                         (ta.parse::<f64>(), tb.parse::<f64>()),
                         (Ok(x), Ok(y)) if (x - y).abs() <= 0.010_000_1
                     )));
         if !same {
             return Some(format!("token {k}: committed {ta:?}, generated {tb:?}"));
+        }
+        if na {
+            continue;
+        }
+        for c in ta.bytes() {
+            match quote {
+                Some(q) if c == q => quote = None,
+                Some(_) => {}
+                None if !in_tag => in_tag = c == b'<',
+                None if c == b'"' || c == b'\'' => quote = Some(c),
+                None => in_tag = c != b'>',
+            }
         }
     }
     (a.len() != b.len()).then(|| format!("{} tokens committed, {} generated", a.len(), b.len()))
@@ -2100,6 +2130,21 @@ mod tests {
         assert!(!svg_matches(a, &a.replace("L7 8", "L7")));
         // A sign is part of the number: "-5.6" against "5.6" is a change.
         assert!(!svg_matches(a, &a.replace("-5.6", "5.6")));
+        // Numbers in text content get no tolerance, only attribute values do.
+        assert!(!svg_matches(a, &a.replace("0.618", "0.619")));
+        let b = r#"<text x='1.25'>ring 1 r = 0.62</text><desc>1.25</desc>"#;
+        assert!(svg_matches(b, &b.replacen("1.25", "1.26", 1)));
+        assert!(!svg_matches(b, &b.replace("1.25", "1.26")));
+    }
+
+    #[test]
+    fn tie_ranks_band_values_apart_only_in_their_last_bits() {
+        // The middle pair straddles the 0.5e-9 boundary that rounding to 1e-9
+        // would split; the band keeps them tied.
+        let xs = [0.3, 0.5e-9 - 1e-15, 0.5e-9 + 1e-15, -0.2];
+        assert_eq!(tie_ranks(&xs), [2, 1, 1, 0]);
+        assert_eq!(tie_ranks(&[1.0, 1.0 + 2e-7]), [0, 1]);
+        assert!(tie_ranks(&[]).is_empty());
     }
 
     #[test]

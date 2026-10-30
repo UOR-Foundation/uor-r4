@@ -601,6 +601,66 @@ fn status_vs_baselines() -> Result<String, Fail> {
 
 // ------------------------------------------------------- 2. results by week
 
+/// The first week with the most records.
+fn busiest_week(weeks: &[Week]) -> Option<usize> {
+    let mut busiest: Option<usize> = None;
+    for (i, w) in weeks.iter().enumerate() {
+        if busiest.is_none_or(|j| w.total > weeks[j].total) {
+            busiest = Some(i);
+        }
+    }
+    busiest
+}
+
+/// (results, records) among the dated records whose day passes `keep`.
+fn results_among(dated: &[Dated], keep: impl Fn(i64) -> bool) -> (usize, usize) {
+    let mut out = (0, 0);
+    for d in dated.iter().filter(|d| keep(d.day)) {
+        out.0 += usize::from(is_result(&d.rec.outcome));
+        out.1 += 1;
+    }
+    out
+}
+
+/// The share chart's description and notes state, in fixed words, that the
+/// share falls sharply in the busiest week, that it drops after 11 October,
+/// and that 12 and 13 October were mostly tool work. Fail once the catalog no
+/// longer supports them, so the words are revised rather than left wrong.
+fn share_prose_holds(records: &[Record]) -> Result<(), Fail> {
+    let stale = |what: &str| -> Fail {
+        format!("results-share-by-week: {what}; revise the fixed prose").into()
+    };
+    let (dated, _) = dated(records)?;
+    let weeks = weekly(&dated);
+    // "Falls sharply": under half the share of the week before.
+    let sharp = |w: &Week, prev: &Week| {
+        prev.total > 0 && 2 * w.results * prev.total < prev.results * w.total
+    };
+    match busiest_week(&weeks) {
+        Some(i) if i > 0 && sharp(&weeks[i], &weeks[i - 1]) => {}
+        _ => {
+            return Err(stale(
+                "the share no longer falls sharply in the busiest week",
+            ))
+        }
+    }
+    let cut = parse_ymd("2026-10-11")?;
+    let (after, after_n) = results_among(&dated, |day| day > cut);
+    let (before, before_n) = results_among(&dated, |day| day <= cut);
+    if after_n == 0 || after * before_n >= before * after_n {
+        return Err(stale("the share no longer drops after 11 October"));
+    }
+    let ports: Vec<&Dated> = dated
+        .iter()
+        .filter(|d| d.day == cut + 1 || d.day == cut + 2)
+        .collect();
+    let tooling = ports.iter().filter(|d| d.rec.outcome == "tooling").count();
+    if ports.is_empty() || 2 * tooling < ports.len() {
+        return Err(stale("12 and 13 October are no longer mostly tooling"));
+    }
+    Ok(())
+}
+
 fn results_share_by_week(records: &[Record]) -> Result<String, Fail> {
     let (dated, undated) = dated(records)?;
     let weeks = weekly(&dated);
@@ -648,12 +708,7 @@ fn results_share_by_week(records: &[Record]) -> Result<String, Fail> {
         );
     }
 
-    let mut busiest: Option<usize> = None; // the largest week, annotated below
-    for (i, w) in weeks.iter().enumerate() {
-        if busiest.is_none_or(|j| w.total > weeks[j].total) {
-            busiest = Some(i);
-        }
-    }
+    let busiest = busiest_week(&weeks); // the largest week, annotated below
 
     for (i, w) in weeks.iter().enumerate() {
         let cx = left + slot * (i as f64 + 0.5);
@@ -1213,6 +1268,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), Fail> {
     let text = std::fs::read_to_string(&catalog_path)
         .map_err(|e| format!("{}: {e}", catalog_path.display()))?;
     let records = parse_records(&text)?;
+    share_prose_holds(&records)?;
     let out_dir = resolve(root, &out);
 
     let figures = render(&records)?;
@@ -1283,7 +1339,12 @@ mod tests {
     #[test]
     fn a_record_from_late_october_is_inside_the_window() {
         // Loop PR 8 archives two pages dated 2026-10-22; the window must chart them.
-        let rows = [rec(Some("2026-10-22"), "harness-governance", "ops", "STATUS.md")];
+        let rows = [rec(
+            Some("2026-10-22"),
+            "harness-governance",
+            "ops",
+            "STATUS.md",
+        )];
         let records = parse_records(&rows.join("\n")).expect("parses");
         assert!(timeline(&records).is_ok());
     }
@@ -1369,6 +1430,25 @@ mod tests {
                 "{pa} has a literal colour outside <style>"
             );
         }
+    }
+
+    #[test]
+    fn share_prose_is_checked_against_the_catalog() {
+        let rows = |oct13: &str, ports: &str| {
+            let rows = [
+                rec(Some("2026-10-06"), "a", "positive", "p1"),
+                rec(Some("2026-10-07"), "a", "negative", "p2"),
+                rec(Some("2026-10-12"), "a", ports, "p3"),
+                rec(Some("2026-10-13"), "a", oct13, "p4"),
+                rec(Some("2026-10-14"), "a", "positive", "p5"),
+            ];
+            parse_records(&rows.join("\n")).expect("parses")
+        };
+        assert!(share_prose_holds(&rows("tooling", "tooling")).is_ok());
+        let err = share_prose_holds(&rows("positive", "tooling")).expect_err("no sharp fall");
+        assert!(err.to_string().contains("busiest week"), "{err}");
+        let err = share_prose_holds(&rows("plan", "plan")).expect_err("not mostly tooling");
+        assert!(err.to_string().contains("mostly tooling"), "{err}");
     }
 
     #[test]
