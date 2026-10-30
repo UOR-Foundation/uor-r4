@@ -12,7 +12,7 @@ TEST FITNESS: FIT. PRE-RUN: PASS. Round 2, at `1bf7e2292`, by a fresh non-author
 - **So the trunk co-adapted with the memory** where the memory names a row. That is expected, since the memory moves those rows' readouts. The fear (the assessment §5; Engram arXiv:2601.07372 and RETRO arXiv:2112.04426 report the same pattern) is that it also reads worse **where the memory names nothing**: the rows the shipped model must earn from the prompt.
 - **The memory moves the readout only, and only at rows its tables name** (`flock_read_memory.rs:1-25`). So on those rows (r) with and without its memory pick the same token, and the comparison is purely trunk against trunk: (r)'s against (r0)'s.
 
-## The arms
+## Base artifact: the arms
 
 The four step-16,384 checkpoints of claude-194, from `caseyallard/uor-r4-store`:
 
@@ -30,7 +30,7 @@ The four step-16,384 checkpoints of claude-194, from `caseyallard/uor-r4-store`:
 
 **How each is scored.** Each checkpoint is scored by `train-in-space --data-root ROOT --score-rows CKPT --out DIR --fresh-v2 FRESH --samples 64 --reply-tokens 64 --retain-rates 1 --seed S`. These are claude-194's `--inspect` flags, at its seed (its `job.sh:182`). `--decay-mult` is not passed, as it was not there: it scales only the optimizer's update (`in_space_long.rs:3334`, `:4110`), never a forward. The binary is built on the pod from this unit's head, `--locked`, and its sha256 is recorded before the first arm (the job's `binary-sha256` step).
 
-## The data
+## Data split: the data
 
 All pinned by sha256 in the code (`load_dev`, `load_train_split`, `pinned_tokenizer`, `load_fresh_v2`):
 - **DEV** (`ft/dev`), 14,287 scored rows.
@@ -44,7 +44,7 @@ These three come from `w2-inputs/2026-10-25/driver-data/`, as claude-194's job f
 - **Which rows.** DEV's 3,406 later rows the reply table does not name at share 0.5, and its 32 openings no first-8 key names: 3,438 rows, judged **pooled**. The 32 alone are too few to decide anything, so they are reported beside the pool, never judged apart.
 - **How they are computed.** The grader recomputes them from TRAIN and DEV with the census's own function (`decision_positions` over `census_decision_rows`, shared with `census`). The census output is byte-identical after that refactor (`cmp` against [census-2026-10-29.json](../../labs/one-model-end-to-end/census-2026-10-29.json), at `df7675b31`).
 
-## The rule, fixed in advance
+## Bar: the rule, fixed in advance
 
 At each seed `s`, on the decision rows:
 - **The counts.** `b(s)` is the number of rows (r) gets and (r0) misses, and `c(s)` the number (r0) gets and (r) misses. `d(s) = b(s) − c(s)`, the nearest-decoded top-1 difference.
@@ -58,6 +58,10 @@ At each seed `s`, on the decision rows:
 | **mixed** | the seeds disagree, or either is inside | No default changes. The training run carries (r) and a memory-dropout arm as equal candidates, and the protocol (done-when 3) chooses between them on its strata. |
 
 Each verdict sets a different training plan (step 5 of the assessment): no dropout arm; the dropout arm as the default; or both as equal candidates. The REPORT gives `b`, `c`, `d` and the band at each seed whatever the cell, since claude-194's seeds differed widely on totals (+1,533 and +259 over (r0)), so the spread term may well decide the cell. The grader (`train-in-space --overturn 1`) applies the rule in code, with unit tests for the band (`the_band_floor_is_twice_the_root_rounded_up`), the cells (`a_seed_is_ahead_or_behind_only_beyond_the_band`), the verdict (`the_verdict_needs_every_seed`) and the pairing (`pairing_counts_discordant_rows_on_the_decision_rows_only`).
+
+## Minimum test power
+
+The band's floor, `⌈2·√(b+c)⌉`, is two paired standard errors of the discordant rows. With the two-seed spread it is the band, and a cell is read only beyond it. (This block names the sheet's existing rule for the prep-sheet shape check, claude-211. No rule changes.)
 
 ## Descriptive only, with no threshold
 
@@ -89,7 +93,7 @@ Each verdict sets a different training plan (step 5 of the assessment): no dropo
 - **I-4: the rows are the census's.** The grader's decision rows number 3,438 (3,406 + 32), and every arm's files score the same 14,287 rows in the same order (`paired` refuses otherwise).
 - **I-5: the inputs are the sealed ones.** Every checkpoint file passes `sha256sum -c` against its seed's sealed `SHA256SUMS` (above), and the data and Fresh V2 pass the code's pins.
 
-## The probe ladder
+## Steps: the probe ladder
 
 - **(a) Synthetic, done on the laptop at `df7675b31`.**
   - The crate's tests: 134 lib tests passed, 0 failed, the new ones among them.
