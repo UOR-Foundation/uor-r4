@@ -140,8 +140,8 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <rect class="built" x="745" y="190" width="85" height="124" rx="8"/>
 <circle class="badge-b" cx="745" cy="190" r="10"/><text class="badge-t" x="745" y="194" text-anchor="middle">8</text>
 <text class="name" x="787.5" y="224" text-anchor="middle">export</text>
-<text class="detail" x="787.5" y="256" text-anchor="middle">discrete M1: exact</text>
-<text class="detail" x="787.5" y="270" text-anchor="middle">FBS: exact, /5</text>
+<text class="detail" x="787.5" y="256" text-anchor="middle">M1: exact</text>
+<text class="detail" x="787.5" y="270" text-anchor="middle">FBS: /5 exact</text>
 <text class="detail" x="787.5" y="286" text-anchor="middle">D11 integer</text>
 <text class="tag tag-built" x="787.5" y="302" text-anchor="middle">BUILT</text>
 <text class="q" x="818" y="210" text-anchor="middle"></text>
@@ -150,9 +150,10 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <rect class="built" x="848" y="190" width="85" height="124" rx="8"/>
 <circle class="badge-b" cx="848" cy="190" r="10"/><text class="badge-t" x="848" y="194" text-anchor="middle">9</text>
 <text class="name" x="890.5" y="224" text-anchor="middle">serving</text>
-<text class="detail" x="890.5" y="248" text-anchor="middle">M1: 10,876 / 10,566</text>
-<text class="detail" x="890.5" y="262" text-anchor="middle">FBS: 4,217–4,504</text>
-<text class="detail" x="890.5" y="276" text-anchor="middle">native tok/s</text>
+<text class="detail" x="890.5" y="244" text-anchor="middle">M1 native tok/s:</text>
+<text class="detail" x="890.5" y="258" text-anchor="middle">10,876/10,566</text>
+<text class="detail" x="890.5" y="272" text-anchor="middle">FBS native tok/s:</text>
+<text class="detail" x="890.5" y="286" text-anchor="middle">4,217–4,504</text>
 <text class="tag tag-built" x="890.5" y="302" text-anchor="middle">BUILT</text>
 
 <!-- 7 learning (below the line) -->
@@ -178,7 +179,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <text class="note" x="64" y="498"><tspan font-weight="700">BUILT</tspan>: the source exists and passes its small fixed controls (not a language result).</text>
 <rect x="21" y="508" width="36" height="22" rx="6" class="ring"/>
 <rect class="trained" x="24" y="511" width="30" height="16" rx="4"/>
-<text class="note" x="64" y="523"><tspan font-weight="700">TRAINED IN</tspan>: took part in a learning run, helped or not. No stage has learned language yet.</text>
+<text class="note" x="64" y="523"><tspan font-weight="700">TRAINED IN</tspan>: took part in a learning run, helped or not. M1 is a language-base pass, not useful chat.</text>
 <rect class="missing" x="24" y="536" width="30" height="12" rx="4"/>
 <text class="note" x="64" y="546"><tspan font-weight="700">MISSING</tspan>: not built (R7, the text path).</text>
 </svg>

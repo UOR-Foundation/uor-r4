@@ -62,7 +62,7 @@ This is a documentation and evidence-propagation unit. It ran no model training,
 - `node web/studio/verify_studio_page.mjs --strict-router` and `verify_studio_page_load.mjs --strict-router`: both pass; both pages loaded with no external requests, and the planted external trap was detected.
 - Scorer evidence-integrity tests in `docs/labs/m1-d11-artifact-scorer/instrument`: **26 passed, 0 failed, 1 ignored** by the test's own missing-DEV-data guard. This was not a new model evaluation.
 - Visual inspection covered every changed figure at wide and 390 px layouts, including the dedicated narrow architecture and repaired milestone figure. No clipping or M1/FBS measurement conflation was found; dense wide diagrams retain updated text descriptions.
-- Reader-test after repair: the front page and start pages identify M1 on the saved 19-table discrete model, say no useful chat, name the next served-key/free-generation and M2–M8 gaps, and link the M1/claude-218 evidence. A separate stale-prose scan found only explicitly historical or out-of-scope matches and the named D41 exception.
+- Reader-test after repair: the front page and start pages identify M1 on the saved 19-table discrete model, say no useful chat, name the point key's partial free-generation gain and the remaining integer-serving and M2–M8 gaps, and link the M1/claude-219 evidence. A separate stale-prose scan found only explicitly historical or out-of-scope matches and the named D41 exception.
 - `uor-harness loop gates --full`: all 11 gates green.
 - `uor-harness check`: completed with the pre-existing error/warnings detailed above.
 - `uor-harness loop report --check`: **PASS**. `uor-harness loop pr-check --local`: **verdict PASS**. The D76 scope advisory remains by design because `rule_scope` reads the item at the merge base; the new claim-file scope entry takes effect after merge.
@@ -73,7 +73,7 @@ This is a documentation and evidence-propagation unit. It ran no model training,
 
 ## Still open
 
-- Useful conversation is not established. The next research step is a trained, served sign key and correct free generation on another fresh panel; the larger point-key gain remains an explicit design tradeoff.
+- Useful conversation is not established. The point key gives a partial free-generation opening gain; the next research step trains and serves it in one integer model and scores the whole model end to end. The sign key is inconclusive at p-v's size, not ruled out.
 - M2 and M3 are in progress; M4–M8 are not complete. The Studio and desktop shell still use a synthetic stand-in without a bundled qualified product model.
 - The independent exact-head review follows this commit. Roadmap sync, generated STATE/HANDOFF/roadmap views, issue verification, and the automatic docs-site preview follow the content merge through their designated workflows.
 - The pre-existing formatting, harness, preprocessor, and WASM warnings above remain outside this documentation unit's repair scope.
@@ -82,4 +82,4 @@ This is a documentation and evidence-propagation unit. It ran no model training,
 
 M1 really is complete: one saved discrete geometric model passed all six bars at two seeds and serves as integer artifacts on an Apple M1. It still does not hold a useful conversation, and p-f's 62.5% reference-reply overlap remains next to that claim.
 
-The documentation now says which model passed, what the numbers mean, and what happens next. The separate FBS line has an encouraging offline memory-key result, but it still must train and serve that key and prove free generation. No product release or later milestone is implied.
+The documentation now says which model passed, what the numbers mean, and what happens next. The separate FBS line has a real but partial point-key gain in free generation. Next it must train and serve that key in one integer model and score the whole model end to end. No product release or later milestone is implied.

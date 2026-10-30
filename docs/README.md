@@ -88,7 +88,7 @@ a failed run closes one configuration, never a mechanism ([charter](../CHARTER.m
 | Research lines with their own page | 17 | [research lines](research/lines/README.md) |
 | Records in the archive catalog | 1,175 | [archive catalog](../archive/CATALOG.md) |
 
-**30 Oct 2026.** Pre-alpha, 1 of 8 milestones complete. The saved discrete M1 model scores 7,002 / 7,001 on DEV, 7,215 / 7,228 on Fresh V2 and 7,850 / 7,872 on p-f, at two seeds. It serves at 10,876 / 10,566 decode tok/s on an Apple M1. The limit is 62.5% verbatim TRAIN reference replies on p-f, not useful chat. Claude-218's offline teacher-forced sign-key probe passed on p-u; the next unit trains and serves that key and tests free generation on another fresh panel ([where we are](start/where-we-are.md), [PLAN](../PLAN.md)).
+**30 Oct 2026.** Pre-alpha, 1 of 8 milestones complete. The saved discrete M1 model scores 7,002 / 7,001 on DEV, 7,215 / 7,228 on Fresh V2 and 7,850 / 7,872 on p-f, at two seeds. It serves at 10,876 / 10,566 decode tok/s on an Apple M1. The limit is 62.5% verbatim TRAIN reference replies on p-f, not useful chat. Claude-219's point-key opening improves free generation at three seeds on fresh p-v, but only partially; next it must be trained and served in one integer model and scored end to end ([where we are](start/where-we-are.md), [PLAN](../PLAN.md)).
 
 ## Go deeper
 
