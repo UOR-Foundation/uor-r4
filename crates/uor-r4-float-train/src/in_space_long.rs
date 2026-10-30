@@ -2089,13 +2089,31 @@ pub enum DecodeRule {
     /// The Flock rank rule (protocol I-E): the `k` nearest table tokens (1 to
     /// [`FLOCK_DECODE_K`]), ranked, and a rank drawn with the harmonic weights of
     /// `stack/flock.rs` ([`flock_rank_draw`]). The served rule is [`DecodeRule::FLOCK`]; `k = 1`
-    /// is I-E's check that it decodes as greedy.
-    FlockRank { k: usize },
+    /// is I-E's check that it decodes as greedy. With `keep_end`, a nearest `<|eos|>` is taken
+    /// ([`flock_pick`]).
+    FlockRank { k: usize, keep_end: bool },
 }
 
 impl DecodeRule {
-    /// The served Flock rank rule, over [`FLOCK_DECODE_K`] candidates.
-    pub const FLOCK: Self = Self::FlockRank { k: FLOCK_DECODE_K };
+    /// The served Flock rank rule, over [`FLOCK_DECODE_K`] candidates, as the protocol registers it.
+    pub const FLOCK: Self = Self::FlockRank { k: FLOCK_DECODE_K, keep_end: false };
+    /// The Flock rank rule that keeps the end of turn (claude-211, Casey 30 Oct: "do not rule
+    /// flock out, improve it instead"): the draw varies the reply's tokens, not where its turn
+    /// ends.
+    pub const FLOCK_END: Self = Self::FlockRank { k: FLOCK_DECODE_K, keep_end: true };
+}
+
+/// The Flock rank rule's token from its `ranked` candidates and the drawn rank `draw`: the
+/// drawn candidate, except that with `keep_end` a nearest `eos` is taken. The registered rule
+/// takes the nearest `<|eos|>` only when its draw lands on rank 0, `W_0 / H` (0.30) of the
+/// time, so a reply can run past its end (claude-211: 56 of seed 1's 256 DEV replies ran to 64
+/// tokens).
+fn flock_pick(ranked: &[u32], draw: usize, keep_end: bool, eos: Option<u32>) -> u32 {
+    if keep_end && ranked.first().copied() == eos && eos.is_some() {
+        ranked[0]
+    } else {
+        ranked[draw.min(ranked.len() - 1)]
+    }
 }
 
 /// The Flock rank rule's candidates: the Hamming read's kept count, and one of the Flock
@@ -2228,7 +2246,7 @@ fn decode_reply(
                         .to_vec1::<u32>()?
                         .last()
                         .ok_or_else(|| invalid("the readout returned no token"))?,
-                    DecodeRule::FlockRank { k } => {
+                    DecodeRule::FlockRank { k, keep_end } => {
                         // The K nearest on the GPU; their order, ties to the smaller id, here.
                         let k = k.clamp(1, FLOCK_DECODE_K).min(scores.dim(1)?);
                         let top = scores
@@ -2239,7 +2257,8 @@ fn decode_reply(
                         let ids_k = top.flatten_all()?.to_vec1::<u32>()?;
                         let ranked = rank_order(ids_k.into_iter().zip(picked).collect());
                         let index = (sample as u64) * 64 + step as u64;
-                        ranked[flock_rank_draw(seed, index, ranked.len())]
+                        let draw = flock_rank_draw(seed, index, ranked.len());
+                        flock_pick(&ranked, draw, keep_end, eos)
                     }
                 }
             } else {
@@ -2879,6 +2898,7 @@ pub fn score_rows(
     reflect_floor: bool,
     seed: u64,
     arm: FbsArm,
+    flock: DecodeRule,
     device: &Device,
 ) -> Result<Vec<ScoredFile>> {
     check_run_arm(checkpoint, arm)?;
@@ -2963,11 +2983,8 @@ pub fn score_rows(
             });
         }
         // Greedy with the memory on and off; the Flock rank rule with it on only, as served.
-        let rules: &[DecodeRule] = if on {
-            &[DecodeRule::Greedy, DecodeRule::FLOCK]
-        } else {
-            &[DecodeRule::Greedy]
-        };
+        let both = [DecodeRule::Greedy, flock];
+        let rules: &[DecodeRule] = if on { &both } else { &both[..1] };
         let active = crate::flock_read_memory::turn_memory();
         let named = |key: &[u32]| active.as_ref().is_some_and(|m| m.reply_stored(key).is_some());
         for split in splits.iter().filter(|s| s.samples) {
@@ -3008,8 +3025,11 @@ pub fn score_rows(
                 let file = match (split.name.as_str(), rule) {
                     ("dev", DecodeRule::Greedy) => format!("samples-{label}.json"),
                     (name, DecodeRule::Greedy) => format!("samples-{name}-greedy-{label}.json"),
-                    (name, DecodeRule::FlockRank { .. }) => {
+                    (name, DecodeRule::FlockRank { keep_end: false, .. }) => {
                         format!("samples-{name}-flock-{label}.json")
+                    }
+                    (name, DecodeRule::FlockRank { keep_end: true, .. }) => {
+                        format!("samples-{name}-flock-end-{label}.json")
                     }
                 };
                 write_new(&out.join(&file), &serde_json::to_vec(&replies)?)?;
@@ -6998,7 +7018,10 @@ mod tests {
             };
             let greedy = decode(DecodeRule::Greedy);
             assert_eq!(
-                decode(DecodeRule::FlockRank { k: 1 }),
+                decode(DecodeRule::FlockRank {
+                    k: 1,
+                    keep_end: false
+                }),
                 greedy,
                 "sample {sample}"
             );
@@ -7007,6 +7030,19 @@ mod tests {
         }
         assert!(decoded > 0, "every reply was empty, so the check held vacuously");
         assert!(left, "K = 16 never left greedy's path: its draws did not run");
+    }
+
+    /// claude-211 (Casey 30 Oct: "do not rule flock out, improve it instead"): with `keep_end`,
+    /// a nearest end of turn is taken whatever the draw; otherwise, and for any other nearest
+    /// token, the drawn rank is.
+    #[test]
+    fn the_flock_rule_keeps_a_nearest_end_of_turn() {
+        let eos = Some(1u32);
+        assert_eq!(flock_pick(&[1, 7, 9], 2, true, eos), 1, "the end of turn is kept");
+        assert_eq!(flock_pick(&[1, 7, 9], 2, false, eos), 9, "the registered rule draws");
+        assert_eq!(flock_pick(&[7, 1, 9], 2, true, eos), 9, "a farther end of turn is drawn");
+        assert_eq!(flock_pick(&[7, 1, 9], 1, true, eos), 1);
+        assert_eq!(flock_pick(&[1, 7, 9], 2, true, None), 9, "no end of turn to keep");
     }
 
     /// claude-211 (I-G): the strata split by whether (T) names a row; a position scored twice,

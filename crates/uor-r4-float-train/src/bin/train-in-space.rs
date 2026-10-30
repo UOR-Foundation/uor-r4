@@ -88,7 +88,8 @@ use uor_r4_float_train::flock_read_register::RegisterSelect;
 use uor_r4_float_train::in_space_long::{
     census, context_reach, controls, decode_speed, fbs_arm_named, grade, gradient_norms,
     inspect_run, opening_bound, overturn, reply_bound, root_separation, run_long, run_recall,
-    score_rows, LongConfig, PointObjective, TrainSplit, DEFAULT_REGISTER_PICKS, MEMORY_DROPOUT_MAX,
+    score_rows, DecodeRule, LongConfig, PointObjective, TrainSplit, DEFAULT_REGISTER_PICKS,
+    MEMORY_DROPOUT_MAX,
 };
 use uor_r4_float_train::{FloatTrainError, Result};
 
@@ -108,6 +109,7 @@ fn main() -> Result<()> {
     let mut overturn_on = false;
     let mut controls_on = false;
     let mut grade_on = false;
+    let mut flock_end = false;
     let (mut controls_dir, mut runs, mut frozen_probe) = (None, None, None);
     let mut scored: Vec<(String, PathBuf)> = Vec::new();
     let (mut split_dir, mut split_tokens, mut split_mask) = (None, None, None);
@@ -175,6 +177,7 @@ fn main() -> Result<()> {
             "--overturn" => overturn_on = switch(&value)?,
             "--controls" => controls_on = switch(&value)?,
             "--grade" => grade_on = switch(&value)?,
+            "--flock-end" => flock_end = switch(&value)?,
             "--controls-dir" => controls_dir = Some(PathBuf::from(&value)),
             "--runs" => runs = Some(PathBuf::from(&value)),
             "--frozen-probe" => frozen_probe = Some(PathBuf::from(&value)),
@@ -487,6 +490,11 @@ fn main() -> Result<()> {
             config.reflect_floor,
             config.seed,
             config.fbs_arm,
+            if flock_end {
+                DecodeRule::FLOCK_END
+            } else {
+                DecodeRule::FLOCK
+            },
             &device,
         )? {
             println!("{}", serde_json::to_string(&file)?);
