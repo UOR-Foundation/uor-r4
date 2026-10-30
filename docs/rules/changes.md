@@ -21,7 +21,7 @@ An entry gives the date, what changed, which charter clauses it touches, and who
 **What changed:**
 1. **Clause 4.8.** After D39's bars, a bar (f): on a fresh held-out-phrasing panel, the same saved model's integer top-1 beats both the unigram table and the T2 successor table, on each of two seeds, with bar (e)'s paired band. The panel is drawn by `heldout-panel` at a new seed, with its own census.
 2. **No other clause changes.** Bars (a) to (e) stand as D39 set them.
-3. **What it means for M1:** antigravity-110 passed (a)–(e), so M1 stays open until its saved model also passes (f). The roadmap item `m1-heldout-phrasing-transfer` measures it.
+3. **What it means for M1:** M1 stays open until a saved model passes (a) to (f). antigravity-110's passed (a)–(e), and the roadmap item `m1-heldout-phrasing-transfer` measures it on (f) first.
 
 ## 28 October 2026: integer serving may use the divide instruction; floats stay banned (D81)
 

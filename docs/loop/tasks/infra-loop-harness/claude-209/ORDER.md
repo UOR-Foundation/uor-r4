@@ -16,12 +16,12 @@ Casey, in Claude's chat, 2026-10-29 (recorded on #2028, comment 6511159403), ans
 
 > "Should M1 also require a held-out-phrasing panel? M1's fresh-transfer bar (e) passed on Fresh V2, but Fresh V2 comes from the same generator as TRAIN, so it tests new values inside known templates, not new phrasings. A held-out-phrasing panel now exists (P-dev, claude-204: 0.000 of its prompt templates occur in TRAIN). P-dev itself is reserved for the coming training run's decisions, so an M1 bar would use a fresh panel drawn the same way at a new seed."
 
-Casey's answer: **"Yes, add the bar (Recommended)"**. That option read: "M1 also requires beating the T2 bigram and unigram on a fresh held-out-phrasing panel (drawn by heldout-panel at a new seed, with its own census), with the same paired band as bar (e). It proves the model reads new phrasings, not just recalls templates."
+Casey's answer: **"Yes, add the bar (Recommended)"**. That option read: "M1 also requires beating the T2 bigram and unigram on a fresh held-out-phrasing panel (drawn by heldout-panel at a new seed, with its own census), with the same paired band as bar (e). It proves the model reads new phrasings, not just recalls templates." The other options offered were "Not yet, after the run" (decide once the training run's verdict is in) and "No, keep M1 as is" (close on the current bars).
 
 ## Cancel probe (run first)
 
 Run at this ORDER's base. **Class: none needed (a record). Go.**
-- **No open PR touches the files below:** `gh pr list --state open` shows #3415 (this one) and antigravity's #3323 (`crates/uor-r4-discrete`, its docs).
+- **No open PR touches the files below:** `gh pr list --state open` shows #3415 (this one) and antigravity's #3323 (`crates/uor-r4-object-store` and its prep sheet `docs/harness/prep/object-store-consumer-m3-2026-10-26.md`).
 - **The last decision is D81,** so this one is D82.
 - **CHARTER §4 item 8 reads:** "Bars (a), (b), (c) and (e) are unchanged. [D39, owner 19 Oct]".
 - **M1's five bars passed.** `antigravity-110`, `m1-close-saved-model`, merged, reports `PASS_M1_ALL_FIVE_BARS` on the saved two-seed discrete artifact across two builds. M1 (#2029) is still open.

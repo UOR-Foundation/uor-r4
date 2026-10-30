@@ -50,6 +50,11 @@ None.
 ## Checks run at the head
 
 - `cargo xtask roadmap check`: 112 items OK. `cargo xtask roadmap render`: written.
+- **Review round 1, at `d78cddbc8`: APPROVE WITH NITS.**
+  - **Confirmed:** the patch matches the three owner files (`git apply --check -R`); bars (a) to (e) stand word for word; every cited fact is at its source; D82 has D81's six cells, and the entry is newest first.
+  - **Fixed:** "M1 stays open until its saved model also passes (f)" tied M1 to one artifact, beyond the owner's words. It now reads "until a saved model passes (a) to (f)" in D82, the change log, PLAN.md and the item, with antigravity-110's measured on (f) first. The owner files went in by a second `git apply`, and the kept patch is refreshed against `origin/main` (`--check -R` passes).
+  - **Also fixed:** the ORDER records the two options the owner did not choose, and names #3323's real files.
+  - **Left:** the charter's "integer top-1", "on each of two seeds" and "the same saved model" follow D39 and bar (e), as the reviewer judged; the item does not ask for bar (e)'s P_succ sub-bar, and its `train,train` control is method, not rule.
 - At `a8830e1b0`: `loop report --check` PASS; `loop pr-check --local` PASS, its `owner-paths` gate reading "owner approval recorded for CHARTER.md, docs/rules/changes.md, docs/integration/DECISIONS.md"; `loop gates --full` 11 GREEN.
 
 ## What it unlocks

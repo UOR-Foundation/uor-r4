@@ -20,7 +20,7 @@ The owner added bar (f) to M1 on 29 Oct (D82, CHARTER §4 item 8): "M1 also requ
 - **A held-out-phrasing panel tests new phrasings.** M-world v2's `dev_phrasing × dev_value` cell is that. claude-204 drew P-dev from it with `heldout-panel`: 0.000 of P-dev's prompt templates occur in TRAIN.
 - **P-dev is reserved** for one-model-end-to-end's training-run decisions, so bar (f) needs its own panel, drawn the same way at a new seed.
 
-M1 (#2029) stays open until antigravity-110's saved model passes bar (f), as it passed (a) to (e).
+M1 (#2029) stays open until a saved model passes (a) to (f). antigravity-110's saved model passed (a) to (e), so this item measures it on (f) first.
 
 ## What is missing
 
