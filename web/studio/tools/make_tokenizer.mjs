@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Generate the stack-bound tokenizer artifact (`uor-r4.studio-tokenizer/1`) for the Studio worker.
-// Supports `uor-r4.lut-stack/1` (`shape.vocab`) and `uor-r4.lut-discrete/1` (`shape.vocabulary`).
-// Default mode is `byte-bpe` (with `--source-tokenizer <hf.json>` for custom BPE vocabularies);
-// `--mode byte-mod` emits the legacy 256-entry `byte % vocab` table.
+// Supports the engine's container family `uor-r4.lut-stack/1` .. `/7` (`shape.vocab`) and the
+// legacy `uor-r4.lut-discrete/1` header (`shape.vocabulary`; tokenizer-compatible, not served by
+// the WASM stack engine). Default mode is `byte-bpe` (with `--source-tokenizer <hf.json>` for
+// custom BPE vocabularies); `--mode byte-mod` emits the legacy 256-entry `byte % vocab` table.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -16,7 +17,18 @@ import {
 } from '../assets/js/uor_tokenizer_artifact.js';
 
 const STACK_MAGIC = 'UORLUT01';
-const SUPPORTED_SCHEMAS = new Set(['uor-r4.lut-stack/1', 'uor-r4.lut-discrete/1']);
+const STACK_SCHEMA_PREFIX = 'uor-r4.lut-stack/';
+const STACK_SCHEMA_MIN = 1;
+const STACK_SCHEMA_MAX = 7;
+const DISCRETE_SCHEMA = 'uor-r4.lut-discrete/1';
+
+/// True for the engine's `uor-r4.lut-stack/1`..`/7` family and the legacy discrete header.
+export function supportedStackSchema(schema) {
+    if (schema === DISCRETE_SCHEMA) return true;
+    if (typeof schema !== 'string' || !schema.startsWith(STACK_SCHEMA_PREFIX)) return false;
+    const level = Number(schema.slice(STACK_SCHEMA_PREFIX.length));
+    return Number.isInteger(level) && level >= STACK_SCHEMA_MIN && level <= STACK_SCHEMA_MAX;
+}
 
 export function parseStackHeader(bytes) {
     const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
@@ -33,8 +45,8 @@ export function parseStackHeader(bytes) {
     const vocab = header?.shape
         ? (Number.isInteger(header.shape.vocab) ? header.shape.vocab : header.shape.vocabulary)
         : null;
-    if (!SUPPORTED_SCHEMAS.has(header?.schema) || !Number.isInteger(vocab) || vocab <= 0) {
-        throw new Error(`unsupported stack schema/header (${header?.schema})`);
+    if (!supportedStackSchema(header?.schema) || !Number.isInteger(vocab) || vocab <= 0) {
+        throw new Error(`unsupported stack schema/header (${header?.schema}); expected ${STACK_SCHEMA_PREFIX}${STACK_SCHEMA_MIN}..${STACK_SCHEMA_MAX} or ${DISCRETE_SCHEMA}`);
     }
     return { ...header, vocab_size: vocab };
 }
