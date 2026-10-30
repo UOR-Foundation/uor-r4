@@ -2,7 +2,7 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md). Order: [claude-217](../../loop/tasks/one-model-end-to-end/claude-217/ORDER.md). It follows claude-216 ([result](../../labs/one-model-end-to-end/cut-train-2026-10-30/README.md)), by Casey's direction of 30 Oct (verbatim on #3407 6523338624): "Yes: after claude-216's grade, register a decode unit that steps off a reply's own cycle (the nearest token outside a repeated 4-gram), on a fresh panel, against greedy."
 
-TEST FITNESS: PENDING (a fresh non-author FIT is run on this sheet before any pod).
+TEST FITNESS: PENDING, round 2 (a fresh non-author FIT is run on this sheet before any pod). Round 1 was NOT FIT on one blocking point, repaired here: the matched content could not see what the cycle step wrote where it stepped, so salad there could read "improves" and ship. The cycle step's content is now also read on the prompts it changed ("Changed content", in the Bar).
 
 ## The question
 
@@ -88,22 +88,30 @@ Each reading is one arm's 256 replies on one split at one seed, against that spl
 - **Matched content:** the verbatim TRAIN share on the prompts the base and the decision's arm both complete (`matched_counts`, `MATCHED_BY`).
   - **Kept:** the arm's share is below the base's by at most `max(0.10, 3·√(p(1−p)/m))`.
   - **The content floor:** at least 64 matched prompts at every seed.
+- **Changed content, for a cycle-step arm only** (`ChangedContent`, `cycle_outcome`):
+  - **The changed prompts:** the prompts where the rule stepped off at least once.
+  - **The reading:** the arm's replies there that are complete and verbatim in TRAIN, against the references on the same prompts.
+  - **Kept:** the arm's share is below the references' by at most `max(0.10, 3·√(p(1−p)/m))`, with `p` the references' share and `m` the changed prompts.
+  - **The floor:** at least 40 changed prompts at every seed (the loop floor's count).
 - **The loop floor:** greedy loops in at least 40 of 256 p-s replies at every seed.
 
-**What the cycle step meets by construction, stated in advance.** Its reply can hold a repeated 4-gram only after an exhausted step. So its loops, its repeat rate, and the repeat parts of "holds" and "close" are met almost by construction. For the cycle step, the reading that decides rests on:
-- completion (the rest of "holds");
-- the matched content, which is where a step into salad shows;
-- `v` against `v_ref` (the rest of "close").
+**What the cycle step meets by construction, stated in advance.**
+- **Loops and repeats.** Its reply can hold a repeated 4-gram only after an exhausted step. So its loops, its repeat rate, and the repeat parts of "holds" and "close" are met almost by construction.
+- **The matched content, too.** Away from a cycle the rule writes greedy's reply token for token. Greedy rarely completes where it loops, so the prompts where the rule steps off mostly fall outside the matched set. The matched content therefore cannot see what the rule wrote where it stepped (FIT round 1).
+- **So for the cycle step, the reading that decides rests on:**
+  - completion (the rest of "holds");
+  - the changed content, which is where a step into salad shows;
+  - `v` against `v_ref` (the rest of "close").
 
 The step counts and the fixed reading are reported to show where it stepped and what it wrote there.
 
-**p-s decides both decisions,** each from its arm at all three seeds (`cut_outcome`, with no rows' step: there are no teacher-forced rows here). The rows are tried in this order:
+**p-s decides both decisions,** each from its arm at all three seeds, with no rows' step, since there are no teacher-forced rows here. Decision 1 uses `cycle_outcome` and decision 2 `cut_outcome`. For a cycle-step arm, "content kept" means the matched content and the changed content are both kept, and the changed floor joins the matched one. The rows are tried in this order:
 
 | Outcome | Condition | What it unlocks |
 |---|---|---|
 | **underpowered** | The base loops in fewer than 40 replies at any seed. | Nothing is decided: an instrument outcome. A new panel or reply length is next. |
 | **no gain** | Not fewer loops and holds, at all three seeds. For the cycle step, that means it completes fewer replies than greedy, beyond the band. | A negative for this rule, in this configuration only. |
-| **underpowered (content)** | Fewer than 64 matched prompts at some seed. | The loops are decided; the content is not. A longer reply or a larger sample is next. |
+| **underpowered (content)** | Fewer than 64 matched prompts at some seed (and, for the cycle step, fewer than 40 changed). | The loops are decided; the content is not. A longer reply or a larger sample is next. |
 | **cures** | Also close, with the matched content kept, at all three seeds. | The arm becomes the one model's served decode. The next unit serves it in integers, with its tok/s. |
 | **improves** | The matched content kept at all three seeds, but not close at all three. | The arm becomes the served decode, as for cures. The content gap to the references is the next work. |
 | **reduces, content lost** | Otherwise. | No decode change. For the cycle step, the next candidate restricts its step to candidates inside the nearest token's cell (claude-213's margin), so a step stays near what the model meant. |
@@ -114,7 +122,7 @@ The step counts and the fixed reading are reported to show where it stepped and 
 |---|---|---|
 | cures or improves | anything else | the cycle step |
 | anything else | cures or improves | the decode-only cut |
-| cures or improves | cures or improves | both, if "both" reads cures or improves by the same rule on decision 1's prompts; else the cycle step alone (Casey's decision comes first) |
+| cures or improves | cures or improves | both, if "both" reads cures or improves by `cycle_outcome` on decision 1's prompts; else the cycle step alone |
 | anything else | anything else | greedy stays |
 
 **Reported beside it, deciding nothing:**
@@ -128,7 +136,8 @@ The step counts and the fixed reading are reported to show where it stepped and 
 ## Minimum test power
 
 - **The sample:** 256 replies per arm, split and seed; the same prompts under every arm.
-- **The loop band:** at greedy's 60–76 looping replies (claude-216's p-t), the band is 14–16, and the floor of 40 gives a band of 12. A panel drawn the same way should loop about as often; the floor decides if not.
+- **The loop band:** at greedy's 60–76 looping replies (claude-216's p-t), the band is 14–15, and the floor of 40 gives a band of 12.
+- **The changed prompts:** a looping greedy reply makes the rule step off, unless every candidate is refused at that step. So at about 60–76 loops the cycle step changes about that many prompts. At 70 changed prompts and references' `p` ≈ 0.6, the changed tolerance is about 0.18; salad, near 0.0–0.1, is far outside it. A panel drawn the same way should loop about as often; the floor decides if not.
 - **The matched prompts:** a looping greedy reply does not complete, so at p-t's loop counts the base completes about 200–212 of 256. The floor of 64 is registered for that reason. The tolerance is 0.10 down to about 225 matched prompts at `p` ≈ 0.5, and widens below that (0.19 at 64).
 - **The seeds:** every condition needs all three.
 

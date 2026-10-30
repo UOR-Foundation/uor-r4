@@ -5422,20 +5422,125 @@ pub struct CycleGrade {
     pub confirm_readings: Vec<CellReading>,
     /// Every cycle-step arm's step counts, on DEV and the panel, at seeds 1–3.
     pub steps: Vec<StepCount>,
-    /// The first registered decision: the cycle step against greedy ([`cut_outcome`] with no
-    /// rows' step, so it can never read "costs accuracy").
+    /// The first registered decision: the cycle step against greedy ([`cycle_outcome`]: its
+    /// content is read on the prompts it changed as well as on the matched prompts).
     pub outcome: &'static str,
     /// The second registered decision: the decode-only cut against greedy, claude-216's
     /// reported "improves" on a fresh panel.
     pub confirm_outcome: &'static str,
-    /// The cycle step under the cut, by the same rule on the first decision's prompts. It
-    /// decides nothing.
+    /// The cycle step under the cut, by [`cycle_outcome`] on the first decision's prompts. It
+    /// decides what ships only if both decisions pass.
     pub cut_cycle_outcome: &'static str,
+    /// Each cycle-step arm's content on the prompts it changed ([`ChangedContent`]), on DEV and
+    /// the panel, at seeds 1–3.
+    pub changed: Vec<ChangedContent>,
+}
+
+/// The fewest prompts the cycle step must change (step off at least once) at every seed for its
+/// content there to decide anything (claude-217's FIT): the loop floor's count.
+const CHANGED_FLOOR: usize = READ_LOOP_FLOOR;
+
+/// A cycle-step arm's content on the prompts it changed (claude-217's FIT): the replies with at
+/// least one step off ([`STEP_OFF`]). Away from a cycle the rule writes greedy's reply token for
+/// token, and greedy rarely completes where it loops, so the matched content cannot see what the
+/// rule wrote where it stepped; this reading can. It counts the complete replies that are
+/// verbatim TRAIN replies, the arm's against the references' on the same prompts.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ChangedContent {
+    pub split: String,
+    pub rule: String,
+    pub seed: u8,
+    /// The prompts the rule changed.
+    pub prompts: usize,
+    /// Of them, the arm's replies that are complete and verbatim in TRAIN.
+    pub arm_verbatim: usize,
+    /// Of them, the references that are complete and verbatim in TRAIN.
+    pub reference_verbatim: usize,
+}
+
+impl ChangedContent {
+    /// Whether the arm keeps the references' content on the prompts it changed: its share is
+    /// below theirs by at most `max(0.10, 3·√(p(1−p)/m))`, `p` the references' share and `m` the
+    /// changed prompts; `None` with none changed.
+    pub fn kept(&self) -> Option<bool> {
+        let m = self.prompts as f64;
+        (self.prompts > 0).then(|| {
+            let (a, p) = (self.arm_verbatim as f64 / m, self.reference_verbatim as f64 / m);
+            a >= p - 0.10f64.max(3.0 * (p * (1.0 - p) / m).sqrt())
+        })
+    }
+}
+
+/// One cycle-step arm's [`ChangedContent`] from its samples, `verbatim` asking whether a reply
+/// is complete and verbatim in TRAIN.
+fn changed_content(
+    split: &str,
+    rule: &str,
+    seed: u8,
+    samples: &[IdSample],
+    verbatim: impl Fn(&[u32]) -> bool,
+) -> ChangedContent {
+    let changed: Vec<&IdSample> = samples.iter().filter(|s| s.stepped.contains(&STEP_OFF)).collect();
+    ChangedContent {
+        split: split.to_owned(),
+        rule: rule.to_owned(),
+        seed,
+        prompts: changed.len(),
+        arm_verbatim: changed.iter().filter(|s| verbatim(&s.reply)).count(),
+        reference_verbatim: changed.iter().filter(|s| verbatim(&s.reference)).count(),
+    }
+}
+
+/// The sheet's decision for a cycle-step arm (claude-217): [`cut_outcome`]'s order with no rows'
+/// step, and its content condition taken on the prompts the rule changed as well as on the
+/// matched prompts, seed for seed:
+/// - `underpowered` when greedy loops in fewer than [`READ_LOOP_FLOOR`] replies at any seed;
+/// - `no gain` unless the arm has fewer loops beyond the band and holds decision 4 at all three;
+/// - `underpowered (content)` when the base has fewer than [`MATCHED_FLOOR`] matched prompts, or
+///   the arm changed fewer than [`CHANGED_FLOOR`], at any seed;
+/// - `cures` when, at all three, it is close, keeps the matched content ([`matched_kept`]) and
+///   keeps the references' content on the prompts it changed ([`ChangedContent::kept`]);
+/// - `improves` when it keeps both at all three;
+/// - else `reduces, content lost`.
+fn cycle_outcome(
+    arm: &[&CellReading],
+    base: &[&CellReading],
+    changed: &[&ChangedContent],
+) -> &'static str {
+    if base.len() != 3 || base.iter().any(|g| g.loops.is_none_or(|n| n < READ_LOOP_FLOOR)) {
+        return "underpowered";
+    }
+    let fewer = arm.len() == 3
+        && arm
+            .iter()
+            .all(|x| x.fewer_loops == Some(true) && x.holds == Some(true));
+    if !fewer {
+        return "no gain";
+    }
+    if changed.len() != 3
+        || base.iter().any(|g| g.matched_n.is_none_or(|m| m < MATCHED_FLOOR))
+        || changed.iter().any(|c| c.prompts < CHANGED_FLOOR)
+    {
+        return "underpowered (content)";
+    }
+    let kept = arm
+        .iter()
+        .zip(base)
+        .zip(changed)
+        .all(|((a, b), c)| matched_kept(a, b) && c.kept() == Some(true));
+    if kept && arm.iter().all(|x| x.close) {
+        "cures"
+    } else if kept {
+        "improves"
+    } else {
+        "reduces, content lost"
+    }
 }
 
 /// Grade the cycle step (claude-217) from stored outputs only, on the laptop: `runs` holds
 /// `r-drop-s{1,2,3}`, the sealed (r-drop) scored on `panel` with `--reply-read all
-/// --cycle-step 1`. The panel decides both decisions ([`cut_outcome`]); DEV is reported.
+/// --cycle-step 1`. The panel decides both decisions: the cycle step by [`cycle_outcome`], the
+/// decode-only cut by [`cut_outcome`]; DEV is reported.
 pub fn cycle_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<CycleGrade> {
     if panel == "dev" {
         return Err(invalid("--cycle-grade's deciding panel cannot be DEV"));
@@ -5444,7 +5549,19 @@ pub fn cycle_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<CycleGr
     let readings = rule_readings(data_root, runs, panel, &named(&CYCLE_RULES), true, MATCHED_BY)?;
     let confirm_readings =
         rule_readings(data_root, runs, panel, &named(&CONFIRM_RULES), true, MATCHED_BY)?;
-    let mut steps = Vec::new();
+    // Complete and verbatim in TRAIN, as `rule_readings` counts its matched content.
+    let (train_tokens, train_mask) = load_train_split(data_root)?;
+    let train: std::collections::HashSet<u128> =
+        split_turns(&train_tokens, &train_mask, hs::SHEET_BOS_ID).replies.iter().map(|r| census_hash(r)).collect();
+    drop((train_tokens, train_mask));
+    let eos = pinned_tokenizer(data_root)?
+        .token_id("<|eos|>")
+        .ok_or_else(|| invalid("the pinned tokenizer has no <|eos|>"))?;
+    let verbatim = |reply: &[u32]| {
+        let cut = cut_at_eos(reply, eos);
+        cut.last() == Some(&eos) && train.contains(&census_hash(cut))
+    };
+    let (mut steps, mut changed) = (Vec::new(), Vec::new());
     for split in ["dev", panel] {
         for seed in 1..=3u8 {
             for rule in ["cycle-step", "cycle-step-read-all"] {
@@ -5456,25 +5573,34 @@ pub fn cycle_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<CycleGr
                     return Err(invalid(format!("{}: a reply records no cycle-step marks", path.display())));
                 }
                 steps.push(step_count(split, rule, seed, &samples));
+                changed.push(changed_content(split, rule, seed, &samples, verbatim));
             }
         }
     }
     let of = |readings: &[CellReading], rule: &str| -> Vec<CellReading> {
         readings.iter().filter(|r| r.split == panel && r.rule == rule).cloned().collect()
     };
-    let decide = |arm: &[CellReading], base: &[CellReading]| {
-        let (arm, base): (Vec<&CellReading>, Vec<&CellReading>) = (arm.iter().collect(), base.iter().collect());
-        cut_outcome(&arm, &base, OverturnCell::Inside)
-    };
     let (base, confirm_base) = (of(&readings, "greedy"), of(&confirm_readings, "greedy"));
+    // A cycle-step arm's decision also reads the prompts it changed, seed by seed.
+    let cycle = |rule: &str| {
+        let arm = of(&readings, rule);
+        let on: Vec<&ChangedContent> = changed.iter().filter(|c| c.split == panel && c.rule == rule).collect();
+        cycle_outcome(&arm.iter().collect::<Vec<_>>(), &base.iter().collect::<Vec<_>>(), &on)
+    };
+    let cut = of(&confirm_readings, "greedy-read-all");
     Ok(CycleGrade {
         panel: panel.to_owned(),
-        outcome: decide(&of(&readings, "cycle-step"), &base),
-        confirm_outcome: decide(&of(&confirm_readings, "greedy-read-all"), &confirm_base),
-        cut_cycle_outcome: decide(&of(&readings, "cycle-step-read-all"), &base),
+        outcome: cycle("cycle-step"),
+        confirm_outcome: cut_outcome(
+            &cut.iter().collect::<Vec<_>>(),
+            &confirm_base.iter().collect::<Vec<_>>(),
+            OverturnCell::Inside,
+        ),
+        cut_cycle_outcome: cycle("cycle-step-read-all"),
         readings,
         confirm_readings,
         steps,
+        changed,
     })
 }
 
@@ -8477,6 +8603,87 @@ mod tests {
         );
         assert_eq!(CYCLE_RULES[..MATCHED_BY], ["greedy", "cycle-step"]);
         assert_eq!(CONFIRM_RULES[..MATCHED_BY], ["greedy", "greedy-read-all"]);
+    }
+
+    /// claude-217 (the FIT's blocking point): the cycle step's content is also read on the prompts
+    /// it changed, against the references there. Salad where it stepped reads as content lost,
+    /// though the matched prompts, where it wrote greedy's replies, are kept.
+    #[test]
+    fn the_cycle_step_is_read_on_the_prompts_it_changed() {
+        let stepped = |reply: u32, reference: u32, marks: Vec<u8>| IdSample {
+            position: 0,
+            prompt: vec![1],
+            reply: vec![reply, 1],
+            reference: vec![reference, 1],
+            reply_text: String::new(),
+            reference_text: String::new(),
+            reply_keys: 0,
+            reply_named: 0,
+            reference_keys: 0,
+            reference_named: 0,
+            admitted: Vec::new(),
+            stepped: marks,
+        };
+        // Token 7 is a TRAIN reply; 9 is not. Two prompts changed, one not.
+        let verbatim = |r: &[u32]| r.first() == Some(&7);
+        let samples = [
+            stepped(9, 7, vec![STEP_NEAREST, STEP_OFF]),
+            stepped(7, 7, vec![STEP_OFF, STEP_NEAREST]),
+            stepped(7, 9, vec![STEP_NEAREST, STEP_EXHAUSTED]),
+        ];
+        let got = changed_content("p", "cycle-step", 1, &samples, verbatim);
+        assert_eq!((got.prompts, got.arm_verbatim, got.reference_verbatim), (2, 1, 2));
+        let content = |prompts: usize, arm: usize, reference: usize| ChangedContent {
+            split: "p".to_owned(),
+            rule: "cycle-step".to_owned(),
+            seed: 1,
+            prompts,
+            arm_verbatim: arm,
+            reference_verbatim: reference,
+        };
+        // References 43 of 70 (p = 0.614, tolerance 0.175): 31 is kept, 30 is not, salad is not.
+        assert_eq!(content(70, 31, 43).kept(), Some(true));
+        assert_eq!(content(70, 30, 43).kept(), Some(false));
+        assert_eq!(content(70, 5, 43).kept(), Some(false));
+        assert_eq!(content(0, 0, 0).kept(), None);
+        // The outcome: an arm that keeps the matched content (it wrote greedy's replies there).
+        let reading = |close: bool| {
+            let made = Generation {
+                replies: 256,
+                complete: 200,
+                verbatim_train: 100,
+                new_ngram_share: Vec::new(),
+                distinct_1: 0.0,
+                distinct_2: 0.0,
+                repeated_4gram_rate: 0.0,
+            };
+            CellReading {
+                split: "p".to_owned(),
+                rule: "cycle-step".to_owned(),
+                seed: 1,
+                reading: VerdictSeed::new(1, &made, &made),
+                holds: Some(true),
+                close,
+                mean_admitted: None,
+                loops: Some(70),
+                fewer_loops: Some(true),
+                mean_length: None,
+                matched_n: Some(186),
+                matched_verbatim: Some(93),
+            }
+        };
+        let (arm, closed) = (reading(false), reading(true));
+        let (arms, closed) = ([&arm, &arm, &arm], [&closed, &closed, &closed]);
+        let base = [&arm, &arm, &arm];
+        let (salad, good, thin) = (content(70, 5, 43), content(70, 40, 43), content(CHANGED_FLOOR - 1, 30, 30));
+        // The FIT's scenario: matched kept, completion held, salad where it stepped.
+        assert_eq!(cycle_outcome(&arms, &base, &[&salad, &good, &good]), "reduces, content lost");
+        assert_eq!(cycle_outcome(&arms, &base, &[&good, &good, &good]), "improves");
+        assert_eq!(cycle_outcome(&closed, &base, &[&good, &good, &good]), "cures");
+        assert_eq!(cycle_outcome(&closed, &base, &[&good, &salad, &good]), "reduces, content lost");
+        // Too few changed prompts, or a seed missing, is an instrument outcome, never a negative.
+        assert_eq!(cycle_outcome(&arms, &base, &[&good, &thin, &good]), "underpowered (content)");
+        assert_eq!(cycle_outcome(&arms, &base, &[&good, &good]), "underpowered (content)");
     }
 
     #[test]
