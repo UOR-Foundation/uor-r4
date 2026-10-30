@@ -20,11 +20,11 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 15 |
+| ready | 17 |
 | held | 10 |
 | decision | 1 |
 | done | 86 |
-| total | 112 |
+| total | 114 |
 
 ## Start here
 
@@ -33,6 +33,7 @@ These items are ready and open to anyone.
 | Item | Milestone | Issue |
 |---|---|---|
 | [Measure M1-class laptop cost on the accepted served model](items/m5-laptop-full-path-measurement.md) | M5 | [#2862](https://github.com/UOR-Foundation/uor-r4/issues/2862) |
+| [Add the rustc --test verifier the frozen M6 code-task bar names](items/m6-code-task-rustc-verifier.md) | M6 | [#3432](https://github.com/UOR-Foundation/uor-r4/issues/3432) |
 | [Build the library, CLI and browser bit-identity parity harness](items/m7-parity-library-cli-browser.md) | M7 | [#2867](https://github.com/UOR-Foundation/uor-r4/issues/2867) |
 | [Independently verify the alpha on consumer hardware](items/m8-independent-verification.md) | M8 | [#2869](https://github.com/UOR-Foundation/uor-r4/issues/2869) |
 | [Prepare the checksummed alpha release package and install path](items/m8-release-packaging.md) | M8 | [#2870](https://github.com/UOR-Foundation/uor-r4/issues/2870) |
@@ -111,6 +112,7 @@ These items are ready and open to anyone.
 
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
+| [Add the rustc --test verifier the frozen M6 code-task bar names](items/m6-code-task-rustc-verifier.md) | ready | anyone | no | [m6-reasoning-panel-freeze](items/m6-reasoning-panel-freeze.md) | [#3432](https://github.com/UOR-Foundation/uor-r4/issues/3432) |
 | [Qualify reasoning and coding on the served model](items/m6-qualify-reasoning-coding.md) | ready | a lab | yes | [m4-export-uorlut01-cli](items/m4-export-uorlut01-cli.md), [m6-reasoning-panel-freeze](items/m6-reasoning-panel-freeze.md), [m6-causal-ablation-instrument](items/m6-causal-ablation-instrument.md), [m6-exact-arithmetic-mechanism](items/m6-exact-arithmetic-mechanism.md) | [#2865](https://github.com/UOR-Foundation/uor-r4/issues/2865) |
 | [Build the intermediate-state ablation instrument for M6](items/m6-causal-ablation-instrument.md) | done | a lab | no | [m6-reasoning-panel-freeze](items/m6-reasoning-panel-freeze.md), [m1-trunk-assembly-and-training](items/m1-trunk-assembly-and-training.md) | [#2863](https://github.com/UOR-Foundation/uor-r4/issues/2863) |
 | [Design exact arithmetic on the geometric path](items/m6-exact-arithmetic-mechanism.md) | done | anyone | no | none | [#2864](https://github.com/UOR-Foundation/uor-r4/issues/2864) |
@@ -179,6 +181,7 @@ These items are ready and open to anyone.
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
 | [Build the loop harness (the loop subcommands of uor-harness)](items/infra-loop-harness.md) | ready | a lab | no | none | [#2904](https://github.com/UOR-Foundation/uor-r4/issues/2904) |
+| [Adopt and verify outside-contribution repairs to the product crate and xtask](items/infra-outsider-repairs.md) | ready | a lab | no | none | [#3433](https://github.com/UOR-Foundation/uor-r4/issues/3433) |
 | [Create the separate scanned D37 float training module](items/float-training-module.md) | done | a lab | no | [owner-decision-float-path-scope](items/owner-decision-float-path-scope.md) | [#2823](https://github.com/UOR-Foundation/uor-r4/issues/2823) |
 | [Bench inbox rule: each lab reads the bench messages addressed to it](items/infra-bench-inbox-rule.md) | done | a lab | no | none | [#2955](https://github.com/UOR-Foundation/uor-r4/issues/2955) |
 | [Build the Tauri desktop client against the synthetic stand-in](items/infra-desktop-client-tauri.md) | done | anyone | no | [m7-studio-connect-wasm-engine](items/m7-studio-connect-wasm-engine.md) | [#2826](https://github.com/UOR-Foundation/uor-r4/issues/2826) |
@@ -274,6 +277,7 @@ flowchart LR
   n_m4_lawful_likelihood_bpb["m4-lawful-likelihood-bpb"]
   n_m5_laptop_full_path_measurement["m5-laptop-full-path-measurement"]
   n_m6_causal_ablation_instrument["m6-causal-ablation-instrument"]
+  n_m6_code_task_rustc_verifier["m6-code-task-rustc-verifier"]
   n_m6_exact_arithmetic_mechanism["m6-exact-arithmetic-mechanism"]
   n_m6_qualify_reasoning_coding["m6-qualify-reasoning-coding"]
   n_m6_reasoning_panel_freeze["m6-reasoning-panel-freeze"]
@@ -397,6 +401,7 @@ flowchart LR
   n_m6_exact_arithmetic_mechanism --> n_m6_qualify_reasoning_coding
   n_m6_qualify_reasoning_coding --> n_m8_release_packaging
   n_m6_reasoning_panel_freeze --> n_m6_causal_ablation_instrument
+  n_m6_reasoning_panel_freeze --> n_m6_code_task_rustc_verifier
   n_m6_reasoning_panel_freeze --> n_m6_qualify_reasoning_coding
   n_m7_parity_library_cli_browser --> n_m8_release_packaging
   n_m7_studio_connect_wasm_engine --> n_infra_desktop_client_tauri
