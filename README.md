@@ -6,7 +6,7 @@ model that runs on a laptop?*
 [![License: MIT](https://img.shields.io/github/license/UOR-Foundation/uor-r4)](LICENSE)
 [![Rust 1.97.1](https://img.shields.io/badge/rust-1.97.1-orange?logo=rust)](rust-toolchain.toml)
 [![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-yellow)](STATUS.md)
-[![Milestones: 0 of 8 complete](https://img.shields.io/badge/milestones-0%2F8%20complete-blue)](#where-we-are)
+[![Milestones: 1 of 8 complete](https://img.shields.io/badge/milestones-1%2F8%20complete-blue)](#where-we-are)
 [![Last commit](https://img.shields.io/github/last-commit/UOR-Foundation/uor-r4/main)](https://github.com/UOR-Foundation/uor-r4/commits/main)
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-ffcc4d)](https://huggingface.co/caseyallard/uor-r4-geometric-214m)
 
@@ -26,21 +26,24 @@ useful conversation yet.** [What UOR-R4 is](docs/start/what-is-uor-r4.md) explai
 
 ## The three products
 
-None of the three ships today; each waits on a trained model ([products](docs/products/README.md)).
+None of the three ships today. The saved model's panel qualification does not yet provide useful conversation or integrated clients ([products](docs/products/README.md)).
 
-- **[The model](docs/products/language-model.md):** one whole-number model file that runs with adds, compares and table look-ups only. On 29 Oct 2026 the float-trained FBS trunk is exported into it exactly under `lut-stack/5` and served on the M1 laptop (claude-182); no discrete-path model trained under today's rules has been exported into it.
+- **[The model](docs/products/language-model.md):** one integer model file for local serving, with integer multiply and divide allowed by D80/D81. On 30 Oct 2026 the saved discrete `UORLUT01` artifacts passed M1's six bars at both seeds ([closing evidence](docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)). Separately, the float-trained FBS trunk was exported under `lut-stack/5` and served on the M1 laptop on 29 Oct (claude-182). Neither result qualifies useful conversation.
 - **[Web client](docs/products/web-client.md):** the Studio page (the project's chat-style web interface) in your browser, running the model on your own device as WebAssembly. Today the browser engine and the Studio page both exist but are not yet connected.
 - **[Desktop client](docs/products/desktop-client.md):** a Tauri app (a desktop shell around the same web page), running the model natively with durable memory and offline use on M1-class laptops. Today it is a written specification only.
 
 ## Where we are
 
-**29 Oct 2026:** pre-alpha, 0 of 8 milestones complete (M1 is in progress; no registered closing run has passed its bar). Since 27 Oct the work is on the float-trained FBS trunk: the trunk **routes** and exact memory **stores** (diagnosis claude-155, owner pivot 28 Oct). Exact turn memory names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, but moves only a reply's first word. Integer multiply and divide are allowed in serving (D80, D81). Next: carry the memory past the first word, serve every part in integers, then a typed question gets a typed reply. See [where we are](docs/start/where-we-are.md) and the [pipeline map](docs/model/pipeline-map.md).
+**30 Oct 2026:** pre-alpha, **1 of 8 milestones complete**. [M1 (#2029)](https://github.com/UOR-Foundation/uor-r4/issues/2029) is closed: one saved discrete model, exported as two seeded `UORLUT01` artifacts, passed all six registered bars. This is a scoped panel result, **not useful-chat qualification**. The separate float-trained FBS trunk line continues toward one model that produces complete replies; see [PLAN.md](PLAN.md) and the [pipeline map](docs/model/pipeline-map.md).
 
-The older K16 table below is the 19 Oct 2026 discrete-path record.
+[The closing run](docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) reproduced **7,002 / 7,001** correct integer top-1 guesses on DEV's 14,287 rows, above the unigram table's 1,226 and T2's 6,300. On the fresh held-out-phrasing panel p-f (15,953 rows), it scored **7,850 / 7,872**, against T2's 7,375, exceeding the paired band of 81 at both seeds. The same artifacts served at median **10,876 / 10,566 decode tokens/s** on an Apple M1 under that report's 192-token prefill/64-token decode protocol.
 
-**0 of 8 milestones are complete** ([STATUS](STATUS.md); live tracker
-[#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028)). The test below asks a model to guess
-the next token at 14,287 positions in 400 held-out documents, one guess each (all **measurements**):
+**Limit:** 62.5% of p-f's reference replies are verbatim TRAIN replies. That is reference-data overlap, **not a measured generated-copy rate**: bar (f) tests new prompt phrasings leading to known kinds of reply, not new reply kinds or useful conversation.
+
+<details>
+<summary>Historical K16 result — 19 Oct 2026</summary>
+
+The following discrete-path measurement predates the M1 closing artifacts. It asks for one next-token guess at each of 14,287 positions in 400 held-out documents:
 
 | Who is guessing | Correct first guesses (of 14,287) | Source |
 |---|---:|---|
@@ -48,31 +51,17 @@ the next token at 14,287 positions in 400 held-out documents, one guess each (al
 | Unigram table: always guess the most common token | 1,226 | [count tables](archive/labs/host-diagnostics-2026-10-17/README.md) |
 | Next-word table (T2): the token that most often followed the previous one | 6,300 | [count tables](archive/labs/host-diagnostics-2026-10-17/README.md) |
 
-**The number to remember: the best trained run gets 463 of 14,287 first guesses right, and a plain next-word table gets 6,300.** So the best model trained under today's rules is **below two plain word-count tables**, and the cause
-is not yet established. Four suspects are still open: the coarse address key (how a word is mapped to the drawers that open), the read (the step that looks back at earlier words), the ranking capacity (how finely the model can order candidate words) and the training schedule. What does work is substrate, not language: an integer model path on the
-GPU that passes 25 of 25 construction checks
-([qualification](docs/labs/k16-rows-qualification-2026-10-18/README.md)), a browser build of the
-serving engine whose 7 of 7 serving functions contain no decimal instruction (since claude-177 `step` uses 14 integer multiplies and 9 divides, which D80 and D81 allow; [m4-serving](docs/research/notebook/m4-serving.md))
-([record](docs/labs/wasm-serving-runtime-2026-10-18/README.md)), and an exact byte store. Four older
-214-million-parameter checkpoints on Hugging Face predate today's rules (they used softmax and
-matrix multiplication) and are kept as historical evidence.
+The K16 best seed's 463 correct guesses was below both count tables. It remains dated evidence, not the current-best compliant result.
+
+</details>
+
 The full picture, with every number sourced: [where we are](docs/start/where-we-are.md).
 
 ## Where we're going
 
-The first milestone (M1) has a new top-1 condition set by the owner (project lead Casey Allard) on 19 October 2026, alongside its existing conditions on reach (whether the right word is among the candidates the model opens at all), cell use and fresh-data transfer: **the model's
-whole-number top-1, measured through its integer export, must beat both count tables (1,226 and
-6,300) on each of two seeds, with tokens per second reported** ([charter](CHARTER.md) §4.8). The
-audit's shortest path to a first simple conversation has six stages, each run on its own pre-run review (D67); the ordered steps are in [PLAN.md](PLAN.md):
+M1's saved-model path is complete under the six bars in [CHARTER §4.8](CHARTER.md#4-evidence), including D82's held-out-phrasing transfer. Full conversation and durable memory remain open; the remaining milestone routes are in [PLAN.md](PLAN.md#the-route-m2m8).
 
-**0** run what is already FIT-reviewed and queued (a capacity test, W2) → **1** make the model's capacity measurable → **2** pick the
-learning law → **3** add the missing parts (a feed-forward layer, a recurrence) → **4** export and
-serve on a laptop → **5** a first simple conversation grounded in exact memory.
-
-That route is the discrete path's route to the M1 bar. After that come laptop energy cost (M5), reasoning and coding (M6), browser and API (M7) and an alpha
-release (M8). This is a plan, not a promise: [where we're going](docs/start/where-were-going.md).
-
-**29 Oct 2026.** The 27-29 Oct work ran on a second path, the float-trained FBS trunk. The two model paths do not join yet ([pipeline map](docs/model/pipeline-map.md)). The order of work now, from [PLAN.md](PLAN.md): (1) carry the exact turn memory past a reply's first word; (2) serve the model's parts in integers; (3) build the text path (R7), so a typed question gets a typed reply; (4) train one model with all of it, export it, serve it on the laptop and score it on prompts with tokens per second; (5) then cost. No milestone is claimed.
+**30 Oct 2026.** The separate float-trained FBS trunk line follows the owner's end-to-end order: carry exact turn memory through the reply, serve the parts in integers, complete the text path (R7), then train/export/serve and score one whole model on prompts with tokens per second; cost follows. The latest completed trained-cut run returned **“reduces, content lost”** and kept `r-drop` as the recipe ([claude-216](docs/loop/tasks/one-model-end-to-end/claude-216/REPORT.md)). The [claude-217 review](https://github.com/UOR-Foundation/uor-r4/issues/3407#issuecomment-6524939582) records FIT, pre-run GO and launch, **not a result**. The remaining [one-model protocol and integer-serving measures](docs/roadmap/items/one-model-end-to-end.md) are still required. This work does not inherit useful-chat qualification from M1.
 
 ## How it works
 
@@ -90,8 +79,7 @@ the tested forms failed or broke a rule while the mechanism stays open.
 | Backpropagation optimizer | [Discrete learning](docs/mechanisms/discrete-learning.md): try each legal rotation of one entry, keep it only if the score strictly improves | ACTIVE |
 | Matrix-multiply runtime | [Integer serving (D11, the whole-number serving contract)](docs/mechanisms/lut-serving.md): adds, shifts, compares and table reads, and no float; since D80 and D81 (28 Oct 2026) the integer multiply and divide are allowed | ACTIVE engine; `lut-stack/5` exports and serves the FBS trunk exactly (claude-181, claude-182) |
 
-Position and normalization now have replacements on the FBS trunk: position is the SpiralCore transport spin, and normalization is RMS norm with an integer square root. Both are trained and served there. No two replacements
-have been trained together into a model that beats the count tables. The board lists 28 mechanisms:
+Position and normalization now have replacements on the FBS trunk: position is the SpiralCore transport spin, and normalization is RMS norm with an integer square root. Both are trained and served there. The saved discrete model beats the count tables under M1's registered panel bars; this does not establish each replacement's independent effect or useful-chat capability. The board lists 28 mechanisms:
 12 ACTIVE, 5 READY and 11 PARKED. Part by part: [transformer vs geometry](docs/start/transformer-vs-geometry.md).
 
 ## Explore
