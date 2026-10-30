@@ -25,6 +25,8 @@ use candle_core::{DType, Device, Tensor};
 use serde::{Deserialize, Serialize};
 use uor_r4_tokenizer::ByteBpeTokenizer;
 
+pub use crate::flock_read_hamming::ReadScope;
+use crate::flock_read_hamming::set_read_cut;
 use crate::geometric_stack::stage_clock::{self, StageTime};
 use crate::geometric_stack::{StackAdamW, StackModel};
 use crate::hamilton_sheet::{self as hs, CausalWindow, HamiltonArm, SHEET_CONTEXT};
@@ -2078,7 +2080,18 @@ fn greedy_reply(
     reply_tokens: usize,
     seed: u64,
 ) -> Result<Vec<u32>> {
-    Ok(decode_reply(model, objective, prompt, reply_tokens, seed, DecodeRule::Greedy, 0, None)?.tokens)
+    Ok(decode_reply(
+        model,
+        objective,
+        prompt,
+        reply_tokens,
+        seed,
+        DecodeRule::Greedy,
+        0,
+        None,
+        ReadScope::Full,
+    )?
+    .tokens)
 }
 
 /// How a reply picks each next token (one-model-end-to-end protocol, "The decode rules").
@@ -2123,6 +2136,13 @@ pub const CELL_MARGIN_MILLI: u32 = 1_000;
 /// The margins claude-213 decodes under [`DecodeRule::FlockCell`], in thousandths: the cell
 /// objective's own, then halving toward greedy.
 pub const FLOCK_CELL_LADDER_MILLI: [u32; 6] = [CELL_MARGIN_MILLI, 500, 250, 125, 62, 31];
+
+/// Whether `scopes` can name `--reply-read`'s scopes: distinct (each names its own file), and
+/// never [`ReadScope::Full`], which is greedy's own file (claude-215).
+pub fn scopes_ok(scopes: &[ReadScope]) -> bool {
+    let distinct: std::collections::BTreeSet<&str> = scopes.iter().map(|s| s.name()).collect();
+    distinct.len() == scopes.len() && !scopes.contains(&ReadScope::Full)
+}
 
 /// Whether `cells` can name `--flock-cell`'s margins: distinct (each names its own file), and
 /// none past four of the cell objective's margins.
@@ -2220,6 +2240,14 @@ fn rank_order(mut candidates: Vec<(u32, f32)>) -> Vec<(u32, f32)> {
     candidates
 }
 
+/// Where a prompt of `prompt_len` tokens ends in a decode window that starts at sequence
+/// position `start` (claude-215): window positions below it are the prompt's. The window holds
+/// the last [`SHEET_CONTEXT`] tokens, so once the reply has pushed `start` past the prompt's
+/// start the cut moves down with it, and once the prompt has scrolled out it is 0.
+fn prompt_cut(prompt_len: usize, start: usize) -> usize {
+    prompt_len.saturating_sub(start)
+}
+
 /// One decoded reply ([`decode_reply`]).
 struct DecodedReply {
     tokens: Vec<u32>,
@@ -2231,7 +2259,10 @@ struct DecodedReply {
 /// The model's reply to `prompt` under `rule`: as [`greedy_reply`], with the next token picked
 /// by `rule`. The Flock rank rule also stops after `eos` (the protocol); greedy decodes to
 /// BOS or its length, as before. `sample` is the reply's index, which with `seed` seeds the Flock rank draws: draw
-/// `index = sample · 64 + step`. The Flock rank rule needs a nearest objective.
+/// `index = sample · 64 + step`. The Flock rank rule needs a nearest objective. `scope` limits
+/// which positions the Hamming read may choose at each step (claude-215): under any scope but
+/// [`ReadScope::Full`], the limited heads choose only the prompt's positions in the window.
+#[allow(clippy::too_many_arguments)]
 fn decode_reply(
     model: &StackModel,
     objective: PointObjective,
@@ -2241,10 +2272,16 @@ fn decode_reply(
     rule: DecodeRule,
     sample: usize,
     eos: Option<u32>,
+    scope: ReadScope,
 ) -> Result<DecodedReply> {
     let flock = rule != DecodeRule::Greedy;
     if flock && !objective.decodes_nearest() {
         return Err(invalid("the Flock rank rule decodes the nearest table tokens only"));
+    }
+    // The read's scope is set on the nearest decode's forward only; on the writer's it would
+    // limit nothing, and its files would be plain greedy under another name.
+    if scope != ReadScope::Full && !objective.decodes_nearest() {
+        return Err(invalid("a read scope decodes the nearest table tokens only"));
     }
     if flock && reply_tokens > FLOCK_MAX_REPLY {
         return Err(invalid(format!(
@@ -2281,7 +2318,13 @@ fn decode_reply(
                         )]));
                     }
                 }
+                // Under a scope, the limited heads choose only before the prompt's end in the
+                // window, so they never read the reply's own tokens.
+                if scope != ReadScope::Full {
+                    set_read_cut(Some((scope, prompt_cut(prompt.len(), start))));
+                }
                 let hidden = crate::flock_read::points(model, window, 1, window.len());
+                set_read_cut(None);
                 crate::flock_read_memory::set_memory_rows(None);
                 crate::flock_read_memory::set_reply_rows(None);
                 let hidden = hidden?;
@@ -2951,7 +2994,9 @@ fn reference_reply(window: &CausalWindow, tokens: usize) -> Vec<u32> {
 ///   - the Flock rank rule (I-E), with the memory on, as it would be served:
 ///     `samples-{split}-flock-memory.json`;
 ///   - the cell rule at each margin of `cells` (claude-213), with the memory on:
-///     `samples-{split}-flock-cell-{margin}-memory.json`.
+///     `samples-{split}-flock-cell-{margin}-memory.json`;
+///   - greedy under each read scope of `scopes` (claude-215), with the memory on:
+///     `samples-{split}-greedy-read-{scope}-memory.json`.
 ///
 ///   Each records its reply-table hits under generation and under teacher forcing (I-F).
 ///
@@ -2972,6 +3017,7 @@ pub fn score_rows(
     arm: FbsArm,
     flock: DecodeRule,
     cells: &[u32],
+    scopes: &[ReadScope],
     device: &Device,
 ) -> Result<Vec<ScoredFile>> {
     check_run_arm(checkpoint, arm)?;
@@ -2979,6 +3025,9 @@ pub fn score_rows(
         return Err(invalid(
             "--flock-cell wants distinct margins of at most 4,000 thousandths",
         ));
+    }
+    if !scopes_ok(scopes) {
+        return Err(invalid("--reply-read wants distinct scopes from copy and all"));
     }
     let step: usize = checkpoint
         .file_name()
@@ -3061,15 +3110,17 @@ pub fn score_rows(
                 decode: None,
             });
         }
-        // Greedy with the memory on and off; the Flock rules with it on only, as served.
-        let mut served = vec![DecodeRule::Greedy, flock];
-        served.extend(cells.iter().map(|&m| DecodeRule::flock_cell(m)));
-        let rules: &[DecodeRule] = if on { &served } else { &served[..1] };
+        // Greedy with the memory on and off; the Flock rules, and greedy under each read scope
+        // (claude-215), with it on only, as served.
+        let mut served = vec![(DecodeRule::Greedy, ReadScope::Full), (flock, ReadScope::Full)];
+        served.extend(cells.iter().map(|&m| (DecodeRule::flock_cell(m), ReadScope::Full)));
+        served.extend(scopes.iter().map(|&s| (DecodeRule::Greedy, s)));
+        let rules: &[(DecodeRule, ReadScope)] = if on { &served } else { &served[..1] };
         let active = crate::flock_read_memory::turn_memory();
         let named = |key: &[u32]| active.as_ref().is_some_and(|m| m.reply_stored(key).is_some());
         for split in splits.iter().filter(|s| s.samples) {
             let prompts = sample_windows(&split.windows, &split.mask, samples);
-            for &rule in rules {
+            for &(rule, scope) in rules {
                 let mut replies = Vec::with_capacity(prompts.len());
                 let started = std::time::Instant::now();
                 for (index, window) in prompts.iter().enumerate() {
@@ -3084,6 +3135,7 @@ pub fn score_rows(
                         rule,
                         index,
                         Some(eos),
+                        scope,
                     )?;
                     let reference = reference_reply(window, reply_tokens);
                     let (reply_keys, reply_named) = reply_key_hits(prompt, cut_at_eos(&reply, eos), named);
@@ -3104,6 +3156,9 @@ pub fn score_rows(
                     });
                 }
                 let file = match (split.name.as_str(), rule) {
+                    (name, DecodeRule::Greedy) if scope != ReadScope::Full => {
+                        format!("samples-{name}-greedy-read-{}-{label}.json", scope.name())
+                    }
                     ("dev", DecodeRule::Greedy) => format!("samples-{label}.json"),
                     (name, DecodeRule::Greedy) => format!("samples-{name}-greedy-{label}.json"),
                     (name, DecodeRule::FlockRank { keep_end: false, .. }) => {
@@ -4538,6 +4593,18 @@ pub struct CellReading {
     /// The cell rule's admitted count per step, averaged over every step of every reply.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mean_admitted: Option<f64>,
+    /// The replies that repeat a 4-gram of their own ([`looping_replies`]), when counted
+    /// (claude-215's `read_grade`; `cell_grade` writes none, so its files are as before).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loops: Option<usize>,
+    /// Whether this rule loops in fewer replies than greedy on the same prompts, by more than
+    /// decision 4's band `⌈2·√(n·p(1−p))⌉` at greedy's count; none for greedy, or uncounted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fewer_loops: Option<bool>,
+    /// The replies' mean length in tokens, each cut after its first end of turn, when loops are
+    /// counted: a rule that ends replies sooner has fewer 4-grams to repeat.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mean_length: Option<f64>,
 }
 
 impl CellReading {
@@ -4629,6 +4696,65 @@ pub fn cell_grade(data_root: &Path, runs: &Path, panel: &str, margins: &[u32]) -
     if panel == "dev" {
         return Err(invalid("--cell-grade's confirming panel cannot be DEV, which selects"));
     }
+    let mut rules = vec!["greedy".to_owned(), "flock-end".to_owned()];
+    rules.extend(margins.iter().map(|m| format!("flock-cell-{m}")));
+    let readings = rule_readings(data_root, runs, panel, &rules, false)?;
+    let of = |split: &str, rule: &str| -> Vec<&CellReading> {
+        readings.iter().filter(|r| r.split == split && r.rule == rule).collect()
+    };
+    let dev: Vec<(u32, Vec<&CellReading>)> = margins
+        .iter()
+        .map(|&m| (m, of("dev", &format!("flock-cell-{m}"))))
+        .collect();
+    let (selected, selection) = select_margin(&dev);
+    let outcome = match selected {
+        Some(m) => panel_outcome(&of(panel, &format!("flock-cell-{m}")), &of(panel, "flock-end")),
+        None => "no selection",
+    };
+    Ok(CellGrade {
+        panel: panel.to_owned(),
+        margins: margins.to_vec(),
+        readings,
+        selected,
+        selection,
+        outcome,
+    })
+}
+
+/// How many of `replies`, each cut after its first `eos`, repeat a 4-gram of their own: the
+/// replies that loop (claude-215).
+fn looping_replies(replies: &[Vec<u32>], eos: u32) -> usize {
+    replies
+        .iter()
+        .filter(|r| {
+            let cut = cut_at_eos(r, eos);
+            let mut seen = std::collections::HashSet::new();
+            cut.windows(4).any(|w| !seen.insert(w))
+        })
+        .count()
+}
+
+/// Whether `loops` looping replies of `n` are fewer than greedy's `greedy_loops` by more than
+/// decision 4's band at greedy's count, `⌈2·√(n·p(1−p))⌉` (claude-215).
+fn fewer_loops(loops: usize, greedy_loops: usize, n: usize) -> bool {
+    loops + count_band(greedy_loops, n) < greedy_loops
+}
+
+/// Every reading [`cell_grade`] and [`read_grade`] compare: for DEV and `panel`, at seeds 1–3,
+/// each of `rules`' samples files in `runs/r-drop-s{seed}/` against the split's own references,
+/// greedy (`rules[0]`) first. Every rule must answer greedy's prompts. With `count_loops`, each
+/// reading also counts its looping replies, and every rule after greedy whether it has fewer
+/// than greedy's beyond decision 4's band.
+fn rule_readings(
+    data_root: &Path,
+    runs: &Path,
+    panel: &str,
+    rules: &[String],
+    count_loops: bool,
+) -> Result<Vec<CellReading>> {
+    if rules.first().map(String::as_str) != Some("greedy") {
+        return Err(invalid("the readings compare against greedy, which comes first"));
+    }
     let (train_tokens, train_mask) = load_train_split(data_root)?;
     let train_replies = split_turns(&train_tokens, &train_mask, hs::SHEET_BOS_ID).replies;
     drop((train_tokens, train_mask));
@@ -4647,14 +4773,13 @@ pub fn cell_grade(data_root: &Path, runs: &Path, panel: &str, margins: &[u32]) -
         }
         Ok(list)
     };
-    let mut rules = vec!["greedy".to_owned(), "flock-end".to_owned()];
-    rules.extend(margins.iter().map(|m| format!("flock-cell-{m}")));
     let mut readings = Vec::new();
     for split in ["dev", panel] {
         for seed in 1..=3u8 {
             let mut greedy: Option<Generation> = None;
+            let mut greedy_loops = 0usize;
             let mut prompts: Option<Vec<(usize, Vec<u32>)>> = None;
-            for rule in &rules {
+            for rule in rules {
                 let file = match (split, rule.as_str()) {
                     ("dev", "greedy") => "samples-memory.json".to_owned(),
                     (_, "greedy") => format!("samples-{split}-greedy-memory.json"),
@@ -4696,8 +4821,18 @@ pub fn cell_grade(data_root: &Path, runs: &Path, panel: &str, margins: &[u32]) -
                         made.repeated_4gram_rate,
                     )),
                 };
+                let loops = count_loops.then(|| looping_replies(&replies, eos));
+                let mean_length = count_loops.then(|| {
+                    let total: usize = replies.iter().map(|r| cut_at_eos(r, eos).len()).sum();
+                    total as f64 / replies.len().max(1) as f64
+                });
+                let fewer_loops = match (&greedy, loops) {
+                    (Some(_), Some(n)) => Some(fewer_loops(n, greedy_loops, replies.len())),
+                    _ => None,
+                };
                 if greedy.is_none() {
                     greedy = Some(made);
+                    greedy_loops = loops.unwrap_or(0);
                 }
                 readings.push(CellReading {
                     split: split.to_owned(),
@@ -4707,29 +4842,97 @@ pub fn cell_grade(data_root: &Path, runs: &Path, panel: &str, margins: &[u32]) -
                     reading,
                     holds,
                     mean_admitted,
+                    loops,
+                    fewer_loops,
+                    mean_length,
                 });
             }
         }
     }
-    let of = |split: &str, rule: &str| -> Vec<&CellReading> {
-        readings.iter().filter(|r| r.split == split && r.rule == rule).collect()
+    Ok(readings)
+}
+
+/// claude-215's grade of the read's decode scopes: every reading, and the panel's outcomes.
+#[derive(Clone, Debug, Serialize)]
+pub struct ReadGrade {
+    pub panel: String,
+    pub readings: Vec<CellReading>,
+    /// The registered decision, from [`ReadScope::All`] on the panel ([`read_outcome`]).
+    pub outcome: &'static str,
+    /// The same reading for [`ReadScope::Copy`], the copy heads alone. It decides nothing.
+    pub copy_outcome: &'static str,
+}
+
+/// The fewest of 256 panel replies greedy must loop in, at every seed, for the read's outcome
+/// to be decided (claude-215's FIT): below it, a reduction is too poorly powered to read, so the
+/// outcome is `underpowered`. It is a power choice, not an impossibility: at 40, the band is 12.
+pub const READ_LOOP_FLOOR: usize = 40;
+
+/// Whether a scope's replies keep greedy's content: its `|v − v_ref|` is at most greedy's gap
+/// plus the verdict's noise tolerance `tol` (a 3σ band on a share; claude-215's FIT).
+fn content_kept(scope: &CellReading, greedy: &CellReading) -> bool {
+    match (scope.gap(), greedy.gap(), scope.reading.tol) {
+        (Some(s), Some(g), Some(t)) => s <= g + t,
+        _ => false,
+    }
+}
+
+/// The sheet's decision for one read scope's three panel seeds against greedy's three
+/// (`greedy`, seed for seed), in this order:
+/// - `underpowered` when greedy loops in fewer than [`READ_LOOP_FLOOR`] replies at any seed;
+/// - `cures` when, at all three, it has fewer looping replies than greedy beyond the band,
+///   holds decision 4, and is close;
+/// - `reduces` when it has fewer loops and holds at all three, keeping greedy's content;
+/// - `reduces, content lost` when it has fewer loops and holds at all three, but not that;
+/// - else `no gain`.
+///
+/// An arm with fewer than three seeds reads `no gain`; it cannot occur from [`read_grade`],
+/// whose [`rule_readings`] refuses any missing file.
+fn read_outcome(scope: &[&CellReading], greedy: &[&CellReading]) -> &'static str {
+    if greedy.len() != 3 || greedy.iter().any(|g| g.loops.is_none_or(|n| n < READ_LOOP_FLOOR)) {
+        return "underpowered";
+    }
+    let fewer = scope.len() == 3
+        && scope
+            .iter()
+            .all(|x| x.fewer_loops == Some(true) && x.holds == Some(true));
+    if !fewer {
+        return "no gain";
+    }
+    if scope.iter().all(|x| x.close) {
+        "cures"
+    } else if scope.iter().zip(greedy).all(|(s, g)| content_kept(s, g)) {
+        "reduces"
+    } else {
+        "reduces, content lost"
+    }
+}
+
+/// Grade the read's decode scopes (claude-215) from stored samples only, on the laptop: `runs`
+/// holds `r-drop-s{1,2,3}`, each with DEV's and `panel`'s greedy samples as trained and under
+/// [`ReadScope::Copy`] and [`ReadScope::All`]. The panel decides ([`read_outcome`]); DEV is
+/// reported. Counts only; no model.
+pub fn read_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<ReadGrade> {
+    if panel == "dev" {
+        return Err(invalid("--read-grade's deciding panel cannot be DEV"));
+    }
+    let rules: Vec<String> = ["greedy", "greedy-read-copy", "greedy-read-all"]
+        .map(String::from)
+        .to_vec();
+    let readings = rule_readings(data_root, runs, panel, &rules, true)?;
+    let of = |rule: &str| -> Vec<&CellReading> {
+        readings.iter().filter(|r| r.split == panel && r.rule == rule).collect()
     };
-    let dev: Vec<(u32, Vec<&CellReading>)> = margins
-        .iter()
-        .map(|&m| (m, of("dev", &format!("flock-cell-{m}"))))
-        .collect();
-    let (selected, selection) = select_margin(&dev);
-    let outcome = match selected {
-        Some(m) => panel_outcome(&of(panel, &format!("flock-cell-{m}")), &of(panel, "flock-end")),
-        None => "no selection",
-    };
-    Ok(CellGrade {
+    let greedy = of("greedy");
+    let (outcome, copy_outcome) = (
+        read_outcome(&of("greedy-read-all"), &greedy),
+        read_outcome(&of("greedy-read-copy"), &greedy),
+    );
+    Ok(ReadGrade {
         panel: panel.to_owned(),
-        margins: margins.to_vec(),
         readings,
-        selected,
-        selection,
         outcome,
+        copy_outcome,
     })
 }
 
@@ -7350,6 +7553,7 @@ mod tests {
                     rule,
                     sample,
                     None,
+                    ReadScope::Full,
                 )
                 .unwrap()
                 .tokens
@@ -7453,6 +7657,9 @@ mod tests {
                 reading,
                 holds: Some(holds),
                 mean_admitted: Some(1.0),
+                loops: None,
+                fewer_loops: None,
+                mean_length: None,
             }
         };
         let (good, salad, loops, off) = (
@@ -7511,6 +7718,143 @@ mod tests {
         assert_eq!(panel_outcome(&three(&off), &three(&silent)), "narrows");
     }
 
+    /// claude-215: a looping reply repeats a 4-gram of its own before its end of turn; the read's
+    /// outcome needs fewer loops beyond the band, decision 4, and (for "cures") close, at all
+    /// three seeds; and `--reply-read`'s scopes are distinct and never `Full`.
+    #[test]
+    fn the_read_grade_counts_loops_and_follows_the_sheet() {
+        let eos = 9;
+        let replies = vec![
+            vec![1, 2, 3, 4, 1, 2, 3, 4, eos],    // repeats 1 2 3 4: loops
+            vec![1, 2, 3, 4, eos, 1, 2, 3, 4],    // the repeat is after its end of turn
+            vec![5, 5, 5, 5, 5],                  // 5 5 5 5 twice: loops, never ends
+            vec![1, 2, 3, eos],                   // too short to loop
+        ];
+        assert_eq!(looping_replies(&replies, eos), 2);
+        // Greedy loops in 64 of 256: the band is ⌈2·√(256·0.25·0.75)⌉ = 14, so 49 is fewer
+        // beyond it and 50 is not.
+        assert_eq!(count_band(64, 256), 14);
+        assert!(fewer_loops(49, 64, 256));
+        assert!(!fewer_loops(50, 64, 256), "inside the band");
+        assert!(!fewer_loops(70, 64, 256));
+        // References: 120 of 200 complete replies verbatim, so v_ref = 0.6 and tol = 0.104.
+        let reading = |fewer: bool, holds: bool, close: bool, verbatim: usize, loops: usize| {
+            let made = |verbatim_train: usize| Generation {
+                replies: 256,
+                complete: 200,
+                verbatim_train,
+                new_ngram_share: Vec::new(),
+                distinct_1: 0.0,
+                distinct_2: 0.0,
+                repeated_4gram_rate: 0.0,
+            };
+            CellReading {
+                split: "p-r".to_owned(),
+                rule: "greedy-read-all".to_owned(),
+                seed: 1,
+                reading: VerdictSeed::new(1, &made(verbatim), &made(120)),
+                holds: Some(holds),
+                close,
+                mean_admitted: None,
+                loops: Some(loops),
+                fewer_loops: Some(fewer),
+                mean_length: None,
+            }
+        };
+        // Greedy loops in 60 of 256 with v = 0.5, a gap of 0.1.
+        let g = reading(false, false, false, 100, 60);
+        let greedy = [&g, &g, &g];
+        let (cured, kept, lost, same, worse) = (
+            reading(true, true, true, 120, 10),
+            reading(true, true, false, 100, 10), // gap 0.1: within greedy's 0.1 + tol
+            reading(true, true, false, 40, 10),  // v = 0.2, gap 0.4: past 0.1 + 0.104
+            reading(false, true, true, 120, 10),
+            reading(true, false, true, 120, 10),
+        );
+        assert_eq!(read_outcome(&[&cured, &cured, &cured], &greedy), "cures");
+        assert_eq!(read_outcome(&[&cured, &kept, &cured], &greedy), "reduces");
+        assert_eq!(read_outcome(&[&cured, &lost, &cured], &greedy), "reduces, content lost");
+        assert_eq!(read_outcome(&[&cured, &same, &cured], &greedy), "no gain", "one seed's loops not fewer");
+        assert_eq!(read_outcome(&[&cured, &worse, &cured], &greedy), "no gain", "decision 4 fails");
+        assert_eq!(read_outcome(&[&cured, &cured], &greedy), "no gain", "two seeds");
+        // Greedy too quiet at one seed to show fewer loops: underpowered, whatever the scope did.
+        let quiet = reading(false, false, false, 100, READ_LOOP_FLOOR - 1);
+        assert_eq!(read_outcome(&[&cured, &cured, &cured], &[&g, &quiet, &g]), "underpowered");
+        let floor = reading(false, false, false, 100, READ_LOOP_FLOOR);
+        assert_eq!(read_outcome(&[&cured, &cured, &cured], &[&g, &floor, &g]), "cures");
+        // Seed by seed: greedy's seed 2 is far from the references (v = 0.3, a gap of 0.3), so
+        // the arm's seed-2 gap of 0.3 keeps content against it, and only against it.
+        let (g_far, far) = (reading(false, false, false, 60, 60), reading(true, true, false, 60, 10));
+        assert_eq!(
+            read_outcome(&[&kept, &far, &kept], &[&g, &g_far, &g]),
+            "reduces",
+            "each arm seed is held to its own greedy seed"
+        );
+        assert!(scopes_ok(&[ReadScope::Copy, ReadScope::All]));
+        assert!(!scopes_ok(&[ReadScope::All, ReadScope::All]));
+        assert!(!scopes_ok(&[ReadScope::Full]), "Full is greedy's own file");
+    }
+
+    /// claude-215: the cut is where the prompt ends in the window. Before the window slides it
+    /// is the prompt's length; once the reply pushes the window's start past the prompt's start
+    /// it moves down by as much; once the prompt has scrolled out it is 0.
+    #[test]
+    fn the_read_cut_is_where_the_prompt_ends_in_the_window() {
+        assert_eq!(prompt_cut(40, 0), 40, "a short prompt: the window starts at 0");
+        assert_eq!(prompt_cut(180, 10), 170, "slid by 10");
+        assert_eq!(prompt_cut(180, 180), 0, "the prompt has scrolled out");
+        assert_eq!(prompt_cut(180, 200), 0);
+        // The decode's window is the last SHEET_CONTEXT ids: with a 180-token prompt and 30 reply
+        // tokens, it starts at 18, so the prompt ends at window position 162.
+        let ids = 180 + 30;
+        assert_eq!(prompt_cut(180, ids - SHEET_CONTEXT), 162);
+    }
+
+    /// claude-215 (its GPU half): on a model with the Hamming reads set, a reply's first token is
+    /// the same under every read scope (its window is all prompt, so the cut limits nothing),
+    /// and the cut is cleared after every decode. New reads start with zero weights, so the
+    /// scopes cannot change a token here: `a_cut_keeps_every_pick_before_it` pins the cut itself,
+    /// and the pod's job checks that the scoped decodes of the trained checkpoints differ.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_read_scope_starts_as_greedy_and_clears_its_cut() {
+        let device = Device::new_cuda(0).unwrap();
+        let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
+        crate::flock_read_hamming::set_hamming_reads(Some(
+            crate::flock_read_hamming::HammingReads::new(4, hs::SHEET_WIDTH, &device).unwrap(),
+        ));
+        let mut decoded = 0;
+        for sample in 0..4usize {
+            let shift = sample as u32 * 101;
+            let prompt: Vec<u32> = (1..=24u32).map(|i| (i * 37 + shift) % 4096).collect();
+            let decode = |scope| {
+                let reply = decode_reply(
+                    &model,
+                    PointObjective::Cell,
+                    &prompt,
+                    16,
+                    1,
+                    DecodeRule::Greedy,
+                    sample,
+                    None,
+                    scope,
+                )
+                .unwrap()
+                .tokens;
+                assert_eq!(crate::flock_read_hamming::read_cut(), None, "the cut outlived its decode");
+                reply
+            };
+            let full = decode(ReadScope::Full);
+            for scope in [ReadScope::Copy, ReadScope::All] {
+                let scoped = decode(scope);
+                assert_eq!(scoped.first(), full.first(), "sample {sample}, {scope:?}");
+            }
+            decoded += full.len();
+        }
+        crate::flock_read_hamming::set_hamming_reads(None);
+        assert!(decoded > 0, "every reply was empty, so the check held vacuously");
+    }
+
     /// claude-213 (its GPU half): on a model, the cell rule at margin 0 decodes exactly as
     /// greedy, admitting one candidate at every step, and records a count at each step; the
     /// objective's own margin admits more than one somewhere, so its draws do run.
@@ -7524,7 +7868,7 @@ mod tests {
             let shift = sample as u32 * 101;
             let prompt: Vec<u32> = (1..=24u32).map(|i| (i * 37 + shift) % 4096).collect();
             let decode = |rule| {
-                decode_reply(&model, PointObjective::Cell, &prompt, 16, 1, rule, sample, None).unwrap()
+                decode_reply(&model, PointObjective::Cell, &prompt, 16, 1, rule, sample, None, ReadScope::Full).unwrap()
             };
             let greedy = decode(DecodeRule::Greedy);
             assert!(greedy.admitted.is_empty(), "greedy records no counts");

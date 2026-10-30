@@ -68,6 +68,59 @@ const FILE: &str = "hamming_read.safetensors";
 
 thread_local! {
     static ACTIVE: RefCell<Option<HammingReads>> = const { RefCell::new(None) };
+    static CUT: std::cell::Cell<Option<(ReadScope, usize)>> = const { std::cell::Cell::new(None) };
+}
+
+/// Which earlier positions the read may choose while a reply decodes (claude-215). Training and
+/// every reading but the decode set none, so the read chooses as trained.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReadScope {
+    /// Every earlier position, as trained.
+    Full,
+    /// The copy heads choose only positions before the cut, the prompt's; the type heads, every
+    /// earlier position.
+    Copy,
+    /// Every head chooses only positions before the cut.
+    All,
+}
+
+impl ReadScope {
+    /// The name a samples file carries for it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Full => "full",
+            Self::Copy => "copy",
+            Self::All => "all",
+        }
+    }
+}
+
+/// Limit the read's choice for the forward passes that follow on this thread: under the scope,
+/// the heads it limits choose only window positions `s < cut`. `None`, the default, limits none.
+/// `decode_reply` sets it around one window's forward, with `cut` where the prompt ends there.
+pub fn set_read_cut(cut: Option<(ReadScope, usize)>) {
+    CUT.with(|c| c.set(cut));
+}
+
+/// The cut [`set_read_cut`] last set on this thread.
+pub fn read_cut() -> Option<(ReadScope, usize)> {
+    CUT.with(|c| c.get())
+}
+
+/// The end of head `head`'s candidates in a window of `time` positions, the first `copy_heads`
+/// of them copy heads, under `cut`: the cut for a head the scope limits, else `time`.
+fn head_limit(cut: Option<(ReadScope, usize)>, head: usize, copy_heads: usize, time: usize) -> usize {
+    match cut {
+        Some((ReadScope::All, at)) => at.min(time),
+        Some((ReadScope::Copy, at)) if head < copy_heads => at.min(time),
+        _ => time,
+    }
+}
+
+/// Whether position `s` is a candidate for position `t`: from `first`, earlier than `t`, and
+/// before `limit` ([`head_limit`]).
+fn is_candidate(s: usize, t: usize, first: usize, limit: usize) -> bool {
+    s >= first && s < t && s < limit
 }
 
 /// Make `reads` the Hamming reads `StackModel::hidden` applies on this thread, or none.
@@ -414,6 +467,11 @@ impl HammingRead {
         let (query, key) = (code(&query)?, code(&key)?);
         let zero = Tensor::new(&[0u32], device)?;
         let margins = self.margin.as_tensor();
+        // A decode's scope names positions in its one window (claude-215).
+        let cut = CUT.with(|c| c.get());
+        if cut.is_some() && batch != 1 {
+            return Err(invalid("the read's decode scope is for one window"));
+        }
         // What each kind of head brings back, at full width: a copy head the table's point of the
         // kept position's own token, the readout's own point for it (the 26 Sep head's tied
         // readout); a type head the kept position's rotated residual.
@@ -435,7 +493,8 @@ impl HammingRead {
             let k = key.narrow(1, h * head_width, head_width)?.contiguous()?;
             // A window's first position has no previous token, so its key names nothing: the
             // candidates start at 1.
-            let (picks, real) = choose_sorted(&q, &k, batch, time, HAMMING_KEPT, 1)?;
+            let limit = head_limit(cut, h, self.copy_heads(), time);
+            let (picks, real) = choose_sorted(&q, &k, batch, time, HAMMING_KEPT, 1, limit)?;
             // A pick that is not real points at its window's first position, whose successor is
             // still inside the window, and carries weight 0.
             let picks = real.where_cond(&picks, &zero.broadcast_as(picks.shape())?)?;
@@ -570,7 +629,8 @@ const FAR: f32 = 1.0e30;
 
 /// The `neighbours` earlier positions `first ≤ s < t` nearest each row `t` of `query` in mean L1,
 /// for all `batch` windows of `time` at once, as positions inside the row's own window
-/// `(batch * time, kept)`, and which are real.
+/// `(batch * time, kept)`, and which are real. Only positions before `limit` are candidates;
+/// `time` limits none (claude-215).
 /// One sort per call, where claude-144's choice (`flock_read::choose_nearest`) takes `kept` argmin
 /// rounds per window; with `first` 0, the same nearest set, hard and detached. Ties may come out in
 /// another order.
@@ -581,6 +641,7 @@ pub(crate) fn choose_sorted(
     time: usize,
     neighbours: usize,
     first: usize,
+    limit: usize,
 ) -> Result<(Tensor, Tensor)> {
     let device = query.device();
     let kept = neighbours.min(time.saturating_sub(1)).max(1);
@@ -590,7 +651,7 @@ pub(crate) fn choose_sorted(
     let k = key.detach().reshape((batch, 1, time, width))?;
     let distance = q.broadcast_sub(&k)?.abs()?.mean(3)?.reshape((rows, time))?;
     let earlier: Vec<u8> = (0..rows * time)
-        .map(|i| u8::from(i % time >= first && i % time < (i / time) % time))
+        .map(|i| u8::from(is_candidate(i % time, (i / time) % time, first, limit)))
         .collect();
     let earlier = Tensor::from_vec(earlier, (rows, time), device)?;
     let far = Tensor::full(FAR, (rows, time), device)?;
@@ -615,6 +676,79 @@ pub(crate) fn hamming_bits(a: &Tensor, b: &Tensor) -> Result<Tensor> {
 mod tests {
     use super::*;
 
+    /// claude-215: the decode scope limits only the heads it names, to positions before the cut;
+    /// no scope, or `Full`, limits none; a cut past the window limits nothing more.
+    #[test]
+    fn the_read_scope_limits_only_its_heads() {
+        let (time, copy) = (12, 2);
+        for head in 0..4 {
+            assert_eq!(head_limit(None, head, copy, time), time);
+            assert_eq!(head_limit(Some((ReadScope::Full, 5)), head, copy, time), time);
+            assert_eq!(head_limit(Some((ReadScope::All, 5)), head, copy, time), 5);
+            assert_eq!(head_limit(Some((ReadScope::All, 40)), head, copy, time), time);
+        }
+        // The copy heads are the first `copy`; the type heads keep every earlier position.
+        assert_eq!(head_limit(Some((ReadScope::Copy, 5)), 0, copy, time), 5);
+        assert_eq!(head_limit(Some((ReadScope::Copy, 5)), 1, copy, time), 5);
+        assert_eq!(head_limit(Some((ReadScope::Copy, 5)), 2, copy, time), time);
+        assert_eq!(head_limit(Some((ReadScope::Copy, 5)), 3, copy, time), time);
+    }
+
+    /// claude-215: a candidate is from `first`, earlier than its position, and before the limit;
+    /// a limit of 1 or less leaves a window with no candidate at all.
+    #[test]
+    fn a_candidate_is_earlier_and_before_the_cut() {
+        assert!(is_candidate(1, 5, 1, 12));
+        assert!(!is_candidate(0, 5, 1, 12), "before first");
+        assert!(!is_candidate(5, 5, 1, 12), "not earlier");
+        assert!(is_candidate(3, 9, 1, 4));
+        assert!(!is_candidate(4, 9, 1, 4), "at the cut: the reply's first token");
+        assert!(!is_candidate(7, 9, 1, 4), "in the reply");
+        assert!((0..12).all(|s| (0..12).all(|t| !is_candidate(s, t, 1, 1))));
+        assert_eq!(ReadScope::Copy.name(), "copy");
+        assert_eq!(ReadScope::All.name(), "all");
+    }
+
+    /// claude-215 (its GPU half): with a limit, every real pick is before it, and the rows whose
+    /// candidates all lie before it keep claude-144's nearest set; with the limit at the window's
+    /// length, the choice is unchanged.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn a_cut_keeps_every_pick_before_it() {
+        let device = Device::new_cuda(0).unwrap();
+        let (batch, time, width, cut) = (1, 20, 8, 7);
+        let values: Vec<f32> = (0..batch * time * width)
+            .map(|i| (((i * 2_654_435_761) % 10_007) as f32) / 997.0)
+            .collect();
+        let points = Tensor::from_vec(values, (batch * time, width), &device).unwrap();
+        let (open, open_real) = choose_sorted(&points, &points, batch, time, 4, 1, time).unwrap();
+        let (cut_picks, cut_real) = choose_sorted(&points, &points, batch, time, 4, 1, cut).unwrap();
+        let rows = |p: Tensor, r: Tensor| -> Vec<Vec<u32>> {
+            let (p, r) = (p.to_vec2::<u32>().unwrap(), r.to_vec2::<u8>().unwrap());
+            p.into_iter()
+                .zip(r)
+                .map(|(row, ok)| {
+                    let mut kept: Vec<u32> =
+                        row.into_iter().zip(ok).filter(|(_, o)| *o == 1).map(|(s, _)| s).collect();
+                    kept.sort_unstable();
+                    kept
+                })
+                .collect()
+        };
+        let (open, limited) = (rows(open, open_real), rows(cut_picks, cut_real));
+        let mut picked = 0;
+        for (t, (o, l)) in open.iter().zip(&limited).enumerate() {
+            assert!(l.iter().all(|&s| (s as usize) < cut), "row {t}: {l:?}");
+            picked += l.len();
+            // Up to the cut, every candidate is before it, so the two choices agree.
+            if t <= cut {
+                assert_eq!(o, l, "row {t}");
+            }
+        }
+        assert!(picked > 0, "the cut left no pick at all");
+        assert!(open.iter().any(|o| o.iter().any(|&s| s as usize >= cut)), "nothing to cut");
+    }
+
     #[test]
     fn packed_sign_codes_pack_one_bit_per_coordinate_in_order() {
         let mut coordinates = vec![-1.0f32; 70];
@@ -633,7 +767,7 @@ mod tests {
             .map(|i| (((i * 2_654_435_761) % 10_007) as f32) / 997.0)
             .collect();
         let points = Tensor::from_vec(values, (batch * time, width), &device).unwrap();
-        let (local, fast_real) = choose_sorted(&points, &points, batch, time, 4, 0).unwrap();
+        let (local, fast_real) = choose_sorted(&points, &points, batch, time, 4, 0, time).unwrap();
         // The sorted choice gives positions inside each window; claude-144's gives global rows.
         let starts: Vec<u32> = (0..batch * time)
             .map(|r| ((r / time) * time) as u32)
