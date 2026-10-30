@@ -222,6 +222,56 @@ impl Ur4Sess1HeaderView {
             layer_count,
         })
     }
+
+    /// Encode a canonical `UR4SESS1` binary session snapshot bound to
+    /// `artifact_sha256`, active `tokens`, and current step `logits` using pure
+    /// integer varint framing.
+    pub fn encode_canonical(
+        artifact_sha256: &str,
+        tokens: &[u32],
+        logits: &[i32],
+    ) -> Result<Vec<u8>> {
+        if artifact_sha256.is_empty() || artifact_sha256.len() > 256 || tokens.is_empty() {
+            return Err(Error::SchemaMismatch);
+        }
+        let mut out = Vec::new();
+        out.extend_from_slice(UR4SESS1_MAGIC);
+        put_str(&mut out, "uor-r4.stack-session/1")?;
+        out.extend_from_slice(&1u32.to_le_bytes());
+        put_str(&mut out, artifact_sha256)?;
+        let pos = tokens.len() as u64;
+        out.extend_from_slice(&pos.to_le_bytes());
+        out.extend_from_slice(&pos.to_le_bytes());
+        out.extend_from_slice(&pos.to_le_bytes());
+        out.extend_from_slice(&65_536i32.to_le_bytes());
+        put_v64(&mut out, logits.len() as u64);
+        for &l in logits {
+            out.extend_from_slice(&l.to_le_bytes());
+        }
+        put_v64(&mut out, tokens.len() as u64);
+        for &t in tokens {
+            out.extend_from_slice(&t.to_le_bytes());
+        }
+        out.push(0); // snap_trace: None
+        put_v64(&mut out, 0); // pointer_keys
+        put_v64(&mut out, 0); // pointer_lifts
+        put_v64(&mut out, 0); // mixture
+        put_v64(&mut out, 0); // layers
+        Ur4Sess1HeaderView::parse(&out)?;
+        Ok(out)
+    }
+}
+
+fn put_v64(out: &mut Vec<u8>, mut v: u64) {
+    loop {
+        let b = (v & 0x7f) as u8;
+        v >>= 7;
+        if v == 0 {
+            out.push(b);
+            return;
+        }
+        out.push(b | 0x80);
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -298,6 +348,27 @@ impl DurableObjectMemoryStore {
             .and_then(|s| s.ur4sess1_bytes.as_deref())
     }
 
+    /// Parse and verify the active `UR4SESS1` binary snapshot for `scope` against
+    /// `expected_artifact_sha256`, failing closed with [`Error::BindingMismatch`]
+    /// if the snapshot belongs to a different model artifact or has inconsistent
+    /// position state.
+    pub fn restore_verified_session(
+        &self,
+        scope: &IdentityScope,
+        expected_artifact_sha256: &str,
+    ) -> Result<Ur4Sess1HeaderView> {
+        let bytes = self
+            .ur4sess1_snapshot(scope)
+            .ok_or(Error::SchemaMismatch)?;
+        let header = Ur4Sess1HeaderView::parse(bytes)?;
+        if header.artifact_sha256 != expected_artifact_sha256
+            || header.position != header.tokens.len() as u64
+        {
+            return Err(Error::BindingMismatch);
+        }
+        Ok(header)
+    }
+
     /// Assert a fact (`FactAction::Assert`) for `(owner, relation)` from `turn_bytes[value_range]`.
     pub fn assert_fact(
         &mut self,
@@ -363,16 +434,26 @@ impl DurableObjectMemoryStore {
         }
         let ingested = ingest(store, tokenizer, turn_bytes)?;
         let mut occurrence_indices = Vec::new();
+        let mut cov_start = None;
+        let mut cov_end = None;
         for occ in ingested.bindings.occurrences() {
             let r = occ.byte_range();
             if r.end > value_range.start && r.start < value_range.end {
-                if r.start < value_range.start || r.end > value_range.end {
-                    return Err(Error::BindingMismatch);
+                if let Some(prev_end) = cov_end {
+                    if r.start != prev_end {
+                        return Err(Error::BindingMismatch);
+                    }
+                } else {
+                    cov_start = Some(r.start);
                 }
+                cov_end = Some(r.end);
                 occurrence_indices.push(occ.index());
             }
         }
-        if occurrence_indices.is_empty() {
+        let (Some(c_start), Some(c_end)) = (cov_start, cov_end) else {
+            return Err(Error::BindingMismatch);
+        };
+        if c_start > value_range.start || c_end < value_range.end {
             return Err(Error::BindingMismatch);
         }
         let provenance = FactProvenance {
@@ -624,6 +705,8 @@ fn verify_provenance<B: RecordBackend>(
     let mut assembled = Vec::new();
     let mut token_ids = Vec::new();
     reserve(&mut token_ids, prov.occurrence_indices.len())?;
+    let mut cov_start = None;
+    let mut cov_end = None;
     for &occ_idx in &prov.occurrence_indices {
         let idx = usize::try_from(occ_idx).map_err(|_| Error::InvalidRange)?;
         let occ = prov
@@ -631,15 +714,34 @@ fn verify_provenance<B: RecordBackend>(
             .occurrences()
             .get(idx)
             .ok_or(Error::InvalidRange)?;
+        let r = occ.byte_range();
+        if let Some(prev_end) = cov_end {
+            if r.start != prev_end {
+                return Err(Error::BindingMismatch);
+            }
+        } else {
+            cov_start = Some(r.start);
+        }
+        cov_end = Some(r.end);
         let tok_bytes = tokenizer.token_bytes(occ.token_id(), limits.max_returned_bytes)?;
-        let occ_verified = Store::range_from(backend, &prov.manifest, occ.byte_range(), limits)?;
+        let occ_verified = Store::range_from(backend, &prov.manifest, r, limits)?;
         if occ_verified.bytes() != tok_bytes.as_slice() {
             return Err(Error::BindingMismatch);
         }
         assembled.extend_from_slice(occ_verified.bytes());
         token_ids.push(occ.token_id());
     }
-    if assembled != span_verified.bytes() {
+    let (Some(c_start), Some(c_end)) = (cov_start, cov_end) else {
+        return Err(Error::BindingMismatch);
+    };
+    if c_start > prov.value_range.start || c_end < prov.value_range.end {
+        return Err(Error::BindingMismatch);
+    }
+    let rel_start =
+        usize::try_from(prov.value_range.start - c_start).map_err(|_| Error::InvalidRange)?;
+    let rel_end =
+        usize::try_from(prov.value_range.end - c_start).map_err(|_| Error::InvalidRange)?;
+    if assembled.get(rel_start..rel_end) != Some(span_verified.bytes()) {
         return Err(Error::BindingMismatch);
     }
     Ok((

@@ -298,13 +298,14 @@ fn byte_level_ascii_tokenizer() -> ByteBpeTokenizer {
         vocab.insert((b as char).to_string(), json!(next_id));
         next_id += 1;
     }
+    vocab.insert("ĠL".to_string(), json!(next_id));
     let spec = json!({
         "pre_tokenizer": {"type": "ByteLevel", "add_prefix_space": false},
         "added_tokens": [],
         "model": {
             "type": "BPE",
             "vocab": vocab,
-            "merges": []
+            "merges": ["Ġ L"]
         }
     });
     ByteBpeTokenizer::from_tokenizer_json_bytes(
@@ -685,4 +686,65 @@ fn panel_executes_through_durable_consumer_and_beats_no_memory_control() {
         restart_hits, 64,
         "UR4SESS1 restart/restore must score 64/64"
     );
+}
+
+#[test]
+fn on_model_m3_evaluator_passes_all_six_bars_and_rejects_cross_artifact_session() {
+    use uor_r4_object_store::m3_durable_memory::{
+        evaluate_m3_panel_with_scorer, ModelStepScore, SEED1_ARTIFACT_SHA256,
+    };
+
+    let tok = byte_level_ascii_tokenizer();
+    let vocab_len = tok.vocab_size() as u32;
+    let committed = std::fs::read(panel_path()).expect("read frozen panel bytes");
+
+    let eval = evaluate_m3_panel_with_scorer(
+        &committed,
+        &tok,
+        SEED1_ARTIFACT_SHA256,
+        256,
+        |prefix: &[u32]| {
+            let mut acc = 17u32;
+            for (idx, &t) in prefix.iter().enumerate() {
+                acc = acc
+                    .wrapping_mul(31)
+                    .wrapping_add(t)
+                    .wrapping_add(idx as u32);
+            }
+            let pred = acc % vocab_len;
+            let mut top8 = Vec::with_capacity(8);
+            for k in 0..8u32 {
+                top8.push((pred + k) % vocab_len);
+            }
+            Ok(ModelStepScore {
+                status: 0,
+                prediction: pred,
+                top8,
+            })
+        },
+    )
+    .expect("evaluate M3 panel through on-model evaluator");
+
+    assert_eq!(eval.total_items, 384);
+    assert_eq!(eval.provenance_hits, 64);
+    assert_eq!(eval.provenance_no_memory_hits, 0);
+    assert_eq!(eval.correction_current_hits, 64);
+    assert_eq!(eval.correction_prior_hits, 64);
+    assert_eq!(eval.correction_no_memory_hits, 0);
+    assert_eq!(eval.abstention_refusals, 128);
+    assert_eq!(eval.abstention_zero_fetch_queries, 128);
+    assert_eq!(eval.non_memory_prose_hits, 64);
+    assert_eq!(eval.reset_isolation_hits, 64);
+    assert_eq!(eval.restart_restore_hits, 64);
+    assert_eq!(eval.restart_restore_matched_tokens, 64 * 32);
+    assert_eq!(eval.restart_restore_total_tokens, 64 * 32);
+    assert_eq!(eval.r14.answered_fact_hit_rate_bps, 10_000);
+    assert_eq!(eval.r14.selective_abstention_gap_bps, 10_000);
+    assert!(eval.r14.r14_pass);
+    assert!(
+        eval.controls.cross_artifact_session_rejected,
+        "cross-artifact UR4SESS1 snapshot must be rejected with BindingMismatch"
+    );
+    assert!(eval.controls.all_controls_pass);
+    assert!(eval.bars_pass);
 }

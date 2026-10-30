@@ -40,3 +40,8 @@ required-features = ["stage0-lab"]
 name = "address-oracle"
 path = "src/bin/address-oracle.rs"
 required-features = ["stage0-lab"]
+
+[[bin]]
+name = "m3-durable-memory"
+path = "src/bin/m3-durable-memory.rs"
+required-features = ["stage0-lab"]
