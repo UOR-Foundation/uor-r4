@@ -70,9 +70,12 @@ The references' `v_ref` is 0.516 and their repeat rate 0.000. Each cell gives se
 ## What it shows
 
 - **Training the cut in removes 58–75% of the base's loops on new phrasings,** against 26–51% for claude-215's decode-only cut on its own panel, p-r. It does so with no measured cost in teacher-forced accuracy.
-- **But the trained model writes less like TRAIN's replies.** The loss is in the model, not only its decode: the uncut arm's matched share (0.412, 0.350 and 0.308) is no higher than the served arm's. Replies are short (11–15 tokens), and the fixed reading shows salad and loops inside a word ("…inginging…") where the base had loops of words.
-- **Held to the prompt, the reply learned to stop more than to answer.** Without its own earlier tokens to read, the trained model's reply leans on the prompt and the trunk alone. That is the role the turn memory's reply table, keyed by the reply's last id, was built to fill. It is a reading, not a tested cause.
-- **The decode-only arm is the surprise, and it decides nothing.** Decoded with the cut, the sealed (r-drop) loses a third to a half of its loops (45%, 37% and 32%), with its matched content unchanged (0.475 against 0.471, 0.503 against 0.508, 0.399 against 0.404).
+- **But the trained model writes less like TRAIN's replies.** Replies are short (11–15 tokens), and the fixed reading shows salad and loops inside a word ("…inginging…") where the base had loops of words.
+  - **One reading is that the loss is in the model, not only its decode.** The uncut arm's matched share (0.412, 0.350 and 0.308) is no higher than the served arm's.
+  - **The uncut arm also loops less** than the base at seeds 2 and 3 (30 against 60, 45 against 76, both beyond the band). So part of the loop drop is in the trained model too.
+  - It is one more arm at the same seeds, not a control for the cause.
+- **One reading: held to the prompt, the reply learned to stop more than to answer.** Without its own earlier tokens to read, the trained model's reply leans on the prompt and the trunk alone. That is the role the turn memory's reply table, keyed by the reply's last id, was built to fill. It is not a tested cause.
+- **The decode-only arm is the surprise, and it decides nothing.** Decoded with the cut, the sealed (r-drop) loses about a third to nearly a half of its loops (45%, 37% and 32%), with its matched content unchanged (0.475 against 0.471, 0.503 against 0.508, 0.399 against 0.404).
   - **Why it differs from claude-215:** claude-215's arm read "reduces, content lost". There, content was read on each arm's own completions, which claude-215 named as a possible selection effect; matched prompts remove it. This arm also holds an earlier reply in the prompt, as claude-215's did not.
   - **It is one panel.** A fresh panel would confirm it.
 

@@ -27,7 +27,10 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - **Seeds 1 and 3 keep it:**
     - seed 1: 0.412 against 0.471, a gap of 0.059 against a tolerance of 0.105;
     - seed 3: 0.337 against 0.404, a gap of 0.067 against a tolerance of 0.102.
-- **The content loss is in the trained model, not only in its decode.** (r-cut) decoded without its cut, the uncut arm, is no more TRAIN-like: 0.412, 0.350 and 0.308 on the same prompts. And 131–163 of the matched replies are the same with and without the cut.
+- **One reading: the content loss is in the trained model, not only in its decode.**
+  - (r-cut) decoded without its cut, the uncut arm, is no more TRAIN-like: 0.412, 0.350 and 0.308 on the same prompts. And 131–163 of the matched replies are the same with and without the cut.
+  - The uncut arm also loops less than the base: 30 against 60 at seed 2 and 45 against 76 at seed 3, beyond the band at both (it does not hold decision 4 at seed 3). So part of the loop drop is in the trained model too.
+  - The uncut arm is one more arm at the same seeds, not a control for the cause.
 - **The loops that end are often replaced by salad, or by a loop inside a word.** Examples from the [fixed reading](../../../../labs/one-model-end-to-end/cut-train-2026-10-30/fixed-reading-s1.md) of seed 1's first 20 replies:
   - "Here are twoedkoum."
   - "Got it, your lucky number is tttt,."
@@ -35,8 +38,8 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - Replies 4, 9 and 19 end in "…inginging…".
 - **The served arm starts loops the base did not have:** 17, 12 and 10 replies start looping, while 54, 55 and 67 stop.
 - **Replies end much sooner.** The served arm's mean length is 15.2, 11.2 and 12.6 tokens, against the base's 21.4, 22.2 and 24.0. Part of the drop in loops is the ending itself.
-- **No arm is "close" at any seed,** the base included. "Close" needs a repeated-4-gram rate within 0.10 of the references' 0.000.
-- **On DEV the loops fall by less.** The base loops in 46, 28 and 29 replies, the served arm in 16, 24 and 26. The fall is beyond the band at seed 1 only.
+- **No arm is "close" on p-t at any seed,** the base included. "Close" needs a repeated-4-gram rate within 0.10 of the references' 0.000.
+- **On DEV the loops fall by less.** The base loops in 46, 28 and 29 replies, the served arm in 16, 24 and 26. The fall is beyond the band at seed 1 only, where the served arm is also close (repeat rate 0.057).
 
 ## What worked (reported; decides nothing here)
 
@@ -60,6 +63,8 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - **`trained_points`** takes each forward's mask from `set_reply_mask`, and refuses a forward under a cut that has no mask, or one of the wrong length.
   - **`decode_reply`** limits every reply row through the read's row cut. It refuses a scoped prompt that ends inside a reply.
   - **`cut_census`** counts the rows the cut limits, and `run_long` logs it (`[cut] TRAIN rows`).
+  - **Which decodes carry the cut:** only `--reply-read`'s decodes (`samples-{split}-greedy-read-{scope}-memory.json`, the served and decode-only arms). A cut-trained run's own mid-run samples, and every plain greedy file, decode uncut, as the uncut arm does.
+  - **claude-215's uniform decode cut** (`set_read_cut`) stays, with its CUDA test; decode now uses the row cut.
 - **The read's row cut** (`crates/uor-r4-float-train/src/flock_read_hamming.rs`): `set_row_cut`, `row_cut_set` and per-row `row_limits` in `choose_sorted`.
 - **Training with the cut** (`--reply-read-train all|copy`, `crates/uor-r4-float-train/src/bin/train-in-space.rs`):
   - the run's `config.json` records it as `reply_read_train`;
@@ -96,6 +101,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 ## Checks run at the head
 
 - **The crate's host tests** (`cargo test --locked -p uor-r4-float-train --lib`): 169 pass.
+- **After the review's fixes** (the grade's rule list as a constant, pinned by a test), `--cut-grade 1` re-run on the sealed outputs gives the committed grade byte for byte.
 - **Four negative gates at the final rule** each fail with their line set aside, and pass when restored:
   - **the content floor** (`the_cut_grade_matches_content_and_follows_the_sheet`);
   - **the mask rule's per-window reset** (`every_reply_row_reads_only_before_its_reply` and `a_decode_window_is_limited_as_its_training_window`);

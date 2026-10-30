@@ -5191,6 +5191,8 @@ pub struct CutGrade {
     /// The registered decision, from (r-cut) decoded with its cut, as served ([`cut_outcome`]).
     pub outcome: &'static str,
     /// The same rule for (r-drop) decoded with the cut only (claude-215's arm). It decides nothing.
+    /// It has no teacher-forced rows of its own, so its rows' step is read as inside: it can never
+    /// read "costs accuracy".
     pub decode_only_outcome: &'static str,
 }
 
@@ -5210,6 +5212,10 @@ fn matched_kept(arm: &CellReading, base: &CellReading) -> bool {
 /// the decision compares (FIT round 2); the decode-only and uncut arms, which decide nothing, are
 /// counted on their prompts and cannot thin them.
 const MATCHED_BY: usize = 2;
+
+/// [`cut_grade`]'s rules, in [`rule_readings`]'s order: the base and the served arm first, so the
+/// first [`MATCHED_BY`] are the two the decision compares; then the decode-only and uncut arms.
+const CUT_RULES: [&str; 4] = ["greedy", "r-cut/greedy-read-all", "greedy-read-all", "r-cut/greedy"];
 
 /// The fewest matched prompts ([`matched_counts`]) the base must have at every seed for the
 /// matched content to decide anything (claude-216's FIT): below it, `underpowered (content)`.
@@ -5261,9 +5267,7 @@ pub fn cut_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<CutGrade>
     if panel == "dev" {
         return Err(invalid("--cut-grade's deciding panel cannot be DEV"));
     }
-    let rules: Vec<String> = ["greedy", "r-cut/greedy-read-all", "greedy-read-all", "r-cut/greedy"]
-        .map(String::from)
-        .to_vec();
+    let rules: Vec<String> = CUT_RULES.map(String::from).to_vec();
     let readings = rule_readings(data_root, runs, panel, &rules, true, MATCHED_BY)?;
     let mut counts = Vec::new();
     for seed in 1..=3u8 {
@@ -8264,10 +8268,15 @@ mod tests {
                 "underpowered (content)"
             );
         }
-        // At the floor the content decides: 38 of 64 (p = 0.59, tolerance 0.18) against 0.30.
+        // At the floor, at every seed, the content decides: 38 of 64 (p = 0.59, tolerance 0.18)
+        // against 0.30 is lost, and against 0.50 kept.
         let at_floor = CellReading { matched_n: Some(MATCHED_FLOOR), matched_verbatim: Some(38), ..g.clone() };
+        let floor_base = [&at_floor, &at_floor, &at_floor];
         let far = reading(true, true, false, 10, 60);
-        assert_eq!(cut_outcome(&[&far, &far, &far], &[&g, &at_floor, &g], Inside), "reduces, content lost");
+        assert_eq!(cut_outcome(&[&far, &far, &far], &floor_base, Inside), "reduces, content lost");
+        assert_eq!(cut_outcome(&[&kept, &kept, &kept], &floor_base, Inside), "improves");
+        // The matched set is the base's and the served arm's: the first two rules the grade reads.
+        assert_eq!(CUT_RULES[..MATCHED_BY], ["greedy", "r-cut/greedy-read-all"]);
     }
 
     /// claude-216: in training and scoring, a row whose input is a reply token reads only before
