@@ -2570,7 +2570,7 @@ fn decode_reply(
                         let ids_k = top.flatten_all()?.to_vec1::<u32>()?;
                         let scored = rank_order(ids_k.into_iter().zip(picked).collect());
                         if let DecodeRule::CycleStep { n, .. } = rule {
-                            // The cycle step takes the nearest that closes no repeated 4-gram.
+                            // The cycle step takes the nearest that closes no repeated n-gram.
                             let ranked: Vec<u32> = scored.iter().map(|&(id, _)| id).collect();
                             let (token, mark) = cycle_step_pick(&reply, &ranked, n)
                                 .ok_or_else(|| invalid("the cycle step had no candidate"))?;
@@ -5684,16 +5684,20 @@ pub fn cycle_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<CycleGr
         readings.iter().filter(|r| r.split == panel && r.rule == rule).cloned().collect()
     };
     // Each decision reads its arm on its own matched prompts and on the base's looping prompts.
-    let decide = |readings: &[CellReading], rule: &str| {
+    let decide = |readings: &[CellReading], rule: &str| -> Result<&'static str> {
         let (arm, base) = (of(readings, rule), of(readings, "greedy"));
         let on: Vec<&LoopContent> =
             loop_content_all.iter().filter(|c| c.split == panel && c.rule == rule).collect();
-        cycle_outcome(&arm.iter().collect::<Vec<_>>(), &base.iter().collect::<Vec<_>>(), &on)
+        // `cycle_outcome` pairs the three by position, so they must pair seed with seed.
+        if arm.iter().zip(&base).zip(&on).any(|((a, b), c)| a.seed != b.seed || a.seed != c.seed) {
+            return Err(invalid(format!("{panel} {rule}: its readings do not pair seed with seed")));
+        }
+        Ok(cycle_outcome(&arm.iter().collect::<Vec<_>>(), &base.iter().collect::<Vec<_>>(), &on))
     };
-    let outcome = decide(&readings, "cycle-step");
-    let confirm_outcome = decide(&confirm_readings, "greedy-read-all");
-    let cut_cycle_outcome = decide(&readings, "cycle-step-read-all");
-    let echo_outcome = decide(&readings, "echo-step");
+    let outcome = decide(&readings, "cycle-step")?;
+    let confirm_outcome = decide(&confirm_readings, "greedy-read-all")?;
+    let cut_cycle_outcome = decide(&readings, "cycle-step-read-all")?;
+    let echo_outcome = decide(&readings, "echo-step")?;
     Ok(CycleGrade {
         panel: panel.to_owned(),
         outcome,
@@ -8653,9 +8657,8 @@ mod tests {
         assert_eq!(prompt_cut(180, ids - SHEET_CONTEXT), 162);
     }
 
-    /// claude-216: the matched content counts only the prompts every rule completes, so one
-    /// rule's completions select nothing; an arm keeps the base's matched content within
-    /// `max(0.10, 3·√(p(1−p)/m))`; and the cut's outcome follows the sheet's order.
+    /// claude-217: the cycle step refuses exactly the token whose append closes an n-gram the
+    /// reply already holds, and marks each step.
     #[test]
     fn the_cycle_step_refuses_exactly_the_token_that_closes_a_repeated_4_gram() {
         // The reply holds 5 6 7 8, and ends 5 6 7: an 8 would close 5 6 7 8 again.
@@ -8839,6 +8842,20 @@ mod tests {
         assert_eq!(partial.kept(), Some(true), "partial salad would read kept here");
         assert!(!partial.powered());
         assert_eq!(cycle_outcome(&arms, &base, &[&partial, &good, &good]), "underpowered (content)");
+        // The review: each step of the order, at one seed. A base under the loop floor is
+        // underpowered; an arm that does not loop less, or does not hold, is no gain; a base under
+        // the matched floor is underpowered (content); and an arm that loses greedy's matched
+        // content reads lost, though the looping prompts keep the references'.
+        let thin_base = CellReading { loops: Some(READ_LOOP_FLOOR - 1), ..reading(false) };
+        assert_eq!(cycle_outcome(&arms, &[&arm, &thin_base, &arm], &[&good, &good, &good]), "underpowered");
+        let unheld = CellReading { holds: Some(false), ..reading(false) };
+        assert_eq!(cycle_outcome(&[&arm, &unheld, &arm], &base, &[&good, &good, &good]), "no gain");
+        let more = CellReading { fewer_loops: Some(false), ..reading(false) };
+        assert_eq!(cycle_outcome(&[&arm, &arm, &more], &base, &[&good, &good, &good]), "no gain");
+        let unmatched = CellReading { matched_n: Some(MATCHED_FLOOR - 1), ..reading(false) };
+        assert_eq!(cycle_outcome(&arms, &[&arm, &arm, &unmatched], &[&good, &good, &good]), "underpowered (content)");
+        let lost = CellReading { matched_verbatim: Some(40), ..reading(true) };
+        assert_eq!(cycle_outcome(&[closed[0], &lost, closed[0]], &base, &[&good, &good, &good]), "reduces, content lost");
     }
 
     /// claude-217: the sheet's "what ships" table, row by row.
@@ -8851,6 +8868,9 @@ mod tests {
         assert_eq!(ships("underpowered", "underpowered (content)", "cures"), "greedy");
     }
 
+    /// claude-216: the matched content counts only the prompts every rule completes, so one
+    /// rule's completions select nothing; an arm keeps the base's matched content within
+    /// `max(0.10, 3·√(p(1−p)/m))`; and the cut's outcome follows the sheet's order.
     #[test]
     fn the_cut_grade_matches_content_and_follows_the_sheet() {
         // Three rules over four prompts: prompt 1 is incomplete under rule 2, prompt 3 under 0.
