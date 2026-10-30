@@ -43,7 +43,17 @@ Kimi's ORDER, for its part, excludes Claude's active code, prep, lab, task and n
 
 ## Cancel probe (run first)
 
-To fill in.
+Run 30 Oct, 19:40Z. **Result: instrument, all clear; the unit goes ahead.**
+- **No open PR touches the in-scope code.** Of the open PRs, #3436 (Kimi) touches `crates/uor-r4-float-train/README.md` and the item file, both excluded above; #3323 (Antigravity) touches nothing in scope.
+- **The inputs are in the store** (`uor-store ls`): (r-drop)'s step-16,384 checkpoints at seeds 1–3 under `results/claude/one-model-end-to-end-2026-10-29/training-460fe46e/s{1,2,3}/r-drop-s{S}/models/step-016384/`, and the panels p-s and p-u.
+- **Seed 2111 and the name p-v are unused.** The panels drawn so far are p-dev, p-ret, p-train, p-f, p-f-train, p-c, p-r, p-s, p-t and p-u. Their seeds are 2001, 2026, 2051, 2052, 2061, 2071, 2081, 2091 and 2101.
+- **claude-218's τ levels are committed** in `docs/labs/one-model-end-to-end/memory-key-2026-10-30/grade-p-s-levels.json`:
+  - sign: 0.0078125, 0.01953125 and 0.0078125 at seeds 1–3;
+  - hsign: 0 at every seed;
+  - point: unbounded (null), at every seed.
+
+  So the keyed-point arm fires on every opening the exact key misses, and keyed-hsign only at distance 0.
+- **Not checked here:** whether the forced arm still lifts on p-v. That is the decision table's instrument row, read from the run.
 
 ## Files in scope
 
