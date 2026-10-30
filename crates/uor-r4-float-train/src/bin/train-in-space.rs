@@ -116,7 +116,7 @@ use candle_core::Device;
 use uor_r4_float_train::flock_read_opening::OpeningAnchor;
 use uor_r4_float_train::flock_read_register::RegisterSelect;
 use uor_r4_float_train::in_space_long::{
-    cell_grade, cells_ok, census, context_reach, controls, cut_grade, cycle_grade, decode_speed, fbs_arm_named, grade,
+    cell_grade, cells_ok, census, context_reach, controls, cut_grade, cycle_grade, decode_speed, key_grade, fbs_arm_named, grade,
     gradient_norms, inspect_run, opening_bound, overturn, read_grade, reply_bound, root_separation,
     run_long, run_recall, score_rows, scopes_ok, DecodeRule, LongConfig, PointObjective, ReadScope,
     TrainSplit, DEFAULT_REGISTER_PICKS, MEMORY_DROPOUT_MAX,
@@ -147,6 +147,8 @@ fn main() -> Result<()> {
     let mut cycle_on = false;
     let mut keys_on = false;
     let mut cycle_grade_on = false;
+    let mut key_grade_on = false;
+    let mut key_levels: Vec<(String, u8)> = Vec::new();
     let mut scopes: Vec<ReadScope> = Vec::new();
     let (mut controls_dir, mut runs, mut frozen_probe) = (None, None, None);
     let mut scored: Vec<(String, PathBuf)> = Vec::new();
@@ -223,6 +225,8 @@ fn main() -> Result<()> {
             "--cycle-step" => cycle_on = switch(&value)?,
             "--opening-keys" => keys_on = switch(&value)?,
             "--cycle-grade" => cycle_grade_on = switch(&value)?,
+            "--key-grade" => key_grade_on = switch(&value)?,
+            "--key-levels" => key_levels = key_levels_arg(&value)?,
             "--reply-read-train" => {
                 config.reply_read_train = Some(match value.as_str() {
                     "copy" => ReadScope::Copy,
@@ -474,10 +478,11 @@ fn main() -> Result<()> {
         read_grade_on,
         cut_grade_on,
         cycle_grade_on,
+        key_grade_on,
     ];
     if modes.iter().filter(|&&m| m).count() > 1 {
         return Err(FloatTrainError::Invalid(
-            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1, --grade 1, --cell-grade 1, --read-grade 1, --cut-grade 1 or --cycle-grade 1"
+            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1, --grade 1, --cell-grade 1, --read-grade 1, --cut-grade 1, --cycle-grade 1 or --key-grade 1"
                 .to_owned(),
         ));
     }
@@ -514,6 +519,7 @@ fn main() -> Result<()> {
             || cycle_on
             || keys_on
             || cycle_grade_on
+            || key_grade_on
             || config.reply_read_train.is_some()
             || !scopes.is_empty()
         {
@@ -562,6 +568,18 @@ fn main() -> Result<()> {
         let graded = cycle_grade(&data_root, &runs, panel)?;
         println!("{}", serde_json::to_string(&graded)?);
         return Ok(());
+    }
+    if key_grade_on {
+        let runs = runs
+            .ok_or_else(|| FloatTrainError::Invalid("--key-grade needs --runs DIR".to_owned()))?;
+        let graded = key_grade(&data_root, &runs, &extra_panels, &key_levels)?;
+        println!("{}", serde_json::to_string(&graded)?);
+        return Ok(());
+    }
+    if !key_levels.is_empty() {
+        return Err(FloatTrainError::Invalid(
+            "--key-levels applies to --key-grade only".to_owned(),
+        ));
     }
     // A run trains with the cut; scoring reads it back from the run's own config.
     if config.reply_read_train.is_some() && !(out.is_some() && score.is_none() && !controls_on) {
@@ -776,9 +794,34 @@ fn panel_arg(value: &str) -> Result<(String, PathBuf)> {
     }
 }
 
+/// `--key-levels sign=L,point=L` (claude-218): each trunk key's level, 1–10 (q10 to q100).
+fn key_levels_arg(value: &str) -> Result<Vec<(String, u8)>> {
+    value
+        .split(',')
+        .map(|part| match part.split_once('=') {
+            Some((key, level)) if ["sign", "point"].contains(&key) => match level.parse::<u8>() {
+                Ok(l) if (1..=10).contains(&l) => Ok((key.to_owned(), l)),
+                _ => Err(FloatTrainError::Invalid(format!("--key-levels: {part} wants a level 1–10"))),
+            },
+            _ => Err(FloatTrainError::Invalid("--key-levels takes sign=L,point=L".to_owned())),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn key_levels_name_each_trunk_key_once_with_a_level_from_1_to_10() {
+        assert_eq!(
+            key_levels_arg("sign=3,point=10").unwrap(),
+            [("sign".to_owned(), 3), ("point".to_owned(), 10)]
+        );
+        assert!(key_levels_arg("sign=0").is_err());
+        assert!(key_levels_arg("sign=11").is_err());
+        assert!(key_levels_arg("exact=3").is_err());
+    }
 
     #[test]
     fn a_panel_argument_is_a_name_and_a_directory() {
