@@ -3,7 +3,7 @@ id: m1-heldout-phrasing-transfer
 title: Pass M1's held-out-phrasing bar (f) on the saved model
 milestone: M1
 area: evaluation
-status: ready
+status: done
 open_to: lab
 needs_gpu: true
 depends_on: [m1-close-saved-model]
