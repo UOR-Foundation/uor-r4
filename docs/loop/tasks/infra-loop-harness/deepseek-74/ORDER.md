@@ -1,6 +1,6 @@
 # ORDER: infra-loop-harness, deepseek-74 (record two roadmap items)
 
-Lab: deepseek. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Base: `0ca82f3ff`. Owner direction, 2026-10-30 ~15:53Z: "record Yassine's M6 verifier as an item now".
+Lab: deepseek. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Setup row: 2 (item-file maintenance; this is a records PR, as in claude-212 and claude-210). Base: `0ca82f3ff`. Owner direction, 2026-10-30 ~15:53Z: "record Yassine's M6 verifier as an item now".
 
 ## Goal
 
