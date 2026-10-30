@@ -18,7 +18,7 @@ References #3440 (the recorded item).
 - New item docs/roadmap/items/m7-studio-live-model-sources.md (M7, area serving, status ready, open_to lab, needs_gpu false, depends_on the two done M7 Studio items, notebook docs/research/notebook/m4-serving.md), with why/missing/done-when/cancel-if/how-to-start/rules/sources.
 - docs/roadmap/issues.json (one line, m7-studio-live-model-sources -> 3440) and docs/roadmap/README.md are written only by roadmap sync --apply / roadmap render (never hand-edited).
 - docs/loop/tasks/infra-loop-harness/deepseek-75/{ORDER,REPORT}.md.
-- Size: 5 files (+157/-4 at this head): the item, the ORDER/REPORT, and the generated issues.json/README; code 0, tests 0.
+- Size: 5 files (+150/-4 at this head): the item, the ORDER/REPORT, and the generated issues.json/README; code 0, tests 0.
 
 ## Measurements
 
