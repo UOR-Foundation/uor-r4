@@ -20,10 +20,10 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 16 |
+| ready | 15 |
 | held | 10 |
 | decision | 1 |
-| done | 85 |
+| done | 86 |
 | total | 112 |
 
 ## Start here
@@ -42,7 +42,6 @@ These items are ready and open to anyone.
 
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
-| [Pass M1's held-out-phrasing bar (f) on the saved model](items/m1-heldout-phrasing-transfer.md) | ready | a lab | yes | [m1-close-saved-model](items/m1-close-saved-model.md) | [#3416](https://github.com/UOR-Foundation/uor-r4/issues/3416) |
 | [Register and run one float-credit training sheet (W4)](items/m1-w4-float-credit-sheet.md) | held | a lab | yes | [m1-w2-capacity-capture](items/m1-w2-capacity-capture.md), [m1-bvg-k-stage-t-training](items/m1-bvg-k-stage-t-training.md) | [#2846](https://github.com/UOR-Foundation/uor-r4/issues/2846) |
 | [Diagnose A8 reach erosion from retained checkpoints](items/m1-a8-erosion-diagnosis.md) | done | a lab | no | none | [#2829](https://github.com/UOR-Foundation/uor-r4/issues/2829) |
 | [Run A8 admission-anchor controller CUDA qualification and restoration](items/m1-a8-finite-cuda-qualification.md) | done | a lab | yes | [m1-a8-registration-and-runbook-staging](items/m1-a8-registration-and-runbook-staging.md) | [#2830](https://github.com/UOR-Foundation/uor-r4/issues/2830) |
@@ -58,6 +57,7 @@ These items are ready and open to anyone.
 | [Measure export gap and tokens per second on a trained model](items/m1-export-gap-and-toks.md) | done | a lab | yes | [m1-d11-exporter-discrete](items/m1-d11-exporter-discrete.md), [m1-bvg-k-stage-t-training](items/m1-bvg-k-stage-t-training.md), [m1-d11-artifact-scorer](items/m1-d11-artifact-scorer.md) | [#2839](https://github.com/UOR-Foundation/uor-r4/issues/2839) |
 | [Replace the full-vocabulary writer scan](items/m1-faster-writer.md) | done | a lab | yes | none | [#2840](https://github.com/UOR-Foundation/uor-r4/issues/2840) |
 | [Evaluate the gain on the fresh sealed panel](items/m1-fresh-panel-transfer.md) | done | a lab | yes | [m1-export-gap-and-toks](items/m1-export-gap-and-toks.md) | [#2841](https://github.com/UOR-Foundation/uor-r4/issues/2841) |
+| [Pass M1's held-out-phrasing bar (f) on the saved model](items/m1-heldout-phrasing-transfer.md) | done | a lab | yes | [m1-close-saved-model](items/m1-close-saved-model.md) | [#3416](https://github.com/UOR-Foundation/uor-r4/issues/3416) |
 | [Design a lawful normalization mechanism](items/m1-normalization-mechanism.md) | done | anyone | no | none | [#2842](https://github.com/UOR-Foundation/uor-r4/issues/2842) |
 | [Design a lawful position mechanism](items/m1-position-mechanism.md) | done | anyone | no | none | [#2843](https://github.com/UOR-Foundation/uor-r4/issues/2843) |
 | [Run the W2 read-code capacity capture](items/m1-w2-capacity-capture.md) | done | a lab | yes | none | [#2845](https://github.com/UOR-Foundation/uor-r4/issues/2845) |

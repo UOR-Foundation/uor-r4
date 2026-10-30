@@ -10,7 +10,7 @@ are rendered from them, never edited. A route or premise change needs a decision
 
 One native Rust autoregressive geometric language model with exact addressed memory, useful for
 conversation, memory, coding and reasoning, served integer-only (D11) on a consumer laptop.
-Pre-alpha: 0 of 8 milestones complete; no model holds a useful conversation yet. Milestones
+Pre-alpha: 1 of 8 milestones complete (M1, 30 Oct 2026: a saved D11 model passes bars (a)–(f); #2029's owner log, reversible); no model holds a useful conversation yet. Milestones
 M1–M8 are issues #2029–#2036; #2028 is the shared board.
 
 ## Premises
@@ -20,7 +20,7 @@ A premise row's Status is `open` until its probe has run; `closed` means the pro
 
 | Premise | Probe | Status | Date | Cancel if |
 |---|---|---|---|---|
-| Exact integer/geometric reads can carry a language model at all | The finite D11 stack suite is answered (3/3 at `127632bc3` and independently confirmed). Next evidence is the registered M1 closing-bar run (CHARTER §4 row 8): D11-export integer top-1 beats unigram (1,226/14,287) and T2 (6,300/14,287) on DEV, two seeds, tokens/s reported | held | 2026-10-23 | both seeds fail to beat the T2 table at full registered scale after the instrument class is ruled out |
+| Exact integer/geometric reads can carry a language model at all | The finite D11 stack suite is answered (3/3 at `127632bc3` and independently confirmed). **Answered 30 Oct:** antigravity-110's saved model passes M1's six bars at both seeds (DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228; the held-out-phrasing panel 7,850 / 7,872 against T2's 7,375; claude-211, #3419). Next evidence is the registered M1 closing-bar run (CHARTER §4 row 8): D11-export integer top-1 beats unigram (1,226/14,287) and T2 (6,300/14,287) on DEV, two seeds, tokens/s reported | closed | 2026-10-30 | both seeds fail to beat the T2 table at full registered scale after the instrument class is ruled out |
 | The 16-root E8 orbit with Cl(0,6) frames can carry sequence position | Finite controls answered 10/10 at `b03d08e85` (#2843 comment `6380719988`); this is not an order-effect or language result. The registered order test (H_pos vs matched endpoint control + shuffled null) remains PENDING (#2843) | closed | 2026-10-24 | the parameter-matched endpoint control ties prefix holonomy on the registered panel |
 | Scale-matched orbit-root snapping holds multi-stage residual blocks lawful | Finite controls answered 13/13 at `5844d911c` (#2842 comment `6381825466`); this is not a trunk or language result. The registered N_snap vs C_unscaled/C_raw trunk test remains PENDING (#2842) | closed | 2026-10-24 | the un-scaled or raw control matches N_snap on the registered panel |
 | Exact addressed memory can serve durable conversation facts | Exact arithmetic controls answered 4/4 at `9aaaf13bb` (#2833 comment `6382217138`); this is not durable-conversation capability. The five-arm object-store oracle passed at `590ace9e`: true address 80/80, no-memory 0/80, deterministic sieve 20/80, with true-vs-sieve gains of 20/0 current and 20/0 abstention and D11 parity exact on 14,287 rows; FIT and D67 are recorded on #2833 | closed | 2026-10-26 | the true-address oracle gains nothing over the sieve and baseline arms |
@@ -62,19 +62,19 @@ The M1 bar is CHARTER §4.8 (D39). Through the D11 export, on each of two seeds,
 beat both the unigram table (1,226/14,287) and the T2 successor table (6,300/14,287) on the same
 DEV panel, with tokens/s reported. M1 closes on the saved-model path (D79). Since D82 (29 Oct), M1
 also requires bar (f): the same comparison on a fresh held-out-phrasing panel, with bar (e)'s paired
-band (item `m1-heldout-phrasing-transfer`). antigravity-110 passed (a)–(e); (f) is open.
+band (item `m1-heldout-phrasing-transfer`). antigravity-110 passed (a)–(e), and (f) on 30 Oct (claude-211, #3419: 7,850 / 7,872 against T2's 7,375, band 81). **M1 is complete** (#2029's owner log, after a decision review that approved with conditions). The limit: 0.625 of the panel's replies are verbatim TRAIN replies, so M1's close is not a claim that the model carries chat.
 
 | Step | Item (issue) | Needs | Unblocks | Kind |
 |---|---|---|---|---|
-| 1 | `m1-w2-capacity-capture` (#2845) | nothing; FIT done | Stage T, `m1-address-key-full-vector` (#2834), `m1-w4-float-credit-sheet` (#2846; with step 4, and only if W2 gives H_law and W3 fails) | GPU run, pre-run review |
+| 1 | `m1-w2-capacity-capture` (#2845) | nothing; FIT done | Stage T, `m1-address-key-full-vector` (#2834), `m1-w4-float-credit-sheet` (#2846; with step 4, and only if W2 gives H_law and W3 fails; not needed for M1's close) | GPU run, pre-run review |
 | 2 | `m1-a8-finite-cuda-qualification` (#2830) | runbook staged (#3167) | `m1-a8-full-dose-rerun` (#2831) | GPU run, pre-run review |
 | 3 | `m1-bvg-k-block-apply-c2` (#2835) | C2 controls met | Stage T, with step 1 | the one-page Stage T sheet and its FIT |
 | 4 | `m1-bvg-k-stage-t-training` (#2836) | steps 1, 3 and 5, `m1-w2-code-utilization` (#3179), and `m1-address-key-full-vector` (#2834; claude-107's D68 card) | the M1 close; the trunk (M2) | GPU run, two seeds, about $12 |
 | 5 | `m1-a8-full-dose-rerun` (#2831) | step 2 | the M1 close | GPU run |
 | 6 | `m1-export-gap-and-toks` (#2839) | the exporter (done, #2838); its measured run needs a trained model from step 4 | `m1-fresh-panel-transfer` (#2841), the M1 close | export + tokens/s |
 | 7 | `m1-fresh-panel-transfer` (#2841) | step 6 | the M1 close | GPU scoring |
-| 8 | `m1-close-saved-model` (#2837) | steps 4–7 | M1 (#2029) | the §4.8 bar |
-| 9 | `m1-heldout-phrasing-transfer` (new, D82) | step 8's saved model; a fresh held-out-phrasing panel | M1 (#2029) | bar (f): a panel, its census, GPU scoring |
+| 8 | `m1-close-saved-model` (#2837) | steps 4–7 | M1 (#2029) | the §4.8 bar, **done** (antigravity-110) |
+| 9 | `m1-heldout-phrasing-transfer` (#3416, D82) | step 8's saved model; a fresh held-out-phrasing panel | M1 (#2029) | bar (f): a panel, its census, GPU scoring, **done** (claude-211, #3419) |
 
 **Next to run on the side lines.** These are not on the close path.
 - `m1-position-mechanism` (#2843): its next unit begins with a device-vs-host check of modes 1–3 and a stack-cost measurement (#2843 comment 6391161531).
