@@ -36,7 +36,7 @@ This unit serves the key, and asks whether the gain survives the decode:
 
 ## Base artifact: the model and the arms
 
-**The model.** (r-drop)'s step-16,384 checkpoints at seeds 1–3: claude-211's training, the ones claude-217 and claude-218 scored. Each has its turn memory, the opening first-8 table and the reply table. They are in the HF store under `results/claude/one-model-end-to-end-2026-10-29/training-460fe46e/s{S}/r-drop-s{S}/models/step-016384/`. The job checks each seed's 11 files against that seed's `SHA256SUMS`, as claude-218's job did.
+**The model.** (r-drop)'s step-16,384 checkpoints at seeds 1–3: claude-211's training, the ones claude-217 and claude-218 scored. Each has its turn memory, the opening first-8 table and the reply table. They are in the HF store under `results/claude/one-model-end-to-end-2026-10-29/training-460fe46e/s{S}/r-drop-s{S}/models/step-016384/`. The job checks each seed's 6 files (the run's `config.json` and the 5 under `step-016384/`) against that seed's `SHA256SUMS`, as claude-218's job did.
 
 **The code.** `train-in-space --score-rows CKPT --opening-keys 1 --keyed-decode sign=T,hsign=T,point=T`, at this unit's head (`crates/uor-r4-float-train/src/in_space_long.rs`). Every arm decodes 64 reply tokens with the nearest-cell objective, on the same prompts ([`sample_windows`]):
 
