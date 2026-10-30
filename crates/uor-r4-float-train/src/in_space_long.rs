@@ -4859,11 +4859,12 @@ pub struct ReadGrade {
 }
 
 /// The fewest of 256 panel replies greedy must loop in, at every seed, for the read's outcome
-/// to be measurable (claude-215's FIT): below it no arm can show fewer loops beyond the band.
+/// to be decided (claude-215's FIT): below it, a reduction is too poorly powered to read, so the
+/// outcome is `underpowered`. It is a power choice, not an impossibility: at 40, the band is 12.
 pub const READ_LOOP_FLOOR: usize = 40;
 
-/// Whether a scope's replies keep greedy's content: its `|v − v_ref|` is no wider than greedy's
-/// by more than the verdict's own tolerance (claude-215's FIT).
+/// Whether a scope's replies keep greedy's content: its `|v − v_ref|` is at most greedy's gap
+/// plus the verdict's noise tolerance `tol` (a 3σ band on a share; claude-215's FIT).
 fn content_kept(scope: &CellReading, greedy: &CellReading) -> bool {
     match (scope.gap(), greedy.gap(), scope.reading.tol) {
         (Some(s), Some(g), Some(t)) => s <= g + t,

@@ -2,7 +2,11 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md). Order: [claude-215](../../loop/tasks/one-model-end-to-end/claude-215/ORDER.md). Scope decision: claude-214 (#3407 6518346519, decision review PASS).
 
-TEST FITNESS: PENDING. Round 1 (`ba6099583`) was NOT FIT, on two blocking findings, both answered here and in `read_outcome`:
+TEST FITNESS: FIT, from a fresh non-author review (round 2) at `0263f2045`.
+- **Its notes are taken:** the floor is worded as a power choice; `content_kept` is stated as greedy's gap plus `tol`.
+- **The REPORT** names any arm whose mean reply length falls well below greedy's before claiming a cause.
+
+Round 1 (`ba6099583`) was NOT FIT, on two blocking findings, both answered here and in `read_outcome`:
 - **A quiet panel would read as a negative.** The sheet now has a pre-registered floor on greedy's p-r loop count: below it, the outcome is "underpowered".
 - **"Reduces" changed the decode without a content check.** It now needs the content kept, and otherwise reads "reduces, content lost", which unlocks no decode change.
 
@@ -100,8 +104,8 @@ Each reading is one arm's 256 replies on one split at one seed, against that spl
   - `|v − v_ref| ≤ tol`, where `v` is the verbatim TRAIN share and `tol = max(0.10, 3·√(v_ref(1−v_ref)/n_c))`;
   - a repeat rate at most the references' + 0.10.
 
-- **Content kept:** the arm's `|v − v_ref|` is no wider than greedy's on the same prompts by more than the arm's `tol` (`content_kept`).
-- **The power floor:** greedy loops in at least 40 of the 256 p-r replies, at every seed (`READ_LOOP_FLOOR`). Below that, no arm can show fewer loops beyond the band.
+- **Content kept:** the arm's `|v − v_ref|` is at most greedy's gap on the same prompts plus the noise tolerance `tol` (`content_kept`). `tol` is a 3σ band on a share, about the noise of a difference between two shares. When greedy's own gap is large, an arm may drift up to `tol` further and still count as kept.
+- **The power floor:** greedy loops in at least 40 of the 256 p-r replies, at every seed (`READ_LOOP_FLOOR`). Below that, a reduction is too poorly powered to read, so the outcome is underpowered. It is a power choice, not an impossibility: at 39 an arm with 26 or fewer would still clear the band.
 
 **p-r decides,** from the `all` arm at all three seeds (`read_outcome`). The rows are tried in this order:
 
