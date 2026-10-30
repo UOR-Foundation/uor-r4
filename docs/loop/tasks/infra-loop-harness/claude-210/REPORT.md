@@ -51,6 +51,7 @@ None.
 - **`cargo test -p uor-r4-harness --test loop_guard`:** 17 passed (3 new). `command_and_cross_lab_guards_refuse_violations` still refuses all of its commands. That includes `echo hacked > CHARTER.md` and `git checkout -- CHARTER.md`, whose fixture ORDER has no approval.
 - **The negative gate:** with `loopguard.rs` set aside (`git apply -R` of its diff), all three new tests FAIL; restored and rebuilt, all three pass.
 - **`cargo test -p uor-r4-harness --no-fail-fast`:** every target passed but the lib's `preprules::tests::the_real_sheets_pass_the_shape_rule` (676 passed, 1 failed), whose cause is above.
+- **At `7d62363be`:** `loop report --check` PASS, `loop pr-check --local` PASS, `loop gates --full` 11 GREEN. Its `fmt-harness` gate was RED until the change was run through `cargo fmt -p uor-r4-harness`.
 
 ## What it unlocks
 
