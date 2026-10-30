@@ -2021,7 +2021,9 @@ fn key_outcome(
         set.iter().find(|(k, _)| *k == key).map(|(_, r)| r.clone()).unwrap_or_default()
     };
     for key in TRUNK_KEYS {
-        let passes = all3(&of(missed, key), &|r| r.net() as f64 > r.band() && r.fired_hits >= r.base_fired_hits)
+        let passes = all3(&of(missed, key), &|r| {
+            powered(r.b, r.c) && r.net() as f64 > r.band() && r.fired_hits >= r.base_fired_hits
+        })
             && all3(&of(new, key), &|r| r.net() as f64 >= -r.band())
             && all3(&of(dev, key), &|r| r.net() as f64 >= -r.band());
         if passes {
@@ -2035,6 +2037,15 @@ fn key_outcome(
         return (4, "an abstention gate", None);
     }
     (5, "train the trunk's opening point to gather paraphrases, with a geometric hinge", None)
+}
+
+/// A deciding grade's given level for `key` must be p-s's own `chosen` one (the code review), so
+/// p-u is never graded at a level the rule did not pick.
+fn level_given(levels: &[(String, u8)], key: &str, chosen: u8) -> Result<()> {
+    match levels.iter().find(|(n, _)| n == key) {
+        Some(&(_, l)) if l == chosen => Ok(()),
+        _ => Err(invalid(format!("--key-levels: {key} is not at p-s's chosen level {chosen}"))),
+    }
 }
 
 /// A split's missed rows (the exact key does not fire), the new stratum among them (the
@@ -2158,10 +2169,8 @@ pub fn key_grade(
             net.push(by_level);
         }
         let level = choose_level(&net);
-        // The levels a deciding grade is given must be p-s's own choice (the code review), so p-u
-        // is never graded at a level the rule did not pick.
-        if deciding && levels.iter().find(|(n, _)| n == key).map(|&(_, l)| l) != Some(level) {
-            return Err(invalid(format!("--key-levels: {key} is not at p-s's chosen level {level}")));
+        if deciding {
+            level_given(levels, key, level)?;
         }
         for (s, picks) in ps_picks.iter().enumerate() {
             let missed_d: Vec<f32> = ps_missed.iter().map(|&i| picks.key(key).1[i]).collect();
@@ -8150,6 +8159,9 @@ mod tests {
         let edge = seeds(read(12, 4, 12, 4));
         assert_eq!(key_outcome(&lifted, &headroom, &set(&edge, &edge), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&even, &even)).0, 5);
         assert_ne!(key_outcome(&lifted, &[(3, 3); 3], &set(&even, &even), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&even, &even)).0, 2);
+        // FIT round 4: a gain on too few rows (5 − 0 > 2·√5, but b + c is 5) does not pass row 3.
+        let thin_gain = seeds(read(5, 0, 5, 0));
+        assert_eq!(key_outcome(&lifted, &headroom, &set(&thin_gain, &thin_gain), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&even, &even)).0, 5);
         let thin_loss = seeds(read(0, 9, 0, 0));
         assert_eq!(key_outcome(&lifted, &headroom, &set(&even, &even), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&thin_loss, &thin_loss)).0, 5);
         // The wiring: the strata, and row 2's arm. Openings 0–3: the exact key fires at 0 only;
@@ -8167,6 +8179,22 @@ mod tests {
         // is wrong at opening 2 only. With B ahead (3 hits), U is read against B.
         assert_eq!(oracle_reading(&opened, &[1, 0, 0, 4]), (1, 0));
         assert_eq!(oracle_reading(&opened, &[1, 2, 3, 0]), (0, 0));
+        // The grade's refusals (the code review, round 2): a given level other than p-s's choice,
+        // or none; and a split where the turn anchor does not keep the first-8 key at every
+        // opening (the anchor check's own case: 2 of 3).
+        let given = [("sign".to_owned(), 4), ("point".to_owned(), 7)];
+        assert!(level_given(&given, "sign", 4).is_ok());
+        assert!(level_given(&given, "sign", 3).is_err());
+        assert!(level_given(&given[..1], "point", 7).is_err());
+        let tokens = [0u32, 10, 11, 12, 20, 21, 1, 13, 14, 22, 15, 23];
+        let mask = [0u8, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1];
+        let empty = KeyTable::new(std::iter::empty());
+        let none = std::collections::HashSet::new();
+        let opened = grade_openings("p", &tokens, &mask, &empty, &empty, &none, &none, &std::collections::HashSet::new());
+        assert!(opened.is_err(), "an opening the anchor misses refuses the grade");
+        let agreeing = grade_openings("p", &tokens[..9], &mask[..9], &empty, &empty, &none, &none, &std::collections::HashSet::new());
+        // Its first turn alone, whose one opening the anchor keeps, grades.
+        assert_eq!(agreeing.unwrap().positions, [4]);
     }
 
     #[test]

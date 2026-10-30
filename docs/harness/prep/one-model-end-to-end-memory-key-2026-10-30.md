@@ -25,7 +25,10 @@ Both are now refusals in the grade. With the code review of the grade (CHANGES o
 - rows 2 and 4, like row 1, do not hold on a reading with b + c under 10;
 - the deciding-nothing readings below are computed.
 
-Round 4 is pending.
+Round 4: **TEST FITNESS: FIT** (a fresh reviewer, 30 Oct, at `a47c235e1`). Every repair holds in the code, the step-5 refusals are all present, and nothing from p-u can change a level or τ. Its non-blocking notes are taken in:
+- row 3's missed-row reading also needs b + c at least 10, so a key firing on a handful of rows cannot pass;
+- sign distances tie at τ;
+- row 2's exact arm includes its TRAIN fallback.
 
 ## The question
 
@@ -82,7 +85,7 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
     - 0.000 of its 1,466 prompts are in TRAIN exactly;
     - 0.000 are in TRAIN as value-masked templates at K = 1,024 (0.044 at K = 256);
     - 0.630 of its replies are verbatim TRAIN replies.
-- **p-s is the development panel.** It was opened by claude-217 and step 0. It chooses τ and decides nothing. It is stored at `inputs/claude/heldout-panel-p-s-2026-10-30/`.
+- **p-s is the development panel.** It was opened by claude-217 and step 0. It chooses τ and decides nothing. It is stored at `inputs/claude/heldout-panel-p-s-2026-10-30/`, with `tokens.u16` sha256 `62099a4800f6ae34a467762a42fcc79535836f222f64a1613d57aea9176610f1` and `response_mask.u8` `9053e117eab299b48623f00f293aa7dd5275cae3804a6ce55f01b1303f05f11a`, as its stored `SHA256SUMS` records them.
 - **DEV is reported, with backoff.**
 - **p-t, p-r, p-c, P-dev and p-f are not used.**
 
@@ -142,8 +145,8 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
 | Row | Holds when | Next unit |
 |---|---|---|
 | 1 | At every seed, the forced arm's lift over greedy (paired, memory on, 256 replies), b − c, is at most 2·√(b + c), both on replies equal to their reference and on replies whose value-masked template (K = 1,024) equals the reference's. If b + c < 10 on both measures at a seed, row 1 is underpowered there and does not hold | The opening is not enough. The rollout hinge, or a combined unit |
-| 2 | At every seed, U's hits minus the larger of the exact key's and B's hits, on all openings, is within 2·√(b + c) of zero, paired against that larger arm (a tie in hits takes the exact key), with b + c at least 10 | No prompt key has headroom. The hinge, and the later rows |
-| 3 | Some key passes all four, at every seed: Δ_K,s beyond its band; precision when it fires at least B's on those rows; Δ on the new stratum not below 0 by more than its own 2·√(b + c); and on DEV, the served model with K backing off where the exact key misses not lower than served by more than its paired band | Train and serve that key (the sign key if both pass), with an opening bar on another fresh panel |
+| 2 | At every seed, U's hits minus the larger of the exact key's hits (with its TRAIN fallback where it misses) and B's, on all openings, is within 2·√(b + c) of zero, paired against that larger arm (a tie in hits takes the exact key), with b + c at least 10 | No prompt key has headroom. The hinge, and the later rows |
+| 3 | Some key passes all four, at every seed: Δ_K,s beyond its band, with b + c at least 10; precision when it fires at least B's on those rows; Δ on the new stratum not below 0 by more than its own 2·√(b + c); and on DEV, the served model with K backing off where the exact key misses not lower than served by more than its paired band | Train and serve that key (the sign key if both pass), with an opening bar on another fresh panel |
 | 4 | No key passes row 3, and some key, read at q100 (firing on every missed row), loses beyond its band at some seed: Δ_K,s < −2·√(b + c), with b + c at least 10 | An abstention gate (a distance or a share threshold) |
 | 5 | None of the above | Train the trunk's opening point to gather paraphrases, with a geometric hinge |
 
@@ -151,6 +154,7 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
 - **Row 3's precision condition** follows from its net gain: on the rows where K fires, K's hits minus B's are b − c. Row 4's "precision below B's" likewise means a net loss at some seed. Both are stated for the reader.
 - **The ORDER's band** was `max(2·√(b + c), the spread across seeds)`. Here every condition must hold at every seed, each with its own paired band, which is the stricter reading of the same rule.
 - **U** is near 100% precise by construction, since its key holds the reply's first token. So row 2 mostly measures how often TRAIN holds the reply's template, which is the headroom a prompt key can reach.
+- **Ties at τ:** sign distances come in steps of 1/256, so a key fires on every row tied with τ. Its fire rate at a level can then pass the decile. Each reading records `fired`, and the REPORT states it.
 
 **Reported, deciding nothing.** In the grade (`readings`, strata `missed-decile`, `known`, `dev-decile`):
 - each key's fire rate, precision and Δ at every decile on p-u's missed rows;
