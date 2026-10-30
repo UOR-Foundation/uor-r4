@@ -2,7 +2,15 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md). Order: [claude-219](../../loop/tasks/one-model-end-to-end/claude-219/ORDER.md), written by hand on Casey's word: "screw kimi forge ahead as you were before with your plan for the single serving model". It follows claude-218 ([result](../../labs/one-model-end-to-end/memory-key-2026-10-30/README.md)).
 
-TEST FITNESS: PENDING (a fresh non-author reviewer reads this sheet and its sources before any pod).
+TEST FITNESS: PENDING (round 2; a fresh non-author reviewer reads this sheet and its sources before any pod).
+
+Round 1 was NOT FIT (a fresh non-author reviewer, 30 Oct, at `4ef780f87`), on one blocking point, repaired here:
+- **Row 1** fired only when the forced arm failed to lift at all three seeds. So one seed's fault would have fallen to row 4 and read as a mechanism negative. Row 1 now fires when the forced arm does not lift at any one seed (`keyed_outcome`), with a unit test for one flat seed and for one too-thin seed.
+
+Its non-blocking notes are taken in too:
+- the sample rule is stated exactly (Data split);
+- the probe now also decodes the keyed arms on DEV, so a fault in them costs the probe, not the main run (Steps 4);
+- a key never names BOS (the instrument checks).
 
 ## The question
 
@@ -63,7 +71,10 @@ DEV's files carry the same names, with DEV's greedy at `samples-memory.json`.
   - **No model has read it.** The grade checks both sha256s.
 - **DEV** carries the not-worse condition (d).
 - **p-u**, claude-218's deciding panel, already read, gives only the power check below.
-- **The prompts:** `--samples 512`. `sample_windows` takes every window whose first scored target opens a reply after at least 16 prompt tokens, and all of them when there are fewer than 512. Every arm reads the same prompts.
+- **The prompts:** `--samples 512`. `sample_windows` keeps the windows whose first scored target opens a reply after at least 16 prompt tokens, then takes every `max(1, eligible / 512)`-th of them from the front, up to 512.
+  - A conversation of p-v (125 tokens on average) or DEV (107) fits in one 192-token window, so each split has about 400 eligible windows: one per conversation, plus the few whose second window starts on a reply.
+  - So the stride is 1, and every eligible prompt is read: each conversation's first opening. The grade records the count.
+  - Every arm reads the same prompts. claude-218's 256 were the first 256 of the same list.
 
 ## Steps
 
@@ -79,14 +90,15 @@ DEV's files carry the same names, with DEV's greedy at `samples-memory.json`.
    - The crate's CUDA tests run, and claude-218's named GPU tests must pass.
    - The binary is built and kept with its sha256.
    - Every input is fetched and checked against its `SHA256SUMS` and this sheet's sha256s.
-4. **The reproduction and throughput probe:** seed 1, DEV only, at claude-218's flags, `--samples 256 --reply-tokens 64 --retain-rates 1 --flock-end 1 --opening-keys 1`.
-   - **Six files** must equal claude-218's registered ones (`run-4cc00df2/out/r-drop-s1/`, checked against that run's `SHA256SUMS`) byte for byte:
+4. **The reproduction and throughput probe:** seeds 1–3 side by side, DEV only, at claude-218's flags, `--samples 256 --reply-tokens 64 --retain-rates 1 --flock-end 1 --opening-keys 1`, plus the keyed arms at each seed's τ (`--keyed-decode`, as extra files).
+   - **Six files a seed** must equal claude-218's registered ones (`run-4cc00df2/out/r-drop-s{S}/`, checked against that run's `SHA256SUMS`) byte for byte. At seed 1 they are:
      - `rows-dev-memory.json` (`c4b26474…83e25`) and `rows-dev-no-memory.json` (`f7d09b98…6be67`);
      - `samples-memory.json` (`2ca7b299…f289f`) and `samples-no-memory.json` (`17501f36…6c991`);
      - `samples-dev-flock-end-memory.json` (`8dc0c897…3b530`) and `samples-dev-forced-memory.json` (`f19fb37f…1a408`).
-   - **A seventh,** `keys-dev.json`, must equal the follow-up pass's (`followup-d5b6f49f/out/r-drop-s1/`, `d9c1aba4…cc8ee`), which carries the Hadamard key.
+   - **A seventh,** `keys-dev.json`, must equal the follow-up pass's (`followup-d5b6f49f/out/r-drop-s{S}/`; at seed 1 `d9c1aba4…cc8ee`), which carries the Hadamard key. So 21 files in all.
    - **Why:** this shows that moving the keys pass and sharing the forced arm's decode changed no byte. Any difference is an instrument fault.
-   - **The probe's time** projects the main run. Past 3 hours for the three seeds sharing the GPU, the job stops.
+   - **The keyed arms run here first,** so a fault in them costs the probe, not the main run.
+   - **The probe's time** projects the main run, which decodes at most 4 times its replies (two splits of 7 arms at up to 512, against one split of 7 at 256). Past 3 hours, the job stops.
 5. **The main run:** seeds 1–3 side by side on the one GPU, each with:
 
    `--samples 512 --reply-tokens 64 --retain-rates 1 --flock-end 1 --opening-keys 1 --panel p-v=DIR --keyed-decode sign=τ_S,hsign=0,point=inf --seed S`
@@ -104,7 +116,7 @@ DEV's files carry the same names, with DEV's greedy at `samples-memory.json`.
 - **(d) DEV:** the same key's templates, b − c ≥ −band.
 
 **The decision table**, read in order on p-v (`keyed_outcome`):
-1. **F does not lift at all three seeds** (inside its band on exact and templates, with b + c ≥ 10): an instrument check against claude-218, whose forced arm lifted 49–56 of 256 on p-s and p-u. Repair, and rerun.
+1. **F does not lift at some seed:** its exact pair is not beyond its band with b + c ≥ 10 there. That is an instrument check against claude-218, whose forced arm lifted 49–59 of 256 at every seed on p-s and p-u. Repair, and rerun.
 2. **A key carries:** the first of sign, hsign and point, the cheapest first, ships. The next unit trains and serves that opening in the one model, and scores it end to end.
    - If point ships, that unit's decision review weighs its table: TRAIN's 212,968 opening points, 218 MB as f32, about 1 KB an opening, against the sign key's 32 bytes.
 3. **Every key thin** (template b + c under 10) at some seed: underpowered. The next unit draws a larger panel, or pools the seeds under a fresh sheet.
@@ -116,7 +128,7 @@ DEV's files carry the same names, with DEV's greedy at `samples-memory.json`.
   - no keyed token: G's reply;
   - the reference's first token: F's reply;
   - G's own first token: G's reply;
-  - any other token: the reply opens with it.
+  - any other token: the reply opens with it. A key's name is a TRAIN reply's first token, never BOS.
 
   So the observed exact pairs must equal the predicted ones;
 - F's replies open with their reference's first token, and every arm reads G's prompts;
@@ -138,7 +150,7 @@ DEV's files carry the same names, with DEV's greedy at `samples-memory.json`.
 
 **What that means here:**
 - **Templates track exact replies.** F's template pairs (52, 0), (49, 0) and (54, 0) sit beside its exact ones, (50, 0), (49, 0) and (52, 0). So (a) is powered for the point key at 256, if p-v is like p-u.
-- **More prompts.** With 512 prompts, or every eligible window if there are fewer, its b + c should roughly double.
+- **More prompts.** p-v's roughly 400 eligible prompts, about 85% of them missed, should give about 1.5 times p-u's b + c.
 - **sign and hsign** are expected to be thin at this panel's size. A row 3 or 4 for them is a power limit, and the REPORT says so.
 - **What the run adds** beyond the prediction: the replies after a wrong keyed opening (K-point gave about 165 of 256 on p-u), whose templates and loops only the decode can show; DEV under the keys; and the speed.
 

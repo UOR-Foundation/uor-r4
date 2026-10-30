@@ -2597,8 +2597,14 @@ fn keyed_outcome(
     forced: &[ForcedReading],
     readings: &[(&str, Vec<(KeyedReading, KeyedReading)>)],
 ) -> (u8, &'static str, Option<String>) {
-    if forced.len() == 3 && forced.iter().all(ForcedReading::no_lift) {
-        return (1, "an instrument check: claude-218's forced arm lifted 49–56 of 256 on p-s and p-u", None);
+    // A right first token lifted exact replies by 49–59 of 256 at every seed on p-s and p-u, so a
+    // seed whose forced arm does not lift is an instrument signal (FIT round 1), whatever the rest.
+    let lifts = |f: &ForcedReading| {
+        let (b, c) = f.exact;
+        b + c >= 10 && b as f64 - c as f64 > 2.0 * ((b + c) as f64).sqrt()
+    };
+    if forced.len() != 3 || !forced.iter().all(lifts) {
+        return (1, "an instrument check: claude-218's forced arm lifted 49–59 of 256 at every seed on p-s and p-u", None);
     }
     for (key, by_seed) in readings {
         if by_seed.len() == 3 && by_seed.iter().all(|(p, d)| p.carries(d)) {
@@ -10378,9 +10384,9 @@ mod tests {
         assert!(read(f32::INFINITY, Some(&with(2, sample(30, vec![8, 3, 1], vec![6, 2, 1], Some(8))))).is_err());
         assert!(read(f32::INFINITY, Some(&with(3, sample(40, vec![5, 1], vec![6, 1], Some(9))))).is_err());
         assert!(read(f32::INFINITY, Some(&keyed[..3])).is_err(), "an arm's prompts are greedy's");
-        // The table, in order: the forced arm without a lift at all three seeds is row 1; a key
-        // that carries at all three is row 2, the cheapest first; every key thin at some seed is
-        // row 3; else row 4.
+        // The table, in order: the forced arm without a lift at any seed is row 1; a key that
+        // carries at all three is row 2, the cheapest first; every key thin at some seed is row 3;
+        // else row 4.
         let at = |t: (usize, usize)| KeyedReading {
             split: "p-v".to_owned(),
             key: "k".to_owned(),
@@ -10399,7 +10405,12 @@ mod tests {
         let flat = ForcedReading { exact: (5, 5), template: (5, 5), ..lift.clone() };
         let carries = (12, 0);
         let table = |sign, hsign, point| vec![("sign", seeds(sign)), ("hsign", seeds(hsign)), ("point", seeds(point))];
-        assert_eq!(keyed_outcome(&[flat.clone(), flat.clone(), flat], &table(carries, carries, carries)).0, 1);
+        assert_eq!(keyed_outcome(&[flat.clone(), flat.clone(), flat.clone()], &table(carries, carries, carries)).0, 1);
+        // One seed's forced arm without a lift is row 1 even where every key carries (FIT round 1),
+        // and so is one too thin to show its lift.
+        assert_eq!(keyed_outcome(&[lift.clone(), flat, lift.clone()], &table(carries, carries, carries)).0, 1);
+        let thin = ForcedReading { exact: (6, 0), template: (6, 0), ..lift.clone() };
+        assert_eq!(keyed_outcome(&[lift.clone(), lift.clone(), thin], &table(carries, carries, carries)).0, 1);
         let forced3 = [lift.clone(), lift.clone(), lift];
         assert_eq!(keyed_outcome(&forced3, &table((3, 1), (3, 1), carries)).2.as_deref(), Some("point"));
         assert_eq!(keyed_outcome(&forced3, &table(carries, (3, 1), carries)).2.as_deref(), Some("sign"));
