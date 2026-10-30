@@ -8,7 +8,7 @@ The item's done-when reads:
 
 > Every PR in the build plan on [the loop page](../../loop/README.md#build-plan) is merged, each with its planted fault turning its gate red. The four labs (Kimi, Claude, DeepSeek, Antigravity) are onboarded, each with a committed onboarding receipt. Each lab has completed one loop task end to end: claim, probe, work, gates, report, review by another vendor, queue, and verify on fresh `main`.
 
-Setup row: 2 (a loop-guard repair the owner asked for, and the roadmap's issue map).
+Setup row: 2 (the roadmap's issue map; a loop-guard repair the owner asked for, withdrawn after review: see the REPORT).
 
 ## The owner's words (verbatim)
 
