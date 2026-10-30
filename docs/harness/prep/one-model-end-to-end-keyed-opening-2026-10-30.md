@@ -99,7 +99,8 @@ DEV's files carry the same names, with DEV's greedy at `samples-memory.json`.
      - `rows-dev-memory.json` (`c4b26474…83e25`) and `rows-dev-no-memory.json` (`f7d09b98…6be67`);
      - `samples-memory.json` (`2ca7b299…f289f`) and `samples-no-memory.json` (`17501f36…6c991`);
      - `samples-dev-flock-end-memory.json` (`8dc0c897…3b530`) and `samples-dev-forced-memory.json` (`f19fb37f…1a408`).
-   - **A seventh,** `keys-dev.json`, must equal the follow-up pass's (`followup-d5b6f49f/out/r-drop-s{S}/`; at seed 1 `d9c1aba4…cc8ee`), which carries the Hadamard key. So 21 files in all.
+   - **A seventh,** `keys-dev.json`, must equal the follow-up pass's (`followup-d5b6f49f/out/r-drop-s{S}/`; at seed 1 `d9c1aba4…cc8ee`), which carries the Hadamard key, without its three wall-clock fields (`point_ms`, `sign_ms`, `hsign_ms`). So 21 files in all.
+   - **Amendment, 30 Oct, 20:45Z, before any result was read: an instrument repair.** The job first compared the keys files with their timings, which no two runs share, and stopped at 18 of 21. The three keys files equal claude-218's at every seed without those fields, checked on the laptop with `jq` and with the job's `sed`. A continuation job (`job2.sh`) compares them so and runs the main run from the same probe, binary and inputs. The main run's own keys check is the same.
    - **Why:** this shows that moving the keys pass and sharing the forced arm's decode changed no byte. Any difference is an instrument fault.
    - **The keyed arms run here first,** so a fault in them costs the probe, not the main run.
    - **The probe's time** projects the main run, which decodes at most 4 times its replies (two splits of 7 arms at up to 512, against one split of 7 at 256). Past 3 hours, the job stops.
