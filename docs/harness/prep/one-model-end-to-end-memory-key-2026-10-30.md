@@ -125,7 +125,7 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
      - The panels' `tokens.u16` and `response_mask.u8`, at the sha256s above.
    - **A failed equality check** (memory-on against memory-off on the missed rows) stops the grade as an instrument fault, and nothing is graded.
    - **If p-s's forced arm shows b + c < 10** on both of row 1's measures at a seed, row 1 cannot hold, and the grade goes ahead.
-   - **Nothing from p-u is read before then.** The run's own printed summary gives no key hits: the keys files leave those fields empty.
+   - **Nothing from p-u is read before then.** The run's own printed summary gives no key hits: its entries for the keys files leave the hit fields empty. The hits are only in the keys files themselves, which the grade alone reads.
 
 ## Bar
 
