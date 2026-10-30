@@ -2750,24 +2750,100 @@ pub fn keyed_grade(
 
 /// The panels the served grade reads (claude-220's sheet), with their token and mask sha256s:
 /// p-v, claude-219's deciding panel, where the served key must give claude-219's keyed-point
-/// replies, and p-w, the fresh panel (seed 2121) that decides.
+/// replies, and p-w, the fresh panel (seed 2121, 1,200 conversations) that decides.
 const SERVED_PANELS: [(&str, &str, &str); 2] = [
     KEYED_PANELS[1],
     (
         "p-w",
-        "1292e2460c8b7b777ea1f536972537436e5c2af168c6a40c54d640c654a8050f",
-        "32a29da0513f3df9404552a2fe313a763426c818fea316fed0edc630dce360b6",
+        "038b0085e6888d988d4b0b6ceb7846015f21f1c40f26ec3286ddcc049c17d217",
+        "797fc23474231595ae42b9cfbf7930ae2021b13d23d8b8b3d4fb3c7dda06ec16",
     ),
 ];
 
+/// The parity count of a served arm (claude-220's sheet, FIT round 1): of the replies the served
+/// key opened, how many it opened with the run's keys-file name for the same opening; and, where
+/// they agree, the largest gap between the served search's least distance and the keys file's,
+/// 0 when the decode's point and the batched forward's are equal.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ServedParity {
+    pub split: String,
+    pub seed: u8,
+    pub served: usize,
+    pub agree: usize,
+    pub max_drift: f32,
+}
+
+impl ServedParity {
+    /// The sheet's rule: parity holds when at most 1% of the served openings disagree.
+    fn holds(&self) -> bool {
+        (self.served - self.agree) * 100 <= self.served
+    }
+}
+
+/// [`ServedParity`] for `served` at `openings`, and `picks` with the point key's names and
+/// distances replaced at each served opening by the served key's own, so that [`keyed_reading`]
+/// reads the served arm by its own tokens (the sheet's rule (a)).
+fn served_parity(
+    split: &str,
+    seed: u8,
+    openings: &GradeOpenings,
+    picks: &SeedPicks,
+    served: &[IdSample],
+) -> Result<(ServedParity, SeedPicks)> {
+    let at: std::collections::HashMap<usize, usize> =
+        openings.positions.iter().enumerate().map(|(i, &p)| (p, i)).collect();
+    let mut keys = picks.keys.clone();
+    let mut parity = ServedParity { split: split.to_owned(), seed, served: 0, agree: 0, max_drift: 0.0 };
+    for s in served {
+        let Some(token) = s.keyed else { continue };
+        let i = *at.get(&s.position).ok_or_else(|| {
+            invalid(format!("{split} s{seed}: a served opening at {} is not the split's (an instrument fault)", s.position))
+        })?;
+        let distance = s
+            .served_distance
+            .ok_or_else(|| invalid(format!("{split} s{seed}: a served token at {} has no distance", s.position)))?;
+        parity.served += 1;
+        if keys.point_target[i] == token {
+            parity.agree += 1;
+            parity.max_drift = parity.max_drift.max((distance - keys.point_distance[i]).abs());
+        }
+        keys.point_target[i] = token;
+        keys.point_distance[i] = distance;
+    }
+    Ok((parity, SeedPicks { keys, base: picks.base.clone(), served: picks.served.clone() }))
+}
+
+/// The served sheet's row (claude-220): 1 where any split's parity fails ([`ServedParity::holds`]),
+/// else [`keyed_outcome`]'s row for the served arm's `(p-w, DEV)` readings at seeds 1–3, except
+/// that row 4 is never read from a seed below the bar alone: with the seeds pooled beyond its band
+/// on p-w's templates, the reading is row 3 (FIT round 1).
+fn served_outcome(
+    forced: &[ForcedReading],
+    by_seed: Vec<(KeyedReading, KeyedReading)>,
+    parity: &[ServedParity],
+) -> u8 {
+    let (b, c) = by_seed.iter().fold((0, 0), |(b, c), (p, _)| {
+        let (pb, pc) = p.template.unwrap_or((0, 0));
+        (b + pb, c + pc)
+    });
+    let pooled_gain = b as f64 - c as f64 > 2.0 * ((b + c) as f64).sqrt();
+    match keyed_outcome(forced, &[("point", by_seed)]).0 {
+        _ if !parity.iter().all(ServedParity::holds) => 1,
+        4 if pooled_gain => 3,
+        row => row,
+    }
+}
+
 /// The served grade (claude-220), on the laptop: on p-w (deciding), p-v and DEV at seeds 1–3,
-/// the forced arm against greedy on p-w; the served arm against greedy, read by [`keyed_reading`]
-/// as the point key at +∞, which refuses any served token that is not the run's keys-file name
-/// (the parity instrument) and any reply its opening does not fix; and the protocol's
-/// free-generation measures ([`generation`]) for greedy and the served arm. With the sheet's
-/// decision, read by [`keyed_outcome`]'s rows on p-w.
+/// the forced arm against greedy on p-w; the served key's parity with the run's keys file
+/// ([`served_parity`]); the served arm against greedy, read by [`keyed_reading`] by its own
+/// tokens, which refuses any reply its opening does not fix; and the protocol's free-generation
+/// measures ([`generation`]) for greedy and the served arm. With the sheet's decision: parity or
+/// the forced arm failing is row 1, then [`keyed_outcome`]'s rows on p-w, with row 4 only where
+/// the seeds pooled show no gain beyond its band (else row 3).
 #[derive(Clone, Debug, Serialize)]
 pub struct ServedGrade {
+    pub parity: Vec<ServedParity>,
     pub forced: Vec<ForcedReading>,
     pub readings: Vec<KeyedReading>,
     /// `(split, seed, arm, measures)`, the arm `greedy` or `served`.
@@ -2840,7 +2916,14 @@ pub fn served_grade(data_root: &Path, runs: &Path, panels: &[(String, PathBuf)])
         };
         read_scored(&runs.join(format!("r-drop-s{seed}")).join(file))
     };
-    let mut grade = ServedGrade { forced: Vec::new(), readings: Vec::new(), generation: Vec::new(), row: None, next: None };
+    let mut grade = ServedGrade {
+        parity: Vec::new(),
+        forced: Vec::new(),
+        readings: Vec::new(),
+        generation: Vec::new(),
+        row: None,
+        next: None,
+    };
     let mut by_seed = Vec::new();
     for seed in 1..=3u8 {
         let mut pw_dev: (Option<KeyedReading>, Option<KeyedReading>) = (None, None);
@@ -2851,10 +2934,12 @@ pub fn served_grade(data_root: &Path, runs: &Path, panels: &[(String, PathBuf)])
             if split == "p-w" {
                 grade.forced.push(forced_reading(split, seed, &greedy, &forced, eos, &keep, &digits)?);
             }
+            let (parity, own) = served_parity(split, seed, openings, &picks, &served)?;
+            grade.parity.push(parity);
             let reading = keyed_reading(
                 (split, "point", seed, f32::INFINITY),
                 openings,
-                &picks,
+                &own,
                 &greedy,
                 &forced,
                 Some(&served),
@@ -2877,13 +2962,13 @@ pub fn served_grade(data_root: &Path, runs: &Path, panels: &[(String, PathBuf)])
             by_seed.push((p, d));
         }
     }
-    let (row, _, _) = keyed_outcome(&grade.forced, &[("point", by_seed)]);
+    let row = served_outcome(&grade.forced, by_seed, &grade.parity);
     grade.row = Some(row);
     grade.next = Some(
         match row {
-            1 => "an instrument check: the forced arm lifted at every seed on p-s, p-u and p-v",
+            1 => "an instrument check: the forced arm did not lift on p-w at some seed, or the served key's parity with the keys file failed",
             2 => "the one float model serves the point key; next, its integer export under its own item, then the integer model end to end",
-            3 => "underpowered: a larger panel, or the seeds pooled under a fresh sheet",
+            3 => "underpowered at some seed: a larger panel, or the seeds pooled under a fresh sheet",
             _ => "the served key does not carry on a second fresh panel; next, train the trunk's opening point to gather paraphrases",
         }
         .to_owned(),
@@ -3920,8 +4005,8 @@ struct DecodedReply {
     /// Under [`DecodeRule::CycleStep`], each step's mark ([`cycle_step_pick`]), a final step
     /// that picked BOS included; empty under any other rule.
     stepped: Vec<u8>,
-    /// The served point key's first token ([`served_opening`], claude-220), where it gave one.
-    served: Option<u32>,
+    /// The served point key's first token and its least L1 distance ([`served_opening`], claude-220), where it gave one.
+    served: Option<(u32, f32)>,
 }
 
 /// The served point key's table (claude-220): TRAIN's opening points under the trunk, on the
@@ -3957,7 +4042,7 @@ fn take_served_searches() -> (u64, u64) {
 /// is the commonest target among the served table's L1-nearest TRAIN openings, ties to the
 /// smaller id, as [`l1_named`] names them. None where no key is served, the memory is off, or
 /// the exact key fires. A key naming BOS is an instrument fault.
-fn served_opening(window: &[u32], point: &Tensor) -> Result<Option<u32>> {
+fn served_opening(window: &[u32], point: &Tensor) -> Result<Option<(u32, f32)>> {
     let Some(key) = SERVED_KEY.with(|k| k.borrow().clone()) else {
         return Ok(None);
     };
@@ -3975,11 +4060,11 @@ fn served_opening(window: &[u32], point: &Tensor) -> Result<Option<u32>> {
         let (n, us) = c.get();
         c.set((n + 1, us + micros));
     });
-    let token = named.first().map(|n| n.target).ok_or_else(|| invalid("the served key named nothing"))?;
-    if token == hs::SHEET_BOS_ID {
+    let first = named.first().ok_or_else(|| invalid("the served key named nothing"))?;
+    if first.target == hs::SHEET_BOS_ID {
         return Err(invalid("the served key names BOS (an instrument fault)"));
     }
-    Ok(Some(token))
+    Ok(Some((first.target, first.distance)))
 }
 
 /// The reply's first token for the next [`decode_reply`] calls on this thread, or none: the
@@ -4107,7 +4192,7 @@ fn decode_reply(
                 let scores = nearest_scores(&point, &table)?;
                 match rule {
                     DecodeRule::Greedy if reply.is_empty() && served.is_some() => {
-                        served.ok_or_else(|| invalid("the served key gave no token"))?
+                        served.map(|(token, _)| token).ok_or_else(|| invalid("the served key gave no token"))?
                     }
                     DecodeRule::Greedy => *scores
                         .argmax(1)?
@@ -4654,7 +4739,7 @@ impl ScoredRows {
 }
 
 /// One greedy reply ([`score_rows`]): ids, for the grader, and text, to read.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct IdSample {
     /// The corpus position of the reply's first target.
     pub position: usize,
@@ -4690,6 +4775,11 @@ pub struct IdSample {
     /// ([`keyed_opening`]). None, and not written, where it did not and under every other arm.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keyed: Option<u32>,
+    /// Under the served arm (claude-220), the served key's least L1 distance where it gave the
+    /// first token, beside the keys file's for the same opening (the parity count). None, and
+    /// not written, elsewhere.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub served_distance: Option<f32>,
 }
 
 /// One file [`score_rows`] wrote, with its nearest and writer hits when it holds rows.
@@ -5057,6 +5147,7 @@ pub fn score_rows(
                         admitted,
                         stepped,
                         keyed: None,
+                        served_distance: None,
                     });
                 }
                 let file = match (split.name.as_str(), rule) {
@@ -5126,7 +5217,11 @@ pub fn score_rows(
                     set_forced_opening(None);
                     set_served_key(None);
                     let decoded = decoded?;
-                    let given = if serve { decoded.served } else { opening.filter(|_| record) };
+                    let (given, distance) = match (serve, decoded.served) {
+                        (true, Some((token, distance))) => (Some(token), Some(distance)),
+                        (true, None) => (None, None),
+                        (false, _) => (opening.filter(|_| record), None),
+                    };
                     let reply = decoded.tokens;
                     let (reply_keys, reply_named) = reply_key_hits(prompt, cut_at_eos(&reply, eos), named);
                     let (reference_keys, reference_named) =
@@ -5145,6 +5240,7 @@ pub fn score_rows(
                         admitted: Vec::new(),
                         stepped: Vec::new(),
                         keyed: given,
+                        served_distance: distance,
                     });
                 }
                 // A given token had no forward, so the speed counts only the decoded ones.
@@ -8943,6 +9039,7 @@ mod tests {
             admitted: Vec::new(),
             stepped: Vec::new(),
             keyed: None,
+            served_distance: None,
         };
         let greedy = [sample(0, vec![7, 7, 7], vec![5, 6, 1]), sample(1, vec![5, 9, 1], vec![5, 8, 1])];
         let forced = [sample(0, vec![5, 6, 1], vec![5, 6, 1]), sample(1, vec![5, 8, 1], vec![5, 8, 1])];
@@ -10464,9 +10561,10 @@ mod tests {
         set_served_key(Some(ServedKey { points, targets: std::sync::Arc::new(vec![77, 88]) }));
         take_served_searches();
         let served_b = decode(&b, 12);
-        assert_eq!((served_b.tokens[0], served_b.served), (77, Some(77)), "the missed opening takes the nearest's target");
+        assert_eq!((served_b.tokens[0], served_b.served.map(|s| s.0)), (77, Some(77)), "the missed opening takes the nearest's target");
+        assert_eq!(served_b.served.map(|s| s.1), Some(0.0), "the decode's own point is the table's row, bit for bit");
         let served_a = decode(&a, 12);
-        assert_eq!((served_a.tokens.as_slice(), served_a.served), (greedy_a.as_slice(), None), "the exact key fires: greedy");
+        assert_eq!((served_a.tokens.as_slice(), served_a.served.is_none()), (greedy_a.as_slice(), true), "the exact key fires: greedy");
         assert_eq!(take_served_searches().0, 1, "only the missed opening is searched");
         set_served_key(None);
         set_forced_opening(Some(77));
@@ -10690,6 +10788,92 @@ mod tests {
         fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// claude-220 (FIT round 1): the parity count compares each served token with the keys
+    /// file's name and measures the distance drift where they agree; the served arm is read by its
+    /// own tokens; parity failing is row 1; and row 4 turns to row 3 when the seeds pooled show
+    /// a gain beyond their band.
+    #[test]
+    fn the_served_parity_counts_disagreements_and_the_pooled_seeds_guard_row_4() {
+        let n4 = |v: [u32; 4]| v.to_vec();
+        let keys = OpeningKeys {
+            split: "p".to_owned(),
+            train_openings: 4,
+            table_bytes: 0,
+            positions: vec![10, 20, 30, 40],
+            targets: n4([3, 7, 6, 6]),
+            point_target: n4([5, 7, 8, 9]),
+            point_distance: vec![0.0, 0.25, 0.5, 0.75],
+            point_ties: n4([1; 4]),
+            sign_target: n4([5; 4]),
+            sign_distance: vec![1.0; 4],
+            sign_ties: n4([1; 4]),
+            point_ms: 0,
+            sign_ms: 0,
+            hsign_target: n4([5; 4]),
+            hsign_distance: vec![1.0; 4],
+            hsign_ties: n4([1; 4]),
+            hsign_ms: 0,
+        };
+        let openings = GradeOpenings {
+            name: "p".to_owned(),
+            positions: vec![10, 20, 30, 40],
+            targets: n4([3, 7, 6, 6]),
+            exact: vec![(3, true), (0, false), (0, false), (0, false)],
+            oracle: vec![0; 4],
+            known: vec![false; 4],
+        };
+        let picks = SeedPicks { keys, base: n4([3, 4, 8, 5]), served: n4([3, 4, 8, 5]) };
+        let served = |position: usize, keyed: Option<u32>, distance: Option<f32>| IdSample {
+            position,
+            prompt: vec![2],
+            reply: vec![1],
+            reference: vec![1],
+            reply_text: String::new(),
+            reference_text: String::new(),
+            reply_keys: 0,
+            reply_named: 0,
+            reference_keys: 0,
+            reference_named: 0,
+            admitted: Vec::new(),
+            stepped: Vec::new(),
+            keyed,
+            served_distance: distance,
+        };
+        // 10 fires (no served token); 20 and 30 agree with the keys file (drift 0 and 0.125); 40
+        // disagrees (9 against 2).
+        let arm = [served(10, None, None), served(20, Some(7), Some(0.25)), served(30, Some(8), Some(0.625)), served(40, Some(2), Some(0.7))];
+        let (parity, own) = served_parity("p", 1, &openings, &picks, &arm).unwrap();
+        assert_eq!((parity.served, parity.agree, parity.max_drift), (3, 2, 0.125));
+        assert!(!parity.holds(), "1 of 3 disagreeing is past 1%");
+        assert_eq!((own.keys.point_target[3], own.keys.point_distance[3]), (2, 0.7), "read by its own token");
+        assert!(served_parity("p", 1, &openings, &picks, &[served(40, Some(2), None)]).is_err(), "a served token needs its distance");
+        assert!(served_parity("p", 1, &openings, &picks, &[served(50, Some(2), Some(0.1))]).is_err(), "an opening the split lacks");
+        // The rows.
+        let at = |t: (usize, usize)| KeyedReading {
+            split: "p-w".to_owned(),
+            key: "point".to_owned(),
+            seed: 1,
+            tau: f32::INFINITY,
+            replies: 1200,
+            keyed: 0,
+            right: 0,
+            predicted_exact: (0, 0),
+            exact: Some((0, 0)),
+            template: Some(t),
+            loops: Some((0, 0)),
+        };
+        let lift = ForcedReading { split: "p-w".to_owned(), seed: 1, replies: 1200, exact: (50, 0), template: (50, 0) };
+        let forced = [lift.clone(), lift.clone(), lift];
+        let seeds = |t: [(usize, usize); 3]| t.iter().map(|&t| (at(t), at((0, 0)))).collect::<Vec<_>>();
+        let held = |served: usize, agree: usize| ServedParity { split: "p-w".to_owned(), seed: 1, served, agree, max_drift: 0.0 };
+        assert_eq!(served_outcome(&forced, seeds([(20, 0); 3]), &[held(1000, 1000)]), 2);
+        assert_eq!(served_outcome(&forced, seeds([(20, 0); 3]), &[held(1000, 989)]), 1, "past 1% disagreeing");
+        assert_eq!(served_outcome(&forced, seeds([(20, 0); 3]), &[held(1000, 990)]), 2, "1% is within");
+        // A seed below the bar but not thin: row 4 only when the pooled seeds show no gain.
+        assert_eq!(served_outcome(&forced, seeds([(20, 0), (20, 0), (10, 8)]), &[held(10, 10)]), 3);
+        assert_eq!(served_outcome(&forced, seeds([(10, 8); 3]), &[held(10, 10)]), 4);
+    }
+
     /// claude-219: the keyed grade predicts each keyed reply from the greedy and forced ones,
     /// refuses an arm whose tokens or replies are not those, counts exact, template and loop pairs
     /// against greedy, and reads the sheet's table in order.
@@ -10709,6 +10893,7 @@ mod tests {
             admitted: Vec::new(),
             stepped: Vec::new(),
             keyed,
+            served_distance: None,
         };
         // Four openings; the exact key fires on the first. The point key names 5, 7, 8 and 9 at
         // distances 0, 0.1, 0.2 and 0.9. The end of turn is 1.
@@ -10887,6 +11072,7 @@ mod tests {
             admitted,
             stepped: Vec::new(),
             keyed: None,
+            served_distance: None,
         };
         let before = r#"{"position":7,"prompt":[1,2],"reply":[3],"reference":[4],"reply_text":"a","reference_text":"b","reply_keys":0,"reply_named":0,"reference_keys":0,"reference_named":0}"#;
         assert_eq!(serde_json::to_string(&sample(Vec::new())).unwrap(), before);
@@ -11130,6 +11316,7 @@ mod tests {
             admitted: Vec::new(),
             stepped,
             keyed: None,
+            served_distance: None,
         };
         let samples = [
             sample(vec![STEP_NEAREST, STEP_OFF, STEP_NEAREST, STEP_OFF]),
@@ -11172,6 +11359,7 @@ mod tests {
             admitted: Vec::new(),
             stepped: marks,
             keyed: None,
+            served_distance: None,
         };
         // Token 7 opens a TRAIN reply; 9 does not. The end of turn is 1. Greedy loops on prompts
         // 0 and 1 (5 6 7 8 twice) and completes prompt 2.
