@@ -51,4 +51,3 @@ Brainstorming, working discipline, documentation co-authoring (freeform under au
 ## Plain summary
 
 This PR proposes reopening the documentation item with boundaries that now cover the real M1 cleanup and exclude other labs' records. The first review rejected an incomplete scope; that rejection is preserved and repaired rather than bypassed. M1's older five-bar evidence and new bar-f evidence are cited separately, and no public milestone count or research rule changes in this scope PR.
-
