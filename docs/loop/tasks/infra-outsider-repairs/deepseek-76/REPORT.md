@@ -14,7 +14,7 @@ Adopts @sharmis-tp's PR #3425; the fork PR is thanked, credited and closed after
 ## What changed
 
 - **Adopted** @sharmis-tp's four-file docs-tool repair unchanged (`+240/−36`): `docs_catalog.rs`, `docs_relink.rs`, `docs_rewrite_refs.rs`, `docs_stubs.rs`.
-- **Merge-forward** of `origin/main` (records PR #3434 and the docs PR #3431; no conflict).
+- **Merge-forward** of `origin/main`: the records PR #3434 and docs PR #3431 first, then the adoption PR #3424 (crates-only changes; no `xtask` conflict). The `xtask` suite was re-run after the second merge-forward: 217 passed.
 - **Added:** this ORDER and REPORT in `docs/loop/tasks/infra-outsider-repairs/deepseek-76/`.
 - **Not changed:** no docs page, catalog entry, figure, bar, status, §3 rule, owner path, generated output or pinned receipt.
 - Size: 4 `xtask/src` files from the PR (unchanged), plus this ORDER and REPORT; no lines of ours in the code.

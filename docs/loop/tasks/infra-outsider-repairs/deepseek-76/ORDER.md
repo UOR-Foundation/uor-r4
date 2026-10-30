@@ -1,6 +1,6 @@
 # ORDER: infra-outsider-repairs, deepseek-76
 
-Lab: deepseek. Item: [infra-outsider-repairs](../../../../roadmap/items/infra-outsider-repairs.md) (#3433). Base: the main commit that adds this item (records PR #3434), plus #3424 merged. Adopted from @sharmis-tp's [PR #3425](https://github.com/UOR-Foundation/uor-r4/pull/3425), fork branch `xtask-docs-tools-2792`, audited head `175a4377`.
+Lab: deepseek. Item: [infra-outsider-repairs](../../../../roadmap/items/infra-outsider-repairs.md) (#3433). Base: `c9f2d03a4` (the #3424 adoption merge). Adopted from @sharmis-tp's [PR #3425](https://github.com/UOR-Foundation/uor-r4/pull/3425), fork branch `xtask-docs-tools-2792`, audited head `175a4377`.
 
 ## Goal
 
