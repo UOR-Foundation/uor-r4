@@ -43,11 +43,10 @@ const LUT_MAGIC = 'UORLUT01';
 const LUT_SCHEMA_PREFIX = 'uor-r4.lut-stack/';
 const STACK_SCHEMA_MIN = 1;
 const STACK_SCHEMA_MAX = 7;
-// Parsed by the container reader; served by the engine only through /6. A /7 stack carries
-// the turn-memory hook, which the serving engine refuses (`stack/session.rs`).
-const STACK_SERVED_MAX = 6;
+// Served by the engine: /1-/7. A /7 stack carries the turn memory, served since the
+// turn-memory-integer units 2-3 (`stack/session.rs`, `stack/memory.rs`).
+const STACK_SERVED_MAX = 7;
 const TURN_MEMORY_SCHEMA = 'uor-r4.lut-stack/7';
-const TURN_MEMORY_REFUSAL = 'this engine does not serve the turn memory yet (uor-r4.lut-stack/7)';
 // Carried by the discrete runtime, which is native-only; the stack engine refuses it.
 const DISCRETE_SCHEMA = 'uor-r4.lut-discrete/1';
 const DISCRETE_TRUNK_SCHEMA = 'uor-r4.lut-discrete-trunk/1';
@@ -219,7 +218,7 @@ function parseUorLutHeader(bytes) {
         schema_level: schemaLevel,
         engine_kind: 'stack',
         engine_supported: schemaLevel <= STACK_SERVED_MAX,
-        engine_support_reason: schemaLevel > STACK_SERVED_MAX ? TURN_MEMORY_REFUSAL : null,
+        engine_support_reason: null,
         shape: {
             vocab,
             width: Number(shape.width) || 0,
@@ -382,7 +381,8 @@ self.onmessage = async ({ data }) => {
                 capabilities,
                 parse_schemas: ENGINE_SCHEMAS,
                 served_schemas: SERVED_SCHEMAS,
-                refused_schemas: [{ schema: TURN_MEMORY_SCHEMA, reason: TURN_MEMORY_REFUSAL }],
+                refused_schemas: [],
+                turn_memory_served: true,
                 discrete_supported: false,
             });
             return;
@@ -395,7 +395,8 @@ self.onmessage = async ({ data }) => {
                 engine: ENGINE_TAG,
                 parse_schemas: ENGINE_SCHEMAS,
                 served_schemas: SERVED_SCHEMAS,
-                refused_schemas: [{ schema: TURN_MEMORY_SCHEMA, reason: TURN_MEMORY_REFUSAL }],
+                refused_schemas: [],
+                turn_memory_served: true,
                 discrete_schemas: [DISCRETE_SCHEMA],
                 discrete_supported: true,
                 discrete_engine: 'uor-r4-integer/discrete (stateless next-token prefix prediction)',
@@ -497,6 +498,13 @@ self.onmessage = async ({ data }) => {
             const wpt = Number(wasmModule.weightsPerToken(handle));
             const allocCount = Number(wasmModule.allocEvents());
             const leaked = Number(wasmModule.leakedModels());
+            let turnMemory = null;
+            try {
+                turnMemory = wasmModule.memoryInfo ? JSON.parse(wasmModule.memoryInfo(handle)) : null;
+            } catch (_error) {
+                turnMemory = null;
+            }
+            const hasTurnMemory = Boolean(turnMemory && turnMemory.present);
 
             activeHandle = handle;
             activeDiscrete = null;
@@ -526,6 +534,9 @@ self.onmessage = async ({ data }) => {
                 tokenizer_label: tokenizerLabel(tokenizerArtifact, headerInfo.shape.vocab),
                 weights_per_token: wpt,
                 checkpoint_bytes: initialSessionBytes.byteLength,
+                turn_memory: turnMemory,
+                can_restore_session: !hasTurnMemory,
+                can_export_session: !hasTurnMemory,
                 alloc_events: allocCount,
                 leaked_models: leaked,
             };
@@ -590,6 +601,9 @@ self.onmessage = async ({ data }) => {
             if (activeJob) {
                 throw new Error('Stop generation before closing or resetting a session.');
             }
+            if (capabilities && capabilities.turn_memory && capabilities.turn_memory.present) {
+                throw new Error('A turn-memory stack keeps its turn state in the session: reload the model to start again (its turn state is not saved yet).');
+            }
             const convId = payload.conversationId;
             if (convId) {
                 sessions.delete(convId);
@@ -605,6 +619,9 @@ self.onmessage = async ({ data }) => {
         }
 
         if (action === 'export_session') {
+            if (capabilities && capabilities.turn_memory && capabilities.turn_memory.present) {
+                throw new Error('A turn-memory session checkpoint cannot be restored yet (its turn state is not saved): reload the model instead.');
+            }
             if (activeJob) {
                 throw new Error('Stop generation before exporting a session checkpoint.');
             }
@@ -620,6 +637,9 @@ self.onmessage = async ({ data }) => {
         }
 
         if (action === 'import_session') {
+            if (capabilities && capabilities.turn_memory && capabilities.turn_memory.present) {
+                throw new Error('A turn-memory session checkpoint cannot be imported yet (its turn state is not saved): reload the model instead.');
+            }
             if (activeJob) {
                 throw new Error('Stop generation before importing a session checkpoint.');
             }
@@ -659,10 +679,13 @@ self.onmessage = async ({ data }) => {
             throw new Error('Another generation is active. Wait for its completion or cancellation.');
         }
 
+        const hasTurnMemory = Boolean(capabilities && capabilities.turn_memory && capabilities.turn_memory.present);
         const convId = payload.conversationId || 'default';
-        const entry = ensureSessionEntry(convId);
+        const entry = hasTurnMemory ? null : ensureSessionEntry(convId);
         const startEpoch = sessionEpochs.get(convId) || 1;
-        wasmModule.restoreSession(activeHandle, entry.bytes);
+        if (!hasTurnMemory) {
+            wasmModule.restoreSession(activeHandle, entry.bytes);
+        }
 
         const decodeText = !Array.isArray(payload.tokenIds) || payload.tokenIds.length === 0;
         const promptTokens = encodePromptTokens(payload, capabilities.shape.vocab, tokenizerArtifact);
@@ -679,12 +702,16 @@ self.onmessage = async ({ data }) => {
                 tok = promptTokens[i];
             }
 
+            if (hasTurnMemory) {
+                wasmModule.markReplyStart(activeHandle);
+            }
+
             const allocBefore = wasmModule.allocEvents();
             const tokenIds = [];
             let fullText = '';
 
             for (let stepIdx = 0; stepIdx < maxTokens && !job.cancelled; stepIdx++) {
-                if ((sessionEpochs.get(convId) || 0) !== startEpoch || !sessions.has(convId)) {
+                if (!hasTurnMemory && ((sessionEpochs.get(convId) || 0) !== startEpoch || !sessions.has(convId))) {
                     job.cancelled = true;
                     break;
                 }
@@ -715,7 +742,7 @@ self.onmessage = async ({ data }) => {
 
             const allocAfter = wasmModule.allocEvents();
             const allocDelta = Number(allocAfter - allocBefore);
-            if ((sessionEpochs.get(convId) || 0) === startEpoch && sessions.has(convId)) {
+            if (!hasTurnMemory && (sessionEpochs.get(convId) || 0) === startEpoch && sessions.has(convId)) {
                 const savedBytes = wasmModule.saveSession(activeHandle);
                 sessions.set(convId, {
                     bytes: new Uint8Array(savedBytes),
