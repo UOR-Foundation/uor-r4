@@ -8,7 +8,7 @@ on new phrasing, remember across sessions, and run as one product. That remains 
 ```mermaid
 flowchart TD
   A["M1: saved integer model<br/>beats count tables"] --> B{"Can it start the right reply<br/>on new phrasing?"}
-  B -- "no served evidence yet" --> M["Train and serve the sign key<br/>test free generation on new phrasing"]
+  B -- "point key gives a partial gain" --> M["Train and serve the point key in integers<br/>score one model end to end"]
   M --> R["Complete correct replies<br/>and durable memory"]
   R --> S["Full serving, cost,<br/>distribution and release"]
 ```
@@ -46,11 +46,13 @@ Claude-217 gives the sharpest current measurement:
 - The cycle step ends every registered loop, yet every content decision is underpowered and greedy
   remains the decode.
 
-So a loop-free reply is not necessarily a correct reply. Claude-218's offline teacher-forced sign-key probe has
-now passed on p-u, gaining +46/+37/+33 on 1,218 exact-memory misses at three seeds; the point key
-gained +125/+185/+114. The open question is whether training and serving the selected sign key
-produces correct free-generated replies on another fresh panel. No served-key result is established
-([claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md)).
+So a loop-free reply is not necessarily a correct reply. Claude-218 found trunk-state keys that
+improved openings offline. [Claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md)
+then served the point key for the first reply token in free generation on fresh p-v: templates
+improve by +13/+8/+12 and exact replies by +9/+8/+12 at three seeds. It reaches only 12–18% of the
+forced-opening lift; the sign key is inconclusive at this panel size. The open question is whether
+an integer point-key table and search can serve one complete model well enough on client hardware.
+Useful conversation remains unproven.
 
 ## What remains open beyond that key
 

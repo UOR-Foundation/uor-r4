@@ -24,7 +24,7 @@ The owner added bar (f) to M1 on 29 Oct (D82, CHARTER §4 item 8): "M1 also requ
 
 ## What is missing
 
-**Outcome: complete.** Before the close, this item needed:
+**Outcome: complete.** Before the close, this item needed a fresh held-out-phrasing panel with these properties:
   - It is drawn by `heldout-panel` (`docs/labs/one-model-end-to-end/instrument/`, claude-204) at a seed no unit has used. claude-204 used 2041–2043.
   - Its cell is `dev,dev`, in dialogue protocol 2, with 400 conversations.
   - It is stored in the HF store with a `SHA256SUMS`.

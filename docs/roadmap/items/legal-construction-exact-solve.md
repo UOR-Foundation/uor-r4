@@ -16,7 +16,7 @@ It reopens a PARKED optimizer path that needs no gradients. Legal construction w
 
 ## What is missing
 
-Legal construction picks each parameter change from values the integer model can hold, but it has never been scored: every attempt stopped on solver numerics. The saved case has 1,960 variables (and 440 constraints) and has not been solved in exact arithmetic. No GPU is assumed, but whether a host solve is allowed is open (see the classification bullet below).
+Legal construction picks each parameter change from values the integer model can hold. Early attempts stopped on solver numerics; the saved 1,960-variable case was later solved exactly under D78, with all 380 guards held and a certified 0.03259% gap to optimal. Optimality itself is unproven, and panel scoring is separate. Whether a host solve is allowed is open (see the classification bullet below).
 
 From the mechanism page and the archived record:
 

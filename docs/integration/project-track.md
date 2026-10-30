@@ -52,11 +52,12 @@ underpowered and greedy remains the decode. On p-s:
 - exact turn memory keys on exact first token ids and adds only 14–16 of 1,400 openings on p-s,
   against 322–337 of 1,226 on DEV.
 
-Claude-218 has now passed its registered offline teacher-forced key probe. On p-u's 1,218 exact-memory misses,
-the sign key gains +46, +37 and +33 at three seeds; the point key gains +125, +185 and +114. Row
-3 selects the cheapest passing sign key. The next unit trains and serves it and tests free
-generation on another fresh panel; no served-key or useful-chat result is established
-([claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md)). Then every required part
+Claude-218 found trunk-state memory keys that improved reply openings offline.
+[Claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md) then served the point key
+for the first reply token in free generation on fresh p-v: templates improve by +13/+8/+12 and
+exact replies by +9/+8/+12 at three seeds. It reaches only 12–18% of the forced-opening lift; the
+sign key is inconclusive at this panel size. The next unit trains and serves the point key in one
+integer model and scores it end to end. Useful chat remains unproven. Then every required part
 must run in integer serving and one joined model must be scored on fresh prompts. See
 [PLAN.md](../../PLAN.md) and the [pipeline map](../model/pipeline-map.md).
 

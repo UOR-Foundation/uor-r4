@@ -12,7 +12,7 @@ scope: [crates/uor-r4-training/**, docs/formal_vocabulary.md, docs/geometry/quat
 
 ## Why it matters
 
-The Hamilton gate is a feed-forward gate with status READY: built and tested, never trained in a language run. It is meant to replace the sigmoid gate that the rules now ban. A sigmoid gate can shut a channel, and a unit rotation cannot, so this question decides whether the gate can do that job at all. See [the Hamilton gate page](../../mechanisms/hamilton-gate.md).
+The Hamilton gate is ACTIVE and trained in the discrete M1 composition and on the FBS trunk. It is meant to replace the sigmoid gate that the rules now ban. A sigmoid gate can shut a channel, and a unit rotation cannot, so the suppression question remains open even though training and serving now exist. See [the Hamilton gate page](../../mechanisms/hamilton-gate.md).
 
 ## What is missing
 

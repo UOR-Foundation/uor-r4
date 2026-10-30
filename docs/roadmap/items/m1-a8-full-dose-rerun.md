@@ -16,7 +16,7 @@ Tests whether reach survives training, which is M1 bar (b), and gives the first 
 
 ## What is missing
 
-The admission-preserving A8 rerun is pre-registered and FIT-reviewed but never run. The first A8 dose hit the registered Q1 stop: Relation P_succ fell 1,351 -> 551 (below half of init) while FrozenZero held 857 at Q1 and 797 at completion. Full-dose approval and release are separate from the finite qualification.
+The admission-preserving A8 rerun ran on 25 October 2026 with D67/D68 PASS. FrozenZero reached Q1 with `1,106 / 3,847`, `4,292 / 14,287` and `871 / 14,287`, then stopped for diagnosis under the 64-batch whole-interval rejection cadence; Relation stopped at batch 1,600. Fresh V2 remains sealed. This is an instrument/cadence-granularity stop, not a mechanism negative or an A8 `5,009` result; that number belongs to Stage T.
 
 ## Done when
 

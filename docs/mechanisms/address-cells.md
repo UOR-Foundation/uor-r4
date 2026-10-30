@@ -1,6 +1,6 @@
 # Address-structured cells
 
-**Status: ACTIVE.** This is the starting table of the live attention line. At zero training it lifted reachable next-word targets from 127 to 1,351 of 3,847. The early dose eroded that gain and is preserved as a dated configuration negative. The A8 full-dose rerun and M1 export are complete at their declared scopes: the saved 19-table model passes all six bars at two seeds. The admission-preserving controller's numerical qualification is **NOT_RUN**. The independent effect of this placement on language and learned address formation remains open ([A8 dose](../labs/a8-dose-2026-10-19/README.md), [controller record](../labs/admission-anchor-controller-2026-10-19/README.md), [M1 close](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
+**Status: ACTIVE.** This is the starting table of the live attention line. At zero training it lifted reachable next-word targets from 127 to 1,351 of 3,847. The early dose eroded that gain and is preserved as a dated configuration negative. A8's finite qualification passed `5/5` with D67 pre-run review PASS, and its full-dose admission-preserving rerun ran to a diagnostic stop at Q1: `4,292 / 14,287`, `1,106 / 3,847` and `871 / 14,287`. Stage T then reached `5,009 / 14,287` with G-Adm and G-Occ, and the saved 19-table M1 model passed all six bars at two seeds. The next admission-preserving rerun is **NOT_RUN**. The independent effect of this placement on language and learned address formation remains open ([finite qualification](../labs/m1-a8-finite-cuda-qualification/README.md), [full-dose rerun](../labs/m1-a8-full-dose-rerun/README.md), [Stage T](../labs/m1-bvg-k-stage-t-training/README.md), [M1 close](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run, **hypothesis** means an untested idea (see [the charter](../../CHARTER.md), section 4.6). Unfamiliar project terms (K16, A8, admission, NOT_RUN) are in the [glossary](../start/glossary.md).
 
@@ -63,12 +63,12 @@ Every number in the last four rows is a count of reachable target words on the d
 - Placement keyed on the real read centre instead of the last word's cell.
 - The compact 32-cell form, $K\approx34$ or more, and partly injective tables.
 - More than one shuffle seed, and training from the K=16 bracket arms.
-- The admission-preserving rule in a real GPU run, and a finer, cell-level census of which moves eject which words.
+- The next admission-preserving rerun after the completed finite qualification and full-dose diagnostic run, and a finer, cell-level census of which moves eject which words.
 - Other shapes, such as 16,384 words on 512 cells (planned after the dose).
 
 ## What comes next
 
-The mechanism is ACTIVE, so this is a plan, not a reopening. The A8 full-dose rerun and M1 export are complete; the controller's numerical qualification and the admission-preserving rerun remain **NOT_RUN**, so do not repeat them for this refresh. Next is independent evidence of address formation and of the placement's effect on complete replies. The early no-op and $K=8$ occupancy risks remain in the record, and Relation's independent effect still needs a paired ablation on the current model.
+The mechanism is ACTIVE, so this is a plan, not a reopening. A8's finite qualification and full-dose rerun are complete at their declared scopes, and M1 export is exact. The next admission-preserving rerun is **NOT_RUN**, so do not claim it. Next is independent evidence of address formation and of the placement's effect on complete replies. The early no-op and $K=8$ occupancy risks remain in the record, and Relation's independent effect still needs a paired ablation on the current model.
 
 ## Also known as
 

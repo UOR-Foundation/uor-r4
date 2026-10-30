@@ -17,7 +17,7 @@ It tells whether lawful recurrence can learn and carry state, and it feeds the p
 
 ## What is missing
 
-The recurrence gates use a powers-of-two fade table with errors of at most 5.5e-8, a clamped-line input gate and rotation-carried state, and pass 18 CUDA controls. The six-recurrence fit never ran. The recurrence mode is also refused by export and QAT.
+The recurrence gates use a powers-of-two fade table with errors of at most 5.5e-8, a clamped-line input gate and rotation-carried state, and pass 18 CUDA controls. The pre-registered 1,024-step six-recurrence fit and D11 export ran on an RTX 5090 with mixed transport/export-gap outcomes; `lut-stack/5` carries the FBS recurrence exactly at DEV scope.
 
 ## Done when
 

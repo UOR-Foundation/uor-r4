@@ -90,7 +90,7 @@ Section 4 of the charter is about not fooling ourselves.
 - **Power.** A decisive run uses at least 2 seeds or at least 200 fresh rows, with bars no narrower than the measured noise, and reports a fresh transfer number with every development gain (§4.3).
 - **Controls and pivots.** Compare against lawful non-neural baselines such as count tables. After three results on one line that do not move its headline number, write a pivot note: stop, or run one decisive experiment (§4.4).
 - **Claims.** Write "measured X on Y against Z". A test pass is not trained capability, and `NOT_RUN` is not a pass (§4.6).
-- **The first-milestone closing bars.** M1 requires self-contained D11 artifacts, exact export/reference agreement and the planted-fault control, tokens/s, DEV integer top-1 above unigram (1,226 of 14,287) and T2 (6,300), Fresh V2 transfer, and held-out-phrasing transfer, on each of two seeds (§4.8).
+- **The first-milestone closing bars.** The close-grade maps (a) self-contained D11 loading, (b) exact export agreement and B4, (c) tokens/s, (d) DEV integer top-1 above unigram (1,226 of 14,287) and T2 (6,300), and (e) Fresh V2 transfer; `panel-score.json` adds (f) held-out phrasing. The upstream D39 G-Pre/G-Adm/G-Occ evidence is retained in the M1 item and dated records; §4.8 and its acceptance text are unchanged.
 
 ## Where it stands
 

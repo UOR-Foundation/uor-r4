@@ -80,7 +80,7 @@ Here $\mathcal{N}_e(i)$ are node $i$'s neighbours under link type $e$. Candidate
 
 ## What comes next
 
-1. **Admission-preserving A8 rerun.** A guard audits a fixed anchor of 3,847 training rows every 64 batches and rejects any interval that erodes admission (margin 24). It stops as a no-op if the rejection rate exceeds 0.50. The sheet is FIT; the controller and verifier merged (`UOR-Foundation/uor-r4#2782`, `#2783`); finite qualification and the lab's D67 pre-run review are outstanding. D41's donor pass is the only owner-at-dispatch exception.
+1. **Next admission-preserving rerun.** A guard audits a fixed anchor of 3,847 training rows every 64 batches and rejects any interval that erodes admission (margin 24). It stops as a no-op if the rejection rate exceeds 0.50. The controller and verifier merged (`UOR-Foundation/uor-r4#2782`, `#2783`); finite qualification passed 5/5 with D67 pre-run review PASS, and the full-dose rerun reached Q1 before a diagnostic stop. A further rerun needs its own D67 pre-run review; D41's donor pass is the only owner-at-dispatch exception.
 2. **Stage M2 discriminator.** A matched interleaved Relation against Route, with a zero-trit ablation. A future run needs its own fitness review and D67 pre-run review, not a blanket owner hold.
 3. **Float extension (hypothesis).** A float-trained version of the 25 trits (D37) only after a Relation KEEP, with an integer export and a reported export gap.
 

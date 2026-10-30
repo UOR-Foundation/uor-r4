@@ -16,7 +16,7 @@ Routes all later spend: H_rep means fix the read and address metric and do not f
 
 ## What is missing
 
-W2 is FIT-reviewed and queued on the retained lease but has not run; it needs an owner-typed release (CHARTER 5.1). It would decide whether the wall is representation (H_rep) or learning law (H_law), and it adds the unigram and admission-matched next-word count-table arms the headline bars lacked. Cost is about $0.91 (chief architect's estimate, not a recorded cost).
+W2's checkpoint-restricted count-table evaluation ran with Stage T: `T_restr(A_W) = 2,140` and `G_restr(A_W) = 3,084` on `T16_fz`, both above the unigram's 1,226. It identifies representation/read-code and within-cell ranking as separate constraints; it is not a blanket owner hold. Cost is recorded in the Stage T report, not the old $0.91 estimate.
 
 ## Done when
 

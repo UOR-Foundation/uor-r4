@@ -48,7 +48,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <text class="title" x="24" y="34">From text to a served model: what exists today</text>
 <text class="sub" x="24" y="56">Two model paths share D11 serving. M1 is complete on the discrete path; FBS works on new-phrasing reply opening (30 Oct).</text>
 
-<!-- empty slots above the line -->
+<!-- Above-line FBS components -->
 <path class="stub" d="M324 144 V250"/>
 <path class="stub" d="M480 144 V166 H530 V250"/>
 <path class="stub" d="M630 144 V166 H530"/>
@@ -60,7 +60,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <text class="q" x="382" y="100" text-anchor="middle">FBS</text>
 <rect class="built" x="410" y="84" width="140" height="60" rx="8"/>
 <text class="name" x="480" y="102" text-anchor="middle">feed-forward</text>
-<text class="detail" x="480" y="117" text-anchor="middle">(discrete path)</text>
+<text class="detail" x="480" y="117" text-anchor="middle">M1: discrete Hamilton</text>
 <text class="detail" x="480" y="132" text-anchor="middle">FBS: Hamilton gate</text>
 <text class="q" x="538" y="100" text-anchor="middle">FBS</text>
 <rect class="built" x="560" y="84" width="140" height="60" rx="8"/>

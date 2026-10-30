@@ -17,7 +17,7 @@ It would give the first language-fit evidence for any lawful feed-forward or gat
 
 ## What is missing
 
-The Hamilton gate has 944 tests, GPU parity of 43 passed and 0 failed, and 18 CUDA controls, but it has never been trained. It still needs the icosian snap before export. The claim that a norm-preserving gate can suppress a signal is only a dossier reading.
+The Hamilton gate has 944 tests, GPU parity of 43 passed and 0 failed, and 18 CUDA controls. It is now ACTIVE and trained in the discrete M1 composition and on the FBS trunk, whose icosian-snapped form exports and serves exactly under `lut-stack/5` at DEV scope. The claim that a norm-preserving gate can suppress a signal remains a separate hypothesis.
 
 ## Done when
 

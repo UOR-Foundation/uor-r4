@@ -14,7 +14,7 @@ For a pure imaginary vector $v$ (a point in $\mathbb{R}^3$), the map $v \mapsto 
 
 **Left multiplication $q\,h$** is a different thing. It is a norm-preserving linear action on the full quaternion space $\mathbb{R}^4$, because $|qh| = |q|\,|h|$. It does not identify $q$ and $-q$ as the same action: the map for $-q$ is the negative of the map for $q$.
 
-The retained float stack's `quaternion_scan` (the [geometric stack](../mechanisms/geometric-stack.md), PARKED) uses left multiplication, then additive input injection ([`geometric_stack.rs`](../../crates/uor-r4-training/src/geometric_stack.rs)). The current M1 model instead executes signed actions on 8D carrier blocks. The quaternion picture explains part of the research lineage. It is not a literal 4D state for the M1 kernel.
+The retained float stack's `quaternion_scan` (the [geometric stack](../mechanisms/geometric-stack.md), PARKED) uses left multiplication, then additive input injection ([`geometric_stack.rs`](../../crates/uor-r4-training/src/geometric_stack.rs)). The saved M1 composition includes `DiscreteQuaternionRecurrenceV1` and a discrete Hamilton gate. The quaternion picture explains part of the research lineage, not a shared M1/FBS normalization component.
 
 ## Rotation preserves length; additive recurrence need not
 
@@ -38,9 +38,9 @@ The same split shows up in the current reads. Flock and Relation reads sum trans
 
 | Mechanism | Status | How it uses quaternions |
 |---|---|---|
-| [Hamilton gate](../mechanisms/hamilton-gate.md) | READY | Turns a gate signal into a unit quaternion and rotates the value block by it, so no sigmoid is needed. Built and tested, never trained; cannot suppress per-block amplitude outside its $10^{-12}$ division-by-zero guard core (`#2879`, **proof**) |
-| [Recurrence gates](../mechanisms/recurrence-gates.md) | READY | Carries state by rotation, with a fade rate read from a table of powers of two. Built and tested, never trained |
-| [Spin-native weights](../mechanisms/spin-weights.md) | PARKED | Each 4×4 weight block is one quaternion. The single-icosian snap (one of 120 rotations) lost. A two-icosian pair with a 2-bit scale matched an equal-parameter dense model, but only through dense matrix multiplication, which a project rule bars |
+| [Hamilton gate](../mechanisms/hamilton-gate.md) | ACTIVE | Turns a gate signal into a unit quaternion and rotates the value block by it, so no sigmoid is needed. Trained in M1 and on FBS; cannot suppress per-block amplitude outside its $10^{-12}$ division-by-zero guard core (`#2879`, **proof**) |
+| [Recurrence gates](../mechanisms/recurrence-gates.md) | READY | Carries state by rotation, with a fade rate read from a table of powers of two. The 1,024-step fit and D11 export ran with mixed outcomes |
+| [Spin-native weights](../mechanisms/spin-weights.md) | READY by D74 | Each 4×4 weight block is one quaternion. The single-icosian snap (one of 120 rotations) lost. A two-icosian pair with a 2-bit scale matched an equal-parameter dense model, but only through dense matrix multiplication, which a project rule bars |
 | [Prime-zeta codebook](../mechanisms/prime-zeta-codebook.md) | ACTIVE | Builds the starting table from unit quaternions on $S^3$ (a one-time offline step), then stores integers |
 | [Discrete learning](../mechanisms/discrete-learning.md), [route read](../mechanisms/route-read.md), [flock read](../mechanisms/flock-read.md) | ACTIVE | Do not use quaternions directly. They apply signed coordinate actions to 8D blocks (see [SpiralCore](./spiralcore.md)) |
 

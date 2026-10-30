@@ -62,11 +62,14 @@ remains the decode. On held-out p-s:
 - Exact turn memory keys on the turn's exact first token ids. It adds 322–337 of 1,226 openings on
   DEV but only 14–16 of 1,400 on p-s, so a reworded known question can find no stored key.
 
-The latest merged experiment, [claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md),
-then passed its offline teacher-forced key probe. On p-u's **1,218 exact-memory misses**, the sign key gains
-**+46, +37 and +33** at three seeds; the point key gains **+125, +185 and +114**. The next unit
-trains and serves the cheapest passing sign key and tests free generation on another fresh panel.
-This is not yet a served-key or useful-chat result.
+[Claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md) then found trunk-state memory
+keys that improved reply openings offline. The latest merged experiment,
+[claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md), tested them in free
+generation on fresh p-v. Serving the point key for the first reply token where exact memory misses
+improves template replies by **+13, +8 and +12** and exact replies by **+9, +8 and +12** at three
+seeds. Keyed openings are right on 27–31% of cases, so this is a partial gain, not useful chat. The
+sign key is inconclusive at this panel size. Next, train and serve the point key in one integer
+model and score it end to end.
 
 ## What does not work yet
 

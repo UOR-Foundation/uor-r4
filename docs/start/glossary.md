@@ -181,7 +181,7 @@ Source: [language model](../products/language-model.md) and [where we're going](
 
 There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mechanisms/README.md).
 
-**MLP (feed-forward layer).** The block in a transformer that processes each token after attention, usually with big grids of multiplications and a gate. UOR-R4's candidates include the [Hamilton gate](#hamilton-gate) and [SpiralCore/FBS projection](../mechanisms/spiralcore-fbs.md), trained on the discrete M1 and FBS paths.
+**MLP (feed-forward layer).** The block in a transformer that processes each token after attention, usually with big grids of multiplications and a gate. The [Hamilton gate](#hamilton-gate) is trained in M1 and on FBS; the [SpiralCore/FBS projection](../mechanisms/spiralcore-fbs.md) is trained on the separate FBS trunk only.
 
 ## N
 

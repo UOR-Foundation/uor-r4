@@ -39,3 +39,7 @@ No model/GPU experiment, paid compute, new dependency, workflow edit, direct mai
 ## Scope decision: required branch claim
 
 After `loop pr-check --local` reported the D76 advisory, the top Kimi session reviewed the whole project context, item, ORDER, claim diff and delivery rules. `docs/harness/claims.json` is added to the item scope solely to carry this branch's existing Kimi claim. No other claim, lab state, rule, bar or capability changes. Approved in this top session on 30 Oct 2026; reverse by removing that scope entry and claim together.
+
+## Scope decision: evidence-critical public status pages
+
+The fourth independent review identified a small set of public pages that either make current main-project status claims or contradict completed evidence. The top Kimi session reviewed the actual A8 finite/full-dose/Stage T and M1 close records and adds only `projects/README.md`, `docs/harness/README.md`, `docs/roadmap/items/m1-a8-full-dose-rerun.md`, `legal-construction-exact-solve.md`, `recurrence-gates-six-recurrence-fit.md`, `hamilton-gate-offline-float-sheet.md`, `r-hamilton-gate-suppression.md`, and `m1-w2-capacity-capture.md` to the item scope. These are status/evidence corrections only: no acceptance text, bar, rule, model, GPU run, sealed lab file or other lab's active work changes. Approved in this top session on 30 Oct 2026; reverse by removing these scope entries and their status edits together.

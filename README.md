@@ -51,12 +51,14 @@ experiment ends every registered loop, but the content decision is underpowered 
 the decode. Exact turn memory also misses reworded questions: its key is the turn's exact first
 token ids ([claude-217](docs/loop/tasks/one-model-end-to-end/claude-217/REPORT.md)).
 
-Claude-218 has now run a teacher-forced offline probe of trunk-state memory keys on fresh p-u. On its **1,218 exact-memory
-misses**, the sign key's net opening gains are **+46, +37 and +33** at three seeds; the point key
-gains **+125, +185 and +114**. Row 3 selects the cheapest passing sign key, with the point key's
-larger gain left as a size/cost tradeoff. The next step is to train and serve that sign key and
-test free generation on another fresh panel. This is not yet a served-key or useful-chat result
-([claude-218](docs/loop/tasks/one-model-end-to-end/claude-218/REPORT.md)).
+Claude-218 found trunk-state memory keys that improved reply openings offline.
+[Claude-219](docs/loop/tasks/one-model-end-to-end/claude-219/REPORT.md) then tested those keys in
+free generation on fresh p-v. Where exact memory misses, serving the **point key** for the first
+reply token improves template replies by **+13, +8 and +12** and exact replies by **+9, +8 and
++12**, at three seeds. This is a real but partial gain: keyed openings are right on **27–31%** of
+the 385 openings it gives, only **12–18%** of the lift from forcing the right first token. The
+cheaper sign key is inconclusive at this panel size. Next, train and serve the point key in one
+integer model and score it end to end. Useful conversation remains unproven.
 
 ## The three products
 
@@ -91,7 +93,7 @@ tested forms failed or broke a rule while the mechanism stays open.
 |---|---|---|
 | Embedding table (a starting vector per token) | [Prime-zeta codebook](docs/mechanisms/prime-zeta-codebook.md) and [address cells](docs/mechanisms/address-cells.md): whole-number addresses from primes and zeta-zero phases | ACTIVE |
 | Attention (which earlier tokens matter) | [Route](docs/mechanisms/route-read.md), [Flock](docs/mechanisms/flock-read.md) and [Relation](docs/mechanisms/relation-read.md) reads: walk an address tree, rotate a few neighbours into one frame, follow copy links | ACTIVE; independent effects remain unisolated |
-| Feed-forward layers (most of the multiplying) | [Hamilton rotation gate](docs/mechanisms/hamilton-gate.md) and [SpiralCore/FBS projection](docs/mechanisms/spiralcore-fbs.md) | ACTIVE in the discrete M1 composition and on the float-trained FBS trunk; FBS is served under `lut-stack/5` |
+| Feed-forward layers (most of the multiplying) | [Hamilton rotation gate](docs/mechanisms/hamilton-gate.md) and [SpiralCore/FBS projection](docs/mechanisms/spiralcore-fbs.md) | Hamilton gate is in M1 and FBS; SpiralCore/FBS projection is on the FBS trunk only, served under `lut-stack/5` |
 | Softmax output and cross-entropy loss | [Admission](docs/mechanisms/admission.md) (open a few address "drawers", called cells) and a [rank-margin hinge](docs/mechanisms/rank-margin.md) | ACTIVE |
 | Backpropagation optimizer | [Discrete learning](docs/mechanisms/discrete-learning.md): try each legal rotation of one entry, keep it only if the score strictly improves | ACTIVE |
 | Matrix-multiply runtime | [Integer serving (D11)](docs/mechanisms/lut-serving.md): whole-number adds, shifts, compares and table reads; integer multiply and divide are allowed | ACTIVE; the discrete M1 pair and the separate FBS `lut-stack/5` export both serve |

@@ -51,7 +51,7 @@ The three short lines are listed in the [generated archive catalog](../../../arc
 
 ## Since 27 Oct
 
-**30 Oct 2026.** The table above stops at 19 Oct. The discrete path has since closed M1, while the float-trained FBS trunk carries current complete-reply research. See [the pipeline map](../../model/pipeline-map.md) for both paths and [the M1 research line](./m1-discrete-attention.md) for the close. The project is pre-alpha: 1 of 8 milestones is complete. Claude-218's offline teacher-forced sign-key probe passed on p-u; current work trains and serves that key and tests free generation on another fresh panel.
+**30 Oct 2026.** The table above stops at 19 Oct. The discrete path has since closed M1, while the float-trained FBS trunk carries current complete-reply research. See [the pipeline map](../../model/pipeline-map.md) for both paths and [the M1 research line](./m1-discrete-attention.md) for the close. The project is pre-alpha: 1 of 8 milestones is complete. Claude-219's point-key opening improves free generation at three seeds on fresh p-v, but only partially. Next, train and serve it in one integer model and score it end to end.
 
 ## Where to go next
 

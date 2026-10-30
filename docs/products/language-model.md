@@ -67,11 +67,12 @@ conversation.
 
 Claude-217's cycle-step experiment ends every registered loop but leaves content underpowered, so
 greedy remains the decode. Exact turn memory keys on exact first token ids and misses reworded
-prompts ([claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)). Claude-218's
-offline teacher-forced sign-key probe then gained +46/+37/+33 on p-u's 1,218 missed rows at three seeds; the next
-unit trains and serves that key and tests free generation on another fresh panel. This is not yet
-a served-key or useful-chat result
-([claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md)).
+prompts ([claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)). Claude-218 found
+trunk-state keys offline; [claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md)
+then served the point key for the first reply token in free generation on fresh p-v. It improves
+templates by +13/+8/+12 and exact replies by +9/+8/+12 at three seeds, but reaches only 12–18% of
+the forced-opening lift. Next, train and serve it in one integer model and score it end to end.
+This is not a useful-chat result.
 
 ## The artifact format and serving boundary
 

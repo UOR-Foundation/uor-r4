@@ -76,7 +76,7 @@ $$3+256+3837=4096 .$$
 
 **The registered plan** ([sheet](../harness/prep/m1-distill-d1-donor-corpus-DRAFT-2026-10-19.md), status TEST FITNESS: FIT, no compute run, $0 so far). The target is 30,000,000 student tokens, with a floor of 20 million and a ceiling of 50 million. Each document is at most 200 tokens. The mixture is conversation 35%, question answering 20%, short code 20%, short reasoning prose 15% and general prose 10%. A pilot of about 1 million tokens (about $2) comes first, and production at 30 million tokens is projected at about $52, or $63 with retries. These costs are planning estimates, not invoices. The sheet sizes the corpus to what the student can consume, about 490 target tokens per second, or roughly 17 hours per pass at 30 million tokens.
 
-**What it needs before it runs.** The owner must type the release personally at dispatch time (D40), and the driver-speed work must finish first. A matched-control training sheet would be needed to learn whether distillation helps at all.
+**What it needs before it runs.** Owner approval at dispatch under D41, and the driver-speed work must finish first. A matched-control training sheet would be needed to learn whether distillation helps at all.
 
 ## Where it stands
 

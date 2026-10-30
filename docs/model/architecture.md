@@ -27,7 +27,8 @@ quaternion recurrence, a four-block orbit-root causal pointer, and post-rotation
 | Reads | Route, Flock and Relation reads using hard selection, not softmax | Trained; independent effects are not all isolated |
 | Writer and admission | 16×16 address cells; bounded candidate shortlist before nearest-token choice | Trained; full 19-table export carries the final readout |
 | Objective and learning | Integer rank-margin hinge and discrete legal moves, including BVG-K batched verified coordinates | Trained; produced the saved model |
-| Position, norm, feed-forward | Discrete quaternion recurrence and Hamilton gate | Trained in the M1 composition; independent effects remain open |
+| Position and feed-forward | Discrete quaternion recurrence and Hamilton gate | Trained in the M1 composition; no separate normalization component is declared |
+| Position and normalization on the separate FBS path | SpiralCore transport spin and RMS norm with integer square root | FBS-only; not M1's projection or normalization mechanism |
 | Export | Table-native `uor-r4.lut-discrete-trunk/1` | Exact 14,287-row agreement and B4 pass |
 | Serving | D11 integer engine on an Apple M1 | 10,876 / 10,566 decode tok/s under the bar-f protocol |
 
@@ -70,10 +71,12 @@ The FBS path trains offline in float under D37 and exports to integer D11. It is
 but content is underpowered and greedy remains the decode. On p-s, reply openings are 17.4%, 13.7%
 and 18.6% at three seeds, against 80.8%, 80.2% and 79.9% on later tokens. Exact-reference replies
 are only 3, 1 and 4 of 256, and exact-key memory finds little on new phrasing
-([claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)). Claude-218's offline
-teacher-forced sign-key probe then gained +46/+37/+33 on p-u's 1,218 missed rows at three seeds. The next unit
-trains and serves that key and tests free generation on another fresh panel; no served-key result
-is established ([claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md)).
+([claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)). Claude-218 found
+trunk-state keys offline; [claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md)
+then tested them in free generation on fresh p-v. The point-key opening improves templates by
++13/+8/+12 and exact replies by +9/+8/+12 at three seeds, but only partially. The sign key is
+inconclusive at this panel size. Next, train and serve the point key in one integer model and
+score it end to end; useful chat remains unproven.
 
 ## What remains unbuilt or unqualified
 

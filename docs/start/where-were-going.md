@@ -45,11 +45,12 @@ conversation. See [CHARTER §4.8](../../CHARTER.md#4-evidence) and the [closing 
 
 ## The current order of work
 
-1. **Train and serve the new-phrasing memory key.** Claude-218's offline teacher-forced sign-key probe passed on
-   p-u: net gains of +46, +37 and +33 on 1,218 exact-memory misses at three seeds. The point key
-   gained more (+125, +185 and +114), but the registered row 3 selects the cheapest passing sign
-   key. Next is a served key and free generation on another fresh panel; neither is established
-   ([report](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md)).
+1. **Train and serve the point key in one integer model.** Claude-218 found trunk-state keys that
+   improved openings offline; [claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md)
+   tested them in free generation on fresh p-v. The point key improves templates by +13/+8/+12 and
+   exact replies by +9/+8/+12 at three seeds. It reaches only 12–18% of the forced-opening lift;
+   the sign key is inconclusive at this panel size. The integer table, client-sized search and
+   end-to-end score remain open.
 2. **Serve every required part in integers.** Finish the served read, memory and readout rather
    than treating an export or an audit alone as the whole model.
 3. **Train and score one model end to end.** Measure complete generated replies on untouched
@@ -91,8 +92,9 @@ artifact on the user's device is the product and is allowed; research compute re
 
 Can the model start a correct reply when the user's phrasing is new, rather than only retrieve or
 continue a familiar template? M1 answered the narrower next-token count-table question. It did not
-answer that broader generation question. Claude-218's offline teacher-forced sign-key probe improves the opening,
-but a trained, served key and correct free generation on another fresh panel remain unproven.
+answer that broader generation question. Claude-219's point-key opening improves free generation
+on fresh p-v, but only partially. Its integer table, client-sized search and whole-model score are
+still unproven; useful conversation has not been established.
 
 ## Where it stands
 
@@ -100,7 +102,7 @@ but a trained, served key and correct free generation on another fresh panel rem
 |---|---|---|
 | Milestones complete | **1 of 8 (M1)** | [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) |
 | Next milestone | M2: grounded complete replies | [PLAN](../../PLAN.md) |
-| Immediate problem | Train and serve the sign key; test free generation on fresh phrasing | [claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md) |
+| Immediate problem | Train and serve the point key in one integer model; score it end to end | [claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md) |
 | M4 | Lawful likelihood built; full accepted-model serving and held-out score open | [serving and export](../model/serving-and-export.md) |
 | Products shipped | None | [products](../products/README.md) |
 

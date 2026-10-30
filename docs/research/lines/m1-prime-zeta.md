@@ -52,6 +52,6 @@ An injective table is necessary, not sufficient. Uniqueness solved aliasing, and
 
 ## Current state
 
-ACTIVE. The held trained-in test against the two nulls (a shifted-ordinate null and a permuted-prime null) at matched budget with at least two seeds is the next step. Prime-zeta is a deterministic function of token id, so identical seeds give identical tables; seed variance needs another declared axis.
+ACTIVE. The trained-in test against the two nulls (a shifted-ordinate null and a permuted-prime null) is not yet run; it needs a fresh FIT and the lab's D67 pre-run review at matched budget with at least two seeds. Prime-zeta is a deterministic function of token id, so identical seeds give identical tables; seed variance needs another declared axis.
 
 **Go deeper:** the [generated catalog page](../../../archive/catalog/m1-prime-zeta.md) lists the three records.

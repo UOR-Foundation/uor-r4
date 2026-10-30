@@ -68,7 +68,7 @@ Terms: $P_{succ}$ is the 3,847-row copy-successor sub-panel (see [relation-read]
 
 ## What comes next
 
-1. **Admission-preserving A8 rerun** with the 64-batch anchor guard. The controller is merged (`UOR-Foundation/uor-r4#2782`). Finite qualification and the lab's D67 pre-run review are outstanding; D41's donor pass is the only owner-at-dispatch exception.
+1. **Next admission-preserving rerun** with the 64-batch anchor guard. The controller is merged (`UOR-Foundation/uor-r4#2782`), finite qualification passed 5/5 with D67 pre-run review PASS, and the full-dose rerun reached Q1 before a diagnostic stop. A further rerun needs its own D67 pre-run review; D41's donor pass is the only owner-at-dispatch exception.
 2. **Occupancy-regularised or load-balanced rank objective**, the registered route after the K16 collapse.
 3. **A finer address metric** if admission stays capped at $K=16$.
 4. **$K>8$ on an injective, address-structured codebook.**
