@@ -13,7 +13,19 @@ Round 2 was NOT FIT (a fresh reviewer, at `45f37c213`). It found rounds 1's repa
 2. **Row 3's new-question condition** had no band. It now has one.
 3. **The grade's inputs** are now listed in full, each with its sha256.
 
-The grade is also written and unit-tested before the pod runs, so only the level choice remains after sealing. Round 3 is pending.
+The grade is also written and unit-tested before the pod runs, so only the level choice remains after sealing.
+
+Round 3 was NOT FIT (a fresh reviewer, at `42cecbd8a`). It found the decision logic, the bands, the strata, the τ rule and the p-u gate matching this sheet, and two checks the sheet promised the grade makes and it did not:
+1. **The panels' masks** were not checked against their sha256.
+2. **The anchor check** was not run by the grade itself.
+
+Both are now refusals in the grade. With the code review of the grade (CHANGES on the same mask check), these were also taken in:
+- the levels a deciding grade is given must equal p-s's own choice;
+- both forced arms must hold 256 replies;
+- rows 2 and 4, like row 1, do not hold on a reading with b + c under 10;
+- the deciding-nothing readings below are computed.
+
+Round 4 is pending.
 
 ## The question
 
@@ -92,7 +104,10 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
    - every expected file is written;
    - each keys file's positions equal the split's openings as the laptop finds them from the panel's mask, in order;
    - every forced reply opens with its reference's first token;
-   - the anchor check holds at every opening of p-s and p-u (`--opening-bound 1` with both panels), so the laptop's exact key is the served memory's;
+   - each panel's tokens and mask match their sha256s above;
+   - the anchor check holds at every opening of p-s, p-u and DEV, run by the grade itself, so the laptop's exact key is the served memory's;
+   - each forced arm and its greedy arm hold the same 256 prompts;
+   - a deciding grade's given levels equal p-s's own choice;
    - on every opening where the exact key misses, the memory-on and memory-off nearest tokens are equal. So the memory moves nothing there, and B is what the served model sees on the missed rows.
 6. **Seal** to `results/claude/one-model-end-to-end-memory-key-2026-10-30/run-<sha8>/` with a `SHA256SUMS`, match it on the pod file for file, read it back, and take the pod down.
 7. **The grade, `--key-grade 1`, is written and unit-tested on the laptop before the pod runs** (FIT round 2's advice), and reviewed with the code. After sealing, in order:
@@ -127,9 +142,9 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
 | Row | Holds when | Next unit |
 |---|---|---|
 | 1 | At every seed, the forced arm's lift over greedy (paired, memory on, 256 replies), b − c, is at most 2·√(b + c), both on replies equal to their reference and on replies whose value-masked template (K = 1,024) equals the reference's. If b + c < 10 on both measures at a seed, row 1 is underpowered there and does not hold | The opening is not enough. The rollout hinge, or a combined unit |
-| 2 | At every seed, U's hits minus the larger of the exact key's and B's hits, on all openings, is within 2·√(b + c) of zero, paired against that larger arm | No prompt key has headroom. The hinge, and the later rows |
+| 2 | At every seed, U's hits minus the larger of the exact key's and B's hits, on all openings, is within 2·√(b + c) of zero, paired against that larger arm (a tie in hits takes the exact key), with b + c at least 10 | No prompt key has headroom. The hinge, and the later rows |
 | 3 | Some key passes all four, at every seed: Δ_K,s beyond its band; precision when it fires at least B's on those rows; Δ on the new stratum not below 0 by more than its own 2·√(b + c); and on DEV, the served model with K backing off where the exact key misses not lower than served by more than its paired band | Train and serve that key (the sign key if both pass), with an opening bar on another fresh panel |
-| 4 | No key passes row 3, and some key, read at q100 (firing on every missed row), loses beyond its band at some seed: Δ_K,s < −2·√(b + c) | An abstention gate (a distance or a share threshold) |
+| 4 | No key passes row 3, and some key, read at q100 (firing on every missed row), loses beyond its band at some seed: Δ_K,s < −2·√(b + c), with b + c at least 10 | An abstention gate (a distance or a share threshold) |
 | 5 | None of the above | Train the trunk's opening point to gather paraphrases, with a geometric hinge |
 
 **Notes on the table:**
@@ -137,10 +152,12 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
 - **The ORDER's band** was `max(2·√(b + c), the spread across seeds)`. Here every condition must hold at every seed, each with its own paired band, which is the stricter reading of the same rule.
 - **U** is near 100% precise by construction, since its key holds the reply's first token. So row 2 mostly measures how often TRAIN holds the reply's template, which is the headroom a prompt key can reach.
 
-**Reported, deciding nothing:**
-- each key's fire rate, precision and Δ at every decile on p-u;
-- the known and new strata;
-- DEV at every decile;
+**Reported, deciding nothing.** In the grade (`readings`, strata `missed-decile`, `known`, `dev-decile`):
+- each key's fire rate, precision and Δ at every decile on p-u's missed rows;
+- the known stratum at the chosen level (the new one decides);
+- DEV's backoff at every decile.
+
+From the run's own files, in the REPORT:
 - the forced arm's loops and complete replies;
 - the search cost per opening in milliseconds, and the table's bytes;
 - tokens per second for every decode.
