@@ -108,6 +108,7 @@ fails, and so does a row whose path is gone. `uor-harness check`'s FILEMAP rule 
 | `scripts/pod/` | `uor-pod` pod management |
 | `scripts/research/` | Research scripts (legacy; read-only) |
 | `scripts/storage/` | Storage and hygiene scripts (`uor-hygiene`, research-data) |
+| `scripts/studio/` | Studio build-and-publish helper (wasm bundle, demo stack, stage and publish) |
 | `src-tauri/` | The Tauri desktop client shell (infra-desktop-client-tauri) |
 | `src-tauri/capabilities/` | Tauri capability grants for the desktop client |
 | `src-tauri/src/` | The desktop client's Rust sources |

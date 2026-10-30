@@ -6,8 +6,9 @@ area: serving
 status: ready
 open_to: lab
 needs_gpu: false
+notebook: docs/research/notebook/m4-serving.md
 depends_on: [m7-studio-connect-wasm-engine, m7-studio-self-host-page-assets]
-scope: [web/**, docs/products/**, scripts/studio/**, docs/research/notebook/m4-serving.md, docs/loop/tasks/m7-studio-live-model-sources/**, docs/roadmap/items/m7-studio-live-model-sources.md]
+scope: [web/**, docs/products/**, scripts/studio/**, scripts/stage-studio-site.sh, docs/research/notebook/m4-serving.md, docs/loop/tasks/m7-studio-live-model-sources/**, docs/roadmap/items/m7-studio-live-model-sources.md]
 done_class: host
 ---
 
@@ -27,7 +28,7 @@ This item is the source-repo change and the built-artifact publish. The Pages wo
 
 ## Done when
 
-1. **Clean Studio page.** web/studio/index.html and index.css are restructured into a coherent, responsive interface with an honest current-status header (project state, engine state, model source), a clean chat pane and code pane, and no stale D36/0-of-8/provenance clutter. It remains offline-first: no external CDN or network request at page load, enforced by web/studio/verify_studio_page.mjs and verify_studio_page_load.mjs.
+1. **Clean Studio page.** web/studio/index.html and index.css are restructured into a coherent, responsive interface with an honest current-status header (project state, engine state, model source), a clean chat pane and code pane, and no stale D36/0-of-8/provenance clutter. It remains offline-first against other origins: no external or off-origin request at page load (only same-origin bundled assets, including ./models.json, are requested), enforced by web/studio/verify_studio_page.mjs and verify_studio_page_load.mjs, which report external [].
 2. **Model sources.** A Model Source panel offers (a) the bundled synthetic demo stack, (b) extend the existing /1-only local sidecar loader to a local .lut/.bin file loader, (c) load a model from a user-provided URL, and (d) an OpenAI-compatible API provider list with add/edit/remove and presets (local uor-r4 API, Ollama, custom), persisted in localStorage, with no keys committed and no automatic external requests. The worker is the only WASM backend and its capability labels are truthful (synthetic vs loaded artifact, unqualified stack, API mode).
 3. **Working wasm.** The serving-wasm bundle builds reproducibly with the documented script and the worker accepts the engine's served stack schemas (uor-r4.lut-stack/1-6; /7 parses but the serving engine refuses a turn-memory stack, recorded honestly) plus a user-selected model; verify_studio_worker.mjs and the M7 parity harness still pass on the synthetic fixture and the bundle loads in a browser/headless check.
 4. **Live publish.** The built site/studio (page, JS, pkg, synthetic-stack.lut, tokenizer.json, model manifest) is pushed to gh-pages by scripts/studio/build-and-publish.sh, the live https://uor-foundation.github.io/uor-r4/studio/ serves it, and the page passes the page-load traps and loads the demo model. The owner is given the docs-site.yml patch proposal (path filters + build steps) as a report, not applied.
