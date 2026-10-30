@@ -46,9 +46,12 @@ Parity must hold: 0 refused rows, 0 reference mismatches, B4 passes. Both seeds 
 
 ## Steps
 
-The job is `local/claude/bar-f-job/job.sh` in this unit's worktree, sha256 `c7cce15649dc32fbc608cf927c5b940b5fc6e6e322c37f49198f9fb9ad3ba10b`, with its configs and receipt shipped to `/workspace/barf-job/`. On 1 × RTX 5090:
+The job is `local/claude/bar-f-job/job.sh` in this unit's worktree, sha256 `716f3be4c0d2ab82d02fad98ba51f00f2f409cf80798b806e540fdc9bb3439e6`, with its configs and receipt shipped to `/workspace/barf-job/`. On 1 × RTX 5090:
 1. **Source and tests.** Pin the source to this unit's head. Run the scorer's tests with `--features cuda --target x86_64-unknown-linux-gnu`; the job stops unless the bar (f) tests ran and all pass.
-2. **Two builds,** A and B, as bar (e) did: `UOR_NVCC_ARCH=compute_120 cargo build --release --locked --manifest-path docs/labs/m1-d11-artifact-scorer/instrument/Cargo.toml --features cuda`, each with its sha256.
+2. **Two builds,** A and B, as bar (e) did: `UOR_NVCC_ARCH=compute_120 cargo build --release --locked --manifest-path docs/labs/m1-d11-artifact-scorer/instrument/Cargo.toml --features cuda --target x86_64-unknown-linux-gnu`, each with its sha256.
+   - **Instrument repair, 30 Oct 04:14Z.** The first job (sha256 `c7cce156…a10b`, at `e6c1bcef5`) built as bar (e)'s sheet wrote it, with no `--target`. Build A failed with `E0463: can't find crate for uor_r4_core`. That is the host and target collision the crate's own `Cargo.toml` warns of (cargo #6313).
+   - **What it was not:** the tests, run with `--target`, had passed, including the bar (f) tests. The job stopped before reading any panel byte, so the panel is unopened.
+   - **The repair:** the two builds now take `--target x86_64-unknown-linux-gnu`. The job's own head gives it a new output folder.
 3. **The inputs, each checked:**
    - the artifacts against the receipt's sha256s;
    - TRAIN and DEV against their pins;
