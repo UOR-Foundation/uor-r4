@@ -2,7 +2,11 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md). Order: [claude-213](../../loop/tasks/one-model-end-to-end/claude-213/ORDER.md). Direction: Casey, 30 Oct, "do not rule flock out, improve it instead".
 
-TEST FITNESS: PENDING (a fresh non-author FIT is run on this sheet before any pod).
+TEST FITNESS: FIT, from a fresh non-author review at `4b28ae7d6`, with nothing blocking. Its notes are taken into this sheet:
+- **"narrows" is nearly automatic once a margin holds.** `FLOCK_END`'s gap is about 0.55, so the REPORT reads "narrows" as a holds result, not as progress toward close (the Bar).
+- **The cell-only lines have no byte reference.** They are pinned by the unit tests and the margin-0 CUDA test; step 7 covers the shared path, concurrency included.
+- **tok/s is read under three-way GPU sharing** (the Bar).
+- **The code pins TRAIN, DEV and the tokenizer:** `pinned_tokenizer` (`in_space_long.rs:5070`), `load_train_split` (`:5084`) and `load_dev` (`:2414`).
 
 ## The question
 
@@ -96,11 +100,13 @@ Every reading is `VerdictSeed` (claude-211's decision 5), against the split's ow
 | **no gain** | otherwise | The score-margin cell is a negative for this configuration only. `FLOCK_END` stays, and the next unit tries the address cell. |
 | **no selection** | no margin holds on DEV | As no gain, recorded as "no margin of the ladder holds decision 4 on DEV". |
 
+**How "narrows" is read:** `FLOCK_END`'s gap is about 0.55, so a margin that holds is almost sure to be nearer the references. "narrows" therefore means "holds, not close": the salad is reduced, and the replies are not yet as TRAIN-like as the references. It is reported as that, never as nearness to close.
+
 **Reported beside the decision, deciding nothing:**
 - every margin's p-c readings;
 - each cell margin's mean admitted count, which shows the score scale;
 - greedy's and `FLOCK_END`'s p-c readings;
-- each rule's decode tok/s;
+- each rule's decode tok/s. This is measured with three seeds sharing one GPU, so it is a floor, not a served speed;
 - a fixed reading of the first 20 p-c replies of seed 1 under greedy, `FLOCK_END` and `FlockCell(m*)`, quoted in the REPORT.
 
 ## Minimum test power
@@ -124,4 +130,4 @@ Every reading is `VerdictSeed` (claude-211's decision 5), against the split's ow
 - **Per seed:** 18 decodes of 256 replies: DEV and p-c × (greedy with the memory on and off, `FLOCK_END`, six margins). claude-211's (r-drop) scoring ran 6 decodes and the rows in 7 minutes, so about 20 minutes per seed.
 - **In all:** three seeds side by side on one GPU (small, latency-bound kernels), so about 30–45 minutes with the build and tests.
 - **The lease:** one RTX 5090 at about $0.56/h, so under $1.
-  - `uor-pod status` (30 Oct, 03:00Z): 0 pods running across the labs, $0/h of $8/h. This is inside the caps.
+  - `uor-pod status` (30 Oct, 07:00Z): 0 pods running across the labs, $0/h of $8/h, with a 5090 from $0.563/h. This is inside the caps.
