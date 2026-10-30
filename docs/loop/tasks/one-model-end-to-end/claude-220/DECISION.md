@@ -22,25 +22,40 @@ The table is TRAIN's 212,968 opening points under the trunk (256 f32 each) and t
 | | Form | Size | Behaviour against the measured key | What it needs first |
 |---|---|---|---|---|
 | A | The exact f32 table, as measured | 218 MB | The same names (bit-for-bit points; the parity instrument checks it) | Nothing |
-| B | A: with identical points merged, each keeping its target counts | below 218 MB, by an unknown ratio | The same names: commonest-at-least-distance over counts is the same rule | The merge ratio, counted from A |
+| B | A: with exactly equal points merged, each keeping its target counts | at most about A's size; the ratio is unknown, possibly 1 | The same names: commonest-at-least-distance over counts is the same rule | The merge ratio, counted from A |
 | C | Quantized points (i8, or after the Hadamard rotation) | about 55 MB as i8 | Different distances, so different names | Its own bar on a fresh panel |
 | D | The sign code (Hamming) | 6.8 MB | Measured too thin to read on p-v | A larger panel |
 
 ## Constraints
 
 - **CHARTER §3 is met by all four.** L1 is a sum of absolute differences, not a dense matmul. Nothing squashes. Model compute stays on the GPU.
-- **D32's integer artifact cannot hold A's floats.** The integer export of the table belongs with `turn-memory-integer`'s remaining units (session keys and moves), as C or an integer form of B.
+- **D32's integer artifact cannot hold A's floats.** No item yet covers the point table's integer export: `turn-memory-integer` holds only the memory's two exact-id tables. That export becomes a new roadmap item or a recorded amendment, as C or D. D is the form `integer-hamming-read`'s popcount machinery already fits.
 - **The goal is one model end to end** (token → vector → vector → integer → token). This unit makes the float served model whole with its key. The integer step comes after it.
 
 ## Recommendation: A, then B and C in later units with their own bars
 
 - **A keeps this unit's free-generation numbers resting on claude-219's registered result.** Changing the table and the serving path at once would leave a difference unattributable.
 - **The cost is acceptable for the float served model.**
-  - 218 MB beside a 52 MB checkpoint is large for a phone, but not for the GPU research host.
-  - The search, once per reply, is under 1% of a 64-token reply's decode time.
+  - 218 MB per checkpoint is large for a phone, but not for the GPU research host.
+  - The search runs once per reply. The batched instrument's 6.8 ms is 0.6% of a 64-token reply's decode time; the served single-query search is measured in this unit, not assumed.
 - **Next:**
   - **B is a lossless size cut:** it needs only a count, and changes no name.
-  - **C is the integer artifact's form,** and needs its own bar, since its names differ.
+  - **C or D is the integer artifact's form,** and needs its own bar, since its names differ.
+
+## The decision review: APPROVE (a fresh non-author reviewer, 30 Oct, D68)
+
+It checked:
+- the sizes;
+- that B changes no name (an exact-equality merge keeps every count at the least distance);
+- that no option breaks CHARTER §3 or D32;
+- that PLAN.md points no other way.
+
+Its conditions, each taken into this unit:
+- **(a)** The REPORT calls A's results a float research evaluation (CHARTER §3.5, §3.7), and its tok/s the GPU float decode's, not the served speed. It names the integer export as owed.
+- **(b)** C's bar, when it comes, is measured with the integer trunk's own points for both the query and the table, never A's float points quantized after the fact.
+- **(c)** The served search is measured per reply, as a single query, inside tok/s.
+- **(d)** The wording above is corrected: B is at most A's size; the integer form is C or D; the integer export needs its own item.
+- **(e)** The REPORT gives residency: 218 MB resident per checkpoint, 654 MB in the store for three seeds, and the bytes scanned per keyed opening.
 
 ## What a reversal costs
 
