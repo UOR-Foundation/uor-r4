@@ -36,10 +36,12 @@
 //! to `DIR/recall.jsonl`, and the final model to `DIR/models/`. Needs no `--data-root`, and
 //! ignores it if given.
 //!
-//! `train-in-space --data-root DIR --opening-bound 1`: how well the prompt words a window shows
-//! could name each reply opening, as TRAIN's commonest opening per key scored on DEV. A count
-//! over the corpus that needs no GPU; one JSON line per key, then one line per split
-//! (`dev`, `train`) with how many openings the opening read's turn anchor keeps the first-8 key at.
+//! `train-in-space --data-root DIR --opening-bound 1 [--panel NAME=DIR]...`: how well the prompt
+//! words a window shows could name each reply opening, as TRAIN's commonest opening per key
+//! scored on DEV and on each panel, with how often each key fires and its precision when it does,
+//! and the oracle `reply-template` key (claude-218). A count over the corpus that needs no GPU;
+//! one JSON line per split and key, then one line per split (`dev`, `train`) with how many
+//! openings the opening read's turn anchor keeps the first-8 key at.
 //!
 //! `train-in-space --data-root DIR --reply-bound 1`: what an exact memory of TRAIN could name
 //! among DEV's reply rows, for each candidate key and stored-share threshold, by kind (openings,
@@ -642,7 +644,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
     if bound {
-        let (rows, checks) = opening_bound(&data_root)?;
+        let (rows, checks) = opening_bound(&data_root, &extra_panels)?;
         for row in rows {
             println!("{}", serde_json::to_string(&row)?);
         }

@@ -1197,22 +1197,38 @@ fn opens_reply(mask: &[u8], position: usize) -> bool {
 }
 
 /// How well the prompt words a window shows could name its reply's first token: TRAIN's
-/// commonest opening for each key, scored on DEV's openings ([`opening_bound`]). A count over the
-/// corpus, not a model: it bounds what a read that finds those words could add to the openings.
+/// commonest opening for each key, scored on a split's openings ([`opening_bound`]): DEV, or a
+/// `--panel` (claude-218). A count over the corpus, not a model: it bounds what a read that finds
+/// those words could add to the openings.
 #[derive(Clone, Debug, Serialize)]
 pub struct OpeningBound {
-    /// `none`, `first-k` (the first `k` prompt tokens the window shows) or `last-k` (the `k`
-    /// tokens before the opening).
+    /// The scored split: `dev`, or the panel's name.
+    pub split: String,
+    /// The panel's token file sha256; DEV is pinned.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+    /// `none`, `first-k` (the first `k` prompt tokens the window shows), `last-k` (the `k`
+    /// tokens before the opening), `set` and `set-first-k` (those tokens' distinct ids in id
+    /// order, an order-free key, claude-218), or `reply-template`: the oracle U, keyed by the
+    /// reference reply itself with its values masked as the census masks them
+    /// ([`OPENING_TEMPLATE_K`]), the most any key that knew the question could name.
     pub key: String,
     pub train_rows: usize,
     pub train_keys: usize,
-    pub dev_rows: usize,
-    /// DEV openings whose key TRAIN never saw; TRAIN's commonest opening names them.
-    pub dev_unseen: usize,
-    pub dev_hits: usize,
+    pub rows: usize,
+    /// Openings whose key TRAIN never saw; TRAIN's commonest opening names them.
+    pub unseen: usize,
+    pub hits: usize,
+    /// The hits among the openings whose key TRAIN saw, where the key fires: its precision is
+    /// `fired_hits / (rows − unseen)`.
+    pub fired_hits: usize,
     /// TRAIN's most frequent keys, decoded, with their commonest opening and its share.
     pub top: Vec<OpeningKey>,
 }
+
+/// The census's value mask for [`OpeningBound`]'s `reply-template` key: TRAIN's 1,024 most
+/// frequent tokens are kept, the K the panel census reads its templates at.
+const OPENING_TEMPLATE_K: usize = 1024;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct OpeningKey {
@@ -1231,13 +1247,22 @@ fn openings(windows: &[CausalWindow], mask: &[u8]) -> Vec<(Vec<u32>, u32)> {
         .collect()
 }
 
-/// One opening [`openings`] yields, with where it stands: its window's index and the offset of
-/// the input token it is predicted from.
+/// One opening [`openings`] yields, with where it stands: its window's index, the offset of the
+/// input token it is predicted from, and its target's corpus position.
 struct OpeningRow {
     window: usize,
     offset: usize,
+    position: usize,
     prompt: Vec<u32>,
     target: u32,
+}
+
+/// The reply that starts at corpus `position`: its tokens while the mask holds, up to BOS.
+fn reply_at<'a>(tokens: &'a [u32], mask: &[u8], position: usize) -> &'a [u32] {
+    let end = (position..tokens.len())
+        .find(|&i| mask[i] == 0 || tokens[i] == hs::SHEET_BOS_ID)
+        .unwrap_or(tokens.len());
+    &tokens[position..end]
 }
 
 fn opening_rows(windows: &[CausalWindow], mask: &[u8]) -> Vec<OpeningRow> {
@@ -1265,6 +1290,7 @@ fn opening_rows(windows: &[CausalWindow], mask: &[u8]) -> Vec<OpeningRow> {
             rows.push(OpeningRow {
                 window: index,
                 offset,
+                position,
                 prompt: w.input_ids[first..=offset].to_vec(),
                 target,
             });
@@ -1326,14 +1352,26 @@ enum PromptKey {
     None,
     First(usize),
     Last(usize),
+    /// The prompt's distinct ids, in id order: the same key for any order of the same words.
+    Set,
+    /// The first `k` prompt tokens' distinct ids, in id order.
+    SetFirst(usize),
 }
 
 impl PromptKey {
-    fn of(self, prompt: &[u32]) -> &[u32] {
+    fn of(self, prompt: &[u32]) -> Vec<u32> {
+        let set = |ids: &[u32]| {
+            let mut ids = ids.to_vec();
+            ids.sort_unstable();
+            ids.dedup();
+            ids
+        };
         match self {
-            PromptKey::None => &[],
-            PromptKey::First(k) => &prompt[..k.min(prompt.len())],
-            PromptKey::Last(k) => &prompt[prompt.len() - k.min(prompt.len())..],
+            PromptKey::None => Vec::new(),
+            PromptKey::First(k) => prompt[..k.min(prompt.len())].to_vec(),
+            PromptKey::Last(k) => prompt[prompt.len() - k.min(prompt.len())..].to_vec(),
+            PromptKey::Set => set(prompt),
+            PromptKey::SetFirst(k) => set(&prompt[..k.min(prompt.len())]),
         }
     }
 
@@ -1342,39 +1380,39 @@ impl PromptKey {
             PromptKey::None => "none".to_owned(),
             PromptKey::First(k) => format!("first-{k}"),
             PromptKey::Last(k) => format!("last-{k}"),
+            PromptKey::Set => "set".to_owned(),
+            PromptKey::SetFirst(k) => format!("set-first-{k}"),
         }
     }
 }
 
+/// [`OpeningBound`] for one key: `train` and `split` are the openings already keyed, each as its
+/// key and its target.
 fn bound(
-    key: PromptKey,
+    split: &str,
+    key: String,
     train: &[(Vec<u32>, u32)],
-    dev: &[(Vec<u32>, u32)],
+    rows: &[(Vec<u32>, u32)],
     decode: &dyn Fn(&[u32]) -> String,
 ) -> OpeningBound {
-    let pick = |prompt| key.of(prompt);
     let mut table =
         std::collections::BTreeMap::<Vec<u32>, std::collections::BTreeMap<u32, usize>>::new();
     let mut overall = std::collections::BTreeMap::<u32, usize>::new();
-    for (prompt, target) in train {
-        *table
-            .entry(pick(prompt).to_vec())
-            .or_default()
-            .entry(*target)
-            .or_default() += 1;
+    for (k, target) in train {
+        *table.entry(k.clone()).or_default().entry(*target).or_default() += 1;
         *overall.entry(*target).or_default() += 1;
     }
     let fallback = commonest(&overall).map(|(t, _)| t);
-    let (mut dev_unseen, mut dev_hits) = (0, 0);
-    for (prompt, target) in dev {
-        let named = match table.get(pick(prompt)) {
-            Some(counts) => commonest(counts).map(|(t, _)| t),
-            None => {
-                dev_unseen += 1;
-                fallback
-            }
+    let (mut unseen, mut hits, mut fired_hits) = (0, 0, 0);
+    for (k, target) in rows {
+        let (named, fired) = match table.get(k) {
+            Some(counts) => (commonest(counts).map(|(t, _)| t), true),
+            None => (fallback, false),
         };
-        dev_hits += usize::from(named == Some(*target));
+        let hit = named == Some(*target);
+        unseen += usize::from(!fired);
+        hits += usize::from(hit);
+        fired_hits += usize::from(hit && fired);
     }
     let mut keys: Vec<(&Vec<u32>, usize)> = table
         .iter()
@@ -1395,38 +1433,98 @@ fn bound(
         })
         .collect();
     OpeningBound {
-        key: key.name(),
+        split: split.to_owned(),
+        sha256: None,
+        key,
         train_rows: train.len(),
         train_keys: table.len(),
-        dev_rows: dev.len(),
-        dev_unseen,
-        dev_hits,
+        rows: rows.len(),
+        unseen,
+        hits,
+        fired_hits,
         top,
     }
 }
 
-/// [`OpeningBound`] for no key, the first 1–8 prompt tokens and the last 1–4, and the opening
-/// read's [`AnchorCheck`] on DEV and on TRAIN.
-pub fn opening_bound(data_root: &Path) -> Result<(Vec<OpeningBound>, Vec<AnchorCheck>)> {
+/// Each opening of `rows` keyed by its reply's template: the reply at its position with its
+/// values masked ([`value_mask`]), and its target.
+fn template_keyed(
+    rows: &[OpeningRow],
+    tokens: &[u32],
+    mask: &[u8],
+    keep: &std::collections::HashSet<u32>,
+    digits: &std::collections::HashSet<u32>,
+) -> Vec<(Vec<u32>, u32)> {
+    rows.iter()
+        .map(|r| (value_mask(reply_at(tokens, mask, r.position), keep, digits), r.target))
+        .collect()
+}
+
+/// [`OpeningBound`] on DEV and on each of `panels` (claude-218), for no key, the first 1–8 prompt
+/// tokens, the last 1–4, the order-free `set` and `set-first-8`, and the oracle
+/// `reply-template`; and the opening read's [`AnchorCheck`] on DEV and on TRAIN.
+pub fn opening_bound(
+    data_root: &Path,
+    panels: &[(String, PathBuf)],
+) -> Result<(Vec<OpeningBound>, Vec<AnchorCheck>)> {
+    let bos = hs::SHEET_BOS_ID;
     let tokenizer = pinned_tokenizer(data_root)?;
-    let decode = |ids: &[u32]| tail(&tokenizer.decode(ids), 80);
+    let shown = |ids: &[u32]| -> Vec<u32> { ids.iter().copied().filter(|&t| t != CENSUS_MASK).collect() };
+    let decode = |ids: &[u32]| tail(&tokenizer.decode(&shown(ids)), 80);
     let (train_tokens, train_mask) = load_train_split(data_root)?;
     let (train_windows, _) =
-        hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
-    let (dev_windows, dev_mask) = load_dev(data_root)?;
-    let train = openings(&train_windows, &train_mask);
-    let dev = openings(&dev_windows, &dev_mask);
-    let keys = std::iter::once(PromptKey::None)
+        hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, bos)?;
+    let (dev_tokens, dev_mask) = hs::load_pinned_uort_split(
+        &data_root.join("ft/dev/tokens.u16"),
+        &data_root.join("ft/dev/response_mask.u8"),
+        hs::PINNED_DEV_TOKENS_SHA256,
+        hs::PINNED_DEV_MASK_SHA256,
+        hs::EXPECTED_DEV_TOKENS,
+        hs::EXPECTED_DEV_ELIGIBLE_TARGETS,
+        hs::SHEET_VOCAB,
+        bos,
+    )?;
+    let mut splits = vec![("dev".to_owned(), dev_tokens, dev_mask, None)];
+    for (name, dir) in panels {
+        if !panel_name_ok(name) {
+            return Err(invalid(format!("--panel {name}: not a panel name")));
+        }
+        let (tokens, mask, sha) = load_unpinned_uort(dir)?;
+        splits.push((name.clone(), tokens, mask, Some(sha)));
+    }
+    let keep = top_tokens(&train_tokens, OPENING_TEMPLATE_K, bos);
+    let digits = digit_tokens(&fs::read_to_string(data_root.join("tokenizer.json"))?)?;
+    let train_rows = opening_rows(&train_windows, &train_mask);
+    let train_templates = template_keyed(&train_rows, &train_tokens, &train_mask, &keep, &digits);
+    let keys: Vec<PromptKey> = std::iter::once(PromptKey::None)
         .chain((1..=8).map(PromptKey::First))
-        .chain((1..=4).map(PromptKey::Last));
-    let checks = vec![
-        anchor_check("dev", &dev_windows, &dev_mask),
-        anchor_check("train", &train_windows, &train_mask),
-    ];
-    Ok((
-        keys.map(|key| bound(key, &train, &dev, &decode)).collect(),
-        checks,
-    ))
+        .chain((1..=4).map(PromptKey::Last))
+        .chain([PromptKey::Set, PromptKey::SetFirst(8)])
+        .collect();
+    let keyed = |rows: &[OpeningRow], key: PromptKey| -> Vec<(Vec<u32>, u32)> {
+        rows.iter().map(|r| (key.of(&r.prompt), r.target)).collect()
+    };
+    let mut bounds = Vec::new();
+    let mut checks = Vec::new();
+    for (name, tokens, mask, sha) in &splits {
+        let (windows, _) = hs::build_document_windows(tokens, mask, SHEET_CONTEXT, bos)?;
+        let rows = opening_rows(&windows, mask);
+        if name == "dev" {
+            checks.push(anchor_check("dev", &windows, mask));
+        }
+        let mut split_bounds: Vec<OpeningBound> = keys
+            .iter()
+            .map(|&key| bound(name, key.name(), &keyed(&train_rows, key), &keyed(&rows, key), &decode))
+            .collect();
+        let templates = template_keyed(&rows, tokens, mask, &keep, &digits);
+        split_bounds.push(bound(name, "reply-template".to_owned(), &train_templates, &templates, &decode));
+        for b in &mut split_bounds {
+            b.sha256 = sha.clone();
+        }
+        bounds.extend(split_bounds);
+    }
+    checks.push(anchor_check("train", &train_windows, &train_mask));
+    Ok((bounds, checks))
 }
 
 /// One reply row (turn-memory-reply, claude-192): the prompt its window shows for its turn, back
@@ -7067,6 +7165,38 @@ mod tests {
         );
     }
 
+    /// claude-218: the probe counts where a key fires (TRAIN saw it) and its hits there, keys
+    /// order-free by the distinct ids, and keys the oracle by each opening's own reply template.
+    #[test]
+    fn the_opening_bound_counts_where_a_key_fires_and_its_precision() {
+        // Any order of the same words is one order-free key.
+        assert_eq!(PromptKey::Set.of(&[5, 3, 5, 1]), [1, 3, 5]);
+        assert_eq!(PromptKey::Set.of(&[3, 5]), PromptKey::Set.of(&[5, 3]));
+        assert_eq!(PromptKey::SetFirst(2).of(&[5, 3, 1]), [3, 5]);
+        assert_eq!(PromptKey::First(2).of(&[5, 3, 1]), [5, 3]);
+        // TRAIN: key [1] opens with 7 twice and 8 once, key [2] with 9; 7 is the commonest.
+        let train = [(vec![1], 7), (vec![1], 7), (vec![1], 8), (vec![2], 9)];
+        // [1] fires and is right, [2] fires and is wrong, [3] is unseen and the fallback 7 is
+        // right, [4] is unseen and wrong: 2 hits, 1 of them where the key fired.
+        let rows = [(vec![1], 7), (vec![2], 7), (vec![3], 7), (vec![4], 5)];
+        let b = bound("p", "k".to_owned(), &train, &rows, &|_| String::new());
+        assert_eq!((b.rows, b.unseen, b.hits, b.fired_hits, b.train_keys), (4, 2, 2, 1, 2));
+        // Two documents: BOS, a prompt (10 11), a reply (20 21), a prompt (12), a reply (22);
+        // then BOS, a prompt (13) and a reply (23). Each reply runs while the mask holds, to BOS.
+        let tokens = [0u32, 10, 11, 20, 21, 12, 22, 0, 13, 23];
+        let mask = [0u8, 0, 0, 1, 1, 0, 1, 0, 0, 1];
+        assert_eq!(reply_at(&tokens, &mask, 3), [20, 21]);
+        assert_eq!(reply_at(&tokens, &mask, 6), [22]);
+        assert_eq!(reply_at(&tokens, &mask, 9), [23]);
+        let (windows, _) = hs::build_document_windows(&tokens, &mask, 16, 0).unwrap();
+        let opened = opening_rows(&windows, &mask);
+        assert_eq!(opened.iter().map(|r| r.position).collect::<Vec<_>>(), [3, 6, 9]);
+        // The oracle's key is the reply with its values masked: 23 is not kept, so it is a value.
+        let keep: std::collections::HashSet<u32> = [20, 21, 22].into();
+        let templates = template_keyed(&opened, &tokens, &mask, &keep, &Default::default());
+        assert_eq!(templates, [(vec![20, 21], 20), (vec![22], 22), (vec![CENSUS_MASK], 23)]);
+    }
+
     #[test]
     fn the_anchor_check_counts_openings_whose_turn_slots_are_the_first_8_key() {
         // BOS, a prompt (10 11 12), a reply (20 21) closed by EOS, a prompt (13 14), a reply (22)
@@ -7239,17 +7369,22 @@ mod tests {
         ];
         let dev = [(vec![10, 99], 20), (vec![13, 98], 22), (vec![50], 20)];
         let decode = |ids: &[u32]| format!("{ids:?}");
-        let first = bound(PromptKey::First(1), &train, &dev, &decode);
+        let by = |key: PromptKey, rows: &[(Vec<u32>, u32)]| -> Vec<(Vec<u32>, u32)> {
+            rows.iter().map(|(p, t)| (key.of(p), *t)).collect()
+        };
+        let key = PromptKey::First(1);
+        let first = bound("dev", key.name(), &by(key, &train), &by(key, &dev), &decode);
         // Key 10 opens with 20 twice and 23 once; key 13 with 22; key 50 is unseen and takes
         // TRAIN's commonest opening, 20.
         assert_eq!(
-            (first.dev_hits, first.dev_unseen, first.train_keys),
-            (3, 1, 2)
+            (first.hits, first.unseen, first.fired_hits, first.train_keys),
+            (3, 1, 2, 2)
         );
         assert_eq!(first.top[0].key, "[10]");
         assert_eq!((first.top[0].train_rows, first.top[0].opening_rows), (3, 2));
-        let none = bound(PromptKey::None, &train, &dev, &decode);
-        assert_eq!((none.dev_hits, none.dev_unseen), (2, 0));
+        let key = PromptKey::None;
+        let none = bound("dev", key.name(), &by(key, &train), &by(key, &dev), &decode);
+        assert_eq!((none.hits, none.unseen, none.fired_hits), (2, 0, 2));
     }
 
     #[test]
