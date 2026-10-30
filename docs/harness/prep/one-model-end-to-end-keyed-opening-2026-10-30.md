@@ -2,7 +2,11 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md). Order: [claude-219](../../loop/tasks/one-model-end-to-end/claude-219/ORDER.md), written by hand on Casey's word: "screw kimi forge ahead as you were before with your plan for the single serving model". It follows claude-218 ([result](../../labs/one-model-end-to-end/memory-key-2026-10-30/README.md)).
 
-TEST FITNESS: PENDING (round 2; a fresh non-author reviewer reads this sheet and its sources before any pod).
+TEST FITNESS: FIT (round 2, a fresh non-author reviewer, 30 Oct, at `42dc7ff50`). The rounds are below.
+
+Round 2 was FIT, with no blocking points. It found row 1's repair in the sheet, the code and the test, and the rest of the sheet matching the code. Its notes are taken in:
+- a keyed token of BOS is now a refusal in the grade, as the instrument checks say, not a tolerance;
+- where row 4 holds while sign and hsign are thin, the REPORT names the key that decided it.
 
 Round 1 was NOT FIT (a fresh non-author reviewer, 30 Oct, at `4ef780f87`), on one blocking point, repaired here:
 - **Row 1** fired only when the forced arm failed to lift at all three seeds. So one seed's fault would have fallen to row 4 and read as a mechanism negative. Row 1 now fires when the forced arm does not lift at any one seed (`keyed_outcome`), with a unit test for one flat seed and for one too-thin seed.

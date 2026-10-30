@@ -2575,7 +2575,8 @@ fn keyed_reading(
         let ok = match want {
             KeyedReply::Greedy => k.reply == g.reply,
             KeyedReply::Forced => k.reply == f.reply,
-            KeyedReply::Novel(t) => k.reply.first() == Some(&t) || (t == hs::SHEET_BOS_ID && k.reply.is_empty()),
+            // A key's name is a TRAIN reply's first token, never BOS (FIT round 2).
+            KeyedReply::Novel(t) => t != hs::SHEET_BOS_ID && k.reply.first() == Some(&t),
         };
         if !ok {
             return Err(fault(&format!("the keyed reply at {} is not the one its opening fixes", g.position)));
