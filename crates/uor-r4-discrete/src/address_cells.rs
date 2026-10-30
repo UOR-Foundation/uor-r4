@@ -514,10 +514,10 @@ pub fn build(
                         cell_of[other].ok_or_else(|| invalid("neighbor cell missing"))?;
                     let outer_d = cell_l1(other_cell, cell);
                     let mut prev_int_d = 0u64;
-                    for prev_stage in 0..stage {
-                        let pic_other = stage_interior[prev_stage][other]
+                    for prev_interior in &stage_interior[..stage] {
+                        let pic_other = prev_interior[other]
                             .ok_or_else(|| invalid("previous stage neighbor interior missing"))?;
-                        let pic_self = stage_interior[prev_stage][t]
+                        let pic_self = prev_interior[t]
                             .ok_or_else(|| invalid("previous stage token interior missing"))?;
                         prev_int_d += if blocks == 3 {
                             root_l1(pic_other, pic_self)
