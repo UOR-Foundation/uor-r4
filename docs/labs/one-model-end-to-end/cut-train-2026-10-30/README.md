@@ -31,7 +31,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../roadmap/items/one-model-end-t
 ## Tokens per second
 
 - **Training:** 34,077, 23,312 and 33,734 context tok/s (seed 2 ran on a slower pod). (r-drop) trained at about 34,000 on a fast 5090, so no training cost of the cut is measured.
-- **Decode:** 92–93 tok/s per process on the fast pods and 71–72 on the slow one, with two scorings sharing each GPU. The cut costs at most 1 tok/s.
+- **Decode:** 91–93 tok/s per process on the fast pods and 71–72 on the slow one (70.9 for the decode-only arm), with two scorings sharing each GPU. The cut costs at most 1 tok/s.
 - **This is not the served speed.** The integer path with the row cut is not built.
 
 ## The registered outcome
@@ -76,7 +76,7 @@ The references' `v_ref` is 0.516 and their repeat rate 0.000. Each cell gives se
   - It is one more arm at the same seeds, not a control for the cause.
 - **One reading: held to the prompt, the reply learned to stop more than to answer.** Without its own earlier tokens to read, the trained model's reply leans on the prompt and the trunk alone. That is the role the turn memory's reply table, keyed by the reply's last id, was built to fill. It is not a tested cause.
 - **The decode-only arm is the surprise, and it decides nothing.** Decoded with the cut, the sealed (r-drop) loses about a third to nearly a half of its loops (45%, 37% and 32%), with its matched content unchanged (0.475 against 0.471, 0.503 against 0.508, 0.399 against 0.404).
-  - **Why it differs from claude-215:** claude-215's arm read "reduces, content lost". There, content was read on each arm's own completions, which claude-215 named as a possible selection effect; matched prompts remove it. This arm also holds an earlier reply in the prompt, as claude-215's did not.
+  - **Why it differs from claude-215:** claude-215's arm read "reduces, content lost". There, content was read on each arm's own completions, which claude-215's [REPORT](../../../loop/tasks/one-model-end-to-end/claude-215/REPORT.md) named as a possible selection effect; matched prompts remove it. This arm also holds an earlier reply in the prompt, as claude-215's did not.
   - **It is one panel.** A fresh panel would confirm it.
 
 ## What it unlocks

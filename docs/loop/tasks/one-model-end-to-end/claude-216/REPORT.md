@@ -14,7 +14,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
   (r-drop) trained in about 1,470 s on a fast 5090, so no training cost of the cut is measured.
 - **Decode, greedy with the memory on, p-t:**
-  - **92–93 tok/s per process** on the two fast pods, and **71–72** on the slow one. Two scorings shared each GPU, so these are floors.
+  - **91–93 tok/s per process** on the two fast pods, and **71–72** on the slow one (70.9 for the decode-only arm). Two scorings shared each GPU, so these are floors.
   - With the cut, decode is at most 1 tok/s slower than without it.
 - **This is not the served speed.** The integer path with the row cut is not built.
 
@@ -53,7 +53,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - **The decode-only arm, (r-drop) decoded with the cut, reads "improves" by the same rule.**
   - **Loops:** 35, 38 and 52 against 64, 60 and 76, fewer beyond the band and holding at every seed. Paired, 32, 27 and 38 replies stop looping, and 3, 5 and 14 start.
   - **Matched content:** 0.475, 0.503 and 0.399, against the base's 0.471, 0.508 and 0.404. That is kept at every seed.
-  - **Why it differs from claude-215's arm:** this arm uses this unit's rule, which also holds an earlier reply in the prompt. And the content is read on matched prompts. claude-215 read its arm's content on each arm's own completions and got "reduces, content lost". It had named a selection effect as a possible cause; this matched reading fits that, but it is one panel and decides nothing here.
+  - **Why it differs from claude-215's arm:** this arm uses this unit's rule, which also holds an earlier reply in the prompt. And the content is read on matched prompts. claude-215 read its arm's content on each arm's own completions and got "reduces, content lost". Its [REPORT](../claude-215/REPORT.md) named a selection effect as a possible cause. This matched reading fits that, but it is one panel and decides nothing here.
 
 ## What changed
 
