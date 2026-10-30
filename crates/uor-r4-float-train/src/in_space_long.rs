@@ -4849,6 +4849,18 @@ fn fewer_loops(loops: usize, greedy_loops: usize, n: usize) -> bool {
     loops + count_band(greedy_loops, n) < greedy_loops
 }
 
+/// From each rule's `(complete, complete and verbatim)` flags over the same prompts: how many
+/// prompts every rule completes, and each rule's verbatim replies among them (claude-216).
+fn matched_counts(flags: &[Vec<(bool, bool)>]) -> (usize, Vec<usize>) {
+    let n = flags.first().map_or(0, Vec::len);
+    let both: Vec<usize> = (0..n).filter(|&j| flags.iter().all(|f| f[j].0)).collect();
+    let verbatim = flags
+        .iter()
+        .map(|f| both.iter().filter(|&&j| f[j].1).count())
+        .collect();
+    (both.len(), verbatim)
+}
+
 /// Every reading [`cell_grade`], [`read_grade`] and [`cut_grade`] compare: for DEV and `panel`,
 /// at seeds 1–3, each of `rules`' samples files against the split's own references, greedy
 /// (`rules[0]`) first. A rule is `name` (in `runs/r-drop-s{seed}/`) or `run/name` (in
@@ -4984,12 +4996,11 @@ fn rule_readings(
             }
             // The prompts every rule completes, and each rule's verbatim replies among them.
             if matched {
-                let n = flags.first().map_or(0, Vec::len);
-                let both: Vec<usize> = (0..n).filter(|&j| flags.iter().all(|f| f[j].0)).collect();
-                for (i, f) in flags.iter().enumerate() {
+                let (n, verbatim) = matched_counts(&flags);
+                for (i, v) in verbatim.into_iter().enumerate() {
                     let reading = &mut readings[first_reading + i];
-                    reading.matched_n = Some(both.len());
-                    reading.matched_verbatim = Some(both.iter().filter(|&&j| f[j].1).count());
+                    reading.matched_n = Some(n);
+                    reading.matched_verbatim = Some(v);
                 }
             }
         }
@@ -5078,6 +5089,108 @@ pub fn read_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<ReadGrad
         readings,
         outcome,
         copy_outcome,
+    })
+}
+
+/// claude-216's grade of the cut trained in: every reading (with its matched content), the
+/// panel rows' teacher-forced cell, and the outcomes.
+#[derive(Clone, Debug, Serialize)]
+pub struct CutGrade {
+    pub panel: String,
+    pub readings: Vec<CellReading>,
+    /// (r-cut)'s nearest hits against (r-drop)'s on every panel row, teacher-forced: the
+    /// protocol's paired cell, ahead or behind only at all three seeds past the band.
+    pub rows: GradeCell,
+    /// The registered decision, from (r-cut) decoded with its cut, as served ([`cut_outcome`]).
+    pub outcome: &'static str,
+    /// The same rule for (r-drop) decoded with the cut only (claude-215's arm). It decides nothing.
+    pub decode_only_outcome: &'static str,
+}
+
+/// Whether `arm` keeps `base`'s content on the prompts both complete: its matched verbatim share
+/// is below the base's by at most `max(0.10, 3·√(p(1−p)/m))`, `p` the base's share and `m` the
+/// matched prompts (claude-216).
+fn matched_kept(arm: &CellReading, base: &CellReading) -> bool {
+    match (arm.matched_v(), base.matched_v(), base.matched_n) {
+        (Some(a), Some(p), Some(m)) if m > 0 => {
+            a >= p - 0.10f64.max(3.0 * (p * (1.0 - p) / m as f64).sqrt())
+        }
+        _ => false,
+    }
+}
+
+/// The sheet's decision (claude-216) for an arm's three panel seeds against (r-drop) greedy's
+/// three (`base`, seed for seed), with the teacher-forced rows' cell `rows`, in this order:
+/// - `underpowered` when greedy loops in fewer than [`READ_LOOP_FLOOR`] replies at any seed;
+/// - `no gain` unless the arm has fewer loops beyond the band and holds decision 4 at all three;
+/// - `costs accuracy` when the rows' cell is behind;
+/// - `cures` when it is also close at all three;
+/// - `improves` when it keeps the matched content at all three ([`matched_kept`]);
+/// - else `reduces, content lost`.
+fn cut_outcome(arm: &[&CellReading], base: &[&CellReading], rows: OverturnCell) -> &'static str {
+    if base.len() != 3 || base.iter().any(|g| g.loops.is_none_or(|n| n < READ_LOOP_FLOOR)) {
+        return "underpowered";
+    }
+    let fewer = arm.len() == 3
+        && arm
+            .iter()
+            .all(|x| x.fewer_loops == Some(true) && x.holds == Some(true));
+    if !fewer {
+        return "no gain";
+    }
+    if rows == OverturnCell::Behind {
+        return "costs accuracy";
+    }
+    if arm.iter().all(|x| x.close) {
+        "cures"
+    } else if arm.iter().zip(base).all(|(a, b)| matched_kept(a, b)) {
+        "improves"
+    } else {
+        "reduces, content lost"
+    }
+}
+
+/// Grade the cut trained in (claude-216) from stored outputs only, on the laptop: `runs` holds
+/// `r-drop-s{1,2,3}` (the sealed (r-drop), scored on `panel` with `--reply-read all`) and
+/// `r-cut-s{1,2,3}` (the run trained with the cut, scored the same way). Every reading is
+/// matched across the four arms; the panel decides ([`cut_outcome`]); DEV is reported.
+pub fn cut_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<CutGrade> {
+    if panel == "dev" {
+        return Err(invalid("--cut-grade's deciding panel cannot be DEV"));
+    }
+    let rules: Vec<String> = ["greedy", "greedy-read-all", "r-cut/greedy-read-all", "r-cut/greedy"]
+        .map(String::from)
+        .to_vec();
+    let readings = rule_readings(data_root, runs, panel, &rules, true, true)?;
+    let mut counts = Vec::new();
+    for seed in 1..=3u8 {
+        let rows = |run: &str| -> Result<ScoredRows> {
+            let path = runs.join(format!("{run}-s{seed}")).join(format!("rows-{panel}-memory.json"));
+            let rows: ScoredRows = read_scored(&path)?;
+            if !rows.memory || rows.split != panel {
+                return Err(invalid(format!("{}: not {panel}'s rows with the memory on", path.display())));
+            }
+            Ok(rows)
+        };
+        let (cut, drop) = (rows("r-cut")?, rows("r-drop")?);
+        let every: std::collections::BTreeSet<usize> = cut.positions.iter().copied().collect();
+        counts.push((seed, paired(&cut, &drop, &every)?));
+    }
+    let rows = grade_cell("r-cut", "r-drop", "the panel's rows", &counts);
+    let of = |rule: &str| -> Vec<&CellReading> {
+        readings.iter().filter(|r| r.split == panel && r.rule == rule).collect()
+    };
+    let base = of("greedy");
+    let (outcome, decode_only_outcome) = (
+        cut_outcome(&of("r-cut/greedy-read-all"), &base, rows.cell),
+        cut_outcome(&of("greedy-read-all"), &base, OverturnCell::Inside),
+    );
+    Ok(CutGrade {
+        panel: panel.to_owned(),
+        readings,
+        rows,
+        outcome,
+        decode_only_outcome,
     })
 }
 
@@ -7963,6 +8076,62 @@ mod tests {
         // tokens, it starts at 18, so the prompt ends at window position 162.
         let ids = 180 + 30;
         assert_eq!(prompt_cut(180, ids - SHEET_CONTEXT), 162);
+    }
+
+    /// claude-216: the matched content counts only the prompts every rule completes, so one
+    /// rule's completions select nothing; an arm keeps the base's matched content within
+    /// `max(0.10, 3·√(p(1−p)/m))`; and the cut's outcome follows the sheet's order.
+    #[test]
+    fn the_cut_grade_matches_content_and_follows_the_sheet() {
+        // Three rules over four prompts: prompt 1 is incomplete under rule 2, prompt 3 under 0.
+        let flags = vec![
+            vec![(true, true), (true, true), (true, false), (false, false)],
+            vec![(true, false), (true, true), (true, true), (true, true)],
+            vec![(true, true), (false, false), (true, true), (true, true)],
+        ];
+        assert_eq!(matched_counts(&flags), (2, vec![1, 1, 2]));
+        assert_eq!(matched_counts(&[]), (0, vec![]));
+        let reading = |fewer: bool, holds: bool, close: bool, loops: usize, verbatim: usize| {
+            let made = Generation {
+                replies: 256,
+                complete: 200,
+                verbatim_train: 100,
+                new_ngram_share: Vec::new(),
+                distinct_1: 0.0,
+                distinct_2: 0.0,
+                repeated_4gram_rate: 0.0,
+            };
+            CellReading {
+                split: "p-t".to_owned(),
+                rule: "r-cut/greedy-read-all".to_owned(),
+                seed: 1,
+                reading: VerdictSeed::new(1, &made, &made),
+                holds: Some(holds),
+                close,
+                mean_admitted: None,
+                loops: Some(loops),
+                fewer_loops: Some(fewer),
+                mean_length: None,
+                matched_n: Some(200),
+                matched_verbatim: Some(verbatim),
+            }
+        };
+        // The base: 120 of 200 matched prompts verbatim, p = 0.6, so the tolerance is 0.104.
+        let g = reading(false, false, false, 60, 120);
+        let base = [&g, &g, &g];
+        let (kept, lost) = (reading(true, true, false, 10, 100), reading(true, true, false, 10, 98));
+        assert!(matched_kept(&kept, &g), "0.50 is within 0.104 of 0.60");
+        assert!(!matched_kept(&lost, &g), "0.49 is not");
+        let cured = reading(true, true, true, 10, 120);
+        let same = reading(false, true, true, 60, 120);
+        use OverturnCell::{Behind, Inside};
+        assert_eq!(cut_outcome(&[&cured, &cured, &cured], &base, Inside), "cures");
+        assert_eq!(cut_outcome(&[&kept, &kept, &kept], &base, Inside), "improves");
+        assert_eq!(cut_outcome(&[&kept, &lost, &kept], &base, Inside), "reduces, content lost");
+        assert_eq!(cut_outcome(&[&cured, &cured, &cured], &base, Behind), "costs accuracy");
+        assert_eq!(cut_outcome(&[&cured, &same, &cured], &base, Inside), "no gain");
+        let quiet = reading(false, false, false, READ_LOOP_FLOOR - 1, 120);
+        assert_eq!(cut_outcome(&[&cured, &cured, &cured], &[&g, &quiet, &g], Inside), "underpowered");
     }
 
     /// claude-216: in training, a reply run's first scored row (its input the prompt's last
