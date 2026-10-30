@@ -5434,6 +5434,22 @@ pub struct CycleGrade {
     /// Each cycle-step arm's content on the prompts it changed ([`ChangedContent`]), on DEV and
     /// the panel, at seeds 1–3.
     pub changed: Vec<ChangedContent>,
+    /// The served decode the sheet's table gives from the three outcomes ([`ships`]).
+    pub ships: &'static str,
+}
+
+/// The sheet's "what ships" table (claude-217): the cycle step when only it passes ("cures" or
+/// "improves"); the decode-only cut when only it does; both when both do and "both" passes on
+/// the first decision's prompts, else the cycle step alone; greedy when neither does.
+fn ships(cycle: &str, cut: &str, both: &str) -> &'static str {
+    let pass = |o: &str| o == "cures" || o == "improves";
+    match (pass(cycle), pass(cut)) {
+        (true, false) => "cycle-step",
+        (false, true) => "decode-only cut",
+        (true, true) if pass(both) => "both",
+        (true, true) => "cycle-step",
+        (false, false) => "greedy",
+    }
 }
 
 /// The fewest prompts the cycle step must change (step off at least once) at every seed for its
@@ -5469,7 +5485,24 @@ impl ChangedContent {
             a >= p - 0.10f64.max(3.0 * (p * (1.0 - p) / m).sqrt())
         })
     }
+
+    /// Whether the reading can tell salad from content (claude-217's FIT, round 2): the lowest
+    /// share [`ChangedContent::kept`] accepts is above [`CHANGED_POWER_SHARE`], so an arm at or
+    /// below it never reads kept. The changed prompts are where greedy loops, not a random
+    /// sample, so their references may be rarely verbatim; then the reading is underpowered.
+    pub fn powered(&self) -> bool {
+        let m = self.prompts as f64;
+        if self.prompts == 0 {
+            return false;
+        }
+        let p = self.reference_verbatim as f64 / m;
+        p - 0.10f64.max(3.0 * (p * (1.0 - p) / m).sqrt()) > CHANGED_POWER_SHARE
+    }
 }
+
+/// The verbatim share a step into salad is taken to stay at or below: a changed reading decides
+/// only where an arm this low would read lost ([`ChangedContent::powered`]).
+pub const CHANGED_POWER_SHARE: f64 = 0.10;
 
 /// One cycle-step arm's [`ChangedContent`] from its samples, `verbatim` asking whether a reply
 /// is complete and verbatim in TRAIN.
@@ -5497,7 +5530,8 @@ fn changed_content(
 /// - `underpowered` when greedy loops in fewer than [`READ_LOOP_FLOOR`] replies at any seed;
 /// - `no gain` unless the arm has fewer loops beyond the band and holds decision 4 at all three;
 /// - `underpowered (content)` when the base has fewer than [`MATCHED_FLOOR`] matched prompts, or
-///   the arm changed fewer than [`CHANGED_FLOOR`], at any seed;
+///   the arm changed fewer than [`CHANGED_FLOOR`], or its changed reading cannot tell salad from
+///   content ([`ChangedContent::powered`]), at any seed;
 /// - `cures` when, at all three, it is close, keeps the matched content ([`matched_kept`]) and
 ///   keeps the references' content on the prompts it changed ([`ChangedContent::kept`]);
 /// - `improves` when it keeps both at all three;
@@ -5519,7 +5553,7 @@ fn cycle_outcome(
     }
     if changed.len() != 3
         || base.iter().any(|g| g.matched_n.is_none_or(|m| m < MATCHED_FLOOR))
-        || changed.iter().any(|c| c.prompts < CHANGED_FLOOR)
+        || changed.iter().any(|c| c.prompts < CHANGED_FLOOR || !c.powered())
     {
         return "underpowered (content)";
     }
@@ -5588,15 +5622,18 @@ pub fn cycle_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<CycleGr
         cycle_outcome(&arm.iter().collect::<Vec<_>>(), &base.iter().collect::<Vec<_>>(), &on)
     };
     let cut = of(&confirm_readings, "greedy-read-all");
+    let (outcome, cut_cycle_outcome) = (cycle("cycle-step"), cycle("cycle-step-read-all"));
+    let confirm_outcome = cut_outcome(
+        &cut.iter().collect::<Vec<_>>(),
+        &confirm_base.iter().collect::<Vec<_>>(),
+        OverturnCell::Inside,
+    );
     Ok(CycleGrade {
         panel: panel.to_owned(),
-        outcome: cycle("cycle-step"),
-        confirm_outcome: cut_outcome(
-            &cut.iter().collect::<Vec<_>>(),
-            &confirm_base.iter().collect::<Vec<_>>(),
-            OverturnCell::Inside,
-        ),
-        cut_cycle_outcome: cycle("cycle-step-read-all"),
+        outcome,
+        confirm_outcome,
+        cut_cycle_outcome,
+        ships: ships(outcome, confirm_outcome, cut_cycle_outcome),
         readings,
         confirm_readings,
         steps,
@@ -8292,6 +8329,12 @@ mod tests {
                 let mut seen = std::collections::HashSet::new();
                 assert!(step.tokens.windows(4).all(|w| seen.insert(w)), "a 4-gram repeats");
             }
+            // Wherever greedy repeats a 4-gram, the rule must have left the nearest token at
+            // least once (FIT round 2): the step-off path ran on the model.
+            let mut seen = std::collections::HashSet::new();
+            if !greedy.windows(4).all(|w| seen.insert(w)) {
+                assert!(step.stepped.iter().any(|&m| m != STEP_NEAREST), "greedy loops, the rule never stepped");
+            }
             decoded += greedy.len();
         }
         assert!(decoded > 0, "every reply was empty, so the check held vacuously");
@@ -8684,6 +8727,26 @@ mod tests {
         // Too few changed prompts, or a seed missing, is an instrument outcome, never a negative.
         assert_eq!(cycle_outcome(&arms, &base, &[&good, &thin, &good]), "underpowered (content)");
         assert_eq!(cycle_outcome(&arms, &base, &[&good, &good]), "underpowered (content)");
+        // FIT round 2: where the changed prompts' references are rarely verbatim, salad would read
+        // kept, so the reading cannot decide: underpowered, not improves. At 7 of 70 (p = 0.10)
+        // the bound is below 0; at 14 of 70 (p = 0.20) it is 0.057, so 4 of 70 would pass.
+        for (low, arm) in [(7, 0), (14, 4)] {
+            let low = content(70, arm, low);
+            assert_eq!(low.kept(), Some(true), "the tolerance alone would pass salad here");
+            assert!(!low.powered());
+            assert_eq!(cycle_outcome(&arms, &base, &[&low, &good, &good]), "underpowered (content)");
+        }
+        assert!(good.powered() && salad.powered() && !content(0, 0, 0).powered());
+    }
+
+    /// claude-217: the sheet's "what ships" table, row by row.
+    #[test]
+    fn the_grade_ships_what_the_table_says() {
+        assert_eq!(ships("improves", "no gain", "improves"), "cycle-step");
+        assert_eq!(ships("reduces, content lost", "cures", "cures"), "decode-only cut");
+        assert_eq!(ships("cures", "improves", "improves"), "both");
+        assert_eq!(ships("improves", "cures", "reduces, content lost"), "cycle-step");
+        assert_eq!(ships("underpowered", "underpowered (content)", "cures"), "greedy");
     }
 
     #[test]

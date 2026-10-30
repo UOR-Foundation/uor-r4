@@ -2,7 +2,9 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md). Order: [claude-217](../../loop/tasks/one-model-end-to-end/claude-217/ORDER.md). It follows claude-216 ([result](../../labs/one-model-end-to-end/cut-train-2026-10-30/README.md)), by Casey's direction of 30 Oct (verbatim on #3407 6523338624): "Yes: after claude-216's grade, register a decode unit that steps off a reply's own cycle (the nearest token outside a repeated 4-gram), on a fresh panel, against greedy."
 
-TEST FITNESS: PENDING, round 2 (a fresh non-author FIT is run on this sheet before any pod). Round 1 was NOT FIT on one blocking point, repaired here: the matched content could not see what the cycle step wrote where it stepped, so salad there could read "improves" and ship. The cycle step's content is now also read on the prompts it changed ("Changed content", in the Bar).
+TEST FITNESS: PENDING, round 3 (a fresh non-author FIT is run on this sheet before any pod). Two earlier rounds were each NOT FIT on one blocking point, both repaired here:
+- **Round 1:** the matched content could not see what the cycle step wrote where it stepped, so salad there could read "improves" and ship. The cycle step's content is now also read on the prompts it changed ("Changed content", in the Bar).
+- **Round 2:** the changed reading's references are read on the prompts where greedy loops, not on a random sample. If they are rarely verbatim, its tolerance reaches zero and salad would read kept. The reading now decides only where an arm at 0.10 or below would read lost, and is otherwise "underpowered (content)".
 
 ## The question
 
@@ -62,7 +64,7 @@ One pod with one RTX 5090 runs `local/claude/claude-217/job.sh <head>` in this u
 4. **The data,** every file checked:
    - the panel, against its `SHA256SUMS` and its pinned `tokens.u16` sha;
    - each seed's 11 sealed files: the run config, 5 checkpoint files and 5 registered files.
-5. **A throughput probe:** seed 1 at 8 samples, projected to 256. Past 2 hours per seed, the job stops.
+5. **A throughput probe:** seed 1 at 8 samples, projected to 256. Past 2 hours per seed, the job stops. The probe runs alone, and the three seeds then share the GPU, so their wall time is longer than projected. That bears on the cost only.
 6. **The scorings,** the three seeds side by side, each:
 
    `--score-rows CKPT --out DIR --panel p-s=PS --samples 256 --reply-tokens 64 --retain-rates 1 --flock-end 1 --reply-read all --cycle-step 1 --seed S`
@@ -93,6 +95,8 @@ Each reading is one arm's 256 replies on one split at one seed, against that spl
   - **The reading:** the arm's replies there that are complete and verbatim in TRAIN, against the references on the same prompts.
   - **Kept:** the arm's share is below the references' by at most `max(0.10, 3·√(p(1−p)/m))`, with `p` the references' share and `m` the changed prompts.
   - **The floor:** at least 40 changed prompts at every seed (the loop floor's count).
+  - **The power condition** (`ChangedContent::powered`): the lowest share "kept" accepts, `p − max(0.10, 3·√(p(1−p)/m))`, must be above 0.10, so an arm at or below 0.10 verbatim, as salad is, always reads lost. Otherwise the reading cannot tell salad from content, and the outcome is "underpowered (content)".
+  - **For the "both" arm,** the changed prompts are its own.
 - **The loop floor:** greedy loops in at least 40 of 256 p-s replies at every seed.
 
 **What the cycle step meets by construction, stated in advance.**
@@ -111,7 +115,7 @@ The step counts and the fixed reading are reported to show where it stepped and 
 |---|---|---|
 | **underpowered** | The base loops in fewer than 40 replies at any seed. | Nothing is decided: an instrument outcome. A new panel or reply length is next. |
 | **no gain** | Not fewer loops and holds, at all three seeds. For the cycle step, that means it completes fewer replies than greedy, beyond the band. | A negative for this rule, in this configuration only. |
-| **underpowered (content)** | Fewer than 64 matched prompts at some seed (and, for the cycle step, fewer than 40 changed). | The loops are decided; the content is not. A longer reply or a larger sample is next. |
+| **underpowered (content)** | At some seed, fewer than 64 matched prompts; or, for the cycle step, fewer than 40 changed prompts, or a changed reading that fails the power condition. | The loops are decided; the content is not. For the cut, a longer reply or a larger sample is next. For the cycle step, if the power condition failed, a content reading for the changed prompts that credits a reply matching its own reference, not only TRAIN, is next. |
 | **cures** | Also close, with the matched content kept, at all three seeds. | The arm becomes the one model's served decode. The next unit serves it in integers, with its tok/s. |
 | **improves** | The matched content kept at all three seeds, but not close at all three. | The arm becomes the served decode, as for cures. The content gap to the references is the next work. |
 | **reduces, content lost** | Otherwise. | No decode change. For the cycle step, the next candidate restricts its step to candidates inside the nearest token's cell (claude-213's margin), so a step stays near what the model meant. |
@@ -125,6 +129,8 @@ The step counts and the fixed reading are reported to show where it stepped and 
 | cures or improves | cures or improves | both, if "both" reads cures or improves by `cycle_outcome` on decision 1's prompts; else the cycle step alone |
 | anything else | anything else | greedy stays |
 
+The grade computes this table itself (`CycleGrade::ships`, `ships`, unit-tested row by row).
+
 **Reported beside it, deciding nothing:**
 - the "both" arm's reading;
 - the DEV readings;
@@ -137,7 +143,11 @@ The step counts and the fixed reading are reported to show where it stepped and 
 
 - **The sample:** 256 replies per arm, split and seed; the same prompts under every arm.
 - **The loop band:** at greedy's 60–76 looping replies (claude-216's p-t), the band is 14–15, and the floor of 40 gives a band of 12.
-- **The changed prompts:** a looping greedy reply makes the rule step off, unless every candidate is refused at that step. So at about 60–76 loops the cycle step changes about that many prompts. At 70 changed prompts and references' `p` ≈ 0.6, the changed tolerance is about 0.18; salad, near 0.0–0.1, is far outside it. A panel drawn the same way should loop about as often; the floor decides if not.
+- **The changed prompts:** a looping greedy reply makes the rule step off, unless every candidate is refused at that step. So at about 60–76 loops the cycle step changes about that many prompts.
+- **The changed references' share `p` is not known in advance.** It is measured on the changed prompts, and those are where greedy loops, not a random sample: the panel-wide 0.624 does not carry over.
+  - Loops may gather on prompts whose reply copies a new value from the prompt (claude-216's fixed reading: "Noted, 3094 is lucky for you."). Such references are rarely verbatim TRAIN replies.
+  - At 70 changed prompts the power condition needs `p` of about 0.26 or more (0.26 − 0.157 = 0.103).
+  - **If `p` is lower,** the cycle step reads "underpowered (content)": an instrument outcome, never a negative. Its loop, completion and step readings are still reported, and decision 2 is unaffected. A panel drawn the same way should loop about as often; the floor decides if not.
 - **The matched prompts:** a looping greedy reply does not complete, so at p-t's loop counts the base completes about 200–212 of 256. The floor of 64 is registered for that reason. The tolerance is 0.10 down to about 225 matched prompts at `p` ≈ 0.5, and widens below that (0.19 at 64).
 - **The seeds:** every condition needs all three.
 
