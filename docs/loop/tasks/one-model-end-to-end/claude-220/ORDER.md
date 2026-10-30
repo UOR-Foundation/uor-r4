@@ -33,7 +33,11 @@ The prep sheet holds the bar and the decision table, with a fresh FIT.
 
 ## Cancel probe (run first)
 
-To fill in.
+Run 30 Oct, about 23:45Z. **Result: instrument, all clear; the unit goes ahead.**
+- **No open PR touches the in-scope code.** #3436 (Kimi) touches `crates/uor-r4-float-train/README.md` and the item file, both excluded above. #3442 (DeepSeek) and #3323 (Antigravity) touch nothing in scope.
+- **The served key can read the decode's own point.** In claude-219's sealed run, greedy's first token, taken from the decode's own first forward on the bare prompt, equals the nearest pick of the batched forward over full windows at all 2,109 sampled openings: p-v and DEV, at seeds 1–3. So both forwards are the same trunk at the opening. That shows agreement on the nearest token, not bit-equal points, so done-when 2's parity instrument still checks the key names.
+- **The inputs are in the store:** (r-drop)'s step-16,384 checkpoints at seeds 1–3, and claude-219's sealed run with its keys files (`results/claude/one-model-end-to-end-keyed-opening-2026-10-30/run-da4a6212/`).
+- **Seed 2121 and the name p-w are unused.**
 
 ## Files in scope
 
