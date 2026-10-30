@@ -23,7 +23,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../roadmap/items/one-model-end-t
 
 ## Tokens per second
 
-- **Every arm decodes at 51–55 tok/s per process** (50.8–55.0 per file), with the three seeds sharing the GPU.
+- **Every arm decodes at 51–55 tok/s per process** (50.9–55.0 per file), with the three seeds sharing the GPU.
 - **The cycle and echo steps cost nothing measurable:** 53.7 (cycle step) and 52.1 (echo step) against greedy's 52.9 at seed 1. Their check is an exact n-gram lookup over the reply.
 - **This is not the served speed.**
 
@@ -68,8 +68,8 @@ No cycle step was exhausted. Every step reply follows greedy until its first ste
 - **claude-216's decode-only "improves" does not hold up on the looping prompts.** There the cut writes 0 verbatim replies at seeds 2 and 3. Its earlier reading came from matched prompts, which cannot see the looping ones (FIT round 3).
 - **The loop looks like a symptom. The larger failure looks like the reply's opening on a new phrasing.** This is a reading, not a decision.
   - On held-out phrasing, greedy's reply equals its reference in 1–4 of 256 (3, 1 and 4), against 38–40 on DEV.
-  - **Teacher-forced on p-s** (this run's sealed rows), the reply's first token is right 17.3%, 13.7% and 18.5% of the time, against about 80% for later tokens. claude-216's p-t rows agree: 12–19% against 81%.
-  - **The turn memory barely reaches a new phrasing.** On DEV it lifts openings from 21.8–23.0% to 49.1–49.3% (325–337 of 1,226). On p-s it adds 14–16 of 1,400.
+  - **Teacher-forced on p-s** (this run's sealed rows), the reply's first token is right 17.4%, 13.7% and 18.6% of the time, against about 80% for later tokens. claude-216's p-t rows agree: 12–19% against 81%.
+  - **The turn memory barely reaches a new phrasing.** On DEV it lifts openings from 21.9–23.0% to 49.1–49.3% (322–337 of 1,226). On p-s it adds 14–16 of 1,400.
   - **Its key is the exact token ids of the turn's first `k` slots,** so a reworded question finds no stored key.
   - So the model continues a reply well, but on a new phrasing it rarely starts the right one.
 

@@ -4,7 +4,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 ## Tokens per second
 
-- **Every arm decodes at 51–55 tok/s per process** (50.8–55.0 per file) on one RTX 5090, with the three seeds sharing it.
+- **Every arm decodes at 51–55 tok/s per process** (50.9–55.0 per file) on one RTX 5090, with the three seeds sharing it.
 - **The cycle and echo steps cost nothing measurable:** 53.7 and 52.1 against greedy's 52.9 at seed 1. Each step is an exact n-gram lookup over the reply.
 - **This is not the served speed.** The integer path is not built.
 
@@ -23,10 +23,10 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - **claude-216's reported decode-only "improves" does not hold up on the looping prompts.** There the cut writes 0 verbatim replies at seeds 2 and 3. Its earlier reading came from matched prompts, which cannot see the looping ones (this sheet's FIT round 3).
 - **On held-out phrasing the model rarely writes the right reply at all.**
   - Greedy's reply equals its reference in 1–4 of 256 on p-s (3, 1 and 4), against 38–40 on DEV. No arm passes 5, the cut's count at seed 1.
-  - **Teacher-forced on p-s** (this run's sealed rows, counted with `jq`), the reply's first token is right 17.3%, 13.7% and 18.5% of the time at seeds 1–3, against 80.7%, 80.1% and 79.8% for later tokens. claude-216's sealed p-t rows agree: 18.7%, 12.2% and 17.9%, against 80.8–81.1%.
+  - **Teacher-forced on p-s** (this run's sealed rows, counted with `jq`), the reply's first token is right 17.4%, 13.7% and 18.6% of the time at seeds 1–3, against 80.8%, 80.2% and 79.9% for later tokens. claude-216's sealed p-t rows agree: 18.7%, 12.2% and 17.9%, against 80.8–81.1%.
   - **The turn memory barely reaches a new phrasing.**
-    - On DEV, openings are right 49.1–49.3% with the memory and 21.8–23.0% without: it adds 325–337 of 1,226.
-    - On p-s it adds 14–16 of 1,400: 17.3/13.7/18.5% with it, against 16.3/12.5/17.4% without.
+    - On DEV, openings are right 49.1–49.3% with the memory and 21.9–23.0% without: it adds 322–337 of 1,226.
+    - On p-s it adds 14–16 of 1,400: 17.4/13.7/18.6% with it, against 16.4/12.6/17.4% without.
     - Its key is the exact token ids of the turn's first `k` slots (`flock_read_memory.rs`), so a new phrasing finds no stored key.
 - **Matched content is unchanged at seeds 2 and 3, and 0.037 higher at seed 1.**
   - The cycle step reads 0.358, 0.442 and 0.377, against greedy's 0.321, 0.442 and 0.377.
@@ -87,7 +87,7 @@ The p-s tables, per arm and seed, are on the [lab page](../../../../labs/one-mod
   - the power condition;
   - after the code review: the matched-content condition, the loop floor, the "no gain" conditions on loops and on holds, and the matched floor.
 - **The CUDA test's limit (from the code review).** `the_cycle_step_follows_greedy_until_it_steps_off_a_cycle_on_a_model` checks that k = 1 equals greedy and that the step marks every loop greedy makes. It does not require greedy to loop on its random model. The step-off wiring on a model is shown by the sealed run's grade: every step reply is marked, the steps fall exactly on greedy's looping prompts, and every reply follows greedy until its first step off.
-- **The review's last fixes are host-only** (test cases, a seed-pairing refusal in the grade, two comments). They change no output of the sealed run's binary. The grade at the head reproduces `cycle-grade.json`.
+- **The review's last fixes are host-only** (test cases, a seed-pairing refusal in the grade, two comments). They change no output of the sealed run's binary. The grade at the head reproduces `cycle-grade.json`. The seed-pairing refusal has no test of its own; the sealed run's readings come in seed order, and it passes.
 - **The stub-nvcc CUDA clippy run:** no new findings.
 - **On the pod:**
   - the CUDA tests pass;
