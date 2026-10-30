@@ -36,10 +36,12 @@
 //! to `DIR/recall.jsonl`, and the final model to `DIR/models/`. Needs no `--data-root`, and
 //! ignores it if given.
 //!
-//! `train-in-space --data-root DIR --opening-bound 1`: how well the prompt words a window shows
-//! could name each reply opening, as TRAIN's commonest opening per key scored on DEV. A count
-//! over the corpus that needs no GPU; one JSON line per key, then one line per split
-//! (`dev`, `train`) with how many openings the opening read's turn anchor keeps the first-8 key at.
+//! `train-in-space --data-root DIR --opening-bound 1 [--panel NAME=DIR]...`: how well the prompt
+//! words a window shows could name each reply opening, as TRAIN's commonest opening per key
+//! scored on DEV and on each panel, with how often each key fires and its precision when it does,
+//! and the oracle `reply-template` key (claude-218). A count over the corpus that needs no GPU;
+//! one JSON line per split and key, then one line per split (`dev`, `train`) with how many
+//! openings the opening read's turn anchor keeps the first-8 key at.
 //!
 //! `train-in-space --data-root DIR --reply-bound 1`: what an exact memory of TRAIN could name
 //! among DEV's reply rows, for each candidate key and stored-share threshold, by kind (openings,
@@ -83,6 +85,11 @@
 //! them, and the decode-only cut, against greedy on the laptop (`in_space_long::cycle_grade`).
 //! One JSON line.
 //!
+//! `--opening-keys 1` adds to `--score-rows` the opening keys (claude-218): TRAIN's opening points
+//! under the trunk, with the memory off, and each split's openings named by the nearest of them
+//! under L1 and by sign pattern (`keys-{split}.json`), and a forced-opening greedy arm, each
+//! reply's first token given as its reference's (`samples-{split}-forced-memory.json`).
+//!
 //! `train-in-space --data-root DIR --controls 1 --out DIR [--fresh-v2 DIR] [--panel NAME=DIR ...]`: the
 //! protocol's recall controls (I-D, claude-211) on the laptop: (T) the memory's tables and (S) the
 //! longest suffix over TRAIN, as rows files the grader pairs with the arms.
@@ -109,7 +116,7 @@ use candle_core::Device;
 use uor_r4_float_train::flock_read_opening::OpeningAnchor;
 use uor_r4_float_train::flock_read_register::RegisterSelect;
 use uor_r4_float_train::in_space_long::{
-    cell_grade, cells_ok, census, context_reach, controls, cut_grade, cycle_grade, decode_speed, fbs_arm_named, grade,
+    cell_grade, cells_ok, census, context_reach, controls, cut_grade, cycle_grade, decode_speed, key_grade, fbs_arm_named, grade,
     gradient_norms, inspect_run, opening_bound, overturn, read_grade, reply_bound, root_separation,
     run_long, run_recall, score_rows, scopes_ok, DecodeRule, LongConfig, PointObjective, ReadScope,
     TrainSplit, DEFAULT_REGISTER_PICKS, MEMORY_DROPOUT_MAX,
@@ -138,7 +145,11 @@ fn main() -> Result<()> {
     let mut read_grade_on = false;
     let mut cut_grade_on = false;
     let mut cycle_on = false;
+    let mut keys_on = false;
     let mut cycle_grade_on = false;
+    let mut key_grade_on = false;
+    let mut key_levels: Vec<(String, u8)> = Vec::new();
+    let mut keys_runs: Option<PathBuf> = None;
     let mut scopes: Vec<ReadScope> = Vec::new();
     let (mut controls_dir, mut runs, mut frozen_probe) = (None, None, None);
     let mut scored: Vec<(String, PathBuf)> = Vec::new();
@@ -213,7 +224,11 @@ fn main() -> Result<()> {
             "--read-grade" => read_grade_on = switch(&value)?,
             "--cut-grade" => cut_grade_on = switch(&value)?,
             "--cycle-step" => cycle_on = switch(&value)?,
+            "--opening-keys" => keys_on = switch(&value)?,
             "--cycle-grade" => cycle_grade_on = switch(&value)?,
+            "--key-grade" => key_grade_on = switch(&value)?,
+            "--key-levels" => key_levels = key_levels_arg(&value)?,
+            "--keys-runs" => keys_runs = Some(PathBuf::from(&value)),
             "--reply-read-train" => {
                 config.reply_read_train = Some(match value.as_str() {
                     "copy" => ReadScope::Copy,
@@ -465,10 +480,11 @@ fn main() -> Result<()> {
         read_grade_on,
         cut_grade_on,
         cycle_grade_on,
+        key_grade_on,
     ];
     if modes.iter().filter(|&&m| m).count() > 1 {
         return Err(FloatTrainError::Invalid(
-            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1, --grade 1, --cell-grade 1, --read-grade 1, --cut-grade 1 or --cycle-grade 1"
+            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1, --grade 1, --cell-grade 1, --read-grade 1, --cut-grade 1, --cycle-grade 1 or --key-grade 1"
                 .to_owned(),
         ));
     }
@@ -503,7 +519,9 @@ fn main() -> Result<()> {
             || read_grade_on
             || cut_grade_on
             || cycle_on
+            || keys_on
             || cycle_grade_on
+            || key_grade_on
             || config.reply_read_train.is_some()
             || !scopes.is_empty()
         {
@@ -536,6 +554,11 @@ fn main() -> Result<()> {
             "--cycle-step applies to --score-rows only".to_owned(),
         ));
     }
+    if keys_on && score.is_none() {
+        return Err(FloatTrainError::Invalid(
+            "--opening-keys applies to --score-rows only".to_owned(),
+        ));
+    }
     if cycle_grade_on {
         let runs = runs
             .ok_or_else(|| FloatTrainError::Invalid("--cycle-grade needs --runs DIR".to_owned()))?;
@@ -547,6 +570,18 @@ fn main() -> Result<()> {
         let graded = cycle_grade(&data_root, &runs, panel)?;
         println!("{}", serde_json::to_string(&graded)?);
         return Ok(());
+    }
+    if key_grade_on {
+        let runs = runs
+            .ok_or_else(|| FloatTrainError::Invalid("--key-grade needs --runs DIR".to_owned()))?;
+        let graded = key_grade(&data_root, &runs, keys_runs.as_deref(), &extra_panels, &key_levels)?;
+        println!("{}", serde_json::to_string(&graded)?);
+        return Ok(());
+    }
+    if !key_levels.is_empty() || keys_runs.is_some() {
+        return Err(FloatTrainError::Invalid(
+            "--key-levels and --keys-runs apply to --key-grade only".to_owned(),
+        ));
     }
     // A run trains with the cut; scoring reads it back from the run's own config.
     if config.reply_read_train.is_some() && !(out.is_some() && score.is_none() && !controls_on) {
@@ -642,7 +677,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
     if bound {
-        let (rows, checks) = opening_bound(&data_root)?;
+        let (rows, checks) = opening_bound(&data_root, &extra_panels)?;
         for row in rows {
             println!("{}", serde_json::to_string(&row)?);
         }
@@ -676,6 +711,7 @@ fn main() -> Result<()> {
             &cells,
             &scopes,
             cycle_on,
+            keys_on,
             &device,
         )? {
             println!("{}", serde_json::to_string(&file)?);
@@ -760,9 +796,35 @@ fn panel_arg(value: &str) -> Result<(String, PathBuf)> {
     }
 }
 
+/// `--key-levels sign=L,hsign=L,point=L` (claude-218): each trunk key's level, 1–10 (q10 to q100).
+fn key_levels_arg(value: &str) -> Result<Vec<(String, u8)>> {
+    value
+        .split(',')
+        .map(|part| match part.split_once('=') {
+            Some((key, level)) if ["sign", "hsign", "point"].contains(&key) => match level.parse::<u8>() {
+                Ok(l) if (1..=10).contains(&l) => Ok((key.to_owned(), l)),
+                _ => Err(FloatTrainError::Invalid(format!("--key-levels: {part} wants a level 1–10"))),
+            },
+            _ => Err(FloatTrainError::Invalid("--key-levels takes sign=L,hsign=L,point=L".to_owned())),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn key_levels_name_each_trunk_key_once_with_a_level_from_1_to_10() {
+        assert_eq!(
+            key_levels_arg("sign=3,point=10").unwrap(),
+            [("sign".to_owned(), 3), ("point".to_owned(), 10)]
+        );
+        assert_eq!(key_levels_arg("hsign=5").unwrap(), [("hsign".to_owned(), 5)]);
+        assert!(key_levels_arg("sign=0").is_err());
+        assert!(key_levels_arg("sign=11").is_err());
+        assert!(key_levels_arg("exact=3").is_err());
+    }
 
     #[test]
     fn a_panel_argument_is_a_name_and_a_directory() {
