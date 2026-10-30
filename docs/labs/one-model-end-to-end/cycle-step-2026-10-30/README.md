@@ -23,8 +23,8 @@ Lab: claude. Item: [one-model-end-to-end](../../../roadmap/items/one-model-end-t
 
 ## Tokens per second
 
-- **Every arm decodes at 51–54 tok/s per process,** with the three seeds sharing the GPU.
-- **The cycle and echo steps cost nothing measurable:** 53.7 against greedy's 52.9 at seed 1. Their check is an exact n-gram lookup over the reply.
+- **Every arm decodes at 51–55 tok/s per process** (50.8–55.0 per file), with the three seeds sharing the GPU.
+- **The cycle and echo steps cost nothing measurable:** 53.7 (cycle step) and 52.1 (echo step) against greedy's 52.9 at seed 1. Their check is an exact n-gram lookup over the reply.
 - **This is not the served speed.**
 
 ## The registered outcome
@@ -60,18 +60,21 @@ No cycle step was exhausted. Every step reply follows greedy until its first ste
 
 - **The cycle step ends every loop, exactly where greedy loops, at no measured cost.**
   - It changed 59, 63 and 86 replies: exactly greedy's looping prompts. Every reply completes.
-  - The matched content is greedy's, since away from a loop it writes greedy's reply.
-- **It does not recover what greedy lost there,** and nor does any other arm.
-  - At the two seeds the reading could decide, every arm writes 0 verbatim TRAIN replies on greedy's looping prompts, against 40 and 52 references. That decides nothing alone, since the rule needs all three seeds.
-  - The fixed reading shows the replies are already wrong before the loop: "Here are three fruitsat about about it it it…" for "Got it, I'll remember them.". The rules only change how a wrong reply ends ("it it.", "…iteded.").
+  - The matched content equals greedy's at seeds 2 and 3. It is 0.037 higher at seed 1, where the step changes greedy's replies that repeat a 4-gram and still end.
+- **At seeds 2 and 3, it does not recover what greedy lost there,** and nor does any other arm.
+  - At those two seeds, where the reading is powered, every arm writes 0 verbatim TRAIN replies on greedy's looping prompts, against 40 and 52 references. That decides nothing alone, since the rule needs all three seeds.
+  - At seed 1 the cycle step writes 8 verbatim replies where the references have 11, but that reading is too thin to decide.
+  - In seed 1's fixed reading, replies are often wrong from the opening. Item 1 reads "Here are three better of help helpave a great." for "Got it, I'll remember them." under every arm. Where greedy loops, the step changes the ending ("Home for for for for", item 3). That is a reading of 20 replies, not a count.
 - **claude-216's decode-only "improves" does not hold up on the looping prompts.** There the cut writes 0 verbatim replies at seeds 2 and 3. Its earlier reading came from matched prompts, which cannot see the looping ones (FIT round 3).
-- **The loop is a symptom. The failure is the reply's opening on a new phrasing.**
-  - On held-out phrasing, greedy's reply equals its reference in 1–5 of 256, against 38–40 on DEV.
-  - Teacher-forced, on p-t (claude-216's sealed rows), the reply's first token is right 12–19% of the time against 81% for later tokens. DEV openings are about 49%.
-  - So the model continues a reply well, but on a new phrasing it rarely starts the right one. When the start is wrong, it writes a stock reply that does not fit, or ends in a loop.
+- **The loop looks like a symptom. The larger failure looks like the reply's opening on a new phrasing.** This is a reading, not a decision.
+  - On held-out phrasing, greedy's reply equals its reference in 1–4 of 256 (3, 1 and 4), against 38–40 on DEV.
+  - **Teacher-forced on p-s** (this run's sealed rows), the reply's first token is right 17.3%, 13.7% and 18.5% of the time, against about 80% for later tokens. claude-216's p-t rows agree: 12–19% against 81%.
+  - **The turn memory barely reaches a new phrasing.** On DEV it lifts openings from 21.8–23.0% to 49.1–49.3% (325–337 of 1,226). On p-s it adds 14–16 of 1,400.
+  - **Its key is the exact token ids of the turn's first `k` slots,** so a reworded question finds no stored key.
+  - So the model continues a reply well, but on a new phrasing it rarely starts the right one.
 
 ## What it unlocks
 
 - **No decode change.** Greedy stays. The cycle step is a cheap, exact backstop that ends every loop, and it is ready if a later unit has content to protect.
-- **A rollout hinge (claude-218 as first planned) would not fix this.** It would train the model toward the cycle step's choice, which on these prompts is salad.
-- **The next work is the reply's opening on held-out phrasing:** routing a new phrasing to the right reply.
+- **A rollout hinge (claude-218 as first planned) would likely not fix this,** though this is an inference. It trains the model toward the cycle step's choice, which wrote no TRAIN-like reply where the reading was powered.
+- **The next work is the reply's opening on held-out phrasing:** a turn-memory key that a new phrasing of a known question can reach.
