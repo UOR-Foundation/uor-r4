@@ -2,7 +2,7 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md). Order: [claude-216](../../loop/tasks/one-model-end-to-end/claude-216/ORDER.md). It follows claude-215 ([result](../../labs/one-model-end-to-end/reply-scope-2026-10-30/README.md)), whose registered outcome, "reduces, content lost", unlocked exactly this follow-up.
 
-TEST FITNESS: PENDING, round 2 (a fresh non-author FIT is run on this sheet before any pod). Round 1 was NOT FIT on two points, both repaired here:
+TEST FITNESS: FIT (round 2, a fresh non-author reviewer, 30 Oct; its five notes are taken in below). Round 1 was NOT FIT on two points, both repaired here:
 - the training cut and the decode cut were different rules, so earlier replies inside a window were read one way in training and another in serving; now one rule, built from the response mask, holds everywhere ("The cut");
 - an empty matched set would have read as a content negative; it now reads `underpowered (content)` below a registered floor ("Bar").
 
@@ -25,6 +25,7 @@ Does training the cut in, so that every reply position's Hamming read chooses on
     - **Its flags** come from the split's response mask at each window position (`window_input_mask`), not from the scored rows. A window that ends a long conversation carries up to 192 earlier tokens whose targets belong to the window before it, earlier replies among them; those reply rows are limited too.
     - **Training, the teacher-forced rows and decode** all apply it. A decode window's flags are the prompt's own, then one per reply token decoded (`decode_window_mask`). So an earlier reply inside a decode prompt reads only before itself, exactly as in the training window that holds the same tokens, and the reply decoded reads only the prompt's positions, claude-215's cut (`a_decode_window_is_limited_as_its_training_window`).
     - **The training log** counts the TRAIN rows the cut limits, and the rows that read nothing because their reply began before the window (`[cut] TRAIN rows`).
+    - **The one difference left, stated:** training cuts documents into fixed windows, and decode slides its window. A training window that opens partway through a reply trains that reply's rows with nothing to read in the limited heads (56 of 365 reply rows in the unit's fixture). Decode almost never meets this, since a decoded reply keeps the prompt's end in view unless the whole prompt scrolls out, past 192 reply tokens; this run decodes 64. It is a property of the configuration, not an instrument fault. The REPORT gives the real share from the log beside the results.
   - **The record:** the run's `config.json` records `"reply_read_train": "all"`, and `--score-rows` applies the same cut to the checkpoint's teacher-forced rows.
 - **(r-drop), sealed:** step-16,384 at seeds 1–3, at `results/claude/one-model-end-to-end-2026-10-29/training-460fe46e/s{S}/r-drop-s{S}/`, checked against that seed's `SHA256SUMS`. The `model.safetensors` sha256s:
   - s1 `c5fcbb90ab49c284da56abc6e74e74a4d8f1bded2d7815f8fb70de8332c81465`;
@@ -80,7 +81,7 @@ Three pods, one RTX 5090 each, one per seed. Each runs `local/claude/claude-216/
    - **The registered fallback:** training's bytes were shown to repeat on one GPU (claude-211's I-H0), never across pods. So on a cross-pod miss, the base commit (claude-215's merge, `0c3c95777638f31263e1ba2297c83594a61a7983`) is built and trains the same probe on the same pod, and this head's probe must match it byte for byte.
    - A miss against the base is EXIT 6, an instrument fault: this unit changed the default path.
 6. **The (r-cut) probe:** 256 steps.
-   - Its `config.json` must record the cut, and its log must count the TRAIN rows the cut limits.
+   - Its `config.json` must record the cut, and its log must count more than zero TRAIN rows the cut limits.
    - At seed 1, its checkpoint must differ from the (r-drop) probe's. Any change in the random draws would pass this too, so it only shows the flag reached training; the unit tests pin the rule itself.
    - Its time is projected ×64; past 2 hours, the job stops.
 7. **The training:** (r-cut), 16,384 steps.
@@ -88,7 +89,7 @@ Three pods, one RTX 5090 each, one per seed. Each runs `local/claude/claude-216/
 
    `--score-rows CKPT --out DIR --panel p-t=PT --samples 256 --reply-tokens 64 --retain-rates 1 --flock-end 1 --reply-read all --seed S`
 
-   This writes the rows on DEV and p-t (with the memory on and out), and the samples greedy (with the memory on and out), `FLOCK_END`, and greedy with the cut.
+   This writes the rows on DEV and p-t (with the memory on and out), and the samples greedy (with the memory on and out), `FLOCK_END`, and greedy with the cut. Each scoring prints the trained cut it read from its run's `config.json`: the job stops (EXIT 6) unless (r-cut)'s is `all` and (r-drop)'s is `none`.
 9. **Reproduction:** the (r-drop) scoring reproduces claude-211's 5 registered files byte for byte (EXIT 6 otherwise). Every expected p-t file is written (EXIT 8 otherwise).
 10. **The seal:** each pod's `/workspace/cut-train` (without its inputs) goes into the store at `results/claude/one-model-end-to-end-cut-train-2026-10-30/run-<sha8>/`, with a `SHA256SUMS`, and is read back before the pod is released and taken down.
 11. **The grade, on the laptop:**
@@ -105,7 +106,7 @@ Each reading is one arm's 256 replies on one split at one seed, against that spl
   - **Fewer loops:** the arm's loops plus decision 4's band at greedy's count are fewer than greedy's.
   - **Holds:** decision 4 against greedy.
   - **Close:** "generalizes"' free-generation condition.
-- **Matched content:** the verbatim TRAIN share on the prompts the three deciding arms (base, decode-only and served) all complete (`matched_counts`, `MATCHED_BY`). A share no deciding arm's completions select, which answers claude-215's selection effect; the uncut arm, which decides nothing, is counted on the same prompts and cannot thin them.
+- **Matched content:** the verbatim TRAIN share on the prompts the base and the served arm both complete (`matched_counts`, `MATCHED_BY`), the two the decision compares. A share neither arm's completions select, which answers claude-215's selection effect. The decode-only and uncut arms, which decide nothing, are counted on the same prompts (a reply of theirs that does not complete counts as not verbatim), so they cannot thin the deciding set.
   - **Kept:** the arm's matched share is below the base's by at most `max(0.10, 3·√(p(1−p)/m))`, with `p` the base's share and `m` the matched prompts (`matched_kept`).
   - **The content floor:** the base must have at least 64 matched prompts at every seed (`MATCHED_FLOOR`). Below it, or with none counted, the content reads `underpowered (content)`, an instrument outcome, never a negative.
 - **The rows' cell:** (r-cut) against (r-drop) on every p-t row, paired. It uses the protocol's band, `max(⌈2·√(b+c)⌉, the three-seed spread)`, and is ahead or behind only at all three seeds.
@@ -134,7 +135,7 @@ Each reading is one arm's 256 replies on one split at one seed, against that spl
 ## Minimum test power
 
 - **The sample:** 256 replies per arm, split and seed; the same prompts under every arm.
-- **The loop band:** at greedy's 63–92 looping replies (claude-215's p-r), the band is 15–16. The floor of 40 gives a band of 12.
+- **The loop band:** at greedy's 63–92 looping replies (claude-215's p-r), the band is 14–16 (`count_band`, `⌈2·√(g(n−g)/n)⌉`). The floor of 40 gives a band of 12.
 - **The matched prompts:** a looping reply does not complete, so at claude-215's p-r loop counts the base completes at most about 164–193 of 256, and the three-arm set is smaller still. The floor of 64 is registered for that reason. The tolerance is 0.10 down to about 225 matched prompts at `p` ≈ 0.5, and widens below that (0.19 at 64).
 - **The rows' cell:** about 16,000 p-t rows per seed, with the protocol's paired band.
 - **The seeds:** every condition needs all three.

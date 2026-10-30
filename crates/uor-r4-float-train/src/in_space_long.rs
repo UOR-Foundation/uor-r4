@@ -3254,7 +3254,9 @@ pub fn score_rows(
     load_reads(checkpoint, device)?;
     // A run trained with the reply's read held to the prompt scores its rows the same way
     // (claude-216); its decodes take the cut through `--reply-read`, as served.
-    set_trained_cut(run_trained_cut(checkpoint)?);
+    let trained = run_trained_cut(checkpoint)?;
+    set_trained_cut(trained);
+    println!("[cut] scoring with the trained cut: {}", trained.map_or("none", |s| s.name()));
     let memory = crate::flock_read_memory::turn_memory();
     let mut written = Vec::new();
     for on in [true, false] {
@@ -5204,9 +5206,10 @@ fn matched_kept(arm: &CellReading, base: &CellReading) -> bool {
     }
 }
 
-/// The rules [`cut_grade`]'s matched content is taken over: the base, the decode-only arm and
-/// the served arm, so the uncut arm, which decides nothing, cannot thin the deciding set.
-const MATCHED_BY: usize = 3;
+/// The rules [`cut_grade`]'s matched content is taken over: the base and the served arm, the two
+/// the decision compares (FIT round 2); the decode-only and uncut arms, which decide nothing, are
+/// counted on their prompts and cannot thin them.
+const MATCHED_BY: usize = 2;
 
 /// The fewest matched prompts ([`matched_counts`]) the base must have at every seed for the
 /// matched content to decide anything (claude-216's FIT): below it, `underpowered (content)`.
@@ -5252,13 +5255,13 @@ fn cut_outcome(arm: &[&CellReading], base: &[&CellReading], rows: OverturnCell) 
 /// Grade the cut trained in (claude-216) from stored outputs only, on the laptop: `runs` holds
 /// `r-drop-s{1,2,3}` (the sealed (r-drop), scored on `panel` with `--reply-read all`) and
 /// `r-cut-s{1,2,3}` (the run trained with the cut, scored the same way). Every reading is
-/// counted on the prompts the three deciding arms complete ([`MATCHED_BY`]); the panel decides
+/// counted on the prompts the base and the served arm complete ([`MATCHED_BY`]); the panel decides
 /// ([`cut_outcome`]); DEV is reported.
 pub fn cut_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<CutGrade> {
     if panel == "dev" {
         return Err(invalid("--cut-grade's deciding panel cannot be DEV"));
     }
-    let rules: Vec<String> = ["greedy", "greedy-read-all", "r-cut/greedy-read-all", "r-cut/greedy"]
+    let rules: Vec<String> = ["greedy", "r-cut/greedy-read-all", "greedy-read-all", "r-cut/greedy"]
         .map(String::from)
         .to_vec();
     let readings = rule_readings(data_root, runs, panel, &rules, true, MATCHED_BY)?;
