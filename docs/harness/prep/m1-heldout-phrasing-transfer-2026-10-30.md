@@ -2,7 +2,7 @@
 
 Lab: claude. Item: [m1-heldout-phrasing-transfer](../../roadmap/items/m1-heldout-phrasing-transfer.md). Order: [claude-211](../../loop/tasks/m1-heldout-phrasing-transfer/claude-211/ORDER.md). Casey, 30 Oct: "Go at M1 bar (f) now (Recommended)".
 
-TEST FITNESS: PENDING. PRE-RUN: PENDING. (Filled after a fresh non-author review.)
+TEST FITNESS: FIT. PRE-RUN: PASS. From a fresh non-author review at `88d332b35698d2605550ca1a1d865f5b2f41ab8c`: no blocker or major finding. Its minor findings are about the job's greps and redundant checks, and the scorer's own pin checks already cover them. Lease: 3 pods at $1.68/h before this one.
 
 ## The question
 
