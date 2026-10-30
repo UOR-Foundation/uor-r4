@@ -64,6 +64,11 @@
 //! protocol's recall controls (I-D, claude-211) on the laptop: (T) the memory's tables and (S) the
 //! longest suffix over TRAIN, as rows files the grader pairs with the arms.
 //!
+//! `train-in-space --data-root DIR --grade 1 --controls-dir DIR --runs DIR --panel p-dev=DIR
+//! [--frozen-probe RUN]`: grades the protocol's training run on the laptop (I-G, claude-211,
+//! `in_space_long::grade`): `--runs` holds one score folder per `ARM-sSEED`, `--controls-dir` the
+//! controls' files, `--frozen-probe` (r-frozen)'s 256-step probe run for I-C. One JSON line.
+//!
 //! `train-in-space --data-root DIR --overturn 1 --scored ARM-sSEED=DIR ...`: grades the overturn
 //! check from those files, on the laptop (`in_space_long::overturn`). Needs `r-s1`, `r0-s1`,
 //! `r-s2` and `r0-s2`; counts only; one JSON line.
@@ -81,9 +86,9 @@ use candle_core::Device;
 use uor_r4_float_train::flock_read_opening::OpeningAnchor;
 use uor_r4_float_train::flock_read_register::RegisterSelect;
 use uor_r4_float_train::in_space_long::{
-    census, context_reach, controls, decode_speed, fbs_arm_named, gradient_norms, inspect_run,
-    opening_bound, overturn, reply_bound, root_separation, run_long, run_recall, score_rows,
-    LongConfig, PointObjective, TrainSplit, DEFAULT_REGISTER_PICKS, MEMORY_DROPOUT_MAX,
+    census, context_reach, controls, decode_speed, fbs_arm_named, grade, gradient_norms,
+    inspect_run, opening_bound, overturn, reply_bound, root_separation, run_long, run_recall,
+    score_rows, LongConfig, PointObjective, TrainSplit, DEFAULT_REGISTER_PICKS, MEMORY_DROPOUT_MAX,
 };
 use uor_r4_float_train::{FloatTrainError, Result};
 
@@ -102,6 +107,8 @@ fn main() -> Result<()> {
     let mut score = None;
     let mut overturn_on = false;
     let mut controls_on = false;
+    let mut grade_on = false;
+    let (mut controls_dir, mut runs, mut frozen_probe) = (None, None, None);
     let mut scored: Vec<(String, PathBuf)> = Vec::new();
     let (mut split_dir, mut split_tokens, mut split_mask) = (None, None, None);
     let mut recall = 0usize;
@@ -167,6 +174,10 @@ fn main() -> Result<()> {
             "--score-rows" => score = Some(PathBuf::from(&value)),
             "--overturn" => overturn_on = switch(&value)?,
             "--controls" => controls_on = switch(&value)?,
+            "--grade" => grade_on = switch(&value)?,
+            "--controls-dir" => controls_dir = Some(PathBuf::from(&value)),
+            "--runs" => runs = Some(PathBuf::from(&value)),
+            "--frozen-probe" => frozen_probe = Some(PathBuf::from(&value)),
             "--scored" => {
                 let arm = panel_arg(&value)?;
                 if scored.iter().any(|(name, _)| *name == arm.0) {
@@ -366,6 +377,7 @@ fn main() -> Result<()> {
         score.is_some(),
         overturn_on,
         controls_on,
+        grade_on,
     ];
     if modes.iter().filter(|&&m| m).count() > 1 {
         return Err(FloatTrainError::Invalid(
@@ -403,6 +415,24 @@ fn main() -> Result<()> {
     }
     let data_root =
         data_root.ok_or_else(|| FloatTrainError::Invalid("--data-root is required".to_owned()))?;
+    if grade_on {
+        let need = |v: Option<PathBuf>, flag: &str| {
+            v.ok_or_else(|| FloatTrainError::Invalid(format!("--grade needs {flag} DIR")))
+        };
+        let p_dev = extra_panels
+            .iter()
+            .find(|(name, _)| name == "p-dev")
+            .map(|(_, dir)| dir.clone());
+        let graded = grade(
+            &data_root,
+            &need(controls_dir, "--controls-dir")?,
+            &need(runs, "--runs")?,
+            &need(p_dev, "--panel p-dev=")?,
+            frozen_probe.as_deref(),
+        )?;
+        println!("{}", serde_json::to_string(&graded)?);
+        return Ok(());
+    }
     if controls_on {
         let out =
             out.ok_or_else(|| FloatTrainError::Invalid("--controls needs --out DIR".to_owned()))?;

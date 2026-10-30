@@ -3623,6 +3623,758 @@ pub fn overturn(data_root: &Path, scored: &[(String, PathBuf)]) -> Result<Overtu
     })
 }
 
+/// The protocol's trained arms (one-model-end-to-end protocol, "Base artifact: the arms").
+pub const PROTOCOL_ARMS: [&str; 7] = [
+    "r", "r-drop", "r0", "r-flock", "r-spin", "r-ident", "r-frozen",
+];
+
+/// The prompts each split's free generation is sampled at, per rule (the protocol's 256).
+pub const PROTOCOL_SAMPLES: usize = 256;
+
+/// The strata's names, each with the split it is drawn from, in [`STRATA_COUNTS`]' order.
+pub const STRATA: [(&str, &str); 4] = [
+    ("K", "dev"),
+    ("U", "dev"),
+    ("N-u", "p-dev"),
+    ("N-k", "p-dev"),
+];
+
+/// The counts the protocol and the training sheet fix for K, U, N-u and N-k.
+pub const STRATA_COUNTS: [usize; 4] = [10_849, 3_438, 15_143, 1_274];
+
+/// The protocol's strata (I-G, claude-211) by corpus position: K and U on DEV, N-u and N-k on
+/// P-dev. U's rule is "the rows TRAIN's tables name none of", which is whether the tables
+/// control (T) of [`controls`] names the row: a named row is keyed, a miss is not.
+#[derive(Clone, Debug, Default)]
+pub struct Strata {
+    pub k: std::collections::BTreeSet<usize>,
+    pub u: std::collections::BTreeSet<usize>,
+    pub n_u: std::collections::BTreeSet<usize>,
+    pub n_k: std::collections::BTreeSet<usize>,
+}
+
+impl Strata {
+    /// The strata from the (T) files on DEV and on P-dev.
+    fn from_tables(dev: &ScoredRows, p_dev: &ScoredRows) -> Result<Self> {
+        use std::collections::BTreeSet;
+        let split = |rows: &ScoredRows| -> Result<(BTreeSet<usize>, BTreeSet<usize>)> {
+            if rows.memory || rows.nearest.len() != rows.positions.len() {
+                return Err(invalid(format!(
+                    "{}: not a tables control file",
+                    rows.split
+                )));
+            }
+            let (mut named, mut not, mut seen) =
+                (BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
+            for (&p, &pick) in rows.positions.iter().zip(&rows.nearest) {
+                if !seen.insert(p) {
+                    return Err(invalid(format!(
+                        "{}: position {p} is scored twice",
+                        rows.split
+                    )));
+                }
+                if pick == CONTROL_MISS {
+                    not.insert(p);
+                } else {
+                    named.insert(p);
+                }
+            }
+            Ok((named, not))
+        };
+        let (k, u) = split(dev)?;
+        let (n_k, n_u) = split(p_dev)?;
+        Ok(Self { k, u, n_u, n_k })
+    }
+
+    fn get(&self, stratum: &str) -> Option<&std::collections::BTreeSet<usize>> {
+        match stratum {
+            "K" => Some(&self.k),
+            "U" => Some(&self.u),
+            "N-u" => Some(&self.n_u),
+            "N-k" => Some(&self.n_k),
+            _ => None,
+        }
+    }
+
+    fn counts(&self) -> [usize; 4] {
+        [self.k.len(), self.u.len(), self.n_u.len(), self.n_k.len()]
+    }
+}
+
+/// One seed of a comparison of X with Y on a stratum: the hits of each, the rows only X gets
+/// (`b`) and only Y gets (`c`), `d = b − c`, the band and the cell.
+#[derive(Clone, Debug, Serialize)]
+pub struct GradeSeed {
+    pub seed: u8,
+    pub x_hits: usize,
+    pub y_hits: usize,
+    pub b: usize,
+    pub c: usize,
+    pub d: i64,
+    pub band: usize,
+    pub cell: OverturnCell,
+}
+
+/// X against Y on one stratum over the seeds (the protocol's "Bar: the band and the cell").
+#[derive(Clone, Debug, Serialize)]
+pub struct GradeCell {
+    pub x: String,
+    pub y: String,
+    pub stratum: &'static str,
+    /// `max d − min d` over the seeds.
+    pub spread: usize,
+    pub seeds: Vec<GradeSeed>,
+    /// Ahead or behind only when all three seeds say so; else inside, which is underpowered,
+    /// never a negative (L-007).
+    pub cell: OverturnCell,
+}
+
+/// One seed's paired counts, `(seed, (x_hits, y_hits, b, c))`, as [`paired`] returns them.
+type SeedCounts = (u8, (usize, usize, usize, usize));
+
+/// The cell over `counts`, one per seed: each seed's band is `max(⌈2·√(b+c)⌉, max d − min d)`,
+/// and the cell is ahead or behind only when all three seeds are.
+fn grade_cell(x: &str, y: &str, stratum: &'static str, counts: &[SeedCounts]) -> GradeCell {
+    let ds: Vec<i64> = counts
+        .iter()
+        .map(|(_, (_, _, b, c))| *b as i64 - *c as i64)
+        .collect();
+    let spread = match (ds.iter().max(), ds.iter().min()) {
+        (Some(hi), Some(lo)) => (hi - lo) as usize,
+        _ => 0,
+    };
+    let seeds: Vec<GradeSeed> = counts
+        .iter()
+        .map(|&(seed, (x_hits, y_hits, b, c))| {
+            let (band, cell) = seed_cell(b, c, spread);
+            GradeSeed {
+                seed,
+                x_hits,
+                y_hits,
+                b,
+                c,
+                d: b as i64 - c as i64,
+                band,
+                cell,
+            }
+        })
+        .collect();
+    let all = |want: OverturnCell| seeds.len() == 3 && seeds.iter().all(|s| s.cell == want);
+    let cell = if all(OverturnCell::Ahead) {
+        OverturnCell::Ahead
+    } else if all(OverturnCell::Behind) {
+        OverturnCell::Behind
+    } else {
+        OverturnCell::Inside
+    };
+    GradeCell {
+        x: x.to_owned(),
+        y: y.to_owned(),
+        stratum,
+        spread,
+        seeds,
+        cell,
+    }
+}
+
+/// Decision 1, the base recipe: `drop_u` and `drop_nu` are (r-drop)'s cells against (r) on U
+/// and on N-u (a cell against (r) mirrors (r)'s against it). The arm that ships, and the rule
+/// that chose it.
+fn base_recipe(drop_u: OverturnCell, drop_nu: OverturnCell) -> (&'static str, &'static str) {
+    use OverturnCell::{Ahead, Behind};
+    if drop_nu == Ahead && drop_u != Behind {
+        ("r-drop", "ahead of (r) on N-u and not behind on U")
+    } else if drop_nu == Behind && drop_u != Ahead {
+        ("r", "ahead of (r-drop) on N-u and not behind on U")
+    } else if drop_u == Ahead && drop_nu != Behind {
+        ("r-drop", "ahead of (r) on U and not behind on N-u")
+    } else if drop_u == Behind && drop_nu != Ahead {
+        ("r", "ahead of (r-drop) on U and not behind on N-u")
+    } else {
+        (
+            "r",
+            "neither leads, so (r), the recipe already served in part",
+        )
+    }
+}
+
+/// Decision 2, one add-on against (r): a candidate if ahead on N-u and not behind on U; a
+/// negative for this configuration if behind on N-u; else no decision.
+fn addon_reading(u: OverturnCell, n_u: OverturnCell) -> &'static str {
+    match n_u {
+        OverturnCell::Ahead if u != OverturnCell::Behind => "a candidate",
+        OverturnCell::Behind => "a negative for this configuration",
+        _ => "no decision (underpowered)",
+    }
+}
+
+/// Decision 3, from (r-ident)'s and (r-frozen)'s cells against (r) on N-u: learned transport
+/// earns its place if both are behind; a negative if either is ahead; else no decision.
+fn transport_reading(ident_nu: OverturnCell, frozen_nu: OverturnCell) -> &'static str {
+    use OverturnCell::{Ahead, Behind};
+    if ident_nu == Behind && frozen_nu == Behind {
+        "learned transport earns its place"
+    } else if ident_nu == Ahead || frozen_nu == Ahead {
+        "a negative for learned transport in this configuration"
+    } else {
+        "no decision (underpowered)"
+    }
+}
+
+/// `⌈2·√(n·p(1−p))⌉` for `p = g/n`, exactly in integers: the smallest `k` with
+/// `n·k² ≥ 4·g·(n − g)`.
+fn count_band(g: usize, n: usize) -> usize {
+    let want = 4 * g as u128 * n.saturating_sub(g) as u128;
+    let n = n as u128;
+    let mut k: u128 = 0;
+    while n * k * k < want {
+        k += 1;
+    }
+    k as usize
+}
+
+/// Decision 4 at one seed: the Flock rank rule holds here if its repeated-4-gram rate is below
+/// greedy's and `f ≥ g − ⌈2·√(n·p(1−p))⌉`, with `p = g/n`.
+fn decode_holds(g: usize, f: usize, n: usize, g_repeat: f64, f_repeat: f64) -> bool {
+    f_repeat < g_repeat && f + count_band(g, n) >= g
+}
+
+/// Decision 4 at one seed: complete replies under greedy (`g`) and the Flock rank rule (`f`)
+/// out of `n`, the count band, and the repeated-4-gram rates.
+#[derive(Clone, Debug, Serialize)]
+pub struct DecodeSeed {
+    pub seed: u8,
+    pub n: usize,
+    pub g: usize,
+    pub f: usize,
+    pub band: usize,
+    pub g_repeat: f64,
+    pub f_repeat: f64,
+    pub holds: bool,
+}
+
+/// Decision 4 on the shipped recipe: F ships only if it holds at all three seeds.
+#[derive(Clone, Debug, Serialize)]
+pub struct DecodeGrade {
+    pub recipe: &'static str,
+    pub seeds: Vec<DecodeSeed>,
+    pub ships: &'static str,
+}
+
+/// Decision 5's free-generation readings at one seed, on P-dev's replies under the shipped rule
+/// against P-dev's own references after the same prompts.
+#[derive(Clone, Debug, Serialize)]
+pub struct VerdictSeed {
+    pub seed: u8,
+    pub complete: usize,
+    pub verbatim: usize,
+    pub reference_complete: usize,
+    pub reference_verbatim: usize,
+    /// `v`, `v_ref` and `tol`; none when there is nothing complete to share over.
+    pub v: Option<f64>,
+    pub v_ref: Option<f64>,
+    pub tol: Option<f64>,
+    pub repeat: f64,
+    pub reference_repeat: f64,
+}
+
+impl VerdictSeed {
+    fn new(seed: u8, replies: &Generation, references: &Generation) -> Self {
+        let share = |part: usize, whole: usize| (whole > 0).then(|| part as f64 / whole as f64);
+        let v = share(replies.verbatim_train, replies.complete);
+        let v_ref = share(references.verbatim_train, references.complete);
+        let tol = match (v, v_ref) {
+            (Some(_), Some(r)) => {
+                Some(0.10f64.max(3.0 * (r * (1.0 - r) / replies.complete as f64).sqrt()))
+            }
+            _ => None,
+        };
+        Self {
+            seed,
+            complete: replies.complete,
+            verbatim: replies.verbatim_train,
+            reference_complete: references.complete,
+            reference_verbatim: references.verbatim_train,
+            v,
+            v_ref,
+            tol,
+            repeat: replies.repeated_4gram_rate,
+            reference_repeat: references.repeated_4gram_rate,
+        }
+    }
+
+    /// "generalizes"' free-generation condition: `n_c ≥ 64`, `|v − v_ref| ≤ tol`, and a
+    /// repeated-4-gram rate at most the references' + 0.10.
+    fn generalizes(&self) -> bool {
+        let close = matches!((self.v, self.v_ref, self.tol), (Some(v), Some(r), Some(t)) if (v - r).abs() <= t);
+        self.complete >= 64 && close && self.repeat <= self.reference_repeat + 0.10
+    }
+
+    /// "memorized"' free-generation condition: `v − v_ref > tol`.
+    fn memorized(&self) -> bool {
+        matches!((self.v, self.v_ref, self.tol), (Some(v), Some(r), Some(t)) if v - r > t)
+    }
+}
+
+/// Decision 5 on the shipped recipe with the shipped decode rule.
+#[derive(Clone, Debug, Serialize)]
+pub struct VerdictGrade {
+    pub recipe: &'static str,
+    pub rule: &'static str,
+    pub seeds: Vec<VerdictSeed>,
+    pub verdict: &'static str,
+    /// For "mixed", each condition that failed.
+    pub failed: Vec<String>,
+}
+
+/// The verdict: `beats` are the recipe's cells against (r0) on U, (r0) on N-u, (S) on U and
+/// (S) on N-u; `keyed` its cell against (r0) on K. "generalizes" needs all four ahead and every
+/// seed's generalizing condition; "memorized" needs K ahead, none of the four ahead, and every
+/// seed's memorized condition; else "mixed", with what failed.
+fn verdict(
+    beats: [OverturnCell; 4],
+    keyed: OverturnCell,
+    seeds: &[VerdictSeed],
+) -> (&'static str, Vec<String>) {
+    let names = ["(r0) on U", "(r0) on N-u", "(S) on U", "(S) on N-u"];
+    let three = seeds.len() == 3;
+    let ahead = beats.map(|c| c == OverturnCell::Ahead);
+    if ahead.iter().all(|&a| a) && three && seeds.iter().all(VerdictSeed::generalizes) {
+        return ("generalizes", Vec::new());
+    }
+    if keyed == OverturnCell::Ahead
+        && !ahead.iter().any(|&a| a)
+        && three
+        && seeds.iter().all(VerdictSeed::memorized)
+    {
+        return ("memorized", Vec::new());
+    }
+    let mut failed: Vec<String> = names
+        .iter()
+        .zip(ahead)
+        .filter(|(_, a)| !a)
+        .map(|(n, _)| format!("generalizes: not ahead of {n}"))
+        .collect();
+    if !three {
+        failed.push(format!("{} of 3 seeds graded", seeds.len()));
+    }
+    for s in seeds.iter().filter(|s| !s.generalizes()) {
+        failed.push(format!(
+            "generalizes: seed {} fails n_c ≥ 64, |v − v_ref| ≤ tol or the repeat rate",
+            s.seed
+        ));
+    }
+    if keyed != OverturnCell::Ahead {
+        failed.push("memorized: not ahead of (r0) on K".to_owned());
+    }
+    for s in seeds.iter().filter(|s| !s.memorized()) {
+        failed.push(format!(
+            "memorized: seed {} has v − v_ref ≤ tol, or nothing complete",
+            s.seed
+        ));
+    }
+    ("mixed", failed)
+}
+
+/// I-C under `frozen` (claude-211): in the run at `run`, every `.spiralcore_fbs` routing
+/// tensor of the step-0 checkpoint equals its step-256 one, bit for bit, while some other tensor
+/// moved, so the run trained. `(routing tensors compared, other tensors that moved)`.
+pub fn frozen_check(run: &Path) -> Result<(usize, usize)> {
+    let load = |step: &str| {
+        candle_core::safetensors::load(
+            run.join("models").join(step).join("model.safetensors"),
+            &Device::Cpu,
+        )
+    };
+    let (start, end) = (load("step-000000")?, load("step-000256")?);
+    let bits = |t: &Tensor| -> Result<Vec<u64>> {
+        Ok(t.flatten_all()?
+            .to_dtype(DType::F64)?
+            .to_vec1::<f64>()?
+            .into_iter()
+            .map(f64::to_bits)
+            .collect())
+    };
+    let (mut routing, mut moved) = (0, 0);
+    for (name, a) in &start {
+        let b = end
+            .get(name)
+            .ok_or_else(|| invalid(format!("step 256 has no {name}")))?;
+        let same = a.dims() == b.dims() && bits(a)? == bits(b)?;
+        if name.ends_with(".spiralcore_fbs") {
+            if !same {
+                return Err(invalid(format!("{name} moved under frozen")));
+            }
+            routing += 1;
+        } else {
+            moved += usize::from(!same);
+        }
+    }
+    if routing == 0 || moved == 0 {
+        return Err(invalid(format!(
+            "{routing} routing tensors and {moved} moved tensors: the check proves nothing"
+        )));
+    }
+    Ok((routing, moved))
+}
+
+/// The grade of the protocol's training run (I-G, one-model-end-to-end claude-211), from stored
+/// outputs only, on the laptop.
+#[derive(Clone, Debug, Serialize)]
+pub struct Grade {
+    /// K, U, N-u and N-k, as [`STRATA_COUNTS`] fixes them.
+    pub strata: [usize; 4],
+    /// Each stratum's rows that copy the prompt (C, reported), in the same order.
+    pub copied: [usize; 4],
+    /// I-F: DEV's later rows, those whose decoder key is the census's `reply_key`, and those the
+    /// reply table names (13,061, 13,061 and 9,655).
+    pub hit_keys: [usize; 3],
+    /// I-C under `frozen`, when a probe is given: routing tensors compared, other tensors moved.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frozen: Option<[usize; 2]>,
+    /// Arm-seeds with no rows: an arm its probe skipped, or a failed step.
+    pub missing: Vec<String>,
+    pub cells: Vec<GradeCell>,
+    pub recipe: &'static str,
+    pub recipe_rule: &'static str,
+    pub addons: Vec<(&'static str, &'static str)>,
+    pub transport: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decode: Option<DecodeGrade>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verdict: Option<VerdictGrade>,
+    /// Hits on each stratum's copied rows, per arm-seed (C).
+    pub copied_hits: Vec<(String, [usize; 4])>,
+    /// Why a decision could not be graded.
+    pub notes: Vec<String>,
+}
+
+/// The rows [`grade`] compares for `name` (an arm, or the control `T` or `S`) at `seed` on
+/// `split`; a control has no seed.
+fn rows_in<'m>(
+    controls: &'m std::collections::BTreeMap<(&'static str, &'static str), ScoredRows>,
+    arms: &'m std::collections::BTreeMap<(&'static str, u8, &'static str), ScoredRows>,
+    name: &str,
+    seed: u8,
+    split: &str,
+) -> Option<&'m ScoredRows> {
+    let split = *["dev", "p-dev"].iter().find(|&&s| s == split)?;
+    if let Some(&control) = ["T", "S"].iter().find(|&&c| c == name) {
+        return controls.get(&(control, split));
+    }
+    let arm = *PROTOCOL_ARMS.iter().find(|&&a| a == name)?;
+    arms.get(&(arm, seed, split))
+}
+
+/// Grade the training run (I-G): `controls` holds [`controls`]' files, `runs` one score folder
+/// per arm-seed named `ARM-sSEED`, `p_dev` the panel, and `frozen_probe` (r-frozen)'s probe run.
+/// It refuses strata other than [`STRATA_COUNTS`], and a U that is not the census's decision
+/// rows; then applies the protocol's five decisions in order. Counts only; no model.
+pub fn grade(
+    data_root: &Path,
+    controls_dir: &Path,
+    runs: &Path,
+    p_dev: &Path,
+    frozen_probe: Option<&Path>,
+) -> Result<Grade> {
+    use std::collections::{BTreeMap, BTreeSet};
+    let bos = hs::SHEET_BOS_ID;
+    let control = |label: &str, split: &str| -> Result<ScoredRows> {
+        read_scored(&controls_dir.join(format!("rows-{split}-{label}.json")))
+    };
+    let mut controls_of: BTreeMap<(&'static str, &'static str), ScoredRows> = BTreeMap::new();
+    for label in ["T", "S"] {
+        for split in ["dev", "p-dev"] {
+            controls_of.insert((label, split), control(label, split)?);
+        }
+    }
+    let strata = Strata::from_tables(&controls_of[&("T", "dev")], &controls_of[&("T", "p-dev")])?;
+    if strata.counts() != STRATA_COUNTS {
+        return Err(invalid(format!(
+            "the strata are {:?}, not the sheet's {STRATA_COUNTS:?}",
+            strata.counts()
+        )));
+    }
+
+    // U against the census, I-F's full count, and C, from TRAIN, DEV and P-dev.
+    let (train_tokens, train_mask) = load_train_split(data_root)?;
+    let (dev_tokens, dev_mask) = hs::load_pinned_uort_split(
+        &data_root.join("ft/dev/tokens.u16"),
+        &data_root.join("ft/dev/response_mask.u8"),
+        hs::PINNED_DEV_TOKENS_SHA256,
+        hs::PINNED_DEV_MASK_SHA256,
+        hs::EXPECTED_DEV_TOKENS,
+        hs::EXPECTED_DEV_ELIGIBLE_TARGETS,
+        hs::SHEET_VOCAB,
+        bos,
+    )?;
+    let (train_w, _) = hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, bos)?;
+    let train_rows = reply_rows(&train_w, &train_mask);
+    let reply = reply_table(ReplyKey::TurnPosition(1), &train_rows);
+    let opening = reply_table(ReplyKey::TurnPosition(0), &train_rows);
+    drop((train_w, train_rows));
+    let (dev_w, _) = hs::build_document_windows(&dev_tokens, &dev_mask, SHEET_CONTEXT, bos)?;
+    let dev_rows = reply_rows(&dev_w, &dev_mask);
+    let (later, openings) = decision_positions(&reply, &opening, &dev_rows, &dev_w)?;
+    let census_u: BTreeSet<usize> = later.iter().chain(&openings).copied().collect();
+    if census_u != strata.u {
+        return Err(invalid(format!(
+            "U from the tables control ({}) is not the census's {} decision rows",
+            strata.u.len(),
+            census_u.len()
+        )));
+    }
+    let mut hit_keys = [0usize; 3];
+    for row in dev_rows.iter().filter(|r| !r.opening) {
+        let ids = &dev_w[row.window].input_ids;
+        let key = reply_key(row);
+        let decoded = row
+            .offset
+            .checked_sub(row.reply.len())
+            .and_then(|at| greedy_reply_key(&ids[..=row.offset], at, &row.reply));
+        hit_keys[0] += 1;
+        hit_keys[1] += usize::from(decoded.as_ref() == Some(&key));
+        hit_keys[2] += usize::from(
+            reply
+                .get(&key)
+                .is_some_and(|s| table_keeps(s, REPLY_MEMORY_SHARE)),
+        );
+    }
+    let copied_at = |rows: &[ReplyRow], windows: &[CausalWindow]| -> Result<BTreeSet<usize>> {
+        rows.iter()
+            .filter(|r| r.copy)
+            .map(|r| {
+                row_position(r, windows)
+                    .ok_or_else(|| invalid("a reply row has no corpus position"))
+            })
+            .collect()
+    };
+    let dev_copied = copied_at(&dev_rows, &dev_w)?;
+    drop((dev_w, dev_rows));
+    let (p_tokens, p_mask, _) = load_unpinned_uort(p_dev)?;
+    let (p_w, _) = hs::build_document_windows(&p_tokens, &p_mask, SHEET_CONTEXT, bos)?;
+    let p_copied = copied_at(&reply_rows(&p_w, &p_mask), &p_w)?;
+    drop(p_w);
+    let copied_in = |stratum: &str| -> BTreeSet<usize> {
+        let rows = strata.get(stratum).expect("a named stratum");
+        let copied = if stratum.starts_with('N') {
+            &p_copied
+        } else {
+            &dev_copied
+        };
+        rows.intersection(copied).copied().collect()
+    };
+    let copied_sets: Vec<BTreeSet<usize>> = STRATA.iter().map(|(s, _)| copied_in(s)).collect();
+    let train_replies = split_turns(&train_tokens, &train_mask, bos).replies;
+    let eos = pinned_tokenizer(data_root)?
+        .token_id("<|eos|>")
+        .ok_or_else(|| invalid("the pinned tokenizer has no <|eos|>"))?;
+
+    // Every arm-seed's rows, memory on, as served.
+    let mut arms: BTreeMap<(&'static str, u8, &'static str), ScoredRows> = BTreeMap::new();
+    let mut missing = Vec::new();
+    let mut copied_hits = Vec::new();
+    for arm in PROTOCOL_ARMS {
+        for seed in 1..=3u8 {
+            let dir = runs.join(format!("{arm}-s{seed}"));
+            let mut found = true;
+            for split in ["dev", "p-dev"] {
+                let path = dir.join(format!("rows-{split}-memory.json"));
+                if !path.exists() {
+                    found = false;
+                    continue;
+                }
+                let rows: ScoredRows = read_scored(&path)?;
+                if !rows.memory || rows.split != split {
+                    return Err(invalid(format!(
+                        "{}: not {split}'s rows with the memory on",
+                        path.display()
+                    )));
+                }
+                arms.insert((arm, seed, split), rows);
+            }
+            if !found {
+                missing.push(format!("{arm}-s{seed}"));
+                continue;
+            }
+            let mut hits = [0usize; 4];
+            for (i, (_, split)) in STRATA.iter().enumerate() {
+                let rows = &arms[&(arm, seed, *split)];
+                hits[i] = rows
+                    .positions
+                    .iter()
+                    .zip(rows.nearest.iter().zip(&rows.targets))
+                    .filter(|(p, (n, t))| copied_sets[i].contains(p) && n == t)
+                    .count();
+            }
+            copied_hits.push((format!("{arm}-s{seed}"), hits));
+        }
+    }
+    let rows_of =
+        |name: &str, seed: u8, split: &str| rows_in(&controls_of, &arms, name, seed, split);
+    let mut cells = Vec::new();
+    let mut compare = |x: &str, y: &str, stratum: &'static str| -> Result<OverturnCell> {
+        let split = STRATA
+            .iter()
+            .find(|(s, _)| *s == stratum)
+            .map(|(_, split)| *split)
+            .ok_or_else(|| invalid(format!("no stratum {stratum}")))?;
+        let positions = strata.get(stratum).expect("a named stratum");
+        let mut counts = Vec::new();
+        for seed in 1..=3u8 {
+            if let (Some(a), Some(b)) = (rows_of(x, seed, split), rows_of(y, seed, split)) {
+                counts.push((seed, paired(a, b, positions)?));
+            }
+        }
+        let cell = grade_cell(x, y, stratum, &counts);
+        let out = cell.cell;
+        cells.push(cell);
+        Ok(out)
+    };
+
+    // 1. The base recipe; 2. the add-ons; 3. the transport (U reported beside N-u).
+    let (recipe, recipe_rule) =
+        base_recipe(compare("r-drop", "r", "U")?, compare("r-drop", "r", "N-u")?);
+    let mut addons = Vec::new();
+    for addon in ["r-flock", "r-spin"] {
+        let u = compare(addon, "r", "U")?;
+        addons.push((addon, addon_reading(u, compare(addon, "r", "N-u")?)));
+    }
+    compare("r-ident", "r", "U")?;
+    compare("r-frozen", "r", "U")?;
+    let transport = transport_reading(
+        compare("r-ident", "r", "N-u")?,
+        compare("r-frozen", "r", "N-u")?,
+    );
+    // The shipped recipe against the controls, for decision 5 (N-k and K against (T) reported).
+    let keyed = compare(recipe, "r0", "K")?;
+    compare(recipe, "T", "K")?;
+    let beats = [
+        compare(recipe, "r0", "U")?,
+        compare(recipe, "r0", "N-u")?,
+        compare(recipe, "S", "U")?,
+        compare(recipe, "S", "N-u")?,
+    ];
+    compare(recipe, "r0", "N-k")?;
+
+    // 4. The decode rule, and 5. the verdict, from the shipped recipe's stored samples.
+    let mut notes = Vec::new();
+    let samples = |seed: u8, file: &str| -> Result<Vec<IdSample>> {
+        let path = runs.join(format!("{recipe}-s{seed}")).join(file);
+        let list: Vec<IdSample> = read_scored(&path)?;
+        if list.len() != PROTOCOL_SAMPLES || list.iter().any(|s| s.reference.is_empty()) {
+            return Err(invalid(format!(
+                "{}: {} samples, or a prompt that opens no reply (I-A)",
+                path.display(),
+                list.len()
+            )));
+        }
+        Ok(list)
+    };
+    let replies = |lists: Vec<Vec<IdSample>>| -> Vec<Vec<u32>> {
+        lists.into_iter().flatten().map(|s| s.reply).collect()
+    };
+    let mut decode_seeds = Vec::new();
+    let mut verdict_lists = Vec::new();
+    for seed in 1..=3u8 {
+        let read = || -> Result<(DecodeSeed, Vec<IdSample>, Vec<IdSample>)> {
+            let p_greedy = samples(seed, "samples-p-dev-greedy-memory.json")?;
+            let p_flock = samples(seed, "samples-p-dev-flock-memory.json")?;
+            let g = replies(vec![
+                samples(seed, "samples-memory.json")?,
+                p_greedy.clone(),
+            ]);
+            let f = replies(vec![
+                samples(seed, "samples-dev-flock-memory.json")?,
+                p_flock.clone(),
+            ]);
+            let (gg, fg) = (
+                generation(&g, &train_replies, eos),
+                generation(&f, &train_replies, eos),
+            );
+            let n = g.len();
+            Ok((
+                DecodeSeed {
+                    seed,
+                    n,
+                    g: gg.complete,
+                    f: fg.complete,
+                    band: count_band(gg.complete, n),
+                    g_repeat: gg.repeated_4gram_rate,
+                    f_repeat: fg.repeated_4gram_rate,
+                    holds: decode_holds(
+                        gg.complete,
+                        fg.complete,
+                        n,
+                        gg.repeated_4gram_rate,
+                        fg.repeated_4gram_rate,
+                    ),
+                },
+                p_greedy,
+                p_flock,
+            ))
+        };
+        match read() {
+            Ok((d, p_greedy, p_flock)) => {
+                decode_seeds.push(d);
+                verdict_lists.push((seed, p_greedy, p_flock));
+            }
+            Err(e) => notes.push(format!(
+                "{recipe}-s{seed}: not graded for decisions 4 and 5: {e}"
+            )),
+        }
+    }
+    let flock = decode_seeds.len() == 3 && decode_seeds.iter().all(|d| d.holds);
+    let rule = if flock { "F" } else { "G" };
+    let verdict_seeds: Vec<VerdictSeed> = verdict_lists
+        .into_iter()
+        .map(|(seed, p_greedy, p_flock)| {
+            let list = if flock { p_flock } else { p_greedy };
+            let references: Vec<Vec<u32>> = list.iter().map(|s| s.reference.clone()).collect();
+            let reply: Vec<Vec<u32>> = list.into_iter().map(|s| s.reply).collect();
+            VerdictSeed::new(
+                seed,
+                &generation(&reply, &train_replies, eos),
+                &generation(&references, &train_replies, eos),
+            )
+        })
+        .collect();
+    let (name, failed) = verdict(beats, keyed, &verdict_seeds);
+    let frozen = match frozen_probe {
+        Some(run) => {
+            let (routing, moved) = frozen_check(run)?;
+            Some([routing, moved])
+        }
+        None => None,
+    };
+    Ok(Grade {
+        strata: strata.counts(),
+        copied: [0, 1, 2, 3].map(|i| copied_sets[i].len()),
+        hit_keys,
+        frozen,
+        missing,
+        cells,
+        recipe,
+        recipe_rule,
+        addons,
+        transport,
+        decode: (!decode_seeds.is_empty()).then_some(DecodeGrade {
+            recipe,
+            seeds: decode_seeds,
+            ships: rule,
+        }),
+        verdict: Some(VerdictGrade {
+            recipe,
+            rule,
+            seeds: verdict_seeds,
+            verdict: name,
+            failed,
+        }),
+        copied_hits,
+        notes,
+    })
+}
+
 /// Key, value and filler token ranges for the recall task: disjoint, and clear of BOS (0).
 pub const RECALL_KEYS: std::ops::Range<u32> = 16..528;
 pub const RECALL_VALUES: std::ops::Range<u32> = 528..1_040;
@@ -6257,6 +7009,169 @@ mod tests {
         assert!(left, "K = 16 never left greedy's path: its draws did not run");
     }
 
+    /// claude-211 (I-G): the strata split by whether (T) names a row; a position scored twice,
+    /// or a file with the memory on, is refused.
+    #[test]
+    fn the_strata_split_by_the_tables_control() {
+        let rows = |split: &str, positions: Vec<usize>, picks: Vec<u32>| ScoredRows {
+            split: split.to_owned(),
+            memory: false,
+            targets: vec![1; positions.len()],
+            writer: picks.clone(),
+            nearest: picks,
+            positions,
+        };
+        let dev = rows("dev", vec![5, 6, 7], vec![1, CONTROL_MISS, 2]);
+        let p_dev = rows("p-dev", vec![1, 2], vec![CONTROL_MISS, CONTROL_MISS]);
+        let strata = Strata::from_tables(&dev, &p_dev).unwrap();
+        assert_eq!(strata.counts(), [2, 1, 2, 0]);
+        assert!(strata.u.contains(&6) && strata.k.contains(&5) && strata.k.contains(&7));
+        let twice = rows("dev", vec![5, 5], vec![1, CONTROL_MISS]);
+        assert!(Strata::from_tables(&twice, &p_dev).is_err());
+        let memory_on = ScoredRows {
+            memory: true,
+            ..dev.clone()
+        };
+        assert!(Strata::from_tables(&memory_on, &p_dev).is_err());
+    }
+
+    /// claude-211 (I-G): a cell is ahead or behind only when all three seeds are, each past
+    /// `max(⌈2·√(b+c)⌉, max d − min d)`; two seeds, or one inside, leave it inside.
+    #[test]
+    fn a_grade_cell_needs_all_three_seeds_past_the_band() {
+        // b + c = 100, so each floor is 20; d = 40, 42, 44, a spread of 4.
+        let ahead = [
+            (1u8, (0, 0, 70, 30)),
+            (2, (0, 0, 71, 29)),
+            (3, (0, 0, 72, 28)),
+        ];
+        assert_eq!(grade_cell("x", "y", "U", &ahead).cell, OverturnCell::Ahead);
+        let behind = ahead.map(|(s, (a, b, x, y))| (s, (b, a, y, x)));
+        assert_eq!(
+            grade_cell("y", "x", "U", &behind).cell,
+            OverturnCell::Behind
+        );
+        assert_eq!(
+            grade_cell("x", "y", "U", &ahead[..2]).cell,
+            OverturnCell::Inside
+        );
+        // d = 60, 62, 30: each past its floor of 20, but the spread of 32 is the band.
+        let spread = [
+            (1u8, (0, 0, 80, 20)),
+            (2, (0, 0, 81, 19)),
+            (3, (0, 0, 65, 35)),
+        ];
+        let cell = grade_cell("x", "y", "U", &spread);
+        assert_eq!((cell.spread, cell.seeds[0].band), (32, 32));
+        assert_eq!(cell.cell, OverturnCell::Inside);
+    }
+
+    /// claude-211 (I-G): decision 1's four rules in the protocol's order, and its default.
+    #[test]
+    fn the_base_recipe_follows_the_protocols_order() {
+        use OverturnCell::{Ahead, Behind, Inside};
+        // (r-drop)'s cells against (r), on U then on N-u.
+        assert_eq!(base_recipe(Inside, Ahead).0, "r-drop");
+        assert_eq!(base_recipe(Inside, Behind).0, "r");
+        assert_eq!(
+            base_recipe(Ahead, Inside).0,
+            "r-drop",
+            "U decides when N-u is inside"
+        );
+        assert_eq!(base_recipe(Behind, Inside).0, "r");
+        // Opposite leads on the two strata: no rule holds, so the default.
+        assert_eq!(base_recipe(Behind, Ahead).1, base_recipe(Inside, Inside).1);
+        assert_eq!(base_recipe(Ahead, Behind).1, base_recipe(Inside, Inside).1);
+        assert_eq!(base_recipe(Inside, Inside).0, "r");
+    }
+
+    /// claude-211 (I-G): decisions 2 and 3's readings.
+    #[test]
+    fn the_add_on_and_transport_readings_follow_the_protocol() {
+        use OverturnCell::{Ahead, Behind, Inside};
+        assert_eq!(addon_reading(Inside, Ahead), "a candidate");
+        assert_eq!(addon_reading(Behind, Ahead), "no decision (underpowered)");
+        assert_eq!(
+            addon_reading(Ahead, Behind),
+            "a negative for this configuration"
+        );
+        assert_eq!(addon_reading(Ahead, Inside), "no decision (underpowered)");
+        assert_eq!(
+            transport_reading(Behind, Behind),
+            "learned transport earns its place"
+        );
+        assert_eq!(
+            transport_reading(Behind, Inside),
+            "no decision (underpowered)"
+        );
+        let negative = "a negative for learned transport in this configuration";
+        assert_eq!(transport_reading(Ahead, Behind), negative);
+        assert_eq!(transport_reading(Inside, Ahead), negative);
+    }
+
+    /// claude-211 (I-G): decision 4's count band is `⌈2·√(n·p(1−p))⌉` exactly, and the Flock
+    /// rank rule holds only with a lower repeat rate and within the band.
+    #[test]
+    fn the_decode_rule_band_is_exact() {
+        // p = 1/2 at n = 512: 2·√128 = 22.6, so 23. p = 1/4: 2·√96 = 19.6, so 20.
+        assert_eq!(count_band(256, 512), 23);
+        assert_eq!(count_band(128, 512), 20);
+        assert_eq!((count_band(0, 512), count_band(512, 512)), (0, 0));
+        assert!(decode_holds(256, 233, 512, 0.5, 0.4));
+        assert!(!decode_holds(256, 232, 512, 0.5, 0.4), "one past the band");
+        assert!(
+            !decode_holds(256, 300, 512, 0.4, 0.4),
+            "the repeat rate must be lower"
+        );
+    }
+
+    /// claude-211 (I-G): decision 5's tolerance and its three verdicts.
+    #[test]
+    fn the_verdict_follows_the_protocol() {
+        use OverturnCell::{Ahead, Inside};
+        let made = |complete: usize, verbatim: usize, repeat: f64| Generation {
+            replies: 256,
+            complete,
+            verbatim_train: verbatim,
+            new_ngram_share: Vec::new(),
+            distinct_1: 0.0,
+            distinct_2: 0.0,
+            repeated_4gram_rate: repeat,
+        };
+        let references = made(200, 128, 0.05);
+        // v = v_ref = 0.64: tol = max(0.10, 3·√(0.64·0.36/100)) = 0.144.
+        let close = VerdictSeed::new(1, &made(100, 64, 0.1), &references);
+        assert!((close.tol.unwrap() - 0.144).abs() < 1e-12);
+        assert!(close.generalizes() && !close.memorized());
+        // v = 0.80: past the tolerance.
+        let copied = VerdictSeed::new(1, &made(100, 80, 0.1), &references);
+        assert!(copied.memorized() && !copied.generalizes());
+        assert!(
+            !VerdictSeed::new(1, &made(63, 40, 0.1), &references).generalizes(),
+            "n_c < 64"
+        );
+        assert!(
+            !VerdictSeed::new(1, &made(100, 64, 0.2), &references).generalizes(),
+            "a loop"
+        );
+        let none = VerdictSeed::new(1, &made(0, 0, 0.0), &references);
+        assert!(none.v.is_none() && !none.generalizes() && !none.memorized());
+        let three = |s: &VerdictSeed| [1u8, 2, 3].map(|seed| VerdictSeed { seed, ..s.clone() });
+        assert_eq!(verdict([Ahead; 4], Ahead, &three(&close)).0, "generalizes");
+        assert_eq!(
+            verdict([Ahead, Ahead, Ahead, Inside], Ahead, &three(&close)).0,
+            "mixed"
+        );
+        assert_eq!(verdict([Inside; 4], Ahead, &three(&copied)).0, "memorized");
+        let (name, failed) = verdict([Ahead, Inside, Inside, Inside], Ahead, &three(&copied));
+        assert_eq!(name, "mixed", "memorized needs it ahead of none of them");
+        assert!(!failed.is_empty());
+        assert_eq!(
+            verdict([Ahead; 4], Ahead, &three(&close)[..2]).0,
+            "mixed",
+            "three seeds"
+        );
+    }
     /// claude-208: candidates rank by the higher score, ties to the smaller id.
     #[test]
     fn candidates_rank_by_score_then_smaller_id() {
