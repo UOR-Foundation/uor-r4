@@ -21,7 +21,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../roadmap/items/one-model-end-t
   - the (r-cut) probe records its cut and limits 2,775,229 of 13,097,856 TRAIN rows (1,885 of them read nothing);
   - each scoring printed the trained cut it read;
   - claude-211's 5 registered files reproduce byte for byte.
-- **Sealed** at `results/claude/one-model-end-to-end-cut-train-2026-10-30/run-5f20e7f7/`, each part read back OK. Each seed folder's `SHA256SUMS` has this sha256:
+- **Sealed** at `results/claude/one-model-end-to-end-cut-train-2026-10-30/run-5f20e7f7/`, each part read back OK. The run's own `SHA256SUMS`, sha256 `1cc9365a95afe5cd486132e7c5039a1c4e661068e7cff360d2d9d909486568b4`, lists the four below. Each seed folder's `SHA256SUMS` has this sha256:
   - `s1`, 130 files: `a6edc174ade23f24bb03c4992d785ccfce6b3b375ff35fc45a6aae8273a41f66`;
   - `s2`, 132 files: `032eda568e5d6a436027265e8c59872f61bdf5f76e3f16852618831230829562`;
   - `s3`, 132 files: `102fd62064a6f61808befe3aefbf6eae8571fc70ef1fb9aaed0328401caf5edc`;

@@ -96,6 +96,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - **Sealed** at `results/claude/one-model-end-to-end-cut-train-2026-10-30/run-5f20e7f7/`:
     - `s1`, 130 files; `s2`, 132; `s3`, 132; and `bin`, the binary, sha256 `7e0415e0cae19cae58fa4e9889c426018613ff0aca129e88a0fb105d69c7a623`, the same on every pod.
     - Each matched the pod file for file, and was read back from the store OK.
+    - The run's top-level `SHA256SUMS` lists the four parts' sums; its sha256 is `1cc9365a95afe5cd486132e7c5039a1c4e661068e7cff360d2d9d909486568b4`.
   - **Every pod is down.**
 
 ## Checks run at the head
