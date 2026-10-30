@@ -25,6 +25,8 @@ Both are now refusals in the grade. With the code review of the grade (CHANGES o
 - rows 2 and 4, like row 1, do not hold on a reading with b + c under 10;
 - the deciding-nothing readings below are computed.
 
+**Amendment, 30 Oct, before p-u is read: a third key, `hsign`** (Casey: "ok add that trick"). It is the Hadamard sign key, run as a follow-up keys pass (Steps 6b). Its own FIT round is pending.
+
 Round 4: **TEST FITNESS: FIT** (a fresh reviewer, 30 Oct, at `a47c235e1`). Every repair holds in the code, the step-5 refusals are all present, and nothing from p-u can change a level or τ. Its non-blocking notes are taken in:
 - row 3's missed-row reading also needs b + c at least 10, so a key firing on a handful of rows cannot pass;
 - sign distances tie at τ;
@@ -50,6 +52,7 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
   - The tie count is written per opening, since identical TRAIN prompts give identical points and sign distances come in steps of 1/256.
   - **point:** L1 on the point itself, the mean `|q − t|`, the cell objective's distance.
   - **sign:** L1 on the point's 0/1 sign pattern (`sign_code`), which is the Hamming distance over the width. It is the cheaper key: 32 bytes an opening, servable as integers.
+  - **hsign (amendment, 30 Oct, Casey: "ok add that trick"):** the sign key taken on `H·S·x` (`hadamard_sign_code`). S is a fixed diagonal of ±1 signs (`rotation_signs`: coordinate i negated when its splitmix64 hash is odd), and H is the 256-wide Walsh–Hadamard transform, computed by 8 add-and-subtract stages on the device. This is the fixed rotation of PrismML's Bonsai 2: it spreads each point's magnitude across the coordinates before its signs are taken. It is the same 32 bytes an opening, plus an O(n log n) transform. It is registered here before p-u is read, and decides under the same rules as the other two.
   - **the exact key** (reported): the memory's own `first-8`, counted on the laptop as in step 0. The anchor check shows it is the served key on p-s too (1,400 of 1,400).
   - **Each key's search is timed separately** (`point_ms`, `sign_ms`). TRAIN's sign codes are taken before the sign search starts, as a served table would hold them.
   - **The timings are the instrument's, not a served key's.** Each covers two distance passes, a copy of the tie masks and the host counting. A served nearest needs one pass. So they are an upper bound on the cost per opening, and are reported as that.
@@ -61,6 +64,7 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
   | served | the model as served, memory on (`rows-{split}-memory.json`) | DEV's backoff base |
   | point | the point key where it fires (distance ≤ τ), else B | decides |
   | sign | the sign key where it fires, else B | decides |
+  | hsign | the Hadamard sign key where it fires, else B (amendment) | decides |
   | forced | free generation, greedy, memory on, with each reply's first token given as its reference's (`samples-{split}-forced-memory.json`) | decides row 1 |
   | U | the oracle `reply-template` key (laptop, as in step 0) | the ceiling, decides row 2 |
 
@@ -112,7 +116,17 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
    - each forced arm and its greedy arm hold the same 256 prompts;
    - a deciding grade's given levels equal p-s's own choice;
    - on every opening where the exact key misses, the memory-on and memory-off nearest tokens are equal. So the memory moves nothing there, and B is what the served model sees on the missed rows.
-6. **Seal** to `results/claude/one-model-end-to-end-memory-key-2026-10-30/run-<sha8>/` with a `SHA256SUMS`, match it on the pod file for file, read it back, and take the pod down.
+6. **Seal** to `results/claude/one-model-end-to-end-memory-key-2026-10-30/run-<sha8>/` with a `SHA256SUMS`, match it on the pod file for file, and read it back.
+6b. **The follow-up keys pass** (amendment). The main run's binary predates `hsign`, and no points are saved. So a second binary, built at the amendment's pushed head, runs `--score-rows … --samples 0 --opening-keys 1` per seed, writing to a separate folder. It decodes nothing and rewrites each `keys-*.json` with all three keys.
+   - It runs on the same pod if it is ready in time, else on a new one.
+   - It is sealed beside the main run, at `run-<sha8>/followup-<sha8>/`.
+   - **Instrument checks, each refusing to grade:**
+     - its rows files equal the main run's byte for byte;
+     - every point and sign field of its keys files (targets, distances, ties) equals the main run's.
+
+     That is, the second binary reproduces the first, so `hsign` is read on the same openings and trunk.
+   - **The grade** reads the main run's files with the follow-up pass's keys files.
+   - **Then** the pod goes down.
 7. **The grade, `--key-grade 1`, is written and unit-tested on the laptop before the pod runs** (FIT round 2's advice), and reviewed with the code. After sealing, in order:
    - run it on p-s alone, to choose each key's level and check row 1's power on p-s's own forced arm;
    - commit the levels and each seed's τ to the PR.
@@ -146,7 +160,7 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
 |---|---|---|
 | 1 | At every seed, the forced arm's lift over greedy (paired, memory on, 256 replies), b − c, is at most 2·√(b + c), both on replies equal to their reference and on replies whose value-masked template (K = 1,024) equals the reference's. If b + c < 10 on both measures at a seed, row 1 is underpowered there and does not hold | The opening is not enough. The rollout hinge, or a combined unit |
 | 2 | At every seed, U's hits minus the larger of the exact key's hits (with its TRAIN fallback where it misses) and B's, on all openings, is within 2·√(b + c) of zero, paired against that larger arm (a tie in hits takes the exact key), with b + c at least 10 | No prompt key has headroom. The hinge, and the later rows |
-| 3 | Some key passes all four, at every seed: Δ_K,s beyond its band, with b + c at least 10; precision when it fires at least B's on those rows; Δ on the new stratum not below 0 by more than its own 2·√(b + c); and on DEV, the served model with K backing off where the exact key misses not lower than served by more than its paired band | Train and serve that key (the sign key if both pass), with an opening bar on another fresh panel |
+| 3 | Some key (sign, hsign or point, tried in that order, the cheapest first) passes all four, at every seed: Δ_K,s beyond its band, with b + c at least 10; precision when it fires at least B's on those rows; Δ on the new stratum not below 0 by more than its own 2·√(b + c); and on DEV, the served model with K backing off where the exact key misses not lower than served by more than its paired band | Train and serve that key (the cheapest that passes: sign, then hsign, then point), with an opening bar on another fresh panel |
 | 4 | No key passes row 3, and some key, read at q100 (firing on every missed row), loses beyond its band at some seed: Δ_K,s < −2·√(b + c), with b + c at least 10 | An abstention gate (a distance or a share threshold) |
 | 5 | None of the above | Train the trunk's opening point to gather paraphrases, with a geometric hinge |
 

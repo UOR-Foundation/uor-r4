@@ -794,16 +794,16 @@ fn panel_arg(value: &str) -> Result<(String, PathBuf)> {
     }
 }
 
-/// `--key-levels sign=L,point=L` (claude-218): each trunk key's level, 1–10 (q10 to q100).
+/// `--key-levels sign=L,hsign=L,point=L` (claude-218): each trunk key's level, 1–10 (q10 to q100).
 fn key_levels_arg(value: &str) -> Result<Vec<(String, u8)>> {
     value
         .split(',')
         .map(|part| match part.split_once('=') {
-            Some((key, level)) if ["sign", "point"].contains(&key) => match level.parse::<u8>() {
+            Some((key, level)) if ["sign", "hsign", "point"].contains(&key) => match level.parse::<u8>() {
                 Ok(l) if (1..=10).contains(&l) => Ok((key.to_owned(), l)),
                 _ => Err(FloatTrainError::Invalid(format!("--key-levels: {part} wants a level 1–10"))),
             },
-            _ => Err(FloatTrainError::Invalid("--key-levels takes sign=L,point=L".to_owned())),
+            _ => Err(FloatTrainError::Invalid("--key-levels takes sign=L,hsign=L,point=L".to_owned())),
         })
         .collect()
 }
@@ -818,6 +818,7 @@ mod tests {
             key_levels_arg("sign=3,point=10").unwrap(),
             [("sign".to_owned(), 3), ("point".to_owned(), 10)]
         );
+        assert_eq!(key_levels_arg("hsign=5").unwrap(), [("hsign".to_owned(), 5)]);
         assert!(key_levels_arg("sign=0").is_err());
         assert!(key_levels_arg("sign=11").is_err());
         assert!(key_levels_arg("exact=3").is_err());

@@ -75,6 +75,28 @@ As the item's scope:
 
 If step 0 already settles the table, by the second row ("no headroom"), the unit closes on step 0 and its REPORT. Steps 2–5 then do not run.
 
+## Amendment, 30 Oct: the Hadamard sign key (Casey's direction)
+
+**Casey, in claude's chat (verbatim):** "ok add that trick". The trick is the fixed rotation in PrismML's Bonsai 2 white paper: a fixed ±1 sign flip, then a fast Walsh–Hadamard transform, before the sign code.
+
+**What it adds:** a third trunk key, `hsign`. It is the sign key taken on `H·S·x`:
+- **S:** a fixed diagonal of ±1 signs;
+- **H:** the 256-wide Walsh–Hadamard transform, computed by add and subtract stages on the device;
+- **The cost:** exact, O(n log n) per point, no dot product, nothing learned.
+
+**The rules are the other keys':**
+- it is named by the commonest target at the least Hamming distance;
+- its level is chosen on p-s;
+- the same decision table applies, with the cheaper keys shipping first: sign, then hsign, then point.
+
+It is registered by a sheet amendment with a fresh FIT before p-u is read. p-u is unopened.
+
+**How it runs:** the main job's binary is built, and it saves no points. So `hsign` runs as a follow-up keys pass, by a new binary, on the same pod after the main job if it is ready in time, else on a new pod. Its keys files must reproduce the point and sign keys of the main run exactly, as an instrument check.
+
+**Done when, added:** `hsign` is built and tested, the amendment is FIT, and the follow-up pass is sealed and graded with the others.
+
+**The integer export's use** of the same rotation (rotating before quantizing a table) belongs to the export unit. It is noted there, and not built here.
+
 ## Stop and ask if
 
 Stop and decide; never wait.

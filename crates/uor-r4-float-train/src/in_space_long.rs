@@ -1637,6 +1637,48 @@ fn sign_code(points: &Tensor) -> Result<Tensor> {
     Ok(points.ge(&points.zeros_like()?)?.to_dtype(DType::F32)?)
 }
 
+/// The fixed ±1 signs S of the Hadamard rotation (claude-218; Casey, 30 Oct: "ok add that
+/// trick", the rotation in PrismML's Bonsai 2): coordinate `i` is negated when its splitmix64
+/// hash is odd, so S is exact, fixed and reproducible.
+fn rotation_signs(width: usize) -> Vec<f32> {
+    (0..width as u64)
+        .map(|i| {
+            let mut z = i.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^= z >> 31;
+            if z & 1 == 1 { -1.0 } else { 1.0 }
+        })
+        .collect()
+}
+
+/// The fast Walsh–Hadamard transform of each row of `x`, whose width is a power of two,
+/// unnormalised: log2(width) stages of adds and subtracts on the device, with no dot product.
+fn walsh_hadamard(x: &Tensor) -> Result<Tensor> {
+    let (n, w) = x.dims2()?;
+    if !w.is_power_of_two() {
+        return Err(invalid(format!("the Walsh–Hadamard transform wants a power-of-two width, not {w}")));
+    }
+    let mut y = x.contiguous()?;
+    let mut h = 1;
+    while h < w {
+        let v = y.reshape((n, w / (2 * h), 2, h))?;
+        let (a, b) = (v.narrow(2, 0, 1)?, v.narrow(2, 1, 1)?);
+        y = Tensor::cat(&[(&a + &b)?, (&a - &b)?], 2)?.reshape((n, w))?;
+        h *= 2;
+    }
+    Ok(y)
+}
+
+/// The Hadamard sign code: the sign pattern of `H·S·x` ([`sign_code`] after the fixed signs and
+/// the transform). The rotation spreads each point's magnitude across the coordinates, so its
+/// Hamming distance compares points along spread-out directions rather than the raw axes.
+fn hadamard_sign_code(points: &Tensor) -> Result<Tensor> {
+    let (_, w) = points.dims2()?;
+    let signs = Tensor::from_vec(rotation_signs(w), (1, w), points.device())?;
+    sign_code(&walsh_hadamard(&points.broadcast_mul(&signs)?)?)
+}
+
 /// One split's openings named by the two trunk keys (claude-218), from TRAIN's opening points
 /// under the same trunk: by point under L1, and by sign pattern (Hamming), each as the commonest
 /// target among the TRAIN openings at the least distance ([`l1_named`]), with the distance and
@@ -1661,6 +1703,16 @@ pub struct OpeningKeys {
     /// a served table would hold them).
     pub point_ms: u64,
     pub sign_ms: u64,
+    /// The Hadamard sign key ([`hadamard_sign_code`], Casey's amendment of 30 Oct), as the sign
+    /// key; empty in a keys file written before it.
+    #[serde(default)]
+    pub hsign_target: Vec<u32>,
+    #[serde(default)]
+    pub hsign_distance: Vec<f32>,
+    #[serde(default)]
+    pub hsign_ties: Vec<u32>,
+    #[serde(default)]
+    pub hsign_ms: u64,
 }
 
 /// [`OpeningKeys`] for one split's opening points against TRAIN's.
@@ -1679,6 +1731,11 @@ fn opening_keys(
     let started = std::time::Instant::now();
     let by_sign = l1_named(&sign_code(query)?, &train_sign, train_targets)?;
     let sign_ms = started.elapsed().as_millis() as u64;
+    drop(train_sign);
+    let train_hsign = hadamard_sign_code(train)?;
+    let started = std::time::Instant::now();
+    let by_hsign = l1_named(&hadamard_sign_code(query)?, &train_hsign, train_targets)?;
+    let hsign_ms = started.elapsed().as_millis() as u64;
     let (rows, width) = train.dims2()?;
     Ok(OpeningKeys {
         split: split.to_owned(),
@@ -1694,6 +1751,10 @@ fn opening_keys(
         sign_ties: by_sign.iter().map(|n| n.ties).collect(),
         point_ms,
         sign_ms,
+        hsign_target: by_hsign.iter().map(|n| n.target).collect(),
+        hsign_distance: by_hsign.iter().map(|n| n.distance).collect(),
+        hsign_ties: by_hsign.iter().map(|n| n.ties).collect(),
+        hsign_ms,
     })
 }
 
@@ -1715,8 +1776,9 @@ const KEY_PANELS: [(&str, &str, &str); 2] = [
 /// The forced arm's and greedy's replies per seed and split, as the sheet registers them.
 const KEY_FORCED_REPLIES: usize = 256;
 
-/// The trunk keys the key grade reads, the cheaper first: if both pass, the sign key ships.
-const TRUNK_KEYS: [&str; 2] = ["sign", "point"];
+/// The trunk keys the key grade reads, the cheaper first: if more than one passes, the sign key
+/// ships, then the Hadamard sign key (the same 32 bytes, plus the rotation), then the point key.
+const TRUNK_KEYS: [&str; 3] = ["sign", "hsign", "point"];
 
 /// An exact table over keyed openings: each key's commonest target, ties to the smaller id, and
 /// the overall commonest for an unseen key, as [`bound`] names them.
@@ -1804,6 +1866,7 @@ impl SeedPicks {
     fn key(&self, key: &str) -> (&[u32], &[f32]) {
         match key {
             "point" => (&self.keys.point_target, &self.keys.point_distance),
+            "hsign" => (&self.keys.hsign_target, &self.keys.hsign_distance),
             _ => (&self.keys.sign_target, &self.keys.sign_distance),
         }
     }
@@ -1815,6 +1878,11 @@ fn seed_picks(runs: &Path, seed: u8, openings: &GradeOpenings) -> Result<SeedPic
     let keys: OpeningKeys = read_scored(&dir.join(format!("keys-{split}.json")))?;
     if keys.positions != openings.positions || keys.targets != openings.targets {
         return Err(invalid(format!("{split} s{seed}: the keys' openings are not the split's (an instrument fault)")));
+    }
+    if keys.hsign_target.len() != keys.positions.len() || keys.hsign_distance.len() != keys.positions.len() {
+        return Err(invalid(format!(
+            "{split} s{seed}: the keys file has no Hadamard sign key (grade the follow-up pass's files)"
+        )));
     }
     let at = |label: &str| -> Result<Vec<u32>> {
         let rows: ScoredRows = read_scored(&dir.join(format!("rows-{split}-{label}.json")))?;
@@ -2118,7 +2186,7 @@ pub fn key_grade(
         Ok((tokens, mask))
     };
     if deciding && (levels.len() != TRUNK_KEYS.len() || TRUNK_KEYS.iter().any(|k| !levels.iter().any(|(n, l)| n == k && (1..=10).contains(l)))) {
-        return Err(invalid("--key-levels wants sign=L,point=L with each L in 1–10"));
+        return Err(invalid("--key-levels wants sign=L,hsign=L,point=L with each L in 1–10"));
     }
     let tokenizer = pinned_tokenizer(data_root)?;
     let eos = tokenizer.token_id("<|eos|>").ok_or_else(|| invalid("the pinned tokenizer has no <|eos|>"))?;
@@ -8138,6 +8206,16 @@ mod tests {
         assert_eq!((r.0, r.2.as_deref()), (3, Some("sign")));
         let r = key_outcome(&lifted, &headroom, &set(&even, &gain), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&even, &even));
         assert_eq!((r.0, r.2.as_deref()), (3, Some("point")));
+        // Casey's amendment: the Hadamard sign key ships when it passes and the sign key does not,
+        // before the point key; the sign key, cheaper still, ships first when both pass.
+        let set3 = |sign: &Vec<KeyReading>, hsign: &Vec<KeyReading>, point: &Vec<KeyReading>| {
+            vec![("sign", sign.clone()), ("hsign", hsign.clone()), ("point", point.clone())]
+        };
+        let (n3, e3) = (set3(&neutral, &neutral, &neutral), set3(&even, &even, &even));
+        let r = key_outcome(&lifted, &headroom, &set3(&even, &gain, &gain), &n3, &n3, &e3);
+        assert_eq!((r.0, r.2.as_deref()), (3, Some("hsign")));
+        let r = key_outcome(&lifted, &headroom, &set3(&gain, &gain, &gain), &n3, &n3, &e3);
+        assert_eq!((r.0, r.2.as_deref()), (3, Some("sign")));
         // A loss beyond its band on the new stratum, or on DEV's backoff, fails row 3.
         assert_eq!(key_outcome(&lifted, &headroom, &set(&gain, &gain), &set(&lost, &lost), &set(&neutral, &neutral), &set(&even, &even)).0, 5);
         assert_eq!(key_outcome(&lifted, &headroom, &set(&gain, &gain), &set(&neutral, &neutral), &set(&lost, &lost), &set(&even, &even)).0, 5);
@@ -9642,6 +9720,36 @@ mod tests {
         assert_eq!(keyed.sign_target, [0, 0, 0]);
         assert_eq!(keyed.sign_ties, [5000, 5000, 5000]);
         assert_eq!(keyed.sign_distance, [0.0, 0.5, 0.0]);
+        // The Hadamard sign key (Casey's amendment) is written beside them, for every opening.
+        assert_eq!((keyed.hsign_target.len(), keyed.hsign_distance.len(), keyed.hsign_ties.len()), (3, 3, 3));
+        assert!(keyed.hsign_ties.iter().all(|&t| t >= 1));
+        // The transform: H4 (1, 2, 3, 4) = (10, −2, −4, 0); twice is 4 times the input; a width
+        // that is not a power of two is refused.
+        let x = Tensor::from_vec(vec![1.0f32, 2.0, 3.0, 4.0], (1, 4), &device).unwrap();
+        let hx = walsh_hadamard(&x).unwrap();
+        assert_eq!(hx.to_vec2::<f32>().unwrap(), [[10.0, -2.0, -4.0, 0.0]]);
+        assert_eq!(walsh_hadamard(&hx).unwrap().to_vec2::<f32>().unwrap(), [[4.0, 8.0, 12.0, 16.0]]);
+        assert!(walsh_hadamard(&Tensor::zeros((1, 3), DType::F32, &device).unwrap()).is_err());
+        // The code is the sign of H·S·x: here S is (+, −, ...) per `rotation_signs`.
+        let s = rotation_signs(4);
+        let sx: Vec<f32> = [1.0f32, 2.0, 3.0, 4.0].iter().zip(&s).map(|(v, s)| v * s).collect();
+        let want = walsh_hadamard(&Tensor::from_vec(sx, (1, 4), &device).unwrap()).unwrap().to_vec2::<f32>().unwrap()[0]
+            .iter()
+            .map(|&v| if v >= 0.0 { 1.0 } else { 0.0 })
+            .collect::<Vec<f32>>();
+        assert_eq!(hadamard_sign_code(&x).unwrap().to_vec2::<f32>().unwrap()[0], want);
+    }
+
+    /// claude-218 (Casey's amendment): the Hadamard rotation's fixed signs are exact, the same at
+    /// every call, and mixed.
+    #[test]
+    fn the_hadamard_rotations_signs_are_fixed_and_mixed() {
+        let s = rotation_signs(256);
+        assert_eq!(s, rotation_signs(256));
+        assert!(s.iter().all(|&v| v == 1.0 || v == -1.0));
+        let negative = s.iter().filter(|&&v| v < 0.0).count();
+        assert!((96..=160).contains(&negative), "{negative} of 256 negated");
+        assert_eq!(rotation_signs(4), rotation_signs(256)[..4]);
     }
 
     /// claude-211 (Casey 30 Oct: "do not rule flock out, improve it instead"): with `keep_end`,
