@@ -18,6 +18,7 @@ use std::path::Path;
 
 use serde_json::{json, Value};
 
+use crate::docs_catalog::encode_target;
 use crate::docs_inventory::{is_manifest, parse_manifest};
 use crate::docs_links::{
     blank_code_spans, extract_links, is_md, resolve, tracked_files, write_json, PathMap, Resolved,
@@ -144,7 +145,7 @@ pub fn new_target(source: &str, target: &str, map: &PathMap) -> Option<String> {
         relative(dir, &np)
     };
     if path_raw.contains('%') {
-        path = path.replace(' ', "%20");
+        path = encode_target(&path);
     }
     if path_raw.ends_with('/') && !path.ends_with('/') {
         path.push('/');
@@ -308,26 +309,25 @@ pub fn parse_args(args: &[String], task: &str) -> Result<Args, String> {
     })
 }
 
-/// Every path covered by a tracked SHA256SUMS manifest.
-pub fn covered_paths(root: &Path, tracked: &[String]) -> BTreeSet<String> {
+/// Every path covered by a tracked SHA256SUMS manifest. A manifest that
+/// cannot be read, or is not UTF-8, is an error: ignoring it would make the
+/// files it covers editable.
+pub fn covered_paths(root: &Path, tracked: &[String]) -> Result<BTreeSet<String>, String> {
     let mut covered = BTreeSet::new();
     for m in tracked.iter().filter(|p| is_manifest(p)) {
-        let Ok(bytes) = std::fs::read(root.join(m)) else {
-            continue;
-        };
-        if let Ok(text) = String::from_utf8(bytes) {
-            let dir = m.rfind('/').map_or("", |i| &m[..i]);
-            covered.extend(parse_manifest(dir, &text));
-        }
+        let bytes = std::fs::read(root.join(m)).map_err(|e| format!("manifest {m}: {e}"))?;
+        let text = String::from_utf8(bytes).map_err(|_| format!("manifest {m}: not UTF-8"))?;
+        let dir = m.rfind('/').map_or("", |i| &m[..i]);
+        covered.extend(parse_manifest(dir, &text));
     }
-    covered
+    Ok(covered)
 }
 
 /// `cargo xtask docs-relink --map MAP.tsv [--exclude PREFIX ..] [--apply] [--json OUT]`
 pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let a = parse_args(args, "docs-relink")?;
     let tracked = tracked_files(root)?;
-    let covered = covered_paths(root, &tracked);
+    let covered = covered_paths(root, &tracked)?;
     let mut files = 0usize;
     let mut edits_json = Vec::new();
     let mut unmatched_json = Vec::new();
@@ -490,6 +490,32 @@ mod tests {
         let r = relink_text("README.md", src, &m);
         assert_eq!(r.text, src);
         assert!(r.edits.is_empty());
+    }
+
+    #[test]
+    fn percent_encoded_target_keeps_parentheses_encoded() {
+        let m = map("docs/history\tarchive/history\n");
+        let r = relink_text("README.md", "[x](docs/history/a%20%28b%29.md)\n", &m);
+        assert_eq!(r.text, "[x](archive/history/a%20%28b%29.md)\n");
+        assert_eq!(r.edits.len(), 1);
+    }
+
+    #[test]
+    fn unreadable_or_non_utf8_manifest_is_an_error() {
+        let root = std::env::temp_dir().join(format!("xtask-relink-sums-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("docs/e")).unwrap();
+        let line = format!("{}  a.json\n", "0".repeat(64));
+        std::fs::write(root.join("docs/e/SHA256SUMS"), line).unwrap();
+        let ok = ["docs/e/SHA256SUMS".to_string()];
+        assert!(covered_paths(&root, &ok).unwrap().contains("docs/e/a.json"));
+        std::fs::write(root.join("docs/e/bad.SHA256SUMS"), b"\xff\xfe\n").unwrap();
+        let bad = ["docs/e/bad.SHA256SUMS".to_string()];
+        assert!(covered_paths(&root, &bad)
+            .unwrap_err()
+            .contains("not UTF-8"));
+        let gone = ["docs/e/gone/SHA256SUMS".to_string()];
+        assert!(covered_paths(&root, &gone).is_err());
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]
