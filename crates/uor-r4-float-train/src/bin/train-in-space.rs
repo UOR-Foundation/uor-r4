@@ -70,8 +70,10 @@
 //! --read-grade 1 --runs DIR --panel NAME=DIR` grades them on the laptop (`in_space_long::read_grade`).
 //! One JSON line.
 //!
-//! `--reply-read-train all|copy` trains with the reply's Hamming read held to the prompt
-//! (claude-216); the run's `config.json` records it, and `--score-rows` reads it back. `train-in-space
+//! `--reply-read-train all|copy` trains with every reply row's Hamming read held to before its
+//! reply, from the response mask (claude-216); the run's `config.json` records it, and
+//! `--score-rows` reads it back. Since claude-216, `--reply-read`'s decodes hold every reply in
+//! the window the same way, an earlier reply in the prompt included. `train-in-space
 //! --data-root DIR --cut-grade 1 --runs DIR --panel NAME=DIR` grades (r-cut) against (r-drop) on the
 //! laptop (`in_space_long::cut_grade`). One JSON line.
 //!

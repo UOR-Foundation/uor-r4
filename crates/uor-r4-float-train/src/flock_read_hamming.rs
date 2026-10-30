@@ -119,6 +119,11 @@ pub fn set_row_cut(cut: Option<(ReadScope, Vec<usize>)>) {
     ROW_CUT.with(|c| *c.borrow_mut() = cut);
 }
 
+/// Whether a row cut is set on this thread ([`set_row_cut`]).
+pub fn row_cut_set() -> bool {
+    ROW_CUT.with(|c| c.borrow().is_some())
+}
+
 /// Whether the scope limits head `head`, the first `copy_heads` heads being copy heads.
 fn head_limited(scope: ReadScope, head: usize, copy_heads: usize) -> bool {
     match scope {
