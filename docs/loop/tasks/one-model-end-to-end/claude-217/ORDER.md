@@ -1,68 +1,57 @@
-# ORDER: one-model-end-to-end, claude-217
+# ORDER: one-model-end-to-end, claude-217 (step off a reply's own cycle)
 
 Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md). Base: `bf0755693`.
 
 ## Goal
 
-The item's done-when reads:
+**Casey's direction** (30 Oct 2026, in the claude lab's chat; recorded verbatim on #3407 6523338624):
 
-> 1. **The census (laptop, counts only, CHARTER §4.5).** A standalone Rust instrument under `docs/labs/one-model-end-to-end/instrument/` must:
->    - resolve the TRAIN size conflict, and build the TRAIN reply index (exact replies and reply 8- and 13-grams);
->    - report for DEV, Fresh V2 and `m2-fresh256`: the share of reply n-grams in TRAIN replies, the share of prompt templates seen in TRAIN with values masked, and the 8-token key share;
->    - read only the manifest of the K16 fresh slice, and leave the slice unopened.
->
->    It also says which panel, if any, holds new templates.
-> 2. **The overturn check (GPU, under a prep sheet with a fresh FIT and a pre-run review).** Score turn-memory-reply claude-194's (r), (r0), and (r) with its memory off.
->    - **Pinned in the sheet:** the checkpoints by store path, `SHA256SUMS` and step; the binary's sha; a lease and cost inside the caps.
->    - **The pod** also seals a float reference for the read's parity: claude-194's (r), with its memory off, at both seeds. That is every DEV row's writer and nearest pick, and its 64 greedy samples. The parity itself, kept sets and top-1, is `integer-hamming-read`'s step 5, on the checkpoint that item's prep sheet names; the first greedy divergence is done-when 3's integer-artifact measure (claude-205's decision review, on #3407).
->    - **Rows:** DEV's 3,406 later rows the reply table does not name, and its 32 unkeyed openings, judged pooled (3,438).
->    - **Band, fixed in advance:** `max(2·√(b+c), the two-seed spread)`, where b and c are the paired discordant rows.
->    - **The cells:**
->      - (r) ahead at both seeds, beyond the band: the memory recipe stays the training default;
->      - (r) behind at both seeds, beyond the band: a memory-dropout arm joins the training run;
->      - mixed (the seeds disagree, or either seed is inside the band): both arms train.
->    - **Descriptive only:** Fresh V2, and 64 greedy samples per arm scored against the census index.
-> 3. **The protocol.** A prep sheet, with a fresh FIT, written before the training run of the model to ship. It holds:
->    - **Strata:**
->      - keyed rows;
->      - unkeyed rows;
->      - new-template rows, from a panel no decision has touched. Fresh V2 is never one.
->    - **Arms:** (r), memory-off, (r0), tables only, and a longest-suffix table over TRAIN.
->    - **Scores:**
->      - teacher-forced top-1, per stratum;
->      - free generation: the share of replies that are verbatim TRAIN replies, new n-grams for n = 4–8, distinct-1 and distinct-2, the repeated-n-gram rate, and the table hit rate under generation against teacher forcing;
->      - on the integer artifact: kept-set agreement, first divergence, and tok/s against context.
->    - **Decode rules:** greedy, and a Flock rank rule with the harmonic weights of `stack/flock.rs`.
->    - **The verdict rule, written in advance:**
->      - "memorized": the gains appear only on keyed rows, and generated replies are mostly TRAIN replies;
->      - "generalizes": the model beats (r0) and the longest-suffix table on unkeyed and new-template rows, with novelty near DEV's own replies.
->
->    The training run itself (ASSESSMENT §6, step 5) adds:
->    - the transport controls: frozen and identity SpiralCore routes, under the fixed backward;
->    - the read-by-meaning arms: the Flock read, and the type spin.
-> 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
+> Yes: after claude-216's grade, register a decode unit that steps off a reply's own cycle (the nearest token outside a repeated 4-gram), on a fresh panel, against greedy.
+
+**Why:**
+- **claude-213:** 96–99.6% of loop steps admit a single candidate, so rules that spread choice by margin or rank cannot break a loop.
+- **claude-216:** training the cut in reduced loops, but cost content (merged as `bf0755693`, "reduces, content lost").
+
+A rule that sees the reply's own cycle acts exactly where greedy loops.
+
+**This unit:**
+- **The rule, `DecodeRule::CycleStep`:** at each step, take the nearest table token, unless appending it would close a 4-gram the reply has already produced; then take the nearest of the `k` candidates that does not. If every candidate would close one, take the nearest, and count the step. It is exact and deterministic, with no squashing function.
+- **The model:** the sealed (r-drop) at seeds 1–3, the recipe claude-216 kept. There is no training.
+- **The arms**, each greedy-based with the memory on, against greedy on a fresh held-out-phrasing panel:
+  - **cycle-step:** decides, by Casey's direction;
+  - **the decode-only cut:** (r-drop) with claude-216's mask cut, a second registered decision that confirms claude-216's reported "improves" on new prompts;
+  - **cycle-step under the cut:** reported.
 
 ## Cancel probe (run first)
 
-To fill in.
+The result, run 30 Oct 14:30Z and classed **instrument**, gives no cancel:
+- **No open PR touches the files in scope.** This unit's own draft, #3428, holds only this ORDER.
+- **(r-drop)'s inputs are in the store.** Its sealed step-16,384 checkpoints are at `results/claude/one-model-end-to-end-2026-10-29/training-460fe46e/s{1,2,3}/r-drop-s{S}/models/step-016384/` (5 files each), and claude-211's registered files are beside them. claude-216's pods fetched and checked all of them against their sums.
+- **The panel's seed, 2091, is unused.** The panel seeds in `docs/harness/prep` and `docs/labs` so far are 2001, 2026, 2051, 2052, 2061, 2071 and 2081.
 
 ## Files in scope
 
-- `docs/labs/one-model-end-to-end/**`
-- `docs/harness/prep/one-model-end-to-end*`
-- `docs/loop/tasks/one-model-end-to-end/**`
-- `docs/research/notebook/float-training.md`
-- `docs/roadmap/items/one-model-end-to-end.md`
-- `crates/uor-r4-float-train/src/in_space_long.rs`
-- `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`
-- `crates/uor-r4-float-train/src/flock_read_hamming.rs`
-- `crates/uor-r4-training/examples/m-world.rs`
+As the item's scope:
+- `crates/uor-r4-float-train/src/{in_space_long.rs,bin/train-in-space.rs,flock_read_hamming.rs,flock_read_memory.rs}`;
+- `crates/uor-r4-training/examples/m-world.rs`;
+- `docs/harness/prep/one-model-end-to-end*`, `docs/labs/one-model-end-to-end/**`, `docs/loop/tasks/one-model-end-to-end/**`;
+- `docs/research/notebook/float-training.md` and `docs/roadmap/items/one-model-end-to-end.md`.
 
 ## Done when
 
-To fill in.
+1. **`DecodeRule::CycleStep { k }` exists and is unit-tested:**
+   - at `k = 1`, it decodes as greedy;
+   - on a hand-built reply, it refuses exactly the token that closes a repeated 4-gram;
+   - when every candidate is refused, it takes the nearest.
+   - Each sample records which steps stepped off and which were exhausted.
+   - `--score-rows` decodes it with `--cycle-step 1`, alone and under `--reply-read all`.
+2. **The grade (`--cycle-grade 1`) applies the sheet's registered decisions** with claude-216's bars: loops beyond decision 4's band, holds, close, matched content with its floor, and the loop floor.
+3. **A fresh held-out panel and its census.**
+4. **A prep sheet, with a fresh FIT and a fresh pre-run review.**
+5. **The GPU decode at three seeds:** sealed, graded and reported, negatives first and tokens per second first. The registered files must reproduce byte for byte.
 
 ## Stop and ask if
 
-To fill in.
+Stop and decide; never wait.
+- **A fault in the instrument, not the mechanism:** a registered file does not reproduce, or the rule leaves greedy before its first refused step. Repair it; it is never a negative (CHARTER §4.1).
+- **Too few loops to decide** (the base loops in fewer than 40 replies): the outcome is "underpowered", an instrument outcome.
