@@ -161,6 +161,12 @@ pub struct LongConfig {
     /// Left out of `config.json` when the default.
     #[serde(skip_serializing_if = "is_one_atom")]
     pub fbs_arm: FbsArm,
+    /// Train with the reply's Hamming read held to the prompt (claude-216): every scored row
+    /// whose input is a reply token reads, for the heads the scope limits, only positions before
+    /// its reply run's first token ([`reply_row_limits`]). Scoring such a checkpoint applies the
+    /// same cut to its rows. Left out of `config.json` when none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reply_read_train: Option<ReadScope>,
 }
 
 fn is_zero_u32(n: &u32) -> bool {
@@ -374,7 +380,38 @@ impl Drop for ArmGuard {
         crate::flock_read_memory::set_turn_memory(None);
         crate::flock_read_memory::set_memory_rows(None);
         crate::flock_read_memory::set_reply_rows(None);
+        set_trained_cut(None);
+        crate::flock_read_hamming::set_row_cut(None);
     }
+}
+
+/// The read scope `checkpoint`'s run trained its replies with ([`LongConfig::reply_read_train`],
+/// claude-216), from the run's `config.json` where [`check_run_arm`] finds it; none when the run
+/// trained without the cut, or no run config is found.
+fn run_trained_cut(checkpoint: &Path) -> Result<Option<ReadScope>> {
+    let checkpoint = checkpoint
+        .canonicalize()
+        .unwrap_or_else(|_| checkpoint.to_path_buf());
+    let candidates = [
+        Some(checkpoint.join("config.json")),
+        checkpoint.parent().and_then(Path::parent).map(|run| run.join("config.json")),
+    ];
+    for path in candidates.into_iter().flatten() {
+        if !path.exists() {
+            continue;
+        }
+        let value: serde_json::Value = serde_json::from_slice(&fs::read(&path)?)
+            .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+        if value.get("steps").is_none() {
+            continue;
+        }
+        return match value.get("reply_read_train") {
+            None => Ok(None),
+            Some(v) => serde_json::from_value(v.clone())
+                .map_err(|e| invalid(format!("{}: reply_read_train: {e}", path.display()))),
+        };
+    }
+    Ok(None)
 }
 
 /// Set this thread's Flock read, content read, Hamming reads, opening read and prompt register
@@ -732,6 +769,59 @@ fn nearest_loss(model: &StackModel, query: &Tensor, targets: &[u32], cell: bool)
     Ok(loss)
 }
 
+thread_local! {
+    /// The read scope a model trains and scores its rows with (claude-216's
+    /// [`LongConfig::reply_read_train`]); none, the default, reads as before.
+    static TRAINED_CUT: std::cell::Cell<Option<ReadScope>> = const { std::cell::Cell::new(None) };
+}
+
+/// Train and score rows on this thread with the reply's read held to the prompt under `scope`
+/// ([`trained_points`]); `None` reads as before.
+pub fn set_trained_cut(scope: Option<ReadScope>) {
+    TRAINED_CUT.with(|c| c.set(scope));
+}
+
+/// Each row's read limit for `rows` rows of windows of `context` positions, `scored` the scored
+/// rows ([`assemble`]'s, ascending, window `b`'s at `b · context + offset`) (claude-216). A run
+/// of consecutive scored rows in one window is one reply: its first row's input is the prompt's
+/// last token, so it keeps every earlier position; every later row's input is a reply token, so
+/// it reads only before the run's first reply token, `first offset + 1`, as a decode's cut. Every
+/// other row keeps every earlier position (`context`).
+fn reply_row_limits(scored: &[u32], rows: usize, context: usize) -> Vec<usize> {
+    let mut limits = vec![context; rows];
+    let mut start: Option<usize> = None;
+    let mut previous: Option<usize> = None;
+    for &row in scored {
+        let row = row as usize;
+        let continues =
+            previous.is_some_and(|p| p + 1 == row && p / context == row / context);
+        if continues {
+            if let Some(first) = start {
+                limits[row] = first % context + 1;
+            }
+        } else {
+            start = Some(row);
+        }
+        previous = Some(row);
+    }
+    limits
+}
+
+/// The trunk's points for `batch` windows of `ids`, with [`set_trained_cut`]'s scope applied to
+/// the reply rows among `scored` ([`reply_row_limits`]), cleared before any error returns.
+fn trained_points(model: &StackModel, ids: &[u32], scored: &[u32], batch: usize) -> Result<Tensor> {
+    let scope = TRAINED_CUT.with(|c| c.get());
+    if let Some(scope) = scope {
+        crate::flock_read_hamming::set_row_cut(Some((
+            scope,
+            reply_row_limits(scored, ids.len(), SHEET_CONTEXT),
+        )));
+    }
+    let hidden = crate::flock_read::points(model, ids, batch, SHEET_CONTEXT);
+    crate::flock_read_hamming::set_row_cut(None);
+    hidden
+}
+
 fn batch_loss(
     model: &StackModel,
     objective: PointObjective,
@@ -740,7 +830,7 @@ fn batch_loss(
     targets: &[u32],
     batch: usize,
 ) -> Result<Tensor> {
-    let hidden = crate::flock_read::points(model, ids, batch, SHEET_CONTEXT)?;
+    let hidden = trained_points(model, ids, scored, batch)?;
     let idx = Tensor::from_vec(scored.to_vec(), scored.len(), model.device())?;
     let query = hidden.index_select(&idx, 0)?;
     stage_clock::mark("points.select");
@@ -968,7 +1058,7 @@ fn row_picks(
                     ));
                 }
             }
-            let hidden = crate::flock_read::points(model, &ids, windows.len(), SHEET_CONTEXT);
+            let hidden = trained_points(model, &ids, &scored, windows.len());
             crate::flock_read_memory::set_memory_rows(None);
             crate::flock_read_memory::set_reply_rows(None);
             let hidden = hidden?;
@@ -3083,6 +3173,9 @@ pub fn score_rows(
     let _guard = ArmGuard;
     let model = StackModel::load(checkpoint, device)?;
     load_reads(checkpoint, device)?;
+    // A run trained with the reply's read held to the prompt scores its rows the same way
+    // (claude-216); its decodes take the cut through `--reply-read`, as served.
+    set_trained_cut(run_trained_cut(checkpoint)?);
     let memory = crate::flock_read_memory::turn_memory();
     let mut written = Vec::new();
     for on in [true, false] {
@@ -5718,6 +5811,11 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     crate::geometric_stack::set_reflected_floor(config.reflect_floor);
     crate::geometric_stack::set_input_table_fixed(config.fix_input_table);
     let _guard = ArmGuard;
+    // The reply's read held to the prompt in training (claude-216); it needs the Hamming read.
+    if config.reply_read_train.is_some() && config.hamming_read == 0 {
+        return Err(invalid("--reply-read-train needs --hamming-read"));
+    }
+    set_trained_cut(config.reply_read_train);
     let model = build_fbs_model_at(config.fbs_arm, config.seed, config.width, device)?;
     // The Flock read, when on: its own parameters and optimizer, applied by `points`.
     let flock = if config.flock_read > 0 {
@@ -6329,6 +6427,7 @@ mod tests {
             turn_memory_reply: false,
             turn_memory_dropout: 0,
             fbs_arm: FbsArm::OneAtomActive,
+            reply_read_train: None,
         }
     }
 
@@ -7808,6 +7907,48 @@ mod tests {
         // tokens, it starts at 18, so the prompt ends at window position 162.
         let ids = 180 + 30;
         assert_eq!(prompt_cut(180, ids - SHEET_CONTEXT), 162);
+    }
+
+    /// claude-216: in training, a reply run's first scored row (its input the prompt's last
+    /// token) keeps every earlier position, and each later row reads only before the run's
+    /// first reply token, as a decode's cut; a run never crosses a window, and unscored rows
+    /// keep every earlier position.
+    #[test]
+    fn a_reply_run_reads_only_before_its_first_reply_token() {
+        let context = 10;
+        // Window 0: one run at offsets 3–5, and a lone row at 8. Window 1: offsets 3–4.
+        let limits = reply_row_limits(&[3, 4, 5, 8, 13, 14], 20, context);
+        let mut want = vec![context; 20];
+        want[4] = 4;
+        want[5] = 4;
+        want[14] = 4;
+        assert_eq!(limits, want);
+        // Rows 9 and 10 are adjacent but in two windows: two runs, so 10 keeps every position.
+        assert_eq!(reply_row_limits(&[8, 9, 10, 11], 20, context)[10], context);
+        assert_eq!(reply_row_limits(&[8, 9, 10, 11], 20, context)[9], 9);
+        assert_eq!(reply_row_limits(&[8, 9, 10, 11], 20, context)[11], 1);
+        assert_eq!(reply_row_limits(&[], 20, context), vec![context; 20]);
+    }
+
+    /// claude-216: a run that trains without the cut writes no `reply_read_train` key, so its
+    /// `config.json` is as before; one that trains with it records the scope, and scoring reads
+    /// it back from the run beside a `step-N` checkpoint.
+    #[test]
+    fn the_trained_cut_is_recorded_and_read_back() {
+        let mut config = super::tests::config(0, None);
+        let plain = serde_json::to_string(&config).unwrap();
+        assert!(!plain.contains("reply_read_train"), "{plain}");
+        config.reply_read_train = Some(ReadScope::All);
+        let cut = serde_json::to_vec_pretty(&config).unwrap();
+        assert!(String::from_utf8_lossy(&cut).contains("\"reply_read_train\": \"all\""));
+        let run = std::env::temp_dir().join(format!("claude-216-cut-{}", std::process::id()));
+        let step = run.join("models").join("step-000256");
+        fs::create_dir_all(&step).unwrap();
+        fs::write(run.join("config.json"), &cut).unwrap();
+        assert_eq!(run_trained_cut(&step).unwrap(), Some(ReadScope::All));
+        fs::write(run.join("config.json"), plain.as_bytes()).unwrap();
+        assert_eq!(run_trained_cut(&step).unwrap(), None);
+        fs::remove_dir_all(&run).unwrap();
     }
 
     /// claude-215 (its GPU half): on a model with the Hamming reads set, a reply's first token is

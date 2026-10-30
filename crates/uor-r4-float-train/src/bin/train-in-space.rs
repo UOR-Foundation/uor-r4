@@ -162,6 +162,7 @@ fn main() -> Result<()> {
         turn_memory_reply: false,
         turn_memory_dropout: 0,
         fbs_arm: uor_r4_float_train::spiralcore_fbs_arms::FbsArm::OneAtomActive,
+        reply_read_train: None,
     };
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -194,6 +195,17 @@ fn main() -> Result<()> {
             "--flock-end" => flock_end = switch(&value)?,
             "--cell-grade" => cell_grade_on = switch(&value)?,
             "--read-grade" => read_grade_on = switch(&value)?,
+            "--reply-read-train" => {
+                config.reply_read_train = Some(match value.as_str() {
+                    "copy" => ReadScope::Copy,
+                    "all" => ReadScope::All,
+                    _ => {
+                        return Err(FloatTrainError::Invalid(
+                            "--reply-read-train wants copy or all".to_owned(),
+                        ))
+                    }
+                });
+            }
             "--reply-read" => {
                 scopes = value
                     .split(',')
