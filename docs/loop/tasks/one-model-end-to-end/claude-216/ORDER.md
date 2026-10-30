@@ -1,68 +1,51 @@
-# ORDER: one-model-end-to-end, claude-216
+# ORDER: one-model-end-to-end, claude-216 (train with the reply's read held to the prompt)
 
 Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md). Base: `0c3c95777`.
 
 ## Goal
 
-The item's done-when reads:
+The registered follow-up of claude-215 (merged as `0c3c95777`; its outcome was "reduces, content lost").
+- **What claude-215 found:** holding the Hamming read to the prompt while a reply decodes removes 26–51% of greedy's loops on new phrasings, beyond the band at every seed.
+- **Why it did not ship:** the model was trained to read its own reply, so the cut takes it off what it learned. The loops are often cut into salad, and at one seed the replies were less TRAIN-like.
 
-> 1. **The census (laptop, counts only, CHARTER §4.5).** A standalone Rust instrument under `docs/labs/one-model-end-to-end/instrument/` must:
->    - resolve the TRAIN size conflict, and build the TRAIN reply index (exact replies and reply 8- and 13-grams);
->    - report for DEV, Fresh V2 and `m2-fresh256`: the share of reply n-grams in TRAIN replies, the share of prompt templates seen in TRAIN with values masked, and the 8-token key share;
->    - read only the manifest of the K16 fresh slice, and leave the slice unopened.
->
->    It also says which panel, if any, holds new templates.
-> 2. **The overturn check (GPU, under a prep sheet with a fresh FIT and a pre-run review).** Score turn-memory-reply claude-194's (r), (r0), and (r) with its memory off.
->    - **Pinned in the sheet:** the checkpoints by store path, `SHA256SUMS` and step; the binary's sha; a lease and cost inside the caps.
->    - **The pod** also seals a float reference for the read's parity: claude-194's (r), with its memory off, at both seeds. That is every DEV row's writer and nearest pick, and its 64 greedy samples. The parity itself, kept sets and top-1, is `integer-hamming-read`'s step 5, on the checkpoint that item's prep sheet names; the first greedy divergence is done-when 3's integer-artifact measure (claude-205's decision review, on #3407).
->    - **Rows:** DEV's 3,406 later rows the reply table does not name, and its 32 unkeyed openings, judged pooled (3,438).
->    - **Band, fixed in advance:** `max(2·√(b+c), the two-seed spread)`, where b and c are the paired discordant rows.
->    - **The cells:**
->      - (r) ahead at both seeds, beyond the band: the memory recipe stays the training default;
->      - (r) behind at both seeds, beyond the band: a memory-dropout arm joins the training run;
->      - mixed (the seeds disagree, or either seed is inside the band): both arms train.
->    - **Descriptive only:** Fresh V2, and 64 greedy samples per arm scored against the census index.
-> 3. **The protocol.** A prep sheet, with a fresh FIT, written before the training run of the model to ship. It holds:
->    - **Strata:**
->      - keyed rows;
->      - unkeyed rows;
->      - new-template rows, from a panel no decision has touched. Fresh V2 is never one.
->    - **Arms:** (r), memory-off, (r0), tables only, and a longest-suffix table over TRAIN.
->    - **Scores:**
->      - teacher-forced top-1, per stratum;
->      - free generation: the share of replies that are verbatim TRAIN replies, new n-grams for n = 4–8, distinct-1 and distinct-2, the repeated-n-gram rate, and the table hit rate under generation against teacher forcing;
->      - on the integer artifact: kept-set agreement, first divergence, and tok/s against context.
->    - **Decode rules:** greedy, and a Flock rank rule with the harmonic weights of `stack/flock.rs`.
->    - **The verdict rule, written in advance:**
->      - "memorized": the gains appear only on keyed rows, and generated replies are mostly TRAIN replies;
->      - "generalizes": the model beats (r0) and the longest-suffix table on unkeyed and new-template rows, with novelty near DEV's own replies.
->
->    The training run itself (ASSESSMENT §6, step 5) adds:
->    - the transport controls: frozen and identity SpiralCore routes, under the fixed backward;
->    - the read-by-meaning arms: the Flock read, and the type spin.
-> 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
+**This unit trains the cut in.**
+- **The cut:** every reply position's Hamming read chooses only positions before that reply's first token, in training as in serving.
+- **The arm:** (r-cut), which is (r-drop)'s recipe plus the cut, at seeds 1–3.
+- **The comparison:** (r-cut) is decoded with its cut, as it would be served, against the sealed (r-drop), greedy as trained and with the decode-only cut. It runs on a new held-out panel, with a matched content measure.
+
+**The mechanism, one rule everywhere** (`flock_read_hamming.rs`).
+- **The limit:** the read takes a per-row limit.
+- **In training and in teacher-forced scoring of an (r-cut) checkpoint:** a scored row whose input is a reply token reads only positions before its reply run's first reply token. The row whose input is the prompt's last token reads as before.
+- **At decode:** the same rule over one reply, which is claude-215's cut.
 
 ## Cancel probe (run first)
 
-To fill in.
+To fill in:
+- no open PR touches `flock_read_hamming.rs`, `in_space_long.rs` or `train-in-space.rs`;
+- (r-drop)'s sealed checkpoints and training inputs are in the store;
+- the training recipe is the training sheet's (r-drop) command.
 
 ## Files in scope
 
-- `docs/labs/one-model-end-to-end/**`
-- `docs/harness/prep/one-model-end-to-end*`
-- `docs/loop/tasks/one-model-end-to-end/**`
-- `docs/research/notebook/float-training.md`
-- `docs/roadmap/items/one-model-end-to-end.md`
-- `crates/uor-r4-float-train/src/in_space_long.rs`
-- `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`
-- `crates/uor-r4-float-train/src/flock_read_hamming.rs`
-- `crates/uor-r4-training/examples/m-world.rs`
+As the item's scope:
+- `crates/uor-r4-float-train/src/{flock_read_hamming.rs,in_space_long.rs,bin/train-in-space.rs}`;
+- `docs/harness/prep/one-model-end-to-end*`;
+- `docs/labs/one-model-end-to-end/**` and `docs/loop/tasks/one-model-end-to-end/**`;
+- `docs/research/notebook/float-training.md`.
 
 ## Done when
 
-To fill in.
+1. **The per-row read limit exists and is unit-tested.**
+   - `--reply-read-train all|copy` trains with it, and the checkpoint's config records it.
+   - `--score-rows` on such a checkpoint scores its rows and decodes with the same cut.
+   - With no cut, every reading is byte-identical: the registered files reproduce.
+2. **The grade gives a matched content measure:** each arm's verbatim TRAIN share on the prompts every compared arm completes. It applies the sheet's registered decision.
+3. **A new held-out panel and its census.**
+4. **A prep sheet, with a fresh FIT and a fresh pre-run review.**
+5. **The GPU training and scoring at three seeds,** sealed, graded and reported, negatives first and tokens per second first.
 
 ## Stop and ask if
 
-To fill in.
+Stop and decide; never wait.
+- **A fault in the instrument, not the mechanism:** a registered file does not reproduce, or a run diverges. Repair it; it is never a negative (CHARTER §4.1).
+- **The cut costs the model its teacher-forced accuracy beyond the band.** Record it; the decision registers what that means.
