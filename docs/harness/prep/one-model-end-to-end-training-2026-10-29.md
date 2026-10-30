@@ -2,7 +2,13 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md). Order: [claude-211](../../loop/tasks/one-model-end-to-end/claude-211/ORDER.md). Protocol: [one-model-end-to-end-protocol-2026-10-29](one-model-end-to-end-protocol-2026-10-29.md) (TEST FITNESS: FIT). This sheet is the run that protocol registers; it changes none of its arms, strata, bars or decisions.
 
-TEST FITNESS: PENDING. PRE-RUN: PENDING. (Filled after a fresh non-author review.)
+TEST FITNESS: FIT. PRE-RUN: PASS. Both are from fresh non-author reviews at `129de2373a9fa0242c0e2b99bafdcb9a0e659463`:
+- **Round 1** (`66cb08708`) was NOT FIT and FAIL. The job lacked four of the GPU checks claude-207 and claude-208 promised.
+- **Round 2** resolved that, and raised three questions:
+  - whether scoring restores each arm;
+  - whether the byte checks are fair;
+  - the row grep.
+- **Round 3** found all three resolved, and ran the store listing and `uor-pod status`: 0 pods running, $0/h.
 
 ## The question
 
@@ -105,7 +111,9 @@ The protocol's band: the floor `⌈2·√(b+c)⌉`, two paired standard errors, 
 
 - **One arm stops alone** if its 256-step probe projects past 1 hour for 16,384 steps. The others go on, and the REPORT names it.
 - **A pod stops** if any CUDA test, data check, I-A or the disk check fails on it.
-- **The whole run stops** at $20 across the pods. This unit's laptop watcher enforces it: each pass, it adds every pod's hourly price from `uor-pod status` over the time since that pod came up, and past $20 it saves each pod's output and takes the pods down.
+- **The budget is $20 across the pods.** This unit's laptop watcher (`local/claude/claude-211/watch.sh`) adds each pod's hourly price over the time it was up, until it went down. Past $20 it stops and wakes this session.
+  - **A healthy run is not cancelled** for a budget it set itself (AGENTS.md). The budget is extended, the extension is noted on #3407, and the watcher restarts.
+  - **A run that is not healthy** is sealed and its pods taken down. Not healthy means a pod has stopped, a probe line failed for an arm still training, or training is not progressing.
 - **Each pod's EXIT** is 0 only when all 7 arms trained and scored. Otherwise it is 5, with the missing steps in `ARMS_FAILED`, or 9 after a stop.
 - **A small miss on a bar** is "keep and iterate", not a stop.
 
