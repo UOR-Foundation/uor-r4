@@ -4698,6 +4698,22 @@ pub struct CellReading {
     /// counted: a rule that ends replies sooner has fewer 4-grams to repeat.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mean_length: Option<f64>,
+    /// The prompts every compared rule completes, and this rule's verbatim TRAIN replies among
+    /// them, when matched (claude-216's `cut_grade`): a content share no rule's completions select.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_n: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_verbatim: Option<usize>,
+}
+
+impl CellReading {
+    /// The verbatim TRAIN share on the matched prompts, when matched and any.
+    fn matched_v(&self) -> Option<f64> {
+        match (self.matched_verbatim, self.matched_n) {
+            (Some(v), Some(n)) if n > 0 => Some(v as f64 / n as f64),
+            _ => None,
+        }
+    }
 }
 
 impl CellReading {
@@ -4791,7 +4807,7 @@ pub fn cell_grade(data_root: &Path, runs: &Path, panel: &str, margins: &[u32]) -
     }
     let mut rules = vec!["greedy".to_owned(), "flock-end".to_owned()];
     rules.extend(margins.iter().map(|m| format!("flock-cell-{m}")));
-    let readings = rule_readings(data_root, runs, panel, &rules, false)?;
+    let readings = rule_readings(data_root, runs, panel, &rules, false, false)?;
     let of = |split: &str, rule: &str| -> Vec<&CellReading> {
         readings.iter().filter(|r| r.split == split && r.rule == rule).collect()
     };
@@ -4833,17 +4849,20 @@ fn fewer_loops(loops: usize, greedy_loops: usize, n: usize) -> bool {
     loops + count_band(greedy_loops, n) < greedy_loops
 }
 
-/// Every reading [`cell_grade`] and [`read_grade`] compare: for DEV and `panel`, at seeds 1–3,
-/// each of `rules`' samples files in `runs/r-drop-s{seed}/` against the split's own references,
-/// greedy (`rules[0]`) first. Every rule must answer greedy's prompts. With `count_loops`, each
-/// reading also counts its looping replies, and every rule after greedy whether it has fewer
-/// than greedy's beyond decision 4's band.
+/// Every reading [`cell_grade`], [`read_grade`] and [`cut_grade`] compare: for DEV and `panel`,
+/// at seeds 1–3, each of `rules`' samples files against the split's own references, greedy
+/// (`rules[0]`) first. A rule is `name` (in `runs/r-drop-s{seed}/`) or `run/name` (in
+/// `runs/{run}-s{seed}/`, claude-216). Every rule must answer greedy's prompts. With
+/// `count_loops`, each reading also counts its looping replies, and every rule after greedy
+/// whether it has fewer than greedy's beyond decision 4's band. With `matched`, each reading
+/// also counts its verbatim TRAIN replies on the prompts every rule completes ([`CellReading::matched_n`]).
 fn rule_readings(
     data_root: &Path,
     runs: &Path,
     panel: &str,
     rules: &[String],
     count_loops: bool,
+    matched: bool,
 ) -> Result<Vec<CellReading>> {
     if rules.first().map(String::as_str) != Some("greedy") {
         return Err(invalid("the readings compare against greedy, which comes first"));
@@ -4854,8 +4873,13 @@ fn rule_readings(
     let eos = pinned_tokenizer(data_root)?
         .token_id("<|eos|>")
         .ok_or_else(|| invalid("the pinned tokenizer has no <|eos|>"))?;
-    let samples = |seed: u8, file: &str| -> Result<Vec<IdSample>> {
-        let path = runs.join(format!("r-drop-s{seed}")).join(file);
+    let train_set: std::collections::HashSet<u128> = if matched {
+        train_replies.iter().map(|r| census_hash(r)).collect()
+    } else {
+        std::collections::HashSet::new()
+    };
+    let samples = |seed: u8, run: &str, file: &str| -> Result<Vec<IdSample>> {
+        let path = runs.join(format!("{run}-s{seed}")).join(file);
         let list: Vec<IdSample> = read_scored(&path)?;
         if list.len() != PROTOCOL_SAMPLES || list.iter().any(|s| s.reference.is_empty()) {
             return Err(invalid(format!(
@@ -4872,13 +4896,17 @@ fn rule_readings(
             let mut greedy: Option<Generation> = None;
             let mut greedy_loops = 0usize;
             let mut prompts: Option<Vec<(usize, Vec<u32>)>> = None;
+            let first_reading = readings.len();
+            // Each rule's replies: complete, and complete and verbatim in TRAIN (`matched`).
+            let mut flags: Vec<Vec<(bool, bool)>> = Vec::new();
             for rule in rules {
-                let file = match (split, rule.as_str()) {
+                let (run, name) = rule.split_once('/').unwrap_or(("r-drop", rule.as_str()));
+                let file = match (split, name) {
                     ("dev", "greedy") => "samples-memory.json".to_owned(),
                     (_, "greedy") => format!("samples-{split}-greedy-memory.json"),
-                    _ => format!("samples-{split}-{rule}-memory.json"),
+                    _ => format!("samples-{split}-{name}-memory.json"),
                 };
-                let list = samples(seed, &file)?;
+                let list = samples(seed, run, &file)?;
                 // Every rule answers greedy's prompts, sample by sample, or nothing compares.
                 let these: Vec<(usize, Vec<u32>)> =
                     list.iter().map(|s| (s.position, s.prompt.clone())).collect();
@@ -4886,16 +4914,28 @@ fn rule_readings(
                     None => prompts = Some(these),
                     Some(first) if *first != these => {
                         return Err(invalid(format!(
-                            "r-drop-s{seed}/{file}: its prompts are not greedy's on {split}"
+                            "{run}-s{seed}/{file}: its prompts are not greedy's on {split}"
                         )));
                     }
                     Some(_) => {}
                 }
                 let replies: Vec<Vec<u32>> = list.iter().map(|s| s.reply.clone()).collect();
                 let references: Vec<Vec<u32>> = list.iter().map(|s| s.reference.clone()).collect();
+                if matched {
+                    flags.push(
+                        replies
+                            .iter()
+                            .map(|r| {
+                                let cut = cut_at_eos(r, eos);
+                                let complete = cut.last() == Some(&eos);
+                                (complete, complete && train_set.contains(&census_hash(cut)))
+                            })
+                            .collect(),
+                    );
+                }
                 let made = generation(&replies, &train_replies, eos);
                 let reading = VerdictSeed::new(seed, &made, &generation(&references, &train_replies, eos));
-                let mean_admitted = if rule.starts_with("flock-cell-") {
+                let mean_admitted = if name.starts_with("flock-cell-") {
                     let steps: Vec<u8> = list.iter().flat_map(|s| s.admitted.iter().copied()).collect();
                     if steps.is_empty() {
                         return Err(invalid(format!("{file}: the cell rule recorded no admitted counts")));
@@ -4938,7 +4978,19 @@ fn rule_readings(
                     loops,
                     fewer_loops,
                     mean_length,
+                    matched_n: None,
+                    matched_verbatim: None,
                 });
+            }
+            // The prompts every rule completes, and each rule's verbatim replies among them.
+            if matched {
+                let n = flags.first().map_or(0, Vec::len);
+                let both: Vec<usize> = (0..n).filter(|&j| flags.iter().all(|f| f[j].0)).collect();
+                for (i, f) in flags.iter().enumerate() {
+                    let reading = &mut readings[first_reading + i];
+                    reading.matched_n = Some(both.len());
+                    reading.matched_verbatim = Some(both.iter().filter(|&&j| f[j].1).count());
+                }
             }
         }
     }
@@ -5012,7 +5064,7 @@ pub fn read_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<ReadGrad
     let rules: Vec<String> = ["greedy", "greedy-read-copy", "greedy-read-all"]
         .map(String::from)
         .to_vec();
-    let readings = rule_readings(data_root, runs, panel, &rules, true)?;
+    let readings = rule_readings(data_root, runs, panel, &rules, true, false)?;
     let of = |rule: &str| -> Vec<&CellReading> {
         readings.iter().filter(|r| r.split == panel && r.rule == rule).collect()
     };
@@ -7759,6 +7811,8 @@ mod tests {
                 loops: None,
                 fewer_loops: None,
                 mean_length: None,
+                matched_n: None,
+                matched_verbatim: None,
             }
         };
         let (good, salad, loops, off) = (
@@ -7858,6 +7912,8 @@ mod tests {
                 loops: Some(loops),
                 fewer_loops: Some(fewer),
                 mean_length: None,
+                matched_n: None,
+                matched_verbatim: None,
             }
         };
         // Greedy loops in 60 of 256 with v = 0.5, a gap of 0.1.
