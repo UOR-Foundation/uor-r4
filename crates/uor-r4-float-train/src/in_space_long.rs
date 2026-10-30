@@ -2078,13 +2078,115 @@ fn greedy_reply(
     reply_tokens: usize,
     seed: u64,
 ) -> Result<Vec<u32>> {
+    Ok(decode_reply(model, objective, prompt, reply_tokens, seed, DecodeRule::Greedy, 0, None)?.tokens)
+}
+
+/// How a reply picks each next token (one-model-end-to-end protocol, "The decode rules").
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DecodeRule {
+    /// The whole table's nearest token, as [`greedy_reply`] decodes.
+    Greedy,
+    /// The Flock rank rule (protocol I-E): the [`FLOCK_DECODE_K`] nearest table tokens, ranked,
+    /// and a rank drawn with the harmonic weights of `stack/flock.rs` ([`flock_rank_draw`]).
+    FlockRank,
+}
+
+/// The Flock rank rule's candidates: the Hamming read's kept count, and one of the Flock
+/// selector's top-k values.
+pub const FLOCK_DECODE_K: usize = 16;
+
+/// The first [`FLOCK_DECODE_K`] of `uor_r4_integer::stack::flock::RAW_RANK_WEIGHTS_Q16`, the
+/// integer Flock selector's harmonic rank weights `1/(i+1)` in Q16 (`stack/flock.rs:382`). The
+/// integer crate's native root does not export `stack`, so they are copied here, and a test
+/// reads that file and fails if the two ever differ.
+pub const FLOCK_RANK_WEIGHTS_Q16: [u16; FLOCK_DECODE_K] = [
+    65535, 32768, 21845, 16384, 13107, 10922, 9362, 8192, 7281, 6553, 5957, 5461, 5041, 4681, 4369,
+    4096,
+];
+
+/// The rank the Flock rank rule draws among `k` candidates (protocol I-E): one xorshift64* step,
+/// seeded as [`epoch_order`] seeds (`state = seed·φ + index·κ`, then `| 1`, never zero); `r =
+/// output mod H`, with `H` the sum of the first `k` harmonic weights
+/// [`FLOCK_RANK_WEIGHTS_Q16`] (`1/(i+1)` in Q16); and the first rank
+/// whose running weight exceeds `r`. No exponential; `k = 1` always draws rank 0.
+pub fn flock_rank_draw(seed: u64, index: u64, k: usize) -> usize {
+    let weights = &FLOCK_RANK_WEIGHTS_Q16[..k.clamp(1, FLOCK_RANK_WEIGHTS_Q16.len())];
+    let total: u64 = weights.iter().map(|&w| u64::from(w)).sum();
+    let mut state = seed
+        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        .wrapping_add(index.wrapping_mul(0xD1B5_4A32_D192_ED03))
+        | 1;
+    state ^= state >> 12;
+    state ^= state << 25;
+    state ^= state >> 27;
+    harmonic_rank(state.wrapping_mul(0x2545_F491_4F6C_DD1D) % total, weights)
+}
+
+/// The rank a draw `r` (below the weights' sum) lands on: the first whose running weight
+/// exceeds `r`, so rank `i` takes exactly `W_i` of the draws.
+fn harmonic_rank(r: u64, weights: &[u16]) -> usize {
+    let mut running = 0u64;
+    for (i, &w) in weights.iter().enumerate() {
+        running += u64::from(w);
+        if running > r {
+            return i;
+        }
+    }
+    weights.len() - 1
+}
+
+/// The longest reply the Flock rank rule draws for: its draw index is `sample · 64 + step`, so a
+/// longer reply would reuse the next sample's draws.
+pub const FLOCK_MAX_REPLY: usize = 64;
+
+/// `reply` up to and including its first `eos`, the reply as the protocol counts it.
+fn cut_at_eos(reply: &[u32], eos: u32) -> &[u32] {
+    match reply.iter().position(|&t| t == eos) {
+        Some(at) => &reply[..=at],
+        None => reply,
+    }
+}
+
+/// `(id, score)` candidates in rank order: the higher score first, ties to the smaller id.
+fn rank_order(mut candidates: Vec<(u32, f32)>) -> Vec<u32> {
+    candidates.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+    candidates.into_iter().map(|(id, _)| id).collect()
+}
+
+/// One decoded reply ([`decode_reply`]).
+struct DecodedReply {
+    tokens: Vec<u32>,
+}
+
+/// The model's reply to `prompt` under `rule`: as [`greedy_reply`], with the next token picked
+/// by `rule`. The Flock rank rule also stops after `eos` (the protocol); greedy decodes to
+/// BOS or its length, as before. `sample` is the reply's index, which with `seed` seeds the Flock rank draws: draw
+/// `index = sample · 64 + step`. The Flock rank rule needs a nearest objective.
+fn decode_reply(
+    model: &StackModel,
+    objective: PointObjective,
+    prompt: &[u32],
+    reply_tokens: usize,
+    seed: u64,
+    rule: DecodeRule,
+    sample: usize,
+    eos: Option<u32>,
+) -> Result<DecodedReply> {
+    if rule == DecodeRule::FlockRank && !objective.decodes_nearest() {
+        return Err(invalid("the Flock rank rule decodes the nearest table tokens only"));
+    }
+    if rule == DecodeRule::FlockRank && reply_tokens > FLOCK_MAX_REPLY {
+        return Err(invalid(format!(
+            "the Flock rank rule draws for replies of at most {FLOCK_MAX_REPLY} tokens"
+        )));
+    }
     let table = table(model)?;
     hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, 0, false, || {
         let mut ids = prompt.to_vec();
         let mut reply = Vec::with_capacity(reply_tokens);
-        for _ in 0..reply_tokens {
+        for step in 0..reply_tokens {
             let window = &ids[ids.len().saturating_sub(SHEET_CONTEXT)..];
-            let next = if objective.decodes_nearest() {
+            let token = if objective.decodes_nearest() {
                 // The reply's first step is its opening row, the one the turn memory moves.
                 if reply.is_empty()
                     && !window.is_empty()
@@ -2111,27 +2213,72 @@ fn greedy_reply(
                 crate::flock_read_memory::set_memory_rows(None);
                 crate::flock_read_memory::set_reply_rows(None);
                 let hidden = hidden?;
-                nearest_scores(&hidden.narrow(0, window.len() - 1, 1)?, &table)?
-                    .argmax(1)?
-                    .to_vec1::<u32>()?
+                let scores = nearest_scores(&hidden.narrow(0, window.len() - 1, 1)?, &table)?;
+                match rule {
+                    DecodeRule::Greedy => *scores
+                        .argmax(1)?
+                        .to_vec1::<u32>()?
+                        .last()
+                        .ok_or_else(|| invalid("the readout returned no token"))?,
+                    DecodeRule::FlockRank => {
+                        // The K nearest on the GPU; their order, ties to the smaller id, here.
+                        let k = FLOCK_DECODE_K.min(scores.dim(1)?);
+                        let top = scores
+                            .arg_sort_last_dim(false)?
+                            .narrow(1, 0, k)?
+                            .contiguous()?;
+                        let picked = scores.gather(&top, 1)?.flatten_all()?.to_vec1::<f32>()?;
+                        let ids_k = top.flatten_all()?.to_vec1::<u32>()?;
+                        let ranked = rank_order(ids_k.into_iter().zip(picked).collect());
+                        let index = (sample as u64) * 64 + step as u64;
+                        ranked[flock_rank_draw(seed, index, ranked.len())]
+                    }
+                }
             } else {
-                model
+                *model
                     .native_next_token_ids(window, 1, window.len())?
                     .flatten_all()?
                     .to_dtype(DType::U32)?
                     .to_vec1::<u32>()?
+                    .last()
+                    .ok_or_else(|| invalid("the writer returned no token"))?
             };
-            let token = *next
-                .last()
-                .ok_or_else(|| invalid("the writer returned no token"))?;
             if token == hs::SHEET_BOS_ID {
                 break;
             }
             ids.push(token);
             reply.push(token);
+            // The Flock rank rule stops at its reply's end of turn (the protocol); greedy keeps
+            // decoding to BOS or its length, as it always has.
+            if rule == DecodeRule::FlockRank && Some(token) == eos {
+                break;
+            }
         }
-        Ok(reply)
+        Ok(DecodedReply { tokens: reply })
     })
+}
+
+/// The reply-table keys a reply's later steps read, and how many the table names (protocol
+/// I-F): at each step `j ≥ 1`, the key [`greedy_reply_key`] forms from `reply[..j]` in the
+/// window the decoder would see, exactly as [`decode_reply`] forms it. For a generated reply
+/// this is the table hit rate under generation; for the true reply after the same prompt it is
+/// the same rate under teacher forcing. `named` asks the reply table.
+fn reply_key_hits(prompt: &[u32], reply: &[u32], named: impl Fn(&[u32]) -> bool) -> (usize, usize) {
+    let (mut keys, mut hits) = (0, 0);
+    for j in 1..reply.len() {
+        let mut ids = prompt.to_vec();
+        ids.extend_from_slice(&reply[..j]);
+        let start = ids.len().saturating_sub(SHEET_CONTEXT);
+        if prompt.len() <= start {
+            continue;
+        }
+        let window = &ids[start..];
+        if let Some(key) = greedy_reply_key(window, prompt.len() - 1 - start, &reply[..j]) {
+            keys += 1;
+            hits += usize::from(named(&key));
+        }
+    }
+    (keys, hits)
 }
 
 fn append_line(path: &Path, line: &str) -> Result<()> {
@@ -2592,6 +2739,18 @@ pub struct IdSample {
     pub reference: Vec<u32>,
     pub reply_text: String,
     pub reference_text: String,
+    /// The reply-table keys the reply's later steps read, and how many the table names
+    /// ([`reply_key_hits`], protocol I-F): the hit rate under generation. 0 for files written
+    /// before claude-208.
+    #[serde(default)]
+    pub reply_keys: usize,
+    #[serde(default)]
+    pub reply_named: usize,
+    /// The same for the true reply after the same prompt: the hit rate under teacher forcing.
+    #[serde(default)]
+    pub reference_keys: usize,
+    #[serde(default)]
+    pub reference_named: usize,
 }
 
 /// One file [`score_rows`] wrote, with its nearest and writer hits when it holds rows.
@@ -2603,6 +2762,28 @@ pub struct ScoredFile {
     pub nearest_hits: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub writer_hits: Option<usize>,
+    /// An unpinned panel's `tokens.u16` sha256 (`--panel`, protocol I-A), when the file is one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub panel_sha256: Option<String>,
+}
+
+/// Whether `name` may name a `--panel` split: one file-name part, and never DEV or the sealed Fresh
+/// V2, so no panel is ever read as either.
+fn panel_name_ok(name: &str) -> bool {
+    !name.is_empty()
+        && !["dev", "fresh-v2"].contains(&name)
+        && !name.contains(['/', '\\'])
+        && !name.contains("..")
+}
+
+/// One split [`score_rows`] scores: its name, windows and mask, and an unpinned panel's sha.
+struct ScoreSplit {
+    name: String,
+    windows: Vec<CausalWindow>,
+    mask: Vec<u8>,
+    sha256: Option<String>,
+    /// Whether its prompts are sampled: DEV and every `--panel`, never Fresh V2.
+    samples: bool,
 }
 
 /// Write `bytes` to a new file at `path`; an existing file is refused, never replaced.
@@ -2647,19 +2828,29 @@ fn reference_reply(window: &CausalWindow, tokens: usize) -> Vec<u32> {
 }
 
 /// Score one saved checkpoint row by row (one-model-end-to-end done-when 2, claude-205), on the
-/// GPU. For DEV, and for the sealed Fresh V2 panel in `fresh_v2` when given, it writes every
-/// scored row's nearest and writer picks ([`ScoredRows`]) to `out/rows-{split}-memory.json`
-/// with the checkpoint's turn memory as loaded, and to `rows-{split}-no-memory.json` with it
-/// taken out. It writes `samples` greedy replies of `reply_tokens` nearest-decoded tokens
-/// ([`IdSample`]) after [`sample_windows`]' prompts, to `samples-memory.json` and
-/// `samples-no-memory.json`. The rows come from [`nearest_reading`]'s own loop, so their sums
-/// are its readings. `checkpoint` is a `step-N` directory; the flags must match its run's.
+/// GPU, with the protocol's scoring instruments (claude-208).
+/// - **Rows.** For DEV, for the sealed Fresh V2 panel in `fresh_v2` when given, and for each
+///   unpinned `(name, dir)` of `panels` (I-A; P-dev), it writes every scored row's nearest and
+///   writer picks ([`ScoredRows`]) to `out/rows-{split}-memory.json` with the checkpoint's turn
+///   memory as loaded, and to `rows-{split}-no-memory.json` with it taken out. The rows come from
+///   [`nearest_reading`]'s own loop, so their sums are its readings.
+/// - **Samples.** For DEV and each panel (never Fresh V2), `samples` replies of `reply_tokens`
+///   tokens ([`IdSample`]) after [`sample_windows`]' prompts over that split:
+///   - greedy, with the memory on and taken out: DEV's to `samples-memory.json` and
+///     `samples-no-memory.json` as before, a panel's to `samples-{name}-greedy-{memory|no-memory}.json`;
+///   - the Flock rank rule (I-E), with the memory on, as it would be served:
+///     `samples-{split}-flock-memory.json`.
+///
+///   Each records its reply-table hits under generation and under teacher forcing (I-F).
+///
+/// `checkpoint` is a `step-N` directory; the flags and `arm` must match its run's.
 #[allow(clippy::too_many_arguments)]
 pub fn score_rows(
     data_root: &Path,
     checkpoint: &Path,
     out: &Path,
     fresh_v2: Option<&Path>,
+    panels: &[(String, PathBuf)],
     samples: usize,
     reply_tokens: usize,
     retain_rates: bool,
@@ -2677,13 +2868,44 @@ pub fn score_rows(
         .and_then(|n| n.parse().ok())
         .ok_or_else(|| invalid("--score-rows wants a run's step-N checkpoint directory"))?;
     let tokenizer = pinned_tokenizer(data_root)?;
+    let eos = tokenizer
+        .token_id("<|eos|>")
+        .ok_or_else(|| invalid("the pinned tokenizer has no <|eos|>"))?;
+    let windows_of = |tokens: &[u32], mask: &[u8]| -> Result<Vec<CausalWindow>> {
+        Ok(hs::build_document_windows(tokens, mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?.0)
+    };
     let (dev_windows, dev_mask) = load_dev(data_root)?;
-    let mut splits = vec![("dev", dev_windows, dev_mask)];
+    let mut splits = vec![ScoreSplit {
+        name: "dev".to_owned(),
+        windows: dev_windows,
+        mask: dev_mask,
+        sha256: None,
+        samples: true,
+    }];
     if let Some(dir) = fresh_v2 {
         let (tokens, mask) = load_fresh_v2(dir)?;
-        let (windows, _) =
-            hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
-        splits.push(("fresh-v2", windows, mask));
+        splits.push(ScoreSplit {
+            name: "fresh-v2".to_owned(),
+            windows: windows_of(&tokens, &mask)?,
+            mask,
+            sha256: None,
+            samples: false,
+        });
+    }
+    for (name, dir) in panels {
+        if !panel_name_ok(name) || splits.iter().any(|s| s.name == *name) {
+            return Err(invalid(format!(
+                "--panel {name}: a panel name is one word, not dev, fresh-v2 or a scored split"
+            )));
+        }
+        let (tokens, mask, sha) = load_unpinned_uort(dir)?;
+        splits.push(ScoreSplit {
+            name: name.clone(),
+            windows: windows_of(&tokens, &mask)?,
+            mask,
+            sha256: Some(sha),
+            samples: true,
+        });
     }
     fs::create_dir_all(out)?;
     arms::set_fbs_arm(Some(arm));
@@ -2694,53 +2916,88 @@ pub fn score_rows(
     let model = StackModel::load(checkpoint, device)?;
     load_reads(checkpoint, device)?;
     let memory = crate::flock_read_memory::turn_memory();
-    let prompts = sample_windows(&splits[0].1, &splits[0].2, samples);
     let mut written = Vec::new();
     for on in [true, false] {
         crate::flock_read_memory::set_turn_memory(if on { memory.clone() } else { None });
         let label = if on { "memory" } else { "no-memory" };
-        for (split, windows, mask) in &splits {
-            let picks = row_picks(&model, windows, mask, seed, step, |_, _| Ok(()))?;
+        for split in &splits {
+            let picks = row_picks(&model, &split.windows, &split.mask, seed, step, |_, _| Ok(()))?;
             let rows = ScoredRows {
-                split: (*split).to_owned(),
+                split: split.name.clone(),
                 memory: on,
                 positions: picks.iter().map(|p| p.position).collect(),
                 targets: picks.iter().map(|p| p.target).collect(),
                 nearest: picks.iter().map(|p| p.nearest).collect(),
                 writer: picks.iter().map(|p| p.writer).collect(),
             };
-            let file = format!("rows-{split}-{label}.json");
+            let file = format!("rows-{}-{label}.json", split.name);
             write_new(&out.join(&file), &serde_json::to_vec(&rows)?)?;
             written.push(ScoredFile {
                 file,
                 rows: picks.len(),
                 nearest_hits: Some(rows.hits()),
                 writer_hits: Some(picks.iter().filter(|p| p.writer == p.target).count()),
+                panel_sha256: split.sha256.clone(),
             });
         }
-        let mut replies = Vec::with_capacity(prompts.len());
-        for window in &prompts {
-            let off = window.scored_offsets[0];
-            let prompt = &window.input_ids[..=off];
-            let reply = greedy_reply(&model, PointObjective::Cell, prompt, reply_tokens, seed)?;
-            let reference = reference_reply(window, reply_tokens);
-            replies.push(IdSample {
-                position: window.scored_corpus_positions[0],
-                prompt: prompt.to_vec(),
-                reply_text: tokenizer.decode(&reply),
-                reference_text: tokenizer.decode(&reference),
-                reply,
-                reference,
-            });
+        // Greedy with the memory on and off; the Flock rank rule with it on only, as served.
+        let rules: &[DecodeRule] = if on {
+            &[DecodeRule::Greedy, DecodeRule::FlockRank]
+        } else {
+            &[DecodeRule::Greedy]
+        };
+        let active = crate::flock_read_memory::turn_memory();
+        let named = |key: &[u32]| active.as_ref().is_some_and(|m| m.reply_stored(key).is_some());
+        for split in splits.iter().filter(|s| s.samples) {
+            let prompts = sample_windows(&split.windows, &split.mask, samples);
+            for &rule in rules {
+                let mut replies = Vec::with_capacity(prompts.len());
+                for (index, window) in prompts.iter().enumerate() {
+                    let off = window.scored_offsets[0];
+                    let prompt = &window.input_ids[..=off];
+                    let reply = decode_reply(
+                        &model,
+                        PointObjective::Cell,
+                        prompt,
+                        reply_tokens,
+                        seed,
+                        rule,
+                        index,
+                        Some(eos),
+                    )?
+                    .tokens;
+                    let reference = reference_reply(window, reply_tokens);
+                    let (reply_keys, reply_named) = reply_key_hits(prompt, cut_at_eos(&reply, eos), named);
+                    let (reference_keys, reference_named) =
+                        reply_key_hits(prompt, cut_at_eos(&reference, eos), named);
+                    replies.push(IdSample {
+                        position: window.scored_corpus_positions[0],
+                        prompt: prompt.to_vec(),
+                        reply_text: tokenizer.decode(&reply),
+                        reference_text: tokenizer.decode(&reference),
+                        reply,
+                        reference,
+                        reply_keys,
+                        reply_named,
+                        reference_keys,
+                        reference_named,
+                    });
+                }
+                let file = match (split.name.as_str(), rule) {
+                    ("dev", DecodeRule::Greedy) => format!("samples-{label}.json"),
+                    (name, DecodeRule::Greedy) => format!("samples-{name}-greedy-{label}.json"),
+                    (name, DecodeRule::FlockRank) => format!("samples-{name}-flock-{label}.json"),
+                };
+                write_new(&out.join(&file), &serde_json::to_vec(&replies)?)?;
+                written.push(ScoredFile {
+                    file,
+                    rows: replies.len(),
+                    nearest_hits: None,
+                    writer_hits: None,
+                    panel_sha256: split.sha256.clone(),
+                });
+            }
         }
-        let file = format!("samples-{label}.json");
-        write_new(&out.join(&file), &serde_json::to_vec(&replies)?)?;
-        written.push(ScoredFile {
-            file,
-            rows: replies.len(),
-            nearest_hits: None,
-            writer_hits: None,
-        });
     }
     Ok(written)
 }
@@ -5657,5 +5914,147 @@ mod tests {
         std::fs::write(run.join("config.json"), br#"{"steps":256,"fbs_arm":"Ident"#).unwrap();
         assert!(check_run_arm(&step, FbsArm::OneAtomActive).is_err());
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// claude-208 (protocol I-E): the copied weights are the integer Flock selector's harmonic
+    /// table, read from its source, so a change there fails here.
+    #[test]
+    fn the_flock_rank_weights_are_the_integer_selectors_table() {
+        let source = include_str!("../../uor-r4-integer/src/stack/flock.rs");
+        let start = source
+            .find("pub const RAW_RANK_WEIGHTS_Q16: [u16; 129] = [")
+            .expect("the table is declared");
+        let body = &source[start..];
+        let body = &body[body.find('[').unwrap() + 1..];
+        let body = &body[body.find('[').unwrap() + 1..body.find("];").unwrap()];
+        let table: Vec<u16> = body
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|s| s.parse().unwrap())
+            .collect();
+        assert_eq!(table.len(), 129);
+        assert_eq!(&table[..FLOCK_DECODE_K], &FLOCK_RANK_WEIGHTS_Q16[..]);
+        // And they are 1/(i+1) in Q16: the first is saturated at u16::MAX.
+        for (i, &w) in FLOCK_RANK_WEIGHTS_Q16.iter().enumerate().skip(1) {
+            assert_eq!(u32::from(w), 65_536 / (i as u32 + 1), "rank {i}");
+        }
+    }
+
+    /// claude-208 (protocol I-E): at k = 1 the Flock rank rule is greedy, and over 10^6 seeded
+    /// draws each rank's frequency is within 0.002 of `W_i / H`.
+    #[test]
+    fn the_flock_rank_draw_follows_the_harmonic_weights() {
+        for index in 0..1_000 {
+            assert_eq!(flock_rank_draw(7, index, 1), 0);
+        }
+        let draws = 1_000_000u64;
+        let mut counts = [0u64; FLOCK_DECODE_K];
+        for index in 0..draws {
+            counts[flock_rank_draw(1, index, FLOCK_DECODE_K)] += 1;
+        }
+        let total: f64 = FLOCK_RANK_WEIGHTS_Q16.iter().map(|&w| f64::from(w)).sum();
+        for (i, &count) in counts.iter().enumerate() {
+            let want = f64::from(FLOCK_RANK_WEIGHTS_Q16[i]) / total;
+            let got = count as f64 / draws as f64;
+            assert!((got - want).abs() < 0.002, "rank {i}: {got} against {want}");
+        }
+        // Deterministic for a seed and index, and seeds differ.
+        assert_eq!(flock_rank_draw(3, 42, 16), flock_rank_draw(3, 42, 16));
+        assert_ne!(
+            (0..64).map(|i| flock_rank_draw(1, i, 16)).collect::<Vec<_>>(),
+            (0..64).map(|i| flock_rank_draw(2, i, 16)).collect::<Vec<_>>()
+        );
+    }
+
+    /// claude-208: candidates rank by the higher score, ties to the smaller id.
+    #[test]
+    fn candidates_rank_by_score_then_smaller_id() {
+        let ranked = rank_order(vec![(9, -1.0), (4, -0.5), (2, -1.0), (7, -0.25)]);
+        assert_eq!(ranked, vec![7, 4, 2, 9]);
+    }
+
+    /// claude-208 (protocol I-F): the key each later step of a reply reads, as the decoder forms
+    /// it, is the census's and the memory's `reply_key` for that row, so counting it on the true
+    /// reply is teacher forcing; and `reply_key_hits` counts every later step.
+    #[test]
+    fn the_hit_rate_keys_are_the_teacher_forced_reply_keys() {
+        // BOS, a prompt (10 11 12), a reply (11 12 30), a prompt (13), a reply (31).
+        let tokens = [0u32, 10, 11, 12, 11, 12, 30, 13, 31];
+        let mask = [0u8, 0, 0, 0, 1, 1, 1, 0, 1];
+        let (windows, _) = hs::build_document_windows(&tokens, &mask, 16, 0).unwrap();
+        let rows = reply_rows(&windows, &mask);
+        let later: Vec<&ReplyRow> = rows.iter().filter(|r| !r.opening).collect();
+        assert_eq!(later.len(), 2);
+        for row in &later {
+            let ids = &windows[row.window].input_ids;
+            let opening = row.offset - row.reply.len();
+            let key = greedy_reply_key(&ids[..=row.offset], opening, &row.reply).unwrap();
+            assert_eq!(key, reply_key(row), "row at offset {}", row.offset);
+        }
+        // The first reply after its prompt: two later steps, both keyed as their rows.
+        let prompt = &windows[0].input_ids[..=3];
+        let reply = [11u32, 12, 30];
+        let keys: std::collections::HashSet<Vec<u32>> = later.iter().map(|r| reply_key(r)).collect();
+        assert_eq!(reply_key_hits(prompt, &reply, |k| keys.contains(k)), (2, 2));
+        assert_eq!(reply_key_hits(prompt, &reply, |_| false), (2, 0));
+        assert_eq!(reply_key_hits(prompt, &reply[..1], |_| true), (0, 0), "an opening only");
+    }
+
+    /// claude-208 (review): rank `i` takes exactly `W_i` draws: a draw equal to a running sum
+    /// belongs to the next rank, so `>` (not `>=`) is pinned at each boundary.
+    #[test]
+    fn a_draw_on_a_boundary_takes_the_next_rank() {
+        let w = &FLOCK_RANK_WEIGHTS_Q16;
+        assert_eq!(harmonic_rank(0, w), 0);
+        assert_eq!(harmonic_rank(u64::from(w[0]) - 1, w), 0);
+        assert_eq!(harmonic_rank(u64::from(w[0]), w), 1);
+        let first_two = u64::from(w[0]) + u64::from(w[1]);
+        assert_eq!(harmonic_rank(first_two - 1, w), 1);
+        assert_eq!(harmonic_rank(first_two, w), 2);
+        let total: u64 = w.iter().map(|&x| u64::from(x)).sum();
+        assert_eq!(harmonic_rank(total - 1, w), FLOCK_DECODE_K - 1);
+    }
+
+    /// claude-208 (review): a generated reply is counted up to its first end of turn, so the next
+    /// turn's tokens it runs on into add no keys.
+    #[test]
+    fn the_hit_rate_counts_a_reply_up_to_its_end_of_turn() {
+        const EOS: u32 = 2;
+        assert_eq!(cut_at_eos(&[5, 6, EOS, 7, 8], EOS), &[5, 6, EOS]);
+        assert_eq!(cut_at_eos(&[5, 6], EOS), &[5, 6]);
+        let prompt = [0u32, 10, 11, 12];
+        let all = reply_key_hits(&prompt, &[11, 12, EOS, 40, 41, 42], |_| true).0;
+        let cut = reply_key_hits(&prompt, cut_at_eos(&[11, 12, EOS, 40, 41, 42], EOS), |_| true).0;
+        assert_eq!((all, cut), (5, 2), "the 3 steps after the end of turn are not counted");
+    }
+
+    /// claude-208 (review): a reply whose window no longer reaches its prompt forms no key, as the
+    /// decoder forms none there.
+    #[test]
+    fn the_hit_rate_stops_where_the_window_loses_the_prompt() {
+        let prompt: Vec<u32> = (10..20).collect();
+        let reply: Vec<u32> = (100..400).collect();
+        // Step j's window is the last SHEET_CONTEXT of prompt + reply[..j]; it holds the prompt's
+        // last token while 10 + j − SHEET_CONTEXT < 10, that is for j < SHEET_CONTEXT.
+        let (keys, _) = reply_key_hits(&prompt, &reply, |_| true);
+        assert_eq!(keys, SHEET_CONTEXT - 1);
+    }
+
+    /// claude-208 (review): a panel name is one file-name part, and never DEV or Fresh V2.
+    #[test]
+    fn a_panel_name_is_never_dev_fresh_v2_or_a_path() {
+        assert!(panel_name_ok("p-dev"));
+        for bad in ["", "dev", "fresh-v2", "a/b", "..", "x\\y"] {
+            assert!(!panel_name_ok(bad), "{bad:?}");
+        }
+    }
+
+    /// claude-208: a sample file written before the hit counts still loads, with them at 0.
+    #[test]
+    fn an_older_sample_file_still_loads() {
+        let old = r#"{"position":4,"prompt":[1],"reply":[2],"reference":[3],"reply_text":"a","reference_text":"b"}"#;
+        let sample: IdSample = serde_json::from_str(old).unwrap();
+        assert_eq!((sample.reply_keys, sample.reply_named, sample.reference_keys), (0, 0, 0));
     }
 }
