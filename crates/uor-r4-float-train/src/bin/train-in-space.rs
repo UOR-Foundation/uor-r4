@@ -58,7 +58,12 @@
 //! fold and floor flags must be the checkpoint's run's, as for `--inspect`. Each `--panel` (an unpinned UORT
 //! split, its sha recorded) is scored and sampled like DEV; the samples come greedy, and under the
 //! Flock rank rule with the memory on, each with its reply-table hits (protocol I-A, I-E, I-F,
-//! claude-208).
+//! claude-208). `--flock-cell M,...` (thousandths of a score) adds the cell rule's samples at each
+//! margin, with the memory on (claude-213).
+//!
+//! `train-in-space --data-root DIR --cell-grade 1 --runs DIR --panel NAME=DIR --flock-cell M,...`:
+//! grades the cell rule on the laptop (claude-213, `in_space_long::cell_grade`) from `--runs`'
+//! `r-drop-s{1,2,3}` score folders: DEV selects the margin, the panel decides. One JSON line.
 //!
 //! `train-in-space --data-root DIR --controls 1 --out DIR [--fresh-v2 DIR] [--panel NAME=DIR ...]`: the
 //! protocol's recall controls (I-D, claude-211) on the laptop: (T) the memory's tables and (S) the
@@ -86,10 +91,10 @@ use candle_core::Device;
 use uor_r4_float_train::flock_read_opening::OpeningAnchor;
 use uor_r4_float_train::flock_read_register::RegisterSelect;
 use uor_r4_float_train::in_space_long::{
-    census, context_reach, controls, decode_speed, fbs_arm_named, grade, gradient_norms,
-    inspect_run, opening_bound, overturn, reply_bound, root_separation, run_long, run_recall,
-    score_rows, DecodeRule, LongConfig, PointObjective, TrainSplit, DEFAULT_REGISTER_PICKS,
-    MEMORY_DROPOUT_MAX,
+    cell_grade, cells_ok, census, context_reach, controls, decode_speed, fbs_arm_named, grade,
+    gradient_norms, inspect_run, opening_bound, overturn, reply_bound, root_separation, run_long,
+    run_recall, score_rows, DecodeRule, LongConfig, PointObjective, TrainSplit,
+    DEFAULT_REGISTER_PICKS, MEMORY_DROPOUT_MAX,
 };
 use uor_r4_float_train::{FloatTrainError, Result};
 
@@ -110,6 +115,8 @@ fn main() -> Result<()> {
     let mut controls_on = false;
     let mut grade_on = false;
     let mut flock_end = false;
+    let mut cell_grade_on = false;
+    let mut cells: Vec<u32> = Vec::new();
     let (mut controls_dir, mut runs, mut frozen_probe) = (None, None, None);
     let mut scored: Vec<(String, PathBuf)> = Vec::new();
     let (mut split_dir, mut split_tokens, mut split_mask) = (None, None, None);
@@ -178,6 +185,23 @@ fn main() -> Result<()> {
             "--controls" => controls_on = switch(&value)?,
             "--grade" => grade_on = switch(&value)?,
             "--flock-end" => flock_end = switch(&value)?,
+            "--cell-grade" => cell_grade_on = switch(&value)?,
+            "--flock-cell" => {
+                cells = value
+                    .split(',')
+                    .map(|m| m.parse::<u32>())
+                    .collect::<std::result::Result<_, _>>()
+                    .map_err(|_| {
+                        FloatTrainError::Invalid(
+                            "--flock-cell wants margins in thousandths, comma-separated".to_owned(),
+                        )
+                    })?;
+                if cells.is_empty() || !cells_ok(&cells) {
+                    return Err(FloatTrainError::Invalid(
+                        "--flock-cell wants distinct margins of at most 4,000 thousandths".to_owned(),
+                    ));
+                }
+            }
             "--controls-dir" => controls_dir = Some(PathBuf::from(&value)),
             "--runs" => runs = Some(PathBuf::from(&value)),
             "--frozen-probe" => frozen_probe = Some(PathBuf::from(&value)),
@@ -381,10 +405,11 @@ fn main() -> Result<()> {
         overturn_on,
         controls_on,
         grade_on,
+        cell_grade_on,
     ];
     if modes.iter().filter(|&&m| m).count() > 1 {
         return Err(FloatTrainError::Invalid(
-            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1 or --grade 1"
+            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1, --grade 1 or --cell-grade 1"
                 .to_owned(),
         ));
     }
@@ -408,7 +433,15 @@ fn main() -> Result<()> {
     }
     if recall > 0 {
         let out = out.ok_or_else(|| FloatTrainError::Invalid("--recall needs --out".to_owned()))?;
-        if modes[..5].iter().any(|&m| m) || score.is_some() || overturn_on || controls_on || grade_on || flock_end {
+        if modes[..5].iter().any(|&m| m)
+            || score.is_some()
+            || overturn_on
+            || controls_on
+            || grade_on
+            || flock_end
+            || cell_grade_on
+            || !cells.is_empty()
+        {
             return Err(FloatTrainError::Invalid(
                 "--recall trains; it takes --out and no other mode".to_owned(),
             ));
@@ -422,6 +455,28 @@ fn main() -> Result<()> {
         return Err(FloatTrainError::Invalid(
             "--flock-end applies to --score-rows and --grade 1 only".to_owned(),
         ));
+    }
+    if !cells.is_empty() && score.is_none() && !cell_grade_on {
+        return Err(FloatTrainError::Invalid(
+            "--flock-cell applies to --score-rows and --cell-grade 1 only".to_owned(),
+        ));
+    }
+    if cell_grade_on {
+        let runs =
+            runs.ok_or_else(|| FloatTrainError::Invalid("--cell-grade needs --runs DIR".to_owned()))?;
+        let [(panel, _)] = extra_panels.as_slice() else {
+            return Err(FloatTrainError::Invalid(
+                "--cell-grade needs one --panel NAME=DIR, the confirming panel".to_owned(),
+            ));
+        };
+        if cells.is_empty() {
+            return Err(FloatTrainError::Invalid(
+                "--cell-grade needs --flock-cell's margins".to_owned(),
+            ));
+        }
+        let graded = cell_grade(&data_root, &runs, panel, &cells)?;
+        println!("{}", serde_json::to_string(&graded)?);
+        return Ok(());
     }
     if grade_on {
         let need = |v: Option<PathBuf>, flag: &str| {
@@ -501,6 +556,7 @@ fn main() -> Result<()> {
             } else {
                 DecodeRule::FLOCK
             },
+            &cells,
             &device,
         )? {
             println!("{}", serde_json::to_string(&file)?);
