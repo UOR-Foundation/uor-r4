@@ -35,3 +35,25 @@ heldout-panel out=p-f-train tokenizer=TOKENIZER cell=train,train conversations=4
 
 - **No p-f prompt reuses a TRAIN phrasing,** even with its values masked. Fresh V2, bar (e)'s panel, reuses 0.665 of them.
 - **Replies are still template-shared:** 0.625 of p-f's replies are verbatim TRAIN replies. The generator shares reply templates across phrasings (claude-204 found the same on P-dev). So bar (f) tests reading a new prompt into a known kind of reply.
+
+## The result: bar (f) passes (30 Oct, `74675bb3f`)
+
+**Tokens per second first.** The saved artifacts serve at a median 10,876 decode tok/s (seed 1) and 10,566 (seed 2) on an Apple M1 laptop, with prefill at 2.67M tok/s ([toks-s1.json](evidence/toks-s1.json), [toks-s2.json](evidence/toks-s2.json)).
+
+| On p-f, 15,953 rows | Seed 1 | Seed 2 |
+|---|---|---|
+| Saved model, integer top-1 | **7,850** | **7,872** |
+| T2 bigram | 7,375 | 7,375 |
+| Rows only the model gets, vs T2 (`b`) / only T2 gets (`c`) | 1,038 / 563 | 1,051 / 554 |
+| Lead over T2, against its band of 81 | **475** | **497** |
+| Unigram | 1,409 | 1,409 |
+| Lead over the unigram, against its band of 162 | **6,441** | **6,463** |
+| Refused rows, reference mismatches, B4 | 0, 0, pass | 0, 0, pass |
+
+- **The outcome is `PASS_BAR_F_HELDOUT_PHRASING`** ([panel-score.json](evidence/panel-score.json)). The band is `max(24, ⌈2√(b+c)⌉, |M(1) − M(2)|)`, and the two-seed spread is 22.
+- **Builds A and B** (`0960545437603586493f54524545728c9065d5f0219a7b21d2105aa3bb579d14` and `bcba357778c445dfd96d8817c683f9fe7b19e6bca4ddaeeca6d694339c4eec37`) gave byte-identical reports.
+- **Build A first reproduced the saved model's DEV top-1,** 7,002 and 7,001, before it read the panel.
+- **Bar (e)'s copy-successor condition, reported only:** the model gets 1,903 and 1,904 of the 4,077 copy-successor rows, against T2's 1,260. So it passes that condition too.
+- **The first attempt was an instrument fault.** It built without `--target` and failed to compile, `E0463`, before reading any panel byte. It was repaired, and is not counted.
+- **The seal** is at `results/claude/m1-heldout-phrasing-transfer-2026-10-30/run-74675bb3/` in the HF store, with a `SHA256SUMS` of 61 files.
+- **What this shows:** a model that passed (a) to (e) also beats both count tables on prompts whose phrasing templates TRAIN never shows, at both seeds, by six times the band against T2. Its replies still come from templates TRAIN shares (0.625 verbatim), so this is reading new prompts into known kinds of reply.
