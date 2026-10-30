@@ -2,6 +2,8 @@
 
 Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `f22ff26aa`.
 
+Setup row: 2 (item-file maintenance and PLAN: a milestone close recorded, M1).
+
 ## Goal
 
 Record M1's close where the lab may write. A saved model passes all six closing bars of CHARTER §4 item 8. Bar (f) is claude-211's: PR #3419, merged as `2ba9f27a3`.
