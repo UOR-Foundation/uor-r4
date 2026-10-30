@@ -3777,10 +3777,66 @@ struct DecodedReply {
     /// Under [`DecodeRule::CycleStep`], each step's mark ([`cycle_step_pick`]), a final step
     /// that picked BOS included; empty under any other rule.
     stepped: Vec<u8>,
+    /// The served point key's first token ([`served_opening`], claude-220), where it gave one.
+    served: Option<u32>,
+}
+
+/// The served point key's table (claude-220): TRAIN's opening points under the trunk, on the
+/// model's device, and their targets, as [`opening_points`] builds them and `opening-table.safetensors`
+/// holds them.
+#[derive(Clone)]
+struct ServedKey {
+    points: Tensor,
+    targets: std::sync::Arc<Vec<u32>>,
 }
 
 thread_local! {
     static FORCED_OPENING: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
+    static SERVED_KEY: std::cell::RefCell<Option<ServedKey>> = const { std::cell::RefCell::new(None) };
+    /// The served key's searches on this thread since the last [`take_served_searches`]: how
+    /// many, and their wall time in microseconds.
+    static SERVED_SEARCHES: std::cell::Cell<(u64, u64)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+/// The served point key for the next [`decode_reply`] calls on this thread, or none.
+fn set_served_key(key: Option<ServedKey>) {
+    SERVED_KEY.with(|k| *k.borrow_mut() = key);
+}
+
+/// The served key's searches since the last call, `(count, microseconds)`, and a reset.
+fn take_served_searches() -> (u64, u64) {
+    SERVED_SEARCHES.with(|c| c.replace((0, 0)))
+}
+
+/// The served point key's first token (claude-220) for the opening that ends `window`, from the
+/// opening row's own `point` (`(1, width)`, from the decode's forward). Where the turn memory's
+/// exact key misses the opening (the memory moves nothing there, so `point` is the trunk's), it
+/// is the commonest target among the served table's L1-nearest TRAIN openings, ties to the
+/// smaller id, as [`l1_named`] names them. None where no key is served, the memory is off, or
+/// the exact key fires. A key naming BOS is an instrument fault.
+fn served_opening(window: &[u32], point: &Tensor) -> Result<Option<u32>> {
+    let Some(key) = SERVED_KEY.with(|k| k.borrow().clone()) else {
+        return Ok(None);
+    };
+    let Some(memory) = crate::flock_read_memory::turn_memory() else {
+        return Ok(None);
+    };
+    let last = window.len() - 1;
+    if memory.stored(window, window.len(), &[last])?.1[last] == 1.0 {
+        return Ok(None);
+    }
+    let started = Instant::now();
+    let named = l1_named(point, &key.points, &key.targets)?;
+    let micros = started.elapsed().as_micros() as u64;
+    SERVED_SEARCHES.with(|c| {
+        let (n, us) = c.get();
+        c.set((n + 1, us + micros));
+    });
+    let token = named.first().map(|n| n.target).ok_or_else(|| invalid("the served key named nothing"))?;
+    if token == hs::SHEET_BOS_ID {
+        return Err(invalid("the served key names BOS (an instrument fault)"));
+    }
+    Ok(Some(token))
 }
 
 /// The reply's first token for the next [`decode_reply`] calls on this thread, or none: the
@@ -3843,6 +3899,7 @@ fn decode_reply(
         let mut reply = Vec::with_capacity(reply_tokens);
         let mut admitted = Vec::new();
         let mut stepped = Vec::new();
+        let mut served = None;
         for step in 0..reply_tokens {
             // A forced opening (claude-218) is the reply's first token, taken without a forward,
             // so no opening row is read or moved for it.
@@ -3898,8 +3955,17 @@ fn decode_reply(
                 crate::flock_read_memory::set_memory_rows(None);
                 crate::flock_read_memory::set_reply_rows(None);
                 let hidden = hidden?;
-                let scores = nearest_scores(&hidden.narrow(0, window.len() - 1, 1)?, &table)?;
+                let point = hidden.narrow(0, window.len() - 1, 1)?;
+                // The served point key (claude-220) names the opening where the exact key misses,
+                // from this forward's own point, under the greedy rule only.
+                if reply.is_empty() && rule == DecodeRule::Greedy {
+                    served = served_opening(window, &point)?;
+                }
+                let scores = nearest_scores(&point, &table)?;
                 match rule {
+                    DecodeRule::Greedy if reply.is_empty() && served.is_some() => {
+                        served.ok_or_else(|| invalid("the served key gave no token"))?
+                    }
                     DecodeRule::Greedy => *scores
                         .argmax(1)?
                         .to_vec1::<u32>()?
@@ -3968,6 +4034,7 @@ fn decode_reply(
             tokens: reply,
             admitted,
             stepped,
+            served,
         })
     })
 }
@@ -4501,6 +4568,10 @@ pub struct ScoredFile {
     /// each rule's decode tok/s (claude-213).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub decode: Option<(usize, f64)>,
+    /// The served point key's searches in a samples file's decode (claude-220): how many, and
+    /// their wall seconds, inside `decode`'s.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search: Option<(u64, f64)>,
 }
 
 /// The rows the tables control (T) names, and its hits among them, at the openings and at the
@@ -4597,11 +4668,16 @@ fn reference_reply(window: &CausalWindow, tokens: usize) -> Vec<u32> {
 ///     with the memory on: `samples-{split}-forced-memory.json`;
 ///   - for each `(key, τ)` of `keyed` (claude-219, which needs `keys`), greedy with the memory on
 ///     and the reply's first token the key's name where [`keyed_opening`] fires:
-///     `samples-{split}-keyed-{key}-memory.json`.
+///     `samples-{split}-keyed-{key}-memory.json`;
+///   - with `served_arm` (claude-220, which needs `keys`), greedy with the memory on and the point
+///     key named in the decode itself from the opening row's own point ([`served_opening`]):
+///     `samples-{split}-served-memory.json`, with the search's count and seconds.
 ///
 ///   Each records its reply-table hits under generation and under teacher forcing (I-F).
 /// - **Keys.** With `keys`, every split's openings named by the trunk keys ([`OpeningKeys`],
-///   claude-218), taken with the memory off before the decodes: `keys-{split}.json`.
+///   claude-218), taken with the memory off before the decodes: `keys-{split}.json`. Their
+///   TRAIN table is read from `opening_table` when given; else it is built, and with `served_arm`
+///   saved to `out/opening-table.safetensors` and read back, and the copy read back is served.
 ///
 /// `checkpoint` is a `step-N` directory; the flags and `arm` must match its run's.
 #[allow(clippy::too_many_arguments)]
@@ -4624,9 +4700,17 @@ pub fn score_rows(
     cycle: bool,
     keys: bool,
     keyed: &[(String, f32)],
+    served_arm: bool,
+    opening_table: Option<&Path>,
     device: &Device,
 ) -> Result<Vec<ScoredFile>> {
     check_run_arm(checkpoint, arm)?;
+    if (served_arm || opening_table.is_some()) && !keys {
+        return Err(invalid("--served-key and --opening-table read the opening keys, so they need --opening-keys 1"));
+    }
+    if served_arm && samples == 0 {
+        return Err(invalid("--served-key decodes samples, so it needs --samples of 1 or more"));
+    }
     if !keyed_ok(keyed) {
         return Err(invalid("--keyed-decode wants distinct trunk keys (sign, hsign, point), each with a τ of 0 or more"));
     }
@@ -4707,19 +4791,46 @@ pub fn score_rows(
     // The opening keys (claude-218), with the memory off: TRAIN's opening points under this
     // trunk, and each split's openings named by the nearest of them. Taken before the decodes,
     // so the keyed arms (claude-219) can read them, and written after them, as before.
+    let mut served_key = None;
+    let mut table_rows = None;
     let named_openings: Vec<OpeningKeys> = if keys {
         crate::flock_read_memory::set_turn_memory(None);
-        let (train_tokens, train_mask) = load_train_split(data_root)?;
-        let train_windows = windows_of(&train_tokens, &train_mask)?;
-        let (train, train_targets, _) = opening_points(&model, &train_windows, &train_mask, seed, step)?;
-        drop((train_windows, train_tokens, train_mask));
-        splits
+        // The served table (claude-220): loaded from `opening_table`, or built from TRAIN; with
+        // `served`, a built one is saved to `out` and read back, which must give the same bytes,
+        // and the copy read back is the one served.
+        let (train, train_targets) = match opening_table {
+            Some(path) => load_opening_table(path, device)?,
+            None => {
+                let (train_tokens, train_mask) = load_train_split(data_root)?;
+                let train_windows = windows_of(&train_tokens, &train_mask)?;
+                let (train, targets, _) = opening_points(&model, &train_windows, &train_mask, seed, step)?;
+                drop((train_windows, train_tokens, train_mask));
+                if served_arm {
+                    let path = out.join(OPENING_TABLE_FILE);
+                    save_opening_table(&path, &train, &targets)?;
+                    let (points, back) = load_opening_table(&path, device)?;
+                    let gap = (&points - &train)?.abs()?.max_all()?.to_scalar::<f32>()?;
+                    if back != targets || gap != 0.0 {
+                        return Err(invalid("the opening table does not read back as saved (an instrument fault)"));
+                    }
+                    table_rows = Some(back.len());
+                    (points, back)
+                } else {
+                    (train, targets)
+                }
+            }
+        };
+        let named = splits
             .iter()
             .map(|split| {
                 let (query, targets, positions) = opening_points(&model, &split.windows, &split.mask, seed, step)?;
                 opening_keys(&split.name, &query, targets, positions, &train, &train_targets)
             })
-            .collect::<Result<_>>()?
+            .collect::<Result<_>>()?;
+        if served_arm {
+            served_key = Some(ServedKey { points: train, targets: std::sync::Arc::new(train_targets) });
+        }
+        named
     } else {
         Vec::new()
     };
@@ -4747,6 +4858,7 @@ pub fn score_rows(
                 panel_sha256: split.sha256.clone(),
                 tables: None,
                 decode: None,
+                search: None,
             });
         }
         // Greedy with the memory on and off; the Flock rules, and greedy under each read scope
@@ -4772,7 +4884,7 @@ pub fn score_rows(
                     let prompt = &window.input_ids[..=off];
                     // The prompt's own flags: an earlier reply in it is limited as in training.
                     let flags = window_input_mask(std::slice::from_ref(window), &split.mask)?;
-                    let DecodedReply { tokens: reply, admitted, stepped } = decode_reply(
+                    let DecodedReply { tokens: reply, admitted, stepped, .. } = decode_reply(
                         &model,
                         PointObjective::Cell,
                         prompt,
@@ -4839,12 +4951,15 @@ pub fn score_rows(
                     panel_sha256: split.sha256.clone(),
                     tables: None,
                     decode: Some((decoded, seconds)),
+                    search: None,
                 });
             }
             // Greedy with each reply's first token given, where `openings` gives one (the arms
             // below): the token is taken without a forward, and the rest decodes from the prompt
-            // and it, as served. With `record`, each reply keeps the token it was given.
-            let opened = |openings: &[Option<u32>], record: bool| -> Result<(Vec<IdSample>, usize, f64)> {
+            // and it, as served. With `record`, each reply keeps the token it was given. With
+            // `serve`, the served point key names the opening in the decode itself (claude-220),
+            // and each reply keeps the token it gave.
+            let opened = |openings: &[Option<u32>], record: bool, serve: bool| -> Result<(Vec<IdSample>, usize, f64)> {
                 let mut replies = Vec::with_capacity(prompts.len());
                 let started = std::time::Instant::now();
                 for (index, (window, &opening)) in prompts.iter().zip(openings).enumerate() {
@@ -4852,6 +4967,7 @@ pub fn score_rows(
                     let prompt = &window.input_ids[..=off];
                     let reference = reference_reply(window, reply_tokens);
                     set_forced_opening(opening);
+                    set_served_key(if serve { served_key.clone() } else { None });
                     let decoded = decode_reply(
                         &model,
                         PointObjective::Cell,
@@ -4865,7 +4981,10 @@ pub fn score_rows(
                         &[],
                     );
                     set_forced_opening(None);
-                    let reply = decoded?.tokens;
+                    set_served_key(None);
+                    let decoded = decoded?;
+                    let given = if serve { decoded.served } else { opening.filter(|_| record) };
+                    let reply = decoded.tokens;
                     let (reply_keys, reply_named) = reply_key_hits(prompt, cut_at_eos(&reply, eos), named);
                     let (reference_keys, reference_named) =
                         reply_key_hits(prompt, cut_at_eos(&reference, eos), named);
@@ -4882,7 +5001,7 @@ pub fn score_rows(
                         reference_named,
                         admitted: Vec::new(),
                         stepped: Vec::new(),
-                        keyed: opening.filter(|_| record),
+                        keyed: given,
                     });
                 }
                 // A given token had no forward, so the speed counts only the decoded ones.
@@ -4896,17 +5015,24 @@ pub fn score_rows(
             // The forced-opening arm (claude-218), each reply's first token its reference's, so
             // what a right opening alone lifts is read beside greedy; and the keyed arms
             // (claude-219), the first token a trunk key's name where the exact key misses.
-            let mut arms: Vec<(String, Vec<Option<u32>>, bool)> = Vec::new();
+            // And the served arm (claude-220): the point key named in the decode itself, from the
+            // table read back from disk.
+            let mut arms: Vec<(String, Vec<Option<u32>>, bool, bool)> = Vec::new();
             if keys && on {
                 let openings = prompts.iter().map(|w| reference_reply(w, reply_tokens).first().copied()).collect();
-                arms.push((format!("samples-{}-forced-{label}.json", split.name), openings, false));
+                arms.push((format!("samples-{}-forced-{label}.json", split.name), openings, false, false));
                 for (key, tau) in keyed {
                     let openings = keyed_openings(&prompts, &named_openings[at], key, *tau, active.as_ref())?;
-                    arms.push((format!("samples-{}-keyed-{key}-{label}.json", split.name), openings, true));
+                    arms.push((format!("samples-{}-keyed-{key}-{label}.json", split.name), openings, true, false));
+                }
+                if served_arm {
+                    arms.push((format!("samples-{}-served-{label}.json", split.name), vec![None; prompts.len()], false, true));
                 }
             }
-            for (file, openings, record) in arms {
-                let (replies, decoded, seconds) = opened(&openings, record)?;
+            for (file, openings, record, serve) in arms {
+                take_served_searches();
+                let (replies, decoded, seconds) = opened(&openings, record, serve)?;
+                let (searches, micros) = take_served_searches();
                 write_new(&out.join(&file), &serde_json::to_vec(&replies)?)?;
                 written.push(ScoredFile {
                     file,
@@ -4916,6 +5042,7 @@ pub fn score_rows(
                     panel_sha256: split.sha256.clone(),
                     tables: None,
                     decode: Some((decoded, seconds)),
+                    search: serve.then_some((searches, micros as f64 / 1e6)),
                 });
             }
         }
@@ -4933,9 +5060,55 @@ pub fn score_rows(
             panel_sha256: split.sha256.clone(),
             tables: None,
             decode: None,
+            search: None,
+        });
+    }
+    if let Some(rows) = table_rows {
+        written.push(ScoredFile {
+            file: OPENING_TABLE_FILE.to_owned(),
+            rows,
+            nearest_hits: None,
+            writer_hits: None,
+            panel_sha256: None,
+            tables: None,
+            decode: None,
+            search: None,
         });
     }
     Ok(written)
+}
+
+/// The served point key's table file (claude-220), in a scoring run's `out`.
+pub const OPENING_TABLE_FILE: &str = "opening-table.safetensors";
+
+/// Saves the served table (claude-220): TRAIN's opening `points` (`(n, width)`, f32) and their
+/// `targets` (u32), as `points` and `targets`. It never replaces a file.
+fn save_opening_table(path: &Path, points: &Tensor, targets: &[u32]) -> Result<()> {
+    if path.exists() {
+        return Err(invalid(format!("{} exists; a table is never replaced", path.display())));
+    }
+    let (n, _) = points.dims2()?;
+    if n != targets.len() {
+        return Err(invalid("the opening table wants one target per point"));
+    }
+    let targets = Tensor::from_vec(targets.to_vec(), n, points.device())?;
+    let tensors = std::collections::HashMap::from([("points".to_owned(), points.clone()), ("targets".to_owned(), targets)]);
+    candle_core::safetensors::save(&tensors, path)?;
+    Ok(())
+}
+
+/// The served table [`save_opening_table`] wrote, on `device`: its points and targets.
+fn load_opening_table(path: &Path, device: &Device) -> Result<(Tensor, Vec<u32>)> {
+    let tensors = candle_core::safetensors::load(path, device)?;
+    let get = |name: &str| {
+        tensors.get(name).cloned().ok_or_else(|| invalid(format!("{}: no {name} tensor", path.display())))
+    };
+    let (points, targets) = (get("points")?, get("targets")?.to_vec1::<u32>()?);
+    let (n, _) = points.dims2()?;
+    if n != targets.len() || points.dtype() != DType::F32 {
+        return Err(invalid(format!("{}: not an opening table of f32 points with one target each", path.display())));
+    }
+    Ok((points, targets))
 }
 
 /// The longest suffix (S) reads: the longest context suffix it looks for in TRAIN.
@@ -5124,6 +5297,7 @@ pub fn controls(
                 panel_sha256: sha.clone(),
                 tables: (label == "T").then_some(named),
                 decode: None,
+                search: None,
             });
         }
     }
@@ -10116,6 +10290,50 @@ mod tests {
     /// claude-218: a forced opening is the reply's first token, and the rest is greedy from the
     /// prompt and that token; and the opening points are exactly the trunk's points at the
     /// scored rows that open a reply, as `row_picks` sees them.
+    /// claude-220: at an opening the memory's exact key misses, the served key names the reply's
+    /// first token from the decode's own point by the table's nearest TRAIN opening, and the
+    /// reply continues as a forced one with that token; where the exact key fires, the decode
+    /// is greedy's; and only the missed opening counts a search.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_served_key_names_a_missed_opening_from_the_decodes_own_point() {
+        use crate::flock_read_opening::{opening_slots, OpeningAnchor};
+        let device = Device::new_cuda(0).unwrap();
+        let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
+        let a: Vec<u32> = std::iter::once(hs::SHEET_BOS_ID).chain((1..=24u32).map(|i| (i * 37) % 4096 + 2)).collect();
+        let b: Vec<u32> = std::iter::once(hs::SHEET_BOS_ID).chain((1..=24u32).map(|i| (i * 53) % 4096 + 2)).collect();
+        let point_of = |p: &[u32]| {
+            crate::flock_read::points(&model, p, 1, p.len()).unwrap().narrow(0, p.len() - 1, 1).unwrap()
+        };
+        let decode = |p: &[u32], n: usize| {
+            decode_reply(&model, PointObjective::Cell, p, n, 1, DecodeRule::Greedy, 0, None, ReadScope::Full, &[]).unwrap()
+        };
+        // A memory whose table holds a's own turn key, with a zero weight, so it moves nothing.
+        let slots = opening_slots(&a, 8, OpeningAnchor::Turn);
+        let key: Vec<u32> = slots[a.len() - 1].iter().map(|&s| a[s]).collect();
+        let pb = point_of(&b);
+        let width = pb.dim(1).unwrap();
+        let memory = crate::flock_read_memory::TurnMemory::new(8, std::collections::HashMap::from([(key, 5u32)]), width, &device).unwrap();
+        crate::flock_read_memory::set_turn_memory(Some(memory));
+        let (greedy_a, greedy_b) = (decode(&a, 12).tokens, decode(&b, 12).tokens);
+        // The table: b's own opening point, target 77, and a far point, target 88.
+        let points = Tensor::cat(&[pb.clone(), (&pb + 100.0).unwrap()], 0).unwrap();
+        set_served_key(Some(ServedKey { points, targets: std::sync::Arc::new(vec![77, 88]) }));
+        take_served_searches();
+        let served_b = decode(&b, 12);
+        assert_eq!((served_b.tokens[0], served_b.served), (77, Some(77)), "the missed opening takes the nearest's target");
+        let served_a = decode(&a, 12);
+        assert_eq!((served_a.tokens.as_slice(), served_a.served), (greedy_a.as_slice(), None), "the exact key fires: greedy");
+        assert_eq!(take_served_searches().0, 1, "only the missed opening is searched");
+        set_served_key(None);
+        set_forced_opening(Some(77));
+        let forced_b = decode(&b, 12).tokens;
+        set_forced_opening(None);
+        assert_eq!(served_b.tokens, forced_b, "the rest decodes as the forced reply with that token");
+        assert_ne!(greedy_b.first(), None, "the unserved reply decodes");
+        crate::flock_read_memory::set_turn_memory(None);
+    }
+
     #[cfg(feature = "cuda")]
     #[test]
     fn a_forced_opening_continues_greedy_and_the_opening_points_are_the_rows() {
@@ -10308,6 +10526,25 @@ mod tests {
         let bos = OpeningKeys { point_target: vec![11, hs::SHEET_BOS_ID], ..keys.clone() };
         assert!(keyed_openings(&prompts, &bos, "point", 0.5, Some(&memory)).is_err());
         assert_eq!(keyed_openings(&prompts, &bos, "point", 0.125, Some(&memory)).unwrap(), [None, None]);
+    }
+
+    /// claude-220: the served table reads back exactly as it was saved, and is never replaced.
+    #[test]
+    fn the_opening_table_reads_back_as_saved_and_is_never_replaced() {
+        let dir = std::env::temp_dir().join(format!("claude-220-table-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(OPENING_TABLE_FILE);
+        let values: Vec<f32> = vec![0.5, -1.25, 3.0, 0.0, -0.0, 7.75];
+        let points = Tensor::from_vec(values.clone(), (3, 2), &Device::Cpu).unwrap();
+        save_opening_table(&path, &points, &[9, 4, 9]).unwrap();
+        let (back, targets) = load_opening_table(&path, &Device::Cpu).unwrap();
+        assert_eq!(targets, [9, 4, 9]);
+        assert_eq!(back.dims(), [3, 2]);
+        let bits = |v: Vec<f32>| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
+        assert_eq!(bits(back.flatten_all().unwrap().to_vec1::<f32>().unwrap()), bits(values));
+        assert!(save_opening_table(&path, &points, &[9, 4, 9]).is_err(), "a table is never replaced");
+        assert!(save_opening_table(&dir.join("other.safetensors"), &points, &[9, 4]).is_err(), "one target per point");
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     /// claude-219: the keyed grade predicts each keyed reply from the greedy and forced ones,

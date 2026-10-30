@@ -98,6 +98,12 @@
 //! grades them against greedy on the laptop (`in_space_long::keyed_grade`); with `--panel p-u=DIR`
 //! on claude-218's run, it predicts their exact replies, the sheet's power check. One JSON line.
 //!
+//! `--served-key 1`, with `--opening-keys 1`, adds the served arm (claude-220): greedy with the
+//! memory on, and the point key named in the decode itself from the opening row's own point
+//! against TRAIN's opening table (`samples-{split}-served-memory.json`). The table is built,
+//! saved to `--out`'s `opening-table.safetensors`, read back to the same bytes, and served;
+//! `--opening-table PATH` reads a saved one instead of building it.
+//!
 //! `train-in-space --data-root DIR --controls 1 --out DIR [--fresh-v2 DIR] [--panel NAME=DIR ...]`: the
 //! protocol's recall controls (I-D, claude-211) on the laptop: (T) the memory's tables and (S) the
 //! longest suffix over TRAIN, as rows files the grader pairs with the arms.
@@ -155,6 +161,8 @@ fn main() -> Result<()> {
     let mut cycle_on = false;
     let mut keys_on = false;
     let mut keyed: Vec<(String, f32)> = Vec::new();
+    let mut served_on = false;
+    let mut opening_table: Option<PathBuf> = None;
     let mut cycle_grade_on = false;
     let mut key_grade_on = false;
     let mut keyed_grade_on = false;
@@ -236,6 +244,8 @@ fn main() -> Result<()> {
             "--cycle-step" => cycle_on = switch(&value)?,
             "--opening-keys" => keys_on = switch(&value)?,
             "--keyed-decode" => keyed = keyed_decode_arg(&value)?,
+            "--served-key" => served_on = switch(&value)?,
+            "--opening-table" => opening_table = Some(PathBuf::from(&value)),
             "--cycle-grade" => cycle_grade_on = switch(&value)?,
             "--key-grade" => key_grade_on = switch(&value)?,
             "--keyed-grade" => keyed_grade_on = switch(&value)?,
@@ -578,6 +588,11 @@ fn main() -> Result<()> {
             "--keyed-decode applies to --score-rows with --opening-keys 1 only".to_owned(),
         ));
     }
+    if (served_on || opening_table.is_some()) && !keys_on {
+        return Err(FloatTrainError::Invalid(
+            "--served-key and --opening-table apply to --score-rows with --opening-keys 1 only".to_owned(),
+        ));
+    }
     if cycle_grade_on {
         let runs = runs
             .ok_or_else(|| FloatTrainError::Invalid("--cycle-grade needs --runs DIR".to_owned()))?;
@@ -744,6 +759,8 @@ fn main() -> Result<()> {
             cycle_on,
             keys_on,
             &keyed,
+            served_on,
+            opening_table.as_deref(),
             &device,
         )? {
             println!("{}", serde_json::to_string(&file)?);
