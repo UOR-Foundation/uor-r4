@@ -3,7 +3,7 @@ id: m7-studio-live-model-sources
 title: Publish the fixed Studio with working WASM and selectable model sources
 milestone: M7
 area: serving
-status: ready
+status: done
 open_to: lab
 needs_gpu: false
 notebook: docs/research/notebook/m4-serving.md
@@ -41,6 +41,10 @@ The owner withdraws the Pages publish direction, the integer wasm engine stops b
 ## How to start
 
 Read web/README.md, web/studio/, docs/products/web-client.md, docs/labs/m7-studio-connect-wasm-engine/README.md and the owner direction on #2028. Build the bundle with RUSTFLAGS='-C target-feature=-simd128' wasm-pack build crates/uor-r4-integer --target web --no-opt --out-dir ../../web/studio/pkg -- --features serving-wasm, generate the seed=5 synthetic stack and tokenizer, run the three node verification scripts, then work through the done-when. The build/publish helper is scripts/studio/build-and-publish.sh (dry-run by default; --publish-gh-pages requires the owner's live-deploy decision).
+
+## Resolution (30 October 2026, live publish)
+
+Published live at https://uor-foundation.github.io/uor-r4/studio/ by scripts/studio/build-and-publish.sh --target gh-pages --push --yes from an attached main at origin/main (cdaed4330). gh-pages moved bac74f13 -> d8e67c66976f19af86beb0dd1060f05143c56e30 and the Pages build for it reports built. The live page shows the "Pre-alpha · M1 complete · 1 of 8 milestones" status and makes no external/off-origin page-load requests; pkg/uor_r4_integer_bg.wasm is HTTP 200 sha256 d971fe7d… (495,334 B), pkg/synthetic-stack.lut 200 sha256 d60f88d6… (469,252 B), pkg/tokenizer.json 200 sha256 6758318d…, models.json 200, and the old pkg/uor_r4_wasm_router_bg.wasm is 404 (the retired engine is gone). The build/publish scripts, verification harnesses and limits are recorded in PR #3442; the owner-only docs-site.yml patch that would automate the publish is in the deploy report, not applied.
 
 ## Rules that apply
 
