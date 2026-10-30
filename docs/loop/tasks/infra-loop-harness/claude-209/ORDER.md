@@ -8,63 +8,51 @@ The item's done-when reads:
 
 > Every PR in the build plan on [the loop page](../../loop/README.md#build-plan) is merged, each with its planted fault turning its gate red. The four labs (Kimi, Claude, DeepSeek, Antigravity) are onboarded, each with a committed onboarding receipt. Each lab has completed one loop task end to end: claim, probe, work, gates, report, review by another vendor, queue, and verify on fresh `main`.
 
+Setup row: 2 (an owner rule change recorded: charter text, decision index, change log, PLAN's owner directions and M1 bar, and the roadmap item that measures it).
+
+## The owner's words (verbatim)
+
+Casey, in Claude's chat, 2026-10-29 (recorded on #2028, comment 6511159403), answering:
+
+> "Should M1 also require a held-out-phrasing panel? M1's fresh-transfer bar (e) passed on Fresh V2, but Fresh V2 comes from the same generator as TRAIN, so it tests new values inside known templates, not new phrasings. A held-out-phrasing panel now exists (P-dev, claude-204: 0.000 of its prompt templates occur in TRAIN). P-dev itself is reserved for the coming training run's decisions, so an M1 bar would use a fresh panel drawn the same way at a new seed."
+
+Casey's answer: **"Yes, add the bar (Recommended)"**. That option read: "M1 also requires beating the T2 bigram and unigram on a fresh held-out-phrasing panel (drawn by heldout-panel at a new seed, with its own census), with the same paired band as bar (e). It proves the model reads new phrasings, not just recalls templates."
+
 ## Cancel probe (run first)
 
-To fill in.
+Run at this ORDER's base. **Class: none needed (a record). Go.**
+- **No open PR touches the files below:** `gh pr list --state open` shows #3415 (this one) and antigravity's #3323 (`crates/uor-r4-discrete`, its docs).
+- **The last decision is D81,** so this one is D82.
+- **CHARTER §4 item 8 reads:** "Bars (a), (b), (c) and (e) are unchanged. [D39, owner 19 Oct]".
+- **M1's five bars passed.** `antigravity-110`, `m1-close-saved-model`, merged, reports `PASS_M1_ALL_FIVE_BARS` on the saved two-seed discrete artifact across two builds. M1 (#2029) is still open.
+
+  So this bar keeps M1 open until that saved model passes it too. That is the decision's direct consequence, and it is written into each record.
 
 ## Files in scope
 
-- `PLAN.md`
-- `docs/roadmap/items/*.md`
-- `crates/uor-r4-harness/src/loopreview.rs`
-- `crates/uor-r4-harness/src/loopnext.rs`
-- `crates/uor-r4-harness/src/loopreport.rs`
-- `crates/uor-r4-harness/src/loopclose.rs`
-- `crates/uor-r4-harness/src/loopclaim.rs`
-- `crates/uor-r4-harness/tests/loop_review*.rs`
-- `crates/uor-r4-harness/tests/loop_next*.rs`
-- `crates/uor-r4-harness/tests/loop_report*.rs`
-- `crates/uor-r4-harness/tests/loop_close*.rs`
-- `crates/uor-r4-harness/tests/loop_claim*.rs`
-- `crates/uor-r4-harness/tests/loop_repair_orders*.rs`
-- `crates/uor-r4-harness/tests/loop_shared_files*.rs`
-- `crates/uor-r4-harness/tests/loop_prcheck.rs`
-- `crates/uor-r4-harness/src/loopbench.rs`
-- `crates/uor-r4-harness/tests/loop_bench*.rs`
-- `docs/harness/d59.json`
-- `docs/harness/owner-paths.json`
-- `docs/integration/DECISIONS.md`
-- `AGENTS.md`
-- `CHARTER.md`
-- `docs/rules/changes.md`
-- `docs/mechanisms/README.md`
-- `docs/mechanisms/lut-serving.md`
-- `docs/mechanisms/hopf-observation.md`
-- `docs/mechanisms/spin-weights.md`
-- `docs/mechanisms/ternary-xor.md`
-- `crates/uor-r4-harness/src/loopdrive.rs`
-- `crates/uor-r4-harness/tests/loop_drive*.rs`
-- `crates/uor-r4-harness/src/prep.rs`
-- `crates/uor-r4-harness/src/preprules.rs`
-- `xtask/src/docs_links.rs`
-- `xtask/src/archive_verify.rs`
-- `xtask/src/figures_charts.rs`
-- `docs/figures/**`
-- `docs/roadmap/issues.json`
-- `docs/harness/prep/read-binding-on-lawful-read-2026-10-25.md`
-- `docs/harness/labs.json`
-- `crates/uor-r4-harness/src/labs.rs`
-- `crates/uor-r4-harness/src/receipt.rs`
-- `crates/uor-r4-harness/tests/lab_registry_cli.rs`
-- `crates/uor-r4-harness/src/onboard.rs`
-- `crates/uor-r4-harness/src/loopguard.rs`
-- `crates/uor-r4-harness/tests/loop_guard.rs`
-- `archive/history/branch-archive/codex-d63-finite-probe-scope-20261026.*`
+- `CHARTER.md` (§4 item 8)
+- `docs/integration/DECISIONS.md` (the D82 row)
+- `docs/rules/changes.md` (the dated entry)
+- `PLAN.md`: the owner direction's row, and "The path to M1"'s bar paragraph
+- `docs/roadmap/items/m1-heldout-phrasing-transfer.md` (new), and its rendered views by `cargo xtask roadmap render`
+- `docs/loop/tasks/infra-loop-harness/claude-209/**`
 
 ## Done when
 
-To fill in.
+1. **§4 item 8** carries D82's added bar.
+2. **`DECISIONS.md` has the D82 row,** with the owner's words verbatim.
+3. **`docs/rules/changes.md` has a dated entry,** with the owner's words.
+4. **`PLAN.md`:**
+   - the owner direction's row, status `done` once this merges (the bar is recorded; it is measured by the item below);
+   - the M1 bar paragraph names the added bar.
+5. **A roadmap item, `m1-heldout-phrasing-transfer`,** for measuring the bar on M1's saved model:
+   - the panel: `heldout-panel` at a new seed, from M-world v2's held-out phrasings;
+   - the panel's census, counted against that model's own TRAIN split;
+   - the unigram and T2 tables, and bar (e)'s paired band.
 
-## Stop and ask if
+   The item passes `cargo xtask roadmap check`, and the views are rendered.
+6. **A REPORT,** and a fresh review of the diff.
 
-To fill in.
+## Stop and decide if
+
+- The charter or decision text would say more than Casey's words. Then quote his words and keep the rule to them.
