@@ -16,7 +16,7 @@ This sheet fixes, before any training run, how the model the project ships is sc
   - neither trunk puts a rare value from the prompt into its reply.
 - **What this sheet is for.** The recipe, add-on and transport decisions below are therefore made on rows no table names, on DEV and on a panel no decision has touched, against recall controls. The decode rule and the verdict also read free generation, and "memorized" reads the keyed rows.
 
-## The arms
+## Base artifact: the arms
 
 **The base recipe is claude-194's (r):** `train-in-space --objective cell --hamming-read 4 --retain-rates 1 --decay-mult 1 --batch 16 --steps 16384 --eval-every 2048 --lr 0.001 --lr-end 0 --turn-memory 8 --turn-memory-reply 1 --seed S`, at width 256 on the pinned TRAIN, with the fixed-order backward (claude-179). Each trained arm changes one thing:
 
@@ -45,7 +45,7 @@ This sheet fixes, before any training run, how the model the project ships is sc
 
   It is the strongest lawful recall control (CHARTER §3.10, §4.4).
 
-## The strata (teacher-forced, nearest top-1)
+## Data split: the strata (teacher-forced, nearest top-1)
 
 | Stratum | Rows | Count | Judged |
 |---|---|---|---|
@@ -59,7 +59,7 @@ This sheet fixes, before any training run, how the model the project ships is sc
 - **P-dev has touched no decision.** claude-204 built it, and no unit has scored a model on it. This protocol opens it once, for the run it registers. Any later decision, such as a combination of add-ons, needs a new panel: `heldout-panel` at a new seed, with its own census.
 - **Fresh V2 is never a stratum.** It is reported per arm, descriptive only.
 
-## The band and the cell
+## Bar: the band and the cell
 
 For arm X against arm or control Y, on one stratum, at each seed `s` in {1, 2, 3}:
 - **The counts.** `b(s)` is the rows only X gets, `c(s)` the rows only Y gets, and `d(s) = b(s) − c(s)`.
@@ -69,6 +69,10 @@ For arm X against arm or control Y, on one stratum, at each seed `s` in {1, 2, 3
   - X is **behind** if `d(s) < −band(s)` at all three seeds;
   - otherwise the cell is **inside**.
 - **What "inside" means.** It means the comparison is underpowered at this scale. **It is never read as a negative, nor as "no difference"** (L-007). This is claude-205's rule (`seed_cell`, `overturn_verdict`), with the spread over three seeds.
+
+## Minimum test power
+
+The band's floor, `⌈2·√(b+c)⌉`, is two paired standard errors of the discordant rows. With the spread over three seeds it is the band, and a cell is read only beyond it. A cell inside it is underpowered, never a negative. (This block names the sheet's existing rule for the prep-sheet shape check, claude-211. No rule changes.)
 
 ## The decisions, fixed in advance, in this order
 
@@ -145,7 +149,7 @@ For arm X against arm or control Y, on one stratum, at each seed `s` in {1, 2, 3
   These run once the serving units have merged: `integer-hamming-read` step 5, `turn-memory-integer` units 2–3, and the nearest readout. Until then, "end to end" is not claimed.
 - **Lead with tokens per second** in every REPORT that has one (done-when 4).
 
-## The instruments the run needs
+## Steps: the instruments the run needs
 
 Each exists, with its check passing, before the run's pre-run review.
 
