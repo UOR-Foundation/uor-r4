@@ -2086,9 +2086,16 @@ fn greedy_reply(
 pub enum DecodeRule {
     /// The whole table's nearest token, as [`greedy_reply`] decodes.
     Greedy,
-    /// The Flock rank rule (protocol I-E): the [`FLOCK_DECODE_K`] nearest table tokens, ranked,
-    /// and a rank drawn with the harmonic weights of `stack/flock.rs` ([`flock_rank_draw`]).
-    FlockRank,
+    /// The Flock rank rule (protocol I-E): the `k` nearest table tokens (1 to
+    /// [`FLOCK_DECODE_K`]), ranked, and a rank drawn with the harmonic weights of
+    /// `stack/flock.rs` ([`flock_rank_draw`]). The served rule is [`DecodeRule::FLOCK`]; `k = 1`
+    /// is I-E's check that it decodes as greedy.
+    FlockRank { k: usize },
+}
+
+impl DecodeRule {
+    /// The served Flock rank rule, over [`FLOCK_DECODE_K`] candidates.
+    pub const FLOCK: Self = Self::FlockRank { k: FLOCK_DECODE_K };
 }
 
 /// The Flock rank rule's candidates: the Hamming read's kept count, and one of the Flock
@@ -2172,10 +2179,11 @@ fn decode_reply(
     sample: usize,
     eos: Option<u32>,
 ) -> Result<DecodedReply> {
-    if rule == DecodeRule::FlockRank && !objective.decodes_nearest() {
+    let flock = matches!(rule, DecodeRule::FlockRank { .. });
+    if flock && !objective.decodes_nearest() {
         return Err(invalid("the Flock rank rule decodes the nearest table tokens only"));
     }
-    if rule == DecodeRule::FlockRank && reply_tokens > FLOCK_MAX_REPLY {
+    if flock && reply_tokens > FLOCK_MAX_REPLY {
         return Err(invalid(format!(
             "the Flock rank rule draws for replies of at most {FLOCK_MAX_REPLY} tokens"
         )));
@@ -2220,9 +2228,9 @@ fn decode_reply(
                         .to_vec1::<u32>()?
                         .last()
                         .ok_or_else(|| invalid("the readout returned no token"))?,
-                    DecodeRule::FlockRank => {
+                    DecodeRule::FlockRank { k } => {
                         // The K nearest on the GPU; their order, ties to the smaller id, here.
-                        let k = FLOCK_DECODE_K.min(scores.dim(1)?);
+                        let k = k.clamp(1, FLOCK_DECODE_K).min(scores.dim(1)?);
                         let top = scores
                             .arg_sort_last_dim(false)?
                             .narrow(1, 0, k)?
@@ -2250,7 +2258,7 @@ fn decode_reply(
             reply.push(token);
             // The Flock rank rule stops at its reply's end of turn (the protocol); greedy keeps
             // decoding to BOS or its length, as it always has.
-            if rule == DecodeRule::FlockRank && Some(token) == eos {
+            if flock && Some(token) == eos {
                 break;
             }
         }
@@ -2956,7 +2964,7 @@ pub fn score_rows(
         }
         // Greedy with the memory on and off; the Flock rank rule with it on only, as served.
         let rules: &[DecodeRule] = if on {
-            &[DecodeRule::Greedy, DecodeRule::FlockRank]
+            &[DecodeRule::Greedy, DecodeRule::FLOCK]
         } else {
             &[DecodeRule::Greedy]
         };
@@ -3000,7 +3008,9 @@ pub fn score_rows(
                 let file = match (split.name.as_str(), rule) {
                     ("dev", DecodeRule::Greedy) => format!("samples-{label}.json"),
                     (name, DecodeRule::Greedy) => format!("samples-{name}-greedy-{label}.json"),
-                    (name, DecodeRule::FlockRank) => format!("samples-{name}-flock-{label}.json"),
+                    (name, DecodeRule::FlockRank { .. }) => {
+                        format!("samples-{name}-flock-{label}.json")
+                    }
                 };
                 write_new(&out.join(&file), &serde_json::to_vec(&replies)?)?;
                 written.push(ScoredFile {
@@ -6206,6 +6216,45 @@ mod tests {
             longest_suffix_predictions(&crossed, &[&[8, 0, 9]], 8),
             vec![2]
         );
+    }
+
+    /// claude-211 (protocol I-E, its GPU half): on a model, the Flock rank rule at K = 1
+    /// decodes exactly as greedy, through the same top-K sort and gather the served rule runs;
+    /// and the served K = 16 leaves greedy's path, so its draws do run.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_flock_rank_rule_at_k1_decodes_as_greedy_on_a_model() {
+        let device = Device::new_cuda(0).unwrap();
+        let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
+        let (mut decoded, mut left) = (0, false);
+        for sample in 0..4usize {
+            let shift = sample as u32 * 101;
+            let prompt: Vec<u32> = (1..=24u32).map(|i| (i * 37 + shift) % 4096).collect();
+            let decode = |rule| {
+                decode_reply(
+                    &model,
+                    PointObjective::Cell,
+                    &prompt,
+                    16,
+                    1,
+                    rule,
+                    sample,
+                    None,
+                )
+                .unwrap()
+                .tokens
+            };
+            let greedy = decode(DecodeRule::Greedy);
+            assert_eq!(
+                decode(DecodeRule::FlockRank { k: 1 }),
+                greedy,
+                "sample {sample}"
+            );
+            left |= decode(DecodeRule::FLOCK) != greedy;
+            decoded += greedy.len();
+        }
+        assert!(decoded > 0, "every reply was empty, so the check held vacuously");
+        assert!(left, "K = 16 never left greedy's path: its draws did not run");
     }
 
     /// claude-208: candidates rank by the higher score, ties to the smaller id.
