@@ -521,6 +521,11 @@ pub mod cuda_runner {
     use std::path::Path;
     use std::time::Instant;
 
+    /// A named qualification control.
+    type QualificationRunner = (&'static str, fn() -> Result<Value>);
+    /// Expected DEV rows and their target tokens.
+    type DevExpectedRows = (Vec<(u64, u32, bool)>, Vec<u32>);
+
     fn ident(token: u32, occurrence: u64) -> Identity {
         Identity {
             token,
@@ -622,7 +627,7 @@ pub mod cuda_runner {
                 queries_flat.extend_from_slice(&row_insp.query);
                 let q = &row_insp.query;
                 let mut host_dists = [0u64; CELLS];
-                for c in 0..CELLS {
+                for (c, host_dist) in host_dists.iter_mut().enumerate() {
                     let host_env = cell_envelope_l1(q, &placed.table, &placed.cells, spec, c)?;
                     let host_two_scale =
                         full_vector_cell_l1(q, &placed.table, &placed.cells, spec, c)?;
@@ -644,7 +649,7 @@ pub mod cuda_runner {
                         row_insp.cell_dist[c] == expected_dist,
                         "GPU wider_cell_distance differs from host oracle",
                     )?;
-                    host_dists[c] = expected_dist;
+                    *host_dist = expected_dist;
                 }
                 let host_adm: Vec<u32> = admit_cells_by_distances(&host_dists, 8)
                     .into_iter()
@@ -919,7 +924,7 @@ pub mod cuda_runner {
         let mut controls = Vec::new();
         let mut failed = false;
 
-        let runners: [(&str, fn() -> Result<Value>); 4] = [
+        let runners: [QualificationRunner; 4] = [
             (QUALIFICATION_NAMES[0], || {
                 verify_host_gpu_parity_for_blocks(6)
             }),
@@ -991,7 +996,7 @@ pub mod cuda_runner {
         Ok(payload)
     }
 
-    fn dev_expected_rows(config: &DriverConfig) -> Result<(Vec<(u64, u32, bool)>, Vec<u32>)> {
+    fn dev_expected_rows(config: &DriverConfig) -> Result<DevExpectedRows> {
         let source = PreparedCorpus::load(&config.dev, config.spec.vocabulary, &config.bos)?;
         let mut expected = Vec::with_capacity(source.eligible_len());
         let mut target_tokens = Vec::with_capacity(source.eligible_len());

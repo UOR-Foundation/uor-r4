@@ -900,7 +900,7 @@ pub fn compare_codebooks(
 }
 
 /// Inspect PTX text for zero floating-point / tensor-core instructions and exact 11-entry inventory.
-#[cfg_attr(not(feature = "cuda"), allow(dead_code))]
+#[allow(dead_code)]
 pub fn verify_zero_float_ptx(ptx: &str) -> Result<usize> {
     const ENTRIES: [&str; 11] = [
         "discrete_init",

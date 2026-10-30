@@ -63,6 +63,28 @@ pub const STAGE2_G_RESTR_FZ: u32 = 3_084;
 pub const STAGE2_G_RESTR_REL: u32 = 2_364;
 pub const STAGE2_UNIGRAM_BAR: u32 = 1_226;
 
+/// Per-token root indices and per-token coordinates decoded from a codebook table.
+pub type DecodedCodebook = (Vec<[u8; TRUNK_BLOCKS]>, Vec<[i32; READ_WIDTH]>);
+
+/// `(chosen_tok, pointer_succ, q_trunk, frames, top8, admitted_cells)` for one joint-pointer row.
+pub type JointPointerRowEval = (
+    u16,
+    Option<u16>,
+    [i32; READ_WIDTH],
+    [u8; TRUNK_BLOCKS],
+    [u32; 8],
+    [u16; 16],
+);
+
+/// `(chosen_tok, q_trunk, frames, top8, admitted_cells)` for one joint-hierarchy row.
+pub type JointHierarchyRowEval = (
+    u16,
+    [i32; READ_WIDTH],
+    [u8; TRUNK_BLOCKS],
+    [u32; 8],
+    [u16; 16],
+);
+
 fn invalid(msg: impl Into<String>) -> Error {
     Error::Invalid(msg.into())
 }
@@ -130,9 +152,7 @@ pub fn build_trunk_norm_frames(blocks: u32, seed_offset: usize) -> Result<NormFr
 
 /// Decode a `4096 * 32` integer codebook `table` into per-token 4-block root indices `[[u8; 4]; 4096]`
 /// and per-token 32-int coordinates `[[i32; 32]; 4096]`.
-pub fn decode_codebook_table(
-    table: &[i32],
-) -> Result<(Vec<[u8; TRUNK_BLOCKS]>, Vec<[i32; READ_WIDTH]>)> {
+pub fn decode_codebook_table(table: &[i32]) -> Result<DecodedCodebook> {
     if table.len() != VOCABULARY * READ_WIDTH {
         return Err(invalid("codebook table length must equal 4096 * 32"));
     }
@@ -270,6 +290,8 @@ pub fn verify_recurrence_holonomy_exactness(
     let last_pos = len - 1;
     let prev_pos = last_pos.saturating_sub(1);
     let mid_pos = last_pos / 2;
+    // `b` is the block index into each token's roots and into the step table.
+    #[allow(clippy::needless_range_loop)]
     for b in 0..TRUNK_BLOCKS {
         let mut roots = Vec::with_capacity(len);
         for &tok in window_tokens {
@@ -553,7 +575,7 @@ impl SparseCountTable {
 
     /// Reconstruct a `SparseCountTable` from a flat `[key, token, count, ...]` `u32` slice.
     pub fn from_triples(words: &[u32]) -> Result<Self> {
-        if words.len() % 3 != 0 {
+        if !words.len().is_multiple_of(3) {
             return Err(invalid(
                 "SparseCountTable triples length must be divisible by 3",
             ));
@@ -771,6 +793,7 @@ impl TrunkTables {
 
     /// `Level 3` (`hamilton_full_trunk`): choose target token in `V_{A_W(x)}` from
     /// `64 * C_query(q_tok, y) + 32 * C_query,read((q_tok, c_read), y) + 16 * C_query,rec((q_tok, c_rec), y) + 4 * C_read(c_read, y) + C_rec(c_rec, y)`.
+    #[allow(clippy::too_many_arguments)]
     pub fn select_level3_full_trunk(
         &self,
         query_token: u16,
@@ -878,6 +901,7 @@ impl TrunkTables {
     }
 
     /// `Level 3` with joint-first hierarchy on pre-rotation admitted cells `V_{A_W(q_read)}`.
+    #[allow(clippy::too_many_arguments)]
     pub fn select_level3_joint_hierarchy_admitted(
         &self,
         query_token: u16,
@@ -924,6 +948,7 @@ impl TrunkTables {
 
     /// Pure bit-shift joint-pointer hierarchy score (`(c_qr << 6) + (c_qc << 5) + (c_rr << 3) + (c_r << 1) + c_q + (ptr_match << 8)`):
     /// zero general integer multiplies, zero divides, zero floats, zero squashing, zero matmul (`D11 R1-R5`).
+    #[allow(clippy::too_many_arguments)]
     pub fn level3_joint_pointer_score(
         &self,
         query_token: u16,
@@ -1072,6 +1097,7 @@ pub fn orbit_root_causal_successor(
 /// Evaluate one row through `orbit_root_causal_successor` + `select_level3_joint_pointer_global` +
 /// `DiscreteHamiltonGateV1` rotation `q_read -> q_trunk` + post-rotation full two-stage `OuterL1V1`
 /// writer (`writer_score_full_outer_l1(&q_trunk)`).
+#[allow(clippy::too_many_arguments)]
 pub fn evaluate_joint_pointer_full_writer(
     q_read: &[i32; READ_WIDTH],
     window_tokens: &[u16],
@@ -1083,14 +1109,7 @@ pub fn evaluate_joint_pointer_full_writer(
     codebook_roots: &[[u8; TRUNK_BLOCKS]],
     codebook_coords: &[[i32; READ_WIDTH]],
     cell_tokens: &[Vec<u16>; CELL_COUNT],
-) -> Result<(
-    u16,
-    Option<u16>,
-    [i32; READ_WIDTH],
-    [u8; TRUNK_BLOCKS],
-    [u32; 8],
-    [u16; 16],
-)> {
+) -> Result<JointPointerRowEval> {
     let query_token = *window_tokens
         .last()
         .ok_or_else(|| invalid("empty window_tokens in evaluate_joint_pointer_full_writer"))?;
@@ -1135,6 +1154,7 @@ pub fn evaluate_joint_pointer_full_writer(
 /// rotation `q_read -> q_trunk` + post-rotation full two-stage `OuterL1V1` writer
 /// (`writer_score_full_outer_l1(&q_trunk)`), so cell admission `A_W(q_trunk)` opens around the
 /// rotated trunk vector rather than pre-rotation `q_read`.
+#[allow(clippy::too_many_arguments)]
 pub fn evaluate_joint_hierarchy_full_writer(
     q_read: &[i32; READ_WIDTH],
     query_token: u16,
@@ -1146,13 +1166,7 @@ pub fn evaluate_joint_hierarchy_full_writer(
     codebook_roots: &[[u8; TRUNK_BLOCKS]],
     codebook_coords: &[[i32; READ_WIDTH]],
     cell_tokens: &[Vec<u16>; CELL_COUNT],
-) -> Result<(
-    u16,
-    [i32; READ_WIDTH],
-    [u8; TRUNK_BLOCKS],
-    [u32; 8],
-    [u16; 16],
-)> {
+) -> Result<JointHierarchyRowEval> {
     let chosen_tok = tables.select_level3_joint_hierarchy_global(
         query_token,
         read_code,
@@ -1948,7 +1962,7 @@ pub fn import_trunk_d11(
             .len
             .checked_mul(4)
             .ok_or_else(|| invalid("trunk section byte length overflow"))?;
-        if (entry.span.offset as usize) % TRUNK_LUT_ALIGN != 0
+        if !(entry.span.offset as usize).is_multiple_of(TRUNK_LUT_ALIGN)
             || entry.span.bytes != expected_bytes as u64
         {
             return Err(invalid(format!(
@@ -2454,6 +2468,7 @@ pub mod gpu {
 
     /// Capture an evaluation panel (`ft/dev` or `fresh_v2`, `14,287` rows) on the GPU (`Device::forward` + `Device::evaluate`)
     /// and compute its causal quaternion recurrence states (`ActiveHolonomyV1`, `ShuffledOrderControlV1`, `UnitSnapControlV1`).
+    #[allow(clippy::too_many_arguments)]
     pub fn capture_eval_panel(
         corpus: &PreparedCorpus,
         model: &Device,
@@ -2515,14 +2530,15 @@ pub mod gpu {
                 let slot_slice = &forward.admitted_cells[r * CELL_SLOTS..(r + 1) * CELL_SLOTS];
                 let (slots, _) = w2_capture::cell_slots(slot_slice).map_err(invalid)?;
 
-                if verify_holonomy && rows.len() < 256 {
-                    if !verify_recurrence_holonomy_exactness(
+                if verify_holonomy
+                    && rows.len() < 256
+                    && !verify_recurrence_holonomy_exactness(
                         &win_tokens,
                         codebook_roots,
                         step_table,
-                    )? {
-                        holonomy_all_ok = false;
-                    }
+                    )?
+                {
+                    holonomy_all_ok = false;
                 }
                 let row_seed = (rows.len() as u64).wrapping_add(1);
                 let (_, rec_code) = compute_recurrence_state(
@@ -2940,12 +2956,14 @@ mod tests {
     use super::*;
     use crate::w2_capacity::root_vector;
 
-    fn synthetic_codebook() -> (
+    type SyntheticCodebook = (
         Vec<i32>,
         Vec<[u8; TRUNK_BLOCKS]>,
         Vec<[i32; READ_WIDTH]>,
         [Vec<u16>; CELL_COUNT],
-    ) {
+    );
+
+    fn synthetic_codebook() -> SyntheticCodebook {
         let mut table = Vec::with_capacity(VOCABULARY * READ_WIDTH);
         for tok in 0..VOCABULARY {
             let r0 = ((tok >> 8) & 15) as u8;

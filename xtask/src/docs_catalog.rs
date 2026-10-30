@@ -117,7 +117,7 @@ pub fn relative_link(from_dir: &str, target: &str) -> String {
 }
 
 /// Percent-encode the characters that would break a markdown link target.
-fn encode_target(t: &str) -> String {
+pub fn encode_target(t: &str) -> String {
     t.replace(' ', "%20")
         .replace('(', "%28")
         .replace(')', "%29")
@@ -143,6 +143,26 @@ pub fn sort_records(recs: &mut [&Record]) {
 
 fn page_name(line: &str) -> String {
     line.replace('/', "_")
+}
+
+/// Research lines that share a page name (`a/b` and `a_b` both become
+/// `a_b.md`), so one page would overwrite the other.
+pub fn page_collisions(recs: &[Record]) -> Vec<String> {
+    let mut by_page: BTreeMap<String, BTreeSet<&str>> = BTreeMap::new();
+    for r in recs {
+        by_page
+            .entry(page_name(&r.line))
+            .or_default()
+            .insert(r.line.as_str());
+    }
+    by_page
+        .into_iter()
+        .filter(|(_, lines)| lines.len() > 1)
+        .map(|(page, lines)| {
+            let lines: Vec<&str> = lines.into_iter().collect();
+            format!("archive/catalog/{page}.md: lines {}", lines.join(", "))
+        })
+        .collect()
 }
 
 fn line_page(line: &str, recs: &[&Record], exists: &dyn Fn(&str) -> bool) -> String {
@@ -271,6 +291,13 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let text =
         std::fs::read_to_string(root.join(&input)).map_err(|e| format!("read {input}: {e}"))?;
     let recs = parse_records(&text)?;
+    let collisions = page_collisions(&recs);
+    if !collisions.is_empty() {
+        return Err(format!(
+            "docs-catalog: research lines share a page:\n  {}",
+            collisions.join("\n  ")
+        ));
+    }
     let uni = git_universe(root)?;
     // Generated outputs are not tracked yet on a first run; the on-disk
     // catalog input itself never needs to resolve, so tracked state suffices.
@@ -411,6 +438,20 @@ mod tests {
         let with = line_page("L", &[&r], &ex);
         assert!(with.contains("| PRs |"));
         assert!(with.contains("[#12](https://github.com/UOR-Foundation/uor-r4/pull/12)"));
+    }
+
+    #[test]
+    fn colliding_page_names_are_detected() {
+        let mut a = rec("docs/a.md", None);
+        a.line = "a/b".into();
+        let mut b = rec("docs/b.md", None);
+        b.line = "a_b".into();
+        let c = rec("docs/c.md", None);
+        assert!(page_collisions(&[a.clone(), c.clone()]).is_empty());
+        assert_eq!(
+            page_collisions(&[a, b, c]),
+            ["archive/catalog/a_b.md: lines a/b, a_b"]
+        );
     }
 
     #[test]
