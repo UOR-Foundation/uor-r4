@@ -25,7 +25,7 @@ This is a documentation and evidence-propagation unit. It ran no model training,
 - Regenerated the architecture, milestone, training, serving, geometry, and chart figures; corrected hand-maintained roadmap, pipeline, and LUT figures, captions, alt text, titles, and descriptions. M1 and FBS throughput stay distinct, and D80/D81 integer multiply/divide wording is current.
 - Corrected all three Studio status areas to 1/8, native M1 decode, stack-bound ByteLevel BPE, self-hosted assets, and the synthetic stand-in with no bundled qualified model. Strengthened the existing checks against stale status.
 - Preserved `archive/**`, `docs/labs/**`, dated notebook rows, `docs/integration/current-state.md`, Claude's research files, and antigravity-113's two mechanism pages. `STATE.md`, `HANDOFF.md`, and `docs/roadmap/README.md` remain for the designated render workflow, not hand edits.
-- Diff size: 82 files, 2,184 insertions and 1,582 deletions, including this REPORT and the complete non-archive README inventory.
+- Diff size: 82 files, 2,190 insertions and 1,583 deletions, including this REPORT and the complete non-archive README inventory.
 
 ## Measurements
 
@@ -54,17 +54,17 @@ This is a documentation and evidence-propagation unit. It ran no model training,
 - Visual inspection covered every changed figure at wide and 390 px layouts, including the dedicated narrow architecture. No clipping or M1/FBS measurement conflation was found; dense wide diagrams retain updated text descriptions.
 - `uor-harness loop gates --full`: all 11 gates green.
 - `uor-harness check`: completed with the pre-existing error/warnings detailed above.
-- `uor-harness loop report --check` and `uor-harness loop pr-check --local`: to be run on the committed REPORT head before the exact-head review; no result is asserted here yet.
+- `uor-harness loop report --check`: **PASS**. `uor-harness loop pr-check --local`: **verdict PASS**. The D76 scope advisory remains by design because `rule_scope` reads the item at the merge base; the new claim-file scope entry takes effect after merge.
 
 ## Skills used
 
-`using-superpowers`, `uor-research-architect`, `executing-plans`, `using-git-worktrees`, `test-driven-development`, `verification-before-completion`, `systematic-debugging`, and `modern-web-guidance`. The accessibility guide informed the complex-figure descriptions; no icon guidance was applied.
+`using-superpowers`, `uor-research-architect`, `executing-plans`, `using-git-worktrees`, `test-driven-development`, `verification-before-completion`, `systematic-debugging`, `requesting-code-review`, and `modern-web-guidance`. The accessibility guide informed the complex-figure descriptions; no icon guidance was applied.
 
 ## Still open
 
 - Useful conversation is not established. The next research step is a trained, served sign key and correct free generation on another fresh panel; the larger point-key gain remains an explicit design tradeoff.
 - M2 and M3 are in progress; M4–M8 are not complete. The Studio and desktop shell still use a synthetic stand-in without a bundled qualified product model.
-- Final ORDER/REPORT/PR-local checks and the independent exact-head review follow this commit. Roadmap sync, generated STATE/HANDOFF/roadmap views, issue verification, and the automatic docs-site preview follow the content merge through their designated workflows.
+- The independent exact-head review follows this commit. Roadmap sync, generated STATE/HANDOFF/roadmap views, issue verification, and the automatic docs-site preview follow the content merge through their designated workflows.
 - The pre-existing formatting, harness, preprocessor, and WASM warnings above remain outside this documentation unit's repair scope.
 
 ## Plain summary
