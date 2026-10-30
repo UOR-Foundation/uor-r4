@@ -1,5 +1,7 @@
 # Studio (`web/studio`) — the browser client
 
+**Live:** https://uor-foundation.github.io/uor-r4/studio/ — published 30 October 2026 from gh-pages `d8e67c66` (wasm sha256 `d971fe7d…`, demo sha256 `d60f88d6…`; see the item's Resolution).
+
 The Studio is the project's in-browser interface: editor, chat panel and model manager, with the
 integer serving engine (`crates/uor-r4-integer`, `--features serving-wasm`) running in a Web
 Worker. It is served from the project's documentation site at **`/studio/`**
