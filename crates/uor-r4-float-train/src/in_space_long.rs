@@ -2240,6 +2240,14 @@ fn rank_order(mut candidates: Vec<(u32, f32)>) -> Vec<(u32, f32)> {
     candidates
 }
 
+/// Where a prompt of `prompt_len` tokens ends in a decode window that starts at sequence
+/// position `start` (claude-215): window positions below it are the prompt's. The window holds
+/// the last [`SHEET_CONTEXT`] tokens, so once the reply has pushed `start` past the prompt's
+/// start the cut moves down with it, and once the prompt has scrolled out it is 0.
+fn prompt_cut(prompt_len: usize, start: usize) -> usize {
+    prompt_len.saturating_sub(start)
+}
+
 /// One decoded reply ([`decode_reply`]).
 struct DecodedReply {
     tokens: Vec<u32>,
@@ -2305,10 +2313,10 @@ fn decode_reply(
                         )]));
                     }
                 }
-                // The prompt ends at window position `prompt.len() − start`; under a scope, the
-                // limited heads choose only before it, so they never read the reply's own tokens.
+                // Under a scope, the limited heads choose only before the prompt's end in the
+                // window, so they never read the reply's own tokens.
                 if scope != ReadScope::Full {
-                    set_read_cut(Some((scope, prompt.len().saturating_sub(start))));
+                    set_read_cut(Some((scope, prompt_cut(prompt.len(), start))));
                 }
                 let hidden = crate::flock_read::points(model, window, 1, window.len());
                 set_read_cut(None);
@@ -4588,6 +4596,10 @@ pub struct CellReading {
     /// decision 4's band `⌈2·√(n·p(1−p))⌉` at greedy's count; none for greedy, or uncounted.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fewer_loops: Option<bool>,
+    /// The replies' mean length in tokens, each cut after its first end of turn, when loops are
+    /// counted: a rule that ends replies sooner has fewer 4-grams to repeat.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mean_length: Option<f64>,
 }
 
 impl CellReading {
@@ -4805,6 +4817,10 @@ fn rule_readings(
                     )),
                 };
                 let loops = count_loops.then(|| looping_replies(&replies, eos));
+                let mean_length = count_loops.then(|| {
+                    let total: usize = replies.iter().map(|r| cut_at_eos(r, eos).len()).sum();
+                    total as f64 / replies.len().max(1) as f64
+                });
                 let fewer_loops = match (&greedy, loops) {
                     (Some(_), Some(n)) => Some(fewer_loops(n, greedy_loops, replies.len())),
                     _ => None,
@@ -4823,6 +4839,7 @@ fn rule_readings(
                     mean_admitted,
                     loops,
                     fewer_loops,
+                    mean_length,
                 });
             }
         }
@@ -4841,21 +4858,44 @@ pub struct ReadGrade {
     pub copy_outcome: &'static str,
 }
 
-/// The sheet's decision for one read scope's three panel seeds against greedy: `cures` when, at
-/// all three, it has fewer looping replies than greedy beyond the band, holds decision 4, and is
-/// close; `reduces` when it has fewer loops beyond the band and holds decision 4 at all three;
-/// else `no gain`.
-fn read_outcome(scope: &[&CellReading]) -> &'static str {
+/// The fewest of 256 panel replies greedy must loop in, at every seed, for the read's outcome
+/// to be measurable (claude-215's FIT): below it no arm can show fewer loops beyond the band.
+pub const READ_LOOP_FLOOR: usize = 40;
+
+/// Whether a scope's replies keep greedy's content: its `|v − v_ref|` is no wider than greedy's
+/// by more than the verdict's own tolerance (claude-215's FIT).
+fn content_kept(scope: &CellReading, greedy: &CellReading) -> bool {
+    match (scope.gap(), greedy.gap(), scope.reading.tol) {
+        (Some(s), Some(g), Some(t)) => s <= g + t,
+        _ => false,
+    }
+}
+
+/// The sheet's decision for one read scope's three panel seeds against greedy's three
+/// (`greedy`, seed for seed), in this order:
+/// - `underpowered` when greedy loops in fewer than [`READ_LOOP_FLOOR`] replies at any seed;
+/// - `cures` when, at all three, it has fewer looping replies than greedy beyond the band,
+///   holds decision 4, and is close;
+/// - `reduces` when it has fewer loops and holds at all three, keeping greedy's content;
+/// - `reduces, content lost` when it has fewer loops and holds at all three, but not that;
+/// - else `no gain`.
+fn read_outcome(scope: &[&CellReading], greedy: &[&CellReading]) -> &'static str {
+    if greedy.len() != 3 || greedy.iter().any(|g| g.loops.is_none_or(|n| n < READ_LOOP_FLOOR)) {
+        return "underpowered";
+    }
     let fewer = scope.len() == 3
         && scope
             .iter()
             .all(|x| x.fewer_loops == Some(true) && x.holds == Some(true));
-    if fewer && scope.iter().all(|x| x.close) {
+    if !fewer {
+        return "no gain";
+    }
+    if scope.iter().all(|x| x.close) {
         "cures"
-    } else if fewer {
+    } else if scope.iter().zip(greedy).all(|(s, g)| content_kept(s, g)) {
         "reduces"
     } else {
-        "no gain"
+        "reduces, content lost"
     }
 }
 
@@ -4874,9 +4914,10 @@ pub fn read_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<ReadGrad
     let of = |rule: &str| -> Vec<&CellReading> {
         readings.iter().filter(|r| r.split == panel && r.rule == rule).collect()
     };
+    let greedy = of("greedy");
     let (outcome, copy_outcome) = (
-        read_outcome(&of("greedy-read-all")),
-        read_outcome(&of("greedy-read-copy")),
+        read_outcome(&of("greedy-read-all"), &greedy),
+        read_outcome(&of("greedy-read-copy"), &greedy),
     );
     Ok(ReadGrade {
         panel: panel.to_owned(),
@@ -7609,6 +7650,7 @@ mod tests {
                 mean_admitted: Some(1.0),
                 loops: None,
                 fewer_loops: None,
+                mean_length: None,
             }
         };
         let (good, salad, loops, off) = (
@@ -7686,11 +7728,12 @@ mod tests {
         assert!(fewer_loops(49, 64, 256));
         assert!(!fewer_loops(50, 64, 256), "inside the band");
         assert!(!fewer_loops(70, 64, 256));
-        let reading = |fewer: bool, holds: bool, close: bool| {
-            let made = Generation {
+        // References: 120 of 200 complete replies verbatim, so v_ref = 0.6 and tol = 0.104.
+        let reading = |fewer: bool, holds: bool, close: bool, verbatim: usize, loops: usize| {
+            let made = |verbatim_train: usize| Generation {
                 replies: 256,
                 complete: 200,
-                verbatim_train: 100,
+                verbatim_train,
                 new_ngram_share: Vec::new(),
                 distinct_1: 0.0,
                 distinct_2: 0.0,
@@ -7700,28 +7743,54 @@ mod tests {
                 split: "p-r".to_owned(),
                 rule: "greedy-read-all".to_owned(),
                 seed: 1,
-                reading: VerdictSeed::new(1, &made, &made),
+                reading: VerdictSeed::new(1, &made(verbatim), &made(120)),
                 holds: Some(holds),
                 close,
                 mean_admitted: None,
-                loops: Some(10),
+                loops: Some(loops),
                 fewer_loops: Some(fewer),
+                mean_length: None,
             }
         };
-        let (cured, fewer, same, worse) = (
-            reading(true, true, true),
-            reading(true, true, false),
-            reading(false, true, true),
-            reading(true, false, true),
+        // Greedy loops in 60 of 256 with v = 0.5, a gap of 0.1.
+        let g = reading(false, false, false, 100, 60);
+        let greedy = [&g, &g, &g];
+        let (cured, kept, lost, same, worse) = (
+            reading(true, true, true, 120, 10),
+            reading(true, true, false, 100, 10), // gap 0.1: within greedy's 0.1 + tol
+            reading(true, true, false, 40, 10),  // v = 0.2, gap 0.4: past 0.1 + 0.104
+            reading(false, true, true, 120, 10),
+            reading(true, false, true, 120, 10),
         );
-        assert_eq!(read_outcome(&[&cured, &cured, &cured]), "cures");
-        assert_eq!(read_outcome(&[&cured, &fewer, &cured]), "reduces");
-        assert_eq!(read_outcome(&[&cured, &same, &cured]), "no gain", "one seed's loops not fewer");
-        assert_eq!(read_outcome(&[&cured, &worse, &cured]), "no gain", "decision 4 fails");
-        assert_eq!(read_outcome(&[&cured, &cured]), "no gain", "two seeds");
+        assert_eq!(read_outcome(&[&cured, &cured, &cured], &greedy), "cures");
+        assert_eq!(read_outcome(&[&cured, &kept, &cured], &greedy), "reduces");
+        assert_eq!(read_outcome(&[&cured, &lost, &cured], &greedy), "reduces, content lost");
+        assert_eq!(read_outcome(&[&cured, &same, &cured], &greedy), "no gain", "one seed's loops not fewer");
+        assert_eq!(read_outcome(&[&cured, &worse, &cured], &greedy), "no gain", "decision 4 fails");
+        assert_eq!(read_outcome(&[&cured, &cured], &greedy), "no gain", "two seeds");
+        // Greedy too quiet at one seed to show fewer loops: underpowered, whatever the scope did.
+        let quiet = reading(false, false, false, 100, READ_LOOP_FLOOR - 1);
+        assert_eq!(read_outcome(&[&cured, &cured, &cured], &[&g, &quiet, &g]), "underpowered");
+        let floor = reading(false, false, false, 100, READ_LOOP_FLOOR);
+        assert_eq!(read_outcome(&[&cured, &cured, &cured], &[&g, &floor, &g]), "cures");
         assert!(scopes_ok(&[ReadScope::Copy, ReadScope::All]));
         assert!(!scopes_ok(&[ReadScope::All, ReadScope::All]));
         assert!(!scopes_ok(&[ReadScope::Full]), "Full is greedy's own file");
+    }
+
+    /// claude-215: the cut is where the prompt ends in the window. Before the window slides it
+    /// is the prompt's length; once the reply pushes the window's start past the prompt's start
+    /// it moves down by as much; once the prompt has scrolled out it is 0.
+    #[test]
+    fn the_read_cut_is_where_the_prompt_ends_in_the_window() {
+        assert_eq!(prompt_cut(40, 0), 40, "a short prompt: the window starts at 0");
+        assert_eq!(prompt_cut(180, 10), 170, "slid by 10");
+        assert_eq!(prompt_cut(180, 180), 0, "the prompt has scrolled out");
+        assert_eq!(prompt_cut(180, 200), 0);
+        // The decode's window is the last SHEET_CONTEXT ids: with a 180-token prompt and 30 reply
+        // tokens, it starts at 18, so the prompt ends at window position 162.
+        let ids = 180 + 30;
+        assert_eq!(prompt_cut(180, ids - SHEET_CONTEXT), 162);
     }
 
     /// claude-215 (its GPU half): on a model with the Hamming reads set, a reply's first token is

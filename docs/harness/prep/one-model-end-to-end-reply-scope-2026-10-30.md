@@ -2,11 +2,15 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md). Order: [claude-215](../../loop/tasks/one-model-end-to-end/claude-215/ORDER.md). Scope decision: claude-214 (#3407 6518346519, decision review PASS).
 
-TEST FITNESS: PENDING (a fresh non-author FIT is run on this sheet before any pod).
+TEST FITNESS: PENDING. Round 1 (`ba6099583`) was NOT FIT, on two blocking findings, both answered here and in `read_outcome`:
+- **A quiet panel would read as a negative.** The sheet now has a pre-registered floor on greedy's p-r loop count: below it, the outcome is "underpowered".
+- **"Reduces" changed the decode without a content check.** It now needs the content kept, and otherwise reads "reduces, content lost", which unlocks no decode change.
+
+The notes are taken too: the arithmetic, the reported reply length, the cut's coordinate (now `prompt_cut`, unit-tested with a negative gate), the question's wording, and the copy arm's limits.
 
 ## The question
 
-Does holding the Hamming read to the prompt while a reply decodes end greedy's loops on prompts whose phrasing TRAIN does not hold, without losing the replies' content?
+Does holding the Hamming read (its copy heads, or all its heads) to the prompt while a reply decodes end greedy's loops on prompts whose phrasing TRAIN does not hold, without losing the replies' content? The turn memory's reply table, which is keyed by the reply's last id, is untouched in every arm.
 
 **Why this, now.**
 - **The loops are not ties.** claude-213 found that inside a loop the nearest token is confident: at margin 0.25, 95.9–99.0% of loop steps admit exactly one candidate. No draw rule can break such a loop.
@@ -96,16 +100,23 @@ Each reading is one arm's 256 replies on one split at one seed, against that spl
   - `|v − v_ref| ≤ tol`, where `v` is the verbatim TRAIN share and `tol = max(0.10, 3·√(v_ref(1−v_ref)/n_c))`;
   - a repeat rate at most the references' + 0.10.
 
-**p-r decides,** from the `all` arm at all three seeds (`read_outcome`):
+- **Content kept:** the arm's `|v − v_ref|` is no wider than greedy's on the same prompts by more than the arm's `tol` (`content_kept`).
+- **The power floor:** greedy loops in at least 40 of the 256 p-r replies, at every seed (`READ_LOOP_FLOOR`). Below that, no arm can show fewer loops beyond the band.
 
-| Outcome | Condition, at all three seeds | What it unlocks |
+**p-r decides,** from the `all` arm at all three seeds (`read_outcome`). The rows are tried in this order:
+
+| Outcome | Condition | What it unlocks |
 |---|---|---|
-| **cures** | fewer loops, holds, and close | The prompt-held read becomes the one model's decode. The next unit serves it in integers: the integer Hamming read with the same cut. |
-| **reduces** | fewer loops and holds, but not close | The read of the reply's own tokens is a cause of the loops, and the prompt-held read joins the decode. The content gap that remains is next. The first candidate is training with the reply read held to the prompt, so that training matches serving. |
-| **no gain** | otherwise | A negative for this cause, in this configuration only. The next candidates are the turn memory's reply table, or the trunk itself. |
+| **underpowered** | Greedy loops in fewer than 40 p-r replies at any seed. | Nothing is decided, and nothing is closed. It is an instrument outcome: the panel shows too few loops to measure a reduction. The next run needs a panel, or a reply length, where greedy loops. |
+| **cures** | At all three seeds: fewer loops, holds, and close. | The prompt-held read becomes the one model's decode. The next unit serves it in integers: the integer Hamming read with the same cut. |
+| **reduces** | At all three seeds: fewer loops, holds, and content kept. | Reading the reply's own tokens is a cause of the loops, and the prompt-held read joins the decode. The content gap that remains is next. The first candidate is training with the reply read held to the prompt, so that training matches serving. |
+| **reduces, content lost** | At all three seeds: fewer loops and holds, but content not kept at some seed. | No decode change and no causal claim: the arm may only have pushed the model off what it was trained on. It unlocks one follow-up only, training with the same cut, so that the trained model meets the cut. |
+| **no gain** | Otherwise. | A negative for this cause, in this configuration only. The next candidates are the turn memory's reply table, or the trunk itself. |
 
 **Reported beside it, deciding nothing:**
-- **The copy arm's outcome, by the same rule.** It attributes the effect: if copy matches all, the copy heads are the cause; if only all reduces, the type heads take part too.
+- **The copy arm's outcome, by the same rule.** If copy matches all, the copy heads alone can carry the effect. If only all reduces, either the type heads take part, or the larger cut simply perturbs the model more. With no type-only arm, the REPORT says no more than that.
+- **Each arm's mean reply length** to its end of turn, beside its loop count: a reply that ends sooner has fewer 4-grams to repeat.
+- **A paired loop count,** computed from the sealed samples for the REPORT: the replies that loop under greedy but not under the arm, and the reverse.
 - **The DEV readings.**
 - **The decode tok/s per arm.** It is measured with three seeds sharing the GPU, so it is a floor.
 - **A fixed reading** of the first 20 p-r replies of seed 1 under greedy, copy and all.
@@ -113,7 +124,11 @@ Each reading is one arm's 256 replies on one split at one seed, against that spl
 ## Minimum test power
 
 - **The sample:** 256 replies per arm, split and seed, the same prompts under every arm.
-- **The loop band:** greedy looped in 68–93 of 256 p-c replies (claude-213's samples, recounted by `read_grade` on stand-in files). At 68, the band is ⌈2·√(256·0.266·0.734)⌉ = 15. So "fewer loops" needs about 53 or fewer, a quarter fewer.
+- **The loop band:** greedy looped in 68–93 of 256 p-c replies (claude-213's samples, recounted by `read_grade` on stand-in files).
+  - At 68, the band is ⌈2·√(256·0.266·0.734)⌉ = 15, so "fewer loops" needs 52 or fewer.
+  - At 93, the band is 16, so it needs 76 or fewer.
+  - The band is an unpaired 2σ on greedy's count, which is conservative for a paired design.
+- **The floor:** p-r has never been decoded, so its greedy loop count is not known in advance. The 40-reply floor turns a quiet panel into "underpowered", never "no gain". At 40, the band is 12, so the arm needs 27 or fewer.
 - **The verbatim tolerance:** 0.10 at `v_ref` ≈ 0.6 and about 256 complete replies.
 - **The seeds:** every condition needs all three.
 
