@@ -1197,22 +1197,38 @@ fn opens_reply(mask: &[u8], position: usize) -> bool {
 }
 
 /// How well the prompt words a window shows could name its reply's first token: TRAIN's
-/// commonest opening for each key, scored on DEV's openings ([`opening_bound`]). A count over the
-/// corpus, not a model: it bounds what a read that finds those words could add to the openings.
+/// commonest opening for each key, scored on a split's openings ([`opening_bound`]): DEV, or a
+/// `--panel` (claude-218). A count over the corpus, not a model: it bounds what a read that finds
+/// those words could add to the openings.
 #[derive(Clone, Debug, Serialize)]
 pub struct OpeningBound {
-    /// `none`, `first-k` (the first `k` prompt tokens the window shows) or `last-k` (the `k`
-    /// tokens before the opening).
+    /// The scored split: `dev`, or the panel's name.
+    pub split: String,
+    /// The panel's token file sha256; DEV is pinned.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+    /// `none`, `first-k` (the first `k` prompt tokens the window shows), `last-k` (the `k`
+    /// tokens before the opening), `set` and `set-first-k` (those tokens' distinct ids in id
+    /// order, an order-free key, claude-218), or `reply-template`: the oracle U, keyed by the
+    /// reference reply itself with its values masked as the census masks them
+    /// ([`OPENING_TEMPLATE_K`]), the most any key that knew the question could name.
     pub key: String,
     pub train_rows: usize,
     pub train_keys: usize,
-    pub dev_rows: usize,
-    /// DEV openings whose key TRAIN never saw; TRAIN's commonest opening names them.
-    pub dev_unseen: usize,
-    pub dev_hits: usize,
+    pub rows: usize,
+    /// Openings whose key TRAIN never saw; TRAIN's commonest opening names them.
+    pub unseen: usize,
+    pub hits: usize,
+    /// The hits among the openings whose key TRAIN saw, where the key fires: its precision is
+    /// `fired_hits / (rows − unseen)`.
+    pub fired_hits: usize,
     /// TRAIN's most frequent keys, decoded, with their commonest opening and its share.
     pub top: Vec<OpeningKey>,
 }
+
+/// The census's value mask for [`OpeningBound`]'s `reply-template` key: TRAIN's 1,024 most
+/// frequent tokens are kept, the K the panel census reads its templates at.
+const OPENING_TEMPLATE_K: usize = 1024;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct OpeningKey {
@@ -1231,13 +1247,22 @@ fn openings(windows: &[CausalWindow], mask: &[u8]) -> Vec<(Vec<u32>, u32)> {
         .collect()
 }
 
-/// One opening [`openings`] yields, with where it stands: its window's index and the offset of
-/// the input token it is predicted from.
+/// One opening [`openings`] yields, with where it stands: its window's index, the offset of the
+/// input token it is predicted from, and its target's corpus position.
 struct OpeningRow {
     window: usize,
     offset: usize,
+    position: usize,
     prompt: Vec<u32>,
     target: u32,
+}
+
+/// The reply that starts at corpus `position`: its tokens while the mask holds, up to BOS.
+fn reply_at<'a>(tokens: &'a [u32], mask: &[u8], position: usize) -> &'a [u32] {
+    let end = (position..tokens.len())
+        .find(|&i| mask[i] == 0 || tokens[i] == hs::SHEET_BOS_ID)
+        .unwrap_or(tokens.len());
+    &tokens[position..end]
 }
 
 fn opening_rows(windows: &[CausalWindow], mask: &[u8]) -> Vec<OpeningRow> {
@@ -1265,6 +1290,7 @@ fn opening_rows(windows: &[CausalWindow], mask: &[u8]) -> Vec<OpeningRow> {
             rows.push(OpeningRow {
                 window: index,
                 offset,
+                position,
                 prompt: w.input_ids[first..=offset].to_vec(),
                 target,
             });
@@ -1278,7 +1304,7 @@ fn opening_rows(windows: &[CausalWindow], mask: &[u8]) -> Vec<OpeningRow> {
 /// `prompt[..8]` ([`opening_bound`]).
 #[derive(Clone, Debug, Serialize)]
 pub struct AnchorCheck {
-    /// The split, `dev` or `train`.
+    /// The split: `dev`, a panel's name, or `train`.
     pub anchor_check: String,
     pub openings: usize,
     pub agree: usize,
@@ -1326,14 +1352,26 @@ enum PromptKey {
     None,
     First(usize),
     Last(usize),
+    /// The prompt's distinct ids, in id order: the same key for any order of the same words.
+    Set,
+    /// The first `k` prompt tokens' distinct ids, in id order.
+    SetFirst(usize),
 }
 
 impl PromptKey {
-    fn of(self, prompt: &[u32]) -> &[u32] {
+    fn of(self, prompt: &[u32]) -> Vec<u32> {
+        let set = |ids: &[u32]| {
+            let mut ids = ids.to_vec();
+            ids.sort_unstable();
+            ids.dedup();
+            ids
+        };
         match self {
-            PromptKey::None => &[],
-            PromptKey::First(k) => &prompt[..k.min(prompt.len())],
-            PromptKey::Last(k) => &prompt[prompt.len() - k.min(prompt.len())..],
+            PromptKey::None => Vec::new(),
+            PromptKey::First(k) => prompt[..k.min(prompt.len())].to_vec(),
+            PromptKey::Last(k) => prompt[prompt.len() - k.min(prompt.len())..].to_vec(),
+            PromptKey::Set => set(prompt),
+            PromptKey::SetFirst(k) => set(&prompt[..k.min(prompt.len())]),
         }
     }
 
@@ -1342,39 +1380,39 @@ impl PromptKey {
             PromptKey::None => "none".to_owned(),
             PromptKey::First(k) => format!("first-{k}"),
             PromptKey::Last(k) => format!("last-{k}"),
+            PromptKey::Set => "set".to_owned(),
+            PromptKey::SetFirst(k) => format!("set-first-{k}"),
         }
     }
 }
 
+/// [`OpeningBound`] for one key: `train` and `split` are the openings already keyed, each as its
+/// key and its target.
 fn bound(
-    key: PromptKey,
+    split: &str,
+    key: String,
     train: &[(Vec<u32>, u32)],
-    dev: &[(Vec<u32>, u32)],
+    rows: &[(Vec<u32>, u32)],
     decode: &dyn Fn(&[u32]) -> String,
 ) -> OpeningBound {
-    let pick = |prompt| key.of(prompt);
     let mut table =
         std::collections::BTreeMap::<Vec<u32>, std::collections::BTreeMap<u32, usize>>::new();
     let mut overall = std::collections::BTreeMap::<u32, usize>::new();
-    for (prompt, target) in train {
-        *table
-            .entry(pick(prompt).to_vec())
-            .or_default()
-            .entry(*target)
-            .or_default() += 1;
+    for (k, target) in train {
+        *table.entry(k.clone()).or_default().entry(*target).or_default() += 1;
         *overall.entry(*target).or_default() += 1;
     }
     let fallback = commonest(&overall).map(|(t, _)| t);
-    let (mut dev_unseen, mut dev_hits) = (0, 0);
-    for (prompt, target) in dev {
-        let named = match table.get(pick(prompt)) {
-            Some(counts) => commonest(counts).map(|(t, _)| t),
-            None => {
-                dev_unseen += 1;
-                fallback
-            }
+    let (mut unseen, mut hits, mut fired_hits) = (0, 0, 0);
+    for (k, target) in rows {
+        let (named, fired) = match table.get(k) {
+            Some(counts) => (commonest(counts).map(|(t, _)| t), true),
+            None => (fallback, false),
         };
-        dev_hits += usize::from(named == Some(*target));
+        let hit = named == Some(*target);
+        unseen += usize::from(!fired);
+        hits += usize::from(hit);
+        fired_hits += usize::from(hit && fired);
     }
     let mut keys: Vec<(&Vec<u32>, usize)> = table
         .iter()
@@ -1395,38 +1433,938 @@ fn bound(
         })
         .collect();
     OpeningBound {
-        key: key.name(),
+        split: split.to_owned(),
+        sha256: None,
+        key,
         train_rows: train.len(),
         train_keys: table.len(),
-        dev_rows: dev.len(),
-        dev_unseen,
-        dev_hits,
+        rows: rows.len(),
+        unseen,
+        hits,
+        fired_hits,
         top,
     }
 }
 
-/// [`OpeningBound`] for no key, the first 1–8 prompt tokens and the last 1–4, and the opening
-/// read's [`AnchorCheck`] on DEV and on TRAIN.
-pub fn opening_bound(data_root: &Path) -> Result<(Vec<OpeningBound>, Vec<AnchorCheck>)> {
+/// Each opening of `rows` keyed by its reply's template: the reply at its position with its
+/// values masked ([`value_mask`]), and its target.
+fn template_keyed(
+    rows: &[OpeningRow],
+    tokens: &[u32],
+    mask: &[u8],
+    keep: &std::collections::HashSet<u32>,
+    digits: &std::collections::HashSet<u32>,
+) -> Vec<(Vec<u32>, u32)> {
+    rows.iter()
+        .map(|r| (value_mask(reply_at(tokens, mask, r.position), keep, digits), r.target))
+        .collect()
+}
+
+/// [`OpeningBound`] on DEV and on each of `panels` (claude-218), for no key, the first 1–8 prompt
+/// tokens, the last 1–4, the order-free `set` and `set-first-8`, and the oracle
+/// `reply-template`; and the opening read's [`AnchorCheck`] on every split and on TRAIN.
+pub fn opening_bound(
+    data_root: &Path,
+    panels: &[(String, PathBuf)],
+) -> Result<(Vec<OpeningBound>, Vec<AnchorCheck>)> {
+    let bos = hs::SHEET_BOS_ID;
     let tokenizer = pinned_tokenizer(data_root)?;
-    let decode = |ids: &[u32]| tail(&tokenizer.decode(ids), 80);
+    let shown = |ids: &[u32]| -> Vec<u32> { ids.iter().copied().filter(|&t| t != CENSUS_MASK).collect() };
+    let decode = |ids: &[u32]| tail(&tokenizer.decode(&shown(ids)), 80);
     let (train_tokens, train_mask) = load_train_split(data_root)?;
     let (train_windows, _) =
-        hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
-    let (dev_windows, dev_mask) = load_dev(data_root)?;
-    let train = openings(&train_windows, &train_mask);
-    let dev = openings(&dev_windows, &dev_mask);
-    let keys = std::iter::once(PromptKey::None)
+        hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, bos)?;
+    let (dev_tokens, dev_mask) = hs::load_pinned_uort_split(
+        &data_root.join("ft/dev/tokens.u16"),
+        &data_root.join("ft/dev/response_mask.u8"),
+        hs::PINNED_DEV_TOKENS_SHA256,
+        hs::PINNED_DEV_MASK_SHA256,
+        hs::EXPECTED_DEV_TOKENS,
+        hs::EXPECTED_DEV_ELIGIBLE_TARGETS,
+        hs::SHEET_VOCAB,
+        bos,
+    )?;
+    let mut splits = vec![("dev".to_owned(), dev_tokens, dev_mask, None)];
+    for (name, dir) in panels {
+        if !panel_name_ok(name) {
+            return Err(invalid(format!("--panel {name}: not a panel name")));
+        }
+        let (tokens, mask, sha) = load_unpinned_uort(dir)?;
+        splits.push((name.clone(), tokens, mask, Some(sha)));
+    }
+    let keep = top_tokens(&train_tokens, OPENING_TEMPLATE_K, bos);
+    let digits = digit_tokens(&fs::read_to_string(data_root.join("tokenizer.json"))?)?;
+    let train_rows = opening_rows(&train_windows, &train_mask);
+    let train_templates = template_keyed(&train_rows, &train_tokens, &train_mask, &keep, &digits);
+    let keys: Vec<PromptKey> = std::iter::once(PromptKey::None)
         .chain((1..=8).map(PromptKey::First))
-        .chain((1..=4).map(PromptKey::Last));
-    let checks = vec![
-        anchor_check("dev", &dev_windows, &dev_mask),
-        anchor_check("train", &train_windows, &train_mask),
-    ];
-    Ok((
-        keys.map(|key| bound(key, &train, &dev, &decode)).collect(),
-        checks,
-    ))
+        .chain((1..=4).map(PromptKey::Last))
+        .chain([PromptKey::Set, PromptKey::SetFirst(8)])
+        .collect();
+    let keyed = |rows: &[OpeningRow], key: PromptKey| -> Vec<(Vec<u32>, u32)> {
+        rows.iter().map(|r| (key.of(&r.prompt), r.target)).collect()
+    };
+    let mut bounds = Vec::new();
+    let mut checks = Vec::new();
+    for (name, tokens, mask, sha) in &splits {
+        let (windows, _) = hs::build_document_windows(tokens, mask, SHEET_CONTEXT, bos)?;
+        let rows = opening_rows(&windows, mask);
+        // Every split's anchor check (claude-218, FIT round 1): the memory's turn slots keep the
+        // first-8 key at its openings, so the laptop's exact key is the memory's served one there.
+        checks.push(anchor_check(name, &windows, mask));
+        let mut split_bounds: Vec<OpeningBound> = keys
+            .iter()
+            .map(|&key| bound(name, key.name(), &keyed(&train_rows, key), &keyed(&rows, key), &decode))
+            .collect();
+        let templates = template_keyed(&rows, tokens, mask, &keep, &digits);
+        split_bounds.push(bound(name, "reply-template".to_owned(), &train_templates, &templates, &decode));
+        for b in &mut split_bounds {
+            b.sha256 = sha.clone();
+        }
+        bounds.extend(split_bounds);
+    }
+    checks.push(anchor_check("train", &train_windows, &train_mask));
+    Ok((bounds, checks))
+}
+
+/// The trunk's own point at every opening of `windows` (claude-218): the readout point that
+/// predicts a reply's first token, with no turn memory moving it (the caller has it off), in
+/// panel order, with each opening's target and corpus position. A forward of the windows that
+/// hold an opening, under the gate mode the rows are scored in ([`row_picks`]).
+fn opening_points(
+    model: &StackModel,
+    windows: &[CausalWindow],
+    mask: &[u8],
+    seed: u64,
+    step: usize,
+) -> Result<(Tensor, Vec<u32>, Vec<usize>)> {
+    if crate::flock_read_memory::turn_memory().is_some() {
+        return Err(invalid("the opening keys read the trunk's own points, with the memory off"));
+    }
+    hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, step, false, || {
+        let (mut points, mut targets, mut positions) = (Vec::new(), Vec::new(), Vec::new());
+        for chunk in windows.chunks(hs::SHEET_EVAL_BATCH) {
+            let windows: Vec<&CausalWindow> = chunk.iter().collect();
+            let (ids, scored, batch_targets) = assemble(&windows);
+            let batch_positions: Vec<usize> = windows
+                .iter()
+                .flat_map(|w| w.scored_corpus_positions.iter().copied())
+                .collect();
+            let open: Vec<usize> =
+                (0..scored.len()).filter(|&i| opens_reply(mask, batch_positions[i])).collect();
+            if open.is_empty() {
+                continue;
+            }
+            if trained_cut_on() {
+                set_reply_mask(Some(window_input_mask(&windows, mask)?));
+            }
+            let hidden = trained_points(model, &ids, windows.len())?;
+            let rows: Vec<u32> = open.iter().map(|&i| scored[i]).collect();
+            let idx = Tensor::from_vec(rows, open.len(), model.device())?;
+            points.push(hidden.index_select(&idx, 0)?.detach());
+            targets.extend(open.iter().map(|&i| batch_targets[i]));
+            positions.extend(open.iter().map(|&i| batch_positions[i]));
+        }
+        if points.is_empty() {
+            return Err(invalid("the split has no opening rows"));
+        }
+        Ok((Tensor::cat(&points, 0)?, targets, positions))
+    })
+}
+
+/// One opening as a trunk key names it ([`l1_named`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Named {
+    /// The commonest target among TRAIN's openings at the least distance, ties to the smaller id.
+    target: u32,
+    distance: f32,
+    /// How many TRAIN openings are at that distance.
+    ties: u32,
+}
+
+/// For each row of `query`, the rows of `table` at the least L1 distance (the mean `|q − t|` over
+/// the coordinates, as the cell objective scores), named by the commonest of their `targets`,
+/// ties to the smaller id, as the exact key names its table (FIT round 1): on the device in
+/// blocks, with no dot product. A first pass finds each query's least distance and a second the
+/// rows at it; both compute the same distances by the same kernels, so they agree exactly.
+fn l1_named(query: &Tensor, table: &Tensor, targets: &[u32]) -> Result<Vec<Named>> {
+    const QUERIES: usize = 64;
+    const ROWS: usize = 4096;
+    let (nq, _) = query.dims2()?;
+    let (nt, _) = table.dims2()?;
+    if targets.len() != nt {
+        return Err(invalid("the trunk keys want one target per TRAIN opening"));
+    }
+    let distances = |q: &Tensor, t0: usize| -> Result<Tensor> {
+        let t = table.narrow(0, t0, ROWS.min(nt - t0))?.unsqueeze(0)?;
+        Ok(q.broadcast_sub(&t)?.abs()?.mean(2)?)
+    };
+    let mut named = Vec::with_capacity(nq);
+    for q0 in (0..nq).step_by(QUERIES) {
+        let n = QUERIES.min(nq - q0);
+        let q = query.narrow(0, q0, n)?.unsqueeze(1)?;
+        let mut least = vec![f32::INFINITY; n];
+        for t0 in (0..nt).step_by(ROWS) {
+            let low = distances(&q, t0)?.min(1)?.to_vec1::<f32>()?;
+            for (l, m) in least.iter_mut().zip(low) {
+                if m < *l {
+                    *l = m;
+                }
+            }
+        }
+        let at = Tensor::from_vec(least.clone(), (n, 1), query.device())?;
+        let mut counts = vec![std::collections::BTreeMap::<u32, usize>::new(); n];
+        for t0 in (0..nt).step_by(ROWS) {
+            let tied = distances(&q, t0)?.broadcast_eq(&at)?.to_vec2::<u8>()?;
+            for (count, row) in counts.iter_mut().zip(&tied) {
+                for (j, _) in row.iter().enumerate().filter(|(_, &f)| f == 1) {
+                    *count.entry(targets[t0 + j]).or_default() += 1;
+                }
+            }
+        }
+        for (count, distance) in counts.iter().zip(least) {
+            let (target, _) =
+                commonest(count).ok_or_else(|| invalid("a trunk key found no TRAIN opening at its least distance"))?;
+            named.push(Named { target, distance, ties: count.values().sum::<usize>() as u32 });
+        }
+    }
+    Ok(named)
+}
+
+/// Each point's sign pattern as 0/1 coordinates: L1 between two of them is their Hamming
+/// distance over the width, so [`l1_named`] on them is the Hamming-nearest sign cell.
+fn sign_code(points: &Tensor) -> Result<Tensor> {
+    Ok(points.ge(&points.zeros_like()?)?.to_dtype(DType::F32)?)
+}
+
+/// The fixed ±1 signs S of the Hadamard rotation (claude-218; Casey, 30 Oct: "ok add that
+/// trick", the rotation in PrismML's Bonsai 2): coordinate `i` is negated when its splitmix64
+/// hash is odd, so S is exact, fixed and reproducible.
+fn rotation_signs(width: usize) -> Vec<f32> {
+    (0..width as u64)
+        .map(|i| {
+            let mut z = i.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^= z >> 31;
+            if z & 1 == 1 { -1.0 } else { 1.0 }
+        })
+        .collect()
+}
+
+/// The fast Walsh–Hadamard transform of each row of `x`, whose width is a power of two,
+/// unnormalised: log2(width) stages of adds and subtracts on the device, with no dot product.
+fn walsh_hadamard(x: &Tensor) -> Result<Tensor> {
+    let (n, w) = x.dims2()?;
+    if !w.is_power_of_two() {
+        return Err(invalid(format!("the Walsh–Hadamard transform wants a power-of-two width, not {w}")));
+    }
+    let mut y = x.contiguous()?;
+    let mut h = 1;
+    while h < w {
+        let v = y.reshape((n, w / (2 * h), 2, h))?;
+        let (a, b) = (v.narrow(2, 0, 1)?, v.narrow(2, 1, 1)?);
+        y = Tensor::cat(&[(&a + &b)?, (&a - &b)?], 2)?.reshape((n, w))?;
+        h *= 2;
+    }
+    Ok(y)
+}
+
+/// The Hadamard sign code: the sign pattern of `H·S·x` ([`sign_code`] after the fixed signs and
+/// the transform). The rotation spreads each point's magnitude across the coordinates, so its
+/// Hamming distance compares points along spread-out directions rather than the raw axes.
+fn hadamard_sign_code(points: &Tensor) -> Result<Tensor> {
+    let (_, w) = points.dims2()?;
+    let signs = Tensor::from_vec(rotation_signs(w), (1, w), points.device())?;
+    sign_code(&walsh_hadamard(&points.broadcast_mul(&signs)?)?)
+}
+
+/// One split's openings named by the two trunk keys (claude-218), from TRAIN's opening points
+/// under the same trunk: by point under L1, and by sign pattern (Hamming), each as the commonest
+/// target among the TRAIN openings at the least distance ([`l1_named`]), with the distance and
+/// the tie count. Written by `--opening-keys 1` as `keys-{split}.json`; the laptop grade reads it
+/// with the rows.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OpeningKeys {
+    pub split: String,
+    /// TRAIN's openings, the table both keys search, and its bytes as f32 points.
+    pub train_openings: usize,
+    pub table_bytes: usize,
+    pub positions: Vec<usize>,
+    pub targets: Vec<u32>,
+    pub point_target: Vec<u32>,
+    pub point_distance: Vec<f32>,
+    pub point_ties: Vec<u32>,
+    pub sign_target: Vec<u32>,
+    pub sign_distance: Vec<f32>,
+    pub sign_ties: Vec<u32>,
+    /// Each key's search over all the split's openings, in milliseconds: the point key's, and
+    /// the sign key's with the queries' sign codes taken (TRAIN's are taken before it starts, as
+    /// a served table would hold them).
+    pub point_ms: u64,
+    pub sign_ms: u64,
+    /// The Hadamard sign key ([`hadamard_sign_code`], Casey's amendment of 30 Oct), as the sign
+    /// key; empty in a keys file written before it.
+    #[serde(default)]
+    pub hsign_target: Vec<u32>,
+    #[serde(default)]
+    pub hsign_distance: Vec<f32>,
+    #[serde(default)]
+    pub hsign_ties: Vec<u32>,
+    #[serde(default)]
+    pub hsign_ms: u64,
+}
+
+/// [`OpeningKeys`] for one split's opening points against TRAIN's.
+fn opening_keys(
+    split: &str,
+    query: &Tensor,
+    targets: Vec<u32>,
+    positions: Vec<usize>,
+    train: &Tensor,
+    train_targets: &[u32],
+) -> Result<OpeningKeys> {
+    let started = std::time::Instant::now();
+    let by_point = l1_named(query, train, train_targets)?;
+    let point_ms = started.elapsed().as_millis() as u64;
+    let train_sign = sign_code(train)?;
+    let started = std::time::Instant::now();
+    let by_sign = l1_named(&sign_code(query)?, &train_sign, train_targets)?;
+    let sign_ms = started.elapsed().as_millis() as u64;
+    drop(train_sign);
+    let train_hsign = hadamard_sign_code(train)?;
+    let started = std::time::Instant::now();
+    let by_hsign = l1_named(&hadamard_sign_code(query)?, &train_hsign, train_targets)?;
+    let hsign_ms = started.elapsed().as_millis() as u64;
+    let (rows, width) = train.dims2()?;
+    Ok(OpeningKeys {
+        split: split.to_owned(),
+        train_openings: rows,
+        table_bytes: rows * width * 4,
+        positions,
+        targets,
+        point_target: by_point.iter().map(|n| n.target).collect(),
+        point_distance: by_point.iter().map(|n| n.distance).collect(),
+        point_ties: by_point.iter().map(|n| n.ties).collect(),
+        sign_target: by_sign.iter().map(|n| n.target).collect(),
+        sign_distance: by_sign.iter().map(|n| n.distance).collect(),
+        sign_ties: by_sign.iter().map(|n| n.ties).collect(),
+        point_ms,
+        sign_ms,
+        hsign_target: by_hsign.iter().map(|n| n.target).collect(),
+        hsign_distance: by_hsign.iter().map(|n| n.distance).collect(),
+        hsign_ties: by_hsign.iter().map(|n| n.ties).collect(),
+        hsign_ms,
+    })
+}
+
+/// The development and deciding panels' token and mask sha256s (claude-218's sheet), checked
+/// before the key grade reads them.
+const KEY_PANELS: [(&str, &str, &str); 2] = [
+    (
+        "p-s",
+        "62099a4800f6ae34a467762a42fcc79535836f222f64a1613d57aea9176610f1",
+        "9053e117eab299b48623f00f293aa7dd5275cae3804a6ce55f01b1303f05f11a",
+    ),
+    (
+        "p-u",
+        "d8e80f38950769650a0f5786a42fbfff3332c9d3cf49a3e42d2cfe428502fbd0",
+        "c883aa4a14c3cf79460c8706de66c3eb5d8166ee89844484c9bb523c45206865",
+    ),
+];
+
+/// The forced arm's and greedy's replies per seed and split, as the sheet registers them.
+const KEY_FORCED_REPLIES: usize = 256;
+
+/// The trunk keys the key grade reads, the cheaper first: if more than one passes, the sign key
+/// ships, then the Hadamard sign key (the same 32 bytes, plus the rotation), then the point key.
+const TRUNK_KEYS: [&str; 3] = ["sign", "hsign", "point"];
+
+/// An exact table over keyed openings: each key's commonest target, ties to the smaller id, and
+/// the overall commonest for an unseen key, as [`bound`] names them.
+struct KeyTable {
+    named: std::collections::HashMap<Vec<u32>, u32>,
+    fallback: u32,
+}
+
+impl KeyTable {
+    fn new(rows: impl Iterator<Item = (Vec<u32>, u32)>) -> Self {
+        let mut table =
+            std::collections::HashMap::<Vec<u32>, std::collections::BTreeMap<u32, usize>>::new();
+        let mut overall = std::collections::BTreeMap::<u32, usize>::new();
+        for (key, target) in rows {
+            *table.entry(key).or_default().entry(target).or_default() += 1;
+            *overall.entry(target).or_default() += 1;
+        }
+        KeyTable {
+            named: table.into_iter().filter_map(|(k, c)| commonest(&c).map(|(t, _)| (k, t))).collect(),
+            fallback: commonest(&overall).map_or(u32::MAX, |(t, _)| t),
+        }
+    }
+
+    /// The target `key` names, and whether it fires (TRAIN holds it).
+    fn name(&self, key: &[u32]) -> (u32, bool) {
+        self.named.get(key).map_or((self.fallback, false), |&t| (t, true))
+    }
+}
+
+/// One split's openings as the key grade reads them, the same at every seed: each opening's
+/// position and target; the exact key's name and whether it fires (the memory's `first-8`); the
+/// oracle U's name (the reference reply's value-masked template); and whether the reference is a
+/// verbatim TRAIN reply (the known stratum).
+struct GradeOpenings {
+    name: String,
+    positions: Vec<usize>,
+    targets: Vec<u32>,
+    exact: Vec<(u32, bool)>,
+    oracle: Vec<u32>,
+    known: Vec<bool>,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn grade_openings(
+    name: &str,
+    tokens: &[u32],
+    mask: &[u8],
+    exact: &KeyTable,
+    oracle: &KeyTable,
+    keep: &std::collections::HashSet<u32>,
+    digits: &std::collections::HashSet<u32>,
+    train_replies: &std::collections::HashSet<u128>,
+) -> Result<GradeOpenings> {
+    let (windows, _) = hs::build_document_windows(tokens, mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
+    // The memory's turn slots must keep the first-8 key at every opening, so the laptop's exact
+    // key is the served one (FIT round 3).
+    let anchor = anchor_check(name, &windows, mask);
+    if anchor.agree != anchor.openings {
+        return Err(invalid(format!(
+            "{name}: the turn anchor keeps the first-8 key at {} of {} openings (an instrument fault)",
+            anchor.agree, anchor.openings
+        )));
+    }
+    let rows = opening_rows(&windows, mask);
+    let reply = |r: &OpeningRow| reply_at(tokens, mask, r.position);
+    Ok(GradeOpenings {
+        name: name.to_owned(),
+        positions: rows.iter().map(|r| r.position).collect(),
+        targets: rows.iter().map(|r| r.target).collect(),
+        exact: rows.iter().map(|r| exact.name(&PromptKey::First(8).of(&r.prompt))).collect(),
+        oracle: rows.iter().map(|r| oracle.name(&value_mask(reply(r), keep, digits)).0).collect(),
+        known: rows.iter().map(|r| train_replies.contains(&census_hash(reply(r)))).collect(),
+    })
+}
+
+/// One seed's picks at a split's openings: the trunk keys' names and distances, B (the trunk alone,
+/// memory off) and the served model (memory on), each checked against the split's openings.
+struct SeedPicks {
+    keys: OpeningKeys,
+    base: Vec<u32>,
+    served: Vec<u32>,
+}
+
+impl SeedPicks {
+    fn key(&self, key: &str) -> (&[u32], &[f32]) {
+        match key {
+            "point" => (&self.keys.point_target, &self.keys.point_distance),
+            "hsign" => (&self.keys.hsign_target, &self.keys.hsign_distance),
+            _ => (&self.keys.sign_target, &self.keys.sign_distance),
+        }
+    }
+}
+
+/// Whether two keys files name the same openings by the same point and sign keys: positions,
+/// targets, and every point and sign field. The follow-up pass's files must equal the main run's
+/// so (Casey's amendment, FIT round 5): its second binary reproduced the first.
+fn same_trunk_keys(a: &OpeningKeys, b: &OpeningKeys) -> bool {
+    a.positions == b.positions
+        && a.targets == b.targets
+        && a.point_target == b.point_target
+        && a.point_distance == b.point_distance
+        && a.point_ties == b.point_ties
+        && a.sign_target == b.sign_target
+        && a.sign_distance == b.sign_distance
+        && a.sign_ties == b.sign_ties
+}
+
+/// One seed's picks on a split: the rows from the main run in `runs`, and the keys from
+/// `keys_runs` (the follow-up pass, `--keys-runs`) when given, refused unless their point and
+/// sign keys equal the main run's ([`same_trunk_keys`]).
+fn seed_picks(runs: &Path, keys_runs: Option<&Path>, seed: u8, openings: &GradeOpenings) -> Result<SeedPicks> {
+    let dir = runs.join(format!("r-drop-s{seed}"));
+    let split = &openings.name;
+    let file = format!("keys-{split}.json");
+    let keys: OpeningKeys = match keys_runs {
+        Some(follow) => {
+            let keys: OpeningKeys = read_scored(&follow.join(format!("r-drop-s{seed}")).join(&file))?;
+            let main: OpeningKeys = read_scored(&dir.join(&file))?;
+            if !same_trunk_keys(&keys, &main) {
+                return Err(invalid(format!(
+                    "{split} s{seed}: the follow-up pass's point or sign keys differ from the main run's (an instrument fault)"
+                )));
+            }
+            keys
+        }
+        None => read_scored(&dir.join(&file))?,
+    };
+    if keys.positions != openings.positions || keys.targets != openings.targets {
+        return Err(invalid(format!("{split} s{seed}: the keys' openings are not the split's (an instrument fault)")));
+    }
+    if keys.hsign_target.len() != keys.positions.len() || keys.hsign_distance.len() != keys.positions.len() {
+        return Err(invalid(format!(
+            "{split} s{seed}: the keys file has no Hadamard sign key (grade the follow-up pass's files)"
+        )));
+    }
+    let at = |label: &str| -> Result<Vec<u32>> {
+        let rows: ScoredRows = read_scored(&dir.join(format!("rows-{split}-{label}.json")))?;
+        let by: std::collections::HashMap<usize, u32> =
+            rows.positions.iter().copied().zip(rows.nearest.iter().copied()).collect();
+        openings
+            .positions
+            .iter()
+            .map(|p| by.get(p).copied().ok_or_else(|| invalid(format!("{split} s{seed}: no {label} row at opening {p}"))))
+            .collect()
+    };
+    let (base, served) = (at("no-memory")?, at("memory")?);
+    // The memory moves nothing where its key misses, so B is what the served model sees there.
+    if openings.exact.iter().zip(base.iter().zip(&served)).any(|(&(_, fired), (b, s))| !fired && b != s) {
+        return Err(invalid(format!(
+            "{split} s{seed}: the memory moved an opening its key misses (an instrument fault)"
+        )));
+    }
+    Ok(SeedPicks { keys, base, served })
+}
+
+/// Level ℓ's threshold over `distances` (ℓ = 1–10, q10 to q100): the ⌈ℓ·n/10⌉-th smallest; q100
+/// is +∞, so it always fires.
+fn level_tau(distances: &[f32], level: u8) -> f32 {
+    if level >= 10 || distances.is_empty() {
+        return f32::INFINITY;
+    }
+    let mut d = distances.to_vec();
+    d.sort_by(|a, b| a.total_cmp(b));
+    d[(usize::from(level) * d.len()).div_ceil(10).max(1) - 1]
+}
+
+/// One trunk key's reading on some of a split's openings at one seed (claude-218): where its
+/// distance is at most τ it names the opening, elsewhere `base` does. `b` counts rows it gets
+/// right and the base wrong, `c` the reverse; the hits where it fires are kept for it and the base.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct KeyReading {
+    pub split: String,
+    pub key: String,
+    /// `missed` (the exact key does not fire), `new` (missed, reference not verbatim TRAIN),
+    /// `q100` (missed, every row firing) or `dev-backoff` (all DEV openings, the served model).
+    pub stratum: String,
+    pub seed: u8,
+    pub level: u8,
+    pub tau: f32,
+    pub rows: usize,
+    pub fired: usize,
+    pub b: usize,
+    pub c: usize,
+    pub fired_hits: usize,
+    pub base_fired_hits: usize,
+}
+
+impl KeyReading {
+    fn net(&self) -> i64 {
+        self.b as i64 - self.c as i64
+    }
+
+    fn band(&self) -> f64 {
+        2.0 * ((self.b + self.c) as f64).sqrt()
+    }
+}
+
+/// [`KeyReading`] on the openings `rows` indexes, against `base`; a row `fires_ok` excludes never
+/// fires (the backoff: the key acts only where the exact key misses).
+#[allow(clippy::too_many_arguments)]
+fn key_reading(
+    head: (&str, &str, &str, u8, u8, f32),
+    rows: &[usize],
+    targets: &[u32],
+    named: &[u32],
+    distance: &[f32],
+    base: &[u32],
+    fires_ok: &dyn Fn(usize) -> bool,
+) -> KeyReading {
+    let (split, key, stratum, seed, level, tau) = head;
+    let mut r = KeyReading {
+        split: split.to_owned(),
+        key: key.to_owned(),
+        stratum: stratum.to_owned(),
+        seed,
+        level,
+        tau,
+        rows: 0,
+        fired: 0,
+        b: 0,
+        c: 0,
+        fired_hits: 0,
+        base_fired_hits: 0,
+    };
+    for &i in rows {
+        let fired = fires_ok(i) && distance[i] <= tau;
+        let arm = if fired { named[i] } else { base[i] };
+        let (hit, base_hit) = (arm == targets[i], base[i] == targets[i]);
+        r.rows += 1;
+        r.fired += usize::from(fired);
+        r.b += usize::from(hit && !base_hit);
+        r.c += usize::from(!hit && base_hit);
+        if fired {
+            r.fired_hits += usize::from(hit);
+            r.base_fired_hits += usize::from(base_hit);
+        }
+    }
+    r
+}
+
+/// The level with the largest net gain summed over seeds, `net[seed][level − 1]`; a tie keeps
+/// the lower level.
+fn choose_level(net: &[[i64; 10]]) -> u8 {
+    let total = |l: usize| net.iter().map(|s| s[l]).sum::<i64>();
+    let mut best = 0;
+    for l in 1..10 {
+        if total(l) > total(best) {
+            best = l;
+        }
+    }
+    best as u8 + 1
+}
+
+/// The forced-opening arm against greedy at one seed (claude-218's row 1), on the same prompts:
+/// paired counts (b: forced right and greedy wrong; c: the reverse) for replies equal to their
+/// reference, and for replies whose value-masked template equals the reference's.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ForcedReading {
+    pub split: String,
+    pub seed: u8,
+    pub replies: usize,
+    pub exact: (usize, usize),
+    pub template: (usize, usize),
+}
+
+impl ForcedReading {
+    /// Row 1 at this seed: the lift is inside its band on both measures, and the reading is not
+    /// underpowered (b + c reaches 10 on at least one).
+    fn no_lift(&self) -> bool {
+        let inside = |(b, c): (usize, usize)| (b as f64 - c as f64) <= 2.0 * ((b + c) as f64).sqrt();
+        let powered = self.exact.0 + self.exact.1 >= 10 || self.template.0 + self.template.1 >= 10;
+        powered && inside(self.exact) && inside(self.template)
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn forced_reading(
+    split: &str,
+    seed: u8,
+    greedy: &[IdSample],
+    forced: &[IdSample],
+    eos: u32,
+    keep: &std::collections::HashSet<u32>,
+    digits: &std::collections::HashSet<u32>,
+) -> Result<ForcedReading> {
+    if greedy.len() != forced.len()
+        || greedy.iter().zip(forced).any(|(g, f)| g.position != f.position || g.reference != f.reference)
+    {
+        return Err(invalid(format!("{split} s{seed}: the forced arm's prompts are not greedy's")));
+    }
+    if forced.iter().any(|f| f.reply.first() != f.reference.first()) {
+        return Err(invalid(format!(
+            "{split} s{seed}: a forced reply does not open with its reference's first token (an instrument fault)"
+        )));
+    }
+    let exact = |s: &IdSample| cut_at_eos(&s.reply, eos) == cut_at_eos(&s.reference, eos);
+    let template = |s: &IdSample| {
+        value_mask(cut_at_eos(&s.reply, eos), keep, digits) == value_mask(cut_at_eos(&s.reference, eos), keep, digits)
+    };
+    let paired = |right: &dyn Fn(&IdSample) -> bool| {
+        greedy.iter().zip(forced).fold((0, 0), |(b, c), (g, f)| {
+            (b + usize::from(right(f) && !right(g)), c + usize::from(!right(f) && right(g)))
+        })
+    };
+    Ok(ForcedReading {
+        split: split.to_owned(),
+        seed,
+        replies: forced.len(),
+        exact: paired(&exact),
+        template: paired(&template),
+    })
+}
+
+/// The decision table of claude-218's sheet, read in order on the deciding panel: the row that
+/// holds (1–5) and the next unit it names, with the key that ships on row 3.
+fn key_outcome(
+    forced: &[ForcedReading],
+    oracle: &[(usize, usize)],
+    missed: &[(&str, Vec<KeyReading>)],
+    new: &[(&str, Vec<KeyReading>)],
+    dev: &[(&str, Vec<KeyReading>)],
+    q100: &[(&str, Vec<KeyReading>)],
+) -> (u8, &'static str, Option<String>) {
+    let all3 = |r: &[KeyReading], f: &dyn Fn(&KeyReading) -> bool| r.len() == 3 && r.iter().all(f);
+    if forced.len() == 3 && forced.iter().all(ForcedReading::no_lift) {
+        return (1, "the opening is not enough: the rollout hinge, or a combined unit", None);
+    }
+    // A reading with b + c under 10 holds no row (FIT round 3): too thin to tell.
+    let powered = |b: usize, c: usize| b + c >= 10;
+    if oracle.len() == 3
+        && oracle
+            .iter()
+            .all(|&(b, c)| powered(b, c) && (b as f64 - c as f64).abs() <= 2.0 * ((b + c) as f64).sqrt())
+    {
+        return (2, "no prompt key has headroom: the rollout hinge and the later rows", None);
+    }
+    let of = |set: &[(&str, Vec<KeyReading>)], key: &str| -> Vec<KeyReading> {
+        set.iter().find(|(k, _)| *k == key).map(|(_, r)| r.clone()).unwrap_or_default()
+    };
+    for key in TRUNK_KEYS {
+        let passes = all3(&of(missed, key), &|r| {
+            powered(r.b, r.c) && r.net() as f64 > r.band() && r.fired_hits >= r.base_fired_hits
+        })
+            && all3(&of(new, key), &|r| r.net() as f64 >= -r.band())
+            && all3(&of(dev, key), &|r| r.net() as f64 >= -r.band());
+        if passes {
+            return (3, "train and serve the key, with an opening bar on another fresh panel", Some(key.to_owned()));
+        }
+    }
+    if TRUNK_KEYS
+        .iter()
+        .any(|&key| of(q100, key).iter().any(|r| powered(r.b, r.c) && (r.net() as f64) < -r.band()))
+    {
+        return (4, "an abstention gate", None);
+    }
+    (5, "train the trunk's opening point to gather paraphrases, with a geometric hinge", None)
+}
+
+/// A deciding grade's given level for `key` must be p-s's own `chosen` one (the code review), so
+/// p-u is never graded at a level the rule did not pick.
+fn level_given(levels: &[(String, u8)], key: &str, chosen: u8) -> Result<()> {
+    match levels.iter().find(|(n, _)| n == key) {
+        Some(&(_, l)) if l == chosen => Ok(()),
+        _ => Err(invalid(format!("--key-levels: {key} is not at p-s's chosen level {chosen}"))),
+    }
+}
+
+/// A split's missed rows (the exact key does not fire), the new stratum among them (the
+/// reference not a verbatim TRAIN reply) and the known stratum, as indices into its openings.
+fn key_strata(o: &GradeOpenings) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
+    let missed: Vec<usize> = (0..o.positions.len()).filter(|&i| !o.exact[i].1).collect();
+    let (known, new): (Vec<usize>, Vec<usize>) = missed.iter().partition(|&&i| o.known[i]);
+    (missed, new, known)
+}
+
+/// Row 2's paired counts at one seed: U against the larger, in hits on all openings, of the
+/// exact key (with its fallback) and B; a tie takes the exact key. b: U right and that arm
+/// wrong; c: the reverse.
+fn oracle_reading(o: &GradeOpenings, base: &[u32]) -> (usize, usize) {
+    let hits = |named: &dyn Fn(usize) -> u32| (0..o.targets.len()).filter(|&i| named(i) == o.targets[i]).count();
+    let exact = |i: usize| o.exact[i].0;
+    let by_base = |i: usize| base[i];
+    let arm: &dyn Fn(usize) -> u32 = if hits(&exact) >= hits(&by_base) { &exact } else { &by_base };
+    (0..o.targets.len()).fold((0, 0), |(b, c), i| {
+        let (u, a) = (o.oracle[i] == o.targets[i], arm(i) == o.targets[i]);
+        (b + usize::from(u && !a), c + usize::from(!u && a))
+    })
+}
+
+/// The key grade (claude-218): on the development panel p-s, each trunk key's level and every
+/// seed's τ, with row 1's power there; and, given the levels, the decision on the deciding panel
+/// p-u, with DEV's backoff. One JSON value.
+#[derive(Clone, Debug, Serialize)]
+pub struct KeyGrade {
+    pub levels: Vec<(String, u8)>,
+    pub taus: Vec<(String, u8, f32)>,
+    /// Each key's net gain on p-s's missed rows at every level, summed over the seeds.
+    pub net_by_level: Vec<(String, Vec<i64>)>,
+    pub development_forced: Vec<ForcedReading>,
+    pub readings: Vec<KeyReading>,
+    pub forced: Vec<ForcedReading>,
+    /// Per seed on p-u, U against the larger of the exact key and B: (b, c).
+    pub oracle: Vec<(usize, usize)>,
+    pub row: Option<u8>,
+    pub next: Option<String>,
+    pub ships: Option<String>,
+}
+
+/// [`KeyGrade`] from the sealed run in `runs` (`r-drop-s{1,2,3}`), on the laptop. With `levels`
+/// empty it reads p-s only and chooses them; with them given it also grades p-u, which it never
+/// reads otherwise.
+pub fn key_grade(
+    data_root: &Path,
+    runs: &Path,
+    keys_runs: Option<&Path>,
+    panels: &[(String, PathBuf)],
+    levels: &[(String, u8)],
+) -> Result<KeyGrade> {
+    let bos = hs::SHEET_BOS_ID;
+    let deciding = !levels.is_empty();
+    let panel = |name: &str| -> Result<(Vec<u32>, Vec<u8>)> {
+        let (_, want, want_mask) =
+            KEY_PANELS.iter().find(|(n, _, _)| *n == name).ok_or_else(|| invalid("not a key panel"))?;
+        let dir = &panels
+            .iter()
+            .find(|(n, _)| n == name)
+            .ok_or_else(|| invalid(format!("--key-grade needs --panel {name}=DIR")))?
+            .1;
+        let (tokens, mask, sha) = load_unpinned_uort(dir)?;
+        let mask_sha = crate::sha256_bytes(&mask);
+        if sha != *want || mask_sha != *want_mask {
+            return Err(invalid(format!(
+                "--panel {name}: tokens sha256 {sha} and mask {mask_sha}, not the sheet's {want} and {want_mask}"
+            )));
+        }
+        Ok((tokens, mask))
+    };
+    if deciding && (levels.len() != TRUNK_KEYS.len() || TRUNK_KEYS.iter().any(|k| !levels.iter().any(|(n, l)| n == k && (1..=10).contains(l)))) {
+        return Err(invalid("--key-levels wants sign=L,hsign=L,point=L with each L in 1–10"));
+    }
+    let tokenizer = pinned_tokenizer(data_root)?;
+    let eos = tokenizer.token_id("<|eos|>").ok_or_else(|| invalid("the pinned tokenizer has no <|eos|>"))?;
+    let digits = digit_tokens(&fs::read_to_string(data_root.join("tokenizer.json"))?)?;
+    let (train_tokens, train_mask) = load_train_split(data_root)?;
+    let keep = top_tokens(&train_tokens, OPENING_TEMPLATE_K, bos);
+    let (train_windows, _) = hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, bos)?;
+    let train_rows = opening_rows(&train_windows, &train_mask);
+    let exact = KeyTable::new(train_rows.iter().map(|r| (PromptKey::First(8).of(&r.prompt), r.target)));
+    let oracle = KeyTable::new(
+        train_rows
+            .iter()
+            .map(|r| (value_mask(reply_at(&train_tokens, &train_mask, r.position), &keep, &digits), r.target)),
+    );
+    let train_replies: std::collections::HashSet<u128> =
+        split_turns(&train_tokens, &train_mask, bos).replies.iter().map(|r| census_hash(r)).collect();
+    drop((train_rows, train_windows));
+    let openings_of = |name: &str, tokens: &[u32], mask: &[u8]| {
+        grade_openings(name, tokens, mask, &exact, &oracle, &keep, &digits, &train_replies)
+    };
+    let samples = |seed: u8, split: &str, arm: &str| -> Result<Vec<IdSample>> {
+        let file = match (split, arm) {
+            ("dev", "greedy") => "samples-memory.json".to_owned(),
+            (split, arm) => format!("samples-{split}-{arm}-memory.json"),
+        };
+        read_scored(&runs.join(format!("r-drop-s{seed}")).join(file))
+    };
+    // The development panel: each key's net gain at every level on its missed rows, and τ.
+    let (ps_tokens, ps_mask) = panel("p-s")?;
+    let ps = openings_of("p-s", &ps_tokens, &ps_mask)?;
+    let (ps_missed, _, _) = key_strata(&ps);
+    let ps_picks: Vec<SeedPicks> = (1..=3u8).map(|s| seed_picks(runs, keys_runs, s, &ps)).collect::<Result<_>>()?;
+    let mut net_by_level = Vec::new();
+    let mut taus = Vec::new();
+    let mut chosen = Vec::new();
+    for key in TRUNK_KEYS {
+        let mut net = Vec::new();
+        for (s, picks) in ps_picks.iter().enumerate() {
+            let (named, distance) = picks.key(key);
+            let missed_d: Vec<f32> = ps_missed.iter().map(|&i| distance[i]).collect();
+            let mut by_level = [0i64; 10];
+            for level in 1..=10u8 {
+                let tau = level_tau(&missed_d, level);
+                let head = ("p-s", key, "missed", s as u8 + 1, level, tau);
+                by_level[usize::from(level) - 1] =
+                    key_reading(head, &ps_missed, &ps.targets, named, distance, &picks.base, &|_| true).net();
+            }
+            net.push(by_level);
+        }
+        let level = choose_level(&net);
+        if deciding {
+            level_given(levels, key, level)?;
+        }
+        for (s, picks) in ps_picks.iter().enumerate() {
+            let missed_d: Vec<f32> = ps_missed.iter().map(|&i| picks.key(key).1[i]).collect();
+            taus.push((key.to_owned(), s as u8 + 1, level_tau(&missed_d, level)));
+        }
+        net_by_level.push((key.to_owned(), (0..10).map(|l| net.iter().map(|n| n[l]).sum()).collect()));
+        chosen.push((key.to_owned(), level));
+    }
+    let forced_at = |split: &str, s: u8| -> Result<ForcedReading> {
+        let f = forced_reading(split, s, &samples(s, split, "greedy")?, &samples(s, split, "forced")?, eos, &keep, &digits)?;
+        if f.replies != KEY_FORCED_REPLIES {
+            return Err(invalid(format!("{split} s{s}: {} forced replies, not {KEY_FORCED_REPLIES}", f.replies)));
+        }
+        Ok(f)
+    };
+    let development_forced = (1..=3u8).map(|s| forced_at("p-s", s)).collect::<Result<Vec<_>>>()?;
+    let mut grade = KeyGrade {
+        levels: chosen.clone(),
+        taus: taus.clone(),
+        net_by_level,
+        development_forced,
+        readings: Vec::new(),
+        forced: Vec::new(),
+        oracle: Vec::new(),
+        row: None,
+        next: None,
+        ships: None,
+    };
+    if !deciding {
+        return Ok(grade);
+    }
+    // The deciding panel and DEV, at each seed's τ.
+    let (pu_tokens, pu_mask) = panel("p-u")?;
+    let pu = openings_of("p-u", &pu_tokens, &pu_mask)?;
+    let (dev_tokens, dev_mask) = hs::load_pinned_uort_split(
+        &data_root.join("ft/dev/tokens.u16"),
+        &data_root.join("ft/dev/response_mask.u8"),
+        hs::PINNED_DEV_TOKENS_SHA256,
+        hs::PINNED_DEV_MASK_SHA256,
+        hs::EXPECTED_DEV_TOKENS,
+        hs::EXPECTED_DEV_ELIGIBLE_TARGETS,
+        hs::SHEET_VOCAB,
+        bos,
+    )?;
+    let dev = openings_of("dev", &dev_tokens, &dev_mask)?;
+    let (missed, new, known) = key_strata(&pu);
+    let all_dev: Vec<usize> = (0..dev.positions.len()).collect();
+    let pu_picks: Vec<SeedPicks> = (1..=3u8).map(|s| seed_picks(runs, keys_runs, s, &pu)).collect::<Result<_>>()?;
+    let dev_picks: Vec<SeedPicks> = (1..=3u8).map(|s| seed_picks(runs, keys_runs, s, &dev)).collect::<Result<_>>()?;
+    // Each seed's τ at a level, from that seed's own p-s missed rows.
+    let tau_at = |key: &str, s: usize, level: u8| {
+        let missed_d: Vec<f32> = ps_missed.iter().map(|&i| ps_picks[s].key(key).1[i]).collect();
+        level_tau(&missed_d, level)
+    };
+    let dev_missed = |i: usize| !dev.exact[i].1;
+    let (mut by_missed, mut by_new, mut by_dev, mut by_q100) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    for key in TRUNK_KEYS {
+        let level = chosen.iter().find(|(n, _)| n == key).map(|&(_, l)| l).unwrap_or(10);
+        let (mut m, mut n, mut d, mut q) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        for (s, (picks, dp)) in pu_picks.iter().zip(&dev_picks).enumerate() {
+            let (seed, tau) = (s as u8 + 1, tau_at(key, s, level));
+            let (named, distance) = picks.key(key);
+            let (dev_named, dev_distance) = dp.key(key);
+            let on_pu = |stratum: &str, rows: &[usize], level: u8, tau: f32| {
+                key_reading(("p-u", key, stratum, seed, level, tau), rows, &pu.targets, named, distance, &picks.base, &|_| true)
+            };
+            let on_dev = |stratum: &str, level: u8, tau: f32| {
+                key_reading(("dev", key, stratum, seed, level, tau), &all_dev, &dev.targets, dev_named, dev_distance, &dp.served, &dev_missed)
+            };
+            m.push(on_pu("missed", &missed, level, tau));
+            n.push(on_pu("new", &new, level, tau));
+            q.push(on_pu("q100", &missed, 10, f32::INFINITY));
+            d.push(on_dev("dev-backoff", level, tau));
+            // Reported, deciding nothing: the known stratum, and every decile on p-u and DEV.
+            grade.readings.push(on_pu("known", &known, level, tau));
+            for l in 1..=10u8 {
+                grade.readings.push(on_pu("missed-decile", &missed, l, tau_at(key, s, l)));
+                grade.readings.push(on_dev("dev-decile", l, tau_at(key, s, l)));
+            }
+        }
+        grade.readings.extend(m.iter().chain(&n).chain(&q).chain(&d).cloned());
+        by_missed.push((key, m));
+        by_new.push((key, n));
+        by_dev.push((key, d));
+        by_q100.push((key, q));
+    }
+    for (s, picks) in pu_picks.iter().enumerate() {
+        grade.forced.push(forced_at("p-u", s as u8 + 1)?);
+        grade.oracle.push(oracle_reading(&pu, &picks.base));
+    }
+    let (row, next, ships) = key_outcome(&grade.forced, &grade.oracle, &by_missed, &by_new, &by_dev, &by_q100);
+    grade.row = Some(row);
+    grade.next = Some(next.to_owned());
+    grade.ships = ships;
+    Ok(grade)
 }
 
 /// One reply row (turn-memory-reply, claude-192): the prompt its window shows for its turn, back
@@ -2460,6 +3398,20 @@ struct DecodedReply {
     stepped: Vec<u8>,
 }
 
+thread_local! {
+    static FORCED_OPENING: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
+}
+
+/// The reply's first token for the next [`decode_reply`] calls on this thread, or none: the
+/// forced-opening arm (claude-218) gives each prompt its reference's first token.
+fn set_forced_opening(token: Option<u32>) {
+    FORCED_OPENING.with(|c| c.set(token));
+}
+
+fn forced_opening() -> Option<u32> {
+    FORCED_OPENING.with(|c| c.get())
+}
+
 /// The model's reply to `prompt` under `rule`: as [`greedy_reply`], with the next token picked
 /// by `rule`. The Flock rank rule also stops after `eos` (the protocol); greedy decodes to
 /// BOS or its length, as before. `sample` is the reply's index, which with `seed` seeds the Flock rank draws: draw
@@ -2511,6 +3463,21 @@ fn decode_reply(
         let mut admitted = Vec::new();
         let mut stepped = Vec::new();
         for step in 0..reply_tokens {
+            // A forced opening (claude-218) is the reply's first token, taken without a forward,
+            // so no opening row is read or moved for it.
+            if let Some(token) = forced_opening().filter(|_| reply.is_empty()) {
+                // As a decoded token would: BOS ends the reply unkept, and an end of turn is kept
+                // and ends it under the Flock rules only.
+                if token == hs::SHEET_BOS_ID {
+                    break;
+                }
+                reply.push(token);
+                ids.push(token);
+                if flock && Some(token) == eos {
+                    break;
+                }
+                continue;
+            }
             let window = &ids[ids.len().saturating_sub(SHEET_CONTEXT)..];
             let token = if objective.decodes_nearest() {
                 // The reply's first step is its opening row, the one the turn memory moves.
@@ -3262,6 +4229,7 @@ pub fn score_rows(
     cells: &[u32],
     scopes: &[ReadScope],
     cycle: bool,
+    keys: bool,
     device: &Device,
 ) -> Result<Vec<ScoredFile>> {
     check_run_arm(checkpoint, arm)?;
@@ -3450,6 +4418,88 @@ pub fn score_rows(
                     decode: Some((decoded, seconds)),
                 });
             }
+            // The forced-opening arm (claude-218): greedy, with each reply's first token given
+            // as its reference's, so what a right opening alone lifts is read beside greedy.
+            if keys && on {
+                let mut replies = Vec::with_capacity(prompts.len());
+                let started = std::time::Instant::now();
+                for (index, window) in prompts.iter().enumerate() {
+                    let off = window.scored_offsets[0];
+                    let prompt = &window.input_ids[..=off];
+                    let reference = reference_reply(window, reply_tokens);
+                    set_forced_opening(reference.first().copied());
+                    let decoded = decode_reply(
+                        &model,
+                        PointObjective::Cell,
+                        prompt,
+                        reply_tokens,
+                        seed,
+                        DecodeRule::Greedy,
+                        index,
+                        Some(eos),
+                        ReadScope::Full,
+                        &[],
+                    );
+                    set_forced_opening(None);
+                    let reply = decoded?.tokens;
+                    let (reply_keys, reply_named) = reply_key_hits(prompt, cut_at_eos(&reply, eos), named);
+                    let (reference_keys, reference_named) =
+                        reply_key_hits(prompt, cut_at_eos(&reference, eos), named);
+                    replies.push(IdSample {
+                        position: window.scored_corpus_positions[0],
+                        prompt: prompt.to_vec(),
+                        reply_text: tokenizer.decode(&reply),
+                        reference_text: tokenizer.decode(&reference),
+                        reply,
+                        reference,
+                        reply_keys,
+                        reply_named,
+                        reference_keys,
+                        reference_named,
+                        admitted: Vec::new(),
+                        stepped: Vec::new(),
+                    });
+                }
+                let file = format!("samples-{}-forced-{label}.json", split.name);
+                // The forced token had no forward, so the speed counts only the decoded ones.
+                let decoded = replies.iter().map(|r| r.reply.len().saturating_sub(1)).sum();
+                let seconds = started.elapsed().as_secs_f64();
+                write_new(&out.join(&file), &serde_json::to_vec(&replies)?)?;
+                written.push(ScoredFile {
+                    file,
+                    rows: replies.len(),
+                    nearest_hits: None,
+                    writer_hits: None,
+                    panel_sha256: split.sha256.clone(),
+                    tables: None,
+                    decode: Some((decoded, seconds)),
+                });
+            }
+        }
+    }
+    // The opening keys (claude-218), with the memory off (the loop's last pass): TRAIN's opening
+    // points under this trunk, and each split's openings named by the nearest of them.
+    if keys {
+        crate::flock_read_memory::set_turn_memory(None);
+        let (train_tokens, train_mask) = load_train_split(data_root)?;
+        let train_windows = windows_of(&train_tokens, &train_mask)?;
+        let (train, train_targets, _) = opening_points(&model, &train_windows, &train_mask, seed, step)?;
+        for split in &splits {
+            let (query, targets, positions) = opening_points(&model, &split.windows, &split.mask, seed, step)?;
+            let keyed = opening_keys(&split.name, &query, targets, positions, &train, &train_targets)?;
+            let file = format!("keys-{}.json", split.name);
+            write_new(&out.join(&file), &serde_json::to_vec(&keyed)?)?;
+            // The keys' hits are in the file itself; the nearest and writer fields name the
+            // trunk's and the writer's picks, so they stay empty here.
+            written.push(ScoredFile {
+                file,
+                rows: keyed.positions.len(),
+                nearest_hits: None,
+                writer_hits: None,
+                panel_sha256: split.sha256.clone(),
+                tables: None,
+                decode: None,
+            });
         }
     }
     Ok(written)
@@ -7067,6 +8117,218 @@ mod tests {
         );
     }
 
+    /// claude-218: the probe counts where a key fires (TRAIN saw it) and its hits there, keys
+    /// order-free by the distinct ids, and keys the oracle by each opening's own reply template.
+    #[test]
+    fn the_opening_bound_counts_where_a_key_fires_and_its_precision() {
+        // Any order of the same words is one order-free key.
+        assert_eq!(PromptKey::Set.of(&[5, 3, 5, 1]), [1, 3, 5]);
+        assert_eq!(PromptKey::Set.of(&[3, 5]), PromptKey::Set.of(&[5, 3]));
+        assert_eq!(PromptKey::SetFirst(2).of(&[5, 3, 1]), [3, 5]);
+        assert_eq!(PromptKey::First(2).of(&[5, 3, 1]), [5, 3]);
+        // TRAIN: key [1] opens with 7 twice and 8 once, key [2] with 9; 7 is the commonest.
+        let train = [(vec![1], 7), (vec![1], 7), (vec![1], 8), (vec![2], 9)];
+        // [1] fires and is right, [2] fires and is wrong, [3] is unseen and the fallback 7 is
+        // right, [4] is unseen and wrong: 2 hits, 1 of them where the key fired.
+        let rows = [(vec![1], 7), (vec![2], 7), (vec![3], 7), (vec![4], 5)];
+        let b = bound("p", "k".to_owned(), &train, &rows, &|_| String::new());
+        assert_eq!((b.rows, b.unseen, b.hits, b.fired_hits, b.train_keys), (4, 2, 2, 1, 2));
+        // Two documents: BOS, a prompt (10 11), a reply (20 21), a prompt (12), a reply (22);
+        // then BOS, a prompt (13) and a reply (23). Each reply runs while the mask holds, to BOS.
+        let tokens = [0u32, 10, 11, 20, 21, 12, 22, 0, 13, 23];
+        let mask = [0u8, 0, 0, 1, 1, 0, 1, 0, 0, 1];
+        assert_eq!(reply_at(&tokens, &mask, 3), [20, 21]);
+        assert_eq!(reply_at(&tokens, &mask, 6), [22]);
+        assert_eq!(reply_at(&tokens, &mask, 9), [23]);
+        let (windows, _) = hs::build_document_windows(&tokens, &mask, 16, 0).unwrap();
+        let opened = opening_rows(&windows, &mask);
+        assert_eq!(opened.iter().map(|r| r.position).collect::<Vec<_>>(), [3, 6, 9]);
+        // The oracle's key is the reply with its values masked: 23 is not kept, so it is a value.
+        let keep: std::collections::HashSet<u32> = [20, 21, 22].into();
+        let templates = template_keyed(&opened, &tokens, &mask, &keep, &Default::default());
+        assert_eq!(templates, [(vec![20, 21], 20), (vec![22], 22), (vec![CENSUS_MASK], 23)]);
+    }
+
+    /// claude-218: the key grade's parts, and the sheet's decision table read in order. τ is level
+    /// ℓ's ⌈ℓ·n/10⌉-th smallest distance, +∞ at q100; a key names a row where it fires and the
+    /// base elsewhere; the level choice keeps the lower on a tie; the forced arm is paired with
+    /// greedy on both measures and refused when it does not open with the reference's token.
+    #[test]
+    fn the_key_grade_reads_the_sheets_table_in_order() {
+        let d = [5.0f32, 1.0, 3.0, 2.0, 4.0];
+        assert_eq!([level_tau(&d, 1), level_tau(&d, 5), level_tau(&d, 9)], [1.0, 3.0, 5.0]);
+        assert_eq!(level_tau(&d, 10), f32::INFINITY);
+        // Four rows: the key names 7 at distances 1–4, the base 9; the targets are 7 7 9 9.
+        let (targets, named, base) = ([7u32, 7, 9, 9], [7u32; 4], [9u32; 4]);
+        let (distance, rows) = ([1.0f32, 2.0, 3.0, 4.0], [0usize, 1, 2, 3]);
+        let at = |tau, fires: &dyn Fn(usize) -> bool| {
+            key_reading(("p", "point", "missed", 1, 5, tau), &rows, &targets, &named, &distance, &base, fires)
+        };
+        let r = at(2.0, &|_| true);
+        assert_eq!((r.fired, r.b, r.c, r.fired_hits, r.base_fired_hits), (2, 2, 0, 2, 0));
+        let r = at(f32::INFINITY, &|_| true);
+        assert_eq!((r.fired, r.b, r.c), (4, 2, 2));
+        // A row the backoff excludes never fires: row 0 keeps the base's wrong 9.
+        let r = at(f32::INFINITY, &|i| i != 0);
+        assert_eq!((r.fired, r.b, r.c), (3, 1, 2));
+        // The level choice, summed over seeds: a tie keeps the lower level.
+        let (mut a, mut b) = ([0i64; 10], [0i64; 10]);
+        (a[2], a[6], b[6]) = (5, 5, 1);
+        assert_eq!((choose_level(&[a]), choose_level(&[a, b])), (3, 7));
+        // The forced arm. The end of turn is 1; 9 is a value (not kept). Prompt 0: greedy writes
+        // 7 7 7, forced the reference 5 6 1. Prompt 1: greedy 5 9 1 has the reference's template
+        // 5 · 1 but not its words 5 8 1, which forced writes.
+        let keep: std::collections::HashSet<u32> = [1, 5, 6, 7].into();
+        let sample = |position: usize, reply: Vec<u32>, reference: Vec<u32>| IdSample {
+            position,
+            prompt: vec![2],
+            reply,
+            reference,
+            reply_text: String::new(),
+            reference_text: String::new(),
+            reply_keys: 0,
+            reply_named: 0,
+            reference_keys: 0,
+            reference_named: 0,
+            admitted: Vec::new(),
+            stepped: Vec::new(),
+        };
+        let greedy = [sample(0, vec![7, 7, 7], vec![5, 6, 1]), sample(1, vec![5, 9, 1], vec![5, 8, 1])];
+        let forced = [sample(0, vec![5, 6, 1], vec![5, 6, 1]), sample(1, vec![5, 8, 1], vec![5, 8, 1])];
+        let none = std::collections::HashSet::new();
+        let f = forced_reading("p", 1, &greedy, &forced, 1, &keep, &none).unwrap();
+        assert_eq!((f.exact, f.template), ((2, 0), (1, 0)));
+        let wrong = [sample(0, vec![6, 6, 1], vec![5, 6, 1]), forced[1].clone()];
+        assert!(forced_reading("p", 1, &greedy, &wrong, 1, &keep, &none).is_err());
+        // The table, in order.
+        let read = |b: usize, c: usize, hits: usize, base: usize| KeyReading {
+            split: "p-u".to_owned(),
+            key: String::new(),
+            stratum: String::new(),
+            seed: 1,
+            level: 5,
+            tau: 1.0,
+            rows: 1218,
+            fired: 600,
+            b,
+            c,
+            fired_hits: hits,
+            base_fired_hits: base,
+        };
+        let seeds = |r: KeyReading| vec![r.clone(), r.clone(), r];
+        let lift = |exact, template| ForcedReading { split: "p-u".to_owned(), seed: 1, replies: 256, exact, template };
+        let flat = vec![lift((0, 0), (6, 5)); 3];
+        let lifted = vec![lift((3, 0), (30, 0)); 3];
+        let thin = vec![lift((2, 0), (3, 1)); 3];
+        let gain = seeds(read(200, 10, 250, 60));
+        let neutral = seeds(read(50, 45, 0, 0));
+        let lost = seeds(read(10, 60, 0, 0));
+        let even = seeds(read(10, 10, 100, 100));
+        let set = |sign: &Vec<KeyReading>, point: &Vec<KeyReading>| vec![("sign", sign.clone()), ("point", point.clone())];
+        let headroom = vec![(300, 0); 3];
+        // Row 1: a forced opening lifts nothing beyond its band, and the reading has power.
+        assert_eq!(key_outcome(&flat, &headroom, &set(&gain, &gain), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&even, &even)).0, 1);
+        // An underpowered forced reading cannot hold row 1.
+        assert_ne!(key_outcome(&thin, &headroom, &set(&gain, &gain), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&even, &even)).0, 1);
+        // Row 2: U has no headroom over the larger arm.
+        assert_eq!(key_outcome(&lifted, &[(5, 5); 3], &set(&gain, &gain), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&even, &even)).0, 2);
+        // Row 3: the sign key passes all four and ships before the point key.
+        let r = key_outcome(&lifted, &headroom, &set(&gain, &gain), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&even, &even));
+        assert_eq!((r.0, r.2.as_deref()), (3, Some("sign")));
+        let r = key_outcome(&lifted, &headroom, &set(&even, &gain), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&even, &even));
+        assert_eq!((r.0, r.2.as_deref()), (3, Some("point")));
+        // Casey's amendment: the Hadamard sign key ships when it passes and the sign key does not,
+        // before the point key; the sign key, cheaper still, ships first when both pass.
+        let set3 = |sign: &Vec<KeyReading>, hsign: &Vec<KeyReading>, point: &Vec<KeyReading>| {
+            vec![("sign", sign.clone()), ("hsign", hsign.clone()), ("point", point.clone())]
+        };
+        let (n3, e3) = (set3(&neutral, &neutral, &neutral), set3(&even, &even, &even));
+        let r = key_outcome(&lifted, &headroom, &set3(&even, &gain, &gain), &n3, &n3, &e3);
+        assert_eq!((r.0, r.2.as_deref()), (3, Some("hsign")));
+        let r = key_outcome(&lifted, &headroom, &set3(&gain, &gain, &gain), &n3, &n3, &e3);
+        assert_eq!((r.0, r.2.as_deref()), (3, Some("sign")));
+        // A loss beyond its band on the new stratum, or on DEV's backoff, fails row 3.
+        assert_eq!(key_outcome(&lifted, &headroom, &set(&gain, &gain), &set(&lost, &lost), &set(&neutral, &neutral), &set(&even, &even)).0, 5);
+        assert_eq!(key_outcome(&lifted, &headroom, &set(&gain, &gain), &set(&neutral, &neutral), &set(&lost, &lost), &set(&even, &even)).0, 5);
+        // FIT round 2: a small loss inside its band on the new stratum still passes row 3.
+        let mild = seeds(read(45, 50, 0, 0));
+        assert_eq!(key_outcome(&lifted, &headroom, &set(&gain, &gain), &set(&mild, &mild), &set(&neutral, &neutral), &set(&even, &even)).0, 3);
+        // Row 4: no key passes, and one loses beyond its band at q100. A loss inside the band, or
+        // none, is row 5.
+        assert_eq!(key_outcome(&lifted, &headroom, &set(&even, &even), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&lost, &even)).0, 4);
+        assert_eq!(key_outcome(&lifted, &headroom, &set(&even, &even), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&mild, &mild)).0, 5);
+        assert_eq!(key_outcome(&lifted, &headroom, &set(&even, &even), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&even, &even)).0, 5);
+        // The code review: row 1 is one-sided (a forced arm that loses still holds it); row 2 is
+        // two-sided (U far behind does not hold it); row 3 wants a gain strictly beyond its band
+        // (12 − 4 = 8 = 2·√16 does not pass); and a reading with b + c under 10 holds neither
+        // row 2 nor row 4 (FIT round 3).
+        let behind = vec![lift((0, 30), (0, 30)); 3];
+        assert_eq!(key_outcome(&behind, &headroom, &set(&gain, &gain), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&even, &even)).0, 1);
+        assert_ne!(key_outcome(&lifted, &[(0, 300); 3], &set(&even, &even), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&even, &even)).0, 2);
+        let edge = seeds(read(12, 4, 12, 4));
+        assert_eq!(key_outcome(&lifted, &headroom, &set(&edge, &edge), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&even, &even)).0, 5);
+        assert_ne!(key_outcome(&lifted, &[(3, 3); 3], &set(&even, &even), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&even, &even)).0, 2);
+        // FIT round 4: a gain on too few rows (5 − 0 > 2·√5, but b + c is 5) does not pass row 3.
+        let thin_gain = seeds(read(5, 0, 5, 0));
+        assert_eq!(key_outcome(&lifted, &headroom, &set(&thin_gain, &thin_gain), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&even, &even)).0, 5);
+        let thin_loss = seeds(read(0, 9, 0, 0));
+        assert_eq!(key_outcome(&lifted, &headroom, &set(&even, &even), &set(&neutral, &neutral), &set(&neutral, &neutral), &set(&thin_loss, &thin_loss)).0, 5);
+        // The wiring: the strata, and row 2's arm. Openings 0–3: the exact key fires at 0 only;
+        // references 1 is a verbatim TRAIN reply, 2 and 3 are not.
+        let opened = GradeOpenings {
+            name: "p".to_owned(),
+            positions: vec![10, 20, 30, 40],
+            targets: vec![1, 2, 3, 4],
+            exact: vec![(1, true), (2, false), (0, false), (0, false)],
+            oracle: vec![1, 2, 3, 0],
+            known: vec![false, true, false, false],
+        };
+        assert_eq!(key_strata(&opened), (vec![1, 2, 3], vec![2, 3], vec![1]));
+        // The exact key and B tie at 2 hits, so U is read against the exact key: right where it
+        // is wrong at opening 2 only. With B ahead (3 hits), U is read against B.
+        assert_eq!(oracle_reading(&opened, &[1, 0, 0, 4]), (1, 0));
+        assert_eq!(oracle_reading(&opened, &[1, 2, 3, 0]), (0, 0));
+        // The grade's refusals (the code review, round 2): a given level other than p-s's choice,
+        // or none; and a split where the turn anchor does not keep the first-8 key at every
+        // opening (the anchor check's own case: 2 of 3).
+        let given = [("sign".to_owned(), 4), ("point".to_owned(), 7)];
+        assert!(level_given(&given, "sign", 4).is_ok());
+        assert!(level_given(&given, "sign", 3).is_err());
+        assert!(level_given(&given[..1], "point", 7).is_err());
+        let tokens = [0u32, 10, 11, 12, 20, 21, 1, 13, 14, 22, 15, 23];
+        let mask = [0u8, 0, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1];
+        let empty = KeyTable::new(std::iter::empty());
+        let none = std::collections::HashSet::new();
+        let opened = grade_openings("p", &tokens, &mask, &empty, &empty, &none, &none, &std::collections::HashSet::new());
+        assert!(opened.is_err(), "an opening the anchor misses refuses the grade");
+        let agreeing = grade_openings("p", &tokens[..9], &mask[..9], &empty, &empty, &none, &none, &std::collections::HashSet::new());
+        // Its first turn alone, whose one opening the anchor keeps, grades.
+        assert_eq!(agreeing.unwrap().positions, [4]);
+        // FIT round 5: the follow-up pass's keys must carry the main run's point and sign keys;
+        // its Hadamard sign fields may differ, any point or sign field may not.
+        let keys = |point: f32, hsign: u32| OpeningKeys {
+            split: "p".to_owned(),
+            train_openings: 2,
+            table_bytes: 16,
+            positions: vec![4],
+            targets: vec![7],
+            point_target: vec![7],
+            point_distance: vec![point],
+            point_ties: vec![1],
+            sign_target: vec![7],
+            sign_distance: vec![0.0],
+            sign_ties: vec![2],
+            point_ms: 1,
+            sign_ms: 1,
+            hsign_target: vec![hsign],
+            hsign_distance: vec![0.0],
+            hsign_ties: vec![1],
+            hsign_ms: 1,
+        };
+        assert!(same_trunk_keys(&keys(0.5, 7), &keys(0.5, 3)));
+        assert!(!same_trunk_keys(&keys(0.5, 7), &keys(0.25, 7)));
+    }
+
     #[test]
     fn the_anchor_check_counts_openings_whose_turn_slots_are_the_first_8_key() {
         // BOS, a prompt (10 11 12), a reply (20 21) closed by EOS, a prompt (13 14), a reply (22)
@@ -7239,17 +8501,22 @@ mod tests {
         ];
         let dev = [(vec![10, 99], 20), (vec![13, 98], 22), (vec![50], 20)];
         let decode = |ids: &[u32]| format!("{ids:?}");
-        let first = bound(PromptKey::First(1), &train, &dev, &decode);
+        let by = |key: PromptKey, rows: &[(Vec<u32>, u32)]| -> Vec<(Vec<u32>, u32)> {
+            rows.iter().map(|(p, t)| (key.of(p), *t)).collect()
+        };
+        let key = PromptKey::First(1);
+        let first = bound("dev", key.name(), &by(key, &train), &by(key, &dev), &decode);
         // Key 10 opens with 20 twice and 23 once; key 13 with 22; key 50 is unseen and takes
         // TRAIN's commonest opening, 20.
         assert_eq!(
-            (first.dev_hits, first.dev_unseen, first.train_keys),
-            (3, 1, 2)
+            (first.hits, first.unseen, first.fired_hits, first.train_keys),
+            (3, 1, 2, 2)
         );
         assert_eq!(first.top[0].key, "[10]");
         assert_eq!((first.top[0].train_rows, first.top[0].opening_rows), (3, 2));
-        let none = bound(PromptKey::None, &train, &dev, &decode);
-        assert_eq!((none.dev_hits, none.dev_unseen), (2, 0));
+        let key = PromptKey::None;
+        let none = bound("dev", key.name(), &by(key, &train), &by(key, &dev), &decode);
+        assert_eq!((none.hits, none.unseen, none.fired_hits), (2, 0, 2));
     }
 
     #[test]
@@ -8410,6 +9677,131 @@ mod tests {
             decoded += greedy.len();
         }
         assert!(decoded > 0, "every reply was empty, so the check held vacuously");
+    }
+
+    /// claude-218: a forced opening is the reply's first token, and the rest is greedy from the
+    /// prompt and that token; and the opening points are exactly the trunk's points at the
+    /// scored rows that open a reply, as `row_picks` sees them.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn a_forced_opening_continues_greedy_and_the_opening_points_are_the_rows() {
+        let device = Device::new_cuda(0).unwrap();
+        let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
+        let prompt: Vec<u32> = (1..=24u32).map(|i| (i * 37) % 4096).collect();
+        let decode = |prompt: &[u32], n| {
+            decode_reply(&model, PointObjective::Cell, prompt, n, 1, DecodeRule::Greedy, 0, None, ReadScope::Full, &[])
+                .unwrap()
+                .tokens
+        };
+        set_forced_opening(Some(77));
+        let forced = decode(&prompt, 16);
+        set_forced_opening(None);
+        assert_eq!(forced[0], 77, "the forced token opens the reply");
+        let extended: Vec<u32> = prompt.iter().copied().chain([77]).collect();
+        assert_eq!(forced[1..], decode(&extended, 15)[..], "the rest is greedy from the prompt and it");
+        assert_ne!(decode(&prompt, 16).first(), None, "the unforced reply decodes");
+        // Two turns: BOS, a prompt, a reply, a prompt, a reply.
+        let mut tokens = vec![hs::SHEET_BOS_ID];
+        let mut mask = vec![0u8];
+        for (ids, flag) in [(10..20u32, 0u8), (20..26, 1), (26..30, 0), (30..34, 1)] {
+            for t in ids {
+                tokens.push(t);
+                mask.push(flag);
+            }
+        }
+        let (windows, _) =
+            hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID).unwrap();
+        let (points, targets, positions) = opening_points(&model, &windows, &mask, 1, 0).unwrap();
+        assert_eq!(positions, [11, 21]);
+        assert_eq!(targets, [20, 30]);
+        let mut seen = Vec::new();
+        row_picks(&model, &windows, &mask, 1, 0, |query, opens| {
+            let rows: Vec<u32> = (0..opens.len() as u32).filter(|&i| opens[i as usize]).collect();
+            let idx = Tensor::from_vec(rows.clone(), rows.len(), query.device())?;
+            seen.push(query.index_select(&idx, 0)?);
+            Ok(())
+        })
+        .unwrap();
+        let seen = Tensor::cat(&seen, 0).unwrap();
+        let gap = (points - seen).unwrap().abs().unwrap().max_all().unwrap().to_scalar::<f32>().unwrap();
+        assert_eq!(gap, 0.0, "the opening points are the rows' own points");
+    }
+
+    /// claude-218 (FIT round 1): each query is named by the commonest target among the TRAIN
+    /// openings at its least L1 distance, ties to the smaller id, across the search's blocks and
+    /// inside one; and by sign pattern, whose L1 is the Hamming distance over the width. On the
+    /// device: CPU tensor compute is refused (D24/D29).
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_opening_keys_name_each_opening_by_its_nearest_train_opening() {
+        let device = Device::new_cuda(0).unwrap();
+        // 5,000 TRAIN rows, past one 4,096-row block: row r is (r, 0), target r % 7.
+        let rows: Vec<f32> = (0..5000).flat_map(|r| [r as f32, 0.0]).collect();
+        let train = Tensor::from_vec(rows, (5000, 2), &device).unwrap();
+        let train_targets: Vec<u32> = (0..5000u32).map(|r| r % 7).collect();
+        // 4,500.2 is nearest row 4,500 alone (second block); −3 is nearest row 0; 4,095.5 ties
+        // rows 4,095 (target 0) and 4,096 (target 1) across the blocks, and names the smaller.
+        let query = Tensor::from_vec(vec![4500.2f32, 0.0, -3.0, 0.0, 4095.5, 0.0], (3, 2), &device).unwrap();
+        let near = l1_named(&query, &train, &train_targets).unwrap();
+        assert_eq!(near.iter().map(|n| (n.target, n.ties)).collect::<Vec<_>>(), [(4500 % 7, 1), (0, 1), (0, 2)]);
+        assert!((near[0].distance - 0.1).abs() < 1e-3 && (near[1].distance - 1.5).abs() < 1e-6, "{near:?}");
+        // Ties inside one block: every row is (100, 0) with target 0, but rows 1 and 1,024 are
+        // (5, 0), with targets 9 and 3: a tie of one each names the smaller id, 3. With row 2,000
+        // also at (5, 0) and targets 3, 9, 9, the commonest, 9, names it, not the first row's 3.
+        let block = |at: &[(usize, u32)]| {
+            let rows: Vec<f32> = (0..4096)
+                .flat_map(|r| [if at.iter().any(|&(i, _)| i == r) { 5.0 } else { 100.0 }, 0.0])
+                .collect();
+            let targets: Vec<u32> = (0..4096).map(|r| at.iter().find(|&&(i, _)| i == r).map_or(0, |&(_, t)| t)).collect();
+            (Tensor::from_vec(rows, (4096, 2), &device).unwrap(), targets)
+        };
+        let five = Tensor::from_vec(vec![5.0f32, 0.0], (1, 2), &device).unwrap();
+        let (table, targets) = block(&[(1, 9), (1024, 3)]);
+        assert_eq!(l1_named(&five, &table, &targets).unwrap()[0], Named { target: 3, distance: 0.0, ties: 2 });
+        let (table, targets) = block(&[(1, 3), (1024, 9), (2000, 9)]);
+        assert_eq!(l1_named(&five, &table, &targets).unwrap()[0], Named { target: 9, distance: 0.0, ties: 3 });
+        // The sign code: 0/1 per coordinate, zero counting as positive.
+        let points = Tensor::from_vec(vec![0.5f32, -0.2, -1.0, 0.0], (2, 2), &device).unwrap();
+        let code = sign_code(&points).unwrap().to_vec2::<f32>().unwrap();
+        assert_eq!(code, [[1.0, 0.0], [0.0, 1.0]]);
+        let keyed = opening_keys("p", &query, vec![1, 2, 3], vec![10, 20, 30], &train, &train_targets).unwrap();
+        assert_eq!(keyed.point_target, [4500 % 7, 0, 0]);
+        assert_eq!(keyed.point_ties, [1, 1, 2]);
+        assert_eq!((keyed.train_openings, keyed.table_bytes), (5000, 5000 * 2 * 4));
+        // Every TRAIN row's sign code is (1, 1), so all 5,000 tie for every query; targets 0 and
+        // 1 are the commonest (715 each), so 0 names them. Hamming distance 0 from the queries
+        // with both coordinates at or above zero, and 1/2 from (−3, 0).
+        assert_eq!(keyed.sign_target, [0, 0, 0]);
+        assert_eq!(keyed.sign_ties, [5000, 5000, 5000]);
+        assert_eq!(keyed.sign_distance, [0.0, 0.5, 0.0]);
+        // The Hadamard sign key (Casey's amendment) is written beside them, for every opening.
+        assert_eq!((keyed.hsign_target.len(), keyed.hsign_distance.len(), keyed.hsign_ties.len()), (3, 3, 3));
+        assert!(keyed.hsign_ties.iter().all(|&t| t >= 1));
+        // The transform: H4 (1, 2, 3, 4) = (10, −2, −4, 0); twice is 4 times the input; a width
+        // that is not a power of two is refused.
+        let x = Tensor::from_vec(vec![1.0f32, 2.0, 3.0, 4.0], (1, 4), &device).unwrap();
+        let hx = walsh_hadamard(&x).unwrap();
+        assert_eq!(hx.to_vec2::<f32>().unwrap(), [[10.0, -2.0, -4.0, 0.0]]);
+        assert_eq!(walsh_hadamard(&hx).unwrap().to_vec2::<f32>().unwrap(), [[4.0, 8.0, 12.0, 16.0]]);
+        assert!(walsh_hadamard(&Tensor::zeros((1, 3), DType::F32, &device).unwrap()).is_err());
+        // The code is the sign of H·S·x, by hand (the code review): S = (−, −, +, −), so
+        // S·x = (−1, −2, 3, −4), H4 of it = (−4, 8, −2, −6), and the code is (0, 1, 0, 0). The
+        // unrotated code, of H·x = (10, −2, −4, 0), would be (1, 0, 0, 1).
+        assert_eq!(hadamard_sign_code(&x).unwrap().to_vec2::<f32>().unwrap(), [[0.0, 1.0, 0.0, 0.0]]);
+    }
+
+    /// claude-218 (Casey's amendment): the Hadamard rotation's fixed signs are exact, the same at
+    /// every call, and mixed.
+    #[test]
+    fn the_hadamard_rotations_signs_are_fixed_and_mixed() {
+        let s = rotation_signs(256);
+        assert_eq!(s, rotation_signs(256));
+        assert!(s.iter().all(|&v| v == 1.0 || v == -1.0));
+        let negative = s.iter().filter(|&&v| v < 0.0).count();
+        assert!((96..=160).contains(&negative), "{negative} of 256 negated");
+        assert_eq!(rotation_signs(4), rotation_signs(256)[..4]);
+        // The first eight, as literals (the code review): a changed hash or rule fails here.
+        assert_eq!(rotation_signs(8), [-1.0, -1.0, 1.0, -1.0, 1.0, 1.0, 1.0, -1.0]);
     }
 
     /// claude-211 (Casey 30 Oct: "do not rule flock out, improve it instead"): with `keep_end`,
