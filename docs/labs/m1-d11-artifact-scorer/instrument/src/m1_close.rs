@@ -17,8 +17,14 @@ use crate::fresh_transfer::{
     FRESH_TRANSFER_GATE_SCHEMA, FRESH_TRANSFER_REPORT_SCHEMA, FRESH_V2_ELIGIBLE_TARGETS,
     FRESH_V2_MANIFEST_SHA256, FRESH_V2_MASK_SHA256, FRESH_V2_PAYLOAD_TOKENS, FRESH_V2_PSUCC_ROWS,
     FRESH_V2_ROW_BINDING_SHA256, FRESH_V2_SEAL_SHA256, FRESH_V2_TOKENS_SHA256,
-    FULL_PANEL_NOISE_FLOOR, PSUCC_NOISE_FLOOR, TRAIN_MASK_SHA256, TRAIN_TOKENS_SHA256,
+    FULL_PANEL_NOISE_FLOOR, PANEL_REPORT_SCHEMA, PSUCC_NOISE_FLOOR, P_F_MASK_SHA256,
+    P_F_TOKENS_SHA256, TRAIN_MASK_SHA256, TRAIN_TOKENS_SHA256,
 };
+
+/// The committed bar (f) report of the canonical saved model (claude-211,
+/// `docs/labs/m1-heldout-phrasing-transfer/evidence/panel-score.json`).
+const CANONICAL_BAR_F_REPORT: &str =
+    include_str!("../../../m1-heldout-phrasing-transfer/evidence/panel-score.json");
 
 pub const M1_CLOSE_SCHEMA: &str = "uor-r4.m1-close-saved-model/1";
 pub const DEV_PSUCC_ROWS: u64 = 3_581;
@@ -140,7 +146,7 @@ impl M1SeedMetrics {
 }
 
 /// Complete two-seed input for evaluating a saved discrete candidate against
-/// the five M1 closing bars (a)–(e).
+/// the six M1 closing bars (a)–(f).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct M1CloseCandidateInput {
     pub candidate_id: String,
@@ -153,6 +159,9 @@ pub struct M1CloseCandidateInput {
     /// Optional `uor-r4.m1-fresh-transfer-report/1` JSON. Must be `None` when
     /// `bars_a_to_d_pass == false` (enforcing the prospective fresh seal).
     pub fresh_transfer_report: Option<Value>,
+    /// Optional `uor-r4.m1-heldout-phrasing-report/1` JSON (`d11-scorer
+    /// panel-score`, M1 bar (f), D82). Must be `None` while bars (a)–(d) fail.
+    pub heldout_phrasing_report: Option<Value>,
 }
 
 impl M1CloseCandidateInput {
@@ -166,11 +175,12 @@ impl M1CloseCandidateInput {
             "seed_1": self.seed_1.to_json(),
             "seed_2": self.seed_2.to_json(),
             "fresh_transfer_report": self.fresh_transfer_report,
+            "heldout_phrasing_report": self.heldout_phrasing_report,
         })
     }
 }
 
-/// Five-bar M1 closing verdict for a two-seed discrete candidate.
+/// Six-bar M1 closing verdict for a two-seed discrete candidate.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct M1BarVerdicts {
     pub candidate_id: String,
@@ -188,6 +198,8 @@ pub struct M1BarVerdicts {
     pub seed_2_deficit_to_t2_floor: u64,
     pub fresh_transfer_status: String,
     pub bar_e_fresh_transfer_two_seeds: bool,
+    pub heldout_phrasing_status: String,
+    pub bar_f_heldout_phrasing_two_seeds: bool,
     pub m1_close_pass: bool,
     pub outcome: String,
 }
@@ -210,6 +222,8 @@ impl M1BarVerdicts {
             "seed_2_deficit_to_t2_floor": self.seed_2_deficit_to_t2_floor,
             "fresh_transfer_status": self.fresh_transfer_status,
             "bar_e_fresh_transfer_two_seeds": self.bar_e_fresh_transfer_two_seeds,
+            "heldout_phrasing_status": self.heldout_phrasing_status,
+            "bar_f_heldout_phrasing_two_seeds": self.bar_f_heldout_phrasing_two_seeds,
             "m1_close_pass": self.m1_close_pass,
             "outcome": self.outcome,
         })
@@ -242,7 +256,7 @@ fn check_seed_bar_c(s: &M1SeedMetrics) -> bool {
         && s.gpu_response_tok_s > 0
 }
 
-/// Evaluates all five M1 closing bars (a)–(e) on a two-seed candidate input.
+/// Evaluates all six M1 closing bars (a)–(f) on a two-seed candidate input.
 /// Refuses any input where `fresh_transfer_report.is_some()` while
 /// `bars_a_to_d_pass == false` so that a premature unsealing of `Fresh V2`
 /// is rejected as a hard error.
@@ -337,13 +351,58 @@ pub fn evaluate_m1_closing_bars(input: &M1CloseCandidateInput) -> Result<M1BarVe
         }
     };
 
-    let m1_close_pass = bars_a_to_d_pass && bar_e;
+    // Bar (f), D82 (claude-211): the held-out-phrasing panel's two-seed report.
+    if !bars_a_to_d_pass && input.heldout_phrasing_report.is_some() {
+        return Err(
+            "heldout_phrasing_report provided while bars_a_to_d_pass is false".into(),
+        );
+    }
+    let (heldout_phrasing_status, bar_f) = match &input.heldout_phrasing_report {
+        None => ("UNAVAILABLE_NOT_RUN".to_owned(), false),
+        Some(rep) => {
+            if rep["schema"].as_str() != Some(PANEL_REPORT_SCHEMA) {
+                return Err(format!(
+                    "heldout_phrasing_report schema must be {PANEL_REPORT_SCHEMA}"
+                ));
+            }
+            // Bar (f)'s own panel only, as bar (e) pins Fresh V2: a report on any other panel,
+            // a template-sharing control included, cannot close M1 (claude-211 review).
+            if rep["panel_tokens_sha256"].as_str() != Some(P_F_TOKENS_SHA256)
+                || rep["panel_mask_sha256"].as_str() != Some(P_F_MASK_SHA256)
+            {
+                return Err(
+                    "heldout_phrasing_report panel is not bar (f)'s p-f (e6abbdf0… / c63c625a…)"
+                        .into(),
+                );
+            }
+            if rep["seed_1"]["artifact_sha256"].as_str() != Some(s1.artifact_sha256.as_str())
+                || rep["seed_2"]["artifact_sha256"].as_str() != Some(s2.artifact_sha256.as_str())
+            {
+                return Err(
+                    "heldout_phrasing_report seed artifact_sha256 does not match candidate seeds"
+                        .into(),
+                );
+            }
+            let pass = rep["bar_f_pass"].as_bool() == Some(true)
+                && rep["outcome"].as_str() == Some("PASS_BAR_F_HELDOUT_PHRASING");
+            let status = if pass {
+                "PASS_BAR_F_HELDOUT_PHRASING".to_owned()
+            } else {
+                "FAIL_BAR_F_CLOSE_CONFIGURATION".to_owned()
+            };
+            (status, pass)
+        }
+    };
+
+    let m1_close_pass = bars_a_to_d_pass && bar_e && bar_f;
     let outcome = if m1_close_pass {
-        "PASS_M1_ALL_FIVE_BARS".to_owned()
+        "PASS_M1_ALL_SIX_BARS".to_owned()
     } else if !bars_a_to_d_pass {
         "HOLD_M1_OPEN_BAR_D_UNMET_FRESH_SEAL_INTACT".to_owned()
-    } else {
+    } else if !bar_e {
         "HOLD_M1_OPEN_BAR_E_UNMET".to_owned()
+    } else {
+        "HOLD_M1_OPEN_BAR_F_UNMET".to_owned()
     };
 
     Ok(M1BarVerdicts {
@@ -362,6 +421,8 @@ pub fn evaluate_m1_closing_bars(input: &M1CloseCandidateInput) -> Result<M1BarVe
         seed_2_deficit_to_t2_floor,
         fresh_transfer_status,
         bar_e_fresh_transfer_two_seeds: bar_e,
+        heldout_phrasing_status,
+        bar_f_heldout_phrasing_two_seeds: bar_f,
         m1_close_pass,
         outcome,
     })
@@ -542,6 +603,7 @@ pub fn canonical_stage_t_fz_candidate() -> M1CloseCandidateInput {
             stage3_trunk_level3_psucc_top1: Some(511),
         },
         fresh_transfer_report: None,
+        heldout_phrasing_report: None,
     }
 }
 
@@ -620,6 +682,7 @@ pub fn canonical_stage_t_rel_candidate() -> M1CloseCandidateInput {
             stage3_trunk_level3_psucc_top1: Some(465),
         },
         fresh_transfer_report: None,
+        heldout_phrasing_report: None,
     }
 }
 
@@ -699,6 +762,7 @@ pub fn canonical_trunk_joint_pointer_fz_candidate() -> M1CloseCandidateInput {
             stage3_trunk_level3_dev_top1: Some(7_001),
             stage3_trunk_level3_psucc_top1: Some(1_770),
         },
+        heldout_phrasing_report: serde_json::from_str(CANONICAL_BAR_F_REPORT).ok(),
         fresh_transfer_report: Some(json!({
             "bar_e_pass": true,
             "fresh_mask_sha256": FRESH_V2_MASK_SHA256,
@@ -873,8 +937,11 @@ pub fn canonical_m1_saved_model_audit() -> Result<(Value, Value), String> {
         "bar_d_pass": true,
         "bar_e_pass": true,
         "bar_e_status": "PASS_BAR_E_FRESH_TRANSFER",
+        "bar_f_pass": true,
+        "bar_f_status": "PASS_BAR_F_HELDOUT_PHRASING",
+        "bar_f_detail": "claude-211, 30 Oct 2026: held-out-phrasing panel p-f (dev,dev seed 2051, 15,953 rows, 0.000 TRAIN prompt templates) top-1 7,850/7,872 (+475/+497 over T2=7,375 vs band 81; +6,441/+6,463 over Unigram=1,409 vs band 162), 0 refused rows, 0 reference mismatches, B4 pass, builds A and B byte-identical (docs/labs/m1-heldout-phrasing-transfer/evidence/panel-score.json)",
         "m1_close_pass": true,
-        "blocking_reason": "None — passes all five M1 closing bars (a)-(e) across both seeds on two independent ahead-of-time CUDA builds (Build A and Build B on RTX 5090 compute_120): Bar (a) 19-table uor-r4.lut-discrete-trunk/1 (86,536,132 B / 84,943,328 B) accepted by crates/uor-r4-integer::IntegerDiscreteModel::from_bytes; Bar (b) 0 export gap (14,287/14,287 agreed) + planted-fault B4 rejection (1,260/1,262 cell flips, 656/682 route/gate flips); Bar (c) laptop decode median 11,026/10,573 tok/s (prefill 2,596,805/2,764,260 tok/s) and GPU 183,206/181,086 response tok/s (34,625,934/34,225,309 context tok/s); Bar (d) ft/dev top-1 7,002/7,001 (+702/+701 over T2=6,300, +5,776/+5,775 over Unigram=1,226) and P_succ 1,779/1,770 (+534/+525 over T2_psucc=1,245); Bar (e) sealed Fresh V2 top-1 7,215/7,228 (+633/+646 over T2=6,582 vs required McNemar floor 82; +5,936/+5,949 over Unigram=1,279 vs required floor 156) and P_succ 1,713/1,711 (+473/+471 over T2_psucc=1,240 vs required floor 52) with 0 reference mismatches and B4 pass"
+        "blocking_reason": "None — passes all six M1 closing bars (a)-(f) (bar (f) in bar_f_detail) across both seeds on two independent ahead-of-time CUDA builds (Build A and Build B on RTX 5090 compute_120): Bar (a) 19-table uor-r4.lut-discrete-trunk/1 (86,536,132 B / 84,943,328 B) accepted by crates/uor-r4-integer::IntegerDiscreteModel::from_bytes; Bar (b) 0 export gap (14,287/14,287 agreed) + planted-fault B4 rejection (1,260/1,262 cell flips, 656/682 route/gate flips); Bar (c) laptop decode median 11,026/10,573 tok/s (prefill 2,596,805/2,764,260 tok/s) and GPU 183,206/181,086 response tok/s (34,625,934/34,225,309 context tok/s); Bar (d) ft/dev top-1 7,002/7,001 (+702/+701 over T2=6,300, +5,776/+5,775 over Unigram=1,226) and P_succ 1,779/1,770 (+534/+525 over T2_psucc=1,245); Bar (e) sealed Fresh V2 top-1 7,215/7,228 (+633/+646 over T2=6,582 vs required McNemar floor 82; +5,936/+5,949 over Unigram=1,279 vs required floor 156) and P_succ 1,713/1,711 (+473/+471 over T2_psucc=1,240 vs required floor 52) with 0 reference mismatches and B4 pass"
     });
     let inventory = json!([
         {
