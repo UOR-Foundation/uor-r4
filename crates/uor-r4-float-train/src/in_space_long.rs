@@ -2748,6 +2748,149 @@ pub fn keyed_grade(
     Ok(grade)
 }
 
+/// The panels the served grade reads (claude-220's sheet), with their token and mask sha256s:
+/// p-v, claude-219's deciding panel, where the served key must give claude-219's keyed-point
+/// replies, and p-w, the fresh panel (seed 2121) that decides.
+const SERVED_PANELS: [(&str, &str, &str); 2] = [
+    KEYED_PANELS[1],
+    (
+        "p-w",
+        "1292e2460c8b7b777ea1f536972537436e5c2af168c6a40c54d640c654a8050f",
+        "32a29da0513f3df9404552a2fe313a763426c818fea316fed0edc630dce360b6",
+    ),
+];
+
+/// The served grade (claude-220), on the laptop: on p-w (deciding), p-v and DEV at seeds 1–3,
+/// the forced arm against greedy on p-w; the served arm against greedy, read by [`keyed_reading`]
+/// as the point key at +∞, which refuses any served token that is not the run's keys-file name
+/// (the parity instrument) and any reply its opening does not fix; and the protocol's
+/// free-generation measures ([`generation`]) for greedy and the served arm. With the sheet's
+/// decision, read by [`keyed_outcome`]'s rows on p-w.
+#[derive(Clone, Debug, Serialize)]
+pub struct ServedGrade {
+    pub forced: Vec<ForcedReading>,
+    pub readings: Vec<KeyedReading>,
+    /// `(split, seed, arm, measures)`, the arm `greedy` or `served`.
+    pub generation: Vec<(String, u8, String, Generation)>,
+    pub row: Option<u8>,
+    pub next: Option<String>,
+}
+
+/// [`ServedGrade`] from the run in `runs` (`r-drop-s{1,2,3}`), on `panels`' p-w and p-v, each
+/// checked by its sha256s.
+pub fn served_grade(data_root: &Path, runs: &Path, panels: &[(String, PathBuf)]) -> Result<ServedGrade> {
+    let bos = hs::SHEET_BOS_ID;
+    let panel = |name: &str| -> Result<(Vec<u32>, Vec<u8>)> {
+        let (_, want, want_mask) =
+            SERVED_PANELS.iter().find(|(n, _, _)| *n == name).ok_or_else(|| invalid("not a served panel"))?;
+        let dir = &panels
+            .iter()
+            .find(|(n, _)| n == name)
+            .ok_or_else(|| invalid(format!("--served-grade needs --panel {name}=DIR")))?
+            .1;
+        let (tokens, mask, sha) = load_unpinned_uort(dir)?;
+        let mask_sha = crate::sha256_bytes(&mask);
+        if sha != *want || mask_sha != *want_mask {
+            return Err(invalid(format!(
+                "--panel {name}: tokens sha256 {sha} and mask {mask_sha}, not the sheet's {want} and {want_mask}"
+            )));
+        }
+        Ok((tokens, mask))
+    };
+    let tokenizer = pinned_tokenizer(data_root)?;
+    let eos = tokenizer.token_id("<|eos|>").ok_or_else(|| invalid("the pinned tokenizer has no <|eos|>"))?;
+    let digits = digit_tokens(&fs::read_to_string(data_root.join("tokenizer.json"))?)?;
+    let (train_tokens, train_mask) = load_train_split(data_root)?;
+    let keep = top_tokens(&train_tokens, OPENING_TEMPLATE_K, bos);
+    let (train_windows, _) = hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, bos)?;
+    let train_rows = opening_rows(&train_windows, &train_mask);
+    let exact = KeyTable::new(train_rows.iter().map(|r| (PromptKey::First(8).of(&r.prompt), r.target)));
+    let oracle = KeyTable::new(
+        train_rows
+            .iter()
+            .map(|r| (value_mask(reply_at(&train_tokens, &train_mask, r.position), &keep, &digits), r.target)),
+    );
+    let train_turns = split_turns(&train_tokens, &train_mask, bos).replies;
+    let train_replies: std::collections::HashSet<u128> = train_turns.iter().map(|r| census_hash(r)).collect();
+    drop((train_rows, train_windows));
+    let (dev_tokens, dev_mask) = hs::load_pinned_uort_split(
+        &data_root.join("ft/dev/tokens.u16"),
+        &data_root.join("ft/dev/response_mask.u8"),
+        hs::PINNED_DEV_TOKENS_SHA256,
+        hs::PINNED_DEV_MASK_SHA256,
+        hs::EXPECTED_DEV_TOKENS,
+        hs::EXPECTED_DEV_ELIGIBLE_TARGETS,
+        hs::SHEET_VOCAB,
+        bos,
+    )?;
+    let (pw_tokens, pw_mask) = panel("p-w")?;
+    let (pv_tokens, pv_mask) = panel("p-v")?;
+    let openings_of = |name: &str, tokens: &[u32], mask: &[u8]| {
+        grade_openings(name, tokens, mask, &exact, &oracle, &keep, &digits, &train_replies)
+    };
+    let splits = [
+        openings_of("p-w", &pw_tokens, &pw_mask)?,
+        openings_of("p-v", &pv_tokens, &pv_mask)?,
+        openings_of("dev", &dev_tokens, &dev_mask)?,
+    ];
+    let samples = |seed: u8, split: &str, arm: &str| -> Result<Vec<IdSample>> {
+        let file = match (split, arm) {
+            ("dev", "greedy") => "samples-memory.json".to_owned(),
+            (split, arm) => format!("samples-{split}-{arm}-memory.json"),
+        };
+        read_scored(&runs.join(format!("r-drop-s{seed}")).join(file))
+    };
+    let mut grade = ServedGrade { forced: Vec::new(), readings: Vec::new(), generation: Vec::new(), row: None, next: None };
+    let mut by_seed = Vec::new();
+    for seed in 1..=3u8 {
+        let mut pw_dev: (Option<KeyedReading>, Option<KeyedReading>) = (None, None);
+        for openings in &splits {
+            let split = openings.name.as_str();
+            let picks = seed_picks(runs, None, seed, openings)?;
+            let (greedy, forced, served) = (samples(seed, split, "greedy")?, samples(seed, split, "forced")?, samples(seed, split, "served")?);
+            if split == "p-w" {
+                grade.forced.push(forced_reading(split, seed, &greedy, &forced, eos, &keep, &digits)?);
+            }
+            let reading = keyed_reading(
+                (split, "point", seed, f32::INFINITY),
+                openings,
+                &picks,
+                &greedy,
+                &forced,
+                Some(&served),
+                eos,
+                &keep,
+                &digits,
+            )?;
+            for (arm, replies) in [("greedy", &greedy), ("served", &served)] {
+                let replies: Vec<Vec<u32>> = replies.iter().map(|s| s.reply.clone()).collect();
+                grade.generation.push((split.to_owned(), seed, arm.to_owned(), generation(&replies, &train_turns, eos)));
+            }
+            match split {
+                "p-w" => pw_dev.0 = Some(reading.clone()),
+                "dev" => pw_dev.1 = Some(reading.clone()),
+                _ => {}
+            }
+            grade.readings.push(reading);
+        }
+        if let (Some(p), Some(d)) = pw_dev {
+            by_seed.push((p, d));
+        }
+    }
+    let (row, _, _) = keyed_outcome(&grade.forced, &[("point", by_seed)]);
+    grade.row = Some(row);
+    grade.next = Some(
+        match row {
+            1 => "an instrument check: the forced arm lifted at every seed on p-s, p-u and p-v",
+            2 => "the one float model serves the point key; next, its integer export under its own item, then the integer model end to end",
+            3 => "underpowered: a larger panel, or the seeds pooled under a fresh sheet",
+            _ => "the served key does not carry on a second fresh panel; next, train the trunk's opening point to gather paraphrases",
+        }
+        .to_owned(),
+    );
+    Ok(grade)
+}
+
 /// One reply row (turn-memory-reply, claude-192): the prompt its window shows for its turn, back
 /// from the reply's start to the last response token or BOS; the reply's own earlier tokens; its
 /// target; and whether it opens the reply or copies the prompt ([`copies_prompt`]).
