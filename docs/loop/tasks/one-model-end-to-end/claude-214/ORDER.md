@@ -25,6 +25,7 @@ Result, 30 Oct (instrument; nothing blocks):
 - **Is the file already in the item's scope?** No. At `f67149842`, `one-model-end-to-end`'s `scope:` holds `flock_read_memory.rs` but not `flock_read_hamming.rs`.
 - **Does another item or open PR hold it?**
   - **Items:** `in-space-trunk-to-text`, `route-plus-memory` and `turn-memory-reply` held `flock_read*.rs`, and all three are done. `integer-hamming-read` only cites the file in prose.
+  - **One held item also covers it:** `e8-orbit-memory-sigmoid-free-iteration`, whose `scope:` is `crates/uor-r4-float-train/**`. It is `status: held`, and nobody has claimed it. Overlapping scopes are accepted elsewhere: `turn-memory-integer` shares `in_space_long.rs` and `flock_read_memory.rs` with this item. A claim's overlap check is what locks a file, and it would refuse a concurrent claim.
   - **Open PRs:** none touches it.
 - **Classed:** instrument. Nothing cancels the unit.
 

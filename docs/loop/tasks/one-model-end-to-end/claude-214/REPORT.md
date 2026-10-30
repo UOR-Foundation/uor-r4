@@ -17,6 +17,7 @@ Not measured here: this unit changes one scope line and runs nothing.
 - **`docs/roadmap/items/one-model-end-to-end.md`:** `scope:` adds `crates/uor-r4-float-train/src/flock_read_hamming.rs`.
   - `roadmap render` leaves `docs/roadmap/README.md` unchanged, since the scope line is not rendered.
 - **The decision** is logged on #3407 (6518346519).
+  - **The exact-head review found one item the probe had missed:** the held, unclaimed `e8-orbit-memory-sigmoid-free-iteration` also covers the file, through `crates/uor-r4-float-train/**`. It is no collision, and it is now named in the ORDER's cancel probe.
   - **Its fresh decision review: PASS.** Chain, collisions, narrowness and risk were each checked with evidence.
   - **Its conditions** are in the ORDER and bind claude-215.
 
