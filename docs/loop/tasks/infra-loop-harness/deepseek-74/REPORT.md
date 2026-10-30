@@ -11,6 +11,7 @@ References #3432, #3433
 - `cargo xtask ...` is not installed as a cargo alias on this main; the CI-proven form `cargo run -q --locked -p xtask -- roadmap ...` was used.
 - The two sync applies are GitHub writes. Each dry run was read in full first. They refreshed #3416's body and the M1/M6 milestone children lists (first apply) and created the umbrella issue (second apply); this REPORT discloses those side effects rather than claiming them as the change.
 - The M6 issue was created by an earlier draft apply (16:04Z) before the umbrella item existed; the second sync adopted it by its `<!-- roadmap:id=m6-code-task-rustc-verifier -->` marker instead of duplicating it.
+- The first route for the three repairs (push the adoption commits to the fork branch and approve its workflow runs) does not work: on a public repository GitHub gives `pull_request` runs from forks a read-only `GITHUB_TOKEN`, and `required-transport` needs `checks: write` to publish the five ruleset names, so a fork PR can never enter the merge queue. The item records the same-repo re-home route instead (branch from `main`, ORDER commit, `git merge --no-ff` the contributor's commits unchanged, REPORT commit, new PR). The fork was never written to; this was found before any fork write.
 
 ## What changed
 

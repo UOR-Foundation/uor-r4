@@ -26,7 +26,7 @@ The three repairs:
 
 - **No roadmap item owns these paths.** The product crate's M1/M2 items are `done` or held; the docs-tool paths are owned by no live item. `infra-loop-harness` is the records/item-file umbrella and its scope deliberately stops at records, not product code; widening it into `crates/uor-r4-discrete/src/**` would put the model crate inside every future loop unit.
 - **No ORDER, REPORT or review exists for the three fork PRs** (no adoption record, no `uor-review v1`, CI never ran on them). Under CHARTER §5.5 an outsider PR needs the maintainer lab that adopts it to add the ORDER and REPORT.
-- **They are behind main** (`strict_required_status_checks_policy` is on), and their branches come from a fork; the adopting commits have to go on the fork branch with `maintainer_can_modify`.
+- **They are behind main and cannot publish the required checks from a fork.** `strict_required_status_checks_policy` is on, and a `pull_request` run from a fork gets a read-only `GITHUB_TOKEN` on this public repository; `required-transport` needs `checks: write`, so the five ruleset names cannot be published at a fork PR head and the merge queue would never admit it. Each repair is therefore re-homed into a same-repo branch and PR: the branch starts from `main`, adds the ORDER commit, merges the contributor's commits unchanged (authorship preserved), adds the REPORT, and runs CI normally. The original fork PR is thanked, credited and closed when the re-homed PR merges.
 - **The contributor's #3168 question is unanswered** (bump `DRIVER_SOURCE_SHA256` in the same PR or not) and the three intent comments got no reply.
 
 ## Done when
@@ -42,7 +42,7 @@ The three repairs:
 
 ## How to start
 
-Read `CHARTER.md` §5.5, `docs/loop/README.md` (the outsider clause and the `uor-review v1` record), the three issues and PRs, and the audit reports in `local/lead/suzuki-audit/reports/`. Claim this item, write the ORDER, push the ORDER and REPORT commits to the fork branch, merge `origin/main` forward, approve the fork's workflow runs, run the ORDER's host done-when at the head, post the review record in the same session, then `loop queue`. The records package is drafted in `local/lead/suzuki-audit/drafts/adoption/`.
+Read `CHARTER.md` §5.5, `docs/loop/README.md` (the outsider clause and the `uor-review v1` record), the three issues and PRs, and the audit reports in `local/lead/suzuki-audit/reports/`. Claim this item. For each repair: create a same-repo branch from current `main`, commit the ORDER first (alone in its folder), merge the contributor's PR head with `git merge --no-ff` (original authorship preserved), commit the REPORT, push and open a `[deepseek] Adopt #NNNN: ...` PR. Run the ORDER's host done-when at that head, post the exact-head fresh-context `uor-review v1`, then `loop queue`. Comment on the original fork PR that it was adopted, then close it. The records package is drafted in `local/lead/suzuki-audit/drafts/adoption/`; the fork route was ruled out by the read-only fork token, found before any fork write.
 
 ## Rules that apply
 
