@@ -95,6 +95,27 @@ fn label(a: &Action) -> (&'static str, &str, &str) {
     }
 }
 
+/// Destinations that repeat, or that lie inside another action's destination
+/// (which must then be both a file and a directory).
+pub fn dest_conflicts(actions: &[Action]) -> Vec<String> {
+    let mut dests = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for a in actions {
+        let (_, dest, _) = label(a);
+        if !dests.insert(dest) {
+            out.push(format!("{dest}: destination listed more than once"));
+        }
+    }
+    for dest in dests.iter().copied() {
+        for (i, _) in dest.match_indices('/') {
+            if dests.contains(&dest[..i]) {
+                out.push(format!("{dest}: destination inside {}", &dest[..i]));
+            }
+        }
+    }
+    out
+}
+
 /// `docs-stubs --list FILE [--apply]`.
 pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let mut list = None;
@@ -133,6 +154,13 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             Err(e) => problems.push(e),
         }
     }
+    problems.extend(dest_conflicts(&actions));
+    if apply && !problems.is_empty() {
+        for p in &problems {
+            println!("problem {p}");
+        }
+        return Err(format!("docs-stubs: {} problems", problems.len()));
+    }
     let (mut stubs, mut copies, mut dirs) = (0, 0, 0);
     for a in &actions {
         let (kind, dest, target) = label(a);
@@ -166,9 +194,6 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         problems.len(),
         if apply { " (applied)" } else { " (dry run)" }
     );
-    if apply && !problems.is_empty() {
-        return Err(format!("docs-stubs: {} problems", problems.len()));
-    }
     Ok(())
 }
 
@@ -230,6 +255,27 @@ mod tests {
             }
         );
         assert_eq!(link_from("archive/d/README.md", "docs/d"), "../../docs/d");
+    }
+
+    #[test]
+    fn repeated_and_nested_destinations_conflict() {
+        let dir_stub = plan("archive/d", &tracked, &dir, &disk).unwrap();
+        let file_stub = plan("archive/d/x.md", &tracked, &dir, &disk).unwrap();
+        assert!(dest_conflicts(&[dir_stub.clone(), file_stub.clone()]).is_empty());
+        let twice = dest_conflicts(&[dir_stub.clone(), dir_stub]);
+        assert_eq!(twice.len(), 1);
+        assert!(twice[0].contains("listed more than once"));
+        let nested = dest_conflicts(&[
+            file_stub,
+            Action::DirStub {
+                dest: "archive/d/x.md/README.md".into(),
+                target: "docs/d/x.md".into(),
+            },
+        ]);
+        assert_eq!(
+            nested,
+            ["archive/d/x.md/README.md: destination inside archive/d/x.md"]
+        );
     }
 
     #[test]
