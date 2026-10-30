@@ -2099,7 +2099,8 @@ impl DecodeRule {
     pub const FLOCK: Self = Self::FlockRank { k: FLOCK_DECODE_K, keep_end: false };
     /// The Flock rank rule that keeps the end of turn (claude-211, Casey 30 Oct: "do not rule
     /// flock out, improve it instead"): the draw varies the reply's tokens, not where its turn
-    /// ends.
+    /// ends. A nearest end of turn is always taken; a farther one can still be drawn, as
+    /// any other candidate is.
     pub const FLOCK_END: Self = Self::FlockRank { k: FLOCK_DECODE_K, keep_end: true };
 }
 
@@ -3877,6 +3878,9 @@ pub struct DecodeSeed {
 #[derive(Clone, Debug, Serialize)]
 pub struct DecodeGrade {
     pub recipe: &'static str,
+    /// Which Flock rank rule F is: `registered` (the protocol's) or `keeps the end of turn`
+    /// (`DecodeRule::FLOCK_END`, added after the run's first grade; Casey, 30 Oct).
+    pub flock_rule: &'static str,
     pub seeds: Vec<DecodeSeed>,
     pub ships: &'static str,
 }
@@ -3941,6 +3945,7 @@ impl VerdictSeed {
 pub struct VerdictGrade {
     pub recipe: &'static str,
     pub rule: &'static str,
+    pub flock_rule: &'static str,
     pub seeds: Vec<VerdictSeed>,
     pub verdict: &'static str,
     /// For "mixed", each condition that failed.
@@ -4012,10 +4017,14 @@ pub fn frozen_check(run: &Path) -> Result<(usize, usize)> {
             .get(..8)
             .and_then(|h| h.try_into().ok())
             .ok_or_else(|| invalid(format!("{step}: no safetensors header")))?;
-        let n = u64::from_le_bytes(head) as usize;
+        let end = usize::try_from(u64::from_le_bytes(head))
+            .ok()
+            .and_then(|n| n.checked_add(8))
+            .ok_or_else(|| invalid(format!("{step}: the header length overflows")))?;
+        let n = end - 8;
         let index: Value = serde_json::from_slice(
             bytes
-                .get(8..8 + n)
+                .get(8..end)
                 .ok_or_else(|| invalid(format!("{step}: the header runs past the file")))?,
         )?;
         let index = index
@@ -4036,7 +4045,11 @@ pub fn frozen_check(run: &Path) -> Result<(usize, usize)> {
             .get(name)
             .ok_or_else(|| invalid(format!("step 256 has no {name}")))?;
         let (a, b) = (tensor(&start_data, a), tensor(&end_data, b));
-        let same = a.is_some() && a == b;
+        // A tensor that cannot be read is refused, never counted as moved.
+        let (Some(a), Some(b)) = (a, b) else {
+            return Err(invalid(format!("{name}: its data cannot be read")));
+        };
+        let same = a == b;
         if name.ends_with(".spiralcore_fbs") {
             if !same {
                 return Err(invalid(format!("{name} moved under frozen")));
@@ -4105,15 +4118,24 @@ fn rows_in<'m>(
 /// Grade the training run (I-G): `controls` holds [`controls`]' files, `runs` one score folder
 /// per arm-seed named `ARM-sSEED`, `p_dev` the panel, and `frozen_probe` (r-frozen)'s probe run.
 /// It refuses strata other than [`STRATA_COUNTS`], and a U that is not the census's decision
-/// rows; then applies the protocol's five decisions in order. Counts only; no model.
+/// rows; then applies the protocol's five decisions in order. Counts only; no model. With
+/// `flock_end`, decisions 4 and 5 read the end-of-turn Flock rule's samples
+/// (`samples-*-flock-end-memory.json`) in place of the registered rule's, and say so.
+/// This mode was added after the run's first grade, at Casey's direction (30 Oct).
 pub fn grade(
     data_root: &Path,
     controls_dir: &Path,
     runs: &Path,
     p_dev: &Path,
     frozen_probe: Option<&Path>,
+    flock_end: bool,
 ) -> Result<Grade> {
     use std::collections::{BTreeMap, BTreeSet};
+    let (flock_rule, flock_label) = if flock_end {
+        ("keeps the end of turn", "flock-end")
+    } else {
+        ("registered", "flock")
+    };
     let bos = hs::SHEET_BOS_ID;
     let control = |label: &str, split: &str| -> Result<ScoredRows> {
         read_scored(&controls_dir.join(format!("rows-{split}-{label}.json")))
@@ -4213,13 +4235,14 @@ pub fn grade(
     for arm in PROTOCOL_ARMS {
         for seed in 1..=3u8 {
             let dir = runs.join(format!("{arm}-s{seed}"));
-            let mut found = true;
-            for split in ["dev", "p-dev"] {
-                let path = dir.join(format!("rows-{split}-memory.json"));
-                if !path.exists() {
-                    found = false;
-                    continue;
-                }
+            // An arm-seed is graded only with both its splits: one with a file missing is
+            // listed as missing and enters no cell (claude-211 review).
+            let paths = ["dev", "p-dev"].map(|split| (split, dir.join(format!("rows-{split}-memory.json"))));
+            if paths.iter().any(|(_, path)| !path.exists()) {
+                missing.push(format!("{arm}-s{seed}"));
+                continue;
+            }
+            for (split, path) in paths {
                 let rows: ScoredRows = read_scored(&path)?;
                 if !rows.memory || rows.split != split {
                     return Err(invalid(format!(
@@ -4228,10 +4251,6 @@ pub fn grade(
                     )));
                 }
                 arms.insert((arm, seed, split), rows);
-            }
-            if !found {
-                missing.push(format!("{arm}-s{seed}"));
-                continue;
             }
             let mut hits = [0usize; 4];
             for (i, (_, split)) in STRATA.iter().enumerate() {
@@ -4315,13 +4334,13 @@ pub fn grade(
     for seed in 1..=3u8 {
         let read = || -> Result<(DecodeSeed, Vec<IdSample>, Vec<IdSample>)> {
             let p_greedy = samples(seed, "samples-p-dev-greedy-memory.json")?;
-            let p_flock = samples(seed, "samples-p-dev-flock-memory.json")?;
+            let p_flock = samples(seed, &format!("samples-p-dev-{flock_label}-memory.json"))?;
             let g = replies(vec![
                 samples(seed, "samples-memory.json")?,
                 p_greedy.clone(),
             ]);
             let f = replies(vec![
-                samples(seed, "samples-dev-flock-memory.json")?,
+                samples(seed, &format!("samples-dev-{flock_label}-memory.json"))?,
                 p_flock.clone(),
             ]);
             let (gg, fg) = (
@@ -4396,12 +4415,14 @@ pub fn grade(
         transport,
         decode: (!decode_seeds.is_empty()).then_some(DecodeGrade {
             recipe,
+            flock_rule,
             seeds: decode_seeds,
             ships: rule,
         }),
         verdict: Some(VerdictGrade {
             recipe,
             rule,
+            flock_rule,
             seeds: verdict_seeds,
             verdict: name,
             failed,
@@ -7237,6 +7258,8 @@ mod tests {
             !VerdictSeed::new(1, &made(100, 64, 0.2), &references).generalizes(),
             "a loop"
         );
+        // The repeat bound is inclusive: exactly the references' rate + 0.10 passes.
+        assert!(VerdictSeed::new(1, &made(100, 64, 0.1), &made(200, 128, 0.0)).generalizes());
         let none = VerdictSeed::new(1, &made(0, 0, 0.0), &references);
         assert!(none.v.is_none() && !none.generalizes() && !none.memorized());
         let three = |s: &VerdictSeed| [1u8, 2, 3].map(|seed| VerdictSeed { seed, ..s.clone() });

@@ -384,7 +384,7 @@ fn main() -> Result<()> {
     ];
     if modes.iter().filter(|&&m| m).count() > 1 {
         return Err(FloatTrainError::Invalid(
-            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows or --overturn 1"
+            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1 or --grade 1"
                 .to_owned(),
         ));
     }
@@ -408,7 +408,7 @@ fn main() -> Result<()> {
     }
     if recall > 0 {
         let out = out.ok_or_else(|| FloatTrainError::Invalid("--recall needs --out".to_owned()))?;
-        if modes[..5].iter().any(|&m| m) || score.is_some() || overturn_on {
+        if modes[..5].iter().any(|&m| m) || score.is_some() || overturn_on || controls_on || grade_on {
             return Err(FloatTrainError::Invalid(
                 "--recall trains; it takes --out and no other mode".to_owned(),
             ));
@@ -418,6 +418,11 @@ fn main() -> Result<()> {
     }
     let data_root =
         data_root.ok_or_else(|| FloatTrainError::Invalid("--data-root is required".to_owned()))?;
+    if flock_end && score.is_none() && !grade_on {
+        return Err(FloatTrainError::Invalid(
+            "--flock-end applies to --score-rows and --grade 1 only".to_owned(),
+        ));
+    }
     if grade_on {
         let need = |v: Option<PathBuf>, flag: &str| {
             v.ok_or_else(|| FloatTrainError::Invalid(format!("--grade needs {flag} DIR")))
@@ -432,6 +437,7 @@ fn main() -> Result<()> {
             &need(runs, "--runs")?,
             &need(p_dev, "--panel p-dev=")?,
             frozen_probe.as_deref(),
+            flock_end,
         )?;
         println!("{}", serde_json::to_string(&graded)?);
         return Ok(());

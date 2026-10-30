@@ -11,14 +11,15 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 - **Decision 4's registered rule shipped greedy, and greedy is degenerate.**
   - The Flock rank rule failed at seed 1: 404 complete against 433, band 17. It held at seeds 2 and 3.
-  - Greedy's replies loop: repeated-4-gram rate 0.49–0.50, against the references' 0.0. Examples: "small small small…" and ",,,,,".
+  - Greedy's replies loop: repeated-4-gram rate 0.49–0.50 on the 512-reply decode panel, and 0.56–0.64 on the 256 P-dev replies, against the references' 0.0. Examples: "small small small…" and ",,,,,".
   - Casey, 30 Oct: "do not rule flock out, improve it instead". So the end-of-turn Flock rule was built and run (below).
 - **The verdict is "mixed" under either rule.**
+  - **Neither verdict holds.** For "memorized", (r-drop) is not ahead of (r0) on K at all three seeds (inside at seed 2: d 548, band 552), and v − v_ref ≤ tol at every seed. For "generalizes":
   - **(r-drop) is not ahead of (r0) on U or N-u.** (r0) is close on N-u, but unstable across seeds: 10,272, 11,413 and 9,446. Its spread of 2,047 sets the band.
-  - **Under greedy:** about 190–206 of 256 P-dev replies complete, they loop, and v is 0.35–0.48 against v_ref 0.566.
+  - **Under greedy:** 186–206 of 256 P-dev replies complete, they loop, and v is 0.35–0.48 against v_ref 0.566.
   - **Under the end-of-turn Flock rule:** 255–256 of 256 complete, and the repeat rate is 0.001–0.002. But only 0.004–0.012 of the replies are verbatim TRAIN replies, against the references' 0.566.
   - **Reading the replies:** some are apt ("Noted!" after "Okay, I'll remember all of that"). Many are word salad ("Gran name tasty tellwa…"). The 16-rank harmonic draw lands below rank 0 about 70% of the time, so content tokens drift.
-- **Decisions 2 and 3: no decision.** (r-flock), (r-spin), (r-ident) and (r-frozen) are each inside the band against (r), on U and on N-u. That is underpowered at this scale, never a negative (L-007).
+- **Decisions 2 and 3: no decision.** (r-flock), (r-spin), (r-ident) and (r-frozen) each have a three-seed cell inside the band against (r), on U and on N-u (single seeds can lie outside it: (r-flock) and (r-frozen) on U at seed 2). That is underpowered at this scale, never a negative (L-007).
 - **Two instrument faults, both repaired and not counted:**
   - **I-C's frozen check** first loaded tensors through candle onto the CPU, which the project's CPU guard refuses (D24/D29). It now compares safetensors bytes (`5081b8066`).
   - **Seed 2's first seal upload** hit a transient Hugging Face `502`. The pod was kept up, and the retry sealed it.
@@ -51,14 +52,20 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 | 3. Transport | no decision | (r-ident), (r-frozen) inside on N-u (bands 285 and 377) |
 | 4. Decode rule, registered | greedy | Flock rank: 404 / 482 / 459 complete against greedy's 433 / 440 / 432 |
 | 4. Decode rule, end of turn kept | **Flock rank ships** | 508 / 510 / 510 complete against 433 / 440 / 432. Repeat rate 0.002 / 0.001 / 0.002 against 0.50 / 0.49 / 0.49 |
-| 5. Verdict | mixed | not ahead of (r0) on U or N-u, with (r0)'s spread at 2,047. Under Flock with the end kept, v is 0.004–0.012 against v_ref 0.566 |
+| 5. Verdict | mixed: neither verdict holds | "generalizes": not ahead of (r0) on U or N-u, with (r0)'s spread at 2,047. "memorized": not ahead of (r0) on K at all three seeds (inside at seed 2, d 548 against band 552), and v − v_ref ≤ tol at every seed. Under Flock with the end kept, v is 0.004–0.012 against v_ref 0.566 |
 
+- **How the two decode rules were graded:**
+  - `grade-flock-end.json` is `--grade 1 --flock-end 1`. It reads the end-of-turn rule's own files (`samples-*-flock-end-memory.json`) and records `"flock_rule": "keeps the end of turn"`.
+  - `grade-registered.json` records `"registered"`.
+  - The end-of-turn rule was added after the first grade, at Casey's direction. So its reading is a second decode rule beside the protocol's, not the protocol's own decision 4.
+- **That `decode_reply` passes `keep_end` and the end of turn to `flock_pick`** is shown by the run, not by a unit test. On the same checkpoints, its replies differ from the registered rule's, and 508–510 of 512 complete against 404–482.
+- **How (S) counts:** every transition in TRAIN, prompt tokens included, ignoring the reply mask. It matches suffixes by 64-bit hashes, so a collision is possible, though unlikely.
 - **Against (S), the strongest lawful recall control:** (r-drop) is ahead on U and on N-u at every seed, by about 1,300–1,400 rows.
 - **On K, the keyed rows,** (r-drop)'s picks equal the tables', 9,423 at every seed.
 
 **The seal:** `results/claude/one-model-end-to-end-2026-10-29/training-460fe46e/s{1,2,3}/`, 748 files each, with a `SHA256SUMS`, and every fetched file matched.
 
-**Cost:** about $7.40. Four pods ran at the peak, inside the caps.
+**Cost:** about $7.65 for the three training pods (about 4.5 h each at $0.563/h, up to each seal). Four pods ran at the peak, inside the caps.
 
 ## Checks run at the head
 
