@@ -2251,10 +2251,11 @@ pub enum DecodeRule {
     /// decodes as greedy.
     FlockCell { k: usize, margin_milli: u32 },
     /// The cycle step (claude-217, Casey 30 Oct: "steps off a reply's own cycle"): of the `k`
-    /// nearest, in rank order, the first whose append would not close a 4-gram the reply has
+    /// nearest, in rank order, the first whose append would not close an `n`-gram the reply has
     /// already produced ([`cycle_step_pick`]); the nearest when every one would. No draw: it is
-    /// exact and deterministic. It stops after the end of turn, as the Flock rules do.
-    CycleStep { k: usize },
+    /// exact and deterministic. It stops after the end of turn, as the Flock rules do. Casey's
+    /// rule is `n = 4`; `n = 2`, the echo step, acts on a repeated token's second repeat.
+    CycleStep { k: usize, n: usize },
 }
 
 impl DecodeRule {
@@ -2271,19 +2272,26 @@ impl DecodeRule {
         Self::FlockCell { k: FLOCK_DECODE_K, margin_milli }
     }
 
-    /// The cycle step over [`FLOCK_DECODE_K`] candidates, as claude-217 registers it.
-    pub const CYCLE_STEP: Self = Self::CycleStep { k: FLOCK_DECODE_K };
+    /// The cycle step over [`FLOCK_DECODE_K`] candidates and 4-grams, as Casey directed and
+    /// claude-217 registers it.
+    pub const CYCLE_STEP: Self = Self::CycleStep { k: FLOCK_DECODE_K, n: 4 };
+    /// The echo step: the same rule on bigrams, so a token repeats at most twice in a row
+    /// (claude-217, reported: 77–89% of greedy's loops repeat one token).
+    pub const ECHO_STEP: Self = Self::CycleStep { k: FLOCK_DECODE_K, n: 2 };
 }
 
 /// [`DecodeRule::CycleStep`]'s token from its `ranked` candidates (the nearest first), after
-/// `reply` (claude-217): the first whose append would not close a 4-gram `reply` already holds,
-/// and its mark: [`STEP_NEAREST`] when that is the nearest, [`STEP_OFF`] when the rule stepped
-/// off the nearest, [`STEP_EXHAUSTED`] when every candidate would close one and the nearest is
-/// taken. `None` with no candidate.
-fn cycle_step_pick(reply: &[u32], ranked: &[u32]) -> Option<(u32, u8)> {
-    let closes = |token: u32| match reply {
-        [.., a, b, c] => reply.windows(4).any(|w| w == [*a, *b, *c, token]),
-        _ => false,
+/// `reply` (claude-217): the first whose append would not close an `n`-gram `reply` already
+/// holds (`n ≥ 2`), and its mark: [`STEP_NEAREST`] when that is the nearest, [`STEP_OFF`] when
+/// the rule stepped off the nearest, [`STEP_EXHAUSTED`] when every candidate would close one and
+/// the nearest is taken. `None` with no candidate.
+fn cycle_step_pick(reply: &[u32], ranked: &[u32], n: usize) -> Option<(u32, u8)> {
+    let closes = |token: u32| {
+        let keep = n.saturating_sub(1);
+        n >= 2 && reply.len() >= keep && {
+            let tail = &reply[reply.len() - keep..];
+            reply.windows(n).any(|w| w[..keep] == *tail && w[keep] == token)
+        }
     };
     let nearest = *ranked.first()?;
     Some(match ranked.iter().position(|&t| !closes(t)) {
@@ -2291,6 +2299,16 @@ fn cycle_step_pick(reply: &[u32], ranked: &[u32]) -> Option<(u32, u8)> {
         Some(i) => (ranked[i], STEP_OFF),
         None => (nearest, STEP_EXHAUSTED),
     })
+}
+
+/// The name a [`DecodeRule::CycleStep`] file carries for its gram size `n`: `cycle-step` for
+/// Casey's 4-grams, `echo-step` for bigrams, else `cycle-step-{n}`.
+fn step_name(n: usize) -> String {
+    match n {
+        4 => "cycle-step".to_owned(),
+        2 => "echo-step".to_owned(),
+        n => format!("cycle-step-{n}"),
+    }
 }
 
 /// [`cycle_step_pick`]'s marks, one a decoded step ([`IdSample::stepped`]).
@@ -2541,7 +2559,7 @@ fn decode_reply(
                         .ok_or_else(|| invalid("the readout returned no token"))?,
                     DecodeRule::FlockRank { k, .. }
                     | DecodeRule::FlockCell { k, .. }
-                    | DecodeRule::CycleStep { k } => {
+                    | DecodeRule::CycleStep { k, .. } => {
                         // The K nearest on the GPU; their order, ties to the smaller id, here.
                         let k = k.clamp(1, FLOCK_DECODE_K).min(scores.dim(1)?);
                         let top = scores
@@ -2551,10 +2569,10 @@ fn decode_reply(
                         let picked = scores.gather(&top, 1)?.flatten_all()?.to_vec1::<f32>()?;
                         let ids_k = top.flatten_all()?.to_vec1::<u32>()?;
                         let scored = rank_order(ids_k.into_iter().zip(picked).collect());
-                        if let DecodeRule::CycleStep { .. } = rule {
+                        if let DecodeRule::CycleStep { n, .. } = rule {
                             // The cycle step takes the nearest that closes no repeated 4-gram.
                             let ranked: Vec<u32> = scored.iter().map(|&(id, _)| id).collect();
-                            let (token, mark) = cycle_step_pick(&reply, &ranked)
+                            let (token, mark) = cycle_step_pick(&reply, &ranked, n)
                                 .ok_or_else(|| invalid("the cycle step had no candidate"))?;
                             stepped.push(mark);
                             token
@@ -3349,6 +3367,7 @@ pub fn score_rows(
         if cycle {
             served.push((DecodeRule::CYCLE_STEP, ReadScope::Full));
             served.extend(scopes.iter().map(|&s| (DecodeRule::CYCLE_STEP, s)));
+            served.push((DecodeRule::ECHO_STEP, ReadScope::Full));
         }
         let rules: &[(DecodeRule, ReadScope)] = if on { &served } else { &served[..1] };
         let active = crate::flock_read_memory::turn_memory();
@@ -3395,11 +3414,11 @@ pub fn score_rows(
                     });
                 }
                 let file = match (split.name.as_str(), rule) {
-                    (name, DecodeRule::CycleStep { .. }) if scope != ReadScope::Full => {
-                        format!("samples-{name}-cycle-step-read-{}-{label}.json", scope.name())
+                    (name, DecodeRule::CycleStep { n, .. }) if scope != ReadScope::Full => {
+                        format!("samples-{name}-{}-read-{}-{label}.json", step_name(n), scope.name())
                     }
-                    (name, DecodeRule::CycleStep { .. }) => {
-                        format!("samples-{name}-cycle-step-{label}.json")
+                    (name, DecodeRule::CycleStep { n, .. }) => {
+                        format!("samples-{name}-{}-{label}.json", step_name(n))
                     }
                     (name, DecodeRule::Greedy) if scope != ReadScope::Full => {
                         format!("samples-{name}-greedy-read-{}-{label}.json", scope.name())
@@ -5371,8 +5390,9 @@ pub fn cut_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<CutGrade>
 
 /// [`cycle_grade`]'s rules for its first decision, in [`rule_readings`]'s order: the base and
 /// the cycle step first, so the first [`MATCHED_BY`] are the two it compares; then the
-/// decode-only cut and the cycle step under it, reported on the same prompts.
-const CYCLE_RULES: [&str; 4] = ["greedy", "cycle-step", "greedy-read-all", "cycle-step-read-all"];
+/// decode-only cut, the cycle step under it, and the echo step, reported on the same prompts.
+const CYCLE_RULES: [&str; 5] =
+    ["greedy", "cycle-step", "greedy-read-all", "cycle-step-read-all", "echo-step"];
 
 /// [`cycle_grade`]'s rules for its second decision: the base and the decode-only cut, matched
 /// on the prompts those two complete.
@@ -5431,6 +5451,9 @@ pub struct CycleGrade {
     /// The cycle step under the cut, by [`cycle_outcome`] on the first decision's matched
     /// prompts. It decides what ships only if both decisions pass.
     pub cut_cycle_outcome: &'static str,
+    /// The echo step ([`DecodeRule::ECHO_STEP`]), by [`cycle_outcome`] on the first decision's
+    /// matched prompts. It is reported and decides nothing.
+    pub echo_outcome: &'static str,
     /// Every arm's content on the base's looping prompts ([`LoopContent`]), on DEV and the
     /// panel, at seeds 1–3.
     pub loop_content: Vec<LoopContent>,
@@ -5637,14 +5660,14 @@ pub fn cycle_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<CycleGr
                 read_scored(&runs.join(format!("r-drop-s{seed}")).join(file))
             };
             let base = samples("greedy")?;
-            for rule in ["cycle-step", "greedy-read-all", "cycle-step-read-all"] {
+            for rule in ["cycle-step", "greedy-read-all", "cycle-step-read-all", "echo-step"] {
                 let arm = samples(rule)?;
-                if rule.starts_with("cycle-step") {
+                if rule != "greedy-read-all" {
                     if arm.iter().any(|s| s.stepped.is_empty()) {
                         return Err(invalid(format!("{split} s{seed} {rule}: a reply records no cycle-step marks")));
                     }
                     // Its own greedy path: greedy for the cycle step, the cut for it under the cut.
-                    let path = if rule == "cycle-step" { base.clone() } else { samples("greedy-read-all")? };
+                    let path = if rule == "cycle-step-read-all" { samples("greedy-read-all")? } else { base.clone() };
                     if !follows_greedy(&arm, &path, eos) {
                         return Err(invalid(format!(
                             "{split} s{seed} {rule}: a reply left greedy's before its first step off (an instrument fault)"
@@ -5669,11 +5692,13 @@ pub fn cycle_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<CycleGr
     let outcome = decide(&readings, "cycle-step");
     let confirm_outcome = decide(&confirm_readings, "greedy-read-all");
     let cut_cycle_outcome = decide(&readings, "cycle-step-read-all");
+    let echo_outcome = decide(&readings, "echo-step");
     Ok(CycleGrade {
         panel: panel.to_owned(),
         outcome,
         confirm_outcome,
         cut_cycle_outcome,
+        echo_outcome,
         ships: ships(outcome, confirm_outcome, cut_cycle_outcome),
         readings,
         confirm_readings,
@@ -8356,14 +8381,15 @@ mod tests {
                     .unwrap()
             };
             let greedy = decode(DecodeRule::Greedy).tokens;
-            assert_eq!(decode(DecodeRule::CycleStep { k: 1 }).tokens, greedy, "sample {sample}");
+            assert_eq!(decode(DecodeRule::CycleStep { k: 1, n: 4 }).tokens, greedy, "sample {sample}");
+            assert_eq!(decode(DecodeRule::CycleStep { k: 1, n: 2 }).tokens, greedy, "sample {sample}, n = 2");
             let step = decode(DecodeRule::CYCLE_STEP);
             // One mark per step, a final step that picked BOS (and ended the reply) included.
             assert!(step.stepped.len() - step.tokens.len() <= 1, "one mark per step");
             let off = step.stepped.iter().position(|&m| m == STEP_OFF).unwrap_or(step.tokens.len());
             assert_eq!(step.tokens[..off], greedy[..off.min(greedy.len())], "sample {sample}");
             if off < step.tokens.len() && off < greedy.len() {
-                let (_, mark) = cycle_step_pick(&greedy[..off], &[greedy[off]]).unwrap();
+                let (_, mark) = cycle_step_pick(&greedy[..off], &[greedy[off]], 4).unwrap();
                 assert_eq!(mark, STEP_EXHAUSTED, "greedy's token at {off} closes no cycle");
             }
             if !step.stepped.contains(&STEP_EXHAUSTED) {
@@ -8633,21 +8659,30 @@ mod tests {
     fn the_cycle_step_refuses_exactly_the_token_that_closes_a_repeated_4_gram() {
         // The reply holds 5 6 7 8, and ends 5 6 7: an 8 would close 5 6 7 8 again.
         let reply = [5, 6, 7, 8, 5, 6, 7];
-        assert_eq!(cycle_step_pick(&reply, &[8, 9, 10]), Some((9, STEP_OFF)));
-        assert_eq!(cycle_step_pick(&reply, &[9, 8]), Some((9, STEP_NEAREST)));
+        assert_eq!(cycle_step_pick(&reply, &[8, 9, 10], 4), Some((9, STEP_OFF)));
+        assert_eq!(cycle_step_pick(&reply, &[9, 8], 4), Some((9, STEP_NEAREST)));
         // Every candidate closes one: the nearest, marked exhausted.
-        assert_eq!(cycle_step_pick(&reply, &[8]), Some((8, STEP_EXHAUSTED)));
+        assert_eq!(cycle_step_pick(&reply, &[8], 4), Some((8, STEP_EXHAUSTED)));
         // One candidate, K = 1: always the nearest, so the rule decodes as greedy.
         for nearest in [8, 9] {
-            assert_eq!(cycle_step_pick(&reply, &[nearest]).map(|(t, _)| t), Some(nearest));
+            assert_eq!(cycle_step_pick(&reply, &[nearest], 4).map(|(t, _)| t), Some(nearest));
         }
         // A reply of fewer than 3 tokens closes nothing; an overlapping cycle is caught.
-        assert_eq!(cycle_step_pick(&[5, 6], &[5]), Some((5, STEP_NEAREST)));
-        assert_eq!(cycle_step_pick(&[1, 1, 1], &[1]), Some((1, STEP_NEAREST)));
-        assert_eq!(cycle_step_pick(&[1, 1, 1, 1], &[1, 2]), Some((2, STEP_OFF)));
+        assert_eq!(cycle_step_pick(&[5, 6], &[5], 4), Some((5, STEP_NEAREST)));
+        assert_eq!(cycle_step_pick(&[1, 1, 1], &[1], 4), Some((1, STEP_NEAREST)));
+        assert_eq!(cycle_step_pick(&[1, 1, 1, 1], &[1, 2], 4), Some((2, STEP_OFF)));
         // The rule looks at the reply's own 4-grams only, never a 3-gram or the prompt.
-        assert_eq!(cycle_step_pick(&[5, 6, 7, 9, 6, 7], &[9]), Some((9, STEP_NEAREST)));
-        assert_eq!(cycle_step_pick(&reply, &[]), None);
+        assert_eq!(cycle_step_pick(&[5, 6, 7, 9, 6, 7], &[9], 4), Some((9, STEP_NEAREST)));
+        assert_eq!(cycle_step_pick(&reply, &[], 4), None);
+        // The echo step, on bigrams: a token may repeat once ("very very"), not twice.
+        assert_eq!(cycle_step_pick(&[3, 4], &[4], 2), Some((4, STEP_NEAREST)));
+        assert_eq!(cycle_step_pick(&[3, 4, 4], &[4, 5], 2), Some((5, STEP_OFF)));
+        // A bigram met earlier is refused anywhere: 5 6 then 6 … 5 cannot be followed by 6.
+        assert_eq!(cycle_step_pick(&[5, 6, 9, 5], &[6, 7], 2), Some((7, STEP_OFF)));
+        // On 4-grams the same replies pass: Casey's rule lets a token run four times.
+        assert_eq!(cycle_step_pick(&[3, 4, 4], &[4], 4), Some((4, STEP_NEAREST)));
+        assert_eq!(step_name(4), "cycle-step");
+        assert_eq!(step_name(2), "echo-step");
     }
 
     /// claude-217: the step counts read the marks; the grade's first decision is matched on the
