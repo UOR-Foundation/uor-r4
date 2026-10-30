@@ -4,65 +4,80 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 ## Goal
 
-The item's done-when reads:
+**A turn-memory key that a reworded question can reach.** This serves the item's done-when 3 and 4, and Casey's open direction to find the best mechanism that crosses every part.
 
-> 1. **The census (laptop, counts only, CHARTER §4.5).** A standalone Rust instrument under `docs/labs/one-model-end-to-end/instrument/` must:
->    - resolve the TRAIN size conflict, and build the TRAIN reply index (exact replies and reply 8- and 13-grams);
->    - report for DEV, Fresh V2 and `m2-fresh256`: the share of reply n-grams in TRAIN replies, the share of prompt templates seen in TRAIN with values masked, and the 8-token key share;
->    - read only the manifest of the K16 fresh slice, and leave the slice unopened.
->
->    It also says which panel, if any, holds new templates.
-> 2. **The overturn check (GPU, under a prep sheet with a fresh FIT and a pre-run review).** Score turn-memory-reply claude-194's (r), (r0), and (r) with its memory off.
->    - **Pinned in the sheet:** the checkpoints by store path, `SHA256SUMS` and step; the binary's sha; a lease and cost inside the caps.
->    - **The pod** also seals a float reference for the read's parity: claude-194's (r), with its memory off, at both seeds. That is every DEV row's writer and nearest pick, and its 64 greedy samples. The parity itself, kept sets and top-1, is `integer-hamming-read`'s step 5, on the checkpoint that item's prep sheet names; the first greedy divergence is done-when 3's integer-artifact measure (claude-205's decision review, on #3407).
->    - **Rows:** DEV's 3,406 later rows the reply table does not name, and its 32 unkeyed openings, judged pooled (3,438).
->    - **Band, fixed in advance:** `max(2·√(b+c), the two-seed spread)`, where b and c are the paired discordant rows.
->    - **The cells:**
->      - (r) ahead at both seeds, beyond the band: the memory recipe stays the training default;
->      - (r) behind at both seeds, beyond the band: a memory-dropout arm joins the training run;
->      - mixed (the seeds disagree, or either seed is inside the band): both arms train.
->    - **Descriptive only:** Fresh V2, and 64 greedy samples per arm scored against the census index.
-> 3. **The protocol.** A prep sheet, with a fresh FIT, written before the training run of the model to ship. It holds:
->    - **Strata:**
->      - keyed rows;
->      - unkeyed rows;
->      - new-template rows, from a panel no decision has touched. Fresh V2 is never one.
->    - **Arms:** (r), memory-off, (r0), tables only, and a longest-suffix table over TRAIN.
->    - **Scores:**
->      - teacher-forced top-1, per stratum;
->      - free generation: the share of replies that are verbatim TRAIN replies, new n-grams for n = 4–8, distinct-1 and distinct-2, the repeated-n-gram rate, and the table hit rate under generation against teacher forcing;
->      - on the integer artifact: kept-set agreement, first divergence, and tok/s against context.
->    - **Decode rules:** greedy, and a Flock rank rule with the harmonic weights of `stack/flock.rs`.
->    - **The verdict rule, written in advance:**
->      - "memorized": the gains appear only on keyed rows, and generated replies are mostly TRAIN replies;
->      - "generalizes": the model beats (r0) and the longest-suffix table on unkeyed and new-template rows, with novelty near DEV's own replies.
->
->    The training run itself (ASSESSMENT §6, step 5) adds:
->    - the transport controls: frozen and identity SpiralCore routes, under the fixed backward;
->    - the read-by-meaning arms: the Flock read, and the type spin.
-> 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
+**Why, from claude-217** (merged as `0ca82f3ff19f24941fea344eedd7477046d8a2d7`), from its sealed rows:
+- **Teacher-forced openings, memory on against off:**
+  - DEV: 49.1–49.3% against 21.9–23.0%, so the memory adds 322–337 of 1,226;
+  - the held-out-phrasing panel p-s: 17.4/13.7/18.6% against 16.4/12.6/17.4%, so it adds 14–16 of 1,400.
+- **Later rows** are about 80% on p-s.
+- **The memory's key** is the exact token ids of the turn's first `k` slots (`flock_read_memory.rs`).
+- **The cycle step** ends every loop, but recovers no content where the reading is powered.
+
+So on new wording the failure is the opening, and the memory that carries the opening on familiar wording does not reach it.
+
+**Casey's direction, 30 Oct (verbatim):** "Yes: finish claude-217 (the cheap decode guard, one pod) first, then build claude-218, the rollout-hinge training fix."
+- **This unit departs from its second half,** by the lab's decision review (D68). The review's verdict was GO for the redirect. It is logged on #3407 (6526603691), with a pointer on #2028 (6526608344), and is open to reversal.
+- **The rollout hinge is deferred, not negative.** It returns by the decision table below, or by Casey's word.
+
+**This unit, in two steps:**
+1. **Step 0, on the laptop (counting over the token files, no model compute).** `--opening-bound 1` gains `--panel NAME=DIR`. For each exact-id key, on the panel's openings and on DEV's, it reports:
+   - the fire rate (the key is in TRAIN's table);
+   - the precision when it fires (the stored opening is the reference's);
+   - the share right overall.
+
+   The keys are the existing first-`k` and last-`k` keys, plus an order-free key (the set of the turn's ids). Beside them sits an oracle ceiling U: TRAIN's commonest opening keyed by the reference reply's own template, with its values masked as the census masks them.
+2. **The GPU key probe, under a prep sheet with a fresh FIT and a pre-run review.** It runs on (r-drop) sealed at seeds 1–3, on a fresh held-out-phrasing panel (seed 2101) with its census. p-s is now a development panel: it chooses keys and thresholds, and decides nothing. The arms:
+   - the exact key;
+   - the trunk's opening point by its Hamming sign cell;
+   - the nearest TRAIN opening point under L1, ties to the smaller id;
+   - the best id key from step 0;
+   - a forced-opening greedy arm: the reference's first token is given, then greedy.
+
+   The probe measures each key's fire rate, precision when it fires, and net gain over the memory-off trunk on the rows where the exact key misses. It splits them by whether the reference is a verbatim TRAIN reply, and reports DEV with backoff (the exact key first). It reports the table's bytes and the search cost per turn.
+
+**The decision table** (the review's), with band `max(2·√(b+c), the spread across seeds)`:
+- **A forced correct opening** does not lift exact-reply or verbatim counts beyond the band: the opening is not enough, and the work goes to the hinge or a combined unit.
+- **U, minus the larger of the exact-key and memory-off scores,** is inside the band: no prompt key has headroom, and the work goes to the hinge and the later rows.
+- **Some key K** has a net gain beyond the band, precision when it fires at least the trunk's, net gain ≥ 0 on the new-question stratum, and DEV not lower beyond the band: the next unit trains and serves the cheapest such K, with an opening bar on another fresh panel.
+- **A key has coverage, but its net gain is ≤ 0** because it fires wrongly: the next unit adds an abstention gate.
+- **There is headroom, but no K reaches it:** the next unit trains the trunk's opening point to gather paraphrases (a geometric hinge).
 
 ## Cancel probe (run first)
 
-To fill in.
+The result, run 30 Oct 19:35Z and classed **instrument**, gives no cancel:
+- **No open PR touches the files in scope.** This unit's own draft, #3430, holds only this ORDER.
+- **(r-drop)'s inputs are in the store.** Its sealed step-16,384 checkpoints are at `results/claude/one-model-end-to-end-2026-10-29/training-460fe46e/s{1,2,3}/r-drop-s{S}/models/step-016384/` (5 files each, listed at s1 with `uor-store ls`).
+- **The panel seed 2101 is unused.** The panel seeds in `docs/harness/prep` and `docs/labs` so far are 2001, 2026, 2051, 2052, 2061, 2071, 2081 and 2091. "2101" appears only as a count in two grade files.
+- **Casey has not answered the redirect.** If he chooses the hinge before step 0 lands, this unit stops at its ORDER and claude-218 becomes the hinge.
 
 ## Files in scope
 
-- `docs/labs/one-model-end-to-end/**`
-- `docs/harness/prep/one-model-end-to-end*`
-- `docs/loop/tasks/one-model-end-to-end/**`
-- `docs/research/notebook/float-training.md`
-- `docs/roadmap/items/one-model-end-to-end.md`
-- `crates/uor-r4-float-train/src/in_space_long.rs`
-- `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`
-- `crates/uor-r4-float-train/src/flock_read_hamming.rs`
-- `crates/uor-r4-training/examples/m-world.rs`
+As the item's scope:
+- `crates/uor-r4-float-train/src/{in_space_long.rs,bin/train-in-space.rs,flock_read_hamming.rs,flock_read_memory.rs}`;
+- `crates/uor-r4-training/examples/m-world.rs`;
+- `docs/harness/prep/one-model-end-to-end*`, `docs/labs/one-model-end-to-end/**`, `docs/loop/tasks/one-model-end-to-end/**`;
+- `docs/research/notebook/float-training.md` and `docs/roadmap/items/one-model-end-to-end.md`.
 
 ## Done when
 
-To fill in.
+1. **Step 0 is built and unit-tested, run on the laptop, and its counts are committed** with a reading (`docs/labs/one-model-end-to-end/memory-key-2026-10-30/`). The tests cover:
+   - the panel's openings and keys;
+   - the order-free key;
+   - the oracle U;
+   - fire rate against precision on a hand-built table.
+2. **The GPU key probe's arms are in `--score-rows`, and unit-tested:**
+   - the Hamming-cell key and the L1-nearest key, each built from TRAIN's opening points under the final trunk;
+   - the forced-opening arm.
+3. **A fresh panel (seed 2101) and its census.**
+4. **A prep sheet, with a fresh FIT and a fresh pre-run review.**
+5. **The probe at three seeds:** sealed, graded by the decision table above, and reported, negatives first and tokens per second first.
+
+If step 0 already settles the table, by the second row ("no headroom"), the unit closes on step 0 and its REPORT. Steps 2–5 then do not run.
 
 ## Stop and ask if
 
-To fill in.
+Stop and decide; never wait.
+- **A fault in the instrument, not the mechanism:** the panel's openings do not match its prompts, or a key reads beyond the prompt. Repair it; it is never a negative (CHARTER §4.1).
+- **A key needs a dot-product search over all of TRAIN, or any weighting by a squashing function:** refuse it (CHARTER §3.2, §3.3). Use L1 or Hamming distance, and look inside a cell before any full search.
+- **Casey chooses the hinge:** stop and switch.
