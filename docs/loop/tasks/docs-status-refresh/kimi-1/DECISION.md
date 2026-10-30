@@ -4,7 +4,7 @@ Lab: kimi. Item: `docs-status-refresh` (#3380). ORDER: [ORDER.md](ORDER.md).
 
 ## Recommendation
 
-Reopen #3380 after merge and widen its scope for the owner's new 30 Oct documentation-housekeeping request. The 29 Oct item completed its declared work, while leaving two pre-existing broken book links and two antigravity-held mechanism pages named in claude-191's REPORT. M1 then closed, so the current public surfaces and M1 tracker inputs need a new factual pass. Reuse the item rather than creating a duplicate roadmap gap.
+After the scope PR merges, reopen #3380 manually, then run roadmap sync; sync itself does not reopen closed issues. Widen the item's scope for the owner's new 30 Oct documentation-housekeeping request. The 29 Oct item completed its declared work, while leaving two pre-existing broken book links and two antigravity-held mechanism pages named in claude-191's REPORT. M1 then closed, so the current public surfaces and M1 tracker inputs need a new factual pass. Reuse the item rather than creating a duplicate roadmap gap.
 
 ## Whole-project reason
 
@@ -23,7 +23,7 @@ The owner's 30 Oct request was followed by explicit owner approval of the docume
 
 ## Cost to undo
 
-Low: return the item to its 29 Oct `done` text and remove the new PLAN direction row. No model, bar, evidence or workflow state changes here.
+Low: return the item to its 29 Oct `done` text and remove the new PLAN direction row. Those item/PLAN rows are the reversible workflow change; no model, bar, evidence or production state changes here.
 
 ## Decision review
 

@@ -1,6 +1,6 @@
 # ORDER: reopen and rescope docs-status-refresh for 30 Oct 2026
 
-Lab: kimi. Item: `docs-status-refresh` (#3380). Base: `0ca82f3ff19f24941fea344eedd7477046d8a2d7`.
+Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Base: `0ca82f3ff19f24941fea344eedd7477046d8a2d7`.
 
 ## Goal and chain
 
@@ -20,7 +20,7 @@ Run first: #2029 must be CLOSED; the older close-grade JSON must still record ba
 
 ## Done-check
 
-The item is `ready`, its 30 Oct scope includes every living path required for M1/current-status reconciliation, and its exclusions keep dated evidence, antigravity-held pages and Claude's active files untouched. PLAN marks the 29 Oct refresh done and records the owner's new Kimi direction verbatim. `cargo run -q --locked -p xtask -- roadmap check`, the full claim-wording check and focused content checks pass; REPORT and a fresh exact-head review are posted. After merge, roadmap sync reopens/updates #3380 from fresh main and the separate render flow refreshes generated views.
+The item is `ready`, its 30 Oct scope includes every living path required for M1/current-status reconciliation, and its exclusions keep dated evidence, antigravity-held pages and Claude's active files untouched. PLAN marks the 29 Oct refresh done and records the owner's new Kimi direction verbatim. `cargo run -q --locked -p xtask -- roadmap check`, the full claim-wording check and focused content checks pass; REPORT and a fresh exact-head review are posted. After merge, Kimi manually reopens #3380, then runs roadmap sync from fresh main; the separate render flow refreshes generated views. `roadmap sync` itself does not reopen closed issues.
 
 ## Stop list
 
