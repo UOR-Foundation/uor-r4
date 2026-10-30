@@ -113,11 +113,72 @@ pub struct Rewritten {
     pub unrewritten: Vec<(usize, String, String)>,
 }
 
+/// Literal -> (replacement or why not, occurrences `scan_refs` reported).
+type Lits = BTreeMap<String, (Result<String, String>, usize)>;
+
+/// Occurrences behind `reported` `scan_refs` entries for `lit`: each occurrence
+/// is reported once per reading of its literal, and the readings depend only on
+/// the file and the literal, so scanning the literal alone gives that count.
+fn occurrences(reported: usize, file: &str, lit: &str, prefixes: &[String]) -> usize {
+    reported / scan_refs(file, lit, prefixes).len().max(1)
+}
+
+/// Rewrite one line from its `tokens`. As relink does, a literal is rewritten
+/// only when the tokens hold exactly the occurrences `scan_refs` reported;
+/// otherwise it is reported unrewritten and left alone.
+fn rewrite_line(
+    line: usize,
+    content: &str,
+    toks: &[(usize, &str)],
+    lits: &Lits,
+    out: &mut Rewritten,
+) -> String {
+    let mut found: BTreeMap<&str, usize> = BTreeMap::new();
+    for (_, lit) in toks {
+        *found.entry(*lit).or_default() += 1;
+    }
+    for (lit, (rep, expected)) in lits {
+        let placed = found.get(lit.as_str()).copied().unwrap_or(0);
+        match rep {
+            Err(why) => out.unrewritten.push((line, lit.clone(), why.clone())),
+            Ok(_) if placed != *expected => out.unrewritten.push((
+                line,
+                lit.clone(),
+                format!("found {placed} of {expected} occurrences on the line"),
+            )),
+            Ok(_) => {}
+        }
+    }
+    let mut buf = String::with_capacity(content.len() + 16);
+    let mut at = 0;
+    for &(start, lit) in toks {
+        let Some((Ok(new), expected)) = lits.get(lit) else {
+            continue;
+        };
+        if found.get(lit).copied() != Some(*expected) {
+            continue;
+        }
+        buf.push_str(&content[at..start]);
+        buf.push_str(new);
+        at = start + lit.len();
+        out.edits.push(RefEdit {
+            line,
+            old: lit.to_string(),
+            new: new.clone(),
+        });
+    }
+    buf.push_str(&content[at..]);
+    buf
+}
+
 /// Rewrite the moved references of `file`'s `text`.
 pub fn rewrite_text(file: &str, text: &str, map: &PathMap, prefixes: &[String]) -> Rewritten {
     // line -> literal -> replacement (Err: unrewritable)
     let mut wanted: BTreeMap<usize, BTreeMap<String, Result<String, String>>> = BTreeMap::new();
+    // (line, literal) -> entries scan_refs reported, moved or not
+    let mut reported: BTreeMap<(usize, String), usize> = BTreeMap::new();
     for r in scan_refs(file, text, prefixes) {
+        *reported.entry((r.line, r.literal.clone())).or_default() += 1;
         let Some(rep) = replacement(&r, map) else {
             continue;
         };
@@ -145,6 +206,20 @@ pub fn rewrite_text(file: &str, text: &str, map: &PathMap, prefixes: &[String]) 
         out.text = text.to_string();
         return out;
     }
+    let wanted: BTreeMap<usize, Lits> = wanted
+        .into_iter()
+        .map(|(line, lits)| {
+            let lits: Lits = lits
+                .into_iter()
+                .map(|(lit, rep)| {
+                    let n = reported.get(&(line, lit.clone())).copied().unwrap_or(0);
+                    let expected = occurrences(n, file, &lit, prefixes);
+                    (lit, (rep, expected))
+                })
+                .collect();
+            (line, lits)
+        })
+        .collect();
     let mut buf = String::with_capacity(text.len() + 64);
     for (idx, (content, term)) in split_lines(text).into_iter().enumerate() {
         let line = idx + 1;
@@ -153,25 +228,8 @@ pub fn rewrite_text(file: &str, text: &str, map: &PathMap, prefixes: &[String]) 
             buf.push_str(term);
             continue;
         };
-        for (lit, rep) in lits {
-            if let Err(why) = rep {
-                out.unrewritten.push((line, lit.clone(), why.clone()));
-            }
-        }
-        let mut at = 0;
-        for (start, lit) in tokens(content, prefixes) {
-            if let Some(Ok(new)) = lits.get(lit) {
-                buf.push_str(&content[at..start]);
-                buf.push_str(new);
-                at = start + lit.len();
-                out.edits.push(RefEdit {
-                    line,
-                    old: lit.to_string(),
-                    new: new.clone(),
-                });
-            }
-        }
-        buf.push_str(&content[at..]);
+        let toks = tokens(content, prefixes);
+        buf.push_str(&rewrite_line(line, content, &toks, lits, &mut out));
         buf.push_str(term);
     }
     out.text = buf;
@@ -183,7 +241,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let a = parse_args(args, "docs-rewrite-refs")?;
     let prefixes: Vec<String> = DEFAULT_PREFIXES.iter().map(|s| (*s).to_string()).collect();
     let tracked = tracked_files(root)?;
-    let covered = covered_paths(root, &tracked);
+    let covered = covered_paths(root, &tracked)?;
     let mut files = 0usize;
     let mut edits_json = Vec::new();
     let mut unrewritten_json = Vec::new();
@@ -344,6 +402,39 @@ mod tests {
         assert_eq!(r.unrewritten.len(), 1);
         assert_eq!(r.unrewritten[0].0, 1);
         assert_eq!(r.unrewritten[0].1, "../archive/x/f.json");
+    }
+
+    #[test]
+    fn chain_with_two_readings_rewrites_every_occurrence() {
+        // From crates/x/, `../docs/labs/a/b.json` is read both chain-resolved
+        // and chain-stripped, so scan_refs reports each occurrence twice.
+        let m = map("docs/labs/a\tarchive/labs/a\n");
+        let src = "a(\"../docs/labs/a/b.json\"); b(\"../docs/labs/a/b.json\");\n";
+        let r = rewrite_text("crates/x/build.rs", src, &m, &prefixes());
+        assert_eq!(
+            r.text,
+            "a(\"../archive/labs/a/b.json\"); b(\"../archive/labs/a/b.json\");\n"
+        );
+        assert_eq!(r.edits.len(), 2);
+        assert!(r.unrewritten.is_empty());
+    }
+
+    #[test]
+    fn placement_shortfall_is_unrewritten() {
+        let mut lits = BTreeMap::new();
+        lits.insert(
+            "docs/labs/a/b.json".to_string(),
+            (Ok("archive/labs/a/b.json".to_string()), 2),
+        );
+        let content = "\"docs/labs/a/b.json\" \"docs/labs/a/b.json\"";
+        // A tokenizer that finds only one of the two reported occurrences.
+        let toks = [(1, "docs/labs/a/b.json")];
+        let mut out = Rewritten::default();
+        assert_eq!(rewrite_line(3, content, &toks, &lits, &mut out), content);
+        assert!(out.edits.is_empty());
+        assert_eq!(out.unrewritten.len(), 1);
+        assert_eq!(out.unrewritten[0].0, 3);
+        assert!(out.unrewritten[0].2.contains("found 1 of 2"));
     }
 
     #[test]
