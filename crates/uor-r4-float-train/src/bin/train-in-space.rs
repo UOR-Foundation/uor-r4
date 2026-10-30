@@ -70,6 +70,13 @@
 //! --read-grade 1 --runs DIR --panel NAME=DIR` grades them on the laptop (`in_space_long::read_grade`).
 //! One JSON line.
 //!
+//! `--reply-read-train all|copy` trains with every reply row's Hamming read held to before its
+//! reply, from the response mask (claude-216); the run's `config.json` records it, and
+//! `--score-rows` reads it back. Since claude-216, `--reply-read`'s decodes hold every reply in
+//! the window the same way, an earlier reply in the prompt included. `train-in-space
+//! --data-root DIR --cut-grade 1 --runs DIR --panel NAME=DIR` grades (r-cut) against (r-drop) on the
+//! laptop (`in_space_long::cut_grade`). One JSON line.
+//!
 //! `train-in-space --data-root DIR --controls 1 --out DIR [--fresh-v2 DIR] [--panel NAME=DIR ...]`: the
 //! protocol's recall controls (I-D, claude-211) on the laptop: (T) the memory's tables and (S) the
 //! longest suffix over TRAIN, as rows files the grader pairs with the arms.
@@ -96,7 +103,7 @@ use candle_core::Device;
 use uor_r4_float_train::flock_read_opening::OpeningAnchor;
 use uor_r4_float_train::flock_read_register::RegisterSelect;
 use uor_r4_float_train::in_space_long::{
-    cell_grade, cells_ok, census, context_reach, controls, decode_speed, fbs_arm_named, grade,
+    cell_grade, cells_ok, census, context_reach, controls, cut_grade, decode_speed, fbs_arm_named, grade,
     gradient_norms, inspect_run, opening_bound, overturn, read_grade, reply_bound, root_separation,
     run_long, run_recall, score_rows, scopes_ok, DecodeRule, LongConfig, PointObjective, ReadScope,
     TrainSplit, DEFAULT_REGISTER_PICKS, MEMORY_DROPOUT_MAX,
@@ -123,6 +130,7 @@ fn main() -> Result<()> {
     let mut cell_grade_on = false;
     let mut cells: Vec<u32> = Vec::new();
     let mut read_grade_on = false;
+    let mut cut_grade_on = false;
     let mut scopes: Vec<ReadScope> = Vec::new();
     let (mut controls_dir, mut runs, mut frozen_probe) = (None, None, None);
     let mut scored: Vec<(String, PathBuf)> = Vec::new();
@@ -162,6 +170,7 @@ fn main() -> Result<()> {
         turn_memory_reply: false,
         turn_memory_dropout: 0,
         fbs_arm: uor_r4_float_train::spiralcore_fbs_arms::FbsArm::OneAtomActive,
+        reply_read_train: None,
     };
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -194,6 +203,18 @@ fn main() -> Result<()> {
             "--flock-end" => flock_end = switch(&value)?,
             "--cell-grade" => cell_grade_on = switch(&value)?,
             "--read-grade" => read_grade_on = switch(&value)?,
+            "--cut-grade" => cut_grade_on = switch(&value)?,
+            "--reply-read-train" => {
+                config.reply_read_train = Some(match value.as_str() {
+                    "copy" => ReadScope::Copy,
+                    "all" => ReadScope::All,
+                    _ => {
+                        return Err(FloatTrainError::Invalid(
+                            "--reply-read-train wants copy or all".to_owned(),
+                        ))
+                    }
+                });
+            }
             "--reply-read" => {
                 scopes = value
                     .split(',')
@@ -432,10 +453,11 @@ fn main() -> Result<()> {
         grade_on,
         cell_grade_on,
         read_grade_on,
+        cut_grade_on,
     ];
     if modes.iter().filter(|&&m| m).count() > 1 {
         return Err(FloatTrainError::Invalid(
-            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1, --grade 1, --cell-grade 1 or --read-grade 1"
+            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1, --grade 1, --cell-grade 1, --read-grade 1 or --cut-grade 1"
                 .to_owned(),
         ));
     }
@@ -468,6 +490,8 @@ fn main() -> Result<()> {
             || cell_grade_on
             || !cells.is_empty()
             || read_grade_on
+            || cut_grade_on
+            || config.reply_read_train.is_some()
             || !scopes.is_empty()
         {
             return Err(FloatTrainError::Invalid(
@@ -493,6 +517,24 @@ fn main() -> Result<()> {
         return Err(FloatTrainError::Invalid(
             "--reply-read applies to --score-rows only".to_owned(),
         ));
+    }
+    // A run trains with the cut; scoring reads it back from the run's own config.
+    if config.reply_read_train.is_some() && !(out.is_some() && score.is_none() && !controls_on) {
+        return Err(FloatTrainError::Invalid(
+            "--reply-read-train applies to training only; scoring reads it from the run".to_owned(),
+        ));
+    }
+    if cut_grade_on {
+        let runs =
+            runs.ok_or_else(|| FloatTrainError::Invalid("--cut-grade needs --runs DIR".to_owned()))?;
+        let [(panel, _)] = extra_panels.as_slice() else {
+            return Err(FloatTrainError::Invalid(
+                "--cut-grade needs one --panel NAME=DIR, the deciding panel".to_owned(),
+            ));
+        };
+        let graded = cut_grade(&data_root, &runs, panel)?;
+        println!("{}", serde_json::to_string(&graded)?);
+        return Ok(());
     }
     if read_grade_on {
         let runs =

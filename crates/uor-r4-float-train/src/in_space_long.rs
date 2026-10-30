@@ -26,7 +26,6 @@ use serde::{Deserialize, Serialize};
 use uor_r4_tokenizer::ByteBpeTokenizer;
 
 pub use crate::flock_read_hamming::ReadScope;
-use crate::flock_read_hamming::set_read_cut;
 use crate::geometric_stack::stage_clock::{self, StageTime};
 use crate::geometric_stack::{StackAdamW, StackModel};
 use crate::hamilton_sheet::{self as hs, CausalWindow, HamiltonArm, SHEET_CONTEXT};
@@ -161,6 +160,12 @@ pub struct LongConfig {
     /// Left out of `config.json` when the default.
     #[serde(skip_serializing_if = "is_one_atom")]
     pub fbs_arm: FbsArm,
+    /// Train with the reply's Hamming read held to the prompt (claude-216): every scored row
+    /// whose input is a reply token reads, for the heads the scope limits, only positions before
+    /// its reply run's first token ([`reply_row_limits`]). Scoring such a checkpoint applies the
+    /// same cut to its rows. Left out of `config.json` when none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reply_read_train: Option<ReadScope>,
 }
 
 fn is_zero_u32(n: &u32) -> bool {
@@ -374,7 +379,38 @@ impl Drop for ArmGuard {
         crate::flock_read_memory::set_turn_memory(None);
         crate::flock_read_memory::set_memory_rows(None);
         crate::flock_read_memory::set_reply_rows(None);
+        set_trained_cut(None);
+        crate::flock_read_hamming::set_row_cut(None);
     }
+}
+
+/// The read scope `checkpoint`'s run trained its replies with ([`LongConfig::reply_read_train`],
+/// claude-216), from the run's `config.json` where [`check_run_arm`] finds it; none when the run
+/// trained without the cut, or no run config is found.
+fn run_trained_cut(checkpoint: &Path) -> Result<Option<ReadScope>> {
+    let checkpoint = checkpoint
+        .canonicalize()
+        .unwrap_or_else(|_| checkpoint.to_path_buf());
+    let candidates = [
+        Some(checkpoint.join("config.json")),
+        checkpoint.parent().and_then(Path::parent).map(|run| run.join("config.json")),
+    ];
+    for path in candidates.into_iter().flatten() {
+        if !path.exists() {
+            continue;
+        }
+        let value: serde_json::Value = serde_json::from_slice(&fs::read(&path)?)
+            .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+        if value.get("steps").is_none() {
+            continue;
+        }
+        return match value.get("reply_read_train") {
+            None => Ok(None),
+            Some(v) => serde_json::from_value(v.clone())
+                .map_err(|e| invalid(format!("{}: reply_read_train: {e}", path.display()))),
+        };
+    }
+    Ok(None)
 }
 
 /// Set this thread's Flock read, content read, Hamming reads, opening read and prompt register
@@ -732,6 +768,105 @@ fn nearest_loss(model: &StackModel, query: &Tensor, targets: &[u32], cell: bool)
     Ok(loss)
 }
 
+thread_local! {
+    /// The read scope a model trains and scores its rows with (claude-216's
+    /// [`LongConfig::reply_read_train`]); none, the default, reads as before.
+    static TRAINED_CUT: std::cell::Cell<Option<ReadScope>> = const { std::cell::Cell::new(None) };
+    /// The next forward's inputs' response-mask flags ([`window_input_mask`]), which
+    /// [`trained_points`] takes under a trained cut.
+    static REPLY_MASK: std::cell::RefCell<Option<Vec<u8>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Train and score rows on this thread with the reply's read held to the prompt under `scope`
+/// ([`trained_points`]); `None` reads as before. Any reply mask left unread is cleared.
+pub fn set_trained_cut(scope: Option<ReadScope>) {
+    TRAINED_CUT.with(|c| c.set(scope));
+    set_reply_mask(None);
+}
+
+/// Give the next [`trained_points`] on this thread its inputs' response-mask flags.
+fn set_reply_mask(mask: Option<Vec<u8>>) {
+    REPLY_MASK.with(|m| *m.borrow_mut() = mask);
+}
+
+/// Whether this thread trains or scores under a cut, so each forward needs its inputs' mask.
+fn trained_cut_on() -> bool {
+    TRAINED_CUT.with(|c| c.get()).is_some()
+}
+
+/// Each input position's response-mask flag in `windows`, flat as [`assemble`] lays them out
+/// (claude-216): `mask` at the position's corpus index, 0 for the BOS that opens a document or
+/// pads a short window. A window's corpus start is its first scored target, less one, less
+/// that row's offset.
+fn window_input_mask(windows: &[&CausalWindow], mask: &[u8]) -> Result<Vec<u8>> {
+    let mut flat = Vec::with_capacity(windows.len() * SHEET_CONTEXT);
+    for window in windows {
+        let start = match (window.scored_corpus_positions.first(), window.scored_offsets.first()) {
+            (Some(&p), Some(&o)) if p > o => p - 1 - o,
+            _ => return Err(invalid("a window with no scored row has no corpus start")),
+        };
+        for (offset, &id) in window.input_ids.iter().enumerate() {
+            flat.push(if id == hs::SHEET_BOS_ID {
+                0
+            } else {
+                *mask
+                    .get(start + offset)
+                    .ok_or_else(|| invalid("a window runs past its split's mask"))?
+            });
+        }
+    }
+    Ok(flat)
+}
+
+/// Each row's read limit for windows of `context` positions whose inputs carry the
+/// response-mask flags `input_mask` ([`window_input_mask`]) (claude-216): a row whose input is a
+/// reply token reads only before its reply's first token in the window, or nothing when the
+/// reply began before the window; every other row keeps every earlier position (`context`). So
+/// a reply's first scored row, whose input is the prompt's last token, keeps them, as at decode.
+fn reply_row_limits(input_mask: &[u8], context: usize) -> Vec<usize> {
+    let mut limits = vec![context; input_mask.len()];
+    let mut first = 0;
+    for (row, &flag) in input_mask.iter().enumerate() {
+        let offset = row % context;
+        if flag == 1 {
+            if offset == 0 || input_mask[row - 1] == 0 {
+                first = offset;
+            }
+            limits[row] = first;
+        }
+    }
+    limits
+}
+
+/// Over `windows` and their split's `mask`: the rows, the rows the trained cut limits, and the
+/// limited rows that read nothing in the limited heads, their reply having begun before the
+/// window (claude-216).
+fn cut_census(windows: &[CausalWindow], mask: &[u8]) -> Result<(usize, usize, usize)> {
+    let refs: Vec<&CausalWindow> = windows.iter().collect();
+    let limits = reply_row_limits(&window_input_mask(&refs, mask)?, SHEET_CONTEXT);
+    let cut = limits.iter().filter(|&&l| l < SHEET_CONTEXT).count();
+    let none = limits.iter().filter(|&&l| l == 0).count();
+    Ok((limits.len(), cut, none))
+}
+
+/// The trunk's points for `batch` windows of `ids`, with [`set_trained_cut`]'s scope applied to
+/// every reply row ([`reply_row_limits`], on the mask [`set_reply_mask`] gave this forward,
+/// which it takes), cleared before any error returns. Under a cut, a forward without its mask,
+/// or with one of another length, is refused.
+fn trained_points(model: &StackModel, ids: &[u32], batch: usize) -> Result<Tensor> {
+    let mask = REPLY_MASK.with(|m| m.borrow_mut().take());
+    if let Some(scope) = TRAINED_CUT.with(|c| c.get()) {
+        let mask = mask.ok_or_else(|| invalid("a trained cut's forward has no reply mask"))?;
+        if mask.len() != ids.len() {
+            return Err(invalid("a trained cut's reply mask is not its forward's length"));
+        }
+        crate::flock_read_hamming::set_row_cut(Some((scope, reply_row_limits(&mask, SHEET_CONTEXT))));
+    }
+    let hidden = crate::flock_read::points(model, ids, batch, SHEET_CONTEXT);
+    crate::flock_read_hamming::set_row_cut(None);
+    hidden
+}
+
 fn batch_loss(
     model: &StackModel,
     objective: PointObjective,
@@ -740,7 +875,7 @@ fn batch_loss(
     targets: &[u32],
     batch: usize,
 ) -> Result<Tensor> {
-    let hidden = crate::flock_read::points(model, ids, batch, SHEET_CONTEXT)?;
+    let hidden = trained_points(model, ids, batch)?;
     let idx = Tensor::from_vec(scored.to_vec(), scored.len(), model.device())?;
     let query = hidden.index_select(&idx, 0)?;
     stage_clock::mark("points.select");
@@ -968,7 +1103,10 @@ fn row_picks(
                     ));
                 }
             }
-            let hidden = crate::flock_read::points(model, &ids, windows.len(), SHEET_CONTEXT);
+            if trained_cut_on() {
+                set_reply_mask(Some(window_input_mask(&windows, mask)?));
+            }
+            let hidden = trained_points(model, &ids, windows.len());
             crate::flock_read_memory::set_memory_rows(None);
             crate::flock_read_memory::set_reply_rows(None);
             let hidden = hidden?;
@@ -2090,6 +2228,7 @@ fn greedy_reply(
         0,
         None,
         ReadScope::Full,
+        &[],
     )?
     .tokens)
 }
@@ -2248,6 +2387,19 @@ fn prompt_cut(prompt_len: usize, start: usize) -> usize {
     prompt_len.saturating_sub(start)
 }
 
+/// The response-mask flags of a decode window that starts at sequence position `start`, over a
+/// prompt flagged `prompt_mask` and the `reply_len` tokens decoded so far, each a reply token
+/// (claude-216): [`reply_row_limits`] then limits the window as it would a training window, the
+/// reply's rows to [`prompt_cut`].
+fn decode_window_mask(prompt_mask: &[u8], reply_len: usize, start: usize) -> Vec<u8> {
+    prompt_mask
+        .iter()
+        .copied()
+        .chain(std::iter::repeat_n(1, reply_len))
+        .skip(start)
+        .collect()
+}
+
 /// One decoded reply ([`decode_reply`]).
 struct DecodedReply {
     tokens: Vec<u32>,
@@ -2261,7 +2413,10 @@ struct DecodedReply {
 /// BOS or its length, as before. `sample` is the reply's index, which with `seed` seeds the Flock rank draws: draw
 /// `index = sample · 64 + step`. The Flock rank rule needs a nearest objective. `scope` limits
 /// which positions the Hamming read may choose at each step (claude-215): under any scope but
-/// [`ReadScope::Full`], the limited heads choose only the prompt's positions in the window.
+/// [`ReadScope::Full`], the limited heads of every reply row in the window read only before
+/// their reply's first token, training's rule ([`reply_row_limits`], claude-216), on the
+/// prompt's response-mask flags `prompt_mask` and the reply's tokens; so the reply decoded reads
+/// only the prompt's positions, and an earlier reply in the prompt reads only before itself.
 #[allow(clippy::too_many_arguments)]
 fn decode_reply(
     model: &StackModel,
@@ -2273,6 +2428,7 @@ fn decode_reply(
     sample: usize,
     eos: Option<u32>,
     scope: ReadScope,
+    prompt_mask: &[u8],
 ) -> Result<DecodedReply> {
     let flock = rule != DecodeRule::Greedy;
     if flock && !objective.decodes_nearest() {
@@ -2282,6 +2438,14 @@ fn decode_reply(
     // limit nothing, and its files would be plain greedy under another name.
     if scope != ReadScope::Full && !objective.decodes_nearest() {
         return Err(invalid("a read scope decodes the nearest table tokens only"));
+    }
+    if scope != ReadScope::Full && prompt_mask.len() != prompt.len() {
+        return Err(invalid("a read scope needs the prompt's response mask, one flag a token"));
+    }
+    // The reply opens after the prompt's last token, so its rows read only before
+    // [`prompt_cut`], claude-215's cut; a prompt that ended inside a reply would merge the two.
+    if scope != ReadScope::Full && prompt_mask.last() != Some(&0) {
+        return Err(invalid("a scoped decode's prompt ends inside a reply"));
     }
     if flock && reply_tokens > FLOCK_MAX_REPLY {
         return Err(invalid(format!(
@@ -2306,25 +2470,30 @@ fn decode_reply(
                 // A later step reads the reply table (claude-193), keyed by the turn at the prompt's
                 // last token, the reply's length and its last id.
                 let start = ids.len().saturating_sub(SHEET_CONTEXT);
+                let cut = prompt_cut(prompt.len(), start);
                 if !reply.is_empty()
-                    && prompt.len() > start
+                    && cut > 0
                     && crate::flock_read_memory::turn_memory()
                         .is_some_and(|m| m.reply_len().is_some())
                 {
-                    if let Some(key) = greedy_reply_key(window, prompt.len() - 1 - start, &reply) {
+                    if let Some(key) = greedy_reply_key(window, cut - 1, &reply) {
                         crate::flock_read_memory::set_reply_rows(Some(vec![(
                             window.len() - 1,
                             key,
                         )]));
                     }
                 }
-                // Under a scope, the limited heads choose only before the prompt's end in the
-                // window, so they never read the reply's own tokens.
+                // Under a scope, every reply row's limited heads choose only before its reply, so
+                // the reply decoded never reads its own tokens, as in training.
                 if scope != ReadScope::Full {
-                    set_read_cut(Some((scope, prompt_cut(prompt.len(), start))));
+                    let flags = decode_window_mask(prompt_mask, reply.len(), start);
+                    crate::flock_read_hamming::set_row_cut(Some((
+                        scope,
+                        reply_row_limits(&flags, flags.len()),
+                    )));
                 }
                 let hidden = crate::flock_read::points(model, window, 1, window.len());
-                set_read_cut(None);
+                crate::flock_read_hamming::set_row_cut(None);
                 crate::flock_read_memory::set_memory_rows(None);
                 crate::flock_read_memory::set_reply_rows(None);
                 let hidden = hidden?;
@@ -3083,6 +3252,11 @@ pub fn score_rows(
     let _guard = ArmGuard;
     let model = StackModel::load(checkpoint, device)?;
     load_reads(checkpoint, device)?;
+    // A run trained with the reply's read held to the prompt scores its rows the same way
+    // (claude-216); its decodes take the cut through `--reply-read`, as served.
+    let trained = run_trained_cut(checkpoint)?;
+    set_trained_cut(trained);
+    println!("[cut] scoring with the trained cut: {}", trained.map_or("none", |s| s.name()));
     let memory = crate::flock_read_memory::turn_memory();
     let mut written = Vec::new();
     for on in [true, false] {
@@ -3126,6 +3300,8 @@ pub fn score_rows(
                 for (index, window) in prompts.iter().enumerate() {
                     let off = window.scored_offsets[0];
                     let prompt = &window.input_ids[..=off];
+                    // The prompt's own flags: an earlier reply in it is limited as in training.
+                    let flags = window_input_mask(std::slice::from_ref(window), &split.mask)?;
                     let DecodedReply { tokens: reply, admitted } = decode_reply(
                         &model,
                         PointObjective::Cell,
@@ -3136,6 +3312,7 @@ pub fn score_rows(
                         index,
                         Some(eos),
                         scope,
+                        &flags[..=off],
                     )?;
                     let reference = reference_reply(window, reply_tokens);
                     let (reply_keys, reply_named) = reply_key_hits(prompt, cut_at_eos(&reply, eos), named);
@@ -4605,6 +4782,22 @@ pub struct CellReading {
     /// counted: a rule that ends replies sooner has fewer 4-grams to repeat.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mean_length: Option<f64>,
+    /// The prompts every compared rule completes, and this rule's verbatim TRAIN replies among
+    /// them, when matched (claude-216's `cut_grade`): a content share no rule's completions select.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_n: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_verbatim: Option<usize>,
+}
+
+impl CellReading {
+    /// The verbatim TRAIN share on the matched prompts, when matched and any.
+    fn matched_v(&self) -> Option<f64> {
+        match (self.matched_verbatim, self.matched_n) {
+            (Some(v), Some(n)) if n > 0 => Some(v as f64 / n as f64),
+            _ => None,
+        }
+    }
 }
 
 impl CellReading {
@@ -4698,7 +4891,7 @@ pub fn cell_grade(data_root: &Path, runs: &Path, panel: &str, margins: &[u32]) -
     }
     let mut rules = vec!["greedy".to_owned(), "flock-end".to_owned()];
     rules.extend(margins.iter().map(|m| format!("flock-cell-{m}")));
-    let readings = rule_readings(data_root, runs, panel, &rules, false)?;
+    let readings = rule_readings(data_root, runs, panel, &rules, false, 0)?;
     let of = |split: &str, rule: &str| -> Vec<&CellReading> {
         readings.iter().filter(|r| r.split == split && r.rule == rule).collect()
     };
@@ -4740,18 +4933,36 @@ fn fewer_loops(loops: usize, greedy_loops: usize, n: usize) -> bool {
     loops + count_band(greedy_loops, n) < greedy_loops
 }
 
-/// Every reading [`cell_grade`] and [`read_grade`] compare: for DEV and `panel`, at seeds 1–3,
-/// each of `rules`' samples files in `runs/r-drop-s{seed}/` against the split's own references,
-/// greedy (`rules[0]`) first. Every rule must answer greedy's prompts. With `count_loops`, each
-/// reading also counts its looping replies, and every rule after greedy whether it has fewer
-/// than greedy's beyond decision 4's band.
+/// From each rule's `(complete, complete and verbatim)` flags over the same prompts: how many
+/// prompts the first `by` rules all complete, and each rule's verbatim replies among them
+/// (claude-216). A rule past the first `by` is counted on their prompts and selects none.
+fn matched_counts(flags: &[Vec<(bool, bool)>], by: usize) -> (usize, Vec<usize>) {
+    let n = flags.first().map_or(0, Vec::len);
+    let both: Vec<usize> = (0..n).filter(|&j| flags.iter().take(by).all(|f| f[j].0)).collect();
+    let verbatim = flags
+        .iter()
+        .map(|f| both.iter().filter(|&&j| f[j].1).count())
+        .collect();
+    (both.len(), verbatim)
+}
+
+/// Every reading [`cell_grade`], [`read_grade`] and [`cut_grade`] compare: for DEV and `panel`,
+/// at seeds 1–3, each of `rules`' samples files against the split's own references, greedy
+/// (`rules[0]`) first. A rule is `name` (in `runs/r-drop-s{seed}/`) or `run/name` (in
+/// `runs/{run}-s{seed}/`, claude-216). Every rule must answer greedy's prompts. With
+/// `count_loops`, each reading also counts its looping replies, and every rule after greedy
+/// whether it has fewer than greedy's beyond decision 4's band. With `matched` above 0, each
+/// reading also counts its verbatim TRAIN replies on the prompts the first `matched` rules all
+/// complete ([`CellReading::matched_n`], [`matched_counts`]).
 fn rule_readings(
     data_root: &Path,
     runs: &Path,
     panel: &str,
     rules: &[String],
     count_loops: bool,
+    matched: usize,
 ) -> Result<Vec<CellReading>> {
+    let matched = matched.min(rules.len());
     if rules.first().map(String::as_str) != Some("greedy") {
         return Err(invalid("the readings compare against greedy, which comes first"));
     }
@@ -4761,8 +4972,13 @@ fn rule_readings(
     let eos = pinned_tokenizer(data_root)?
         .token_id("<|eos|>")
         .ok_or_else(|| invalid("the pinned tokenizer has no <|eos|>"))?;
-    let samples = |seed: u8, file: &str| -> Result<Vec<IdSample>> {
-        let path = runs.join(format!("r-drop-s{seed}")).join(file);
+    let train_set: std::collections::HashSet<u128> = if matched > 0 {
+        train_replies.iter().map(|r| census_hash(r)).collect()
+    } else {
+        std::collections::HashSet::new()
+    };
+    let samples = |seed: u8, run: &str, file: &str| -> Result<Vec<IdSample>> {
+        let path = runs.join(format!("{run}-s{seed}")).join(file);
         let list: Vec<IdSample> = read_scored(&path)?;
         if list.len() != PROTOCOL_SAMPLES || list.iter().any(|s| s.reference.is_empty()) {
             return Err(invalid(format!(
@@ -4779,13 +4995,17 @@ fn rule_readings(
             let mut greedy: Option<Generation> = None;
             let mut greedy_loops = 0usize;
             let mut prompts: Option<Vec<(usize, Vec<u32>)>> = None;
+            let first_reading = readings.len();
+            // Each rule's replies: complete, and complete and verbatim in TRAIN (`matched`).
+            let mut flags: Vec<Vec<(bool, bool)>> = Vec::new();
             for rule in rules {
-                let file = match (split, rule.as_str()) {
+                let (run, name) = rule.split_once('/').unwrap_or(("r-drop", rule.as_str()));
+                let file = match (split, name) {
                     ("dev", "greedy") => "samples-memory.json".to_owned(),
                     (_, "greedy") => format!("samples-{split}-greedy-memory.json"),
-                    _ => format!("samples-{split}-{rule}-memory.json"),
+                    _ => format!("samples-{split}-{name}-memory.json"),
                 };
-                let list = samples(seed, &file)?;
+                let list = samples(seed, run, &file)?;
                 // Every rule answers greedy's prompts, sample by sample, or nothing compares.
                 let these: Vec<(usize, Vec<u32>)> =
                     list.iter().map(|s| (s.position, s.prompt.clone())).collect();
@@ -4793,16 +5013,28 @@ fn rule_readings(
                     None => prompts = Some(these),
                     Some(first) if *first != these => {
                         return Err(invalid(format!(
-                            "r-drop-s{seed}/{file}: its prompts are not greedy's on {split}"
+                            "{run}-s{seed}/{file}: its prompts are not greedy's on {split}"
                         )));
                     }
                     Some(_) => {}
                 }
                 let replies: Vec<Vec<u32>> = list.iter().map(|s| s.reply.clone()).collect();
                 let references: Vec<Vec<u32>> = list.iter().map(|s| s.reference.clone()).collect();
+                if matched > 0 {
+                    flags.push(
+                        replies
+                            .iter()
+                            .map(|r| {
+                                let cut = cut_at_eos(r, eos);
+                                let complete = cut.last() == Some(&eos);
+                                (complete, complete && train_set.contains(&census_hash(cut)))
+                            })
+                            .collect(),
+                    );
+                }
                 let made = generation(&replies, &train_replies, eos);
                 let reading = VerdictSeed::new(seed, &made, &generation(&references, &train_replies, eos));
-                let mean_admitted = if rule.starts_with("flock-cell-") {
+                let mean_admitted = if name.starts_with("flock-cell-") {
                     let steps: Vec<u8> = list.iter().flat_map(|s| s.admitted.iter().copied()).collect();
                     if steps.is_empty() {
                         return Err(invalid(format!("{file}: the cell rule recorded no admitted counts")));
@@ -4845,7 +5077,18 @@ fn rule_readings(
                     loops,
                     fewer_loops,
                     mean_length,
+                    matched_n: None,
+                    matched_verbatim: None,
                 });
+            }
+            // The prompts every rule completes, and each rule's verbatim replies among them.
+            if matched > 0 {
+                let (n, verbatim) = matched_counts(&flags, matched);
+                for (i, v) in verbatim.into_iter().enumerate() {
+                    let reading = &mut readings[first_reading + i];
+                    reading.matched_n = Some(n);
+                    reading.matched_verbatim = Some(v);
+                }
             }
         }
     }
@@ -4919,7 +5162,7 @@ pub fn read_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<ReadGrad
     let rules: Vec<String> = ["greedy", "greedy-read-copy", "greedy-read-all"]
         .map(String::from)
         .to_vec();
-    let readings = rule_readings(data_root, runs, panel, &rules, true)?;
+    let readings = rule_readings(data_root, runs, panel, &rules, true, 0)?;
     let of = |rule: &str| -> Vec<&CellReading> {
         readings.iter().filter(|r| r.split == panel && r.rule == rule).collect()
     };
@@ -4933,6 +5176,128 @@ pub fn read_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<ReadGrad
         readings,
         outcome,
         copy_outcome,
+    })
+}
+
+/// claude-216's grade of the cut trained in: every reading (with its matched content), the
+/// panel rows' teacher-forced cell, and the outcomes.
+#[derive(Clone, Debug, Serialize)]
+pub struct CutGrade {
+    pub panel: String,
+    pub readings: Vec<CellReading>,
+    /// (r-cut)'s nearest hits against (r-drop)'s on every panel row, teacher-forced: the
+    /// protocol's paired cell, ahead or behind only at all three seeds past the band.
+    pub rows: GradeCell,
+    /// The registered decision, from (r-cut) decoded with its cut, as served ([`cut_outcome`]).
+    pub outcome: &'static str,
+    /// The same rule for (r-drop) decoded with the cut only (claude-215's arm). It decides nothing.
+    /// It has no teacher-forced rows of its own, so its rows' step is read as inside: it can never
+    /// read "costs accuracy".
+    pub decode_only_outcome: &'static str,
+}
+
+/// Whether `arm` keeps `base`'s content on the prompts both complete: its matched verbatim share
+/// is below the base's by at most `max(0.10, 3·√(p(1−p)/m))`, `p` the base's share and `m` the
+/// matched prompts (claude-216).
+fn matched_kept(arm: &CellReading, base: &CellReading) -> bool {
+    match (arm.matched_v(), base.matched_v(), base.matched_n) {
+        (Some(a), Some(p), Some(m)) if m > 0 => {
+            a >= p - 0.10f64.max(3.0 * (p * (1.0 - p) / m as f64).sqrt())
+        }
+        _ => false,
+    }
+}
+
+/// The rules [`cut_grade`]'s matched content is taken over: the base and the served arm, the two
+/// the decision compares (FIT round 2); the decode-only and uncut arms, which decide nothing, are
+/// counted on their prompts and cannot thin them.
+const MATCHED_BY: usize = 2;
+
+/// [`cut_grade`]'s rules, in [`rule_readings`]'s order: the base and the served arm first, so the
+/// first [`MATCHED_BY`] are the two the decision compares; then the decode-only and uncut arms.
+const CUT_RULES: [&str; 4] = ["greedy", "r-cut/greedy-read-all", "greedy-read-all", "r-cut/greedy"];
+
+/// The fewest matched prompts ([`matched_counts`]) the base must have at every seed for the
+/// matched content to decide anything (claude-216's FIT): below it, `underpowered (content)`.
+const MATCHED_FLOOR: usize = 64;
+
+/// The sheet's decision (claude-216) for an arm's three panel seeds against (r-drop) greedy's
+/// three (`base`, seed for seed), with the teacher-forced rows' cell `rows`, in this order:
+/// - `underpowered` when greedy loops in fewer than [`READ_LOOP_FLOOR`] replies at any seed;
+/// - `no gain` unless the arm has fewer loops beyond the band and holds decision 4 at all three;
+/// - `costs accuracy` when the rows' cell is behind;
+/// - `underpowered (content)` when the base has fewer than [`MATCHED_FLOOR`] matched prompts
+///   at any seed: an instrument outcome, never a content negative;
+/// - `cures` when it is also close and keeps the matched content ([`matched_kept`]) at all three;
+/// - `improves` when it keeps the matched content at all three;
+/// - else `reduces, content lost`.
+fn cut_outcome(arm: &[&CellReading], base: &[&CellReading], rows: OverturnCell) -> &'static str {
+    if base.len() != 3 || base.iter().any(|g| g.loops.is_none_or(|n| n < READ_LOOP_FLOOR)) {
+        return "underpowered";
+    }
+    let fewer = arm.len() == 3
+        && arm
+            .iter()
+            .all(|x| x.fewer_loops == Some(true) && x.holds == Some(true));
+    if !fewer {
+        return "no gain";
+    }
+    if rows == OverturnCell::Behind {
+        return "costs accuracy";
+    }
+    if base.iter().any(|g| g.matched_n.is_none_or(|m| m < MATCHED_FLOOR)) {
+        return "underpowered (content)";
+    }
+    let kept = arm.iter().zip(base).all(|(a, b)| matched_kept(a, b));
+    if kept && arm.iter().all(|x| x.close) {
+        "cures"
+    } else if kept {
+        "improves"
+    } else {
+        "reduces, content lost"
+    }
+}
+
+/// Grade the cut trained in (claude-216) from stored outputs only, on the laptop: `runs` holds
+/// `r-drop-s{1,2,3}` (the sealed (r-drop), scored on `panel` with `--reply-read all`) and
+/// `r-cut-s{1,2,3}` (the run trained with the cut, scored the same way). Every reading is
+/// counted on the prompts the base and the served arm complete ([`MATCHED_BY`]); the panel decides
+/// ([`cut_outcome`]); DEV is reported.
+pub fn cut_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<CutGrade> {
+    if panel == "dev" {
+        return Err(invalid("--cut-grade's deciding panel cannot be DEV"));
+    }
+    let rules: Vec<String> = CUT_RULES.map(String::from).to_vec();
+    let readings = rule_readings(data_root, runs, panel, &rules, true, MATCHED_BY)?;
+    let mut counts = Vec::new();
+    for seed in 1..=3u8 {
+        let rows = |run: &str| -> Result<ScoredRows> {
+            let path = runs.join(format!("{run}-s{seed}")).join(format!("rows-{panel}-memory.json"));
+            let rows: ScoredRows = read_scored(&path)?;
+            if !rows.memory || rows.split != panel {
+                return Err(invalid(format!("{}: not {panel}'s rows with the memory on", path.display())));
+            }
+            Ok(rows)
+        };
+        let (cut, drop) = (rows("r-cut")?, rows("r-drop")?);
+        let every: std::collections::BTreeSet<usize> = cut.positions.iter().copied().collect();
+        counts.push((seed, paired(&cut, &drop, &every)?));
+    }
+    let rows = grade_cell("r-cut", "r-drop", "the panel's rows", &counts);
+    let of = |rule: &str| -> Vec<&CellReading> {
+        readings.iter().filter(|r| r.split == panel && r.rule == rule).collect()
+    };
+    let base = of("greedy");
+    let (outcome, decode_only_outcome) = (
+        cut_outcome(&of("r-cut/greedy-read-all"), &base, rows.cell),
+        cut_outcome(&of("greedy-read-all"), &base, OverturnCell::Inside),
+    );
+    Ok(CutGrade {
+        panel: panel.to_owned(),
+        readings,
+        rows,
+        outcome,
+        decode_only_outcome,
     })
 }
 
@@ -5358,13 +5723,13 @@ fn load_named_split(split: &TrainSplit) -> Result<(Vec<u32>, Vec<u8>)> {
     Ok((tokens, mask))
 }
 
-/// TRAIN's windows with at least 4 scored targets, each context-long; at least `batch` of them.
-/// TRAIN is the pinned split, or `split` when a run names one.
+/// TRAIN's windows with at least 4 scored targets, each context-long; at least `batch` of them;
+/// and TRAIN's response mask. TRAIN is the pinned split, or `split` when a run names one.
 fn load_train(
     data_root: &Path,
     batch: usize,
     split: Option<&TrainSplit>,
-) -> Result<Vec<CausalWindow>> {
+) -> Result<(Vec<CausalWindow>, Vec<u8>)> {
     let (train_tokens, train_mask) = match split {
         None => load_train_split(data_root)?,
         Some(split) => load_named_split(split)?,
@@ -5378,7 +5743,7 @@ fn load_train(
     if usable.len() < batch || usable.iter().any(|w| w.input_ids.len() != SHEET_CONTEXT) {
         return Err(invalid("TRAIN windows are too few or not context-long"));
     }
-    Ok(usable)
+    Ok((usable, train_mask))
 }
 
 /// One parameter's gradient norm on the first training batch ([`gradient_norms`]).
@@ -5396,7 +5761,7 @@ pub fn gradient_norms(
     config: &LongConfig,
     device: &Device,
 ) -> Result<Vec<GradientNorm>> {
-    let usable = load_train(data_root, config.batch, config.train_split.as_ref())?;
+    let (usable, _) = load_train(data_root, config.batch, config.train_split.as_ref())?;
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
     crate::geometric_stack::set_retention_rates(config.retain_rates);
     crate::geometric_stack::set_folded_scores(config.fold_scores);
@@ -5700,7 +6065,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
 
     let tokenizer = pinned_tokenizer(data_root)?;
 
-    let usable = load_train(data_root, config.batch, config.train_split.as_ref())?;
+    let (usable, train_mask) = load_train(data_root, config.batch, config.train_split.as_ref())?;
     let (dev_windows, dev_mask) = load_dev(data_root)?;
     let prompts = sample_windows(&dev_windows, &dev_mask, config.samples);
     println!(
@@ -5718,6 +6083,18 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     crate::geometric_stack::set_reflected_floor(config.reflect_floor);
     crate::geometric_stack::set_input_table_fixed(config.fix_input_table);
     let _guard = ArmGuard;
+    // The reply's read held to the prompt in training (claude-216); it needs the Hamming read.
+    if config.reply_read_train.is_some() && config.hamming_read == 0 {
+        return Err(invalid("--reply-read-train needs --hamming-read"));
+    }
+    set_trained_cut(config.reply_read_train);
+    if config.reply_read_train.is_some() {
+        let (rows, cut, none) = cut_census(&usable, &train_mask)?;
+        println!(
+            "[cut] TRAIN rows {rows}: {cut} reply rows read only before their reply, {none} of \
+             them nothing (their reply began before the window)"
+        );
+    }
     let model = build_fbs_model_at(config.fbs_arm, config.seed, config.width, device)?;
     // The Flock read, when on: its own parameters and optimizer, applied by `points`.
     let flock = if config.flock_read > 0 {
@@ -5970,6 +6347,10 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         // The memory's rows are `b · SHEET_CONTEXT + offset`, so every window must be whole.
         if ids.len() != config.batch * SHEET_CONTEXT {
             return Err(invalid("a training batch's windows are not context-long"));
+        }
+        // Under the cut (claude-216), every reply row of the batch reads only before its reply.
+        if trained_cut_on() {
+            set_reply_mask(Some(window_input_mask(&windows, &train_mask)?));
         }
         let profiled = profile_window(step, config.profile);
         let started = Instant::now();
@@ -6329,6 +6710,7 @@ mod tests {
             turn_memory_reply: false,
             turn_memory_dropout: 0,
             fbs_arm: FbsArm::OneAtomActive,
+            reply_read_train: None,
         }
     }
 
@@ -7554,6 +7936,7 @@ mod tests {
                     sample,
                     None,
                     ReadScope::Full,
+                    &[],
                 )
                 .unwrap()
                 .tokens
@@ -7660,6 +8043,8 @@ mod tests {
                 loops: None,
                 fewer_loops: None,
                 mean_length: None,
+                matched_n: None,
+                matched_verbatim: None,
             }
         };
         let (good, salad, loops, off) = (
@@ -7759,6 +8144,8 @@ mod tests {
                 loops: Some(loops),
                 fewer_loops: Some(fewer),
                 mean_length: None,
+                matched_n: None,
+                matched_verbatim: None,
             }
         };
         // Greedy loops in 60 of 256 with v = 0.5, a gap of 0.1.
@@ -7810,10 +8197,204 @@ mod tests {
         assert_eq!(prompt_cut(180, ids - SHEET_CONTEXT), 162);
     }
 
+    /// claude-216: the matched content counts only the prompts every rule completes, so one
+    /// rule's completions select nothing; an arm keeps the base's matched content within
+    /// `max(0.10, 3·√(p(1−p)/m))`; and the cut's outcome follows the sheet's order.
+    #[test]
+    fn the_cut_grade_matches_content_and_follows_the_sheet() {
+        // Three rules over four prompts: prompt 1 is incomplete under rule 2, prompt 3 under 0.
+        let flags = vec![
+            vec![(true, true), (true, true), (true, false), (false, false)],
+            vec![(true, false), (true, true), (true, true), (true, true)],
+            vec![(true, true), (false, false), (true, true), (true, true)],
+        ];
+        assert_eq!(matched_counts(&flags, 3), (2, vec![1, 1, 2]));
+        // Taken over the first two rules only, rule 2's incomplete prompt 1 selects nothing.
+        assert_eq!(matched_counts(&flags, 2), (3, vec![2, 2, 2]));
+        assert_eq!(matched_counts(&[], 3), (0, vec![]));
+        let reading = |fewer: bool, holds: bool, close: bool, loops: usize, verbatim: usize| {
+            let made = Generation {
+                replies: 256,
+                complete: 200,
+                verbatim_train: 100,
+                new_ngram_share: Vec::new(),
+                distinct_1: 0.0,
+                distinct_2: 0.0,
+                repeated_4gram_rate: 0.0,
+            };
+            CellReading {
+                split: "p-t".to_owned(),
+                rule: "r-cut/greedy-read-all".to_owned(),
+                seed: 1,
+                reading: VerdictSeed::new(1, &made, &made),
+                holds: Some(holds),
+                close,
+                mean_admitted: None,
+                loops: Some(loops),
+                fewer_loops: Some(fewer),
+                mean_length: None,
+                matched_n: Some(200),
+                matched_verbatim: Some(verbatim),
+            }
+        };
+        // The base: 120 of 200 matched prompts verbatim, p = 0.6, so the tolerance is 0.104.
+        let g = reading(false, false, false, 60, 120);
+        let base = [&g, &g, &g];
+        let (kept, lost) = (reading(true, true, false, 10, 100), reading(true, true, false, 10, 98));
+        assert!(matched_kept(&kept, &g), "0.50 is within 0.104 of 0.60");
+        assert!(!matched_kept(&lost, &g), "0.49 is not");
+        let cured = reading(true, true, true, 10, 120);
+        let same = reading(false, true, true, 60, 120);
+        use OverturnCell::{Behind, Inside};
+        assert_eq!(cut_outcome(&[&cured, &cured, &cured], &base, Inside), "cures");
+        assert_eq!(cut_outcome(&[&kept, &kept, &kept], &base, Inside), "improves");
+        assert_eq!(cut_outcome(&[&kept, &lost, &kept], &base, Inside), "reduces, content lost");
+        assert_eq!(cut_outcome(&[&cured, &cured, &cured], &base, Behind), "costs accuracy");
+        assert_eq!(cut_outcome(&[&cured, &same, &cured], &base, Inside), "no gain");
+        let quiet = reading(false, false, false, READ_LOOP_FLOOR - 1, 120);
+        assert_eq!(cut_outcome(&[&cured, &cured, &cured], &[&g, &quiet, &g], Inside), "underpowered");
+        // Close on its own completions, but the matched content lost: not cured (the FIT).
+        let close_lost = reading(true, true, true, 10, 98);
+        assert_eq!(
+            cut_outcome(&[&close_lost, &close_lost, &close_lost], &base, Inside),
+            "reduces, content lost"
+        );
+        // Too few matched prompts, or none counted, is an instrument outcome, never a negative.
+        let thin = CellReading { matched_n: Some(MATCHED_FLOOR - 1), ..g.clone() };
+        let unmatched = CellReading { matched_n: None, ..g.clone() };
+        for weak in [&thin, &unmatched] {
+            assert_eq!(
+                cut_outcome(&[&lost, &lost, &lost], &[&g, weak, &g], Inside),
+                "underpowered (content)"
+            );
+        }
+        // At the floor, at every seed, the content decides: 38 of 64 (p = 0.59, tolerance 0.18)
+        // against 0.30 is lost, and against 0.50 kept.
+        let at_floor = CellReading { matched_n: Some(MATCHED_FLOOR), matched_verbatim: Some(38), ..g.clone() };
+        let floor_base = [&at_floor, &at_floor, &at_floor];
+        let far = reading(true, true, false, 10, 60);
+        assert_eq!(cut_outcome(&[&far, &far, &far], &floor_base, Inside), "reduces, content lost");
+        assert_eq!(cut_outcome(&[&kept, &kept, &kept], &floor_base, Inside), "improves");
+        // The matched set is the base's and the served arm's: the first two rules the grade reads.
+        assert_eq!(CUT_RULES[..MATCHED_BY], ["greedy", "r-cut/greedy-read-all"]);
+    }
+
+    /// claude-216: in training and scoring, a row whose input is a reply token reads only before
+    /// its reply's first token in the window, or nothing when the reply began before the window;
+    /// every other row, the reply's first scored row (the prompt's last token) among them, keeps
+    /// every earlier position; a reply never crosses a window.
+    #[test]
+    fn every_reply_row_reads_only_before_its_reply() {
+        let context = 10;
+        // Window 0: prompt 0–2, reply 3–5, prompt 6–7, reply 8–9. Window 1: a reply carried in
+        // at 0–1, prompt 2–4, reply 5–6, prompt 7–9.
+        let flags = [0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0];
+        let want = [10, 10, 10, 3, 3, 3, 10, 10, 8, 8, 0, 0, 10, 10, 10, 5, 5, 10, 10, 10];
+        assert_eq!(reply_row_limits(&flags, context), want);
+        assert_eq!(reply_row_limits(&[], context), Vec::<usize>::new());
+    }
+
+    /// claude-216 (the FIT's first point): a window that ends a long conversation carries up to
+    /// a context of earlier tokens, earlier replies among them, so a decode prompt can hold an
+    /// earlier reply, which training limits. Each window's input flags come from the split's
+    /// mask ([`window_input_mask`]), and a decode window ([`decode_window_mask`]) is limited
+    /// exactly as the training window holding the same tokens: its earlier replies to before
+    /// themselves, the reply decoded to [`prompt_cut`]. claude-215's uniform cut, `s < cut` on
+    /// every row, would leave the earlier reply reading itself.
+    #[test]
+    fn a_decode_window_is_limited_as_its_training_window() {
+        // Two conversations of five turns, each longer than a window. The first's second window
+        // opens inside turn 3's reply; the second's, at 108, inside turn 2's.
+        let (mut tokens, mut mask) = (Vec::new(), Vec::new());
+        for (prompt, reply) in [(30, 45), (40, 20)] {
+            tokens.push(hs::SHEET_BOS_ID);
+            mask.push(0u8);
+            for _ in 0..5 {
+                tokens.extend(std::iter::repeat_n(7u32, prompt + reply));
+                mask.extend(std::iter::repeat_n(0u8, prompt));
+                mask.extend(std::iter::repeat_n(1u8, reply));
+            }
+        }
+        let (windows, _) =
+            hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID).unwrap();
+        assert_eq!(windows.len(), 4);
+        let flags_of = |w: &CausalWindow| window_input_mask(std::slice::from_ref(&w), &mask).unwrap();
+        // The second conversation's second window: turn 2's reply carried in at 0–12, turn 3's
+        // prompt, its reply at 53–72, turn 4's prompt, and the reply the sample opens at 113.
+        let flags = flags_of(&windows[3]);
+        assert!(flags[..13].iter().all(|&f| f == 1) && flags[13] == 0);
+        assert!(flags[52] == 0 && flags[53] == 1 && flags[72] == 1 && flags[73] == 0);
+        assert!(flags[112] == 0 && flags[113] == 1);
+        let limits = reply_row_limits(&flags, SHEET_CONTEXT);
+        assert_eq!((limits[5], limits[60], limits[52], limits[112]), (0, 53, SHEET_CONTEXT, SHEET_CONTEXT));
+        // Every sampled prompt opens a reply; its decode windows are limited as training's.
+        // What each row may read: `first ≤ s < min(t, limit)` (`flock_read_hamming::is_candidate`).
+        let reach = |limits: &[usize]| -> Vec<usize> {
+            limits.iter().enumerate().map(|(t, &l)| t.min(l)).collect()
+        };
+        let sampled = sample_windows(&windows, &mask, 16);
+        assert_eq!(sampled.len(), 3, "both first windows, and the second one's second");
+        let mut held_earlier = false;
+        for &window in &sampled {
+            let off = window.scored_offsets[0];
+            let flags = flags_of(window);
+            let train = reply_row_limits(&flags, SHEET_CONTEXT);
+            // Within the reference reply, which is 20 tokens or more, the windows match.
+            for reply_len in [0, 1, 2, 20] {
+                let decode = decode_window_mask(&flags[..=off], reply_len, 0);
+                let width = off + 1 + reply_len;
+                assert_eq!(decode, flags[..width], "offset {off}, {reply_len} tokens");
+                assert_eq!(
+                    reach(&reply_row_limits(&decode, decode.len())),
+                    reach(&train[..width]),
+                    "offset {off}, {reply_len} tokens"
+                );
+            }
+            // The earlier reply in this prompt reads only before itself; a uniform cut would
+            // leave it every earlier position.
+            held_earlier |= (0..=off).any(|t| train[t] < t);
+        }
+        assert!(held_earlier, "no sampled prompt held an earlier reply, so the check was vacuous");
+        // Once the window slides, a reply carried in reads nothing and the reply decoded reads
+        // the prompt's positions, claude-215's cut.
+        let prompt: Vec<u8> = [vec![0; 50], vec![1; 30], vec![0; 100]].concat();
+        let (reply_len, start) = (64, 180 + 64 - SHEET_CONTEXT);
+        let slid = decode_window_mask(&prompt, reply_len, start);
+        let limits = reply_row_limits(&slid, slid.len());
+        assert_eq!(slid.len(), SHEET_CONTEXT);
+        assert!(limits[..28].iter().all(|&l| l == 0));
+        assert!(limits[28..128].iter().all(|&l| l == SHEET_CONTEXT));
+        assert!(limits[128..].iter().all(|&l| l == prompt_cut(prompt.len(), start)));
+        // The census of the four windows: 101 + 132 + 60 + 72 reply rows, of which the 43 and
+        // 13 carried in read nothing.
+        assert_eq!(cut_census(&windows, &mask).unwrap(), (4 * SHEET_CONTEXT, 365, 56));
+    }
+
+    /// claude-216: a run that trains without the cut writes no `reply_read_train` key, so its
+    /// `config.json` is as before; one that trains with it records the scope, and scoring reads
+    /// it back from the run beside a `step-N` checkpoint.
+    #[test]
+    fn the_trained_cut_is_recorded_and_read_back() {
+        let mut config = super::tests::config(0, None);
+        let plain = serde_json::to_string(&config).unwrap();
+        assert!(!plain.contains("reply_read_train"), "{plain}");
+        config.reply_read_train = Some(ReadScope::All);
+        let cut = serde_json::to_vec_pretty(&config).unwrap();
+        assert!(String::from_utf8_lossy(&cut).contains("\"reply_read_train\": \"all\""));
+        let run = std::env::temp_dir().join(format!("claude-216-cut-{}", std::process::id()));
+        let step = run.join("models").join("step-000256");
+        fs::create_dir_all(&step).unwrap();
+        fs::write(run.join("config.json"), &cut).unwrap();
+        assert_eq!(run_trained_cut(&step).unwrap(), Some(ReadScope::All));
+        fs::write(run.join("config.json"), plain.as_bytes()).unwrap();
+        assert_eq!(run_trained_cut(&step).unwrap(), None);
+        fs::remove_dir_all(&run).unwrap();
+    }
+
     /// claude-215 (its GPU half): on a model with the Hamming reads set, a reply's first token is
     /// the same under every read scope (its window is all prompt, so the cut limits nothing),
-    /// and the cut is cleared after every decode. New reads start with zero weights, so the
-    /// scopes cannot change a token here: `a_cut_keeps_every_pick_before_it` pins the cut itself,
+    /// and the cut (a row cut since claude-216) is cleared after every decode. New reads start
+    /// with zero weights, so the scopes cannot change a token here: `a_cut_keeps_every_pick_before_it` pins the cut itself,
     /// and the pod's job checks that the scoped decodes of the trained checkpoints differ.
     #[cfg(feature = "cuda")]
     #[test]
@@ -7838,10 +8419,12 @@ mod tests {
                     sample,
                     None,
                     scope,
+                    &vec![0; prompt.len()],
                 )
                 .unwrap()
                 .tokens;
                 assert_eq!(crate::flock_read_hamming::read_cut(), None, "the cut outlived its decode");
+                assert!(!crate::flock_read_hamming::row_cut_set(), "the row cut outlived its decode");
                 reply
             };
             let full = decode(ReadScope::Full);
@@ -7868,7 +8451,7 @@ mod tests {
             let shift = sample as u32 * 101;
             let prompt: Vec<u32> = (1..=24u32).map(|i| (i * 37 + shift) % 4096).collect();
             let decode = |rule| {
-                decode_reply(&model, PointObjective::Cell, &prompt, 16, 1, rule, sample, None, ReadScope::Full).unwrap()
+                decode_reply(&model, PointObjective::Cell, &prompt, 16, 1, rule, sample, None, ReadScope::Full, &[]).unwrap()
             };
             let greedy = decode(DecodeRule::Greedy);
             assert!(greedy.admitted.is_empty(), "greedy records no counts");
