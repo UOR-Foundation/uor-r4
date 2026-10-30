@@ -2,7 +2,7 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md). Order: [claude-211](../../loop/tasks/one-model-end-to-end/claude-211/ORDER.md). Protocol: [one-model-end-to-end-protocol-2026-10-29](one-model-end-to-end-protocol-2026-10-29.md) (TEST FITNESS: FIT). This sheet is the run that protocol registers; it changes none of its arms, strata, bars or decisions.
 
-TEST FITNESS: (to be filled by the fresh reviewer). PRE-RUN: (to be filled).
+TEST FITNESS: PENDING. PRE-RUN: PENDING. (Filled after a fresh non-author review.)
 
 ## The question
 
