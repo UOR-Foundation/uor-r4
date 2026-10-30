@@ -13,13 +13,25 @@
  * stored only in this browser's localStorage. The exported object is also available at
  * window.UORModelSources for other Studio modules; every state change dispatches a
  * "uor-model-source-changed" CustomEvent on the document.
- *
+ */
+
+import { sha256Hex, validateTokenizerArtifact } from './uor_tokenizer_artifact.js';
+
+/**
  * Public interface:
  *   list()                              -> { active, wasm, api }
  *   active()                            -> { kind, id }
  *   apiConfig(id?)                      -> config | null
  *   loadLocalFile(file)                 -> Promise<{ bytes, fileName, header, meta, source }>
  *   loadFromUrl(url)                    -> Promise<{ bytes, fileName, header, meta, source }>
+ *   loadPublished(idOrEntry)            -> Promise<{ bytes, fileName, header, meta, source }>
+ *
+ * Published catalog entries are the only sources allowed to be cross-origin. They are
+ * fetched only after an explicit user click on their Load button (user-initiated network
+ * access to the host named on the card), optionally with a pinned sha256/size and a
+ * stack-bound tokenizer artifact; the bytes are then posted to the worker, which remains
+ * the only WASM backend. Bundled/demo entries must stay same-origin.
+ *
  *   save()                              -> persisted list()
  *   testApi(id?)                        -> Promise<{ ok, detail, models }>
  *   setActive({ kind, id })             -> list()
@@ -31,7 +43,7 @@
 
 const STORAGE_KEY = 'uor.studio.modelSources.v1';
 const EVENT_NAME = 'uor-model-source-changed';
-const MAX_WASM_BYTES = 64 * 1024 * 1024; // matches the worker's MAX_ARTIFACT_BYTES
+const MAX_WASM_BYTES = 128 * 1024 * 1024; // matches the worker's MAX_ARTIFACT_BYTES (M1 trunk is 86.5 MB)
 const BUNDLED_DEMO_URL = './pkg/synthetic-stack.lut';
 const BUNDLED_DEMO_LABEL = 'Synthetic demo (seed 5)';
 const MODELS_CATALOG_URL = './models.json';
@@ -260,7 +272,8 @@ function parseUorLutHeader(arrayBuffer) {
     };
 }
 
-async function readArtifact(bytes, fileName, origin) {
+async function readArtifact(bytes, fileName, origin, options) {
+    const extra = options || {};
     const parsed = parseUorLutHeader(bytes);
     const meta = {
         kind: origin.kind,
@@ -271,6 +284,12 @@ async function readArtifact(bytes, fileName, origin) {
         synthetic: parsed.synthetic,
         byteLength: bytes.byteLength,
         shape: parsed.shape,
+        format: extra.format || 'UORLUT01',
+        sizeBytes: Number.isInteger(extra.sizeBytes) ? extra.sizeBytes : bytes.byteLength,
+        sha256: extra.sha256 || '',
+        expectedSha256: extra.expectedSha256 || '',
+        host: origin.host || '',
+        tokenizerBound: Boolean(extra.tokenizerArtifact),
     };
     setWasmMeta(meta);
     state.active = { kind: 'wasm', id: meta.id };
@@ -283,9 +302,13 @@ async function readArtifact(bytes, fileName, origin) {
         fileName,
         header: parsed.header,
         headerMeta: { schema: parsed.schema, shape: parsed.shape, synthetic: parsed.synthetic, group: parsed.group },
+        expectedSha256: extra.expectedSha256 || '',
+        tokenizerArtifact: extra.tokenizerArtifact || null,
+        sizeBytes: meta.sizeBytes,
+        format: meta.format,
         meta: clone(meta),
     });
-    return { bytes, fileName, header: parsed.header, meta: clone(meta), source: { kind: 'wasm', id: meta.id } };
+    return { bytes, fileName, header: parsed.header, tokenizerArtifact: extra.tokenizerArtifact || null, meta: clone(meta), source: { kind: 'wasm', id: meta.id } };
 }
 
 function getBundledDemo() {
@@ -308,6 +331,32 @@ function sameOriginModelUrl(value) {
     }
 }
 
+/** Published entries may name any http(s) host (the user's click is the consent to fetch it). */
+function remoteModelUrl(value) {
+    var raw = String(value || '').trim();
+    if (!raw) return null;
+    try {
+        var url = new URL(raw, document.baseURI);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+        return url;
+    } catch (_error) {
+        return null;
+    }
+}
+
+function formatBytes(bytes) {
+    var n = Number(bytes);
+    if (!Number.isFinite(n) || n <= 0) return '';
+    if (n >= 1024 * 1024) return (Math.round((n / (1024 * 1024)) * 10) / 10) + ' MB';
+    if (n >= 1024) return Math.round(n / 1024) + ' KB';
+    return n + ' B';
+}
+
+function shortSha(value) {
+    var s = String(value || '');
+    return /^[0-9a-f]{64}$/i.test(s) ? s.slice(0, 12) + '…' : s;
+}
+
 async function loadModelCatalog() {
     try {
         var response = await fetch(MODELS_CATALOG_URL, { cache: 'no-store', credentials: 'omit' });
@@ -324,29 +373,40 @@ async function loadModelCatalog() {
             }
         }
         // The publisher's stage helper writes models[] entries:
-        //   kind "bundled" -> the bundled demo (label/url override the hardcoded default);
-        //   any other kind with a URL -> an optional extra model card loaded user-initiated.
+        //   kind "bundled" -> the bundled demo (label/url override the hardcoded default,
+        //                     and it MUST stay same-origin);
+        //   any other kind ("published"/"url"/...) -> a user-initiated model card whose
+        //                     http(s) URL may be cross-origin (for example Hugging Face),
+        //                     carrying optional tokenizer_url/sha256/size_bytes/format pins.
         var entries = Array.isArray(data.models) ? data.models : [];
         var published = [];
         entries.forEach(function (entry, index) {
             if (!entry || typeof entry !== 'object') return;
-            var url = sameOriginModelUrl(entry.url || entry.path || '');
-            if (!url) return;
+            var kind = typeof entry.kind === 'string' ? entry.kind.toLowerCase() : '';
             var label = typeof entry.label === 'string' && entry.label.trim()
                 ? entry.label.trim()
                 : (typeof entry.name === 'string' && entry.name.trim() ? entry.name.trim() : 'Model ' + (index + 1));
-            var kind = typeof entry.kind === 'string' ? entry.kind.toLowerCase() : '';
             if (kind === 'bundled' || kind === 'demo') {
-                catalog.bundled = { label: label, url: url.href };
+                var bundledUrl = sameOriginModelUrl(entry.url || entry.path || '');
+                if (bundledUrl) catalog.bundled = { label: label, url: bundledUrl.href };
                 return;
             }
+            var url = remoteModelUrl(entry.url || entry.path || '');
+            if (!url) return;
+            var tokenizerUrl = remoteModelUrl(entry.tokenizer_url || entry.tokenizerUrl || '');
             published.push({
                 id: typeof entry.id === 'string' && entry.id ? 'published-' + entry.id : 'published-' + index,
                 label: label,
                 url: url.href,
+                tokenizerUrl: tokenizerUrl ? tokenizerUrl.href : '',
                 note: typeof entry.note === 'string' ? entry.note : '',
                 schema: typeof entry.schema === 'string' ? entry.schema : '',
-                sha256: typeof entry.sha256 === 'string' ? entry.sha256 : '',
+                format: typeof entry.format === 'string' ? entry.format : 'UORLUT01',
+                sha256: typeof entry.sha256 === 'string' ? entry.sha256.toLowerCase() : '',
+                sizeBytes: Number.isInteger(entry.size_bytes) && entry.size_bytes > 0 ? entry.size_bytes : 0,
+                tokenizerSha256: typeof entry.tokenizer_sha256 === 'string' ? entry.tokenizer_sha256.toLowerCase() : '',
+                primary: entry.primary === true,
+                host: url.host,
             });
         });
         catalog.models = published;
@@ -358,6 +418,134 @@ async function loadModelCatalog() {
 
 function getCatalog() {
     return { bundled: getBundledDemo(), models: catalogModelEntries() };
+}
+
+/**
+ * Fetch one artifact with a byte cap and progress callback. The page verifies the pinned
+ * sha256/size after the download; the worker re-verifies expectedSha256 before load.
+ */
+async function fetchArtifactWithProgress(rawUrl, options) {
+    var opts = options || {};
+    var url = remoteModelUrl(rawUrl);
+    if (!url) throw new Error('The model URL is not a valid http(s) URL.');
+    var response = await fetch(url.toString(), { cache: 'no-store', credentials: 'omit' });
+    if (!response.ok) {
+        throw new Error('The model download from ' + url.host + ' failed with HTTP ' + response.status + '.');
+    }
+    var expected = Number(opts.expectedBytes) > 0 ? Number(opts.expectedBytes) : 0;
+    var declared = Number(response.headers.get('content-length') || 0);
+    if (declared > MAX_WASM_BYTES) {
+        throw new Error('That model file is larger than the ' + Math.round(MAX_WASM_BYTES / (1024 * 1024)) + ' MB browser limit for this Studio.');
+    }
+    if (expected > MAX_WASM_BYTES) {
+        throw new Error('The catalog pins a model larger than the ' + Math.round(MAX_WASM_BYTES / (1024 * 1024)) + ' MB browser limit for this Studio.');
+    }
+    var total = expected || declared || 0;
+    var report = function (loaded, complete) {
+        if (typeof opts.onProgress !== 'function') return;
+        var pct = total > 0 ? Math.min(100, Math.floor((loaded * 100) / total)) : 0;
+        opts.onProgress(complete ? 100 : Math.min(99, pct), loaded, total);
+    };
+    if (!response.body || typeof response.body.getReader !== 'function') {
+        var buffer = await response.arrayBuffer();
+        var whole = new Uint8Array(buffer);
+        if (whole.byteLength > MAX_WASM_BYTES) throw new Error('That model file is larger than the browser load limit for this Studio.');
+        if (expected && whole.byteLength !== expected) {
+            throw new Error('Downloaded size ' + whole.byteLength + ' does not match the pinned size_bytes ' + expected + '.');
+        }
+        report(whole.byteLength, true);
+        return whole;
+    }
+    var reader = response.body.getReader();
+    var chunks = [];
+    var received = 0;
+    for (;;) {
+        var read = await reader.read();
+        if (read.done) break;
+        var chunk = read.value instanceof Uint8Array ? read.value : new Uint8Array(read.value);
+        received += chunk.byteLength;
+        if (received > MAX_WASM_BYTES) {
+            try { reader.cancel(); } catch (_error) { /* ignore */ }
+            throw new Error('That model file is larger than the ' + Math.round(MAX_WASM_BYTES / (1024 * 1024)) + ' MB browser load limit for this Studio.');
+        }
+        chunks.push(chunk);
+        report(received, false);
+    }
+    var merged = new Uint8Array(received);
+    var offset = 0;
+    for (var i = 0; i < chunks.length; i += 1) {
+        merged.set(chunks[i], offset);
+        offset += chunks[i].byteLength;
+    }
+    if (expected && merged.byteLength !== expected) {
+        throw new Error('Downloaded size ' + merged.byteLength + ' does not match the pinned size_bytes ' + expected + '.');
+    }
+    report(merged.byteLength, true);
+    return merged;
+}
+
+/** Fetch and validate the stack-bound tokenizer named by a published entry. */
+async function fetchTokenizerArtifact(entry, stackSha256, vocabSize) {
+    var url = remoteModelUrl(entry.tokenizerUrl);
+    if (!url) throw new Error('The catalog tokenizer_url is not a valid http(s) URL.');
+    setMessage('info', 'Loading the stack-bound tokenizer for ' + entry.label + '…');
+    var response = await fetch(url.toString(), { cache: 'no-store', credentials: 'omit' });
+    if (!response.ok) {
+        throw new Error('The tokenizer download from ' + url.host + ' failed with HTTP ' + response.status + '.');
+    }
+    var text = await response.text();
+    var tokenizerHash = await sha256Hex(new TextEncoder().encode(text));
+    if (entry.tokenizerSha256 && tokenizerHash !== entry.tokenizerSha256) {
+        throw new Error('Tokenizer sha256 ' + shortSha(tokenizerHash) + ' does not match the catalog pin ' + shortSha(entry.tokenizerSha256) + '; refusing to load.');
+    }
+    var artifact;
+    try {
+        artifact = JSON.parse(text);
+    } catch (_error) {
+        throw new Error('The tokenizer_url did not return a JSON tokenizer artifact.');
+    }
+    if (!validateTokenizerArtifact(artifact, stackSha256, vocabSize)) {
+        throw new Error('The tokenizer artifact does not bind to this stack (sha256/vocab mismatch); refusing to load the trained model without its bound tokenizer.');
+    }
+    return artifact;
+}
+
+/** Load a published catalog entry: user-initiated download, hash/size check, tokenizer binding. */
+async function loadPublished(idOrEntry) {
+    var entry = typeof idOrEntry === 'string'
+        ? catalog.models.find(function (item) { return item.id === idOrEntry; })
+        : idOrEntry;
+    if (!entry) throw new Error('That published model is not in the catalog.');
+    var host = entry.host || (new URL(entry.url)).host;
+    setMessage('info', 'Downloading ' + entry.label + ' from ' + host + '…');
+    var bytes = await fetchArtifactWithProgress(entry.url, {
+        expectedBytes: entry.sizeBytes,
+        onProgress: function (pct, loaded, total) {
+            setMessage('info', 'Downloading ' + entry.label + ' from ' + host + '… ' + pct + '% (' + formatBytes(loaded) + (total ? ' / ' + formatBytes(total) : '') + ')');
+        },
+    });
+    var stackSha256 = await sha256Hex(bytes);
+    if (entry.sha256 && stackSha256 !== entry.sha256) {
+        throw new Error('sha256 mismatch for ' + entry.label + ': expected ' + shortSha(entry.sha256) + ', got ' + shortSha(stackSha256) + '; refusing to load.');
+    }
+    var arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    var parsed = parseUorLutHeader(arrayBuffer);
+    var parsedVocab = parsed.shape ? Number(parsed.shape.vocab || parsed.shape.vocabulary || 0) : 0;
+    var tokenizerArtifact = null;
+    if (entry.tokenizerUrl) {
+        tokenizerArtifact = await fetchTokenizerArtifact(entry, stackSha256, parsedVocab);
+    }
+    setMessage('info', 'Loading ' + entry.label + ' into the engine…');
+    var fileName = (new URL(entry.url)).pathname.split('/').pop() || 'published-stack.lut';
+    var result = await readArtifact(bytes, fileName, { kind: 'published', id: entry.id, label: entry.label, host: host }, {
+        expectedSha256: entry.sha256 || stackSha256,
+        tokenizerArtifact: tokenizerArtifact,
+        sizeBytes: entry.sizeBytes || bytes.byteLength,
+        format: entry.format || 'UORLUT01',
+        sha256: stackSha256,
+    });
+    setMessage('success', 'Loaded ' + entry.label + ' from ' + host + ' (' + formatBytes(bytes.byteLength) + ', ' + parsed.schema + (tokenizerArtifact ? ', tokenizer bound' : ', no tokenizer') + ').');
+    return result;
 }
 
 const api = {
@@ -393,6 +581,10 @@ const api = {
 
     loadModelCatalog() {
         return loadModelCatalog();
+    },
+
+    loadPublished(idOrEntry) {
+        return loadPublished(idOrEntry);
     },
 
     setActive(next) {
@@ -456,22 +648,15 @@ const api = {
 
     async loadFromUrl(rawUrl) {
         const url = resolveModelUrl(rawUrl);
-        setMessage('info', 'Downloading ' + url.pathname.split('/').pop() + ' from ' + url.origin + '…');
-        const response = await fetch(url.toString(), { cache: 'no-store', credentials: 'omit' });
-        if (!response.ok) {
-            throw new Error('The model download failed with HTTP ' + response.status + '.');
-        }
-        const declared = Number(response.headers.get('content-length') || 0);
-        if (declared > MAX_WASM_BYTES) {
-            throw new Error('That model file is larger than the ' + Math.round(MAX_WASM_BYTES / (1024 * 1024)) + ' MB browser limit for this Studio.');
-        }
-        const bytes = await response.arrayBuffer();
-        if (bytes.byteLength > MAX_WASM_BYTES) {
-            throw new Error('The downloaded model is larger than the browser limit for this Studio.');
-        }
+        setMessage('info', 'Downloading ' + (url.pathname.split('/').pop() || 'model') + ' from ' + url.host + '…');
+        const bytes = await fetchArtifactWithProgress(url.href, {
+            onProgress: function (pct, loaded, total) {
+                setMessage('info', 'Downloading from ' + url.host + '… ' + pct + '% (' + formatBytes(loaded) + (total ? ' / ' + formatBytes(total) : '') + ')');
+            },
+        });
         const fileName = url.pathname.split('/').pop() || 'downloaded-stack.lut';
-        const result = await readArtifact(bytes, fileName, { kind: 'url', id: 'url', label: fileName });
-        setMessage('success', 'Loaded ' + fileName + '.');
+        const result = await readArtifact(bytes, fileName, { kind: 'url', id: 'url', label: fileName, host: url.host });
+        setMessage('success', 'Loaded ' + fileName + ' (' + formatBytes(bytes.byteLength) + ').');
         return result;
     },
 
@@ -529,17 +714,38 @@ function cardHeader(kind, label, detail, active) {
 
 function renderAll(container) {
     container.textContent = '';
+
+    var primaryEntries = [];
+    var researchEntries = [];
+    for (var p = 0; p < catalog.models.length; p += 1) {
+        if (catalog.models[p].primary) primaryEntries.push(catalog.models[p]);
+        else researchEntries.push(catalog.models[p]);
+    }
+
+    if (primaryEntries.length) {
+        var trained = el('section', 'source-group');
+        trained.appendChild(el('h3', null, 'Trained M1 model'));
+        trained.appendChild(el('p', 'hint', 'The M1-closing 19-table trunk export (uor-r4.lut-discrete-trunk/1). Load it to run top-8 next-token prediction in the browser; it is a language base, not a chat assistant. The download and load are user-initiated.'));
+        for (var t = 0; t < primaryEntries.length; t += 1) trained.appendChild(publishedModelCard(primaryEntries[t]));
+        container.appendChild(trained);
+    }
+
     const local = el('section', 'source-group');
     local.appendChild(el('h3', null, 'Local WASM engine'));
     local.appendChild(el('p', 'hint', 'Runs in a Web Worker inside this tab. Prompts and replies stay on this device. The bundled demo is a synthetic stack, not a chat model.'));
 
     local.appendChild(bundledCard());
-    for (var i = 0; i < catalog.models.length; i += 1) {
-        local.appendChild(publishedModelCard(catalog.models[i]));
-    }
     local.appendChild(localFileCard());
     local.appendChild(urlCard());
     container.appendChild(local);
+
+    if (researchEntries.length) {
+        var research = el('section', 'source-group');
+        research.appendChild(el('h3', null, 'Research artifacts (experimental)'));
+        research.appendChild(el('p', 'hint', 'Earlier trained exports kept for inspection. The FBS stack trunks have no token writer, so they are not generation-capable in this Studio; greedy continuation on a base model repeats tokens.'));
+        for (var q = 0; q < researchEntries.length; q += 1) research.appendChild(publishedModelCard(researchEntries[q]));
+        container.appendChild(research);
+    }
 
     const remote = el('section', 'source-group');
     remote.appendChild(el('h3', null, 'OpenAI-compatible API'));
@@ -574,11 +780,19 @@ function bundledCard() {
 
 function publishedModelCard(entry) {
     const card = el('div', 'source-card');
-    const active = state.active.kind === 'wasm' && state.wasm.kind === 'url';
-    card.appendChild(cardHeader('Published', entry.label, (entry.note || entry.url) + (entry.sha256 ? ' · sha256 ' + entry.sha256.slice(0, 12) + '…' : ''), active));
+    const active = state.active.kind === 'wasm' && state.wasm.id === entry.id;
+    card.appendChild(cardHeader(entry.primary ? 'M1' : 'Published', entry.label, entry.note || ('Loads from ' + (entry.host || entry.url) + ' only when you click Load.'), active));
+    const pins = [];
+    if (entry.schema) pins.push(entry.schema);
+    pins.push('format ' + (entry.format || 'UORLUT01'));
+    if (entry.sizeBytes) pins.push(formatBytes(entry.sizeBytes));
+    if (entry.sha256) pins.push('sha256 ' + shortSha(entry.sha256));
+    pins.push(entry.tokenizerUrl ? 'stack-bound tokenizer' : 'no tokenizer');
+    card.appendChild(el('div', 'source-detail', pins.join(' · ')));
+    card.appendChild(el('div', 'source-detail', 'User-initiated remote load: bytes are fetched from ' + (entry.host || 'its host') + ' only after you click Load.'));
     const actions = el('div', 'source-card-actions');
     const load = button('Load published model', 'load-published', { className: 'btn-secondary btn-small' });
-    load.dataset.modelUrl = entry.url;
+    load.dataset.modelId = entry.id;
     actions.appendChild(load);
     card.appendChild(actions);
     return card;
@@ -728,7 +942,14 @@ async function onClick(event) {
         if (action === 'load-bundled') {
             await loadBundled();
         } else if (action === 'load-published') {
-            await api.loadFromUrl(target.dataset.modelUrl);
+            target.disabled = true;
+            target.setAttribute('aria-busy', 'true');
+            try {
+                await api.loadPublished(target.dataset.modelId);
+            } finally {
+                target.disabled = false;
+                target.removeAttribute('aria-busy');
+            }
         } else if (action === 'load-url') {
             const input = mounted.container.querySelector('#modelUrlInput');
             await api.loadFromUrl(input.value);
