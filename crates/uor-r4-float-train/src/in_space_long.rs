@@ -1774,7 +1774,12 @@ fn keyed_openings(
                 Some(m) => m.stored(first, first.len(), &[first.len() - 1])?.1[first.len() - 1] == 1.0,
                 None => false,
             };
-            Ok(keyed_opening(fires, names[i], distances[i], tau))
+            let token = keyed_opening(fires, names[i], distances[i], tau);
+            // A key's name is a TRAIN reply's first token, never BOS (the code review).
+            if token == Some(hs::SHEET_BOS_ID) {
+                return Err(invalid(format!("{}: a key names BOS at {position} (an instrument fault)", keys.split)));
+            }
+            Ok(token)
         })
         .collect()
 }
@@ -2574,7 +2579,9 @@ fn keyed_reading(
         }
         let ok = match want {
             KeyedReply::Greedy => k.reply == g.reply,
-            KeyedReply::Forced => k.reply == f.reply,
+            // The forced reply opens with the keyed token too, on DEV as on the panel (the code
+            // review), so a forcing both arms ignore is refused.
+            KeyedReply::Forced => k.reply == f.reply && f.reply.first() == token.as_ref(),
             // A key's name is a TRAIN reply's first token, never BOS (FIT round 2).
             KeyedReply::Novel(t) => t != hs::SHEET_BOS_ID && k.reply.first() == Some(&t),
         };
@@ -2730,8 +2737,9 @@ pub fn keyed_grade(
             by_key[k].1.push((panel, dev));
         }
     }
-    // The decision only when every keyed arm was decoded; p-u's power check has none.
-    if grade.readings.iter().all(|r| r.exact.is_some()) {
+    // The decision only on p-v, the deciding panel, and only when every keyed arm was decoded;
+    // p-u's power check has none.
+    if name == "p-v" && grade.readings.iter().all(|r| r.exact.is_some()) {
         let (row, next, ships) = keyed_outcome(&grade.forced, &by_key);
         grade.row = Some(row);
         grade.next = Some(next.to_owned());
@@ -4624,6 +4632,9 @@ pub fn score_rows(
     }
     if !keyed.is_empty() && !keys {
         return Err(invalid("--keyed-decode reads the opening keys, so it needs --opening-keys 1"));
+    }
+    if !keyed.is_empty() && samples == 0 {
+        return Err(invalid("--keyed-decode decodes samples, so it needs --samples of 1 or more"));
     }
     if !cells_ok(cells) {
         return Err(invalid(
@@ -10293,6 +10304,10 @@ mod tests {
         let (unnamed, moved) = (window(b.clone(), 2, 300), window(b, 3, 200));
         assert!(keyed_openings(&[&unnamed], &keys, "point", 1.0, Some(&memory)).is_err());
         assert!(keyed_openings(&[&moved], &keys, "point", 1.0, Some(&memory)).is_err());
+        // A key that would give BOS is refused (the code review); where it does not fire, it is not.
+        let bos = OpeningKeys { point_target: vec![11, hs::SHEET_BOS_ID], ..keys.clone() };
+        assert!(keyed_openings(&prompts, &bos, "point", 0.5, Some(&memory)).is_err());
+        assert_eq!(keyed_openings(&prompts, &bos, "point", 0.125, Some(&memory)).unwrap(), [None, None]);
     }
 
     /// claude-219: the keyed grade predicts each keyed reply from the greedy and forced ones,
@@ -10385,6 +10400,11 @@ mod tests {
         assert!(read(f32::INFINITY, Some(&with(2, sample(30, vec![8, 3, 1], vec![6, 2, 1], Some(8))))).is_err());
         assert!(read(f32::INFINITY, Some(&with(3, sample(40, vec![5, 1], vec![6, 1], Some(9))))).is_err());
         assert!(read(f32::INFINITY, Some(&keyed[..3])).is_err(), "an arm's prompts are greedy's");
+        // A forcing that both the forced and the keyed arm ignore is refused (the code review).
+        let mut unforced = forced.clone();
+        unforced[1].reply = vec![4, 1];
+        let ignored = with(1, sample(20, vec![4, 1], vec![7, 6, 1], Some(7)));
+        assert!(keyed_reading(("p", "point", 1, f32::INFINITY), &openings, &picks, &greedy, &unforced, Some(&ignored), 1, &keep, &none).is_err());
         // The table, in order: the forced arm without a lift at any seed is row 1; a key that
         // carries at all three is row 2, the cheapest first; every key thin at some seed is row 3;
         // else row 4.
@@ -10417,6 +10437,12 @@ mod tests {
         assert_eq!(keyed_outcome(&forced3, &table(carries, (3, 1), carries)).2.as_deref(), Some("sign"));
         assert_eq!(keyed_outcome(&forced3, &table((3, 1), (3, 1), (3, 1))).0, 3);
         assert_eq!(keyed_outcome(&forced3, &table((10, 8), (3, 1), (10, 8))).0, 4);
+        // b + c under 10 never carries, however large the net (the code review).
+        assert_eq!(keyed_outcome(&forced3, &table((9, 0), (9, 0), (9, 0))).0, 3);
+        // Thin at one seed of three, and carrying at none, is row 3, not row 4 (the code review).
+        let mixed = vec![(at((3, 1)), at((0, 0))), (at((10, 8)), at((0, 0))), (at((10, 8)), at((0, 0)))];
+        let by_seed = vec![("sign", mixed.clone()), ("hsign", mixed.clone()), ("point", mixed)];
+        assert_eq!(keyed_outcome(&forced3, &by_seed).0, 3);
         // Worse exact replies, more loops or DEV's templates lower beyond their bands stop a key.
         let worse = |e: (usize, usize), l: (usize, usize), d: (usize, usize)| {
             let p = KeyedReading { exact: Some(e), loops: Some(l), ..at(carries) };
