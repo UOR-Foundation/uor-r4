@@ -5,7 +5,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 ## Tokens per second
 
 - **Every rule decodes at 58–60 tok/s per process** on one RTX 5090, while all three seeds share it, about 180 tok/s together. This is the float GPU path with the memory on.
-  - **One exception:** seed 1's last file was decoded alone, after the others finished, and ran at 108 tok/s.
+  - **Every memory-on file reads 57.9–60.3 tok/s.** The two exceptions are memory-off greedy controls decoded last, after the other seeds had finished or partly so: seed 1's at 108 tok/s and seed 3's at 66.
 - **The cell rule adds no cost over `FLOCK_END`,** which reads the same top-16 sort.
 - **This is not the served speed.** The integer path for (r-drop) is not built.
 
@@ -18,7 +18,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - at 0.031, `v` is 0.343–0.353 and the repeat rate 0.553–0.614, near greedy's 0.559–0.628 and below it at seeds 2 and 3;
   - the references sit at `v` 0.59 and repeat 0.00.
 - **The objective's own margin is no narrowing.** At 1.0, the margin the run trained to, 15.1–15.2 of the 16 candidates are admitted, and 195–209 of 256 p-c replies are identical to `FLOCK_END`'s.
-- **Inside a loop, the nearest token is confident, so narrowing cannot break the loop.** This is measured from the recorded admitted counts, where a loop step is one whose 4-gram occurred earlier in the same reply.
+- **Inside a loop, the nearest token is confident, so narrowing almost never changes the draw.** This is measured from the recorded admitted counts, where a loop step is one whose 4-gram occurred earlier in the same reply. At 95.9–99.6% of loop steps a narrower margin draws the same token from the same prefix.
   - At margin 0.25, 95.9–99.0% of loop steps admit exactly one candidate, across both splits and all three seeds, against 19.7–29.9% of other steps.
   - At 0.031, 99.2–99.6% of loop steps admit one.
   - **The scope:** steps inside loops, on the cell rule's own replies. Loop entries and greedy's replies were not read.

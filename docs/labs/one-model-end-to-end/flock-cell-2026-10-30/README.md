@@ -18,7 +18,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../roadmap/items/one-model-end-t
 ## Tokens per second
 
 - **Every rule decodes at 58–60 tok/s per process while all three seeds share the one GPU,** about 180 tok/s together. This is the float GPU path with the memory on, at a context of up to 192.
-  - **One exception:** seed 1's last file was decoded after the other two had finished, and ran at 108 tok/s.
+  - **Every memory-on file reads 57.9–60.3 tok/s.** The two exceptions are memory-off greedy controls, each decoded last, after the other seeds had finished or partly so: seed 1's at 108 tok/s and seed 3's at 66.
 - **The cell rule costs nothing over `FLOCK_END`:** both read the same top-16 sort.
 - **Nothing here is the served speed.** The integer path for (r-drop) is not built yet.
 
@@ -55,14 +55,14 @@ On DEV, whose prompts are TRAIN-templated (`v_ref` 0.57), the same shape holds:
 - **`v` and the repeat rate rise together, broadly, along the ladder.** No margin is both TRAIN-like and loop-free, at any seed, on either split. Narrowing the draw moves along one curve from `FLOCK_END` (no loops, no TRAIN-like replies) toward greedy (both). At the narrowest margin, 0.031, the repeat rate (0.553–0.614) is near greedy's (0.559–0.628), and below it at seeds 2 and 3.
 - **Inside a loop, the nearest token is confident.** This is measured from the replies' recorded admitted counts. A step is a loop step when the 4-gram ending at it occurred earlier in the same reply.
 
-  | Split, margin | Loop steps admitting one, at seeds 1–3 | Other steps admitting one, at seeds 1–3 |
+  | Split, margin | Loop steps admitting one, at seeds 1–3 | Other steps from a reply's fourth token on, admitting one |
   |---|---|---|
   | p-c, 0.25 | 98.5%, 97.1%, 98.2% | 22.5%, 19.7%, 20.5% |
   | p-c, 0.031 | 99.6%, 99.5%, 99.4% | 70.3%, 62.4%, 64.0% |
   | DEV, 0.25 | 99.0%, 95.9%, 98.5% | 29.9%, 23.7%, 25.8% |
   | DEV, 0.031 | 99.4%, 99.2%, 99.5% | 89.4%, 84.5%, 84.8% |
 
-  At 0.25, where an ordinary step admits about 12 candidates, a loop step admits about one. In loops, the nearest is more than the margin ahead of every other token, so the draw has nothing to choose among, and narrowing the margin further cannot break the loop.
+  At 0.25, where an ordinary step admits about 12 candidates, a loop step admits about one. At almost every loop step the nearest is more than the margin ahead of every other token, so the draw has nothing to choose among. At 95.9–99.6% of loop steps, a narrower margin draws the same token from the same prefix. Only the other 0.4–4.1% could be changed by narrowing.
   - **The scope:** steps inside loops, on the cell rule's own replies. The steps that enter a loop, and greedy's own replies, were not read.
 - **What a narrowed draw does fix,** in the fixed reading of seed 1's first 20 p-c replies:
   - **Two replies become the reference's kind of reply:** reply 3 is "Okay, I'll remember that." and reply 17 is "That's great news about the bike!". Under `FLOCK_END` they were "Okayist coneBilly" and "That's greatist bark'teded legs2setchund.".
