@@ -39,7 +39,7 @@ b counts the arm right and greedy wrong, c the reverse. For loops, b counts the 
 | Key | Seed | Keyed | Right | Exact | Templates | Band | Loops | DEV templates | Carries |
 |---|---|---|---|---|---|---|---|---|---|
 | sign | 1 | 158 | 52 | (3, 0) | (6, 0) | 4.9 | (22, 21) | (1, 0) | no: thin |
-| sign | 2 | 154 | 35 | (1, 1) | (1, 1) | 2.8 | (36, 12) | (1, 0) | no: thin |
+| sign | 2 | 154 | 35 | (1, 1) | (1, 1) | 2.8 | (36, 12) | (1, 0) | no: thin; loops up |
 | sign | 3 | 165 | 53 | (0, 0) | (2, 0) | 2.8 | (17, 26) | (0, 1) | no: thin |
 | hsign | 1 | 300 | 55 | (1, 2) | (4, 2) | 4.9 | (36, 40) | (0, 0) | no: thin |
 | hsign | 2 | 193 | 44 | (3, 0) | (3, 0) | 3.5 | (37, 38) | (0, 0) | no: thin |
@@ -48,7 +48,7 @@ b counts the arm right and greedy wrong, c the reverse. For loops, b counts the 
 | **point** | 2 | 385 | 105 | (9, 1) | **(9, 1)** | 6.3 | (47, 85) | (0, 1) | **yes** |
 | **point** | 3 | 385 | 119 | (14, 2) | **(14, 2)** | 8.0 | (22, 113) | (0, 1) | **yes** |
 
-On DEV, the keys open only 12–19 of 310 replies, since the exact key fires on most DEV openings. Every DEV pair is within its band.
+On DEV, the keys open only 12–19 of 310 replies, since the exact key fires on most DEV openings. Every DEV template and exact pair is within its band. hsign's DEV loops at seed 1, (7, 0), exceed theirs (5.3), which is reported only and decides nothing.
 
 ## What the point key's replies are
 
@@ -56,4 +56,4 @@ On DEV, the keys open only 12–19 of 310 replies, since the exact key fires on 
 - **Fewer loops.** Its replies loop on 35, 47 and 22 prompts where greedy's do not, against 60, 85 and 113 the other way.
   - **Part of that is short replies.** 49–58 of its openings a seed are " Noted." followed by the end of turn, a common TRAIN opening, and 332–348 of its replies end within 64 tokens against greedy's 291–316.
   - So the loop count is not read as a quality gain. Bar (c) asked only that loops not rise.
-- **Prediction, registered before the run:** from claude-218's p-u files, +11/+13/+12 exact at 256 prompts. Observed on p-v: +9/+8/+12 at 393.
+- **The prediction, registered before the run,** was exact nets of +10/+13/+12 at 256 prompts (pairs (11, 1), (13, 0), (12, 0)), from claude-218's p-u files. Observed on p-v at 393: +9/+8/+12, with b + c of 15, 10 and 16. Its direction held (point powered, sign and hsign thin); its size fell short of the 1.5 times scale the sheet expected.

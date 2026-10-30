@@ -15,7 +15,8 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - Its template pairs on p-v are (6, 0), (1, 1) and (2, 0): b + c under 10 at every seed, too thin to read.
   - It fires on 154–165 of 393 openings and names the right first token on 35–53 of them.
   - claude-218's teacher-forced gain (+46/+37/+33 openings) does not reach whole replies here.
-- **The Hadamard sign key is thin too:** (4, 2), (3, 0) and (6, 1).
+- **At seed 2 the sign key also raises loops beyond the band:** (36, 12), b − c = 24 against a band of 13.9. It fails bar (c) there as well as (a).
+- **The Hadamard sign key is thin too:** (4, 2), (3, 0) and (6, 1). "Thin" here is per key; the table's row 3 does not apply, since point is powered.
 - **The point key closes only part of the gap.**
   - A right first token (the forced arm) lifts templates by +71/+66/+73 of 393. Keyed-point lifts them by +13/+8/+12, 12–18% of that.
   - Its openings are right on 105–119 of the 385 it gives (27–31%).
@@ -24,7 +25,9 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - 49–58 of its openings a seed are " Noted." and an end of turn, a common TRAIN opening.
   - 332–348 of its replies end within 64 tokens, against greedy's 291–316.
   - So the loop counts (35/47/22 against 60/85/113) are read only as bar (c), "not higher", never as a gain.
-- **DEV says little.** The keys open only 12–19 of its 310 replies, because the exact key fires on most DEV openings. Every DEV pair is within its band.
+- **DEV says little.** The keys open only 12–19 of its 310 replies, because the exact key fires on most DEV openings.
+  - Every DEV template and exact pair is within its band.
+  - hsign's DEV loops at seed 1, (7, 0), exceed theirs (5.3); that is reported only and decides nothing.
 - **My pod job stopped once at its own check, an instrument fault.** It compared the keys files byte for byte, but they record the search's wall-clock milliseconds.
   - 18 of 21 registered files had reproduced. The 3 keys files equal claude-218's at every seed without the three timing fields, checked with jq and with the job's sed.
   - `job2.sh` continued on the same pod, from the same probe, binary and inputs, and the sheet records the amendment, made before any result was read.
@@ -38,7 +41,9 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - **Loops** are not higher (fewer, see above), and **DEV** is not lower.
 - **So the next unit trains and serves the point key's opening in the one model and scores it end to end** (#3407, step 4). Its decision review weighs the point key's table (218 MB as f32 for TRAIN's openings) against the gain. Integer export of the table, and a smaller code that keeps the gain, are that unit's to test.
 - **The forced arm lifts at every seed** (row 1 does not hold): exact (66, 0), (63, 0) and (70, 0); templates (71, 0), (66, 0) and (73, 0).
-- **The prediction held.** The power check on claude-218's p-u files, registered before the pod, predicted keyed-point exact gains of +11/+13/+12 at 256 prompts, and sign and hsign thin. On p-v at 393 prompts: +9/+8/+12, with sign and hsign thin.
+- **The prediction's direction held, not its size.**
+  - The power check on claude-218's p-u files, registered before the pod, predicted keyed-point exact nets of +10/+13/+12 at 256 prompts (pairs (11, 1), (13, 0), (12, 0)), with sign and hsign thin.
+  - On p-v at 393 prompts the nets are +9/+8/+12 (b + c of 15, 10 and 16): point powered and sign and hsign thin, as predicted. But that is below the 1.5 times scale the sheet expected (b + c of about 18–20).
 - **The reply identity held in every cell.** No keyed token was refused, and every keyed reply is the one its opening fixes:
   - no keyed token: greedy's reply;
   - the reference's first token: the forced arm's reply;
@@ -103,7 +108,7 @@ None.
 
 Last time we found that looking a reworded question up by where the model's own internal state lands names the reply's first word better than the memory's exact-words lookup. But that was checked one word at a time, with the right words already in place.
 
-This unit actually let the model write its replies with that lookup choosing the first word, wherever the exact lookup found nothing. On a fresh set of reworded questions, the fullest version of the lookup, which uses the whole state, made the model write more right replies than it does now, at all three of the models tested, by a clear margin. It also looped less, though partly because some replies became a short "Noted." and stopped.
+This unit actually let the model write its replies with that lookup choosing the first word, wherever the exact lookup found nothing. On a fresh set of reworded questions, the fullest version of the lookup, which uses the whole state, made the model write more right replies than it does now, at all three of the models tested, though at one only just past the bar. It also looped less, though partly because some replies became a short "Noted." and stopped.
 
 The cheaper sign-based versions may help too, but this set of questions was too small to tell.
 
