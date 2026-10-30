@@ -308,8 +308,8 @@ mod cuda_run {
             let coords = root_coords(root)?;
             for b in 0..swap_spec.blocks as usize {
                 let start = (tok * swap_spec.blocks as usize + b) * 8;
-                for d in 0..8 {
-                    hol_snap.table[start + d] = i32::from(coords[d]);
+                for (d, &coord) in coords.iter().enumerate() {
+                    hol_snap.table[start + d] = i32::from(coord);
                 }
             }
         }

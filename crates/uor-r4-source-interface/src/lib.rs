@@ -379,8 +379,7 @@ impl std::fmt::Display for SourceIngestKind {
             Self::UnknownGeometryProjection { id, version } => write!(
                 f,
                 "geometry projection {id}/{version} is not in the versioned projection \
-                 registry (known: {}/{})",
-                "bucket-average", 1,
+                 registry (known: bucket-average/1)"
             ),
             Self::UnknownTokenizerAdapter { family, version } => write!(
                 f,
@@ -392,28 +391,15 @@ impl std::fmt::Display for SourceIngestKind {
             Self::UnknownAttentionOperator { id, version } => write!(
                 f,
                 "attention operator {id}/{version} is not in the versioned operator \
-                 registry (registered entries include {}/{}, {}/{}, {}/{}, {}/{}, \
-                 {}/{}, {}/{}, and {}/{})",
-                "standard-source-attention",
-                1,
-                "standard-source-attention",
-                2,
-                "experimental-r4-source-attention",
-                1,
-                "experimental-r4-source-attention",
-                2,
-                "learned-absolute-source-attention",
-                1,
-                "learned-absolute-source-attention",
-                2,
-                "r4-route-attention",
-                1,
+                 registry (registered entries include standard-source-attention/1, \
+                 standard-source-attention/2, experimental-r4-source-attention/1, \
+                 experimental-r4-source-attention/2, learned-absolute-source-attention/1, \
+                 learned-absolute-source-attention/2, and r4-route-attention/1)"
             ),
             Self::UnknownDenseOperator { id, version } => write!(
                 f,
                 "dense operator {id}/{version} is not in the versioned operator registry \
-                 (registered entries: {}/{}, {}/{})",
-                "gpt2-source-dense", 1, "gpt2-source-dense", 2,
+                 (registered entries: gpt2-source-dense/1, gpt2-source-dense/2)"
             ),
         }
     }
