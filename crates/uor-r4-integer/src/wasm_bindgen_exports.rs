@@ -7,6 +7,11 @@
 //! reload-identical test, `weights_per_token` for the R3 report, and
 //! `alloc_events` to prove zero per-token allocation.
 //!
+//! The turn memory (`uor-r4.lut-stack/7`, units 2-3 of `turn-memory-integer`): the JS caller
+//! reads `memoryInfo` after loading, calls `markReplyStart` just before the step that ingests the
+//! prompt's last token (so that row is the opening table's row), and does not restore a memory
+//! session, which is refused until its turn state is saved.
+//!
 //! Host clock: `tick_clock` is called by the JS glue from
 //! `performance.now()` at the start of every generate/step batch so the
 //! generation telemetry (`duration_nanos_exact`) carries measured values.
@@ -58,6 +63,27 @@ pub fn save_session(handle: u32) -> Result<Vec<u8>, JsError> {
 #[wasm_bindgen(js_name = restoreSession)]
 pub fn restore_session(handle: u32, state: &[u8]) -> Result<(), JsError> {
     crate::wasm_serve::wasm_restore(handle, state).map_err(|e| JsError::new(&e))
+}
+
+/// The turn memory the loaded model serves, as a JSON object string, or the string `null`
+/// (`JSON.parse` gives the object or null). Its fields: `present`, `k`, `key_window`,
+/// `reply_turn`, `opening_entries`, `reply_entries`, `reply_key_len`, `weight_exp`.
+#[wasm_bindgen(js_name = memoryInfo)]
+pub fn memory_info(handle: u32) -> Result<String, JsError> {
+    crate::wasm_serve::wasm_memory_info(handle).map_err(|e| JsError::new(&e))
+}
+
+/// Mark that the reply begins at the next token stepped (units 2-3 of `turn-memory-integer`):
+/// the next `step` call ingests the prompt's last token, so its row is the opening table's row.
+#[wasm_bindgen(js_name = markReplyStart)]
+pub fn mark_reply_start(handle: u32) -> Result<(), JsError> {
+    crate::wasm_serve::wasm_mark_reply_start(handle).map_err(|e| JsError::new(&e))
+}
+
+/// Clear the reply-start signal.
+#[wasm_bindgen(js_name = clearReplyStart)]
+pub fn clear_reply_start(handle: u32) -> Result<(), JsError> {
+    crate::wasm_serve::wasm_clear_reply_start(handle).map_err(|e| JsError::new(&e))
 }
 
 /// Weights touched per token (R3 per-token parameter reads).

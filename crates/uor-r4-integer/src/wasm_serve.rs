@@ -9,6 +9,12 @@
 //! restore reproduces a greedy stream byte-for-byte as long as the artifact
 //! bytes are the same sealed ones.
 //!
+//! **The turn memory (`uor-r4.lut-stack/7`).** Units 2-3 of `turn-memory-integer` serve the
+//! trunk's turn memory: the session takes where the reply begins from its caller
+//! (`mark_reply_start`), keys the opening and reply tables as the item states, and moves the
+//! readout point. `memory_info` reports the record, and a memory session refuses a restore until
+//! its turn state is saved (it is not saved yet).
+//!
 //! **Session pairing without `unsafe`.** This crate is
 //! `#![forbid(unsafe_code)]`, so a session (which borrows its model) cannot
 //! be paired with its model in one owning struct. The serving surface
@@ -167,6 +173,49 @@ pub fn wasm_restore(handle: u32, state: &[u8]) -> Result<(), String> {
     with_slot_mut(handle, |slot| {
         let parsed = crate::session_codec::decode(state)?;
         slot.session.restore_state(&parsed).map_err(take_error)
+    })
+}
+
+/// The turn memory the loaded model serves (units 2-3 of `turn-memory-integer`), as a JSON
+/// object: its key sizes and table counts, or `null` for a stack without one. The Studio worker
+/// reports this in its capabilities and uses `present` to skip session restores, which a
+/// memory session refuses.
+pub fn wasm_memory_info(handle: u32) -> Result<String, String> {
+    with_slot(handle, |slot| {
+        let Some(record) = slot.session.turn_memory_record() else {
+            return Ok("null".to_string());
+        };
+        let (opening, reply) = slot
+            .session
+            .turn_memory_table_lengths()
+            .unwrap_or((0, None));
+        let reply_turn = record
+            .reply_turn
+            .map_or_else(|| "null".to_string(), |turn| turn.to_string());
+        let reply_entries = reply.map_or_else(|| "null".to_string(), |n| n.to_string());
+        Ok(format!(
+            "{{\"present\":true,\"k\":{},\"key_window\":{},\"reply_turn\":{},\"opening_entries\":{},\"reply_entries\":{},\"reply_key_len\":{},\"weight_exp\":{}}}",
+            record.k, record.key_window, reply_turn, opening, reply_entries,
+            record.reply_key_len, record.weight_exp,
+        ))
+    })
+}
+
+/// Mark that the turn memory's reply begins at the next token the session predicts: the token
+/// stepped next is the prompt's last (its row is the opening table's row), and every later row is
+/// a reply row. A model without a memory ignores it.
+pub fn wasm_mark_reply_start(handle: u32) -> Result<(), String> {
+    with_slot_mut(handle, |slot| {
+        slot.session.mark_reply_start();
+        Ok(())
+    })
+}
+
+/// Clear the reply start: no row is keyed or moved.
+pub fn wasm_clear_reply_start(handle: u32) -> Result<(), String> {
+    with_slot_mut(handle, |slot| {
+        slot.session.clear_reply_start();
+        Ok(())
     })
 }
 
