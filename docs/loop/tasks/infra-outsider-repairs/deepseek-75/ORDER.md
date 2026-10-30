@@ -1,6 +1,6 @@
 # ORDER: infra-outsider-repairs, deepseek-75
 
-Lab: deepseek. Item: [infra-outsider-repairs](../../../../roadmap/items/infra-outsider-repairs.md) (#3433). Base: the main commit that adds this item (records PR #3434); adopted from @sharmis-tp's [PR #3424](https://github.com/UOR-Foundation/uor-r4/pull/3424), fork branch `clippy-drift`, audited head `047ee1eb…`.
+Lab: deepseek. Item: [infra-outsider-repairs](../../../../roadmap/items/infra-outsider-repairs.md) (#3433). Base: `ec9a790fe` (the records PR #3434 merge). Adopted from @sharmis-tp's [PR #3424](https://github.com/UOR-Foundation/uor-r4/pull/3424), fork branch `clippy-drift`, audited head `047ee1eb…`.
 
 ## Goal
 
@@ -19,7 +19,7 @@ If the head moved or the diff grew outside those paths, stop and re-review befor
 
 ## Files in scope
 
-- `crates/uor-r4-discrete/src/**`, `crates/uor-r4-discrete/tests/read_off_ablation_controls.rs`, `crates/uor-r4-source-interface/src/lib.rs`
+- `crates/uor-r4-discrete/src/address_cells.rs`, `bin/position-qualify.rs`, `d11_export.rs`, `device.rs`, `normalization_mechanism.rs`, `prime_zeta.rs`, `stage_t.rs`, `trunk.rs`, `wider_carrier.rs`, `within_cell_writer.rs`, `writer_bucket_qualification.rs`, `crates/uor-r4-discrete/tests/read_off_ablation_controls.rs`, `crates/uor-r4-source-interface/src/lib.rs`
 - `docs/loop/tasks/infra-outsider-repairs/deepseek-75/**`
 
 ## Done when
