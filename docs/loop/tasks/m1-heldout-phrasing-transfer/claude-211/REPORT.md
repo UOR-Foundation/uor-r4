@@ -19,7 +19,25 @@ antigravity-110's two saved `UORLUT01` integer artifacts serve at a median **10,
 - **Bar (e)'s copy-successor condition is reported, not required:** D82 names the unigram and T2 only. The model passes it anyway: 1,903 and 1,904 of 4,077 copy-successor rows, against T2's 1,260.
 - **The item file's `status` is not edited here.** It is outside this ORDER's scope (`docs/roadmap/items/`).
 
-## The result: bar (f) passes at both seeds
+## What changed
+
+- **`d11-scorer panel-score`** (`docs/labs/m1-d11-artifact-scorer/instrument/`):
+  - the gate is split: `validate_decision_receipt` holds the receipt's own checks, and `validate_fresh_transfer_gate` is that plus Fresh V2's pins, unchanged;
+  - `refuse_reserved_panel` turns away the sealed fresh panels, P-dev, DEV and TRAIN;
+  - `panel_rows` loads the panel under its config's sha256s;
+  - `evaluate_panel_two_seeds` grades bar (f).
+  - It has three tests in `tests/panel.rs`, each with a negative gate.
+- **M1's close grade** (`m1_close.rs`, done-when 3):
+  - M1 now closes on (a) to (d), and (e), and (f), as `PASS_M1_ALL_SIX_BARS`;
+  - with only (f) missing it holds as `HOLD_M1_OPEN_BAR_F_UNMET`;
+  - a bar (f) report for other artifacts, or on a reserved panel, is refused;
+  - the canonical saved model carries the committed bar (f) report, and `d11-scorer m1-close-grade` prints `m1_close_pass true`, status `CLOSED_PASS`.
+  - Its negative gate passes: with bar (f) set aside, the test fails.
+- **All 26 of the crate's laptop tests pass** (`--target aarch64-apple-darwin`). On the pod, the CUDA build's tests passed too.
+
+## Measurements
+
+**Bar (f) passes at both seeds.**
 
 **The panel, p-f** ([README](../../../../labs/m1-heldout-phrasing-transfer/README.md)):
 - **Drawn by `heldout-panel`:** `dev,dev` at seed 2051, 400 conversations, 15,953 reply targets, stored at `inputs/claude/heldout-panels-2026-10-30/` with a `SHA256SUMS`.
@@ -43,23 +61,30 @@ antigravity-110's two saved `UORLUT01` integer artifacts serve at a median **10,
 - **The seal** is at `results/claude/m1-heldout-phrasing-transfer-2026-10-30/run-74675bb3/`: 61 files with a `SHA256SUMS`. The pod was released and taken down.
 - **Cost:** about $0.20.
 
-## What was built
+## Checks run at the head
 
-- **`d11-scorer panel-score`** (`docs/labs/m1-d11-artifact-scorer/instrument/`):
-  - the gate is split: `validate_decision_receipt` holds the receipt's own checks, and `validate_fresh_transfer_gate` is that plus Fresh V2's pins, unchanged;
-  - `refuse_reserved_panel` turns away the sealed fresh panels, P-dev, DEV and TRAIN;
-  - `panel_rows` loads the panel under its config's sha256s;
-  - `evaluate_panel_two_seeds` grades bar (f).
-  - It has three tests in `tests/panel.rs`, each with a negative gate.
-- **M1's close grade** (`m1_close.rs`, done-when 3):
-  - M1 now closes on (a) to (d), and (e), and (f), as `PASS_M1_ALL_SIX_BARS`;
-  - with only (f) missing it holds as `HOLD_M1_OPEN_BAR_F_UNMET`;
-  - a bar (f) report for other artifacts, or on a reserved panel, is refused;
-  - the canonical saved model carries the committed bar (f) report, and `d11-scorer m1-close-grade` prints `m1_close_pass true`, status `CLOSED_PASS`.
-  - Its negative gate passes: with bar (f) set aside, the test fails.
-- **All 26 of the crate's laptop tests pass** (`--target aarch64-apple-darwin`). On the pod, the CUDA build's tests passed too.
+- **The scorer crate, laptop:** `cargo test --locked --no-fail-fast --target aarch64-apple-darwin` gives 26 passed, 0 failed. It includes `tests/panel.rs`'s 3 tests and the updated `tests/m1_close.rs`.
+- **The negative gates:**
+  - bar (f) without T2 in its pass;
+  - P-dev left out of the refusal list;
+  - bar (f) set aside from `m1_close_pass`.
 
-## Next
+  Each makes its test fail, and the file is restored after.
+- **On the pod (`74675bb3f`):**
+  - the scorer's CUDA tests passed;
+  - builds A and B, the input pins, the DEV reproduction gate (7,002 / 7,001), and `panel-score` on both builds, byte-identical.
+- **`d11-scorer m1-close-grade`** prints `m1_close_pass true`, status `CLOSED_PASS`.
+- **The panel's census:** `train-in-space --census 1` with both panels.
+
+## Skills used
+
+None.
+
+## Still open
 
 - **M1 (#2029):** a saved model has now passed (a) to (f). Its close grade says `CLOSED_PASS`. Closing the milestone in `PLAN.md`, and on #2029, is a status change for the top session's decision review.
 - **(r-drop),** from one-model-end-to-end's training run, can be scored on p-f as evidence once its checkpoints are sealed. It enters no bar.
+## Plain summary
+
+M1's last bar, (f), passes. On a fresh panel of prompts phrased in ways the training data never shows, the saved integer model beats the bigram table by 475 and 497 rows at its two seeds, against a required margin of 81. M1's close grade now needs all six bars, and it reads `CLOSED_PASS`.
+
