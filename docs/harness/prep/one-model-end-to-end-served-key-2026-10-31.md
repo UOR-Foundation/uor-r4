@@ -2,7 +2,18 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md). Order: [claude-220](../../loop/tasks/one-model-end-to-end/claude-220/ORDER.md), written by hand on Casey's word: "screw kimi forge ahead as you were before with your plan for the single serving model". Decision: [DECISION.md](../../loop/tasks/one-model-end-to-end/claude-220/DECISION.md), APPROVE on five conditions. It follows claude-219 ([result](../../labs/one-model-end-to-end/keyed-opening-2026-10-30/README.md)).
 
-TEST FITNESS: PENDING (round 2; a fresh non-author reviewer reads this sheet and its sources before any pod).
+TEST FITNESS: PENDING (round 3; a fresh non-author reviewer reads this sheet and its sources before any pod).
+
+Round 2 was NOT FIT (a fresh non-author reviewer, 31 Oct, at `cad0ae00f`), on one blocking point, repaired here before any model read p-w:
+- **The pooled guard could label a harm as "underpowered."** Any row 4 turned to row 3 when the pooled templates gained, even where a seed failed on loops, exact replies or DEV, which a larger panel cannot fix.
+- **Repaired:** the guard applies only when every seed is harmless on bars (b)–(d) (`KeyedReading::harmless`), so the failing seeds miss on (a) alone. A seed with a harm keeps row 4. A unit case pins it.
+
+Its notes are taken in:
+- the probe's served-file byte check strips `served_distance` first, so DEV's parity reads before the main run;
+- parity with no served opening fails;
+- the job's header names its flags.
+
+Round 2 found round 1's repairs holding: power, rule (a), the 1% threshold and row 1, and the Steps against the job.
 
 Round 1 was NOT FIT (a fresh non-author reviewer, 31 Oct, at `17c5cef9f`), on two blocking points, each repaired here before any model read p-w:
 1. **Power.** With S required to carry at all three seeds at claude-219's b + c (19, 10, 16), the chance of row 2 under a real effect was about 0.25–0.4. Row 4 could have come from an underpowered panel.
@@ -82,7 +93,7 @@ Its non-blocking notes are taken in:
    - **six DEV files, `cmp -s` byte for byte:** `rows-dev-memory.json`, `rows-dev-no-memory.json`, `samples-memory.json`, `samples-no-memory.json`, `samples-dev-flock-end-memory.json` and `samples-dev-forced-memory.json`;
    - **`keys-dev.json`,** compared after `sed -E 's/"(point|sign|hsign)_ms":[0-9]+//g'` on both sides.
 
-   It also reports, without stopping, whether `samples-dev-served-memory.json` equals claude-219's `samples-dev-keyed-point-memory.json` byte for byte.
+   It also reports, without stopping, whether `samples-dev-served-memory.json`, with its `served_distance` fields stripped (`sed -E 's/,"served_distance":[^,}]*//g'`), equals claude-219's `samples-dev-keyed-point-memory.json` byte for byte.
 
    Any other difference is an instrument fault. The probe's time projects the main run, at most 18 times it (about 6 times the replies, on three seeds sharing the GPU): past 5 hours, stop.
 5. **The main run:** seeds 1–3 side by side, with the probe's flags plus `--panel p-w=DIR --panel p-v=DIR`. Afterwards:
@@ -102,7 +113,7 @@ Its non-blocking notes are taken in:
 **The decision table**, read in order on p-w (`served_outcome`):
 1. **Parity fails at some split and seed** (more than 1% of the served openings name otherwise than the keys file), **or F does not lift on p-w at some seed** (its exact pair not beyond its band with b + c ≥ 10): an instrument check. Repair.
 2. **S carries:** the one float model serves the point key. The next unit is its integer export, under its own roadmap item (the decision's condition (d)), with a bar measured on the integer trunk's own points (condition (b)); then the integer model end to end.
-3. **S is thin** (template b + c under 10) at some seed, **or it would be row 4 while the seeds pooled show a template gain beyond their band:** underpowered at some seed. Next: a larger panel, or the seeds pooled under a fresh sheet.
+3. **S is thin** (template b + c under 10) at some seed, **or it would be row 4 while every seed is harmless on bars (b)–(d) and the seeds pooled show a template gain beyond their band:** underpowered at some seed. Next: a larger panel, or the seeds pooled under a fresh sheet. A seed that fails (b), (c) or (d) is a harm, and keeps row 4.
 4. **Otherwise:** the served key does not carry on a second fresh panel, even pooled, and claude-219's p-v reading stands alone. Next: train the trunk's opening point to gather paraphrases.
 
 **Instrument checks.** The grade or the job refuses on any of these. Each is an instrument fault, repaired, never a negative (CHARTER §4.1):

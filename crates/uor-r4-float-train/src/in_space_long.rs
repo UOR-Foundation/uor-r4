@@ -2502,10 +2502,19 @@ impl KeyedReading {
     fn carries(&self, dev: &KeyedReading) -> bool {
         let band = |(b, c): (usize, usize)| 2.0 * ((b + c) as f64).sqrt();
         let net = |(b, c): (usize, usize)| b as f64 - c as f64;
-        match (self.template, self.exact, self.loops, dev.template) {
-            (Some(t), Some(e), Some(l), Some(d)) => {
-                t.0 + t.1 >= 10 && net(t) > band(t) && net(e) >= -band(e) && net(l) <= band(l) && net(d) >= -band(d)
-            }
+        match self.template {
+            Some(t) => t.0 + t.1 >= 10 && net(t) > band(t) && self.harmless(dev),
+            None => false,
+        }
+    }
+
+    /// Bars (b)–(d) alone: exact replies and DEV's templates not lower beyond their bands, and
+    /// loops not higher, so a seed that fails to carry fails on (a)'s templates alone.
+    fn harmless(&self, dev: &KeyedReading) -> bool {
+        let band = |(b, c): (usize, usize)| 2.0 * ((b + c) as f64).sqrt();
+        let net = |(b, c): (usize, usize)| b as f64 - c as f64;
+        match (self.exact, self.loops, dev.template) {
+            (Some(e), Some(l), Some(d)) => net(e) >= -band(e) && net(l) <= band(l) && net(d) >= -band(d),
             _ => false,
         }
     }
@@ -2776,7 +2785,7 @@ pub struct ServedParity {
 impl ServedParity {
     /// The sheet's rule: parity holds when at most 1% of the served openings disagree.
     fn holds(&self) -> bool {
-        (self.served - self.agree) * 100 <= self.served
+        self.served > 0 && (self.served - self.agree) * 100 <= self.served
     }
 }
 
@@ -2815,8 +2824,9 @@ fn served_parity(
 
 /// The served sheet's row (claude-220): 1 where any split's parity fails ([`ServedParity::holds`]),
 /// else [`keyed_outcome`]'s row for the served arm's `(p-w, DEV)` readings at seeds 1–3, except
-/// that row 4 is never read from a seed below the bar alone: with the seeds pooled beyond its band
-/// on p-w's templates, the reading is row 3 (FIT round 1).
+/// that row 4 is never read from a seed below the bar on its templates alone: with every seed
+/// harmless on bars (b)–(d) ([`KeyedReading::harmless`]) and the seeds pooled beyond their band on
+/// p-w's templates, the reading is row 3 (FIT rounds 1 and 2). A seed with a harm keeps row 4.
 fn served_outcome(
     forced: &[ForcedReading],
     by_seed: Vec<(KeyedReading, KeyedReading)>,
@@ -2826,7 +2836,8 @@ fn served_outcome(
         let (pb, pc) = p.template.unwrap_or((0, 0));
         (b + pb, c + pc)
     });
-    let pooled_gain = b as f64 - c as f64 > 2.0 * ((b + c) as f64).sqrt();
+    let pooled_gain = b as f64 - c as f64 > 2.0 * ((b + c) as f64).sqrt()
+        && by_seed.iter().all(|(p, d)| p.harmless(d));
     match keyed_outcome(forced, &[("point", by_seed)]).0 {
         _ if !parity.iter().all(ServedParity::holds) => 1,
         4 if pooled_gain => 3,
@@ -10872,6 +10883,12 @@ mod tests {
         // A seed below the bar but not thin: row 4 only when the pooled seeds show no gain.
         assert_eq!(served_outcome(&forced, seeds([(20, 0), (20, 0), (10, 8)]), &[held(10, 10)]), 3);
         assert_eq!(served_outcome(&forced, seeds([(10, 8); 3]), &[held(10, 10)]), 4);
+        // A seed whose templates gain but whose loops rise beyond their band keeps row 4: a harm
+        // is not a power shortfall (FIT round 2).
+        let mut harmed = seeds([(20, 0), (20, 0), (25, 3)]);
+        harmed[2].0.loops = Some((12, 2));
+        assert_eq!(served_outcome(&forced, harmed, &[held(10, 10)]), 4);
+        assert!(!held(0, 0).holds(), "no served opening is no parity");
     }
 
     /// claude-219: the keyed grade predicts each keyed reply from the greedy and forced ones,
