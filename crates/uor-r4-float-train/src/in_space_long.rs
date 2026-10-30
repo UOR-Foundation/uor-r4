@@ -2250,6 +2250,11 @@ pub enum DecodeRule {
     /// kept, as under [`DecodeRule::FLOCK_END`]. Margin 0 admits only exact ties, so it
     /// decodes as greedy.
     FlockCell { k: usize, margin_milli: u32 },
+    /// The cycle step (claude-217, Casey 30 Oct: "steps off a reply's own cycle"): of the `k`
+    /// nearest, in rank order, the first whose append would not close a 4-gram the reply has
+    /// already produced ([`cycle_step_pick`]); the nearest when every one would. No draw: it is
+    /// exact and deterministic. It stops after the end of turn, as the Flock rules do.
+    CycleStep { k: usize },
 }
 
 impl DecodeRule {
@@ -2265,7 +2270,33 @@ impl DecodeRule {
     pub const fn flock_cell(margin_milli: u32) -> Self {
         Self::FlockCell { k: FLOCK_DECODE_K, margin_milli }
     }
+
+    /// The cycle step over [`FLOCK_DECODE_K`] candidates, as claude-217 registers it.
+    pub const CYCLE_STEP: Self = Self::CycleStep { k: FLOCK_DECODE_K };
 }
+
+/// [`DecodeRule::CycleStep`]'s token from its `ranked` candidates (the nearest first), after
+/// `reply` (claude-217): the first whose append would not close a 4-gram `reply` already holds,
+/// and its mark: [`STEP_NEAREST`] when that is the nearest, [`STEP_OFF`] when the rule stepped
+/// off the nearest, [`STEP_EXHAUSTED`] when every candidate would close one and the nearest is
+/// taken. `None` with no candidate.
+fn cycle_step_pick(reply: &[u32], ranked: &[u32]) -> Option<(u32, u8)> {
+    let closes = |token: u32| match reply {
+        [.., a, b, c] => reply.windows(4).any(|w| w == [*a, *b, *c, token]),
+        _ => false,
+    };
+    let nearest = *ranked.first()?;
+    Some(match ranked.iter().position(|&t| !closes(t)) {
+        Some(0) => (nearest, STEP_NEAREST),
+        Some(i) => (ranked[i], STEP_OFF),
+        None => (nearest, STEP_EXHAUSTED),
+    })
+}
+
+/// [`cycle_step_pick`]'s marks, one a decoded step ([`IdSample::stepped`]).
+pub const STEP_NEAREST: u8 = 0;
+pub const STEP_OFF: u8 = 1;
+pub const STEP_EXHAUSTED: u8 = 2;
 
 /// The cell objective's margin in thousandths of a score: `rival_hinge`'s
 /// `relu(1 + max_r s(r) − s(target))` asks the target to keep this gap over its nearest rival,
@@ -2406,6 +2437,9 @@ struct DecodedReply {
     /// Under [`DecodeRule::FlockCell`], each drawn step's admitted count, a final step that
     /// drew BOS included; empty under any other rule.
     admitted: Vec<u8>,
+    /// Under [`DecodeRule::CycleStep`], each step's mark ([`cycle_step_pick`]), a final step
+    /// that picked BOS included; empty under any other rule.
+    stepped: Vec<u8>,
 }
 
 /// The model's reply to `prompt` under `rule`: as [`greedy_reply`], with the next token picked
@@ -2457,6 +2491,7 @@ fn decode_reply(
         let mut ids = prompt.to_vec();
         let mut reply = Vec::with_capacity(reply_tokens);
         let mut admitted = Vec::new();
+        let mut stepped = Vec::new();
         for step in 0..reply_tokens {
             let window = &ids[ids.len().saturating_sub(SHEET_CONTEXT)..];
             let token = if objective.decodes_nearest() {
@@ -2504,7 +2539,9 @@ fn decode_reply(
                         .to_vec1::<u32>()?
                         .last()
                         .ok_or_else(|| invalid("the readout returned no token"))?,
-                    DecodeRule::FlockRank { k, .. } | DecodeRule::FlockCell { k, .. } => {
+                    DecodeRule::FlockRank { k, .. }
+                    | DecodeRule::FlockCell { k, .. }
+                    | DecodeRule::CycleStep { k } => {
                         // The K nearest on the GPU; their order, ties to the smaller id, here.
                         let k = k.clamp(1, FLOCK_DECODE_K).min(scores.dim(1)?);
                         let top = scores
@@ -2514,20 +2551,31 @@ fn decode_reply(
                         let picked = scores.gather(&top, 1)?.flatten_all()?.to_vec1::<f32>()?;
                         let ids_k = top.flatten_all()?.to_vec1::<u32>()?;
                         let scored = rank_order(ids_k.into_iter().zip(picked).collect());
-                        // The rank rule draws among all K; the cell rule among those it admits.
-                        let (drawn, keep_end) = match rule {
-                            DecodeRule::FlockCell { margin_milli, .. } => {
-                                let n = cell_admitted(&scored, margin_milli);
-                                admitted.push(n as u8);
-                                (n, true)
-                            }
-                            DecodeRule::FlockRank { keep_end, .. } => (scored.len(), keep_end),
-                            DecodeRule::Greedy => (1, false),
-                        };
-                        let ranked: Vec<u32> = scored[..drawn].iter().map(|&(id, _)| id).collect();
-                        let index = (sample as u64) * 64 + step as u64;
-                        let draw = flock_rank_draw(seed, index, ranked.len());
-                        flock_pick(&ranked, draw, keep_end, eos)
+                        if let DecodeRule::CycleStep { .. } = rule {
+                            // The cycle step takes the nearest that closes no repeated 4-gram.
+                            let ranked: Vec<u32> = scored.iter().map(|&(id, _)| id).collect();
+                            let (token, mark) = cycle_step_pick(&reply, &ranked)
+                                .ok_or_else(|| invalid("the cycle step had no candidate"))?;
+                            stepped.push(mark);
+                            token
+                        } else {
+                            // The rank rule draws among all K; the cell rule among those it
+                            // admits.
+                            let (drawn, keep_end) = match rule {
+                                DecodeRule::FlockCell { margin_milli, .. } => {
+                                    let n = cell_admitted(&scored, margin_milli);
+                                    admitted.push(n as u8);
+                                    (n, true)
+                                }
+                                DecodeRule::FlockRank { keep_end, .. } => (scored.len(), keep_end),
+                                DecodeRule::Greedy | DecodeRule::CycleStep { .. } => (1, false),
+                            };
+                            let ranked: Vec<u32> =
+                                scored[..drawn].iter().map(|&(id, _)| id).collect();
+                            let index = (sample as u64) * 64 + step as u64;
+                            let draw = flock_rank_draw(seed, index, ranked.len());
+                            flock_pick(&ranked, draw, keep_end, eos)
+                        }
                     }
                 }
             } else {
@@ -2553,6 +2601,7 @@ fn decode_reply(
         Ok(DecodedReply {
             tokens: reply,
             admitted,
+            stepped,
         })
     })
 }
@@ -3056,6 +3105,10 @@ pub struct IdSample {
     /// files are as before.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub admitted: Vec<u8>,
+    /// Under [`DecodeRule::CycleStep`], each step's mark (claude-217): [`STEP_NEAREST`],
+    /// [`STEP_OFF`] or [`STEP_EXHAUSTED`]. Empty, and not written, under every other rule.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stepped: Vec<u8>,
 }
 
 /// One file [`score_rows`] wrote, with its nearest and writer hits when it holds rows.
@@ -3165,7 +3218,10 @@ fn reference_reply(window: &CausalWindow, tokens: usize) -> Vec<u32> {
 ///   - the cell rule at each margin of `cells` (claude-213), with the memory on:
 ///     `samples-{split}-flock-cell-{margin}-memory.json`;
 ///   - greedy under each read scope of `scopes` (claude-215), with the memory on:
-///     `samples-{split}-greedy-read-{scope}-memory.json`.
+///     `samples-{split}-greedy-read-{scope}-memory.json`;
+///   - with `cycle`, the cycle step (claude-217), with the memory on, alone and under each read
+///     scope: `samples-{split}-cycle-step-memory.json` and
+///     `samples-{split}-cycle-step-read-{scope}-memory.json`.
 ///
 ///   Each records its reply-table hits under generation and under teacher forcing (I-F).
 ///
@@ -3187,6 +3243,7 @@ pub fn score_rows(
     flock: DecodeRule,
     cells: &[u32],
     scopes: &[ReadScope],
+    cycle: bool,
     device: &Device,
 ) -> Result<Vec<ScoredFile>> {
     check_run_arm(checkpoint, arm)?;
@@ -3289,6 +3346,10 @@ pub fn score_rows(
         let mut served = vec![(DecodeRule::Greedy, ReadScope::Full), (flock, ReadScope::Full)];
         served.extend(cells.iter().map(|&m| (DecodeRule::flock_cell(m), ReadScope::Full)));
         served.extend(scopes.iter().map(|&s| (DecodeRule::Greedy, s)));
+        if cycle {
+            served.push((DecodeRule::CYCLE_STEP, ReadScope::Full));
+            served.extend(scopes.iter().map(|&s| (DecodeRule::CYCLE_STEP, s)));
+        }
         let rules: &[(DecodeRule, ReadScope)] = if on { &served } else { &served[..1] };
         let active = crate::flock_read_memory::turn_memory();
         let named = |key: &[u32]| active.as_ref().is_some_and(|m| m.reply_stored(key).is_some());
@@ -3302,7 +3363,7 @@ pub fn score_rows(
                     let prompt = &window.input_ids[..=off];
                     // The prompt's own flags: an earlier reply in it is limited as in training.
                     let flags = window_input_mask(std::slice::from_ref(window), &split.mask)?;
-                    let DecodedReply { tokens: reply, admitted } = decode_reply(
+                    let DecodedReply { tokens: reply, admitted, stepped } = decode_reply(
                         &model,
                         PointObjective::Cell,
                         prompt,
@@ -3330,9 +3391,16 @@ pub fn score_rows(
                         reference_keys,
                         reference_named,
                         admitted,
+                        stepped,
                     });
                 }
                 let file = match (split.name.as_str(), rule) {
+                    (name, DecodeRule::CycleStep { .. }) if scope != ReadScope::Full => {
+                        format!("samples-{name}-cycle-step-read-{}-{label}.json", scope.name())
+                    }
+                    (name, DecodeRule::CycleStep { .. }) => {
+                        format!("samples-{name}-cycle-step-{label}.json")
+                    }
                     (name, DecodeRule::Greedy) if scope != ReadScope::Full => {
                         format!("samples-{name}-greedy-read-{}-{label}.json", scope.name())
                     }
@@ -5298,6 +5366,115 @@ pub fn cut_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<CutGrade>
         rows,
         outcome,
         decode_only_outcome,
+    })
+}
+
+/// [`cycle_grade`]'s rules for its first decision, in [`rule_readings`]'s order: the base and
+/// the cycle step first, so the first [`MATCHED_BY`] are the two it compares; then the
+/// decode-only cut and the cycle step under it, reported on the same prompts.
+const CYCLE_RULES: [&str; 4] = ["greedy", "cycle-step", "greedy-read-all", "cycle-step-read-all"];
+
+/// [`cycle_grade`]'s rules for its second decision: the base and the decode-only cut, matched
+/// on the prompts those two complete.
+const CONFIRM_RULES: [&str; 2] = ["greedy", "greedy-read-all"];
+
+/// How often one arm's cycle step left the nearest token, at one split and seed (claude-217).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct StepCount {
+    pub split: String,
+    pub rule: String,
+    pub seed: u8,
+    /// Decoded steps, a final step that picked BOS included.
+    pub steps: usize,
+    /// Steps that took a farther candidate ([`STEP_OFF`]).
+    pub stepped_off: usize,
+    /// Steps where every candidate closed a repeated 4-gram, so the nearest was taken
+    /// ([`STEP_EXHAUSTED`]).
+    pub exhausted: usize,
+    /// Replies with at least one step off.
+    pub replies_stepped: usize,
+}
+
+/// One arm's [`StepCount`] from its samples' marks.
+fn step_count(split: &str, rule: &str, seed: u8, samples: &[IdSample]) -> StepCount {
+    let count = |mark: u8| samples.iter().flat_map(|s| &s.stepped).filter(|&&m| m == mark).count();
+    StepCount {
+        split: split.to_owned(),
+        rule: rule.to_owned(),
+        seed,
+        steps: samples.iter().map(|s| s.stepped.len()).sum(),
+        stepped_off: count(STEP_OFF),
+        exhausted: count(STEP_EXHAUSTED),
+        replies_stepped: samples.iter().filter(|s| s.stepped.contains(&STEP_OFF)).count(),
+    }
+}
+
+/// claude-217's grade of the cycle step: both decisions' readings, the step counts, and the
+/// outcomes.
+#[derive(Clone, Debug, Serialize)]
+pub struct CycleGrade {
+    pub panel: String,
+    /// The first decision's readings ([`CYCLE_RULES`]), matched on the base's and the cycle
+    /// step's completions.
+    pub readings: Vec<CellReading>,
+    /// The second decision's readings ([`CONFIRM_RULES`]), matched on the base's and the
+    /// decode-only cut's completions.
+    pub confirm_readings: Vec<CellReading>,
+    /// Every cycle-step arm's step counts, on DEV and the panel, at seeds 1–3.
+    pub steps: Vec<StepCount>,
+    /// The first registered decision: the cycle step against greedy ([`cut_outcome`] with no
+    /// rows' step, so it can never read "costs accuracy").
+    pub outcome: &'static str,
+    /// The second registered decision: the decode-only cut against greedy, claude-216's
+    /// reported "improves" on a fresh panel.
+    pub confirm_outcome: &'static str,
+    /// The cycle step under the cut, by the same rule on the first decision's prompts. It
+    /// decides nothing.
+    pub cut_cycle_outcome: &'static str,
+}
+
+/// Grade the cycle step (claude-217) from stored outputs only, on the laptop: `runs` holds
+/// `r-drop-s{1,2,3}`, the sealed (r-drop) scored on `panel` with `--reply-read all
+/// --cycle-step 1`. The panel decides both decisions ([`cut_outcome`]); DEV is reported.
+pub fn cycle_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<CycleGrade> {
+    if panel == "dev" {
+        return Err(invalid("--cycle-grade's deciding panel cannot be DEV"));
+    }
+    let named = |rules: &[&str]| -> Vec<String> { rules.iter().map(|&r| r.to_owned()).collect() };
+    let readings = rule_readings(data_root, runs, panel, &named(&CYCLE_RULES), true, MATCHED_BY)?;
+    let confirm_readings =
+        rule_readings(data_root, runs, panel, &named(&CONFIRM_RULES), true, MATCHED_BY)?;
+    let mut steps = Vec::new();
+    for split in ["dev", panel] {
+        for seed in 1..=3u8 {
+            for rule in ["cycle-step", "cycle-step-read-all"] {
+                let path = runs
+                    .join(format!("r-drop-s{seed}"))
+                    .join(format!("samples-{split}-{rule}-memory.json"));
+                let samples: Vec<IdSample> = read_scored(&path)?;
+                if samples.iter().any(|s| s.stepped.is_empty()) {
+                    return Err(invalid(format!("{}: a reply records no cycle-step marks", path.display())));
+                }
+                steps.push(step_count(split, rule, seed, &samples));
+            }
+        }
+    }
+    let of = |readings: &[CellReading], rule: &str| -> Vec<CellReading> {
+        readings.iter().filter(|r| r.split == panel && r.rule == rule).cloned().collect()
+    };
+    let decide = |arm: &[CellReading], base: &[CellReading]| {
+        let (arm, base): (Vec<&CellReading>, Vec<&CellReading>) = (arm.iter().collect(), base.iter().collect());
+        cut_outcome(&arm, &base, OverturnCell::Inside)
+    };
+    let (base, confirm_base) = (of(&readings, "greedy"), of(&confirm_readings, "greedy"));
+    Ok(CycleGrade {
+        panel: panel.to_owned(),
+        outcome: decide(&of(&readings, "cycle-step"), &base),
+        confirm_outcome: decide(&of(&confirm_readings, "greedy-read-all"), &confirm_base),
+        cut_cycle_outcome: decide(&of(&readings, "cycle-step-read-all"), &base),
+        readings,
+        confirm_readings,
+        steps,
     })
 }
 
@@ -7957,6 +8134,43 @@ mod tests {
         assert!(left, "K = 16 never left greedy's path: its draws did not run");
     }
 
+    /// claude-217 (its GPU half): on a model, the cycle step at K = 1 decodes exactly as greedy;
+    /// at K = 16 it follows greedy until its first step off, where greedy's token would close a
+    /// 4-gram the reply already holds; and its reply repeats no 4-gram unless a step was
+    /// exhausted. It records one mark per step.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_cycle_step_follows_greedy_until_it_steps_off_a_cycle_on_a_model() {
+        let device = Device::new_cuda(0).unwrap();
+        let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
+        let mut decoded = 0;
+        for sample in 0..4usize {
+            let shift = sample as u32 * 101;
+            let prompt: Vec<u32> = (1..=24u32).map(|i| (i * 37 + shift) % 4096).collect();
+            let decode = |rule| {
+                decode_reply(&model, PointObjective::Cell, &prompt, 32, 1, rule, sample, None, ReadScope::Full, &[])
+                    .unwrap()
+            };
+            let greedy = decode(DecodeRule::Greedy).tokens;
+            assert_eq!(decode(DecodeRule::CycleStep { k: 1 }).tokens, greedy, "sample {sample}");
+            let step = decode(DecodeRule::CYCLE_STEP);
+            // One mark per step, a final step that picked BOS (and ended the reply) included.
+            assert!(step.stepped.len() - step.tokens.len() <= 1, "one mark per step");
+            let off = step.stepped.iter().position(|&m| m == STEP_OFF).unwrap_or(step.tokens.len());
+            assert_eq!(step.tokens[..off], greedy[..off.min(greedy.len())], "sample {sample}");
+            if off < step.tokens.len() && off < greedy.len() {
+                let (_, mark) = cycle_step_pick(&greedy[..off], &[greedy[off]]).unwrap();
+                assert_eq!(mark, STEP_EXHAUSTED, "greedy's token at {off} closes no cycle");
+            }
+            if !step.stepped.contains(&STEP_EXHAUSTED) {
+                let mut seen = std::collections::HashSet::new();
+                assert!(step.tokens.windows(4).all(|w| seen.insert(w)), "a 4-gram repeats");
+            }
+            decoded += greedy.len();
+        }
+        assert!(decoded > 0, "every reply was empty, so the check held vacuously");
+    }
+
     /// claude-211 (Casey 30 Oct: "do not rule flock out, improve it instead"): with `keep_end`,
     /// a nearest end of turn is taken whatever the draw; otherwise, and for any other nearest
     /// token, the drawn rank is.
@@ -8008,12 +8222,17 @@ mod tests {
             reference_keys: 0,
             reference_named: 0,
             admitted,
+            stepped: Vec::new(),
         };
         let before = r#"{"position":7,"prompt":[1,2],"reply":[3],"reference":[4],"reply_text":"a","reference_text":"b","reply_keys":0,"reply_named":0,"reference_keys":0,"reference_named":0}"#;
         assert_eq!(serde_json::to_string(&sample(Vec::new())).unwrap(), before);
         assert_eq!(serde_json::from_str::<IdSample>(before).unwrap(), sample(Vec::new()));
         let cell = serde_json::to_string(&sample(vec![2, 1])).unwrap();
         assert!(cell.ends_with(r#""admitted":[2,1]}"#), "{cell}");
+        // claude-217: the cycle step's marks are written only under that rule, the same way.
+        let step = IdSample { stepped: vec![STEP_NEAREST, STEP_OFF, STEP_EXHAUSTED], ..sample(Vec::new()) };
+        let step = serde_json::to_string(&step).unwrap();
+        assert!(step.ends_with(r#""reference_named":0,"stepped":[0,1,2]}"#), "{step}");
     }
 
     /// claude-213: the sheet's selection on DEV (the widest qualified margin; else the nearest
@@ -8200,6 +8419,66 @@ mod tests {
     /// claude-216: the matched content counts only the prompts every rule completes, so one
     /// rule's completions select nothing; an arm keeps the base's matched content within
     /// `max(0.10, 3·√(p(1−p)/m))`; and the cut's outcome follows the sheet's order.
+    #[test]
+    fn the_cycle_step_refuses_exactly_the_token_that_closes_a_repeated_4_gram() {
+        // The reply holds 5 6 7 8, and ends 5 6 7: an 8 would close 5 6 7 8 again.
+        let reply = [5, 6, 7, 8, 5, 6, 7];
+        assert_eq!(cycle_step_pick(&reply, &[8, 9, 10]), Some((9, STEP_OFF)));
+        assert_eq!(cycle_step_pick(&reply, &[9, 8]), Some((9, STEP_NEAREST)));
+        // Every candidate closes one: the nearest, marked exhausted.
+        assert_eq!(cycle_step_pick(&reply, &[8]), Some((8, STEP_EXHAUSTED)));
+        // One candidate, K = 1: always the nearest, so the rule decodes as greedy.
+        for nearest in [8, 9] {
+            assert_eq!(cycle_step_pick(&reply, &[nearest]).map(|(t, _)| t), Some(nearest));
+        }
+        // A reply of fewer than 3 tokens closes nothing; an overlapping cycle is caught.
+        assert_eq!(cycle_step_pick(&[5, 6], &[5]), Some((5, STEP_NEAREST)));
+        assert_eq!(cycle_step_pick(&[1, 1, 1], &[1]), Some((1, STEP_NEAREST)));
+        assert_eq!(cycle_step_pick(&[1, 1, 1, 1], &[1, 2]), Some((2, STEP_OFF)));
+        // The rule looks at the reply's own 4-grams only, never a 3-gram or the prompt.
+        assert_eq!(cycle_step_pick(&[5, 6, 7, 9, 6, 7], &[9]), Some((9, STEP_NEAREST)));
+        assert_eq!(cycle_step_pick(&reply, &[]), None);
+    }
+
+    /// claude-217: the step counts read the marks; the grade's first decision is matched on the
+    /// base's and the cycle step's prompts, its second on the base's and the decode-only cut's.
+    #[test]
+    fn the_cycle_grade_counts_steps_and_matches_each_decision() {
+        let sample = |stepped: Vec<u8>| IdSample {
+            position: 0,
+            prompt: vec![1],
+            reply: vec![2],
+            reference: vec![3],
+            reply_text: String::new(),
+            reference_text: String::new(),
+            reply_keys: 0,
+            reply_named: 0,
+            reference_keys: 0,
+            reference_named: 0,
+            admitted: Vec::new(),
+            stepped,
+        };
+        let samples = [
+            sample(vec![STEP_NEAREST, STEP_OFF, STEP_NEAREST, STEP_OFF]),
+            sample(vec![STEP_NEAREST, STEP_EXHAUSTED]),
+            sample(vec![STEP_NEAREST]),
+        ];
+        assert_eq!(
+            step_count("p", "cycle-step", 2, &samples),
+            StepCount {
+                split: "p".to_owned(),
+                rule: "cycle-step".to_owned(),
+                seed: 2,
+                steps: 7,
+                stepped_off: 2,
+                exhausted: 1,
+                replies_stepped: 1,
+            }
+        );
+        assert_eq!(CYCLE_RULES[..MATCHED_BY], ["greedy", "cycle-step"]);
+        assert_eq!(CONFIRM_RULES[..MATCHED_BY], ["greedy", "greedy-read-all"]);
+    }
+
     #[test]
     fn the_cut_grade_matches_content_and_follows_the_sheet() {
         // Three rules over four prompts: prompt 1 is incomplete under rule 2, prompt 3 under 0.
