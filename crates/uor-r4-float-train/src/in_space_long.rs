@@ -7724,9 +7724,11 @@ mod tests {
         assert!(!scopes_ok(&[ReadScope::Full]), "Full is greedy's own file");
     }
 
-    /// claude-215 (its GPU half): on a model, a reply's first token is the same under every read
-    /// scope (its window is all prompt, so the cut limits nothing), the scopes leave greedy's
-    /// path somewhere, and the cut is cleared after every decode.
+    /// claude-215 (its GPU half): on a model with the Hamming reads set, a reply's first token is
+    /// the same under every read scope (its window is all prompt, so the cut limits nothing),
+    /// and the cut is cleared after every decode. New reads start with zero weights, so the
+    /// scopes cannot change a token here: `a_cut_keeps_every_pick_before_it` pins the cut itself,
+    /// and the pod's job checks that the scoped decodes of the trained checkpoints differ.
     #[cfg(feature = "cuda")]
     #[test]
     fn the_read_scope_starts_as_greedy_and_clears_its_cut() {
@@ -7735,7 +7737,7 @@ mod tests {
         crate::flock_read_hamming::set_hamming_reads(Some(
             crate::flock_read_hamming::HammingReads::new(4, hs::SHEET_WIDTH, &device).unwrap(),
         ));
-        let mut left = false;
+        let mut decoded = 0;
         for sample in 0..4usize {
             let shift = sample as u32 * 101;
             let prompt: Vec<u32> = (1..=24u32).map(|i| (i * 37 + shift) % 4096).collect();
@@ -7760,11 +7762,11 @@ mod tests {
             for scope in [ReadScope::Copy, ReadScope::All] {
                 let scoped = decode(scope);
                 assert_eq!(scoped.first(), full.first(), "sample {sample}, {scope:?}");
-                left |= scoped != full;
             }
+            decoded += full.len();
         }
         crate::flock_read_hamming::set_hamming_reads(None);
-        assert!(left, "no scope ever left greedy's path: the cut did nothing");
+        assert!(decoded > 0, "every reply was empty, so the check held vacuously");
     }
 
     /// claude-213 (its GPU half): on a model, the cell rule at margin 0 decodes exactly as
