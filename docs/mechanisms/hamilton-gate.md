@@ -35,7 +35,7 @@ with $d$ the incoming adjoint and $\bar q$ the quaternion conjugate. No `exp`, s
 **What the owner's card left open (hypothesis).** An icosian snap of $q$, so the product becomes a read in the 120×120 table; an exact hard forward with a straight-through gradient bridge; and a serving form.
 
 **Rule check.**
-- *D11 (integer serving):* not servable today. The exporter refuses other gates, and the normalisation divides by a square root and multiplies two runtime values. It becomes table-servable only after the icosian snap makes $q$ one of 120 rotations.
+- *D11 (integer serving):* the discrete M1 composition includes a discrete Hamilton gate, and the FBS trunk serves its icosian-snapped form exactly under `lut-stack/5` at DEV scope. The older exporter refusal is historical; the joined FBS session still has open parts.
 - *D23 (no softmax or squashing):* passes by construction. D25 closed the sigmoid exception that SwiGLU relied on, which this replaces.
 - *D25/D30 (no dense matrix multiplication):* a per-block Hamilton product is not a dense contraction. The owner permits a geometric feed-forward block of this gate plus Hamilton-block projections, and the projection half has since been replaced by [SpiralCore/FBS](./spiralcore-fbs.md).
 - *D32/D37:* a float operation, frozen by D32. D37 lets it return only through a new pre-registered offline sheet ([decisions](../integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised)).

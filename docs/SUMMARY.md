@@ -17,7 +17,7 @@
 - [The three products](products/README.md)
   - [The language model](products/language-model.md)
   - [The web client](products/web-client.md)
-  - [The desktop client (specification)](products/desktop-client.md)
+  - [The desktop client](products/desktop-client.md)
   - [Releases and artifacts](products/releases-and-artifacts.md)
 
 # The model

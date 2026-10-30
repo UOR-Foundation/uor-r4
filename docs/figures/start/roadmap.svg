@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="960" role="img" aria-labelledby="t d">
 <title id="t">The road from today to the products</title>
-<desc id="d">A left-to-right road from M1's completed language-base result to the remaining products. Milestone 1 is done: the saved discrete model passed all six bars on two seeds (DEV 7,002 / 7,001 and p-f 7,850 / 7,872). Claude-218's offline sign-key probe then passed on p-u, gaining +46, +37 and +33 on 1,218 exact-memory misses at three seeds. Current work trains and serves that key and tests free generation on another fresh panel; no served-key result is established. Then: serve every part in integers, connect typed text through R7, train and score one joined model, then measure cost and revisit Flock. Every run uses the lab's own pre-run review. M2 and M3 are in progress; M4 to M8 remain open, ending at the model file, web client and desktop shell.</desc>
+<desc id="d">A left-to-right road from M1's completed language-base result to the remaining products. Milestone 1 is done: the saved discrete model passed all six bars on two seeds (DEV 7,002 / 7,001 and p-f 7,850 / 7,872). Claude-218's offline teacher-forced sign-key probe then passed on p-u, gaining +46, +37 and +33 on 1,218 exact-memory misses at three seeds. Current work trains and serves that key and tests free generation on another fresh panel; no served-key result is established. Then: serve every part in integers, connect typed text through R7, train and score one joined model, then measure cost and revisit Flock. Every run uses the lab's own pre-run review. M2 and M3 are in progress; M4 to M8 remain open, ending at the model file, web client and desktop shell.</desc>
 <style>
 svg { --bg:#ffffff; --ink:#1f2328; --body:#2b3138; --muted:#57606a; --rule:#d0d7de; --panel:#f6f8fa;
       --blue:#0072b2; --sky:#56b4e9; --green:#007a5e; --orange:#e69f00; --verm:#d55e00; --purple:#7a4fa3; --pink:#cc79a7;
@@ -180,5 +180,5 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <rect class="icon-spec" x="886" y="418" width="50" height="36" rx="4"/>
 <path class="icon-line" d="M878,458 L944,458 L938,466 L884,466 Z"/>
 <text class="name" x="911" y="490" text-anchor="middle">Desktop client</text>
-<text class="detail" x="911" y="506" text-anchor="middle">spec only</text></g>
+<text class="detail" x="911" y="506" text-anchor="middle">synthetic shell</text></g>
 </svg>

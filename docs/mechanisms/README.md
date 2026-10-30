@@ -29,7 +29,7 @@ Two model paths remain distinct. The saved discrete 19-table model has closed M1
 - **Readout:** whole-table nearest (claude-150). The joined served session remains open.
 - **Reading by meaning:** Flock, with cell D closed at claude-144. Its independent effect remains a question for the joined model.
 
-M1 does not prove each mechanism's independent effect or useful conversation. Claude-217's p-s reply openings are 17.4%, 13.7% and 18.6% at three seeds, against about 80% on later tokens. Claude-218's offline sign-key probe then gained +46/+37/+33 on p-u's 1,218 missed rows at three seeds. The next work trains and serves that key and tests free generation; no served-key result is established. The parts, costs and current order are in the [pipeline map](../model/pipeline-map.md).
+M1 does not prove each mechanism's independent effect or useful conversation. Claude-217's p-s reply openings are 17.4%, 13.7% and 18.6% at three seeds, against about 80% on later tokens. Claude-218's offline teacher-forced sign-key probe then gained +46/+37/+33 on p-u's 1,218 missed rows at three seeds. The next work trains and serves that key and tests free generation; no served-key result is established. The parts, costs and current order are in the [pipeline map](../model/pipeline-map.md).
 
 ## The family tree
 
@@ -113,7 +113,7 @@ Five mechanisms have no recorded parent or child, so they are not drawn: admissi
 
 | Mechanism | In plain words | Replaces | Why this status | Next step |
 |---|---|---|---|---|
-| [Recurrence gates](recurrence-gates.md) | Fade rate from a table of powers of two, input opened by a clamped line, state carried by rotation. | sigmoid, exp and tanh gates | Table errors at most 5.5e-8, 18 CUDA controls. The six-recurrence fit never ran ([record](../../archive/labs/rung0-complete-path-2026-10-13/README.md)). | Show the learning surrogate gives descent |
+| [Recurrence gates](recurrence-gates.md) | Fade rate from a table of powers of two, input opened by a clamped line, state carried by rotation. | sigmoid, exp and tanh gates | Table errors at most 5.5e-8, 18 CUDA controls. The pre-registered 1,024-step six-recurrence fit ran on an RTX 5090, with mixed transport/export-gap outcomes ([record](../labs/recurrence-gates-six-recurrence-fit/README.md)). This is separate from the M1 discrete quaternion recurrence. | Match transport and export at both seeds |
 | [Object store (D19)](object-store.md) | Keeps bytes exactly in a hashed tree: repeats are stored once and any range can be checked. | none (durable memory) | 60 tests and a client conformance pass. Nothing consumes it; the durable-memory bars have not run ([D19](../../archive/labs/d19-object-store-2026-10-15/README.md), [conformance](../labs/uorobj01-conformance-2026-10-18/README.md)). | Wire it in and run those bars (milestone M3) |
 | [Hopf observation: kept-fibre map](hopf-observation.md) | Views a 4D rotation through a 3D shadow while keeping the lost angle separately. | attention scoring | Built and unit-tested, telemetry only. Its language test was never run ([census](../labs/course-correction-2026-10-18/audits/mechanism-census.md)). READY by owner ruling D72. | Retained-fibre test |
 | [Spin-native weights](spin-weights.md) | Each 4-by-4 weight block is one quaternion, snapped to 120 icosian rotations. | arithmetic (matmul) | Reached 1.5148 BPB, level with dense, but only through matmul ([record](../../archive/labs/icosian-mantissa-2026-10-11/README.md)). READY by owner ruling D74. | A lawful Hamilton-block trunk without dense multiplication |
@@ -123,8 +123,8 @@ Five mechanisms have no recorded parent or child, so they are not drawn: admissi
 
 | Mechanism | In plain words | Replaces | Why this status | Next step |
 |---|---|---|---|---|
-| [Carrier credit](carrier-credit.md) | Sends learning credit back to the geometric objects that carried the information. | optimizer | Three fixed arms fell from 437/512 to 0/512. The sampled-choice step uses softmax ([record](../../archive/labs/unified-geometric-integration-2026-10-11/README.md)). | Hard-selection step; needs the M2 training hold released |
-| [Legal construction](legal-construction.md) | Picks each parameter change from values the integer model can hold, protecting answers already correct. | optimizer | Never scored. Every attempt stopped on solver numerics ([record](../../archive/labs/direct-legal-construction-2026-10-09/README.md)). | Solve the saved case (1,960 variables) in exact arithmetic |
+| [Carrier credit](carrier-credit.md) | Sends learning credit back to the geometric objects that carried the information. | optimizer | Three fixed arms fell from 437/512 to 0/512. The sampled-choice step uses softmax ([record](../../archive/labs/unified-geometric-integration-2026-10-11/README.md)). | Hard-selection step under the lab's D67 pre-run review; D41's donor pass needs the owner at dispatch |
+| [Legal construction](legal-construction.md) | Picks each parameter change from values the integer model can hold, protecting answers already correct. | optimizer | D78's exact solve of the saved case holds all 380 guards and is certified within 0.03259% of optimal; optimality is unproven. Earlier attempts stopped on solver numerics. | Apply the discrete block result on the M1 path; no new acceptance claim |
 | [E8 orbit memory](e8-orbit-memory.md) | Replaces a feed-forward layer with a few rows of a large table addressed by E8 lattice points. | feed-forward layer (MLP) | Half-MLP form cost +0.033 BPB, within its bar, but learned keys beat E8 by 0.023. The gate is a sigmoid ([record](../../archive/labs/e8-orbit-memory-2026-10-11/README.md)). | Sigmoid-free gate and the named next iteration |
 | [Exact memory](exact-memory.md) | Writes a fact once under an exact prime address and reads it back exactly. | key-value memory | Trained forms scored 19/40 against a 27/40 bar, or used softmax. The address-as-read form was never built ([record](../../archive/labs/addressed-memory-2026-10-10/README.md)). A different form, exact turn memory on the FBS trunk (claude-161), is trained and moves only the first word of a reply ([report](../loop/tasks/route-plus-memory/claude-161/REPORT.md)). | Build the address as the read, oracle first |
 | [Pointer key](pointer-key.md) | Copies the answer by the slot's exact name, not by the surrounding wording. | copy head | A softmax pointer. Hit rate rose from 0.377 to 0.545, but memory missed its bar ([record](../../archive/labs/ptr-addr-2026-10-10/README.md)). | Lawful oracle, then a prime entity key |
@@ -132,7 +132,7 @@ Five mechanisms have no recorded parent or child, so they are not drawn: admissi
 | [Hopf observation: sector routing](hopf-observation.md) | Bins three Hopf coordinates 8 by 8 by 8, into 512 sectors, to pick a route. | attention scoring | Telemetry only. Sector routing used 7 of 512 sectors ([occupancy record](../../archive/hopf_sector_occupancy_d3.md)). Stays PARKED by owner ruling D72. | The reopen conditions on its page |
 | [VSA](vsa.md) | 4,096-bit codes glued by XOR and compared by counting differing bits. | key-value memory | Improved BPB by 0.014 to 0.023 on 2 seeds, but on the banned CPU learner ([record](../../archive/labs/vsa-native-test-2026-10-09/README.md)). | GPU Hamming binding in the discrete model |
 | [Geometric stack](geometric-stack.md) | The old 7M to 214M-parameter layered model with quaternion recurrence. | whole model | Trained form used softmax and matmul and served 1.20 to 1.24 BPB against a 0.90 bar ([record](../../archive/labs/d11-serving-2026-10-10/README.md)). | Rebuild from lawful parts (D37) |
-| [Native geometric engine](native-geometric.md) | A from-scratch Rust model with prime addresses and version chains. It answered authored questions only. | whole model | No prose. 437/512 fell to 0/128 on fresh rows ([record](../../archive/labs/m2-fresh-437-2026-10-10/README.md)). | Re-register with the hinge loss once the M2 hold lifts |
+| [Native geometric engine](native-geometric.md) | A from-scratch Rust model with prime addresses and version chains. It answered authored questions only. | whole model | No prose. 437/512 fell to 0/128 on fresh rows ([record](../../archive/labs/m2-fresh-437-2026-10-10/README.md)). | Re-register with the hinge loss under the lab's D67 pre-run review |
 | [R4G1 graph](r4g1-graph.md) | Compiled a teacher model's preferences into integer lookup tables. | whole model | Never wrote coherent free text, and needs a banned transformer teacher. | Owner decision on repairing or removing the crates (D36) |
 
 ## Which mechanism covers each part of a transformer
@@ -143,24 +143,27 @@ Each row names a part of a standard transformer, says what it does, and lists th
 |---|---|---|
 | Tokenizer | Cuts text into pieces | [tokenizer](tokenizer.md) (A) |
 | Token embedding table | Gives each piece a starting vector | [prime-zeta-codebook](prime-zeta-codebook.md) (A), [address-cells](address-cells.md) (A) |
-| **Positional encoding** | Tells the model the order of words | [spiralcore-fbs](spiralcore-fbs.md) (A): SpiralCore transport spin in the FBS recurrence, no RoPE (29 Oct 2026). **GAP on the discrete path: none.** |
+| **Positional encoding** | Tells the model the order of words | FBS: [spiralcore-fbs](spiralcore-fbs.md) (A), SpiralCore transport spin, no RoPE. Discrete M1: `DiscreteQuaternionRecurrenceV1` and the orbit-root causal pointer, not an absent position path. |
 | Attention: choosing what to read | Picks which earlier words matter | [route-read](route-read.md) (A), [flock-read](flock-read.md) (A), [relation-read](relation-read.md) (A), [admission](admission.md) (A), [hopf-observation](hopf-observation.md) (R, P) |
 | Attention: mixing what was read | Combines the chosen words | [flock-read](flock-read.md) (A) |
 | Copy and induction heads | Repeats what appeared earlier | [relation-read](relation-read.md) (A), [pointer-key](pointer-key.md) (P) |
 | Context memory (KV cache) | Holds earlier words ready to read | [exact-memory](exact-memory.md) (P), [vsa](vsa.md) (P), [read-binding](read-binding.md) (P) |
 | Durable memory outside the model | Stores facts between chats | [object-store](object-store.md) (R) |
-| Feed-forward block (MLP) | Processes each word | [spiralcore-fbs](spiralcore-fbs.md) (A), [hamilton-gate](hamilton-gate.md) (A), [e8-orbit-memory](e8-orbit-memory.md) (P) |
+| Feed-forward block (MLP) | Processes each word | [spiralcore-fbs](spiralcore-fbs.md) (A), [hamilton-gate](hamilton-gate.md) (A), [e8-orbit-memory](e8-orbit-memory.md) (P); the discrete M1 composition also has a discrete Hamilton gate |
 | Activation and gating | Decides how much signal passes | [hamilton-gate](hamilton-gate.md) (A), [recurrence-gates](recurrence-gates.md) (R) |
-| Recurrent sequence mixing | Carries a running memory along | [recurrence-gates](recurrence-gates.md) (R), [geometric-stack](geometric-stack.md) (P) |
+| Recurrent sequence mixing | Carries a running memory along | [recurrence-gates](recurrence-gates.md) (R), [geometric-stack](geometric-stack.md) (P); M1 separately uses `DiscreteQuaternionRecurrenceV1` |
 | Projections and matmul | The big grids of multiplications | [lut-serving](lut-serving.md) (A), [spiralcore-fbs](spiralcore-fbs.md) (A), [spin-weights](spin-weights.md) (R), [ternary-xor](ternary-xor.md) (R) |
-| **Normalization** | Keeps numbers in a stable range | On the FBS trunk: RMS norm with an integer square root, served (29 Oct 2026; no mechanism page yet). **GAP on the discrete path: none.** |
+| **Normalization** | Keeps numbers in a stable range | FBS: RMS norm with an integer square root, served. Discrete M1: its declared discrete quaternion recurrence, not a missing path or an assumed shared FBS mechanism. |
 | Output head | Scores every word and picks one | [admission](admission.md) (A), [discrete-learning](discrete-learning.md) (A) |
 | Loss | Measures how wrong a guess was | [rank-margin](rank-margin.md) (A), [read-binding](read-binding.md) (P) |
 | Optimizer | Decides how to change the model | [discrete-learning](discrete-learning.md) (A), [carrier-credit](carrier-credit.md) (P), [legal-construction](legal-construction.md) (P) |
 | Inference runtime | Runs the finished model | [lut-serving](lut-serving.md) (A), [r4g1-graph](r4g1-graph.md) (P) |
 | Whole-model engine | The complete model | [geometric-stack](geometric-stack.md) (P), [native-geometric](native-geometric.md) (P), [r4g1-graph](r4g1-graph.md) (P) |
 
-The two gaps hold for the discrete path only; the FBS trunk fills them (see the 29 Oct 2026 passage above). On the discrete path, the only position-related result is about recurrent state transport, not word order, and it was measured in a model that used banned parts. The discrete model has no position mechanism, no normalization and no feed-forward block, and it scores below a unigram baseline (audit synthesis, section 1). Having a mechanism for a slot does not mean it works: a row can list four mechanisms and no trained result.
+The 19 October slot-map gaps are historical, not the current M1 state. The saved discrete M1 model
+uses a discrete quaternion recurrence and Hamilton gate and beats both count tables at two seeds;
+the separate FBS trunk uses SpiralCore transport and RMS norm. A mechanism's slot still does not
+establish its independent effect or useful conversation.
 
 ## Where the audit questions a status
 

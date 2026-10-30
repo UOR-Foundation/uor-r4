@@ -9,7 +9,7 @@ This line tried to make the model answer a question from a fact it was told earl
 | **Milestone** | M2, grounded reply from exact memory (60 of 151 records); 38 tagged M1 |
 | **Records** | 151 |
 | **Outcomes** | review 39 · negative 35 · positive 25 · inconclusive 21 · diagnostic-stop 12 · plan 9 · tooling 9 · blocked 1 |
-| **State** | Held. M2 is incomplete; fresh qualification failed |
+| **State** | In progress. M2 is incomplete; fresh qualification is unqualified, and D67 removed the blanket owner hold |
 
 M2's bar is at least 256 of 512 saved replies and at least 40% on genuinely fresh rows, with existing panels and graders unchanged (`ROADMAP.md`, M2 row). Counts: `archive/catalog.jsonl`. Terms follow the [glossary](../../start/glossary.md); ACTIVE, READY and PARKED are defined on the [mechanism board](../../mechanisms/README.md).
 
@@ -52,10 +52,8 @@ Development is not fresh (lesson 4 in [what the project knows](../findings.md)).
 
 ## Current state
 
-M2 is held. These mechanisms are PARKED, each with the conditions that would reopen it: [exact memory](../../mechanisms/exact-memory.md), [read binding](../../mechanisms/read-binding.md), [pointer key](../../mechanisms/pointer-key.md), [carrier credit](../../mechanisms/carrier-credit.md), [legal construction](../../mechanisms/legal-construction.md) and [native geometric](../../mechanisms/native-geometric.md). The next step in the exact-memory dossier is to build the address itself as the read, with an oracle test first. The durable store lives in [the M3 line](m3-durable-memory.md).
+M2 is in progress and its acceptance bar is unchanged; no blanket owner hold remains (D67). These mechanisms are PARKED, each with the conditions that would reopen it: [exact memory](../../mechanisms/exact-memory.md), [read binding](../../mechanisms/read-binding.md), [pointer key](../../mechanisms/pointer-key.md), [carrier credit](../../mechanisms/carrier-credit.md), [legal construction](../../mechanisms/legal-construction.md) and [native geometric](../../mechanisms/native-geometric.md). The durable store lives in [the M3 line](m3-durable-memory.md).
 
-## 29 Oct 2026
-
-M2 is blocked on the owner, and its bar is unchanged. Related work on the FBS trunk line: exact turn memory keyed by the user's first 8 tokens names 598.7 and 598.3 of the DEV panel's 1,226 reply openings at two seeds (claude-161, [report](../../loop/tasks/route-plus-memory/claude-161/REPORT.md)), against 266.3 and 281.0 for an empty-table control. It moves only the first word of a reply, and it is not served. This is not M2 progress. See [the pipeline map](../../model/pipeline-map.md).
+Related work on the FBS trunk line: exact turn memory keyed by the user's first 8 tokens names 598.7 and 598.3 of the DEV panel's 1,226 reply openings at two seeds (claude-161, [report](../../loop/tasks/route-plus-memory/claude-161/REPORT.md)), against 266.3 and 281.0 for an empty-table control. It moves only the first word of a reply. Claude-218's offline teacher-forced sign-key probe passed on p-u; the next unit trains and serves that key and tests free generation on another fresh panel. This is not M2 acceptance or useful chat. See [the pipeline map](../../model/pipeline-map.md).
 
 **Go deeper:** the [generated catalog page](../../../archive/catalog/m2-exact-memory.md) lists all 151 records.

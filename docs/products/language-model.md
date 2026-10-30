@@ -68,7 +68,7 @@ conversation.
 Claude-217's cycle-step experiment ends every registered loop but leaves content underpowered, so
 greedy remains the decode. Exact turn memory keys on exact first token ids and misses reworded
 prompts ([claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)). Claude-218's
-offline sign-key probe then gained +46/+37/+33 on p-u's 1,218 missed rows at three seeds; the next
+offline teacher-forced sign-key probe then gained +46/+37/+33 on p-u's 1,218 missed rows at three seeds; the next
 unit trains and serves that key and tests free generation on another fresh panel. This is not yet
 a served-key or useful-chat result
 ([claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md)).

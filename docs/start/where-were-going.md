@@ -45,7 +45,7 @@ conversation. See [CHARTER §4.8](../../CHARTER.md#4-evidence) and the [closing 
 
 ## The current order of work
 
-1. **Train and serve the new-phrasing memory key.** Claude-218's offline sign-key probe passed on
+1. **Train and serve the new-phrasing memory key.** Claude-218's offline teacher-forced sign-key probe passed on
    p-u: net gains of +46, +37 and +33 on 1,218 exact-memory misses at three seeds. The point key
    gained more (+125, +185 and +114), but the registered row 3 selects the cheapest passing sign
    key. Next is a served key and free generation on another fresh panel; neither is established
@@ -91,7 +91,7 @@ artifact on the user's device is the product and is allowed; research compute re
 
 Can the model start a correct reply when the user's phrasing is new, rather than only retrieve or
 continue a familiar template? M1 answered the narrower next-token count-table question. It did not
-answer that broader generation question. Claude-218's offline sign-key probe improves the opening,
+answer that broader generation question. Claude-218's offline teacher-forced sign-key probe improves the opening,
 but a trained, served key and correct free generation on another fresh panel remain unproven.
 
 ## Where it stands

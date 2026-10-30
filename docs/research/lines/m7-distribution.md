@@ -1,6 +1,6 @@
 # Research line: API, browser runtime and Studio (M7)
 
-Milestone M7 asks that the finished model be reachable through a local API, a WebAssembly runtime and a web "Studio". This line holds the early design and review work for that surface and one cleanup of the Studio. It contains no model result, because there is no model to serve yet. The runtime half has since been delivered (see the [serving line](m4-serving.md)); the model half has not.
+Milestone M7 asks that the finished model be reachable through a local API, a WebAssembly runtime and a web "Studio". This line holds the early design and review work for that surface and one cleanup of the Studio. The discrete M1 pair and separate FBS export exist, but there is no accepted conversational product bundle. Runtime and Studio checks now pass on a synthetic stand-in; accepted-model parity remains open.
 
 | | |
 |---|---|
@@ -9,7 +9,7 @@ Milestone M7 asks that the finished model be reachable through a local API, a We
 | **Milestone** | M7 by name; the catalog tags none of its 8 records |
 | **Records** | 8 |
 | **Outcomes** | review 5 · tooling 2 · plan 1 |
-| **State** | Runtime delivered, model bundle not integrated. Local API only |
+| **State** | Runtime and Studio harness delivered on a synthetic stand-in; accepted-model bundle and parity open |
 
 Counts: `archive/catalog.jsonl`. State: `ROADMAP.md`, M7 row. Terms follow the [glossary](../../start/glossary.md); ACTIVE, READY and PARKED are defined on the [mechanism board](../../mechanisms/README.md).
 

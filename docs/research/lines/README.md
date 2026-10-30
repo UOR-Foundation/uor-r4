@@ -1,6 +1,6 @@
 # The research lines
 
-A research line is one sustained question the project worked on, such as "how does the discrete model read earlier text". The audit sorted all 1,173 recorded pieces of work into 20 lines. This page lists them, shows when each ran, and says in a word where each stands. Seventeen lines have at least three records and get their own page. None of them has produced a model that holds a useful conversation: the project is pre-alpha and 0 of its 8 milestones are complete (`docs/integration/NOW.md`).
+A research line is one sustained question the project worked on, such as "how does the discrete model read earlier text". The audit sorted all 1,173 recorded pieces of work into 20 lines. This page lists them, shows when each ran, and says in a word where each stands. Seventeen lines have at least three records and get their own page. None has produced a model that holds a useful conversation: the project is pre-alpha and **1 of its 8 milestones is complete (M1)** ([PLAN](../../../PLAN.md), [STATE](../../../STATE.md)).
 
 ![A timeline from July to October 2026 of the 12 largest of the 20 research lines, with one dot per dated record; the 8 smaller lines are not shown](../../figures/research-lines-timeline.svg)
 
@@ -19,19 +19,19 @@ A research line is one sustained question the project worked on, such as "how do
 | Line | Span | Records | Results | State |
 |---|---|---:|---:|---|
 | [`native-geometric-sept`](native-geometric-sept.md): the September native geometric model | 31 Jul to 28 Sep | 294 | 224 | Closed; whole model parked |
-| [`m1-discrete-attention`](m1-discrete-attention.md): discrete attention for the language base | 7 Aug to 19 Oct | 199 | 73 | Active; M1 not met |
+| [`m1-discrete-attention`](m1-discrete-attention.md): discrete attention for the language base | 7 Aug to 19 Oct | 199 | 73 | M1 complete, 30 Oct |
 | [`harness-governance`](harness-governance.md): research tooling and rules | 24 Jul to 19 Oct | 185 | 0 | Active support, slimmer since 19 Oct |
-| [`m2-exact-memory`](m2-exact-memory.md): grounded replies from exact memory | 3 Sep to 12 Oct | 151 | 93 | Held; fresh test failed (0 of 128) |
+| [`m2-exact-memory`](m2-exact-memory.md): grounded replies from exact memory | 3 Sep to 12 Oct | 151 | 93 | In progress; the earlier fresh test failed (0 of 128), and D67 removed the blanket hold |
 | [`geometric-stack-pretraining`](geometric-stack-pretraining.md): the geometric stack | 20 Sep to 11 Oct | 84 | 50 | Parked as a whole model |
 | [`r4g1-transformerless`](r4g1-transformerless.md): compiling a teacher into tables | 21 Jul to 27 Sep | 74 | 40 | Parked |
-| [`m4-serving`](m4-serving.md): integer serving | 7 Aug to 18 Oct | 42 | 23 | Engine active; no lawful model exported |
+| [`m4-serving`](m4-serving.md): integer serving | 7 Aug to 18 Oct | 42 | 23 | Engine active; M1 and FBS exports served, accepted M4 path open |
 | [`m1-float-rung0`](m1-float-rung0.md): the float route to rung 0 | 31 Aug to 13 Oct | 38 | 18 | Preserved; parts ready, never trained |
-| [`m3-durable-memory`](m3-durable-memory.md): durable memory and the object store | 3 Oct to 18 Oct | 33 | 3 | Store ready; nothing consumes it |
+| [`m3-durable-memory`](m3-durable-memory.md): durable memory and the object store | 3 Oct to 18 Oct | 33 | 3 | Store ready; selected-model consumer in progress |
 | [`compute-ops`](compute-ops.md): GPU and pod operations | 3 Sep to 18 Oct | 15 | 0 | Active support |
 | [`eval-panels`](eval-panels.md): evaluation panels and graders | 7 Aug to 14 Oct | 14 | 5 | Panels frozen; reply headline suspended |
 | [`geometric-intelligence-aug`](geometric-intelligence-aug.md): the August geometric programme | 25 to 30 Aug | 9 | 7 | Closed |
 | [`data-tokenizer`](data-tokenizer.md): data and tokenizer | 16 Aug to 19 Oct | 8 | 1 | Active tokenizer; 16,384-piece trainer and donor corpus prepared, not run |
-| [`m7-distribution`](m7-distribution.md): API, browser runtime and Studio | 3 Sep to 15 Oct | 8 | 0 | Runtime delivered; no model to serve |
+| [`m7-distribution`](m7-distribution.md): API, browser runtime and Studio | 3 Sep to 15 Oct | 8 | 0 | Runtime and Studio harness on a synthetic stand-in; accepted parity open |
 | [`spiralcore-wire`](spiralcore-wire.md): SpiralCore wire transport | 18 Oct | 7 | 0 | Side exploration, off the model path |
 | [`m5-energy`](m5-energy.md): laptop energy and cost | 25 Sep to 18 Oct | 4 | 1 | Not started; no joules per token measured |
 | [`m1-prime-zeta`](m1-prime-zeta.md): the prime-zeta codebook | 14 Oct | 3 | 2 | Active as baseline start |
@@ -51,11 +51,11 @@ The three short lines are listed in the [generated archive catalog](../../../arc
 
 ## Since 27 Oct
 
-**30 Oct 2026.** The table above stops at 19 Oct. The discrete path has since closed M1, while the float-trained FBS trunk carries current complete-reply research. See [the pipeline map](../../model/pipeline-map.md) for both paths and [the M1 research line](./m1-discrete-attention.md) for the close. The project is pre-alpha: 1 of 8 milestones is complete. Claude-218's offline sign-key probe passed on p-u; current work trains and serves that key and tests free generation on another fresh panel.
+**30 Oct 2026.** The table above stops at 19 Oct. The discrete path has since closed M1, while the float-trained FBS trunk carries current complete-reply research. See [the pipeline map](../../model/pipeline-map.md) for both paths and [the M1 research line](./m1-discrete-attention.md) for the close. The project is pre-alpha: 1 of 8 milestones is complete. Claude-218's offline teacher-forced sign-key probe passed on p-u; current work trains and serves that key and tests free generation on another fresh panel.
 
 ## Where to go next
 
 - [How research is done now](../README.md), the rules for notebooks, sheets and releases.
 - [What the project knows](../findings.md), [what is still open](../open-questions.md) and [how the project got here](../history.md).
-- [Mechanism board](../../mechanisms/README.md): the 27 mechanisms with ACTIVE, READY or PARKED status.
+- [Mechanism board](../../mechanisms/README.md): the 28 mechanisms with ACTIVE, READY or PARKED status.
 - [Archive catalog](../../../archive/CATALOG.md): every dated record, with one generated page per line under `archive/catalog/`.

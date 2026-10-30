@@ -49,7 +49,7 @@ underpowered and greedy remains the decode. On p-s:
 - exact turn memory keys on exact first token ids and adds only 14–16 of 1,400 openings on p-s,
   against 322–337 of 1,226 on DEV.
 
-Claude-218 has now passed its registered offline key probe. On p-u's 1,218 exact-memory misses,
+Claude-218 has now passed its registered offline teacher-forced key probe. On p-u's 1,218 exact-memory misses,
 the sign key gains +46, +37 and +33 at three seeds; the point key gains +125, +185 and +114. Row
 3 selects the cheapest passing sign key. The next unit trains and serves it and tests free
 generation on another fresh panel; no served-key or useful-chat result is established

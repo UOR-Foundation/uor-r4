@@ -39,7 +39,7 @@ The mode refuses non-GPU devices, export and quantisation-aware training. The hi
 - *D11 (integer serving):* designed for it, since the rates are table reads, the opening is a clamp and the scan is rotations. The FBS `lut-stack/5` export now carries this geometric recurrence exactly at DEV scope; the older blocked-export note is historical.
 - *D23 (no softmax or squashing):* a grep on 13 October found 0 squash-family tokens in the geometric arms (the historical branches keep 8 by design).
 - *D25/D30 (no dense matrix multiplication):* a clamp, a table read, a scan and a per-block rotation. The no-matmul and no-softmax counters were unchanged by the delivering PR.
-- *D32/D37:* a float operator. D32 froze it and D37 allows it back only by a new offline sheet ([decisions](../integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised)). The active discrete model carries no recurrent state, so this belongs to a separate float trunk.
+- *D32/D37:* a float operator. D32 froze it and D37 allows it back only by a new offline sheet ([decisions](../integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised)). The saved discrete M1 model carries a separate `DiscreteQuaternionRecurrenceV1`; these READY float recurrence gates are not that M1 component and belong to the FBS path.
 
 ## What has been tried
 

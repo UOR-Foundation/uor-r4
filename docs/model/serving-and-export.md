@@ -5,7 +5,7 @@ floating-point and transcendental arithmetic and excludes dense matmul; D80 and 
 hardware integer multiply and divide. **The saved discrete M1 pair and a separate FBS trunk have
 now been exported and served.** That is not useful-chat qualification or an M4/M7 product release.
 
-![Offline training leading to an integer UORLUT01 artifact, with the export gap measured before native or WebAssembly serving.](../figures/model/integer-export.svg)
+![The separate FBS float-training path leading to a 4-bit integer UORLUT01 artifact, with the export gap measured before native or WebAssembly serving. The discrete M1 pair instead uses the table-native 19-table lut-discrete-trunk/1 schema.](../figures/model/integer-export.svg)
 
 *Training may use float offline. The integer artifact and its measured export gap are the serving boundary.*
 

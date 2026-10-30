@@ -10,7 +10,7 @@ model that runs on a laptop?*
 [![Last commit](https://img.shields.io/github/last-commit/UOR-Foundation/uor-r4/main)](https://github.com/UOR-Foundation/uor-r4/commits/main)
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-ffcc4d)](https://huggingface.co/caseyallard/uor-r4-geometric-214m)
 
-![Four panels read left to right: a sentence split into numbered pieces; each piece placed as a point on a geometric object; the newest piece looking at only a few nearby earlier points; a few drawers opening near what was read, with the nearest word inside them picked. A band underneath reads "whole numbers only: adds, compares and table look-ups".](docs/figures/start/hero-how-it-thinks.svg)
+![Four panels read left to right: a sentence split into numbered pieces; each piece placed as a point on a geometric object; the newest piece looking at only a few nearby earlier points; a few drawers opening near what was read, with the nearest word inside them picked. A band underneath reads "whole numbers: adds, compares and table look-ups, with integer multiply and divide allowed".](docs/figures/start/hero-how-it-thinks.svg)
 
 *How UOR-R4 is designed to predict the next word. The picture shows the design, not a claim of useful conversation.*
 
@@ -51,7 +51,7 @@ experiment ends every registered loop, but the content decision is underpowered 
 the decode. Exact turn memory also misses reworded questions: its key is the turn's exact first
 token ids ([claude-217](docs/loop/tasks/one-model-end-to-end/claude-217/REPORT.md)).
 
-Claude-218 has now tested trunk-state memory keys offline on fresh p-u. On its **1,218 exact-memory
+Claude-218 has now run a teacher-forced offline probe of trunk-state memory keys on fresh p-u. On its **1,218 exact-memory
 misses**, the sign key's net opening gains are **+46, +37 and +33** at three seeds; the point key
 gains **+125, +185 and +114**. Row 3 selects the cheapest passing sign key, with the point key's
 larger gain left as a size/cost tradeoff. The next step is to train and serve that sign key and

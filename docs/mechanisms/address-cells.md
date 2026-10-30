@@ -68,7 +68,7 @@ Every number in the last four rows is a count of reachable target words on the d
 
 ## What comes next
 
-The mechanism is ACTIVE, so this is a plan, not a reopening. The controller qualification, admission-preserving rerun and M1 export are complete; there is no need to repeat them for this refresh. Next is independent evidence of address formation and of the placement's effect on complete replies. The early no-op and $K=8$ occupancy risks remain in the record, and Relation's independent effect still needs a paired ablation on the current model.
+The mechanism is ACTIVE, so this is a plan, not a reopening. The A8 full-dose rerun and M1 export are complete; the controller's numerical qualification and the admission-preserving rerun remain **NOT_RUN**, so do not repeat them for this refresh. Next is independent evidence of address formation and of the placement's effect on complete replies. The early no-op and $K=8$ occupancy risks remain in the record, and Relation's independent effect still needs a paired ablation on the current model.
 
 ## Also known as
 

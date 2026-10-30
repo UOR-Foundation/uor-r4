@@ -46,7 +46,7 @@ Claude-217 gives the sharpest current measurement:
 - The cycle step ends every registered loop, yet every content decision is underpowered and greedy
   remains the decode.
 
-So a loop-free reply is not necessarily a correct reply. Claude-218's offline sign-key probe has
+So a loop-free reply is not necessarily a correct reply. Claude-218's offline teacher-forced sign-key probe has
 now passed on p-u, gaining +46/+37/+33 on 1,218 exact-memory misses at three seeds; the point key
 gained +125/+185/+114. The open question is whether training and serving the selected sign key
 produces correct free-generated replies on another fresh panel. No served-key result is established

@@ -1,6 +1,6 @@
 # Research line: integer serving (M4)
 
-This line is about running a finished model on an ordinary laptop or in a browser using whole-number arithmetic and table lookups, with no floating point. The records below date from when multiplication was also banned (see 29 Oct 2026 at the end). In the records the engine reproduced its float models exactly on the old stack, and the multiply-free audits pass on the WASM serving symbols. What is missing is a trained model worth serving: the models tried scored 1.20 to 1.24 bits per byte against a 0.90 target, and no model that obeys all the current rules has been exported.
+This line is about running a finished model on an ordinary laptop or in a browser using whole-number arithmetic and table lookups, with no floating point. The records below date from when multiplication was also banned (see 29 Oct 2026 at the end). In the records the engine reproduced its float models exactly on the old stack, and the multiply-free audits pass on the WASM serving symbols. The older models scored 1.20 to 1.24 bits per byte against a 0.90 target. Since then the discrete M1 pair and separate FBS `lut-stack/5` export have been served at their declared scopes; M4's accepted-model path remains open.
 
 | | |
 |---|---|
@@ -9,7 +9,7 @@ This line is about running a finished model on an ordinary laptop or in a browse
 | **Milestone** | M4, one served model under D11 and a command-line interface (12 of 42 records); 4 tagged M1 |
 | **Records** | 42 |
 | **Outcomes** | tooling 10 · negative 9 · positive 7 · inconclusive 6 · review 3 · ops 2 · process 2 · blocked 1 · diagnostic-stop 1 · plan 1 |
-| **State** | The D11 engine is ACTIVE ([D11 integer serving](../../mechanisms/lut-serving.md)). M4 is held; the export gap of a lawful model is unmeasured |
+| **State** | The D11 engine is ACTIVE ([D11 integer serving](../../mechanisms/lut-serving.md)). M4 is not complete; the accepted model path is not started. M1 export agreement is exact and FBS's export gap passes at DEV scope; `PRLL` held-out scoring remains open |
 
 Counts: `archive/catalog.jsonl`. D11 is the owner decision that every lab serves under one integer contract (the multiply and divide rule changed on 28 Oct, see below). Terms follow the [glossary](../../start/glossary.md); ACTIVE, READY and PARKED are defined on the [mechanism board](../../mechanisms/README.md).
 
@@ -62,6 +62,6 @@ The records above describe the old multiplier-free stack. Since 28 Oct, D80 (int
 - The unsnapped contract `lut-stack/5` is inside the export-gap bar on the DEV panel on both seeds, serving at 4,217 to 4,320 tok/s (claude-182, [report](../../loop/tasks/d11-exporter-float-trunk/claude-182/REPORT.md)), then 4,491 and 4,504 tok/s after the integer square root (claude-186).
 - `lut-stack/6` carries the Hamming reads (claude-188, [report](../../loop/tasks/integer-hamming-read/claude-188/REPORT.md)). The copy-head integer kernel matches an f64 reference (claude-189, [report](../../loop/tasks/integer-hamming-read/claude-189/REPORT.md)). The session refuses `/6` until its hooks serve them. Those hooks are next.
 
-Not yet: text in and out (R7), exact turn memory served, and the readout (the served session still reads the native writer). No milestone is claimed; M4 is not-started. See [the pipeline map](../../model/pipeline-map.md).
+Not yet: text in and out (R7), exact turn memory served, and the readout (the served session still reads the native writer). M1 is complete; M4 is not complete, and its accepted-model path is not started. See [the pipeline map](../../model/pipeline-map.md).
 
 **Go deeper:** the [generated catalog page](../../../archive/catalog/m4-serving.md) lists all 42 records.

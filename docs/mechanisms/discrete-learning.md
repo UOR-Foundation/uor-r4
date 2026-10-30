@@ -6,7 +6,7 @@ Labels used below: **proof** means derived from definitions or code, **measureme
 
 ## In plain words
 
-The model is a big table of small whole-number vectors, one per word, plus a few routing choices. To teach it, the machine picks one table entry and tries every allowed rotation of it, 16 options counting "leave it alone". For each option it replays a batch of training examples and counts the mistakes with whole-number arithmetic. It keeps the best option only if that is strictly better than leaving the entry alone. There are no gradients, no decimals and no matrix multiplication. Every step stays inside the values the finished model can hold. So far the method has moved some counts but has not produced better language.
+The model is a big table of small whole-number vectors, one per word, plus a few routing choices. To teach it, the machine picks one table entry and tries every allowed rotation of it, 16 options counting "leave it alone". For each option it replays a batch of training examples and counts the mistakes with whole-number arithmetic. It keeps the best option only if that is strictly better than leaving the entry alone. There are no gradients, no decimals and no matrix multiplication. Every step stays inside the values the finished model can hold. Earlier forms moved counts without producing better language; the later 19-table model passed M1, but that whole-model result does not isolate this rule's independent effect.
 
 ## What it replaces in a transformer
 

@@ -1282,7 +1282,7 @@ fn milestones() -> Result<String, Fail> {
     s.legend(636.0, &[St::Complete, St::Progress, St::Planned]);
     s.finish(
         "Milestones M1 to M8",
-        "30 October 2026: 1 of 8 milestones complete. M1 language base complete at all six bars on two seeds (DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228; p-f 7,850 / 7,872; exact export and B4; Apple M1 decode 10,876 / 10,566 tok/s). M2 grounded reply and M3 durable memory are in progress: claude-218's offline sign-key probe passed on p-u, so the next unit trains and serves that key and tests free generation. M4 to M8 are not complete. M7 runtime and Studio harness work is in progress on a synthetic stand-in, with accepted-model parity open. M1 is not useful-chat qualification.",
+        "30 October 2026: 1 of 8 milestones complete. M1 language base complete at all six bars on two seeds (DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228; p-f 7,850 / 7,872; exact export and B4; Apple M1 decode 10,876 / 10,566 tok/s). M2 grounded reply and M3 durable memory are in progress: claude-218's offline teacher-forced sign-key probe passed on p-u, so the next unit trains and serves that key and tests free generation. M4 to M8 are not complete. M7 runtime and Studio harness work is in progress on a synthetic stand-in, with accepted-model parity open. M1 is not useful-chat qualification.",
     )
 }
 

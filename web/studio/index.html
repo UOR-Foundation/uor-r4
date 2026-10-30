@@ -2554,20 +2554,20 @@
                 <button class="tool-icon-btn" onclick="closeModelManagerModal()" style="font-size:1rem; border:none; background:transparent;">×</button>
             </div>
             <div style="font-size:0.75rem; color:var(--text-muted); line-height:1.4; margin-bottom:0.75rem;">
-                All neural models run 100% in-browser on WebGPU. Downloaded weights are stored in sovereign local storage (CacheStorage) for instant offline inference.
+                The available integer model runtime runs 100% in-browser on WebAssembly in a Web Worker. Model files you choose stay in local browser storage for offline use; current verification uses a synthetic stand-in.
             </div>
             <div class="model-manager-grid" id="modelManagerGrid" style="max-height:360px; overflow-y:auto;">
                 <!-- Populated dynamically -->
             </div>
 
-            <!-- AUTONOMOUS SOVEREIGN CI CDN HOSTING DISPATCHER -->
+            <!-- OPTIONAL USER-INITIATED MODEL PACKAGING -->
             <div style="margin-top:1rem; padding:0.85rem; background:rgba(6,182,212,0.06); border:1px solid rgba(6,182,212,0.25); border-radius:8px; display:flex; align-items:center; justify-content:space-between; gap:1rem;">
                 <div>
                     <div style="font-size:0.78rem; font-weight:700; color:var(--accent-cyan); display:flex; align-items:center; gap:0.4rem;">
-                        <span>🦀</span> Sovereign CI Model Packaging & CDN Streaming
+                        <span>🦀</span> Optional model packaging on GitHub Actions
                     </div>
                     <div style="font-size:0.68rem; color:var(--text-muted); margin-top:0.2rem; line-height:1.35;">
-                        Autonomous GitHub Actions workers package and stage quantized model crates directly on our sovereign CDN.
+                        A user-initiated CI job can package a model artifact for later download. No qualified model is bundled in this page.
                     </div>
                 </div>
                 <button class="modal-btn primary" style="font-size:0.72rem; padding:0.4rem 0.85rem; white-space:nowrap;" onclick="triggerAutonomousCiModelPackaging()">
