@@ -6,7 +6,7 @@ Every public number in this refresh must link to this sheet's committed evidence
 
 ## 1. Milestone state and the M1 artifact
 
-- **Project stage:** pre-alpha, **1 of 8 milestones complete**. M1 #2029 is CLOSED. M2 and M3 are in progress; M4–M8 are not started. No useful conversation or product release is established.
+- **Project stage:** pre-alpha, **1 of 8 milestones complete**. M1 #2029 is CLOSED. M2 and M3 are in progress; M4–M8 are not complete. M7 runtime/harness work is in progress on a synthetic stand-in. No useful conversation or product release is established.
 - **Closing artifact:** antigravity-110's saved `trunk-joint-pointer-v1-d11`, a 19-table `uor-r4.lut-discrete-trunk/1` discrete model, exported as two seeded `UORLUT01` files:
   - seed 1 `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d` (86,536,132 B);
   - seed 2 `1b49e8bd823a1021e31de55c767111f9cf43807d3e6d007644e49281935877de` (84,943,328 B).

@@ -35,7 +35,7 @@ Minimise the original gradient $g\cdot\delta$ subject to the 380 unit-normalised
 
 **Consequence (proof, from the definition).** Any committed move is a legal code and, by the commit rule, strictly lowers the loss. Whether the guards also survive is not guaranteed when a smooth move is rounded afterwards. The rounding runs below measure that.
 
-**Rule check.** Aligned with D11: every accepted step is already in the servable code set. The solver is offline float arithmetic and is not a serving part. The pooled-ranking loss behind the M2 learner used softmax and softplus forms that D23 bans, so a rerun needs a compliant objective. Not yet assessed against D30 (the guard test forms a 380-by-1,960 Jacobian product and the solver does dense LU), so a rerun would have to be classified or run on the GPU. The float solver was frozen by D32 and can return under D37 as an offline float sheet with a fresh review, an owner release, a separately scanned module and a reported export gap.
+**Rule check.** Aligned with D11: every accepted step is already in the servable code set. The solver is offline float arithmetic and is not a serving part. The pooled-ranking loss behind the M2 learner used softmax and softplus forms that D23 bans, so a rerun needs a compliant objective. Not yet assessed against D30 (the guard test forms a 380-by-1,960 Jacobian product and the solver does dense LU), so a rerun would have to be classified or run on the GPU. The float solver was frozen by D32 and can return under D37 as an offline float sheet with a fresh review, the lab's pre-run review under D67, a separately scanned module and a reported export gap; D41's donor pass is the named owner-at-dispatch exception.
 
 ## What has been tried
 

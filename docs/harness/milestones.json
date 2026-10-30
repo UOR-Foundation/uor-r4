@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "note": "Current-status cache reconciled on 2026-10-30 from closed M1 #2029, claude-211's six-bar evidence and current roadmap state. M1 is complete; M2 and M3 are in progress; M4–M8 are not started. Current headlines/statuses live in their normal fields, while prior headlines, artifacts and holds are preserved in explicit `historical` fields rather than deleted. No acceptance bar changes.",
+  "note": "Current-status cache reconciled on 2026-10-30 from closed M1 #2029, claude-211's six-bar evidence and current roadmap state. M1 is complete; M2 and M3 are in progress; M4–M8 are not complete. M7 runtime/harness work is in progress on a synthetic stand-in. Current headlines/statuses live in their normal fields, while prior headlines, artifacts and holds are preserved in explicit `historical` fields rather than deleted. No acceptance bar changes.",
   "tracker": {
     "issue": 2028,
     "title": "[Roadmap] UOR-R4 - path to a native conversation and memory alpha"
@@ -33,20 +33,22 @@
           "note": "Median, 192-token prefill and 64-token decode"
         }
       ],
-      "panel": "v5-reply",
+      "panel": "",
       "qualification_panels": ["DEV", "Fresh V2", "held-out-phrasing p-f"],
       "base_artifact": "antigravity-110 two seeded UORLUT01 artifacts (04652a3d…, 1b49e8bd…)",
       "mechanisms": [
-        "exact-memory",
-        "pointer-key",
-        "read-binding",
-        "spiralcore-fbs"
+        "flock-read",
+        "hamilton-gate",
+        "recurrence-gates",
+        "pointer-key"
       ],
       "lines": [
         {
-          "name": "exact addressed memory",
-          "count": 0,
-          "of": 3
+          "name": "saved discrete six-bar close",
+          "count": 6,
+          "of": 6,
+          "lab": "antigravity",
+          "note": "Two seeded UORLUT01 artifacts; exact export agreement and B4 at both seeds."
         },
         {
           "name": "evaluation integrity",
@@ -57,6 +59,27 @@
         }
       ],
       "historical": {
+        "previous_panel": "v5-reply",
+        "previous_mechanisms": [
+          "exact-memory",
+          "pointer-key",
+          "read-binding",
+          "spiralcore-fbs"
+        ],
+        "previous_lines": [
+          {
+            "name": "exact addressed memory",
+            "count": 0,
+            "of": 3
+          },
+          {
+            "name": "evaluation integrity",
+            "count": 1,
+            "of": 3,
+            "lab": "kimi",
+            "note": "Recorded operator card6134571032; no reset by instruction repair."
+          }
+        ],
         "previous_status": "in-progress",
         "previous_headline": {
           "label": "reply acceptable",
@@ -78,7 +101,7 @@
         "previous_next": "Rung-0 sheet Amendment2 TEST FITNESS: FIT (design) and the pre-M1 K16/A8 route; all superseded by the reviewed six-bar close.",
         "negative_scope": "K16-A scored 65 and 463 of 14,287 below unigram 1,226 and T2 6,300; K16-R collapsed to 19 or 20 cells. These results remain dated evidence."
       },
-      "next": "M2 grounded replies. Current end-to-end work addresses new-phrasing reply opening and a memory key that reworded known questions can reach; M1 does not establish useful chat. p-f has 0.625 verbatim TRAIN reference replies.",
+      "next": "M2 grounded replies. Claude-218's offline sign-key probe passed on p-u; the next unit trains and serves that key and tests free generation on another fresh panel. M1 does not establish useful chat. p-f has 0.625 verbatim TRAIN reference replies.",
       "project_manager": "kimi",
       "training_hold": false
     },
@@ -281,7 +304,7 @@
       "id": "M7",
       "title": "Distribution: capability API, WASM runtime and the Pages Studio",
       "lab": "",
-      "status": "not-started",
+      "status": "in-progress",
       "headline": {
         "label": "native model served through the API, WASM and Studio",
         "current": 0,
@@ -292,10 +315,14 @@
       },
       "secondary": [],
       "panel": "m7-distribution",
-      "base_artifact": "a local Rust API exists (capability API tests in uor-r4-integer); WASM qualification not started; no Studio deployment of the native model",
+      "base_artifact": "local Rust API and integer WASM engine; Studio worker/page and desktop shell verified on the 469,252-byte synthetic stand-in; no accepted model bundle",
       "mechanisms": [],
       "lines": [],
-      "next": "WASM qualification and a Studio deployment of the native model; depends on M4 serving under D11.",
+      "historical": {
+        "previous_status": "not-started",
+        "previous_base_artifact": "a local Rust API exists (capability API tests in uor-r4-integer); WASM qualification not started; no Studio deployment of the native model"
+      },
+      "next": "Accepted-model WASM, CLI and browser parity and distribution; depends on M4 serving under D11.",
       "carried_from": "#1172, #1173"
     },
     "m8": {
@@ -317,7 +344,7 @@
       "base_artifact": "follows #962/#954/#964 and #955/#1088 on the same native path, with #963 cost evidence and #1172/#1173 distribution scope",
       "mechanisms": [],
       "lines": [],
-      "next": "A clearly labelled release; depends on M3-M7. Not startable under the current training hold.",
+      "next": "A clearly labelled release after M1-M7; no blanket training hold (D67).",
       "carried_from": "#965"
     }
   },

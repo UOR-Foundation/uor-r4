@@ -187,7 +187,7 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 **Nat.** A unit of prediction error: the natural logarithm of how surprised the model was. Lower is better; bits per byte is a related score.
 
-**Notebook.** One page per line of research, with one row per result: date, what ran, the number, the bar, the verdict and an artifact link. Notebooks plus [NOW.md](../integration/NOW.md) replaced the old running log. See [research notebooks](../research/notebook/README.md).
+**Notebook.** One page per line of research, with one row per result: date, what ran, the number, the bar, the verdict and an artifact link. Notebooks retain the results; [PLAN](../../PLAN.md) and rendered [STATE](../../STATE.md) carry the current plan and status. See [research notebooks](../research/notebook/README.md).
 
 **NOT_RUN.** A record that a planned test was never executed. It is not a pass and it is not a failure. See [what the project knows](../research/findings.md).
 
@@ -249,7 +249,7 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 <a id="spiralcore"></a>**SpiralCore.** An exact-geometry source credited to Matthew. From the octonion multiplication table it yields moves that shuffle the eight coordinates and flip some signs. Each move can be undone exactly. The integer form is the core of the current model. See [SpiralCore](../geometry/spiralcore.md).
 
-**Studio.** The single-page interface meant to be the shell of both the web and desktop clients. It is not yet connected to the new engine. See [web client](../products/web-client.md).
+**Studio.** The single-page interface meant to be the shell of both the web and desktop clients. It is connected to the integer WebAssembly worker and verified on a synthetic stand-in with self-hosted assets and a stack-bound tokenizer; no qualified model is bundled. See [web client](../products/web-client.md).
 
 ## T
 
@@ -261,9 +261,9 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 **Tokenizer.** The component that cuts text into tokens and turns tokens back into text. The pinned one has 4,096 pieces (identity `d36d3e87`). See [tokenizer](../mechanisms/tokenizer.md).
 
-**Tokens/s (tokens per second).** How many tokens the model reads or writes per second. It is the project's lead metric, with decode speed and context speed reported separately. It has never been measured for the current model. See [charter](../../CHARTER.md), section 1.
+**Tokens/s (tokens per second).** How many tokens the model reads or writes per second. It is the project's lead metric, with decode speed and context speed reported separately. The saved discrete M1 pair measures 10,876 and 10,566 native decode tok/s on Apple M1; the separate FBS export has its own rates. See [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md).
 
-**Tauri.** A toolkit that wraps a web page as a desktop app. The planned desktop client would use it to share the web interface.
+**Tauri.** The toolkit used by the existing desktop shell to share the web interface. The shell is verified on a synthetic artifact, with no qualified trained product bundle.
 
 <a id="top-1"></a>**Top-1 (and top-8).** The number of DEV rows on which the model's first guess (or any of its first eight) is the right next token, out of 14,287. M1 requires the top-1 of the model, through the integer export, to beat the [unigram](#unigram) and [T2](#t2) tables. See [charter](../../CHARTER.md), section 4.8.
 
@@ -301,6 +301,6 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 - [FAQ](./faq.md): the questions newcomers ask most, answered with links.
 - [What is UOR-R4](./what-is-uor-r4.md): the five-minute explanation.
-- [Mechanism board](../mechanisms/README.md): all 27 mechanisms and their status.
+- [Mechanism board](../mechanisms/README.md): all 28 mechanisms and their status.
 - [Geometry chapters](../geometry/README.md): one illustrated page per geometric idea.
 - [`docs/formal_vocabulary.md`](../formal_vocabulary.md): the rules for proof, measurement and hypothesis.

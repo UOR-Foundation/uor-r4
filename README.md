@@ -26,8 +26,9 @@ in your browser, with nothing sent to a server. The project is open research and
 
 ## Where we are
 
-**30 Oct 2026: M1 is complete — 1 of 8 milestones.** One saved discrete geometric model, exported
-as two seeded `UORLUT01` integer artifacts, passed all six closing bars on both seeds
+**30 Oct 2026: M1 is complete — 1 of 8 milestones.** The saved 19-table discrete
+`trunk-joint-pointer-v1-d11` model, exported as two seeded `UORLUT01` integer artifacts, passed all
+six closing bars on both seeds
 ([M1 #2029](https://github.com/UOR-Foundation/uor-r4/issues/2029), [closing evidence](docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)). This is a measured language-base result, not useful-chat qualification.
 
 | Test | Saved model, seed 1 / seed 2 | Controls | Outcome |
@@ -52,7 +53,8 @@ token ids ([claude-217](docs/loop/tasks/one-model-end-to-end/claude-217/REPORT.m
 
 Claude-218 has now tested trunk-state memory keys offline on fresh p-u. On its **1,218 exact-memory
 misses**, the sign key's net opening gains are **+46, +37 and +33** at three seeds; the point key
-gains **+125, +185 and +114**. The registered next step is to train and serve the sign key and
+gains **+125, +185 and +114**. Row 3 selects the cheapest passing sign key, with the point key's
+larger gain left as a size/cost tradeoff. The next step is to train and serve that sign key and
 test free generation on another fresh panel. This is not yet a served-key or useful-chat result
 ([claude-218](docs/loop/tasks/one-model-end-to-end/claude-218/REPORT.md)).
 
@@ -89,15 +91,16 @@ tested forms failed or broke a rule while the mechanism stays open.
 |---|---|---|
 | Embedding table (a starting vector per token) | [Prime-zeta codebook](docs/mechanisms/prime-zeta-codebook.md) and [address cells](docs/mechanisms/address-cells.md): whole-number addresses from primes and zeta-zero phases | ACTIVE |
 | Attention (which earlier tokens matter) | [Route](docs/mechanisms/route-read.md), [Flock](docs/mechanisms/flock-read.md) and [Relation](docs/mechanisms/relation-read.md) reads: walk an address tree, rotate a few neighbours into one frame, follow copy links | ACTIVE; independent effects remain unisolated |
-| Feed-forward layers (most of the multiplying) | [Hamilton rotation gate](docs/mechanisms/hamilton-gate.md) and [SpiralCore/FBS projection](docs/mechanisms/spiralcore-fbs.md) | ACTIVE on the float-trained FBS trunk; trained and served under `lut-stack/5` |
+| Feed-forward layers (most of the multiplying) | [Hamilton rotation gate](docs/mechanisms/hamilton-gate.md) and [SpiralCore/FBS projection](docs/mechanisms/spiralcore-fbs.md) | ACTIVE in the discrete M1 composition and on the float-trained FBS trunk; FBS is served under `lut-stack/5` |
 | Softmax output and cross-entropy loss | [Admission](docs/mechanisms/admission.md) (open a few address "drawers", called cells) and a [rank-margin hinge](docs/mechanisms/rank-margin.md) | ACTIVE |
 | Backpropagation optimizer | [Discrete learning](docs/mechanisms/discrete-learning.md): try each legal rotation of one entry, keep it only if the score strictly improves | ACTIVE |
 | Matrix-multiply runtime | [Integer serving (D11)](docs/mechanisms/lut-serving.md): whole-number adds, shifts, compares and table reads; integer multiply and divide are allowed | ACTIVE; the discrete M1 pair and the separate FBS `lut-stack/5` export both serve |
 
 Position and normalization have replacements on the FBS trunk: SpiralCore transport spin and RMS
-norm with an integer square root. The saved discrete model's M1 pass does not establish every
-replacement's independent effect. The board lists **28 mechanisms: 12 ACTIVE, 5 READY and 11
-PARKED**. Part by part: [transformer vs geometry](docs/start/transformer-vs-geometry.md).
+norm with an integer square root. The discrete M1 composition uses a discrete quaternion recurrence
+and Hamilton gate. M1 does not establish every replacement's independent effect. The board lists
+**28 mechanisms: 12 ACTIVE, 5 READY and 11 PARKED**. Part by part:
+[transformer vs geometry](docs/start/transformer-vs-geometry.md).
 
 <details>
 <summary><strong>Historical K16 result — 19 Oct 2026</strong></summary>

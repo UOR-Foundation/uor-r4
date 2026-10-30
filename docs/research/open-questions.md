@@ -22,6 +22,7 @@ Terms follow the [glossary](../start/glossary.md). Claims are **proof**, **measu
 
 The saved 19-table `uor-r4.lut-discrete-trunk/1` model passes all six bars on two seeds:
 
+- self-contained `UORLUT01` artifacts load in the clean-room D11 reader;
 - DEV **7,002 / 7,001** of 14,287 against unigram 1,226 and T2 6,300;
 - Fresh V2 **7,215 / 7,228** of 14,479 against unigram 1,279 and T2 6,582;
 - p-f **7,850 / 7,872** of 15,953 against unigram 1,409 and T2 7,375, beyond paired band 81;

@@ -1,6 +1,6 @@
 # Frequently asked questions
 
-**In one paragraph.** These are the questions newcomers and would-be contributors ask most often, answered plainly. The short version: UOR-R4 is a pre-alpha research project that tries to build a fast language model out of geometry instead of a transformer's expensive arithmetic. Parts of it are built and tested. No model it has trained holds a useful conversation yet, and the best one so far predicts the next word worse than a simple table of word counts ([STATUS](../../STATUS.md)). Words in the answers are defined in the [glossary](./glossary.md).
+**In one paragraph.** These are the questions newcomers and would-be contributors ask most often, answered plainly. The short version: UOR-R4 is a pre-alpha research project that tries to build a fast language model out of geometry instead of a transformer's expensive arithmetic. **M1 is complete: the saved discrete model beats both count tables at two seeds through its integer export.** No model holds a useful conversation yet ([PLAN](../../PLAN.md)). Words in the answers are defined in the [glossary](./glossary.md).
 
 ```mermaid
 flowchart TD
@@ -8,7 +8,7 @@ flowchart TD
   Q -- "Understand it" --> U["What is UOR-R4<br/>Transformer vs geometry"]
   Q -- "See how far it got" --> W["Where we are<br/>Where we're going"]
   Q -- "Run or chat with it" --> R["Section: Running it<br/>(no chat model yet)"]
-  Q -- "Help build it" --> C["Section: Contributing<br/>CONTRIBUTING.md and NOW.md"]
+  Q -- "Help build it" --> C["Section: Contributing<br/>CONTRIBUTING.md and PLAN.md"]
   Q -- "Read the old work" --> A["Section: Records<br/>archive/ and the catalog"]
 ```
 
@@ -24,7 +24,7 @@ It is an open research project that asks one question: can a language model run 
 
 ### 2. Is this a transformer?
 
-No, by design. The charter says the project is "not a transformer" (section 1), bans matrix multiplication (section 3.3) and excludes "a dense model disguised as lookup tables" from serving (section 3.6) ([charter](../../CHARTER.md)). The current model (`crates/uor-r4-discrete`) reads earlier words with three bounded reads ([Route](../mechanisms/route-read.md), [Flock](../mechanisms/flock-read.md), [Relation](../mechanisms/relation-read.md)) and has no feed-forward block at all. But be careful with the history: the project's older float models (7 million to 214 million parameters) used softmax, matrix multiplication and a SiLU activation (a smooth squashing curve), so they did not follow today's rules (**measurement**, [geometric stack](../mechanisms/geometric-stack.md)). The comparison page is [transformer vs geometry](./transformer-vs-geometry.md).
+No, by design. The charter says the project is "not a transformer" (section 1), bans matrix multiplication (section 3.3) and excludes "a dense model disguised as lookup tables" from serving (section 3.6) ([charter](../../CHARTER.md)). The saved discrete M1 model reads earlier words with three bounded reads ([Route](../mechanisms/route-read.md), [Flock](../mechanisms/flock-read.md), [Relation](../mechanisms/relation-read.md)) and uses a discrete Hamilton gate. The separate FBS trunk uses a Hamilton-gated recurrence and SpiralCore projection. Older float models (7 million to 214 million parameters) used softmax, matrix multiplication and a SiLU activation, so they did not follow today's rules (**measurement**, [geometric stack](../mechanisms/geometric-stack.md)). The comparison page is [transformer vs geometry](./transformer-vs-geometry.md).
 
 ### 3. Does it work yet?
 
@@ -50,7 +50,7 @@ That is the goal, in the owner's words "almost frontier level capability" on a l
 
 ### 7. Why no softmax?
 
-The owner's reason is cost, not taste: "to ban expensive operations" ([charter](../../CHARTER.md), section 1). Softmax turns scores into probabilities with exponentials and a sum over everything, and it hides a dense global normalisation. The charter bans it, and every softmax-like function, in the model, its training, its comparators and any renamed or table form (section 3.2). The price is real: every earlier read that learned a ranking had softmax helping it somewhere in training, and the best softmax-free read was a recorded REJECT, 0.0172 bits per byte worse and 15% slower (**measurement**, [open questions](../research/open-questions.md), [record](../../archive/labs/softmax-free-read-2026-10-10/README.md)). Whether a softmax-free read can learn ranking at all is the project's biggest open question.
+The owner's reason is cost, not taste: "to ban expensive operations" ([charter](../../CHARTER.md), section 1). Softmax turns scores into probabilities with exponentials and a sum over everything, and it hides a dense global normalisation. The charter bans it, and every softmax-like function, in the model, its training, its comparators and any renamed or table form (section 3.2). The price is real: every earlier read that learned a ranking had softmax helping it somewhere in training, and the best softmax-free read was a recorded REJECT, 0.0172 bits per byte worse and 15% slower (**measurement**, [record](../../archive/labs/softmax-free-read-2026-10-10/README.md)). Those older negatives remain in scope, but the saved discrete model later passed M1. The current open question is correct free-generated replies on new phrasing ([open questions](../research/open-questions.md)).
 
 ### 8. Why no matrix multiplication?
 
@@ -76,11 +76,11 @@ A **pre-registration sheet** is a one-page plan written before a run: the bar, t
 
 ### 13. Can I run it?
 
-You can build it and run its checks, but you cannot chat with it. A model has been exported and served (the FBS trunk, 29 Oct), but there is no typed chat yet, because R7, the text path, is not built. From a clone, with the pinned Rust toolchain, the README's commands are `cargo check --locked -p uor-r4-discrete --lib` and `cargo test --locked -p uor-r4-discrete --lib`. These execute no model ([README](../../README.md)). Training needs CUDA GPUs rented through the project's tools and a personal release by the owner for each run ([training](../model/training.md)).
+You can build it and run its checks, but you cannot hold a useful chat with it. The saved discrete M1 pair and separate FBS export exist and serve; the FBS typed text path (R7) is not built. From a clone, with the pinned Rust toolchain, the README's commands are `cargo check --locked -p uor-r4-discrete --lib` and `cargo test --locked -p uor-r4-discrete --lib`. These execute no model ([README](../../README.md)). Training needs CUDA GPUs rented through the project's tools and the lab's own pre-run review under D67; D41's donor pass is the named owner-at-dispatch exception ([training](../model/training.md)).
 
 ### 14. Is there a web or desktop app?
 
-Not one you can use. The web client is meant to be a local model in a browser tab, and the desktop client a Tauri app with durable memory. Today the Studio interface and a WebAssembly build of the engine exist separately, the Studio still imports an older engine, and the desktop app is a specification only ([products](../products/README.md), [web client](../products/web-client.md), [desktop client](../products/desktop-client.md)).
+No qualified conversational app ships. The Studio is connected to the integer WebAssembly worker and verified with self-hosted assets and a stack-bound tokenizer on a synthetic stand-in. The Tauri desktop shell also verifies durable session behavior on a synthetic artifact. Neither bundles a qualified trained product model ([products](../products/README.md), [web client](../products/web-client.md), [desktop client](../products/desktop-client.md)).
 
 ### 15. What about the models on Hugging Face?
 
@@ -88,17 +88,17 @@ Four 214 million parameter checkpoints are public, but they are historical: trai
 
 ### 16. How fast is it? How much does it cost to train?
 
-Tokens per second is the project's lead metric, and it has never been measured for the current discrete model ([charter](../../CHARTER.md), section 1; [lut-serving](../mechanisms/lut-serving.md)). For the FBS trunk it has been measured: a served token on the M1 laptop went from 3,042 to 4,829 tok/s (the snapped contract) once the engine used the hardware integer multiply and divide, with replies byte-identical (claude-169, claude-177). The exact `lut-stack/5` contract serves at 4,217–4,504 tok/s (claude-182, claude-186). For cost, the audit quotes the K16 runs at "~1.2 h (~$2)", the chief architect's figure (section 7 of the [architect audit](../labs/course-correction-2026-10-18/audits/d37-reactivation-architect.md)), that is about 1.2 hours and $2 for all four K16 runs together. Spending is capped at 4 rented pods and $8 an hour across all labs ([charter](../../CHARTER.md), section 5.4). These are estimates, not invoices.
+Tokens per second is the project's lead metric. The saved discrete M1 pair measures 10,876 and 10,566 native decode tok/s on Apple M1 with a 192-token prefill and 64-token decode ([bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)). For the separate FBS trunk, a served token went from 3,042 to 4,829 tok/s (snapped) once the engine used hardware integer multiply and divide, with replies byte-identical; exact `lut-stack/5` serves at 4,217–4,504 tok/s ([lut-serving](../mechanisms/lut-serving.md)). For cost, the audit quotes the K16 runs at "~1.2 h (~$2)", the chief architect's figure (section 7 of the [architect audit](../labs/course-correction-2026-10-18/audits/d37-reactivation-architect.md)), that is about 1.2 hours and $2 for all four K16 runs together. Spending is capped at 4 rented pods and $8 an hour across all labs ([charter](../../CHARTER.md), section 5.4). These are estimates, not invoices.
 
 ## Contributing
 
 ### 17. How can I contribute?
 
-Start with the one-page plan, [NOW.md](../integration/NOW.md), then [CONTRIBUTING.md](../../CONTRIBUTING.md). Model work on the first four milestones is gated and owned by the labs. Work that is genuinely open to outsiders includes documentation and claim-wording fixes, reproducing a published negative result, and tooling that does not touch the model path. Post a short comment on the owning issue saying what you will do, work on a short branch, and open a pull request that says `References #N`. A maintainer runs the project's gates for you ([CONTRIBUTING](../../CONTRIBUTING.md)).
+Start with [PLAN.md](../../PLAN.md) and rendered [STATE.md](../../STATE.md), then [CONTRIBUTING.md](../../CONTRIBUTING.md). M1 is complete; later model work is owned by the labs. Work that is genuinely open to outsiders includes documentation and claim-wording fixes, reproducing a published negative result, and tooling that does not touch the model path. Post a short comment on the owning issue saying what you will do, work on a short branch, and open a pull request that says `References #N`. A maintainer runs the project's gates for you ([CONTRIBUTING](../../CONTRIBUTING.md)).
 
 ### 18. What are the labs, and who decides?
 
-A **lab** is any contributor, human or AI, working under the charter. Four labs are registered: claude, antigravity, deepseek and kimi, with Kimi in the project-manager seat. Codex left the registry (claude-138). The owner, Casey, decides the charter, the constraints, holds, spending, milestone bars and exceptions, and types every run release personally. The project manager sequences work, and labs choose tasks from `NOW.md`. Subagents review and test but never make critical decisions. See [the rules](../rules/README.md#who-decides-what).
+A **lab** is any contributor, human or AI, working under the charter. Four labs are registered: claude, antigravity, deepseek and kimi, with Kimi in the project-manager seat. Codex left the registry (claude-138). The owner, Casey, decides the charter, technical constraints and GPU caps. Labs approve their own runs through whole-project pre-run reviews and make other decisions through decision reviews; D41's donor pass still needs the owner at dispatch. The project manager sequences work from `PLAN.md`. Subagents review and test but never make critical decisions. See [the rules](../rules/README.md#who-decides-what).
 
 ### 19. What do ACTIVE, READY and PARKED mean? Is PARKED dead?
 

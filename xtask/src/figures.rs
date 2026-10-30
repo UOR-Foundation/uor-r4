@@ -40,6 +40,7 @@ const DATE: &str = "30 October 2026";
 #[derive(Clone, Copy, PartialEq)]
 enum St {
     Working,
+    Complete,
     Built,
     Historical,
     Progress,
@@ -50,6 +51,7 @@ impl St {
     fn label(self) -> &'static str {
         match self {
             St::Working => "WORKING",
+            St::Complete => "COMPLETE",
             St::Built => "BUILT & TESTED",
             St::Historical => "HISTORICAL · INACTIVE",
             St::Progress => "IN PROGRESS",
@@ -59,6 +61,7 @@ impl St {
     fn legend(self) -> &'static str {
         match self {
             St::Working => "Working",
+            St::Complete => "Complete",
             St::Built => "Built & tested",
             St::Historical => "Historical · inactive",
             St::Progress => "In progress",
@@ -68,7 +71,7 @@ impl St {
     /// (fill, stroke, stroke width, dash)
     fn card(self) -> (&'static str, &'static str, f64, Option<&'static str>) {
         match self {
-            St::Working => ("#E3F4EE", GREEN, 2.5, None),
+            St::Working | St::Complete => ("#E3F4EE", GREEN, 2.5, None),
             St::Built => ("#E4EFF8", BLUE, 1.75, None),
             St::Historical => ("#F6F8FA", "#8C959F", 1.5, Some("4 4")),
             St::Progress => ("url(#hP)", "#B87A00", 2.0, None),
@@ -85,7 +88,7 @@ impl St {
         Option<&'static str>,
     ) {
         match self {
-            St::Working => (GREEN, GREEN, "#FFFFFF", None),
+            St::Working | St::Complete => (GREEN, GREEN, "#FFFFFF", None),
             St::Built => (BLUE, BLUE, "#FFFFFF", None),
             St::Historical => ("#E6E9ED", "#8C959F", INK, Some("4 3")),
             St::Progress => (ORANGE, "#B87A00", INK, None),
@@ -1169,7 +1172,7 @@ fn milestones() -> Result<String, Fail> {
         (
             "M1",
             "Language base",
-            St::Working,
+            St::Complete,
             [
                 "six bars, two seeds:",
                 "DEV 7,002 / 7,001;",
@@ -1182,9 +1185,9 @@ fn milestones() -> Result<String, Fail> {
             "Grounded reply",
             St::Progress,
             [
-                "new-phrasing opening",
-                "and reachable memory key",
-                "in progress",
+                "sign-key probe passed",
+                "train and serve next",
+                "free generation open",
                 "",
             ],
         ),
@@ -1203,7 +1206,7 @@ fn milestones() -> Result<String, Fail> {
             "M4",
             "One served model",
             St::Planned,
-            ["accepted model through", "D11 and CLI: not started", "", ""],
+            ["accepted model through", "D11 and CLI: open", "", ""],
         ),
         (
             "M5",
@@ -1220,8 +1223,8 @@ fn milestones() -> Result<String, Fail> {
         (
             "M7",
             "Distribution",
-            St::Planned,
-            ["API, WASM, Studio;", "accepted model open", "", ""],
+            St::Progress,
+            ["runtime on synthetic;", "accepted parity open", "", ""],
         ),
         (
             "M8",
@@ -1276,10 +1279,10 @@ fn milestones() -> Result<String, Fail> {
             true,
         );
     }
-    s.legend(636.0, &[St::Working, St::Progress, St::Planned]);
+    s.legend(636.0, &[St::Complete, St::Progress, St::Planned]);
     s.finish(
         "Milestones M1 to M8",
-        "30 October 2026: 1 of 8 milestones complete. M1 language base complete at all six bars on two seeds (DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228; p-f 7,850 / 7,872; exact export and B4; Apple M1 decode 10,876 / 10,566 tok/s). M2 grounded reply and M3 durable memory are in progress, centred on new-phrasing reply opening and a memory key that reworded known questions can reach. M4 to M8 are not started. M1 is not useful-chat qualification.",
+        "30 October 2026: 1 of 8 milestones complete. M1 language base complete at all six bars on two seeds (DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228; p-f 7,850 / 7,872; exact export and B4; Apple M1 decode 10,876 / 10,566 tok/s). M2 grounded reply and M3 durable memory are in progress: claude-218's offline sign-key probe passed on p-u, so the next unit trains and serves that key and tests free generation. M4 to M8 are not complete. M7 runtime and Studio harness work is in progress on a synthetic stand-in, with accepted-model parity open. M1 is not useful-chat qualification.",
     )
 }
 

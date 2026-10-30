@@ -80,7 +80,7 @@ sessions continue identically token for token (`IntegerStackSession` + `UR4SESS1
 prose does not silently overwrite stored facts. The true-address 80/80 oracle is exact-read evidence,
 not learned address formation or M3 completion.
 
-### M4 `#2032` — one served model through D11 and a CLI: not started
+### M4 `#2032` — one served model through D11 and a CLI: not complete; accepted model path not started
 
 The chosen M1/M2/M3 model exports to `UORLUT01` and reports its export gap, meets its held-out
 quality bar and the M1–M3 reply/memory bars through `uor-chat`, and restores sessions identically in

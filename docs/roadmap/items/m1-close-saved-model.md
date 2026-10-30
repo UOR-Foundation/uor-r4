@@ -25,6 +25,8 @@ This is the M1 closing condition and unblocks M2, M4 and everything after.
 
 One saved discrete model: (a) starting reach at no fewer than 4,894 of 14,287; (b) reach kept on both seeds (G-Adm); (c) more than 16 of 256 cells in use plus the D39 occupancy condition (G-Occ); (d) integer top-1 through the integer export beats the unigram table (1,226) and the next-word table (6,300) on each of two seeds, with tokens per second reported; (e) the gain holds on a fresh sealed panel.
 
+**Close-record mapping, 30 Oct 2026:** the (a)–(e) letters in the completed outcome above mean the close-grade contract: (a) self-contained D11 loading, (b) exact export agreement and B4, (c) tokens/s, (d) DEV integer top-1 above both count tables, and (e) Fresh V2 transfer. The separate `panel-score.json` supplies (f), held-out-phrasing transfer. The older D39 starting-reach, G-Adm and G-Occ conditions in this Done-when list remain upstream/historical requirements, not a relabelling of the close-grade fields. No acceptance text or bar changes here.
+
 ## How to start
 
 Open these first:

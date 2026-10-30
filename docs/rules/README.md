@@ -54,18 +54,17 @@ Source: `CHARTER.md` §3; the first column gives its clause numbers.
 A **lab** is any contributor, human or AI, working under the charter. The rules in sections 3 and 5 give these limits.
 
 **Labs may:**
-- Choose their own work from `NOW.md`, post a one-line intent note, claim a branch and carry on unless redirected (`CHARTER.md` §5.3).
+- Choose their own work from `PLAN.md`, post a one-line intent note, claim a branch and carry on unless redirected (`CHARTER.md` §5.3).
 - Build, run finite kernel tests and run host checks without any pre-registration (§4.5).
-- Train in float offline once a sheet, FIT and typed release exist (training is currently held; §3.7, §4.5, §5.1), and report the export gap on the same evaluator.
+- Train in float offline with a sheet, a non-author FIT and the lab's own whole-project pre-run review under D67, and report the export gap on the same evaluator (§3.7, §4.5, §5.1).
 - Serve the integer model on a user's device and measure it (§3.6).
 - Review their own pull request at the exact head, from a fresh context (§5.5), and use a fresh-context subagent as the non-author FIT reviewer (§4.5).
 
 **Labs may not:**
 - Use a banned operation anywhere, including in comparators, or in renamed form (§3.2, §3.3).
 - Run research compute on the CPU, or spend GPU on work that cannot change a decision (§3.5).
-- Start GPU training or a milestone-bearing run without a sheet, a FIT review and a typed owner release (§4.5, §5.1).
+- Start GPU training or a milestone-bearing run without a sheet, a non-author FIT and the lab's own pre-run review (§4.5, §5.1). D41's donor pass is the named exception that also needs the owner at dispatch.
 - Use a neural comparator, teacher or grader, apart from the single D41 donor pass (§3.10).
-- Type an owner release themselves. Casey types it personally with `UOR_LAB` unset; labs only stage the commands (§5.1, from D40).
 - Cancel a healthy run because a self-set budget ran out, or touch another session's GPU or files (§5.4).
 - Stop a mechanism. That needs the owner (§4.1).
 - Delete research. Negatives, unique source and other labs' work go to the archive unchanged (§4.7).
@@ -75,12 +74,12 @@ A **lab** is any contributor, human or AI, working under the charter. The rules 
 
 | Who | Decides | Source |
 |---|---|---|
-| The owner (Casey) | The charter, the technical constraints, holds, spending caps, milestone bars and exceptions. Releases each pre-registered run. Stops a mechanism. | `CHARTER.md` §5.1 |
-| The project-manager seat (Kimi, with a cover lab named by the owner when Kimi is offline) | The order of work. Keeps `NOW.md` with the roster. Operating notes may never contradict the charter. | `CHARTER.md` §5.2 |
-| Labs | Which task to pick from `NOW.md`, how to implement it, and the exact-head review of pull requests. | `CHARTER.md` §5.3, §5.5 |
-| Subagents | Reviews, adversarial tests and research. They never make critical decisions: a change to a bar, a status, a constraint or a spend goes to the manager or the owner as a decision card. | `CHARTER.md` §5.2 |
+| The owner (Casey) | The charter, technical constraints and GPU caps; stopping a mechanism; the D41 donor-pass release. | `CHARTER.md` §5.1, §5.2 |
+| The project-manager seat (Kimi, with a cover lab named by the owner when Kimi is offline) | The order of work from `PLAN.md`. Operating notes may never contradict the charter. | `CHARTER.md` §5.2 |
+| Labs | Which task to pick from `PLAN.md`, how to implement it, their own pre-run and decision reviews, and the exact-head review of pull requests. | `CHARTER.md` §5.1, §5.3, §5.5 |
+| Subagents | Reviews, adversarial tests and research. They never make critical decisions: a change to a bar, status, scope or stop rule belongs to the top lab session after its decision review; §3 and the caps stay with the owner. | `CHARTER.md` §5.1, §5.2 |
 
-Two rules guard the owner's role. A pending owner question means wait. And Casey's own words beat any written acceptance text, with his directions recorded verbatim the same day (`CHARTER.md` §5.1). The training hold, the M2 hold and the Stage B hold remain until the owner releases them, and a passing FIT review releases none of them.
+Two rules guard the owner's role without creating a wait. An unanswered ask becomes the lab's own decision review under D67, and Casey's own words beat any written acceptance text, with his directions recorded verbatim the same day (`CHARTER.md` §5.1). The old blanket Training, M2 and Stage B holds are released; D41's donor pass is the named owner-at-dispatch exception.
 
 ## How evidence is judged
 
@@ -91,7 +90,7 @@ Section 4 of the charter is about not fooling ourselves.
 - **Power.** A decisive run uses at least 2 seeds or at least 200 fresh rows, with bars no narrower than the measured noise, and reports a fresh transfer number with every development gain (§4.3).
 - **Controls and pivots.** Compare against lawful non-neural baselines such as count tables. After three results on one line that do not move its headline number, write a pivot note: stop, or run one decisive experiment (§4.4).
 - **Claims.** Write "measured X on Y against Z". A test pass is not trained capability, and `NOT_RUN` is not a pass (§4.6).
-- **The first-milestone closing bar.** For milestone M1, the integer model's top-1 accuracy through the D11 export must beat both the unigram table (1,226 of 14,287) and the T2 successor table (6,300 of 14,287) on the same development panel, on each of two seeds, with tokens per second reported (§4.8).
+- **The first-milestone closing bars.** M1 requires self-contained D11 artifacts, exact export/reference agreement and the planted-fault control, tokens/s, DEV integer top-1 above unigram (1,226 of 14,287) and T2 (6,300), Fresh V2 transfer, and held-out-phrasing transfer, on each of two seeds (§4.8).
 
 ## Where it stands
 
