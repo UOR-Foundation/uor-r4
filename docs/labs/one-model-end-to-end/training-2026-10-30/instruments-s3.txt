@@ -1,0 +1,7 @@
+I-E PASS K = 1 decodes as greedy on a model; K = 16 leaves greedy's path
+I-H0 PASS (r) twice on this pod: the same readings and step-256 checkpoint
+I-B-P0 PASS P = 0 is (r), byte for byte
+I-C-one-atom PASS one-atom is (r), byte for byte
+I-B-P1 PASS the reply weight is 0.0 at step 256
+I-C-frozen LAPTOP probe-r-frozen/models/step-000000 against step-000256, tensor by tensor, in the grader
+I-A PASS P-dev scores 16417 rows, memory on and out
