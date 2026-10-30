@@ -2,7 +2,13 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md). Order: [claude-218](../../loop/tasks/one-model-end-to-end/claude-218/ORDER.md). It follows claude-217 ([result](../../labs/one-model-end-to-end/cycle-step-2026-10-30/README.md)) and step 0 ([counts](../../labs/one-model-end-to-end/memory-key-2026-10-30/README.md)). The redirect from the rollout hinge was made by the lab's decision review (D68), logged on #3407 (6526603691).
 
-TEST FITNESS: (to be filled by a fresh non-author reviewer)
+TEST FITNESS: round 1 NOT FIT (a fresh non-author reviewer, 30 Oct, at `bb9047baa`), on four blocking points, each repaired here:
+1. **τ across seeds.** One distance cannot carry across seeds' trunk scales, so τ is now a decile level, applied at each seed's own quantile.
+2. **Ties.** The device's reduction picks among tied rows by thread. Each key now names the commonest target among all tied rows, and records the tie count.
+3. **Row 1.** It was two-sided, counted verbatim rather than correct replies, and argued its power on DEV. It is now one-sided, on exact and template matches, with an underpowered floor.
+4. **The exact key.** Nothing showed it is the memory's served key on the panels. Three instrument checks now do.
+
+Round 2 is pending.
 
 ## The question
 
@@ -18,10 +24,14 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
 
 - **The model:** the sealed (r-drop) at step 16,384, seeds 1–3, at `results/claude/one-model-end-to-end-2026-10-29/training-460fe46e/s{S}/r-drop-s{S}/`, each checked against its seed's `SHA256SUMS`. It is the recipe claude-216 kept. There is no training.
 - **The table:** TRAIN's 212,968 openings. Each opening is a scored row whose previous token is not a reply token. For each, the table holds the trunk's own readout point, with the turn memory off, and its target, the reply's first token. It is built per seed, under that seed's trunk (`opening_points`). It takes 212,968 × 256 × 4 bytes, 218 MB, on the device.
-- **The keys,** each naming an opening by the target of its nearest TRAIN opening (`l1_nearest`, on the device in blocks of 64 queries × 4,096 rows, with no dot product; a tie keeps the earlier row):
-  - **point:** L1 on the point itself, the mean `|q − t|`, the cell objective's distance;
+- **The keys.** Each names an opening by the commonest target among all TRAIN openings at its least distance, ties to the smaller id, as the exact key names its table (`l1_named`).
+  - It runs on the device in blocks of 64 queries × 4,096 rows, with no dot product.
+  - A first pass finds each opening's least distance, and a second counts the targets of every row at it, by the same kernels.
+  - The tie count is written per opening, since identical TRAIN prompts give identical points and sign distances come in steps of 1/256.
+  - **point:** L1 on the point itself, the mean `|q − t|`, the cell objective's distance.
   - **sign:** L1 on the point's 0/1 sign pattern (`sign_code`), which is the Hamming distance over the width. It is the cheaper key: 32 bytes an opening, servable as integers.
-  - **the exact key** (reported): the memory's own, `first-8`, counted on the laptop as in step 0.
+  - **the exact key** (reported): the memory's own `first-8`, counted on the laptop as in step 0. The anchor check shows it is the served key on p-s too (1,400 of 1,400).
+  - **Each key's search is timed separately** (`point_ms`, `sign_ms`). TRAIN's sign codes are taken before the sign search starts, as a served table would hold them.
 - **The arms,** all on the same openings:
 
   | Arm | What names the opening | Role |
@@ -34,9 +44,9 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
   | U | the oracle `reply-template` key (laptop, as in step 0) | the ceiling, decides row 2 |
 
 - **Each key's threshold τ** is chosen on p-s only, before p-u is graded.
-  - Per key, it is the decile of that key's distances on p-s's missed rows, pooled over seeds, that gives the largest pooled net gain. The deciles are q10, q20, … q100, and q100 always fires.
-  - A tie keeps the smaller τ.
-  - It is applied unchanged to p-u and DEV.
+  - **The level:** one decile level per key, from q10, q20, … q100. At a level ℓ and seed s, τ_s(ℓ) is the ℓ-quantile of that key's distances on seed s's own p-s missed rows. q100 is +∞, so it always fires.
+  - **The choice:** the level with the largest net gain on p-s's missed rows, summed over the three seeds. A tie keeps the lower level.
+  - **Applied unchanged:** at seed s, the key fires on p-u and DEV where its distance is at most τ_s(ℓ), seed s's own p-s quantile. Each seed's trunk has its own distance scale, so a level carries across seeds where a single distance would not.
 
 ## Data split
 
@@ -72,17 +82,22 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
    - greedy and the default Flock samples;
    - the forced samples;
    - `keys-{dev,p-s,p-u}.json`.
-5. **Check the outputs:**
+5. **Check the outputs** (on the pod: the files; in the grade, on the laptop, each an instrument fault that refuses to grade):
    - every expected file is written;
-   - each keys file's openings equal the split's openings in its rows file;
-   - every forced reply opens with its reference's first token.
+   - each keys file's positions equal the split's openings as the laptop finds them from the panel's mask, in order;
+   - every forced reply opens with its reference's first token;
+   - the anchor check holds at every opening of p-s and p-u (`--opening-bound 1` with both panels), so the laptop's exact key is the served memory's;
+   - on every opening where the exact key misses, the memory-on and memory-off nearest tokens are equal. So the memory moves nothing there, and B is what the served model sees on the missed rows.
 6. **Seal** to `results/claude/one-model-end-to-end-memory-key-2026-10-30/run-<sha8>/` with a `SHA256SUMS`, match it on the pod file for file, read it back, and take the pod down.
 7. **On the laptop, before p-u is graded:**
    - write and unit-test the grade, `--key-grade 1`;
-   - choose τ on p-s;
-   - commit both, with the τ values, to the PR.
+   - choose each key's level on p-s;
+   - check row 1's power on p-s's own forced arm (below);
+   - commit all three, with the levels and each seed's τ, to the PR.
 
    **Then** grade p-u.
+   - **The grade reads** the sealed run's rows, samples and keys files, plus the panels' and TRAIN's token files. It needs those for the exact key, U, the verbatim hash of the known and new strata, and the value-masked template match.
+   - **Nothing from p-u is read before then.** The run's own printed summary gives no key hits: the keys files leave those fields empty.
 
 ## Bar
 
@@ -101,11 +116,16 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
 
 | Row | Holds when | Next unit |
 |---|---|---|
-| 1 | At every seed, the forced arm's exact-reference replies and its verbatim-TRAIN replies are each within 2·√(b + c) of greedy's (paired, memory on, 256 replies) | The opening is not enough. The rollout hinge, or a combined unit |
+| 1 | At every seed, the forced arm's lift over greedy (paired, memory on, 256 replies), b − c, is at most 2·√(b + c), both on replies equal to their reference and on replies whose value-masked template (K = 1,024) equals the reference's. If b + c < 10 on both measures at a seed, row 1 is underpowered there and does not hold | The opening is not enough. The rollout hinge, or a combined unit |
 | 2 | At every seed, U's hits minus the larger of the exact key's and B's hits, on all openings, is within 2·√(b + c) of zero, paired against that larger arm | No prompt key has headroom. The hinge, and the later rows |
 | 3 | Some key passes all four, at every seed: Δ_K,s beyond its band; precision when it fires at least B's on those rows; Δ_K,s ≥ 0 on the new stratum; and on DEV, the served model with K backing off where the exact key misses not lower than served by more than its paired band | Train and serve that key (the sign key if both pass), with an opening bar on another fresh panel |
 | 4 | No key passes row 3, but some key fires on at least 10% of the missed rows at its τ, with precision when it fires below B's at some seed | An abstention gate (a distance or a share threshold) |
 | 5 | None of the above | Train the trunk's opening point to gather paraphrases, with a geometric hinge |
+
+**Notes on the table:**
+- **Row 3's precision condition** follows from its net gain: on the rows where K fires, K's hits minus B's are b − c. Row 4's "precision below B's" likewise means a net loss at some seed. Both are stated for the reader.
+- **The ORDER's band** was `max(2·√(b + c), the spread across seeds)`. Here every condition must hold at every seed, each with its own paired band, which is the stricter reading of the same rule.
+- **U** is near 100% precise by construction, since its key holds the reply's first token. So row 2 mostly measures how often TRAIN holds the reply's template, which is the headroom a prompt key can reach.
 
 **Reported, deciding nothing:**
 - each key's fire rate, precision and Δ at every decile on p-u;
@@ -118,10 +138,12 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
 ## Minimum test power
 
 - **p-u's openings.** p-s has 1,400 prompts and 1,400 openings, so p-u's 1,466 prompts give about 1,466 openings.
-- **The missed rows:** on p-s the exact key missed 83% of openings, so p-u should have about 1,200 missed rows at each seed.
-- **Row 3's power:** with B at 14–19% on p-s, a key naming half of the oracle's headroom right would give Δ of several hundred. The band 2·√(b + c) is at most about 70 for 1,200 rows. A key that helps cannot hide in the band; one that does nothing reads inside it.
-- **Row 1's power:** 256 replies a seed. claude-217's DEV greedy matched its reference in 38–40, so a lift of a few dozen sits outside a band of about 2·√(b + c) ≈ 12–18.
-- **An instrument outcome:** if p-u has fewer than 500 missed rows at a seed, the outcome is "underpowered", never a negative.
+- **The missed rows:** the exact key fires on 248 of p-u's 1,466 openings (the census's keyed openings), so p-u has 1,218 missed rows at every seed. The key is the same at every seed.
+- **Row 3's power:** with B at 14–19% on p-s, a key naming half of the oracle's headroom right would give Δ of several hundred. The band 2·√(b + c) is at most about 70 for 1,218 rows. A key that helps cannot hide in the band; one that does nothing reads inside it. Row 3 cannot be underpowered.
+- **Row 1's power,** on held-out wording, where greedy matched its reference in only 3, 1 and 4 of 256 replies (claude-217, p-s).
+  - The template match is the measure with power. 0.63 of p-u's references are verbatim TRAIN replies, so a right opening that leads into the right template gives a lift of dozens.
+  - Row 1's underpowered floor, b + c < 10 on both measures, keeps a thin reading from holding row 1.
+  - This power is checked on p-s's own forced arm before p-u is graded (step 7).
 
 ## Stop rule
 

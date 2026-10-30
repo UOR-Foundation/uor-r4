@@ -1462,7 +1462,7 @@ fn template_keyed(
 
 /// [`OpeningBound`] on DEV and on each of `panels` (claude-218), for no key, the first 1–8 prompt
 /// tokens, the last 1–4, the order-free `set` and `set-first-8`, and the oracle
-/// `reply-template`; and the opening read's [`AnchorCheck`] on DEV and on TRAIN.
+/// `reply-template`; and the opening read's [`AnchorCheck`] on every split and on TRAIN.
 pub fn opening_bound(
     data_root: &Path,
     panels: &[(String, PathBuf)],
@@ -1509,9 +1509,9 @@ pub fn opening_bound(
     for (name, tokens, mask, sha) in &splits {
         let (windows, _) = hs::build_document_windows(tokens, mask, SHEET_CONTEXT, bos)?;
         let rows = opening_rows(&windows, mask);
-        if name == "dev" {
-            checks.push(anchor_check("dev", &windows, mask));
-        }
+        // Every split's anchor check (claude-218, FIT round 1): the memory's turn slots keep the
+        // first-8 key at its openings, so the laptop's exact key is the memory's served one there.
+        checks.push(anchor_check(name, &windows, mask));
         let mut split_bounds: Vec<OpeningBound> = keys
             .iter()
             .map(|&key| bound(name, key.name(), &keyed(&train_rows, key), &keyed(&rows, key), &decode))
@@ -1572,58 +1572,76 @@ fn opening_points(
     })
 }
 
-/// For each row of `query`, the row of `table` nearest under L1 (the mean `|q − t|` over the
-/// coordinates, as the cell objective scores), as its index and distance: computed on the device
-/// in blocks, with no dot product. A tie keeps the earlier row, inside a block (the first index
-/// at the minimum, not the reduction's pick) and across blocks.
-fn l1_nearest(query: &Tensor, table: &Tensor) -> Result<Vec<(u32, f32)>> {
+/// One opening as a trunk key names it ([`l1_named`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Named {
+    /// The commonest target among TRAIN's openings at the least distance, ties to the smaller id.
+    target: u32,
+    distance: f32,
+    /// How many TRAIN openings are at that distance.
+    ties: u32,
+}
+
+/// For each row of `query`, the rows of `table` at the least L1 distance (the mean `|q − t|` over
+/// the coordinates, as the cell objective scores), named by the commonest of their `targets`,
+/// ties to the smaller id, as the exact key names its table (FIT round 1): on the device in
+/// blocks, with no dot product. A first pass finds each query's least distance and a second the
+/// rows at it; both compute the same distances by the same kernels, so they agree exactly.
+fn l1_named(query: &Tensor, table: &Tensor, targets: &[u32]) -> Result<Vec<Named>> {
     const QUERIES: usize = 64;
     const ROWS: usize = 4096;
     let (nq, _) = query.dims2()?;
     let (nt, _) = table.dims2()?;
-    let mut best = vec![(u32::MAX, f32::INFINITY); nq];
+    if targets.len() != nt {
+        return Err(invalid("the trunk keys want one target per TRAIN opening"));
+    }
+    let distances = |q: &Tensor, t0: usize| -> Result<Tensor> {
+        let t = table.narrow(0, t0, ROWS.min(nt - t0))?.unsqueeze(0)?;
+        Ok(q.broadcast_sub(&t)?.abs()?.mean(2)?)
+    };
+    let mut named = Vec::with_capacity(nq);
     for q0 in (0..nq).step_by(QUERIES) {
-        let q = query.narrow(0, q0, QUERIES.min(nq - q0))?.unsqueeze(1)?;
+        let n = QUERIES.min(nq - q0);
+        let q = query.narrow(0, q0, n)?.unsqueeze(1)?;
+        let mut least = vec![f32::INFINITY; n];
         for t0 in (0..nt).step_by(ROWS) {
-            let rows = ROWS.min(nt - t0);
-            let t = table.narrow(0, t0, rows)?.unsqueeze(0)?;
-            let d = q.broadcast_sub(&t)?.abs()?.mean(2)?;
-            let low_each = d.min_keepdim(1)?;
-            // The first row at the minimum: every row index where the distance equals it, the
-            // rest pushed past the block, and the smallest taken.
-            let index = Tensor::arange(0u32, rows as u32, d.device())?
-                .to_dtype(DType::F32)?
-                .unsqueeze(0)?
-                .broadcast_as(d.shape())?;
-            let past = Tensor::full(ROWS as f32, d.shape(), d.device())?;
-            let at = d
-                .broadcast_eq(&low_each)?
-                .where_cond(&index, &past)?
-                .min(1)?
-                .to_dtype(DType::U32)?
-                .to_vec1::<u32>()?;
-            let low = low_each.squeeze(1)?.to_vec1::<f32>()?;
-            for (i, (&j, &m)) in at.iter().zip(&low).enumerate() {
-                let slot = &mut best[q0 + i];
-                if m < slot.1 {
-                    *slot = (t0 as u32 + j, m);
+            let low = distances(&q, t0)?.min(1)?.to_vec1::<f32>()?;
+            for (l, m) in least.iter_mut().zip(low) {
+                if m < *l {
+                    *l = m;
                 }
             }
         }
+        let at = Tensor::from_vec(least.clone(), (n, 1), query.device())?;
+        let mut counts = vec![std::collections::BTreeMap::<u32, usize>::new(); n];
+        for t0 in (0..nt).step_by(ROWS) {
+            let tied = distances(&q, t0)?.broadcast_eq(&at)?.to_vec2::<u8>()?;
+            for (count, row) in counts.iter_mut().zip(&tied) {
+                for (j, _) in row.iter().enumerate().filter(|(_, &f)| f == 1) {
+                    *count.entry(targets[t0 + j]).or_default() += 1;
+                }
+            }
+        }
+        for (count, distance) in counts.iter().zip(least) {
+            let (target, _) =
+                commonest(count).ok_or_else(|| invalid("a trunk key found no TRAIN opening at its least distance"))?;
+            named.push(Named { target, distance, ties: count.values().sum::<usize>() as u32 });
+        }
     }
-    Ok(best)
+    Ok(named)
 }
 
 /// Each point's sign pattern as 0/1 coordinates: L1 between two of them is their Hamming
-/// distance over the width, so [`l1_nearest`] on them is the Hamming-nearest sign cell.
+/// distance over the width, so [`l1_named`] on them is the Hamming-nearest sign cell.
 fn sign_code(points: &Tensor) -> Result<Tensor> {
     Ok(points.ge(&points.zeros_like()?)?.to_dtype(DType::F32)?)
 }
 
 /// One split's openings named by the two trunk keys (claude-218), from TRAIN's opening points
-/// under the same trunk: the nearest TRAIN opening by its point under L1, and by its sign
-/// pattern (Hamming), each with that opening's target and the distance. Written by
-/// `--opening-keys 1` as `keys-{split}.json`; the laptop grade reads it with the rows.
+/// under the same trunk: by point under L1, and by sign pattern (Hamming), each as the commonest
+/// target among the TRAIN openings at the least distance ([`l1_named`]), with the distance and
+/// the tie count. Written by `--opening-keys 1` as `keys-{split}.json`; the laptop grade reads it
+/// with the rows.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OpeningKeys {
     pub split: String,
@@ -1634,10 +1652,15 @@ pub struct OpeningKeys {
     pub targets: Vec<u32>,
     pub point_target: Vec<u32>,
     pub point_distance: Vec<f32>,
+    pub point_ties: Vec<u32>,
     pub sign_target: Vec<u32>,
     pub sign_distance: Vec<f32>,
-    /// The two searches' wall time over all the split's openings, in milliseconds.
-    pub search_ms: u64,
+    pub sign_ties: Vec<u32>,
+    /// Each key's search over all the split's openings, in milliseconds: the point key's, and
+    /// the sign key's with the queries' sign codes taken (TRAIN's are taken before it starts, as
+    /// a served table would hold them).
+    pub point_ms: u64,
+    pub sign_ms: u64,
 }
 
 /// [`OpeningKeys`] for one split's opening points against TRAIN's.
@@ -1650,10 +1673,12 @@ fn opening_keys(
     train_targets: &[u32],
 ) -> Result<OpeningKeys> {
     let started = std::time::Instant::now();
-    let by_point = l1_nearest(query, train)?;
-    let by_sign = l1_nearest(&sign_code(query)?, &sign_code(train)?)?;
-    let search_ms = started.elapsed().as_millis() as u64;
-    let name = |(i, _): &(u32, f32)| train_targets[*i as usize];
+    let by_point = l1_named(query, train, train_targets)?;
+    let point_ms = started.elapsed().as_millis() as u64;
+    let train_sign = sign_code(train)?;
+    let started = std::time::Instant::now();
+    let by_sign = l1_named(&sign_code(query)?, &train_sign, train_targets)?;
+    let sign_ms = started.elapsed().as_millis() as u64;
     let (rows, width) = train.dims2()?;
     Ok(OpeningKeys {
         split: split.to_owned(),
@@ -1661,11 +1686,14 @@ fn opening_keys(
         table_bytes: rows * width * 4,
         positions,
         targets,
-        point_target: by_point.iter().map(name).collect(),
-        point_distance: by_point.iter().map(|&(_, d)| d).collect(),
-        sign_target: by_sign.iter().map(name).collect(),
-        sign_distance: by_sign.iter().map(|&(_, d)| d).collect(),
-        search_ms,
+        point_target: by_point.iter().map(|n| n.target).collect(),
+        point_distance: by_point.iter().map(|n| n.distance).collect(),
+        point_ties: by_point.iter().map(|n| n.ties).collect(),
+        sign_target: by_sign.iter().map(|n| n.target).collect(),
+        sign_distance: by_sign.iter().map(|n| n.distance).collect(),
+        sign_ties: by_sign.iter().map(|n| n.ties).collect(),
+        point_ms,
+        sign_ms,
     })
 }
 
@@ -8845,9 +8873,10 @@ mod tests {
         assert_eq!(gap, 0.0, "the opening points are the rows' own points");
     }
 
-    /// claude-218: each query is named by its nearest TRAIN opening under L1, across the search's
-    /// blocks, a tie keeping the earlier row; and by sign pattern, whose L1 is the Hamming
-    /// distance over the width. On the device: CPU tensor compute is refused (D24/D29).
+    /// claude-218 (FIT round 1): each query is named by the commonest target among the TRAIN
+    /// openings at its least L1 distance, ties to the smaller id, across the search's blocks and
+    /// inside one; and by sign pattern, whose L1 is the Hamming distance over the width. On the
+    /// device: CPU tensor compute is refused (D24/D29).
     #[cfg(feature = "cuda")]
     #[test]
     fn the_opening_keys_name_each_opening_by_its_nearest_train_opening() {
@@ -8856,28 +8885,40 @@ mod tests {
         let rows: Vec<f32> = (0..5000).flat_map(|r| [r as f32, 0.0]).collect();
         let train = Tensor::from_vec(rows, (5000, 2), &device).unwrap();
         let train_targets: Vec<u32> = (0..5000u32).map(|r| r % 7).collect();
-        // 4,500.2 is nearest row 4,500 (second block); −3 is nearest row 0; 4,095.5 ties rows
-        // 4,095 and 4,096 across the blocks and keeps the earlier.
+        // 4,500.2 is nearest row 4,500 alone (second block); −3 is nearest row 0; 4,095.5 ties
+        // rows 4,095 (target 0) and 4,096 (target 1) across the blocks, and names the smaller.
         let query = Tensor::from_vec(vec![4500.2f32, 0.0, -3.0, 0.0, 4095.5, 0.0], (3, 2), &device).unwrap();
-        let near = l1_nearest(&query, &train).unwrap();
-        assert_eq!(near.iter().map(|&(i, _)| i).collect::<Vec<_>>(), [4500, 0, 4095]);
-        assert!((near[0].1 - 0.1).abs() < 1e-3 && (near[1].1 - 1.5).abs() < 1e-6, "{near:?}");
-        // A tie inside one block keeps the earlier row: rows 100 and 3,000 are both (5, 0), every
-        // other row (100, 0), so the query (5, 0) is at distance 0 from both.
-        let rows: Vec<f32> = (0..4096).flat_map(|r| [if r == 100 || r == 3000 { 5.0 } else { 100.0 }, 0.0]).collect();
-        let tied = Tensor::from_vec(rows, (4096, 2), &device).unwrap();
-        let at = Tensor::from_vec(vec![5.0f32, 0.0], (1, 2), &device).unwrap();
-        assert_eq!(l1_nearest(&at, &tied).unwrap(), [(100, 0.0)], "an in-block tie keeps the earlier row");
+        let near = l1_named(&query, &train, &train_targets).unwrap();
+        assert_eq!(near.iter().map(|n| (n.target, n.ties)).collect::<Vec<_>>(), [(4500 % 7, 1), (0, 1), (0, 2)]);
+        assert!((near[0].distance - 0.1).abs() < 1e-3 && (near[1].distance - 1.5).abs() < 1e-6, "{near:?}");
+        // Ties inside one block: every row is (100, 0) with target 0, but rows 1 and 1,024 are
+        // (5, 0), with targets 9 and 3: a tie of one each names the smaller id, 3. With row 2,000
+        // also at (5, 0) and targets 3, 9, 9, the commonest, 9, names it, not the first row's 3.
+        let block = |at: &[(usize, u32)]| {
+            let rows: Vec<f32> = (0..4096)
+                .flat_map(|r| [if at.iter().any(|&(i, _)| i == r) { 5.0 } else { 100.0 }, 0.0])
+                .collect();
+            let targets: Vec<u32> = (0..4096).map(|r| at.iter().find(|&&(i, _)| i == r).map_or(0, |&(_, t)| t)).collect();
+            (Tensor::from_vec(rows, (4096, 2), &device).unwrap(), targets)
+        };
+        let five = Tensor::from_vec(vec![5.0f32, 0.0], (1, 2), &device).unwrap();
+        let (table, targets) = block(&[(1, 9), (1024, 3)]);
+        assert_eq!(l1_named(&five, &table, &targets).unwrap()[0], Named { target: 3, distance: 0.0, ties: 2 });
+        let (table, targets) = block(&[(1, 3), (1024, 9), (2000, 9)]);
+        assert_eq!(l1_named(&five, &table, &targets).unwrap()[0], Named { target: 9, distance: 0.0, ties: 3 });
         // The sign code: 0/1 per coordinate, zero counting as positive.
         let points = Tensor::from_vec(vec![0.5f32, -0.2, -1.0, 0.0], (2, 2), &device).unwrap();
         let code = sign_code(&points).unwrap().to_vec2::<f32>().unwrap();
         assert_eq!(code, [[1.0, 0.0], [0.0, 1.0]]);
         let keyed = opening_keys("p", &query, vec![1, 2, 3], vec![10, 20, 30], &train, &train_targets).unwrap();
-        assert_eq!(keyed.point_target, [4500 % 7, 0, 4095 % 7]);
+        assert_eq!(keyed.point_target, [4500 % 7, 0, 0]);
+        assert_eq!(keyed.point_ties, [1, 1, 2]);
         assert_eq!((keyed.train_openings, keyed.table_bytes), (5000, 5000 * 2 * 4));
-        // Every TRAIN row's sign code is (1, 1): the first nearest row, at Hamming distance 0
-        // from the queries with both coordinates at or above zero, and 1/2 from (−3, 0).
+        // Every TRAIN row's sign code is (1, 1), so all 5,000 tie for every query; targets 0 and
+        // 1 are the commonest (715 each), so 0 names them. Hamming distance 0 from the queries
+        // with both coordinates at or above zero, and 1/2 from (−3, 0).
         assert_eq!(keyed.sign_target, [0, 0, 0]);
+        assert_eq!(keyed.sign_ties, [5000, 5000, 5000]);
         assert_eq!(keyed.sign_distance, [0.0, 0.5, 0.0]);
     }
 

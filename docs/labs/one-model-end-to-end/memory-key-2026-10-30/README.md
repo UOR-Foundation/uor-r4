@@ -4,10 +4,10 @@ Lab: claude. Item: [one-model-end-to-end](../../../roadmap/items/one-model-end-t
 
 ## Step 0: what each exact key could name, on the laptop
 
-- **The method:** `train-in-space --opening-bound 1 --panel p-s=DIR`, at `8ea674541`. It counts over the corpus: for each key, TRAIN's commonest reply opening, scored on the openings of DEV and of the panel p-s. There is no model compute.
+- **The method:** `train-in-space --opening-bound 1 --panel p-s=DIR`, at `8ea674541`; re-run with the panel's anchor check at the head after FIT round 1, its bounds byte-identical. It counts over the corpus: for each key, TRAIN's commonest reply opening, scored on the openings of DEV and of the panel p-s. There is no model compute.
   - p-s is the held-out-phrasing panel of claude-217 (seed 2091; tokens sha256 `62099a48…10f1`, mask `9053e117…f11a`).
   - It is now a development panel: it chooses keys and decides nothing.
-- **The output:** [opening-bound.jsonl](opening-bound.jsonl), sha256 `35993249ea3a0814b3e43f3fcc965b591fecef803cb36f65d6c6e190f3d169dc`.
+- **The output:** [opening-bound.jsonl](opening-bound.jsonl), sha256 `f22316c7db876e8eba565d064de997b40367f100828395611177f26eefa77d05`.
 - **Fires** means TRAIN holds the key. **Precision** is the share right among those.
 
 | Key | DEV fires | DEV precision | DEV right | p-s fires | p-s precision | p-s right |
@@ -21,7 +21,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../roadmap/items/one-model-end-t
 | **`reply-template`, the oracle U** | 76.6% | 100% | 80.8% | **69.1%** | 100% | **76.1%** |
 
 - **Totals:** DEV has 1,226 openings and p-s 1,400.
-- **The memory's key:** the turn anchor keeps `first-8`'s tokens at every opening (1,226 of 1,226 on DEV, 212,968 of 212,968 on TRAIN).
+- **The memory's key:** the turn anchor keeps `first-8`'s tokens at every opening (1,226 of 1,226 on DEV, 1,400 of 1,400 on p-s, 212,968 of 212,968 on TRAIN), so the laptop's exact key is the memory's served one.
 - **The oracle U** is keyed by the reference reply itself, with its values masked (K = 1,024). So its precision is 100% by construction. It is the ceiling for a key that knew which question was asked, not a key that can be built.
 
 ## What step 0 shows
