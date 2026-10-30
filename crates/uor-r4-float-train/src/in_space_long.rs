@@ -2250,6 +2250,12 @@ pub enum DecodeRule {
     /// kept, as under [`DecodeRule::FLOCK_END`]. Margin 0 admits only exact ties, so it
     /// decodes as greedy.
     FlockCell { k: usize, margin_milli: u32 },
+    /// The cycle step (claude-217, Casey 30 Oct: "steps off a reply's own cycle"): of the `k`
+    /// nearest, in rank order, the first whose append would not close an `n`-gram the reply has
+    /// already produced ([`cycle_step_pick`]); the nearest when every one would. No draw: it is
+    /// exact and deterministic. It stops after the end of turn, as the Flock rules do. Casey's
+    /// rule is `n = 4`; `n = 2`, the echo step, acts on a repeated token's second repeat.
+    CycleStep { k: usize, n: usize },
 }
 
 impl DecodeRule {
@@ -2265,7 +2271,50 @@ impl DecodeRule {
     pub const fn flock_cell(margin_milli: u32) -> Self {
         Self::FlockCell { k: FLOCK_DECODE_K, margin_milli }
     }
+
+    /// The cycle step over [`FLOCK_DECODE_K`] candidates and 4-grams, as Casey directed and
+    /// claude-217 registers it.
+    pub const CYCLE_STEP: Self = Self::CycleStep { k: FLOCK_DECODE_K, n: 4 };
+    /// The echo step: the same rule on bigrams, so a token repeats at most twice in a row
+    /// (claude-217, reported: 77–89% of greedy's loops repeat one token).
+    pub const ECHO_STEP: Self = Self::CycleStep { k: FLOCK_DECODE_K, n: 2 };
 }
+
+/// [`DecodeRule::CycleStep`]'s token from its `ranked` candidates (the nearest first), after
+/// `reply` (claude-217): the first whose append would not close an `n`-gram `reply` already
+/// holds (`n ≥ 2`), and its mark: [`STEP_NEAREST`] when that is the nearest, [`STEP_OFF`] when
+/// the rule stepped off the nearest, [`STEP_EXHAUSTED`] when every candidate would close one and
+/// the nearest is taken. `None` with no candidate.
+fn cycle_step_pick(reply: &[u32], ranked: &[u32], n: usize) -> Option<(u32, u8)> {
+    let closes = |token: u32| {
+        let keep = n.saturating_sub(1);
+        n >= 2 && reply.len() >= keep && {
+            let tail = &reply[reply.len() - keep..];
+            reply.windows(n).any(|w| w[..keep] == *tail && w[keep] == token)
+        }
+    };
+    let nearest = *ranked.first()?;
+    Some(match ranked.iter().position(|&t| !closes(t)) {
+        Some(0) => (nearest, STEP_NEAREST),
+        Some(i) => (ranked[i], STEP_OFF),
+        None => (nearest, STEP_EXHAUSTED),
+    })
+}
+
+/// The name a [`DecodeRule::CycleStep`] file carries for its gram size `n`: `cycle-step` for
+/// Casey's 4-grams, `echo-step` for bigrams, else `cycle-step-{n}`.
+fn step_name(n: usize) -> String {
+    match n {
+        4 => "cycle-step".to_owned(),
+        2 => "echo-step".to_owned(),
+        n => format!("cycle-step-{n}"),
+    }
+}
+
+/// [`cycle_step_pick`]'s marks, one a decoded step ([`IdSample::stepped`]).
+pub const STEP_NEAREST: u8 = 0;
+pub const STEP_OFF: u8 = 1;
+pub const STEP_EXHAUSTED: u8 = 2;
 
 /// The cell objective's margin in thousandths of a score: `rival_hinge`'s
 /// `relu(1 + max_r s(r) − s(target))` asks the target to keep this gap over its nearest rival,
@@ -2406,6 +2455,9 @@ struct DecodedReply {
     /// Under [`DecodeRule::FlockCell`], each drawn step's admitted count, a final step that
     /// drew BOS included; empty under any other rule.
     admitted: Vec<u8>,
+    /// Under [`DecodeRule::CycleStep`], each step's mark ([`cycle_step_pick`]), a final step
+    /// that picked BOS included; empty under any other rule.
+    stepped: Vec<u8>,
 }
 
 /// The model's reply to `prompt` under `rule`: as [`greedy_reply`], with the next token picked
@@ -2457,6 +2509,7 @@ fn decode_reply(
         let mut ids = prompt.to_vec();
         let mut reply = Vec::with_capacity(reply_tokens);
         let mut admitted = Vec::new();
+        let mut stepped = Vec::new();
         for step in 0..reply_tokens {
             let window = &ids[ids.len().saturating_sub(SHEET_CONTEXT)..];
             let token = if objective.decodes_nearest() {
@@ -2504,7 +2557,9 @@ fn decode_reply(
                         .to_vec1::<u32>()?
                         .last()
                         .ok_or_else(|| invalid("the readout returned no token"))?,
-                    DecodeRule::FlockRank { k, .. } | DecodeRule::FlockCell { k, .. } => {
+                    DecodeRule::FlockRank { k, .. }
+                    | DecodeRule::FlockCell { k, .. }
+                    | DecodeRule::CycleStep { k, .. } => {
                         // The K nearest on the GPU; their order, ties to the smaller id, here.
                         let k = k.clamp(1, FLOCK_DECODE_K).min(scores.dim(1)?);
                         let top = scores
@@ -2514,20 +2569,31 @@ fn decode_reply(
                         let picked = scores.gather(&top, 1)?.flatten_all()?.to_vec1::<f32>()?;
                         let ids_k = top.flatten_all()?.to_vec1::<u32>()?;
                         let scored = rank_order(ids_k.into_iter().zip(picked).collect());
-                        // The rank rule draws among all K; the cell rule among those it admits.
-                        let (drawn, keep_end) = match rule {
-                            DecodeRule::FlockCell { margin_milli, .. } => {
-                                let n = cell_admitted(&scored, margin_milli);
-                                admitted.push(n as u8);
-                                (n, true)
-                            }
-                            DecodeRule::FlockRank { keep_end, .. } => (scored.len(), keep_end),
-                            DecodeRule::Greedy => (1, false),
-                        };
-                        let ranked: Vec<u32> = scored[..drawn].iter().map(|&(id, _)| id).collect();
-                        let index = (sample as u64) * 64 + step as u64;
-                        let draw = flock_rank_draw(seed, index, ranked.len());
-                        flock_pick(&ranked, draw, keep_end, eos)
+                        if let DecodeRule::CycleStep { n, .. } = rule {
+                            // The cycle step takes the nearest that closes no repeated n-gram.
+                            let ranked: Vec<u32> = scored.iter().map(|&(id, _)| id).collect();
+                            let (token, mark) = cycle_step_pick(&reply, &ranked, n)
+                                .ok_or_else(|| invalid("the cycle step had no candidate"))?;
+                            stepped.push(mark);
+                            token
+                        } else {
+                            // The rank rule draws among all K; the cell rule among those it
+                            // admits.
+                            let (drawn, keep_end) = match rule {
+                                DecodeRule::FlockCell { margin_milli, .. } => {
+                                    let n = cell_admitted(&scored, margin_milli);
+                                    admitted.push(n as u8);
+                                    (n, true)
+                                }
+                                DecodeRule::FlockRank { keep_end, .. } => (scored.len(), keep_end),
+                                DecodeRule::Greedy | DecodeRule::CycleStep { .. } => (1, false),
+                            };
+                            let ranked: Vec<u32> =
+                                scored[..drawn].iter().map(|&(id, _)| id).collect();
+                            let index = (sample as u64) * 64 + step as u64;
+                            let draw = flock_rank_draw(seed, index, ranked.len());
+                            flock_pick(&ranked, draw, keep_end, eos)
+                        }
                     }
                 }
             } else {
@@ -2553,6 +2619,7 @@ fn decode_reply(
         Ok(DecodedReply {
             tokens: reply,
             admitted,
+            stepped,
         })
     })
 }
@@ -3056,6 +3123,10 @@ pub struct IdSample {
     /// files are as before.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub admitted: Vec<u8>,
+    /// Under [`DecodeRule::CycleStep`], each step's mark (claude-217): [`STEP_NEAREST`],
+    /// [`STEP_OFF`] or [`STEP_EXHAUSTED`]. Empty, and not written, under every other rule.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stepped: Vec<u8>,
 }
 
 /// One file [`score_rows`] wrote, with its nearest and writer hits when it holds rows.
@@ -3165,7 +3236,10 @@ fn reference_reply(window: &CausalWindow, tokens: usize) -> Vec<u32> {
 ///   - the cell rule at each margin of `cells` (claude-213), with the memory on:
 ///     `samples-{split}-flock-cell-{margin}-memory.json`;
 ///   - greedy under each read scope of `scopes` (claude-215), with the memory on:
-///     `samples-{split}-greedy-read-{scope}-memory.json`.
+///     `samples-{split}-greedy-read-{scope}-memory.json`;
+///   - with `cycle`, the cycle step (claude-217), with the memory on, alone and under each read
+///     scope: `samples-{split}-cycle-step-memory.json` and
+///     `samples-{split}-cycle-step-read-{scope}-memory.json`.
 ///
 ///   Each records its reply-table hits under generation and under teacher forcing (I-F).
 ///
@@ -3187,6 +3261,7 @@ pub fn score_rows(
     flock: DecodeRule,
     cells: &[u32],
     scopes: &[ReadScope],
+    cycle: bool,
     device: &Device,
 ) -> Result<Vec<ScoredFile>> {
     check_run_arm(checkpoint, arm)?;
@@ -3289,6 +3364,11 @@ pub fn score_rows(
         let mut served = vec![(DecodeRule::Greedy, ReadScope::Full), (flock, ReadScope::Full)];
         served.extend(cells.iter().map(|&m| (DecodeRule::flock_cell(m), ReadScope::Full)));
         served.extend(scopes.iter().map(|&s| (DecodeRule::Greedy, s)));
+        if cycle {
+            served.push((DecodeRule::CYCLE_STEP, ReadScope::Full));
+            served.extend(scopes.iter().map(|&s| (DecodeRule::CYCLE_STEP, s)));
+            served.push((DecodeRule::ECHO_STEP, ReadScope::Full));
+        }
         let rules: &[(DecodeRule, ReadScope)] = if on { &served } else { &served[..1] };
         let active = crate::flock_read_memory::turn_memory();
         let named = |key: &[u32]| active.as_ref().is_some_and(|m| m.reply_stored(key).is_some());
@@ -3302,7 +3382,7 @@ pub fn score_rows(
                     let prompt = &window.input_ids[..=off];
                     // The prompt's own flags: an earlier reply in it is limited as in training.
                     let flags = window_input_mask(std::slice::from_ref(window), &split.mask)?;
-                    let DecodedReply { tokens: reply, admitted } = decode_reply(
+                    let DecodedReply { tokens: reply, admitted, stepped } = decode_reply(
                         &model,
                         PointObjective::Cell,
                         prompt,
@@ -3330,9 +3410,16 @@ pub fn score_rows(
                         reference_keys,
                         reference_named,
                         admitted,
+                        stepped,
                     });
                 }
                 let file = match (split.name.as_str(), rule) {
+                    (name, DecodeRule::CycleStep { n, .. }) if scope != ReadScope::Full => {
+                        format!("samples-{name}-{}-read-{}-{label}.json", step_name(n), scope.name())
+                    }
+                    (name, DecodeRule::CycleStep { n, .. }) => {
+                        format!("samples-{name}-{}-{label}.json", step_name(n))
+                    }
                     (name, DecodeRule::Greedy) if scope != ReadScope::Full => {
                         format!("samples-{name}-greedy-read-{}-{label}.json", scope.name())
                     }
@@ -4917,14 +5004,14 @@ pub fn cell_grade(data_root: &Path, runs: &Path, panel: &str, margins: &[u32]) -
 /// How many of `replies`, each cut after its first `eos`, repeat a 4-gram of their own: the
 /// replies that loop (claude-215).
 fn looping_replies(replies: &[Vec<u32>], eos: u32) -> usize {
-    replies
-        .iter()
-        .filter(|r| {
-            let cut = cut_at_eos(r, eos);
-            let mut seen = std::collections::HashSet::new();
-            cut.windows(4).any(|w| !seen.insert(w))
-        })
-        .count()
+    replies.iter().filter(|r| loops(r, eos)).count()
+}
+
+/// Whether `reply`, cut after its first `eos`, repeats a 4-gram of its own ([`looping_replies`]).
+fn loops(reply: &[u32], eos: u32) -> bool {
+    let cut = cut_at_eos(reply, eos);
+    let mut seen = std::collections::HashSet::new();
+    cut.windows(4).any(|w| !seen.insert(w))
 }
 
 /// Whether `loops` looping replies of `n` are fewer than greedy's `greedy_loops` by more than
@@ -5298,6 +5385,330 @@ pub fn cut_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<CutGrade>
         rows,
         outcome,
         decode_only_outcome,
+    })
+}
+
+/// [`cycle_grade`]'s rules for its first decision, in [`rule_readings`]'s order: the base and
+/// the cycle step first, so the first [`MATCHED_BY`] are the two it compares; then the
+/// decode-only cut, the cycle step under it, and the echo step, reported on the same prompts.
+const CYCLE_RULES: [&str; 5] =
+    ["greedy", "cycle-step", "greedy-read-all", "cycle-step-read-all", "echo-step"];
+
+/// [`cycle_grade`]'s rules for its second decision: the base and the decode-only cut, matched
+/// on the prompts those two complete.
+const CONFIRM_RULES: [&str; 2] = ["greedy", "greedy-read-all"];
+
+/// How often one arm's cycle step left the nearest token, at one split and seed (claude-217).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct StepCount {
+    pub split: String,
+    pub rule: String,
+    pub seed: u8,
+    /// Decoded steps, a final step that picked BOS included.
+    pub steps: usize,
+    /// Steps that took a farther candidate ([`STEP_OFF`]).
+    pub stepped_off: usize,
+    /// Steps where every candidate closed a repeated 4-gram, so the nearest was taken
+    /// ([`STEP_EXHAUSTED`]).
+    pub exhausted: usize,
+    /// Replies with at least one step off.
+    pub replies_stepped: usize,
+}
+
+/// One arm's [`StepCount`] from its samples' marks.
+fn step_count(split: &str, rule: &str, seed: u8, samples: &[IdSample]) -> StepCount {
+    let count = |mark: u8| samples.iter().flat_map(|s| &s.stepped).filter(|&&m| m == mark).count();
+    StepCount {
+        split: split.to_owned(),
+        rule: rule.to_owned(),
+        seed,
+        steps: samples.iter().map(|s| s.stepped.len()).sum(),
+        stepped_off: count(STEP_OFF),
+        exhausted: count(STEP_EXHAUSTED),
+        replies_stepped: samples.iter().filter(|s| s.stepped.contains(&STEP_OFF)).count(),
+    }
+}
+
+/// claude-217's grade of the cycle step: both decisions' readings, the step counts, and the
+/// outcomes.
+#[derive(Clone, Debug, Serialize)]
+pub struct CycleGrade {
+    pub panel: String,
+    /// The first decision's readings ([`CYCLE_RULES`]), matched on the base's and the cycle
+    /// step's completions.
+    pub readings: Vec<CellReading>,
+    /// The second decision's readings ([`CONFIRM_RULES`]), matched on the base's and the
+    /// decode-only cut's completions.
+    pub confirm_readings: Vec<CellReading>,
+    /// Every cycle-step arm's step counts, on DEV and the panel, at seeds 1–3.
+    pub steps: Vec<StepCount>,
+    /// The first registered decision: the cycle step against greedy ([`cycle_outcome`]: its
+    /// content is read on the base's looping prompts as well as on the matched prompts).
+    pub outcome: &'static str,
+    /// The second registered decision: the decode-only cut against greedy, claude-216's
+    /// reported "improves" on a fresh panel, by the same rule.
+    pub confirm_outcome: &'static str,
+    /// The cycle step under the cut, by [`cycle_outcome`] on the first decision's matched
+    /// prompts. It decides what ships only if both decisions pass.
+    pub cut_cycle_outcome: &'static str,
+    /// The echo step ([`DecodeRule::ECHO_STEP`]), by [`cycle_outcome`] on the first decision's
+    /// matched prompts. It is reported and decides nothing.
+    pub echo_outcome: &'static str,
+    /// Every arm's content on the base's looping prompts ([`LoopContent`]), on DEV and the
+    /// panel, at seeds 1–3.
+    pub loop_content: Vec<LoopContent>,
+    /// The served decode the sheet's table gives from the three outcomes ([`ships`]).
+    pub ships: &'static str,
+}
+
+/// The sheet's "what ships" table (claude-217): the cycle step when only it passes ("cures" or
+/// "improves"); the decode-only cut when only it does; both when both do and "both" passes on
+/// the first decision's prompts, else the cycle step alone; greedy when neither does.
+fn ships(cycle: &str, cut: &str, both: &str) -> &'static str {
+    let pass = |o: &str| o == "cures" || o == "improves";
+    match (pass(cycle), pass(cut)) {
+        (true, false) => "cycle-step",
+        (false, true) => "decode-only cut",
+        (true, true) if pass(both) => "both",
+        (true, true) => "cycle-step",
+        (false, false) => "greedy",
+    }
+}
+
+/// The fewest looping prompts the base must have at every seed for the content there to decide
+/// anything (claude-217's FIT): the loop floor's count.
+const LOOP_FLOOR: usize = READ_LOOP_FLOOR;
+
+/// An arm's content on the prompts where the base, greedy, loops (claude-217's FIT, rounds 1 and
+/// 3). A loop fix changes what is written exactly there, and greedy rarely completes there, so
+/// the matched content (on the prompts both complete) cannot see it; this reading can. For the
+/// cycle step these are the prompts it steps off on, since it writes greedy's reply until a cycle
+/// would close. It counts the complete replies that are verbatim TRAIN replies, the arm's against
+/// the references' on the same prompts, and, reported only, the replies equal to their reference.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct LoopContent {
+    pub split: String,
+    pub rule: String,
+    pub seed: u8,
+    /// The prompts where the base loops ([`loops`]).
+    pub prompts: usize,
+    /// Of them, the arm's replies that are complete and verbatim in TRAIN.
+    pub arm_verbatim: usize,
+    /// Of them, the references that are complete and verbatim in TRAIN.
+    pub reference_verbatim: usize,
+    /// Of them, the arm's replies equal to their reference, each cut after its first end of turn:
+    /// a fallback reading, reported. It decides nothing.
+    pub arm_exact: usize,
+}
+
+impl LoopContent {
+    /// Whether the arm keeps the references' content on the base's looping prompts: its share is
+    /// below theirs by at most `max(0.10, 3·√(p(1−p)/m))`, `p` the references' share and `m` the
+    /// looping prompts; `None` with none.
+    pub fn kept(&self) -> Option<bool> {
+        let m = self.prompts as f64;
+        (self.prompts > 0).then(|| {
+            let (a, p) = (self.arm_verbatim as f64 / m, self.reference_verbatim as f64 / m);
+            a >= p - 0.10f64.max(3.0 * (p * (1.0 - p) / m).sqrt())
+        })
+    }
+
+    /// Whether the reading can tell salad from content (claude-217's FIT, rounds 2 and 4): the
+    /// lowest share [`LoopContent::kept`] accepts is above [`LOOP_POWER_SHARE`] and above half the
+    /// references' share, so an arm at or below 0.10 never reads kept, and nor does one that
+    /// keeps less than half of what the references hold. The looping prompts are not a random
+    /// sample, so their references may be rarely verbatim; then the reading is underpowered.
+    pub fn powered(&self) -> bool {
+        let m = self.prompts as f64;
+        if self.prompts == 0 {
+            return false;
+        }
+        let p = self.reference_verbatim as f64 / m;
+        p - 0.10f64.max(3.0 * (p * (1.0 - p) / m).sqrt()) > LOOP_POWER_SHARE.max(p / 2.0)
+    }
+}
+
+/// The verbatim share a step into salad is taken to stay at or below: a loop-prompt reading
+/// decides only where an arm this low would read lost ([`LoopContent::powered`]).
+pub const LOOP_POWER_SHARE: f64 = 0.10;
+
+/// One arm's [`LoopContent`] from its samples and the base's on the same prompts, in the same
+/// order: the prompts are the base's looping ones; `verbatim` asks whether a reply is complete
+/// and verbatim in TRAIN. Refused when the two do not answer the same prompts.
+fn loop_content(
+    split: &str,
+    rule: &str,
+    seed: u8,
+    arm: &[IdSample],
+    base: &[IdSample],
+    eos: u32,
+    verbatim: impl Fn(&[u32]) -> bool,
+) -> Result<LoopContent> {
+    if arm.len() != base.len()
+        || arm.iter().zip(base).any(|(a, b)| a.position != b.position || a.reference != b.reference)
+    {
+        return Err(invalid(format!("{split} s{seed} {rule}: its prompts are not the base's")));
+    }
+    let on: Vec<&IdSample> =
+        arm.iter().zip(base).filter(|(_, b)| loops(&b.reply, eos)).map(|(a, _)| a).collect();
+    Ok(LoopContent {
+        split: split.to_owned(),
+        rule: rule.to_owned(),
+        seed,
+        prompts: on.len(),
+        arm_verbatim: on.iter().filter(|s| verbatim(&s.reply)).count(),
+        reference_verbatim: on.iter().filter(|s| verbatim(&s.reference)).count(),
+        arm_exact: on
+            .iter()
+            .filter(|s| cut_at_eos(&s.reply, eos) == cut_at_eos(&s.reference, eos))
+            .count(),
+    })
+}
+
+/// The cycle step's instrument check (claude-217's FIT, round 3): each of `arm`'s replies, cut
+/// after its first end of turn, must be its greedy `base`'s token for token until its first step
+/// off ([`STEP_OFF`]). A reply that left greedy with no mark is a fault, never a reading.
+fn follows_greedy(arm: &[IdSample], base: &[IdSample], eos: u32) -> bool {
+    arm.len() == base.len()
+        && arm.iter().zip(base).all(|(a, b)| {
+            let off = a.stepped.iter().position(|&m| m == STEP_OFF).unwrap_or(a.reply.len());
+            let k = off.min(cut_at_eos(&a.reply, eos).len());
+            b.reply.len() >= k && a.reply[..k] == b.reply[..k]
+        })
+}
+
+/// The sheet's decision for a decode arm against greedy (claude-217): [`cut_outcome`]'s order with
+/// no rows' step, and its content condition taken on the base's looping prompts as well as on the
+/// matched prompts, seed for seed:
+/// - `underpowered` when greedy loops in fewer than [`READ_LOOP_FLOOR`] replies at any seed;
+/// - `no gain` unless the arm has fewer loops beyond the band and holds decision 4 at all three;
+/// - `underpowered (content)` when the base has fewer than [`MATCHED_FLOOR`] matched prompts or
+///   [`LOOP_FLOOR`] looping ones, or the loop-prompt reading cannot tell salad from content
+///   ([`LoopContent::powered`]), at any seed;
+/// - `cures` when, at all three, it is close, keeps the matched content ([`matched_kept`]) and
+///   keeps the references' content on the looping prompts ([`LoopContent::kept`]);
+/// - `improves` when it keeps both at all three;
+/// - else `reduces, content lost`: short of the references where greedy looped, or of greedy's
+///   content where it did not.
+fn cycle_outcome(
+    arm: &[&CellReading],
+    base: &[&CellReading],
+    changed: &[&LoopContent],
+) -> &'static str {
+    if base.len() != 3 || base.iter().any(|g| g.loops.is_none_or(|n| n < READ_LOOP_FLOOR)) {
+        return "underpowered";
+    }
+    let fewer = arm.len() == 3
+        && arm
+            .iter()
+            .all(|x| x.fewer_loops == Some(true) && x.holds == Some(true));
+    if !fewer {
+        return "no gain";
+    }
+    if changed.len() != 3
+        || base.iter().any(|g| g.matched_n.is_none_or(|m| m < MATCHED_FLOOR))
+        || changed.iter().any(|c| c.prompts < LOOP_FLOOR || !c.powered())
+    {
+        return "underpowered (content)";
+    }
+    let kept = arm
+        .iter()
+        .zip(base)
+        .zip(changed)
+        .all(|((a, b), c)| matched_kept(a, b) && c.kept() == Some(true));
+    if kept && arm.iter().all(|x| x.close) {
+        "cures"
+    } else if kept {
+        "improves"
+    } else {
+        "reduces, content lost"
+    }
+}
+
+/// Grade the cycle step (claude-217) from stored outputs only, on the laptop: `runs` holds
+/// `r-drop-s{1,2,3}`, the sealed (r-drop) scored on `panel` with `--reply-read all
+/// --cycle-step 1`. The panel decides both decisions by [`cycle_outcome`]; DEV is reported. It
+/// refuses to grade a cycle-step reply that left greedy's before its first step off
+/// ([`follows_greedy`]).
+pub fn cycle_grade(data_root: &Path, runs: &Path, panel: &str) -> Result<CycleGrade> {
+    if panel == "dev" {
+        return Err(invalid("--cycle-grade's deciding panel cannot be DEV"));
+    }
+    let named = |rules: &[&str]| -> Vec<String> { rules.iter().map(|&r| r.to_owned()).collect() };
+    let readings = rule_readings(data_root, runs, panel, &named(&CYCLE_RULES), true, MATCHED_BY)?;
+    let confirm_readings =
+        rule_readings(data_root, runs, panel, &named(&CONFIRM_RULES), true, MATCHED_BY)?;
+    // Complete and verbatim in TRAIN, as `rule_readings` counts its matched content.
+    let (train_tokens, train_mask) = load_train_split(data_root)?;
+    let train: std::collections::HashSet<u128> =
+        split_turns(&train_tokens, &train_mask, hs::SHEET_BOS_ID).replies.iter().map(|r| census_hash(r)).collect();
+    drop((train_tokens, train_mask));
+    let eos = pinned_tokenizer(data_root)?
+        .token_id("<|eos|>")
+        .ok_or_else(|| invalid("the pinned tokenizer has no <|eos|>"))?;
+    let verbatim = |reply: &[u32]| {
+        let cut = cut_at_eos(reply, eos);
+        cut.last() == Some(&eos) && train.contains(&census_hash(cut))
+    };
+    let (mut steps, mut loop_content_all) = (Vec::new(), Vec::new());
+    for split in ["dev", panel] {
+        for seed in 1..=3u8 {
+            let samples = |name: &str| -> Result<Vec<IdSample>> {
+                let file = match (split, name) {
+                    ("dev", "greedy") => "samples-memory.json".to_owned(),
+                    (_, name) => format!("samples-{split}-{name}-memory.json"),
+                };
+                read_scored(&runs.join(format!("r-drop-s{seed}")).join(file))
+            };
+            let base = samples("greedy")?;
+            for rule in ["cycle-step", "greedy-read-all", "cycle-step-read-all", "echo-step"] {
+                let arm = samples(rule)?;
+                if rule != "greedy-read-all" {
+                    if arm.iter().any(|s| s.stepped.is_empty()) {
+                        return Err(invalid(format!("{split} s{seed} {rule}: a reply records no cycle-step marks")));
+                    }
+                    // Its own greedy path: greedy for the cycle step, the cut for it under the cut.
+                    let path = if rule == "cycle-step-read-all" { samples("greedy-read-all")? } else { base.clone() };
+                    if !follows_greedy(&arm, &path, eos) {
+                        return Err(invalid(format!(
+                            "{split} s{seed} {rule}: a reply left greedy's before its first step off (an instrument fault)"
+                        )));
+                    }
+                    steps.push(step_count(split, rule, seed, &arm));
+                }
+                loop_content_all.push(loop_content(split, rule, seed, &arm, &base, eos, verbatim)?);
+            }
+        }
+    }
+    let of = |readings: &[CellReading], rule: &str| -> Vec<CellReading> {
+        readings.iter().filter(|r| r.split == panel && r.rule == rule).cloned().collect()
+    };
+    // Each decision reads its arm on its own matched prompts and on the base's looping prompts.
+    let decide = |readings: &[CellReading], rule: &str| -> Result<&'static str> {
+        let (arm, base) = (of(readings, rule), of(readings, "greedy"));
+        let on: Vec<&LoopContent> =
+            loop_content_all.iter().filter(|c| c.split == panel && c.rule == rule).collect();
+        // `cycle_outcome` pairs the three by position, so they must pair seed with seed.
+        if arm.iter().zip(&base).zip(&on).any(|((a, b), c)| a.seed != b.seed || a.seed != c.seed) {
+            return Err(invalid(format!("{panel} {rule}: its readings do not pair seed with seed")));
+        }
+        Ok(cycle_outcome(&arm.iter().collect::<Vec<_>>(), &base.iter().collect::<Vec<_>>(), &on))
+    };
+    let outcome = decide(&readings, "cycle-step")?;
+    let confirm_outcome = decide(&confirm_readings, "greedy-read-all")?;
+    let cut_cycle_outcome = decide(&readings, "cycle-step-read-all")?;
+    let echo_outcome = decide(&readings, "echo-step")?;
+    Ok(CycleGrade {
+        panel: panel.to_owned(),
+        outcome,
+        confirm_outcome,
+        cut_cycle_outcome,
+        echo_outcome,
+        ships: ships(outcome, confirm_outcome, cut_cycle_outcome),
+        readings,
+        confirm_readings,
+        steps,
+        loop_content: loop_content_all,
     })
 }
 
@@ -7957,6 +8368,50 @@ mod tests {
         assert!(left, "K = 16 never left greedy's path: its draws did not run");
     }
 
+    /// claude-217 (its GPU half): on a model, the cycle step at K = 1 decodes exactly as greedy;
+    /// at K = 16 it follows greedy until its first step off, where greedy's token would close a
+    /// 4-gram the reply already holds; and its reply repeats no 4-gram unless a step was
+    /// exhausted. It records one mark per step.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_cycle_step_follows_greedy_until_it_steps_off_a_cycle_on_a_model() {
+        let device = Device::new_cuda(0).unwrap();
+        let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
+        let mut decoded = 0;
+        for sample in 0..4usize {
+            let shift = sample as u32 * 101;
+            let prompt: Vec<u32> = (1..=24u32).map(|i| (i * 37 + shift) % 4096).collect();
+            let decode = |rule| {
+                decode_reply(&model, PointObjective::Cell, &prompt, 32, 1, rule, sample, None, ReadScope::Full, &[])
+                    .unwrap()
+            };
+            let greedy = decode(DecodeRule::Greedy).tokens;
+            assert_eq!(decode(DecodeRule::CycleStep { k: 1, n: 4 }).tokens, greedy, "sample {sample}");
+            assert_eq!(decode(DecodeRule::CycleStep { k: 1, n: 2 }).tokens, greedy, "sample {sample}, n = 2");
+            let step = decode(DecodeRule::CYCLE_STEP);
+            // One mark per step, a final step that picked BOS (and ended the reply) included.
+            assert!(step.stepped.len() - step.tokens.len() <= 1, "one mark per step");
+            let off = step.stepped.iter().position(|&m| m == STEP_OFF).unwrap_or(step.tokens.len());
+            assert_eq!(step.tokens[..off], greedy[..off.min(greedy.len())], "sample {sample}");
+            if off < step.tokens.len() && off < greedy.len() {
+                let (_, mark) = cycle_step_pick(&greedy[..off], &[greedy[off]], 4).unwrap();
+                assert_eq!(mark, STEP_EXHAUSTED, "greedy's token at {off} closes no cycle");
+            }
+            if !step.stepped.contains(&STEP_EXHAUSTED) {
+                let mut seen = std::collections::HashSet::new();
+                assert!(step.tokens.windows(4).all(|w| seen.insert(w)), "a 4-gram repeats");
+            }
+            // Wherever greedy repeats a 4-gram, the rule must have left the nearest token at
+            // least once (FIT round 2): the step-off path ran on the model.
+            let mut seen = std::collections::HashSet::new();
+            if !greedy.windows(4).all(|w| seen.insert(w)) {
+                assert!(step.stepped.iter().any(|&m| m != STEP_NEAREST), "greedy loops, the rule never stepped");
+            }
+            decoded += greedy.len();
+        }
+        assert!(decoded > 0, "every reply was empty, so the check held vacuously");
+    }
+
     /// claude-211 (Casey 30 Oct: "do not rule flock out, improve it instead"): with `keep_end`,
     /// a nearest end of turn is taken whatever the draw; otherwise, and for any other nearest
     /// token, the drawn rank is.
@@ -8008,12 +8463,17 @@ mod tests {
             reference_keys: 0,
             reference_named: 0,
             admitted,
+            stepped: Vec::new(),
         };
         let before = r#"{"position":7,"prompt":[1,2],"reply":[3],"reference":[4],"reply_text":"a","reference_text":"b","reply_keys":0,"reply_named":0,"reference_keys":0,"reference_named":0}"#;
         assert_eq!(serde_json::to_string(&sample(Vec::new())).unwrap(), before);
         assert_eq!(serde_json::from_str::<IdSample>(before).unwrap(), sample(Vec::new()));
         let cell = serde_json::to_string(&sample(vec![2, 1])).unwrap();
         assert!(cell.ends_with(r#""admitted":[2,1]}"#), "{cell}");
+        // claude-217: the cycle step's marks are written only under that rule, the same way.
+        let step = IdSample { stepped: vec![STEP_NEAREST, STEP_OFF, STEP_EXHAUSTED], ..sample(Vec::new()) };
+        let step = serde_json::to_string(&step).unwrap();
+        assert!(step.ends_with(r#""reference_named":0,"stepped":[0,1,2]}"#), "{step}");
     }
 
     /// claude-213: the sheet's selection on DEV (the widest qualified margin; else the nearest
@@ -8195,6 +8655,217 @@ mod tests {
         // tokens, it starts at 18, so the prompt ends at window position 162.
         let ids = 180 + 30;
         assert_eq!(prompt_cut(180, ids - SHEET_CONTEXT), 162);
+    }
+
+    /// claude-217: the cycle step refuses exactly the token whose append closes an n-gram the
+    /// reply already holds, and marks each step.
+    #[test]
+    fn the_cycle_step_refuses_exactly_the_token_that_closes_a_repeated_4_gram() {
+        // The reply holds 5 6 7 8, and ends 5 6 7: an 8 would close 5 6 7 8 again.
+        let reply = [5, 6, 7, 8, 5, 6, 7];
+        assert_eq!(cycle_step_pick(&reply, &[8, 9, 10], 4), Some((9, STEP_OFF)));
+        assert_eq!(cycle_step_pick(&reply, &[9, 8], 4), Some((9, STEP_NEAREST)));
+        // Every candidate closes one: the nearest, marked exhausted.
+        assert_eq!(cycle_step_pick(&reply, &[8], 4), Some((8, STEP_EXHAUSTED)));
+        // One candidate, K = 1: always the nearest, so the rule decodes as greedy.
+        for nearest in [8, 9] {
+            assert_eq!(cycle_step_pick(&reply, &[nearest], 4).map(|(t, _)| t), Some(nearest));
+        }
+        // A reply of fewer than 3 tokens closes nothing; an overlapping cycle is caught.
+        assert_eq!(cycle_step_pick(&[5, 6], &[5], 4), Some((5, STEP_NEAREST)));
+        assert_eq!(cycle_step_pick(&[1, 1, 1], &[1], 4), Some((1, STEP_NEAREST)));
+        assert_eq!(cycle_step_pick(&[1, 1, 1, 1], &[1, 2], 4), Some((2, STEP_OFF)));
+        // The rule looks at the reply's own 4-grams only, never a 3-gram or the prompt.
+        assert_eq!(cycle_step_pick(&[5, 6, 7, 9, 6, 7], &[9], 4), Some((9, STEP_NEAREST)));
+        assert_eq!(cycle_step_pick(&reply, &[], 4), None);
+        // The echo step, on bigrams: a token may repeat once ("very very"), not twice.
+        assert_eq!(cycle_step_pick(&[3, 4], &[4], 2), Some((4, STEP_NEAREST)));
+        assert_eq!(cycle_step_pick(&[3, 4, 4], &[4, 5], 2), Some((5, STEP_OFF)));
+        // A bigram met earlier is refused anywhere: 5 6 then 6 … 5 cannot be followed by 6.
+        assert_eq!(cycle_step_pick(&[5, 6, 9, 5], &[6, 7], 2), Some((7, STEP_OFF)));
+        // On 4-grams the same replies pass: Casey's rule lets a token run four times.
+        assert_eq!(cycle_step_pick(&[3, 4, 4], &[4], 4), Some((4, STEP_NEAREST)));
+        assert_eq!(step_name(4), "cycle-step");
+        assert_eq!(step_name(2), "echo-step");
+    }
+
+    /// claude-217: the step counts read the marks; the grade's first decision is matched on the
+    /// base's and the cycle step's prompts, its second on the base's and the decode-only cut's.
+    #[test]
+    fn the_cycle_grade_counts_steps_and_matches_each_decision() {
+        let sample = |stepped: Vec<u8>| IdSample {
+            position: 0,
+            prompt: vec![1],
+            reply: vec![2],
+            reference: vec![3],
+            reply_text: String::new(),
+            reference_text: String::new(),
+            reply_keys: 0,
+            reply_named: 0,
+            reference_keys: 0,
+            reference_named: 0,
+            admitted: Vec::new(),
+            stepped,
+        };
+        let samples = [
+            sample(vec![STEP_NEAREST, STEP_OFF, STEP_NEAREST, STEP_OFF]),
+            sample(vec![STEP_NEAREST, STEP_EXHAUSTED]),
+            sample(vec![STEP_NEAREST]),
+        ];
+        assert_eq!(
+            step_count("p", "cycle-step", 2, &samples),
+            StepCount {
+                split: "p".to_owned(),
+                rule: "cycle-step".to_owned(),
+                seed: 2,
+                steps: 7,
+                stepped_off: 2,
+                exhausted: 1,
+                replies_stepped: 1,
+            }
+        );
+        assert_eq!(CYCLE_RULES[..MATCHED_BY], ["greedy", "cycle-step"]);
+        assert_eq!(CONFIRM_RULES[..MATCHED_BY], ["greedy", "greedy-read-all"]);
+    }
+
+    /// claude-217 (the FIT, rounds 1 and 3): an arm's content is also read on the prompts where
+    /// the base, greedy, loops, against the references there. Salad where greedy looped reads as
+    /// content lost, though the matched prompts, where the arm wrote greedy's replies, are kept;
+    /// and a cycle-step reply must follow greedy until its first step off.
+    #[test]
+    fn the_cycle_step_is_read_on_the_prompts_it_changed() {
+        let sample = |position: usize, reply: Vec<u32>, reference: u32, marks: Vec<u8>| IdSample {
+            position,
+            prompt: vec![1],
+            reply,
+            reference: vec![reference, 1],
+            reply_text: String::new(),
+            reference_text: String::new(),
+            reply_keys: 0,
+            reply_named: 0,
+            reference_keys: 0,
+            reference_named: 0,
+            admitted: Vec::new(),
+            stepped: marks,
+        };
+        // Token 7 opens a TRAIN reply; 9 does not. The end of turn is 1. Greedy loops on prompts
+        // 0 and 1 (5 6 7 8 twice) and completes prompt 2.
+        let (eos, verbatim) = (1, |r: &[u32]| r.first() == Some(&7) && r.last() == Some(&1));
+        let looping = vec![5, 6, 7, 8, 5, 6, 7, 8];
+        let base = [
+            sample(0, looping.clone(), 7, Vec::new()),
+            sample(1, looping.clone(), 7, Vec::new()),
+            sample(2, vec![7, 1], 9, Vec::new()),
+        ];
+        // The arm: salad after a step off on prompt 0, the reference on prompt 1, greedy's on 2.
+        let arm = [
+            sample(0, vec![5, 6, 7, 8, 5, 6, 7, 9, 1], 7, vec![0, 0, 0, 0, 0, 0, 0, STEP_OFF, 0]),
+            sample(1, vec![7, 1], 7, vec![STEP_OFF, 0]),
+            sample(2, vec![7, 1], 9, vec![0, 0]),
+        ];
+        let got = loop_content("p", "cycle-step", 1, &arm, &base, eos, verbatim).unwrap();
+        assert_eq!((got.prompts, got.arm_verbatim, got.reference_verbatim, got.arm_exact), (2, 1, 2, 1));
+        // Another arm's prompts are refused.
+        let moved = [sample(9, vec![7, 1], 7, Vec::new()), arm[1].clone(), arm[2].clone()];
+        assert!(loop_content("p", "x", 1, &moved, &base, eos, verbatim).is_err());
+        // The arm follows greedy until its first step off; prompt 1 left greedy at its first step
+        // with a mark, so it follows too; a reply that left with no mark does not.
+        assert!(follows_greedy(&arm[..1], &base[..1], eos));
+        assert!(follows_greedy(&arm, &[base[0].clone(), base[1].clone(), sample(2, vec![7, 1], 9, Vec::new())], eos));
+        let unmarked = [sample(0, vec![5, 6, 9, 1], 7, vec![0, 0, 0, 0])];
+        assert!(!follows_greedy(&unmarked, &base[..1], eos));
+        let content = |prompts: usize, arm: usize, reference: usize| LoopContent {
+            split: "p".to_owned(),
+            rule: "cycle-step".to_owned(),
+            seed: 1,
+            prompts,
+            arm_verbatim: arm,
+            reference_verbatim: reference,
+            arm_exact: 0,
+        };
+        // References 43 of 70 (p = 0.614, tolerance 0.175): 31 is kept, 30 is not, salad is not.
+        assert_eq!(content(70, 31, 43).kept(), Some(true));
+        assert_eq!(content(70, 30, 43).kept(), Some(false));
+        assert_eq!(content(70, 5, 43).kept(), Some(false));
+        assert_eq!(content(0, 0, 0).kept(), None);
+        // The outcome: an arm that keeps the matched content (it wrote greedy's replies there).
+        let reading = |close: bool| {
+            let made = Generation {
+                replies: 256,
+                complete: 200,
+                verbatim_train: 100,
+                new_ngram_share: Vec::new(),
+                distinct_1: 0.0,
+                distinct_2: 0.0,
+                repeated_4gram_rate: 0.0,
+            };
+            CellReading {
+                split: "p".to_owned(),
+                rule: "cycle-step".to_owned(),
+                seed: 1,
+                reading: VerdictSeed::new(1, &made, &made),
+                holds: Some(true),
+                close,
+                mean_admitted: None,
+                loops: Some(70),
+                fewer_loops: Some(true),
+                mean_length: None,
+                matched_n: Some(186),
+                matched_verbatim: Some(93),
+            }
+        };
+        let (arm, closed) = (reading(false), reading(true));
+        let (arms, closed) = ([&arm, &arm, &arm], [&closed, &closed, &closed]);
+        let base = [&arm, &arm, &arm];
+        let (salad, good, thin) = (content(70, 5, 43), content(70, 40, 43), content(LOOP_FLOOR - 1, 30, 30));
+        // The FIT's scenario: matched kept, completion held, salad where it stepped.
+        assert_eq!(cycle_outcome(&arms, &base, &[&salad, &good, &good]), "reduces, content lost");
+        assert_eq!(cycle_outcome(&arms, &base, &[&good, &good, &good]), "improves");
+        assert_eq!(cycle_outcome(&closed, &base, &[&good, &good, &good]), "cures");
+        assert_eq!(cycle_outcome(&closed, &base, &[&good, &salad, &good]), "reduces, content lost");
+        // Too few changed prompts, or a seed missing, is an instrument outcome, never a negative.
+        assert_eq!(cycle_outcome(&arms, &base, &[&good, &thin, &good]), "underpowered (content)");
+        assert_eq!(cycle_outcome(&arms, &base, &[&good, &good]), "underpowered (content)");
+        // FIT round 2: where the changed prompts' references are rarely verbatim, salad would read
+        // kept, so the reading cannot decide: underpowered, not improves. At 7 of 70 (p = 0.10)
+        // the bound is below 0; at 14 of 70 (p = 0.20) it is 0.057, so 4 of 70 would pass.
+        for (low, arm) in [(7, 0), (14, 4)] {
+            let low = content(70, arm, low);
+            assert_eq!(low.kept(), Some(true), "the tolerance alone would pass salad here");
+            assert!(!low.powered());
+            assert_eq!(cycle_outcome(&arms, &base, &[&low, &good, &good]), "underpowered (content)");
+        }
+        assert!(good.powered() && salad.powered() && !content(0, 0, 0).powered());
+        // FIT round 4: at 18 of 70 (p = 0.257, tolerance 0.157) "kept" would accept 0.10, an arm
+        // keeping 39% of the references' share; the reading needs kept to mean at least half.
+        let partial = content(70, 8, 18);
+        assert_eq!(partial.kept(), Some(true), "partial salad would read kept here");
+        assert!(!partial.powered());
+        assert_eq!(cycle_outcome(&arms, &base, &[&partial, &good, &good]), "underpowered (content)");
+        // The review: each step of the order, at one seed. A base under the loop floor is
+        // underpowered; an arm that does not loop less, or does not hold, is no gain; a base under
+        // the matched floor is underpowered (content); and an arm that loses greedy's matched
+        // content reads lost, though the looping prompts keep the references'.
+        let thin_base = CellReading { loops: Some(READ_LOOP_FLOOR - 1), ..reading(false) };
+        assert_eq!(cycle_outcome(&arms, &[&arm, &thin_base, &arm], &[&good, &good, &good]), "underpowered");
+        let unheld = CellReading { holds: Some(false), ..reading(false) };
+        assert_eq!(cycle_outcome(&[&arm, &unheld, &arm], &base, &[&good, &good, &good]), "no gain");
+        let more = CellReading { fewer_loops: Some(false), ..reading(false) };
+        assert_eq!(cycle_outcome(&[&arm, &arm, &more], &base, &[&good, &good, &good]), "no gain");
+        let unmatched = CellReading { matched_n: Some(MATCHED_FLOOR - 1), ..reading(false) };
+        assert_eq!(cycle_outcome(&arms, &[&arm, &arm, &unmatched], &[&good, &good, &good]), "underpowered (content)");
+        let lost = CellReading { matched_verbatim: Some(40), ..reading(true) };
+        assert_eq!(cycle_outcome(&[closed[0], &lost, closed[0]], &base, &[&good, &good, &good]), "reduces, content lost");
+    }
+
+    /// claude-217: the sheet's "what ships" table, row by row.
+    #[test]
+    fn the_grade_ships_what_the_table_says() {
+        assert_eq!(ships("improves", "no gain", "improves"), "cycle-step");
+        assert_eq!(ships("reduces, content lost", "cures", "cures"), "decode-only cut");
+        assert_eq!(ships("cures", "improves", "improves"), "both");
+        assert_eq!(ships("improves", "cures", "reduces, content lost"), "cycle-step");
+        assert_eq!(ships("underpowered", "underpowered (content)", "cures"), "greedy");
     }
 
     /// claude-216: the matched content counts only the prompts every rule completes, so one
