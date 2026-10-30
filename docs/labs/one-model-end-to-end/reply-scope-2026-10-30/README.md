@@ -19,7 +19,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../roadmap/items/one-model-end-t
 ## Tokens per second
 
 - **Every arm decodes at 28–41 tok/s per process,** with three seeds sharing the GPU. This pod was slower than claude-213's: its 8-sample probe took 93 s against 25 s.
-- **The scope costs nothing:** the `copy` and `all` arms are as fast as greedy, at the same seed.
+- **No cost of the scope is established either way.** At the same seed, `all` is 0–18% slower than greedy and `copy` within ±9%. That is inside the spread of three processes sharing one GPU.
 - **This is not the served speed.** The integer path is not built yet.
 
 ## The registered outcome
@@ -56,11 +56,11 @@ The references' `v_ref` is 0.563, their repeat rate is 0.00, and their mean leng
 
 ## What it shows
 
-- **Holding the read to the prompt removes about half of greedy's loops on new phrasings, at every seed.** The paired counts run strongly one way: 33–39 replies stop looping, and 2–15 start. Completion rises by 23 to 58 replies, and the repeat rate falls from 0.53–0.63 to 0.21–0.29.
+- **Holding the read to the prompt removes a quarter to a half of greedy's loops on new phrasings, beyond the band at every seed:** 51%, 44% and 26%. The paired counts run strongly one way: 33–39 replies stop looping, and 2–15 start. Completion rises by 23 to 58 replies, and the repeat rate falls from 0.53–0.63 to 0.21–0.29.
 - **The copy heads alone carry most of it.** `copy` leaves 29, 50 and 62 looping replies, against `all`'s 31, 39 and 68: fewer at seeds 1 and 3, more at seed 2. With no type-only arm, this says no more than that the copy heads' read of the reply takes part.
 - **The reading's limits:**
   - **Replies end sooner.** Mean lengths are 15–18 tokens against greedy's 21–26, though both are above the references' 12.8. Greedy's are long because its loops run to 64 tokens.
-  - **The loops are interrupted, and the interruption is often salad.** In the fixed reading of seed 1's first 20 p-r replies, reply 1's loop "A friendundrot hear aboutdant: A friendundrot hear …" becomes "A friendundrot hear aboutdant: A friendunday." and ends. Replies 7 and 17 now end in "…all all all all soundededay.".
+  - **The loops are interrupted, and the interruption is often salad.** In the fixed reading of seed 1's first 20 p-r replies, reply 1's loop "A friendundrot hear aboutdant: A friendundrot hear …" becomes "A friendundrot hear aboutdant: A friendunday." and ends. Reply 17 ends in "…all all all all soundededay." under both arms, and reply 7 does under `copy` ("…sounded." under `all`).
   - **Some loops survive:** replies 2, 11 and 12 loop under every arm.
   - **One reply improves:** reply 19 under `all` is "Got it, your friend is Pleddrurgrod.", the prompt's name, where greedy wrote "Got it, your lucky number is P.".
   - **The beginnings are unchanged.** A reply's first sentence is mostly greedy's: the model was trained to read its reply, and decoding it with that read removed takes it off what it learned.

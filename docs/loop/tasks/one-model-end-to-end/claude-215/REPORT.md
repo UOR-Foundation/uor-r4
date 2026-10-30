@@ -5,7 +5,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 ## Tokens per second
 
 - **Every arm decodes at 28–41 tok/s per process** on one RTX 5090, while all three seeds share it. This pod was slower than claude-213's (an 8-sample probe took 93 s against 25 s). The float GPU path has the memory on.
-- **The read's scope costs nothing:** `copy` and `all` decode as fast as greedy at the same seed.
+- **No cost of the read's scope is established either way.** At the same seed, `all` is 0–18% slower than greedy and `copy` within ±9%, inside the spread of three processes sharing one GPU.
 - **This is not the served speed.** The integer path is not built.
 
 ## What did not work, first
@@ -83,4 +83,4 @@ None.
 
 The model's replies get stuck repeating themselves. I tested whether that is because its copy mechanism looks back at the reply it is writing, by letting it look back only at the prompt.
 
-That removes about half of the loops on new phrasings, at all three seeds, and more replies finish. But the loops are often replaced by garbled endings, and at one seed the replies were less like the training replies. So, as registered, the decoding stays as it is. The next step is to train the model the same way it will be decoded, so it learns to reply without reading its own reply.
+That removes between a quarter and a half of the loops on new phrasings, at all three seeds, and more replies finish. But the loops are often replaced by garbled endings, and at one seed the replies were less like the training replies. So, as registered, the decoding stays as it is. The next step is to train the model the same way it will be decoded, so it learns to reply without reading its own reply.

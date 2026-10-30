@@ -2260,7 +2260,7 @@ struct DecodedReply {
 /// by `rule`. The Flock rank rule also stops after `eos` (the protocol); greedy decodes to
 /// BOS or its length, as before. `sample` is the reply's index, which with `seed` seeds the Flock rank draws: draw
 /// `index = sample · 64 + step`. The Flock rank rule needs a nearest objective. `scope` limits
-/// which positions the Hamming read may choose at each step (claude-214): under any scope but
+/// which positions the Hamming read may choose at each step (claude-215): under any scope but
 /// [`ReadScope::Full`], the limited heads choose only the prompt's positions in the window.
 #[allow(clippy::too_many_arguments)]
 fn decode_reply(
@@ -2277,6 +2277,11 @@ fn decode_reply(
     let flock = rule != DecodeRule::Greedy;
     if flock && !objective.decodes_nearest() {
         return Err(invalid("the Flock rank rule decodes the nearest table tokens only"));
+    }
+    // The read's scope is set on the nearest decode's forward only; on the writer's it would
+    // limit nothing, and its files would be plain greedy under another name.
+    if scope != ReadScope::Full && !objective.decodes_nearest() {
+        return Err(invalid("a read scope decodes the nearest table tokens only"));
     }
     if flock && reply_tokens > FLOCK_MAX_REPLY {
         return Err(invalid(format!(
@@ -3106,7 +3111,7 @@ pub fn score_rows(
             });
         }
         // Greedy with the memory on and off; the Flock rules, and greedy under each read scope
-        // (claude-214), with it on only, as served.
+        // (claude-215), with it on only, as served.
         let mut served = vec![(DecodeRule::Greedy, ReadScope::Full), (flock, ReadScope::Full)];
         served.extend(cells.iter().map(|&m| (DecodeRule::flock_cell(m), ReadScope::Full)));
         served.extend(scopes.iter().map(|&s| (DecodeRule::Greedy, s)));
@@ -4880,6 +4885,9 @@ fn content_kept(scope: &CellReading, greedy: &CellReading) -> bool {
 /// - `reduces` when it has fewer loops and holds at all three, keeping greedy's content;
 /// - `reduces, content lost` when it has fewer loops and holds at all three, but not that;
 /// - else `no gain`.
+///
+/// An arm with fewer than three seeds reads `no gain`; it cannot occur from [`read_grade`],
+/// whose [`rule_readings`] refuses any missing file.
 fn read_outcome(scope: &[&CellReading], greedy: &[&CellReading]) -> &'static str {
     if greedy.len() != 3 || greedy.iter().any(|g| g.loops.is_none_or(|n| n < READ_LOOP_FLOOR)) {
         return "underpowered";
@@ -7774,6 +7782,14 @@ mod tests {
         assert_eq!(read_outcome(&[&cured, &cured, &cured], &[&g, &quiet, &g]), "underpowered");
         let floor = reading(false, false, false, 100, READ_LOOP_FLOOR);
         assert_eq!(read_outcome(&[&cured, &cured, &cured], &[&g, &floor, &g]), "cures");
+        // Seed by seed: greedy's seed 2 is far from the references (v = 0.3, a gap of 0.3), so
+        // the arm's seed-2 gap of 0.3 keeps content against it, and only against it.
+        let (g_far, far) = (reading(false, false, false, 60, 60), reading(true, true, false, 60, 10));
+        assert_eq!(
+            read_outcome(&[&kept, &far, &kept], &[&g, &g_far, &g]),
+            "reduces",
+            "each arm seed is held to its own greedy seed"
+        );
         assert!(scopes_ok(&[ReadScope::Copy, ReadScope::All]));
         assert!(!scopes_ok(&[ReadScope::All, ReadScope::All]));
         assert!(!scopes_ok(&[ReadScope::Full]), "Full is greedy's own file");
