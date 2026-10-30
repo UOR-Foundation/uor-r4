@@ -71,7 +71,7 @@ The tables are on the [lab page](../../../../labs/one-model-end-to-end/keyed-ope
 - **Sealed** at `results/claude/one-model-end-to-end-keyed-opening-2026-10-30/run-da4a6212/`: 147 files, `SHA256SUMS` sha256 `730026ee5380cbcb7cb3eea01eb4529af277961028327d42209124bd4079b04d`, read back OK. The pod is down.
 - **The grade:** [grade-p-v.json](../../../../labs/one-model-end-to-end/keyed-opening-2026-10-30/grade-p-v.json), sha256 `044fe4aa1a7021fd415ebae2a90759c0fc274fc79ac8539c7fecbfbaaf6d8037`.
 
-## Checks run
+## Checks run at the head
 
 - **The crate's host tests** (`cargo test --release --locked -p uor-r4-float-train`): all pass, 178 in the library. The CUDA code type-checks with the stub nvcc.
 - **Negative gates on the host,** each failing with its fix set aside and passing when restored:
@@ -84,3 +84,27 @@ The tables are on the [lab page](../../../../labs/one-model-end-to-end/keyed-ope
   - the probe's 21 files reproduce claude-218's at all three seeds (the 18 decode files byte for byte, the 3 keys files without their timing fields);
   - the main run's DEV rows and keys equal the probe's.
 - **The grade on the sealed run:** exit 0, with no refusal.
+
+## Skills used
+
+None.
+
+## Still open
+
+- **The next unit (row 2):** train and serve the point key's opening in the one model, and score it end to end with tok/s (#3407, step 4).
+  - Its decision review weighs the point key's table (TRAIN's 212,968 opening points, 218 MB as f32) against its gain. The served key needs an integer table and a nearest search that fits a client device.
+  - A smaller code that keeps the gain is worth testing there: the sign keys are 32 bytes but too thin to read at this size, and the Hadamard rotation may help a quantized point code.
+- **The rest of the gap:** a right first token lifts templates by +66 to +73 of 393, and the point key reaches 12–18% of that, because its openings are right on only 27–31%. Training the trunk's opening point to gather paraphrases (the table's row 4 unit) would raise the key's own precision.
+- **The sign key's free-generation effect** is below this panel's power. A larger panel, or seeds pooled under a fresh sheet, would read it.
+- **The keys files' timing fields** make them unfit for byte checks. Keeping timings out of files meant to reproduce is a small follow-up in the instrument.
+- **p-v has now been opened once,** by this decision.
+
+## Plain summary
+
+Last time we found that looking a reworded question up by where the model's own internal state lands names the reply's first word better than the memory's exact-words lookup. But that was checked one word at a time, with the right words already in place.
+
+This unit actually let the model write its replies with that lookup choosing the first word, wherever the exact lookup found nothing. On a fresh set of reworded questions, the fullest version of the lookup, which uses the whole state, made the model write more right replies than it does now, at all three of the models tested, by a clear margin. It also looped less, though partly because some replies became a short "Noted." and stopped.
+
+The cheaper sign-based versions may help too, but this set of questions was too small to tell.
+
+It is a real but partial fix. Handing the model the correct first word lifts right replies five to eight times as much, so most of the remaining gap is in naming that first word correctly. The next step is to build this lookup into the one served model and measure it end to end.
