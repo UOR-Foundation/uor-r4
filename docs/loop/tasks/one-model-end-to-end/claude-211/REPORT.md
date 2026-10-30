@@ -80,6 +80,7 @@ None.
 
 ## Still open
 
+- **Two grader paths are shown by the regenerated grades, not by unit tests:** `--grade --flock-end` reading the end-of-turn rule's files, and an arm-seed with one split missing entering no cell. A fixture test for each needs a small TRAIN, DEV and P-dev, so it is left to the next unit that touches `grade`.
 - **Flock rank's content draw.**
   - **The problem:** the end-of-turn rule fixed completion and loops, but the 16-wide harmonic draw puts unrelated tokens in replies.
   - **Next:** a geometric narrowing that draws only among candidates inside the nearest token's cell, so a near tie gets the draw and a far one never does. Measure it on a new panel.

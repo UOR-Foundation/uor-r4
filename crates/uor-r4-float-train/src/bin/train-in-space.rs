@@ -408,7 +408,7 @@ fn main() -> Result<()> {
     }
     if recall > 0 {
         let out = out.ok_or_else(|| FloatTrainError::Invalid("--recall needs --out".to_owned()))?;
-        if modes[..5].iter().any(|&m| m) || score.is_some() || overturn_on || controls_on || grade_on {
+        if modes[..5].iter().any(|&m| m) || score.is_some() || overturn_on || controls_on || grade_on || flock_end {
             return Err(FloatTrainError::Invalid(
                 "--recall trains; it takes --out and no other mode".to_owned(),
             ));
