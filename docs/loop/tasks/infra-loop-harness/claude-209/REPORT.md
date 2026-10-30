@@ -50,7 +50,7 @@ None.
 ## Checks run at the head
 
 - `cargo xtask roadmap check`: 112 items OK. `cargo xtask roadmap render`: written.
-- `loop report --check`, `loop pr-check --local` and `loop gates --full`: below, before review.
+- At `a8830e1b0`: `loop report --check` PASS; `loop pr-check --local` PASS, its `owner-paths` gate reading "owner approval recorded for CHARTER.md, docs/rules/changes.md, docs/integration/DECISIONS.md"; `loop gates --full` 11 GREEN.
 
 ## What it unlocks
 
