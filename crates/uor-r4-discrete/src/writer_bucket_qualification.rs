@@ -840,12 +840,14 @@ fn run_direct_seeded_sweep(engine: &BucketWriterEngine) -> Result<DirectSweepSum
                     / (sum_id_tc + sum_id_cd + sum_pruned_td).max(1);
                 let pruned_red_whole = pruned_red_x100 / 100;
 
-                if (vocabulary == 4096 || vocabulary == 16384) && kept_cells == 8 && blocks == 4 {
-                    if id_red_x100 < MIN_REDUCTION_X100 || pruned_red_x100 < MIN_REDUCTION_X100 {
-                        return Err(invalid(format!(
-                            "B2 reduction bar missed at V={vocabulary} B={blocks} K={kept_cells}: id_red_x100={id_red_x100}"
-                        )));
-                    }
+                if (vocabulary == 4096 || vocabulary == 16384)
+                    && kept_cells == 8
+                    && blocks == 4
+                    && (id_red_x100 < MIN_REDUCTION_X100 || pruned_red_x100 < MIN_REDUCTION_X100)
+                {
+                    return Err(invalid(format!(
+                        "B2 reduction bar missed at V={vocabulary} B={blocks} K={kept_cells}: id_red_x100={id_red_x100}"
+                    )));
                 }
 
                 scales.push(ScaleCounterSummary {
