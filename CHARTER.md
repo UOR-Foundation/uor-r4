@@ -6,7 +6,7 @@ Old text moves byte-identical to `archive/`. Bracketed ids are sources.
 
 ## 1. Mission
 
-Build the **UOR-R4 Geometric Language Model**: a fast language model that is not a transformer. It predicts text with geometry (prime addresses, zeta phases, E8/H4/icosian rotations, SpiralCore/FBS routing) and exact memory, on an ordinary laptop or in a browser. Conversation with durable memory first, then coding and reasoning, on one model [AGENTS:mode, D19, AGENTS:both-lines]. Pre-alpha; no capability is established.
+Build the **UOR-R4 Geometric Language Model**: a fast language model that is not a transformer. It predicts text with geometry (prime addresses, zeta phases, E8/H4/icosian rotations, SpiralCore/FBS routing) and exact memory, on an ordinary laptop or in a browser. Conversation with durable memory first, then coding and reasoning, on one model [AGENTS:mode, D19, AGENTS:both-lines]. Pre-alpha: M1 is complete (30 October 2026); no model holds a useful conversation.
 
 The owner's rule: **"USE GEOMETRY. THAT IS THE END OF IT. NEVER USE ANYTHING ELSE."** [OWNER:0]
 
@@ -16,7 +16,7 @@ The owner's goal behind every ban (18 Oct, verbatim): *"my goal with all of thes
 
 1. **Model:** the geometric model, exported as one D11 integer/table artifact; built in `crates/uor-r4-discrete`, served by `crates/uor-r4-integer` [AGENTS:ownership].
 2. **Web client:** the Studio at `/studio` on the mdBook site, running the integer model locally in the browser as WASM [renorm decision 7, D36].
-3. **Desktop client:** a Tauri app sharing the web UI, the native integer model with D19 memory, offline, on M1-class laptops; spec only [renorm decision 8].
+3. **Desktop client:** a Tauri app sharing the web UI, the native integer model with D19 memory, offline, on M1-class laptops; the shell is verified on a synthetic stand-in, with no qualified trained product bundle [renorm decision 8].
 4. **Legacy crates are repaired, not archived:** `uor-r4-graph-compiler`, `uor-r4-graph-certify`, `uor-r4-api`, `uor-r4-proof-model` and the root crate are repaired to build on the current core; repairing restores the build only, and their mechanisms (r4g1-graph, native-geometric) stay PARKED. [D36, owner 19 Oct]
 
 ## 3. Technical constraints

@@ -1,6 +1,6 @@
 # AGENTS.md — UOR-R4 Geometric Language Model
 
-UOR-R4 builds a fast, non-transformer language model that predicts text with geometry and exact memory, served as an integer artifact on ordinary devices. It is pre-alpha: 0 of 8 milestones (M1–M8, issues #2029–#2036) are complete, and no capability is established. This page is onboarding for every agent; it summarizes, and never overrides, the charter.
+UOR-R4 builds a fast, non-transformer language model that predicts text with geometry and exact memory, served as an integer artifact on ordinary devices. It is pre-alpha: 1 of 8 milestones (M1–M8, issues #2029–#2036) is complete — M1 closed on 30 October 2026 — and no model holds a useful conversation. This page is onboarding for every agent; it summarizes, and never overrides, the charter.
 
 ## Read CHARTER.md first; it is the rules
 

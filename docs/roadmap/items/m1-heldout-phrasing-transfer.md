@@ -20,11 +20,11 @@ The owner added bar (f) to M1 on 29 Oct (D82, CHARTER §4 item 8): "M1 also requ
 - **A held-out-phrasing panel tests new phrasings.** M-world v2's `dev_phrasing × dev_value` cell is that. claude-204 drew P-dev from it with `heldout-panel`: 0.000 of P-dev's prompt templates occur in TRAIN.
 - **P-dev is reserved** for one-model-end-to-end's training-run decisions, so bar (f) needs its own panel, drawn the same way at a new seed.
 
-M1 (#2029) stays open until a saved model passes (a) to (f). antigravity-110's saved model passed (a) to (e), so this item measures it on (f) first.
+**Completed 30 Oct 2026:** antigravity-110's saved model passed bar (f) at both seeds, closing #2029 after all six bars passed. On p-f (seed 2051, 15,953 rows, 0.000 TRAIN prompt templates at K = 1,024), integer top-1 is 7,850 / 7,872 against T2's 7,375 (paired band 81) and unigram's 1,409. Apple M1 decode is 10,876 / 10,566 tok/s. The close grade reads `CLOSED_PASS`. The limit: 0.625 of p-f's reference replies are verbatim TRAIN replies, so this is reading new phrasings into known reply kinds, not useful chat.
 
 ## What is missing
 
-- **A fresh held-out-phrasing panel.**
+**Outcome: complete.** Before the close, this item needed:
   - It is drawn by `heldout-panel` (`docs/labs/one-model-end-to-end/instrument/`, claude-204) at a seed no unit has used. claude-204 used 2041–2043.
   - Its cell is `dev,dev`, in dialogue protocol 2, with 400 conversations.
   - It is stored in the HF store with a `SHA256SUMS`.

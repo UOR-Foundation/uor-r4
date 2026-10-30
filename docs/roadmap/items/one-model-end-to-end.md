@@ -15,13 +15,13 @@ scope: [docs/labs/one-model-end-to-end/**, docs/harness/prep/one-model-end-to-en
 
 This item is the last part of the open owner direction's order: "`turn-memory-reply` first, then the integer serving of the parts, R7, and one model end to end" (`PLAN.md:86`). Casey added on 29 Oct (about 20:05Z) that it be done "in a smart way that considers the whole project and outside research we can draw from to see what exactly we are probably dealing with instead of making quick (and wrong) decisions".
 
-[The assessment](../../loop/tasks/infra-loop-harness/claude-201/ASSESSMENT.md) is that reading. A fresh decision review passed it in its third round (owner log on #2028, `6507593846`). Its findings:
-- **The replies are templated, and no panel holds new templates.**
+[The assessment](../../loop/tasks/infra-loop-harness/claude-201/ASSESSMENT.md) is that reading. A fresh decision review passed it in its third round (owner log on #2028, `6507593846`). Its findings on 29 Oct, before the held-out-phrasing panels and generation runs:
+- **The replies are templated; DEV and Fresh V2 do not hold out prompt templates.**
   - A reply-only control, keyed on the reply's own last tokens, already gets 8,089 of DEV's later rows. The chosen key gets 8,822 / 9,655.
   - The sealed Fresh V2 panel comes from the same generator. The bigram table T2 scores 6,582 / 14,479 there, against 6,300 / 14,287 on DEV.
 - **The memory gives a real gain inside the templates.** Openings are 598.7 / 598.3 with it, against 266.3 / 281.0 without, under a ceiling of 607.
 - **The trunk now leans on it.** Without its tables, turn-memory-reply's (r) falls to 4,101 / 3,807, below the empty-table control (r0)'s 10,079 / 11,171.
-- **Generated text has never been scored.**
+- **Generated text had not yet been scored at that assessment.** By 30 Oct, claude-216 and claude-217 had scored free generation on new-template panels. The trained cut returned "reduces, content lost" and did not replace `r-drop`; the cycle step ends every registered loop but every content decision is underpowered, so greedy remains the decode.
 
 So before the model the project ships is trained, the scoring must be able to tell recall of a template from reading the prompt.
 
@@ -32,7 +32,7 @@ So before the model the project ships is trained, the scoring must be able to te
   - a TRAIN reply index;
   - which panel, if any, holds templates TRAIN never shows.
 - **The check that could overturn the diagnosis:** whether (r) falls below (r0) where no key matches.
-- **A panel with held-out phrasings** (claude-202's census, `443a980e5`). Neither DEV nor Fresh V2 qualifies: 0.750 and 0.777 of their replies are verbatim TRAIN replies.
+- **Held-out-phrasing evidence now exists, with a sharp limit.** M1's p-f panel passed bar (f): 7,850 / 7,872 of 15,953 integer top-1 rows against T2's 7,375 (paired band 81), at two seeds. Its prompt-template census is 0.000 at K = 1,024; 0.625 of its reference replies are verbatim TRAIN replies. That reference overlap is not a generated-copy rate or useful-chat qualification. On p-s, claude-217's teacher-forced reply openings are only 17.4%, 13.7% and 18.6% at three seeds, against 80.8%, 80.2% and 79.9% on later tokens; exact turn memory's exact-token key finds little on new phrasing. The next problem is reply opening and a memory key a reworded known question can reach (claude-218 is active, with no result claimed). DEV and Fresh V2 remain template-sharing controls, not untouched new-template generation panels.
   - M-world v2 already splits phrasings: `dev_phrasing × dev_value` is its development cell (`crates/uor-r4-training/src/milestone_world_v2.rs`, "Cross cells").
     - **The split covers user-turn phrasings and fillers only.** The assistant's reply templates are shared across splits. They include `MQAR_ACKS`, `MQAR_REPLIES`, `UPDATE_ACKS` and v1's closers and absent replies.
     - So the panel tests held-out *prompts* with new values, not held-out reply wording. Its census's masked reply-template share is expected to stay high.
@@ -95,7 +95,7 @@ Read [the assessment](../../loop/tasks/infra-loop-harness/claude-201/ASSESSMENT.
 - **Deterministic scores only:** count tables are lawful controls, and there are no neural or transformer baselines (CHARTER §3.10, §4.4).
 - **No bits per byte without a lawful likelihood** (§4.8). A rank code is a diagnostic only.
 - **Model scoring on the GPU; counting the data on the laptop** (§3.5).
-- **Changing the M1 bar is the owner's** (§4.8, D39). The question is on #2028 (`6507594237`).
+- **The M1 bar question is answered:** the owner adopted D82's held-out-phrasing bar (f), now in [CHARTER §4.8](../../../CHARTER.md#4-evidence). The saved model passed (a)–(f), and [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) closed on 30 Oct. This does not complete this item's protocol or integer-serving requirements.
 
 ## Sources
 

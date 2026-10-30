@@ -14,6 +14,15 @@ flowchart LR
 
 An entry gives the date, what changed, which charter clauses it touches, and who decided. The owner's own words are recorded verbatim when they are the reason. Old text is never edited or deleted: it moves unchanged to the `archive/` folder, and the live decision index keeps one line saying where each decision went (see the [decision map](decision-map.md)).
 
+## 30 October 2026: M1 closes; mission status records 1 of 8 (D83)
+
+**Decided by:** M1's close was approved through claude-211's whole-chain decision review on #2029. Kimi records it here under the owner-approved documentation plan, answer **"Approved Plan"** at `2026-10-30T15:30:07Z`.
+
+**What changed:**
+1. **Mission status only.** CHARTER §1 and AGENTS.md now record pre-alpha, 1 of 8 milestones complete; DECISIONS.md appends D83. The desktop product line now names the synthetic-verified shell rather than "spec only."
+2. **No rule changes.** No acceptance bar, technical constraint, GPU cap, workflow rule or owner release changes. D82 and every other clause remain as written.
+3. **Evidence and limit.** antigravity-110's saved integer artifacts pass all six bars at both seeds. The older close grade covers (a)–(e), and claude-211 supplies bar (f): p-f 7,850 / 7,872 against T2 7,375, band 81. The 0.625 reference-reply overlap with TRAIN means this is reading new phrasings into known reply kinds, not useful conversation.
+
 ## 29 October 2026: M1 adds a held-out-phrasing bar (D82)
 
 **Decided by:** the owner (Casey), in Claude's chat, 2026-10-29 (recorded on #2028, 6511159403). He was asked "Should M1 also require a held-out-phrasing panel?", and chose "Yes, add the bar (Recommended)": "M1 also requires beating the T2 bigram and unigram on a fresh held-out-phrasing panel (drawn by heldout-panel at a new seed, with its own census), with the same paired band as bar (e). It proves the model reads new phrasings, not just recalls templates."
