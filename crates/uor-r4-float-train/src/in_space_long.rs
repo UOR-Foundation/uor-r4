@@ -5513,17 +5513,18 @@ impl LoopContent {
         })
     }
 
-    /// Whether the reading can tell salad from content (claude-217's FIT, round 2): the lowest
-    /// share [`LoopContent::kept`] accepts is above [`LOOP_POWER_SHARE`], so an arm at or
-    /// below it never reads kept. The looping prompts are not a random sample, so their
-    /// references may be rarely verbatim; then the reading is underpowered.
+    /// Whether the reading can tell salad from content (claude-217's FIT, rounds 2 and 4): the
+    /// lowest share [`LoopContent::kept`] accepts is above [`LOOP_POWER_SHARE`] and above half the
+    /// references' share, so an arm at or below 0.10 never reads kept, and nor does one that
+    /// keeps less than half of what the references hold. The looping prompts are not a random
+    /// sample, so their references may be rarely verbatim; then the reading is underpowered.
     pub fn powered(&self) -> bool {
         let m = self.prompts as f64;
         if self.prompts == 0 {
             return false;
         }
         let p = self.reference_verbatim as f64 / m;
-        p - 0.10f64.max(3.0 * (p * (1.0 - p) / m).sqrt()) > LOOP_POWER_SHARE
+        p - 0.10f64.max(3.0 * (p * (1.0 - p) / m).sqrt()) > LOOP_POWER_SHARE.max(p / 2.0)
     }
 }
 
@@ -8832,6 +8833,12 @@ mod tests {
             assert_eq!(cycle_outcome(&arms, &base, &[&low, &good, &good]), "underpowered (content)");
         }
         assert!(good.powered() && salad.powered() && !content(0, 0, 0).powered());
+        // FIT round 4: at 18 of 70 (p = 0.257, tolerance 0.157) "kept" would accept 0.10, an arm
+        // keeping 39% of the references' share; the reading needs kept to mean at least half.
+        let partial = content(70, 8, 18);
+        assert_eq!(partial.kept(), Some(true), "partial salad would read kept here");
+        assert!(!partial.powered());
+        assert_eq!(cycle_outcome(&arms, &base, &[&partial, &good, &good]), "underpowered (content)");
     }
 
     /// claude-217: the sheet's "what ships" table, row by row.

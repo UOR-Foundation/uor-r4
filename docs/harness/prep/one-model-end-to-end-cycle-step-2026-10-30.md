@@ -2,7 +2,7 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md). Order: [claude-217](../../loop/tasks/one-model-end-to-end/claude-217/ORDER.md). It follows claude-216 ([result](../../labs/one-model-end-to-end/cut-train-2026-10-30/README.md)), by Casey's direction of 30 Oct (verbatim on #3407 6523338624): "Yes: after claude-216's grade, register a decode unit that steps off a reply's own cycle (the nearest token outside a repeated 4-gram), on a fresh panel, against greedy."
 
-TEST FITNESS: PENDING, round 4 (a fresh non-author FIT is run on this sheet before any pod). Three earlier rounds were each NOT FIT on one blocking point, all repaired here:
+TEST FITNESS: FIT (round 4, a fresh non-author reviewer, 30 Oct, at `b3b46402c`; its note on partial salad is taken in below). Three earlier rounds were each NOT FIT on one blocking point, all repaired here:
 - **Round 1:** the matched content could not see what the cycle step wrote where it stepped, so salad there could read "improves" and ship.
 - **Round 2:** a content reading on those prompts could pass salad where their references are rarely verbatim. It now has a power condition.
 - **Round 3:** the decode-only cut had the same blindness as round 1, since the replies it newly completes sit on prompts greedy looped on.
@@ -110,7 +110,8 @@ Each reading is one arm's 256 replies on one split at one seed, against that spl
   - **The reading:** the arm's replies there that are complete and verbatim in TRAIN, against the references on the same prompts.
   - **Kept:** the arm's share is below the references' by at most `max(0.10, 3·√(p(1−p)/m))`, with `p` the references' share and `m` the looping prompts.
   - **The loop-prompt floor:** at least 40 at every seed, the loop floor's count.
-  - **The power condition** (`LoopContent::powered`): the lowest share "kept" accepts must be above 0.10, so an arm at or below 0.10 verbatim, as salad is, always reads lost. Otherwise the reading cannot tell salad from content, and the outcome is "underpowered (content)".
+  - **The power condition** (`LoopContent::powered`): the lowest share "kept" accepts must be above 0.10 and above half the references' share. So an arm at or below 0.10 verbatim, as salad is, always reads lost, and so does one that keeps less than half of what the references hold (FIT round 4: partial salad). Otherwise the reading cannot tell salad from content, and the outcome is "underpowered (content)".
+  - **Its limits, stated:** "verbatim TRAIN" does not check that a reply suits its prompt, so a stock memorised reply counts as content. `arm_exact`, the replies equal to their own reference, is reported beside any "improves" or "cures" to show that.
 - **The loop floor:** greedy loops in at least 40 of 256 p-s replies at every seed.
 
 **What a loop fix meets by construction, stated in advance.**
@@ -161,7 +162,7 @@ The grade computes this table itself (`CycleGrade::ships`, `ships`, unit-tested 
 - **The looping prompts:** about 60–76 per seed, at p-t's loop counts.
 - **The looping references' share `p` is not known in advance.** It is measured on the looping prompts, which are not a random sample: the panel-wide 0.624 does not carry over.
   - Loops gather on a few hub tokens, sometimes where a reply should copy a new value ("your lucky number is 66666" for "313"). Such references are rarely verbatim TRAIN replies.
-  - At 70 looping prompts the power condition needs `p` of about 0.26 or more (0.26 − 0.157 = 0.103).
+  - The power condition needs `p` of about 0.34 or more at 70 looping prompts, and about 0.47 at the floor of 40: there the lowest share "kept" accepts first passes half of `p`.
   - **If `p` is lower,** both decisions read "underpowered (content)": an instrument outcome, never a negative. The loop, completion and step readings are still reported.
 - **The matched prompts:** at p-t's loop counts the base completes about 200–212 of 256. The floor of 64 is registered for that reason. The tolerance is 0.10 down to about 225 matched prompts at `p` ≈ 0.5, and widens below that (0.19 at 64).
 - **The seeds:** every condition needs all three.
