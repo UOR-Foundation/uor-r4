@@ -3999,28 +3999,44 @@ fn verdict(
 /// I-C under `frozen` (claude-211): in the run at `run`, every `.spiralcore_fbs` routing
 /// tensor of the step-0 checkpoint equals its step-256 one, bit for bit, while some other tensor
 /// moved, so the run trained. `(routing tensors compared, other tensors that moved)`.
+///
+/// It reads each `model.safetensors` as bytes, never as tensors (the CPU device refuses model
+/// compute, D24/D29): an 8-byte little-endian header length, a JSON index of each tensor's
+/// dtype, shape and `data_offsets`, then the raw data. Two tensors are the same when their
+/// dtype, shape and bytes are.
 pub fn frozen_check(run: &Path) -> Result<(usize, usize)> {
-    let load = |step: &str| {
-        candle_core::safetensors::load(
-            run.join("models").join(step).join("model.safetensors"),
-            &Device::Cpu,
-        )
+    use serde_json::{Map, Value};
+    let read = |step: &str| -> Result<(Vec<u8>, Map<String, Value>)> {
+        let mut bytes = fs::read(run.join("models").join(step).join("model.safetensors"))?;
+        let head: [u8; 8] = bytes
+            .get(..8)
+            .and_then(|h| h.try_into().ok())
+            .ok_or_else(|| invalid(format!("{step}: no safetensors header")))?;
+        let n = u64::from_le_bytes(head) as usize;
+        let index: Value = serde_json::from_slice(
+            bytes
+                .get(8..8 + n)
+                .ok_or_else(|| invalid(format!("{step}: the header runs past the file")))?,
+        )?;
+        let index = index
+            .as_object()
+            .cloned()
+            .ok_or_else(|| invalid(format!("{step}: the header is not an object")))?;
+        Ok((bytes.split_off(8 + n), index))
     };
-    let (start, end) = (load("step-000000")?, load("step-000256")?);
-    let bits = |t: &Tensor| -> Result<Vec<u64>> {
-        Ok(t.flatten_all()?
-            .to_dtype(DType::F64)?
-            .to_vec1::<f64>()?
-            .into_iter()
-            .map(f64::to_bits)
-            .collect())
+    let ((start_data, start), (end_data, end)) = (read("step-000000")?, read("step-000256")?);
+    let tensor = |data: &[u8], info: &Value| -> Option<(Value, Value, Vec<u8>)> {
+        let offsets = info["data_offsets"].as_array()?;
+        let (from, to) = (offsets.first()?.as_u64()? as usize, offsets.get(1)?.as_u64()? as usize);
+        Some((info["dtype"].clone(), info["shape"].clone(), data.get(from..to)?.to_vec()))
     };
     let (mut routing, mut moved) = (0, 0);
-    for (name, a) in &start {
+    for (name, a) in start.iter().filter(|(name, _)| name.as_str() != "__metadata__") {
         let b = end
             .get(name)
             .ok_or_else(|| invalid(format!("step 256 has no {name}")))?;
-        let same = a.dims() == b.dims() && bits(a)? == bits(b)?;
+        let (a, b) = (tensor(&start_data, a), tensor(&end_data, b));
+        let same = a.is_some() && a == b;
         if name.ends_with(".spiralcore_fbs") {
             if !same {
                 return Err(invalid(format!("{name} moved under frozen")));
@@ -7043,6 +7059,37 @@ mod tests {
         assert_eq!(flock_pick(&[7, 1, 9], 2, true, eos), 9, "a farther end of turn is drawn");
         assert_eq!(flock_pick(&[7, 1, 9], 1, true, eos), 1);
         assert_eq!(flock_pick(&[1, 7, 9], 2, true, None), 9, "no end of turn to keep");
+    }
+
+    /// claude-211 (I-C): the frozen check reads safetensors bytes, passes a run whose routing
+    /// tensor stayed while another moved, and refuses a moved routing tensor or a run that did
+    /// not move at all.
+    #[test]
+    fn the_frozen_check_compares_routing_tensor_bytes() {
+        let file = |route: f32, other: f32| -> Vec<u8> {
+            let header = r#"{"a.spiralcore_fbs":{"dtype":"F32","shape":[1],"data_offsets":[0,4]},"b.weight":{"dtype":"F32","shape":[1],"data_offsets":[4,8]}}"#;
+            let mut bytes = (header.len() as u64).to_le_bytes().to_vec();
+            bytes.extend_from_slice(header.as_bytes());
+            bytes.extend_from_slice(&route.to_le_bytes());
+            bytes.extend_from_slice(&other.to_le_bytes());
+            bytes
+        };
+        let run = |name: &str, end: (f32, f32)| {
+            let dir = std::env::temp_dir().join(format!("claude-211-frozen-{name}-{}", std::process::id()));
+            for (step, (r, o)) in [("step-000000", (1.0, 1.0)), ("step-000256", end)] {
+                let at = dir.join("models").join(step);
+                fs::create_dir_all(&at).unwrap();
+                fs::write(at.join("model.safetensors"), file(r, o)).unwrap();
+            }
+            dir
+        };
+        let (kept, moved, still) = (run("kept", (1.0, 2.0)), run("moved", (3.0, 2.0)), run("still", (1.0, 1.0)));
+        assert_eq!(frozen_check(&kept).unwrap(), (1, 1));
+        assert!(frozen_check(&moved).is_err(), "a routing tensor moved under frozen");
+        assert!(frozen_check(&still).is_err(), "nothing trained, so the check proves nothing");
+        for dir in [kept, moved, still] {
+            fs::remove_dir_all(dir).unwrap();
+        }
     }
 
     /// claude-211 (I-G): the strata split by whether (T) names a row; a position scored twice,
