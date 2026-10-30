@@ -1715,6 +1715,70 @@ pub struct OpeningKeys {
     pub hsign_ms: u64,
 }
 
+impl OpeningKeys {
+    /// One trunk key's names and distances: `point`, `hsign`, or else `sign`.
+    fn by_key(&self, key: &str) -> (&[u32], &[f32]) {
+        match key {
+            "point" => (&self.point_target, &self.point_distance),
+            "hsign" => (&self.hsign_target, &self.hsign_distance),
+            _ => (&self.sign_target, &self.sign_distance),
+        }
+    }
+}
+
+/// The keyed opening (claude-219): a trunk key's `named` target as the reply's first token,
+/// where the memory's exact key misses the opening (`fires` false) and the key's `distance` is at
+/// most `tau`; elsewhere none, and the decode is greedy with the memory, as served. A τ of +∞
+/// fires at every opening the exact key misses.
+fn keyed_opening(fires: bool, named: u32, distance: f32, tau: f32) -> Option<u32> {
+    (!fires && distance <= tau).then_some(named)
+}
+
+/// Whether `--keyed-decode`'s arms are distinct trunk keys, each with a τ of zero or more.
+fn keyed_ok(keyed: &[(String, f32)]) -> bool {
+    keyed.iter().enumerate().all(|(i, (key, tau))| {
+        TRUNK_KEYS.contains(&key.as_str()) && *tau >= 0.0 && !keyed[..i].iter().any(|(k, _)| k == key)
+    })
+}
+
+/// The keyed openings ([`keyed_opening`]) of a split's sampled `prompts` under the trunk key
+/// `key` at `tau`, from the split's `keys`: whether the exact key fires is the served `memory`'s
+/// own first-8 lookup on the decode's first window. A sampled opening the keys do not name, or
+/// name with another target, is an instrument fault.
+fn keyed_openings(
+    prompts: &[&CausalWindow],
+    keys: &OpeningKeys,
+    key: &str,
+    tau: f32,
+    memory: Option<&crate::flock_read_memory::TurnMemory>,
+) -> Result<Vec<Option<u32>>> {
+    let (names, distances) = keys.by_key(key);
+    let at: std::collections::HashMap<usize, usize> =
+        keys.positions.iter().enumerate().map(|(i, &p)| (p, i)).collect();
+    prompts
+        .iter()
+        .map(|window| {
+            let position = window.scored_corpus_positions[0];
+            let i = *at.get(&position).ok_or_else(|| {
+                invalid(format!("{}: no key names the sampled opening at {position} (an instrument fault)", keys.split))
+            })?;
+            if keys.targets[i] != window.scored_targets[0] {
+                return Err(invalid(format!(
+                    "{}: the keys' target at {position} is not the window's (an instrument fault)",
+                    keys.split
+                )));
+            }
+            let prompt = &window.input_ids[..=window.scored_offsets[0]];
+            let first = &prompt[prompt.len().saturating_sub(SHEET_CONTEXT)..];
+            let fires = match memory {
+                Some(m) => m.stored(first, first.len(), &[first.len() - 1])?.1[first.len() - 1] == 1.0,
+                None => false,
+            };
+            Ok(keyed_opening(fires, names[i], distances[i], tau))
+        })
+        .collect()
+}
+
 /// [`OpeningKeys`] for one split's opening points against TRAIN's.
 fn opening_keys(
     split: &str,
@@ -1864,11 +1928,7 @@ struct SeedPicks {
 
 impl SeedPicks {
     fn key(&self, key: &str) -> (&[u32], &[f32]) {
-        match key {
-            "point" => (&self.keys.point_target, &self.keys.point_distance),
-            "hsign" => (&self.keys.hsign_target, &self.keys.hsign_distance),
-            _ => (&self.keys.sign_target, &self.keys.sign_distance),
-        }
+        self.keys.by_key(key)
     }
 }
 
@@ -4094,6 +4154,11 @@ pub struct IdSample {
     /// [`STEP_OFF`] or [`STEP_EXHAUSTED`]. Empty, and not written, under every other rule.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stepped: Vec<u8>,
+    /// Under a keyed arm (claude-219), the token a trunk key gave the reply as its first, where
+    /// the memory's exact key missed the opening and the key fired within its τ
+    /// ([`keyed_opening`]). None, and not written, where it did not and under every other arm.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keyed: Option<u32>,
 }
 
 /// One file [`score_rows`] wrote, with its nearest and writer hits when it holds rows.
@@ -4206,9 +4271,16 @@ fn reference_reply(window: &CausalWindow, tokens: usize) -> Vec<u32> {
 ///     `samples-{split}-greedy-read-{scope}-memory.json`;
 ///   - with `cycle`, the cycle step (claude-217), with the memory on, alone and under each read
 ///     scope: `samples-{split}-cycle-step-memory.json` and
-///     `samples-{split}-cycle-step-read-{scope}-memory.json`.
+///     `samples-{split}-cycle-step-read-{scope}-memory.json`;
+///   - with `keys`, greedy with each reply's first token given as its reference's (claude-218),
+///     with the memory on: `samples-{split}-forced-memory.json`;
+///   - for each `(key, τ)` of `keyed` (claude-219, which needs `keys`), greedy with the memory on
+///     and the reply's first token the key's name where [`keyed_opening`] fires:
+///     `samples-{split}-keyed-{key}-memory.json`.
 ///
 ///   Each records its reply-table hits under generation and under teacher forcing (I-F).
+/// - **Keys.** With `keys`, every split's openings named by the trunk keys ([`OpeningKeys`],
+///   claude-218), taken with the memory off before the decodes: `keys-{split}.json`.
 ///
 /// `checkpoint` is a `step-N` directory; the flags and `arm` must match its run's.
 #[allow(clippy::too_many_arguments)]
@@ -4230,9 +4302,16 @@ pub fn score_rows(
     scopes: &[ReadScope],
     cycle: bool,
     keys: bool,
+    keyed: &[(String, f32)],
     device: &Device,
 ) -> Result<Vec<ScoredFile>> {
     check_run_arm(checkpoint, arm)?;
+    if !keyed_ok(keyed) {
+        return Err(invalid("--keyed-decode wants distinct trunk keys (sign, hsign, point), each with a τ of 0 or more"));
+    }
+    if !keyed.is_empty() && !keys {
+        return Err(invalid("--keyed-decode reads the opening keys, so it needs --opening-keys 1"));
+    }
     if !cells_ok(cells) {
         return Err(invalid(
             "--flock-cell wants distinct margins of at most 4,000 thousandths",
@@ -4301,6 +4380,25 @@ pub fn score_rows(
     set_trained_cut(trained);
     println!("[cut] scoring with the trained cut: {}", trained.map_or("none", |s| s.name()));
     let memory = crate::flock_read_memory::turn_memory();
+    // The opening keys (claude-218), with the memory off: TRAIN's opening points under this
+    // trunk, and each split's openings named by the nearest of them. Taken before the decodes,
+    // so the keyed arms (claude-219) can read them, and written after them, as before.
+    let named_openings: Vec<OpeningKeys> = if keys {
+        crate::flock_read_memory::set_turn_memory(None);
+        let (train_tokens, train_mask) = load_train_split(data_root)?;
+        let train_windows = windows_of(&train_tokens, &train_mask)?;
+        let (train, train_targets, _) = opening_points(&model, &train_windows, &train_mask, seed, step)?;
+        drop((train_windows, train_tokens, train_mask));
+        splits
+            .iter()
+            .map(|split| {
+                let (query, targets, positions) = opening_points(&model, &split.windows, &split.mask, seed, step)?;
+                opening_keys(&split.name, &query, targets, positions, &train, &train_targets)
+            })
+            .collect::<Result<_>>()?
+    } else {
+        Vec::new()
+    };
     let mut written = Vec::new();
     for on in [true, false] {
         crate::flock_read_memory::set_turn_memory(if on { memory.clone() } else { None });
@@ -4340,7 +4438,7 @@ pub fn score_rows(
         let rules: &[(DecodeRule, ReadScope)] = if on { &served } else { &served[..1] };
         let active = crate::flock_read_memory::turn_memory();
         let named = |key: &[u32]| active.as_ref().is_some_and(|m| m.reply_stored(key).is_some());
-        for split in splits.iter().filter(|s| s.samples) {
+        for (at, split) in splits.iter().enumerate().filter(|(_, s)| s.samples) {
             let prompts = sample_windows(&split.windows, &split.mask, samples);
             for &(rule, scope) in rules {
                 let mut replies = Vec::with_capacity(prompts.len());
@@ -4379,6 +4477,7 @@ pub fn score_rows(
                         reference_named,
                         admitted,
                         stepped,
+                        keyed: None,
                     });
                 }
                 let file = match (split.name.as_str(), rule) {
@@ -4418,16 +4517,17 @@ pub fn score_rows(
                     decode: Some((decoded, seconds)),
                 });
             }
-            // The forced-opening arm (claude-218): greedy, with each reply's first token given
-            // as its reference's, so what a right opening alone lifts is read beside greedy.
-            if keys && on {
+            // Greedy with each reply's first token given, where `openings` gives one (the arms
+            // below): the token is taken without a forward, and the rest decodes from the prompt
+            // and it, as served. With `record`, each reply keeps the token it was given.
+            let opened = |openings: &[Option<u32>], record: bool| -> Result<(Vec<IdSample>, usize, f64)> {
                 let mut replies = Vec::with_capacity(prompts.len());
                 let started = std::time::Instant::now();
-                for (index, window) in prompts.iter().enumerate() {
+                for (index, (window, &opening)) in prompts.iter().zip(openings).enumerate() {
                     let off = window.scored_offsets[0];
                     let prompt = &window.input_ids[..=off];
                     let reference = reference_reply(window, reply_tokens);
-                    set_forced_opening(reference.first().copied());
+                    set_forced_opening(opening);
                     let decoded = decode_reply(
                         &model,
                         PointObjective::Cell,
@@ -4458,12 +4558,31 @@ pub fn score_rows(
                         reference_named,
                         admitted: Vec::new(),
                         stepped: Vec::new(),
+                        keyed: opening.filter(|_| record),
                     });
                 }
-                let file = format!("samples-{}-forced-{label}.json", split.name);
-                // The forced token had no forward, so the speed counts only the decoded ones.
-                let decoded = replies.iter().map(|r| r.reply.len().saturating_sub(1)).sum();
-                let seconds = started.elapsed().as_secs_f64();
+                // A given token had no forward, so the speed counts only the decoded ones.
+                let decoded = replies
+                    .iter()
+                    .zip(openings)
+                    .map(|(r, o)| r.reply.len().saturating_sub(usize::from(o.is_some())))
+                    .sum();
+                Ok((replies, decoded, started.elapsed().as_secs_f64()))
+            };
+            // The forced-opening arm (claude-218), each reply's first token its reference's, so
+            // what a right opening alone lifts is read beside greedy; and the keyed arms
+            // (claude-219), the first token a trunk key's name where the exact key misses.
+            let mut arms: Vec<(String, Vec<Option<u32>>, bool)> = Vec::new();
+            if keys && on {
+                let openings = prompts.iter().map(|w| reference_reply(w, reply_tokens).first().copied()).collect();
+                arms.push((format!("samples-{}-forced-{label}.json", split.name), openings, false));
+                for (key, tau) in keyed {
+                    let openings = keyed_openings(&prompts, &named_openings[at], key, *tau, active.as_ref())?;
+                    arms.push((format!("samples-{}-keyed-{key}-{label}.json", split.name), openings, true));
+                }
+            }
+            for (file, openings, record) in arms {
+                let (replies, decoded, seconds) = opened(&openings, record)?;
                 write_new(&out.join(&file), &serde_json::to_vec(&replies)?)?;
                 written.push(ScoredFile {
                     file,
@@ -4477,30 +4596,20 @@ pub fn score_rows(
             }
         }
     }
-    // The opening keys (claude-218), with the memory off (the loop's last pass): TRAIN's opening
-    // points under this trunk, and each split's openings named by the nearest of them.
-    if keys {
-        crate::flock_read_memory::set_turn_memory(None);
-        let (train_tokens, train_mask) = load_train_split(data_root)?;
-        let train_windows = windows_of(&train_tokens, &train_mask)?;
-        let (train, train_targets, _) = opening_points(&model, &train_windows, &train_mask, seed, step)?;
-        for split in &splits {
-            let (query, targets, positions) = opening_points(&model, &split.windows, &split.mask, seed, step)?;
-            let keyed = opening_keys(&split.name, &query, targets, positions, &train, &train_targets)?;
-            let file = format!("keys-{}.json", split.name);
-            write_new(&out.join(&file), &serde_json::to_vec(&keyed)?)?;
-            // The keys' hits are in the file itself; the nearest and writer fields name the
-            // trunk's and the writer's picks, so they stay empty here.
-            written.push(ScoredFile {
-                file,
-                rows: keyed.positions.len(),
-                nearest_hits: None,
-                writer_hits: None,
-                panel_sha256: split.sha256.clone(),
-                tables: None,
-                decode: None,
-            });
-        }
+    for (split, keys) in splits.iter().zip(&named_openings) {
+        let file = format!("keys-{}.json", split.name);
+        write_new(&out.join(&file), &serde_json::to_vec(keys)?)?;
+        // The keys' hits are in the file itself; the nearest and writer fields name the
+        // trunk's and the writer's picks, so they stay empty here.
+        written.push(ScoredFile {
+            file,
+            rows: keys.positions.len(),
+            nearest_hits: None,
+            writer_hits: None,
+            panel_sha256: split.sha256.clone(),
+            tables: None,
+            decode: None,
+        });
     }
     Ok(written)
 }
@@ -8192,6 +8301,7 @@ mod tests {
             reference_named: 0,
             admitted: Vec::new(),
             stepped: Vec::new(),
+            keyed: None,
         };
         let greedy = [sample(0, vec![7, 7, 7], vec![5, 6, 1]), sample(1, vec![5, 9, 1], vec![5, 8, 1])];
         let forced = [sample(0, vec![5, 6, 1], vec![5, 6, 1]), sample(1, vec![5, 8, 1], vec![5, 8, 1])];
@@ -9804,6 +9914,74 @@ mod tests {
         assert_eq!(rotation_signs(8), [-1.0, -1.0, 1.0, -1.0, 1.0, 1.0, 1.0, -1.0]);
     }
 
+    /// claude-219: a keyed opening gives the key's name only where the served memory's exact key
+    /// misses the opening and the key's distance is within τ; the key read is the one named; and
+    /// a sampled opening the keys do not name, or name with another target, is refused.
+    #[test]
+    fn a_keyed_opening_fires_only_where_the_exact_key_misses_within_tau() {
+        use crate::flock_read_opening::{opening_slots, OpeningAnchor};
+        assert_eq!(keyed_opening(false, 7, 0.25, 0.5), Some(7));
+        assert_eq!(keyed_opening(false, 7, 0.5, 0.5), Some(7), "at τ itself");
+        assert_eq!(keyed_opening(false, 7, 0.75, 0.5), None);
+        assert_eq!(keyed_opening(true, 7, 0.0, f32::INFINITY), None, "the exact key fires");
+        assert_eq!(keyed_opening(false, 7, 9.0, f32::INFINITY), Some(7), "+∞ fires wherever it misses");
+        assert_eq!(keyed_opening(false, 7, f32::NAN, f32::INFINITY), None);
+        let arm = |k: &str, t: f32| (k.to_owned(), t);
+        assert!(keyed_ok(&[arm("sign", 0.0), arm("hsign", 0.5), arm("point", f32::INFINITY)]));
+        assert!(!keyed_ok(&[arm("sign", 0.0), arm("sign", 1.0)]));
+        assert!(!keyed_ok(&[arm("exact", 0.0)]));
+        assert!(!keyed_ok(&[arm("point", -1.0)]));
+        assert!(!keyed_ok(&[arm("point", f32::NAN)]));
+        // Two prompts after BOS; the memory's table holds the first's own turn key, read by the
+        // served slots, so its opening fires and the second's misses.
+        let window = |ids: Vec<u32>, target: u32, position: usize| CausalWindow {
+            doc_id: 0,
+            scored_offsets: vec![ids.len() - 1],
+            scored_targets: vec![target],
+            scored_corpus_positions: vec![position],
+            input_ids: ids,
+        };
+        let a: Vec<u32> = std::iter::once(hs::SHEET_BOS_ID).chain(10..30).collect();
+        let b: Vec<u32> = std::iter::once(hs::SHEET_BOS_ID).chain(40..60).collect();
+        let slots = opening_slots(&a, 8, OpeningAnchor::Turn);
+        let key: Vec<u32> = slots[a.len() - 1].iter().map(|&s| a[s]).collect();
+        assert!(!key.is_empty());
+        let table = std::collections::HashMap::from([(key, 5u32)]);
+        let memory = crate::flock_read_memory::TurnMemory::new(8, table, 4, &Device::Cpu).unwrap();
+        let keys = OpeningKeys {
+            split: "p".to_owned(),
+            train_openings: 3,
+            table_bytes: 48,
+            positions: vec![100, 200],
+            targets: vec![1, 2],
+            point_target: vec![11, 12],
+            point_distance: vec![0.0, 0.25],
+            point_ties: vec![1, 1],
+            sign_target: vec![21, 22],
+            sign_distance: vec![0.0, 0.75],
+            sign_ties: vec![1, 1],
+            point_ms: 0,
+            sign_ms: 0,
+            hsign_target: vec![31, 32],
+            hsign_distance: vec![0.0, 0.0],
+            hsign_ties: vec![1, 1],
+            hsign_ms: 0,
+        };
+        let (wa, wb) = (window(a.clone(), 1, 100), window(b.clone(), 2, 200));
+        let prompts = [&wa, &wb];
+        let keyed = |key: &str, tau: f32| keyed_openings(&prompts, &keys, key, tau, Some(&memory)).unwrap();
+        assert_eq!(keyed("point", 0.5), [None, Some(12)]);
+        assert_eq!(keyed("point", 0.125), [None, None]);
+        assert_eq!(keyed("sign", 0.5), [None, None]);
+        assert_eq!(keyed("sign", f32::INFINITY), [None, Some(22)]);
+        assert_eq!(keyed("hsign", 0.0), [None, Some(32)]);
+        // With no memory, no exact key fires.
+        assert_eq!(keyed_openings(&prompts, &keys, "hsign", 0.0, None).unwrap(), [Some(31), Some(32)]);
+        let (unnamed, moved) = (window(b.clone(), 2, 300), window(b, 3, 200));
+        assert!(keyed_openings(&[&unnamed], &keys, "point", 1.0, Some(&memory)).is_err());
+        assert!(keyed_openings(&[&moved], &keys, "point", 1.0, Some(&memory)).is_err());
+    }
+
     /// claude-211 (Casey 30 Oct: "do not rule flock out, improve it instead"): with `keep_end`,
     /// a nearest end of turn is taken whatever the draw; otherwise, and for any other nearest
     /// token, the drawn rank is.
@@ -9856,6 +10034,7 @@ mod tests {
             reference_named: 0,
             admitted,
             stepped: Vec::new(),
+            keyed: None,
         };
         let before = r#"{"position":7,"prompt":[1,2],"reply":[3],"reference":[4],"reply_text":"a","reference_text":"b","reply_keys":0,"reply_named":0,"reference_keys":0,"reference_named":0}"#;
         assert_eq!(serde_json::to_string(&sample(Vec::new())).unwrap(), before);
@@ -10098,6 +10277,7 @@ mod tests {
             reference_named: 0,
             admitted: Vec::new(),
             stepped,
+            keyed: None,
         };
         let samples = [
             sample(vec![STEP_NEAREST, STEP_OFF, STEP_NEAREST, STEP_OFF]),
@@ -10139,6 +10319,7 @@ mod tests {
             reference_named: 0,
             admitted: Vec::new(),
             stepped: marks,
+            keyed: None,
         };
         // Token 7 opens a TRAIN reply; 9 does not. The end of turn is 1. Greedy loops on prompts
         // 0 and 1 (5 6 7 8 twice) and completes prompt 2.

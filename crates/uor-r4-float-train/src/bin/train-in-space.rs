@@ -90,6 +90,11 @@
 //! under L1 and by sign pattern (`keys-{split}.json`), and a forced-opening greedy arm, each
 //! reply's first token given as its reference's (`samples-{split}-forced-memory.json`).
 //!
+//! `--keyed-decode sign=T,hsign=T,point=T`, with `--opening-keys 1`, adds a keyed arm per trunk key
+//! (claude-219): greedy with the memory on, the reply's first token the key's name where the
+//! memory's exact key misses the opening and the key's distance is at most τ (`inf`: wherever it
+//! misses), each forced token kept as the sample's `keyed` (`samples-{split}-keyed-{key}-memory.json`).
+//!
 //! `train-in-space --data-root DIR --controls 1 --out DIR [--fresh-v2 DIR] [--panel NAME=DIR ...]`: the
 //! protocol's recall controls (I-D, claude-211) on the laptop: (T) the memory's tables and (S) the
 //! longest suffix over TRAIN, as rows files the grader pairs with the arms.
@@ -146,6 +151,7 @@ fn main() -> Result<()> {
     let mut cut_grade_on = false;
     let mut cycle_on = false;
     let mut keys_on = false;
+    let mut keyed: Vec<(String, f32)> = Vec::new();
     let mut cycle_grade_on = false;
     let mut key_grade_on = false;
     let mut key_levels: Vec<(String, u8)> = Vec::new();
@@ -225,6 +231,7 @@ fn main() -> Result<()> {
             "--cut-grade" => cut_grade_on = switch(&value)?,
             "--cycle-step" => cycle_on = switch(&value)?,
             "--opening-keys" => keys_on = switch(&value)?,
+            "--keyed-decode" => keyed = keyed_decode_arg(&value)?,
             "--cycle-grade" => cycle_grade_on = switch(&value)?,
             "--key-grade" => key_grade_on = switch(&value)?,
             "--key-levels" => key_levels = key_levels_arg(&value)?,
@@ -559,6 +566,11 @@ fn main() -> Result<()> {
             "--opening-keys applies to --score-rows only".to_owned(),
         ));
     }
+    if !keyed.is_empty() && !keys_on {
+        return Err(FloatTrainError::Invalid(
+            "--keyed-decode applies to --score-rows with --opening-keys 1 only".to_owned(),
+        ));
+    }
     if cycle_grade_on {
         let runs = runs
             .ok_or_else(|| FloatTrainError::Invalid("--cycle-grade needs --runs DIR".to_owned()))?;
@@ -712,6 +724,7 @@ fn main() -> Result<()> {
             &scopes,
             cycle_on,
             keys_on,
+            &keyed,
             &device,
         )? {
             println!("{}", serde_json::to_string(&file)?);
@@ -810,9 +823,41 @@ fn key_levels_arg(value: &str) -> Result<Vec<(String, u8)>> {
         .collect()
 }
 
+/// `--keyed-decode sign=T,hsign=T,point=T` (claude-219): the keyed arms, each trunk key with its
+/// τ, a distance of 0 or more, or `inf` to fire at every opening the exact key misses.
+fn keyed_decode_arg(value: &str) -> Result<Vec<(String, f32)>> {
+    let keyed: Vec<(String, f32)> = value
+        .split(',')
+        .map(|part| match part.split_once('=') {
+            Some((key, tau)) if ["sign", "hsign", "point"].contains(&key) => match tau.parse::<f32>() {
+                Ok(t) if t >= 0.0 => Ok((key.to_owned(), t)),
+                _ => Err(FloatTrainError::Invalid(format!("--keyed-decode: {part} wants a τ of 0 or more, or inf"))),
+            },
+            _ => Err(FloatTrainError::Invalid("--keyed-decode takes sign=T,hsign=T,point=T".to_owned())),
+        })
+        .collect::<Result<_>>()?;
+    if keyed.iter().enumerate().any(|(i, (k, _))| keyed[..i].iter().any(|(j, _)| j == k)) {
+        return Err(FloatTrainError::Invalid("--keyed-decode names each trunk key once".to_owned()));
+    }
+    Ok(keyed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keyed_decode_names_each_trunk_key_once_with_a_tau_of_0_or_more() {
+        assert_eq!(
+            keyed_decode_arg("sign=0.0078125,hsign=0,point=inf").unwrap(),
+            [("sign".to_owned(), 0.0078125), ("hsign".to_owned(), 0.0), ("point".to_owned(), f32::INFINITY)]
+        );
+        assert!(keyed_decode_arg("sign=-0.5").is_err());
+        assert!(keyed_decode_arg("sign=NaN").is_err());
+        assert!(keyed_decode_arg("sign=x").is_err());
+        assert!(keyed_decode_arg("exact=0").is_err());
+        assert!(keyed_decode_arg("sign=0,sign=1").is_err());
+    }
 
     #[test]
     fn key_levels_name_each_trunk_key_once_with_a_level_from_1_to_10() {
