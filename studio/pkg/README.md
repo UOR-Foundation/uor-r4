@@ -1,303 +1,242 @@
-# UOR-R4 Geometric Language Model
+# UOR-R4 Geometric Language Model: integer serving
 
-*An open research project: can geometry replace a transformer's run-time machinery in a language
-model that runs on a laptop?*
+> **Selected API, 13 October — D29:** Cargo selects `src/native_geometry.rs`, exposing fixed H4 geometry, checked integer primitives and report/config metadata. The historical model/stack/sampling executors and generation binaries described below remain source evidence and are excluded; `historical-runtime` fails compilation. The composed native CUDA graph at `1f1547bfd` passes 31 finite controls on RTX4090, pending protected delivery. No compliant D11 language-serving model is qualified by this facade or those controls; all training holds remain. [Boundary record](../../archive/labs/d29-vendor-boundary-2026-10-13/README.md).
 
-[![License: MIT](https://img.shields.io/github/license/UOR-Foundation/uor-r4)](LICENSE)
-[![Rust 1.97.1](https://img.shields.io/badge/rust-1.97.1-orange?logo=rust)](rust-toolchain.toml)
-[![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-yellow)](STATUS.md)
-[![Milestones: 0 of 8 complete](https://img.shields.io/badge/milestones-0%2F8%20complete-blue)](#where-we-are)
-[![Last commit](https://img.shields.io/github/last-commit/UOR-Foundation/uor-r4/main)](https://github.com/UOR-Foundation/uor-r4/commits/main)
-[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-ffcc4d)](https://huggingface.co/caseyallard/uor-r4-geometric-214m)
+## Status on 29 Oct 2026
 
-**Status, 13 October 2026: pre-alpha.** No model in this repository holds a useful conversation yet.
-The project is building the first model whose whole executed path obeys its rules; **training is held**
-until that path is complete and reviewed.
+This crate serves the float-trained FBS trunk as a D11 integer artifact. Pre-alpha: no milestone is complete and no conversation is established. The model's two paths and their state are in [the pipeline map](../../docs/model/pipeline-map.md); the plan is [PLAN.md](../../PLAN.md).
 
-## The question
+- **D80 and D81 (28 Oct).** Served integer code may use the hardware integer multiply and divide. Floats, transcendentals and dense matmul stay banned in serving.
+- **`lut-stack/5`.** It keeps the 120-root rotations exact, so the export gap closes (claude-181, claude-182). It serves at 4,217–4,504 tok/s on the M1 laptop (DEV scope).
+- **`lut-stack/6`.** It carries the Hamming reads (claude-188). The session refuses `/6` until it serves them. The copy-head integer kernel matches an f64 reference (claude-189); the session hooks are next.
+- **Speed.** 4,829 tok/s on the M1 with the snapped contract, replies byte-identical to the engine before the multiply and divide (claude-177).
 
-Transformers spend most of their run-time work on dense matrix products and softmax attention. This
-project asks whether a language model can carry its state, read its past and choose its next token
-through **geometry** instead, and run on an M1-class laptop with no floating point and no multiplier
-instruction at serving time ([D11](docs/integration/DECISIONS.md#d11--native-multiplier-free-transformerless-serving-for-every-lab-d10-superseded)).
+## Historical implementation and evidence
 
-"Geometry" here means concrete, exact structures:
+This crate serves the retained learned recurrent model with full causal context,
+integer model arithmetic, and integer token selection. It supports the quaternion
+model and the matched Householder-pair control, with the retained dot-product
+read or the hyperbolic (Lorentz) read, at state width 128 or 256 (read width 64,
+context up to 256). Serving bundles keep the retained width-256, context-256
+shape. The weights retain the model's existing
+limitations: general prose remains weak, and useful general reasoning and
+frontier capability are not established.
 
-- **State and transport:** unit quaternions (R4/S³) that rotate the state each step.
-- **Exact structure:** the 120 icosians (the 600-cell), exact golden integers `Z[φ]`, E8 = H4 ⊕ φH4.
-- **Addressing:** prime (UOR) addresses, SpiralCore signed transport, fixed zeta-zero phases.
+A Lorentz model is served under its own packed contract
+(`config::packed_numerical_contract`), which differs from the retained one only
+in its read declaration. Its two learned scalars are signed 16-bit codes. At load,
+`exp(read.lorentz_log_beta)` is computed once with integer arithmetic. For each
+key, `z - 1` of the lifted query and key comes from their Q8 codes as a
+difference of exact integers, with one square root and one rounded division
+(see [`src/lorentz.rs`](src/lorentz.rs)). The distance `arcosh(z)` is read from
+a sealed Q24 table (`arcosh.json`/`arcosh.bin`), which the training tool now
+exports next to the retained tables; the retained table files are unchanged.
+A Lorentz model refuses a table root without it.
 
-The answer is recorded either way. Architectural priority is not a measured advantage, and the
-project keeps the two apart.
+The crate depends on the shared byte-level tokenizer, Serde/JSON, and hashing
+libraries. It has no dependency on Candle, the training crate, the core crate,
+model-source, a transformer implementation, or an external model provider.
+Training evaluation re-exports the same integer computation used here.
 
-## Architecture
+The [packed coefficient candidate](../../archive/integration/packed-integer-preparation-2026-09-27.md)
+keeps signed4 arrays in shared `Arc<[u8]>` storage after loading and consumes
+packed rows directly. Signed16 arrays are shared separately.
+`IntegerModel::coefficient_storage()` reports unique coefficient payload bytes,
+excluding metadata, loading temporaries and session state. Artifact formats and
+supported dimensions are unchanged. The [completed comparison](../../archive/integration/packed-integer-comparison-2026-09-27.md)
+preserves every declared stable field across eight paired workloads on the two
+retained width-256 artifacts. Logical retained coefficient payload falls from
+6,702,340 to 847,876 bytes; observed peak child RSS is 13.04–16.83% lower.
+Timing changes are small and mixed in this single pass. Dense access and the
+artifacts' language limitations remain; no general speed or energy gain is established.
 
-<img src="docs/figures/architecture.svg" alt="Architecture: line A, the geometric stack language base, has a compliant trunk as tested source but no geometric head yet and its first training run is held; line B, the native learner, completes 437 of 512 development replies but 0 of 128 on fresh transfer; both join as one model served under D11 at M4" width="100%">
+The separate [width-576 dialogue development profile](../../archive/integration/dialogue-child-native-observation-2026-09-27.md)
+now accepts a verified complete-prefix child through its own conversion schema.
+Use the training example `dialogue-child-integer-bridge` to construct its packed
+model and `pack-dialogue576` to package it. This keeps the selected child's
+actual arrays and local clocks separate from its historical R1d ancestor.
+The observer's `--child` mode compares this child's saved reference and actual
+FF/QQ/integer replies. The nearest-hard child loses useful relationships and
+remains diagnostic; it is not an accepted bundle or useful chat qualification.
+The linked result supplies complete CLI arguments, artifact identity and costs.
 
-- **Line A, the language base (M1).** A geometric stack language model: recurrence layers that carry a
-  quaternion state by rotation, geometric feed-forward blocks and a geometric head.
-  Code: [`crates/uor-r4-training`](crates/uor-r4-training).
-- **Line B, grounded reply from exact memory (M2, M3).** A learned compiler writes facts into an exact,
-  versioned, addressed store; a learned emitter writes the reply.
-  Code: [`crates/uor-r4-core/src/native_geometric`](crates/uor-r4-core/src/native_geometric).
-- **Serving (M4).** One model, served by the integer engine [`crates/uor-r4-integer`](crates/uor-r4-integer).
+## Build and package
 
-The geometry is explained, with pictures, in **[The geometry, illustrated](docs/geometry.md)**.
+**Current build clarification:** The [manifest](Cargo.toml) requires `serving-wasm` for this binary; the implementation and qualification evidence above remain historical.
 
-## Where we are
-
-**0 of 8 milestones complete.** Each closes only when its acceptance is met on a saved model.
-Live tracker: [#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028).
-
-| Milestone | Issue | Status | Headline now → target |
-|---|---|---|---|
-| M1 Language base | [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) | in progress; training held | acceptable replies 37 → 116 of 232; v5 memory 20 → 34 of 40 |
-| M2 Grounded reply from exact memory | [#2030](https://github.com/UOR-Foundation/uor-r4/issues/2030) | held | 437/512 development replies (above 256), but 0/128 on fresh transfer |
-| M3 Durable conversation memory | [#2031](https://github.com/UOR-Foundation/uor-r4/issues/2031) | paused | evaluator and session built; waits on an M1 or M2 model |
-| M4 One served model (D11 and a CLI) | [#2032](https://github.com/UOR-Foundation/uor-r4/issues/2032) | held | softmax at runtime: yes → must be no (D23) |
-| M5 Laptop cost | [#2033](https://github.com/UOR-Foundation/uor-r4/issues/2033) | not started | energy per token on an M1: not measured |
-| M6 Reasoning and coding | [#2034](https://github.com/UOR-Foundation/uor-r4/issues/2034) | not started | exact arithmetic is the visible gap |
-| M7 Distribution (API, WASM, Studio) | [#2035](https://github.com/UOR-Foundation/uor-r4/issues/2035) | not started | local API only |
-| M8 Alpha release | [#2036](https://github.com/UOR-Foundation/uor-r4/issues/2036) | not started | owner decision |
-
-<img src="docs/figures/milestones.svg" alt="Milestones M1 to M8: M1 in progress, M2 and M4 held, M3 paused, M5 to M8 planned" width="100%">
-
-Per-lab measured position: [STATUS.md](STATUS.md). Plan of record: [ROADMAP.md](ROADMAP.md) and
-[project-track.md](docs/integration/project-track.md).
-
-## The current path: one lawful model, then training
-
-The owner's rules of 12 October ([D23–D25](#rules-the-project-works-under)) prohibit softmax, sigmoid,
-tanh, softplus and dense matrix products anywhere a model executes, in training as well as serving.
-No earlier training configuration satisfies them, so the project is rebuilding the language base's
-operators geometrically (the **operator phase**, led by Kimi) before training again.
-
-<img src="docs/figures/geometry/compliant-path.svg" alt="The compliant next-token path: embedding, recurrence with geometric gates, geometric feed-forward with the SpiralCore/FBS projection and the G2 Hamilton gate, a geometric head not yet built, raw scores, a rank-margin hinge in training and greedy argmax in serving" width="100%">
-
-| Step | Replaces | Status | Record |
-|---|---|---|---|
-| G2 Hamilton gate: the gate rotates the value, `q(g) ⊗ u` | the SwiGLU sigmoid | source, tested | [#2260](https://github.com/UOR-Foundation/uor-r4/pull/2260) |
-| SpiralCore/FBS projection: select one carrier, transport by signed BFS | dense projections | source, tested | [#2279](https://github.com/UOR-Foundation/uor-r4/pull/2279), [brief](docs/mechanisms/spiralcore-fbs-projection.md) |
-| Geometric recurrence gates: clamped opening, exact rate table, Hamilton output gate | sigmoid, `exp`, softplus, GELU | source, tested | [#2293](https://github.com/UOR-Foundation/uor-r4/pull/2293) |
-| Rank-margin objective: a hinge over declared rivals on raw scores | softmax cross-entropy | source, tested | [#2255](https://github.com/UOR-Foundation/uor-r4/pull/2255), [brief](docs/mechanisms/rank-margin-objective.md) |
-| Geometric head (OP3a): product-key vocabulary scoring | the dense tied head | **not built** | [operator plan](docs/labs/operator-phase-2026-10-12/README.md) |
-| Device qualification: stored or analytic expected values, no CPU reference | the CPU-referenced parity gate | **not built** | rung-0 sheet, dependency 4 |
-| Rung 0: the first lawful training run (2 arms × 2 seeds, ≤ $4) | — | pre-registered; **held** | [sheet](docs/harness/prep/m1-rank-margin-rung0-2026-10-13.md) |
-| Rung 0b: starling / rank-table reads with a rank-consistent gradient | softmax attention | after rung 0 | [brief](docs/mechanisms/starling-read.md) |
-
-"Source, tested" means the code has landed with focused tests. None of these operators has been trained
-yet, and none is a capability claim. Pictures of the three new operators:
-[the geometry page](docs/geometry.md#the-operators-of-the-compliant-trunk).
-
-## Rules the project works under
-
-| Rule | What it says |
-|---|---|
-| [D11](docs/integration/DECISIONS.md#d11--native-multiplier-free-transformerless-serving-for-every-lab-d10-superseded) | Serving uses adds, subtracts, shifts, compares and table reads: no floating point, no multiplier instruction, no transformer backbone. |
-| [D22](docs/integration/DECISIONS.md#d22--a-negative-closes-a-configuration-never-a-mechanism-five-closures-reopened) | A negative result closes a configuration, never a mechanism. Decisive runs use ≥ 2 seeds or ≥ 200 fresh rows and a pre-registered bar reviewed `TEST FITNESS: FIT` before compute. |
-| [D23](docs/integration/DECISIONS.md#d23---no-softmax-anywhere-in-the-active-project) | No softmax anywhere: training, serving, sampling, objectives, teachers, comparators, renamed or table forms. |
-| [D24](docs/integration/DECISIONS.md#d24---no-cpu-model-compute-and-no-gpu-on-non-decisive-work) | No CPU model compute; no GPU on work that cannot change a decision. |
-| [D25](docs/integration/DECISIONS.md#d25---geometric-operator-phase-and-current-lab-direction) | No softplus, sigmoid or tanh, and no dense matrix multiplication, in training or serving. The constraint set is frozen until the first lawful run reports. |
-| [D26](docs/integration/DECISIONS.md#d26---vastai-is-the-default-provider-for-new-pods) | GPU pods are rented on Vast.ai through `scripts/pod/uor-pod`, within ≤ 4 pods and ≤ $8/h; Runpod is an emergency backup only. |
-| [D27](docs/integration/DECISIONS.md#d27---rust-first-and-the-uor-foundation-ecosystem-as-the-shared-floor) | Rust is the default for all new code, tooling included; the uor-foundation crates are the shared floor. |
-
-Interlocks run on every PR: `scripts/check_no_softmax.py` and `scripts/check_no_matmul.py` ratchet the
-executable tree so no prohibited site can be added. All decisions: [DECISIONS.md](docs/integration/DECISIONS.md).
-
-## Mechanisms under test
-
-One page per novel mechanism: the idea, where it lives, what has been tried and what a fair test needs.
-Index: [docs/mechanisms/](docs/mechanisms/README.md).
-
-| Mechanism | Milestone | Where it stands |
-|---|---|---|
-| [SpiralCore/FBS projection](docs/mechanisms/spiralcore-fbs-projection.md) | M1, M2 | source, tested; in the compliant trunk |
-| [Rank-margin objective](docs/mechanisms/rank-margin-objective.md) | M1 | source, tested; rung 0's objective |
-| [Starling read](docs/mechanisms/starling-read.md) (~7 neighbours on the 600-cell) | M4 | served softmax-free; its gradient is rung 0b |
-| [Flock / rank-table reads](docs/mechanisms/flock-rank-reads.md) | M4 | served; earlier measurements from a softmax-trained stack |
-| [E8 orbit memory](docs/mechanisms/e8-orbit-memory.md) | M4 | source; rung 1 KEEP and iterate (historical) |
-| [Exact addressed memory](docs/mechanisms/exact-addressed-memory.md) | M1, M3 | built; product-key memory trained in historically |
-| [Invariant-addressed read](docs/mechanisms/invariant-addressed-read.md) | M1 | source; its router campaign was cancelled under D23/D24 |
-| [Read binding](docs/mechanisms/read-binding.md) | M1 | KEEP in the historical float form |
-| [Pointer with an identity key](docs/mechanisms/pointer-identity-key.md) | M1 | historical evidence |
-| [Spin-native weights](docs/mechanisms/spin-native-weights.md) | M4 | quaternion weights and 2-bit norms KEEP (historical) |
-| [Unified geometric carrier credit](docs/mechanisms/unified-geometric-carrier-credit.md) | M2 | source; training held |
-| [Protected legal construction](docs/mechanisms/protected-legal-construction.md) | M2 | reopened by D22; not active |
-| [Ternary / XOR arithmetic](docs/mechanisms/ternary-xor-arithmetic.md) and its [evidence sheet](docs/mechanisms/ternary-xor-evidence-factsheet.md) | M4, M5 | assessed, not adopted |
-
-## Results so far
-
-Every number holds only at its exact artifact, data, operator and budget. Rows marked **historical**
-come from the pre-D23 float form (softmax reads and head, dense products): they are evidence of what
-was measured, not a path that runs today.
-
-| Result | Value | Scope |
-|---|---|---|
-| M1 memory and replies (29M chat line, frozen panels) | v5 memory **20/40**; open reply panel **37/232** acceptable | historical; [mixture dose](docs/labs/mixture-dose-2026-10-10/README.md) |
-| Read binding, powered (3 seeds against matched controls) | wrong-value failures **47 → 30** of 120; **KEEP** | historical; [record](docs/labs/read-binding-powered-2026-10-11/README.md) |
-| Native grounded learner | **437/512** development replies (from 177); **0/128** on fresh transfer: panel fitting | training held; [record](docs/labs/m2-pooled-rank-2026-10-10/README.md) |
-| 19.9M chat stack | 0.877550 BPB float / 0.886838 served multiplier-free (11.9 MB) | historical; 512 windows |
-| D11 integer engine | bit-exact with its float reference on 3,072 targets | engine property, not model quality |
-| 214M Plan A base | FineWeb dev NLL 2.90 → 2.073 | historical; rewrite and summarize usable, code and arithmetic wrong |
-
-<details>
-<summary><b>All results, negatives and retractions</b></summary>
-
-| Result | Value | Scope |
-|---|---|---|
-| Sealed 8M stack | 1.1199 BPB (Kneser-Ney 5-gram: 1.2803) | historical sealed report |
-| Product-key memory trained into the M1 stack (`memory_layers=`) | layer 4, 64 sub-keys 19/40 (2 seeds); layer 8 (a read layer) 20/40 with wrong-value failures 17 → 10 | historical; [record](docs/labs/addressed-memory-2026-10-10/README.md) |
-| Addressed read (product-key at the answer layer) | wrong-value 47 → 34 of 120, headline flat; −90 % per-token compute on that layer, +36.9 M parameters | historical; [record](docs/labs/addressed-read-2026-10-11/README.md) |
-| Criterion 2, 29M M1 artifacts served under D11 | 1.20138 BPB against a ≤ 0.90 target; engine bit-exact | historical |
-| v4 memory panel (`exact` check) | 31/40 at 214M, 26/40 at 96M | historical; one seed each |
-| Softmax-free flock reads (2 seeds each) | Δ BPB against softmax: learned rank tables +0.0172 to +0.0185; fixed rank +0.040; Hamming rank +0.259 | historical; reads trained beside a softmax stack |
-| Trained VSA codes in the native learner | held-out BPB improves 0.014–0.023; icosian-root-only codes collapse token identity | [record](docs/labs/vsa-native-test-2026-10-09/README.md) |
-| MQAR toy (1.37M) | 0.99919 in-class vs 0.2534 control | synthetic; advantage confined to a learning-rate band |
-
-**Negatives and retractions, kept as evidence.**
-
-- D0 stack against a matched transformer control: 1.998 vs 2.011 NLL, parity. No tested geometric
-  mechanism has yet beaten a matched ordinary control.
-- Larger is not always better: a 214M SmolTalk-mixture stack scored 1.0966 BPB against 0.9607 for a
-  7.16M chat-only stack on the same panel.
-- Fine-tune levers of Steps 5–12 (knowledge corpus, dialogue recall, gate supervision, phase binding,
-  constant learning rate, abstention) were null or rejected.
-- The native learner's 437/512 is panel fitting: 0/128 on fresh literal-bank transfer.
-- Track A1 stopped (D18); the transformer-conversion track is parked after its parity failure (#1518);
-  complete-roadmap claims of 8 September were retracted by audit.
-- The starling ladder's recall results (#2222–#2249) learned through softmax teachers and are inactive
-  evidence under D23 ([archived branches](docs/history/branch-archive/INDEX.md)).
-
-Sources: [current state](docs/integration/current-state.md), [evidence index](docs/integration/EVIDENCE.md),
-[mechanism admissibility](docs/integration/mechanism-admissibility-2026-10.md).
-
-</details>
-
-## Bookkeeping: where things are recorded
-
-| What | Where |
-|---|---|
-| What is true now, newest first | [docs/integration/current-state.md](docs/integration/current-state.md) |
-| Owner decisions D0–D27 | [docs/integration/DECISIONS.md](docs/integration/DECISIONS.md) |
-| Live tracker and milestone issues | [#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028), #2029–#2036 |
-| One dated record per completed unit | `docs/labs/<topic>-<date>/README.md` |
-| Pre-registrations and their `TEST FITNESS` verdicts | [docs/harness/prep/](docs/harness/prep/) and the milestone issue |
-| Who holds which branch, what each lab is doing, what ran | the research harness: [docs/harness/](docs/harness/README.md) |
-| Unmerged, superseded or negative source | [docs/history/branch-archive/](docs/history/branch-archive/INDEX.md) (patches with sha256) |
-| Compute spend and pods | `scripts/pod/uor-pod log`, the compute board [#2037](https://github.com/UOR-Foundation/uor-r4/issues/2037) |
-| Results and artifacts | iCloud (MD5-verified `cloud-store`) and the private HF store; public release on Hugging Face |
-| How the README and figures are kept current | [docs/bookkeeping.md](docs/bookkeeping.md) |
-
-## How the project is run
-
-The owner, Casey Allard, sets direction and holds the decisions on spending, holds and mechanism stops.
-The work is done by AI research labs that share one repository and one harness:
-
-- **Kimi:** project manager. One plan, line assignments, collision resolution and the operator phase.
-- **Claude:** expert lab for the starling and rank reads and the GPU pods. It is also the proposed
-  keeper of this README, the figures and the geometry page ([bookkeeping](docs/bookkeeping.md)).
-- **Codex (Sol):** expert lab for enforcement, M2, the geometric head and the writer.
-- **DeepSeek:** the harness and maintenance, plus the invariant-addressed router and memory.
-- **Antigravity:** a fifth lab, currently offline.
-
-Every unit follows the same cadence: claim a branch in the harness, pre-register any compute and get a
-`TEST FITNESS: FIT` review, deliver through a protected PR with checks run at its exact head, write the
-dated record and current-state entry, merge, then delete the branch on both sides.
-`origin/main` is the only source of truth. Full procedure: [CONTRIBUTING.md](CONTRIBUTING.md); rules for
-agents: [AGENTS.md](AGENTS.md); the PM's operating rules: [pm-rules.md](docs/harness/pm-rules.md); the shared
-harness: [docs/harness/README.md](docs/harness/README.md).
-
-## Quick start
-
-Rust 1.97.1 is pinned by `rust-toolchain.toml`. Training data and trained artifacts are not in the
-repository (see [Models and data](#models-and-data)). Model compute runs on GPU pods only (D24).
+From the repository root:
 
 ```sh
-git clone https://github.com/UOR-Foundation/uor-r4 && cd uor-r4
-cargo build --release -p uor-r4-training --example geometric-stack   # the stack trainer and tools
-cargo test -p uor-r4-training --lib geometric_stack                   # focused stack tests
-cargo run -p xtask -- figures                                         # the status diagrams are current
-python3 scripts/check_no_softmax.py && python3 scripts/check_no_matmul.py   # the D23/D25 ratchets
+cargo build --release --offline -p uor-r4-integer --features serving-wasm --bin uor-r4-integer
+target/release/uor-r4-integer pack PACKED TABLES TOKENIZER_JSON NEW_BUNDLE
 ```
 
-New lab: set `UOR_LAB`, then run the harness onboarding ([docs/harness/ONBOARD-PROMPT.md](docs/harness/ONBOARD-PROMPT.md)).
-GPU work goes through `scripts/pod/uor-pod` ([docs/labs/compute.md](docs/labs/compute.md)); never rent by hand.
+`PACKED` is a sealed accepted packed-model directory; `TABLES` is its sealed
+integer table directory; `TOKENIZER_JSON` is the original tokenizer file. The
+tokenizer's SHA-256 must match the parent's evaluator provenance. Packaging
+copies the existing parameter codes and tables; it performs no fitting or table
+construction. `NEW_BUNDLE` must not exist.
 
-<a id="models-and-data"></a>
-<details>
-<summary><b>Models and data</b></summary>
+For a model packed by a training tool rather than an accepted campaign (for
+example the `joint-integer-parity` example of `uor-r4-training`), use
+`pack-development PACKED TABLES TOKENIZER_JSON NEW_BUNDLE`. It produces the
+same sealed layout without evaluator provenance: the tokenizer is the caller's,
+and `bundle.json` records the bundle as a development bundle with no accepted
+parent. A Lorentz model's table root must carry the arcosh table.
 
-Released publicly on Hugging Face (9 October 2026). These checkpoints are **historical**: trained before
-D23–D25 in the float form. The labs' working store stays private.
+The resulting sealed bundle binds the model, table hashes, tokenizer bytes and
+identity, full context policy, and parent provenance. Loading uses the files
+inside the bundle; recorded source paths do not cause source lookups. Vocabulary
+size must be 4096, `<|bos|>` must encode as token 0, and `<|eos|>` as token 1.
+The tokenizer applies its existing byte-level BPE rules without inserting BOS or
+EOS. The session inserts one BOS explicitly.
 
-**[caseyallard/uor-r4-geometric-214m](https://huggingface.co/caseyallard/uor-r4-geometric-214m)**: four 214M
-geometric-stack checkpoints, with configs, sanitized run reports and the byte-BPE tokenizer.
+## Generate from a request array
 
-| Checkpoint | What it is | Result |
-|---|---|---|
-| `base-tinystories/` | Step 8 base: TinyStories, TinyDialogues and chat-v0-p2 | TinyStories val NLL 1.032 |
-| `base-planA/` | the base above, continued for 1.84B SmolLM-Corpus tokens | FineWeb dev NLL 2.90 → 2.073 |
-| `chat-planA-b8/` | Plan A base plus an assistant fine-tune (173M-token mix, 8k steps) | rewrite and summarize usable; code and arithmetic wrong |
-| `chat-smoltalk-b16/` | Step 8 base plus the same fine-tune mix (16k steps) | rewrite and summarize usable |
+```sh
+target/release/uor-r4-integer generate BUNDLE requests.json NEW_REPORT
+```
 
-**[datasets/caseyallard/uor-r4-data](https://huggingface.co/datasets/caseyallard/uor-r4-data)**: the
-project-generated data: the tokenizer, the memory-dialogue sets (`mw-balp`, `mw-orcp`) with the fine-tune
-manifest, the dev split, the conversational panels, and TinyStories tokenized for the native learner.
+`requests.json` is an array of 1–256 independent requests. Each starts a fresh
+model session. The complete request shape is:
 
-| Source | Used for | License |
-|---|---|---|
-| [SmolLM-Corpus](https://huggingface.co/datasets/HuggingFaceTB/smollm-corpus) (FineWeb-Edu, Cosmopedia-v2) | Plan A pretraining | ODC-BY |
-| [TinyStories](https://huggingface.co/datasets/roneneldan/TinyStories) | 8M–214M ladder pretraining | CDLA-Sharing-1.0 |
-| [TinyDialogues](https://huggingface.co/datasets/styfeng/TinyDialogues) | 214M Step 8 pretraining | MIT |
-| [SmolTalk](https://huggingface.co/datasets/HuggingFaceTB/smoltalk) and [UltraChat 200k](https://huggingface.co/datasets/HuggingFaceH4/ultrachat_200k) (as `chat-v0-p2`) | chat pretraining share and the assistant fine-tune | Apache-2.0 / MIT |
-| Project-generated memory dialogues (`mw-balp`, `mw-orcp`, dialogue-recall) | memory fine-tunes, recall panels | MIT (this project) |
+```json
+[
+  {
+    "prompt": "The red key is in the box. Where is the red key?",
+    "max_new_tokens": 24,
+    "selection": {"kind": "greedy"},
+    "read_mode": "enabled",
+    "first_sentence": true
+  },
+  {
+    "prompt": "Once there was a little bird",
+    "max_new_tokens": 48,
+    "selection": {"kind": "categorical", "top_k": 40, "seed": 17},
+    "read_mode": "enabled",
+    "first_sentence": false
+  }
+]
+```
 
-Third-party text is not republished. SmolLM2 weights (Apache-2.0) were used only as an offline comparator,
-never on a serving path, and no new comparator runs are permitted (D23).
+`prompt` and `max_new_tokens` are required. Omitted fields default to greedy
+selection, reading enabled, and `first_sentence: false`. Unknown fields are
+rejected. `read_mode: "no_read"` is an explicit diagnostic intervention.
 
-</details>
+Greedy ties choose the lowest token ID. Categorical selection samples the Q48
+masses at temperature 1 using the declared xorshift64 generator. `top_k: 0` or
+`top_k >= 4096` includes all tokens; `top_k: 1` is greedy and consumes no random
+value. This is a new policy, not seeded parity with the historical floating
+temperature sampler. No temperature parameter is accepted.
 
-<details>
-<summary><b>Repository map</b></summary>
+The full requested budget must satisfy:
 
-| Path | Purpose |
-|---|---|
-| [`crates/uor-r4-core`](crates/uor-r4-core) | R4/S³/H4, exact `Z[φ]`, prime addressing, the native learner (`native_geometric/`), sealed report output |
-| [`crates/uor-r4-training`](crates/uor-r4-training) | Rust autodiff and CUDA kernels: the geometric stack, the operators, memory, export, experiment drivers |
-| [`crates/uor-r4-integer`](crates/uor-r4-integer) | the D11 integer engine; the `uor-r4-stack` and `uor-chat` binaries |
-| [`crates/uor-r4-harness`](crates/uor-r4-harness) | the Rust research harness (`uor-harness onboard`) |
-| [`crates/uor-r4-api`](crates/uor-r4-api) | typed compile and engine APIs; the `r4-native-chat` CLI |
-| [`crates/uor-r4-tokenizer`](crates/uor-r4-tokenizer) | byte-level BPE engine and tokenizer identity |
-| [`crates/uor-r4-lut`](crates/uor-r4-lut), [`crates/uor-r4-simd`](crates/uor-r4-simd) | frozen table-driven 4-bit serving comparator and its vector kernels |
-| [`crates/uor-r4-router`](crates/uor-r4-router) | reusable routing plus historical paths |
-| `crates/uor-r4-graph-*` | the frozen R4G1 graph format, compiler, runtime, certifier and CLI |
-| [`crates/uor-r4-proof-model`](crates/uor-r4-proof-model), [`crates/uor-r4-naf`](crates/uor-r4-naf), [`crates/uor-r4-workbench`](crates/uor-r4-workbench) | proof specification, the UOR-NAF slice, the bounded research reference |
-| [`crates/repo-model`](crates/repo-model), [`crates/repo-conformance`](crates/repo-conformance), [`xtask`](xtask) | claim registries, honesty gates, `cargo xtask` repository tasks (including `figures`) |
-| [`scripts/`](scripts) | the harness CLI, pod tooling (`scripts/pod/`), storage hygiene, interlocks |
-| [`docs/`](docs) | decisions, current state, lab records, mechanism briefs, the geometry page, history |
+```text
+1 BOS + encoded prompt length + max_new_tokens <= 256
+```
 
-The [project map](docs/PROJECT_MAP.md) covers every crate and directory.
+Empty prompts, zero continuation budgets, and oversized requests fail. The
+runtime does not truncate, evict, reduce attention access, or reset implicitly.
+Every prediction exposes every previous occurrence, up to 255 positions. A
+64-coordinate read vector does not impose a 64-token access limit.
 
-**Statistics, 13 October 2026** (mostly multi-agent lab work, not a count of human contributors): about
-1,990 commits since 9 June 2026; 1,761 merged PRs (968 in the last 30 days); about 1.68M lines of Rust;
-8,131 `#[test]` functions; decisions D0 to D27; 14 open issues.
+Generation stops at EOS, the requested maximum, or three repeats of a token cycle
+of period 1–4. With `first_sentence: true`, any decoded ASCII period also stops
+generation; this is a byte-level stop rule, not a linguistic sentence parser.
 
-</details>
+`NEW_REPORT` must not exist. Successful output is sealed and contains
+`generations.jsonl` and `summary.json`, with token IDs, rendered text, stop reason,
+Q48 distribution hashes, causal-slot counts, identities, and timings. A failed
+attempt may leave partial output; retain it and choose a new directory for a
+retry. `raw_decoded` is a lossy UTF-8 rendering including emitted EOS content;
+token IDs preserve the exact output and `utf8_decodable` reports whether the
+response bytes were valid UTF-8. `response_text` omits EOS and trims whitespace.
 
-## Acknowledgements
+## Retain a session in Rust
 
-- **Alex Flom** (UOR Foundation, [@afflom](https://github.com/afflom)): the upstream UOR framework, addressing and Lean sources this project builds on, and review of its early design.
-- **Ari** (UOR, [@auser](https://github.com/auser)): migrated the transformerless engine into this workspace and authored the R4G1/graph-compiler design and early certify measurement work.
-- **Maura** (UOR, [@maurathat](https://github.com/maurathat)): UOR contributions including uor-addr, and a README correction here (PR #235).
-- **Mark (N3mesis)**: geometry research in [NEMESIS-Theory](https://github.com/markrnd87-cmd/NEMESIS-Theory), the octonion/Fano and structure-carrying criteria that informed the substrate reviews.
-- **Matthew**: author of SpiralCore (the v63 Cl(0,6) octonion operator convention and the v68/v69 material), whose signed transport is now the trunk's projection.
-- **Gerrit** (DarkUnicorn, [LinkedIn](https://www.linkedin.com/in/gerrit-b%C3%B6hme-36b3a9413)): author of GoldSnnail and goldworm-coder, reviewed as external sources for state-layout patterns and evaluation ideas.
-- **Wil Dahn** ([W33-Theory](https://github.com/wilcompute/W33-Theory)): theory discussions on the high-level geometry and its allowed pathing; author of the W(3,3) corpus reviewed by the labs.
-- **John Haines**: theory discussions on the high-level geometry and its allowed pathing.
-- **Ron Brazil**: theory discussions and engineering design.
-- **The AI research labs** (Kimi, Claude, Codex, DeepSeek), which do most implementation under the owner's direction; owner and principal investigator Casey Allard.
+```rust
+use std::path::Path;
+use uor_r4_integer::{bundle::Bundle, generation::Selection, ReadMode, Result};
 
-## Citation and license
+fn continue_session(bundle_path: &Path) -> Result<()> {
+    let bundle = Bundle::load(bundle_path)?;
+    let mut session = bundle.text_session(ReadMode::Enabled)?;
+    session.append("Once there was a little bird")?;
+    let first = session.generate(
+        16,
+        Selection::Categorical { top_k: 40, seed: 17 },
+        false,
+    )?;
+    let second = session.generate(
+        16,
+        Selection::Categorical {
+            top_k: 40,
+            seed: first.sampler_state_after,
+        },
+        false,
+    )?;
+    println!("{}{}", first.raw_decoded, second.raw_decoded);
+    Ok(())
+}
+```
 
-Cite the software with [CITATION.cff](CITATION.cff) (GitHub's "Cite this repository" button reads it). No
-paper is claimed. [MIT](LICENSE); third-party research and dependencies keep their own licenses.
+`TextSession` retains recurrent state and exact token/occurrence history. Its last
+emitted token is pending until the next input or prediction, and counts toward
+`len()` and the 256-token limit. `append` accepts finalized text chunks: each
+chunk is tokenized independently, so arbitrary byte-stream chunking can change
+BPE token boundaries. It is not an incremental UTF-8/BPE stream decoder.
+
+The random seed is explicit for every `generate` call. Pass
+`sampler_state_after` as the next categorical seed to continue its random stream;
+reusing the original seed restarts that stream. Stops apply per call. Resuming
+after a returned EOS is an explicit caller decision. Session state is in memory;
+the generated report is not a serialized session checkpoint.
+
+The separate `session::ChatSession`/`ChatTokenStream` API used by `uor-chat` has
+its own session lifecycle. After draining a stream, callers must inspect
+`error()` and `stop_reason()`; iterator exhaustion alone is not success. If the
+model write that commits a sampled EOS, turn-end or custom stop, or an inserted
+cap/cycle turn-end, fails, the stream retains the error and reports `ModelError`
+while flushing already buffered text. `uor-chat` exits with status 1 before
+success telemetry on a terminal error and reports the actual stop on success.
+Existing stream-construction errors still print and return to the prompt, so
+exit status zero alone does not establish that all earlier commands succeeded.
+A failed model step may have changed state; this reporting provides no rollback
+or recovery. The [focused validation](../../archive/evidence/chat-stream-error-validation-2026-09-27.json)
+uses synthetic library and CLI-helper checks plus a release build, with no
+learned-model execution, spawned CLI exit-status test or chat-quality claim.
+
+
+`uor-chat` serves three different containers, and they hold different models. `--bundle <PATH>` loads
+the sealed recurrent bundle described above. `--stack <model.lut> --tokenizer <TOKENIZER.json>
+[--protocol 1|2] [--threads N] [--say TEXT] [--max-tokens N]` instead serves a `UORLUT01` geometric
+stack artifact directly, through `stack::IntegerStackModel` under the literal-role protocol
+(`stack::StackChat`): the engine's integers and the float stack's stop rules, greedy `stack_argmax`
+over `next_token_scores()` with pointer mixtures included, exact token history, and an over-context
+turn refused rather than truncated. The stack path is **greedy only** — a nonzero `--temperature` is
+refused because this engine has no integer categorical sampler. `--say` prints a JSON record.
+
+`--discrete <model.lut> --prompt-ids <CSV> [--max-tokens N]` serves a `uor-r4.lut-discrete/1`
+artifact directly through `discrete_d11::IntegerDiscreteModel`. Each step appends the evaluator's
+integer top-1 prediction; an initial prompt must fit the declared context, which then slides by one
+token as generation proceeds. This raw-token path needs no tokenizer, is greedy only, and prints a
+`uor-r4.uor-chat-discrete-parity/1` JSON record. Text chat, REPL and `UR4SESS1` discrete sessions are
+not supported. No conversion exists between the three containers, and none can be written without
+training a model to another container's parameter inventory.
+## Arithmetic and cost boundaries
+
+Model values use the retained signed parameter codes, fixed-point state, integer
+normalization, bound tables, and exactly normalized Q48 output masses. Both
+greedy and categorical token selection use integer arithmetic. Offline floating
+table construction remains in the training crate.
+
+This numerical claim does not cover legacy JSON parsing, tokenization, hashing,
+allocation, shape/address calculations, or host clock/reporting operations. It
+does not claim that every instruction in the executable is free of multiplication
+or floating operations. The runtime still reads dense parameters, allocates,
+and has a finite context. Packaging alone establishes no speed or energy benefit.
+
+CLI summary wall time includes bundle loading and request generation through
+JSONL output, but excludes the final summary write and sealing. Model step time
+is nested within that total and must not be added to it. Consult the project
+current-state and experiment records for measured results and their scope.

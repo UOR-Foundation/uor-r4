@@ -1,0 +1,72 @@
+{
+  "schema": "uor-r4.studio-tokenizer/1",
+  "mode": "byte-bpe",
+  "stack_sha256": "d60f88d6e08ac60763b35484307f9425f702b9fead4615dd8cbe5fdbbced92df",
+  "vocab_size": 40,
+  "unk_id": 2,
+  "pre_tokenizer": {
+    "type": "ByteLevel",
+    "add_prefix_space": false
+  },
+  "added_tokens": [
+    {
+      "id": 0,
+      "content": "<|bos|>"
+    },
+    {
+      "id": 1,
+      "content": "<|eos|>"
+    },
+    {
+      "id": 2,
+      "content": "<|unk|>"
+    }
+  ],
+  "model": {
+    "type": "BPE",
+    "vocab": {
+      "0": 18,
+      "1": 19,
+      "2": 20,
+      "3": 21,
+      "4": 22,
+      "5": 23,
+      "6": 24,
+      "7": 25,
+      "8": 26,
+      "9": 27,
+      "<|bos|>": 0,
+      "<|eos|>": 1,
+      "<|unk|>": 2,
+      ":": 3,
+      "Ġ": 4,
+      "Ċ": 5,
+      "U": 6,
+      "s": 7,
+      "e": 8,
+      "r": 9,
+      "A": 10,
+      "i": 11,
+      "t": 12,
+      "a": 13,
+      "n": 14,
+      "S": 15,
+      "y": 16,
+      "m": 17,
+      "b": 28,
+      "c": 29,
+      "d": 30,
+      "f": 31,
+      "g": 32,
+      "h": 33,
+      "k": 34,
+      "l": 35,
+      "o": 36,
+      "p": 37,
+      "q": 38,
+      "v": 39
+    },
+    "merges": []
+  },
+  "label_note": "stack-bound ByteLevel BPE tokenizer artifact"
+}
