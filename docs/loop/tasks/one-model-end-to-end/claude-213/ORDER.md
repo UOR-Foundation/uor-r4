@@ -1,67 +1,38 @@
-# ORDER: one-model-end-to-end, claude-213
+# ORDER: one-model-end-to-end, claude-213 (Flock rank inside the nearest token's cell)
 
-Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md). Base: `6256256db`.
+Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md).
 
 ## Goal
 
-The item's done-when reads:
+Casey, 30 Oct: "do not rule flock out, improve it instead". claude-211 found two things about the Flock rank rule:
+- **Keeping a nearest end of turn (`FLOCK_END`) fixed completion and loops.** (r-drop) completes 508–510 of 512 at a repeat rate of 0.002, against greedy's 0.50.
+- **Its content is often word salad.** The 16-wide harmonic draw lands below rank 0 about 70% of the time, on tokens the model has separated from the nearest.
 
-> 1. **The census (laptop, counts only, CHARTER §4.5).** A standalone Rust instrument under `docs/labs/one-model-end-to-end/instrument/` must:
->    - resolve the TRAIN size conflict, and build the TRAIN reply index (exact replies and reply 8- and 13-grams);
->    - report for DEV, Fresh V2 and `m2-fresh256`: the share of reply n-grams in TRAIN replies, the share of prompt templates seen in TRAIN with values masked, and the 8-token key share;
->    - read only the manifest of the K16 fresh slice, and leave the slice unopened.
->
->    It also says which panel, if any, holds new templates.
-> 2. **The overturn check (GPU, under a prep sheet with a fresh FIT and a pre-run review).** Score turn-memory-reply claude-194's (r), (r0), and (r) with its memory off.
->    - **Pinned in the sheet:** the checkpoints by store path, `SHA256SUMS` and step; the binary's sha; a lease and cost inside the caps.
->    - **The pod** also seals a float reference for the read's parity: claude-194's (r), with its memory off, at both seeds. That is every DEV row's writer and nearest pick, and its 64 greedy samples. The parity itself, kept sets and top-1, is `integer-hamming-read`'s step 5, on the checkpoint that item's prep sheet names; the first greedy divergence is done-when 3's integer-artifact measure (claude-205's decision review, on #3407).
->    - **Rows:** DEV's 3,406 later rows the reply table does not name, and its 32 unkeyed openings, judged pooled (3,438).
->    - **Band, fixed in advance:** `max(2·√(b+c), the two-seed spread)`, where b and c are the paired discordant rows.
->    - **The cells:**
->      - (r) ahead at both seeds, beyond the band: the memory recipe stays the training default;
->      - (r) behind at both seeds, beyond the band: a memory-dropout arm joins the training run;
->      - mixed (the seeds disagree, or either seed is inside the band): both arms train.
->    - **Descriptive only:** Fresh V2, and 64 greedy samples per arm scored against the census index.
-> 3. **The protocol.** A prep sheet, with a fresh FIT, written before the training run of the model to ship. It holds:
->    - **Strata:**
->      - keyed rows;
->      - unkeyed rows;
->      - new-template rows, from a panel no decision has touched. Fresh V2 is never one.
->    - **Arms:** (r), memory-off, (r0), tables only, and a longest-suffix table over TRAIN.
->    - **Scores:**
->      - teacher-forced top-1, per stratum;
->      - free generation: the share of replies that are verbatim TRAIN replies, new n-grams for n = 4–8, distinct-1 and distinct-2, the repeated-n-gram rate, and the table hit rate under generation against teacher forcing;
->      - on the integer artifact: kept-set agreement, first divergence, and tok/s against context.
->    - **Decode rules:** greedy, and a Flock rank rule with the harmonic weights of `stack/flock.rs`.
->    - **The verdict rule, written in advance:**
->      - "memorized": the gains appear only on keyed rows, and generated replies are mostly TRAIN replies;
->      - "generalizes": the model beats (r0) and the longest-suffix table on unkeyed and new-template rows, with novelty near DEV's own replies.
->
->    The training run itself (ASSESSMENT §6, step 5) adds:
->    - the transport controls: frozen and identity SpiralCore routes, under the fixed backward;
->    - the read-by-meaning arms: the Flock read, and the type spin.
-> 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
+This unit builds and measures `FLOCK_CELL`, a geometric narrowing:
+- **The candidate set:** the top-16 nearest tokens whose score is within the cell objective's margin of the nearest. That margin is 1.0 (`rival_hinge`), the margin training pushes a target past its nearest rival.
+- **Inside the margin,** the model has not separated the candidates, and the harmonic draw chooses among them.
+- **Outside it,** the model has, and those tokens are never drawn.
+- **The end-of-turn rule stays.**
+
+It is measured against `FLOCK_END` and greedy on (r-drop)'s sealed step-16,384 checkpoints, at all three seeds, on a new held-out-phrasing panel. P-dev has been opened once already, and p-f is bar (f)'s.
 
 ## Cancel probe (run first)
 
-To fill in.
+To fill in: confirm that no other unit changes `decode_reply` or the Flock rules, and that the sealed (r-drop) checkpoints are in the store.
 
 ## Files in scope
 
-- `docs/labs/one-model-end-to-end/**`
-- `docs/harness/prep/one-model-end-to-end*`
-- `docs/loop/tasks/one-model-end-to-end/**`
-- `docs/research/notebook/float-training.md`
-- `docs/roadmap/items/one-model-end-to-end.md`
-- `crates/uor-r4-float-train/src/in_space_long.rs`
-- `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`
-- `crates/uor-r4-training/examples/m-world.rs`
+As the claim recorded: `crates/uor-r4-float-train/src/in_space_long.rs`, `crates/uor-r4-float-train/src/bin/train-in-space.rs`, `docs/harness/prep/one-model-end-to-end*`, `docs/labs/one-model-end-to-end/**`, `docs/loop/tasks/one-model-end-to-end/**` and `docs/research/notebook/float-training.md`.
 
 ## Done when
 
-To fill in.
+1. **`DecodeRule::FLOCK_CELL`** exists, with `--flock-cell 1` for `--score-rows` and `--grade`. A unit test pins it, with a negative gate.
+2. **A new held-out-phrasing panel** is drawn by `heldout-panel` at a new seed, with its own census.
+3. **A prep sheet with a fresh FIT and pre-run review,** registering the comparison before any decode is read: complete count, repeat rate, verbatim share against the references, and a fixed reading of 20 replies per rule.
+4. **The GPU decode of (r-drop)** at three seeds, under greedy, `FLOCK_END` and `FLOCK_CELL`. It is sealed, graded, and reported, negatives first and tokens per second first.
 
 ## Stop and ask if
 
-To fill in.
+Stop and decide (never wait) if any of these holds:
+- **The margin admits only the nearest at almost every step.** Then `FLOCK_CELL` is greedy with the end-of-turn rule. Record that, and try the margin the trained model actually shows.
+- **A fault is in the instrument, not the rule.** Classify it before calling a result (CHARTER §4.1).
