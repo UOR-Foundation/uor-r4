@@ -2312,7 +2312,7 @@
         <div class="d36-engine-status-banner" id="d36EngineStatusBanner" role="status" aria-live="polite" style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.4rem 1rem; padding:0.45rem 1.25rem; background:rgba(245, 158, 11, 0.08); border-bottom:1px solid rgba(245, 158, 11, 0.28); font-size:0.74rem; line-height:1.4; color:var(--text-secondary);">
             <div>
                 <strong style="color:#fbbf24; font-family:var(--font-mono);">Engine Status (D36):</strong>
-                Pre-alpha (<code>0/8</code> milestones complete; A8 preflight checkpoint-0 admission <code>P_succ = 35.1%</code> in <code>docs/labs/address-cells-preflight-2026-10-19/README.md:71</code>; D11 decode <code>tok/s</code> on a qualified model is unmeasured). Model worker wired to <code>uor-r4-integer</code> (<code>serving-wasm</code>: <code>loadStack</code>, <code>step</code>, <code>saveSession</code>, <code>restoreSession</code>; prompt tokenizer is a UTF-8 byte-mod stand-in); no qualified model is bundled, page-level UI CDN scripts remain external, and GitHub Pages deploy remains frozen per D36.
+                Pre-alpha (<code>1/8</code> milestones complete (M1); the saved discrete pair serves at <code>10,876 / 10,566 tok/s</code> natively on Apple M1 and scores <code>7,850 / 7,872</code> on p-f at two seeds; this is not useful-chat qualification). Model worker wired to <code>uor-r4-integer</code> (<code>serving-wasm</code>: <code>loadStack</code>, <code>step</code>, <code>saveSession</code>, <code>restoreSession</code>; stack-bound ByteLevel BPE tokenizer). No qualified model is bundled; this page uses a synthetic stand-in, self-hosted assets, and the old GitHub Pages deploy remains frozen per D36.
             </div>
             <div id="studioProvenanceNote" style="font-size:0.7rem; color:var(--text-muted); font-family:var(--font-mono);">
                 Provenance: Studio source is an import of companion repo <code>Casey-allard/uor-r4-wasm-chat</code>
@@ -2484,7 +2484,7 @@
     <aside class="telemetry-sidecar" id="telemetrySidecar">
         <div class="sidecar-header"><span>Native model session</span><button class="icon-btn" onclick="toggleSidecar()">✕</button></div>
         <div class="sidecar-content">
-            <p id="sidecarD36Status"><strong>Engine status (D36):</strong> Pre-alpha (<code>0/8</code> milestones complete; A8 preflight checkpoint-0 <code>P_succ = 35.1%</code>; D11 decode <code>tok/s</code> unmeasured). Worker connects to <code>uor-r4-integer</code> (<code>serving-wasm</code>; UTF-8 byte-mod stand-in tokenizer); GitHub Pages deploy remains frozen per D36. Provenance: Studio source is an import of companion repo <code>Casey-allard/uor-r4-wasm-chat</code>.</p>
+            <p id="sidecarD36Status"><strong>Engine status (D36):</strong> Pre-alpha (<code>1/8</code> milestones complete (M1); native Apple M1 decode <code>10,876 / 10,566 tok/s</code> at two seeds; p-f <code>7,850 / 7,872</code>, not useful chat). Worker connects to <code>uor-r4-integer</code> (<code>serving-wasm</code>; stack-bound ByteLevel BPE tokenizer). No qualified model is bundled; this page uses a synthetic stand-in and self-hosted assets; old GitHub Pages deploy remains frozen per D36. Provenance: Studio source is an import of companion repo <code>Casey-allard/uor-r4-wasm-chat</code>.</p>
             <p id="nativeModelStatus">No stack loaded. Select a UORLUT01 stack file (.lut or .bin).</p>
             <input id="nativeModelFile" type="file" accept=".lut,.bin,application/octet-stream" aria-label="Load UORLUT01 stack" onchange="loadNativeModelFile(this.files[0])">
             <p id="nativeCapabilitiesPanel">Capabilities: none loaded (load a UORLUT01 stack to inspect header and engine counters).</p>
@@ -2759,9 +2759,9 @@
                 source: 'uor-r4-integer/serving-wasm',
                 localPath: './pkg/uor_r4_integer_bg.wasm',
                 size_mb: null,
-                tier: 'Pre-alpha (0/8 milestones complete; synthetic stand-in only)',
+                tier: 'Pre-alpha (1/8 milestones complete; synthetic stand-in only)',
                 dtype: 'UORLUT01 integer lookup-table stack',
-                desc: 'Browser Web Worker integer stack runtime (model path only; UI assets load from CDNs). Load a UORLUT01 stack file (.lut) to step tokens locally with zero remote model calls and a UTF-8 byte-mod stand-in prompt tokenizer.'
+                desc: 'Browser Web Worker integer stack runtime (model path only; UI assets are self-hosted). Load a UORLUT01 stack file (.lut) to step tokens locally with zero remote model calls and a stack-bound ByteLevel BPE prompt tokenizer.'
             }
         };
 

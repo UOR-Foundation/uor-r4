@@ -16,9 +16,9 @@ This is how a finished model runs on an ordinary laptop or in a web browser usin
 
 The arithmetic. A transformer runs on large matrix multiplications. Here the same weights are read through tables, so every product is a table read and an add. This changes how a model is computed, not what it is. The engine does not make a weak model better, and, as the history below shows, it still reads every stored weight for every token.
 
-![Three panels. Left: one dot product done with table look-ups and a shift, with a counter reading zero multiplies. Middle: float and integer outputs on the diagonal, and a bar showing the real cost is weight rounding. Right: a strip of 44 native and 7 WebAssembly symbols, all counted zero multiply, divide and float instructions.](../figures/mechanisms/lut-serving.svg)
+![Three panels: table look-ups replace weight products; older and M1 integer exports agree exactly, with rounding costs shown for the older weights; 44 native and 7 WebAssembly serving symbols have zero float instructions, while integer multiply and divide are allowed and counted.](../figures/mechanisms/lut-serving.svg)
 
-*Left, how a weight's dot product needs no multiply: a table of the activation's multiples (products of two runtime values use the hardware multiply since claude-177). Panel C's counts are the 18 October audit's. Middle, the engine is exact and the loss is in rounding the weights. Right, the audit counts instructions in the compiled program.*
+*Left, table reads replace weight products; products of two runtime values can use the hardware multiply since claude-177. Middle, older 29M export checks and their weight-rounding costs; the discrete M1 pair has exact 14,287-row agreement and B4 pass. Right, the instruction audit counts zero floats and permits integer multiplies and divides.*
 
 ## Its chapter in the project's history
 

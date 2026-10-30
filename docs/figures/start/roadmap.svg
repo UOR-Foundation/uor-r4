@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="960" role="img" aria-labelledby="t d">
 <title id="t">The road from today to the products</title>
-<desc id="d">A left-to-right road with six stops, the order of work from PLAN.md on 29 October 2026. Stage 0, now: carry the exact turn memory past a reply's first word (turn-memory-reply), carrying the "you are here" pin. Stage 1: serve the parts in integers (Hamming read, turn memory, readout). Stage 2: a typed question gets a typed reply (R7, uor-chat --stack). Stage 3: one model, end to end, trained, exported, served and scored on prompts with tokens per second. Stage 4: then cost (training-step-cost, the vector kernel, float where faster). Stage 5: revisit Flock, reading by meaning, after the one model works. A gate between every pair of stops is labelled own pre-run review. Under the road, milestone M1 spans Stages 2 to 4 with its bar: beat 1,226 and 6,300 on two seeds through the D11 export; M4 sits under Stage 4; M2 under Stage 5; M3 is shown as not yet staged. A lighter second road continues after Stage 5 through M5 laptop cost, M6 reasoning and coding, M7 browser, API and Studio, and M8 alpha, ending at three products: a model file (UORLUT01, integer), a web client and a desktop client (spec only).</desc>
+<desc id="d">A left-to-right road from M1's completed language-base result to the remaining products. Milestone 1 is done: the saved discrete model passed all six bars on two seeds (DEV 7,002 / 7,001 and p-f 7,850 / 7,872). Current work is reply opening on new phrasing and an exact memory key that reworded known questions can reach (claude-218). Then: serve every part in integers, connect typed text through R7, train and score one joined model, then measure cost and revisit Flock. Every run uses the lab's own pre-run review. M2 and M3 are in progress; M4 to M8 remain open, ending at the model file, web client and desktop shell.</desc>
 <style>
 svg { --bg:#ffffff; --ink:#1f2328; --body:#2b3138; --muted:#57606a; --rule:#d0d7de; --panel:#f6f8fa;
       --blue:#0072b2; --sky:#56b4e9; --green:#007a5e; --orange:#e69f00; --verm:#d55e00; --purple:#7a4fa3; --pink:#cc79a7;
@@ -55,7 +55,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <rect class="bg" x="0" y="0" width="960" height="540"/>
 
 <text class="title" x="24" y="36">The road from today to the products</text>
-<text class="sub" x="24" y="58">A plan, not a promise. Order of work from PLAN.md, 29 Oct 2026.</text>
+<text class="sub" x="24" y="58">A plan, not a promise. M1 complete and the current order from PLAN.md, 30 Oct 2026.</text>
 
 <!-- Road, row 1 -->
 <line class="road" x1="40" y1="150" x2="920" y2="150"/>
@@ -89,18 +89,18 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <circle class="stop" cx="890" cy="150" r="15"/><text class="stopnum" x="890" y="155" text-anchor="middle">5</text>
 
 <!-- Stage 0 -->
-<text class="stage" x="90" y="186" text-anchor="middle">STAGE 0</text>
-<text class="name" x="90" y="204" text-anchor="middle">Carry memory past</text>
-<text class="name" x="90" y="220" text-anchor="middle">the first word</text>
-<text class="detail" x="90" y="236" text-anchor="middle">turn-memory-reply</text>
-<rect class="tag" x="62" y="258" width="56" height="20" rx="10"/><text class="tagtext" x="90" y="272" text-anchor="middle">now</text>
+<text class="stage" x="90" y="186" text-anchor="middle">MILESTONE 1</text>
+<text class="name" x="90" y="204" text-anchor="middle">M1 complete</text>
+<text class="name" x="90" y="220" text-anchor="middle">(saved discrete model)</text>
+<text class="detail" x="90" y="236" text-anchor="middle">six bars, two seeds</text>
+<rect class="tag" x="62" y="258" width="56" height="20" rx="10"/><text class="tagtext" x="90" y="272" text-anchor="middle">done</text>
 
 <!-- Stage 1 -->
 <text class="stage" x="250" y="186" text-anchor="middle">STAGE 1</text>
-<text class="name" x="250" y="204" text-anchor="middle">Serve the parts</text>
-<text class="name" x="250" y="220" text-anchor="middle">in integers</text>
-<text class="detail" x="250" y="236" text-anchor="middle">Hamming read,</text><text class="detail" x="250" y="250" text-anchor="middle">memory, readout</text>
-<rect class="tag-build" x="180" y="258" width="140" height="20" rx="10"/><text class="tag-build-text" x="250" y="272" text-anchor="middle">new build (optional part)</text>
+<text class="name" x="250" y="204" text-anchor="middle">Reach reply opening</text>
+<text class="name" x="250" y="220" text-anchor="middle">on new phrasing</text>
+<text class="detail" x="250" y="236" text-anchor="middle">memory key (claude-218)</text>
+<rect class="tag-build" x="180" y="258" width="140" height="20" rx="10"/><text class="tag-build-text" x="250" y="272" text-anchor="middle">current work</text>
 
 <!-- Stage 2 -->
 <text class="stage" x="410" y="186" text-anchor="middle">STAGE 2</text>
@@ -135,13 +135,13 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <line class="rule" x1="24" y1="290" x2="936" y2="290"/>
 <text class="section" x="24" y="316">Milestones tested</text>
 <rect class="m1" x="340" y="300" width="460" height="26" rx="13"/>
-<text class="ms" x="570" y="318" text-anchor="middle"><tspan class="msb">M1</tspan> bar: beat 1,226 and 6,300, on two seeds, through D11</text>
+<text class="ms" x="570" y="318" text-anchor="middle"><tspan class="msb">M1</tspan> complete: DEV 7,002 / 7,001; p-f 7,850 / 7,872</text>
 <rect class="mpill" x="812" y="300" width="132" height="26" rx="13"/>
 <text class="ms" x="878" y="318" text-anchor="middle"><tspan class="msb">M2</tspan> grounded reply</text>
 <rect class="mpill" x="664" y="334" width="134" height="26" rx="13"/>
 <text class="ms" x="731" y="352" text-anchor="middle"><tspan class="msb">M4</tspan> one served model</text>
 <rect class="mpill" x="812" y="334" width="132" height="26" rx="13"/>
-<text class="ms" x="878" y="352" text-anchor="middle"><tspan class="msb">M3</tspan> not yet staged</text>
+<text class="ms" x="878" y="352" text-anchor="middle"><tspan class="msb">M3</tspan> in progress</text>
 
 <!-- Row 2: further out -->
 <line class="rule" x1="24" y1="378" x2="936" y2="378"/>

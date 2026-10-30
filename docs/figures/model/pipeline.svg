@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" width="960" role="img" aria-labelledby="t d">
 <title id="t">The model pipeline, stage by stage</title>
-<desc id="d">A left-to-right pipeline. Stages 1 to 7 are the discrete path: tokenizer with 4,096 pieces (built), token table (trained in), ordered context (built), reads Route, Flock and Relation (trained in), writer with admission (trained in), rank-margin loss (trained in) and discrete learning on the GPU. Three boxes above the line, position, feed-forward and normalization, are parts the discrete path lacks; the float-trained FBS trunk fills them with the SpiralCore transport spin, the Hamilton gate and an RMS norm with integer square root. Stage 8, export, is built for the FBS trunk: exact under lut-stack/5 (claude-182). Stage 9, serving, is integer with D80 and D81, at 4,217 to 4,504 tokens per second on the M1 under the exact lut-stack/5 contract (4,829 under the snapped one). The text path (R7) is not built.</desc>
+<desc id="d">Two model paths share the integer D11 serving boundary. The discrete path produced the M1 19-table UORLUT01 pair: DEV 7,002 / 7,001, Fresh V2 7,215 / 7,228 and p-f 7,850 / 7,872 at two seeds, with exact export agreement and Apple M1 decode at 10,876 / 10,566 tok/s. The separate float-trained FBS trunk uses a learned table, SpiralCore position, a Hamilton-gated recurrence, Hamming reads and exact turn memory, with an exact lut-stack/5 export at DEV scope and 4,217 to 4,504 tok/s. M1 is not useful-chat qualification; current work is new-phrasing reply opening and a reachable memory key, then joined serving and R7.</desc>
 <style>
 svg { --bg:#ffffff; --ink:#1f2328; --body:#2b3138; --muted:#57606a; --rule:#d0d7de; --panel:#f6f8fa;
       --blue:#0072b2; --sky:#56b4e9; --green:#007a5e; --orange:#e69f00; --verm:#d55e00; --purple:#7a4fa3; --pink:#cc79a7;
@@ -46,7 +46,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 </defs>
 <rect class="bg" x="0" y="0" width="960" height="560"/>
 <text class="title" x="24" y="34">From text to a served model: what exists today</text>
-<text class="sub" x="24" y="56">Boxes above: parts the discrete path lacks. The FBS trunk fills them (29 Oct).</text>
+<text class="sub" x="24" y="56">Two model paths share D11 serving. M1 is complete on the discrete path; FBS works on new-phrasing reply opening (30 Oct).</text>
 
 <!-- empty slots above the line -->
 <path class="stub" d="M324 144 V250"/>
@@ -136,13 +136,13 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <text class="detail" x="684.5" y="277" text-anchor="middle">hinge</text>
 <text class="tag tag-trained" x="684.5" y="302" text-anchor="middle">TRAINED IN</text>
 
-<!-- 8 export (missing) -->
-<rect class="missing" x="745" y="190" width="85" height="124" rx="8"/>
-<circle class="badge-v" cx="745" cy="190" r="10"/><text class="badge-t" x="745" y="194" text-anchor="middle">8</text>
+<!-- 8 export (built) -->
+<rect class="built" x="745" y="190" width="85" height="124" rx="8"/>
+<circle class="badge-b" cx="745" cy="190" r="10"/><text class="badge-t" x="745" y="194" text-anchor="middle">8</text>
 <text class="name" x="787.5" y="224" text-anchor="middle">export</text>
-<text class="detail" x="787.5" y="256" text-anchor="middle">FBS trunk:</text>
-<text class="detail" x="787.5" y="270" text-anchor="middle">exact, lut-stack/5</text>
-<text class="detail" x="787.5" y="286" text-anchor="middle">claude-182</text>
+<text class="detail" x="787.5" y="256" text-anchor="middle">discrete M1: exact</text>
+<text class="detail" x="787.5" y="270" text-anchor="middle">FBS: exact, /5</text>
+<text class="detail" x="787.5" y="286" text-anchor="middle">D11 integer</text>
 <text class="tag tag-built" x="787.5" y="302" text-anchor="middle">BUILT</text>
 <text class="q" x="818" y="210" text-anchor="middle"></text>
 
@@ -150,9 +150,9 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <rect class="built" x="848" y="190" width="85" height="124" rx="8"/>
 <circle class="badge-b" cx="848" cy="190" r="10"/><text class="badge-t" x="848" y="194" text-anchor="middle">9</text>
 <text class="name" x="890.5" y="224" text-anchor="middle">serving</text>
-<text class="detail" x="890.5" y="248" text-anchor="middle">integer, D80/D81;</text>
-<text class="detail" x="890.5" y="262" text-anchor="middle">4,217–4,504</text>
-<text class="detail" x="890.5" y="276" text-anchor="middle">tok/s (/5)</text>
+<text class="detail" x="890.5" y="248" text-anchor="middle">M1: 10,876 / 10,566</text>
+<text class="detail" x="890.5" y="262" text-anchor="middle">FBS: 4,217–4,504</text>
+<text class="detail" x="890.5" y="276" text-anchor="middle">native tok/s</text>
 <text class="tag tag-built" x="890.5" y="302" text-anchor="middle">BUILT</text>
 
 <!-- 7 learning (below the line) -->
