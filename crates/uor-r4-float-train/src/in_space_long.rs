@@ -1527,6 +1527,133 @@ pub fn opening_bound(
     Ok((bounds, checks))
 }
 
+/// The trunk's own point at every opening of `windows` (claude-218): the readout point that
+/// predicts a reply's first token, with no turn memory moving it (the caller has it off), in
+/// panel order, with each opening's target and corpus position. A forward of the windows that
+/// hold an opening, under the gate mode the rows are scored in ([`row_picks`]).
+fn opening_points(
+    model: &StackModel,
+    windows: &[CausalWindow],
+    mask: &[u8],
+    seed: u64,
+    step: usize,
+) -> Result<(Tensor, Vec<u32>, Vec<usize>)> {
+    if crate::flock_read_memory::turn_memory().is_some() {
+        return Err(invalid("the opening keys read the trunk's own points, with the memory off"));
+    }
+    hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, step, false, || {
+        let (mut points, mut targets, mut positions) = (Vec::new(), Vec::new(), Vec::new());
+        for chunk in windows.chunks(hs::SHEET_EVAL_BATCH) {
+            let windows: Vec<&CausalWindow> = chunk.iter().collect();
+            let (ids, scored, batch_targets) = assemble(&windows);
+            let batch_positions: Vec<usize> = windows
+                .iter()
+                .flat_map(|w| w.scored_corpus_positions.iter().copied())
+                .collect();
+            let open: Vec<usize> =
+                (0..scored.len()).filter(|&i| opens_reply(mask, batch_positions[i])).collect();
+            if open.is_empty() {
+                continue;
+            }
+            if trained_cut_on() {
+                set_reply_mask(Some(window_input_mask(&windows, mask)?));
+            }
+            let hidden = trained_points(model, &ids, windows.len())?;
+            let rows: Vec<u32> = open.iter().map(|&i| scored[i]).collect();
+            let idx = Tensor::from_vec(rows, open.len(), model.device())?;
+            points.push(hidden.index_select(&idx, 0)?.detach());
+            targets.extend(open.iter().map(|&i| batch_targets[i]));
+            positions.extend(open.iter().map(|&i| batch_positions[i]));
+        }
+        if points.is_empty() {
+            return Err(invalid("the split has no opening rows"));
+        }
+        Ok((Tensor::cat(&points, 0)?, targets, positions))
+    })
+}
+
+/// For each row of `query`, the row of `table` nearest under L1 (the mean `|q − t|` over the
+/// coordinates, as the cell objective scores), as its index and distance: computed on the device
+/// in blocks, with no dot product. A tie keeps the earlier row.
+fn l1_nearest(query: &Tensor, table: &Tensor) -> Result<Vec<(u32, f32)>> {
+    const QUERIES: usize = 64;
+    const ROWS: usize = 4096;
+    let (nq, _) = query.dims2()?;
+    let (nt, _) = table.dims2()?;
+    let mut best = vec![(u32::MAX, f32::INFINITY); nq];
+    for q0 in (0..nq).step_by(QUERIES) {
+        let q = query.narrow(0, q0, QUERIES.min(nq - q0))?.unsqueeze(1)?;
+        for t0 in (0..nt).step_by(ROWS) {
+            let t = table.narrow(0, t0, ROWS.min(nt - t0))?.unsqueeze(0)?;
+            let d = q.broadcast_sub(&t)?.abs()?.mean(2)?;
+            let at = d.argmin(1)?.to_vec1::<u32>()?;
+            let low = d.min(1)?.to_vec1::<f32>()?;
+            for (i, (&j, &m)) in at.iter().zip(&low).enumerate() {
+                let slot = &mut best[q0 + i];
+                if m < slot.1 {
+                    *slot = (t0 as u32 + j, m);
+                }
+            }
+        }
+    }
+    Ok(best)
+}
+
+/// Each point's sign pattern as 0/1 coordinates: L1 between two of them is their Hamming
+/// distance over the width, so [`l1_nearest`] on them is the Hamming-nearest sign cell.
+fn sign_code(points: &Tensor) -> Result<Tensor> {
+    Ok(points.ge(&points.zeros_like()?)?.to_dtype(DType::F32)?)
+}
+
+/// One split's openings named by the two trunk keys (claude-218), from TRAIN's opening points
+/// under the same trunk: the nearest TRAIN opening by its point under L1, and by its sign
+/// pattern (Hamming), each with that opening's target and the distance. Written by
+/// `--opening-keys 1` as `keys-{split}.json`; the laptop grade reads it with the rows.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OpeningKeys {
+    pub split: String,
+    /// TRAIN's openings, the table both keys search, and its bytes as f32 points.
+    pub train_openings: usize,
+    pub table_bytes: usize,
+    pub positions: Vec<usize>,
+    pub targets: Vec<u32>,
+    pub point_target: Vec<u32>,
+    pub point_distance: Vec<f32>,
+    pub sign_target: Vec<u32>,
+    pub sign_distance: Vec<f32>,
+    /// The two searches' wall time over all the split's openings, in milliseconds.
+    pub search_ms: u64,
+}
+
+/// [`OpeningKeys`] for one split's opening points against TRAIN's.
+fn opening_keys(
+    split: &str,
+    query: &Tensor,
+    targets: Vec<u32>,
+    positions: Vec<usize>,
+    train: &Tensor,
+    train_targets: &[u32],
+) -> Result<OpeningKeys> {
+    let started = std::time::Instant::now();
+    let by_point = l1_nearest(query, train)?;
+    let by_sign = l1_nearest(&sign_code(query)?, &sign_code(train)?)?;
+    let search_ms = started.elapsed().as_millis() as u64;
+    let name = |(i, _): &(u32, f32)| train_targets[*i as usize];
+    let (rows, width) = train.dims2()?;
+    Ok(OpeningKeys {
+        split: split.to_owned(),
+        train_openings: rows,
+        table_bytes: rows * width * 4,
+        positions,
+        targets,
+        point_target: by_point.iter().map(name).collect(),
+        point_distance: by_point.iter().map(|&(_, d)| d).collect(),
+        sign_target: by_sign.iter().map(name).collect(),
+        sign_distance: by_sign.iter().map(|&(_, d)| d).collect(),
+        search_ms,
+    })
+}
+
 /// One reply row (turn-memory-reply, claude-192): the prompt its window shows for its turn, back
 /// from the reply's start to the last response token or BOS; the reply's own earlier tokens; its
 /// target; and whether it opens the reply or copies the prompt ([`copies_prompt`]).
@@ -2558,6 +2685,20 @@ struct DecodedReply {
     stepped: Vec<u8>,
 }
 
+thread_local! {
+    static FORCED_OPENING: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
+}
+
+/// The reply's first token for the next [`decode_reply`] calls on this thread, or none: the
+/// forced-opening arm (claude-218) gives each prompt its reference's first token.
+fn set_forced_opening(token: Option<u32>) {
+    FORCED_OPENING.with(|c| c.set(token));
+}
+
+fn forced_opening() -> Option<u32> {
+    FORCED_OPENING.with(|c| c.get())
+}
+
 /// The model's reply to `prompt` under `rule`: as [`greedy_reply`], with the next token picked
 /// by `rule`. The Flock rank rule also stops after `eos` (the protocol); greedy decodes to
 /// BOS or its length, as before. `sample` is the reply's index, which with `seed` seeds the Flock rank draws: draw
@@ -2609,6 +2750,13 @@ fn decode_reply(
         let mut admitted = Vec::new();
         let mut stepped = Vec::new();
         for step in 0..reply_tokens {
+            // A forced opening (claude-218) is the reply's first token, taken without a forward,
+            // so no opening row is read or moved for it.
+            if let Some(token) = forced_opening().filter(|_| reply.is_empty()) {
+                reply.push(token);
+                ids.push(token);
+                continue;
+            }
             let window = &ids[ids.len().saturating_sub(SHEET_CONTEXT)..];
             let token = if objective.decodes_nearest() {
                 // The reply's first step is its opening row, the one the turn memory moves.
@@ -3360,6 +3508,7 @@ pub fn score_rows(
     cells: &[u32],
     scopes: &[ReadScope],
     cycle: bool,
+    keys: bool,
     device: &Device,
 ) -> Result<Vec<ScoredFile>> {
     check_run_arm(checkpoint, arm)?;
@@ -3548,6 +3697,85 @@ pub fn score_rows(
                     decode: Some((decoded, seconds)),
                 });
             }
+            // The forced-opening arm (claude-218): greedy, with each reply's first token given
+            // as its reference's, so what a right opening alone lifts is read beside greedy.
+            if keys && on {
+                let mut replies = Vec::with_capacity(prompts.len());
+                let started = std::time::Instant::now();
+                for (index, window) in prompts.iter().enumerate() {
+                    let off = window.scored_offsets[0];
+                    let prompt = &window.input_ids[..=off];
+                    let reference = reference_reply(window, reply_tokens);
+                    set_forced_opening(reference.first().copied());
+                    let decoded = decode_reply(
+                        &model,
+                        PointObjective::Cell,
+                        prompt,
+                        reply_tokens,
+                        seed,
+                        DecodeRule::Greedy,
+                        index,
+                        Some(eos),
+                        ReadScope::Full,
+                        &[],
+                    );
+                    set_forced_opening(None);
+                    let reply = decoded?.tokens;
+                    let (reply_keys, reply_named) = reply_key_hits(prompt, cut_at_eos(&reply, eos), named);
+                    let (reference_keys, reference_named) =
+                        reply_key_hits(prompt, cut_at_eos(&reference, eos), named);
+                    replies.push(IdSample {
+                        position: window.scored_corpus_positions[0],
+                        prompt: prompt.to_vec(),
+                        reply_text: tokenizer.decode(&reply),
+                        reference_text: tokenizer.decode(&reference),
+                        reply,
+                        reference,
+                        reply_keys,
+                        reply_named,
+                        reference_keys,
+                        reference_named,
+                        admitted: Vec::new(),
+                        stepped: Vec::new(),
+                    });
+                }
+                let file = format!("samples-{}-forced-{label}.json", split.name);
+                let decoded = replies.iter().map(|r| r.reply.len()).sum();
+                let seconds = started.elapsed().as_secs_f64();
+                write_new(&out.join(&file), &serde_json::to_vec(&replies)?)?;
+                written.push(ScoredFile {
+                    file,
+                    rows: replies.len(),
+                    nearest_hits: None,
+                    writer_hits: None,
+                    panel_sha256: split.sha256.clone(),
+                    tables: None,
+                    decode: Some((decoded, seconds)),
+                });
+            }
+        }
+    }
+    // The opening keys (claude-218), with the memory off (the loop's last pass): TRAIN's opening
+    // points under this trunk, and each split's openings named by the nearest of them.
+    if keys {
+        crate::flock_read_memory::set_turn_memory(None);
+        let (train_tokens, train_mask) = load_train_split(data_root)?;
+        let train_windows = windows_of(&train_tokens, &train_mask)?;
+        let (train, train_targets, _) = opening_points(&model, &train_windows, &train_mask, seed, step)?;
+        for split in &splits {
+            let (query, targets, positions) = opening_points(&model, &split.windows, &split.mask, seed, step)?;
+            let keyed = opening_keys(&split.name, &query, targets, positions, &train, &train_targets)?;
+            let file = format!("keys-{}.json", split.name);
+            write_new(&out.join(&file), &serde_json::to_vec(&keyed)?)?;
+            written.push(ScoredFile {
+                file,
+                rows: keyed.positions.len(),
+                nearest_hits: Some(keyed.point_target.iter().zip(&keyed.targets).filter(|(a, b)| a == b).count()),
+                writer_hits: Some(keyed.sign_target.iter().zip(&keyed.targets).filter(|(a, b)| a == b).count()),
+                panel_sha256: split.sha256.clone(),
+                tables: None,
+                decode: None,
+            });
         }
     }
     Ok(written)
@@ -8545,6 +8773,84 @@ mod tests {
             decoded += greedy.len();
         }
         assert!(decoded > 0, "every reply was empty, so the check held vacuously");
+    }
+
+    /// claude-218: a forced opening is the reply's first token, and the rest is greedy from the
+    /// prompt and that token; and the opening points are exactly the trunk's points at the
+    /// scored rows that open a reply, as `row_picks` sees them.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn a_forced_opening_continues_greedy_and_the_opening_points_are_the_rows() {
+        let device = Device::new_cuda(0).unwrap();
+        let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
+        let prompt: Vec<u32> = (1..=24u32).map(|i| (i * 37) % 4096).collect();
+        let decode = |prompt: &[u32], n| {
+            decode_reply(&model, PointObjective::Cell, prompt, n, 1, DecodeRule::Greedy, 0, None, ReadScope::Full, &[])
+                .unwrap()
+                .tokens
+        };
+        set_forced_opening(Some(77));
+        let forced = decode(&prompt, 16);
+        set_forced_opening(None);
+        assert_eq!(forced[0], 77, "the forced token opens the reply");
+        let extended: Vec<u32> = prompt.iter().copied().chain([77]).collect();
+        assert_eq!(forced[1..], decode(&extended, 15)[..], "the rest is greedy from the prompt and it");
+        assert_ne!(decode(&prompt, 16).first(), None, "the unforced reply decodes");
+        // Two turns: BOS, a prompt, a reply, a prompt, a reply.
+        let mut tokens = vec![hs::SHEET_BOS_ID];
+        let mut mask = vec![0u8];
+        for (ids, flag) in [(10..20u32, 0u8), (20..26, 1), (26..30, 0), (30..34, 1)] {
+            for t in ids {
+                tokens.push(t);
+                mask.push(flag);
+            }
+        }
+        let (windows, _) =
+            hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID).unwrap();
+        let (points, targets, positions) = opening_points(&model, &windows, &mask, 1, 0).unwrap();
+        assert_eq!(positions, [11, 21]);
+        assert_eq!(targets, [20, 30]);
+        let mut seen = Vec::new();
+        row_picks(&model, &windows, &mask, 1, 0, |query, opens| {
+            let rows: Vec<u32> = (0..opens.len() as u32).filter(|&i| opens[i as usize]).collect();
+            let idx = Tensor::from_vec(rows.clone(), rows.len(), query.device())?;
+            seen.push(query.index_select(&idx, 0)?);
+            Ok(())
+        })
+        .unwrap();
+        let seen = Tensor::cat(&seen, 0).unwrap();
+        let gap = (points - seen).unwrap().abs().unwrap().max_all().unwrap().to_scalar::<f32>().unwrap();
+        assert_eq!(gap, 0.0, "the opening points are the rows' own points");
+    }
+
+    /// claude-218: each query is named by its nearest TRAIN opening under L1, across the search's
+    /// blocks, a tie keeping the earlier row; and by sign pattern, whose L1 is the Hamming
+    /// distance over the width. On the device: CPU tensor compute is refused (D24/D29).
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_opening_keys_name_each_opening_by_its_nearest_train_opening() {
+        let device = Device::new_cuda(0).unwrap();
+        // 5,000 TRAIN rows, past one 4,096-row block: row r is (r, 0), target r % 7.
+        let rows: Vec<f32> = (0..5000).flat_map(|r| [r as f32, 0.0]).collect();
+        let train = Tensor::from_vec(rows, (5000, 2), &device).unwrap();
+        let train_targets: Vec<u32> = (0..5000u32).map(|r| r % 7).collect();
+        // 4,500.2 is nearest row 4,500 (second block); −3 is nearest row 0; 4,095.5 ties rows
+        // 4,095 and 4,096 across the blocks and keeps the earlier.
+        let query = Tensor::from_vec(vec![4500.2f32, 0.0, -3.0, 0.0, 4095.5, 0.0], (3, 2), &device).unwrap();
+        let near = l1_nearest(&query, &train).unwrap();
+        assert_eq!(near.iter().map(|&(i, _)| i).collect::<Vec<_>>(), [4500, 0, 4095]);
+        assert!((near[0].1 - 0.1).abs() < 1e-3 && (near[1].1 - 1.5).abs() < 1e-6, "{near:?}");
+        // The sign code: 0/1 per coordinate, zero counting as positive.
+        let points = Tensor::from_vec(vec![0.5f32, -0.2, -1.0, 0.0], (2, 2), &device).unwrap();
+        let code = sign_code(&points).unwrap().to_vec2::<f32>().unwrap();
+        assert_eq!(code, [[1.0, 0.0], [0.0, 1.0]]);
+        let keyed = opening_keys("p", &query, vec![1, 2, 3], vec![10, 20, 30], &train, &train_targets).unwrap();
+        assert_eq!(keyed.point_target, [4500 % 7, 0, 4095 % 7]);
+        assert_eq!((keyed.train_openings, keyed.table_bytes), (5000, 5000 * 2 * 4));
+        // Every TRAIN row's sign code is (1, 1): the first nearest row, at Hamming distance 0
+        // from the queries with both coordinates at or above zero, and 1/2 from (−3, 0).
+        assert_eq!(keyed.sign_target, [0, 0, 0]);
+        assert_eq!(keyed.sign_distance, [0.0, 0.5, 0.0]);
     }
 
     /// claude-211 (Casey 30 Oct: "do not rule flock out, improve it instead"): with `keep_end`,

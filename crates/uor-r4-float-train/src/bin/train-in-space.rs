@@ -85,6 +85,11 @@
 //! them, and the decode-only cut, against greedy on the laptop (`in_space_long::cycle_grade`).
 //! One JSON line.
 //!
+//! `--opening-keys 1` adds to `--score-rows` the opening keys (claude-218): TRAIN's opening points
+//! under the trunk, with the memory off, and each split's openings named by the nearest of them
+//! under L1 and by sign pattern (`keys-{split}.json`), and a forced-opening greedy arm, each
+//! reply's first token given as its reference's (`samples-{split}-forced-memory.json`).
+//!
 //! `train-in-space --data-root DIR --controls 1 --out DIR [--fresh-v2 DIR] [--panel NAME=DIR ...]`: the
 //! protocol's recall controls (I-D, claude-211) on the laptop: (T) the memory's tables and (S) the
 //! longest suffix over TRAIN, as rows files the grader pairs with the arms.
@@ -140,6 +145,7 @@ fn main() -> Result<()> {
     let mut read_grade_on = false;
     let mut cut_grade_on = false;
     let mut cycle_on = false;
+    let mut keys_on = false;
     let mut cycle_grade_on = false;
     let mut scopes: Vec<ReadScope> = Vec::new();
     let (mut controls_dir, mut runs, mut frozen_probe) = (None, None, None);
@@ -215,6 +221,7 @@ fn main() -> Result<()> {
             "--read-grade" => read_grade_on = switch(&value)?,
             "--cut-grade" => cut_grade_on = switch(&value)?,
             "--cycle-step" => cycle_on = switch(&value)?,
+            "--opening-keys" => keys_on = switch(&value)?,
             "--cycle-grade" => cycle_grade_on = switch(&value)?,
             "--reply-read-train" => {
                 config.reply_read_train = Some(match value.as_str() {
@@ -505,6 +512,7 @@ fn main() -> Result<()> {
             || read_grade_on
             || cut_grade_on
             || cycle_on
+            || keys_on
             || cycle_grade_on
             || config.reply_read_train.is_some()
             || !scopes.is_empty()
@@ -536,6 +544,11 @@ fn main() -> Result<()> {
     if cycle_on && score.is_none() {
         return Err(FloatTrainError::Invalid(
             "--cycle-step applies to --score-rows only".to_owned(),
+        ));
+    }
+    if keys_on && score.is_none() {
+        return Err(FloatTrainError::Invalid(
+            "--opening-keys applies to --score-rows only".to_owned(),
         ));
     }
     if cycle_grade_on {
@@ -678,6 +691,7 @@ fn main() -> Result<()> {
             &cells,
             &scopes,
             cycle_on,
+            keys_on,
             &device,
         )? {
             println!("{}", serde_json::to_string(&file)?);
