@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use m1_d11_artifact_scorer_instrument::fresh_transfer::{
-    evaluate_fresh_transfer_two_seeds, validate_fresh_transfer_gate, FreshSeedScore,
+    evaluate_fresh_transfer_two_seeds, evaluate_panel_two_seeds, validate_fresh_transfer_gate,
+    FreshSeedScore,
     FRESH_V2_ELIGIBLE_TARGETS, FRESH_V2_MASK_SHA256, FRESH_V2_PAYLOAD_TOKENS, FRESH_V2_PSUCC_ROWS,
     FRESH_V2_TOKENS_SHA256,
 };
@@ -90,6 +91,16 @@ fn synthetic_passing_candidate() -> M1CloseCandidateInput {
     let fresh_rep = evaluate_fresh_transfer_two_seeds(&fresh_s1, &fresh_s2).unwrap();
     assert_eq!(fresh_rep["bar_e_pass"], true);
     base.fresh_transfer_report = Some(fresh_rep);
+    // Bar (f) (claude-211): the same two seeds on a held-out-phrasing panel of its own.
+    let panel_rep = evaluate_panel_two_seeds(
+        &fresh_s1,
+        &fresh_s2,
+        "e6abbdf0dd2f2fff1810d5e1fd95f6cfa20582c57c98e990a1d9c852e5e43fef",
+        "c63c625a9897b4ee42043028addb3f9f831d7ecc28976cae8223ba0050e5c910",
+    )
+    .unwrap();
+    assert_eq!(panel_rep["bar_f_pass"], true);
+    base.heldout_phrasing_report = Some(panel_rep);
     base
 }
 
@@ -130,7 +141,7 @@ fn canonical_saved_models_pass_bars_a_b_c_and_fail_bar_d_leaving_fresh_seal_inta
     assert!(trunk_v.bars_a_to_d_pass);
     assert!(trunk_v.bar_e_fresh_transfer_two_seeds);
     assert!(trunk_v.m1_close_pass);
-    assert_eq!(trunk_v.outcome, "PASS_M1_ALL_FIVE_BARS");
+    assert_eq!(trunk_v.outcome, "PASS_M1_ALL_SIX_BARS");
     assert_eq!(
         trunk_gate_receipt["dev_decision"],
         "PASS_BARS_A_TO_D_TWO_SEEDS"
@@ -201,7 +212,7 @@ fn negative_gate_checks_on_each_of_five_m1_bars_and_prospective_fresh_seal() {
     assert!(v_pass.bars_a_to_d_pass);
     assert!(v_pass.bar_e_fresh_transfer_two_seeds);
     assert!(v_pass.m1_close_pass);
-    assert_eq!(v_pass.outcome, "PASS_M1_ALL_FIVE_BARS");
+    assert_eq!(v_pass.outcome, "PASS_M1_ALL_SIX_BARS");
 
     let gate_pass = build_fresh_transfer_gate_receipt(&passing, &v_pass);
     assert_eq!(gate_pass["dev_decision"], "PASS_BARS_A_TO_D_TWO_SEEDS");
@@ -225,6 +236,7 @@ fn negative_gate_checks_on_each_of_five_m1_bars_and_prospective_fresh_seal() {
     let err_a = evaluate_m1_closing_bars(&break_a).unwrap_err();
     assert!(err_a.starts_with("SEALED_FRESH_PANEL_REFUSED:"));
     break_a.fresh_transfer_report = None;
+    break_a.heldout_phrasing_report = None;
     let v_break_a = evaluate_m1_closing_bars(&break_a).unwrap();
     assert!(!v_break_a.bar_a_d11_self_contained);
     assert!(!v_break_a.bars_a_to_d_pass);
@@ -233,6 +245,7 @@ fn negative_gate_checks_on_each_of_five_m1_bars_and_prospective_fresh_seal() {
     // 2. Break Bar (b): nonzero export gap (`row_mismatches = 1`)
     let mut break_b = passing.clone();
     break_b.fresh_transfer_report = None;
+    break_b.heldout_phrasing_report = None;
     break_b.seed_2.row_mismatches = 1;
     let v_break_b = evaluate_m1_closing_bars(&break_b).unwrap();
     assert!(!v_break_b.bar_b_export_gap_and_b4);
@@ -242,6 +255,7 @@ fn negative_gate_checks_on_each_of_five_m1_bars_and_prospective_fresh_seal() {
     // 3. Break Bar (c): missing tokens/s (`laptop_decode_median_tok_s = 0`)
     let mut break_c = passing.clone();
     break_c.fresh_transfer_report = None;
+    break_c.heldout_phrasing_report = None;
     break_c.seed_1.laptop_decode_median_tok_s = 0;
     let v_break_c = evaluate_m1_closing_bars(&break_c).unwrap();
     assert!(!v_break_c.bar_c_tokens_per_s_reported);
@@ -251,6 +265,7 @@ fn negative_gate_checks_on_each_of_five_m1_bars_and_prospective_fresh_seal() {
     // 4. Break Bar (d): DEV top-1 fails to clear T2 + 24 (`6,320 < 6,324`)
     let mut break_d = passing.clone();
     break_d.fresh_transfer_report = None;
+    break_d.heldout_phrasing_report = None;
     break_d.seed_2.d11_dev_top1 = 6_320;
     break_d.seed_2.train_eval_dev_top1 = 6_320;
     let v_break_d = evaluate_m1_closing_bars(&break_d).unwrap();
@@ -267,6 +282,40 @@ fn negative_gate_checks_on_each_of_five_m1_bars_and_prospective_fresh_seal() {
     assert!(!v_break_e.bar_e_fresh_transfer_two_seeds);
     assert!(!v_break_e.m1_close_pass);
     assert_eq!(v_break_e.outcome, "HOLD_M1_OPEN_BAR_E_UNMET");
+
+    // 6. Break Bar (f) (D82, claude-211): with (a)-(e) passing, M1 still holds open until the
+    // held-out-phrasing report passes; a report for other artifacts, or on a reserved panel,
+    // is refused.
+    let mut break_f_not_run = passing.clone();
+    break_f_not_run.heldout_phrasing_report = None;
+    let v_break_f = evaluate_m1_closing_bars(&break_f_not_run).unwrap();
+    assert!(v_break_f.bar_e_fresh_transfer_two_seeds);
+    assert_eq!(v_break_f.heldout_phrasing_status, "UNAVAILABLE_NOT_RUN");
+    assert!(!v_break_f.m1_close_pass);
+    assert_eq!(v_break_f.outcome, "HOLD_M1_OPEN_BAR_F_UNMET");
+    let mut failed_f = passing.clone();
+    failed_f.heldout_phrasing_report.as_mut().unwrap()["bar_f_pass"] = serde_json::json!(false);
+    let v_failed_f = evaluate_m1_closing_bars(&failed_f).unwrap();
+    assert_eq!(v_failed_f.heldout_phrasing_status, "FAIL_BAR_F_CLOSE_CONFIGURATION");
+    assert!(!v_failed_f.m1_close_pass);
+    let mut other_artifact = passing.clone();
+    other_artifact.heldout_phrasing_report.as_mut().unwrap()["seed_1"]["artifact_sha256"] =
+        serde_json::json!("cc".repeat(32));
+    assert!(evaluate_m1_closing_bars(&other_artifact).is_err());
+    let mut reserved = passing.clone();
+    reserved.heldout_phrasing_report.as_mut().unwrap()["panel_tokens_sha256"] =
+        serde_json::json!(FRESH_V2_TOKENS_SHA256);
+    assert!(evaluate_m1_closing_bars(&reserved).is_err());
+    // A report on a template-sharing control, P-train (train,train), cannot close M1 either.
+    let mut control = passing.clone();
+    control.heldout_phrasing_report.as_mut().unwrap()["panel_tokens_sha256"] =
+        serde_json::json!("7546c6d73b9314af8376de811a83f9b1a2c8d90625a5f3d948baee3a3217bac8");
+    assert!(evaluate_m1_closing_bars(&control).is_err());
+    // The mask is pinned too: p-f's tokens with another panel's mask are refused.
+    let mut other_mask = passing.clone();
+    other_mask.heldout_phrasing_report.as_mut().unwrap()["panel_mask_sha256"] =
+        serde_json::json!(FRESH_V2_MASK_SHA256);
+    assert!(evaluate_m1_closing_bars(&other_mask).is_err());
 }
 
 #[test]

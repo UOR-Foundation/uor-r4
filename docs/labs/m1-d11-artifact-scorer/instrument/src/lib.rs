@@ -194,6 +194,27 @@ pub fn fresh_rows(
     rows_from_corpus_unchecked(&fresh, config.spec.context, config.batch_rows)
 }
 
+/// M1 bar (f)'s held-out-phrasing panel rows (claude-211): `config.dev` is the
+/// panel, under the sha256s its config names, which `PreparedCorpus::load`
+/// checks. Refused before touching disk unless the decision receipt binds
+/// `artifact_sha256` to a passed two-seed bars (a)–(d) record, and unless the
+/// panel is none of the sealed fresh panels, P-dev, DEV or TRAIN.
+pub fn panel_rows(
+    config: &DriverConfig,
+    decision_receipt: &Value,
+    artifact_sha256: &str,
+) -> Result<Vec<DevRow>, String> {
+    fresh_transfer::validate_decision_receipt(decision_receipt, artifact_sha256)?;
+    fresh_transfer::refuse_reserved_panel(&config.dev)?;
+    fresh_transfer::refuse_sealed_fresh_source(&config.train)?;
+    let mut validated_cfg = config.clone();
+    validated_cfg.dev.split = uor_r4_discrete::corpus::Split::Dev;
+    validated_cfg.validate().map_err(|e| e.to_string())?;
+    let panel = PreparedCorpus::load(&config.dev, config.spec.vocabulary, &config.bos)
+        .map_err(|e| e.to_string())?;
+    rows_from_corpus_unchecked(&panel, config.spec.context, config.batch_rows)
+}
+
 /// sha256 over every row as little-endian `ordinal u64, target_position u64,
 /// target_token u32, prefix_len u32, prefix u32 x prefix_len`.
 pub fn rows_sha256(rows: &[DevRow]) -> String {
