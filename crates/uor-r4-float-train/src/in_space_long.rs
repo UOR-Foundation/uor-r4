@@ -2092,6 +2092,12 @@ pub enum DecodeRule {
     /// is I-E's check that it decodes as greedy. With `keep_end`, a nearest `<|eos|>` is taken
     /// ([`flock_pick`]).
     FlockRank { k: usize, keep_end: bool },
+    /// The Flock rank rule inside the nearest token's cell (claude-213): of the `k` nearest,
+    /// only those whose score is within `margin_milli / 1000` of the nearest's are drawn among
+    /// ([`cell_admitted`]), with the harmonic weights over that count. A nearest `<|eos|>` is
+    /// kept, as under [`DecodeRule::FLOCK_END`]. Margin 0 admits only exact ties, so it
+    /// decodes as greedy.
+    FlockCell { k: usize, margin_milli: u32 },
 }
 
 impl DecodeRule {
@@ -2102,6 +2108,41 @@ impl DecodeRule {
     /// ends. A nearest end of turn is always taken; a farther one can still be drawn, as
     /// any other candidate is.
     pub const FLOCK_END: Self = Self::FlockRank { k: FLOCK_DECODE_K, keep_end: true };
+
+    /// [`DecodeRule::FlockCell`] over [`FLOCK_DECODE_K`] candidates at `margin_milli`.
+    pub const fn flock_cell(margin_milli: u32) -> Self {
+        Self::FlockCell { k: FLOCK_DECODE_K, margin_milli }
+    }
+}
+
+/// The cell objective's margin in thousandths of a score: `rival_hinge`'s
+/// `relu(1 + max_r s(r) − s(target))` asks the target to keep this gap over its nearest rival,
+/// so a rival nearer than it is one the model has not separated (claude-213).
+pub const CELL_MARGIN_MILLI: u32 = 1_000;
+
+/// The margins claude-213 decodes under [`DecodeRule::FlockCell`], in thousandths: the cell
+/// objective's own, then halving toward greedy.
+pub const FLOCK_CELL_LADDER_MILLI: [u32; 6] = [CELL_MARGIN_MILLI, 500, 250, 125, 62, 31];
+
+/// Whether `cells` can name `--flock-cell`'s margins: distinct (each names its own file), and
+/// none past four of the cell objective's margins.
+pub fn cells_ok(cells: &[u32]) -> bool {
+    let distinct: std::collections::BTreeSet<&u32> = cells.iter().collect();
+    distinct.len() == cells.len() && cells.iter().all(|&m| m <= 4 * CELL_MARGIN_MILLI)
+}
+
+/// How many of `ranked` (in rank order, the nearest first) [`DecodeRule::FlockCell`] admits:
+/// those whose score is within `margin_milli / 1000` of the nearest's, never fewer than one.
+fn cell_admitted(ranked: &[(u32, f32)], margin_milli: u32) -> usize {
+    let Some(&(_, nearest)) = ranked.first() else {
+        return 0;
+    };
+    let margin = margin_milli as f32 / 1000.0;
+    ranked
+        .iter()
+        .take_while(|&&(_, s)| nearest - s <= margin)
+        .count()
+        .max(1)
 }
 
 /// The Flock rank rule's token from its `ranked` candidates and the drawn rank `draw`: the
@@ -2174,14 +2215,16 @@ fn cut_at_eos(reply: &[u32], eos: u32) -> &[u32] {
 }
 
 /// `(id, score)` candidates in rank order: the higher score first, ties to the smaller id.
-fn rank_order(mut candidates: Vec<(u32, f32)>) -> Vec<u32> {
+fn rank_order(mut candidates: Vec<(u32, f32)>) -> Vec<(u32, f32)> {
     candidates.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
-    candidates.into_iter().map(|(id, _)| id).collect()
+    candidates
 }
 
 /// One decoded reply ([`decode_reply`]).
 struct DecodedReply {
     tokens: Vec<u32>,
+    /// Under [`DecodeRule::FlockCell`], each step's admitted count; empty under any other rule.
+    admitted: Vec<u8>,
 }
 
 /// The model's reply to `prompt` under `rule`: as [`greedy_reply`], with the next token picked
@@ -2198,7 +2241,7 @@ fn decode_reply(
     sample: usize,
     eos: Option<u32>,
 ) -> Result<DecodedReply> {
-    let flock = matches!(rule, DecodeRule::FlockRank { .. });
+    let flock = rule != DecodeRule::Greedy;
     if flock && !objective.decodes_nearest() {
         return Err(invalid("the Flock rank rule decodes the nearest table tokens only"));
     }
@@ -2211,6 +2254,7 @@ fn decode_reply(
     hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, 0, false, || {
         let mut ids = prompt.to_vec();
         let mut reply = Vec::with_capacity(reply_tokens);
+        let mut admitted = Vec::new();
         for step in 0..reply_tokens {
             let window = &ids[ids.len().saturating_sub(SHEET_CONTEXT)..];
             let token = if objective.decodes_nearest() {
@@ -2247,7 +2291,7 @@ fn decode_reply(
                         .to_vec1::<u32>()?
                         .last()
                         .ok_or_else(|| invalid("the readout returned no token"))?,
-                    DecodeRule::FlockRank { k, keep_end } => {
+                    DecodeRule::FlockRank { k, .. } | DecodeRule::FlockCell { k, .. } => {
                         // The K nearest on the GPU; their order, ties to the smaller id, here.
                         let k = k.clamp(1, FLOCK_DECODE_K).min(scores.dim(1)?);
                         let top = scores
@@ -2256,7 +2300,18 @@ fn decode_reply(
                             .contiguous()?;
                         let picked = scores.gather(&top, 1)?.flatten_all()?.to_vec1::<f32>()?;
                         let ids_k = top.flatten_all()?.to_vec1::<u32>()?;
-                        let ranked = rank_order(ids_k.into_iter().zip(picked).collect());
+                        let scored = rank_order(ids_k.into_iter().zip(picked).collect());
+                        // The rank rule draws among all K; the cell rule among those it admits.
+                        let (drawn, keep_end) = match rule {
+                            DecodeRule::FlockCell { margin_milli, .. } => {
+                                let n = cell_admitted(&scored, margin_milli);
+                                admitted.push(n as u8);
+                                (n, true)
+                            }
+                            DecodeRule::FlockRank { keep_end, .. } => (scored.len(), keep_end),
+                            DecodeRule::Greedy => (1, false),
+                        };
+                        let ranked: Vec<u32> = scored[..drawn].iter().map(|&(id, _)| id).collect();
                         let index = (sample as u64) * 64 + step as u64;
                         let draw = flock_rank_draw(seed, index, ranked.len());
                         flock_pick(&ranked, draw, keep_end, eos)
@@ -2282,7 +2337,10 @@ fn decode_reply(
                 break;
             }
         }
-        Ok(DecodedReply { tokens: reply })
+        Ok(DecodedReply {
+            tokens: reply,
+            admitted,
+        })
     })
 }
 
@@ -2779,6 +2837,10 @@ pub struct IdSample {
     pub reference_keys: usize,
     #[serde(default)]
     pub reference_named: usize,
+    /// Under [`DecodeRule::FlockCell`], each step's admitted count ([`cell_admitted`],
+    /// claude-213). Empty, and not written, under every other rule, so their files are as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub admitted: Vec<u8>,
 }
 
 /// One file [`score_rows`] wrote, with its nearest and writer hits when it holds rows.
@@ -2880,7 +2942,9 @@ fn reference_reply(window: &CausalWindow, tokens: usize) -> Vec<u32> {
 ///   - greedy, with the memory on and taken out: DEV's to `samples-memory.json` and
 ///     `samples-no-memory.json` as before, a panel's to `samples-{name}-greedy-{memory|no-memory}.json`;
 ///   - the Flock rank rule (I-E), with the memory on, as it would be served:
-///     `samples-{split}-flock-memory.json`.
+///     `samples-{split}-flock-memory.json`;
+///   - the cell rule at each margin of `cells` (claude-213), with the memory on:
+///     `samples-{split}-flock-cell-{margin}-memory.json`.
 ///
 ///   Each records its reply-table hits under generation and under teacher forcing (I-F).
 ///
@@ -2900,9 +2964,15 @@ pub fn score_rows(
     seed: u64,
     arm: FbsArm,
     flock: DecodeRule,
+    cells: &[u32],
     device: &Device,
 ) -> Result<Vec<ScoredFile>> {
     check_run_arm(checkpoint, arm)?;
+    if !cells_ok(cells) {
+        return Err(invalid(
+            "--flock-cell wants distinct margins of at most 4,000 thousandths",
+        ));
+    }
     let step: usize = checkpoint
         .file_name()
         .and_then(|n| n.to_str())
@@ -2983,9 +3053,10 @@ pub fn score_rows(
                 tables: None,
             });
         }
-        // Greedy with the memory on and off; the Flock rank rule with it on only, as served.
-        let both = [DecodeRule::Greedy, flock];
-        let rules: &[DecodeRule] = if on { &both } else { &both[..1] };
+        // Greedy with the memory on and off; the Flock rules with it on only, as served.
+        let mut served = vec![DecodeRule::Greedy, flock];
+        served.extend(cells.iter().map(|&m| DecodeRule::flock_cell(m)));
+        let rules: &[DecodeRule] = if on { &served } else { &served[..1] };
         let active = crate::flock_read_memory::turn_memory();
         let named = |key: &[u32]| active.as_ref().is_some_and(|m| m.reply_stored(key).is_some());
         for split in splits.iter().filter(|s| s.samples) {
@@ -2995,7 +3066,7 @@ pub fn score_rows(
                 for (index, window) in prompts.iter().enumerate() {
                     let off = window.scored_offsets[0];
                     let prompt = &window.input_ids[..=off];
-                    let reply = decode_reply(
+                    let DecodedReply { tokens: reply, admitted } = decode_reply(
                         &model,
                         PointObjective::Cell,
                         prompt,
@@ -3004,8 +3075,7 @@ pub fn score_rows(
                         rule,
                         index,
                         Some(eos),
-                    )?
-                    .tokens;
+                    )?;
                     let reference = reference_reply(window, reply_tokens);
                     let (reply_keys, reply_named) = reply_key_hits(prompt, cut_at_eos(&reply, eos), named);
                     let (reference_keys, reference_named) =
@@ -3021,6 +3091,7 @@ pub fn score_rows(
                         reply_named,
                         reference_keys,
                         reference_named,
+                        admitted,
                     });
                 }
                 let file = match (split.name.as_str(), rule) {
@@ -3031,6 +3102,9 @@ pub fn score_rows(
                     }
                     (name, DecodeRule::FlockRank { keep_end: true, .. }) => {
                         format!("samples-{name}-flock-end-{label}.json")
+                    }
+                    (name, DecodeRule::FlockCell { margin_milli, .. }) => {
+                        format!("samples-{name}-flock-cell-{margin_milli}-{label}.json")
                     }
                 };
                 write_new(&out.join(&file), &serde_json::to_vec(&replies)?)?;
@@ -4429,6 +4503,202 @@ pub fn grade(
         }),
         copied_hits,
         notes,
+    })
+}
+
+/// One decode rule's free-generation reading on one split at one seed (claude-213's
+/// `--cell-grade`), against that split's own references after the same prompts.
+#[derive(Clone, Debug, Serialize)]
+pub struct CellReading {
+    pub split: String,
+    /// `greedy`, `flock-end`, or `flock-cell-{margin}`.
+    pub rule: String,
+    pub seed: u8,
+    pub reading: VerdictSeed,
+    /// Decision 4 against greedy on the same prompts ([`decode_holds`]); none for greedy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub holds: Option<bool>,
+    /// The free-generation condition of "generalizes" ([`VerdictSeed::generalizes`]).
+    pub close: bool,
+    /// The cell rule's admitted count per step, averaged over every step of every reply.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mean_admitted: Option<f64>,
+}
+
+impl CellReading {
+    /// `|v − v_ref|`, or none when nothing is complete to share over.
+    fn gap(&self) -> Option<f64> {
+        match (self.reading.v, self.reading.v_ref) {
+            (Some(v), Some(r)) => Some((v - r).abs()),
+            _ => None,
+        }
+    }
+}
+
+/// claude-213's grade of the cell rule: every reading, DEV's selection and the panel's outcome.
+#[derive(Clone, Debug, Serialize)]
+pub struct CellGrade {
+    pub panel: String,
+    pub margins: Vec<u32>,
+    pub readings: Vec<CellReading>,
+    pub selected: Option<u32>,
+    /// `qualified`, `closest, not qualified`, or `none holds decision 4`.
+    pub selection: &'static str,
+    /// The selected margin's outcome on the panel: `improves`, `narrows`, `no gain`, or
+    /// `no selection`.
+    pub outcome: &'static str,
+}
+
+/// DEV's selection, as the claude-213 sheet registers it, from each margin's three DEV seeds:
+/// - the widest margin that holds decision 4 against greedy and is close (free generation,
+///   [`VerdictSeed::generalizes`]) at all three seeds: `qualified`;
+/// - else, of those that hold decision 4 at all three seeds, the one nearest the references by
+///   the mean `|v − v_ref|` over its seeds, ties to the wider: `closest, not qualified`;
+/// - else none.
+fn select_margin(dev: &[(u32, Vec<&CellReading>)]) -> (Option<u32>, &'static str) {
+    let three = |r: &[&CellReading], f: &dyn Fn(&CellReading) -> bool| r.len() == 3 && r.iter().all(|x| f(x));
+    let mut by_width: Vec<&(u32, Vec<&CellReading>)> = dev.iter().collect();
+    by_width.sort_by_key(|r| std::cmp::Reverse(r.0));
+    if let Some((m, _)) = by_width
+        .iter()
+        .find(|(_, r)| three(r, &|x| x.holds == Some(true) && x.close))
+    {
+        return (Some(*m), "qualified");
+    }
+    let mut best: Option<(u32, f64)> = None;
+    for (m, r) in by_width {
+        if !three(r, &|x| x.holds == Some(true)) {
+            continue;
+        }
+        let gaps: Option<Vec<f64>> = r.iter().map(|x| x.gap()).collect();
+        let Some(gaps) = gaps else { continue };
+        let mean = gaps.iter().sum::<f64>() / gaps.len() as f64;
+        // Widest first, so a later margin replaces it only when strictly nearer.
+        if best.is_none_or(|(_, b)| mean < b) {
+            best = Some((*m, mean));
+        }
+    }
+    match best {
+        Some((m, _)) => (Some(m), "closest, not qualified"),
+        None => (None, "none holds decision 4"),
+    }
+}
+
+/// The panel's outcome for the selected margin's three seeds `cell`, against `FLOCK_END`'s
+/// three seeds `end` there, as the sheet registers it: `improves` when it holds decision 4 and
+/// is close at all three; `narrows` when it holds decision 4 at all three and is nearer the
+/// references than `FLOCK_END` at all three; else `no gain`.
+fn panel_outcome(cell: &[&CellReading], end: &[&CellReading]) -> &'static str {
+    let holds = cell.len() == 3 && cell.iter().all(|x| x.holds == Some(true));
+    if holds && cell.iter().all(|x| x.close) {
+        return "improves";
+    }
+    let nearer = end.len() == 3
+        && cell.iter().zip(end).all(|(c, e)| match (c.gap(), e.gap()) {
+            (Some(c), Some(e)) => c < e,
+            (Some(_), None) => true,
+            _ => false,
+        });
+    if holds && nearer { "narrows" } else { "no gain" }
+}
+
+/// Grade the cell rule (claude-213) from stored samples only, on the laptop: `runs` holds one
+/// `--score-rows` folder per seed, `r-drop-s{1,2,3}`, each with DEV's and `panel`'s samples
+/// under greedy, `FLOCK_END` and the cell rule at each of `margins`. Every reading is against
+/// the split's own references after the same prompts; DEV selects the margin
+/// ([`select_margin`]) and the panel decides ([`panel_outcome`]). Counts only; no model.
+pub fn cell_grade(data_root: &Path, runs: &Path, panel: &str, margins: &[u32]) -> Result<CellGrade> {
+    if margins.is_empty() || !cells_ok(margins) {
+        return Err(invalid("--cell-grade wants --flock-cell's distinct margins"));
+    }
+    let (train_tokens, train_mask) = load_train_split(data_root)?;
+    let train_replies = split_turns(&train_tokens, &train_mask, hs::SHEET_BOS_ID).replies;
+    drop((train_tokens, train_mask));
+    let eos = pinned_tokenizer(data_root)?
+        .token_id("<|eos|>")
+        .ok_or_else(|| invalid("the pinned tokenizer has no <|eos|>"))?;
+    let samples = |seed: u8, file: &str| -> Result<Vec<IdSample>> {
+        let path = runs.join(format!("r-drop-s{seed}")).join(file);
+        let list: Vec<IdSample> = read_scored(&path)?;
+        if list.len() != PROTOCOL_SAMPLES || list.iter().any(|s| s.reference.is_empty()) {
+            return Err(invalid(format!(
+                "{}: {} samples, or a prompt that opens no reply",
+                path.display(),
+                list.len()
+            )));
+        }
+        Ok(list)
+    };
+    let mut rules = vec!["greedy".to_owned(), "flock-end".to_owned()];
+    rules.extend(margins.iter().map(|m| format!("flock-cell-{m}")));
+    let mut readings = Vec::new();
+    for split in ["dev", panel] {
+        for seed in 1..=3u8 {
+            let mut greedy: Option<Generation> = None;
+            for rule in &rules {
+                let file = match (split, rule.as_str()) {
+                    ("dev", "greedy") => "samples-memory.json".to_owned(),
+                    (_, "greedy") => format!("samples-{split}-greedy-memory.json"),
+                    _ => format!("samples-{split}-{rule}-memory.json"),
+                };
+                let list = samples(seed, &file)?;
+                let replies: Vec<Vec<u32>> = list.iter().map(|s| s.reply.clone()).collect();
+                let references: Vec<Vec<u32>> = list.iter().map(|s| s.reference.clone()).collect();
+                let made = generation(&replies, &train_replies, eos);
+                let reading = VerdictSeed::new(seed, &made, &generation(&references, &train_replies, eos));
+                let mean_admitted = if rule.starts_with("flock-cell-") {
+                    let steps: Vec<u8> = list.iter().flat_map(|s| s.admitted.iter().copied()).collect();
+                    if steps.is_empty() {
+                        return Err(invalid(format!("{file}: the cell rule recorded no admitted counts")));
+                    }
+                    Some(steps.iter().map(|&n| f64::from(n)).sum::<f64>() / steps.len() as f64)
+                } else {
+                    None
+                };
+                let holds = match &greedy {
+                    None => None,
+                    Some(g) => Some(decode_holds(
+                        g.complete,
+                        made.complete,
+                        replies.len(),
+                        g.repeated_4gram_rate,
+                        made.repeated_4gram_rate,
+                    )),
+                };
+                if greedy.is_none() {
+                    greedy = Some(made);
+                }
+                readings.push(CellReading {
+                    split: split.to_owned(),
+                    rule: rule.clone(),
+                    seed,
+                    close: reading.generalizes(),
+                    reading,
+                    holds,
+                    mean_admitted,
+                });
+            }
+        }
+    }
+    let of = |split: &str, rule: &str| -> Vec<&CellReading> {
+        readings.iter().filter(|r| r.split == split && r.rule == rule).collect()
+    };
+    let dev: Vec<(u32, Vec<&CellReading>)> = margins
+        .iter()
+        .map(|&m| (m, of("dev", &format!("flock-cell-{m}"))))
+        .collect();
+    let (selected, selection) = select_margin(&dev);
+    let outcome = match selected {
+        Some(m) => panel_outcome(&of(panel, &format!("flock-cell-{m}")), &of(panel, "flock-end")),
+        None => "no selection",
+    };
+    Ok(CellGrade {
+        panel: panel.to_owned(),
+        margins: margins.to_vec(),
+        readings,
+        selected,
+        selection,
+        outcome,
     })
 }
 
@@ -7082,6 +7352,140 @@ mod tests {
         assert_eq!(flock_pick(&[1, 7, 9], 2, true, None), 9, "no end of turn to keep");
     }
 
+    /// claude-213: the cell rule admits the nearest and every candidate within the margin of
+    /// its score, the margin's edge included, and never fewer than one.
+    #[test]
+    fn the_cell_rule_admits_within_the_margin() {
+        // Gaps from the nearest: 0, 0.375, 1.0, 1.125 (exact in binary).
+        let ranked = [(5u32, -1.0f32), (3, -1.375), (9, -2.0), (2, -2.125)];
+        assert_eq!(cell_admitted(&ranked, 0), 1);
+        assert_eq!(cell_admitted(&ranked, 374), 1);
+        assert_eq!(cell_admitted(&ranked, 500), 2);
+        assert_eq!(cell_admitted(&ranked, CELL_MARGIN_MILLI), 3, "the edge is inside");
+        assert_eq!(cell_admitted(&ranked, 4_000), 4);
+        assert_eq!(cell_admitted(&[(1, -0.5), (2, -0.5), (3, -0.75)], 0), 2, "an exact tie");
+        assert_eq!(cell_admitted(&[(1, -0.5)], 0), 1);
+        assert_eq!(cell_admitted(&[], 1_000), 0);
+        // The ladder is the objective's margin, then halving, and every margin names its own file.
+        assert_eq!(FLOCK_CELL_LADDER_MILLI[0], CELL_MARGIN_MILLI);
+        assert!(cells_ok(&FLOCK_CELL_LADDER_MILLI));
+        assert!(!cells_ok(&[500, 500]), "a margin twice would write one file twice");
+        assert!(!cells_ok(&[4_001]));
+    }
+
+    /// claude-213: a sample decoded under any rule but the cell rule serializes exactly as
+    /// before, with no `admitted` key, so the registered files reproduce byte for byte; and a
+    /// file written before claude-213 still reads.
+    #[test]
+    fn the_cell_rules_record_leaves_the_other_rules_files_alone() {
+        let sample = |admitted: Vec<u8>| IdSample {
+            position: 7,
+            prompt: vec![1, 2],
+            reply: vec![3],
+            reference: vec![4],
+            reply_text: "a".to_owned(),
+            reference_text: "b".to_owned(),
+            reply_keys: 0,
+            reply_named: 0,
+            reference_keys: 0,
+            reference_named: 0,
+            admitted,
+        };
+        let before = r#"{"position":7,"prompt":[1,2],"reply":[3],"reference":[4],"reply_text":"a","reference_text":"b","reply_keys":0,"reply_named":0,"reference_keys":0,"reference_named":0}"#;
+        assert_eq!(serde_json::to_string(&sample(Vec::new())).unwrap(), before);
+        assert_eq!(serde_json::from_str::<IdSample>(before).unwrap(), sample(Vec::new()));
+        let cell = serde_json::to_string(&sample(vec![2, 1])).unwrap();
+        assert!(cell.ends_with(r#""admitted":[2,1]}"#), "{cell}");
+    }
+
+    /// claude-213: the sheet's selection on DEV (the widest qualified margin; else the nearest
+    /// of those holding decision 4; else none) and its decision on the panel.
+    #[test]
+    fn the_cell_selection_and_outcome_follow_the_sheet() {
+        let read = |holds: bool, v: f64, repeat: f64| {
+            let made = |complete: usize, verbatim: usize, repeat: f64| Generation {
+                replies: 256,
+                complete,
+                verbatim_train: verbatim,
+                new_ngram_share: Vec::new(),
+                distinct_1: 0.0,
+                distinct_2: 0.0,
+                repeated_4gram_rate: repeat,
+            };
+            // References: v_ref = 0.5; 200 complete, so tol = 0.10.
+            let reading = VerdictSeed::new(1, &made(200, (v * 200.0) as usize, repeat), &made(200, 100, 0.0));
+            CellReading {
+                split: "dev".to_owned(),
+                rule: "flock-cell".to_owned(),
+                seed: 1,
+                close: reading.generalizes(),
+                reading,
+                holds: Some(holds),
+                mean_admitted: Some(1.0),
+            }
+        };
+        let (good, salad, loops, off) = (
+            read(true, 0.5, 0.0),
+            read(true, 0.02, 0.0),
+            read(false, 0.5, 0.6),
+            read(true, 0.3, 0.0),
+        );
+        assert!(good.close && !salad.close && !off.close);
+        fn three(r: &CellReading) -> Vec<&CellReading> {
+            vec![r; 3]
+        }
+        fn margins(rows: [(u32, &CellReading); 3]) -> Vec<(u32, Vec<&CellReading>)> {
+            rows.iter().map(|&(m, r)| (m, three(r))).collect()
+        }
+        // The widest qualified margin, whatever the order given.
+        assert_eq!(
+            select_margin(&margins([(125, &good), (1_000, &salad), (500, &good)])),
+            (Some(500), "qualified")
+        );
+        // None qualifies: the nearest of those holding decision 4 (0.2 beats 0.48).
+        assert_eq!(
+            select_margin(&margins([(1_000, &salad), (250, &off), (31, &loops)])),
+            (Some(250), "closest, not qualified")
+        );
+        // One seed of three failing decision 4 rules a margin out.
+        let mixed = vec![(500u32, vec![&good, &good, &loops])];
+        assert_eq!(select_margin(&mixed), (None, "none holds decision 4"));
+        // The panel.
+        assert_eq!(panel_outcome(&three(&good), &three(&salad)), "improves");
+        assert_eq!(panel_outcome(&three(&off), &three(&salad)), "narrows");
+        assert_eq!(panel_outcome(&three(&salad), &three(&off)), "no gain", "farther than FLOCK_END");
+        assert_eq!(panel_outcome(&three(&loops), &three(&salad)), "no gain", "decision 4 fails");
+        assert_eq!(panel_outcome(&three(&good)[..2], &three(&salad)), "no gain", "two seeds");
+    }
+
+    /// claude-213 (its GPU half): on a model, the cell rule at margin 0 decodes exactly as
+    /// greedy, admitting one candidate at every step, and records a count at each step; the
+    /// objective's own margin admits more than one somewhere, so its draws do run.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_cell_rule_at_margin_0_decodes_as_greedy_on_a_model() {
+        let device = Device::new_cuda(0).unwrap();
+        let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
+        let (mut decoded, mut wider) = (0, false);
+        for sample in 0..4usize {
+            let shift = sample as u32 * 101;
+            let prompt: Vec<u32> = (1..=24u32).map(|i| (i * 37 + shift) % 4096).collect();
+            let decode = |rule| {
+                decode_reply(&model, PointObjective::Cell, &prompt, 16, 1, rule, sample, None).unwrap()
+            };
+            let greedy = decode(DecodeRule::Greedy);
+            assert!(greedy.admitted.is_empty(), "greedy records no counts");
+            let cell = decode(DecodeRule::flock_cell(0));
+            assert_eq!(cell.tokens, greedy.tokens, "sample {sample}");
+            assert!(cell.admitted.len() >= cell.tokens.len());
+            assert!(cell.admitted.iter().all(|&n| n == 1), "sample {sample}: {:?}", cell.admitted);
+            wider |= decode(DecodeRule::flock_cell(CELL_MARGIN_MILLI)).admitted.iter().any(|&n| n > 1);
+            decoded += greedy.tokens.len();
+        }
+        assert!(decoded > 0, "every reply was empty, so the check held vacuously");
+        assert!(wider, "the objective's margin never admitted a second candidate");
+    }
+
     /// claude-211 (I-C): the frozen check reads safetensors bytes, passes a run whose routing
     /// tensor stayed while another moved, and refuses a moved routing tensor or a run that did
     /// not move at all.
@@ -7282,7 +7686,8 @@ mod tests {
     #[test]
     fn candidates_rank_by_score_then_smaller_id() {
         let ranked = rank_order(vec![(9, -1.0), (4, -0.5), (2, -1.0), (7, -0.25)]);
-        assert_eq!(ranked, vec![7, 4, 2, 9]);
+        assert_eq!(ranked.iter().map(|&(id, _)| id).collect::<Vec<_>>(), vec![7, 4, 2, 9]);
+        assert_eq!(ranked[0], (7, -0.25), "each keeps its score");
     }
 
     /// claude-208 (protocol I-F): the key each later step of a reply reads, as the decoder forms
