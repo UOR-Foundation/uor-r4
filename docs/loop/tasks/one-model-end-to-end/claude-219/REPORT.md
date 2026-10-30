@@ -61,8 +61,9 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - **`--keyed-grade 1 --runs DIR [--keys-runs DIR] --panel p-v=DIR|p-u=DIR`** (`keyed_grade`):
   - the registered τ (`KEYED_TAUS`), the panels' sha256s (`KEYED_PANELS`);
   - the reply identity (`keyed_reply`) and its refusals (`keyed_reading`);
-  - the bar (`KeyedReading::carries`, `thin`) and the table (`keyed_outcome`; row 1 at any seed, after FIT round 1);
-  - a BOS-named key is a refusal.
+  - the bar (`KeyedReading::carries`, `thin`) and the table (`keyed_outcome`; row 1 at any seed, after FIT round 1), decided on p-v only;
+  - a BOS-named key is a refusal, at decode and in the grade, and a forced opening must open with its keyed token.
+- **`--keyed-decode` needs `--opening-keys 1` and `--samples` of 1 or more.**
 - **Also written:** the panel p-v (seed 2111) and its census, the sheet, the power check, the lab page, the grade, and one notebook row.
 - **The local job and watcher** are in `local/claude/claude-219/`:
   - `job.sh`, sha256 `fb2244abcea9bb29498a199e19fbf9ac8da4453187f7f246c08310212efe6bb4`;
@@ -82,7 +83,10 @@ The tables are on the [lab page](../../../../labs/one-model-end-to-end/keyed-ope
 - **Negative gates on the host,** each failing with its fix set aside and passing when restored:
   - the keyed opening's miss rule;
   - the served memory's lookup;
-  - row 1 at any seed.
+  - row 1 at any seed;
+  - after the code reviews: bar (a)'s b + c ≥ 10 floor, row 3's "thin at some seed", the forced opening's first token, and the refusal of a BOS-named key.
+- **The grade and the power check, re-run at the head after the code reviews' fixes:** byte-identical to the committed `grade-p-v.json` and `power-p-u.json`.
+- **The loop's full gates** (`uor-harness loop gates --full`): green.
 - **On the pod:**
   - the crate's CUDA tests pass, including claude-218's named GPU tests and this unit's two;
   - every input matches its sha256;
