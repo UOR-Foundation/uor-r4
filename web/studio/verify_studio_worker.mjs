@@ -284,6 +284,14 @@ const runtimeMsg = await waitForMessage((m) => m.action === 'runtime_loaded' || 
 assert(runtimeMsg.action === 'runtime_loaded', `prewarm failed: ${JSON.stringify(runtimeMsg)}`);
 assert(runtimeMsg.engine === 'uor-r4-integer/serving-wasm', `unexpected engine tag: ${runtimeMsg.engine}`);
 
+// 1b. The engine limit is advertised honestly: /1-/6 served, /7 parsed but refused.
+await sendToWorker({ action: 'engine_info', id: 'limit_probe' });
+const infoMsg = await waitForMessage((m) => m.action === 'engine_info_result' || m.action === 'operation_error');
+assert(infoMsg.action === 'engine_info_result', `engine_info failed: ${JSON.stringify(infoMsg)}`);
+assert(Array.isArray(infoMsg.served_schemas) && infoMsg.served_schemas.length === 6 && infoMsg.served_schemas[5] === 'uor-r4.lut-stack/6', `served schemas should be /1-/6, got ${JSON.stringify(infoMsg.served_schemas)}`);
+assert(Array.isArray(infoMsg.parse_schemas) && infoMsg.parse_schemas.includes('uor-r4.lut-stack/7'), `parse schemas should include /7, got ${JSON.stringify(infoMsg.parse_schemas)}`);
+assert(Array.isArray(infoMsg.refused_schemas) && infoMsg.refused_schemas.some((s) => s.schema === 'uor-r4.lut-stack/7' && /turn memory/.test(s.reason)), `refused schemas should name the /7 turn-memory refusal, got ${JSON.stringify(infoMsg.refused_schemas)}`);
+
 // 2. Load the synthetic stack via `load_model` -> `loadStack`.
 await sendToWorker({
     action: 'load_model',
@@ -487,24 +495,65 @@ assert(
     `expected bound byte-bpe tokenizer label after re-load, got: ${JSON.stringify(reloadedBoundMsg)}`,
 );
 
-// 6. Verify static source invariants on uor_model_worker.js and index.html.
+// 6. Verify static source invariants on uor_model_worker.js and the Studio page.
 const workerSrc = readFileSync(resolve(__dirname, 'assets/js/uor_model_worker.js'), 'utf8')
     .replace(/\/\/.*$/gm, '');
 for (const forbidden of ['fetch(', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'sendBeacon', 'importScripts', 'http://', 'https://']) {
     assert(!workerSrc.includes(forbidden), `uor_model_worker.js contains forbidden network token: ${forbidden}`);
 }
 
+// 6a. The page's honest status contract: pre-alpha, M1 closed, 1 of 8 milestones.
+// These assertions fail if the honest chip is removed or the stale claims return.
 const indexHtml = readFileSync(resolve(__dirname, 'index.html'), 'utf8');
-assert(indexHtml.includes('id="d36EngineStatusBanner"'), 'missing d36EngineStatusBanner in index.html');
-assert(indexHtml.includes('0/8') && indexHtml.includes('P_succ = 35.1%'), 'd36EngineStatusBanner must cite 0/8 milestones and A8 preflight P_succ = 35.1%');
+assert(indexHtml.includes('id="projectStatus"'), 'index.html must carry the #projectStatus status chip');
+assert(/Pre-alpha[^<]*M1[^<]*1 of 8/.test(indexHtml), 'the status chip must state Pre-alpha, M1 closed and 1 of 8 milestones');
+assert(!indexHtml.includes('d36EngineStatusBanner'), 'the stale d36EngineStatusBanner banner must stay removed');
+assert(!indexHtml.includes('0/8') && !indexHtml.includes('P_succ = 35.1%'), 'the stale 0/8 and P_succ = 35.1% claims must stay removed');
 assert(!indexHtml.includes('35.1%</code> tok/s') && !indexHtml.includes('35.1% tok/s'), 'unsourced "35.1% tok/s" must not appear in index.html');
 assert(!indexHtml.includes('en.wikipedia.org/w/api.php'), 'live Wikipedia search fetch must be removed from index.html');
 assert(!indexHtml.includes('api.duckduckgo.com'), 'live DuckDuckGo search fetch must be removed from index.html');
+
+// 6b. The page wires the model-source manager, the API module and this worker, and
+// marks itself ready for the model sources (data-studio-ready + uor-studio-ready).
+assert(indexHtml.includes('id="modelSourcesPanel"') && indexHtml.includes('id="modelSourceMount"'),
+    'index.html must carry the model-source panel ids (#modelSourcesPanel, #modelSourceMount)');
+assert(indexHtml.includes('id="btnOpenModelSources"'), 'index.html must carry the #btnOpenModelSources control');
+assert(indexHtml.includes('id="engineStatus"') && indexHtml.includes('id="modelStatus"'),
+    'index.html must carry the #engineStatus and #modelStatus chips');
+assert(indexHtml.includes("import { mountModelSources, ModelSources } from './assets/js/model_sources.js'"),
+    'index.html must import the model-source module');
+assert(indexHtml.includes("import { configFromSources, streamChatCompletions } from './assets/js/studio_api.js'"),
+    'index.html must import the API module');
+assert(indexHtml.includes('./assets/js/uor_model_worker.js'), 'index.html must start the wasm model worker');
+assert(indexHtml.includes("document.documentElement.dataset.studioReady = '1'") && indexHtml.includes("new CustomEvent('uor-studio-ready')"),
+    'index.html must set document data-studio-ready = 1 and dispatch the uor-studio-ready event');
+
+// 6c. All four model-source options are offered by model_sources.js: the bundled
+// synthetic demo, a local file, a user-initiated URL and OpenAI-compatible APIs.
+const modelSourcesSrc = readFileSync(resolve(__dirname, 'assets/js/model_sources.js'), 'utf8');
+for (const marker of ["cardHeader('Demo'", "cardHeader('Local file'", "cardHeader('From URL'", "cardHeader('API'"]) {
+    assert(modelSourcesSrc.includes(marker), `model_sources.js must offer the ${marker.replace("cardHeader('", '').replace("'", '')} source`);
+}
+for (const marker of ['load-bundled', 'load-url', 'add-api', '[data-role="model-file"]']) {
+    assert(modelSourcesSrc.includes(marker), `model_sources.js must wire the ${marker} source control`);
+}
+assert(modelSourcesSrc.includes('./pkg/synthetic-stack.lut'),
+    'the bundled demo source must point at the build-produced ./pkg/synthetic-stack.lut');
+assert(modelSourcesSrc.includes('globalThis.UORModelSources = api'),
+    'model_sources.js must expose window.UORModelSources for the page');
+for (const method of ['loadLocalFile', 'loadFromUrl', 'apiConfig', 'save', 'testApi']) {
+    assert(modelSourcesSrc.includes(method), `window.UORModelSources must expose ${method}`);
+}
+assert(modelSourcesSrc.includes("uor-model-source-changed"),
+    'model_sources.js must dispatch the uor-model-source-changed event');
 assert(remoteRequests.length === 0, `expected 0 remote requests, got ${JSON.stringify(remoteRequests)}`);
 
 console.log(JSON.stringify({
     verdict: 'ALL STUDIO WORKER CHECKS PASSED',
     engine: runtimeMsg.engine,
+    statusChip: 'pre-alpha / M1 complete / 1 of 8 milestones',
+    modelSourceOptions: ['bundled demo', 'local file', 'user-initiated URL', 'OpenAI-compatible API'],
+    studioReadyMarker: 'data-studio-ready + uor-studio-ready',
     statusLabel: loadedMsg.capabilities.status_label,
     tokenizerLabel: loadedMsg.capabilities.tokenizer_label,
     weightsPerToken: loadedMsg.capabilities.weights_per_token,

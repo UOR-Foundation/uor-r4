@@ -1,8 +1,8 @@
 # web
 
-`web/studio/` holds the Studio shell: the editor, chat and model-manager page (`index.html`, `index.css`, `assets/js/uor_model_worker.js`, `r4_worker.js`, `verify_studio_worker.mjs`, `coi-serviceworker.js`) and the standalone geometry explorer (`geometric_prime_router_webapp.html`). It is the planned home of the web client, a local in-browser model; see [`docs/products/web-client.md`](../docs/products/web-client.md) and [`docs/labs/m7-studio-connect-wasm-engine/README.md`](../docs/labs/m7-studio-connect-wasm-engine/README.md).
+`web/studio/` holds the Studio: a clean editor, chat and model-source page (`index.html`, `index.css`, `assets/js/`), the wasm worker, the build/publish helpers and the verification harnesses, plus the standalone geometry explorer (`geometric_prime_router_webapp.html`). It is the repository's web client; see [`docs/products/web-client.md`](../docs/products/web-client.md) and [`web/studio/README.md`](studio/README.md) for the current state, the build recipe and the limitations.
 
-The published site is built by [`docs-site.yml`](../.github/workflows/docs-site.yml): the book is served at the root and the Studio at `/studio/`. The old `deploy.yml` job that copied these files remains disabled (D36).
+The WASM bundle, the demo stack, the tokenizer, the page-load/worker/parity checks and the publish step are one command (`web/studio/build_serve_wasm.sh`) plus the publisher (`scripts/studio/build-and-publish.sh`, dry run by default; `--push --yes` publishes). The published site is served by [`docs-site.yml`](../.github/workflows/docs-site.yml): the book is at the root and the Studio at `/studio/`; the workflow preserves an existing `studio/` directory, so a manual publish persists across later book deploys. `.github/**` is an owner path: the workflow change that would build the Studio automatically is proposed in the unit's REPORT, not applied. The old `deploy.yml` job remains disabled (D36).
 
 ## Build the WASM bundle and verify the Studio worker locally
 
