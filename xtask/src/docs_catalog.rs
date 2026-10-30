@@ -58,13 +58,20 @@ pub fn parse_records(text: &str) -> Result<Vec<Record>, String> {
         if path.is_empty() {
             return Err(format!("catalog line {}: missing path", i + 1));
         }
+        let date = match v.get("date") {
+            Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+            Some(Value::String(_) | Value::Null) | None => None,
+            Some(other) => {
+                return Err(format!(
+                    "catalog line {}: date {other} is not a string or null",
+                    i + 1
+                ))
+            }
+        };
         out.push(Record {
             path,
             title: str_field(&v, "title"),
-            date: match v.get("date") {
-                Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
-                _ => None,
-            },
+            date,
             lab: str_field(&v, "lab"),
             line: str_field(&v, "line"),
             mechanisms: v
@@ -385,6 +392,22 @@ mod tests {
         );
         assert_eq!(resolve_target("docs/gone.md", &ex), None);
         assert_eq!(resolve_target("other/gone.md", &ex), None);
+    }
+
+    #[test]
+    fn non_string_date_is_rejected() {
+        let recs = parse_records("{\"path\":\"a.md\",\"date\":null}\n{\"path\":\"b.md\"}")
+            .expect("null and missing dates parse");
+        assert_eq!(
+            (recs[0].date.as_deref(), recs[1].date.as_deref()),
+            (None, None)
+        );
+        let err = parse_records("{\"path\":\"a.md\"}\n{\"path\":\"c.md\",\"date\":20261001}")
+            .expect_err("a numeric date must fail");
+        assert!(
+            err.contains("catalog line 2") && err.contains("date"),
+            "{err}"
+        );
     }
 
     #[test]
