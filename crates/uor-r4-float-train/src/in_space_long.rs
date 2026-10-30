@@ -2858,6 +2858,10 @@ pub struct ScoredFile {
     /// The tables control's rows, openings apart from later rows ([`controls`]' (T) only).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tables: Option<TableNamed>,
+    /// A samples file's decode: the reply tokens it decoded and the wall seconds it took, so
+    /// each rule's decode tok/s (claude-213).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decode: Option<(usize, f64)>,
 }
 
 /// The rows the tables control (T) names, and its hits among them, at the openings and at the
@@ -3051,6 +3055,7 @@ pub fn score_rows(
                 writer_hits: Some(picks.iter().filter(|p| p.writer == p.target).count()),
                 panel_sha256: split.sha256.clone(),
                 tables: None,
+                decode: None,
             });
         }
         // Greedy with the memory on and off; the Flock rules with it on only, as served.
@@ -3063,6 +3068,7 @@ pub fn score_rows(
             let prompts = sample_windows(&split.windows, &split.mask, samples);
             for &rule in rules {
                 let mut replies = Vec::with_capacity(prompts.len());
+                let started = std::time::Instant::now();
                 for (index, window) in prompts.iter().enumerate() {
                     let off = window.scored_offsets[0];
                     let prompt = &window.input_ids[..=off];
@@ -3107,6 +3113,10 @@ pub fn score_rows(
                         format!("samples-{name}-flock-cell-{margin_milli}-{label}.json")
                     }
                 };
+                // Every reply's tokens over the loop's wall time; the reference work in the loop
+                // is host-side and small beside the decode.
+                let decoded = replies.iter().map(|r| r.reply.len()).sum();
+                let seconds = started.elapsed().as_secs_f64();
                 write_new(&out.join(&file), &serde_json::to_vec(&replies)?)?;
                 written.push(ScoredFile {
                     file,
@@ -3115,6 +3125,7 @@ pub fn score_rows(
                     writer_hits: None,
                     panel_sha256: split.sha256.clone(),
                     tables: None,
+                    decode: Some((decoded, seconds)),
                 });
             }
         }
@@ -3307,6 +3318,7 @@ pub fn controls(
                 writer_hits: None,
                 panel_sha256: sha.clone(),
                 tables: (label == "T").then_some(named),
+                decode: None,
             });
         }
     }
