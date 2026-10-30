@@ -417,34 +417,34 @@ pub fn import_d11(bytes: &[u8]) -> Result<Snapshot> {
     };
     read_initialization.validate(read_spec)?;
 
-    let read_section = |name: &str,
-                        expected_kind: SectionKind,
-                        expected_len: usize|
-     -> Result<&[u8]> {
-        let entry = header
-            .tables
-            .iter()
-            .find(|t| t.name == name)
-            .ok_or_else(|| invalid(format!("missing table {name}")))?;
-        if entry.kind != expected_kind || entry.len != expected_len {
-            return Err(invalid(format!("table {name} kind or length mismatch")));
-        }
-        let expected_bytes = expected_len
-            .checked_mul(expected_kind.width())
-            .ok_or_else(|| invalid("table byte size overflow"))?;
-        if (entry.span.offset as usize) % ALIGN != 0 || entry.span.bytes != expected_bytes as u64 {
-            return Err(invalid(format!(
-                "table {name} alignment or byte span mismatch"
-            )));
-        }
-        let start =
-            usize::try_from(entry.span.offset).map_err(|_| invalid("table offset overflow"))?;
-        let end = start
-            .checked_add(expected_bytes)
-            .ok_or_else(|| invalid("table end overflow"))?;
-        data.get(start..end)
-            .ok_or_else(|| invalid(format!("table {name} span out of bounds")))
-    };
+    let read_section =
+        |name: &str, expected_kind: SectionKind, expected_len: usize| -> Result<&[u8]> {
+            let entry = header
+                .tables
+                .iter()
+                .find(|t| t.name == name)
+                .ok_or_else(|| invalid(format!("missing table {name}")))?;
+            if entry.kind != expected_kind || entry.len != expected_len {
+                return Err(invalid(format!("table {name} kind or length mismatch")));
+            }
+            let expected_bytes = expected_len
+                .checked_mul(expected_kind.width())
+                .ok_or_else(|| invalid("table byte size overflow"))?;
+            if !(entry.span.offset as usize).is_multiple_of(ALIGN)
+                || entry.span.bytes != expected_bytes as u64
+            {
+                return Err(invalid(format!(
+                    "table {name} alignment or byte span mismatch"
+                )));
+            }
+            let start =
+                usize::try_from(entry.span.offset).map_err(|_| invalid("table offset overflow"))?;
+            let end = start
+                .checked_add(expected_bytes)
+                .ok_or_else(|| invalid("table end overflow"))?;
+            data.get(start..end)
+                .ok_or_else(|| invalid(format!("table {name} span out of bounds")))
+        };
 
     if header.tables.len() != 4 {
         return Err(invalid("discrete UORLUT01 requires exactly four tables"));
