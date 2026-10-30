@@ -65,6 +65,11 @@
 //! grades the cell rule on the laptop (claude-213, `in_space_long::cell_grade`) from `--runs`'
 //! `r-drop-s{1,2,3}` score folders: DEV selects the margin, the panel decides. One JSON line.
 //!
+//! `--reply-read copy,all` adds greedy samples to `--score-rows` with the Hamming read held to the
+//! prompt, for the copy heads or for every head (claude-215). `train-in-space --data-root DIR
+//! --read-grade 1 --runs DIR --panel NAME=DIR` grades them on the laptop (`in_space_long::read_grade`).
+//! One JSON line.
+//!
 //! `train-in-space --data-root DIR --controls 1 --out DIR [--fresh-v2 DIR] [--panel NAME=DIR ...]`: the
 //! protocol's recall controls (I-D, claude-211) on the laptop: (T) the memory's tables and (S) the
 //! longest suffix over TRAIN, as rows files the grader pairs with the arms.
@@ -92,9 +97,9 @@ use uor_r4_float_train::flock_read_opening::OpeningAnchor;
 use uor_r4_float_train::flock_read_register::RegisterSelect;
 use uor_r4_float_train::in_space_long::{
     cell_grade, cells_ok, census, context_reach, controls, decode_speed, fbs_arm_named, grade,
-    gradient_norms, inspect_run, opening_bound, overturn, reply_bound, root_separation, run_long,
-    run_recall, score_rows, DecodeRule, LongConfig, PointObjective, TrainSplit,
-    DEFAULT_REGISTER_PICKS, MEMORY_DROPOUT_MAX,
+    gradient_norms, inspect_run, opening_bound, overturn, read_grade, reply_bound, root_separation,
+    run_long, run_recall, score_rows, scopes_ok, DecodeRule, LongConfig, PointObjective, ReadScope,
+    TrainSplit, DEFAULT_REGISTER_PICKS, MEMORY_DROPOUT_MAX,
 };
 use uor_r4_float_train::{FloatTrainError, Result};
 
@@ -117,6 +122,8 @@ fn main() -> Result<()> {
     let mut flock_end = false;
     let mut cell_grade_on = false;
     let mut cells: Vec<u32> = Vec::new();
+    let mut read_grade_on = false;
+    let mut scopes: Vec<ReadScope> = Vec::new();
     let (mut controls_dir, mut runs, mut frozen_probe) = (None, None, None);
     let mut scored: Vec<(String, PathBuf)> = Vec::new();
     let (mut split_dir, mut split_tokens, mut split_mask) = (None, None, None);
@@ -186,6 +193,24 @@ fn main() -> Result<()> {
             "--grade" => grade_on = switch(&value)?,
             "--flock-end" => flock_end = switch(&value)?,
             "--cell-grade" => cell_grade_on = switch(&value)?,
+            "--read-grade" => read_grade_on = switch(&value)?,
+            "--reply-read" => {
+                scopes = value
+                    .split(',')
+                    .map(|s| match s {
+                        "copy" => Ok(ReadScope::Copy),
+                        "all" => Ok(ReadScope::All),
+                        _ => Err(FloatTrainError::Invalid(
+                            "--reply-read wants copy and/or all, comma-separated".to_owned(),
+                        )),
+                    })
+                    .collect::<Result<_>>()?;
+                if scopes.is_empty() || !scopes_ok(&scopes) {
+                    return Err(FloatTrainError::Invalid(
+                        "--reply-read wants distinct scopes from copy and all".to_owned(),
+                    ));
+                }
+            }
             "--flock-cell" => {
                 cells = value
                     .split(',')
@@ -406,10 +431,11 @@ fn main() -> Result<()> {
         controls_on,
         grade_on,
         cell_grade_on,
+        read_grade_on,
     ];
     if modes.iter().filter(|&&m| m).count() > 1 {
         return Err(FloatTrainError::Invalid(
-            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1, --grade 1 or --cell-grade 1"
+            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1, --grade 1, --cell-grade 1 or --read-grade 1"
                 .to_owned(),
         ));
     }
@@ -441,6 +467,8 @@ fn main() -> Result<()> {
             || flock_end
             || cell_grade_on
             || !cells.is_empty()
+            || read_grade_on
+            || !scopes.is_empty()
         {
             return Err(FloatTrainError::Invalid(
                 "--recall trains; it takes --out and no other mode".to_owned(),
@@ -460,6 +488,23 @@ fn main() -> Result<()> {
         return Err(FloatTrainError::Invalid(
             "--flock-cell applies to --score-rows and --cell-grade 1 only".to_owned(),
         ));
+    }
+    if !scopes.is_empty() && score.is_none() {
+        return Err(FloatTrainError::Invalid(
+            "--reply-read applies to --score-rows only".to_owned(),
+        ));
+    }
+    if read_grade_on {
+        let runs =
+            runs.ok_or_else(|| FloatTrainError::Invalid("--read-grade needs --runs DIR".to_owned()))?;
+        let [(panel, _)] = extra_panels.as_slice() else {
+            return Err(FloatTrainError::Invalid(
+                "--read-grade needs one --panel NAME=DIR, the deciding panel".to_owned(),
+            ));
+        };
+        let graded = read_grade(&data_root, &runs, panel)?;
+        println!("{}", serde_json::to_string(&graded)?);
+        return Ok(());
     }
     if cell_grade_on {
         let runs =
@@ -557,6 +602,7 @@ fn main() -> Result<()> {
                 DecodeRule::FLOCK
             },
             &cells,
+            &scopes,
             &device,
         )? {
             println!("{}", serde_json::to_string(&file)?);
