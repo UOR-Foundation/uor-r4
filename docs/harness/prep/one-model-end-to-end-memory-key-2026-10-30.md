@@ -2,7 +2,9 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md). Order: [claude-218](../../loop/tasks/one-model-end-to-end/claude-218/ORDER.md). It follows claude-217 ([result](../../labs/one-model-end-to-end/cycle-step-2026-10-30/README.md)) and step 0 ([counts](../../labs/one-model-end-to-end/memory-key-2026-10-30/README.md)). The redirect from the rollout hinge was made by the lab's decision review (D68), logged on #3407 (6526603691).
 
-TEST FITNESS: round 1 NOT FIT (a fresh non-author reviewer, 30 Oct, at `bb9047baa`), on four blocking points, each repaired here:
+TEST FITNESS: FIT (round 4, a fresh non-author reviewer, 30 Oct, at `a47c235e1`; its `hsign` amendment FIT in round 5, at `7a3f9a3e9`). The rounds are below.
+
+Round 1 was NOT FIT (a fresh non-author reviewer, 30 Oct, at `bb9047baa`), on four blocking points, each repaired here:
 1. **τ across seeds.** One distance cannot carry across seeds' trunk scales, so τ is now a decile level, applied at each seed's own quantile.
 2. **Ties.** The device's reduction picks among tied rows by thread. Each key now names the commonest target among all tied rows, and records the tie count.
 3. **Row 1.** It was two-sided, counted verbatim rather than correct replies, and argued its power on DEV. It is now one-sided, on exact and template matches, with an underpowered floor.
@@ -25,9 +27,9 @@ Both are now refusals in the grade. With the code review of the grade (CHANGES o
 - rows 2 and 4, like row 1, do not hold on a reading with b + c under 10;
 - the deciding-nothing readings below are computed.
 
-**Amendment, 30 Oct, before p-u is read: a third key, `hsign`** (Casey: "ok add that trick"). It is the Hadamard sign key, run as a follow-up keys pass (Steps 6b). Round 5, a fresh reviewer at `7a3f9a3e9`: **TEST FITNESS: FIT**. Its owed checks are in at `2feeb79c1`. The follow-up job's pre-run review is GO, on its condition (a refusal marker), which is met.
+**Amendment, 30 Oct, before p-u is read: a third key, `hsign`** (Casey: "ok add that trick"). It is the Hadamard sign key, run as a follow-up keys pass (Steps 6b). Round 5, a fresh reviewer at `7a3f9a3e9`, found it FIT. Its owed checks are in at `2feeb79c1`. The follow-up job's pre-run review is GO, on its condition (a refusal marker), which is met.
 
-Round 4: **TEST FITNESS: FIT** (a fresh reviewer, 30 Oct, at `a47c235e1`). Every repair holds in the code, the step-5 refusals are all present, and nothing from p-u can change a level or τ. Its non-blocking notes are taken in:
+Round 4 was FIT (a fresh reviewer, 30 Oct, at `a47c235e1`). Every repair holds in the code, the step-5 refusals are all present, and nothing from p-u can change a level or τ. Its non-blocking notes are taken in:
 - row 3's missed-row reading also needs b + c at least 10, so a key firing on a handful of rows cannot pass;
 - sign distances tie at τ;
 - row 2's exact arm includes its TRAIN fallback.
