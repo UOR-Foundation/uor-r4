@@ -2765,6 +2765,19 @@ pub struct ScoredFile {
     /// An unpinned panel's `tokens.u16` sha256 (`--panel`, protocol I-A), when the file is one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub panel_sha256: Option<String>,
+    /// The tables control's rows, openings apart from later rows ([`controls`]' (T) only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tables: Option<TableNamed>,
+}
+
+/// The rows the tables control (T) names, and its hits among them, at the openings and at the
+/// later rows apart: protocol I-D's check reads them against the census.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct TableNamed {
+    pub openings_named: usize,
+    pub openings_hit: usize,
+    pub later_named: usize,
+    pub later_hit: usize,
 }
 
 /// Whether `name` may name a `--panel` split: one file-name part, and never DEV or the sealed Fresh
@@ -2938,6 +2951,7 @@ pub fn score_rows(
                 nearest_hits: Some(rows.hits()),
                 writer_hits: Some(picks.iter().filter(|p| p.writer == p.target).count()),
                 panel_sha256: split.sha256.clone(),
+                tables: None,
             });
         }
         // Greedy with the memory on and off; the Flock rank rule with it on only, as served.
@@ -2995,8 +3009,200 @@ pub fn score_rows(
                     nearest_hits: None,
                     writer_hits: None,
                     panel_sha256: split.sha256.clone(),
+                    tables: None,
                 });
             }
+        }
+    }
+    Ok(written)
+}
+
+/// The longest suffix (S) reads: the longest context suffix it looks for in TRAIN.
+pub const SUFFIX_CONTROL_MAX: usize = 64;
+
+/// A prediction no token can equal: a control's miss.
+const CONTROL_MISS: u32 = u32::MAX;
+
+/// One step of the suffix hash, extending `h` (the hash of a suffix of length `n − 1`) by
+/// `token` on its left: order-dependent, deterministic, and the same for TRAIN and the rows.
+fn suffix_hash_step(h: u64, token: u32, n: usize) -> u64 {
+    let mut x = h ^ (u64::from(token).wrapping_add(1)).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    x = x.wrapping_add((n as u64).wrapping_mul(0xD1B5_4A32_D192_ED03));
+    x ^= x >> 31;
+    x.wrapping_mul(0xBF58_476D_1CE4_E5B9)
+}
+
+/// The longest-suffix control (S, protocol I-D) for each `(context, _)` of `rows`: TRAIN's
+/// commonest next token, ties to the smaller id, after the longest suffix of the context, up
+/// to `max` tokens, that `train` holds with a token after it. A BOS can be a suffix's first
+/// token (a document's start), and no suffix reaches back past it. A context whose last token
+/// TRAIN never shows gets [`CONTROL_MISS`].
+fn longest_suffix_predictions(train: &[u32], contexts: &[&[u32]], max: usize) -> Vec<u32> {
+    use std::collections::{HashMap, HashSet};
+    // Every suffix every row asks for. A suffix no row asks for cannot end a longer one a row
+    // asks for (the longer one's last tokens are that suffix), so TRAIN's scan stops there.
+    let mut wanted: HashSet<(usize, u64)> = HashSet::new();
+    for ctx in contexts {
+        let mut h = 0u64;
+        for n in 1..=max.min(ctx.len()) {
+            h = suffix_hash_step(h, ctx[ctx.len() - n], n);
+            wanted.insert((n, h));
+        }
+    }
+    let mut next: HashMap<(usize, u64), HashMap<u32, u32>> = HashMap::new();
+    for i in 1..train.len() {
+        let target = train[i];
+        if target == hs::SHEET_BOS_ID {
+            continue;
+        }
+        let mut h = 0u64;
+        for n in 1..=max.min(i) {
+            let token = train[i - n];
+            h = suffix_hash_step(h, token, n);
+            if !wanted.contains(&(n, h)) {
+                break;
+            }
+            *next.entry((n, h)).or_default().entry(target).or_default() += 1;
+            if token == hs::SHEET_BOS_ID {
+                break;
+            }
+        }
+    }
+    contexts
+        .iter()
+        .map(|ctx| {
+            let mut h = 0u64;
+            let mut best = CONTROL_MISS;
+            for n in 1..=max.min(ctx.len()) {
+                h = suffix_hash_step(h, ctx[ctx.len() - n], n);
+                let Some(counts) = next.get(&(n, h)) else {
+                    break;
+                };
+                best = counts
+                    .iter()
+                    .max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0)))
+                    .map(|(&t, _)| t)
+                    .unwrap_or(CONTROL_MISS);
+            }
+            best
+        })
+        .collect()
+}
+
+/// One split the controls count: its name, tokens, reply mask, and an unpinned panel's sha256.
+type ControlSplit = (String, Vec<u32>, Vec<u8>, Option<String>);
+
+/// The protocol's recall controls (I-D, one-model-end-to-end claude-211), counted on the
+/// laptop with no model, for DEV, the sealed Fresh V2 panel in `fresh_v2` when given, and each
+/// unpinned `--panel`.
+/// - **(T), the tables:** at an opening its first-8 key names, TRAIN's commonest opening; at a
+///   later row the reply table keeps at share 0.5, its stored token; elsewhere a miss. The
+///   memory's own tables, built from TRAIN as `census` builds them.
+/// - **(S), the longest suffix** over TRAIN ([`longest_suffix_predictions`], at most
+///   [`SUFFIX_CONTROL_MAX`] tokens, in the row's own window).
+///
+/// Each is written as [`ScoredRows`] (`rows-{split}-T.json`, `rows-{split}-S.json`, with the
+/// rows in [`score_rows`]' order), so the grader pairs them with the arms row by row.
+pub fn controls(
+    data_root: &Path,
+    out: &Path,
+    fresh_v2: Option<&Path>,
+    panels: &[(String, PathBuf)],
+) -> Result<Vec<ScoredFile>> {
+    let bos = hs::SHEET_BOS_ID;
+    let (train_tokens, train_mask) = load_train_split(data_root)?;
+    let (train_w, _) = hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, bos)?;
+    let train_rows = reply_rows(&train_w, &train_mask);
+    let opening = reply_table(ReplyKey::TurnPosition(0), &train_rows);
+    let reply = reply_table(ReplyKey::TurnPosition(1), &train_rows);
+    drop((train_w, train_rows));
+    let (dev_tokens, dev_mask) = hs::load_pinned_uort_split(
+        &data_root.join("ft/dev/tokens.u16"),
+        &data_root.join("ft/dev/response_mask.u8"),
+        hs::PINNED_DEV_TOKENS_SHA256,
+        hs::PINNED_DEV_MASK_SHA256,
+        hs::EXPECTED_DEV_TOKENS,
+        hs::EXPECTED_DEV_ELIGIBLE_TARGETS,
+        hs::SHEET_VOCAB,
+        bos,
+    )?;
+    let mut splits: Vec<ControlSplit> = vec![("dev".to_owned(), dev_tokens, dev_mask, None)];
+    if let Some(dir) = fresh_v2 {
+        let (t, m) = load_fresh_v2(dir)?;
+        splits.push(("fresh-v2".to_owned(), t, m, None));
+    }
+    for (name, dir) in panels {
+        if !panel_name_ok(name) || splits.iter().any(|s| s.0 == *name) {
+            return Err(invalid(format!("--panel {name}: not a usable panel name")));
+        }
+        let (t, m, sha) = load_unpinned_uort(dir)?;
+        splits.push((name.clone(), t, m, Some(sha)));
+    }
+    fs::create_dir_all(out)?;
+    let mut written = Vec::new();
+    for (name, tokens, mask, sha) in &splits {
+        let (windows, _) = hs::build_document_windows(tokens, mask, SHEET_CONTEXT, bos)?;
+        let rows = reply_rows(&windows, mask);
+        let mut by_place = std::collections::HashMap::new();
+        for row in &rows {
+            by_place.insert((row.window, row.offset), row);
+        }
+        let (mut positions, mut targets, mut tables) = (Vec::new(), Vec::new(), Vec::new());
+        let mut named = TableNamed::default();
+        let mut contexts: Vec<&[u32]> = Vec::new();
+        for (wi, w) in windows.iter().enumerate() {
+            for ((&off, &target), &position) in w
+                .scored_offsets
+                .iter()
+                .zip(&w.scored_targets)
+                .zip(&w.scored_corpus_positions)
+            {
+                positions.push(position);
+                targets.push(target);
+                contexts.push(&w.input_ids[..=off]);
+                let row = by_place.get(&(wi, off));
+                let stored = row.and_then(|row| {
+                    if row.opening {
+                        opening.get(&ReplyKey::TurnPosition(0).of(row)).map(|s| s.0)
+                    } else {
+                        reply
+                            .get(&ReplyKey::TurnPosition(1).of(row))
+                            .filter(|s| table_keeps(s, REPLY_MEMORY_SHARE))
+                            .map(|s| s.0)
+                    }
+                });
+                if let (Some(row), Some(token)) = (row, stored) {
+                    let (seen, hit) = if row.opening {
+                        (&mut named.openings_named, &mut named.openings_hit)
+                    } else {
+                        (&mut named.later_named, &mut named.later_hit)
+                    };
+                    *seen += 1;
+                    *hit += usize::from(token == target);
+                }
+                tables.push(stored.unwrap_or(CONTROL_MISS));
+            }
+        }
+        let suffix = longest_suffix_predictions(&train_tokens, &contexts, SUFFIX_CONTROL_MAX);
+        for (label, picks) in [("T", tables), ("S", suffix)] {
+            let scored = ScoredRows {
+                split: name.clone(),
+                memory: false,
+                positions: positions.clone(),
+                targets: targets.clone(),
+                nearest: picks.clone(),
+                writer: picks,
+            };
+            let file = format!("rows-{name}-{label}.json");
+            write_new(&out.join(&file), &serde_json::to_vec(&scored)?)?;
+            written.push(ScoredFile {
+                file,
+                rows: scored.positions.len(),
+                nearest_hits: Some(scored.hits()),
+                writer_hits: None,
+                panel_sha256: sha.clone(),
+                tables: (label == "T").then_some(named),
+            });
         }
     }
     Ok(written)
@@ -5964,6 +6170,41 @@ mod tests {
         assert_ne!(
             (0..64).map(|i| flock_rank_draw(1, i, 16)).collect::<Vec<_>>(),
             (0..64).map(|i| flock_rank_draw(2, i, 16)).collect::<Vec<_>>()
+        );
+    }
+    /// claude-211 (protocol I-D): the longest-suffix control predicts TRAIN's commonest next
+    /// token after the longest context suffix TRAIN holds, ties to the smaller id; a BOS anchors
+    /// a suffix at a document's start, and no suffix reaches back past one; and a token TRAIN
+    /// never shows is a miss.
+    #[test]
+    fn the_longest_suffix_control_reads_the_longest_match() {
+        // BOS 5 6 7 8 | BOS 9 6 7 3 | BOS 6 7 4 | BOS 6 7 4
+        let train = [0u32, 5, 6, 7, 8, 0, 9, 6, 7, 3, 0, 6, 7, 4, 0, 6, 7, 4];
+        let contexts: Vec<&[u32]> = vec![
+            &[1, 5, 6, 7],  // "5 6 7" occurs once, followed by 8 ("6 7" alone gives 4)
+            &[1, 9, 6, 7],  // "9 6 7" once, followed by 3
+            &[2, 2, 6, 7],  // only "6 7": 8, 3, 4, 4, so 4
+            &[2, 2, 2, 7],  // only "7": the same as "6 7": 4
+            &[2, 2, 2, 42], // 42 never occurs: a miss
+        ];
+        assert_eq!(
+            longest_suffix_predictions(&train, &contexts, 8),
+            vec![8, 3, 4, 4, CONTROL_MISS]
+        );
+        // A tie goes to the smaller id: "1" is followed once by 2 and once by 3.
+        let tied = [0u32, 1, 2, 0, 1, 3];
+        assert_eq!(longest_suffix_predictions(&tied, &[&[1]], 4), vec![2]);
+        // BOS anchors: "6 7" is followed by 4, 3, 3, but "BOS 6 7" only by 4.
+        let anchored = [0u32, 6, 7, 4, 0, 5, 6, 7, 3, 0, 9, 6, 7, 3];
+        assert_eq!(
+            longest_suffix_predictions(&anchored, &[&[0, 6, 7], &[1, 6, 7]], 8),
+            vec![4, 3]
+        );
+        // Never past a BOS: "8 BOS 9" would give 1, but "BOS 9" is followed by 1, 2, 2.
+        let crossed = [0u32, 8, 0, 9, 1, 0, 9, 2, 0, 9, 2];
+        assert_eq!(
+            longest_suffix_predictions(&crossed, &[&[8, 0, 9]], 8),
+            vec![2]
         );
     }
 
