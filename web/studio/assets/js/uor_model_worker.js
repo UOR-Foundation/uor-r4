@@ -4,8 +4,11 @@
 // `weightsPerToken`, `allocEvents`, `leakedModels` (`crates/uor-r4-integer/src/wasm_bindgen_exports.rs`).
 //
 // Container family: the engine parses `uor-r4.lut-stack/1` .. `uor-r4.lut-stack/7`
-// (`crates/uor-r4-integer/src/stack/format.rs`). It does not serve the discrete
-// `uor-r4.lut-discrete/1` runtime, so that container is refused with the reason.
+// (`crates/uor-r4-integer/src/stack/format.rs`) and, since the M1 serving unit, the
+// discrete `uor-r4.lut-discrete/1` artifact (`crates/uor-r4-integer/src/discrete_d11.rs`).
+// The stack family is served as a stateful token session; the discrete family is
+// served as stateless next-token prefix evaluation (the M1 model is a language base,
+// not a chat model).
 //
 // Model sources: this worker is the only WASM backend in the Studio and it makes
 // **no network calls**. The page resolves bytes for any source it offers
@@ -47,6 +50,7 @@ const TURN_MEMORY_SCHEMA = 'uor-r4.lut-stack/7';
 const TURN_MEMORY_REFUSAL = 'this engine does not serve the turn memory yet (uor-r4.lut-stack/7)';
 // Carried by the discrete runtime, which is native-only; the stack engine refuses it.
 const DISCRETE_SCHEMA = 'uor-r4.lut-discrete/1';
+const DISCRETE_TRUNK_SCHEMA = 'uor-r4.lut-discrete-trunk/1';
 const ENGINE_SCHEMAS = Object.freeze(
     Array.from({ length: STACK_SCHEMA_MAX }, (_, i) => `${LUT_SCHEMA_PREFIX}${i + 1}`),
 );
@@ -56,8 +60,9 @@ const SERVED_SCHEMAS = Object.freeze(
 // Where the page may have resolved the artifact bytes from. The worker itself
 // makes no network requests: the page (or a desktop shell) owns resolution.
 const MODEL_SOURCES = Object.freeze(['file', 'bundled', 'url', 'api']);
-// The page's own artifact limit (64 MiB), enforced here as a second gate.
-const MAX_ARTIFACT_BYTES = 64 * 1024 * 1024;
+// The page's own artifact limit (128 MiB), enforced here as a second gate. The
+// M1-closing 19-table trunk is 86.5 MB; the synthetic demo is 0.5 MB.
+const MAX_ARTIFACT_BYTES = 128 * 1024 * 1024;
 const MAX_SESSIONS = 32;
 
 let wasmModule = null;
@@ -65,6 +70,7 @@ let wasmInitPromise = null;
 let capabilities = null;
 let tokenizerArtifact = null;
 let activeHandle = null;
+let activeDiscrete = null;
 let initialSessionBytes = null;
 let activeJob = null;
 const sessions = new Map();
@@ -159,6 +165,45 @@ function parseUorLutHeader(bytes) {
     } catch (error) {
         throw new Error(`UORLUT01 header is not valid JSON: ${error}`);
     }
+    if (parsed && (parsed.schema === DISCRETE_SCHEMA || parsed.schema === DISCRETE_TRUNK_SCHEMA)) {
+        const isTrunk = parsed.schema === DISCRETE_TRUNK_SCHEMA;
+        const shape = parsed.shape || {};
+        const vocabulary = Number(shape.vocabulary) || 0;
+        const context = Number(shape.context) || 0;
+        if (!vocabulary || !context || !parsed.shape || typeof parsed.shape !== 'object') {
+            throw new Error('The discrete M1 header has no valid shape.vocabulary/context.');
+        }
+        return {
+            schema: parsed.schema,
+            schema_level: null,
+            engine_kind: 'discrete',
+            engine_supported: true,
+            engine_support_reason: null,
+            shape: {
+                vocab: vocabulary,
+                vocabulary,
+                width: 0,
+                heads: 0,
+                mlp: 0,
+                pattern: '',
+                read: String(shape.read_mode || ''),
+                rotation: false,
+                context,
+                blocks: Number(shape.blocks) || 0,
+                kept_cells: Number(shape.kept_cells) || 0,
+                stages: Number(shape.stages) || 0,
+                seed: Number(shape.seed) || 0,
+                epoch: Number(shape.epoch) || 0,
+            },
+            group: null,
+            synthetic: false,
+            status_label: isTrunk
+                ? 'trained M1 model (19-table trunk, next-token prediction)'
+                : 'M1 base export (4-table, next-token prediction)',
+            features: headerFeatures(parsed),
+            mode: 'discrete-prefix',
+        };
+    }
     const schemaLevel = stackSchemaLevel(parsed && parsed.schema);
     if (!Number.isInteger(schemaLevel)) {
         throw new Error(unsupportedSchemaReason(parsed && parsed.schema));
@@ -172,6 +217,7 @@ function parseUorLutHeader(bytes) {
     return {
         schema: parsed.schema,
         schema_level: schemaLevel,
+        engine_kind: 'stack',
         engine_supported: schemaLevel <= STACK_SERVED_MAX,
         engine_support_reason: schemaLevel > STACK_SERVED_MAX ? TURN_MEMORY_REFUSAL : null,
         shape: {
@@ -351,7 +397,8 @@ self.onmessage = async ({ data }) => {
                 served_schemas: SERVED_SCHEMAS,
                 refused_schemas: [{ schema: TURN_MEMORY_SCHEMA, reason: TURN_MEMORY_REFUSAL }],
                 discrete_schemas: [DISCRETE_SCHEMA],
-                discrete_supported: false,
+                discrete_supported: true,
+                discrete_engine: 'uor-r4-integer/discrete (stateless next-token prefix prediction)',
                 load_sources: MODEL_SOURCES,
                 max_artifact_bytes: MAX_ARTIFACT_BYTES,
                 wasm_loaded: Boolean(wasmModule),
@@ -401,6 +448,49 @@ self.onmessage = async ({ data }) => {
             }
             const { source, source_label } = normalizeSource(payload);
             tokenizerArtifact = await loadTokenizerArtifact(raw, headerInfo, payload.tokenizerArtifact);
+            if (headerInfo.engine_kind === 'discrete') {
+                const handle = wasmModule.loadDiscrete(raw);
+                activeDiscrete = handle;
+                activeHandle = null;
+                initialSessionBytes = null;
+                sessions.clear();
+                sessionEpochs.clear();
+                capabilities = {
+                    engine: 'uor-r4-integer/discrete',
+                    mode: 'discrete-prefix',
+                    handle,
+                    file_name: payload.fileName
+                        || (manifest && typeof manifest.name === 'string' ? manifest.name : null),
+                    artifact_bytes: raw.byteLength,
+                    artifact_sha256: artifactSha256,
+                    expected_sha256: expectedSha256,
+                    sha256_verified: expectedSha256 ? true : null,
+                    source,
+                    source_label,
+                    schema: headerInfo.schema,
+                    engine_supported: true,
+                    shape: headerInfo.shape,
+                    features: headerInfo.features,
+                    synthetic: false,
+                    status_label: headerInfo.status_label,
+                    tokenizer_label: tokenizerLabel(tokenizerArtifact, headerInfo.shape.vocab),
+                    weights_per_token: null,
+                    checkpoint_bytes: null,
+                    can_generate: false,
+                    can_predict: true,
+                    alloc_events: Number(wasmModule.allocEvents()),
+                    leaked_models: Number(wasmModule.leakedModels()),
+                };
+                self.postMessage({
+                    action: 'model_loaded',
+                    capabilities,
+                    bytes: raw.byteLength,
+                    schema: headerInfo.schema,
+                    sha256: artifactSha256,
+                    source,
+                });
+                return;
+            }
             wasmModule.tickClock(1n);
             const handle = wasmModule.loadStack(raw);
             const blankState = wasmModule.saveSession(handle);
@@ -409,6 +499,7 @@ self.onmessage = async ({ data }) => {
             const leaked = Number(wasmModule.leakedModels());
 
             activeHandle = handle;
+            activeDiscrete = null;
             initialSessionBytes = new Uint8Array(blankState);
             sessions.clear();
             sessionEpochs.clear();
@@ -450,7 +541,50 @@ self.onmessage = async ({ data }) => {
             return;
         }
 
-        requireModel();
+        if (action === 'predict_discrete') {
+            if (activeDiscrete === null) {
+                throw new Error('Load the M1 discrete model before predicting; the loaded model is not a discrete artifact.');
+            }
+            const context = capabilities && capabilities.shape ? Number(capabilities.shape.context) : 0;
+            const vocab = capabilities && capabilities.shape ? Number(capabilities.shape.vocab) : 0;
+            const ids = Array.isArray(payload.tokenIds) ? payload.tokenIds.map((v) => Number(v)) : [];
+            if (!ids.length) {
+                throw new Error('predict_discrete needs a non-empty tokenIds prompt.');
+            }
+            if (context > 0 && ids.length > context) {
+                throw new Error(`The M1 model serves prefixes up to ${context} tokens; got ${ids.length}.`);
+            }
+            if (vocab > 0 && ids.some((id) => !Number.isInteger(id) || id < 0 || id >= vocab)) {
+                throw new Error(`A prompt token id is outside the model vocabulary (0..${vocab - 1}).`);
+            }
+            const started = performance.now();
+            const prediction = JSON.parse(wasmModule.predictDiscrete(activeDiscrete, Uint32Array.from(ids)));
+            const durationMs = performance.now() - started;
+            const decoded = (prediction.top8 || []).map((id) => ({
+                id,
+                text: decodeTokenIdWithArtifact(id, tokenizerArtifact),
+            }));
+            self.postMessage({
+                action: 'discrete_prediction_result',
+                id,
+                schema: prediction.schema,
+                artifact_sha256: prediction.artifact_sha256,
+                prediction: prediction.prediction,
+                top8: prediction.top8,
+                decoded,
+                admitted_cells: prediction.admitted_cells,
+                prompt_tokens: prediction.prompt_tokens,
+                vocabulary: prediction.vocabulary,
+                context: prediction.context,
+                durationMs,
+                tokenizer_label: capabilities ? capabilities.tokenizer_label : null,
+            });
+            return;
+        }
+
+        if (action !== 'generate') {
+            requireModel();
+        }
 
         if (action === 'close_session' || action === 'reset_session') {
             if (activeJob) {
@@ -517,6 +651,9 @@ self.onmessage = async ({ data }) => {
 
         if (action !== 'generate') {
             throw new Error(`Unknown worker action: ${action}`);
+        }
+        if (activeDiscrete !== null) {
+            throw new Error('The M1 discrete model serves next-token prediction only: use Predict for a prefix, or load a stack artifact (synthetic demo, local file or URL) to generate.');
         }
         if (activeJob) {
             throw new Error('Another generation is active. Wait for its completion or cancellation.');

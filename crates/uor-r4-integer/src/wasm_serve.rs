@@ -34,6 +34,7 @@
 
 #![cfg(all(target_arch = "wasm32", feature = "serving-wasm"))]
 
+use crate::discrete_d11::IntegerDiscreteModel;
 use crate::stack::{stack_argmax, IntegerStackModel, StackError};
 use core::sync::atomic::{AtomicU64, Ordering};
 use std::cell::RefCell;
@@ -243,4 +244,110 @@ pub fn wasm_alloc_events() -> u64 {
 /// Models leaked for the module lifetime (one per `wasm_load_stack`).
 pub fn wasm_leaked_models() -> u64 {
     LEAKED_MODELS.load(Ordering::Relaxed)
+}
+
+// The M1 discrete artifact (`uor-r4.lut-discrete/1`) is a different runtime:
+// it has no incremental session, so it is served as stateless prefix
+// evaluation. It keeps its own handle space; one loaded model per worker.
+
+/// One loaded discrete model (leaked, `'static`).
+struct DiscreteSlot {
+    model: &'static IntegerDiscreteModel,
+}
+
+thread_local! {
+    static DISCRETE_SLOTS: RefCell<Vec<Option<Box<DiscreteSlot>>>> = const { RefCell::new(Vec::new()) };
+}
+
+static LEAKED_DISCRETE: AtomicU64 = AtomicU64::new(0);
+
+/// One opaque call into the discrete slot table.
+#[inline(never)]
+fn with_discrete<R>(
+    handle: u32,
+    f: impl FnOnce(&DiscreteSlot) -> Result<R, String>,
+) -> Result<R, String> {
+    DISCRETE_SLOTS.with(|t| {
+        let handle = core::hint::black_box(handle);
+        let table = t.borrow();
+        let i = handle as usize;
+        if i >= table.len() {
+            return Err(format!("unknown discrete handle {handle}"));
+        }
+        match &table[i] {
+            Some(slot) => f(slot.as_ref()),
+            None => Err(format!("unknown discrete handle {handle}")),
+        }
+    })
+}
+
+/// Load a `uor-r4.lut-discrete/1` M1 artifact from bytes. Returns its handle.
+#[inline(never)]
+pub fn wasm_load_discrete(artifact: &[u8]) -> Result<u32, String> {
+    let model =
+        IntegerDiscreteModel::from_bytes(artifact).map_err(|e| format!("{e:?}"))?;
+    DISCRETE_SLOTS.with(|t| {
+        let mut table = t.borrow_mut();
+        let Some((i, slot)) = table.iter_mut().enumerate().find(|(_, s)| s.is_none()) else {
+            table.push(None);
+            let i = table.len() - 1;
+            let model_ref: &'static IntegerDiscreteModel = Box::leak(Box::new(model));
+            LEAKED_DISCRETE.fetch_add(1, Ordering::Relaxed);
+            table[i] = Some(Box::new(DiscreteSlot { model: model_ref }));
+            return Ok(i as u32);
+        };
+        let model_ref: &'static IntegerDiscreteModel = Box::leak(Box::new(model));
+        LEAKED_DISCRETE.fetch_add(1, Ordering::Relaxed);
+        *slot = Some(Box::new(DiscreteSlot { model: model_ref }));
+        Ok(i as u32)
+    })
+}
+
+/// Evaluate a causal token prefix with a loaded discrete model. Returns JSON
+/// with the top-1 and top-8 predicted next tokens (the M1 model is a
+/// next-token predictor; it has no incremental session).
+#[inline(never)]
+pub fn wasm_discrete_predict(handle: u32, ids: &[u32]) -> Result<String, String> {
+    with_discrete(handle, |slot| {
+        let evaluation = slot
+            .model
+            .evaluate_prefix(ids)
+            .map_err(|e| format!("{e:?}"))?;
+        let shape = slot.model.shape();
+        let out = serde_json::json!({
+            "schema": "uor-r4.wasm-discrete-prediction/1",
+            "artifact_sha256": slot.model.artifact_sha256(),
+            "prediction": evaluation.prediction,
+            "top8": evaluation.top8,
+            "admitted_cells": evaluation.admitted_cells,
+            "prompt_tokens": ids.len(),
+            "vocabulary": shape.vocabulary,
+            "context": shape.context,
+            "blocks": shape.blocks,
+        });
+        serde_json::to_string(&out).map_err(|e| e.to_string())
+    })
+}
+
+/// Static facts about a loaded discrete model.
+#[inline(never)]
+pub fn wasm_discrete_info(handle: u32) -> Result<String, String> {
+    with_discrete(handle, |slot| {
+        let shape = slot.model.shape();
+        let out = serde_json::json!({
+            "schema": "uor-r4.wasm-discrete-info/1",
+            "artifact_sha256": slot.model.artifact_sha256(),
+            "vocabulary": shape.vocabulary,
+            "blocks": shape.blocks,
+            "context": shape.context,
+            "kept_cells": shape.kept_cells,
+            "stages": shape.stages,
+            "read_mode": shape.read_mode,
+            "read_kept": shape.read_kept,
+            "read_sweeps": shape.read_sweeps,
+            "seed": shape.seed,
+            "epoch": shape.epoch,
+        });
+        serde_json::to_string(&out).map_err(|e| e.to_string())
+    })
 }
