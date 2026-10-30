@@ -1263,10 +1263,9 @@ pub fn grade_relation_head(
             || (s.rel_dev_b3_psucc_admitted > s.fz_dev_b3_psucc_admitted
                 && s.rel_dev_writer_top1_all >= s.fz_dev_writer_top1_all)
     });
-    let m1_closing_bar_met_two_seeds = seeds.iter().all(|s| {
-        s.rel_dev_writer_top1_all > UNIGRAM_FULL_BAR
-            && s.rel_dev_writer_top1_all > FULL_PANEL_T2_REFERENCE
-    });
+    let m1_closing_bar_met_two_seeds = seeds
+        .iter()
+        .all(|s| s.rel_dev_writer_top1_all > UNIGRAM_FULL_BAR.max(FULL_PANEL_T2_REFERENCE));
 
     // Outcome invariance check: max(C_frozen_zero, C_route) >= C_frozen_zero > H_relation
     let fz_strictly_dominates_rel_all_metrics = seeds.iter().all(|s| {

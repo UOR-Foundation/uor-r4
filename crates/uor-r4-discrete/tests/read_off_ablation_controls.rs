@@ -430,8 +430,8 @@ fn flock_vector_reference(
                 let c0 = words[0] as usize;
                 frame[node] = frame[c0];
                 let mut sum = [0i32; WIDTH];
-                for k in 0..3 {
-                    let child = words[k] as usize;
+                for &word in &words[..3] {
+                    let child = word as usize;
                     let act = geometry::BFS[frame[child] as usize * 16 + frame[c0] as usize];
                     let carried = action(act, &payload[child]);
                     for d in 0..WIDTH {
@@ -986,14 +986,16 @@ fn c7_committed_ten_arm_battery_configs_are_valid_and_distinct() {
         ReadInitialization, ReadSpec,
     };
 
-    let arms: [(
-        &str,
-        &[u8],
-        &str,
+    type Arm = (
+        &'static str,
+        &'static [u8],
+        &'static str,
         ReadSpec,
         ReadInitialization,
         SchedulePolicy,
-    ); 10] = [
+    );
+
+    let arms: [Arm; 10] = [
         (
             "a8-r-on",
             include_bytes!("../../../docs/labs/r-read-off-vs-read-on/evidence/a8-r-on.json"),

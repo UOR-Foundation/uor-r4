@@ -826,6 +826,7 @@ fn packed_geometry() -> Vec<u32> {
     words
 }
 
+#[allow(clippy::too_many_arguments)]
 fn make_binding(
     spec: Spec,
     read_spec: ReadSpec,
@@ -944,6 +945,7 @@ impl Device {
     }
 
     /// As `new_with_normalization`, with optional position transport `s[14]`.
+    #[allow(clippy::too_many_arguments)]
     pub fn new_with_position(
         spec: Spec,
         read_spec: ReadSpec,
@@ -2902,8 +2904,8 @@ mod position_device_tests {
             let coords = geometry::ROOTS[usize::from(root)];
             for b in 0..swap_spec.blocks as usize {
                 let start = (tok * swap_spec.blocks as usize + b) * 8;
-                for d in 0..8 {
-                    hol_snap.table[start + d] = i32::from(coords[d]);
+                for (d, &coord) in coords.iter().enumerate() {
+                    hol_snap.table[start + d] = i32::from(coord);
                 }
             }
         }

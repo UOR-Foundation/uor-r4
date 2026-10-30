@@ -914,8 +914,8 @@ mod tests {
                 geometry::IDENTITY,
             )?;
 
-            for b in 0..2 {
-                let inv = BlockNormInvariants::measure(&snap_blocks[b]);
+            for block in &snap_blocks {
+                let inv = BlockNormInvariants::measure(block);
                 assert!(inv.is_canonical_unit_root());
             }
             for cell in [0u8, 5, 85, 255] {

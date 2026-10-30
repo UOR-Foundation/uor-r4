@@ -2742,9 +2742,9 @@ mod cuda_impl {
         // Compute pre-registered intersection of admitted rows across all GPU arms
         let mut in_intersection = vec![true; DEV_ROWS];
         for ge in &gpu_evals {
-            for r in 0..DEV_ROWS {
+            for (r, admitted) in in_intersection.iter_mut().enumerate() {
                 if !ge.rows[r].target_admitted {
-                    in_intersection[r] = false;
+                    *admitted = false;
                 }
             }
         }
@@ -3109,84 +3109,85 @@ mod cuda_impl {
             &int_hit_vec_inter(7),
         )?;
 
-        let mut secondary = Vec::new();
-        secondary.push(compute_paired_comparison(
-            "v1_twopass_vs_current_interior_key_intersection",
-            "twopass_endpoint_output_v1",
-            "current_single_pass_v1",
-            &int_hit_vec_inter(2),
-            &int_hit_vec_inter(0),
-        )?);
-        secondary.push(compute_paired_comparison(
-            "v2_twopass_vs_current_interior_key_intersection",
-            "twopass_endpoint_output_v2",
-            "current_single_pass_v2",
-            &int_hit_vec_inter(8),
-            &int_hit_vec_inter(6),
-        )?);
-        secondary.push(compute_paired_comparison(
-            "v1_twopass_vs_frozen_frame_interior_key_intersection",
-            "twopass_endpoint_output_v1",
-            "frozen_constant_frame_v1",
-            &int_hit_vec_inter(2),
-            &int_hit_vec_inter(3),
-        )?);
-        secondary.push(compute_paired_comparison(
-            "v1_twopass_vs_permuted_frame_interior_key_intersection",
-            "twopass_endpoint_output_v1",
-            "permuted_frame_v1",
-            &int_hit_vec_inter(2),
-            &int_hit_vec_inter(4),
-        )?);
-        secondary.push(compute_paired_comparison(
-            "v1_train_remap16_vs_nearest_interior_key_intersection",
-            "train_remap_16_v1",
-            "nearest_endpoint_single_pass_v1",
-            &int_hit_vec_inter(5),
-            &int_hit_vec_inter(1),
-        )?);
-        secondary.push(compute_paired_comparison(
-            "v2_global_vs_v1_current_top1_all",
-            "twopass_global_writer_frame_v2",
-            "current_single_pass_v1",
-            &top1_hit_vec_all(12),
-            &top1_hit_vec_all(0),
-        )?);
-        secondary.push(compute_paired_comparison(
-            "reranker_v1_vs_writer_v1_top1_all",
-            "reranker_t_rebuilt_pooled_v1",
-            "current_single_pass_v1",
-            &r_v1_all_hits,
-            &top1_hit_vec_all(0),
-        )?);
-        secondary.push(compute_paired_comparison(
-            "reranker_v1_vs_permuted_null_top1_all",
-            "reranker_t_rebuilt_pooled_v1",
-            "reranker_code_permuted_null_v1",
-            &r_v1_all_hits,
-            &r_perm_all_hits,
-        )?);
-        secondary.push(compute_paired_comparison(
-            "reranker_v1_vs_permuted_null_top1_intersection",
-            "reranker_t_rebuilt_pooled_v1",
-            "reranker_code_permuted_null_v1",
-            &r_v1_inter_hits,
-            &r_perm_inter_hits,
-        )?);
-        secondary.push(compute_paired_comparison(
-            "reranker_v2_vs_writer_v2_top1_all",
-            "reranker_t_rebuilt_pooled_v2",
-            "current_single_pass_v2",
-            &r_v2_all_hits,
-            &top1_hit_vec_all(6),
-        )?);
-        secondary.push(compute_paired_comparison(
-            "reranker_v1_vs_g_bigram_restr_top1_all",
-            "reranker_t_rebuilt_pooled_v1",
-            "lookup_g_bigram_restr_v1",
-            &r_v1_all_hits,
-            &g_all_hits,
-        )?);
+        let secondary = vec![
+            compute_paired_comparison(
+                "v1_twopass_vs_current_interior_key_intersection",
+                "twopass_endpoint_output_v1",
+                "current_single_pass_v1",
+                &int_hit_vec_inter(2),
+                &int_hit_vec_inter(0),
+            )?,
+            compute_paired_comparison(
+                "v2_twopass_vs_current_interior_key_intersection",
+                "twopass_endpoint_output_v2",
+                "current_single_pass_v2",
+                &int_hit_vec_inter(8),
+                &int_hit_vec_inter(6),
+            )?,
+            compute_paired_comparison(
+                "v1_twopass_vs_frozen_frame_interior_key_intersection",
+                "twopass_endpoint_output_v1",
+                "frozen_constant_frame_v1",
+                &int_hit_vec_inter(2),
+                &int_hit_vec_inter(3),
+            )?,
+            compute_paired_comparison(
+                "v1_twopass_vs_permuted_frame_interior_key_intersection",
+                "twopass_endpoint_output_v1",
+                "permuted_frame_v1",
+                &int_hit_vec_inter(2),
+                &int_hit_vec_inter(4),
+            )?,
+            compute_paired_comparison(
+                "v1_train_remap16_vs_nearest_interior_key_intersection",
+                "train_remap_16_v1",
+                "nearest_endpoint_single_pass_v1",
+                &int_hit_vec_inter(5),
+                &int_hit_vec_inter(1),
+            )?,
+            compute_paired_comparison(
+                "v2_global_vs_v1_current_top1_all",
+                "twopass_global_writer_frame_v2",
+                "current_single_pass_v1",
+                &top1_hit_vec_all(12),
+                &top1_hit_vec_all(0),
+            )?,
+            compute_paired_comparison(
+                "reranker_v1_vs_writer_v1_top1_all",
+                "reranker_t_rebuilt_pooled_v1",
+                "current_single_pass_v1",
+                &r_v1_all_hits,
+                &top1_hit_vec_all(0),
+            )?,
+            compute_paired_comparison(
+                "reranker_v1_vs_permuted_null_top1_all",
+                "reranker_t_rebuilt_pooled_v1",
+                "reranker_code_permuted_null_v1",
+                &r_v1_all_hits,
+                &r_perm_all_hits,
+            )?,
+            compute_paired_comparison(
+                "reranker_v1_vs_permuted_null_top1_intersection",
+                "reranker_t_rebuilt_pooled_v1",
+                "reranker_code_permuted_null_v1",
+                &r_v1_inter_hits,
+                &r_perm_inter_hits,
+            )?,
+            compute_paired_comparison(
+                "reranker_v2_vs_writer_v2_top1_all",
+                "reranker_t_rebuilt_pooled_v2",
+                "current_single_pass_v2",
+                &r_v2_all_hits,
+                &top1_hit_vec_all(6),
+            )?,
+            compute_paired_comparison(
+                "reranker_v1_vs_g_bigram_restr_top1_all",
+                "reranker_t_rebuilt_pooled_v1",
+                "lookup_g_bigram_restr_v1",
+                &r_v1_all_hits,
+                &g_all_hits,
+            )?,
+        ];
 
         let twopass_clears_primary_bar =
             primary_v1.clears_strict_paired_rule || primary_v2.clears_strict_paired_rule;
@@ -3300,18 +3301,14 @@ mod tests {
         // Case 1: b = 30, c = 0 -> d = 30 > 24, d^2 = 900 > 4 * 30 = 120 -> PASS
         let mut cand = vec![false; 100];
         let refer = vec![false; 100];
-        for i in 0..30 {
-            cand[i] = true;
-        }
+        cand[..30].fill(true);
         let cmp_pass = compute_paired_comparison("t1", "cand", "ref", &cand, &refer).unwrap();
         assert_eq!(cmp_pass.net_diff_d, 30);
         assert!(cmp_pass.clears_strict_paired_rule);
 
         // Case 2: b = 24, c = 0 -> d = 24 (not > 24) -> FAIL
         let mut cand24 = vec![false; 100];
-        for i in 0..24 {
-            cand24[i] = true;
-        }
+        cand24[..24].fill(true);
         let cmp_fail_24 = compute_paired_comparison("t2", "cand", "ref", &cand24, &refer).unwrap();
         assert_eq!(cmp_fail_24.net_diff_d, 24);
         assert!(!cmp_fail_24.clears_strict_paired_rule);
