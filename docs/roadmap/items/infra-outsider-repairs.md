@@ -7,20 +7,20 @@ status: ready
 open_to: lab
 needs_gpu: false
 depends_on: []
-scope: [crates/uor-r4-discrete/src/**, crates/uor-r4-discrete/tests/read_off_ablation_controls.rs, crates/uor-r4-source-interface/src/lib.rs, xtask/src/docs_catalog.rs, xtask/src/docs_relink.rs, xtask/src/docs_rewrite_refs.rs, xtask/src/docs_stubs.rs, xtask/src/figures_math.rs, xtask/src/figures_charts.rs, docs/loop/tasks/infra-outsider-repairs/**]
+scope: [crates/uor-r4-discrete/src/address_cells.rs, crates/uor-r4-discrete/src/bin/position-qualify.rs, crates/uor-r4-discrete/src/d11_export.rs, crates/uor-r4-discrete/src/device.rs, crates/uor-r4-discrete/src/normalization_mechanism.rs, crates/uor-r4-discrete/src/prime_zeta.rs, crates/uor-r4-discrete/src/stage_t.rs, crates/uor-r4-discrete/src/trunk.rs, crates/uor-r4-discrete/src/wider_carrier.rs, crates/uor-r4-discrete/src/within_cell_writer.rs, crates/uor-r4-discrete/src/writer_bucket_qualification.rs, crates/uor-r4-discrete/tests/read_off_ablation_controls.rs, crates/uor-r4-source-interface/src/lib.rs, xtask/src/docs_catalog.rs, xtask/src/docs_relink.rs, xtask/src/docs_rewrite_refs.rs, xtask/src/docs_stubs.rs, xtask/src/figures_math.rs, xtask/src/figures_charts.rs, docs/loop/tasks/infra-outsider-repairs/**]
 done_class: host
 ---
 
 ## Why it matters
 
-Three small repairs to project code were found by our own labs, filed as issues, and then written by an outside contributor, @sharmis-tp, as PRs #3424, #3425 and #3426. The owner directed on 30 Oct 2026 that harmless contributions should be merged ("figure out what it will take to merge Suzuki's work in ... I do not think it will actively hurt anything else, will it? ... otherwise I do not mind the contributions"), recorded verbatim in the #2028 owner log.
+Three small repairs to project code were found by our own labs, filed as issues, and then written by an outside contributor, @sharmis-tp, as PRs #3424, #3425 and #3426. The owner directed on 30 Oct 2026 that harmless contributions should be merged ("figure out what it will take to merge Suzuki's work in ... I do not think it will actively hurt anything else, will it? ... otherwise I do not mind the contributions"), recorded in the [#2028 owner log, comment 6527705969](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6527705969) (quoted there as an excerpt with ellipses; the verbatim capture is in the Lead's chat).
 
 The three repairs:
 - **#3424** (References #3168): mechanical clippy fixes in `crates/uor-r4-discrete` and `crates/uor-r4-source-interface`; lint-only, no behaviour change. It also rewrites the M1 closing-bar predicate to an equivalent `> max(U, T)` form and leaves one known lint, `training.rs:2255`, because fixing that moves `DRIVER_SOURCE_SHA256`.
 - **#3425** (Closes #2792): the five docs-tool findings from the #2788 review: unreadable manifest is an error, rewrite placement shortfall is reported, stubs refuse before writing on conflicts, `encode_target` is reused, page-name collisions are detected.
 - **#3426** (Closes #2796): the #2791 hardening: `svg_mismatch` tolerance only inside attribute values, a 1e-7 tie band in `flock_choice`, a guard that fails `figures-charts` when the catalog no longer supports the fixed share prose, and a non-string catalog date is an error.
 
-**D77.** A new infrastructure unit runs only when a milestone item depends on it. This item runs because the owner directed it on 30 Oct 2026; that direction stands in place of D77's bar for this one item, as the 29 Oct documentation direction does for `docs-status-refresh` (PLAN.md, owner directions). None of the three repairs moves a bar, a status, a §3 rule, an owner path, a rendered file or a pinned hash; #3168 stays open for its clippy-gate half, which needs a `.github/**` owner change.
+**D77.** A new infrastructure unit runs only when a milestone item depends on it. This item runs because the owner directed it on 30 Oct 2026; that direction stands in place of D77's bar for this one item, as the 29 Oct documentation direction does for `docs-status-refresh` (PLAN.md, owner directions). None of the three repairs moves a bar, a status, a §3 rule, an owner path or a rendered file, and no checked-in pinned constant moves (#3168's `DRIVER_SOURCE_SHA256` is untouched because `training.rs` is). One computed identity does move: #3424 edits `device.rs`, one of the `include_bytes!` sources of `device::source_sha256()`, so the device binding's computed `source_sha256` changes; the fresh-context harm review found no active harm because no in-flight work uses `uor-r4-discrete`. #3168 stays open for its clippy-gate half, which needs a `.github/**` owner change.
 
 ## What is missing
 
@@ -37,12 +37,12 @@ The three repairs:
    - the queue (`loop queue`), then a post-merge verification on fresh `main`.
 2. **The repairs behave as their bodies say**, re-run at the adopted head: #3424's clippy/tests, #3425's `cargo test -p xtask` and no generated-output change, #3426's figure checks with a planted drift turning red and no committed figure change.
 3. **#2792 and #2796 are closed by their merged PRs; #3168 records its remainder** (the CI clippy gate is a `.github/**` owner path, and `training.rs:2255` is its own pin-bump PR).
-4. **The contributor is credited and answered**, and nothing in a bar, status, §3 rule, owner path, rendered file or pinned receipt moved.
+4. **The contributor is credited and answered**, and nothing in a bar, status, §3 rule, owner path, rendered file or checked-in pinned constant moved; the device binding's computed `source_sha256` move is recorded, not hidden.
 5. **The last adoption PR sets this item to `done`** in a status-only edit and says `Closes #<issue>` (D70).
 
 ## How to start
 
-Read `CHARTER.md` §5.5, `docs/loop/README.md` (the outsider clause and the `uor-review v1` record), the three issues and PRs, and the audit reports in `local/lead/suzuki-audit/reports/`. Claim this item. For each repair: create a same-repo branch from current `main`, commit the ORDER first (alone in its folder), merge the contributor's PR head with `git merge --no-ff` (original authorship preserved), commit the REPORT, push and open a `[deepseek] Adopt #NNNN: ...` PR. Run the ORDER's host done-when at that head, post the exact-head fresh-context `uor-review v1`, then `loop queue`. Comment on the original fork PR that it was adopted, then close it. The records package is drafted in `local/lead/suzuki-audit/drafts/adoption/`; the fork route was ruled out by the read-only fork token, found before any fork write.
+Read `CHARTER.md` §5.5, `docs/loop/README.md` (the outsider clause and the `uor-review v1` record), the three issues and PRs, and each earlier adoption's committed ORDER and REPORT under `docs/loop/tasks/infra-outsider-repairs/`. Claim this item. For each repair: create a same-repo branch from current `main`, commit the ORDER first (alone in its folder), merge the contributor's PR head with `git merge --no-ff` (original authorship preserved), commit the REPORT, push and open a `[deepseek] Adopt #NNNN: ...` PR. Run the ORDER's host done-when at that head, post the exact-head fresh-context `uor-review v1`, then `loop queue`. Comment on the original fork PR that it was adopted, then close it. The fork route was ruled out by the read-only fork token before any fork write.
 
 ## Rules that apply
 
@@ -55,7 +55,7 @@ Read `CHARTER.md` §5.5, `docs/loop/README.md` (the outsider clause and the `uor
 ## Sources
 
 - PRs [#3424](https://github.com/UOR-Foundation/uor-r4/pull/3424), [#3425](https://github.com/UOR-Foundation/uor-r4/pull/3425), [#3426](https://github.com/UOR-Foundation/uor-r4/pull/3426); issues [#3168](https://github.com/UOR-Foundation/uor-r4/issues/3168), [#2792](https://github.com/UOR-Foundation/uor-r4/issues/2792), [#2796](https://github.com/UOR-Foundation/uor-r4/issues/2796).
-- Owner direction, [#2028 owner log](https://github.com/UOR-Foundation/uor-r4/issues/2028) (30 Oct 2026).
+- Owner direction, [#2028 owner log comment 6527705969](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6527705969) (30 Oct 2026; excerpt, ellipses as quoted).
 - [CHARTER.md](../../../CHARTER.md) §5.3, §5.5; [docs/loop/README.md](../../loop/README.md).
 
 ## Cancel if

@@ -9,7 +9,7 @@ References #3432, #3433
 - No verifier implementation and no repair adoption happened in this PR; it records the gaps only.
 - The first audit pass treated Yassine's suggestion as a nice-to-have. The fresh-context reviews then found that the frozen M6 bar and registry already name the verifier, so this is a record inconsistency as well as an enhancement.
 - `cargo xtask ...` is not installed as a cargo alias on this main; the CI-proven form `cargo run -q --locked -p xtask -- roadmap ...` was used.
-- The two sync applies are GitHub writes. Each dry run was read in full first. They refreshed #3416's body and the M1/M6 milestone children lists (first apply) and created the umbrella issue (second apply); this REPORT discloses those side effects rather than claiming them as the change.
+- The sync applies are GitHub writes. Each dry run was read in full first. They created #3432, refreshed #3416's body and the M1/M6 milestone children lists (first apply); created #3433 (second apply); refreshed #3433's body after the re-home edit (third apply); and refreshed #3432's and #3433's bodies again after the review's accuracy fixes (fourth apply). This REPORT discloses those side effects rather than claiming them as the change.
 - The M6 issue was created by an earlier draft apply (16:04Z) before the umbrella item existed; the second sync adopted it by its `<!-- roadmap:id=m6-code-task-rustc-verifier -->` marker instead of duplicating it.
 - The first route for the three repairs (push the adoption commits to the fork branch and approve its workflow runs) does not work: on a public repository GitHub gives `pull_request` runs from forks a read-only `GITHUB_TOKEN`, and `required-transport` needs `checks: write` to publish the five ruleset names, so a fork PR can never enter the merge queue. The item records the same-repo re-home route instead (branch from `main`, ORDER commit, `git merge --no-ff` the contributor's commits unchanged, REPORT commit, new PR). The fork was never written to; this was found before any fork write.
 
@@ -25,14 +25,14 @@ Size: docs 4 files; generated 1 file; code 0 files; tests 0 files.
 
 ## Measurements
 
-No measurement. Roadmap counts at the head: 114 items OK; by status ready 17, held 10, decision 1, done 86; M6 has 5 items (was 4) and infra has 22 (was 21). Sync plans: first 0 labels, 1 issue to create (#3432), 1 body update (#3416), 0 close, 2 milestone checklists; second 0 labels, 1 issue to create (#3433), 0 updates, 0 closes, 0 checklist changes. Applied: #3432 and #3433 exist, issues.json maps both, README re-rendered at 114 items.
+No measurement. Roadmap counts at the head: 114 items OK; by status ready 17, held 10, decision 1, done 86; M6 has 5 items (was 4) and infra has 22 (was 21). Sync plans: first 0 labels, 1 issue to create (#3432), 1 body update (#3416), 0 close, 2 milestone checklists; second 1 issue to create (#3433); third 1 body update (#3433); fourth 2 body updates (#3432, #3433). Applied: #3432 and #3433 exist, issues.json maps both, README re-rendered at 114 items.
 
 ## Checks run at the head
 
 - `cargo run -q --locked -p xtask -- roadmap check` -> 114 items OK (counts above).
 - `cargo run -q --locked -p xtask -- roadmap render --check` -> current.
-- `cargo run -q --locked -p xtask -- roadmap sync` (dry, both times) -> exactly the plans above.
-- `cargo run -q --locked -p xtask -- roadmap sync --apply` (twice) -> created #3432 and #3433 and wrote the generated files.
+- `cargo run -q --locked -p xtask -- roadmap sync` (dry, before each apply) -> exactly the plans above.
+- `cargo run -q --locked -p xtask -- roadmap sync --apply` (four times) -> created #3432 and #3433, refreshed #3432/#3433 bodies after the re-home and review edits, and wrote the generated files.
 - `cargo run -q --locked -p uor-r4-claim-wording -- .` -> pass ("no unlinked machine-verified/exact-equivalence wording").
 - `git diff --check` -> PASS.
 - `uor-harness check` -> exit 0 (only pre-existing warnings; no error).
@@ -45,9 +45,9 @@ No measurement. Roadmap counts at the head: 114 items OK; by status ready 17, he
 ## Still open
 
 - The verifier itself is not built. Item #3432 is ready and open to anyone, and it is not on the current lab path (M6 sits behind M4); #2865's pre-registration must later bind or drop the `rustc --test` clause (the item's "Cancel if").
-- The three outsider repairs are still open. Item #3433 is ready; three adoption units follow, each adding its ORDER/REPORT to the fork branch and merging through the queue, with the last one setting #3433 done.
+- The three outsider repairs are still open. Item #3433 is ready; three same-repo re-home adoption PRs follow (#3424, #3425, #3426 order), each with its ORDER/REPORT, exact-head review and queue entry, and the last one sets #3433 done.
 - The rendered `docs/roadmap/README.md` may be refreshed again by a render PR.
-- The sync changed #3416's body and the #2029/#2034 checklists; those are tool outputs, disclosed here, not authored by this PR.
+- The sync changed #3416's body, the #2029/#2034 checklists, and the #3432/#3433 item bodies; those are tool outputs, disclosed here, not authored by this PR.
 
 ## Plain summary
 
