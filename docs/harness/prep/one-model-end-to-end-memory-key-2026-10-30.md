@@ -25,7 +25,7 @@ Both are now refusals in the grade. With the code review of the grade (CHANGES o
 - rows 2 and 4, like row 1, do not hold on a reading with b + c under 10;
 - the deciding-nothing readings below are computed.
 
-**Amendment, 30 Oct, before p-u is read: a third key, `hsign`** (Casey: "ok add that trick"). It is the Hadamard sign key, run as a follow-up keys pass (Steps 6b). Its own FIT round is pending.
+**Amendment, 30 Oct, before p-u is read: a third key, `hsign`** (Casey: "ok add that trick"). It is the Hadamard sign key, run as a follow-up keys pass (Steps 6b). Round 5, a fresh reviewer at `7a3f9a3e9`: **TEST FITNESS: FIT**. Its owed checks are in at `2feeb79c1`. The follow-up job's pre-run review is GO, on its condition (a refusal marker), which is met.
 
 Round 4: **TEST FITNESS: FIT** (a fresh reviewer, 30 Oct, at `a47c235e1`). Every repair holds in the code, the step-5 refusals are all present, and nothing from p-u can change a level or τ. Its non-blocking notes are taken in:
 - row 3's missed-row reading also needs b + c at least 10, so a key firing on a handful of rows cannot pass;
