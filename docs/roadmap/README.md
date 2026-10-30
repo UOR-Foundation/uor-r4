@@ -20,11 +20,11 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 17 |
+| ready | 18 |
 | held | 10 |
 | decision | 1 |
 | done | 86 |
-| total | 114 |
+| total | 115 |
 
 ## Start here
 
@@ -123,6 +123,7 @@ These items are ready and open to anyone.
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
 | [Build the library, CLI and browser bit-identity parity harness](items/m7-parity-library-cli-browser.md) | ready | anyone | no | [m7-studio-connect-wasm-engine](items/m7-studio-connect-wasm-engine.md), [m4-export-uorlut01-cli](items/m4-export-uorlut01-cli.md) | [#2867](https://github.com/UOR-Foundation/uor-r4/issues/2867) |
+| [Publish the fixed Studio with working WASM and selectable model sources](items/m7-studio-live-model-sources.md) | ready | a lab | no | [m7-studio-connect-wasm-engine](items/m7-studio-connect-wasm-engine.md), [m7-studio-self-host-page-assets](items/m7-studio-self-host-page-assets.md) | [#3440](https://github.com/UOR-Foundation/uor-r4/issues/3440) |
 | [Connect the Studio to the browser WASM engine](items/m7-studio-connect-wasm-engine.md) | done | anyone | no | none | [#2868](https://github.com/UOR-Foundation/uor-r4/issues/2868) |
 | [Verify the Studio's offline claim, retire the demo CDNs, bundle tokenizer](items/m7-studio-self-host-page-assets.md) | done | anyone | no | none | [#3075](https://github.com/UOR-Foundation/uor-r4/issues/3075) |
 
@@ -137,6 +138,7 @@ These items are ready and open to anyone.
 
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
+| [Bring every status page, picture and tracker up to 30 Oct 2026](items/docs-status-refresh.md) | ready | a lab | no | none | [#3380](https://github.com/UOR-Foundation/uor-r4/issues/3380) |
 | [Serve the Hamming read from the integer artifact on the laptop](items/integer-hamming-read.md) | ready | a lab | yes | [float-training-module](items/float-training-module.md), [spiralcore-fbs-offline-float-sheet](items/spiralcore-fbs-offline-float-sheet.md) | [#3385](https://github.com/UOR-Foundation/uor-r4/issues/3385) |
 | [Score one model end to end on prompts it has not seen, with tokens per second](items/one-model-end-to-end.md) | ready | a lab | yes | [turn-memory-reply](items/turn-memory-reply.md) | [#3407](https://github.com/UOR-Foundation/uor-r4/issues/3407) |
 | [Split the training backward, and run a cheaper rival search against (a)](items/training-step-cost.md) | ready | a lab | yes | [fbs-cost-profile](items/fbs-cost-profile.md) | [#3391](https://github.com/UOR-Foundation/uor-r4/issues/3391) |
@@ -150,7 +152,6 @@ These items are ready and open to anyone.
 | [Test discrete Hamming binding (VSA) on the current writer](items/r-vsa-hamming-binding.md) | held | a lab | yes | none | [#2888](https://github.com/UOR-Foundation/uor-r4/issues/2888) |
 | [Port read binding to a Flock or Relation read](items/read-binding-on-lawful-read.md) | held | a lab | yes | none | [#2889](https://github.com/UOR-Foundation/uor-r4/issues/2889) |
 | [Build a hard-selection step for carrier credit](items/carrier-credit-hard-selection.md) | done | a lab | yes | none | [#2819](https://github.com/UOR-Foundation/uor-r4/issues/2819) |
-| [Bring every status page, picture and tracker up to 29 Oct 2026](items/docs-status-refresh.md) | done | a lab | no | none | [#3380](https://github.com/UOR-Foundation/uor-r4/issues/3380) |
 | [Profile one training step and one served token, stage by stage](items/fbs-cost-profile.md) | done | a lab | yes | none | [#3381](https://github.com/UOR-Foundation/uor-r4/issues/3381) |
 | [Split each served FBS layer, then make its largest parts faster, exactly](items/fbs-serving-kernels.md) | done | a lab | no | [fbs-cost-profile](items/fbs-cost-profile.md) | [#3382](https://github.com/UOR-Foundation/uor-r4/issues/3382) |
 | [A NEON kernel and fewer snap candidates for the served FBS step](items/fbs-serving-vector-kernel.md) | done | a lab | no | [fbs-serving-kernels](items/fbs-serving-kernels.md) | [#3383](https://github.com/UOR-Foundation/uor-r4/issues/3383) |
@@ -181,7 +182,6 @@ These items are ready and open to anyone.
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
 | [Build the loop harness (the loop subcommands of uor-harness)](items/infra-loop-harness.md) | ready | a lab | no | none | [#2904](https://github.com/UOR-Foundation/uor-r4/issues/2904) |
-| [Adopt and verify outside-contribution repairs to the product crate and xtask](items/infra-outsider-repairs.md) | ready | a lab | no | none | [#3433](https://github.com/UOR-Foundation/uor-r4/issues/3433) |
 | [Create the separate scanned D37 float training module](items/float-training-module.md) | done | a lab | no | [owner-decision-float-path-scope](items/owner-decision-float-path-scope.md) | [#2823](https://github.com/UOR-Foundation/uor-r4/issues/2823) |
 | [Bench inbox rule: each lab reads the bench messages addressed to it](items/infra-bench-inbox-rule.md) | done | a lab | no | none | [#2955](https://github.com/UOR-Foundation/uor-r4/issues/2955) |
 | [Build the Tauri desktop client against the synthetic stand-in](items/infra-desktop-client-tauri.md) | done | anyone | no | [m7-studio-connect-wasm-engine](items/m7-studio-connect-wasm-engine.md) | [#2826](https://github.com/UOR-Foundation/uor-r4/issues/2826) |
@@ -200,6 +200,7 @@ These items are ready and open to anyone.
 | [Loop PR 11: loop gates --watch and warnings raised to errors](items/infra-loop-pr11-progress-window.md) | done | a lab | no | [infra-loop-pr04-gates](items/infra-loop-pr04-gates.md) | [#2916](https://github.com/UOR-Foundation/uor-r4/issues/2916) |
 | [Loop PR 12: git hooks, pr-check before push, Lab and Order trailers](items/infra-loop-pr12-git-hooks.md) | done | a lab | no | [infra-loop-pr05-policy-check](items/infra-loop-pr05-policy-check.md), [infra-loop-pr06-review-records](items/infra-loop-pr06-review-records.md) | [#2917](https://github.com/UOR-Foundation/uor-r4/issues/2917) |
 | [Let loop review count the render PR (or exempt it at the queue)](items/infra-loop-render-review.md) | done | a lab | no | [infra-loop-harness](items/infra-loop-harness.md) | [#3036](https://github.com/UOR-Foundation/uor-r4/issues/3036) |
+| [Adopt and verify outside-contribution repairs to the product crate and xtask](items/infra-outsider-repairs.md) | done | a lab | no | none | [#3433](https://github.com/UOR-Foundation/uor-r4/issues/3433) |
 | [Harden the render-PR review path](items/loop-render-review-hardening.md) | done | a lab | no | [infra-loop-render-review](items/infra-loop-render-review.md) | [#3044](https://github.com/UOR-Foundation/uor-r4/issues/3044) |
 | [Settle the disputed D11 and Hopf observation statuses on the board](items/owner-decision-board-status-disputes.md) | done | a lab | no | none | [#2874](https://github.com/UOR-Foundation/uor-r4/issues/2874) |
 
@@ -283,6 +284,8 @@ flowchart LR
   n_m6_reasoning_panel_freeze["m6-reasoning-panel-freeze"]
   n_m7_parity_library_cli_browser["m7-parity-library-cli-browser"]
   n_m7_studio_connect_wasm_engine["m7-studio-connect-wasm-engine"]
+  n_m7_studio_live_model_sources["m7-studio-live-model-sources"]
+  n_m7_studio_self_host_page_assets["m7-studio-self-host-page-assets"]
   n_m8_independent_verification["m8-independent-verification"]
   n_m8_release_packaging["m8-release-packaging"]
   n_object_store_consumer_m3["object-store-consumer-m3"]
@@ -406,6 +409,8 @@ flowchart LR
   n_m7_parity_library_cli_browser --> n_m8_release_packaging
   n_m7_studio_connect_wasm_engine --> n_infra_desktop_client_tauri
   n_m7_studio_connect_wasm_engine --> n_m7_parity_library_cli_browser
+  n_m7_studio_connect_wasm_engine --> n_m7_studio_live_model_sources
+  n_m7_studio_self_host_page_assets --> n_m7_studio_live_model_sources
   n_m8_release_packaging --> n_m8_independent_verification
   n_object_store_consumer_m3 --> n_m3_qualify_memory
   n_one_decoder --> n_writer_admission
