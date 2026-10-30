@@ -162,7 +162,7 @@ The grade computes this table itself (`CycleGrade::ships`, `ships`, unit-tested 
 - **The looping prompts:** about 60–76 per seed, at p-t's loop counts.
 - **The looping references' share `p` is not known in advance.** It is measured on the looping prompts, which are not a random sample: the panel-wide 0.624 does not carry over.
   - Loops gather on a few hub tokens, sometimes where a reply should copy a new value ("your lucky number is 66666" for "313"). Such references are rarely verbatim TRAIN replies.
-  - The power condition needs `p` of about 0.34 or more at 70 looping prompts, and about 0.47 at the floor of 40: there the lowest share "kept" accepts first passes half of `p`.
+  - The power condition needs `p` of about 0.35 or more at 70 looping prompts (0.35 − 0.171 = 0.179, above 0.175), and about 0.48 at the floor of 40: there the lowest share "kept" accepts first passes half of `p`.
   - **If `p` is lower,** both decisions read "underpowered (content)": an instrument outcome, never a negative. The loop, completion and step readings are still reported.
 - **The matched prompts:** at p-t's loop counts the base completes about 200–212 of 256. The floor of 64 is registered for that reason. The tolerance is 0.10 down to about 225 matched prompts at `p` ≈ 0.5, and widens below that (0.19 at 64).
 - **The seeds:** every condition needs all three.
