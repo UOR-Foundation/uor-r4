@@ -109,8 +109,9 @@ than assuming table lookup implies sparsity.
 - **Addressed/product-key memory:** the older exporter refuses it; the needed integer path is not built.
 
 The web client is connected to the current integer worker on a synthetic stand-in; it no longer
-simply "points at a retired engine." The old Studio deploy remains paused, while the separate mdBook
-workflow publishes preview on main and production only by manual dispatch.
+simply "points at a retired engine." DeepSeek's #3442 supplies the rebuilt Studio and model sources;
+#3444 records the verified live `/studio/` publish and closes #3440. The mdBook workflow publishes
+preview on main and production only by manual dispatch. This unit publishes neither.
 
 ## Go deeper
 

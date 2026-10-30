@@ -54,7 +54,7 @@ Every public number in this refresh must link to this sheet's committed evidence
 ## 4. Product state
 
 - **Model:** trained integer artifacts exist, including the M1 pair, but no versioned product release ships and no useful-chat model is qualified.
-- **Web:** the Studio and `uor-r4-integer` worker are connected and verified on a synthetic stand-in; page assets and a stack-bound tokenizer are self-hosted. No qualified model is bundled and no M7 product parity is claimed. The old Studio deploy remains paused; the mdBook workflow publishes preview on main and production only by manual dispatch, which this unit does not perform.
+- **Web:** the Studio and `uor-r4-integer` worker are connected and verified on a synthetic stand-in; page assets and a stack-bound tokenizer are self-hosted. DeepSeek's #3442 adds local-file, user-URL and OpenAI-compatible API sources; #3444 records the live `/studio/` publish and closes #3440. No public trained model or accepted-model M7 parity is claimed. This Kimi unit performs no production deployment.
 - **Desktop:** the Tauri shell exists and is verified with durable-memory/session behavior on the 469,252-byte `mk-synthetic-stack` seed-5 artifact. It is not merely a specification, but it has no qualified trained product bundle.
 - **M4:** a lawful likelihood (`PRLL`) is built and registered, but the GPU held-out scoring and full accepted M4 model/CLI path remain open. Do not say no lawful likelihood exists, and do not claim M4 is complete.
 - **M7:** runtime/harness work on the synthetic stand-in is real; accepted-model distribution is not complete.
@@ -82,7 +82,7 @@ Every public number in this refresh must link to this sheet's committed evidence
 ## 7. Active collaboration boundaries at the baseline
 
 - #3430 (claude-218) was active at the baseline and merged at `5ec6e36a8f69d3b0c9acf993cc3e09acc7be4646` during verification. #3439 (claude-219) then merged at `e44f68e65` with the fresh p-v free-generation result. Both are included; Claude's research files remain untouched by this unit.
-- #3441 registered the M7 Studio live/model-sources item. Its generated roadmap view and new item are preserved; this unit still does not publish the Studio or edit `.github/**`.
+- #3441 registered the M7 Studio live/model-sources item; #3442 merged the rebuilt client and publisher; #3444 recorded the verified live publish and closed #3440. Their source and generated roadmap view are preserved. This unit does not publish the Studio or edit `.github/**`.
 - #3426's figure tooling fixes landed through #3438 and were merged forward before figure regeneration.
 - #3435/#3424: discrete/source-interface code only, no documentation overlap at baseline.
 - #3323 (antigravity-113): `exact-memory.md` and `object-store.md` stay untouched even though they were once considered by the older documentation refresh.

@@ -2,10 +2,10 @@
 
 Lab: kimi. Base: `ec9a790fe5be73cd673f082eba86ced551b22d12`.
 
-The tracked non-archive README set has **243 files** (242 matched recursively plus the root README). Each is assigned to exactly one class below; the raw paths follow.
+The tracked non-archive README set has **246 files** (245 matched recursively plus the root README), including the three added while this unit was in review. Each is assigned to exactly one class below; the raw paths follow.
 
-- **35 living public project READMEs:** root README; the 15 crate/profile/fixture READMEs; `conformance/features/suites`; `data/panels`; the documentation, geometry, harness, loop, mechanism, product, reference, research, research-line, notebook and rules hubs; `tools/lab-runner`; `tools/uor-knowledge`; and `web/README.md`. These are review/edit candidates only where their current claims are stale.
-- **172 dated lab/evidence READMEs:** every `docs/labs/**` entry below. Read as evidence, never rewritten by this housekeeping unit.
+- **36 living public project READMEs:** root README; the 15 crate/profile/fixture READMEs; `conformance/features/suites`; `data/panels`; the documentation, geometry, harness, loop, mechanism, product, reference, research, research-line, notebook and rules hubs; `tools/lab-runner`; `tools/uor-knowledge`; `web/README.md`; and `web/studio/README.md`. These are review/edit candidates only where their current claims are stale.
+- **174 dated lab/evidence READMEs:** every `docs/labs/**` entry below, including claude-218's memory-key record and claude-219's keyed-opening record. Read as evidence, never rewritten by this housekeeping unit.
 - **1 generated roadmap view:** `docs/roadmap/README.md`. Regenerate only through the designated render flow; do not include in the content PR.
 - **35 side-project, vendor or local README files:** `.codex-lab`, `.kimi-code`, `projects/**`, `third_party/**`, and the historical `tools/r4-softmax-trainer` example. Audit for links and obvious misrepresentation, but do not restyle or rewrite them for the main project's status.
 
@@ -160,6 +160,8 @@ docs/labs/one-model-end-to-end/README.md
 docs/labs/one-model-end-to-end/cut-train-2026-10-30/README.md
 docs/labs/one-model-end-to-end/cycle-step-2026-10-30/README.md
 docs/labs/one-model-end-to-end/flock-cell-2026-10-30/README.md
+docs/labs/one-model-end-to-end/keyed-opening-2026-10-30/README.md
+docs/labs/one-model-end-to-end/memory-key-2026-10-30/README.md
 docs/labs/one-model-end-to-end/reply-scope-2026-10-30/README.md
 docs/labs/optimization-path-2026-10-18/README.md
 docs/labs/pm-coordination-2026-10-18/README.md
@@ -254,3 +256,4 @@ tools/lab-runner/README.md
 tools/r4-softmax-trainer/README.md
 tools/uor-knowledge/README.md
 web/README.md
+web/studio/README.md
