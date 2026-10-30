@@ -52,7 +52,10 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
   - The tie count is written per opening, since identical TRAIN prompts give identical points and sign distances come in steps of 1/256.
   - **point:** L1 on the point itself, the mean `|q − t|`, the cell objective's distance.
   - **sign:** L1 on the point's 0/1 sign pattern (`sign_code`), which is the Hamming distance over the width. It is the cheaper key: 32 bytes an opening, servable as integers.
-  - **hsign (amendment, 30 Oct, Casey: "ok add that trick"):** the sign key taken on `H·S·x` (`hadamard_sign_code`). S is a fixed diagonal of ±1 signs (`rotation_signs`: coordinate i negated when its splitmix64 hash is odd), and H is the 256-wide Walsh–Hadamard transform, computed by 8 add-and-subtract stages on the device. This is the fixed rotation of PrismML's Bonsai 2: it spreads each point's magnitude across the coordinates before its signs are taken. It is the same 32 bytes an opening, plus an O(n log n) transform. It is registered here before p-u is read, and decides under the same rules as the other two.
+  - **hsign (amendment, 30 Oct, Casey: "ok add that trick"):** the sign key taken on `H·S·x` (`hadamard_sign_code`). S is a fixed diagonal of ±1 signs (`rotation_signs`: coordinate i negated when its splitmix64 hash is odd), and H is the 256-wide Walsh–Hadamard transform, computed by 8 add-and-subtract stages on the device. This is the fixed rotation of PrismML's Bonsai 2: it spreads each point's magnitude across the coordinates before its signs are taken. It is the same 32 bytes an opening, plus an O(n log n) transform.
+    - **Deterministic, not integer-exact (FIT round 5):** the f32 sums round, so a coordinate near zero can change sign. The integer export would need an integer transform, which is exact on integer inputs.
+    - **The false-pass risk:** a third key adds at most its own false-pass rate. hsign is strongly correlated with sign (two 1-bit codes of the same point in two orthonormal frames), and every key must pass all four conditions at all three seeds. So no correction is made.
+    - **Registered** here before p-u is read, and decides under the same rules as the other two.
   - **the exact key** (reported): the memory's own `first-8`, counted on the laptop as in step 0. The anchor check shows it is the served key on p-s too (1,400 of 1,400).
   - **Each key's search is timed separately** (`point_ms`, `sign_ms`). TRAIN's sign codes are taken before the sign search starts, as a served table would hold them.
   - **The timings are the instrument's, not a served key's.** Each covers two distance passes, a copy of the tie masks and the host counting. A served nearest needs one pass. So they are an upper bound on the cost per opening, and are reported as that.
@@ -125,7 +128,7 @@ When a question is reworded, can the trunk's own opening point find TRAIN's vers
      - every point and sign field of its keys files (targets, distances, ties) equals the main run's.
 
      That is, the second binary reproduces the first, so `hsign` is read on the same openings and trunk.
-   - **The grade** reads the main run's files with the follow-up pass's keys files.
+   - **The grade** reads the main run's rows and samples from `--runs`, and the follow-up pass's keys files from `--keys-runs`. It compares each follow-up keys file's point and sign fields with the main run's (`same_trunk_keys`) and refuses on any difference (FIT round 5).
    - **Then** the pod goes down.
 7. **The grade, `--key-grade 1`, is written and unit-tested on the laptop before the pod runs** (FIT round 2's advice), and reviewed with the code. After sealing, in order:
    - run it on p-s alone, to choose each key's level and check row 1's power on p-s's own forced arm;

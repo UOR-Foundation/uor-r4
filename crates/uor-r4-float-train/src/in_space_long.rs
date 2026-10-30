@@ -1872,10 +1872,40 @@ impl SeedPicks {
     }
 }
 
-fn seed_picks(runs: &Path, seed: u8, openings: &GradeOpenings) -> Result<SeedPicks> {
+/// Whether two keys files name the same openings by the same point and sign keys: positions,
+/// targets, and every point and sign field. The follow-up pass's files must equal the main run's
+/// so (Casey's amendment, FIT round 5): its second binary reproduced the first.
+fn same_trunk_keys(a: &OpeningKeys, b: &OpeningKeys) -> bool {
+    a.positions == b.positions
+        && a.targets == b.targets
+        && a.point_target == b.point_target
+        && a.point_distance == b.point_distance
+        && a.point_ties == b.point_ties
+        && a.sign_target == b.sign_target
+        && a.sign_distance == b.sign_distance
+        && a.sign_ties == b.sign_ties
+}
+
+/// One seed's picks on a split: the rows from the main run in `runs`, and the keys from
+/// `keys_runs` (the follow-up pass, `--keys-runs`) when given, refused unless their point and
+/// sign keys equal the main run's ([`same_trunk_keys`]).
+fn seed_picks(runs: &Path, keys_runs: Option<&Path>, seed: u8, openings: &GradeOpenings) -> Result<SeedPicks> {
     let dir = runs.join(format!("r-drop-s{seed}"));
     let split = &openings.name;
-    let keys: OpeningKeys = read_scored(&dir.join(format!("keys-{split}.json")))?;
+    let file = format!("keys-{split}.json");
+    let keys: OpeningKeys = match keys_runs {
+        Some(follow) => {
+            let keys: OpeningKeys = read_scored(&follow.join(format!("r-drop-s{seed}")).join(&file))?;
+            let main: OpeningKeys = read_scored(&dir.join(&file))?;
+            if !same_trunk_keys(&keys, &main) {
+                return Err(invalid(format!(
+                    "{split} s{seed}: the follow-up pass's point or sign keys differ from the main run's (an instrument fault)"
+                )));
+            }
+            keys
+        }
+        None => read_scored(&dir.join(&file))?,
+    };
     if keys.positions != openings.positions || keys.targets != openings.targets {
         return Err(invalid(format!("{split} s{seed}: the keys' openings are not the split's (an instrument fault)")));
     }
@@ -2163,6 +2193,7 @@ pub struct KeyGrade {
 pub fn key_grade(
     data_root: &Path,
     runs: &Path,
+    keys_runs: Option<&Path>,
     panels: &[(String, PathBuf)],
     levels: &[(String, u8)],
 ) -> Result<KeyGrade> {
@@ -2218,7 +2249,7 @@ pub fn key_grade(
     let (ps_tokens, ps_mask) = panel("p-s")?;
     let ps = openings_of("p-s", &ps_tokens, &ps_mask)?;
     let (ps_missed, _, _) = key_strata(&ps);
-    let ps_picks: Vec<SeedPicks> = (1..=3u8).map(|s| seed_picks(runs, s, &ps)).collect::<Result<_>>()?;
+    let ps_picks: Vec<SeedPicks> = (1..=3u8).map(|s| seed_picks(runs, keys_runs, s, &ps)).collect::<Result<_>>()?;
     let mut net_by_level = Vec::new();
     let mut taus = Vec::new();
     let mut chosen = Vec::new();
@@ -2286,8 +2317,8 @@ pub fn key_grade(
     let dev = openings_of("dev", &dev_tokens, &dev_mask)?;
     let (missed, new, known) = key_strata(&pu);
     let all_dev: Vec<usize> = (0..dev.positions.len()).collect();
-    let pu_picks: Vec<SeedPicks> = (1..=3u8).map(|s| seed_picks(runs, s, &pu)).collect::<Result<_>>()?;
-    let dev_picks: Vec<SeedPicks> = (1..=3u8).map(|s| seed_picks(runs, s, &dev)).collect::<Result<_>>()?;
+    let pu_picks: Vec<SeedPicks> = (1..=3u8).map(|s| seed_picks(runs, keys_runs, s, &pu)).collect::<Result<_>>()?;
+    let dev_picks: Vec<SeedPicks> = (1..=3u8).map(|s| seed_picks(runs, keys_runs, s, &dev)).collect::<Result<_>>()?;
     // Each seed's τ at a level, from that seed's own p-s missed rows.
     let tau_at = |key: &str, s: usize, level: u8| {
         let missed_d: Vec<f32> = ps_missed.iter().map(|&i| ps_picks[s].key(key).1[i]).collect();
@@ -8273,6 +8304,29 @@ mod tests {
         let agreeing = grade_openings("p", &tokens[..9], &mask[..9], &empty, &empty, &none, &none, &std::collections::HashSet::new());
         // Its first turn alone, whose one opening the anchor keeps, grades.
         assert_eq!(agreeing.unwrap().positions, [4]);
+        // FIT round 5: the follow-up pass's keys must carry the main run's point and sign keys;
+        // its Hadamard sign fields may differ, any point or sign field may not.
+        let keys = |point: f32, hsign: u32| OpeningKeys {
+            split: "p".to_owned(),
+            train_openings: 2,
+            table_bytes: 16,
+            positions: vec![4],
+            targets: vec![7],
+            point_target: vec![7],
+            point_distance: vec![point],
+            point_ties: vec![1],
+            sign_target: vec![7],
+            sign_distance: vec![0.0],
+            sign_ties: vec![2],
+            point_ms: 1,
+            sign_ms: 1,
+            hsign_target: vec![hsign],
+            hsign_distance: vec![0.0],
+            hsign_ties: vec![1],
+            hsign_ms: 1,
+        };
+        assert!(same_trunk_keys(&keys(0.5, 7), &keys(0.5, 3)));
+        assert!(!same_trunk_keys(&keys(0.5, 7), &keys(0.25, 7)));
     }
 
     #[test]
@@ -9730,14 +9784,10 @@ mod tests {
         assert_eq!(hx.to_vec2::<f32>().unwrap(), [[10.0, -2.0, -4.0, 0.0]]);
         assert_eq!(walsh_hadamard(&hx).unwrap().to_vec2::<f32>().unwrap(), [[4.0, 8.0, 12.0, 16.0]]);
         assert!(walsh_hadamard(&Tensor::zeros((1, 3), DType::F32, &device).unwrap()).is_err());
-        // The code is the sign of H·S·x: here S is (+, −, ...) per `rotation_signs`.
-        let s = rotation_signs(4);
-        let sx: Vec<f32> = [1.0f32, 2.0, 3.0, 4.0].iter().zip(&s).map(|(v, s)| v * s).collect();
-        let want = walsh_hadamard(&Tensor::from_vec(sx, (1, 4), &device).unwrap()).unwrap().to_vec2::<f32>().unwrap()[0]
-            .iter()
-            .map(|&v| if v >= 0.0 { 1.0 } else { 0.0 })
-            .collect::<Vec<f32>>();
-        assert_eq!(hadamard_sign_code(&x).unwrap().to_vec2::<f32>().unwrap()[0], want);
+        // The code is the sign of H·S·x, by hand (the code review): S = (−, −, +, −), so
+        // S·x = (−1, −2, 3, −4), H4 of it = (−4, 8, −2, −6), and the code is (0, 1, 0, 0). The
+        // unrotated code, of H·x = (10, −2, −4, 0), would be (1, 0, 0, 1).
+        assert_eq!(hadamard_sign_code(&x).unwrap().to_vec2::<f32>().unwrap(), [[0.0, 1.0, 0.0, 0.0]]);
     }
 
     /// claude-218 (Casey's amendment): the Hadamard rotation's fixed signs are exact, the same at
@@ -9750,6 +9800,8 @@ mod tests {
         let negative = s.iter().filter(|&&v| v < 0.0).count();
         assert!((96..=160).contains(&negative), "{negative} of 256 negated");
         assert_eq!(rotation_signs(4), rotation_signs(256)[..4]);
+        // The first eight, as literals (the code review): a changed hash or rule fails here.
+        assert_eq!(rotation_signs(8), [-1.0, -1.0, 1.0, -1.0, 1.0, 1.0, 1.0, -1.0]);
     }
 
     /// claude-211 (Casey 30 Oct: "do not rule flock out, improve it instead"): with `keep_end`,

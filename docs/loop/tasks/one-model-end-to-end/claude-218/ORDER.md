@@ -82,7 +82,7 @@ If step 0 already settles the table, by the second row ("no headroom"), the unit
 **What it adds:** a third trunk key, `hsign`. It is the sign key taken on `H·S·x`:
 - **S:** a fixed diagonal of ±1 signs;
 - **H:** the 256-wide Walsh–Hadamard transform, computed by add and subtract stages on the device;
-- **The cost:** exact, O(n log n) per point, no dot product, nothing learned.
+- **The cost:** deterministic (f32, not integer-exact), O(n log n) per point, no dot product, nothing learned.
 
 **The rules are the other keys':**
 - it is named by the commonest target at the least Hamming distance;

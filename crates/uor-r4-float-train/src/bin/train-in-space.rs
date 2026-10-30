@@ -149,6 +149,7 @@ fn main() -> Result<()> {
     let mut cycle_grade_on = false;
     let mut key_grade_on = false;
     let mut key_levels: Vec<(String, u8)> = Vec::new();
+    let mut keys_runs: Option<PathBuf> = None;
     let mut scopes: Vec<ReadScope> = Vec::new();
     let (mut controls_dir, mut runs, mut frozen_probe) = (None, None, None);
     let mut scored: Vec<(String, PathBuf)> = Vec::new();
@@ -227,6 +228,7 @@ fn main() -> Result<()> {
             "--cycle-grade" => cycle_grade_on = switch(&value)?,
             "--key-grade" => key_grade_on = switch(&value)?,
             "--key-levels" => key_levels = key_levels_arg(&value)?,
+            "--keys-runs" => keys_runs = Some(PathBuf::from(&value)),
             "--reply-read-train" => {
                 config.reply_read_train = Some(match value.as_str() {
                     "copy" => ReadScope::Copy,
@@ -572,13 +574,13 @@ fn main() -> Result<()> {
     if key_grade_on {
         let runs = runs
             .ok_or_else(|| FloatTrainError::Invalid("--key-grade needs --runs DIR".to_owned()))?;
-        let graded = key_grade(&data_root, &runs, &extra_panels, &key_levels)?;
+        let graded = key_grade(&data_root, &runs, keys_runs.as_deref(), &extra_panels, &key_levels)?;
         println!("{}", serde_json::to_string(&graded)?);
         return Ok(());
     }
-    if !key_levels.is_empty() {
+    if !key_levels.is_empty() || keys_runs.is_some() {
         return Err(FloatTrainError::Invalid(
-            "--key-levels applies to --key-grade only".to_owned(),
+            "--key-levels and --keys-runs apply to --key-grade only".to_owned(),
         ));
     }
     // A run trains with the cut; scoring reads it back from the run's own config.
