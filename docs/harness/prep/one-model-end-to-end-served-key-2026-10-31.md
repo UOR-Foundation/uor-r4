@@ -2,7 +2,16 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md). Order: [claude-220](../../loop/tasks/one-model-end-to-end/claude-220/ORDER.md), written by hand on Casey's word: "screw kimi forge ahead as you were before with your plan for the single serving model". Decision: [DECISION.md](../../loop/tasks/one-model-end-to-end/claude-220/DECISION.md), APPROVE on five conditions. It follows claude-219 ([result](../../labs/one-model-end-to-end/keyed-opening-2026-10-30/README.md)).
 
-TEST FITNESS: PENDING (round 4; a fresh non-author reviewer reads this sheet and its sources before any pod).
+TEST FITNESS: FIT (round 4, two fresh non-author reviewers, 31 Oct, at `45bce3626`: (a) the decision table and the grade, (b) the served key, the table and the job). The rounds are below.
+
+Round 4 was FIT in both parts, with no blocking points.
+- **(a)** found every row equal to the code's. No harm reads as underpowered, and no fault as a negative. Each rule is pinned by a test.
+- **(b)** found the served key, its single search per reply, the table's read-back and the job's Steps 3–7 as the sheet says.
+
+Their notes are taken in: exact-reply and DEV harm cases join the served test. The items (b) left unread were checked directly:
+- all eight named tests exist;
+- `--out` is made before the table is saved;
+- the store layout, the `./` prefixes and p-v's sha256s match claude-219's job, which ran.
 
 Round 3 was NOT FIT (a fresh non-author reviewer, 31 Oct, at `40af9ad68`), on one blocking point, repaired here before any model read p-w:
 - **A harm could still read as underpowered, through the thin path.** `keyed_outcome` gives row 3 whenever a seed is thin, so a thin seed beside a harmed one read as "a larger panel".

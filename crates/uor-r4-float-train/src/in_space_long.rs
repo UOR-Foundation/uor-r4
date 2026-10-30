@@ -10896,6 +10896,13 @@ mod tests {
         thin_and_harmed[1].0.loops = Some((30, 2));
         assert_eq!(served_outcome(&forced, thin_and_harmed, &[held(10, 10)]), 4);
         assert_eq!(served_outcome(&forced, seeds([(4, 2), (20, 0), (20, 0)]), &[held(10, 10)]), 3, "thin alone is row 3");
+        // Exact replies and DEV's templates are harms too (round 4's note), beside a thin seed.
+        let mut exact_harm = seeds([(4, 2), (30, 0), (20, 0)]);
+        exact_harm[1].0.exact = Some((2, 30));
+        assert_eq!(served_outcome(&forced, exact_harm, &[held(10, 10)]), 4);
+        let mut dev_harm = seeds([(4, 2), (30, 0), (20, 0)]);
+        dev_harm[1].1.template = Some((2, 30));
+        assert_eq!(served_outcome(&forced, dev_harm, &[held(10, 10)]), 4);
         assert!(!held(0, 0).holds(), "no served opening is no parity");
     }
 
