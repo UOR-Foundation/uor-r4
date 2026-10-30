@@ -18,12 +18,14 @@ The registered follow-up of claude-215 (merged as `0c3c95777`; its outcome was "
 - **In training and in teacher-forced scoring of an (r-cut) checkpoint:** a scored row whose input is a reply token reads only positions before its reply run's first reply token. The row whose input is the prompt's last token reads as before.
 - **At decode:** the same rule over one reply, which is claude-215's cut.
 
+**Amended 30 Oct, after FIT round 1 (#3407 6521483305):** the rule is built from the split's response mask, not from the scored rows. Every row whose input is a reply token reads only before its reply's first token in the window, or nothing when the reply began before the window. Training, the teacher-forced rows and decode all apply it, so an earlier reply inside a decode prompt is held as in training.
+
 ## Cancel probe (run first)
 
-To fill in:
-- no open PR touches `flock_read_hamming.rs`, `in_space_long.rs` or `train-in-space.rs`;
-- (r-drop)'s sealed checkpoints and training inputs are in the store;
-- the training recipe is the training sheet's (r-drop) command.
+The result, classed **instrument**, gives no cancel:
+- **No other open PR** touches `flock_read_hamming.rs`, `in_space_long.rs` or `train-in-space.rs`. The only one is this unit's own, #3427.
+- **(r-drop)'s inputs are in the store.** Its sealed step-16,384 checkpoints, registered files and s1 probe are there (the pre-run review listed them), and every pod's job checked them against their sums.
+- **The recipe is the training sheet's (r-drop) command** (`one-model-end-to-end-training-2026-10-29.md`) with `--turn-memory-dropout 500`. The job's 256-step probe reproduced claude-211's sealed probe byte for byte at every seed.
 
 ## Files in scope
 
