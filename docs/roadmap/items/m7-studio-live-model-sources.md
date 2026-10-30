@@ -7,7 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: false
 depends_on: [m7-studio-connect-wasm-engine, m7-studio-self-host-page-assets]
-scope: [web/**, docs/products/**, scripts/studio/**, docs/loop/tasks/m7-studio-live-model-sources/**, docs/roadmap/items/m7-studio-live-model-sources.md]
+scope: [web/**, docs/products/**, scripts/studio/**, docs/research/notebook/m4-serving.md, docs/loop/tasks/m7-studio-live-model-sources/**, docs/roadmap/items/m7-studio-live-model-sources.md]
 done_class: host
 ---
 
@@ -21,17 +21,17 @@ This item is the source-repo change and the built-artifact publish. The Pages wo
 
 - The published /studio/ is the old deploy: CDN loads, old router engine, stale engine-status banner, and no working wasm bundle at studio/pkg/uor_r4_integer*.
 - The wasm bundle is not built by any workflow and web/studio/pkg is gitignored; the build recipe exists only in web/README.md and the verification scripts.
-- The model worker accepts only the uor-r4.lut-stack/1 schema, while the engine supports uor-r4.lut-stack/1..7; nothing loads a user-chosen model file, a model URL, or a remote API.
+- The engine parses uor-r4.lut-stack/1-7 and serves /1-/6 (a /7 turn-memory stack is refused by the serving engine as "does not serve the turn memory yet"); the Studio worker accepts only /1. The source page already has a local UORLUT01 file loader and Model Manager (index.html #nativeModelFile, loadNativeModelFile, the model-manager grid; the worker's load_model), but it is gated to /1 and there is no model URL or remote-API source.
 - The page is visually cluttered: ~7k lines with inline CSS, repeated status/provenance blocks, stale "frozen per D36" and "0/8 milestones" claims, and no model-source panel.
 - No documented, repeatable publish step agents or the owner can run; the workflow path filter excludes web/** and crates/uor-r4-integer/**.
 
 ## Done when
 
 1. **Clean Studio page.** web/studio/index.html and index.css are restructured into a coherent, responsive interface with an honest current-status header (project state, engine state, model source), a clean chat pane and code pane, and no stale D36/0-of-8/provenance clutter. It remains offline-first: no external CDN or network request at page load, enforced by web/studio/verify_studio_page.mjs and verify_studio_page_load.mjs.
-2. **Model sources.** A Model Source panel offers (a) the bundled synthetic demo stack, (b) load a local .lut/.bin file, (c) load a model from a user-provided URL, and (d) an OpenAI-compatible API provider list with add/edit/remove and presets (local uor-r4 API, Ollama, custom), persisted in localStorage, with no keys committed and no automatic external requests. The worker is the only WASM backend and its capability labels are truthful (synthetic vs loaded artifact, unqualified stack, API mode).
-3. **Working wasm.** The serving-wasm bundle builds reproducibly with the documented script and the worker accepts the engine's real stack schemas (uor-r4.lut-stack/1..7) plus a user-selected model; verify_studio_worker.mjs and the M7 parity harness still pass on the synthetic fixture and the bundle loads in a browser/headless check.
+2. **Model sources.** A Model Source panel offers (a) the bundled synthetic demo stack, (b) extend the existing /1-only local sidecar loader to a local .lut/.bin file loader, (c) load a model from a user-provided URL, and (d) an OpenAI-compatible API provider list with add/edit/remove and presets (local uor-r4 API, Ollama, custom), persisted in localStorage, with no keys committed and no automatic external requests. The worker is the only WASM backend and its capability labels are truthful (synthetic vs loaded artifact, unqualified stack, API mode).
+3. **Working wasm.** The serving-wasm bundle builds reproducibly with the documented script and the worker accepts the engine's served stack schemas (uor-r4.lut-stack/1-6; /7 parses but the serving engine refuses a turn-memory stack, recorded honestly) plus a user-selected model; verify_studio_worker.mjs and the M7 parity harness still pass on the synthetic fixture and the bundle loads in a browser/headless check.
 4. **Live publish.** The built site/studio (page, JS, pkg, synthetic-stack.lut, tokenizer.json, model manifest) is pushed to gh-pages by scripts/studio/build-and-publish.sh, the live https://uor-foundation.github.io/uor-r4/studio/ serves it, and the page passes the page-load traps and loads the demo model. The owner is given the docs-site.yml patch proposal (path filters + build steps) as a report, not applied.
-5. **Docs and records.** docs/products/web-client.md, web/README.md and the studio README state what is now built and what is still missing (no public trained model artifact; M4/M8 remain), one notebook row if a research-line notebook applies, and the PR carries ORDER/REPORT with the build/publish commands and evidence. No binary is committed to the source repo, and no owner path, bar, status, pinned receipt, or private HF artifact is touched.
+5. **Docs and records.** docs/products/web-client.md, web/README.md and the studio README state what is now built and what is still missing (no public trained model artifact; M4/M8 remain); one row is added to docs/research/notebook/m4-serving.md; and the PR carries ORDER/REPORT with the build/publish commands and evidence. No binary is committed to the source repo, and no owner path, bar, status, pinned receipt, or private HF artifact is touched.
 
 ## Cancel if
 
@@ -51,7 +51,7 @@ Read web/README.md, web/studio/, docs/products/web-client.md, docs/labs/m7-studi
 
 ## Sources
 
-- Owner direction and answers, [#2028 owner log](https://github.com/UOR-Foundation/uor-r4/issues/2028) (30 Oct 2026).
+- Owner direction and answers, [#2028 owner log comment 6534841207](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6534841207) (30 Oct 2026).
 - [CHARTER.md](../../../CHARTER.md) §2, §3.6, §3.13, §5.5; [PLAN.md](../../../PLAN.md).
 - [docs/products/web-client.md](../../products/web-client.md), [the M7 Studio WASM record](../../labs/m7-studio-connect-wasm-engine/README.md), [the self-hosted assets record](../../labs/m7-studio-self-host-page-assets/README.md).
 - [web/README.md](../../../web/README.md), [web/studio/README.md](../../../web/studio/README.md), [.github/workflows/docs-site.yml](../../../.github/workflows/docs-site.yml).
