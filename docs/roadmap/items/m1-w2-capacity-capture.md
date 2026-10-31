@@ -47,6 +47,6 @@ Open these first:
 - [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:110`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
 - [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:115-118`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
 - [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:31`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
-- [W2 capacity-capture record](../labs/m1-w2-capacity-capture/README.md)
-- [Stage T follow-up record](../labs/m1-bvg-k-stage-t-training/README.md)
+- [W2 capacity-capture record](../../labs/m1-w2-capacity-capture/README.md)
+- [Stage T follow-up record](../../labs/m1-bvg-k-stage-t-training/README.md)
 
