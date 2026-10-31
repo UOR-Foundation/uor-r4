@@ -50,7 +50,7 @@
 <path d="M340,448 L370,448" fill="none" stroke="#424A53" stroke-width="2" marker-end="url(#ah)"/>
 <path d="M790,448 L820,448" fill="none" stroke="#424A53" stroke-width="2" marker-end="url(#ah)"/>
 <text x="40" y="540" font-size="12.5" font-weight="400" fill="#57606A" text-anchor="start">Saved discrete M1 pair: 10,876 / 10,566 native decode tok/s on Apple M1.</text>
-<text x="40" y="558" font-size="12.5" font-weight="400" fill="#57606A" text-anchor="start">Separate FBS serving: 270, then 3,042 exact, then 4,829 snapped tok/s; integer multiply and divide (claude-163–177).</text>
+<text x="40" y="558" font-size="12.5" font-weight="400" fill="#57606A" text-anchor="start">Separate FBS serving: 270, then 3,042 with exact structured kernels, then 4,829 snapped tok/s; integer multiply and divide (claude-163–177).</text>
 <text x="40" y="576" font-size="12.5" font-weight="400" fill="#57606A" text-anchor="start">FBS lut-stack/5 exact: 4,217–4,504 tok/s. Studio and desktop use a synthetic stand-in; M5 and M7 remain open.</text>
 <path d="M40,614 L1160,614" fill="none" stroke="#D0D7DE" stroke-width="1"/>
 <text x="40" y="636" font-size="13.5" font-weight="700" fill="#1F2328" text-anchor="start">Status</text>

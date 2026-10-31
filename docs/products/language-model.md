@@ -79,13 +79,14 @@ This is not a useful-chat result.
 `UORLUT01` begins with an 8-byte magic string and a JSON header, then aligned integer data sections.
 The reader checks offsets and lengths and computes the file's SHA-256 as it loads, so a release can
 pin that identity ([`format.rs`](../../crates/uor-r4-integer/src/stack/format.rs)). Table-native
-schemas now include `lut-discrete/1`, `lut-discrete-trunk/1` and the FBS `lut-stack` contracts; the
-older dense `/1`, `/2` and `/3` schemas are not a description of today's M1 artifact.
+schemas include `lut-discrete/1` and `lut-discrete-trunk/1`. The separate FBS `lut-stack/5` is a
+4-bit float-to-integer stack with exact rotations, not a table-native discrete schema; older dense
+`/1`, `/2` and `/3` schemas are not a description of today's M1 artifact.
 
 The serving engine is [`crates/uor-r4-integer`](../../crates/uor-r4-integer/). It serves native and
 WebAssembly artifacts, with save/restore formats such as `UR4SESS1`. An engine audit proves the
 absence of refused instructions, not model quality. M4 still requires the accepted model's full
-quality, session and distribution path.
+quality, CLI, session and audit path; M7's distribution check is separate.
 
 ## The eight milestones in plain words
 

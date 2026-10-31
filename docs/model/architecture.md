@@ -24,7 +24,7 @@ quaternion recurrence, a four-block orbit-root causal pointer, and post-rotation
 | Tokenizer | Byte-level BPE, 4,096 pieces, identity `d36d3e87` | Fixed and pinned to corpora, panels and artifacts |
 | Token table | Shared input/carry/output vector table; exact token identity stays separate from geometric address | Trained |
 | Ordered context | At most 243 positions; recorded runs use 192 | Built and used |
-| Reads | Route, Flock and Relation reads using hard selection, not softmax | Trained; independent effects are not all isolated |
+| Reads | Flock read and orbit-root causal pointer using hard selection, not softmax | Trained in the M1 composition; Route and Relation are other discrete mechanisms, not isolated by this whole-model pass |
 | Writer and admission | 16×16 address cells; bounded candidate shortlist before nearest-token choice | Trained; full 19-table export carries the final readout |
 | Objective and learning | Integer rank-margin hinge and discrete legal moves, including BVG-K batched verified coordinates | Trained; produced the saved model |
 | Position and feed-forward | Discrete quaternion recurrence and Hamilton gate | Trained in the M1 composition; no separate normalization component is declared |

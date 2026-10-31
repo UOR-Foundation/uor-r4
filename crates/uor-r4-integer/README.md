@@ -1,6 +1,6 @@
 # UOR-R4 Geometric Language Model: integer serving
 
-> **Selected API, 13 October — D29:** Cargo selects `src/native_geometry.rs`, exposing fixed H4 geometry, checked integer primitives and report/config metadata. The historical model/stack/sampling executors and generation binaries described below remain source evidence and are excluded; `historical-runtime` fails compilation. The composed native CUDA graph at `1f1547bfd` passes 31 finite controls on RTX4090, pending protected delivery. No compliant D11 language-serving model is qualified by this facade or those controls; all training holds remain. [Boundary record](../../archive/labs/d29-vendor-boundary-2026-10-13/README.md).
+> **Selected API, 13 October — D29:** Cargo selects `src/native_geometry.rs`, exposing fixed H4 geometry, checked integer primitives and report/config metadata. The historical model/stack/sampling executors and generation binaries described below remain source evidence and are excluded; `historical-runtime` fails compilation. The composed native CUDA graph at `1f1547bfd` passes 31 finite controls on RTX4090, pending protected delivery. No compliant D11 language-serving model was qualified by this facade or those controls at that 13 October boundary; training holds then in force are historical. Current runs use the lab's D67 pre-run review, with D41's donor pass the named owner-at-dispatch exception. [Boundary record](../../archive/labs/d29-vendor-boundary-2026-10-13/README.md).
 
 ## Status on 30 Oct 2026
 

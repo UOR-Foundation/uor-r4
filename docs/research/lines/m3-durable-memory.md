@@ -1,6 +1,6 @@
 # Research line: durable memory and the object store (M3)
 
-Milestone M3 asks that a conversation's memory survive between sessions and that answers stay grounded in it. This line built the storage half: an exact object store that keeps bytes once in a hashed tree, can fetch any range with an integrity check, and can copy itself between machines. The store works and is well tested. Joining it to the selected model is in progress, so M3 has not been measured end to end.
+Milestone M3 asks that a conversation's memory survive between sessions and that answers stay grounded in it. This line built the storage half: an exact object store that keeps bytes once in a hashed tree, can fetch any range with an integrity check, and can copy itself between machines. The store works and is well tested. The consumer is built, but the on-model M3 run awaits M2's model selection, so M3 has not been measured end to end.
 
 | | |
 |---|---|
@@ -9,7 +9,7 @@ Milestone M3 asks that a conversation's memory survive between sessions and that
 | **Milestone** | M3, durable conversation memory (28 of 33 records) |
 | **Records** | 33 |
 | **Outcomes** | tooling 27 · inconclusive 2 · plan 2 · positive 1 · review 1 |
-| **State** | The object store is READY ([D19 object store](../../mechanisms/object-store.md)). M3 is in progress on the selected model; its bars have not been run |
+| **State** | The object store is READY ([D19 object store](../../mechanisms/object-store.md)). The consumer is built; the on-model M3 run awaits M2 selection; its bars have not been run |
 
 Counts: `archive/catalog.jsonl`. The store follows decision D19 (a model-independent exact byte store). Terms follow the [glossary](../../start/glossary.md); ACTIVE, READY and PARKED are defined on the [mechanism board](../../mechanisms/README.md).
 

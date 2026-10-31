@@ -1157,7 +1157,7 @@ fn serving_pipeline() -> Result<String, Fail> {
         [40.0, 558.0],
         (12.5, 400, MUTED),
         1120.0,
-        "Separate FBS serving: 270, then 3,042 exact, then 4,829 snapped tok/s; integer multiply and divide (claude-163–177).",
+        "Separate FBS serving: 270, then 3,042 with exact structured kernels, then 4,829 snapped tok/s; integer multiply and divide (claude-163–177).",
     );
     s.fit(
         [40.0, 576.0],
@@ -1206,8 +1206,8 @@ fn milestones() -> Result<String, Fail> {
             "Durable memory",
             St::Progress,
             [
-                "object-store consumer",
-                "on the selected model:",
+                "consumer built; M3 run",
+                "awaits M2 selection",
                 "in progress",
                 "",
             ],

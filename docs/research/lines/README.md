@@ -26,7 +26,7 @@ A research line is one sustained question the project worked on, such as "how do
 | [`r4g1-transformerless`](r4g1-transformerless.md): compiling a teacher into tables | 21 Jul to 27 Sep | 74 | 40 | Parked |
 | [`m4-serving`](m4-serving.md): integer serving | 7 Aug to 18 Oct | 42 | 23 | Engine active; M1 and FBS exports served, accepted M4 path open |
 | [`m1-float-rung0`](m1-float-rung0.md): the float route to rung 0 | 31 Aug to 13 Oct | 38 | 18 | Historical line; Hamilton/FBS trained, recurrence READY with fit/export measured, M1 complete on the discrete path |
-| [`m3-durable-memory`](m3-durable-memory.md): durable memory and the object store | 3 Oct to 18 Oct | 33 | 3 | Store ready; selected-model consumer in progress |
+| [`m3-durable-memory`](m3-durable-memory.md): durable memory and the object store | 3 Oct to 18 Oct | 33 | 3 | Store ready; consumer built; on-model M3 run awaits M2 selection |
 | [`compute-ops`](compute-ops.md): GPU and pod operations | 3 Sep to 18 Oct | 15 | 0 | Active support |
 | [`eval-panels`](eval-panels.md): evaluation panels and graders | 7 Aug to 14 Oct | 14 | 5 | Panels frozen; reply headline suspended |
 | [`geometric-intelligence-aug`](geometric-intelligence-aug.md): the August geometric programme | 25 to 30 Aug | 9 | 7 | Closed |

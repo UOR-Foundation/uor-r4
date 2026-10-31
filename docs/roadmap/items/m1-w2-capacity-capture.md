@@ -16,7 +16,7 @@ Routes all later spend: H_rep means fix the read and address metric and do not f
 
 ## What is missing
 
-W2's checkpoint-restricted count-table evaluation ran with Stage T: `T_restr(A_W) = 2,140` and `G_restr(A_W) = 3,084` on `T16_fz`, both above the unigram's 1,226. It identifies representation/read-code and within-cell ranking as separate constraints; it is not a blanket owner hold. Cost is recorded in the Stage T report, not the old $0.91 estimate.
+W2's own checkpoint-restricted evaluation is `T = 3,414`, `G = 6,300`, `W = 149`: H_mixed. Its read-code table is informative beyond the writer but not beyond the bigram; the next step is a code-utilization diagnostic, not a learning-law change. The separate Stage T follow-up reached `T_restr(A_W) = 2,140` and `G_restr(A_W) = 3,084` on `T16_fz`, both above unigram 1,226, and identifies representation/read-code and within-cell ranking as separate constraints. Cost is recorded in the Stage T report, not the old $0.91 estimate.
 
 ## Done when
 
@@ -47,6 +47,6 @@ Open these first:
 - [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:110`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
 - [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:115-118`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
 - [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:31`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
-- [`docs/research/open-questions.md:33`](../../../docs/research/open-questions.md)
-- [`docs/start/where-were-going.md:42`](../../../docs/start/where-were-going.md)
+- [W2 capacity-capture record](../labs/m1-w2-capacity-capture/README.md)
+- [Stage T follow-up record](../labs/m1-bvg-k-stage-t-training/README.md)
 

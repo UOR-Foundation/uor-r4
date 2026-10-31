@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 548" width="960" role="img" aria-labelledby="t d">
 <title id="t">Web client architecture</title>
-<desc id="d">A browser window with three stacked layers. Top: the Studio page (index.html) with three panes, editor, chat and model manager, connected to the integer worker and verified on a synthetic stand-in. Middle: a Web Worker holding the WebAssembly engine (uor-r4-integer, serving-wasm feature) with its calls init, loadStack, step, saveSession and restoreSession, tested on a synthetic model. Bottom: browser storage holding the model file (model.uorlut01) and session snapshots (UR4SESS1), also verified on the synthetic stand-in. Solid wiring means verified on that stand-in; accepted-model parity remains open. Integer adds, shifts and table look-ups are used, with hardware integer multiply and divide allowed by D80 and D81. Outside the window on the left, a static file host sends one dashed arrow in, labelled first visit only: page and model file, check SHA-256. On the right, an arrow to a model server is crossed out: no prompts leave the device.</desc>
+<desc id="d">A browser window with three stacked layers. Top: the Studio page (index.html) with three panes, editor, chat and model manager, connected to the integer worker and verified on a synthetic stand-in. Middle: a Web Worker holding the WebAssembly engine (uor-r4-integer, serving-wasm feature) with its calls init, loadStack, step, saveSession and restoreSession, tested on a synthetic model. Bottom: browser storage holding the model file (model.uorlut01) and session snapshots (UR4SESS1), also verified on the synthetic stand-in. Solid wiring means verified on that stand-in; accepted-model parity remains open. Integer adds, shifts and table look-ups are used, with hardware integer multiply and divide allowed by D80 and D81. Outside the window on the left, a static file host sends one dashed arrow in, labelled first visit only: page and model file, check SHA-256. On the right, local WASM mode keeps prompts on the device; an optional user-configured OpenAI-compatible API sends prompts to the user's chosen endpoint.</desc>
 <style>
 svg { --bg:#ffffff; --ink:#1f2328; --body:#2b3138; --muted:#57606a; --rule:#d0d7de; --panel:#f6f8fa;
       --blue:#0072b2; --sky:#56b4e9; --green:#007a5e; --orange:#e69f00; --verm:#d55e00; --purple:#7a4fa3; --pink:#cc79a7;
@@ -111,13 +111,13 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <text class="note" x="24" y="310">download page and model,</text>
 <text class="note" x="24" y="326">check SHA-256</text>
 
-<!-- Right: model server, crossed out -->
+<!-- Right: optional API, not a default server -->
 <line class="flow" x1="772" y1="240" x2="808" y2="240" marker-end="url(#arr)"/>
 <line class="cross" x1="782" y1="230" x2="798" y2="250"/>
 <line class="cross" x1="798" y1="230" x2="782" y2="250"/>
 <rect class="ext-none" x="812" y="210" width="124" height="60" rx="8"/>
-<text class="name" x="874" y="236" text-anchor="middle">Model server</text>
-<text class="detail" x="874" y="254" text-anchor="middle">none</text>
-<text class="blocked" x="812" y="294">No prompts leave</text>
-<text class="blocked" x="812" y="310">the device</text>
+<text class="name" x="874" y="236" text-anchor="middle">Optional API</text>
+<text class="detail" x="874" y="254" text-anchor="middle">user-chosen</text>
+<text class="blocked" x="812" y="294">Local: no prompts</text>
+<text class="blocked" x="812" y="310">leave device; API: chosen</text>
 </svg>
