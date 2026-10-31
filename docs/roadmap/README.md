@@ -20,11 +20,11 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 18 |
+| ready | 19 |
 | held | 10 |
 | decision | 1 |
 | done | 87 |
-| total | 116 |
+| total | 117 |
 
 ## Start here
 
@@ -140,8 +140,9 @@ These items are ready and open to anyone.
 |---|---|---|---|---|---|
 | [Bring every status page, picture and tracker up to 30 Oct 2026](items/docs-status-refresh.md) | ready | a lab | no | none | [#3380](https://github.com/UOR-Foundation/uor-r4/issues/3380) |
 | [Serve the Hamming read from the integer artifact on the laptop](items/integer-hamming-read.md) | ready | a lab | yes | [float-training-module](items/float-training-module.md), [spiralcore-fbs-offline-float-sheet](items/spiralcore-fbs-offline-float-sheet.md) | [#3385](https://github.com/UOR-Foundation/uor-r4/issues/3385) |
+| [Serve the recurrence's retention reading in the integer artifact](items/integer-retention-rates.md) | ready | a lab | yes | [d11-exporter-float-trunk](items/d11-exporter-float-trunk.md) | [#3456](https://github.com/UOR-Foundation/uor-r4/issues/3456) |
 | [Score one model end to end on prompts it has not seen, with tokens per second](items/one-model-end-to-end.md) | ready | a lab | yes | [turn-memory-reply](items/turn-memory-reply.md) | [#3407](https://github.com/UOR-Foundation/uor-r4/issues/3407) |
-| [Serve the point key's opening in the integer artifact on the laptop](items/point-key-integer.md) | ready | a lab | no | [one-model-end-to-end](items/one-model-end-to-end.md), [turn-memory-integer](items/turn-memory-integer.md) | [#3450](https://github.com/UOR-Foundation/uor-r4/issues/3450) |
+| [Serve the point key's opening in the integer artifact on the laptop](items/point-key-integer.md) | ready | a lab | no | [one-model-end-to-end](items/one-model-end-to-end.md), [turn-memory-integer](items/turn-memory-integer.md), [integer-retention-rates](items/integer-retention-rates.md) | [#3450](https://github.com/UOR-Foundation/uor-r4/issues/3450) |
 | [Split the training backward, and run a cheaper rival search against (a)](items/training-step-cost.md) | ready | a lab | yes | [fbs-cost-profile](items/fbs-cost-profile.md) | [#3391](https://github.com/UOR-Foundation/uor-r4/issues/3391) |
 | [Serve the turn memory from the integer artifact on the laptop](items/turn-memory-integer.md) | ready | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | [#3392](https://github.com/UOR-Foundation/uor-r4/issues/3392) |
 | [Make the native writer's admission hold at every seed](items/writer-admission.md) | ready | a lab | yes | [one-decoder](items/one-decoder.md) | [#3394](https://github.com/UOR-Foundation/uor-r4/issues/3394) |
@@ -244,6 +245,7 @@ flowchart LR
   n_infra_loop_render_review["infra-loop-render-review"]
   n_integer_hamming_read["integer-hamming-read"]
   n_integer_mul_div_serving["integer-mul-div-serving"]
+  n_integer_retention_rates["integer-retention-rates"]
   n_loop_render_review_hardening["loop-render-review-hardening"]
   n_m1_a8_finite_cuda_qualification["m1-a8-finite-cuda-qualification"]
   n_m1_a8_full_dose_rerun["m1-a8-full-dose-rerun"]
@@ -309,6 +311,7 @@ flowchart LR
   n_turn_memory_integer["turn-memory-integer"]
   n_turn_memory_reply["turn-memory-reply"]
   n_writer_admission["writer-admission"]
+  n_d11_exporter_float_trunk --> n_integer_retention_rates
   n_d41_driver_math_pilot --> n_m2_donor_corpus_generation
   n_fbs_cost_profile --> n_fbs_serving_kernels
   n_fbs_cost_profile --> n_training_step_cost
@@ -343,6 +346,7 @@ flowchart LR
   n_infra_loop_pr07c_queue_board --> n_infra_loop_pr10_supervisor
   n_infra_loop_pr09_client_adapters --> n_infra_loop_pr10_supervisor
   n_infra_loop_render_review --> n_loop_render_review_hardening
+  n_integer_retention_rates --> n_point_key_integer
   n_m1_a8_finite_cuda_qualification --> n_m1_a8_full_dose_rerun
   n_m1_a8_full_dose_rerun --> n_m1_bvg_k_block_apply_c2
   n_m1_a8_full_dose_rerun --> n_m1_bvg_k_stage_t_training
