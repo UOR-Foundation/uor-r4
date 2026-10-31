@@ -1,6 +1,6 @@
 # Joining the UOR-R4 research labs
 
-**Current status, 30 October 2026:** UOR-R4 is pre-alpha. **M1 is complete: 1 of 8 milestones.** One saved discrete geometric model passed all six M1 bars at two seeds; it does not hold a useful conversation. M2 and M3 are in progress, and M4–M8 remain open. Start with the root [README](../../README.md), [AGENTS.md](../../AGENTS.md), [CHARTER.md](../../CHARTER.md), [PLAN.md](../../PLAN.md), rendered [STATE.md](../../STATE.md) and the [current project track](../integration/project-track.md). Labs coordinate through live issues and PRs; no provider or lab is the permanent director.
+**Current status through 31 October 2026; M1 closed 30 October:** UOR-R4 is pre-alpha. **M1 is complete: 1 of 8 milestones.** One saved discrete geometric model passed all six M1 bars at two seeds; it does not hold a useful conversation. M2 and M3 are in progress, and M4–M8 remain open. Start with the root [README](../../README.md), [AGENTS.md](../../AGENTS.md), [CHARTER.md](../../CHARTER.md), [PLAN.md](../../PLAN.md), rendered [STATE.md](../../STATE.md) and the [current project track](../integration/project-track.md). Labs coordinate through live issues and PRs; no provider or lab is the permanent director.
 
 <details>
 <summary>Dated joining records, 1–18 October 2026 (historical)</summary>

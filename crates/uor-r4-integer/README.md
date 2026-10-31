@@ -9,7 +9,7 @@ This crate serves the saved discrete M1 pair and the separate float-trained FBS 
 - **Discrete M1 pair.** `uor-r4.lut-discrete-trunk/1` reproduces the reference on all 14,287 DEV rows and passes B4. It scores 7,002 / 7,001 on DEV, 7,215 / 7,228 on Fresh V2 and 7,850 / 7,872 on p-f, closing all six bars at two seeds. Apple M1 decode is 10,876 / 10,566 tok/s under the bar-f protocol ([M1 close](../../docs/labs/m1-close-saved-model/README.md), [Fresh V2](../../docs/labs/m1-fresh-panel-transfer/README.md), [bar-f](../../docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 - **D80 and D81 (28 Oct).** Served integer code may use the hardware integer multiply and divide. Floats, transcendentals and dense matmul stay banned in serving.
 - **Separate FBS `lut-stack/5`.** It keeps the 120-root rotations exact, putting the export gap inside its bar at DEV scope (claude-181, claude-182), and serves at 4,217–4,504 tok/s on the M1 laptop. `/6` carries additional Hamming-read hooks; the joined session remains open.
-- **Limit.** p-f has 62.5% verbatim TRAIN reference replies, so M1 is not useful-chat qualification. Claude-217's p-s reply openings are only 17.4%, 13.7% and 18.6% at three seeds, against about 80% on later tokens.
+- **Limit.** p-f has 62.5% verbatim TRAIN reference replies, so M1 is not useful-chat qualification. Claude-217's teacher-forced p-s reply openings are only 17.4%, 13.7% and 18.6% at three seeds, against about 80% on later tokens.
 
 ## Historical implementation and evidence
 

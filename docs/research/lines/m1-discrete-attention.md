@@ -59,7 +59,7 @@ transfer, and held-out-phrasing transfer ([CHARTER §4.8](../../../CHARTER.md#4-
    Its separate DEV export agreement was exact on 14,287 rows; Apple M1 decode is 10,876 and
    10,566 tok/s. M1 closed at all six bars.
 9. **The next failure (30 Oct).** On the separate FBS generation path, claude-217's cycle step ends
-   every registered loop but content is underpowered. On p-s, reply openings are 17.4%, 13.7% and
+   every registered loop but content is underpowered. On p-s, teacher-forced reply openings are 17.4%, 13.7% and
    18.6% at three seeds, against about 80% on later tokens. Exact-key memory misses reworded prompts.
 
 ## Key results
@@ -72,7 +72,7 @@ transfer, and held-out-phrasing transfer ([CHARTER §4.8](../../../CHARTER.md#4-
 | Apple M1 decode 10,876 / 10,566 tok/s | measurement | [bar-f report](../../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
 | K16-A: 65 and 463 below unigram 1,226 and T2 6,300 | dated configuration negative | [K16 outcome](../../labs/k16-outcome-call-2026-10-19/README.md) |
 | A8 address cells: 127 to 1,351 of 3,847 at zero training, then erosion | measurement | [pre-flight](../../labs/address-cells-preflight-2026-10-19/README.md), [A8 dose](../../labs/a8-dose-2026-10-19/README.md) |
-| p-s reply openings 17.4%, 13.7%, 18.6% against about 80% on later tokens | measurement | [claude-217](../../loop/tasks/one-model-end-to-end/claude-217/REPORT.md) |
+| Teacher-forced p-s reply openings 17.4%, 13.7%, 18.6% against about 80% on later tokens | measurement | [claude-217](../../loop/tasks/one-model-end-to-end/claude-217/REPORT.md) |
 
 ## What it taught
 

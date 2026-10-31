@@ -1,6 +1,6 @@
 # Research line: durable memory and the object store (M3)
 
-Milestone M3 asks that a conversation's memory survive between sessions and that answers stay grounded in it. This line built the storage half: an exact object store that keeps bytes once in a hashed tree, can fetch any range with an integrity check, and can copy itself between machines. The store works and is well tested. The consumer is built, but the on-model M3 run awaits M2's model selection, so M3 has not been measured end to end.
+Milestone M3 asks that a conversation's memory survive between sessions and that answers stay grounded in it. This line built the storage half: an exact object store that keeps bytes once in a hashed tree, can fetch any range with an integrity check, and can copy itself between machines. The store works and is well tested. The consumer is built, but the on-model M3 run awaits an M1-or-M2 model selection, so M3 has not been measured end to end.
 
 | | |
 |---|---|
@@ -17,7 +17,7 @@ Counts: `archive/catalog.jsonl`. The store follows decision D19 (a model-indepen
 flowchart LR
   A["3 to 5 Oct<br/>Chat-memory<br/>diagnostics"] --> B["14 to 15 Oct<br/>Design, build, byte tests"]
   B --> C["17 to 18 Oct<br/>Replication, audit,<br/>repair, cross-language"]
-  C --> D["Consumer built<br/>On-model M3 run<br/>awaits M2 selection"]
+  C --> D["Consumer built<br/>On-model M3 run<br/>awaits M1/M2 selection"]
 ```
 
 *The storage consumer and its controls are built; the selected model's on-model M3 qualification remains open.*
@@ -49,6 +49,6 @@ A byte store is a reliable component, and its tests show that it stores and retu
 
 ## Current state
 
-READY. The store and its consumer are built, but the on-model M3 run awaits M2's model selection and no M3 bar has been run ([consumer record](../../labs/object-store-consumer-m3/README.md)). The next step is to run M3 on the selected model, not to repeat storage-only work. Exact addressed memory as a read is still unbuilt ([exact memory](../../mechanisms/exact-memory.md)).
+READY. The store and its consumer are built, but the on-model M3 run awaits an M1-or-M2 model selection and no M3 bar has been run ([consumer record](../../labs/object-store-consumer-m3/README.md)). The next step is to run M3 on the selected model, not to repeat storage-only work. Exact addressed memory as a read is still unbuilt ([exact memory](../../mechanisms/exact-memory.md)).
 
 **Go deeper:** the [generated catalog page](../../../archive/catalog/m3-durable-memory.md) lists all 33 records.

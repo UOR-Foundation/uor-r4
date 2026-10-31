@@ -30,7 +30,7 @@ Every public number in this refresh must link to this sheet's committed evidence
 
 ## 2. Separate FBS trunk and current open research
 
-- The float-trained FBS trunk is a different path from the saved discrete M1 model. `lut-stack/5` exports/serves it exactly at DEV scope; D80/D81 allow integer multiply and divide while floats remain banned in serving. Its earlier M1 rates were 4,217–4,504 tok/s; do not mix those rates with the saved M1 artifacts' 10,876/10,566 tok/s.
+- The float-trained FBS trunk is a different path from the saved discrete M1 model. `lut-stack/5` exports/serves it exactly at DEV scope; D80/D81 allow integer multiply and divide while floats remain banned in serving. On Apple M1, earlier FBS exports served at 4,217–4,320 tok/s ([claude-182](../../d11-exporter-float-trunk/claude-182/REPORT.md)) and 4,491/4,504 tok/s after the integer square root ([claude-186](../../fbs-serving-vector-kernel/claude-186/REPORT.md)); do not mix those rates with the saved M1 artifacts' 10,876/10,566 tok/s.
 - **claude-217**, `docs/loop/tasks/one-model-end-to-end/claude-217/REPORT.md`:
   - The cycle/echo steps end every registered loop, but every content decision is **underpowered (content)**; greedy remains the served decode. Loop removal is not a quality result.
   - On held-out p-s, exact-reference replies are only 3, 1 and 4 of 256 at seeds 1–3, against 38–40 on DEV.
@@ -96,7 +96,7 @@ Every public number in this refresh must link to this sheet's committed evidence
 
 - The board has **28 mechanisms: 12 ACTIVE, 5 READY, 11 PARKED**. A whole-model M1 pass does not establish each mechanism's independent effect.
 - **Prime-zeta negative retained:** the 25 October zero-update comparison was a configuration loss. P8 admitted 127/3,847 against 178–188 for the strongest nulls, lost to Q0, Q1, R0 and R1, tied Q2 and won only R2. Keep the mechanism ACTIVE without erasing that outcome ([record](../../../../labs/r-prime-zeta-vs-nulls/README.md)).
-- **Durable memory:** the object-store consumer and frozen 384-item host-control panel are built and pass; the on-model M3 run awaits M2 selection. Host controls are not M3 qualification ([consumer record](../../../../labs/object-store-consumer-m3/README.md)).
+- **Durable memory:** the object-store consumer and frozen 384-item host-control panel are built and pass; the on-model M3 run needs a selected M1 or M2 model; M1's completion alone is not M3 qualification. Host controls are not M3 qualification ([consumer record](../../../../labs/object-store-consumer-m3/README.md)).
 - **D11:** integer serving may use hardware integer multiply and divide (D80/D81); floats, transcendentals and dense matmul remain banned. Do not restore multiplier/divide-free wording as current.
 - **D37:** float is allowed only in offline training with the export gap; the discrete path stays integer. The saved M1 model and FBS trunk must not be joined in prose or figures. M1 uses discrete Hamilton/quaternion recurrence, `PositionHolonomyV1` and `OrbitRootSnapNormV1`, not FBS projection or the FBS RMS normalization.
 - **A8 evidence scope:** finite qualification passed 5/5 with D67 PASS; the full-dose admission-preserving rerun reached Q1 `4,292 / 14,287`, `1,106 / 3,847` and `871 / 14,287` before a diagnostic stop. Stage T—not A8—reached `5,009 / 14,287` with G-Adm/G-Occ. The next admission-preserving rerun is NOT_RUN.
@@ -130,6 +130,8 @@ Every public number in this refresh must link to this sheet's committed evidence
 - [M1 bar-f REPORT](../../m1-heldout-phrasing-transfer/claude-211/REPORT.md)
 - [M1 bar-f panel score](../../../../labs/m1-heldout-phrasing-transfer/evidence/panel-score.json)
 - [Latest merged one-model REPORT](../../one-model-end-to-end/claude-220/REPORT.md)
+- [FBS export gap and speed](../../d11-exporter-float-trunk/claude-182/REPORT.md)
+- [FBS integer-square-root speed](../../fbs-serving-vector-kernel/claude-186/REPORT.md)
 - [Latest merged integer point-key implementation](../../point-key-integer/claude-224/REPORT.md)
 - [Latest merged retention implementation](../../integer-retention-rates/claude-226/REPORT.md)
 - [Retention GPU parity result](../../integer-retention-rates/claude-227/REPORT.md)

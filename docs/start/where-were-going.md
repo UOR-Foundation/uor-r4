@@ -59,7 +59,7 @@ conversation. See [CHARTER §4.8](../../CHARTER.md#4-evidence), the [M1 close](.
 
 The preceding claude-217 result explains why this order matters. Its cycle step ends every
 registered loop, but its content decision is underpowered and greedy remains the decode. On p-s,
-reply openings are 17.4%, 13.7% and 18.6% at three seeds, against about 80% on later tokens.
+teacher-forced reply openings are 17.4%, 13.7% and 18.6% at three seeds, against about 80% on later tokens.
 Stopping a loop does not repair a reply that began wrong
 ([report](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)).
 

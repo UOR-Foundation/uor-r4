@@ -42,7 +42,7 @@ That is not new reply kinds or useful conversation
 
 ## The remaining gaps
 
-**Reply opening on new phrasing.** On the separate FBS path, claude-217's p-s openings are 17.4%,
+**Reply opening on new phrasing.** On the separate FBS path, claude-217's teacher-forced p-s openings are 17.4%,
 13.7% and 18.6% at three seeds, against about 80% on later tokens. Exact turn memory keys on exact
 first token ids and misses reworded prompts. A cycle step ends loops but does not repair the opening.
 

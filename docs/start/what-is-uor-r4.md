@@ -68,7 +68,7 @@ Whether these replacements can match a transformer's quality is the open questio
 
 **Learning means trying the legal moves.** The discrete M1 path does not use calculus. To learn, it tries all 16 legal values of one block on the graphics card and keeps a change only if a whole-number score strictly improves. The separate FBS path trains offline with floating point and reports its export gap ([training](../model/training.md), [discrete learning](../mechanisms/discrete-learning.md)).
 
-## The two model paths as of 30 Oct 2026
+## The two model paths through 31 Oct 2026
 
 The saved 19-table `trunk-joint-pointer-v1-d11` model is the discrete path that closed M1. A second,
 separate float-trained trunk called FBS carries the complete-reply research; it has not joined the
@@ -89,7 +89,8 @@ full status and its limits.
 | Milestones complete | **1 of 8 (M1)** | [PLAN](../../PLAN.md), rendered [STATE](../../STATE.md) |
 | Whole-number serving engine | Built. Native and WebAssembly audits pass; integer multiply and divide are allowed, floats remain banned | [WASM runtime record](../labs/wasm-serving-runtime-2026-10-18/README.md), [serving dossier](../mechanisms/lut-serving.md) |
 | A model trained under today's rules in that engine | The saved discrete M1 pair and a separate FBS export exist; neither is useful chat or a released product. New work uses the lab's pre-run review, not a blanket owner hold | [where we are](./where-we-are.md), [charter](../../CHARTER.md) section 5 |
-| Saved M1 model | 7,002 and 7,001 correct first guesses out of 14,287 on DEV, above unigram 1,226 and T2 6,300; p-f 7,850 and 7,872 | [M1 close](../labs/m1-close-saved-model/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
+| Saved M1 model | DEV 7,002 and 7,001 of 14,287, above unigram 1,226 and T2 6,300; Fresh V2 7,215 and 7,228 of 14,479; p-f 7,850 and 7,872 of 15,953 | [M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
+| Current FBS research | The point key serves in one float model; integer decode/grade exists, but nearest-readout parity missed in every cell, so localization precedes p-x | [claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md), [claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md), [claude-232](../loop/tasks/integer-nearest-readout/claude-232/REPORT.md) |
 | Apple M1 decode for the M1 pair | Bar-f remeasurement 10,876 and 10,566 tokens per second, with a 192-token prefill and 64-token decode; older close-grade bar (c) 11,026 and 10,573 | [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md), [close grade](../labs/m1-close-saved-model/README.md) |
 
 M1 reads new prompt phrasings into known reply kinds; 62.5% of p-f's reference replies are verbatim TRAIN replies, so this is not useful conversation. K16's older 65 and 463 are history, not the current best. [Where we are](./where-we-are.md) explains both the result and its limits.

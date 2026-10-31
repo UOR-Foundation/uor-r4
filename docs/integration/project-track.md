@@ -46,7 +46,7 @@ artifact and does not share its table, trunk or served session.
 Claude-217's cycle and echo steps end every registered loop, but every content decision is
 underpowered and greedy remains the decode. On p-s:
 
-- reply openings are 17.4%, 13.7% and 18.6% at three seeds, against 80.8%, 80.2% and 79.9% on later
+- Teacher-forced reply openings are 17.4%, 13.7% and 18.6% at three seeds, against 80.8%, 80.2% and 79.9% on later
   tokens;
 - exact-reference replies are only 3, 1 and 4 of 256, against 38–40 on DEV;
 - exact turn memory keys on exact first token ids and adds only 14–16 of 1,400 openings on p-s,

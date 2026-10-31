@@ -44,7 +44,7 @@ It reproduces the reference on all 14,287 DEV rows and passes the planted-fault 
 | Apple M1 decode, median | **10,876 tok/s** | **10,566 tok/s** |
 
 The throughput protocol uses a 192-token prefill and 64-token decode, with about 2.67M prefill
-tok/s. This is native Apple M1 serving, not a browser measurement and not a claim of chat quality
+tok/s. This is native Apple M1 serving, not a browser measurement and not a claim of chat quality. On p-f, 62.5% of the reference replies are verbatim TRAIN replies: reference-data overlap, not a generated-copy rate or useful-chat qualification
 ([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 
 ## The separate FBS export

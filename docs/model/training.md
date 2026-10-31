@@ -97,7 +97,7 @@ which instruments and configurations failed before the later model passed.
 
 ## What is still open
 
-- **Reply opening on new phrasing.** Claude-217 measures 17.4%, 13.7% and 18.6% on p-s, against
+- **Reply opening on new phrasing.** Claude-217 measures teacher-forced reply openings of 17.4%, 13.7% and 18.6% on p-s, against
   about 80% on later tokens. Exact-key memory misses reworded prompts.
 - **Independent mechanism effects.** M1 is a whole-model result, not an ablation proving each read,
   gate, route or memory mechanism independently.

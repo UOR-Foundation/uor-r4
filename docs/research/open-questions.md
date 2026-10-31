@@ -38,7 +38,7 @@ kinds, not new reply kinds or useful conversation
 
 Claude-217 gives the sharpest current measurement:
 
-- p-s reply openings are **17.4%, 13.7% and 18.6%** at three seeds, against **80.8%, 80.2% and
+- Teacher-forced p-s reply openings are **17.4%, 13.7% and 18.6%** at three seeds, against **80.8%, 80.2% and
   79.9%** on later tokens.
 - Exact-reference replies are only 3, 1 and 4 of 256, against 38–40 on DEV.
 - Exact turn memory keys on the turn's exact first token ids. It adds 322–337 of 1,226 openings on

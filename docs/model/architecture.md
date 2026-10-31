@@ -70,7 +70,7 @@ The FBS path trains offline in float under D37 and exports to integer D11. It is
 | Text in/out | R7 and accepted-model text/chat distribution | Open |
 
 **Current failure and latest probe.** Claude-217's cycle and echo steps end every registered loop,
-but content is underpowered and greedy remains the decode. On p-s, reply openings are 17.4%, 13.7%
+but content is underpowered and greedy remains the decode. On p-s, teacher-forced reply openings are 17.4%, 13.7%
 and 18.6% at three seeds, against 80.8%, 80.2% and 79.9% on later tokens. Exact-reference replies
 are only 3, 1 and 4 of 256, and exact-key memory finds little on new phrasing
 ([claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)). Claude-218 found

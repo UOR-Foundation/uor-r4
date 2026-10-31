@@ -182,7 +182,7 @@
         "vacuous": true
       },
       "panel": "m3-memory",
-      "base_artifact": "unselected; M2's accepted model is required first",
+      "base_artifact": "unselected; a selected M1 or M2 model is required; M1's completion alone is not M3 qualification",
       "mechanisms": [
         "exact-memory"
       ],
@@ -217,8 +217,8 @@
       },
       "secondary": [
         {
-          "label": "served BPB at 512 windows",
-          "current": 0.886838,
+          "label": "held-out quality at 512 windows",
+          "text": "not measured on the accepted model; target ≤0.90 BPB",
           "target": 0.9,
           "of": null
         }
@@ -252,7 +252,8 @@
           "target": 0,
           "target_display": "no (D23 prohibits softmax project-wide)",
           "of": 1,
-          "unit": "prohibited site"
+          "unit": "prohibited site",
+          "note": "the live prompt's qualitative headline; D23 makes \"no\" the only accepted value. Acceptance items 1-3 (D11 parity, kernel audit, fresh-process restore) remain open."
         },
         "previous_secondary": [
           {
