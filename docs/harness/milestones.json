@@ -224,7 +224,7 @@
         }
       ],
       "panel": "m4-served",
-      "base_artifact": "unselected; the accepted M3 model is required before M4 qualification",
+      "base_artifact": "unselected; the selected M1 or M2 model must pass M3 before M4 qualification",
       "mechanisms": [
         "flock-read",
         "e8-orbit-memory",
@@ -454,7 +454,7 @@
     },
     {
       "id": "D32",
-      "rule": "Active discrete geometric substrate (`crates/uor-r4-discrete`, Dose 1): model computation and its instruments are discrete/exact and GPU-only - no floating-point forward, gradients, optimizer or numerical model instrument on that path, and no matrix multiplication. Use native SpiralCore/E8/FBS geometry with one integer input/carry/output writer. D37 revises D32's offline-training float ban in separately scanned float modules; the discrete path, D11 serving and the October 14 zeta-zero exception are unchanged. Runs use the lab's D67 pre-run review; D41's donor pass needs the owner at dispatch.",
+      "rule": "Active discrete geometric substrate (`crates/uor-r4-discrete`, Dose 1): model computation and its instruments are discrete/exact and GPU-only - no floating-point forward, gradients, optimizer or numerical model instrument on that path, and no matrix multiplication. Use native SpiralCore/E8/FBS geometry with one integer input/carry/output writer. D37 revises D32's offline-training float ban in separately scanned float modules; the discrete path, D11 serving and the October 14 zeta-zero exception are unchanged. Both training holds remain HELD; a FIT review releases neither. Historical hold text preserved verbatim; D67 subsequently removed blanket M2 training/rental holds, and D41's donor pass needs the owner at dispatch.",
       "scope": "all",
       "source": "docs/integration/DECISIONS.md"
     },

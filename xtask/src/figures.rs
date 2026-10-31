@@ -500,7 +500,7 @@ fn architecture_narrow() -> Result<String, Fail> {
         ),
         (
             318.0,
-            St::Working,
+            St::Progress,
             "Exact memory; copy read open",
             "/7 synthetic: open+reply",
         ),
@@ -560,14 +560,15 @@ fn architecture_narrow() -> Result<String, Fail> {
         "M1 complete: six bars, two seeds",
     );
     s.rect(
-        [16.0, 698.0, 348.0, 88.0],
+        [16.0, 698.0, 348.0, 112.0],
         5.0,
         ("#FFFFFF", MUTED, 1.25, Some("5 4")),
     );
     for (i, t) in [
         "Current: new-phrasing reply opening",
         "and a reachable exact memory key",
-        "Then joined integer serving and R7",
+        "Localize parity MISS before p-x",
+        "p-f refs: 62.5% verbatim TRAIN",
     ]
     .iter()
     .enumerate()
@@ -575,12 +576,12 @@ fn architecture_narrow() -> Result<String, Fail> {
         s.fit([30.0, 722.0 + 24.0 * i as f64], (14.0, 400, BODY), 320.0, t);
     }
     s.fit(
-        [16.0, 812.0],
+        [16.0, 824.0],
         (12.0, 400, MUTED),
         348.0,
         "Green: served. Hatched: trained, not yet served.",
     );
-    s.finish("Two model paths, M1 complete, narrow layout", "The saved discrete 19-table model has closed M1 at all six bars on two seeds. The separate float-trained FBS trunk uses a learned table, SpiralCore position, a Hamilton-gated recurrence and exact turn memory, with exact rotations and its export gap inside the bar under lut-stack/5 at DEV scope. The /7 engine serves opening and later-reply memory tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open. The current gap is reply opening on new phrasing and a memory key that reworded known questions can reach, then joined integer serving and R7. This is structure, not a useful-chat claim.")
+    s.finish("Two model paths, M1 complete, narrow layout", "The saved discrete 19-table model has closed M1 at all six bars on two seeds. The separate float-trained FBS trunk uses a learned table, SpiralCore position, a Hamilton-gated recurrence and exact turn memory, with exact rotations and its export gap inside the bar under lut-stack/5 at DEV scope. The /7 engine serves opening and later-reply memory tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open. Next, localize claude-232's parity MISS before p-x, then joined integer serving and R7. On p-f, 62.5% of reference replies are verbatim TRAIN replies: reference-data overlap, not a generated-copy rate, new reply kinds or useful conversation.")
 }
 
 fn compliant_path() -> Result<String, Fail> {
