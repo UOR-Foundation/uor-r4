@@ -2994,6 +2994,272 @@ pub fn served_grade(data_root: &Path, runs: &Path, panels: &[(String, PathBuf)])
     Ok(grade)
 }
 
+/// One panel prompt for the integer decode (point-key-integer unit 2, claude-224).
+/// - **Its fields:** the reply's corpus position, the prompt's ids, and the reference reply.
+/// - **Its origin:** these are exactly what [`score_rows`] decodes and writes, and `fbs-toks --replies` reads them.
+/// - **`float_keyed`** is the float side's served name at the opening, where a seed's served file gives one.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PanelPrompt {
+    pub position: usize,
+    pub prompt: Vec<u32>,
+    pub reference: Vec<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub float_keyed: Option<u32>,
+}
+
+/// The prompts [`score_rows`] decodes on a split (claude-224):
+/// - the windows are [`sample_windows`]';
+/// - each prompt is its window's input through its first scored offset;
+/// - each reference is its [`reference_reply`].
+///
+/// No model is involved.
+fn split_prompts(windows: &[CausalWindow], mask: &[u8], samples: usize, reply_tokens: usize) -> Vec<PanelPrompt> {
+    sample_windows(windows, mask, samples)
+        .into_iter()
+        .map(|window| PanelPrompt {
+            position: window.scored_corpus_positions[0],
+            prompt: window.input_ids[..=window.scored_offsets[0]].to_vec(),
+            reference: reference_reply(window, reply_tokens),
+            float_keyed: None,
+        })
+        .collect()
+}
+
+/// `--panel-prompts` (claude-224): DEV's and each panel's prompts, as [`score_rows`] decodes them,
+/// written new to `out` as `prompts-{split}.json`.
+///
+/// With `served_runs` (claude-220's `out`), each `r-drop-s{seed}` there whose served file holds a
+/// split also gets `prompts-{split}-s{seed}.json`, each prompt carrying that seed's float served
+/// name. A served sample whose position, prompt or reference is not its prompt's is refused: the
+/// float arms decoded these prompts, so the two lists are one.
+///
+/// It returns each written file's name and rows.
+pub fn panel_prompts(
+    data_root: &Path,
+    panels: &[(String, PathBuf)],
+    samples: usize,
+    reply_tokens: usize,
+    served_runs: Option<&Path>,
+    out: &Path,
+) -> Result<Vec<(String, usize)>> {
+    let windows_of = |tokens: &[u32], mask: &[u8]| -> Result<Vec<CausalWindow>> {
+        Ok(hs::build_document_windows(tokens, mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?.0)
+    };
+    let (dev_windows, dev_mask) = load_dev(data_root)?;
+    let mut splits = vec![("dev".to_owned(), split_prompts(&dev_windows, &dev_mask, samples, reply_tokens))];
+    for (name, dir) in panels {
+        if !panel_name_ok(name) || splits.iter().any(|(n, _)| n == name) {
+            return Err(invalid(format!("--panel {name}: a panel name is one word, not dev")));
+        }
+        let (tokens, mask, _) = load_unpinned_uort(dir)?;
+        splits.push((name.clone(), split_prompts(&windows_of(&tokens, &mask)?, &mask, samples, reply_tokens)));
+    }
+    fs::create_dir_all(out)?;
+    let mut written = Vec::new();
+    for (split, prompts) in &splits {
+        let file = format!("prompts-{split}.json");
+        write_new(&out.join(&file), &serde_json::to_vec(prompts)?)?;
+        written.push((file, prompts.len()));
+        let Some(runs) = served_runs else { continue };
+        for seed in 1..=3u8 {
+            let path = runs.join(format!("r-drop-s{seed}")).join(format!("samples-{split}-served-memory.json"));
+            if !path.exists() {
+                continue;
+            }
+            let served: Vec<IdSample> = read_scored(&path)?;
+            if served.len() != prompts.len() {
+                return Err(invalid(format!("{}: {} samples, not the split's {} prompts", path.display(), served.len(), prompts.len())));
+            }
+            let mut keyed = prompts.clone();
+            for (p, s) in keyed.iter_mut().zip(&served) {
+                if (p.position, &p.prompt, &p.reference) != (s.position, &s.prompt, &s.reference) {
+                    return Err(invalid(format!("{}: the sample at {} is not the prompt's (an instrument fault)", path.display(), s.position)));
+                }
+                p.float_keyed = s.keyed;
+            }
+            let file = format!("prompts-{split}-s{seed}.json");
+            write_new(&out.join(&file), &serde_json::to_vec(&keyed)?)?;
+            written.push((file, keyed.len()));
+        }
+    }
+    Ok(written)
+}
+
+/// One reply as `fbs-toks --replies` writes it (claude-224).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+struct IntegerSample {
+    position: usize,
+    prompt: Vec<u32>,
+    reply: Vec<u32>,
+    reference: Vec<u32>,
+    keyed: Option<u32>,
+    served_distance_q12: Option<i64>,
+    float_keyed: Option<u32>,
+    float_distance_q12: Option<i64>,
+    end: String,
+}
+
+/// The item's rounding bound, at Q12 (done-when 3). Half a unit on each of 256 values of the query
+/// and of a row moves their L1 sum by at most 256, and two rows can move apart, so an order that
+/// rounding alone can flip lies within 512.
+pub const POINT_KEY_ROUNDING_BOUND: i64 = 512;
+
+/// Parity with the float key on one split and seed (done-when 3, reported, deciding nothing).
+/// - **`served`:** the integer served openings.
+/// - **`both`:** those the float side served too.
+/// - **The split of `both`:**
+///   - `agree`, the same name;
+///   - `within`, a different name within [`POINT_KEY_ROUNDING_BOUND`] of the integer least distance;
+///   - `drift`, every other one, a float name no row holds included.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct IntegerParity {
+    pub split: String,
+    pub seed: u8,
+    pub served: usize,
+    pub both: usize,
+    pub agree: usize,
+    pub within: usize,
+    pub drift: usize,
+}
+
+/// [`IntegerParity`] of a served arm's samples.
+fn integer_parity(split: &str, seed: u8, served: &[IntegerSample]) -> IntegerParity {
+    let mut p = IntegerParity { split: split.to_owned(), seed, served: 0, both: 0, agree: 0, within: 0, drift: 0 };
+    for s in served {
+        let Some(name) = s.keyed else { continue };
+        p.served += 1;
+        let Some(float) = s.float_keyed else { continue };
+        p.both += 1;
+        if name == float {
+            p.agree += 1;
+        } else if s
+            .float_distance_q12
+            .zip(s.served_distance_q12)
+            .is_some_and(|(f, i)| f - i <= POINT_KEY_ROUNDING_BOUND)
+        {
+            p.within += 1;
+        } else {
+            p.drift += 1;
+        }
+    }
+    p
+}
+
+/// The integer served arm against integer greedy on one split and seed (claude-224): a
+/// [`KeyedReading`] by their own tokens, so [`KeyedReading::carries`] and
+/// [`KeyedReading::harmless`] read it as they read claude-220's served arm. The arms must hold the
+/// same prompts.
+///
+/// Instrument faults, refused:
+/// - a served reply that does not open with its keyed token;
+/// - a reply the key did not open that differs from greedy's. The two artifacts decode alike there (claude-222).
+fn integer_reading(
+    split: &str,
+    seed: u8,
+    served: &[IntegerSample],
+    greedy: &[IntegerSample],
+    eos: u32,
+    keep: &std::collections::HashSet<u32>,
+    digits: &std::collections::HashSet<u32>,
+) -> Result<KeyedReading> {
+    let fault = |what: String| invalid(format!("{split} s{seed} integer: {what} (an instrument fault)"));
+    if served.len() != greedy.len()
+        || served.iter().zip(greedy).any(|(s, g)| (s.position, &s.prompt, &s.reference) != (g.position, &g.prompt, &g.reference))
+    {
+        return Err(fault("the served and greedy arms do not hold the same prompts".to_owned()));
+    }
+    let exact = |s: &IntegerSample| cut_at_eos(&s.reply, eos) == cut_at_eos(&s.reference, eos);
+    let template = |s: &IntegerSample| {
+        value_mask(cut_at_eos(&s.reply, eos), keep, digits) == value_mask(cut_at_eos(&s.reference, eos), keep, digits)
+    };
+    let pair = |(b, c): (usize, usize), arm: bool, base: bool| (b + usize::from(arm && !base), c + usize::from(!arm && base));
+    let mut r = KeyedReading {
+        split: split.to_owned(),
+        key: "integer-point".to_owned(),
+        seed,
+        tau: f32::INFINITY,
+        replies: served.len(),
+        keyed: 0,
+        right: 0,
+        predicted_exact: (0, 0),
+        exact: Some((0, 0)),
+        template: Some((0, 0)),
+        loops: Some((0, 0)),
+    };
+    for (s, g) in served.iter().zip(greedy) {
+        match s.keyed {
+            Some(token) if s.reply.first() != Some(&token) => {
+                return Err(fault(format!("the served reply at {} does not open with its keyed token", s.position)));
+            }
+            Some(token) => {
+                r.keyed += 1;
+                r.right += usize::from(s.reference.first() == Some(&token));
+            }
+            None if s.reply != g.reply => {
+                return Err(fault(format!("the reply at {} differs from greedy's though the key did not open it", s.position)));
+            }
+            None => {}
+        }
+        r.exact = r.exact.map(|e| pair(e, exact(s), exact(g)));
+        r.template = r.template.map(|t| pair(t, template(s), template(g)));
+        r.loops = r.loops.map(|l| pair(l, loops(&s.reply, eos), loops(&g.reply, eos)));
+    }
+    r.predicted_exact = r.exact.unwrap_or((0, 0));
+    Ok(r)
+}
+
+/// The integer grade (point-key-integer unit 2, claude-224), on the laptop.
+/// - **What it reads:** the integer served arm against integer greedy on DEV and each panel, at seeds 1–3, with their parity against the float key and their free-generation measures.
+/// - **`carries`:** each panel's per-seed reading of done-when 4's bar against that seed's DEV (claude-220's `carries`). The rows are the run's sheet's.
+#[derive(Clone, Debug, Serialize)]
+pub struct IntegerGrade {
+    pub readings: Vec<KeyedReading>,
+    pub parity: Vec<IntegerParity>,
+    /// Each `(split, seed)`'s capped replies, served and greedy: those the context cut.
+    pub capped: Vec<(String, u8, usize, usize)>,
+    pub generation: Vec<(String, u8, String, Generation)>,
+    pub carries: Vec<(String, u8, bool)>,
+}
+
+/// [`IntegerGrade`] of `runs`.
+/// - **The files:** each `r-drop-s{seed}` there holds `integer-greedy-{split}.json` (from `/7`) and `integer-served-{split}.json` (from `/8`), as `fbs-toks --replies` writes them, for DEV and each name of `panels`.
+/// - **TRAIN's templates and replies** come from `data_root`, as in [`served_grade`].
+pub fn integer_grade(data_root: &Path, runs: &Path, panels: &[String]) -> Result<IntegerGrade> {
+    let bos = hs::SHEET_BOS_ID;
+    let tokenizer = pinned_tokenizer(data_root)?;
+    let eos = tokenizer.token_id("<|eos|>").ok_or_else(|| invalid("the pinned tokenizer has no <|eos|>"))?;
+    let digits = digit_tokens(&fs::read_to_string(data_root.join("tokenizer.json"))?)?;
+    let (train_tokens, train_mask) = load_train_split(data_root)?;
+    let keep = top_tokens(&train_tokens, OPENING_TEMPLATE_K, bos);
+    let train_turns = split_turns(&train_tokens, &train_mask, bos).replies;
+    drop((train_tokens, train_mask));
+    let mut grade = IntegerGrade { readings: Vec::new(), parity: Vec::new(), capped: Vec::new(), generation: Vec::new(), carries: Vec::new() };
+    let splits: Vec<&str> = std::iter::once("dev").chain(panels.iter().map(String::as_str)).collect();
+    for seed in 1..=3u8 {
+        let dir = runs.join(format!("r-drop-s{seed}"));
+        let mut dev = None;
+        for &split in &splits {
+            let read = |arm: &str| -> Result<Vec<IntegerSample>> { read_scored(&dir.join(format!("integer-{arm}-{split}.json"))) };
+            let (served, greedy) = (read("served")?, read("greedy")?);
+            let reading = integer_reading(split, seed, &served, &greedy, eos, &keep, &digits)?;
+            grade.parity.push(integer_parity(split, seed, &served));
+            let capped = |arm: &[IntegerSample]| arm.iter().filter(|s| s.end == "context").count();
+            grade.capped.push((split.to_owned(), seed, capped(&served), capped(&greedy)));
+            for (arm, samples) in [("greedy", &greedy), ("served", &served)] {
+                let replies: Vec<Vec<u32>> = samples.iter().map(|s| s.reply.clone()).collect();
+                grade.generation.push((split.to_owned(), seed, arm.to_owned(), generation(&replies, &train_turns, eos)));
+            }
+            if split == "dev" {
+                dev = Some(reading.clone());
+            } else if let Some(dev) = &dev {
+                grade.carries.push((split.to_owned(), seed, reading.carries(dev)));
+            }
+            grade.readings.push(reading);
+        }
+    }
+    Ok(grade)
+}
+
 /// One reply row (turn-memory-reply, claude-192): the prompt its window shows for its turn, back
 /// from the reply's start to the last response token or BOS; the reply's own earlier tokens; its
 /// target; and whether it opens the reply or copies the prompt ([`copies_prompt`]).
@@ -10844,6 +11110,96 @@ mod tests {
         for rule in [DecodeRule::FLOCK, DecodeRule::FlockCell { k: 4, margin_milli: 0 }, DecodeRule::CycleStep { k: 4, n: 4 }] {
             assert!(!serves_at(&[], rule), "{rule:?} decodes as it did");
         }
+    }
+
+    /// claude-224: the panel prompts are the scored run's own. Each prompt is its window's input
+    /// through the first scored offset, which ends at the row that predicts the reply's first
+    /// token. Its reference is the true reply that follows, and its position is that reply's
+    /// first target.
+    #[test]
+    fn the_panel_prompts_are_the_scored_runs_own() {
+        let bos = hs::SHEET_BOS_ID;
+        let (mut tokens, mut mask) = (Vec::new(), Vec::new());
+        for doc in 0..2u32 {
+            tokens.push(bos);
+            mask.push(0u8);
+            tokens.extend((0..20).map(|i| 10 + i + doc));
+            mask.extend([0u8; 20]);
+            tokens.extend([5, 6, 7]);
+            mask.extend([1u8; 3]);
+        }
+        let windows = hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, bos).unwrap().0;
+        let prompt = |doc: u32| std::iter::once(bos).chain((0..20).map(|i| 10 + i + doc)).collect::<Vec<u32>>();
+        let row = |position: usize, doc: u32| PanelPrompt { position, prompt: prompt(doc), reference: vec![5, 6, 7], float_keyed: None };
+        assert_eq!(split_prompts(&windows, &mask, 2, 64), [row(21, 0), row(45, 1)]);
+        assert_eq!(split_prompts(&windows, &mask, 2, 2)[0].reference, [5, 6], "at most the reply tokens");
+        assert_eq!(split_prompts(&windows, &mask, 1, 64), [row(21, 0)], "the stride takes the first");
+    }
+
+    fn integer_sample(keyed: Option<u32>, reply: Vec<u32>, reference: Vec<u32>) -> IntegerSample {
+        IntegerSample {
+            position: 0,
+            prompt: vec![2],
+            reply,
+            reference,
+            keyed,
+            served_distance_q12: keyed.map(|_| 10),
+            float_keyed: None,
+            float_distance_q12: None,
+            end: "length".to_owned(),
+        }
+    }
+
+    /// claude-224: parity's classes are the item's, fixed before any panel is read. An integer
+    /// name that differs from the float's is within the rounding bound when the float name's least
+    /// distance is at most 512 past the integer's, and drift otherwise, a float name no row holds
+    /// included. Openings only one side served are counted apart.
+    #[test]
+    fn the_integer_parity_classes_are_the_items() {
+        let s = |keyed: Option<u32>, float: Option<u32>, float_d: Option<i64>| IntegerSample {
+            float_keyed: float,
+            float_distance_q12: float_d,
+            ..integer_sample(keyed, vec![1], vec![1])
+        };
+        let served = [
+            s(Some(5), Some(5), Some(10)),
+            s(Some(5), Some(6), Some(522)),
+            s(Some(5), Some(6), Some(523)),
+            s(Some(5), Some(6), None),
+            s(Some(5), None, None),
+            s(None, Some(6), Some(10)),
+        ];
+        let p = integer_parity("p-x", 1, &served);
+        assert_eq!((p.served, p.both, p.agree, p.within, p.drift), (5, 4, 1, 1, 2));
+    }
+
+    /// claude-224: the integer reading pairs served against greedy by their own tokens. A served
+    /// reply must open with its keyed token, and a reply the key did not open must be greedy's;
+    /// either is an instrument fault, as is a different prompt.
+    #[test]
+    fn the_integer_reading_pairs_the_arms_and_refuses_an_instrument_fault() {
+        let empty = std::collections::HashSet::new();
+        let served = [
+            integer_sample(Some(7), vec![7, 8], vec![7, 8]),
+            integer_sample(None, vec![4], vec![4]),
+            integer_sample(Some(3), vec![3, 9], vec![2, 9]),
+        ];
+        let greedy = [
+            integer_sample(None, vec![9, 8], vec![7, 8]),
+            integer_sample(None, vec![4], vec![4]),
+            integer_sample(None, vec![2, 9], vec![2, 9]),
+        ];
+        let r = integer_reading("p-x", 1, &served, &greedy, 1, &empty, &empty).unwrap();
+        assert_eq!((r.keyed, r.right, r.exact), (2, 1, Some((1, 1))));
+        let mut unopened = served.clone();
+        unopened[0].reply = vec![9, 8];
+        assert!(integer_reading("p-x", 1, &unopened, &greedy, 1, &empty, &empty).is_err(), "a served reply not opening with its key");
+        let mut drifted = served.clone();
+        drifted[1].reply = vec![5];
+        assert!(integer_reading("p-x", 1, &drifted, &greedy, 1, &empty, &empty).is_err(), "an unkeyed reply that is not greedy's");
+        let mut other = greedy.clone();
+        other[2].prompt = vec![3];
+        assert!(integer_reading("p-x", 1, &served, &other, 1, &empty, &empty).is_err(), "another prompt");
     }
 
     /// claude-220 (FIT round 1): the parity count compares each served token with the keys
