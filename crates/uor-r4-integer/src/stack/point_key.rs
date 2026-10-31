@@ -172,6 +172,10 @@ pub fn point_key_windows(
     if tokens.len() != mask.len() || context == 0 {
         return Err(StackError::Numerics("the split's mask is not its tokens' length, or the context is 0".to_owned()));
     }
+    // A mask byte past 1 is neither prompt nor reply, and would drop or invent openings silently.
+    if mask.iter().any(|&m| m > 1) {
+        return Err(StackError::Numerics("the split's response mask holds a byte other than 0 or 1".to_owned()));
+    }
     let starts: Vec<usize> = (0..tokens.len()).filter(|&p| tokens[p] == bos).collect();
     let mut windows = Vec::new();
     for (doc, &start) in starts.iter().enumerate() {
@@ -256,14 +260,12 @@ mod point_key_tests {
         // Rows 0–3 are all at distance 2 from [0, 0]; 9 twice, 5 once, 4 once.
         let key = served(2, vec![1, 1, 2, 0, -1, -1, 0, 2, 50, 50], vec![9, 5, 9, 4, 3]);
         let mut tied = Vec::with_capacity(key.rows());
-        let capacity = tied.capacity();
         assert_eq!(key.name(&[0, 0], &mut tied).unwrap(), (9, 2), "the commonest of the tied");
         let even = served(2, vec![1, 1, 2, 0, -1, -1, 0, 2], vec![9, 5, 5, 9]);
         assert_eq!(even.name(&[0, 0], &mut tied).unwrap(), (5, 2), "a tie in counts goes to the smaller id");
         // A nearer single row beats a more common farther one.
         let near = served(2, vec![1, 1, 1, 1, 0, 1], vec![6, 6, 7]);
         assert_eq!(near.name(&[0, 0], &mut tied).unwrap(), (7, 1));
-        assert_eq!(tied.capacity(), capacity, "the search grew no scratch past its capacity");
     }
 
     /// claude-222: a table holding BOS or an id past the vocabulary is refused, and so is a

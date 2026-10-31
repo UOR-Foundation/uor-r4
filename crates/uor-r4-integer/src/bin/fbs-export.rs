@@ -47,7 +47,7 @@ fn uort_tokens(path: &str) -> Result<Vec<u32>, String> {
     }
     let count = u64::from_le_bytes(bytes[8..16].try_into().map_err(|_| format!("{path}: truncated"))?) as usize;
     let payload = &bytes[64..];
-    if payload.len() != count * 2 {
+    if count.checked_mul(2) != Some(payload.len()) {
         return Err(format!("{path}: the header counts {count} tokens, the payload holds {} bytes", payload.len()));
     }
     Ok(payload.chunks_exact(2).map(|w| u32::from(u16::from_le_bytes([w[0], w[1]]))).collect())

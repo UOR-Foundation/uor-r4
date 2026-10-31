@@ -5186,9 +5186,6 @@ fn synthetic_point_key(bytes: &[u8], rows: usize) -> super::PointKeyImage {
     }
 }
 
-/// claude-222: the served point key names the reply's first token where the opening table's exact
-/// key misses, from that row's own query. Every other row, an opening the key hits, and a session
-/// without the reply-start signal decode as the `/7` stack does, token for token.
 /// claude-222: a `/7` stack of the small trunk whose opening table holds `turn_memory_script`'s
 /// opening key when `hit`, and an unseen one when not. Its reply table holds a key no row hits, so
 /// every later reply row is keyed and misses.
@@ -5212,6 +5209,9 @@ fn point_key_test_stack(hit: bool) -> Vec<u8> {
     super::export_fbs_trunk_uorlut01(&snap).expect("export")
 }
 
+/// claude-222: the served point key names the reply's first token where the opening table's exact
+/// key misses, from that row's own query. Every other row, an opening the key hits, and a session
+/// without the reply-start signal decode as the `/7` stack does, token for token.
 #[test]
 fn the_point_key_names_a_missed_opening_and_leaves_the_rest() {
     let (tokens, reply_start) = turn_memory_script(8);
@@ -5300,6 +5300,7 @@ fn the_point_key_windows_are_the_float_trunks_openings() {
         "a later run's prefix starts inside the document"
     );
     assert!(super::point_key_windows(&[0, 1], &[0], 4, 0).is_err(), "a mask of another length");
+    assert!(super::point_key_windows(&[0, 1, 2], &[0, 0, b'1'], 4, 0).is_err(), "a mask byte other than 0 or 1");
 }
 
 /// claude-222: the builder's table holds the integer trunk's own query at TRAIN's opening rows,

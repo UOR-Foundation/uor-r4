@@ -3181,7 +3181,9 @@ fn stack_step_fbs(
         &mut b.native_kept,
     );
     // The served point key (claude-222): where the opening's exact key missed, the commonest
-    // target among TRAIN's L1-nearest openings to this query names the reply's first token.
+    // target among TRAIN's L1-nearest openings to this query names the reply's first token. Its
+    // search cannot fail here: parsing refused a table of another width, with no rows or naming
+    // BOS, so the step never stops halfway on its error.
     if point_miss {
         if let Some(point) = model.memory.as_ref().and_then(|m| m.point.as_ref()) {
             b.native_token = point.name(&b.query_q12, &mut b.point_tied)?.0;
