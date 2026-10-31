@@ -16,6 +16,7 @@ No measurement. The step reads one of two tables where it read one before, and t
 - **One negative gate first passed through another check.**
   - Widening `validate` to accept an unknown `rec_gates` value left the test green: the artifact was still refused, by a later structural check (`rec_geometric()` is false for it, so the FBS layers' tables do not fit).
   - The refusal an older engine makes is its `validate`'s, so the test now calls `validate` on the shape directly, and the gate fails.
+- **The byte-identity test first could not fail** (this unit's review). It compared two exports from the same head. It now pins the base's sha256 (`2eda9536…`, 21,696 bytes, taken at `a5eb6863a` with the base's sources checked out), and a changed false-case string fails it.
 - **`fold_scores` and `reflect_floor` are not served** (claude-225's review). `fbs-snapshot` refuses a run with either on, until their integer forms exist.
 
 ## What worked
@@ -35,7 +36,7 @@ No measurement. The step reads one of two tables where it read one before, and t
 ## What changed
 
 - **`crates/uor-r4-integer/src/stack/format.rs`:** `rec_geometric`, `rec_retention`, `validate`, the FBS export's `rec_gates`, and `RefRecurrence::retained`.
-- **`stack/session.rs`:** `RETAIN_LAMBDA_Q31`, `RETAIN_KEEP_Q31` and the recurrence's branch.
+- **`stack/session.rs`:** `RETAIN_LAMBDA_Q31`, `RETAIN_KEEP_Q31` and the recurrence's branch. The two gate reads are string compares on the shape, so they are read once per layer, not per lane (this unit's review).
 - **`fbs_snapshot.rs`:** `FbsTrunkSnapshot.retain_rates`.
 - **`stack/synthetic.rs`:** the field.
 - **`stack/tests.rs`:** three tests.
@@ -50,7 +51,8 @@ No measurement. The step reads one of two tables where it read one before, and t
 
 ## Checks run at the head
 
-- **Eight negative gates,** each failing at its own assertion with its rule set aside, and passing when restored:
+- **Nine negative gates,** each failing at its own assertion with its rule set aside, and passing when restored:
+  - the false-case export against the base's sha256 (the source block's string changed);
   - the λ table;
   - the recurrence reads it;
   - the export writes the flag;
@@ -73,6 +75,8 @@ None.
   - `fbs-export`;
   - `fbs-compare`, the integer readout against the float one.
 - **Then `point-key-integer`'s run.**
+- **The older trunk snapshot** (`export_float_trunk_uorlut01` and its reference in `format.rs`) still assumes decay. Nothing builds it from a retained run today (this unit's review).
+- **`cargo fmt --check` finds drift on main** in `bin/fbs-export.rs` and `bin/fbs-toks.rs` (claude-224), outside this unit's lines. The next unit that touches those bins formats them.
 
 ## Plain summary
 

@@ -5503,17 +5503,19 @@ fn a_retained_fbs_stack_serves_the_retained_reference() {
     assert!(model.shape().validate().is_ok(), "the retained reading is valid");
 }
 
-/// claude-226: a snapshot without the flag, as every one before it, exports byte for byte as one
-/// that says `retain_rates: false`, and serves the decay reading.
+/// claude-226: a snapshot without the flag, as every one before it, exports byte for byte as it did
+/// before the change, and serves the decay reading. The sha256 was taken at `a5eb6863a`, the base.
 #[test]
 fn a_snapshot_without_the_flag_exports_as_before() {
+    use sha2::{Digest, Sha256};
     let snap = synthetic_fbs_trunk(20261026);
     let mut json: Value = serde_json::to_value(&snap).expect("json");
     assert!(json.get("retain_rates").is_none(), "false is not written");
     json.as_object_mut().expect("object").remove("retain_rates");
     let old: super::FbsTrunkSnapshot = serde_json::from_value(json).expect("an old snapshot");
     let bytes = super::export_fbs_trunk_uorlut01(&old).expect("export");
-    assert_eq!(bytes, super::export_fbs_trunk_uorlut01(&snap).expect("export"));
+    assert_eq!(bytes.len(), 21_696);
+    assert_eq!(hex::encode(Sha256::digest(&bytes)), "2eda9536d128c310eff1f84875bac832355790b5dd21d4dfa98aeb60b0de700d");
     let model = IntegerStackModel::parse(&bytes).expect("parse");
     assert!(model.shape().rec_geometric() && !model.shape().rec_retention());
 }

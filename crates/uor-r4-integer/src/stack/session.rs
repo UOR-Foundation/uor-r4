@@ -3658,6 +3658,8 @@ fn stack_lanes(
     mut trace: Option<&mut SnapTrace>,
 ) {
     let (s, n) = (&model.shape, &model.numerics);
+    // Read once per layer: both are string compares on the shape.
+    let (geometric, retention) = (s.rec_geometric(), s.rec_retention());
     for (lane, ((held, pushed), &decay)) in state
         .chunks_exact_mut(4)
         .zip(wide.chunks_exact(4))
@@ -3665,12 +3667,12 @@ fn stack_lanes(
         .enumerate()
     {
         // Decay gate, decay and the drive's weight, all Q31.
-        let (lambda, keep) = if s.rec_geometric() {
+        let (lambda, keep) = if geometric {
             let offset = offsets.get(lane).copied().unwrap_or(0);
             let s_q16 = decay.saturating_add(offset).clamp(0, 1 << 16);
             let idx = ((s_q16 >> 12) as usize).min(15);
             // The retained reading (claude-226) carries 1 - 2^-(idx+1) where decay carries 2^-(idx+1).
-            if s.rec_retention() {
+            if retention {
                 (RETAIN_LAMBDA_Q31[idx], RETAIN_KEEP_Q31[idx])
             } else {
                 (1u64 << (30 - idx), GEOMETRIC_KEEP_Q31[idx])
