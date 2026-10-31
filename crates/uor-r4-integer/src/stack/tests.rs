@@ -5664,6 +5664,21 @@ fn the_point_key_still_names_the_opening_under_the_nearest_head() {
     assert_eq!(panel_reply(&model7, prompt, 4, None).expect("greedy").keyed, None, "no table");
 }
 
+/// claude-231: `serve_step` on a dense stack is the browser's old step: the integer argmax of the
+/// step's logits (first on ties) and top1 − top2, read here by a sort.
+#[test]
+fn serve_step_on_a_dense_stack_is_the_logits_argmax_and_margin() {
+    let model = IntegerStackModel::parse(&artifact(7)).expect("a dense stack");
+    let (mut stepped, mut served) = (model.session(), model.session());
+    for t in 0..4u32 {
+        let logits = stepped.step(t).expect("step").to_vec();
+        let mut sorted = logits.clone();
+        sorted.sort_unstable_by(|x, y| y.cmp(x));
+        let want = (super::stack_argmax(&logits) as u32, sorted[0].saturating_sub(sorted[1]));
+        assert_eq!(served.serve_step(t).expect("serve"), want, "step {t}");
+    }
+}
+
 /// claude-231: the run's readout is its objective: `cell` and `nearest` read nearest, `sheet` and
 /// `voronoi` the writer, a config without one the writer, and anything else is refused.
 #[test]

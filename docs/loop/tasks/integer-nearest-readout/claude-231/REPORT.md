@@ -52,24 +52,25 @@ The nearest readout costs about 2.85× a token: the scan reads 4,096 rows of 256
 - **`stack/synthetic.rs`** and the float **`fbs_export.rs`:** the field.
 - **`bin/fbs-export.rs`:** `--run-config`.
 - **The float `bin/fbs-snapshot.rs`:** the run's objective.
-- **`stack/tests.rs`:** four tests, and two assertions added to claude-226's byte-identity test.
+- **`stack/tests.rs`:** five tests, and two assertions added to claude-226's byte-identity test. The fifth pins `serve_step`'s dense branch (this unit's review).
 - **`docs/roadmap/{README.md, issues.json}`:** claude-230's sync write, with #3462 numbered.
 
 ## Measurements
 
-- **The integer crate's library tests** (`--features serving-wasm`): 394 pass and 1 is ignored, against 390 at the base.
+- **The integer crate's library tests** (`--features serving-wasm`): 395 pass and 1 is ignored, against 390 at the base.
 - **The float crate:** 186 pass.
 - **The serving audit:** FULL PASS, with 0 forbidden instructions across 44 symbol ranges and 118 reachable functions (116 at claude-228; the served step now reaches the scan).
 
 ## Checks run at the head
 
-- **Six negative gates,** each failing at its own assertion with its rule set aside, and passing when restored:
+- **Seven negative gates,** each failing at its own assertion with its rule set aside, and passing when restored:
   - **G1:** `validate` accepting any head, at `tests.rs:5596`;
   - **G2:** the served step's nearest branch, at `tests.rs:5633`;
   - **G3:** `serve_step`'s FBS branch, at `tests.rs:5637`;
   - **G4:** `cell` reading nearest, at `tests.rs:5672`;
   - **G5:** the export writing the nearest head, at `tests.rs:5591`;
-  - **G6:** the writer case's bytes against claude-226's base hash, at `tests.rs:5576`.
+  - **G6:** the writer case's bytes against claude-226's base hash, at `tests.rs:5576`;
+  - **G7:** `serve_step`'s dense margin (`top1` alone for top1 − top2), at `tests.rs:5678`.
 - **The WASM library build** is clean, with no warnings; the old dead-code warning on the scan is gone.
 - **The stub-nvcc CUDA check** of the float crate (`--all-targets`) finishes. Its only warnings are in vendored candle.
 - `cargo fmt --check -p uor-r4-integer` is clean.
@@ -82,7 +83,7 @@ None.
 
 - **Parity (done-when 3),** under a prep sheet with a fresh FIT. Integer greedy of the nearest `/7`, memory on, against claude-220's stored float greedy on DEV and p-w at seeds 1–3. The bar is registered before reading.
 - **Speed:** skip the scan on prefill steps, whose tokens are not served, which would bring context back near the writer's rate. A faster scan within the audit's allowances is a separate step.
-- **`fbs-compare`'s readouts** are the writer's; a nearest artifact needs nearest readouts there.
+- **`fbs-compare`'s readouts** are the writer's. On a nearest artifact, every disagreement would read as a parity failure, the instrument fault L-007 names (this unit's review). Before any parity unit uses `fbs-compare`, it should refuse a `native_vector_nearest` artifact, or read nearest. It is outside this item's scope.
 - **A note to DeepSeek** about the Studio's FBS path, once this merges.
 
 ## Plain summary

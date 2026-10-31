@@ -125,9 +125,11 @@ pub fn wasm_load_stack(artifact: &[u8]) -> Result<u32, String> {
 
 /// The result of one step.
 pub struct StepOut {
-    /// The greedy next token (integer argmax, first on ties).
+    /// The greedy next token: a dense stack's integer argmax (first on ties), or a SpiralCore/FBS
+    /// model's native token, the writer's or the whole table's nearest (claude-231).
     pub next: u32,
-    /// top1 − top2 of the logits, Q16 units, adjacent-maxima subtraction only.
+    /// top1 − top2 of a dense stack's logits, Q16 units, adjacent-maxima subtraction only; 0 for
+    /// an FBS model, whose step has no logits.
     pub margin_q16: i32,
     /// Context position after the step.
     pub position: u32,

@@ -455,9 +455,11 @@ const Q12_EXP: i32 = -12;
 /// The next token of a SpiralCore/FBS model's native vector writer.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NativeStep {
-    /// The best candidate of the kept cells, ties to the smaller token id.
+    /// The best candidate of the kept cells, ties to the smaller token id; under the nearest head,
+    /// the whole table's L1-nearest token (claude-231).
     pub token: u32,
-    /// The kept cells `a * 16 + b`, best first (ties to the smaller cell id).
+    /// The kept cells `a * 16 + b`, best first (ties to the smaller cell id). Under the nearest
+    /// head no cells are kept, and this holds zeros.
     pub kept_cells: Vec<u32>,
     /// The final query the writer scored, at Q12.
     pub query_q12: Vec<i32>,
@@ -3433,7 +3435,7 @@ fn stack_step_fbs_timed(
     } else {
         stack_native_writer(fbs, s.vocab, &b.query_q12, &mut b.cells, &mut b.native_kept)
     };
-    // The served point key (claude-222), timed with the writer.
+    // The served point key (claude-222), timed with the readout.
     let mut served = None;
     if point_miss {
         if let Some(point) = model.memory.as_ref().and_then(|m| m.point.as_ref()) {
@@ -3465,11 +3467,13 @@ impl IntegerStackSession<'_> {
     /// - for each layer, its recurrence and then its feed-forward block, each
     ///   with its residual add;
     /// - the final norm and the query at Q12;
-    /// - the native writer;
+    /// - the native writer, or under the nearest head the whole-table scan
+    ///   that replaces it (claude-231);
     /// - the bookkeeping (the token pushed and the cursors advanced);
     /// - the whole step (the stages above and the clock reads between them);
     /// - a whole-table nearest search over the query, after the step and
-    ///   outside its time, whose token is returned beside the step.
+    ///   outside its time, whose token is returned beside the step. Under the
+    ///   nearest head it repeats the scan the step served.
     pub fn measure_fbs_step_stages(
         &mut self,
         token: u32,
