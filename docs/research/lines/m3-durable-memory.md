@@ -9,7 +9,7 @@ Milestone M3 asks that a conversation's memory survive between sessions and that
 | **Milestone** | M3, durable conversation memory (28 of 33 records) |
 | **Records** | 33 |
 | **Outcomes** | tooling 27 · inconclusive 2 · plan 2 · positive 1 · review 1 |
-| **State** | The object store is READY ([D19 object store](../../mechanisms/object-store.md)). The consumer is built; the on-model M3 run awaits M2 selection; its bars have not been run |
+| **State** | The object store is READY ([D19 object store](../../mechanisms/object-store.md)). The consumer is built; the on-model M3 run awaits an M1-or-M2 model selection; its bars have not been run |
 
 Counts: `archive/catalog.jsonl`. The store follows decision D19 (a model-independent exact byte store). Terms follow the [glossary](../../start/glossary.md); ACTIVE, READY and PARKED are defined on the [mechanism board](../../mechanisms/README.md).
 

@@ -54,8 +54,9 @@ export gap inside its bar on both seeds at DEV scope. Earlier `lut-stack/4` snap
 that bar; `/5` is the passing contract at its measured scope
 ([claude-181](../loop/tasks/d11-exporter-float-trunk/claude-181/REPORT.md), [claude-182](../loop/tasks/d11-exporter-float-trunk/claude-182/REPORT.md)). `/6` carries additional Hamming-read hooks; the joined served session remains open.
 
-The FBS native rates are different measurements from the M1 pair's: about 4,217–4,504 tok/s under
-`/5`, and 4,829 snapped under claude-177. Do not substitute them for the M1 pair's 10,876/10,566.
+The FBS native rates are different measurements from the M1 pair's: 4,217–4,320 tok/s under `/5`
+([claude-182](../loop/tasks/d11-exporter-float-trunk/claude-182/REPORT.md)), then 4,491/4,504 after the integer square root
+([claude-186](../loop/tasks/fbs-serving-vector-kernel/claude-186/REPORT.md)); and 4,829 snapped under claude-177. Do not substitute them for the M1 pair's 10,876/10,566.
 
 ## Container and computation
 
@@ -111,7 +112,7 @@ than assuming table lookup implies sparsity.
 
 The web client is connected to the current integer worker. DeepSeek's #3442/#3444 rebuilt and
 published the Studio; #3445 then wired the publicly released M1 trunk for top-8 next-token
-prediction and `/7` turn-memory serving. The M1 model is a language base, not a chat assistant;
+prediction, and #3446 served `/7` integer turn memory. The M1 model is a language base, not a chat assistant;
 accepted-model parity remains open. The mdBook workflow publishes preview on main and production
 only by manual dispatch. This documentation unit publishes neither.
 

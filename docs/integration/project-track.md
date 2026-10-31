@@ -86,7 +86,7 @@ not learned address formation or M3 completion.
 ### M4 `#2032` — one served model through D11 and a CLI: not complete; accepted model path not started
 
 The chosen M1/M2/M3 model exports to `UORLUT01` and reports its export gap, meets its held-out
-quality bar and the M1–M3 reply/memory bars through `uor-chat`, and restores sessions identically in
+quality bar of ≤0.90 BPB and the M1–M3 reply/memory bars through `uor-chat`, and restores sessions identically in
 a fresh process or WASM worker. D11 bans float, transcendental arithmetic and dense matmul; D80/D81
 allow integer multiply and divide. `PRLL` is built and registered, but GPU held-out scoring and the
 accepted full path remain open. Engine audits alone do not close M4.

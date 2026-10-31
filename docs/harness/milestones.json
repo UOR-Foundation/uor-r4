@@ -28,7 +28,7 @@
           "unit": "correct first guesses"
         },
         {
-          "label": "Apple M1 decode tok/s (seeds 1/2)",
+          "label": "Apple M1 decode tok/s, bar-f remeasurement (seeds 1/2)",
           "text": "10,876 / 10,566",
           "note": "Median, 192-token prefill and 64-token decode"
         }
