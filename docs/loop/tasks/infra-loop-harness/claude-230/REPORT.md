@@ -16,6 +16,10 @@ No measurement. This unit records an item.
   - The new item's parity is end to end against the trained model's own replies, so it would also catch a gap of this kind elsewhere in the served model.
 - **The new item's float side is claude-220's stored GPU replies,** not a new float run. They cover DEV and p-w at seeds 1–3, at claude-220's prompts and settings. A parity on other prompts would need a new float run on the GPU.
 - **The existing snapshots carry no objective.** The item leaves the build unit to choose between reading the run config at export time and re-snapshotting on a pod.
+- **The first draft could close on a failed parity, and left the browser out** (this unit's review).
+  - Its done-when 3 only reported agreement against a bar. It now requires the bar to pass, and the item stays `ready` on a miss.
+  - `wasm_serve`'s step takes the session's logits and their `stack_argmax`, not the session's token, so a nearest readout inside `stack_step_fbs` alone would not reach the Studio. `wasm_serve.rs` and `wasm_bindgen_exports.rs` are now in scope, with a done-when check that the browser's token equals the session's nearest.
+- **The float side's measure is now cited,** not assumed: `nearest_scores` (`in_space_long.rs`), the negative mean L1 to every table row, then `argmax`. It is the integer rule's measure.
 
 ## What worked
 
