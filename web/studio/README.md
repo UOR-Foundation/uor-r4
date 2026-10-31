@@ -173,6 +173,40 @@ The helper validates each tokenizer against its artifact (`stack_sha256` + `voca
 refuses a file over 100 MB before copying. The bundled synthetic demo and the legacy
 `public_model_url` positional slot keep working exactly as before.
 
+### Serving the trained M1 model (Hugging Face)
+
+The trained M1 model is the M1-closing 19-table discrete trunk (`uor-r4.lut-discrete-trunk/1`,
+86,536,132 B seed 1 / 84,943,328 B seed 2). It is released publicly at
+<https://huggingface.co/caseyallard/uor-r4-m1-model> with both stack-bound tokenizers; the 4-table
+Stage-T base exports are at <https://huggingface.co/caseyallard/uor-r4-m1-discrete> and the research
+FBS trunk pair at <https://huggingface.co/caseyallard/uor-r4-fbs-dual-c131> (no token writer, so it
+loads but cannot generate). The primary Model Source card is **remote-only**: the page makes no
+external request at load, and the 86.5 MB artifact is downloaded only after an explicit Load click,
+with sha256 and tokenizer validation, then loaded into the discrete wasm runtime and served as
+**top-8 next-token prediction** (greedy continuation repeats tokens; the page says so and refuses
+chat generation on the discrete engine). The page/worker artifact cap is 128 MB.
+
+```json
+[{"id": "m1-trunk-seed1", "label": "M1 model (19-table trunk, seed 1)", "primary": true,
+  "hf_url": "https://huggingface.co/caseyallard/uor-r4-m1-model/resolve/main/t16-frozen-zero-seed1-trunk.d11",
+  "hf_tokenizer_url": "https://huggingface.co/caseyallard/uor-r4-m1-model/resolve/main/tokenizer-seed-1.json",
+  "sha256": "04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d",
+  "size_bytes": 86536132, "schema": "uor-r4.lut-discrete-trunk/1", "note": "..."}]
+```
+
+```sh
+scripts/studio/build-and-publish.sh --target gh-pages --push --yes --trained-manifest /tmp/m1-trained.json
+```
+
+### The /7 turn memory
+
+The integer engine serves `uor-r4.lut-stack/7` turn-memory stacks (units 2-3 of
+`turn-memory-integer`): both memory tables, the caller's reply start (`markReplyStart`), the
+opening/reply keys, and the moves at the readout. The worker reports `memoryInfo` in the loaded
+capabilities and calls `markReplyStart` before the first generated token. A memory session's
+state is not saved yet, so the worker refuses restore/export/import for it (reload the model to
+start again); units 4 (DEV parity under a pre-registered sheet) and 5 (cost) of the item remain open.
+
 ### Limits, rollback, and why no artifact is committed
 
 - GitHub Pages limits: **100 MB per file** and **1 GB per published site**; the publisher enforces
@@ -182,5 +216,6 @@ refuses a file over 100 MB before copying. The bundled synthetic demo and the le
   to the known-good commit is the rollback; nothing is deleted.
 - Build outputs are generated locally/runner-side and land only on the build branch. Nothing is
   committed to `main`: no wasm, no `.lut`, no tokenizer, no manifest.
-- The wasm/synthetic demo prove the engine and the page end to end. They are a **synthetic
-  stand-in**, not a trained model; the page's engine-status labels say so.
+- The bundled demo is a synthetic **stand-in**; the trained M1 model is loaded from its public
+  Hugging Face release (remote-only primary card) and served by the discrete runtime as next-token
+  prediction. The page labels both.

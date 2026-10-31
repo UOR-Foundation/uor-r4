@@ -238,8 +238,8 @@ function resolveModelUrl(raw) {
     return url;
 }
 
-function parseUorLutHeader(arrayBuffer) {
-    const bytes = new Uint8Array(arrayBuffer);
+function parseUorLutHeader(input) {
+    const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
     if (bytes.byteLength < 16) {
         throw new Error('That file is too small to be a UORLUT01 stack artifact.');
     }
@@ -247,7 +247,9 @@ function parseUorLutHeader(arrayBuffer) {
     if (magic !== 'UORLUT01') {
         throw new Error('Unrecognized file header; a stack artifact starts with the ASCII magic UORLUT01.');
     }
-    const view = new DataView(arrayBuffer);
+    const view = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+        ? new DataView(bytes.buffer)
+        : new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const jsonLenBig = view.getBigUint64(8, true);
     const jsonLen = Number(jsonLenBig);
     if (!Number.isSafeInteger(jsonLen) || jsonLen <= 0 || 16 + jsonLen > bytes.byteLength) {
