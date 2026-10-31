@@ -5405,3 +5405,46 @@ fn the_lut_stack_8_schema_and_record_are_checked() {
         other => panic!("expected the turn-memory restore refusal, got {other:?}"),
     }
 }
+
+/// claude-224: a panel reply ends at BOS, unkept; at its length; or where prompt and reply fill
+/// the context. Each of the last two keeps its token.
+#[test]
+fn the_reply_stop_ends_at_bos_its_length_or_a_full_context() {
+    use super::{reply_stop, ReplyEnd};
+    assert_eq!(reply_stop(0, 5, 10, 64, 192), Some(ReplyEnd::Bos));
+    assert_eq!(reply_stop(5, 63, 10, 64, 192), Some(ReplyEnd::Length));
+    assert_eq!(reply_stop(5, 0, 10, 1, 192), Some(ReplyEnd::Length), "a one-token reply");
+    assert_eq!(reply_stop(5, 10, 181, 64, 192), Some(ReplyEnd::Context));
+    assert_eq!(reply_stop(5, 9, 181, 64, 192), None, "one row of context left");
+    assert_eq!(reply_stop(5, 5, 10, 64, 192), None);
+}
+
+/// claude-224: on a `/8` stack the panel reply's opening is the point key's name where the exact
+/// key misses, with its least distance, and the float name's least distance is the table's. A `/7`
+/// stack has neither. The reply is capped where prompt and reply fill the context, and at its
+/// length.
+#[test]
+fn a_panel_reply_records_the_point_keys_opening_and_is_capped() {
+    use super::{panel_reply, ReplyEnd};
+    let (tokens, reply_start) = turn_memory_script(8);
+    let mask: Vec<u8> = (0..tokens.len()).map(|p| u8::from(p >= reply_start)).collect();
+    let bytes = point_key_test_stack(false);
+    let model7 = IntegerStackModel::parse(&bytes).expect("served /7");
+    let windows = super::point_key_windows(&tokens, &mask, 192, 0).expect("windows");
+    let image = super::build_point_key(&model7, &windows).expect("the table");
+    let model8 = IntegerStackModel::parse(&super::add_point_key_uorlut01(&bytes, &image).expect("/8")).expect("served /8");
+    let (prompt, named) = (&tokens[..reply_start], tokens[reply_start]);
+    let served = panel_reply(&model8, prompt, 64, Some(named)).expect("served");
+    assert_eq!((served.keyed, served.float_distance), (Some((named, 0)), Some(0)));
+    assert_eq!(served.reply[0], named, "the opening is the key's name");
+    let context = model8.shape().context;
+    assert_eq!((served.reply.len(), served.end), (context - prompt.len(), ReplyEnd::Context), "capped at the context");
+    let other = panel_reply(&model8, prompt, 64, Some(named + 1)).expect("served");
+    assert_eq!(other.float_distance, None, "a name no row holds");
+    let greedy = panel_reply(&model7, prompt, 64, Some(named)).expect("greedy");
+    assert_eq!((greedy.keyed, greedy.float_distance), (None, None), "no table");
+    assert_eq!(greedy.reply.len(), context - prompt.len(), "greedy is capped the same way");
+    let short = panel_reply(&model8, prompt, 3, None).expect("served");
+    assert_eq!((short.reply.len(), short.end), (3, ReplyEnd::Length));
+    assert!(panel_reply(&model8, &vec![12; context], 4, None).is_err(), "a prompt that fills the context");
+}

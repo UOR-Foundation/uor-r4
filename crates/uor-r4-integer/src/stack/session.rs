@@ -1028,6 +1028,18 @@ impl IntegerStackModel {
         self.memory.as_ref().map(|memory| &memory.record)
     }
 
+    /// The rows of the served point key's table (claude-222), if the artifact carries one.
+    pub fn point_key_rows(&self) -> Option<usize> {
+        self.memory.as_ref()?.point.as_ref().map(|p| p.rows())
+    }
+
+    /// The least L1 distance at Q12 from `query` to a row of the point table naming `target`
+    /// (claude-224), or `None` without a table or such a row: the input to parity's rounding
+    /// bound. It is off the step's path.
+    pub fn point_key_distance(&self, query: &[i32], target: u32) -> Option<i64> {
+        self.memory.as_ref()?.point.as_ref()?.least_distance_to(query, target)
+    }
+
     /// How many opening and reply keys the turn memory's tables hold, if it has one.
     pub fn turn_memory_table_lengths(&self) -> Option<(usize, Option<usize>)> {
         self.memory
@@ -1611,6 +1623,9 @@ struct MemoryServing {
     /// The last keyed row's move, kept in every build (claude-222): the point key reads whether
     /// the opening table's exact key missed.
     last_move: Option<MemoryMove>,
+    /// The last step's served point key (claude-224): the token it named and its least L1
+    /// distance at Q12, or `None` where it did not serve. Every step sets it.
+    last_point: Option<(u32, i64)>,
     #[cfg(test)]
     readout_before: Vec<i64>,
 }
@@ -1721,6 +1736,12 @@ impl IntegerStackSession<'_> {
     /// ignores the signal.
     pub fn mark_reply_start(&mut self) {
         self.memory.reply_start = Some(self.position + 1);
+    }
+
+    /// The token the served point key named at the last step, and its least L1 distance at Q12
+    /// (claude-224), or `None` where it did not serve. Read-only, for the panel decode.
+    pub fn last_point_key(&self) -> Option<(u32, i64)> {
+        self.memory.last_point
     }
 
     /// Clear the reply start: no row is keyed or moved, and the turn memory's moves are off.
@@ -3184,11 +3205,15 @@ fn stack_step_fbs(
     // target among TRAIN's L1-nearest openings to this query names the reply's first token. Its
     // search cannot fail here: parsing refused a table of another width, with no rows or naming
     // BOS, so the step never stops halfway on its error.
+    let mut served = None;
     if point_miss {
         if let Some(point) = model.memory.as_ref().and_then(|m| m.point.as_ref()) {
-            b.native_token = point.name(&b.query_q12, &mut b.point_tied)?.0;
+            let named = point.name(&b.query_q12, &mut b.point_tied)?;
+            b.native_token = named.0;
+            served = Some(named);
         }
     }
+    session.memory.last_point = served;
     session.position += 1;
     session.cache_at += d;
     session.lift_at += heads;
@@ -3346,11 +3371,15 @@ fn stack_step_fbs_timed(
         &mut b.native_kept,
     );
     // The served point key (claude-222), timed with the writer.
+    let mut served = None;
     if point_miss {
         if let Some(point) = model.memory.as_ref().and_then(|m| m.point.as_ref()) {
-            b.native_token = point.name(&b.query_q12, &mut b.point_tied)?.0;
+            let named = point.name(&b.query_q12, &mut b.point_tied)?;
+            b.native_token = named.0;
+            served = Some(named);
         }
     }
+    session.memory.last_point = served;
     lap(&mut since, ns);
     session.position += 1;
     session.cache_at += d;
