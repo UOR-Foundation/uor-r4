@@ -18,7 +18,10 @@
   - Exported by `fbs-export --run-config CONFIG SNAPSHOT A7n-sN` from claude-227's full snapshots (`results/claude/integer-retention-rates-parity-2026-10-31/out/full/`), which carry the memory and the Hamming read. The run configs are `results/claude/one-model-end-to-end-2026-10-29/training-460fe46e/sN/r-drop-sN/config.json`.
   - Decoded by `fbs-toks A7n-sN --replies PROMPTS --out FILE --reply-tokens 64` (`panel_reply`): memory on, the reply start marked, then greedy.
   - The integer session cannot slide its window, so a reply also ends where prompt and reply fill the 192-token context.
-- **F, float greedy (stored):** claude-220's `samples-memory.json` (DEV) and `samples-p-w-greedy-memory.json` (p-w), for each seed, in `results/claude/one-model-end-to-end-served-key-2026-10-31/run-eb762e60/out/r-drop-sN/`. Each reply is 64 tokens.
+- **F, float greedy (stored):** claude-220's arm G ("Greedy, memory on"): `samples-memory.json` (DEV) and `samples-p-w-greedy-memory.json` (p-w), for each seed.
+  - They are in the store at `results/claude/one-model-end-to-end-served-key-2026-10-31/run-eb762e60/out/r-drop-sN/`, and on the laptop at `local/claude/claude-220/run-eb762e60/served-key/out/r-drop-sN/`, the same files.
+  - The replies are 64 tokens, except where the float model ended at BOS. One p-w s1 reply has 8 tokens (FIT round 1).
+  - Where I runs past F's end, they diverged there, and the whole-reply reading counts it as a disagreement.
 - **The prompts:** `train-in-space --panel-prompts 1 --runs <claude-220's out> --samples 1536 --reply-tokens 64 --panel p-w=...`, at each seed (`prompts-dev-sN.json`, `prompts-p-w-sN.json`). These are F's own prompts, which `panel_prompts` checks and claude-224 confirmed.
 
 ## 3. Bar and decision table
@@ -50,11 +53,11 @@ jq -n --slurpfile i I --slurpfile f F '($i[0]|length) as $n
 **Readings, no bar:**
 - whole-reply agreement per cell;
 - each arm's first token equal to the reference's first token;
-- the capped count.
+- the capped count. It is expected at 26 of 310 on DEV and 136 of 1,202 on p-w per seed, the prompts where prompt + 64 > 192 (FIT round 1). The first token is pushed before any stop, so the bar holds on capped prompts.
 
 ## 4. Instrument checks (any failure is row 0)
 
-1. **`I-Float-Inputs`:** the six F files on the laptop equal the store's, by claude-220's `run-eb762e60/SHA256SUMS`.
+1. **`I-Float-Inputs`:** the six F files on the laptop (`local/claude/claude-220/run-eb762e60/served-key/out/r-drop-sN/`) equal the store's, by claude-220's `run-eb762e60/SHA256SUMS` (`./out/r-drop-sN/...`). Checked 31 Oct before the arm: 6 of 6 OK.
 2. **`I-Head`:** each `/7`'s header carries `head` `native_vector_nearest` and `rec_gates` `geometric-retention`. `--run-config`'s `retain_rates` check passes.
 3. **`I-Identity`:** each artifact's printed sha256 equals its file's.
 4. **`I-Prompts`:** 310 DEV and 1,202 p-w prompts at every seed; `panel_prompts` refuses no float name.
@@ -94,8 +97,32 @@ So the grader can read both ends.
 
 ## 9. Non-author TEST FITNESS review
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
+
+**Round 1 (a fresh non-author reviewer, 31 Oct): FIT.**
+- **What it checked:**
+  - F is claude-220's greedy arm, its served and forced arms being in other files;
+  - the grader is right (pairing, positions, and an empty I reply disagrees), with bars of 9 and 36;
+  - the rows are exhaustive and match "done only when the bar passes";
+  - the `fbs-toks` command form;
+  - the risk runs one way: a mismatch in reply start or memory moves gives a MISS, not a false PASS.
+- **Advisories, each made:** the float reply lengths (one of 8 on p-w s1); the expected capped counts (26 and 136); the float path.
+- **Left unfinished:** the float `greedy_reply` body, and two command forms. The pre-run review covers them.
 
 ## 10. Pre-run review
 
-PENDING
+Lab: claude, 31 Oct 2026. This is the author's own review under CHARTER §5.10.
+- **The chain:**
+  - claude-229's point-key run ended at row 0, because the integer artifact served the native writer while (r-drop) decodes nearest;
+  - claude-231 built the nearest head;
+  - this run checks the whole served model against the trained one's own stored replies;
+  - a PASS unblocks point-key-integer's rerun on p-x, and a MISS locates the next gap. Nothing else depends on it.
+- **What the FIT left:**
+  - **The two decoders' equivalence** (reply start, the memory's moves, the window) is claude-224's design: `panel_reply` decodes `score_rows`' prompts in claude-220's sample shape, with the reply start marked at the prompt's last token. Any departure would show as a MISS, never a false PASS.
+  - **The command forms:** `fbs-export --run-config` ran on s1 in claude-231 (`0064b00a…`). `--panel-prompts` ran in claude-229 with these flags.
+- **Inputs present:**
+  - `I-Float-Inputs` holds, 6 of 6;
+  - the three snapshots match the store (`dcbfb69b…`, `d0522d02…`, `9744d385…`);
+  - the binaries build at the base.
+- **The rules:** the laptop only, under the owner's allowance; no code changes; deterministic exact checks; the bar fixed above before any decode is read.
+- **Verdict: GO.**
