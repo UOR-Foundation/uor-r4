@@ -107,6 +107,12 @@ The model throughout is (r-drop)'s sealed step-16,384 checkpoints at seeds 1–3
 4. **Next: the real run,** on the laptop, under a prep sheet with a fresh FIT and a pre-run review.
    - (r-drop)'s full snapshots at seeds 1–3 are in the store at `results/claude/integer-retention-rates-parity-2026-10-31/out/full/`, so no pod is needed.
    - The steps: `fbs-export`, and `fbs-export --point-key` over TRAIN; the fresh panel p-x drawn with its census; the arms on p-x, p-w, p-v and DEV at seeds 1–3; and tok/s.
+   - **Ran 31 Oct (claude-229): row 0, an instrument fault.**
+     - Done-when 2's instruments held (8,295 served openings).
+     - But integer greedy is not the trained model's decode: its first token equals claude-220's float greedy on 0 of 310 DEV prompts.
+     - The likely cause: (r-drop) is a cell-objective model, decoded as the whole table's nearest token, while the integer session serves the native writer.
+     - Nothing was counted. p-x stays the deciding panel ([lab record](../../labs/point-key-integer/README.md)).
+5. **Serve the trained model's readout in the integer artifact,** under its own item, checked by end-to-end token parity against claude-220's stored float greedy on DEV and p-w. Then rerun unit 4's sheet on p-x, as its row 0 prescribes.
 
 ## Rules that apply
 
