@@ -181,7 +181,7 @@ Source: [language model](../products/language-model.md) and [where we're going](
 
 There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mechanisms/README.md).
 
-**MLP (feed-forward layer).** The block in a transformer that processes each token after attention, usually with big grids of multiplications and a gate. The [Hamilton gate](#hamilton-gate) is trained in M1 and on FBS; the [SpiralCore/FBS projection](../mechanisms/spiralcore-fbs.md) is trained on the separate FBS trunk only.
+**MLP (feed-forward layer).** The block in a transformer that processes each token after attention, usually with big grids of multiplications and a gate. The [Hamilton gate](#hamilton-gate) is trained in M1 and on FBS; the [SpiralCore/FBS routes](../mechanisms/spiralcore-fbs.md) are ACTIVE on the separate FBS trunk, while the dated float projection form remains READY. M1 uses discrete Hamilton/quaternion recurrence, not FBS projection.
 
 ## N
 

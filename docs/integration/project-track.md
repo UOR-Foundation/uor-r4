@@ -28,10 +28,10 @@ four-block orbit-root causal pointer and post-rotation outer-L1 readout.
 |---|---|
 | (a) self-contained D11 | Two `UORLUT01` artifacts load in the clean-room reader |
 | (b) export/reference and fault control | 14,287 of 14,287 agree; B4 passes |
-| (c) tokens per second | Apple M1 decode 10,876 / 10,566 under the bar-f protocol |
-| (d) DEV integer top-1 | 7,002 / 7,001 against unigram 1,226 and T2 6,300 |
+| (c) tokens per second | close-grade Apple M1 decode 11,026 / 10,573 |
+| (d) DEV integer top-1 | 7,002 / 7,001 against unigram 1,226 and T2 6,300, above the 6,324 target (T2 + 24) |
 | (e) Fresh V2 transfer | 7,215 / 7,228 against unigram 1,279 and T2 6,582, band 82 |
-| (f) held-out phrasing | p-f 7,850 / 7,872 against unigram 1,409 and T2 7,375, band 81 |
+| (f) held-out phrasing | p-f 7,850 / 7,872 against unigram 1,409 and T2 7,375, band 81; separate Apple M1 remeasurement 10,876 / 10,566 tok/s |
 
 The older close grade covers (a)–(e); claude-211's panel score supplies (f), and #2029 is closed.
 The limit is explicit: 62.5% of p-f's reference replies are verbatim TRAIN replies. M1 reads new

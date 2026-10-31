@@ -526,7 +526,17 @@ fn architecture_narrow() -> Result<String, Fail> {
     ] {
         s.rect([x, 518.0, 158.0, 62.0], 5.0, ("#FFFFFF", BLUE, 1.5, None));
         s.fit([x + 10.0, 543.0], (14.0, 700, INK), 138.0, title);
-        s.fit([x + 10.0, 565.0], (12.5, 400, BODY), 138.0, detail);
+        if x == 16.0 {
+            s.fit([x + 10.0, 565.0], (12.5, 400, BODY), 138.0, detail);
+        } else {
+            s.fit([x + 10.0, 558.0], (12.5, 400, BODY), 138.0, "4,829 snapped");
+            s.fit(
+                [x + 10.0, 573.0],
+                (11.5, 400, BODY),
+                138.0,
+                "exact /5: 4,217–4,504",
+            );
+        }
     }
     s.arrow(174.0, 549.0, 206.0, 549.0, false);
     s.text(

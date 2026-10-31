@@ -4,7 +4,7 @@ The active M1 geometric learning crate: integer 8D carrier blocks, 64 signed
 SpiralCore transport actions, a 16-root carrier orbit, ordered ternary FBS context,
 Route/Flock/Relation reads and one shared input/carry/output vector table and writer.
 Four blocks give width32. See the [architecture source map](../../docs/architecture.md)
-and [current status](../../STATUS.md) for evidence and release scope.
+[PLAN.md](../../PLAN.md) and rendered [STATE.md](../../STATE.md) for evidence and release scope.
 
 ## Read the source
 
