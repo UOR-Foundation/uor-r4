@@ -5186,6 +5186,82 @@ fn synthetic_point_key(bytes: &[u8], rows: usize) -> super::PointKeyImage {
     }
 }
 
+/// claude-222: the served point key names the reply's first token where the opening table's exact
+/// key misses, from that row's own query. Every other row, an opening the key hits, and a session
+/// without the reply-start signal decode as the `/7` stack does, token for token.
+#[test]
+fn the_point_key_names_a_missed_opening_and_leaves_the_rest() {
+    use super::{FbsMemoryEntry, FbsMemorySnapshot, FbsReplyTable, MEMORY_PAD};
+    let (tokens, reply_start) = turn_memory_script(8);
+    let width = FBS_SYNTH_SMALL.d as usize;
+    let stack = |hit: bool| -> Vec<u8> {
+        let mut snap = turn_memory_trunk(24);
+        let key = if hit { vec![12, 13, 14, 15] } else { vec![90, 91, 92, 93] };
+        // A reply table no row hits, so every later reply row is keyed and misses: the point key
+        // must still serve only the opening.
+        let unseen = vec![90, 91, 92, 93, 94, 95, 96, 97, MEMORY_PAD, 1, MEMORY_PAD, 20];
+        snap.memory = Some(FbsMemorySnapshot {
+            k: 4,
+            key_window: 192,
+            opening: vec![FbsMemoryEntry { key, value: 42 }],
+            opening_weight: vec![0.5; width],
+            reply: Some(FbsReplyTable {
+                turn: 8,
+                entries: vec![FbsMemoryEntry { key: unseen, value: 43 }],
+                weight: vec![0.5; width],
+            }),
+        });
+        super::export_fbs_trunk_uorlut01(&snap).expect("export")
+    };
+    // Each row's token and query, and the opening row's move, with or without the signal.
+    let decode = |bytes: &[u8], signal: bool| -> (Vec<(u32, Vec<i32>)>, Option<Option<u32>>) {
+        let model = IntegerStackModel::parse(bytes).expect("served");
+        let mut session = model.session();
+        let mut opening = None;
+        let steps = tokens
+            .iter()
+            .enumerate()
+            .map(|(row, &token)| {
+                if signal && row + 1 == reply_start {
+                    session.mark_reply_start();
+                }
+                let step = session.step_native(token).expect("step");
+                if row + 1 == reply_start {
+                    opening = session.last_memory_move().map(|m| m.stored);
+                }
+                (step.token, step.query_q12)
+            })
+            .collect();
+        (steps, opening)
+    };
+    // The table: the missed opening's own query naming `named`, and a far row naming another id.
+    let with_table = |bytes: &[u8], query: &[i32], named: u32| -> Vec<u8> {
+        let mut points: Vec<i16> = query.iter().map(|&q| q as i16).collect();
+        points.extend(query.iter().map(|&q| (q + 3000).clamp(-32768, 32767) as i16));
+        let image = super::PointKeyImage { width, points, targets: vec![named, named + 1] };
+        super::add_point_key_uorlut01(bytes, &image).expect("the /8 stack")
+    };
+    let at = reply_start - 1;
+    let (miss7, opening) = decode(&stack(false), true);
+    assert_eq!(opening, Some(None), "the opening key misses");
+    let named = if miss7[at].0 == 7 { 8 } else { 7 };
+    let (miss8, _) = decode(&with_table(&stack(false), &miss7[at].1, named), true);
+    assert_eq!(miss8[at].0, named, "the missed opening takes the point key's name");
+    for (row, (a, b)) in miss7.iter().zip(&miss8).enumerate().filter(|&(row, _)| row != at) {
+        assert_eq!(a.0, b.0, "row {row} decodes as /7");
+    }
+    // The key hits: the memory names the opening, and the table changes nothing.
+    let (hit7, opening) = decode(&stack(true), true);
+    assert_eq!(opening, Some(Some(42)), "the opening key hits");
+    let (hit8, _) = decode(&with_table(&stack(true), &hit7[at].1, named), true);
+    assert_eq!(hit7.iter().map(|s| s.0).collect::<Vec<_>>(), hit8.iter().map(|s| s.0).collect::<Vec<_>>());
+    // No reply-start signal: no row is keyed, and the table changes nothing.
+    let (quiet7, _) = decode(&stack(false), false);
+    let (quiet8, opening) = decode(&with_table(&stack(false), &miss7[at].1, named), false);
+    assert_eq!(opening, None, "no row keyed");
+    assert_eq!(quiet7.iter().map(|s| s.0).collect::<Vec<_>>(), quiet8.iter().map(|s| s.0).collect::<Vec<_>>());
+}
+
 /// `bytes`' JSON header and its data sections.
 fn header_and_data(bytes: &[u8]) -> (Value, Vec<u8>) {
     let len = u64::from_le_bytes(bytes[8..16].try_into().expect("length")) as usize;

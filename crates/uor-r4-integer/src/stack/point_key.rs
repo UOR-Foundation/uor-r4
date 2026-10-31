@@ -108,9 +108,11 @@ impl ServedPointKey {
         let mut least = i64::MAX;
         tied.clear();
         for (row, &target) in self.points.chunks_exact(self.width).zip(&self.targets) {
+            // `black_box` keeps the sum scalar, as `stack_whole_table_nearest`'s: a vectorized
+            // sum leaves through a float register move, which the serving audit refuses.
             let mut sum = 0i64;
             for (&x, &p) in query.iter().zip(row) {
-                sum += i64::from(x.abs_diff(i32::from(p)));
+                sum += i64::from(core::hint::black_box(x).abs_diff(i32::from(p)));
             }
             if sum < least {
                 least = sum;
