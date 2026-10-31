@@ -2810,11 +2810,13 @@ fn served_parity(
         })?;
         let distance = s
             .served_distance
-            .ok_or_else(|| invalid(format!("{split} s{seed}: a served token at {} has no distance", s.position)))?;
+            .filter(|d| d.is_finite())
+            .ok_or_else(|| invalid(format!("{split} s{seed}: a served token at {} has no finite distance", s.position)))?;
         parity.served += 1;
-        if keys.point_target[i] == token {
+        // Against the keys file as read, never the copy this loop rewrites.
+        if picks.keys.point_target[i] == token {
             parity.agree += 1;
-            parity.max_drift = parity.max_drift.max((distance - keys.point_distance[i]).abs());
+            parity.max_drift = parity.max_drift.max((distance - picks.keys.point_distance[i]).abs());
         }
         keys.point_target[i] = token;
         keys.point_distance[i] = distance;
@@ -2868,6 +2870,9 @@ pub struct ServedGrade {
 /// [`ServedGrade`] from the run in `runs` (`r-drop-s{1,2,3}`), on `panels`' p-w and p-v, each
 /// checked by its sha256s.
 pub fn served_grade(data_root: &Path, runs: &Path, panels: &[(String, PathBuf)]) -> Result<ServedGrade> {
+    if let Some((name, _)) = panels.iter().find(|(n, _)| !SERVED_PANELS.iter().any(|(s, _, _)| *s == n.as_str())) {
+        return Err(invalid(format!("--served-grade reads p-w and p-v only, not --panel {name}")));
+    }
     let bos = hs::SHEET_BOS_ID;
     let panel = |name: &str| -> Result<(Vec<u32>, Vec<u8>)> {
         let (_, want, want_mask) =
@@ -4066,6 +4071,8 @@ fn served_opening(window: &[u32], point: &Tensor) -> Result<Option<(u32, f32)>> 
     if memory.stored(window, window.len(), &[last])?.1[last] == 1.0 {
         return Ok(None);
     }
+    // The forward's kernels finish first, so the timer holds the search alone.
+    point.device().synchronize()?;
     let started = Instant::now();
     let named = l1_named(point, &key.points, &key.targets)?;
     let micros = started.elapsed().as_micros() as u64;
@@ -4077,7 +4084,16 @@ fn served_opening(window: &[u32], point: &Tensor) -> Result<Option<(u32, f32)>> 
     if first.target == hs::SHEET_BOS_ID {
         return Err(invalid("the served key names BOS (an instrument fault)"));
     }
+    if !first.distance.is_finite() {
+        return Err(invalid("the served key's distance is not finite (an instrument fault)"));
+    }
     Ok(Some((first.target, first.distance)))
+}
+
+/// Whether the served point key may name the next token of `reply` under `rule` (claude-220):
+/// at the reply's first step, under the greedy rule only.
+fn serves_at(reply: &[u32], rule: DecodeRule) -> bool {
+    reply.is_empty() && rule == DecodeRule::Greedy
 }
 
 /// The reply's first token for the next [`decode_reply`] calls on this thread, or none: the
@@ -4199,7 +4215,7 @@ fn decode_reply(
                 let point = hidden.narrow(0, window.len() - 1, 1)?;
                 // The served point key (claude-220) names the opening where the exact key misses,
                 // from this forward's own point, under the greedy rule only.
-                if reply.is_empty() && rule == DecodeRule::Greedy {
+                if serves_at(&reply, rule) {
                     served = served_opening(window, &point)?;
                 }
                 let scores = nearest_scores(&point, &table)?;
@@ -4922,8 +4938,8 @@ fn reference_reply(window: &CausalWindow, tokens: usize) -> Vec<u32> {
 ///   Each records its reply-table hits under generation and under teacher forcing (I-F).
 /// - **Keys.** With `keys`, every split's openings named by the trunk keys ([`OpeningKeys`],
 ///   claude-218), taken with the memory off before the decodes: `keys-{split}.json`. Their
-///   TRAIN table is read from `opening_table` when given; else it is built, and with `served_arm`
-///   saved to `out/opening-table.safetensors` and read back, and the copy read back is served.
+///   TRAIN table is built from TRAIN; with `served_arm` it is saved to
+///   `out/opening-table.safetensors`, read back to the same bits, and the copy read back is served.
 ///
 /// `checkpoint` is a `step-N` directory; the flags and `arm` must match its run's.
 #[allow(clippy::too_many_arguments)]
@@ -4947,12 +4963,11 @@ pub fn score_rows(
     keys: bool,
     keyed: &[(String, f32)],
     served_arm: bool,
-    opening_table: Option<&Path>,
     device: &Device,
 ) -> Result<Vec<ScoredFile>> {
     check_run_arm(checkpoint, arm)?;
-    if (served_arm || opening_table.is_some()) && !keys {
-        return Err(invalid("--served-key and --opening-table read the opening keys, so they need --opening-keys 1"));
+    if served_arm && !keys {
+        return Err(invalid("--served-key reads the opening keys, so it needs --opening-keys 1"));
     }
     if served_arm && samples == 0 {
         return Err(invalid("--served-key decodes samples, so it needs --samples of 1 or more"));
@@ -5034,6 +5049,9 @@ pub fn score_rows(
     set_trained_cut(trained);
     println!("[cut] scoring with the trained cut: {}", trained.map_or("none", |s| s.name()));
     let memory = crate::flock_read_memory::turn_memory();
+    if served_arm && memory.is_none() {
+        return Err(invalid("--served-key serves where the turn memory's exact key misses, so it needs a checkpoint with a turn memory"));
+    }
     // The opening keys (claude-218), with the memory off: TRAIN's opening points under this
     // trunk, and each split's openings named by the nearest of them. Taken before the decodes,
     // so the keyed arms (claude-219) can read them, and written after them, as before.
@@ -5041,30 +5059,23 @@ pub fn score_rows(
     let mut table_rows = None;
     let named_openings: Vec<OpeningKeys> = if keys {
         crate::flock_read_memory::set_turn_memory(None);
-        // The served table (claude-220): loaded from `opening_table`, or built from TRAIN; with
-        // `served`, a built one is saved to `out` and read back, which must give the same bytes,
-        // and the copy read back is the one served.
-        let (train, train_targets) = match opening_table {
-            Some(path) => load_opening_table(path, device)?,
-            None => {
-                let (train_tokens, train_mask) = load_train_split(data_root)?;
-                let train_windows = windows_of(&train_tokens, &train_mask)?;
-                let (train, targets, _) = opening_points(&model, &train_windows, &train_mask, seed, step)?;
-                drop((train_windows, train_tokens, train_mask));
-                if served_arm {
-                    let path = out.join(OPENING_TABLE_FILE);
-                    save_opening_table(&path, &train, &targets)?;
-                    let (points, back) = load_opening_table(&path, device)?;
-                    let gap = (&points - &train)?.abs()?.max_all()?.to_scalar::<f32>()?;
-                    if back != targets || gap != 0.0 {
-                        return Err(invalid("the opening table does not read back as saved (an instrument fault)"));
-                    }
-                    table_rows = Some(back.len());
-                    (points, back)
-                } else {
-                    (train, targets)
-                }
+        // The served table (claude-220), built from TRAIN; with `served_arm` it is saved to `out`
+        // and read back, which must give the same bits, and the copy read back is the one served.
+        let (train_tokens, train_mask) = load_train_split(data_root)?;
+        let train_windows = windows_of(&train_tokens, &train_mask)?;
+        let (built, targets, _) = opening_points(&model, &train_windows, &train_mask, seed, step)?;
+        drop((train_windows, train_tokens, train_mask));
+        let (train, train_targets) = if served_arm {
+            let path = out.join(OPENING_TABLE_FILE);
+            save_opening_table(&path, &built, &targets)?;
+            let (points, back) = load_opening_table(&path, device)?;
+            if back != targets || !same_bits(&points, &built)? {
+                return Err(invalid("the opening table does not read back as saved (an instrument fault)"));
             }
+            table_rows = Some(back.len());
+            (points, back)
+        } else {
+            (built, targets)
         };
         let named = splits
             .iter()
@@ -5334,19 +5345,27 @@ pub fn score_rows(
 pub const OPENING_TABLE_FILE: &str = "opening-table.safetensors";
 
 /// Saves the served table (claude-220): TRAIN's opening `points` (`(n, width)`, f32) and their
-/// `targets` (u32), as `points` and `targets`. It never replaces a file.
+/// `targets` (u32), as `points` and `targets`. It never replaces a file: the path is created
+/// new before the table is written into it.
 fn save_opening_table(path: &Path, points: &Tensor, targets: &[u32]) -> Result<()> {
-    if path.exists() {
-        return Err(invalid(format!("{} exists; a table is never replaced", path.display())));
-    }
     let (n, _) = points.dims2()?;
     if n != targets.len() {
         return Err(invalid("the opening table wants one target per point"));
     }
+    write_new(path, &[]).map_err(|e| invalid(format!("{e}; a table is never replaced")))?;
     let targets = Tensor::from_vec(targets.to_vec(), n, points.device())?;
     let tensors = std::collections::HashMap::from([("points".to_owned(), points.clone()), ("targets".to_owned(), targets)]);
     candle_core::safetensors::save(&tensors, path)?;
     Ok(())
+}
+
+/// Whether two f32 tensors hold the same shape and the same bits: a +0.0 against a −0.0, or
+/// a NaN, differs, where a difference of values would not see it.
+fn same_bits(a: &Tensor, b: &Tensor) -> Result<bool> {
+    let bits = |t: &Tensor| -> Result<Vec<u32>> {
+        Ok(t.flatten_all()?.to_vec1::<f32>()?.into_iter().map(f32::to_bits).collect())
+    };
+    Ok(a.dims() == b.dims() && bits(a)? == bits(b)?)
 }
 
 /// The served table [`save_opening_table`] wrote, on `device`: its points and targets.
@@ -10568,7 +10587,7 @@ mod tests {
         let width = pb.dim(1).unwrap();
         let memory = crate::flock_read_memory::TurnMemory::new(8, std::collections::HashMap::from([(key, 5u32)]), width, &device).unwrap();
         crate::flock_read_memory::set_turn_memory(Some(memory));
-        let (greedy_a, greedy_b) = (decode(&a, 12).tokens, decode(&b, 12).tokens);
+        let greedy_a = decode(&a, 12).tokens;
         // The table: b's own opening point, target 77, and a far point, target 88.
         let points = Tensor::cat(&[pb.clone(), (&pb + 100.0).unwrap()], 0).unwrap();
         set_served_key(Some(ServedKey { points, targets: std::sync::Arc::new(vec![77, 88]) }));
@@ -10584,7 +10603,6 @@ mod tests {
         let forced_b = decode(&b, 12).tokens;
         set_forced_opening(None);
         assert_eq!(served_b.tokens, forced_b, "the rest decodes as the forced reply with that token");
-        assert_ne!(greedy_b.first(), None, "the unserved reply decodes");
         crate::flock_read_memory::set_turn_memory(None);
     }
 
@@ -10785,8 +10803,16 @@ mod tests {
     /// claude-220: the served table reads back exactly as it was saved, and is never replaced.
     #[test]
     fn the_opening_table_reads_back_as_saved_and_is_never_replaced() {
+        /// Removes the test's folder however the test ends.
+        struct Gone(PathBuf);
+        impl Drop for Gone {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
         let dir = std::env::temp_dir().join(format!("claude-220-table-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
+        let _gone = Gone(dir.clone());
         let path = dir.join(OPENING_TABLE_FILE);
         let values: Vec<f32> = vec![0.5, -1.25, 3.0, 0.0, -0.0, 7.75];
         let points = Tensor::from_vec(values.clone(), (3, 2), &Device::Cpu).unwrap();
@@ -10795,10 +10821,29 @@ mod tests {
         assert_eq!(targets, [9, 4, 9]);
         assert_eq!(back.dims(), [3, 2]);
         let bits = |v: Vec<f32>| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
-        assert_eq!(bits(back.flatten_all().unwrap().to_vec1::<f32>().unwrap()), bits(values));
+        assert_eq!(bits(back.flatten_all().unwrap().to_vec1::<f32>().unwrap()), bits(values.clone()));
+        assert!(same_bits(&back, &points).unwrap(), "the read-back's bits are the saved ones");
         assert!(save_opening_table(&path, &points, &[9, 4, 9]).is_err(), "a table is never replaced");
+        assert_eq!(load_opening_table(&path, &Device::Cpu).unwrap().1, [9, 4, 9], "the refused save left the table whole");
         assert!(save_opening_table(&dir.join("other.safetensors"), &points, &[9, 4]).is_err(), "one target per point");
-        fs::remove_dir_all(&dir).unwrap();
+        let wide = dir.join("f64.safetensors");
+        let points_f64 = Tensor::from_vec(values.iter().map(|&x| f64::from(x)).collect::<Vec<_>>(), (3, 2), &Device::Cpu).unwrap();
+        save_opening_table(&wide, &points_f64, &[9, 4, 9]).unwrap();
+        assert!(load_opening_table(&wide, &Device::Cpu).is_err(), "a table of f64 points is not served");
+        // The read-back check is by bits: −0.0 against +0.0 differs, though their values are equal.
+        let signed = Tensor::from_vec(vec![0.5f32, -1.25, 3.0, -0.0, -0.0, 7.75], (3, 2), &Device::Cpu).unwrap();
+        assert!(!same_bits(&signed, &points).unwrap());
+        assert!(!same_bits(&points.reshape((2, 3)).unwrap(), &points).unwrap(), "the shape is part of it");
+    }
+
+    /// claude-220: the served key names only a reply's first token, and only under greedy.
+    #[test]
+    fn the_served_key_serves_greedys_first_step_only() {
+        assert!(serves_at(&[], DecodeRule::Greedy));
+        assert!(!serves_at(&[5], DecodeRule::Greedy), "past the first step");
+        for rule in [DecodeRule::FLOCK, DecodeRule::FlockCell { k: 4, margin_milli: 0 }, DecodeRule::CycleStep { k: 4, n: 4 }] {
+            assert!(!serves_at(&[], rule), "{rule:?} decodes as it did");
+        }
     }
 
     /// claude-220 (FIT round 1): the parity count compares each served token with the keys
@@ -10860,6 +10905,16 @@ mod tests {
         assert!(!parity.holds(), "1 of 3 disagreeing is past 1%");
         assert_eq!((own.keys.point_target[3], own.keys.point_distance[3]), (2, 0.7), "read by its own token");
         assert!(served_parity("p", 1, &openings, &picks, &[served(40, Some(2), None)]).is_err(), "a served token needs its distance");
+        assert!(served_parity("p", 1, &openings, &picks, &[served(40, Some(2), Some(f32::NAN))]).is_err(), "a finite one");
+        // Each served token is compared with the keys file as read: a second token at 40 does
+        // not agree with the first.
+        let twice = [served(40, Some(2), Some(0.7)), served(40, Some(2), Some(0.7))];
+        let (parity, _) = served_parity("p", 1, &openings, &picks, &twice).unwrap();
+        assert_eq!((parity.served, parity.agree), (2, 0));
+        // The grade reads p-w and p-v, and refuses any other panel before it reads anything.
+        let other = [("p-u".to_owned(), PathBuf::from("/nowhere"))];
+        let refused = served_grade(Path::new("/nowhere"), Path::new("/nowhere"), &other).err().map(|e| e.to_string());
+        assert!(refused.is_some_and(|e| e.contains("p-w and p-v only")), "another panel is refused");
         assert!(served_parity("p", 1, &openings, &picks, &[served(50, Some(2), Some(0.1))]).is_err(), "an opening the split lacks");
         // The rows.
         let at = |t: (usize, usize)| KeyedReading {
@@ -10882,6 +10937,7 @@ mod tests {
         assert_eq!(served_outcome(&forced, seeds([(20, 0); 3]), &[held(1000, 1000)]), 2);
         assert_eq!(served_outcome(&forced, seeds([(20, 0); 3]), &[held(1000, 989)]), 1, "past 1% disagreeing");
         assert_eq!(served_outcome(&forced, seeds([(20, 0); 3]), &[held(1000, 990)]), 2, "1% is within");
+        assert_eq!(served_outcome(&forced, seeds([(20, 0); 3]), &[held(10, 10), held(1000, 989)]), 1, "every split and seed");
         // A seed below the bar but not thin: row 4 only when the pooled seeds show no gain.
         assert_eq!(served_outcome(&forced, seeds([(20, 0), (20, 0), (10, 8)]), &[held(10, 10)]), 3);
         assert_eq!(served_outcome(&forced, seeds([(10, 8); 3]), &[held(10, 10)]), 4);
