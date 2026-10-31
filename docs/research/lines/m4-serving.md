@@ -9,7 +9,7 @@ This line is about running a finished model on an ordinary laptop or in a browse
 | **Milestone** | M4, one served model under D11 and a command-line interface (12 of 42 records); 4 tagged M1 |
 | **Records** | 42 |
 | **Outcomes** | tooling 10 · negative 9 · positive 7 · inconclusive 6 · review 3 · ops 2 · process 2 · blocked 1 · diagnostic-stop 1 · plan 1 |
-| **State** | The D11 engine is ACTIVE ([D11 integer serving](../../mechanisms/lut-serving.md)). M4 is not complete; the accepted model path is not started. M1 export agreement is exact and FBS's export gap passes at DEV scope; `PRLL` held-out scoring remains open |
+| **State** | The D11 engine is ACTIVE ([D11 integer serving](../../mechanisms/lut-serving.md)). M4 is not complete; the accepted model path is not started. M1's 14,287-row DEV export agreement is exact at both seeds and FBS's export gap passes at DEV scope; `PRLL` held-out scoring remains open |
 
 Counts: `archive/catalog.jsonl`. D11 is the owner decision that every lab serves under one integer contract (the multiply and divide rule changed on 28 Oct, see below). Terms follow the [glossary](../../start/glossary.md); ACTIVE, READY and PARKED are defined on the [mechanism board](../../mechanisms/README.md).
 

@@ -9,6 +9,8 @@ Worker. It is served from the project's documentation site at **`/studio/`**
 
 ### First console redesign (superseded by v2)
 
+*Current interface: the workable v2 Workspace/Agent design below; this subsection preserves the first console as history.*
+
 An agent-console shell: command bar (wordmark, workspace breadcrumb, project chip, command search,
 view switch, theme/new), icon rail, collapsible sessions sidebar with a runtime environment card, a
 central transcript with a quiet console hero and a terminal-frame composer, a full-width Model

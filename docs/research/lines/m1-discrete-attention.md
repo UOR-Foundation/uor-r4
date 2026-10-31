@@ -66,7 +66,7 @@ transfer, and held-out-phrasing transfer ([CHARTER §4.8](../../../CHARTER.md#4-
 |---|---|---|
 | Saved M1 model: DEV 7,002 / 7,001 of 14,287 against unigram 1,226 and T2 6,300 | measurement | [M1 close](../../labs/m1-close-saved-model/README.md) |
 | Fresh V2: 7,215 / 7,228 of 14,479 against unigram 1,279 and T2 6,582 | measurement | [Fresh transfer](../../labs/m1-fresh-panel-transfer/README.md) |
-| p-f: 7,850 / 7,872 of 15,953 against unigram 1,409 and T2 7,375, band 81 | measurement | [bar-f report](../../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
+| p-f: 7,850 / 7,872 of 15,953 against unigram 1,409 and T2 7,375, band 81; 62.5% of reference replies are verbatim TRAIN replies (reference overlap, not a generated-copy rate) | measurement | [bar-f report](../../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
 | Apple M1 decode 10,876 / 10,566 tok/s | measurement | [bar-f report](../../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
 | K16-A: 65 and 463 below unigram 1,226 and T2 6,300 | dated configuration negative | [K16 outcome](../../labs/k16-outcome-call-2026-10-19/README.md) |
 | A8 address cells: 127 to 1,351 of 3,847 at zero training, then erosion | measurement | [pre-flight](../../labs/address-cells-preflight-2026-10-19/README.md), [A8 dose](../../labs/a8-dose-2026-10-19/README.md) |

@@ -85,9 +85,11 @@
 <path d="M40,634 L1160,634" fill="none" stroke="#D0D7DE" stroke-width="1"/>
 <text x="40" y="656" font-size="13.5" font-weight="700" fill="#1F2328" text-anchor="start">Status</text>
 <rect x="110" y="641" width="34" height="20" rx="5" fill="#E3F4EE" stroke="#007A5E" stroke-width="2"/>
-<text x="152" y="656" font-size="13" font-weight="400" fill="#2B3138" text-anchor="start">Working</text>
-<rect x="232.05" y="641" width="34" height="20" rx="5" fill="#E4EFF8" stroke="#0072B2" stroke-width="1.75"/>
-<text x="274.05" y="656" font-size="13" font-weight="400" fill="#2B3138" text-anchor="start">Built &amp; tested</text>
-<rect x="404.15000000000003" y="641" width="34" height="20" rx="5" fill="url(#hP)" stroke="#B87A00" stroke-width="2"/>
-<text x="446.15000000000003" y="656" font-size="13" font-weight="400" fill="#2B3138" text-anchor="start">In progress</text>
+<text x="152" y="656" font-size="13" font-weight="400" fill="#2B3138" text-anchor="start">Complete</text>
+<rect x="239.2" y="641" width="34" height="20" rx="5" fill="#E3F4EE" stroke="#007A5E" stroke-width="2"/>
+<text x="281.2" y="656" font-size="13" font-weight="400" fill="#2B3138" text-anchor="start">Working</text>
+<rect x="361.25" y="641" width="34" height="20" rx="5" fill="#E4EFF8" stroke="#0072B2" stroke-width="1.75"/>
+<text x="403.25" y="656" font-size="13" font-weight="400" fill="#2B3138" text-anchor="start">Built &amp; tested</text>
+<rect x="533.35" y="641" width="34" height="20" rx="5" fill="url(#hP)" stroke="#B87A00" stroke-width="2"/>
+<text x="575.35" y="656" font-size="13" font-weight="400" fill="#2B3138" text-anchor="start">In progress</text>
 </svg>

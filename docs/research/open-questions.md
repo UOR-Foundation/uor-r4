@@ -83,7 +83,7 @@ These should not be repeated as if untouched:
 
 - **Can a discrete model beat unigram and T2 through D11?** Yes, at M1's two-seed bars.
 - **Does a table-native discrete exporter exist, and is the M1 export exact?** Yes: 14,287-row
-  agreement and B4 pass.
+  DEV agreement at both seeds and B4 pass.
 - **Does a lawful likelihood exist for later BPB scoring?** `PRLL` is built and registered. Its GPU
   held-out scoring is the open part.
 - **Does the Studio connect to the integer engine?** Yes. It verifies a synthetic stand-in and also

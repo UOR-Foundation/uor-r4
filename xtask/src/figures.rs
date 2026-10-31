@@ -453,7 +453,10 @@ fn architecture() -> Result<String, Fail> {
         1120.0,
         "The key has no \"trained\" state: In progress also marks a part that is trained but not yet served.",
     );
-    s.legend(645.0, &[St::Working, St::Progress, St::Planned]);
+    s.legend(
+        645.0,
+        &[St::Complete, St::Working, St::Progress, St::Planned],
+    );
     s.finish(
         "The two model paths, 31 October 2026",
         "The saved discrete 19-table model has closed M1 at all six bars on two seeds: DEV 7,002 / 7,001, Fresh V2 7,215 / 7,228 and p-f 7,850 / 7,872, with exact 14,287-row DEV export agreement and Apple M1 decode at 10,876 / 10,566 tok/s. Separately, BPE-4096 token ids feed the float-trained FBS trunk: learned table, SpiralCore position, recurrence with Hamilton gate and RMS norm, Hamming reads and exact turn memory. The /7 engine serves opening and later-reply memory tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open. The FBS export through lut-stack/5 has exact rotations and its export gap inside the bar at DEV scope; D11 integer serving uses integer multiply and divide with floats banned. The current blocker is reply opening on new phrasing, not the completed count-table bar or loop suppression alone. On p-f, 62.5% of reference replies are verbatim TRAIN replies: reference-data overlap, not a generated-copy rate or new reply kinds.",
@@ -1074,7 +1077,7 @@ fn training_pipeline() -> Result<String, Fail> {
         ],
         true,
     );
-    s.legend(656.0, &[St::Working, St::Built, St::Progress]);
+    s.legend(656.0, &[St::Complete, St::Working, St::Built, St::Progress]);
     s.finish(
         "Training and the M1 close, 31 October 2026",
         "Data, pre-registration, a non-author TEST FITNESS review and the lab's own pre-run review come before GPU time. The saved discrete 19-table model has closed M1 at all six bars on two seeds, with exact 14,287-row DEV export agreement and Apple M1 decode at 10,876 / 10,566 tok/s. The separate float-trained FBS trunk uses a fixed-order backward and exports with exact rotations and its export gap inside the bar through lut-stack/5 at DEV scope. p-f reference replies are 62.5% verbatim TRAIN, so M1 is not useful-chat qualification; current work is new-phrasing reply opening and a reachable memory key.",

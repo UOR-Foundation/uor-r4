@@ -70,7 +70,7 @@ flowchart TB
 11. **Compliance needs a demand paired with its exact short answer.** Instruction following was 0
    of 6 until each demand was paired (#1918, #1958).
 17. **Exact integer export and bit-exact serving work** (#1254, #1893), and the M1 pair has exact
-   14,287-row export agreement with B4 pass.
+   14,287-row DEV export agreement with B4 pass at both seeds.
 
 ### Learning
 
