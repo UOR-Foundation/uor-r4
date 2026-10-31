@@ -74,7 +74,7 @@ The final review identified nine roadmap items whose current text still describe
 
 ## Scope decision: claude-224 implementation status
 
-During repair, #3454 merged claude-224 on `main` as `18c4c3da70f35b5c8c9348297df05cfd4d8e452d`. The same living documentation scope records its completed unit-2 panel prompts, integer decode and grade, its 383 integer-library and 185 float-library tests, 13 negative gates and full serving audit, the shared 192-token context cap, and unit 3's remaining real export, fresh p-x score and laptop measurements. No acceptance bar, model code, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation corrections together.
+During repair, #3454 merged claude-224 on `main` as `18c4c3da70f35b5c8c9348297df05cfd4d8e452d`. The same living documentation scope records its completed unit-2 panel prompts, integer decode and grade, its 383 integer-library and 185 float-library tests, 13 negative gates and full serving audit, the shared 192-token context cap, and unit 4's remaining real export, fresh p-x score and laptop measurements. No acceptance bar, model code, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation corrections together.
 
 ## Scope decision: retention dependency registration
 
@@ -82,11 +82,11 @@ During repair, #3454 merged claude-224 on `main` as `18c4c3da70f35b5c8c9348297df
 
 ## Scope decision: retention implementation status
 
-#3457 then merged claude-226 on `main` as `bd9660fa76cf14e5a96d9c87b53788797d6d2fbd`. `integer-retention-rates.md` is added to record the completed flag and retained recurrence, their 386 integer-library and 186 float-library tests, nine negative gates and full serving audit, and the remaining GPU parity before point-key unit 3. No acceptance bar, model code, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation corrections together.
+#3457 then merged claude-226 on `main` as `bd9660fa76cf14e5a96d9c87b53788797d6d2fbd`. `integer-retention-rates.md` is added to record the completed flag and retained recurrence, their 386 integer-library and 186 float-library tests, nine negative gates and full serving audit, and the remaining GPU parity before point-key unit 4. No acceptance bar, model code, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation corrections together.
 
 ## Scope decision: retention parity result
 
-#3458 then merged claude-227 on `main` as `cd328d3af791fbc8b3b38a11e40bf65f2dbf3f97`. The same living documentation scope records G-Ret-Parity PASS: 1,531 / 1,536 sequences and 4,023 / 4,096 single tokens within the 3% bar, the decay control, the unexplained 1.78% residual, the closed retention item, and point-key unit 3's remaining real export, fresh p-x score and laptop measurements. No acceptance bar, model code, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation corrections together.
+#3458 then merged claude-227 on `main` as `cd328d3af791fbc8b3b38a11e40bf65f2dbf3f97`. The same living documentation scope records G-Ret-Parity PASS: 1,531 / 1,536 sequences and 4,023 / 4,096 single tokens within the 3% bar, the decay control, the unexplained 1.78% residual, the closed retention item, and point-key unit 4's remaining real export, fresh p-x score and laptop measurements. No acceptance bar, model code, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation corrections together.
 
 ## Scope decision: run instruments status
 

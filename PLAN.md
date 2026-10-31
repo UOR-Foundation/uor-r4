@@ -107,9 +107,9 @@ The float-side items (the first, second and fourth) share files and run one afte
 
 ## The route M2–M8
 
-M2 (complete correct replies on DEV) starts with `m1-trunk-assembly-and-training` (#2844). That
-needs position, normalization and Stage T, and D41's donor pass, which still needs the owner at
-dispatch. Then the routes run in order:
+The historical M2 route began with the now-done `m1-trunk-assembly-and-training` (#2844), whose
+position, normalization and Stage T work fed the saved M1 artifact. That artifact does not select
+M2's accepted model. D41's donor pass still needs the owner at dispatch. The routes then run in order:
 - M3: durable memory qualified (provenance, correction, abstention, reset, restart).
 - M4: the accepted UORLUT01 export, its served score and tokens/s.
 - M5: the full-path laptop cost of that served model.

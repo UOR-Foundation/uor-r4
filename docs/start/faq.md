@@ -34,7 +34,7 @@ The separate float-trained FBS `lut-stack/5` trunk is also exported and served e
 
 ### 4. How good is the best model so far?
 
-At M1's next-token bars, strong enough to pass: 7,002 and 7,001 of 14,287 DEV first guesses, above unigram 1,226 and T2 6,300. Fresh V2 scores 7,215 and 7,228, and p-f scores 7,850 and 7,872, at both seeds. Apple M1 decode is 10,876 and 10,566 tok/s under the bar-f protocol (**measurement**, [M1 close](../labs/m1-close-saved-model/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
+At M1's next-token bars, strong enough to pass: 7,002 and 7,001 of 14,287 DEV first guesses, above unigram 1,226 and T2 6,300. Fresh V2 scores 7,215 and 7,228, and p-f scores 7,850 and 7,872, at both seeds. Apple M1 decode is 10,876 and 10,566 tok/s under the bar-f protocol (**measurement**, [M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 
 That is not a conversational result. The p-f reference replies are 62.5% verbatim TRAIN replies, and the separate FBS generation line still struggles on new phrasing. K16's older 65 and 463 are historical, not the current best.
 

@@ -370,9 +370,9 @@ fn architecture() -> Result<String, Fail> {
     );
     s.card(
         [626.0, 290.0, 240.0, 62.0],
-        St::Progress,
+        St::Working,
         "Exact turn memory",
-        &["first word only; not served"],
+        &["/7: opening + later rows"],
         false,
     );
     for (a, b) in [(150.0, 190.0), (366.0, 406.0), (1076.0, 1100.0)] {
@@ -497,9 +497,9 @@ fn architecture_narrow() -> Result<String, Fail> {
         ),
         (
             318.0,
-            St::Progress,
+            St::Working,
             "Copy and exact turn memory",
-            "trained; not served; memory: 1st word",
+            "/7 serves opening + later rows",
         ),
         (
             400.0,

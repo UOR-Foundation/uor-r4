@@ -99,7 +99,7 @@ flowchart LR
 
 **Exact memory.** The idea of writing a fact once under an exact name (a prime-based address) and reading it back exactly, instead of smearing it across weights. The trained forms tested so far missed their bars, so the mechanism is PARKED. See [exact memory](../mechanisms/exact-memory.md).
 
-**Exact turn memory.** A table keyed by the first 8 tokens of the user's turn that returns the reply's opening word. On DEV it named 598.7 and 598.3 of 1,226 reply openings at two seeds (claude-161). It does not yet carry a reply past its first word and is not served. See [pipeline map](../model/pipeline-map.md).
+**Exact turn memory.** Tables keyed by the user's first 8 tokens: the opening table returns the reply's opening word, and the completed reply table extends later rows. On DEV the opening table named 598.7 and 598.3 of 1,226 reply openings at two seeds (claude-161). The `/7` engine serves both tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open. See [pipeline map](../model/pipeline-map.md).
 
 **Export gap.** The quality lost when a model trained with decimals is snapped into the whole-number file that ships. It is the served score minus the float score on the same evaluator. A float candidate whose gap exceeds the two-seed noise band is disqualified. On the FBS trunk it was measured on 29 Oct 2026: under `lut-stack/5` the served model is inside the bar on both seeds, net 6 and −8 rows against F_I 24 on DEV (claude-182). See [serving and export](../model/serving-and-export.md).
 
@@ -255,7 +255,7 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 <a id="t2"></a>**T2.** A table built from the training text. It looks up the last word and returns the next word seen most often after it. It gets 6,300 of the 14,287 DEV first guesses right, and it is one of the two count tables a trained model must beat (**measurement**). See [host diagnostics](../../archive/labs/host-diagnostics-2026-10-17/README.md).
 
-**Ternary.** Used in two ways here. A ternary weight or gate takes one of three values: −1, 0 or +1. A ternary tree has three branches per node. Dense ternary weights are READY: the dense form is barred because every weight is touched for every word, but a lawful successor remains open. See [ternary and XOR](../mechanisms/ternary-xor.md).
+**Ternary.** Used in two ways here. A ternary weight or gate takes one of three values: −1, 0 or +1. A ternary tree has three branches per node. The ternary-weight mechanism is READY, while its dense form remains barred because every weight is touched for every word; a lawful successor remains open. See [ternary and XOR](../mechanisms/ternary-xor.md).
 
 **Token.** One numbered piece of text, a word or part of a word. The model never sees letters. See [tokenizer](../mechanisms/tokenizer.md).
 

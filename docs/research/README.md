@@ -51,7 +51,7 @@ A fresh-context subagent counts as a non-author. Builds, finite kernel tests and
 
 The research line that is current is the FBS trunk line, which carries the model's replies. See the [pipeline map](../model/pipeline-map.md) for the two model paths. Four labs work in the loop (claude, antigravity, deepseek and kimi). Its results since 27 Oct are in [what the project knows](./findings.md).
 
-The catalog groups its 1,173 records into 20 lines. The ten largest are below. Counts are catalog records, which mix lab records and lane results, so they show where effort went and not how many experiments ran.
+The current catalog groups its **1,175 records** into 20 lines ([archive catalog](https://github.com/UOR-Foundation/uor-r4/blob/main/archive/CATALOG.md)); the 19 October audit had 1,173. The ten largest are below. Counts are catalog records, which mix lab records and lane results, so they show where effort went and not how many experiments ran.
 
 | Line (catalog id) | Records | First to last date | What it covers |
 |---|---:|---|---|

@@ -40,7 +40,7 @@ generated-copy rate, and not new reply kinds or useful conversation.
 
 | Part | Evidence | Scope | Source |
 |---|---|---|---|
-| Discrete geometric language base | M1's six bars on two saved integer artifacts | Next-token ranking on DEV, Fresh V2 and p-f, not free conversation | [close and bar-f records](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
+| Discrete geometric language base | M1's six bars on two saved integer artifacts | Next-token ranking on DEV, Fresh V2 and p-f, not free conversation | [M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
 | Integer serving (D11) | Exact export/reference agreement and planted-fault control; integer multiply and divide are allowed, floats remain banned | The M1 pair and the separate FBS `lut-stack/5` export | [serving dossier](../mechanisms/lut-serving.md) |
 | Exact-read oracle | True-address 80/80 against 0/80 no-memory and 20/80 sieve | Exact-read oracle only, not learned address formation or M3 | [exact memory](../mechanisms/exact-memory.md) |
 | Object-store consumer | Consumer built; frozen 384-item host-control panel passes | On-model M3 run awaits M2 selection; host controls are not M3 qualification | [consumer record](../labs/object-store-consumer-m3/README.md) |
