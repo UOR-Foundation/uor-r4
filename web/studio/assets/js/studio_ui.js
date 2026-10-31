@@ -729,7 +729,9 @@
         var api = mode === 'api';
         var attachmentCount = hook('getAttachments') ? hook('getAttachments')().length : 0;
         setText('#engineStatusText', 'local WASM · ' + engine);
-        setText('#modelStatusText', /no model/i.test(model) ? 'none' : model);
+        var modelShort = /no model/i.test(model) ? 'none' : model.split(' · ')[0];
+        if (modelShort.length > 42) modelShort = modelShort.slice(0, 41) + '…';
+        setText('#modelStatusText', modelShort);
         setText('#privacyStatusText', api ? 'API (leaves device)' : 'Local only');
         setText('#footerStorage', String(storage || 'unknown').replace('MB used of ', ' MB / ').replace(/\s+/g, ' '));
         setText('#statusWorkspaceLabel', (window.__studioFiles && window.__studioFiles.workspaceName && window.__studioFiles.workspaceName()) ? window.__studioFiles.workspaceName() : 'uor-r4');

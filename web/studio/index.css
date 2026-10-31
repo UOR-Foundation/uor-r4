@@ -3668,3 +3668,6 @@ html[data-theme="light"] .inline-link { color: #7a3410; }
     .statusbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .statusbar .status-model, .statusbar .status-context { display: none !important; }
 }
+
+/* deepseek-6: the full offline sentence lives in the Guide/hero; the bar keeps only short values */
+.statusbar .footer-offline { display: none !important; }
