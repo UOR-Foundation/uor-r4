@@ -44,11 +44,17 @@ The writer's token is on both sides, so this compares queries and the writer's p
 |---|---|---|---|
 | 0 | **An instrument fault** (§4), including a variant without its `compare.json`, or I-Repro failing | Nothing is located. | Repair, then rerun. |
 | B | t3 misses, and h1 exceeds t1 or h3 exceeds t3 | Both the trunk at s3 and the read diverge. | The trunk first (row T's next step), then the read (row R's). |
-| T | t3 misses, and no h exceeds its t | The trunk at s3 diverges, with no read needed to explain it. If only t3's sequences miss and its single tokens pass, the synthetic input is named as a possible co-cause (claude-227's caveat). | A per-layer residual trace at s3, as claude-127 traced the D11 exporter. |
+| T | t3 misses, and no h exceeds its t | The trunk at s3 diverges. The read adds nothing measurable on these inputs, which is not a pass for the read (`R-Exercised` below). If only t3's sequences miss and its single tokens pass, the synthetic input is named as a possible co-cause (claude-227's caveat). | A per-layer residual trace at s3, as claude-127 traced the D11 exporter. |
 | R | t3 passes, and h1 or h3 misses | The Hamming read's integer form diverges from the float read. The difference, and whether it exceeds, is reported. | integer-hamming-read's step 5 (#3385): trace the read's hooks against the float. |
-| N | all four pass | Trunk and read agree on fixed sequences. The gap is on real prompts, or in the memory or the readout. | Real-prompt readouts (`fbs-snapshot` over DEV and p-w windows, a code change), and the readout table checked on the disagreeing prompts. |
+| N | all four pass | The trunk agrees on fixed sequences at both seeds. The read agrees only where `R-Exercised` holds; elsewhere it is not measured. The gap is on real prompts, in the read where it is not measured, or in the memory or the readout. | Real-prompt readouts (`fbs-snapshot` over DEV and p-w windows, a code change), which exercise the read, and the readout table checked on the disagreeing prompts. |
 
 The rows are read in order, and the first that holds applies. Outside row 0 they are exhaustive: t3 misses (B or T), or t3 passes (R if any h misses, else N).
+
+**`R-Exercised`, a reading after the run (the pre-run review).** These inputs barely exercise the read:
+- each single token is read as a one-position sequence, and the read reads only earlier positions;
+- the fixed sequences repeat no token (11 · 191 < 4,096), so the copy heads never meet the exact match they were built for.
+
+So for each seed and section, the record counts the positions where h_s's float D11 readout picks a different token from t_s's. Both readouts are stored. The read counts as **measured** on a section only if that count reaches the section's bar (46 or 122), enough that a wrong read could cross it. On the single tokens the count is expected to be 0. Where the read is not measured, no row says the read agrees.
 
 ## 4. Instrument checks (any failure is row 0)
 
@@ -88,6 +94,7 @@ The rows are read in order, and the first that holds applies. Outside row 0 they
 - 1,536 sequence positions and 4,096 single tokens per variant. At the 3% bar that is 46 and 122 positions.
 - claude-232's p-w s3 disagreement was 95% of first tokens, and a fault of that size would show far past the bar.
 - A fault that appears only on real prompts would not show here. That is row N, which names its own next step.
+- **The read has little power here.** The copy heads' exact-match path is not exercised (`R-Exercised`, §3), so this run can implicate the read (rows B and R) but cannot clear it.
 
 ## 8. Cost and stop rule
 
@@ -125,4 +132,15 @@ TEST FITNESS: FIT
 
 ## 10. Pre-run review
 
-PENDING
+**A fresh reviewer, at `bf95adafb`: GO.** It checked the five points:
+1. **The chain:** the 29 Oct direction's end-to-end model, with claude-232's miss located next.
+2. **The tools and inputs:** the three bins and their features, the `fbs_export::` tests, and each seed's 6 summed files, which are claude-227's fetch, already run.
+3. **The rows:** exhaustive, each with a next step.
+4. **The FIT:** consistent with the sheet.
+5. **The lease:** one 5090 at about $1.11/h, inside the caps.
+
+It found no job bug and no missing path.
+
+**Amended after it, text only,** before launch:
+- **Its finding 1:** the read is barely exercised on these inputs. This adds `R-Exercised` (§3) and the power note (§7), and rows T and N no longer say the read agrees where it is not measured. The rows' conditions and order, the bar and the job are unchanged.
+- **Its two minor points, both on the watcher:** the watcher waits for `SHA256SUMS` after `EXIT`, and its time cap is 90 minutes, under the $2 ceiling.
