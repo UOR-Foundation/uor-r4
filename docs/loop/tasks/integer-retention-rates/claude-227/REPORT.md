@@ -20,7 +20,7 @@ No measurement. This run is parity only; the served model's tok/s comes with poi
   - This is tooling; it is logged in `local/claude/FRICTION.md`.
 - **The single tokens' residual, 1.78%, is the larger one.** It is inside the bar, but above claude-126's 1.4% single-token reading and above this run's 0.33% on sequences. So the exporter's own residual sits mostly at position 0, where retention plays no part.
 - **The by-product snapshots' `retain_rates` was not checked in the files.** `fbs-snapshot` read it from each run's config as in the trunk arm. Point-key-integer's run checks it when it exports them.
-- **CI's "harness rules and tests" also fails `harness.documented_commands`** on DeepSeek's REPORT lines on main (`uor-harness loop pr-check --local ->`). That is not this unit's, and not a required check.
+- **CI's "harness rules and tests" also fails `harness.documented_commands`** on three of DeepSeek's REPORTs on main (deepseek-75, deepseek-1, deepseek-2): each documents a `pr-check` call with a stray arrow as a flag. That is not this unit's, and not a required check.
 
 ## What worked
 
