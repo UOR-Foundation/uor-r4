@@ -1,4 +1,4 @@
-# FACTS: documentation status at 30 Oct 2026
+# FACTS: documentation status through 31 Oct 2026
 
 Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md). ORDER: [ORDER.md](ORDER.md). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `4195ce2bf83d703b1acd3eb868c888d1da053479`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
 

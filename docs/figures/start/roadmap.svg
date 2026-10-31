@@ -55,7 +55,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <rect class="bg" x="0" y="0" width="960" height="540"/>
 
 <text class="title" x="24" y="36">The road from today to the products</text>
-<text class="sub" x="24" y="58">A plan, not a promise. M1 complete and the current order from PLAN.md, 30 Oct 2026.</text>
+<text class="sub" x="24" y="58">A plan, not a promise. M1 closed 30 Oct; current research and PLAN.md through 31 Oct 2026.</text>
 
 <!-- Road, row 1 -->
 <line class="road" x1="40" y1="150" x2="920" y2="150"/>

@@ -11,7 +11,7 @@ This page follows one token from the training data to the last word of a reply s
 
 It answers the owner's direction of 27 October 2026 (recorded verbatim in the item [`pipeline-map`](../roadmap/items/pipeline-map.md)). The goal is a local model of about GPT-4's ability, trained on less than a datacenter and served on a laptop like this one.
 
-**This revision (30 Oct)** retains claude-159's cost-per-token map and adds:
+**This revision (31 Oct)** retains claude-159's cost-per-token map and adds:
 - claude-149 to claude-158, as listed under [what changed since the first map](#what-changed-since-the-first-map);
 - the owner's 28 Oct criterion: "I don't care what we serve at long as it is cheap";
 - the saved discrete M1 close and claude-211's bar-f result, and claude-217's current new-phrasing opening failure;

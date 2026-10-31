@@ -94,7 +94,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <rect class="box sb" x="526" y="222" width="112" height="40" rx="5"/><text class="t c" x="582" y="239">Hamilton product</text><text class="n c" x="582" y="255">q ⊗ u</text>
 <rect class="box" x="466" y="232" width="42" height="20" rx="10"/><text class="n b c" x="487" y="246">up u</text>
 <path class="nf sm w1" d="M466 242H450" marker-end="url(#a-muted)"/><path class="nf sm w1" d="M508 242H524" marker-end="url(#a-muted)"/>
-<rect class="box sb" x="500" y="338" width="140" height="56" rx="6"/><text class="n c" x="570" y="356">Now: table reads serve</text><text class="n c" x="570" y="371">FBS /4 snapped and</text><text class="n c" x="570" y="386">/5 exact at DEV</text>
+<rect class="box sb" x="500" y="338" width="140" height="56" rx="6"/><text class="n c" x="570" y="356">Now: table reads serve</text><text class="n c" x="570" y="371">earlier /4 snapped;</text><text class="n c" x="570" y="386">/5 exact at DEV</text>
 <path class="nf sm w1 dash" d="M638 242H650V366H643" marker-end="url(#a-muted)"/>
 <text class="n" x="332" y="424">The same operation is the output gate of</text><text class="n" x="332" y="440">the geometric recurrence.</text>
 <rect class="panel" x="670" y="48" width="274" height="420" rx="8"/>

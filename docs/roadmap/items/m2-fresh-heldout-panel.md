@@ -27,7 +27,7 @@ A fresh panel registered and sealed in advance, graded by the existing determini
 
 ## How to start
 
-1. Read the old panel and why it failed. Open `docs/harness/panels/m2-reply512.json`, `docs/research/open-questions.md` (line 74), `docs/mechanisms/native-geometric.md`, `CHARTER.md` §4.3 and `PLAN.md`. The `docs/labs/m2-masked-train-reference-2026-10-13/README.md` file cited as a source does not exist in this checkout; use the panel file instead. From the repository root, build the harness (`CARGO_TARGET_DIR=local/harness-target ~/.cargo/bin/cargo build --release -p uor-r4-harness`), put it on your path (`export PATH="$PWD/local/harness-target/release:$PATH"`, as `docs/harness/README.md` does) and run `uor-harness brief -m m2` to see the milestone context.
+1. Read the old panel and why it failed. Open `docs/harness/panels/m2-reply512.json`, `docs/research/open-questions.md` ([the central unknown](../../research/open-questions.md#the-central-unknown-correct-reply-opening-on-new-phrasing)), `docs/mechanisms/native-geometric.md`, `CHARTER.md` §4.3 and `PLAN.md`. The `docs/labs/m2-masked-train-reference-2026-10-13/README.md` file cited as a source does not exist in this checkout; use the panel file instead. From the repository root, build the harness (`CARGO_TARGET_DIR=local/harness-target ~/.cargo/bin/cargo build --release -p uor-r4-harness`), put it on your path (`export PATH="$PWD/local/harness-target/release:$PATH"`, as `docs/harness/README.md` does) and run `uor-harness brief -m m2` to see the milestone context.
 2. Post a written registration draft on #2030 as your first deliverable. It must say how the fresh questions are produced, and that the source is independent of the 512 development rows, the opened 128-row draw and every training corpus. It must say how overlap is excluded (exact and near-duplicate checks against all three), the row count (at least 200, so 40% is at least 80; choose it from a noise estimate), and that the grader is not touched.
 3. Measure noise before fixing the bar: score the saved parent on the development panel with the existing grader and record the spread you can measure. The panel file says no spread is stated, so do not invent one. The bar must not be narrower than what you measure.
 4. Build the panel with Rust tooling only (no new Python). Freeze it: record its row count and content hash, add it as a new frozen entry beside the old one in `docs/harness/panels/`, and keep the rows sealed and unscored. Do not commit the corpus itself. `docs/reference/storage.md` says where stored bytes live: the private HF store `caseyallard/uor-r4-store`, whose `data/` prefix holds shared inputs. Because that store is private, hand the sealed bytes and their hash to a maintainer to place there; the repository carries only the frozen panel entry (row count and hash).
@@ -43,6 +43,6 @@ A fresh panel registered and sealed in advance, graded by the existing determini
 ## Sources
 
 - [`PLAN.md`](../../../PLAN.md)
-- [`docs/research/open-questions.md:74`](../../../docs/research/open-questions.md)
+- [`docs/research/open-questions.md: the central unknown`](../../../docs/research/open-questions.md#the-central-unknown-correct-reply-opening-on-new-phrasing)
 - issue#2030
 

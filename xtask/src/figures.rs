@@ -33,7 +33,7 @@ const ORANGE: &str = "#E69F00";
 const VERM: &str = "#D55E00";
 const PANEL: &str = "#F6F8FA";
 const RULE: &str = "#D0D7DE";
-const DATE: &str = "30 October 2026";
+const DATE: &str = "31 October 2026";
 
 /// Where a piece of the project stands. "Built" means source built and tested,
 /// not trained.

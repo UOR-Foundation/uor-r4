@@ -95,7 +95,7 @@ quality, CLI, session and audit path; M7's distribution check is separate.
 | M1 | **It predicts text.** Six bars through the saved integer model, including fresh and held-out-phrasing transfer | **Complete** |
 | M2 | **It answers from memory.** ≥256/512 complete correct DEV replies and ≥40% fresh | In progress |
 | M3 | **It remembers across sessions.** Provenance, correction, abstention, reset and restart | In progress |
-| M4 | **It is served.** Accepted model, export gap, quality, CLI, session and audits | Not complete; accepted model path not started |
+| M4 | **It is served.** Accepted model and export gap; held-out quality **≤0.90 BPB**; M1–M3 bars through `uor-chat`; bit-identical continuation after restore; full CLI/session/audit path | Not complete; accepted model path not started |
 | M5 | **It is cheap on a laptop.** Latency, memory, energy and selected access measured | Not started |
 | M6 | **It reasons and codes.** Frozen tasks with executable oracles and causal ablation | Not started |
 | M7 | **It runs everywhere the same.** Library, CLI and browser parity plus client-only Studio | Runtime/harness on synthetic stand-in; accepted model open |

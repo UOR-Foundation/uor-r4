@@ -2,7 +2,7 @@
 
 Most chat AIs are built from a few standard parts: a way to look back at earlier words (attention), a block that processes each word (a feed-forward layer), big grids of multiplications, and a function that scores every possible next word. UOR-R4 is trying to replace each of those parts with something built from geometry, such as rotations, exact addresses and lookup tables. Each replacement is called a **mechanism**. This page lists 28 rows for them, because Hopf observation is split into its two forms (owner ruling D72), and says where each one stands today. Status here means how far a mechanism has been built and tested. M1 is complete (1 of 8 milestones); no mechanism has produced a useful conversation yet ([PLAN](../../PLAN.md) and rendered [STATE](../../STATE.md)).
 
-![A family tree of the 27 mechanisms with lineage from 19 October 2026 and statuses current on 30 October, showing which mechanism grew out of which](../figures/mechanisms-family.svg)
+![A family tree of the 27 mechanisms with lineage from 19 October 2026 and statuses current on 31 October, showing which mechanism grew out of which](../figures/mechanisms-family.svg)
 
 *The 22 mechanisms with a recorded parent or child, drawn as a family tree. Most of the live ones descend from earlier, parked attempts.*
 
@@ -18,7 +18,7 @@ There is no "retired" status. Owner decision D22 says a negative result closes o
 
 Every number in the tables is a **measurement** from a recorded run or test, linked in its row, unless the cell says otherwise. The "Next" column is a **hypothesis** about what would help, not a result. A passing test is not a trained capability, and `NOT_RUN` is not a pass. BPB means bits per byte of text (lower is better). "FIT" means a pre-registered test was reviewed and judged able to answer its question.
 
-## 30 Oct 2026: the composition
+## M1 closed 30 Oct; current mechanisms on 31 Oct 2026
 
 Two model paths remain distinct. The saved discrete 19-table model has closed M1 at all six bars: DEV 7,002 / 7,001, Fresh V2 7,215 / 7,228 and p-f 7,850 / 7,872 at two seeds, with exact export agreement and Apple M1 decode at 10,876 / 10,566 tok/s ([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)). The separate float-trained FBS trunk is the current complete-reply line:
 

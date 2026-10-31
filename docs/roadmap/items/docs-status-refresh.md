@@ -1,6 +1,6 @@
 ---
 id: docs-status-refresh
-title: Bring every status page, picture and tracker up to 30 Oct 2026
+title: Bring every status page, picture and tracker up to 31 Oct 2026
 milestone: research
 area: tooling
 status: ready
@@ -26,7 +26,7 @@ On 30 Oct the owner assigned Kimi the follow-up: "Please make sure the documenta
 
 ## Done when
 
-1. **Every living status page in scope states the project as of 30 Oct 2026, with a source for each number:** pre-alpha, 1 of 8 milestones complete, M1's two-seed DEV/Fresh V2/p-f evidence and serving rates, and the p-f reference-reply limitation. M1 is not useful-chat qualification; the saved discrete model and FBS trunk stay distinct; current work comes only from merged evidence, including claude-217's 14–19% new-phrasing reply-opening result against about 80% on later tokens.
+1. **Every living status page in scope states the project as of 31 Oct 2026, with a source for each number:** pre-alpha, 1 of 8 milestones complete, M1's two-seed DEV/Fresh V2/p-f evidence and serving rates, and the p-f reference-reply limitation. M1 is not useful-chat qualification; the saved discrete model and FBS trunk stay distinct; current work comes only from merged evidence, including claude-217's 14–19% new-phrasing reply-opening result against about 80% on later tokens.
 2. **Every non-archive README is inventoried.** Living project READMEs with stale current claims are corrected; dated evidence and unrelated vendor/side-project history are left intact.
 3. **The generated pictures are redrawn from the three figure sources,** with current data and accessible descriptions. `cargo run -q --locked -p xtask -- figures`, `figures-math` and `figures-charts` pass; genuinely hand-maintained status pictures and their captions are corrected and visually checked.
 4. **The trackers agree.** `docs/harness/milestones.json` and the M1 roadmap item inputs reflect the six-bar close without changing any bar. Current headlines/statuses move to current fields, while historical counts, negatives and holds remain in explicit history fields rather than being deleted. Roadmap sync runs from fresh `main`, milestone checklists are current, and `STATE.md`, `HANDOFF.md` and `docs/roadmap/README.md` are refreshed through the normal render workflow.
@@ -48,7 +48,7 @@ On 30 Oct the owner assigned Kimi the follow-up: "Please make sure the documenta
 
 ## Sources
 
-- The owner's words of 29 and 30 Oct 2026 (quoted above).
+- The owner's words of 29 and 31 Oct 2026 (quoted above).
 - Closed M1 #2029; `docs/labs/m1-close-saved-model/evidence/m1-close-grade.json` for bars (a)–(e); `docs/labs/m1-heldout-phrasing-transfer/evidence/panel-score.json` and `docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md` for bar (f).
 - Latest merged end-to-end evidence, including `docs/loop/tasks/one-model-end-to-end/claude-220/REPORT.md`, with claude-219 as its precursor, `docs/loop/tasks/point-key-integer/claude-222/REPORT.md` for the synthetic integer implementation, `docs/loop/tasks/point-key-integer/claude-224/REPORT.md` for the panel decode and grade, `docs/loop/tasks/infra-loop-harness/claude-225/REPORT.md` plus `docs/roadmap/items/integer-retention-rates.md` for the retention prerequisite, `docs/loop/tasks/integer-retention-rates/claude-226/REPORT.md` for its implementation, `docs/loop/tasks/integer-retention-rates/claude-227/REPORT.md` for the passing GPU parity, `docs/loop/tasks/point-key-integer/claude-228/REPORT.md` for the run instruments, `docs/loop/tasks/point-key-integer/claude-229/REPORT.md` for the row-0 instrument fault, `docs/loop/tasks/infra-loop-harness/claude-230/REPORT.md` plus `docs/roadmap/items/integer-nearest-readout.md` for the readout repair, and `docs/loop/tasks/integer-nearest-readout/claude-231/REPORT.md` for its implementation, and `docs/loop/tasks/integer-nearest-readout/claude-232/REPORT.md` for the parity MISS and remaining layer-by-layer localization.
 - `xtask/src/figures.rs`, `xtask/src/figures_charts.rs`, `xtask/src/figures_math.rs` and `docs/harness/milestones.json`.

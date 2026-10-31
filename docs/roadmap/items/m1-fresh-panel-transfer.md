@@ -45,8 +45,8 @@ The fresh panel's size, noise floor and thresholds are registered in `docs/harne
 
 ## Sources
 
-- [`ROADMAP.md:14`](../../../ROADMAP.md)
+- [`ROADMAP.md`](../../../ROADMAP.md)
 - [`archive/integration/NOW-2026-10-22.md:85`](../../../archive/integration/NOW-2026-10-22.md)
-- [`docs/start/where-were-going.md:34`](../../../docs/start/where-were-going.md)
-- [`docs/start/faq.md:111`](../../../docs/start/faq.md)
+- [`docs/start/where-were-going.md: What M1 established`](../../../docs/start/where-were-going.md#what-m1-established)
+- [`docs/start/faq.md: the 437/512 and 0.877 records`](../../../docs/start/faq.md#21-what-happened-to-the-437-of-512-and-the-0877-results-i-may-have-seen)
 
