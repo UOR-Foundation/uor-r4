@@ -67,7 +67,7 @@ This is a documentation and evidence-propagation unit. It ran no model training,
 - `cargo run -q --locked -p uor-r4-claim-wording -- .`: pass, within that tool's supported Markdown surface; changed public prose was also scanned for stale status.
 - `cargo run -q --locked -p xtask -- roadmap check`: **115 items OK**. `docs-catalog --check`: **1,175 records, 0 paths not found**.
 - `cargo run -q --locked -p xtask -- archive-verify --base ec9a790fe5be73cd673f082eba86ced551b22d12`: **10,810 archive files, 0 modified, 0 deleted, 0 regressions**.
-- `cargo run -q --locked -p xtask -- links --baseline … --renames-from …`: **6,013 sources, 23,114 checked, 1,202 baseline broken, 0 new broken**.
+- `cargo run -q --locked -p xtask -- links --baseline … --renames-from …`: **6,013 sources, 23,120 checked, 1,202 baseline broken, 0 new broken**.
 - `book-stage`, `mdbook-mermaid install .`, `mdbook build`, and `book-check`: **104 pages and 70 figures staged; 105 pages checked, 0 broken links**.
 - `web/studio/build_serve_wasm.sh` and its worker verification: pass. The rebuilt WASM is 495,334 bytes and the synthetic stack 469,252 bytes; exact 32-token output, 9,782/5,366-byte checkpoints, bit-identical save/restore, mid-generation guards, six network traps, four model-source choices, and zero remote requests passed.
 - `node web/studio/verify_studio_page.mjs` and `verify_studio_page_load.mjs`: both pass; both pages loaded with no external requests, and the planted external trap was detected. `verify_m7_parity.mjs` passed all 8 synthetic prompts; `verify_desktop_client.mjs` passed with `pageWired:false`. Its stale-lockfile refresh was restored after verification and is not part of the diff.
