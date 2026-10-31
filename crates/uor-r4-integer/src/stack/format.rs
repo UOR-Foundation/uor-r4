@@ -405,7 +405,7 @@ impl StackShape {
         } else if self
             .rec_gates
             .as_deref()
-            .is_some_and(|g| g != "geometric")
+            .is_some_and(|g| g != "geometric" && g != "geometric-retention")
         {
             Some("the recurrence gates are not geometric")
         } else if self.rec_geometric() && !self.rotation {
@@ -612,7 +612,15 @@ impl StackShape {
     /// Whether the recurrence uses the geometric dyadic rate/keep tables and
     /// icosian-snapped Hamilton output gate (`rec_gates == "geometric"`).
     pub fn rec_geometric(&self) -> bool {
-        self.rec_gates.as_deref() == Some("geometric")
+        matches!(self.rec_gates.as_deref(), Some("geometric" | "geometric-retention"))
+    }
+
+    /// Whether the geometric recurrence reads its rate table as retention
+    /// (`rec_gates == "geometric-retention"`, integer-retention-rates, claude-226): a lane carries
+    /// `1 - 2^-(k+1)` of its state where the decay reading carries `2^-(k+1)`, as the float trunk's
+    /// `retain_rates` does. An engine before it refuses the value by [`StackShape::validate`].
+    pub fn rec_retention(&self) -> bool {
+        self.rec_gates.as_deref() == Some("geometric-retention")
     }
 
     /// Whether every projection is a SpiralCore/FBS route table
@@ -1567,7 +1575,7 @@ pub fn export_fbs_trunk_uorlut01_with(
         read_weights: None,
         read_binary: false,
         memory: None,
-        rec_gates: Some("geometric".to_owned()),
+        rec_gates: Some(if snap.retain_rates { "geometric-retention" } else { "geometric" }.to_owned()),
         gate: Some("hamilton".to_owned()),
         raw_gates: !snaps.gates,
         raw_transition: !snaps.transition,
@@ -1772,7 +1780,7 @@ pub fn export_fbs_trunk_uorlut01_with(
             "exporter": "uor-r4-integer::stack::export_fbs_trunk_uorlut01",
             "projection": "spiralcore_fbs",
             "head": "native_vector",
-            "rec_gates": "geometric",
+            "rec_gates": if snap.retain_rates { "geometric-retention" } else { "geometric" },
             "gate": "hamilton",
         },
         // An unsnapped transition records no snap (null), which the reader
@@ -2082,9 +2090,17 @@ pub(super) struct RefRecurrence {
     conv_bias: Vec<f64>,
     /// `lanes` decay offsets.
     decay: Vec<f64>,
+    /// The retention reading of the rate table (claude-226): a lane carries `1 - 2^-(k+1)`.
+    retain: bool,
 }
 
 impl RefRecurrence {
+    /// This layer under the retention reading when `on` (integer-retention-rates, claude-226).
+    pub(super) fn retained(mut self, on: bool) -> Self {
+        self.retain = on;
+        self
+    }
+
     pub(super) fn new(taps: &[f32], conv_bias: &[f32], decay: &[f32], quantized: bool) -> Result<Self, StackError> {
         let exp = super::kernels::RESIDUAL_EXP;
         Ok(Self {
@@ -2094,6 +2110,7 @@ impl RefRecurrence {
                 .collect::<Result<_, _>>()?,
             conv_bias: conv_bias.iter().map(|&v| ref_fixed(v, exp, quantized)).collect(),
             decay: decay.iter().map(|&v| ref_fixed(v, exp, quantized)).collect(),
+            retain: false,
         })
     }
 
@@ -2135,7 +2152,8 @@ impl RefRecurrence {
             });
             let s = rate.clamp(0.0, 1.0);
             let idx = ((s * 16.0).floor() as usize).min(15);
-            let lambda = 2.0f64.powi(-((idx as i32) + 1));
+            let decayed = 2.0f64.powi(-((idx as i32) + 1));
+            let lambda = if self.retain { 1.0 - decayed } else { decayed };
             let keep = (1.0 - lambda * lambda).sqrt();
             let q_rot = ref_quat_mode(ref_quat(rotations, u), snaps.transition, TRANSITION_EPS);
             let trans = [
@@ -2621,7 +2639,8 @@ impl FbsTrunkSnapshot {
                         .iter()
                         .map(|&v| ref_fixed(v, super::kernels::RESIDUAL_EXP, quantized))
                         .collect(),
-                    rec: RefRecurrence::new(&layer.conv_taps, &layer.conv_bias, &layer.decay, quantized)?,
+                    rec: RefRecurrence::new(&layer.conv_taps, &layer.conv_bias, &layer.decay, quantized)?
+                        .retained(self.retain_rates),
                 })
             })
             .collect::<Result<_, _>>()?;

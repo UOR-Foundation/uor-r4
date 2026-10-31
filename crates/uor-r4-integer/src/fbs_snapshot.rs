@@ -285,6 +285,12 @@ pub struct FbsTrunkSnapshot {
     /// without one, so every snapshot written before it still parses (claude-198).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory: Option<FbsMemorySnapshot>,
+    /// Whether the trunk was trained with the recurrence's retention reading of its rate table
+    /// (the float trainer's `retain_rates`, integer-retention-rates, claude-226). The export then
+    /// serves `rec_gates = "geometric-retention"`. False, and not written, for the decay reading,
+    /// so every earlier snapshot parses and exports as before.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub retain_rates: bool,
 }
 
 /// The longest memory key, and the width a reply key is padded to: the float memory's
