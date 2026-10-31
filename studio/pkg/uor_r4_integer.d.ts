@@ -7,6 +7,16 @@
 export function allocEvents(): bigint;
 
 /**
+ * Clear the reply-start signal.
+ */
+export function clearReplyStart(handle: number): void;
+
+/**
+ * Static facts about a loaded discrete model, as JSON.
+ */
+export function discreteInfo(handle: number): string;
+
+/**
  * Module init. Registers the host clock seam and the panic hook so a panic
  * surfaces as a JS exception with a message, not a silent trap.
  */
@@ -18,9 +28,32 @@ export function init(): void;
 export function leakedModels(): bigint;
 
 /**
+ * Load a `uor-r4.lut-discrete/1` M1 artifact (the trained discrete runtime).
+ */
+export function loadDiscrete(artifact: Uint8Array): number;
+
+/**
  * Load a `UORLUT01` stack artifact from bytes. Returns the session handle.
  */
 export function loadStack(artifact: Uint8Array): number;
+
+/**
+ * Mark that the reply begins at the next token stepped (units 2-3 of `turn-memory-integer`):
+ * the next `step` call ingests the prompt's last token, so its row is the opening table's row.
+ */
+export function markReplyStart(handle: number): void;
+
+/**
+ * The turn memory the loaded model serves, as a JSON object string, or the string `null`
+ * (`JSON.parse` gives the object or null). Its fields: `present`, `k`, `key_window`,
+ * `reply_turn`, `opening_entries`, `reply_entries`, `reply_key_len`, `weight_exp`.
+ */
+export function memoryInfo(handle: number): string;
+
+/**
+ * Evaluate a causal prefix; returns JSON with the top-1/top-8 next tokens.
+ */
+export function predictDiscrete(handle: number, ids: Uint32Array): string;
 
 /**
  * Restore a serialized session into the same loaded model.
@@ -52,7 +85,13 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly clearReplyStart: (a: number) => [number, number];
+    readonly discreteInfo: (a: number) => [number, number, number, number];
+    readonly loadDiscrete: (a: number, b: number) => [number, number, number];
     readonly loadStack: (a: number, b: number) => [number, number, number];
+    readonly markReplyStart: (a: number) => [number, number];
+    readonly memoryInfo: (a: number) => [number, number, number, number];
+    readonly predictDiscrete: (a: number, b: number, c: number) => [number, number, number, number];
     readonly restoreSession: (a: number, b: number, c: number) => [number, number];
     readonly saveSession: (a: number) => [number, number, number, number];
     readonly step: (a: number, b: number) => [number, number, number, number];
@@ -62,9 +101,9 @@ export interface InitOutput {
     readonly tickClock: (a: bigint) => void;
     readonly init: () => void;
     readonly __wbindgen_externrefs: WebAssembly.Table;
-    readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __externref_table_dealloc: (a: number) => void;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+    readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_start: () => void;
 }
 

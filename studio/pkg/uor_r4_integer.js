@@ -10,6 +10,41 @@ export function allocEvents() {
 }
 
 /**
+ * Clear the reply-start signal.
+ * @param {number} handle
+ */
+export function clearReplyStart(handle) {
+    const ret = wasm.clearReplyStart(handle);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
+/**
+ * Static facts about a loaded discrete model, as JSON.
+ * @param {number} handle
+ * @returns {string}
+ */
+export function discreteInfo(handle) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.discreteInfo(handle);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
  * Module init. Registers the host clock seam and the panic hook so a panic
  * surfaces as a JS exception with a message, not a silent trap.
  */
@@ -27,6 +62,21 @@ export function leakedModels() {
 }
 
 /**
+ * Load a `uor-r4.lut-discrete/1` M1 artifact (the trained discrete runtime).
+ * @param {Uint8Array} artifact
+ * @returns {number}
+ */
+export function loadDiscrete(artifact) {
+    const ptr0 = passArray8ToWasm0(artifact, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.loadDiscrete(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return ret[0] >>> 0;
+}
+
+/**
  * Load a `UORLUT01` stack artifact from bytes. Returns the session handle.
  * @param {Uint8Array} artifact
  * @returns {number}
@@ -39,6 +89,71 @@ export function loadStack(artifact) {
         throw takeFromExternrefTable0(ret[1]);
     }
     return ret[0] >>> 0;
+}
+
+/**
+ * Mark that the reply begins at the next token stepped (units 2-3 of `turn-memory-integer`):
+ * the next `step` call ingests the prompt's last token, so its row is the opening table's row.
+ * @param {number} handle
+ */
+export function markReplyStart(handle) {
+    const ret = wasm.markReplyStart(handle);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
+/**
+ * The turn memory the loaded model serves, as a JSON object string, or the string `null`
+ * (`JSON.parse` gives the object or null). Its fields: `present`, `k`, `key_window`,
+ * `reply_turn`, `opening_entries`, `reply_entries`, `reply_key_len`, `weight_exp`.
+ * @param {number} handle
+ * @returns {string}
+ */
+export function memoryInfo(handle) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.memoryInfo(handle);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * Evaluate a causal prefix; returns JSON with the top-1/top-8 next tokens.
+ * @param {number} handle
+ * @param {Uint32Array} ids
+ * @returns {string}
+ */
+export function predictDiscrete(handle, ids) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passArray32ToWasm0(ids, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.predictDiscrete(handle, ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
 }
 
 /**
@@ -152,12 +267,27 @@ function getStringFromWasm0(ptr, len) {
     return decodeText(ptr >>> 0, len);
 }
 
+let cachedUint32ArrayMemory0 = null;
+function getUint32ArrayMemory0() {
+    if (cachedUint32ArrayMemory0 === null || cachedUint32ArrayMemory0.byteLength === 0) {
+        cachedUint32ArrayMemory0 = new Uint32Array(wasm.memory.buffer);
+    }
+    return cachedUint32ArrayMemory0;
+}
+
 let cachedUint8ArrayMemory0 = null;
 function getUint8ArrayMemory0() {
     if (cachedUint8ArrayMemory0 === null || cachedUint8ArrayMemory0.byteLength === 0) {
         cachedUint8ArrayMemory0 = new Uint8Array(wasm.memory.buffer);
     }
     return cachedUint8ArrayMemory0;
+}
+
+function passArray32ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 4, 4) >>> 0;
+    getUint32ArrayMemory0().set(arg, ptr / 4);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
 }
 
 function passArray8ToWasm0(arg, malloc) {
@@ -195,6 +325,7 @@ function __wbg_finalize_init(instance, module) {
     wasm = instance.exports;
     wasmModule = module;
     cachedInt32ArrayMemory0 = null;
+    cachedUint32ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
     wasm.__wbindgen_start();
     return wasm;
