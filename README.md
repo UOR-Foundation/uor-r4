@@ -5,7 +5,7 @@ model that runs on a laptop?*
 
 [![License: MIT](https://img.shields.io/github/license/UOR-Foundation/uor-r4)](LICENSE)
 [![Rust 1.97.1](https://img.shields.io/badge/rust-1.97.1-orange?logo=rust)](rust-toolchain.toml)
-[![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-yellow)](STATUS.md)
+[![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-yellow)](PLAN.md)
 [![Milestones: 1 of 8 complete](https://img.shields.io/badge/milestones-1%2F8%20complete-blue)](#where-we-are)
 [![Last commit](https://img.shields.io/github/last-commit/UOR-Foundation/uor-r4/main)](https://github.com/UOR-Foundation/uor-r4/commits/main)
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-ffcc4d)](https://huggingface.co/caseyallard/uor-r4-geometric-214m)
@@ -33,13 +33,14 @@ six closing bars on both seeds
 
 | Test | Saved model, seed 1 / seed 2 | Controls | Outcome |
 |---|---:|---:|---|
-| DEV next-token top-1, 14,287 rows | **7,002 / 7,001** | unigram 1,226; T2 6,300 | Beats both at both seeds |
+| DEV next-token top-1, 14,287 rows | **7,002 / 7,001** | unigram 1,226; T2 6,300; bar target 6,324 (T2 + 24) | Beats both and the target at both seeds |
 | Fresh V2, 14,479 rows | **7,215 / 7,228** | unigram 1,279; T2 6,582 | Beats both beyond the paired band of 82 |
 | Held-out phrasing p-f, 15,953 rows | **7,850 / 7,872** | unigram 1,409; T2 7,375 | Beats both beyond the paired band of 81 |
 
 The same saved artifacts have zero export/reference gap and pass the planted-fault control. They
 serve at a median **10,876 / 10,566 decode tokens per second on an Apple M1**, measured with a
-192-token prefill and 64-token decode. Bar (f) uses prompts whose phrasing templates are absent
+192-token prefill and 64-token decode for bar (f); the older close-grade bar (c) reports 11,026 /
+10,573 tok/s. Bar (f) uses prompts whose phrasing templates are absent
 from TRAIN at K = 1,024. **The limit:** 62.5% of p-f's *reference replies* are verbatim TRAIN
 replies. That is data overlap, not a generated-copy rate: M1 shows reading new prompts into known
 kinds of reply, not inventing new kinds of reply or carrying a conversation.
@@ -93,14 +94,16 @@ tested forms failed or broke a rule while the mechanism stays open.
 |---|---|---|
 | Embedding table (a starting vector per token) | [Prime-zeta codebook](docs/mechanisms/prime-zeta-codebook.md) and [address cells](docs/mechanisms/address-cells.md): whole-number addresses from primes and zeta-zero phases | ACTIVE |
 | Attention (which earlier tokens matter) | [Route](docs/mechanisms/route-read.md), [Flock](docs/mechanisms/flock-read.md) and [Relation](docs/mechanisms/relation-read.md) reads: walk an address tree, rotate a few neighbours into one frame, follow copy links | ACTIVE; independent effects remain unisolated |
-| Feed-forward layers (most of the multiplying) | [Hamilton rotation gate](docs/mechanisms/hamilton-gate.md) and [SpiralCore/FBS projection](docs/mechanisms/spiralcore-fbs.md) | Hamilton gate is in M1 and FBS; SpiralCore/FBS projection is on the FBS trunk only, served under `lut-stack/5` |
+| Feed-forward layers (most of the multiplying) | [Hamilton rotation gate](docs/mechanisms/hamilton-gate.md) and [SpiralCore/FBS routes](docs/mechanisms/spiralcore-fbs.md) | Hamilton gate is in M1 and FBS; FBS routes are trained and served on FBS only; dated float projection form READY |
 | Softmax output and cross-entropy loss | [Admission](docs/mechanisms/admission.md) (open a few address "drawers", called cells) and a [rank-margin hinge](docs/mechanisms/rank-margin.md) | ACTIVE |
 | Backpropagation optimizer | [Discrete learning](docs/mechanisms/discrete-learning.md): try each legal rotation of one entry, keep it only if the score strictly improves | ACTIVE |
 | Matrix-multiply runtime | [Integer serving (D11)](docs/mechanisms/lut-serving.md): whole-number adds, shifts, compares and table reads; integer multiply and divide are allowed | ACTIVE; the discrete M1 pair and the separate FBS `lut-stack/5` export both serve |
 
 Position and normalization have replacements on the FBS trunk: SpiralCore transport spin and RMS
-norm with an integer square root. The discrete M1 composition uses a discrete quaternion recurrence
-and Hamilton gate. M1 does not establish every replacement's independent effect. The board lists
+norm with an integer square root. M1 instead uses Flock `FrozenZeroV1`, `DiscreteHamiltonGateV1`,
+`DiscreteQuaternionRecurrenceV1`, an orbit-root causal pointer and post-rotation `OuterL1V1`—not FBS
+projection or a separate normalization component. M1 does not establish every replacement's
+independent effect. The board lists
 **28 mechanisms: 12 ACTIVE, 5 READY and 11 PARKED**. Part by part:
 [transformer vs geometry](docs/start/transformer-vs-geometry.md).
 

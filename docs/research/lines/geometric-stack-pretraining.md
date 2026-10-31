@@ -51,6 +51,6 @@ Loss and prose are different things: a good number coexisted with 0 of 5 stories
 
 ## Current state
 
-PARKED as a whole model. Its lawful pieces are tracked separately: [Hamilton gate](../../mechanisms/hamilton-gate.md) and [SpiralCore/FBS](../../mechanisms/spiralcore-fbs.md) are ACTIVE and trained on the discrete M1 and/or FBS paths; [recurrence gates](../../mechanisms/recurrence-gates.md) is READY with its fit/export measured. The M1 table-native and FBS `lut-stack/5` exporters exist at their declared scopes. A rebuild remains a separate research question, not a missing exporter.
+PARKED as a whole model. Its lawful pieces are tracked separately: [Hamilton gate](../../mechanisms/hamilton-gate.md) is ACTIVE on both M1 and FBS; [SpiralCore/FBS routes](../../mechanisms/spiralcore-fbs.md) are ACTIVE on FBS only, while the dated float projection form stays READY. M1 uses Flock `FrozenZeroV1`, `DiscreteHamiltonGateV1`, `DiscreteQuaternionRecurrenceV1`, an orbit-root causal pointer and post-rotation `OuterL1V1`, not FBS projection. [Recurrence gates](../../mechanisms/recurrence-gates.md) is READY with its fit/export measured. The M1 table-native and FBS `lut-stack/5` exporters exist at their declared scopes. A rebuild remains a separate research question, not a missing exporter.
 
 **Go deeper:** the [generated catalog page](../../../archive/catalog/geometric-stack-pretraining.md) lists all 84 records.

@@ -17,7 +17,7 @@ Every public number in this refresh must link to this sheet's committed evidence
 
 | Panel/contract | Seed 1 | Seed 2 | Controls and scope | Source |
 |---|---:|---:|---|---|
-| DEV integer top-1 | **7,002 / 14,287** | **7,001 / 14,287** | unigram 1,226; T2 6,300; both seeds beat both | [M1 close record](../../../../labs/m1-close-saved-model/README.md) |
+| DEV integer top-1 | **7,002 / 14,287** | **7,001 / 14,287** | unigram 1,226; T2 6,300; bar (d) target 6,324 = T2 + 24; both seeds beat both and the target | [M1 close record](../../../../labs/m1-close-saved-model/README.md) |
 | Fresh V2 integer top-1 | **7,215 / 14,479** | **7,228 / 14,479** | unigram 1,279; T2 6,582; paired band 82 | [Fresh transfer](../../../../labs/m1-fresh-panel-transfer/README.md) |
 | p-f held-out phrasing | **7,850 / 15,953** | **7,872 / 15,953** | unigram 1,409; T2 7,375; leads 475/497 above paired band 81 | [bar-f REPORT](../../m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
 | Export/reference agreement | 14,287 / 14,287 | 14,287 / 14,287 | zero export gap; planted-fault B4 passes | [close grade](../../../../labs/m1-close-saved-model/evidence/m1-close-grade.json) |

@@ -1,6 +1,6 @@
 # Glossary
 
-**In one paragraph.** UOR-R4 uses a lot of words that come from three places: language models (token, softmax, BPB), geometry (quaternion, E8, icosian) and the project's own rulebook (FIT, KEEP, PARKED). This page defines each one in a sentence or two and links to the page that explains it properly. Words are in alphabetical order. If you meet a code name such as K16 or A8 in a record, look for it here too. The project is pre-alpha: 1 of its 8 milestones is complete and no model holds a useful conversation yet ([STATUS](../../STATUS.md)).
+**In one paragraph.** UOR-R4 uses a lot of words that come from three places: language models (token, softmax, BPB), geometry (quaternion, E8, icosian) and the project's own rulebook (FIT, KEEP, PARKED). This page defines each one in a sentence or two and links to the page that explains it properly. Words are in alphabetical order. If you meet a code name such as K16 or A8 in a record, look for it here too. The project is pre-alpha: 1 of its 8 milestones is complete and no model holds a useful conversation yet ([PLAN](../../PLAN.md) and rendered [STATE](../../STATE.md)).
 
 ```mermaid
 flowchart LR
@@ -205,7 +205,7 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 **PM seat.** The project-manager role: it sequences work and keeps [PLAN.md](../../PLAN.md). Kimi holds it, with a cover lab named by the owner. See [the rules](../rules/README.md#who-decides-what).
 
-**Pre-alpha.** The project's honest stage. M1 is complete (1 of 8 milestones), but no model holds a useful conversation and no alpha release exists. See [STATUS](../../STATUS.md).
+**Pre-alpha.** The project's honest stage. M1 is complete (1 of 8 milestones), but no model holds a useful conversation and no alpha release exists. See [PLAN](../../PLAN.md) and rendered [STATE](../../STATE.md).
 
 **Pre-registration (sheet).** A one-page plan, written before a run, that states the bar, the noise, the controls, the seeds, the cost and what each outcome would decide. It is needed only before GPU training or evaluation and before any run a milestone claim rests on. See [the rules](../rules/README.md).
 

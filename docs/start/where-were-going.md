@@ -2,7 +2,7 @@
 
 **In one paragraph.** The goal is a fast language model that runs on your own laptop or browser,
 holds a conversation with durable memory, and later reasons and writes code, all through geometry
-and exact memory rather than a transformer. **M1 is complete: 1 of 8 milestones.** M2 is next:
+and exact memory rather than a transformer. **M1 is complete: 1 of 8 milestones.** M2 is the next capability milestone:
 complete correct replies grounded in exact memory. The immediate obstacle is new-phrasing reply
 opening, not the already-passed next-token count-table bars. This page is a plan, not a promise.
 

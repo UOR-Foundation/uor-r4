@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 440" width="960" height="440" role="img" aria-labelledby="t d">
 <title id="t">Saved M1 model against count tables</title>
-<desc id="d">Horizontal bars on one scale from 0 to 14,287 development-panel positions. Next-word table 6,300, unigram table 1,226, saved M1 model seed 2 7,001, saved M1 model seed 1 7,002. A dashed line at 6,300 marks M1's closing threshold, passed at both seeds. The saved model is above both tables.</desc>
+<desc id="d">Horizontal bars on one scale from 0 to 14,287 development-panel positions. Next-word table 6,300, unigram table 1,226, saved M1 model seed 2 7,001, saved M1 model seed 1 7,002. A dashed line at 6,324 marks M1's closing target: T2 6,300 plus 24. Both seeds pass the target and beat both tables.</desc>
 <style>
 svg { --bg:#ffffff; --ink:#1f2328; --body:#2b3138; --muted:#57606a; --rule:#d0d7de; --panel:#f6f8fa;
       --blue:#0072b2; --sky:#56b4e9; --green:#007a5e; --orange:#e69f00; --verm:#d55e00; --purple:#7a4fa3; --pink:#cc79a7; }
@@ -55,8 +55,8 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <text x="16" y="328" font-size="11" class="t-muted" text-anchor="start">integer UORLUT01</text>
 <rect x="270" y="298" width="308.8" height="34" rx="2" class="f-blue"/>
 <text x="586.8" y="320" font-size="13" class="t-ink b" text-anchor="start">7,002</text>
-<line x1="547.8" y1="112" x2="547.8" y2="348" class="s-verm" stroke-width="2" stroke-dasharray="6 4"/>
-<text x="555.8" y="100" font-size="13" class="t-body" text-anchor="start">M1 complete: above both tables on each of two seeds</text>
+<line x1="548.9" y1="112" x2="548.9" y2="348" class="s-verm" stroke-width="2" stroke-dasharray="6 4"/>
+<text x="556.9" y="100" font-size="13" class="t-body" text-anchor="start">M1 target 6,324 (T2 + 24): passed at both seeds</text>
 <text x="16" y="412" font-size="11" class="t-muted" text-anchor="start">Exact export/reference agreement and B4 pass at both seeds.</text>
 <text x="16" y="428" font-size="11" class="t-muted" text-anchor="start">Source: docs/labs/m1-close-saved-model; docs/labs/host-diagnostics-2026-10-17.</text>
 </svg>

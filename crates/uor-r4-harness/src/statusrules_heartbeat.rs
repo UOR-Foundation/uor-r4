@@ -119,6 +119,9 @@ mod tests {
         let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let p = StatePaths::resolve(&repo, None, Some("/nonexistent-live"));
         let mut regs = Registries::load(&p).expect("registry");
+        for m in &mut regs.milestones {
+            m.status = "done".to_string();
+        }
         if let Some(m) = regs.milestones.first_mut() {
             m.status = status.to_string();
         }

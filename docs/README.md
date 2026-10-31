@@ -32,7 +32,7 @@ sources.*
 | You want to… | Start here |
 |---|---|
 | Understand the project in five minutes | [What UOR-R4 is](start/what-is-uor-r4.md), then the [glossary](start/glossary.md) and [FAQ](start/faq.md) |
-| Know where the project stands, with numbers | [Where we are](start/where-we-are.md) and the short [STATUS](../STATUS.md) page |
+| Know where the project stands, with numbers | [Where we are](start/where-we-are.md), [PLAN](../PLAN.md) and rendered [STATE](../STATE.md) |
 | Know where it is going | [Where we're going](start/where-were-going.md) and the milestone table in [ROADMAP](../ROADMAP.md) |
 | See which transformer part each mechanism replaces | [Transformer vs geometry](start/transformer-vs-geometry.md) |
 | Find your way around the folders | [How the repository is laid out](start/repository-layout.md) |
@@ -82,7 +82,7 @@ a failed run closes one configuration, never a mechanism ([charter](../CHARTER.m
 
 | Item | State | Source |
 |---|---|---|
-| Milestones complete | **1 of 8 (M1)** | [STATUS](../STATUS.md), [PLAN](../PLAN.md) |
+| Milestones complete | **1 of 8 (M1)** | [PLAN](../PLAN.md), rendered [STATE](../STATE.md) |
 | Model that holds a conversation | None | [where we are](start/where-we-are.md) |
 | Mechanisms | 28: 12 ACTIVE, 5 READY, 11 PARKED | [mechanism board](mechanisms/README.md) |
 | Research lines with their own page | 17 | [research lines](research/lines/README.md) |

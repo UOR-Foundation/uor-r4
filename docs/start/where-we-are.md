@@ -23,12 +23,12 @@ adds bar (f), and [M1 #2029](https://github.com/UOR-Foundation/uor-r4/issues/202
 
 | Measurement | Seed 1 | Seed 2 | Controls and scope |
 |---|---:|---:|---|
-| DEV integer top-1 | **7,002 / 14,287** | **7,001 / 14,287** | unigram 1,226; T2 6,300 |
+| DEV integer top-1 | **7,002 / 14,287** | **7,001 / 14,287** | unigram 1,226; T2 6,300; bar (d) target 6,324 = T2 + 24 |
 | Fresh V2 integer top-1 | **7,215 / 14,479** | **7,228 / 14,479** | unigram 1,279; T2 6,582; paired band 82 |
 | Held-out-phrasing p-f | **7,850 / 15,953** | **7,872 / 15,953** | unigram 1,409; T2 7,375; paired band 81 |
-| Apple M1 decode | **10,876 tok/s** | **10,566 tok/s** | median, 192-token prefill and 64-token decode |
+| Apple M1 decode | **10,876 tok/s** | **10,566 tok/s** | bar-f remeasurement; median, 192-token prefill and 64-token decode |
 
-Both seeds have exact 14,287-row export/reference agreement and pass the planted-fault B4 control.
+The older close-grade bar (c) reports 11,026 / 10,573 tok/s; the table keeps the separate bar-f remeasurement. Both seeds have exact 14,287-row export/reference agreement and pass the planted-fault B4 control.
 Sources: [M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), and [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md).
 
 **What bar (f) proves, and its limit.** At K = 1,024, no p-f prompt value-masked template occurs

@@ -36,10 +36,10 @@ const DEFAULT_OUT: &str = "docs/figures";
 /// Sources: `docs/labs/m1-close-saved-model/README.md` (saved M1 model top-1,
 /// seed 1 = 7,002, seed 2 = 7,001) and
 /// `docs/labs/host-diagnostics-2026-10-17/README.md` (unigram table 1,226 and
-/// next-word table T2 6,300, both on the full 14,287 panel). The older K16
-/// values (65 and 463) are historical and are not the current best.
+/// next-word table T2 6,300, both on the full 14,287 panel). Close-grade bar (d)
+/// requires T2 + 24 = 6,324. The older K16 values are historical, not the current best.
 const PANEL_POSITIONS: u64 = 14_287;
-const M1_BAR: u64 = 6_300;
+const M1_BAR: u64 = 6_324;
 
 /// (label, sub-label, value, is_trained_model), top to bottom.
 const BASELINE_BARS: [(&str, &str, u64, bool); 4] = [
@@ -567,7 +567,7 @@ fn status_vs_baselines() -> Result<String, Fail> {
         );
     }
 
-    // M1's closing threshold, now passed at both seeds.
+    // M1's closing target: T2 6,300 plus 24, passed at both seeds.
     let bx = x(M1_BAR);
     d.line([bx, top - 12.0, bx, axis_y], "verm", 2.0, Some("6 4"));
     d.text(
@@ -575,7 +575,7 @@ fn status_vs_baselines() -> Result<String, Fail> {
         top - 24.0,
         LBL,
         Anchor::Start,
-        "M1 complete: above both tables on each of two seeds",
+        "M1 target 6,324 (T2 + 24): passed at both seeds",
     );
 
     let fy = axis_y + 64.0;
@@ -595,7 +595,7 @@ fn status_vs_baselines() -> Result<String, Fail> {
     );
     d.finish(
         "Saved M1 model against count tables",
-        "Horizontal bars on one scale from 0 to 14,287 development-panel positions. Next-word table 6,300, unigram table 1,226, saved M1 model seed 2 7,001, saved M1 model seed 1 7,002. A dashed line at 6,300 marks M1's closing threshold, passed at both seeds. The saved model is above both tables.",
+        "Horizontal bars on one scale from 0 to 14,287 development-panel positions. Next-word table 6,300, unigram table 1,226, saved M1 model seed 2 7,001, saved M1 model seed 1 7,002. A dashed line at 6,324 marks M1's closing target: T2 6,300 plus 24. Both seeds pass the target and beat both tables.",
     )
 }
 

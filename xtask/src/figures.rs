@@ -1158,7 +1158,7 @@ fn serving_pipeline() -> Result<String, Fail> {
     s.legend(636.0, &[St::Working, St::Built, St::Progress]);
     s.finish(
         "The D11 serving pipeline, 30 October 2026",
-        "The integer engine serves the saved discrete M1 pair and the separate float-trained FBS trunk. The M1 pair has exact export agreement and reaches 10,876 / 10,566 native decode tok/s on Apple M1. FBS lut-stack/5 is exact at DEV scope and reaches 4,829 tok/s snapped, with integer multiply and divide allowed and floats banned. Next, a reachable memory key on new phrasing, joined integer serving and R7. Studio and desktop use a synthetic stand-in, not a qualified product bundle.",
+        "The integer engine serves the saved discrete M1 pair and the separate float-trained FBS trunk. The M1 pair has exact export agreement and reaches 10,876 / 10,566 native decode tok/s on Apple M1 under the bar-f remeasurement; the older close-grade bar-c rate is 11,026 / 10,573. FBS lut-stack/5 is exact at DEV scope and reaches 4,217–4,504 tok/s; the separate snapped artifact reaches 4,829 tok/s. Integer multiply and divide are allowed and floats are banned. Next, a reachable memory key on new phrasing, joined integer serving and R7. Studio and desktop use a synthetic stand-in, not a qualified product bundle.",
     )
 }
 

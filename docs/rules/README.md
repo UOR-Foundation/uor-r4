@@ -23,7 +23,7 @@ flowchart TD
 
 The owner's stated goal behind every ban, in his own words from 18 October 2026, is "to ban expensive operations" and to optimise for "fast local ai that can train fast and run fast" and reaches "almost frontier level capability" (`CHARTER.md` §1, from decision D37). Each rule removes a cost that a dense neural network pays, or protects the evidence that tells the project whether its geometric replacement works. When a case is unclear, the charter says to choose what trains and serves fastest on a laptop through the geometric path, and to write the choice down.
 
-The project's headline metric is tokens per second: how fast the model reads and writes text, with decode speed and context speed measured separately. A small quality gap is acceptable (`CHARTER.md` §1). The project is pre-alpha, 1 of its 8 milestones is complete, and no model holds a useful conversation yet (`STATUS.md`; see [the mechanism board](../mechanisms/README.md)).
+The project's headline metric is tokens per second: how fast the model reads and writes text, with decode speed and context speed measured separately. A small quality gap is acceptable (`CHARTER.md` §1). The project is pre-alpha, 1 of its 8 milestones is complete, and no model holds a useful conversation yet ([PLAN](../../PLAN.md) and rendered [STATE](../../STATE.md); see [the mechanism board](../mechanisms/README.md)).
 
 These are rules, so the labels "proof", "measurement" and "hypothesis" from `docs/formal_vocabulary.md` do not apply to them. The "why" given for each rule below is the reason the charter itself states. It is not a measured result.
 
@@ -90,7 +90,7 @@ Section 4 of the charter is about not fooling ourselves.
 - **Power.** A decisive run uses at least 2 seeds or at least 200 fresh rows, with bars no narrower than the measured noise, and reports a fresh transfer number with every development gain (§4.3).
 - **Controls and pivots.** Compare against lawful non-neural baselines such as count tables. After three results on one line that do not move its headline number, write a pivot note: stop, or run one decisive experiment (§4.4).
 - **Claims.** Write "measured X on Y against Z". A test pass is not trained capability, and `NOT_RUN` is not a pass (§4.6).
-- **The first-milestone closing bars.** The close-grade maps (a) self-contained D11 loading, (b) exact export agreement and B4, (c) tokens/s, (d) DEV integer top-1 above unigram (1,226 of 14,287) and T2 (6,300), and (e) Fresh V2 transfer; `panel-score.json` adds (f) held-out phrasing. The upstream D39 G-Pre/G-Adm/G-Occ evidence is retained in the M1 item and dated records; §4.8 and its acceptance text are unchanged.
+- **The first-milestone closing bars.** The close-grade maps (a) self-contained D11 loading, (b) exact export agreement and B4, (c) tokens/s, (d) DEV integer top-1 above unigram (1,226 of 14,287) and T2 (6,300), with the close-grade target 6,324 = T2 + 24, and (e) Fresh V2 transfer; `panel-score.json` adds (f) held-out phrasing. The upstream D39 G-Pre/G-Adm/G-Occ evidence is retained in the M1 item and dated records; §4.8 and its acceptance text are unchanged.
 
 ## Where it stands
 
@@ -99,7 +99,7 @@ Section 4 of the charter is about not fooling ourselves.
 | Charter | Adopted 19 October 2026 by the owner at checkpoint 1 of the repository renormalisation. | `CHARTER.md`; [change log](changes.md) |
 | Old rules D0 to D41 and the long `AGENTS.md` | Replaced by the charter. Each decision keeps its heading and a one-sentence fate in the live index; full text is preserved unchanged in the archive. | [`decision-map.md`](decision-map.md); [archived original](../../archive/integration/DECISIONS-2026-10-19.md) |
 | Training, M2 and Stage B | Go through the lab's own whole-project pre-run review under D67; D41's donor pass is the named owner-at-dispatch exception. | `CHARTER.md` §5.1, §5.10 |
-| Pre-alpha status | 1 of 8 milestones complete (M1); no useful conversation yet. | `STATUS.md`, `PLAN.md` |
+| Pre-alpha status | 1 of 8 milestones complete (M1); no useful conversation yet. | `PLAN.md`, rendered `STATE.md` |
 
 ## Go deeper
 

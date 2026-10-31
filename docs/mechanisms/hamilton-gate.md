@@ -12,7 +12,7 @@ Inside a feed-forward layer, a gate decides how much of a signal passes through.
 
 The gate in the feed-forward layer (the multilayer perceptron) that follows attention. The common form, SwiGLU, multiplies the value by a sigmoid-shaped gate.
 
-![Left: a value vector drawn as an arrow. As the gate input sweeps, the arrow under a sigmoid gate shrinks toward nothing, while under the Hamilton gate it keeps its length and swings around a sphere. Middle: two feed-forward wiring diagrams side by side. SwiGLU runs gate, sigmoid, then times the up branch. Hamilton runs gate, divide by length, then a quaternion product with the up branch; the banned sigmoid is crossed out and a dashed box shows a future table read for the product. Right: the backward factor one over r plotted against gate length, with the 1e-12 guard marked.](../figures/mechanisms/hamilton-gate.svg)
+![Left: a value vector drawn as an arrow. As the gate input sweeps, the arrow under a sigmoid gate shrinks toward nothing, while under the Hamilton gate it keeps its length and swings around a sphere. Middle: two feed-forward wiring diagrams side by side. SwiGLU runs gate, sigmoid, then times the up branch. Hamilton runs gate, divide by length, then a quaternion product with the up branch; the banned sigmoid is crossed out and the final label records that the gate is ACTIVE, trained and served in M1 and FBS. Right: the backward factor one over r plotted against gate length, with the 1e-12 guard marked.](../figures/mechanisms/hamilton-gate.svg)
 
 *What the swap does and does not do. The rotation keeps the signal's length; the length of the gate block enters only through the backward pass (right, drawn from the formula).*
 

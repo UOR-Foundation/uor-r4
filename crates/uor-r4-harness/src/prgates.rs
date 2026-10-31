@@ -606,14 +606,14 @@ mod registry_gate_tests {
     /// Asserted against Python's own message, including the names it lists.
     #[test]
     fn an_unknown_line_is_reported_with_pythons_text() {
-        let body = "Line: a line that does not exist | count 0/3 | headline 37/232 -> 37/232\nDecision: KEEP\nReferences #2029\n";
+        let body = "Line: a line that does not exist | count 0/3 | headline 6/6 -> 6/6\nDecision: KEEP\nReferences #2029\n";
         let p = count_matches_registry(&fields(body), &regs());
         assert_eq!(p.len(), 1, "{p:?}");
         assert_eq!(p[0].rule, "prlint.count_matches_registry");
         assert_eq!(p[0].severity, "warn");
         assert_eq!(
             p[0].message,
-            "line 'a line that does not exist' is not in M1's registry lines (exact addressed memory, evaluation integrity)"
+            "line 'a line that does not exist' is not in M1's registry lines (saved discrete six-bar close, evaluation integrity)"
         );
     }
 
@@ -621,23 +621,23 @@ mod registry_gate_tests {
     /// hits when it resets a count it did not earn by moving the headline (D21).
     ///
     /// **I wrote this test the wrong way round first and it failed**, which is the fixture discipline
-    /// working on the person who wrote the code: M2's only line sits at **12/3**, so declaring `0` is
+    /// working on the person who wrote the code: M4's `starling read` line sits at **3/3**, so declaring `0` is
     /// below it and *must* be reported.
     #[test]
     fn a_count_below_the_registry_is_reported() {
-        let body = "Line: unified geometric route/action/learning integration | count 0/3 | headline 437/512 -> 437/512\nDecision: KEEP\nReferences #2030\n";
+        let body = "Line: starling read | count 0/3 | headline 0/1 -> 0/1\nDecision: KEEP\nReferences #2032\n";
         let p = count_matches_registry(&fields(body), &regs());
         assert_eq!(p.len(), 1, "{p:?}");
         assert_eq!(
             p[0].message,
-            "declares 0/3 but docs/harness/milestones.json has 12/3 for line 'unified geometric route/action/learning integration'"
+            "declares 0/3 but docs/harness/milestones.json has 3/3 for line 'starling read'"
         );
     }
 
     /// A count **at** the registry's raises nothing: this gate reports a reset, not agreement.
     #[test]
     fn a_count_at_the_registry_is_silent() {
-        let body = "Line: unified geometric route/action/learning integration | count 12/3 | headline 437/512 -> 437/512\nDecision: KEEP\nReferences #2030\n";
+        let body = "Line: starling read | count 3/3 | headline 0/1 -> 0/1\nDecision: KEEP\nReferences #2032\n";
         assert!(count_matches_registry(&fields(body), &regs()).is_empty());
     }
 
@@ -645,7 +645,7 @@ mod registry_gate_tests {
     /// nag a lab whose body agrees with the registry.
     #[test]
     fn a_known_line_at_its_registry_count_is_silent() {
-        let body = "Line: evaluation integrity | count 1/3 | headline 37/232 -> 37/232\nDecision: KEEP\nReferences #2029\n";
+        let body = "Line: evaluation integrity | count 1/3 | headline 6/6 -> 6/6\nDecision: KEEP\nReferences #2029\n";
         assert!(count_matches_registry(&fields(body), &regs()).is_empty());
     }
 
@@ -662,7 +662,7 @@ mod registry_gate_tests {
     /// here: whether that is intended is a policy question, and the port matches Python either way.**
     #[test]
     fn the_headline_gate_fires_only_on_a_self_contradicting_body() {
-        let firing = "Line: exact addressed memory | count 0/3 | headline 5/232 -> 5/232\nDecision: KEEP\nReferences #2029\n";
+        let firing = "Line: evaluation integrity | count 0/3 | headline 5/232 -> 5/232\nDecision: KEEP\nReferences #2029\n";
         let p = headline_vs_registry(&fields(firing), &regs());
         assert_eq!(
             p.len(),
@@ -677,14 +677,14 @@ mod registry_gate_tests {
             p[0].message
         );
         assert!(
-            p[0].message.contains("reply acceptable 37/232"),
+            p[0].message.contains("M1 closing bars 6/6"),
             "{}",
             p[0].message
         );
 
         // A body that STATES its move is never reported, even when the after value is nowhere near
         // the registry - because D21 lets a line move, and saying so is the whole declaration.
-        let moved = "Line: exact addressed memory | count 0/3 | headline 37/232 -> 116/232\nDecision: KEEP\nReferences #2029\n";
+        let moved = "Line: evaluation integrity | count 0/3 | headline 37/232 -> 116/232\nDecision: KEEP\nReferences #2029\n";
         assert!(
             headline_vs_registry(&fields(moved), &regs()).is_empty(),
             "a stated move is the declaration, not an exception to it"
@@ -700,12 +700,12 @@ mod registry_gate_tests {
         let r = regs();
         let m1 = r.milestones.iter().find(|m| m.id == "M1").expect("M1");
         assert_eq!(
-            find_line(Some(m1), "exact addressed memory").map(|l| l.name.clone()),
-            Some("exact addressed memory".into())
+            find_line(Some(m1), "evaluation integrity").map(|l| l.name.clone()),
+            Some("evaluation integrity".into())
         );
         // A substring either way still resolves, which is the second pass.
-        assert!(find_line(Some(m1), "addressed memory").is_some());
-        assert!(find_line(Some(m1), "memory").is_some());
+        assert!(find_line(Some(m1), "integrity").is_some());
+        assert!(find_line(Some(m1), "evaluation").is_some());
         assert!(find_line(Some(m1), "nothing like it").is_none());
     }
 
@@ -716,7 +716,7 @@ mod registry_gate_tests {
     fn the_milestone_is_the_one_the_body_is_about() {
         let r = regs();
         // Names M1's line, so M1 scores 3 on the line match regardless of issue order.
-        let body = "Line: exact addressed memory | count 0/3 | headline 37/232 -> 37/232\nReferences #2032 #2029\n";
+        let body = "Line: evaluation integrity | count 0/3 | headline 6/6 -> 6/6\nReferences #2032 #2029\n";
         let f = fields(body);
         assert_eq!(find_milestone(&r, &f).map(|m| m.id), Some("M1".into()));
 
@@ -1744,9 +1744,9 @@ mod check_pr_tests {
             let name = case.get("name").and_then(|v| v.as_str()).unwrap_or("?");
             let body = match name {
                 "empty" => "",
-                "minimal" => "Line: exact addressed memory | count 0/3 | headline 37/232 -> 37/232\nDecision: KEEP\nReferences #2029\n",
-                "complete" => "Line: exact addressed memory | count 0/3 | headline 37/232 -> 37/232\nDecision: KEEP\n- [x] Checks run at this exact head\n```\ncargo test -p uor-r4-harness\n```\nRecord: docs/labs/prlint-linking-gates-2026-10-14/README.md\nReferences #2029\n",
-                "unknown-line" => "Line: nope not a line | count 0/3 | headline 37/232 -> 37/232\nDecision: KEEP\nReferences #2029\n",
+                "minimal" => "Line: evaluation integrity | count 1/3 | headline 6/6 -> 6/6\nDecision: KEEP\nPrereg: #issuecomment-12345\nReferences #2029\n",
+                "complete" => "Line: evaluation integrity | count 1/3 | headline 6/6 -> 6/6\nDecision: KEEP\nPrereg: #issuecomment-12345\n- [x] Checks run at this exact head\n```\ncargo test -p uor-r4-harness\n```\nRecord: docs/labs/prlint-linking-gates-2026-10-14/README.md\nReferences #2029\n",
+                "unknown-line" => "Line: nope not a line | count 0/3 | headline 6/6 -> 6/6\nDecision: KEEP\nReferences #2029\n",
                 _ => continue,
             };
             let got = check_pr(body, &p, &regs, None, "2026-10-14");

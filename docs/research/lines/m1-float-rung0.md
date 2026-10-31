@@ -51,7 +51,7 @@ Hard geometric selection gives unselected keys no gradient, so it needs a traini
 
 ## Current state
 
-Preserved evidence, not a live line. [Hamilton gate](../../mechanisms/hamilton-gate.md) and [SpiralCore/FBS](../../mechanisms/spiralcore-fbs.md) are ACTIVE and trained on the discrete M1 and/or FBS paths; [recurrence gates](../../mechanisms/recurrence-gates.md) is READY with its 1,024-step fit and mixed export outcome, and [Flock read](../../mechanisms/flock-read.md) is ACTIVE. [Spin weights](../../mechanisms/spin-weights.md) is READY by D74. Archived float sheets return only as new sheets with a fresh review and the lab's D67 pre-run review.
+Preserved evidence, not a live line. [Hamilton gate](../../mechanisms/hamilton-gate.md) is ACTIVE on M1 and FBS; [SpiralCore/FBS routes](../../mechanisms/spiralcore-fbs.md) are ACTIVE on FBS only, while the dated float projection form stays READY. M1 uses Flock `FrozenZeroV1`, `DiscreteHamiltonGateV1`, `DiscreteQuaternionRecurrenceV1`, an orbit-root causal pointer and post-rotation `OuterL1V1`, not FBS projection. [Recurrence gates](../../mechanisms/recurrence-gates.md) is READY with its 1,024-step fit and mixed export outcome, and [Flock read](../../mechanisms/flock-read.md) is ACTIVE. [Spin weights](../../mechanisms/spin-weights.md) is READY by D74. Archived float sheets return only as new sheets with a fresh review and the lab's D67 pre-run review.
 
 ## 29 Oct 2026
 

@@ -23,7 +23,7 @@
         {
           "label": "DEV integer top-1 (seeds 1/2)",
           "text": "7,002 / 7,001",
-          "target": 6300,
+          "target": 6324,
           "of": 14287,
           "unit": "correct first guesses"
         },
@@ -103,7 +103,7 @@
           }
         ],
         "previous_base_artifact": "D10 (10% recall dose, adopted under D22 5f)",
-        "previous_next": "Rung-0 sheet Amendment2 TEST FITNESS: FIT (design) and the pre-M1 K16/A8 route; all superseded by the reviewed six-bar close.",
+        "previous_next": "Rung-0 sheet Amendment2 TEST FITNESS: FIT (design) — Claude 6159328025 confirmed on merged blob 6159394631, Codex 6159308818 exact-head 6159343268 (PR2415 5c189cf59). FIT lifts no hold. Execution gates in order: Codex implements+qualifies the admission diff (controller wiring, trained-checkpoint eval, per-kind sensitivity counters, P1/P2 pilot reporting) at e7d926fbe+only-that-diff; Claude reviews that exact diff; Kimi binds final executable/PTX/source identities + resource admission; owner alone releases D4. Pilot scope preserved: seed1, 1640 batches, VectorBlock 0..1639 only, Route NOT_RUN, ~1.784h/$1.62 UNVERIFIED known-component subtotal; fresh transfer UNAVAILABLE/NOT_RUN; full two-seed run is a later owner decision. M1 reply headline SUSPENDED under R14.",
         "negative_scope": "K16-A scored 65 and 463 of 14,287 below unigram 1,226 and T2 6,300; K16-R collapsed to 19 or 20 cells. These results remain dated evidence."
       },
       "next": "M2 grounded replies. Claude-219's point-key opening improves free generation at three seeds on fresh p-v, but only partially; the next unit trains and serves it in one integer model and scores it end to end. M1 does not establish useful chat. p-f has 0.625 verbatim TRAIN reference replies.",
@@ -260,7 +260,7 @@
           }
         ],
         "previous_base_artifact": "19.9M chat stack, 0.933 BPB served",
-        "previous_next": "Murmuration read and the older rung-0b route; retained as history, not the current M4 path."
+        "previous_next": "Murmuration read (card #2032 6151093135, owner-approved 13 Oct): S1 flock transport mean + S2 FBS tree source and section-4 finite controls (FIT), then the decisive run after rung 0 and the owner hold release. Rung-0b rank read retired as evidence."
       },
       "next": "Select the accepted model, complete the lawful-likelihood held-out score, export it through UORLUT01 and qualify the full native/CLI/session/audit path. PRLL is built and registered; GPU held-out scoring remains open.",
       "training_hold": false
