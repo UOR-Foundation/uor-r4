@@ -1,6 +1,6 @@
 # ORDER: comprehensive 30 Oct documentation refresh
 
-Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `a5eb6863a05b0177de189c7ca39da4025843c167`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
+Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `bd9660fa76cf14e5a96d9c87b53788797d6d2fbd`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
 
 ## Goal and chain
 
@@ -79,3 +79,7 @@ During repair, #3454 merged claude-224 on `main` as `18c4c3da70f35b5c8c9348297df
 ## Scope decision: retention dependency registration
 
 #3455 then merged claude-225 on `main` as `a5eb6863a05b0177de189c7ca39da4025843c167`. Its source inspection found that the integer artifact does not serve (r-drop)'s trained retention recurrence and registered `integer-retention-rates` (#3456) before the point-key run. The same living documentation scope records that prerequisite and the unchanged NOT_RUN scope; no model code, acceptance bar, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation corrections together.
+
+## Scope decision: retention implementation status
+
+#3457 then merged claude-226 on `main` as `bd9660fa76cf14e5a96d9c87b53788797d6d2fbd`. `integer-retention-rates.md` is added to record the completed flag and retained recurrence, their 386 integer-library and 186 float-library tests, nine negative gates and full serving audit, and the remaining GPU parity before point-key unit 3. No acceptance bar, model code, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation corrections together.

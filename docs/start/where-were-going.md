@@ -48,7 +48,7 @@ conversation. See [CHARTER §4.8](../../CHARTER.md#4-evidence) and the [closing 
 1. **Complete `point-key-integer` (#3450).** Claude-218 found trunk-state keys that
    improved openings offline; [claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md)
    showed a partial free-generation gain on fresh p-v, and [claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md)
-   then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade; before unit 3's real TRAIN export, p-x scoring and laptop measurement, [integer-retention-rates](../roadmap/items/integer-retention-rates.md) must make the integer recurrence match the trained model ([item](../roadmap/items/point-key-integer.md)).
+   then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade; [claude-226](../loop/tasks/integer-retention-rates/claude-226/REPORT.md) has built the retention recurrence and flag; GPU parity on (r-drop) s1 must pass before unit 3's real TRAIN export, p-x scoring and laptop measurement ([item](../roadmap/items/point-key-integer.md)).
 2. **Serve every required part in integers.** Finish the served read, memory and readout rather
    than treating an export or an audit alone as the whole model.
 3. **Train and score one model end to end.** Measure complete generated replies on untouched
@@ -101,7 +101,7 @@ whole-model score are still unproven; useful conversation has not been establish
 |---|---|---|
 | Milestones complete | **1 of 8 (M1)** | [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) |
 | Next milestone | M2: grounded complete replies | [PLAN](../../PLAN.md) |
-| Immediate problem | Match the trained retention recurrence, then run unit 3's real TRAIN export, p-x scoring and laptop measurement | [retention item](../roadmap/items/integer-retention-rates.md), [claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md) |
+| Immediate problem | Prove retention parity on the GPU, then run unit 3's real TRAIN export, p-x scoring and laptop measurement | [claude-226](../loop/tasks/integer-retention-rates/claude-226/REPORT.md), [item](../roadmap/items/point-key-integer.md) |
 | M4 | Lawful likelihood built; full accepted-model serving and held-out score open | [serving and export](../model/serving-and-export.md) |
 | Products shipped | None | [products](../products/README.md) |
 

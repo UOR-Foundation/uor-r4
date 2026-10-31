@@ -13,26 +13,18 @@ scope: [crates/uor-r4-float-train/src/fbs_export.rs, crates/uor-r4-float-train/s
 
 ## Why it matters
 
-The project's first hurdle is one working model end to end, served from its integer artifact. The trained model and the served one must compute the same recurrence, and today they do not for any model trained since 27 October.
+The project's first hurdle is one working model end to end, served from its integer artifact. The trained model and the served one must compute the same recurrence. Claude-226 has now built the retained reading and its artifact flag; their GPU parity on the trained checkpoint remains to be proven.
 
 - **The float trunk's retention reading:** with `retain_rates` on, a recurrence lane carries 1 − 2^−(k+1) of its state at each token, with the input share keep = √(1 − λ²). `geometric_stack_native.rs`: "On (`in_space_long`, 27 Oct 2026): a lane carries `1 - 2^-(k+1)`, so entry `k` holds about `2^(k+1)` tokens."
 - **Every one-model-end-to-end checkpoint since then trained with it.** (r-drop), which claude-217 to claude-220 scored, has `"retain_rates": true` in its run's `config.json`, and claude-220 scored it with `--retain-rates 1`.
-- **The integer artifact serves only the off reading,** λ = 2^−(k+1), at Q31 (`stack/session.rs`, the geometric recurrence, `1 << (30 - idx)` with `GEOMETRIC_KEEP_Q31`). The exporter (`fbs_export.rs`, `fbs-snapshot`) carries no flag.
-- **So an export of such a checkpoint serves a different, untrained recurrence.** [`point-key-integer`](point-key-integer.md)'s run waits on this item.
-
-Found by claude-225 reading the code, before any run.
+- **Before claude-226, the integer artifact served only the off reading,** λ = 2^−(k+1), and the exporter carried no flag. Claude-225 found that mismatch by reading the code, before any run.
+- **Claude-226 built the flag and retained recurrence** ([REPORT](../../loop/tasks/integer-retention-rates/claude-226/REPORT.md), #3457): 386 integer-library tests, 186 float-library tests, nine negative gates and a full serving audit. Earlier snapshots still export byte for byte, and an older engine refuses the new `geometric-retention` reading.
+- **GPU parity is still NOT_RUN.** [`point-key-integer`](point-key-integer.md)'s real run waits for that check, not for the recurrence implementation.
 
 ## What is missing
 
-- **The flag:** the snapshot carries the run's `retain_rates`, read from the run's `config.json` beside its `models/`. The artifact records it, so a stack with the retention reading carries a schema or shape field that engines without it refuse.
-- **The retained recurrence, in integers.**
-  - λ_i = 1 − 2^−(i+1) at Q31, that is `(1 << 31) − (1 << (30 − i))`.
-  - keep_i = isqrt(2^62 − λ_i²) at Q31, a precomputed table beside `GEOMETRIC_KEEP_Q31`, with no multiply in the step's audited path beyond what D80 allows.
-  - Its floor matches the float side's clamp.
-- **The rate score's other two flags, settled for (r-drop):** `fold_scores` and `reflect_floor` (`geometric_stack_native.rs`) also change the score before the rate is selected, and the integer step only clamps.
-  - (r-drop)'s run config has both off (`"fold_scores": false`, `"reflect_floor": false`), so the clamp is the float rule for it, and this item serves `retain_rates` alone.
-  - A checkpoint trained with either on needs its own form too. The snapshot refuses such a run's config until that form exists.
-- **Trunk parity on the GPU** (CHARTER §3.5, the float reference): `fbs-compare`, the integer trunk's readouts against `fbs-snapshot`'s float readouts, on (r-drop) seed 1 at step 16,384, as the D11 exporter units measured it.
+- **Trunk parity on the GPU** (CHARTER §3.5, the float reference): `fbs-compare`, the integer trunk's readouts against `fbs-snapshot`'s float readouts, on (r-drop) seed 1 at step 16,384, as the D11 exporter units measured it. `fbs-snapshot` now reads the run config and takes its float reference under retention too.
+- **The completed integer form, for reference:** `rec_gates = "geometric-retention"`; λ_i = 1 − 2^−(i+1) at Q31 and keep_i = isqrt(2^62 − λ_i²), using precomputed tables with a test-side f64 reference. A run with `fold_scores` or `reflect_floor` on is refused; both are off in (r-drop), so this item serves `retain_rates` alone.
 
 ## Done when
 
