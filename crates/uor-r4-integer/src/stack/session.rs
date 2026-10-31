@@ -47,9 +47,7 @@ use super::kernels::{
     NORM_FINE_EXP, RESIDUAL_EXP,
 };
 use super::hamming::{hamming_image, ServedHamming};
-use super::memory::{memory_image, MemoryAnchors, ServedTurnMemory};
-#[cfg(test)]
-use super::memory::MemoryMove;
+use super::memory::{memory_image, MemoryAnchors, MemoryMove, ServedTurnMemory};
 use super::StackError;
 
 /// Exponent of the recurrence state.
@@ -1346,6 +1344,9 @@ impl IntegerStackModel {
                 cells: vec![0; if self.fbs.is_some() { 256 } else { 0 }],
                 native_kept: vec![0; self.fbs.as_ref().map_or(0, |f| f.kept_cells)],
                 native_token: 0,
+                point_tied: Vec::with_capacity(
+                    self.memory.as_ref().and_then(|m| m.point.as_ref()).map_or(0, |p| p.rows()),
+                ),
             },
         }
     }
@@ -1595,6 +1596,9 @@ struct Buffers {
     cells: Vec<i64>,
     native_kept: Vec<u32>,
     native_token: u32,
+    /// The point key's tied targets (claude-222), at the table's row count, so its search
+    /// allocates nothing.
+    point_tied: Vec<u32>,
 }
 
 /// A session's turn-memory state (units 2-3 of `turn-memory-integer`): the caller's reply start
@@ -1604,7 +1608,8 @@ struct MemoryServing {
     /// The token index of the reply's first generated token, from the caller's signal.
     reply_start: Option<usize>,
     anchors: MemoryAnchors,
-    #[cfg(test)]
+    /// The last keyed row's move, kept in every build (claude-222): the point key reads whether
+    /// the opening table's exact key missed.
     last_move: Option<MemoryMove>,
     #[cfg(test)]
     readout_before: Vec<i64>,
@@ -3142,6 +3147,7 @@ fn stack_step_fbs(
     }
     // The turn memory's move (units 2-3), after the Hamming readout as in the float trunk: the
     // opening table at the reply's first step's row, the reply table each later row.
+    let mut point_miss = false;
     if let Some(memory) = &model.memory {
         if let Some(reply_start) = session.memory.reply_start {
             #[cfg(test)]
@@ -3157,12 +3163,11 @@ fn stack_step_fbs(
                 &fbs.writer_table,
                 &mut b.scratch[..d],
             );
-            #[cfg(test)]
-            {
-                session.memory.last_move = moved;
-            }
-            #[cfg(not(test))]
-            let _ = moved;
+            // An opening the exact key missed moved nothing, so the query below is the trunk's
+            // own point there: the point key's (claude-222).
+            point_miss = memory.point.is_some()
+                && moved.as_ref().is_some_and(|m| m.opening && m.stored.is_none());
+            session.memory.last_move = moved;
         }
     }
     for (q, &v) in b.query_q12.iter_mut().zip(&b.scratch[..d]) {
@@ -3175,6 +3180,15 @@ fn stack_step_fbs(
         &mut b.cells,
         &mut b.native_kept,
     );
+    // The served point key (claude-222): where the opening's exact key missed, the commonest
+    // target among TRAIN's L1-nearest openings to this query names the reply's first token. Its
+    // search cannot fail here: parsing refused a table of another width, with no rows or naming
+    // BOS, so the step never stops halfway on its error.
+    if point_miss {
+        if let Some(point) = model.memory.as_ref().and_then(|m| m.point.as_ref()) {
+            b.native_token = point.name(&b.query_q12, &mut b.point_tied)?.0;
+        }
+    }
     session.position += 1;
     session.cache_at += d;
     session.lift_at += heads;
@@ -3297,6 +3311,7 @@ fn stack_step_fbs_timed(
     }
     // The turn memory's move (units 2-3), after the Hamming readout as in the float trunk: the
     // opening table at the reply's first step's row, the reply table each later row.
+    let mut point_miss = false;
     if let Some(memory) = &model.memory {
         if let Some(reply_start) = session.memory.reply_start {
             #[cfg(test)]
@@ -3312,12 +3327,11 @@ fn stack_step_fbs_timed(
                 &fbs.writer_table,
                 &mut b.scratch[..d],
             );
-            #[cfg(test)]
-            {
-                session.memory.last_move = moved;
-            }
-            #[cfg(not(test))]
-            let _ = moved;
+            // An opening the exact key missed moved nothing, so the query below is the trunk's
+            // own point there: the point key's (claude-222).
+            point_miss = memory.point.is_some()
+                && moved.as_ref().is_some_and(|m| m.opening && m.stored.is_none());
+            session.memory.last_move = moved;
         }
     }
     for (q, &v) in b.query_q12.iter_mut().zip(&b.scratch[..d]) {
@@ -3331,6 +3345,12 @@ fn stack_step_fbs_timed(
         &mut b.cells,
         &mut b.native_kept,
     );
+    // The served point key (claude-222), timed with the writer.
+    if point_miss {
+        if let Some(point) = model.memory.as_ref().and_then(|m| m.point.as_ref()) {
+            b.native_token = point.name(&b.query_q12, &mut b.point_tied)?.0;
+        }
+    }
     lap(&mut since, ns);
     session.position += 1;
     session.cache_at += d;

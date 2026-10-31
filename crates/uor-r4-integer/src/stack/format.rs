@@ -63,8 +63,13 @@ pub const HAMMING_KEPT: usize = 16;
 /// without Hamming reads: an engine that does not serve the memory refuses it instead of
 /// dropping it.
 pub const STACK_FBS_MEMORY_SCHEMA: &str = "uor-r4.lut-stack/7";
+/// Header schema of a turn-memory stack that also carries the served point key (claude-222): an
+/// engine that does not serve the key refuses it by its schema instead of dropping it.
+pub const STACK_FBS_POINT_SCHEMA: &str = "uor-r4.lut-stack/8";
 /// The memory's move weights at `2^MEMORY_WEIGHT_EXP`.
 pub const MEMORY_WEIGHT_EXP: i32 = -24;
+/// The point key's points at `2^POINT_KEY_EXP`: the writer query's Q12.
+pub const POINT_KEY_EXP: i32 = -12;
 
 /// The header record of a stack's turn memory (claude-198): its key sizes, its table counts, and
 /// the exponent its weights are stored at, in sections `memory.opening.*` and `memory.reply.*`.
@@ -106,6 +111,32 @@ impl StackTurnMemory {
         }
         if self.reply_key_len != MEMORY_REPLY_KEY_LEN || self.weight_exp != MEMORY_WEIGHT_EXP {
             return Err(StackError::Shape("the turn memory's key length or exponent is not this engine's"));
+        }
+        Ok(())
+    }
+}
+
+/// The header record of a stack's served point key (claude-222): its rows, their width and the
+/// exponent the points are stored at, in sections `memory.point.points` (i16) and
+/// `memory.point.targets` (u32).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StackPointKey {
+    pub rows: usize,
+    pub width: usize,
+    pub exp: i32,
+}
+
+impl StackPointKey {
+    /// Refuse a record the stack cannot carry: no turn memory beside it (the key serves where the
+    /// memory misses), no rows, a width other than the stack's, or an exponent other than this
+    /// engine's.
+    pub fn check(&self, shape: &StackShape, memory: Option<&StackTurnMemory>) -> Result<(), StackError> {
+        if memory.is_none() {
+            return Err(StackError::Shape("a point key needs the turn memory"));
+        }
+        if self.rows == 0 || self.width != shape.width || self.exp != POINT_KEY_EXP {
+            return Err(StackError::Shape("the point key's rows, width or exponent is not this stack's"));
         }
         Ok(())
     }
@@ -706,6 +737,9 @@ struct Header {
     /// The turn memory, under [`STACK_FBS_MEMORY_SCHEMA`]; absent on a stack without one.
     #[serde(default)]
     memory: Option<StackTurnMemory>,
+    /// The served point key, under [`STACK_FBS_POINT_SCHEMA`]; absent on a stack without one.
+    #[serde(default)]
+    point: Option<StackPointKey>,
 }
 
 /// One 4-bit matrix of a parsed container, borrowed from its bytes.
@@ -728,6 +762,8 @@ pub(crate) struct Container<'a> {
     pub hamming: Option<StackHamming>,
     /// The validated turn memory record, if the header carries one.
     pub memory: Option<StackTurnMemory>,
+    /// The validated point key record, if the header carries one.
+    pub point: Option<StackPointKey>,
     data: &'a [u8],
     /// Sections by name (unique within each kind).
     matrices: HashMap<String, MatrixEntry>,
@@ -763,12 +799,13 @@ impl<'a> Container<'a> {
             })?;
         let header: Header =
             serde_json::from_slice(&bytes[16..header_end]).map_err(StackError::Header)?;
-        // A stack with a turn memory is `lut-stack/7`, one with Hamming reads alone `/6`; any
-        // other is the schema its shape implies.
-        let expected = match (&header.memory, &header.hamming) {
-            (Some(_), _) => STACK_FBS_MEMORY_SCHEMA,
-            (None, Some(_)) => STACK_FBS_HAMMING_SCHEMA,
-            (None, None) => stack_schema_for(&header.shape),
+        // A stack with the point key is `lut-stack/8`, one with a turn memory `/7`, one with
+        // Hamming reads alone `/6`; any other is the schema its shape implies.
+        let expected = match (&header.point, &header.memory, &header.hamming) {
+            (Some(_), _, _) => STACK_FBS_POINT_SCHEMA,
+            (None, Some(_), _) => STACK_FBS_MEMORY_SCHEMA,
+            (None, None, Some(_)) => STACK_FBS_HAMMING_SCHEMA,
+            (None, None, None) => stack_schema_for(&header.shape),
         };
         if header.schema != expected {
             return Err(StackError::Schema(header.schema));
@@ -782,6 +819,9 @@ impl<'a> Container<'a> {
         }
         if let Some(memory) = &header.memory {
             memory.check(&header.shape)?;
+        }
+        if let Some(point) = &header.point {
+            point.check(&header.shape, header.memory.as_ref())?;
         }
         if let Some(snap) = &header.transport_snap {
             let known = snap.name == "icosian"
@@ -857,6 +897,7 @@ impl<'a> Container<'a> {
             transport_snap: header.transport_snap,
             hamming: header.hamming,
             memory: header.memory,
+            point: header.point,
             data,
             matrices,
             tables,
@@ -1758,6 +1799,47 @@ pub fn export_fbs_trunk_uorlut01_with(
     if memory.is_some() {
         super::memory::memory_image(&Container::parse(&out)?)?;
     }
+    Ok(out)
+}
+
+/// A turn-memory stack (`uor-r4.lut-stack/7`) with the served point key added (claude-222): every
+/// section of `artifact` byte for byte, `memory.point.points` and `memory.point.targets` appended,
+/// and the header naming them under [`STACK_FBS_POINT_SCHEMA`]. The table is built from the
+/// integer trunk's own points, never from a float snapshot, so it is added to an exported stack
+/// rather than exported with it. The result is read back before it is returned.
+pub fn add_point_key_uorlut01(artifact: &[u8], image: &super::PointKeyImage) -> Result<Vec<u8>, StackError> {
+    let container = Container::parse(artifact)?;
+    if container.memory.is_none() || container.point.is_some() {
+        return Err(StackError::Shape("a point key is added to a turn-memory stack without one"));
+    }
+    if image.width != container.shape.width {
+        return Err(StackError::Shape("the point key's width is not this stack's"));
+    }
+    image.check(container.shape.vocab)?;
+    // Where `Container::parse` found the header and the data.
+    let declared = u64::from_le_bytes(artifact[8..16].try_into().map_err(|_| StackError::MissingData)?);
+    let header_end = 16 + usize::try_from(declared).map_err(|_| StackError::MissingData)?;
+    let data_start = header_end.div_ceil(ALIGN) * ALIGN;
+    let mut header: serde_json::Value =
+        serde_json::from_slice(&artifact[16..header_end]).map_err(StackError::Header)?;
+    let mut b = ExportBuilder::new();
+    b.data = artifact[data_start..].to_vec();
+    b.push_i16("memory.point.points", &image.points);
+    b.push_u32("memory.point.targets", &image.targets);
+    header["tables"]
+        .as_array_mut()
+        .ok_or(StackError::MissingData)?
+        .extend(b.tables);
+    header["schema"] = json!(STACK_FBS_POINT_SCHEMA);
+    header["point"] = json!(image.record());
+    let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
+    let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + b.data.len());
+    out.extend_from_slice(MAGIC);
+    out.extend_from_slice(&(header_bytes.len() as u64).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
+    out.extend_from_slice(&b.data);
+    super::point_key::point_image(&Container::parse(&out)?)?;
     Ok(out)
 }
 
