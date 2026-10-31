@@ -20,7 +20,10 @@ Both decode each prompt in a fresh session, with the memory on and the reply sta
 - **The prompts:** `train-in-space --panel-prompts 1 --samples 1536 --reply-tokens 64`, `score_rows`' own windows and prompts.
   - On DEV, p-w and p-v, each seed's prompts carry claude-220's float served names, for parity.
   - On p-x, the prompts carry none: no float arm served it.
-- **The cap:** the integer session cannot slide its window, so a reply ends where prompt and reply fill the 192-token context, as well as at BOS or 64 tokens. G and S are capped identically, so the bar stays a fair paired test. The capped count is reported for each split, arm and seed.
+- **The cap:** the integer session cannot slide its window, so a reply ends where prompt and reply fill the 192-token context, as well as at BOS or 64 tokens.
+  - G and S are capped identically, so the bar stays a fair paired test.
+  - A capped reply is still scored against the full reference, which tends to make both arms wrong. That shrinks b + c and costs power; it does not bias S.
+  - The capped count is reported for each split, arm and seed, and p-x's beside each seed's b + c (FIT round 1).
 
 ## 3. Bar and decision table (done-when 4)
 
@@ -30,11 +33,13 @@ Both decode each prompt in a fresh session, with the memory on and the reply sta
 - **(c) Loops:** b − c ≤ band, with b counting S looping where G does not.
 - **(d) DEV:** S's templates, b − c ≥ −band.
 
+The row counts only the p-x entries of the grade's `carries` (true at 3, 1–2 or 0 seeds). Its p-w and p-v entries are reported, deciding nothing.
+
 | Row | Reading on p-x | Decides | Next |
 |---|---|---|---|
 | 0 | **An instrument fault** (§4), at any split and seed | Nothing is counted. | Repair in a new unit, then rerun. |
 | 1 | S carries at **all three** seeds | Form C carries in the integer artifact. Done-when 4 is met, and the item is done once tok/s (done-when 5) is reported. | The one model end to end with the point key, served on a client (one-model-end-to-end). |
-| 2 | S carries at **one or two** seeds | Reported under its row, with each seed's (a)–(d) and b + c. No panel is redrawn (the item's rule). | A decision card: pool the seeds under a fresh sheet, or a larger panel, by whether the failing seeds are thin (b + c < 10) or harmed ((b), (c) or (d) failing). |
+| 2 | S carries at **one or two** seeds | Reported under its row, with each seed's (a)–(d), b + c and p-x capped count. No panel is redrawn (the item's rule). | A decision card. Its option is a pooled reading of these same files under a fresh sheet, if the failing seeds are thin (b + c < 10) and not harmed ((b), (c) and (d) holding). A new or larger panel would be a new question with its own sheet and bar, and could not reverse this row (FIT round 1). |
 | 3 | S carries at **no** seed | Form C does not carry in the integer form on this fresh panel. | A decision card on the next form, with the float result on p-w beside it. |
 
 **Reported, deciding nothing:**
@@ -69,7 +74,10 @@ And these:
    - an unkeyed reply that differs from greedy's;
    - float names that are not the seed's served file's;
    - a missing arm, seed or split.
-8. **`I-Prompts`:** `--panel-prompts` refuses no float served name that is not its prompt's, and its DEV, p-w and p-v prompt counts equal claude-224's check (310, 1,202 and 393).
+8. **`I-Prompts`:**
+   - `--panel-prompts` refuses no float served name that is not its prompt's;
+   - its DEV, p-w and p-v prompt counts equal claude-224's check (310, 1,202 and 393);
+   - p-x's count, recorded from `prompts-p-x.json`, equals the rows `integer_grade` reads for p-x in each arm and seed (FIT round 1).
 
 ## 5. Base artifact and data split
 
@@ -101,12 +109,18 @@ All paths are on the laptop. `R` is the run folder in the unit's worktree (`loca
 4. **The prompts:** `train-in-space --data-root D --panel-prompts 1 --out R/prompts --panel p-w=… --panel p-v=… --panel p-x=… --runs <claude-220 out> --samples 1536 --reply-tokens 64` (`I-Prompts`).
 5. **The decodes:** 24 runs (2 arms × 4 splits × 3 seeds) of `fbs-toks R/a{7,8}-sN.uorlut --replies R/prompts/prompts-{split}[-sN].json --out R/r-drop-sN/integer-{greedy,served}-{split}.json --reply-tokens 64`.
    - DEV, p-w and p-v use each seed's own prompts, so both arms read the same ones.
-   - Each run's wall time is recorded (`I-Reference-Scan`).
+   - Each run's printed `reference_checked` must equal its `keyed` (`I-Reference-Scan`).
+   - Each run's wall time and its prompt plus reply tokens are recorded, for step 8.
 6. **The grade:** `train-in-space --data-root D --integer-grade 1 --runs R --keys-runs <claude-220 out> --panel p-w=… --panel p-v=… --panel p-x=…` into `R/grade.json` (`I-Grade`). The row is read from it.
 7. **Seal:** `R` without the artifacts but with their sums, plus the three `/8` artifacts, to `results/claude/point-key-integer-run-2026-10-31/` with `SHA256SUMS`, read back.
 8. **Tok/s, first in the REPORT:**
    - **Decode against context:** `fbs-toks R/a7-sN.uorlut` and `fbs-toks R/a8-sN.uorlut --stages`, the standard protocol (a 128-token prefill and 64 decode steps, 1 warmup and 20 timed runs).
-   - **The search counted:** that protocol never marks a reply start, so the point search does not run in it. The search is measured from step 5, as each split's S wall time against G's over its keyed openings.
+   - **The search counted:** that protocol never marks a reply start, so the point search does not run in it. So the search is read from step 5.
+     - Each arm's tokens per second per split: its prompt plus reply tokens over its wall time.
+     - S's keyed-opening count.
+     - The per-search cost, from the two arms' rates: S's wall time less its tokens at G's rate, over its keyed openings.
+
+     S and G replies differ in length after a keyed opening, so a raw difference of wall times would mix in decode length. This reading of done-when 5 is indirect, and the REPORT says so (FIT round 1).
    - **Resident memory:** `/usr/bin/time -l`'s maximum resident set for one decode of each arm.
 
 ## 7. Minimum test power
