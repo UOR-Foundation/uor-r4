@@ -8,6 +8,7 @@
 use super::format::{Container, StackTurnMemory, MEMORY_PAD, MEMORY_REPLY_KEY_LEN, MEMORY_WEIGHT_EXP};
 use super::hamming::round_shift;
 use super::kernels::NORM_FINE_EXP;
+use super::point_key::{point_image, PointKeyImage, ServedPointKey};
 use super::StackError;
 
 /// One memory table: its keys (pads cut) in strictly ascending order, the id each names, and the
@@ -26,6 +27,8 @@ pub struct MemoryImage {
     pub record: StackTurnMemory,
     pub opening: MemoryTableImage,
     pub reply: Option<MemoryTableImage>,
+    /// The served point key (claude-222), on a `uor-r4.lut-stack/8` stack.
+    pub point: Option<PointKeyImage>,
 }
 
 /// The turn memory of a `UORLUT01` stack artifact, every section checked, or `None` for a stack
@@ -61,6 +64,7 @@ pub(crate) fn memory_image(artifact: &Container<'_>) -> Result<Option<MemoryImag
         record,
         opening,
         reply,
+        point: point_image(artifact)?,
     }))
 }
 
@@ -209,6 +213,9 @@ pub(crate) struct ServedTurnMemory {
     pub(crate) reply_turn: Option<usize>,
     opening: ServedMemoryTable,
     reply: Option<ServedMemoryTable>,
+    /// The served point key (claude-222): it names a reply's first token where the opening
+    /// table's exact key misses.
+    pub(crate) point: Option<ServedPointKey>,
 }
 
 /// A session's stored turn state (units 2-3): the caller's reply start, and the anchor's ids at
@@ -248,6 +255,7 @@ impl ServedTurnMemory {
             reply_turn: image.record.reply_turn,
             opening: ServedMemoryTable::new(&image.opening),
             reply: image.reply.as_ref().map(ServedMemoryTable::new),
+            point: image.point.map(ServedPointKey::new),
         }
     }
 

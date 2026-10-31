@@ -5173,3 +5173,235 @@ fn a_turn_memory_session_restore_is_refused() {
     b.step_native(11).expect("step");
     assert!(b.last_memory_move().is_none());
 }
+
+/// claude-222: a point table for the synthetic `/7` stack, `rows` rows of its width.
+fn synthetic_point_key(bytes: &[u8], rows: usize) -> super::PointKeyImage {
+    let shape = IntegerStackModel::parse(bytes).expect("served").shape().clone();
+    let points = (0..rows * shape.width).map(|i| ((i * 37) % 2001) as i16 - 1000).collect();
+    let targets = (0..rows).map(|r| 2 + (r as u32 * 7) % (shape.vocab as u32 - 2)).collect();
+    super::PointKeyImage {
+        width: shape.width,
+        points,
+        targets,
+    }
+}
+
+/// claude-222: a `/7` stack of the small trunk whose opening table holds `turn_memory_script`'s
+/// opening key when `hit`, and an unseen one when not. Its reply table holds a key no row hits, so
+/// every later reply row is keyed and misses.
+fn point_key_test_stack(hit: bool) -> Vec<u8> {
+    use super::{FbsMemoryEntry, FbsMemorySnapshot, FbsReplyTable, MEMORY_PAD};
+    let width = FBS_SYNTH_SMALL.d as usize;
+    let mut snap = turn_memory_trunk(24);
+    let key = if hit { vec![12, 13, 14, 15] } else { vec![90, 91, 92, 93] };
+    let unseen = vec![90, 91, 92, 93, 94, 95, 96, 97, MEMORY_PAD, 1, MEMORY_PAD, 20];
+    snap.memory = Some(FbsMemorySnapshot {
+        k: 4,
+        key_window: 192,
+        opening: vec![FbsMemoryEntry { key, value: 42 }],
+        opening_weight: vec![0.5; width],
+        reply: Some(FbsReplyTable {
+            turn: 8,
+            entries: vec![FbsMemoryEntry { key: unseen, value: 43 }],
+            weight: vec![0.5; width],
+        }),
+    });
+    super::export_fbs_trunk_uorlut01(&snap).expect("export")
+}
+
+/// claude-222: the served point key names the reply's first token where the opening table's exact
+/// key misses, from that row's own query. Every other row, an opening the key hits, and a session
+/// without the reply-start signal decode as the `/7` stack does, token for token.
+#[test]
+fn the_point_key_names_a_missed_opening_and_leaves_the_rest() {
+    let (tokens, reply_start) = turn_memory_script(8);
+    let width = FBS_SYNTH_SMALL.d as usize;
+    // The point key must serve only the opening, though every later reply row misses too.
+    let stack = point_key_test_stack;
+    // Each row's token and query, and the opening row's move, with or without the signal.
+    let decode = |bytes: &[u8], signal: bool| -> (Vec<(u32, Vec<i32>)>, Option<Option<u32>>) {
+        let model = IntegerStackModel::parse(bytes).expect("served");
+        let mut session = model.session();
+        let mut opening = None;
+        let steps = tokens
+            .iter()
+            .enumerate()
+            .map(|(row, &token)| {
+                if signal && row + 1 == reply_start {
+                    session.mark_reply_start();
+                }
+                let step = session.step_native(token).expect("step");
+                if row + 1 == reply_start {
+                    opening = session.last_memory_move().map(|m| m.stored);
+                }
+                (step.token, step.query_q12)
+            })
+            .collect();
+        (steps, opening)
+    };
+    // The table: the missed opening's own query naming `named`, and a far row naming another id.
+    let with_table = |bytes: &[u8], query: &[i32], named: u32| -> Vec<u8> {
+        let mut points: Vec<i16> = query.iter().map(|&q| q as i16).collect();
+        points.extend(query.iter().map(|&q| (q + 3000).clamp(-32768, 32767) as i16));
+        let image = super::PointKeyImage { width, points, targets: vec![named, named + 1] };
+        super::add_point_key_uorlut01(bytes, &image).expect("the /8 stack")
+    };
+    let at = reply_start - 1;
+    let (miss7, opening) = decode(&stack(false), true);
+    assert_eq!(opening, Some(None), "the opening key misses");
+    let named = if miss7[at].0 == 7 { 8 } else { 7 };
+    let (miss8, _) = decode(&with_table(&stack(false), &miss7[at].1, named), true);
+    assert_eq!(miss8[at].0, named, "the missed opening takes the point key's name");
+    for (row, (a, b)) in miss7.iter().zip(&miss8).enumerate().filter(|&(row, _)| row != at) {
+        assert_eq!(a.0, b.0, "row {row} decodes as /7");
+    }
+    // The key hits: the memory names the opening, and the table changes nothing.
+    let (hit7, opening) = decode(&stack(true), true);
+    assert_eq!(opening, Some(Some(42)), "the opening key hits");
+    let (hit8, _) = decode(&with_table(&stack(true), &hit7[at].1, named), true);
+    assert_eq!(hit7.iter().map(|s| s.0).collect::<Vec<_>>(), hit8.iter().map(|s| s.0).collect::<Vec<_>>());
+    // No reply-start signal: no row is keyed, and the table changes nothing.
+    let (quiet7, _) = decode(&stack(false), false);
+    let (quiet8, opening) = decode(&with_table(&stack(false), &miss7[at].1, named), false);
+    assert_eq!(opening, None, "no row keyed");
+    assert_eq!(quiet7.iter().map(|s| s.0).collect::<Vec<_>>(), quiet8.iter().map(|s| s.0).collect::<Vec<_>>());
+    // The timed twin serves the key as the step does.
+    let model = IntegerStackModel::parse(&with_table(&stack(false), &miss7[at].1, named)).expect("served");
+    let mut session = model.session();
+    let mut ns = Vec::new();
+    let timed: Vec<u32> = tokens
+        .iter()
+        .enumerate()
+        .map(|(row, &token)| {
+            if row + 1 == reply_start {
+                session.mark_reply_start();
+            }
+            session.measure_fbs_step_stages(token, &mut ns).expect("timed step").0.token
+        })
+        .collect();
+    assert_eq!(timed, miss8.iter().map(|s| s.0).collect::<Vec<_>>(), "the timed twin decodes as the step");
+}
+
+/// claude-222: TRAIN's openings are read in the float trunk's windows, and so are their rows. The
+/// first run of a document starts at its `<|bos|>`. A later run's causal prefix starts inside the
+/// document and never crosses its start. A target after a reply token is no opening, and a window
+/// without one is skipped.
+#[test]
+fn the_point_key_windows_are_the_float_trunks_openings() {
+    let windows = |tokens: &[u32], mask: &[u8], context| super::point_key_windows(tokens, mask, context, 0).expect("windows");
+    let w = |input: Vec<u32>, openings: Vec<(usize, u32)>| super::PointKeyWindow { input, openings };
+    assert_eq!(
+        windows(&[0, 5, 6, 7, 8, 9, 0, 10, 11, 12], &[0, 0, 0, 1, 1, 0, 0, 0, 1, 1], 4),
+        [w(vec![0, 5, 6], vec![(2, 7)]), w(vec![0, 10], vec![(1, 11)])]
+    );
+    assert_eq!(
+        windows(&[0, 1, 2, 3, 4, 5, 6, 7], &[0, 0, 0, 0, 0, 0, 1, 1], 3),
+        [w(vec![3, 4, 5], vec![(2, 6)])],
+        "a later run's prefix starts inside the document"
+    );
+    assert!(super::point_key_windows(&[0, 1], &[0], 4, 0).is_err(), "a mask of another length");
+    assert!(super::point_key_windows(&[0, 1, 2], &[0, 0, b'1'], 4, 0).is_err(), "a mask byte other than 0 or 1");
+}
+
+/// claude-222: the builder's table holds the integer trunk's own query at TRAIN's opening rows,
+/// exactly the session's with no reply-start signal. Served from the `/8` stack it builds, it names
+/// a TRAIN opening that the exact key misses by that opening's own target.
+#[test]
+fn the_point_key_builder_reads_the_trunks_own_points_at_trains_openings() {
+    let (tokens, reply_start) = turn_memory_script(8);
+    let mask: Vec<u8> = (0..tokens.len()).map(|p| u8::from(p >= reply_start)).collect();
+    let bytes = point_key_test_stack(false);
+    let model = IntegerStackModel::parse(&bytes).expect("served /7");
+    let windows = super::point_key_windows(&tokens, &mask, 192, 0).expect("windows");
+    assert_eq!(windows, [super::PointKeyWindow { input: tokens[..reply_start].to_vec(), openings: vec![(reply_start - 1, tokens[reply_start])] }]);
+    let image = super::build_point_key(&model, &windows).expect("the table");
+    let mut session = model.session();
+    let own: Vec<i16> = tokens[..reply_start]
+        .iter()
+        .map(|&t| session.step_native(t).expect("step").query_q12)
+        .last()
+        .expect("a row")
+        .iter()
+        .map(|&q| q as i16)
+        .collect();
+    assert_eq!((image.points, image.targets.clone()), (own, vec![tokens[reply_start]]));
+    let built = super::build_point_key(&model, &windows).expect("the table");
+    let served = IntegerStackModel::parse(&super::add_point_key_uorlut01(&bytes, &built).expect("/8")).expect("served /8");
+    let mut session = served.session();
+    let mut opening = None;
+    for (row, &token) in tokens[..reply_start].iter().enumerate() {
+        if row + 1 == reply_start {
+            session.mark_reply_start();
+        }
+        opening = Some(session.step_native(token).expect("step").token);
+    }
+    assert_eq!(opening, Some(tokens[reply_start]), "the TRAIN opening's own target");
+}
+
+/// `bytes`' JSON header and its data sections.
+fn header_and_data(bytes: &[u8]) -> (Value, Vec<u8>) {
+    let len = u64::from_le_bytes(bytes[8..16].try_into().expect("length")) as usize;
+    let header = serde_json::from_slice(&bytes[16..16 + len]).expect("header");
+    (header, bytes[(16 + len).div_ceil(64) * 64..].to_vec())
+}
+
+/// claude-222: the served point key added to a `/7` turn-memory stack is a `/8` stack whose table
+/// reads back as written, with the `/7` data unchanged byte for byte. Adding it is deterministic,
+/// and it is refused on a stack that already has one, on a stack without the turn memory, and at
+/// another width.
+#[test]
+fn a_point_key_round_trips_through_the_lut_stack_8_record() {
+    let bytes = super::synthetic::synthetic_turn_memory_artifact(7, 8, 192, false);
+    let image = synthetic_point_key(&bytes, 5);
+    let with = super::add_point_key_uorlut01(&bytes, &image).expect("the /8 stack");
+    assert_eq!(with, super::add_point_key_uorlut01(&bytes, &image).expect("again"), "deterministic");
+    let read = super::read_memory_uorlut01(&with).expect("read").expect("a memory");
+    assert_eq!(read.point.as_ref(), Some(&image), "the table reads back as written");
+    assert_eq!(super::read_memory_uorlut01(&bytes).expect("read").expect("a memory").point, None);
+    let ((old_header, old), (new_header, new)) = (header_and_data(&bytes), header_and_data(&with));
+    assert_eq!(&new[..old.len()], &old[..], "the /7 sections are unchanged");
+    assert_eq!(new_header["schema"], json!(super::STACK_FBS_POINT_SCHEMA));
+    assert_eq!(new_header["point"], json!({ "rows": 5, "width": image.width, "exp": super::POINT_KEY_EXP }));
+    assert_eq!(new_header["memory"], old_header["memory"]);
+    IntegerStackModel::parse(&with).expect("served /8");
+    assert!(super::add_point_key_uorlut01(&with, &image).is_err(), "a stack with a table already");
+    let plain = super::export_fbs_trunk_uorlut01(&synthetic_fbs_trunk(7)).expect("export");
+    assert!(super::add_point_key_uorlut01(&plain, &image).is_err(), "a stack without the turn memory");
+    let narrow = super::PointKeyImage {
+        width: image.width - 1,
+        points: vec![0; (image.width - 1) * 5],
+        targets: image.targets.clone(),
+    };
+    assert!(super::add_point_key_uorlut01(&bytes, &narrow).is_err(), "another width");
+}
+
+/// claude-222: the schema names the point key, and the record is checked: under `/7`, `/8` without
+/// the record, the record without the turn memory, rows its targets do not hold, another width or
+/// exponent, and an unknown field are each refused. A `/8` session's restore is refused as a `/7`
+/// one's is.
+#[test]
+fn the_lut_stack_8_schema_and_record_are_checked() {
+    let bytes = super::synthetic::synthetic_turn_memory_artifact(7, 8, 192, false);
+    let with = super::add_point_key_uorlut01(&bytes, &synthetic_point_key(&bytes, 5)).expect("the /8 stack");
+    let refused = |b: Vec<u8>| IntegerStackModel::parse(&b).is_err();
+    assert!(refused(with_header(&with, |h| h["schema"] = json!(super::STACK_FBS_MEMORY_SCHEMA))), "the record under /7");
+    assert!(refused(with_header(&bytes, |h| h["schema"] = json!(super::STACK_FBS_POINT_SCHEMA))), "/8 without the record");
+    assert!(
+        refused(with_header(&with, |h| {
+            h.as_object_mut().expect("object").remove("memory");
+        })),
+        "the record without the turn memory"
+    );
+    assert!(refused(with_header(&with, |h| h["point"]["rows"] = json!(4))), "rows the targets do not hold");
+    assert!(refused(with_header(&with, |h| h["point"]["width"] = json!(3))), "another width");
+    assert!(refused(with_header(&with, |h| h["point"]["exp"] = json!(-11))), "another exponent");
+    assert!(refused(with_header(&with, |h| h["point"]["extra"] = json!(1))), "an unknown field");
+    let model = IntegerStackModel::parse(&with).expect("served /8");
+    let mut session = model.session();
+    session.step_native(10).expect("step");
+    let saved = session.save_state();
+    match model.session().restore_state(&saved) {
+        Err(StackError::Shape(m)) => assert_eq!(m, "a session of a turn memory cannot be restored yet: its turn state is not saved"),
+        other => panic!("expected the turn-memory restore refusal, got {other:?}"),
+    }
+}

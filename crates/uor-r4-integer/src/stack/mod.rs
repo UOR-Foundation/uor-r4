@@ -57,6 +57,7 @@ mod format;
 mod hamming;
 pub(crate) mod kernels;
 mod memory;
+mod point_key;
 #[cfg(feature = "serving-wasm")]
 pub mod simd;
 mod session;
@@ -91,6 +92,10 @@ pub use format::{
     MEMORY_WEIGHT_EXP, STACK_FBS_MEMORY_SCHEMA,
 };
 pub use memory::{read_memory_uorlut01, MemoryImage, MemoryTableImage};
+pub use format::{add_point_key_uorlut01, StackPointKey, POINT_KEY_EXP, STACK_FBS_POINT_SCHEMA};
+pub use point_key::{
+    build_point_key, point_key_windows, PointKeyImage, PointKeyWindow, POINT_KEY_BOS, POINT_KEY_WINDOW,
+};
 pub use hamming::{copy_weight_q31, read_hamming_uorlut01, CopyHeads, HammingImage, HammingReadImage, TypeHeads, COPY_MEAN_EXP};
 pub use kernels::{stack_argmax, stack_memory_select, stack_snap_select, MAX_SELECT_SIDE};
 pub use session::{
