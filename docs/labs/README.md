@@ -53,7 +53,7 @@ Read these in order:
 
 1. The root [AGENTS.md](../../AGENTS.md), [README](../../README.md) and
    [PLAN.md](../../PLAN.md), with rendered [STATE.md](../../STATE.md) for current status.
-2. The [active canonical plan](../integration/project-track.md),
+2. The [long-form project track](../integration/project-track.md),
    [integration queue and branch dispositions](integration-queue.md), and
    [shared lab protocol](protocol.md).
 3. The live [tracker #2028](https://github.com/UOR-Foundation/uor-r4/issues/2028),

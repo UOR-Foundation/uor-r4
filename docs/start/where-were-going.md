@@ -41,14 +41,14 @@ unigram and T2; Fresh V2 transfer; and held-out-phrasing transfer.
 
 The limitation is equally important: 62.5% of p-f's reference replies are verbatim TRAIN replies.
 M1 reads new prompt phrasings into known reply kinds; it does not show new reply kinds or useful
-conversation. See [CHARTER §4.8](../../CHARTER.md#4-evidence) and the [closing report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md).
+conversation. See [CHARTER §4.8](../../CHARTER.md#4-evidence), the [M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), and the [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md).
 
 ## The current order of work
 
 1. **Complete `point-key-integer` (#3450).** Claude-218 found trunk-state keys that
    improved openings offline; [claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md)
    showed a partial free-generation gain on fresh p-v, and [claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md)
-   then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade; [claude-227](../loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; unit 3's real TRAIN export, p-x scoring and laptop measurement is next ([item](../roadmap/items/point-key-integer.md)).
+   then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade; [claude-227](../loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; unit 4's real TRAIN export, p-x scoring and laptop measurement is next ([item](../roadmap/items/point-key-integer.md)).
 2. **Serve every required part in integers.** Finish the served read, memory and readout rather
    than treating an export or an audit alone as the whole model.
 3. **Train and score one model end to end.** Measure complete generated replies on untouched
@@ -101,7 +101,7 @@ whole-model score are still unproven; useful conversation has not been establish
 |---|---|---|
 | Milestones complete | **1 of 8 (M1)** | [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) |
 | Next milestone | M2: grounded complete replies | [PLAN](../../PLAN.md) |
-| Immediate problem | Run unit 3's real TRAIN export, p-x scoring and laptop measurement after retention parity passed | [claude-227](../loop/tasks/integer-retention-rates/claude-227/REPORT.md), [item](../roadmap/items/point-key-integer.md) |
+| Immediate problem | Run unit 4's real TRAIN export, p-x scoring and laptop measurement after the run instruments passed | [claude-228](../loop/tasks/point-key-integer/claude-228/REPORT.md), [item](../roadmap/items/point-key-integer.md) |
 | M4 | Lawful likelihood built; full accepted-model serving and held-out score open | [serving and export](../model/serving-and-export.md) |
 | Products shipped | None | [products](../products/README.md) |
 

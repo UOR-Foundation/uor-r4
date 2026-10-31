@@ -45,7 +45,7 @@ It reproduces the reference on all 14,287 DEV rows and passes the planted-fault 
 
 The throughput protocol uses a 192-token prefill and 64-token decode, with about 2.67M prefill
 tok/s. This is native Apple M1 serving, not a browser measurement and not a claim of chat quality
-([bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
+([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 
 ## The separate FBS export
 

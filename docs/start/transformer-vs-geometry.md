@@ -38,7 +38,7 @@ The saved discrete 19-table model has exact export/reference agreement and passe
 p-f has no prompt value-masked templates in TRAIN at K = 1,024, so the model reads new prompt
 phrasings into known reply kinds. But 62.5% of p-f's reference replies are verbatim TRAIN replies.
 That is not new reply kinds or useful conversation
-([closing report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
+([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 
 ## The remaining gaps
 

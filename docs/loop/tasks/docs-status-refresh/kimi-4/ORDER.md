@@ -1,6 +1,6 @@
 # ORDER: comprehensive 30 Oct documentation refresh
 
-Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `cd328d3af791fbc8b3b38a11e40bf65f2dbf3f97`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
+Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `c71e85788da3a6ef09909bb4d525dd2e53ff30b3`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
 
 ## Goal and chain
 
@@ -87,3 +87,7 @@ During repair, #3454 merged claude-224 on `main` as `18c4c3da70f35b5c8c9348297df
 ## Scope decision: retention parity result
 
 #3458 then merged claude-227 on `main` as `cd328d3af791fbc8b3b38a11e40bf65f2dbf3f97`. The same living documentation scope records G-Ret-Parity PASS: 1,531 / 1,536 sequences and 4,023 / 4,096 single tokens within the 3% bar, the decay control, the unexplained 1.78% residual, the closed retention item, and point-key unit 3's remaining real export, fresh p-x score and laptop measurements. No acceptance bar, model code, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation corrections together.
+
+## Scope decision: run instruments status
+
+#3459 then merged claude-228 on `main` as `c71e85788da3a6ef09909bb4d525dd2e53ff30b3`. The same living documentation scope records the independent reference scan, table read-back and BOS refusal, 390 integer-library tests with one ignored, four negative gates and full serving audit, and unit 4's remaining real export, fresh p-x score and laptop measurements. No acceptance bar, model code, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation corrections together.

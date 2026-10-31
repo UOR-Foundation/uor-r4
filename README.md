@@ -29,7 +29,7 @@ in your browser, with local computation by default and an optional user-configur
 **30 Oct 2026: M1 is complete — 1 of 8 milestones.** The saved 19-table discrete
 `trunk-joint-pointer-v1-d11` model, exported as two seeded `UORLUT01` integer artifacts, passed all
 six closing bars on both seeds
-([M1 #2029](https://github.com/UOR-Foundation/uor-r4/issues/2029), [closing evidence](docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)). This is a measured language-base result, not useful-chat qualification.
+([M1 #2029](https://github.com/UOR-Foundation/uor-r4/issues/2029), [M1 close](docs/labs/m1-close-saved-model/README.md), [Fresh V2](docs/labs/m1-fresh-panel-transfer/README.md), [bar-f](docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)). This is a measured language-base result, not useful-chat qualification.
 
 | Test | Saved model, seed 1 / seed 2 | Controls | Outcome |
 |---|---:|---:|---|
@@ -63,7 +63,7 @@ then served the point key inside one float model on fresh p-w: templates improve
 at three seeds, with exact claude-219 parity. That gain recalls TRAIN replies rather than
 generalizing. [Claude-222](docs/loop/tasks/point-key-integer/claude-222/REPORT.md) has now built the
 integer point table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](docs/loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade.
-[Claude-227](docs/loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; unit 3's real TRAIN export, p-x scoring and laptop measurement is next. Useful conversation
+[Claude-227](docs/loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; [Claude-228](docs/loop/tasks/point-key-integer/claude-228/REPORT.md) built the run's reference/read-back/BOS checks; unit 4's real TRAIN export, p-x scoring and laptop measurement is next. Useful conversation
 remains unproven.
 
 ## The three products

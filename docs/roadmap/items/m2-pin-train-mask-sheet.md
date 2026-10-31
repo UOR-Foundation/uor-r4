@@ -17,8 +17,8 @@ M2 is the first simple conversation: at least 256 of 512 saved questions and at 
 
 ## What is missing
 
-**State on 25 Oct 2026 (claude-99, #3196).** The question below is answered, and the D37 sheet is written. The D37 route waits on other items; the discrete-law route is open inside this one.
-- **The owner's answer** (24 Oct, #2028 comment `6379430093`): "I want both because we do not know which we will ultimately need." The D37-basis sheet `docs/harness/prep/m2-pin-train-mask-sheet-2026-10-23.md` is the successor to the Amendment 6 record, and a discrete-law rung-0 sheet is also wanted. That second sheet is this item's other route to its done-when, and it is not yet written.
+**State on 25 Oct 2026 (claude-99, #3196).** The question below is answered, and the D37 sheet is written. The D37 route waits on other items; the discrete-law sheet now exists at `docs/harness/prep/m2-pin-train-mask-sheet-discrete-2026-10-26.md`.
+- **The owner's answer** (24 Oct, #2028 comment `6379430093`): "I want both because we do not know which we will ultimately need." The D37-basis sheet `docs/harness/prep/m2-pin-train-mask-sheet-2026-10-23.md` is the successor to the Amendment 6 record, and a discrete-law rung-0 sheet was also wanted. That second sheet is this item's other route to its done-when; the text below records the earlier open route.
 - **The sheet** pins the mask, the count and both source SHAs, re-verified on 25 Oct at `53b40ecd6`. It also registers the export-gap statistic and band (line 29). Its FIT is `NOT_FIT` (`antigravity-33`) until the separate D29-scanned float module and the D11 float-trunk exporter exist and are wired into its steps, and until its fresh-transfer slice is sealed.
 - **Two routes to the done-when, as the owner wants both.** The D37 sheet's FIT waits on `float-training-module` (#2823) and `d11-exporter-float-trunk` (#2820). The discrete-law route needs neither: it carries the mask checksum, the count and the source into a discrete-law sheet with its own non-author FIT. It does not gate the discrete M2 route (`m2-train-grounded-replies`) behind the float path.
 

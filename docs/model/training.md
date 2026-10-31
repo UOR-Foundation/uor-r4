@@ -55,7 +55,7 @@ The saved 19-table `uor-r4.lut-discrete-trunk/1` model scores:
 
 The saved model reads new prompt phrasings into known reply kinds. It does not show new reply kinds
 or useful conversation; 62.5% of p-f's reference replies are verbatim TRAIN replies
-([bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
+([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 
 ## Offline float training under D37
 

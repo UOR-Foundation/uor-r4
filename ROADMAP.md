@@ -21,11 +21,11 @@ closes only when its full bar is met on a saved model. The evidence and limitati
 | [M8 Alpha release](https://github.com/UOR-Foundation/uor-r4/issues/2036) | One versioned, checksum-pinned artifact meets M1–M7, with reproducible installation and independent consumer-hardware verification | not started |
 
 M1's two-seed results are **7,002 / 7,001** on DEV (T2 6,300), **7,215 / 7,228** on Fresh V2
-(T2 6,582), and **7,850 / 7,872** on the held-out-phrasing p-f panel (T2 7,375). The p-f panel's
+(T2 6,582), and **7,850 / 7,872** on the held-out-phrasing p-f panel (T2 7,375) ([M1 close](docs/labs/m1-close-saved-model/README.md), [Fresh V2](docs/labs/m1-fresh-panel-transfer/README.md), [bar-f](docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)). The p-f panel's
 62.5% reference-reply overlap with TRAIN means this is a scoped language-base result, not useful
 conversation. M2 is the next capability milestone. Claude-220 serves the point key inside one
 float model on fresh p-w, improving templates by +41/+40/+42 at three seeds with exact claude-219
 parity; the gain recalls TRAIN replies, not new wording. Claude-222 has built the integer point
-table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](docs/loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade. [Claude-227](docs/loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; unit 3's real TRAIN export, p-x scoring and laptop measurement is next.
+table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](docs/loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade. [Claude-227](docs/loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; [Claude-228](docs/loop/tasks/point-key-integer/claude-228/REPORT.md) built the run's reference/read-back/BOS checks; unit 4's real TRAIN export, p-x scoring and laptop measurement is next.
 Every run goes ahead on its own pre-run review (D67, [charter](CHARTER.md) §5.1). The one plan is
 [PLAN.md](PLAN.md) (D77).

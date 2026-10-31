@@ -50,7 +50,7 @@ The older close grade covers bars (a)–(e); claude-211's panel score supplies b
 prompt value-masked templates in TRAIN at K = 1,024, but **62.5% of its reference replies are
 verbatim TRAIN replies**. M1 therefore shows reading new prompt phrasings into known reply kinds,
 not new reply kinds or useful conversation
-([closing report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
+([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 
 ## The separate float-trained FBS trunk
 
@@ -77,7 +77,7 @@ are only 3, 1 and 4 of 256, and exact-key memory finds little on new phrasing
 trunk-state keys offline; [claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md)
 then tested them in free generation on fresh p-v. The point-key opening improves templates by
 +13/+8/+12 and exact replies by +9/+8/+12 at three seeds, but only partially. The sign key is
-inconclusive at this panel size. [Claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md) then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade. [Claude-227](../loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; unit 3's real TRAIN export, p-x scoring and laptop measurement is next; useful chat remains unproven.
+inconclusive at this panel size. [Claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md) then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade. [Claude-227](../loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; [Claude-228](../loop/tasks/point-key-integer/claude-228/REPORT.md) built the run's reference/read-back/BOS checks; unit 4's real TRAIN export, p-x scoring and laptop measurement is next; useful chat remains unproven.
 
 ## What remains unbuilt or unqualified
 

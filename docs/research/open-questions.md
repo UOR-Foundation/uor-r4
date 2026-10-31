@@ -8,7 +8,7 @@ on new phrasing, remember across sessions, and run as one product. That remains 
 ```mermaid
 flowchart TD
   A["M1: saved integer model<br/>beats count tables"] --> B{"Can it start the right reply<br/>on new phrasing?"}
-  B -- "point key gives a partial gain" --> M["claude-220: float key; claude-222/224: integer instruments<br/>retention parity passed; unit 3 next"]
+  B -- "point key gives a partial gain" --> M["claude-220: float key; claude-222/224: integer instruments<br/>retention parity passed; unit 4 next"]
   M --> R["Complete correct replies<br/>and durable memory"]
   R --> S["Full serving, cost,<br/>distribution and release"]
 ```
@@ -32,7 +32,7 @@ The saved 19-table `uor-r4.lut-discrete-trunk/1` model passes all six bars on tw
 p-f has no prompt value-masked templates in TRAIN at K = 1,024, so it tests new phrasings. But
 62.5% of its reference replies are verbatim TRAIN replies: M1 reads new prompts into known reply
 kinds, not new reply kinds or useful conversation
-([closing report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
+([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 
 ## The central unknown: correct reply opening on new phrasing
 
@@ -56,7 +56,7 @@ three seeds with exact claude-219 parity, while recalling TRAIN replies rather t
 [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table,
 search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md)
 has built the panel decode and grade. [Claude-227](../loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity
-within the 3% bar; unit 3's real TRAIN export, p-x scoring and laptop measurement on client hardware
+within the 3% bar; unit 4's real TRAIN export, p-x scoring and laptop measurement on client hardware
 is next. Useful conversation remains unproven.
 
 ## What remains open beyond that key

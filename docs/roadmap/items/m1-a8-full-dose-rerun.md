@@ -16,11 +16,11 @@ Tests whether reach survives training, the then-current D39 G-Adm condition, and
 
 ## What is missing
 
-The admission-preserving A8 rerun ran on 25 October 2026 with D67/D68 PASS. FrozenZero reached Q1 with `1,106 / 3,847`, `4,292 / 14,287` and `871 / 14,287`, then continued to a diagnostic stop at batch 5,248 under the 64-batch whole-interval rejection cadence; Relation stopped at batch 1,600. Fresh V2 remains sealed. This is an instrument/cadence-granularity stop, not a mechanism negative or an A8 `5,009` result; that number belongs to Stage T.
+The admission-preserving A8 rerun ran on 25 October 2026 with D67/D68 PASS. FrozenZero reached Q1 with `1,106 / 3,847`, `4,292 / 14,287` and `871 / 14,287`, then continued to a diagnostic stop at batch 5,248 under the 64-batch whole-interval rejection cadence; Relation stopped at batch 1,600. This A8 run did not open Fresh V2; the later M1 bar-(e) run opened and scored it at 7,215 / 7,228. This is an instrument/cadence-granularity stop, not a mechanism negative or an A8 `5,009` result; that number belongs to Stage T.
 
 ## Done when
 
-Paired DEV verdict recorded for the registered arms and seeds; reach kept under the then-current D39 G-Adm condition or a registered diagnostic stop classified as instrument versus mechanism; fresh slice stays sealed.
+Paired DEV verdict recorded for the registered arms and seeds; reach kept under the then-current D39 G-Adm condition or a registered diagnostic stop classified as instrument versus mechanism; this A8 run leaves the fresh slice sealed; the later M1 bar-(e) opening and score are recorded separately.
 
 ## How to start
 

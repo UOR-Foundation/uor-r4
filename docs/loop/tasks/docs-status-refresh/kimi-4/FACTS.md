@@ -1,6 +1,6 @@
 # FACTS: documentation status at 30 Oct 2026
 
-Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md). ORDER: [ORDER.md](ORDER.md). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `cd328d3af791fbc8b3b38a11e40bf65f2dbf3f97`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
+Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md). ORDER: [ORDER.md](ORDER.md). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `c71e85788da3a6ef09909bb4d525dd2e53ff30b3`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
 
 Every public number in this refresh must link to this sheet's committed evidence. This is a factual baseline, not a new measurement or a capability claim.
 
@@ -46,7 +46,7 @@ Every public number in this refresh must link to this sheet's committed evidence
   - One float model now serves the point key itself on fresh p-w (1,200 conversations), reproducing claude-219's keyed files exactly on p-v and DEV. Template pairs are **(50,9), (44,4), (47,5)**, net **+41/+40/+42** at three seeds; exact pairs are **(48,9), (44,4), (47,4)**, all passing their bands without lower DEV.
   - The gain is recall of TRAIN replies, not generalization: served replies are more often verbatim TRAIN replies and have fewer new n-grams. The key closes about 18% of the forced-opening gap and is right on 28–32% of its 1,172 openings per seed.
   - The table is 218,931,272 bytes per checkpoint and scanned at each keyed opening; search is at most 32 ms with three processes sharing one RTX 5090 and at most 5.8 ms alone, both upper bounds. These are float GPU evaluations, not integer serving speed.
-  - **Next:** [point-key-integer](../../../../roadmap/items/point-key-integer.md) (#3450) has since completed its unit-2 instruments; unit 3's real export and measurement remain open. Client-sized search and useful conversation remain open.
+  - **Next:** [point-key-integer](../../../../roadmap/items/point-key-integer.md) (#3450) has since completed its unit-2 and run instruments; unit 4's real export and measurement remain open. Client-sized search and useful conversation remain open.
 - **Merged implementation: claude-222**, [integer point-key report](../../point-key-integer/claude-222/REPORT.md):
   - The integer point table, its search and the `/8` record are built, with 380 library tests, 18 negative gates and a full serving audit. The integer search uses the trunk's own Q12 points and the least-L1/commonest-target rule.
   - This is synthetic-only, not a real trained-model evaluation.
@@ -59,7 +59,10 @@ Every public number in this refresh must link to this sheet's committed evidence
   - The `geometric-retention` flag and retained recurrence are built, with 386 integer-library tests, 186 float-library tests, nine negative gates and a full serving audit. Earlier snapshots still export byte for byte, and older engines refuse the new reading.
 - **Latest merged result: claude-227**, [retention parity report](../../integer-retention-rates/claude-227/REPORT.md), merged on `main` as `cd328d3af791fbc8b3b38a11e40bf65f2dbf3f97`:
   - **G-Ret-Parity PASS:** the retained artifact agrees on 1,531 / 1,536 sequences (0.33% residual) and 4,023 / 4,096 single tokens (1.78%), both within the 3% bar; decay agrees on only 17 and 84. The single-token residual's cause is not located. This closes `integer-retention-rates` (#3456).
-  - Three full snapshots are stored for point-key unit 3. Its real TRAIN export, fresh p-x scoring, tok/s and resident memory are NOT_RUN under its fresh sheet and pre-run review. Parity is not a useful-chat or throughput result.
+  - Three full snapshots are stored for the point-key run. Parity is not a useful-chat or throughput result.
+- **Latest merged implementation: claude-228**, [run-instruments report](../../point-key-integer/claude-228/REPORT.md), merged on `main` as `c71e85788da3a6ef09909bb4d525dd2e53ff30b3`:
+  - The independent reference scan checks every served opening, the `/8` table reads back as built, and BOS is refused at the step. There are 390 integer-library tests with one ignored, four negative gates and a full serving audit.
+  - Unit 4's real TRAIN export, fresh p-x scoring, tok/s and resident memory are NOT_RUN under its fresh sheet and pre-run review. The instruments are not a scored panel result.
 - **D67:** no blanket owner release holds every training step. The D41 donor pass is the remaining named owner-at-dispatch exception. Do not restore retired "every training step is held" language.
 
 ## 3. Historical facts to preserve, not present as current
@@ -104,7 +107,7 @@ Every public number in this refresh must link to this sheet's committed evidence
 
 - #3430 (claude-218) was active at the baseline and merged at `5ec6e36a8f69d3b0c9acf993cc3e09acc7be4646` during verification. #3439 (claude-219) then merged at `e44f68e65` with the fresh p-v free-generation result. Both are included; Claude's research files remain untouched by this unit.
 - #3441 registered the M7 Studio live/model-sources item; #3442/#3444 rebuilt and published it. During final repair, #3445 added the public M1 release/top-8 Studio path, #3446 served `/7` integer turn memory, #3447 redesigned the console, #3448 supplied the workable v2 Workspace/Agent interface and #3451 polished it. `origin/main` `437d1ddf5` is merged forward; their implementations and generated roadmap view are preserved. This unit changes only documentation and does not publish the Studio or edit `.github/**`.
-- #3443 merged claude-220 on `main` as `c3d5cb684336a59cb12a8b5021430585bc3b751a` during final review: one float model serves the point key on p-w at all three seeds with exact claude-219 parity. #3449 then registered `point-key-integer` (#3450), #3452 delivered claude-222's integer table, search and `/8` record, #3453 registered claude-223's grading scope and unit order, #3454 delivered claude-224's panel decode and grade, #3455 registered the retention prerequisite (#3456), #3457 delivered claude-226's retained recurrence and flag, and #3458 passed claude-227's retention GPU parity. `origin/main` `cd328d3af791fbc8b3b38a11e40bf65f2dbf3f97` is merged forward; unit 3's real export, fresh p-x score and laptop measurements come next. Claude's research source and records remain untouched by this unit.
+- #3443 merged claude-220 on `main` as `c3d5cb684336a59cb12a8b5021430585bc3b751a` during final review: one float model serves the point key on p-w at all three seeds with exact claude-219 parity. #3449 then registered `point-key-integer` (#3450), #3452 delivered claude-222's integer table, search and `/8` record, #3453 registered claude-223's grading scope and unit order, #3454 delivered claude-224's panel decode and grade, #3455 registered the retention prerequisite (#3456), #3457 delivered claude-226's retained recurrence and flag, #3458 passed claude-227's retention GPU parity, and #3459 delivered claude-228's run instruments. `origin/main` `c71e85788da3a6ef09909bb4d525dd2e53ff30b3` is merged forward; unit 4's real export, fresh p-x score and laptop measurements come next. Claude's research source and records remain untouched by this unit.
 - #3426's figure tooling fixes landed through #3438 and were merged forward before figure regeneration.
 - #3435/#3424: discrete/source-interface code only, no documentation overlap at baseline.
 - #3323 (antigravity-113): `exact-memory.md` and `object-store.md` stay untouched even though they were once considered by the older documentation refresh.
@@ -118,6 +121,7 @@ Every public number in this refresh must link to this sheet's committed evidence
 - [Latest merged integer point-key implementation](../../point-key-integer/claude-224/REPORT.md)
 - [Latest merged retention implementation](../../integer-retention-rates/claude-226/REPORT.md)
 - [Retention GPU parity result](../../integer-retention-rates/claude-227/REPORT.md)
+- [Run instruments result](../../point-key-integer/claude-228/REPORT.md)
 - [Pipeline map](../../../../model/pipeline-map.md)
 - [Mechanism board](../../../../mechanisms/README.md)
 - [Studio wiring record](../../../../labs/m7-studio-connect-wasm-engine/README.md)

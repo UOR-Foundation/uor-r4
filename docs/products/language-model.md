@@ -52,7 +52,7 @@ float-trained FBS `lut-stack/5` trunk.
 
 Both seeds have exact export/reference agreement and pass B4. These results close M1
 ([#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029)), with the older close grade for
-bars (a)–(e) and claude-211's panel score for bar (f).
+bars (a)–(e) and claude-211's panel score for bar (f) ([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 
 **The limitation is part of the result:** 62.5% of p-f's reference replies are verbatim TRAIN
 replies. M1 shows reading new prompt phrasings into known reply kinds, not new reply kinds or useful
@@ -71,7 +71,7 @@ prompts ([claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)).
 trunk-state keys offline; [claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md)
 then served the point key for the first reply token in free generation on fresh p-v. It improves
 templates by +13/+8/+12 and exact replies by +9/+8/+12 at three seeds, but reaches only 12–18% of
-the forced-opening lift. [Claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md) then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade. [Claude-227](../loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; unit 3's real TRAIN export, p-x scoring and laptop measurement is next.
+the forced-opening lift. [Claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md) then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade. [Claude-227](../loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; [Claude-228](../loop/tasks/point-key-integer/claude-228/REPORT.md) built the run's reference/read-back/BOS checks; unit 4's real TRAIN export, p-x scoring and laptop measurement is next.
 This is not a useful-chat result.
 
 ## The artifact format and serving boundary
