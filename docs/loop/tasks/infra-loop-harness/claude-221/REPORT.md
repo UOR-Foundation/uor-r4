@@ -24,7 +24,11 @@ No measurement: this unit records an item.
   - builds, finite tests, tok/s and resident memory run on the laptop;
   - the export pass over TRAIN, the panel arms and the scoring run on the GPU.
 - **Named as missing work:** `uor-r4-integer` has no CUDA path, so an exact integer evaluator on the GPU, bit-exact against the laptop engine, is listed.
-- **The owner's question:** whether the bit-exact laptop engine may score the deciding panel instead is a §3.6 call. It goes to the owner's queue once (#2028), and the kernel work does not wait for it.
+- **The owner's question:** whether the bit-exact laptop engine may score the deciding panel instead is a §3.6 call. It went to the owner once, on #2028 and in claude's chat.
+- **The owner answered (31 Oct 2026, in claude's chat):** "I want both. If the laptop bit-exact will allow us to proceed right now I think we should do that, but eventually we want the performance boost that we get by building our custom CUDA drivers".
+  - So `needs_gpu` is false: this item's bar is scored on the bit-exact laptop engine.
+  - The CUDA evaluator is listed as later work for speed, under its own item, and this item does not wait for it.
+  - The charter's text is unchanged.
 - **Also from round 2:** the near-tie class is reworded as "within the rounding bound", since the integer points are the integer trunk's own, not rounded float points.
 
 ## What worked
@@ -51,7 +55,7 @@ No measurement: this unit records an item.
   - By milestone: research 39.
 - **The sync plan:** 0 labels, 1 issue to create, 0 to update, 0 to close, 0 milestone checklists.
 - **Applied:** created #3450.
-- **After each review round,** a sync planned and applied exactly one update, #3450's body. That happened twice. The rendered row's GPU column read "no" after round 1 and "yes" again after round 2.
+- **After each review round,** a sync planned and applied exactly one update, #3450's body. That happened three times, the last after the owner's answer. The rendered row's GPU column read "no" after round 1, "yes" after round 2, and "no" after the owner's answer.
 
 ## Checks run at the head
 
@@ -68,8 +72,8 @@ None.
 ## Still open
 
 - **The item's first unit:** the integer table, its search, and the artifact record. It takes its claim through `loop next` once this merges.
-- **Settled in that unit's sheet:** the export pass's cost over TRAIN's openings, the GPU evaluator's bit-exactness check, the fresh panel p-x's seed, and the bar's rows.
-- **The GPU evaluator** is built unless the owner allows laptop scoring (#2028). Until then a decision card decides only its crate and files.
+- **Settled in that unit's sheet:** the export pass's cost over TRAIN's openings and its split across the laptop's cores, the fresh panel p-x's seed, and the bar's rows.
+- **The CUDA evaluator, for speed** (the owner's "eventually"): its own item, scope and decision card, recorded when that work begins.
 
 ## Plain summary
 

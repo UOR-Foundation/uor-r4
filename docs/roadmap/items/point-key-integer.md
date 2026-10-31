@@ -5,7 +5,7 @@ milestone: research
 area: serving
 status: ready
 open_to: lab
-needs_gpu: true
+needs_gpu: false
 depends_on: [one-model-end-to-end, turn-memory-integer]
 notebook: docs/research/notebook/float-training.md
 scope: [crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/stack/memory.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/point_key.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/src/bin/fbs-point-key.rs, crates/uor-r4-integer/src/wasm_serve.rs, crates/uor-r4-integer/src/wasm_bindgen_exports.rs, docs/roadmap/items/point-key-integer.md, docs/harness/prep/point-key-integer*, docs/labs/point-key-integer/**, docs/loop/tasks/point-key-integer/**, docs/research/notebook/float-training.md]
@@ -29,7 +29,7 @@ The integer artifact cannot hold the float table, since no floating point is all
 
 - **A table built by the integer engine.**
   - It holds TRAIN's opening points at the writer query's representation (i16 Q12: 212,968 × 256 × 2 B, about 109 MB) and their targets.
-  - It is taken with the memory off, by an export pass that runs the integer session over TRAIN's openings (a new `fbs-point-key`). On the laptop engine that pass is the bit-exact reference and the unit tests' driver; the full pass and the panels run on the GPU evaluator below.
+  - It is taken with the memory off, by an export pass that runs the integer session over TRAIN's openings (a new `fbs-point-key`). It and the panel arms run on the bit-exact laptop engine, by the owner's allowance (below).
   - claude-220's float `opening-table.safetensors` is never quantized into it. Neither is any float snapshot, which is why the float exporter and snapshot files are outside this item's scope.
 - **The served search in the integer session.**
   - **Where:** at `stack_step_fbs`'s first reply step, and its timed twin. Where the turn memory's opening read misses its exact key, the memory moves nothing, so `b.query_q12` is the trunk's own point. The search overrides the native token there.
@@ -38,11 +38,10 @@ The integer artifact cannot hold the float table, since no floating point is all
 - **The artifact:** `uor-r4.lut-stack/8`, or a new optional record that older engines refuse, since `StackTurnMemory` denies unknown fields.
   - The new section is `memory.point.{points,targets}`.
   - The restore refusal covers its state.
-- **An exact integer evaluator on the GPU.**
+- **Later, for speed, not for this item's bar: an exact integer evaluator on the GPU.**
   - The integer engine is CPU code, and `uor-r4-integer` has no CUDA path.
-  - CHARTER §3.6 keeps "panel scoring, qualification and milestone evaluation of an exported artifact" as GPU research compute (§3.5), and §3.5 calls a host fallback "a defect to fix with a kernel".
-  - So the export pass over TRAIN and the panel arms need a CUDA form of the integer session's step and the table search, bit-exact against the laptop engine on a fixed prompt set. It is built ahead with nvcc, never NVRTC.
-  - It is built unless the owner allows laptop scoring (the owner's call below). That unit's decision card decides only its crate and files, which it adds to this item's scope.
+  - The owner wants it built ("eventually we want the performance boost that we get by building our custom CUDA drivers"). It would be a CUDA form of the integer session's step and the table search, built ahead with nvcc (never NVRTC), and bit-exact against the laptop engine on a fixed prompt set.
+  - It needs its own item, scope and decision card. This item's done-when does not wait for it.
 - **Optionally, the sign code** (6.8 MB, the Hamming form that `integer-hamming-read`'s popcount fits). It is reported only, since claude-219 read it too thin to tell.
 
 ## Done when
@@ -82,11 +81,11 @@ The model throughout is (r-drop)'s sealed step-16,384 checkpoints at seeds 1–3
   - `turn-memory-integer`'s item, and DeepSeek's integer turn memory (#3446, the `/7` turn memory in the integer session);
   - `crates/uor-r4-integer/src/stack/{memory.rs,session.rs,format.rs}` at the plug-in point.
 - **Before claiming:** check that neither `integer-hamming-read` nor `fbs-serving-kernels` holds a claim on `session.rs`, and that no Studio worktree plans edits to `session.rs` or `wasm_serve.rs`.
-- **Which run goes where:**
-  - **The laptop:** builds, the finite unit tests, tok/s and resident memory (CHARTER §3.6: serving the artifact and measuring its tok/s). The float references need no new run; they are claude-220's sealed served files.
-  - **The GPU:** the export pass over TRAIN, the panel arms, and the scoring of the bar in done-when 3 and 4 (§3.5–§3.6). That needs the exact integer evaluator above.
-  - **The owner's call:** whether a deciding panel of the integer artifact may instead be scored by the bit-exact laptop engine is a §3.6 question, and §3 is the owner's. It goes to the owner's queue once. The kernel work goes on meanwhile; it does not wait for the answer.
-- **Settle in the sheet:** the export pass's cost over TRAIN's 212,968 openings, and the GPU path's bit-exactness check.
+- **Which run goes where:** everything runs on the laptop's bit-exact integer engine. That covers builds, the finite unit tests, the export pass over TRAIN, the panel arms, the scoring of done-when 3 and 4, and tok/s and resident memory. The float references need no new run: they are claude-220's sealed served files.
+- **The owner's allowance (31 Oct 2026, in claude's chat).**
+  - **The question:** CHARTER §3.6 keeps "panel scoring, qualification and milestone evaluation of an exported artifact" as GPU research compute, and the integer engine has no GPU path. Asked how this item's deciding panel is scored, the owner answered: "I want both. If the laptop bit-exact will allow us to proceed right now I think we should do that, but eventually we want the performance boost that we get by building our custom CUDA drivers".
+  - **What it covers:** this item's scoring, on the bit-exact laptop engine. The charter's text is unchanged; it is an owner path.
+- **Settle in the sheet:** the export pass's cost over TRAIN's 212,968 openings, and how it is split across the laptop's cores.
 
 ## Rules that apply
 
