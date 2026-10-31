@@ -291,6 +291,8 @@ pub fn fbs_trunk_snapshot(model: &StackModel) -> Result<FbsTrunkSnapshot> {
         // The memory is not part of the `StackModel`: `fbs-snapshot` loads it from the checkpoint
         // directory and sets it with `fbs_memory_snapshot` (claude-198).
         memory: None,
+        // Nor is the rate reading: `fbs-snapshot` sets it from the run's config (claude-226).
+        retain_rates: false,
     })
 }
 
@@ -417,6 +419,23 @@ pub fn fbs_hamming_snapshot(
         depths: HAMMING_DEPTHS.to_vec(),
         reads: out,
     })
+}
+
+/// Whether a run's recurrence read its rate table as retention (integer-retention-rates,
+/// claude-226), from the run's `config.json`: its `retain_rates`, false when absent, as in every run
+/// before 27 Oct 2026. A run with `fold_scores` or `reflect_floor` on is refused: those change the
+/// rate score before its selection, and the integer artifact only clamps it.
+pub fn run_rate_reading(run_config: &str) -> Result<bool> {
+    let config: serde_json::Value = serde_json::from_str(run_config)?;
+    let flag = |name: &str| config.get(name).and_then(serde_json::Value::as_bool).unwrap_or(false);
+    for name in ["fold_scores", "reflect_floor"] {
+        if flag(name) {
+            return Err(invalid(format!(
+                "the run trained with {name} on, whose integer form does not exist: its export is refused (integer-retention-rates)"
+            )));
+        }
+    }
+    Ok(flag("retain_rates"))
 }
 
 /// The snapshot of a turn memory (claude-161, claude-193): its tables in ascending key order, as
@@ -666,6 +685,18 @@ pub const READOUT_SEQUENCES: usize = 8;
 mod tests {
     use super::*;
     use crate::geometric_stack::Objective;
+
+    /// claude-226: a run's rate reading is its `retain_rates`, false when absent. A run with
+    /// `fold_scores` or `reflect_floor` on is refused, since the integer artifact only clamps the rate
+    /// score.
+    #[test]
+    fn the_run_rate_reading_is_retain_rates_and_refuses_the_other_score_forms() {
+        assert!(run_rate_reading(r#"{"retain_rates": true, "fold_scores": false, "reflect_floor": false}"#).unwrap());
+        assert!(!run_rate_reading(r#"{"steps": 16384}"#).unwrap(), "absent, as before 27 Oct");
+        assert!(run_rate_reading(r#"{"retain_rates": true, "fold_scores": true}"#).is_err(), "folded scores");
+        assert!(run_rate_reading(r#"{"reflect_floor": true}"#).is_err(), "a reflected floor");
+        assert!(run_rate_reading("not json").is_err());
+    }
 
     /// The Stage 3 trunk's configuration at a small size.
     fn small_config(seed: u64) -> StackConfig {
