@@ -45,10 +45,10 @@ conversation. See [CHARTER §4.8](../../CHARTER.md#4-evidence), the [M1 close](.
 
 ## The current order of work
 
-1. **Complete `point-key-integer` (#3450).** Claude-218 found trunk-state keys that
+1. **Complete `integer-nearest-readout` and rerun `point-key-integer`.** Claude-218 found trunk-state keys that
    improved openings offline; [claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md)
    showed a partial free-generation gain on fresh p-v, and [claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md)
-   then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade; [claude-227](../loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; [Claude-229](../loop/tasks/point-key-integer/claude-229/REPORT.md) found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so no bar result or throughput is reported. [integer-nearest-readout](../roadmap/items/integer-nearest-readout.md) repairs the readout and checks parity before rerunning p-x ([item](../roadmap/items/point-key-integer.md)).
+   then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade; [claude-227](../loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; [Claude-228](../loop/tasks/point-key-integer/claude-228/REPORT.md) built the run's reference/read-back/BOS instruments (390 integer-library tests with one ignored and four negative gates), which held in row 0; [Claude-229](../loop/tasks/point-key-integer/claude-229/REPORT.md) found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so no bar result or throughput is reported. [Claude-231](../loop/tasks/integer-nearest-readout/claude-231/REPORT.md) built the nearest readout and export on native and browser paths; end-to-end greedy parity is next before the p-x rerun ([item](../roadmap/items/point-key-integer.md)).
 2. **Serve every required part in integers.** Finish the served read, memory and readout rather
    than treating an export or an audit alone as the whole model.
 3. **Train and score one model end to end.** Measure complete generated replies on untouched
@@ -101,7 +101,7 @@ whole-model score are still unproven; useful conversation has not been establish
 |---|---|---|
 | Milestones complete | **1 of 8 (M1)** | [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) |
 | Next milestone | M2: grounded complete replies | [PLAN](../../PLAN.md) |
-| Immediate problem | Repair unit 5's readout and integer/float greedy parity, then rerun p-x after row 0's instrument fault | [claude-229](../loop/tasks/point-key-integer/claude-229/REPORT.md), [item](../roadmap/items/point-key-integer.md) |
+| Immediate problem | Prove greedy parity after claude-231's nearest readout, then rerun p-x after row 0's instrument fault | [claude-231](../loop/tasks/integer-nearest-readout/claude-231/REPORT.md), [item](../roadmap/items/point-key-integer.md) |
 | M4 | Lawful likelihood built; full accepted-model serving and held-out score open | [serving and export](../model/serving-and-export.md) |
 | Products shipped | None | [products](../products/README.md) |
 

@@ -1,6 +1,6 @@
 # ORDER: comprehensive 30 Oct documentation refresh
 
-Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `54f20ac7bb9203cb4949f8161a72d1c5fba53408`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
+Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `62308fcbce74170316fd5672716fc313b37aca16`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
 
 ## Goal and chain
 
@@ -99,3 +99,7 @@ During repair, #3454 merged claude-224 on `main` as `18c4c3da70f35b5c8c9348297df
 ## Scope decision: readout repair registration
 
 #3461 then merged claude-230 on `main` as `54f20ac7bb9203cb4949f8161a72d1c5fba53408`, registering `integer-nearest-readout`. The same living documentation scope links the repair and its required `I-Greedy-Parity` check before the p-x rerun; it is not a repair result. No acceptance bar, model code, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation corrections together.
+
+## Scope decision: nearest-readout implementation
+
+#3463 then merged claude-231 on `main` as `62308fcbce74170316fd5672716fc313b37aca16`. `integer-nearest-readout.md` is added to record the completed native/browser nearest readout and export, 395 integer-library tests with one ignored, seven negative gates and full serving/WASM audits, and the remaining end-to-end greedy parity and p-x rerun. No acceptance bar, model code, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation corrections together.

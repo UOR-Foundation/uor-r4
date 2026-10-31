@@ -25,7 +25,7 @@ The fresh panel's size, noise floor and thresholds are registered in `docs/harne
 
 ## Done when
 
-'(e) Fresh transfer. The gain holds on a fresh, sealed test panel registered in advance.' Read with bar (d), "the gain" is integer top-1 through the D11 export beating the unigram table (1,226 of 14,287) and the next-word table (6,300 of 14,287) on each of two seeds. Step 3 has registered the fresh-panel thresholds and noise floor in `docs/harness/prep/m1-fresh-panel-transfer-2026-10-26.md`; Step 4 applies them on the single fresh opening.
+'(e) Fresh transfer. The gain holds on a fresh, sealed test panel registered in advance.' Read with bar (d), "the gain" is integer top-1 through the D11 export beating the unigram table (1,226 of 14,287) and the next-word table (6,300 of 14,287) on each of two seeds, with the required 6,324 target = T2 + 24. Step 3 has registered the fresh-panel thresholds and noise floor in `docs/harness/prep/m1-fresh-panel-transfer-2026-10-26.md`; Step 4 applies them on the single fresh opening.
 
 ## How to start
 
@@ -46,7 +46,7 @@ The fresh panel's size, noise floor and thresholds are registered in `docs/harne
 ## Sources
 
 - [`ROADMAP.md:14`](../../../ROADMAP.md)
-- [`docs/integration/NOW.md:85`](../../../docs/integration/NOW.md)
+- [`archive/integration/NOW-2026-10-22.md:85`](../../../archive/integration/NOW-2026-10-22.md)
 - [`docs/start/where-were-going.md:34`](../../../docs/start/where-were-going.md)
 - [`docs/start/faq.md:111`](../../../docs/start/faq.md)
 

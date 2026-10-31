@@ -8,7 +8,7 @@ on new phrasing, remember across sessions, and run as one product. That remains 
 ```mermaid
 flowchart TD
   A["M1: saved integer model<br/>beats count tables"] --> B{"Can it start the right reply<br/>on new phrasing?"}
-  B -- "point key gives a partial gain" --> M["claude-220: float key; claude-222/224/228: integer instruments<br/>row 0 instrument fault; unit 5 readout repair"]
+  B -- "point key gives a partial gain" --> M["claude-220: float key; claude-222/224/228: integer instruments<br/>claude-231 nearest built; greedy parity next"]
   M --> R["Complete correct replies<br/>and durable memory"]
   R --> S["Full serving, cost,<br/>distribution and release"]
 ```
@@ -58,7 +58,7 @@ search and `/8` record, with 380 library tests and a full serving audit. [Claude
 has built the panel decode and grade. [Claude-227](../loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity
 within the 3% bar; [claude-228](../loop/tasks/point-key-integer/claude-228/REPORT.md) built the run's reference/read-back/BOS checks; [claude-229](../loop/tasks/point-key-integer/claude-229/REPORT.md) found an instrument fault: the
 integer session uses the native writer instead of the trained whole-table nearest readout, so all grade
-pairs are (0, 0). [integer-nearest-readout](../roadmap/items/integer-nearest-readout.md) repairs the readout and checks parity before rerunning p-x. Useful conversation remains unproven.
+pairs are (0, 0). [Claude-231](../loop/tasks/integer-nearest-readout/claude-231/REPORT.md) built the nearest readout and export on native and browser paths; end-to-end greedy parity is next before the p-x rerun. Useful conversation remains unproven.
 
 ## What remains open beyond that key
 
