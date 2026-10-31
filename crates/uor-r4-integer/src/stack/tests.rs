@@ -5451,6 +5451,56 @@ fn a_panel_reply_records_the_point_keys_opening_and_is_capped() {
     assert!(panel_reply(&model8, &vec![12; context + 1], 4, None).is_err(), "a prompt past the context");
 }
 
+/// claude-228: the run's instrument at a served opening. A decode whose key serves passes the
+/// reference scan with the opening step's own query, and a served name or distance the reference
+/// does not give is refused, as is a check against a stack without a table.
+#[test]
+fn a_served_opening_is_checked_against_the_reference_scan() {
+    use super::panel_reply;
+    use super::point_key::check_served_point;
+    let (tokens, reply_start) = turn_memory_script(8);
+    let mask: Vec<u8> = (0..tokens.len()).map(|p| u8::from(p >= reply_start)).collect();
+    let bytes = point_key_test_stack(false);
+    let model7 = IntegerStackModel::parse(&bytes).expect("served /7");
+    let windows = super::point_key_windows(&tokens, &mask, 192, 0).expect("windows");
+    let image = super::build_point_key(&model7, &windows).expect("the table");
+    let model8 = IntegerStackModel::parse(&super::add_point_key_uorlut01(&bytes, &image).expect("/8")).expect("served /8");
+    let prompt = &tokens[..reply_start];
+    let keyed = panel_reply(&model8, prompt, 4, None).expect("served and checked").keyed.expect("the key served");
+    let mut session = model8.session();
+    let mut step = None;
+    for (row, &token) in prompt.iter().enumerate() {
+        if row + 1 == prompt.len() {
+            session.mark_reply_start();
+        }
+        step = Some(session.step_native(token).expect("step"));
+    }
+    let query = step.expect("a step").query_q12;
+    assert_eq!(session.last_point_key(), Some(keyed), "the same opening");
+    assert_eq!(model8.point_key_reference(&query), Some(keyed), "the reference names as served");
+    check_served_point(&model8, &query, keyed).expect("the served name");
+    assert!(check_served_point(&model8, &query, (keyed.0 + 1, keyed.1)).is_err(), "another name");
+    assert!(check_served_point(&model8, &query, (keyed.0, keyed.1 + 1)).is_err(), "another distance");
+    assert!(check_served_point(&model7, &query, keyed).is_err(), "a stack without a table");
+}
+
+/// claude-228: the run's instrument at export. The table reads back from the `/8` bytes as built;
+/// a built table that differs from what the bytes hold is refused, and so is a `/7` stack.
+#[test]
+fn a_point_table_that_does_not_read_back_as_built_is_refused() {
+    let bytes = super::synthetic::synthetic_turn_memory_artifact(7, 8, 192, false);
+    let image = synthetic_point_key(&bytes, 5);
+    let with = super::add_point_key_uorlut01(&bytes, &image).expect("the /8 stack");
+    super::check_point_key_read_back(&with, &image).expect("as built");
+    let mut moved = image.clone();
+    moved.points[3] += 1;
+    assert!(super::check_point_key_read_back(&with, &moved).is_err(), "a point changed");
+    let mut renamed = image.clone();
+    renamed.targets[0] += 1;
+    assert!(super::check_point_key_read_back(&with, &renamed).is_err(), "a target changed");
+    assert!(super::check_point_key_read_back(&bytes, &image).is_err(), "a /7 stack holds no table");
+}
+
 /// claude-226: the retained rates are the float trunk's `retain_rates` rule at Q31. Each lane
 /// carries `1 - 2^-(i+1)` exactly, and its drive weight is `sqrt(1 - lambda^2)` within one unit.
 /// Entry 0 is one half in both readings, so the readings first differ at entry 1.

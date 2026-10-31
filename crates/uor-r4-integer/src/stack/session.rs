@@ -1071,6 +1071,13 @@ impl IntegerStackModel {
         self.memory.as_ref()?.point.as_ref()?.least_distance_to(query, target)
     }
 
+    /// The reference scan's name and least distance for `query` against the point table
+    /// (claude-228), or `None` without a table: what the run's instrument compares each served
+    /// opening with. It is off the step's path.
+    pub fn point_key_reference(&self, query: &[i32]) -> Option<(u32, i64)> {
+        self.memory.as_ref()?.point.as_ref()?.reference_name(query)
+    }
+
     /// How many opening and reply keys the turn memory's tables hold, if it has one.
     pub fn turn_memory_table_lengths(&self) -> Option<(usize, Option<usize>)> {
         self.memory
