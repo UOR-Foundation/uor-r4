@@ -1,15 +1,15 @@
 # UOR-R4 Geometric Language Model: integer serving
 
-> **Selected API, 13 October — D29:** Cargo selects `src/native_geometry.rs`, exposing fixed H4 geometry, checked integer primitives and report/config metadata. The historical model/stack/sampling executors and generation binaries described below remain source evidence and are excluded; `historical-runtime` fails compilation. The composed native CUDA graph at `1f1547bfd` passes 31 finite controls on RTX4090, pending protected delivery. No compliant D11 language-serving model is qualified by this facade or those controls; all training holds remain. [Boundary record](../../archive/labs/d29-vendor-boundary-2026-10-13/README.md).
+> **Selected API, 13 October — D29:** Cargo selects `src/native_geometry.rs`, exposing fixed H4 geometry, checked integer primitives and report/config metadata. The historical model/stack/sampling executors and generation binaries described below remain source evidence and are excluded; `historical-runtime` fails compilation. The composed native CUDA graph at `1f1547bfd` passes 31 finite controls on RTX4090, pending protected delivery. No compliant D11 language-serving model was qualified by this facade or those controls at that 13 October boundary; training holds then in force are historical. Current runs use the lab's D67 pre-run review, with D41's donor pass the named owner-at-dispatch exception. [Boundary record](../../archive/labs/d29-vendor-boundary-2026-10-13/README.md).
 
-## Status on 29 Oct 2026
+## Status through 31 Oct 2026
 
-This crate serves the float-trained FBS trunk as a D11 integer artifact. Pre-alpha: no milestone is complete and no conversation is established. The model's two paths and their state are in [the pipeline map](../../docs/model/pipeline-map.md); the plan is [PLAN.md](../../PLAN.md).
+This crate serves the saved discrete M1 pair and the separate float-trained FBS trunk as D11 integer artifacts. Pre-alpha: 1 of 8 milestones is complete, and no useful conversation is established. The model's two paths and their state are in [the pipeline map](../../docs/model/pipeline-map.md); the plan is [PLAN.md](../../PLAN.md).
 
+- **Discrete M1 pair.** `uor-r4.lut-discrete-trunk/1` reproduces the reference on all 14,287 DEV rows and passes B4. It scores 7,002 / 7,001 on DEV, 7,215 / 7,228 on Fresh V2 and 7,850 / 7,872 on p-f, closing all six bars at two seeds. Apple M1 decode is 10,876 / 10,566 tok/s under the bar-f protocol ([M1 close](../../docs/labs/m1-close-saved-model/README.md), [Fresh V2](../../docs/labs/m1-fresh-panel-transfer/README.md), [bar-f](../../docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 - **D80 and D81 (28 Oct).** Served integer code may use the hardware integer multiply and divide. Floats, transcendentals and dense matmul stay banned in serving.
-- **`lut-stack/5`.** It keeps the 120-root rotations exact, so the export gap closes (claude-181, claude-182). It serves at 4,217–4,504 tok/s on the M1 laptop (DEV scope).
-- **`lut-stack/6`.** It carries the Hamming reads (claude-188). The session refuses `/6` until it serves them. The copy-head integer kernel matches an f64 reference (claude-189); the session hooks are next.
-- **Speed.** 4,829 tok/s on the M1 with the snapped contract, replies byte-identical to the engine before the multiply and divide (claude-177).
+- **Separate FBS `lut-stack/5`.** It keeps the 120-root rotations exact, putting the export gap inside its bar at DEV scope ([claude-182](../../docs/loop/tasks/d11-exporter-float-trunk/claude-182/REPORT.md)). It serves at 4,217–4,320 tok/s, then 4,491/4,504 after the integer square root ([claude-186](../../docs/loop/tasks/fbs-serving-vector-kernel/claude-186/REPORT.md)), on the M1 laptop. `/6` carries additional Hamming-read hooks; the joined session remains open.
+- **Limit.** p-f has 62.5% verbatim TRAIN reference replies, so M1 is not useful-chat qualification. Claude-217's teacher-forced p-s reply openings are only 17.4%, 13.7% and 18.6% at three seeds, against about 80% on later tokens.
 
 ## Historical implementation and evidence
 

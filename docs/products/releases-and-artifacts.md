@@ -1,6 +1,6 @@
 # Releases and artifacts
 
-A release is how a finished model reaches people: a numbered version, a file you can download, and a fingerprint (a checksum) that proves the file is exactly the one that was tested. For UOR-R4 the file is meant to be one integer-only model file in a format called `UORLUT01`, released at milestone M8. That release does not exist. Two old software releases are on GitHub from the summer, plus one pinned-corpus data release, but both software releases belong to an earlier engine and neither is a qualified model. The release automation still targets that older engine too. This page explains the file format, the release machinery as it is, the Hugging Face repositories, and how checksums bind them together. **Nothing ships until a trained model passes M1 to M8.**
+A release is how a finished model reaches people: a numbered version, a file you can download, and a fingerprint (a checksum) that proves the file is exactly the one that was tested. For UOR-R4 the product file is meant to be one integer-only model file in a format called `UORLUT01`, released at milestone M8. **That M8 release does not exist.** Separately, checksum-pinned research artifacts are now public on Hugging Face, including the M1 pair; they are not a qualified conversational product or M8 release. Two old software releases are on GitHub from the summer, plus one pinned-corpus data release, but both software releases belong to an earlier engine and neither is a qualified model. The release automation still targets that older engine too. This page explains the file format, the release machinery as it is, the Hugging Face repositories, and how checksums bind them together. **No product ships until a trained model passes M1 to M8.**
 
 Labels used below: **proof** (derived from definitions or code), **measurement** (a recorded run with its artifact), **hypothesis** (untested). See the [glossary](../start/glossary.md).
 
@@ -24,10 +24,10 @@ flowchart LR
 - The 8-byte magic string `UORLUT01`, then the header length as a little-endian 64-bit integer.
 - A JSON header with the schema name, the model's shape, the group size, numeric settings, a list of matrices and tables, the exporter's provenance (never read by the serving arithmetic), and an optional record of a trained-in rotation snap, with the SHA-256 of its root set.
 - Zero padding to a 64-byte boundary, then the data sections at 64-byte-aligned offsets.
-- Each weight matrix stored as 4-bit codes, two per byte, with one scale byte per row and group. The scale byte holds a 4-bit mantissa $m$ and a 4-bit exponent step $d_e$, meaning a group scale of $(16+m)\,2^{\,e_{\text{base}}+d_e-4}$.
+- In dense/FBS schemas, each weight matrix is stored as 4-bit codes, two per byte, with one scale byte per row and group. The scale byte holds a 4-bit mantissa $m$ and a 4-bit exponent step $d_e$, meaning a group scale of $(16+m)\,2^{\,e_{\text{base}}+d_e-4}$. M1's table-native `lut-discrete-trunk/1` instead stores named integer lookup tables and has zero 4-bit matrix sections.
 - Small integer tables (16-bit or 32-bit) for the few nonlinear steps.
 
-**Three schemas** exist: `lut-stack/1` (a softmax attention read), `/2` (adds a pointer head) and `/3` (a softmax-free flock rank read). The first two serve exp-table softmax reads, which the no-squashing rule bans. No schema fits today's rules as it stands: all three also carry SiLU and GELU tables and stream dense 4-bit weight maps through a table-based product, which the charter excludes, so a new table-native schema is likely needed ([lut-serving dossier](../mechanisms/lut-serving.md)).
+**Older dense schemas** are `lut-stack/1` (a softmax attention read), `/2` (adds a pointer head) and `/3` (a softmax-free flock rank read). The first two serve exp-table softmax reads, which the no-squashing rule bans, and the older family also carries SiLU/GELU tables and dense 4-bit weight maps. **Current table-native contracts include** `lut-discrete/1` and the M1 `lut-discrete-trunk/1`. The separate FBS `lut-stack/5` is a 4-bit float-to-integer stack with exact rotations, not a table-native discrete schema; `/6` carries additional read hooks. These are the formats relevant to today's saved artifacts ([lut-serving dossier](../mechanisms/lut-serving.md)).
 
 **A built-in fingerprint.** When the reader parses a file, it computes the SHA-256 of all its bytes and keeps it with the parsed model (`format.rs`, line 557). A release can therefore pin that hash, and a client can refuse any file that does not match.
 
@@ -55,7 +55,7 @@ The M8 bar is "one versioned, checksum-pinned `UORLUT01` artifact" that meets th
 
 1. **The model file** with its SHA-256, plus the tokenizer it was trained with.
 2. **Release notes** that bind the code SHA, the file hash, the tokenizer, the training data and seed, every measured score with its panel, the export gap, and the known limits. The charter requires every artifact to bind its data, seed, configuration, parameters and format (section 3.12).
-3. **Binaries:** `uor-chat` for each platform and the WebAssembly bundle, each with a `.sha256`, and each re-passing its engine's serving audit. Every audit refuses float. The FBS stack's audits (`uor-r4-stack` and the WebAssembly serving surface) also refuse vector and matrix multiplies, and since D80 and D81 allow the scalar integer multiply and divide. The other engines' audits, `uor-chat`'s among them, keep the zero-multiply rule. At last count the audits covered 44 native symbol ranges and 7 of 7 WebAssembly functions ([project track](../integration/project-track.md), M4).
+3. **Binaries:** `uor-chat` for each platform and the WebAssembly bundle, each with a `.sha256`, and each re-passing its engine's serving audit. Every audit refuses float. The FBS stack's audits (`uor-r4-stack` and the WebAssembly serving surface) also refuse vector and matrix multiplies, while D80 and D81 allow scalar integer multiply and divide. Any separate legacy `uor-chat` audit is reported under that engine's own rules, not as a current project-wide zero-multiply rule. At last count the audits covered 44 native symbol ranges and 7 of 7 WebAssembly functions ([project track](../integration/project-track.md), M4).
 4. **The Studio**, published to `/studio` on the documentation site ([charter](../../CHARTER.md), section 2).
 5. **Independent verification** on consumer hardware.
 
@@ -65,11 +65,14 @@ Missing today: a release workflow for `UORLUT01`, WebAssembly and desktop packag
 
 | Repository | Visibility | What it holds | Status |
 |---|---|---|---|
+| [`caseyallard/uor-r4-m1-model`](https://huggingface.co/caseyallard/uor-r4-m1-model) | Public (model, MIT) | The M1-closing 19-table discrete trunk pair, 86,536,132 and 84,943,328 bytes, with stack-bound tokenizers | **Current research artifact.** Studio top-8 next-token prediction, not chat; not an M8 product release |
+| [`caseyallard/uor-r4-m1-discrete`](https://huggingface.co/caseyallard/uor-r4-m1-discrete) | Public (model, MIT) | Four-table Stage-T base exports and tokenizer | Earlier discrete research artifacts, not the closing M1 pair |
+| [`caseyallard/uor-r4-fbs-dual-c131`](https://huggingface.co/caseyallard/uor-r4-fbs-dual-c131) | Public (model, MIT) | Separate trained FBS trunk pair and tokenizers | Research artifacts; no trained token writer, so the Studio does not generate from them |
 | [`caseyallard/uor-r4-geometric-214m`](https://huggingface.co/caseyallard/uor-r4-geometric-214m) | Public (model, MIT) | Four 214M-parameter float checkpoints: `base-tinystories`, `base-planA`, `chat-planA-b8`, `chat-smoltalk-b16`, with configs, sanitized run reports and the byte-level BPE tokenizer | **Historical.** Trained before the softmax and matmul bans; not the D11 product |
 | [`datasets/caseyallard/uor-r4-data`](https://huggingface.co/datasets/caseyallard/uor-r4-data) | Public (dataset, MIT plus CDLA-Sharing-1.0) | Project-generated data: the tokenizer, the memory-dialogue sets `mw-balp` and `mw-orcp` with the fine-tune manifest, the dev split, conversational panels, TinyStories tokenized for the native learner | Live data |
 | `caseyallard/uor-r4-store` | Private | The labs' working store: `data/*` (about 2.7 GB, checked against `MD5SUMS`), base models, pinned toolchain and crate-registry archives, project binaries `bin/<sha>` with `SHA256SUMS`, pod setup, and `results/<lab>/<topic-date>/` | Working store; never a release channel |
 
-Both public repositories were published on 9 October 2026. Sources: the two Hugging Face repository pages; [compute guide](../labs/compute.md). The public model repository's visibility is inferred from the listing, which showed no private flag.
+The historical model and data repositories were published on 9 October 2026. DeepSeek's #3445 records the three public research-model releases, their exact bytes and SHA-256 pins, and the Studio's explicit-click M1 download ([report](../loop/tasks/m7-studio-live-model-sources/deepseek-3/REPORT.md)); [compute guide](../labs/compute.md) covers the private working store.
 
 ## How checksums tie it together
 

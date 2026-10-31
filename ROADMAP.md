@@ -1,28 +1,31 @@
 # Roadmap
 
-UOR-R4 marks progress with eight milestones, M1 to M8. **None is complete.** A milestone closes only
-when its bar is met on a saved model. This page is a pointer: the plain-language road, its six stages
-and the products at the end are in [where we're going](docs/start/where-were-going.md); the measured
-starting point is in [where we are](docs/start/where-we-are.md).
+UOR-R4 marks progress with eight milestones, M1 to M8. **M1 is complete: 1 of 8.** A milestone
+closes only when its full bar is met on a saved model. The evidence and limitations are in
+[where we are](docs/start/where-we-are.md); the route and open questions are in
+[where we're going](docs/start/where-were-going.md) and the one [PLAN](PLAN.md).
 
-![A road with six stops, Stage 0 to Stage 5, from "run what is already FIT'd" to "first conversation", with a "you are here" pin at Stage 0, owner-release gates between stops, and milestone flags M1 to M8 underneath, ending at the model file, the browser tab and the laptop app.](docs/figures/start/roadmap.svg)
+![The project road: M1 marked complete on the saved discrete model, while the current end-to-end line works toward grounded replies, durable memory and the remaining milestones.](docs/figures/start/roadmap.svg)
 
-*The road from today to the products. Each gate is a run on its own pre-run review (D67); the ordered steps are in [PLAN.md](PLAN.md).*
+*M1 is complete; the current work is new-phrasing reply opening and one useful model end to end.*
 
 | Milestone | Bar to close it | Status |
 |---|---|---|
-| [M1 Language base](https://github.com/UOR-Foundation/uor-r4/issues/2029) | One saved discrete model: the right answer reachable (within the candidates the model opens) at ≥ 4,894 of 14,287 positions before training and kept on both seeds; more than 16 of the 256 address cells in use (the occupancy gate, [D39](docs/integration/DECISIONS.md#d39--m1-closing-bar-k16-reachability-gate-post-qualification-sequence-and-lab-self-direction-owner-2026-10-18) item 1); **integer top-1 through the integer export beats the unigram table (1,226) and the next-word table (6,300) on each of two seeds, with tokens per second reported**; the gain holds on a fresh sealed panel | in progress |
-| [M2 Grounded reply from exact memory](https://github.com/UOR-Foundation/uor-r4/issues/2030) | ≥ 256/512 saved questions and ≥ 40% of genuinely fresh ones, with the existing graders unchanged | held |
-| [M3 Durable conversation memory](https://github.com/UOR-Foundation/uor-r4/issues/2031) | Memory persists across sessions and answers stay grounded | paused |
-| [M4 One served model](https://github.com/UOR-Foundation/uor-r4/issues/2032) | One model exported as an integer file under the serving contract (D11), usable from a command line, with held-out quality at or below 0.90 bits per byte | held |
-| [M5 Laptop cost](https://github.com/UOR-Foundation/uor-r4/issues/2033) | Measured energy per token, memory and tokens per second on an M1-class laptop | not started |
-| [M6 Reasoning and coding](https://github.com/UOR-Foundation/uor-r4/issues/2034) | Executable reasoning and coding on the same model | not started |
-| [M7 API, browser and Studio](https://github.com/UOR-Foundation/uor-r4/issues/2035) | The model reachable through an API, in the browser (WebAssembly) and in the Studio, giving bit-identical tokens across the library, command line and browser | engine delivered; no model |
-| [M8 Alpha release](https://github.com/UOR-Foundation/uor-r4/issues/2036) | One versioned, checksum-pinned model file, declared alpha by the owner | not started |
+| [M1 Language base](https://github.com/UOR-Foundation/uor-r4/issues/2029) | One saved model passes the approved six-part close-grade contract at two seeds ([decision log 6515151261](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6515151261)): self-contained D11 artifact; exact export/reference agreement and planted-fault control; tokens/s; DEV integer top-1 above both count tables and the 6,324 target (T2 6,300 + 24); Fresh V2 transfer; and held-out-phrasing transfer | **complete, 30 Oct 2026** |
+| [M2 Grounded reply from exact memory](https://github.com/UOR-Foundation/uor-r4/issues/2030) | ≥ 256/512 complete correct replies on DEV and ≥ 40% on a genuinely fresh panel, through one unified geometric model and a clean D11 export | in progress |
+| [M3 Durable conversation memory](https://github.com/UOR-Foundation/uor-r4/issues/2031) | Provenance, correction, abstention, explicit reset and process restart all pass on the selected model; restored sessions continue identically | in progress |
+| [M4 One served model](https://github.com/UOR-Foundation/uor-r4/issues/2032) | The chosen model exports to `UORLUT01`, with held-out quality at or below **0.90 BPB**, passes the full D11/CLI quality, session and audit bars, and reports its export gap | not complete; accepted model path not started |
+| [M5 Laptop cost](https://github.com/UOR-Foundation/uor-r4/issues/2033) | Measured energy per token, memory and tokens per second on an M1-class laptop, with selected parameter access reported | not started |
+| [M6 Reasoning and coding](https://github.com/UOR-Foundation/uor-r4/issues/2034) | Unseen multi-step compositions and executable coding tasks on the same model, with causal state/memory ablation | not started |
+| [M7 API, browser and Studio](https://github.com/UOR-Foundation/uor-r4/issues/2035) | Bit-identical tokens and sessions across library, CLI and browser on the accepted model; truthful client-only Studio | engine/harness delivered on a synthetic stand-in; accepted model open |
+| [M8 Alpha release](https://github.com/UOR-Foundation/uor-r4/issues/2036) | One versioned, checksum-pinned artifact meets M1–M7, with reproducible installation and independent consumer-hardware verification | not started |
 
-M1's integer top-1 condition was set by the owner on 19 October 2026 and replaces the earlier bar of
-0.90 bits per byte, which returns at a later milestone once the model gives probabilities
-([charter](CHARTER.md) §4.8). The shortest path the audit proposes: **0** run the already FIT-reviewed capacity
-test (W2, step 1 in PLAN.md) → **1** make capacity measurable → **2** pick the learning law → **3** add the missing parts →
-**4** export and serve → **5** first simple conversation. Training runs on each lab's own pre-run review
-(D67, [charter](CHARTER.md) §5.1). The one plan is [PLAN.md](PLAN.md) (D77).
+M1's two-seed results are **7,002 / 7,001** on DEV (T2 6,300), **7,215 / 7,228** on Fresh V2
+(T2 6,582), and **7,850 / 7,872** on the held-out-phrasing p-f panel (T2 7,375) ([M1 close](docs/labs/m1-close-saved-model/README.md), [Fresh V2](docs/labs/m1-fresh-panel-transfer/README.md), [bar-f](docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)). The p-f panel's
+62.5% reference-reply overlap with TRAIN means this is a scoped language-base result, not useful
+conversation. M2 is the next capability milestone. Claude-220 serves the point key inside one
+float model on fresh p-w, improving templates by +41/+40/+42 at three seeds with exact claude-219
+parity; the gain recalls TRAIN replies, not new wording. Claude-222 has built the integer point
+table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](docs/loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade. [Claude-227](docs/loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; [Claude-228](docs/loop/tasks/point-key-integer/claude-228/REPORT.md) built the run's reference/read-back/BOS checks; [Claude-229](docs/loop/tasks/point-key-integer/claude-229/REPORT.md) found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so no bar result or throughput is reported. [Claude-231](docs/loop/tasks/integer-nearest-readout/claude-231/REPORT.md) built the nearest readout and export on native and browser paths; [claude-232](docs/loop/tasks/integer-nearest-readout/claude-232/REPORT.md) then missed greedy parity in every cell, so the mismatch must be localized before the p-x rerun.
+Every run goes ahead on its own pre-run review (D67, [charter](CHARTER.md) §5.1). The one plan is
+[PLAN.md](PLAN.md) (D77).

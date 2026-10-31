@@ -1,92 +1,113 @@
 # How the model learns
 
-Most language models learn by working out a smooth slope for every number inside them and nudging all the numbers a little. This model does not. It takes one entry of its table, tries every legal turn that entry can make, counts the mistakes after each turn using whole numbers, and keeps the best turn only if it beats leaving the entry alone. The method is exact, cheap per step and runs on the GPU. So far it has moved some counts but has not produced better language, and every new training run needs the owner's personal release.
+The discrete model learns by trying every legal geometric move of a table entry and keeping a move
+only when the integer loss strictly improves. The method is exact and runs on the GPU. **It has now
+produced a saved model that passes M1 on two seeds.** Earlier failures remain useful negative
+evidence, not the current best. A separate FBS path trains offline in float under D37.
 
-![A loop for one training batch. A batch of 64 example rows feeds a baseline pass, then 16 parallel lanes (the current state plus 15 rotations) each score every row. A chooser lights the lowest integer loss, with ties going to staying put. An apply step commits only a strict improvement, and a validate step re-checks the stored table on the GPU. A side panel shows the same loop scoring K coordinates per launch (BVG-K) and committing them as one block only if the joint loss beats the best single move. A second side panel shows the offline float path as a separate module that must end in an export-gap check.](../figures/model/discrete-learning-loop.svg)
+![The discrete learning loop: score every legal move, choose the lowest integer loss, commit only a strict gain, then verify the stored result. A side panel shows BVG-K scoring several coordinates per launch.](../figures/model/discrete-learning-loop.svg)
 
-*One batch of discrete learning: score every legal move on 64 rows, choose the lowest integer loss, commit only a strict gain, then verify the stored result.*
+*Discrete learning: exact counterfactual moves, strict acceptance and verification on the GPU.*
 
-Labels follow [`docs/formal_vocabulary.md`](../formal_vocabulary.md): **proof** is derived from definitions or code, **measurement** is a recorded run, **hypothesis** is untested. The mechanism page, [discrete-learning](../mechanisms/discrete-learning.md), is the short form of this page and carries the full run history.
+Labels follow [`docs/formal_vocabulary.md`](../formal_vocabulary.md): **proof**, **measurement**,
+**hypothesis**. The [discrete-learning mechanism page](../mechanisms/discrete-learning.md) carries
+the longer history.
 
-## Since 27 October 2026 (as of 29 Oct)
+## The discrete learning step
 
-The FBS trunk trains in float on the GPU, offline only (D37). Its backward pass uses a fixed-order reduction, so two training runs give the same model byte for byte ([claude-179](../loop/tasks/d11-exporter-float-trunk/claude-179/REPORT.md)). It trains at 31,851 context tokens per second at one seed and 29,564 at the other, and the exact turn memory adds no measurable cost ([claude-161](../loop/tasks/route-plus-memory/claude-161/REPORT.md)). Everything below this passage describes the older discrete path. The two paths do not join yet ([pipeline map](./pipeline-map.md)).
+A *vector block* is one of four 8-number blocks in a token's vector. A *route frame* is one of 64
+signed-axis rotations. A *gate* takes values −1, 0 or +1. A vector block has 16 legal states,
+including "stay as it is" ([architecture](./architecture.md)).
 
-## How it works
-
-**What is learned.** The model holds three kinds of *coordinate*. A *vector block* is one of the four 8-number blocks of one token's vector. A *route frame* is one of 64 signed-axis rotations of 8-dimensional space, one per routing stage. A *gate* is a switch that takes the values $-1$, $0$ or $+1$. A vector block is always one of 16 roots of an E8 orbit, so it has 16 legal states, counting "stay as it is" ([architecture](./architecture.md)).
-
-**The learning step (definition).** Training visits one coordinate $\theta$ per batch. A batch is 64 rows of training text, and which rows can count is fixed by the baseline. For each candidate move $m$ among the identity and 15 rotations, the machine replays the read and the writer and adds up the integer [rank-margin loss](../mechanisms/rank-margin.md):
+For each candidate move $m$, the machine replays the read and writer and computes the integer
+rank-margin loss:
 
 $$L(m)=\sum_{x\in\mathcal R}\ell\big(x;\ \theta\leftarrow m\big),\qquad m\in\{\mathrm{id},m_1,\dots,m_{15}\}.$$
 
-It chooses $m^*=\arg\min_m L(m)$. Ties go to the identity, then to the lowest resulting port number, then to the lowest move index. It applies $m^*$ only if $L(m^*)<L(\mathrm{id})$, and then re-checks the stored table on the GPU. Nothing is sampled, and no floating-point number appears in the step.
+It chooses the lowest loss, with ties going to identity and then deterministic move order. It
+applies the winner only if $L(m^*)<L(\mathrm{id})$, and re-checks the stored table. Every accepted
+move is therefore legal and strictly improves its scored set; that alone says nothing about other
+rows or fresh transfer.
 
-**Consequence (proof, from the definition).** Every committed move strictly lowers the loss on its own batch, and the new state is always a legal state. The rule says nothing about rows outside the batch. A move that helps its 64 rows can push other targets out of the shortlist, and that is the failure behind the early stops in the table below.
+One 16,404-batch pass scores 1,049,856 targets out of 2,425,925, or 43.3% of the training split
+(**proof by arithmetic**). This is why a batch improvement is not by itself a language result.
 
-**Coverage (proof, by arithmetic).** One pass is 16,404 batches of 64 rows, which is 1,049,856 target rows. The training split has 2,425,925 targets, so one pass sees 43.3% of them. Each coordinate is visited about once per pass, with about 64 rows of evidence (chief architect's review §3.4).
+## Row-parallel and BVG-K execution
 
-### The GPU kernels
+The ordinary counterfactual evaluates 16 lanes in one block. The row-parallel form evaluates 64
+rows × 16 lanes as 1,024 threads and reproduces the ordinary loss on 1,085 finite cases
+([rows parity](../labs/counterfactual-rows-parity-2026-10-18/README.md)). On one RTX 5090, its
+non-gating diagnostic was about 56 times faster.
 
-All model compute is GPU-only; a host fallback is a defect to fix ([charter](../../CHARTER.md) §3.5). The kernels live in [`discrete.cu`](../../crates/uor-r4-discrete/src/discrete.cu) and its generated siblings. The build checks the emitted GPU code and rejects any floating-point type, tensor-core instruction or approximate exponent (`crates/uor-r4-discrete/build.rs`, PTX admission audit).
+**BVG-K (batched verified coordinates)** scores several coordinates per launch and commits the
+block only if its joint loss beats the best single move. BVG-K is not merely a construction test:
+Stage T training (`#2836`) and the later 19-table joint-pointer Hamilton trunk are part of the M1
+lineage. The exact export then reproduces the saved discrete model on all 14,287 DEV rows.
 
-1. **Ordinary counterfactual.** One block of 16 threads, one thread per move. Each thread walks every row in turn and recomputes the baseline. A route proposal took 3.903 s against 37.8 ms for a plain forward pass, which projected to about 17.8 hours for one 16,404-batch pass (**measurement** and projection, unverified, [driver cost](../../archive/labs/discrete-driver-cost-2026-10-13/README.md)). A later diagnostic put this kernel at 99.99% of a proposal ([sub-phase diagnostic](../../archive/labs/propose-subphase-diagnostic-run-2026-10-16/README.md)).
-2. **Row-parallel counterfactual (`rows_v1`).** It computes the baseline once per row and each virtual move once per (row, lane), then a reducer replays the ordinary loop over those records in row order. So 64 rows by 16 lanes run as 1,024 threads. It is opt-in, and it matched the ordinary kernel's losses on every finite case checked (72, 108 and 288 cases in the three tables of the [rows parity](../labs/counterfactual-rows-parity-2026-10-18/README.md) record; 1,085 in all across the attempt files, per the [documentation reconciliation](../labs/documentation-reconciliation-2026-10-18/README.md)).
-3. **Speed (measurement).** At vocabulary 4096, 4 blocks, context 192, $K=8$, 64 rows, on one RTX 5090, the median of five proposals:
+## The result that closed M1
 
-| Read and coordinate | Ordinary | Row-parallel | Ratio |
+The saved 19-table `uor-r4.lut-discrete-trunk/1` model scores:
+
+- DEV **7,002 / 7,001** against unigram 1,226 and T2 6,300;
+- Fresh V2 **7,215 / 7,228** against unigram 1,279 and T2 6,582;
+- p-f **7,850 / 7,872** against unigram 1,409 and T2 7,375, beyond paired band 81;
+- Apple M1 decode **10,876 / 10,566 tok/s** under the bar-f protocol.
+
+The saved model reads new prompt phrasings into known reply kinds. It does not show new reply kinds
+or useful conversation; 62.5% of p-f's reference replies are verbatim TRAIN replies
+([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
+
+## Offline float training under D37
+
+The separate FBS trunk uses float forward passes, gradients and an optimizer offline, in its own
+scanned module. Softmax, squashing and dense matmul remain banned. Every float candidate must report
+its export gap on the same evaluator, and the shipped artifact must be integer.
+
+Since claude-179, the FBS backward uses a fixed-order reduction, so two runs give the same model
+byte for byte. The `lut-stack/5` export is inside the gap bar at DEV scope. Determinism is not a
+quality claim: on new phrasing, the model still starts replies poorly
+([claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)).
+
+## Pre-registration and runs
+
+Before GPU training or evaluation, and before any run a milestone claim rests on, a one-page sheet
+states the bar, noise, controls, seeds, cost and what each outcome decides. A non-author reviews it
+for `TEST FITNESS: FIT`; a fresh-context subagent counts. Builds, finite kernel tests and host
+checks need no sheet.
+
+Since D67, a GPU or training run goes ahead on the lab's own whole-project pre-run review inside
+the caps. There is no blanket owner release for every run; D41's donor pass is the named exception
+that still needs the owner at dispatch. Pods go through `scripts/pod/uor-pod`, with at most 4 pods
+and $8/h across all labs, and a healthy run is not cancelled for a self-set budget.
+
+## Historical campaigns and what they taught
+
+| Date | Run | Result and exact scope | Verdict |
 |---|---|---|---|
-| Route, vector block | 3.843 s | 0.0691 s | 55.6 times |
-| Relation, gate | 4.144 s | 0.0728 s | 56.9 times |
+| 14 Oct | Pilot, 1,640 batches | Top-8 173→1,169 and top-1 17→82, while total loss rose | inconclusive |
+| 15 Oct | Stage A sweep, K=8 | 1,920 admitted targets against a 4,894 gate | negative configuration |
+| 18 Oct | Relation/control to Q1 | Copy-successor admission fell to 225/205 of 3,847 | diagnostic stop |
+| 19 Oct | K16, two objectives/two seeds | A scored 65 and 463; R collapsed to 19 or 20 cells | negative configuration |
+| 19 Oct | A8 dose | Relation admission 1,351→551; control 857 | diagnostic stop |
+| 25–26 Oct | Stage T and 19-table export | Exact export and M1 (a)–(e) on two seeds | positive at M1 scope |
+| 30 Oct | p-f bar (f) | 7,850 / 7,872 against T2 7,375, band 81 | M1 complete |
 
-This is the "56 times" figure. The timing is non-gating and was not qualified (`qualified=false`). The A8 control arm later completed 16,404 batches in 1,967 s, or 0.12 s per batch ([A8 dose](../labs/a8-dose-2026-10-19/README.md)). It used a different read, so treat that as a rough size of the gain.
+A negative closes a configuration, never a mechanism. These records are preserved because they show
+which instruments and configurations failed before the later model passed.
 
-### BVG-K: several coordinates per launch
+## What is still open
 
-BVG-K means *batched verified coordinates*, with $K$ the batch size. One row-parallel launch occupies at most 8 of an RTX 5090's 170 multiprocessors, so the card sits mostly idle. BVG-K scores $K$ coordinates in one launch (1 to 64 are supported), chooses the best move for each, and commits the whole block only if its *joint* loss beats the best single move.
-- **Scoring (measurement, quoted).** About 16 times faster at $K=16$ than scoring one coordinate at a time, from the first qualifier ([BVG-K scoring](../labs/bvgk-rowsk-scoring-2026-10-18/README.md)).
-- **Block apply (measurement, on fixtures).** 259 ms at $K=16$ with joint verification, about 8 times faster than 16 single proposals at roughly 130 ms each ([qualifier](../labs/injective-preflight-and-c2-qualify-2026-10-19/README.md)).
-- **As a learning law, never run.** BVG-K has passed construction tests only. It is the matched discrete competitor that any float method must beat.
-
-### Float training, offline only (D37)
-
-On 18 October the owner revised the discrete-only rule: **floating point is legal in offline training**. A float forward pass, gradients and an optimizer may be used. Three things still hold ([D37](../integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised)):
-
-- **The bans on expensive operations stand.** No softmax or other squashing function, no dense matrix multiplication, GPU only, and the path must stay geometric.
-- **Float lives in a separate module.** It gets its own scanned entry, added with its pre-registration. It never goes in the discrete crate or in `crates/uor-r4-training`.
-- **The integer artifact is the boundary.** Every float candidate reports its *export gap*, the loss in quality when its weights become the integer file. A gap above the two-seed noise band disqualifies it, and a float score alone qualifies nothing (D39 item 5).
-
-As of 19 October, no float sheet was registered. The order set in D39 item 4 is the read-code capacity capture (W2), then BVG-K (W3), then a single float-credit sheet only if W2 points at the learning law and W3 fails. The chief architect expects the export gap to be structurally non-zero, because the table entries are exact roots with no continuous scale (**hypothesis**, `docs/labs/course-correction-2026-10-18/audits/d37-reactivation-architect.md` §3.3).
-
-### Holds and pre-registration
-
-As of 19 October, training was **held**. The global training hold, the M2 hold and Stage B all stay in force, and a review that finds a plan fit releases nothing ([charter](../../CHARTER.md) §5.1; D37 item 6).
-
-- **Pre-registration.** Before any GPU training or evaluation, and before any run a milestone claim rests on, a one-page sheet states the bar, the noise, the controls, the seeds, the cost and what each outcome decides. A non-author reviews it for `TEST FITNESS: FIT`. A fresh-context subagent counts as non-author. Builds, finite kernel tests and host checks need no sheet.
-- **Release.** One typed owner release per sheet covers all its arms, seeds and stop rules. Casey types it personally with `UOR_LAB` unset. A lab stages the commands and verifies the records, and never types one itself (D40).
-- **Compute.** Pods go through `scripts/pod/uor-pod`: at most 4 pods and $8 an hour across all labs. A healthy run is never cancelled for a self-set budget.
-- **Bar.** The M1 closing bar is integer top-1 through the D11 export, on each of two seeds, beating the unigram table (1,226 of 14,287) and the successor table (6,300 of 14,287) on the same panel, with tokens per second reported (charter §4.8). The earlier 0.90 bits-per-byte bar was replaced for M1, since the hinge gives no likelihood.
-
-## Where it stands
-
-No training run on this path has produced a KEEP. The table below lists six campaigns since 13 October: the pilot, the Stage A sweep, the Q1 diagnosis, the four K16 runs, the A8 dose and the controller run.
-
-| Date | Run | Result | Verdict | Record |
-|---|---|---|---|---|
-| 2026-10-14 | Pilot, seed 1, 1,640 batches, vector blocks only | Top-8 hits 173 to 1,169, top-1 17 to 82, yet loss 13,816,032 to 13,884,032; 236 of 1,640 batches accepted | inconclusive | [pilot](../../archive/labs/a2-pilot-2026-10-14/README.md) |
-| 2026-10-15 | Same lineage to 16,404 batches, $K=8$ | Top-1 149, top-8 747 of 14,287; 1,920 targets admitted against a gate of 4,894 | negative | [Stage A sweep](../../archive/labs/rung0-stage-a-sweep-2026-10-15/README.md) |
-| 2026-10-18 | Relation and control to the 4,096-batch checkpoint | Copy-successor admission 2,034 to 225 (Relation) and 205 (control) of 3,847 | diagnostic stop | [Q1 diagnosis](../labs/attention-rows-q1-diagnosis-2026-10-18/README.md) |
-| 2026-10-19 | K16: two objectives, two seeds, 16,404 batches | Objective A: top-1 65 and 463, accepted 407 and 410; objective R collapsed to 19 or 20 occupied cells | negative (configuration) | [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md) |
-| 2026-10-19 | A8 cells, Relation against frozen control | Admission 1,351 to 551 (Relation) and 857 (control) at the checkpoint | diagnostic stop | [A8 dose](../labs/a8-dose-2026-10-19/README.md) |
-| 2026-10-19 | Admission-preserving controller | 198 host tests pass; GPU qualification and any learning result `NOT_RUN` | inconclusive | [controller](../labs/admission-anchor-controller-2026-10-19/README.md) |
-
-**What the runs say.** Only 0.8% to 2.5% of batches in the K16 runs were accepted (407, 130, 410 and 129 of 16,404), against 14.4% in the pilot. A negative closes a configuration, not the mechanism (D22). The next decisive step, W2, is already reviewed fit and queued. It separates a representation wall from a learning-law wall (renormalization audit record).
-
-**Never tested.** Route-frame and gate learning at dose; a full corpus pass; BVG-K or the admission-preserving rule as a GPU training run; all 240 E8 roots; any generated text or tokens per second from a trained discrete model; fresh-slice transfer (sealed); any float credit sheet.
+- **Reply opening on new phrasing.** Claude-217 measures teacher-forced reply openings of 17.4%, 13.7% and 18.6% on p-s, against
+  about 80% on later tokens. Exact-key memory misses reworded prompts.
+- **Independent mechanism effects.** M1 is a whole-model result, not an ablation proving each read,
+  gate, route or memory mechanism independently.
+- **Complete generation and M2/M3.** Next-token ranking is not complete correct replies or durable memory.
+- **Cost and scale.** Whole-path training and serving costs, model scaling and M5 energy are not
+  established by one passing artifact or by arithmetic projections.
 
 ## Go deeper
 
-- Pipeline: [the model, end to end](./architecture.md).
-- Mechanism pages: [discrete-learning](../mechanisms/discrete-learning.md), [rank-margin](../mechanisms/rank-margin.md), [admission](../mechanisms/admission.md), [legal-construction](../mechanisms/legal-construction.md) (the older float attempt at the same goal).
+- [Architecture](./architecture.md) and [serving and export](./serving-and-export.md).
+- Mechanisms: [discrete learning](../mechanisms/discrete-learning.md), [rank margin](../mechanisms/rank-margin.md), [admission](../mechanisms/admission.md), [legal construction](../mechanisms/legal-construction.md).
 - Code: [`device.rs`](../../crates/uor-r4-discrete/src/device.rs), [`training.rs`](../../crates/uor-r4-discrete/src/training.rs), [`rows_source.rs`](../../crates/uor-r4-discrete/src/rows_source.rs), [`bvgk_source.rs`](../../crates/uor-r4-discrete/src/bvgk_source.rs).
-- Audit: the [renormalization audit record](../labs/repo-renormalization-2026-10-19/README.md) and the [discrete-learning mechanism page](../mechanisms/discrete-learning.md).
+- Records: [M1 close](../labs/m1-close-saved-model/README.md), [bar-f](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md), and [claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md).

@@ -1,8 +1,8 @@
 # What UOR-R4 is
 
-**In one paragraph.** UOR-R4 is an attempt to build a language model, the kind of program behind chat assistants, that is cheap enough to train and run on an ordinary laptop or inside a web browser. Today's language models are *transformers*. They spend most of their effort multiplying very large grids of decimal numbers. UOR-R4 bets that a different toolkit can do the same job for far less: rotations of a geometric object, exact whole-number addresses built from primes, small lookup tables, and an exact memory. This page explains that bet in about five minutes. It is a research project and it is **pre-alpha**. None of its 8 milestones is complete, and no model built under its rules holds a useful conversation yet ([STATUS](../../STATUS.md), [NOW](../integration/NOW.md)).
+**In one paragraph.** UOR-R4 is an attempt to build a language model, the kind of program behind chat assistants, that is cheap enough to train and run on an ordinary laptop or inside a web browser. Today's language models are *transformers*. They spend most of their effort multiplying very large grids of decimal numbers. UOR-R4 bets that a different toolkit can do the same job for far less: rotations of a geometric object, exact whole-number addresses built from primes, small lookup tables, and an exact memory. This page explains that bet in about five minutes. It is a research project and it is **pre-alpha**. **M1 is complete: 1 of 8 milestones**, but no model built under its rules holds a useful conversation yet ([PLAN](../../PLAN.md), [STATE](../../STATE.md)).
 
-![Four panels read left to right. Panel 1: the words "the cat sat on the" split into numbered pieces. Panel 2: each piece becomes an address, drawn as a point on a ring of evenly spaced points (a stand-in for the geometric object), labelled "4 blocks of 8 whole numbers". Panel 3: the newest piece looks at only a few nearby earlier points, which are highlighted, while the rest of the history stays grey. Panel 4: a few labelled drawers open near what was read, and the nearest word inside them, "mat", is picked. A band under all four panels reads "whole numbers only: adds, compares and table look-ups".](../figures/start/hero-how-it-thinks.svg)
+![Four panels read left to right. Panel 1: the words "the cat sat on the" split into numbered pieces. Panel 2: each piece becomes an address, drawn as a point on a ring of evenly spaced points (a stand-in for the geometric object), labelled "4 blocks of 8 whole numbers". Panel 3: the newest piece looks at only a few nearby earlier points, which are highlighted, while the rest of the history stays grey. Panel 4: a few labelled drawers open near what was read, and the nearest word inside them, "mat", is picked. A band under all four panels reads "Served as whole numbers: add, subtract, integer multiply/divide, compare, table look-up. No floats.".](../figures/start/hero-how-it-thinks.svg)
 
 *How UOR-R4 predicts the next word. Each step uses only whole numbers. The picture shows the design; it does not show a model that already works well.*
 
@@ -62,36 +62,38 @@ Whether these replacements can match a transformer's quality is the open questio
 
 **Moving means rotating.** Changing a block means swapping one fixed point for another, which is a rotation from a finite set. Nothing is rounded, so a rotation can always be undone exactly ([quaternions and rotation](../geometry/quaternions-and-rotation.md)).
 
-**Names come from primes; starting places from zeta phases.** Each token can be named exactly by a prime number, and that name never collides with another. Separately, angles taken from the zeros of the Riemann zeta function (a fixed, reproducible set of numbers from mathematics) scatter the tokens' starting addresses. One such construction, PrimeZeta, gives all 4,096 tokens distinct starting addresses (**measurement**, [construction record](../../archive/labs/prime-zeta-construction-2026-10-14/README.md)). The distinctness comes from a cell-balancing step, not from the zeta angles; whether the angles help at all is untested ([primes and zeta phases](../geometry/primes-and-zeta.md)).
+**Names come from primes; starting places from zeta phases.** Each token can be named exactly by a prime number, and that name never collides with another. Separately, angles taken from the zeros of the Riemann zeta function (a fixed, reproducible set of numbers from mathematics) scatter the tokens' starting addresses. One such construction, PrimeZeta, gives all 4,096 tokens distinct starting addresses (**measurement**, [construction record](../../archive/labs/prime-zeta-construction-2026-10-14/README.md)). The distinctness comes from a cell-balancing step, not from the zeta angles. A zero-update comparison found no admission advantage over simple injective controls; a trained effect remains untested ([primes and zeta phases](../geometry/primes-and-zeta.md), [comparison](../labs/r-prime-zeta-vs-nulls/README.md)).
 
 **Near means few steps apart.** Distance between two addresses is the sum of the differences between their numbers, which needs only subtraction and addition. "Nearby earlier tokens" and "the nearest word" both use this distance ([the model page](../model/architecture.md)).
 
-**Learning means trying the legal moves.** The current model does not use calculus. To learn, it tries all 16 legal values of one block on the graphics card and keeps a change only if a whole-number score strictly improves ([training](../model/training.md), [discrete learning](../mechanisms/discrete-learning.md)).
+**Learning means trying the legal moves.** The discrete M1 path does not use calculus. To learn, it tries all 16 legal values of one block on the graphics card and keeps a change only if a whole-number score strictly improves. The separate FBS path trains offline with floating point and reports its export gap ([training](../model/training.md), [discrete learning](../mechanisms/discrete-learning.md)).
 
-## The model as of 29 Oct 2026
+## The two model paths through 31 Oct 2026
 
-Since 27 October the work is on a second model path, a float-trained trunk called FBS. It does not join the discrete path described above yet ([pipeline map](../model/pipeline-map.md)). On it, the project's design is now one mechanism per part:
+The saved 19-table `trunk-joint-pointer-v1-d11` model is the discrete path that closed M1. A second,
+separate float-trained trunk called FBS carries the complete-reply research; it has not joined the
+M1 model ([pipeline map](../model/pipeline-map.md)). On the FBS path:
 
 - The trunk **routes**. A recurrence with a Hamilton gate and a SpiralCore rotation carries position. A Hamming read (XOR and popcount over 64-bit codes) copies words seen earlier.
-- Exact memory **stores**. Memory keyed by the user's first 8 tokens names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, against 266.3 and 281.0 for an empty-table control (claude-161). It moves only the first word of a reply. After it, replies are still templates.
-- The model is **served as integers**. On an M1 laptop a served token runs at 4,217 to 4,504 tok/s under the exact `lut-stack/5` contract (claude-182, claude-186). The served model is inside the export-gap bar on both seeds: net 6 and −8 rows against F_I 24 on DEV (claude-182). Not every part is served in integers yet: the copy heads, the memory and the nearest-word readout are not.
+- Exact memory **stores**. Memory keyed by the user's first 8 tokens names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, against 266.3 and 281.0 for an empty-table control (claude-161). Claude-161's opening table moves only the first word of a reply; the completed reply table extends later rows. The `/7` engine serves both on synthetic fixtures, with trained-artifact parity and memory-session restore still open.
+- The model is **served as integers**. On an M1 laptop a served token runs at 4,217 to 4,504 tok/s under `lut-stack/5`, with exact rotations and its DEV export gap inside the bar, ([claude-182](../loop/tasks/d11-exporter-float-trunk/claude-182/REPORT.md), [claude-186](../loop/tasks/fbs-serving-vector-kernel/claude-186/REPORT.md)). The served model is inside the export-gap bar on both seeds: net 6 and −8 rows against F_I 24 on DEV (claude-182). The `/7` engine serves the opening and later-reply memory tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open.
 - Text in and out (R7) is not built. The artifacts take token ids only.
 
-No milestone is complete. [Where we are](./where-we-are.md) has the full status.
+M1 is complete on the discrete model, not this FBS trunk. [Where we are](./where-we-are.md) has the
+full status and its limits.
 
 ## Where it stands
 
-The table below is the 19 Oct 2026 discrete path.
-
 | Item | State | Source |
 |---|---|---|
-| Milestones complete | 0 of 8 | [STATUS](../../STATUS.md), [NOW](../integration/NOW.md) |
-| Whole-number serving engine | Built. It runs in a browser, and its audit finds no decimal instruction in 7 of 7 serving functions (**measurement**) | [WASM runtime record](../labs/wasm-serving-runtime-2026-10-18/README.md) |
-| A model trained under today's rules in that engine | None yet (older float stacks were served in October and missed their quality bar). Training is on hold until the owner releases each run | [NOW](../integration/NOW.md), [charter](../../CHARTER.md) section 5 |
-| Best trained model so far | 65 and 463 correct first guesses out of 14,287 on its two seeds. A table of word counts gets 1,226, and a next-word table gets 6,300 (**measurement**) | [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md), [count tables](../../archive/labs/host-diagnostics-2026-10-17/README.md) |
-| Tokens per second for the current model | Never measured | [lut-serving](../mechanisms/lut-serving.md) |
+| Milestones complete | **1 of 8 (M1)** | [PLAN](../../PLAN.md), rendered [STATE](../../STATE.md) |
+| Whole-number serving engine | Built. Native and WebAssembly audits pass; integer multiply and divide are allowed, floats remain banned | [WASM runtime record](../labs/wasm-serving-runtime-2026-10-18/README.md), [serving dossier](../mechanisms/lut-serving.md) |
+| A model trained under today's rules in that engine | The saved discrete M1 pair and a separate FBS export exist; neither is useful chat or a released product. New work uses the lab's pre-run review, not a blanket owner hold | [where we are](./where-we-are.md), [charter](../../CHARTER.md) section 5 |
+| Saved M1 model | DEV 7,002 and 7,001 of 14,287, above unigram 1,226 and T2 6,300; Fresh V2 7,215 and 7,228 of 14,479; p-f 7,850 and 7,872 of 15,953 | [M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
+| Current FBS research | The point key serves in one float model; integer decode/grade exists, but nearest-readout parity missed in every cell, so localization precedes p-x | [claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md), [claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md), [claude-232](../loop/tasks/integer-nearest-readout/claude-232/REPORT.md) |
+| Apple M1 decode for the M1 pair | Bar-f remeasurement 10,876 and 10,566 tokens per second, with a 192-token prefill and 64-token decode; older close-grade bar (c) 11,026 and 10,573 | [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md), [close grade](../labs/m1-close-saved-model/README.md) |
 
-The model is currently worse than two simple tables of word counts, and the cause is not established. [Where we are](./where-we-are.md) explains the numbers.
+M1 reads new prompt phrasings into known reply kinds; 62.5% of p-f's reference replies are verbatim TRAIN replies, so this is not useful conversation. K16's older 65 and 463 are history, not the current best. [Where we are](./where-we-are.md) explains both the result and its limits.
 
 ## Go deeper
 
@@ -99,5 +101,5 @@ The model is currently worse than two simple tables of word counts, and the caus
 - [Where we are](./where-we-are.md): what works, what does not, and the measured results.
 - [Where we're going](./where-were-going.md): the eight milestones, the shortest path and the products.
 - [The model, end to end](../model/architecture.md): one piece of text through the real pipeline.
-- [Mechanism board](../mechanisms/README.md): all 27 mechanisms and their status.
+- [Mechanism board](../mechanisms/README.md): all 28 mechanisms and their status.
 - [Charter](../../CHARTER.md): the mission and the rules.

@@ -27,9 +27,13 @@ The integer artifact cannot hold the float table, since no floating point is all
 
 ## What is missing
 
+**Completed units:** claude-222 (#3452) built the integer point table, its least-L1/commonest-target search and the `/8` record, with 380 library tests, 18 negative gates and a full serving audit. Claude-224 (#3454, [REPORT](../../loop/tasks/point-key-integer/claude-224/REPORT.md)) then built the panel prompts, integer decode and grade, with 383 integer-library tests, 185 float-library tests, a full serving audit and 13 negative gates. These are synthetic/host instruments, not a real TRAIN export or panel evaluation. Claude-227 completed [`integer-retention-rates`](integer-retention-rates.md) with GPU parity inside the 3% bar: 1,531 / 1,536 sequences and 4,023 / 4,096 single tokens. Three full snapshots are stored. Claude-228 built the run's reference/read-back/BOS instruments, with 390 integer-library tests with one ignored and four negative gates. Claude-229's real run found row 0, an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so every grade pair is (0, 0) and no throughput is reported. [Claude-231](../../loop/tasks/integer-nearest-readout/claude-231/REPORT.md) built the nearest readout and export on native and browser paths; [claude-232](../../loop/tasks/integer-nearest-readout/claude-232/REPORT.md) then missed greedy parity in every cell, so the mismatch must be localized before the p-x rerun.
+
+The completed table, search, artifact and instruments below are retained as implementation requirements and evidence, not as claims that they remain unbuilt. The remaining gate is localizing claude-232's parity MISS before rechecking parity and rerunning p-x.
+
 - **A table built by the integer engine.**
   - It holds TRAIN's opening points at the writer query's representation (i16 Q12: 212,968 × 256 × 2 B, about 109 MB) and their targets.
-  - It is taken with the memory off, by an export pass that runs the integer session over TRAIN's openings (a new `fbs-point-key`). It and the panel arms run on the bit-exact laptop engine, by the owner's allowance (below).
+  - It is taken with the memory off, by an export pass that runs the integer session over TRAIN's openings (`fbs-export --point-key`). It and the panel arms run on the bit-exact laptop engine, by the owner's allowance (below).
   - claude-220's float `opening-table.safetensors` is never quantized into it. Neither is any float snapshot, which is why the float exporter and snapshot files are outside this item's scope.
 - **The served search in the integer session.**
   - **Where:** at `stack_step_fbs`'s first reply step, and its timed twin. Where the turn memory's opening read misses its exact key, the memory moves nothing, so `b.query_q12` is the trunk's own point. The search overrides the native token there.
@@ -93,24 +97,23 @@ The model throughout is (r-drop)'s sealed step-16,384 checkpoints at seeds 1–3
 ## The units (31 October 2026)
 
 1. **Done: the integer table, its search, the step, the `/8` record and the builder** (claude-222, #3452, merged as `f4beaaf79`). This is done-when 1, on the synthetic stack: 380 library tests, a full pass of the serving audit, and 18 negative gates.
-2. **The panel decode and the grade,** on the laptop, with finite tests and no run.
-   - **The decode:** a `fbs-toks` mode decodes a panel's prompts with the memory on, under greedy, from a `/7` or `/8` artifact. It writes the replies in claude-220's sample shape.
-   - **The grade:** it lives in `in_space_long.rs` and `train-in-space.rs`, beside claude-220's `served_grade`. It reads the integer arms by their own tokens, and compares the served names with claude-220's float served files (done-when 3). It reads the bar of done-when 4.
-   - **Why the decode and the grade sit in different crates:** the float crate links `uor-r4-integer` without `serving-wasm`, so it cannot decode the stack.
-3. **The run's instruments** (claude-228), done-when 2, on the laptop with finite tests:
-   - the reference scan at every served opening (`panel_reply`);
-   - the table read back as built (`fbs-export --point-key`);
-   - a BOS name refused at the step.
-4. **The run,** on the laptop, under a prep sheet with a fresh FIT and a pre-run review.
-   - [`integer-retention-rates`](integer-retention-rates.md) is done (claude-226 and claude-227): the integer artifact now serves (r-drop)'s retained recurrence.
+2. **Done: the panel decode and the grade** (claude-224, #3454, merged as `18c4c3da7`), on the laptop with finite tests and no real-model run.
+   - **The decode:** `fbs-toks --replies` decodes a panel's prompts with the memory on, under greedy, from a `/7` or `/8` artifact and writes claude-220's sample shape.
+   - **The grade:** `train-in-space --integer-grade` reads the integer arms by their own tokens, compares served names with claude-220's float served files (done-when 3), and reads the bar of done-when 4.
+   - **Checks:** 383 integer-library tests, 185 float-library tests, 13 negative gates and a full serving audit.
+   - **Limit:** both integer arms stop at BOS, 64 reply tokens or the shared 192-token context. Long-prompt replies are capped identically, and the real grade must report that count.
+3. **Done: the run's instruments** (claude-228, #3459, merged as `c71e85788`), done-when 2, on the laptop with finite tests and no real-model run.
+   - The independent reference scan checks every served opening in `panel_reply`; `fbs-export --point-key` reads the table back as built; a BOS name is refused at the step.
+   - **Checks:** 390 integer-library tests with one ignored, four negative gates and a full serving audit. These checks stop the run on mismatch.
+   - [`integer-retention-rates`](integer-retention-rates.md) is complete (claude-226 and claude-227), so the integer artifact serves (r-drop)'s retained recurrence.
+4. **Ran: the real run (claude-229), on the laptop: row 0, an instrument fault.**
    - (r-drop)'s full snapshots at seeds 1–3 are in the store at `results/claude/integer-retention-rates-parity-2026-10-31/out/full/`, so no pod is needed.
-   - The steps: `fbs-export`, and `fbs-export --point-key` over TRAIN; the fresh panel p-x drawn with its census; the arms on p-x, p-w, p-v and DEV at seeds 1–3; and tok/s.
-   - **Ran 31 Oct (claude-229): row 0, an instrument fault.**
-     - Done-when 2's instruments held (8,295 served openings).
-     - But integer greedy is not the trained model's decode: its first token equals claude-220's float greedy on 0 of 310 DEV prompts.
-     - The likely cause: (r-drop) is a cell-objective model, decoded as the whole table's nearest token, while the integer session serves the native writer.
-     - Nothing was counted. p-x stays the deciding panel ([lab record](../../labs/point-key-integer/README.md)).
-5. **Serve the trained model's readout in the integer artifact,** under its own item, [`integer-nearest-readout`](integer-nearest-readout.md) (recorded by claude-230), checked by end-to-end token parity against claude-220's stored float greedy on DEV and p-w. Then rerun unit 4's sheet on p-x, as its row 0 prescribes, with an added `I-Greedy-Parity` check.
+   - The steps ran under a fresh FIT and pre-run review: `fbs-export`, and `fbs-export --point-key` over TRAIN; the fresh panel p-x drawn with its census; the arms on p-x, p-w, p-v and DEV at seeds 1–3.
+   - Done-when 2's instruments held (8,295 served openings), but integer greedy is not the trained model's decode: its first token equals claude-220's float greedy on 0 of 310 DEV prompts and 2 of 1,202 p-w prompts at seed 1.
+   - The likely cause: (r-drop) is a cell-objective model, decoded as the whole table's nearest token, while the integer session serves the native writer.
+   - Nothing was counted and no throughput is reported. p-x stays the deciding panel ([lab record](../../labs/point-key-integer/README.md)).
+5. **Built: the trained model's nearest readout** (claude-231, #3463, merged as `62308fcbc`), on native and browser paths, with 395 integer-library tests with one ignored, seven negative gates and full serving/WASM audits.
+6. **Parity MISS: localize the mismatch** (claude-232, #3464, merged as `4195ce2bf`). First-token agreement on DEV is 291, 285 and 284 of 310 at seeds 1–3; on p-w it is 911, 777 and 64 of 1,202. Every cell missed its bar, and whole-reply agreement remains incomplete. The trunk, Hamming read and readout are suspects, not located causes. **Next:** localize the mismatch layer by layer on real prompts, then rerun the parity check and unit 4's p-x sheet.
 
 ## Rules that apply
 

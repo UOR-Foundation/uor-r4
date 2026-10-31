@@ -1,12 +1,12 @@
 # Relation read (finite relational head)
 
-**Status: ACTIVE.** It is built, passes 9 of 9 finite CUDA controls, and has trained twice. Both training runs were stopped by loss of admission before the read could be judged, so there is no verdict yet ([A8 dose record](../labs/a8-dose-2026-10-19/README.md)).
+**Status: ACTIVE.** It is built, passes 9 of 9 finite CUDA controls, and has trained three times. The first two runs stopped by loss of admission. Stage T's separate `T16_rel` run reached 4,096 batches at Q1 and committed 425 relation moves; its `relation_off` ablation dropped admission and top-1. There is no paired Route-control verdict, and M1's close is Flock + orbit-root pointer, not a Relation result ([A8 dose](../labs/a8-dose-2026-10-19/README.md), [Stage T](../labs/m1-bvg-k-stage-t-training/README.md)).
 
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run, **hypothesis** means an untested idea (see [the charter](../../CHARTER.md), section 4.6). Unfamiliar project terms (K16, A8, admission, NOT_RUN) are in the [glossary](../start/glossary.md).
 
 ## In plain words
 
-Much of language works by copying. When you meet a word you saw earlier, the next word is often the one that followed it last time. The [Flock read](./flock-read.md) finds earlier positions that look like the current one, but it cannot say "take the word right after that earlier copy." Relation adds that ability. It lets the read follow simple links between positions: the word right after, a sibling in the same phrase, the same word again. Each kind of link is controlled by one three-position dial: off, boost or penalise. With every dial off, the model behaves exactly like Flock. The dials have been trained twice, but never long enough to judge them.
+Much of language works by copying. When you meet a word you saw earlier, the next word is often the one that followed it last time. The [Flock read](./flock-read.md) finds earlier positions that look like the current one, but it cannot say "take the word right after that earlier copy." Relation adds that ability. It lets the read follow simple links between positions: the word right after, a sibling in the same phrase, the same word again. Each kind of link is controlled by one three-position dial: off, boost or penalise. With every dial off, the model behaves exactly like Flock. The dials have been trained three times, but there is no paired Route-control verdict. Stage T's third run reached Q1 rather than stopping for admission loss.
 
 ## What it replaces in a transformer
 
@@ -65,6 +65,7 @@ Here $\mathcal{N}_e(i)$ are node $i$'s neighbours under link type $e$. Candidate
 | 2026-10-19 | Injective codebook as the start | 127 of 3,847 against a gate of 500; run not dispatched | diagnostic-stop | [injective preflight](../labs/injective-preflight-and-c2-qualify-2026-10-19/README.md) |
 | 2026-10-19 | A8 dose: Relation against the control | At batch 4,096, Relation: 1,351 to 551, stopped there under its half-start rule. Control: 1,351 to 857, then ran the full dose. Trits 275/124/87 | diagnostic-stop | [A8 dose](../labs/a8-dose-2026-10-19/README.md) |
 | 2026-10-19 | Admission-preserving rerun, pre-registered | Passed its fitness review; nothing run | inconclusive | [admission-preserving](../labs/admission-preserving-2026-10-19/README.md) |
+| 2026-10-25 | Stage T `T16_rel`, third Relation training run | Reached 4,096 batches and 425 relation moves; the `relation_off` ablation then reduced admission and top-1 | paired ablation, not a Route-control verdict | [Stage T](../labs/m1-bvg-k-stage-t-training/README.md) |
 
 **Reading these honestly.** In the A8 dose, the Relation arm fell faster, which coincides with 87 accepted relation-trit updates. That is co-occurrence, not attribution. Both arms lost admission to learning moves, and the sheet named this risk before the run. Under the project's diagnostic-stop rule (D31) and the rule that a negative closes a configuration, never a mechanism (D22), these are diagnostic stops: not negatives, and not a KEEP. The fresh transfer slice has never been opened.
 
@@ -80,8 +81,8 @@ Here $\mathcal{N}_e(i)$ are node $i$'s neighbours under link type $e$. Candidate
 
 ## What comes next
 
-1. **Admission-preserving A8 rerun.** A guard audits a fixed anchor of 3,847 training rows every 64 batches and rejects any interval that erodes admission (margin 24). It stops as a no-op if the rejection rate exceeds 0.50. The sheet is FIT; the controller and verifier merged (`UOR-Foundation/uor-r4#2782`, `#2783`); finite qualification, project-manager dispatch and an owner-typed release are outstanding.
-2. **Stage M2 discriminator.** A matched interleaved Relation against Route, with a zero-trit ablation. Still held and awaiting a fitness review.
+1. **Next admission-preserving rerun.** A guard audits a fixed anchor of 3,847 training rows every 64 batches and rejects any interval that erodes admission (margin 24). It stops as a no-op if the rejection rate exceeds 0.50. The controller and verifier merged (`UOR-Foundation/uor-r4#2782`, `#2783`); finite qualification passed 5/5 with D67 pre-run review PASS, and the full-dose rerun reached Q1 before a diagnostic stop. A further rerun needs its own D67 pre-run review; D41's donor pass is the only owner-at-dispatch exception.
+2. **Stage M2 discriminator.** A matched interleaved Relation against Route, with a zero-trit ablation. A future run needs its own fitness review and D67 pre-run review, not a blanket owner hold.
 3. **Float extension (hypothesis).** A float-trained version of the 25 trits (D37) only after a Relation KEEP, with an integer export and a reported export gap.
 
 Open questions: whether the guard rejects so many intervals that learning does nothing; whether copying is better delivered by the read or by a successor table beside it; and which of the 25 dials matter beyond level 0.

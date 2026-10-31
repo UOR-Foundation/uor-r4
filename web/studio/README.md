@@ -1,13 +1,13 @@
 # Studio (`web/studio`) — the browser client
 
-**Live:** https://uor-foundation.github.io/uor-r4/studio/ — published 30 October 2026 from gh-pages `d8e67c66` (wasm sha256 `d971fe7d…`, demo sha256 `d60f88d6…`; see the item's Resolution).
+**Live:** https://uor-foundation.github.io/uor-r4/studio/ — the current gh-pages `454bb30fc` publish serves the M1-capable 626,889-byte wasm bundle (sha256 `d7bcaf40…`), and `models.json` lists both M1 seeds. Kimi verified the live bundle and manifest; Kimi did not publish them. The earlier `d8e67c66` publish had the pre-M1 495,334-byte `d971fe7d…` bundle (see the item's Resolution).
 
 The Studio is the project's in-browser interface: editor, chat panel and model manager, with the
 integer serving engine (`crates/uor-r4-integer`, `--features serving-wasm`) running in a Web
 Worker. It is served from the project's documentation site at **`/studio/`**
-(<https://uor-foundation.github.io/uor-r4/studio/> once the live branch is published).
+(<https://uor-foundation.github.io/uor-r4/studio/>). The current live publish is gh-pages `454bb30fc`; `d8e67c66` was the earlier pre-M1 publish.
 
-### Interface (31 October 2026 redesign)
+### First console redesign (superseded by v2)
 
 An agent-console shell: command bar (wordmark, workspace breadcrumb, project chip, command search,
 view switch, theme/new), icon rail, collapsible sessions sidebar with a runtime environment card, a
@@ -117,8 +117,9 @@ find site -mindepth 1 -maxdepth 1 ! -name .git ! -name studio -exec rm -rf {} +
 ```
 
 So a built Studio published once to `gh-pages` / `gh-pages-preview` **persists across every later
-book deploy**. The 13 October 2026 app that is live now was preserved by exactly that rule — it has
-simply never been replaced. Publishing the current page means replacing that directory once.
+book deploy**. The current live app at `/studio/` is gh-pages `454bb30fc`, with the M1-capable
+integer wasm bundle and both M1 seeds in `models.json` verified by HTTP and hash checks. The earlier
+`d8e67c66` publish was pre-M1. Publishing a newer page means replacing that directory once.
 
 **The publisher.** `scripts/studio/build-and-publish.sh` does the whole unit:
 
@@ -144,8 +145,8 @@ scripts/studio/build-and-publish.sh --target gh-pages --push --yes
 
 **Why not in CI yet.** Making the Studio build part of the workflow needs
 `.github/workflows/docs-site.yml` changed, and `.github/**` is an **owner-only path**
-(`docs/harness/owner-paths.json`): a lab PR touching it fails the `owner-paths` gate. The Lead's
-report carries the proposed workflow diff (add the wasm/demo/verify build and a
+(`docs/harness/owner-paths.json`): a lab PR touching it fails the `owner-paths` gate. DeepSeek's non-repository
+deploy report carries the proposed workflow diff (add the wasm/demo/verify build and a
 `studio/` replacement to the existing publish step, plus path triggers for `web/**` and
 `crates/uor-r4-integer/**`) for the owner to land. Until then this script is the manual publisher;
 the proposed workflow reuses the same `stage-studio-site.sh` helper, so the staged output cannot

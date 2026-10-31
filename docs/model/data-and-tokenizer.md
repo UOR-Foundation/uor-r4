@@ -55,6 +55,8 @@ $$3+256+3837=4096 .$$
 | [SmolTalk](https://huggingface.co/datasets/HuggingFaceTB/smoltalk) and [UltraChat 200k](https://huggingface.co/datasets/HuggingFaceH4/ultrachat_200k), as `chat-v0-p2` | Chat | Chat pretraining share and assistant fine-tune | Apache-2.0 / MIT | Historical |
 | `distill-d1` | A donor-written corpus | The discrete student | Apache-2.0 donor | **Planned; not generated** |
 
+**TRAIN count check (claude-202):** the pinned `tokens.u16` is 15,025,658 bytes: a 64-byte header plus two bytes for each of 7,512,797 tokens, with 2,425,925 eligible targets. A 26 October sheet says 26,214,400 tokens and 10,975,281 targets for the same SHA; those figures match neither the file header nor its payload and are not the corpus count ([census](../labs/one-model-end-to-end/README.md), [count report](../loop/tasks/one-model-end-to-end/claude-202/REPORT.md)).
+
 "Historical" means trained before the no-softmax and no-matrix-multiplication rules (D23 to D25), in the float form. Source: the [Hugging Face dataset card](https://huggingface.co/datasets/caseyallard/uor-r4-data) and the sheets above. The training data never includes the frozen test-panel rows.
 
 **Data against size (measurement, older float stack).** With the model size held at 7,155,396 parameters, changing only the training data from a mixed set to chat-only lowered the held-out score from 1.1199 to 0.9607 bits per byte, a gain of 0.1592. Growing the model from 7.16M to 19.93M parameters at matched data gained 0.0837 more. Both come from one seed, one corpus and one held-out stream, and the record says a claim finer than about 0.01 bits per byte needs a clustered protocol ([#1894](../../archive/history/github-archive-2026-10-15/markdown/1894-data-vs-architecture-settled-in-domain-data-is-worth-0-159-b.md)). This is the reason the project keeps asking for data first, but it is not a result on the current model.
@@ -76,7 +78,7 @@ $$3+256+3837=4096 .$$
 
 **The registered plan** ([sheet](../harness/prep/m1-distill-d1-donor-corpus-DRAFT-2026-10-19.md), status TEST FITNESS: FIT, no compute run, $0 so far). The target is 30,000,000 student tokens, with a floor of 20 million and a ceiling of 50 million. Each document is at most 200 tokens. The mixture is conversation 35%, question answering 20%, short code 20%, short reasoning prose 15% and general prose 10%. A pilot of about 1 million tokens (about $2) comes first, and production at 30 million tokens is projected at about $52, or $63 with retries. These costs are planning estimates, not invoices. The sheet sizes the corpus to what the student can consume, about 490 target tokens per second, or roughly 17 hours per pass at 30 million tokens.
 
-**What it needs before it runs.** The owner must type the release personally at dispatch time (D40), and the driver-speed work must finish first. A matched-control training sheet would be needed to learn whether distillation helps at all.
+**What it needs before it runs.** Owner approval at dispatch under D41, and the driver-speed work must finish first. A matched-control training sheet would be needed to learn whether distillation helps at all.
 
 ## Where it stands
 
@@ -90,7 +92,7 @@ $$3+256+3837=4096 .$$
 | Other scripts and languages | Never tested; the corpora are English chat | none | [tokenizer page](../mechanisms/tokenizer.md) |
 | `distill-d1` | Registered, not generated, no capability claim | hypothesis | [sheet](../harness/prep/m1-distill-d1-donor-corpus-DRAFT-2026-10-19.md) |
 
-No model holds a useful conversation yet, and 0 of 8 milestones are complete ([project track](../integration/project-track.md)).
+No model holds a useful conversation yet, and 1 of 8 milestones is complete ([project track](../integration/project-track.md)).
 
 ## Go deeper
 

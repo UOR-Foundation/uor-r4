@@ -26,7 +26,7 @@ is the only implementation: the Python mirror it was ported from was retired on 
 
 | File | Role |
 |---|---|
-| `milestones.json` | machine view of the live milestone contract (m1–m4): issue, lab, headline, panel target |
+| `milestones.json` | machine view of the live milestone contract (m1–m8): issue, lab, headline, panel target |
 | `skills/<id>/SKILL.md` | one research skill, [Agent Skills](https://code.claude.com/docs/en/skills) front matter + protocol |
 | `roles.json` | the expert team: dispatchable roles, their default model route and their seat |
 | `mistakes/<id>.md` | one durable lesson: trigger, symptom, lesson, and a machine-checkable guard |

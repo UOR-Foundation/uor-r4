@@ -16,7 +16,7 @@ This is the deliverable of M8: the single file and install path a person outside
 
 ## What is missing
 
-No versioned, checksum-pinned release artifact, reproducible install path or release notes exist. The two GitHub releases on file (`v0.1`, `v0.1.0-alpha`) belong to an earlier engine and are historical. [`.github/workflows/release.yml`](../../../.github/workflows/release.yml) has all three jobs paused (`if: ${{ false }}`) and packages the old R4G1 bundle, not `UORLUT01`. Release notes must bind the exact measured scores and known limitations, and the owner declares alpha. No lawful model has been exported yet, so there is no file to pin.
+No versioned, checksum-pinned release artifact, reproducible install path or release notes exist. The two GitHub releases on file (`v0.1`, `v0.1.0-alpha`) belong to an earlier engine and are historical. [`.github/workflows/release.yml`](../../../.github/workflows/release.yml) has all three jobs paused (`if: ${{ false }}`) and packages the old R4G1 bundle, not `UORLUT01`. Release notes must bind the exact measured scores and known limitations, and the owner declares alpha. The M1 pair is exported and served, but there is still no versioned M8 artifact, reproducible install path or release notes to pin ([M1 close](../../labs/m1-close-saved-model/README.md)).
 
 ## Done when
 

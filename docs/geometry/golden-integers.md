@@ -39,7 +39,7 @@ A caution about addresses: equality addresses for complete tuples are not semant
 |---|---|---|
 | Fixed `ZPhi` arithmetic and anchor orientation tables, `uor-r4-core` | in `uor-r4-core`; no step of the M1 read is recorded as using it | Exact arithmetic for the icosian and E8 checks and for the retained native learner |
 | The [retained native geometric engine](../mechanisms/native-geometric.md) | PARKED | Chirality and polarity signs; version chains and prime addresses |
-| [Spin-native weights](../mechanisms/spin-weights.md) | PARKED | Quaternion blocks snapped to the 120 icosians; their coordinates live in $\tfrac12\mathbb{Z}[\varphi]$ |
+| [Spin-native weights](../mechanisms/spin-weights.md) | READY | Quaternion blocks snapped to the 120 icosians; their coordinates live in $\tfrac12\mathbb{Z}[\varphi]$. The dense form is barred, and a lawful successor remains open |
 | Current M1 carrier ([discrete learning](../mechanisms/discrete-learning.md)) | ACTIVE | Plain integer coordinates such as signed permutations of $(2,2,0,0,0,0,0,0)$, not $\mathbb{Z}[\varphi]$ pairs |
 
 The two ends of the table matter. The exact golden arithmetic is real, tested code, but the current model's own carrier is built from ordinary integers. Whether exact golden coordinates help a language model has not been measured.

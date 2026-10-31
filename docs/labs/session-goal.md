@@ -2,8 +2,9 @@
 
 > **Superseded on 19 October 2026 by [`CHARTER.md`](../../CHARTER.md).** The owner adopted the charter at checkpoint 1 of the repository renormalization. Where this page conflicts with it, the charter wins. This page is kept for the harness and for history.
 
+> **Registry cross-check, 30 October 2026:** the current registry records **M1 complete at 6/6 closing bars** and **M2 at 0/512 complete correct replies against its required accepted saved model; the model is unselected**. M1 #2029 is closed; useful conversation is not established. The operational prompts below are historical, not current owner releases or holds. New runs use the lab's D67 pre-run review, with D41's donor pass the named owner-at-dispatch exception. Historical counts and prompts remain below unchanged.
 
-These are the current start prompts under
+These are the historical start prompts under
 [D25](../integration/DECISIONS.md#d25---geometric-operator-phase-and-current-lab-direction).
 Kimi is project manager; Casey retains strategic authority. Older prompts are
 preserved in [the pre-reconciliation revision](https://github.com/UOR-Foundation/uor-r4/blob/aaa210ef46301623f10164ae5af586d7f558483a/docs/labs/session-goal.md).

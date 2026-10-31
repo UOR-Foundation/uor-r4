@@ -30,7 +30,7 @@ with $c$ the per-boundary cost and $s$ the recorded score of the parameter event
 
 **Shared writer (definition).** One learned vector table encodes the input token, ranks the output and carries the compiler/store/emitter channel. Tokens get a product cell from the root numbers of their first and last 8-dimensional block, and a target omitted from the shortlist still receives score credit.
 
-**Rule check.** The sampled-choice credit used by the whole-path producer uses softmax, so it is blocked by D23, and the pooled-ranking loss used softplus. The shared-writer margin form and the integer writer are compliant. No dense matrix multiplication is needed (D30): the finite factors use table reads and quarter-step sums, and 31 vendor-boundary controls passed for the writer. The served M2 form is already integer (D11), but the export gap of the unified form was never measured, and every position still scores all 4,096 answer choices, so per-token access is not sparse. D37 allows a float re-registration with a fresh review, an owner release, a scanned module and a reported export gap.
+**Rule check.** The sampled-choice credit used by the whole-path producer uses softmax, so it is blocked by D23, and the pooled-ranking loss used softplus. The shared-writer margin form and the integer writer are compliant. No dense matrix multiplication is needed (D30): the finite factors use table reads and quarter-step sums, and 31 vendor-boundary controls passed for the writer. The integer writer form is already compliant with D11, while M2's accepted model remains unselected and the export gap of the unified form was never measured, and every position still scores all 4,096 answer choices, so per-token access is not sparse. D37 allows a float re-registration with a fresh review, the lab's pre-run review under D67, a scanned module and a reported export gap; D41's donor pass is the named owner-at-dispatch exception.
 
 ## What has been tried
 
@@ -67,8 +67,8 @@ with $c$ the per-boundary cost and $s$ the recorded score of the parameter event
 2. One coherent typed binding, frame and native credit boundary, qualified first, so carriers and prototypes change under a readout trained with them.
 3. A panel that is not component-only, with at least two seeds and a fresh draw of at least 128 rows.
 4. A matched ON against OFF comparison with identical active parameters, all 4,096 answer choices and physical copy aliases scored, and carriers rebuilt after each update.
-5. A D37 float re-registration (fresh review, owner release, scanned module, export gap against the D11 form) or an integer counterfactual form on the discrete path.
-6. Owner release of the separate hold on training and rental for milestone M2 (answering from memory; see the [milestones](../start/glossary.md)).
+5. A D37 float re-registration (fresh review, the lab's pre-run review under D67, scanned module, export gap against the D11 form) or an integer counterfactual form on the discrete path.
+6. A fresh pre-run review under D67 for any new training or rental. The blanket M2 owner hold is retired; D41's donor pass is the named owner-at-dispatch exception.
 
 ## Also known as
 

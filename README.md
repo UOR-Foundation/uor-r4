@@ -5,98 +5,130 @@ model that runs on a laptop?*
 
 [![License: MIT](https://img.shields.io/github/license/UOR-Foundation/uor-r4)](LICENSE)
 [![Rust 1.97.1](https://img.shields.io/badge/rust-1.97.1-orange?logo=rust)](rust-toolchain.toml)
-[![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-yellow)](STATUS.md)
-[![Milestones: 0 of 8 complete](https://img.shields.io/badge/milestones-0%2F8%20complete-blue)](#where-we-are)
+[![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-yellow)](PLAN.md)
+[![Milestones: 1 of 8 complete](https://img.shields.io/badge/milestones-1%2F8%20complete-blue)](#where-we-are)
 [![Last commit](https://img.shields.io/github/last-commit/UOR-Foundation/uor-r4/main)](https://github.com/UOR-Foundation/uor-r4/commits/main)
-[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-ffcc4d)](https://huggingface.co/caseyallard/uor-r4-geometric-214m)
+[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-ffcc4d)](https://huggingface.co/caseyallard/uor-r4-m1-model)
 
-![Four panels read left to right: a sentence split into numbered pieces; each piece placed as a point on a geometric object; the newest piece looking at only a few nearby earlier points; a few drawers opening near what was read, with the nearest word inside them picked. A band underneath reads "whole numbers only: adds, compares and table look-ups".](docs/figures/start/hero-how-it-thinks.svg)
+![Four panels read left to right: a sentence split into numbered pieces; each piece placed as a point on a geometric object; the newest piece looking at only a few nearby earlier points; a few drawers opening near what was read, with the nearest word inside them picked. A band underneath reads "Served as whole numbers: add, subtract, integer multiply/divide, compare, table look-up. No floats.".](docs/figures/start/hero-how-it-thinks.svg)
 
-*How UOR-R4 is designed to predict the next word. The picture shows the design, not a model that already works well.*
+*How UOR-R4 is designed to predict the next word. The picture shows the design, not a claim of useful conversation.*
 
 ## What this is
 
-Chat assistants run on **transformers**: programs that spend most of their effort multiplying very
-large grids of decimal numbers. UOR-R4 bets that a different toolkit can do the same job far more
-cheaply: rotations of a geometric object, whole-number addresses built from prime numbers, small
-lookup tables and an exact memory. The goal is a fast language model that trains quickly and runs on
-your own laptop or in your browser, with nothing sent to a server. The project is open research and
-**pre-alpha**: many parts work and pass their checks, but **no model built under its rules holds a
-useful conversation yet.** [What UOR-R4 is](docs/start/what-is-uor-r4.md) explains the bet in five minutes.
-
-## The three products
-
-None of the three ships today; each waits on a trained model ([products](docs/products/README.md)).
-
-- **[The model](docs/products/language-model.md):** one whole-number model file that runs with adds, compares and table look-ups only. On 29 Oct 2026 the float-trained FBS trunk is exported into it exactly under `lut-stack/5` and served on the M1 laptop (claude-182); no discrete-path model trained under today's rules has been exported into it.
-- **[Web client](docs/products/web-client.md):** the Studio page (the project's chat-style web interface) in your browser, running the model on your own device as WebAssembly. Today the browser engine and the Studio page both exist but are not yet connected.
-- **[Desktop client](docs/products/desktop-client.md):** a Tauri app (a desktop shell around the same web page), running the model natively with durable memory and offline use on M1-class laptops. Today it is a written specification only.
+Chat assistants run on **transformers**: programs that spend much of their effort multiplying very
+large grids of decimal numbers. UOR-R4 bets that a different toolkit can do the same job more
+cheaply: geometric rotations, whole-number addresses built from primes, small lookup tables and an
+exact memory. The goal is a fast language model that trains quickly and runs on your own laptop or
+in your browser, with local computation by default and an optional user-configured API that sends prompts to the chosen endpoint. The project is open research and **pre-alpha**:
+**one milestone is complete, but no model built under its rules holds a useful conversation yet.**
+[What UOR-R4 is](docs/start/what-is-uor-r4.md) explains the bet in five minutes.
 
 ## Where we are
 
-**29 Oct 2026:** pre-alpha, 0 of 8 milestones complete (M1 is in progress; no registered closing run has passed its bar). Since 27 Oct the work is on the float-trained FBS trunk: the trunk **routes** and exact memory **stores** (diagnosis claude-155, owner pivot 28 Oct). Exact turn memory names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, but moves only a reply's first word. Integer multiply and divide are allowed in serving (D80, D81). Next: carry the memory past the first word, serve every part in integers, then a typed question gets a typed reply. See [where we are](docs/start/where-we-are.md) and the [pipeline map](docs/model/pipeline-map.md).
+**30 Oct 2026: M1 is complete — 1 of 8 milestones.** The saved 19-table discrete
+`trunk-joint-pointer-v1-d11` model, exported as two seeded `UORLUT01` integer artifacts, passed all
+six closing bars on both seeds
+([M1 #2029](https://github.com/UOR-Foundation/uor-r4/issues/2029), [M1 close](docs/labs/m1-close-saved-model/README.md), [Fresh V2](docs/labs/m1-fresh-panel-transfer/README.md), [bar-f](docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)). This is a measured language-base result, not useful-chat qualification.
 
-The older K16 table below is the 19 Oct 2026 discrete-path record.
+| Test | Saved model, seed 1 / seed 2 | Controls | Outcome |
+|---|---:|---:|---|
+| DEV next-token top-1, 14,287 rows | **7,002 / 7,001** | unigram 1,226; T2 6,300; bar target 6,324 (T2 + 24) | Beats both and the target at both seeds |
+| Fresh V2, 14,479 rows | **7,215 / 7,228** | unigram 1,279; T2 6,582 | Beats both beyond the paired band of 82 |
+| Held-out phrasing p-f, 15,953 rows | **7,850 / 7,872** | unigram 1,409; T2 7,375 | Beats both beyond the paired band of 81 |
 
-**0 of 8 milestones are complete** ([STATUS](STATUS.md); live tracker
-[#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028)). The test below asks a model to guess
-the next token at 14,287 positions in 400 held-out documents, one guess each (all **measurements**):
+The same saved artifacts have zero export/reference gap and pass the planted-fault control. They
+serve at a median **10,876 / 10,566 decode tokens per second on an Apple M1**, measured with a
+192-token prefill and 64-token decode for bar (f); the older close-grade bar (c) reports 11,026 /
+10,573 tok/s. Bar (f) uses prompts whose phrasing templates are absent
+from TRAIN at K = 1,024. **The limit:** 62.5% of p-f's *reference replies* are verbatim TRAIN
+replies. That is data overlap, not a generated-copy rate: M1 shows reading new prompts into known
+kinds of reply, not inventing new kinds of reply or carrying a conversation.
 
-| Who is guessing | Correct first guesses (of 14,287) | Source |
-|---|---:|---|
-| Selected trained UOR-R4 model (K16-A), seeds 1 and 2 (two separate random starts) | 65 and 463 | [K16 outcome](docs/labs/k16-outcome-call-2026-10-19/README.md) |
-| Unigram table: always guess the most common token | 1,226 | [count tables](archive/labs/host-diagnostics-2026-10-17/README.md) |
-| Next-word table (T2): the token that most often followed the previous one | 6,300 | [count tables](archive/labs/host-diagnostics-2026-10-17/README.md) |
+### The live research question
 
-**The number to remember: the best trained run gets 463 of 14,287 first guesses right, and a plain next-word table gets 6,300.** So the best model trained under today's rules is **below two plain word-count tables**, and the cause
-is not yet established. Four suspects are still open: the coarse address key (how a word is mapped to the drawers that open), the read (the step that looks back at earlier words), the ranking capacity (how finely the model can order candidate words) and the training schedule. What does work is substrate, not language: an integer model path on the
-GPU that passes 25 of 25 construction checks
-([qualification](docs/labs/k16-rows-qualification-2026-10-18/README.md)), a browser build of the
-serving engine whose 7 of 7 serving functions contain no decimal instruction (since claude-177 `step` uses 14 integer multiplies and 9 divides, which D80 and D81 allow; [m4-serving](docs/research/notebook/m4-serving.md))
-([record](docs/labs/wasm-serving-runtime-2026-10-18/README.md)), and an exact byte store. Four older
-214-million-parameter checkpoints on Hugging Face predate today's rules (they used softmax and
-matrix multiplication) and are kept as historical evidence.
-The full picture, with every number sourced: [where we are](docs/start/where-we-are.md).
+The separate float-trained FBS trunk is working toward complete replies. Claude-217's cycle-step
+experiment ends every registered loop, but the content decision is underpowered and greedy stays
+the decode. Exact turn memory also misses reworded questions: its key is the turn's exact first
+token ids ([claude-217](docs/loop/tasks/one-model-end-to-end/claude-217/REPORT.md)).
+
+Claude-218 found trunk-state memory keys that improved reply openings offline.
+[Claude-219](docs/loop/tasks/one-model-end-to-end/claude-219/REPORT.md) then tested those keys in
+free generation on fresh p-v. Where exact memory misses, serving the **point key** for the first
+reply token improves template replies by **+13, +8 and +12** and exact replies by **+9, +8 and
++12**, at three seeds. This is a real but partial gain: keyed openings are right on **27–31%** of
+the 385 openings it gives, only **12–18%** of the lift from forcing the right first token. The
+cheaper sign key is inconclusive at this panel size. [Claude-220](docs/loop/tasks/one-model-end-to-end/claude-220/REPORT.md)
+then served the point key inside one float model on fresh p-w: templates improve by **+41/+40/+42**
+at three seeds, with exact claude-219 parity. That gain recalls TRAIN replies rather than
+generalizing. [Claude-222](docs/loop/tasks/point-key-integer/claude-222/REPORT.md) has now built the
+integer point table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](docs/loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade.
+[Claude-227](docs/loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; [Claude-228](docs/loop/tasks/point-key-integer/claude-228/REPORT.md) built the run's reference/read-back/BOS checks; [Claude-229](docs/loop/tasks/point-key-integer/claude-229/REPORT.md) found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so no bar result or throughput is reported. [Claude-231](docs/loop/tasks/integer-nearest-readout/claude-231/REPORT.md) built the nearest readout and export on native and browser paths. [Claude-232](docs/loop/tasks/integer-nearest-readout/claude-232/REPORT.md) then ran greedy parity: DEV first-token agreement is 291, 285 and 284 of 310 at three seeds, and p-w agreement is 911, 777 and 64 of 1,202. Every cell missed the bar, so the mismatch must be localized before the p-x rerun. Useful conversation
+remains unproven.
+
+## The three products
+
+None ships today. A trained integer artifact exists; an integrated, qualified product does not
+([products](docs/products/README.md)).
+
+- **[The model](docs/products/language-model.md):** one whole-number model file for local serving,
+  with integer multiply and divide allowed by D80/D81. The saved discrete M1 pair is real; so is a
+  separate `lut-stack/5` FBS export with exact rotations and its DEV export gap inside the bar. Neither is a released conversational product.
+- **[Web client](docs/products/web-client.md):** the live Studio can load the publicly released M1
+  model after an explicit click and serves top-8 next-token prediction—not chat. The synthetic
+  parity harness passes; M7's accepted-model parity and a qualified product bundle remain open.
+- **[Desktop client](docs/products/desktop-client.md):** the Tauri shell exists and verifies
+  durable session behavior on a synthetic artifact. It has no qualified trained product bundle.
 
 ## Where we're going
 
-The first milestone (M1) has a new top-1 condition set by the owner (project lead Casey Allard) on 19 October 2026, alongside its existing conditions on reach (whether the right word is among the candidates the model opens at all), cell use and fresh-data transfer: **the model's
-whole-number top-1, measured through its integer export, must beat both count tables (1,226 and
-6,300) on each of two seeds, with tokens per second reported** ([charter](CHARTER.md) §4.8). The
-audit's shortest path to a first simple conversation has six stages, each run on its own pre-run review (D67); the ordered steps are in [PLAN.md](PLAN.md):
-
-**0** run what is already FIT-reviewed and queued (a capacity test, W2) → **1** make the model's capacity measurable → **2** pick the
-learning law → **3** add the missing parts (a feed-forward layer, a recurrence) → **4** export and
-serve on a laptop → **5** a first simple conversation grounded in exact memory.
-
-That route is the discrete path's route to the M1 bar. After that come laptop energy cost (M5), reasoning and coding (M6), browser and API (M7) and an alpha
-release (M8). This is a plan, not a promise: [where we're going](docs/start/where-were-going.md).
-
-**29 Oct 2026.** The 27-29 Oct work ran on a second path, the float-trained FBS trunk. The two model paths do not join yet ([pipeline map](docs/model/pipeline-map.md)). The order of work now, from [PLAN.md](PLAN.md): (1) carry the exact turn memory past a reply's first word; (2) serve the model's parts in integers; (3) build the text path (R7), so a typed question gets a typed reply; (4) train one model with all of it, export it, serve it on the laptop and score it on prompts with tokens per second; (5) then cost. No milestone is claimed.
+M2 asks for complete correct replies grounded in exact memory; M3 then qualifies durable memory.
+After that come one served model (M4), laptop cost (M5), reasoning and coding (M6), browser/API
+distribution (M7) and an alpha release (M8). The immediate end-to-end work is to make new-phrasing
+reply openings reachable, serve every part in integers, and measure one whole model on fresh
+prompts with tokens per second. This is a plan, not a promise: [where we're going](docs/start/where-were-going.md) and [PLAN.md](PLAN.md).
 
 ## How it works
 
-Each transformer part gets a geometric or exact replacement that avoids softmax and matrix
+Each transformer part gets a geometric or exact replacement that avoids softmax and dense matrix
 multiplication. Statuses come from the [mechanism board](docs/mechanisms/README.md): **ACTIVE** is
-on the current model path, **READY** is built and tested but never trained in, and **PARKED** means
-the tested forms failed or broke a rule while the mechanism stays open.
+on a current model path, **READY** is built and tested but not trained in, and **PARKED** means the
+tested forms failed or broke a rule while the mechanism stays open.
 
 | Transformer part | Geometric replacement in UOR-R4 | Status |
 |---|---|---|
 | Embedding table (a starting vector per token) | [Prime-zeta codebook](docs/mechanisms/prime-zeta-codebook.md) and [address cells](docs/mechanisms/address-cells.md): whole-number addresses from primes and zeta-zero phases | ACTIVE |
-| Attention (which earlier tokens matter) | [Route](docs/mechanisms/route-read.md), [Flock](docs/mechanisms/flock-read.md) and [Relation](docs/mechanisms/relation-read.md) reads: walk an address tree, rotate a few neighbours into one frame, follow copy links | ACTIVE; none of the reads has yet been shown to help on its own |
-| Feed-forward layers (most of the multiplying) | [Hamilton rotation gate](docs/mechanisms/hamilton-gate.md) and [SpiralCore/FBS projection](docs/mechanisms/spiralcore-fbs.md) | READY; never trained |
+| Attention (which earlier tokens matter) | [Route](docs/mechanisms/route-read.md), [Flock](docs/mechanisms/flock-read.md) and [Relation](docs/mechanisms/relation-read.md) reads: walk an address tree, rotate a few neighbours into one frame, follow copy links | ACTIVE; independent effects remain unisolated |
+| Feed-forward layers (most of the multiplying) | [Hamilton rotation gate](docs/mechanisms/hamilton-gate.md) and [SpiralCore/FBS routes](docs/mechanisms/spiralcore-fbs.md) | Hamilton gate is in M1 and FBS; FBS routes are trained and served on FBS only; dated float projection form READY |
 | Softmax output and cross-entropy loss | [Admission](docs/mechanisms/admission.md) (open a few address "drawers", called cells) and a [rank-margin hinge](docs/mechanisms/rank-margin.md) | ACTIVE |
 | Backpropagation optimizer | [Discrete learning](docs/mechanisms/discrete-learning.md): try each legal rotation of one entry, keep it only if the score strictly improves | ACTIVE |
-| Matrix-multiply runtime | [Integer serving (D11, the whole-number serving contract)](docs/mechanisms/lut-serving.md): adds, shifts, compares and table reads, and no float; since D80 and D81 (28 Oct 2026) the integer multiply and divide are allowed | ACTIVE engine; `lut-stack/5` exports and serves the FBS trunk exactly (claude-181, claude-182) |
+| Matrix-multiply runtime | [Integer serving (D11)](docs/mechanisms/lut-serving.md): whole-number adds, shifts, compares and table reads; integer multiply and divide are allowed | ACTIVE; the discrete M1 pair and the separate FBS `lut-stack/5` export both serve |
 
-Position and normalization now have replacements on the FBS trunk: position is the SpiralCore transport spin, and normalization is RMS norm with an integer square root. Both are trained and served there. No two replacements
-have been trained together into a model that beats the count tables. The board lists 28 mechanisms:
-12 ACTIVE, 5 READY and 11 PARKED. Part by part: [transformer vs geometry](docs/start/transformer-vs-geometry.md).
+Position and normalization have replacements on the FBS trunk: SpiralCore transport spin and RMS
+norm with an integer square root. M1 instead uses Flock `FrozenZeroV1`, `DiscreteHamiltonGateV1`,
+`DiscreteQuaternionRecurrenceV1`, `PositionHolonomyV1`, `OrbitRootSnapNormV1`, an orbit-root causal pointer and post-rotation `OuterL1V1`—not FBS
+projection or the FBS RMS normalization. M1 does not establish every replacement's
+independent effect. The board lists
+**28 mechanisms: 12 ACTIVE, 5 READY and 11 PARKED**. Part by part:
+[transformer vs geometry](docs/start/transformer-vs-geometry.md).
+
+<details>
+<summary><strong>Historical K16 result — 19 Oct 2026</strong></summary>
+
+Before the M1 closing artifacts, the selected K16-A discrete model scored **65 and 463** correct
+next-token guesses out of 14,287, below the unigram table's **1,226** and T2's **6,300**. K16-R
+collapsed to 19 or 20 occupied cells. These remain dated negative results, not the current best
+model: [K16 outcome](docs/labs/k16-outcome-call-2026-10-19/README.md).
+
+Four older 214-million-parameter checkpoints on Hugging Face predate today's rules (they used
+softmax and matrix multiplication) and are kept as historical evidence, not as the D11 product.
+
+</details>
 
 ## Explore
 
 - **[Start here](docs/start/what-is-uor-r4.md)**, with a [glossary](docs/start/glossary.md) and [FAQ](docs/start/faq.md)
+- **[Where we are, with the evidence](docs/start/where-we-are.md)** and the [pipeline map](docs/model/pipeline-map.md)
 - **[Mechanism board](docs/mechanisms/README.md):** 28 mechanisms, one page each, with reopen conditions for the PARKED ones
 - **[Geometry](docs/geometry/README.md):** primes and zeta phases, quaternions, E8/H4 and the 600-cell, SpiralCore, the Hopf map
 - **[Research findings](docs/research/findings.md)** and **[open questions](docs/research/open-questions.md)**

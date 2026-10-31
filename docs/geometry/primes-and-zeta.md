@@ -64,7 +64,7 @@ The [D19 object store](../../crates/uor-r4-object-store/README.md) preserves exa
 | Each of 4,096 words gets a distinct starting vector | measurement | [construction record](../../archive/labs/prime-zeta-construction-2026-10-14/README.md) |
 | Zeta phases beat the matched controls in training | `NOT_RUN` | [prime-zeta codebook](../mechanisms/prime-zeta-codebook.md) |
 | Prime identity is a semantic distance | no | exact identity only |
-| The model has a measured language gain from either idea | no | pre-alpha; see [`STATUS.md`](../../STATUS.md) |
+| The model has a measured language gain from either idea | no | pre-alpha; see [`PLAN.md`](../../PLAN.md) and rendered [`STATE.md`](../../STATE.md) |
 
 ## Go deeper
 

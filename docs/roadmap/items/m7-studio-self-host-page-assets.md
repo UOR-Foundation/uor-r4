@@ -16,11 +16,11 @@ The Studio's model worker is fully client-side (m7-studio-connect-wasm-engine, P
 
 ## What is missing
 
-1. **Verification and both pages are done.** The page-load claim is machine-checked statically (`#3073`) and at runtime in headless Chrome (`#3080`), and the router demo page's three CDN loads are self-hosted behind the same traps (`#3110`, `0d5d6791d`). The tokenizer leg remains.
-2. **The tokenizer.** The byte-mod stand-in is real (`web/studio/assets/js/uor_model_worker.js:140`, `rawBytes[i] % vocabSize`); bundle the stack-bound tokenizer artifact in its place.
+1. **Verification and both pages are done.** The page-load claim is machine-checked statically (`#3073`) and at runtime in headless Chrome (`#3080`), and the router demo page's three CDN loads are self-hosted behind the same traps (`#3110`, `0d5d6791d`).
+2. **The tokenizer is done.** `antigravity-60` (#3075) generated the stack-bound byte-BPE artifact and replaced the byte-mod stand-in; the Studio verifies its binding to the synthetic stack ([record](../../labs/m7-studio-self-host-page-assets/README.md)).
 3. **GitHub API calls, recorded.** `web/studio/index.html:2866-2872` calls `api.github.com`; the calls are user-initiated and refused under Tauri/offline. The privacy model in `docs/products/web-client.md` records them as user-initiated, **not** page-load requests, and therefore outside the "on load" bar (`#3074`); no change to the calls is needed.
 
-Website deploys stay paused (D36) regardless; this item changes assets and verification, not the deploy.
+The website is now live at gh-pages `454bb30fc`; this item changed assets and verification, not the deploy.
 
 ## Done when
 

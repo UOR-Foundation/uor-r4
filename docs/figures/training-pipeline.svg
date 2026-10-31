@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 680" width="1200" height="680" role="img" aria-labelledby="t d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
-<title id="t">The training pipeline, 29 October 2026</title>
-<desc id="d">Data, pre-registration, a non-author TEST FITNESS review and the lab's own pre-run review come before GPU time. The FBS trunk trains in float on a Vast.ai GPU pod with a deterministic fixed-order backward, is evaluated on the DEV panel at two seeds with tokens/s, and its results are kept. The export through lut-stack/5 keeps the rotations exact. No closing run has passed the M1 bar.</desc>
+<title id="t">Training and the M1 close, 31 October 2026</title>
+<desc id="d">Data, pre-registration, a non-author TEST FITNESS review and the lab's own pre-run review come before GPU time. The saved discrete 19-table model has closed M1 at all six bars on two seeds, with exact export agreement and Apple M1 decode at 10,876 / 10,566 tok/s. The separate float-trained FBS trunk uses a fixed-order backward and exports with exact rotations and its export gap inside the bar through lut-stack/5 at DEV scope. p-f reference replies are 62.5% verbatim TRAIN, so M1 is not useful-chat qualification; current work is new-phrasing reply opening and a reachable memory key.</desc>
 <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#424A53"/></marker><pattern id="hP" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="9" height="9" fill="#FFF7E3"/><line x1="0" y1="0" x2="0" y2="9" stroke="#F1D79A" stroke-width="2.2"/></pattern><pattern id="hF" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#F0F2F4"/><path d="M0,0 L8,8 M8,0 L0,8" stroke="#D3D8DD" stroke-width="1"/></pattern></defs>
 <rect x="0.5" y="0.5" width="1199" height="679" rx="16" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1"/>
 <text x="40" y="52" font-size="26" font-weight="700" fill="#1F2328" text-anchor="start">Training: float on the GPU, exported exactly to integers</text>
-<text x="40" y="80" font-size="14.5" font-weight="400" fill="#57606A" text-anchor="start">29 October 2026. Float training is offline only (D37); serving is D11 integers. Unit REPORTs: docs/loop/tasks/.</text>
+<text x="40" y="80" font-size="14.5" font-weight="400" fill="#57606A" text-anchor="start">31 October 2026. Float training is offline only (D37); serving is D11 integers. Unit REPORTs: docs/loop/tasks/.</text>
 <text x="40" y="118" font-size="14" font-weight="700" fill="#0072B2" text-anchor="start">BEFORE THE RUN</text>
 <rect x="40" y="130" width="250" height="128" rx="10" fill="#E3F4EE" stroke="#007A5E" stroke-width="2.5"/>
 <text x="54" y="156" font-size="15" font-weight="700" fill="#1F2328" text-anchor="start">Data</text>
@@ -75,12 +75,12 @@
 <text x="54" y="551" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">bar on DEV at both seeds. /6 carries the Hamming reads.</text>
 <rect x="54" y="574" width="69" height="22" rx="11" fill="#007A5E" stroke="#007A5E" stroke-width="1.5"/>
 <text x="88.5" y="589" font-size="11" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.4">WORKING</text>
-<rect x="600" y="488" width="560" height="116" rx="10" fill="url(#hP)" stroke="#B87A00" stroke-width="2"/>
-<text x="614" y="514" font-size="15" font-weight="700" fill="#1F2328" text-anchor="start">The M1 bar (CHARTER §4.8)</text>
-<text x="614" y="535" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">integer top-1 must beat the unigram (1,226) and T2 successor</text>
-<text x="614" y="551" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">(6,300) tables on DEV at two seeds; no closing run has passed</text>
-<rect x="614" y="574" width="97" height="22" rx="11" fill="#E69F00" stroke="#B87A00" stroke-width="1.5"/>
-<text x="662.5" y="589" font-size="11" font-weight="700" fill="#1F2328" text-anchor="middle" letter-spacing="0.4">IN PROGRESS</text>
+<rect x="600" y="488" width="560" height="116" rx="10" fill="#E3F4EE" stroke="#007A5E" stroke-width="2.5"/>
+<text x="614" y="514" font-size="15" font-weight="700" fill="#1F2328" text-anchor="start">M1 complete (discrete)</text>
+<text x="614" y="535" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228;</text>
+<text x="614" y="551" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">p-f 7,850 / 7,872; Apple M1 decode 10,876 / 10,566 tok/s</text>
+<rect x="614" y="574" width="76" height="22" rx="11" fill="#007A5E" stroke="#007A5E" stroke-width="1.5"/>
+<text x="652" y="589" font-size="11" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.4">COMPLETE</text>
 <path d="M40,634 L1160,634" fill="none" stroke="#D0D7DE" stroke-width="1"/>
 <text x="40" y="656" font-size="13.5" font-weight="700" fill="#1F2328" text-anchor="start">Status</text>
 <rect x="110" y="641" width="34" height="20" rx="5" fill="#E3F4EE" stroke="#007A5E" stroke-width="2"/>

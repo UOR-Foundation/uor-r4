@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "note": "Cache reconciled after protected masked TRAIN count-reference source PR2328 merge9e904a834 (source2fd6358bb); 11 finite controls PASS (9 metadata,2 CUDA) and Amendment5 independent Claude CONFIRM FIT6146716704; physical sheet refreshed on the D37 basis (m2-pin-train-mask-sheet-2026-10-23, NOT_FIT pending D29 float module #2823, D11 exporter #2820 and a sealed fresh-transfer slice) and discrete-law M2 sheet landed with non-author TEST FITNESS: FIT (m2-pin-train-mask-sheet-discrete-2026-10-26, antigravity-104 #2851); owner answer recorded 2026-10-24T03:42Z (both the D37-basis sheet and a discrete-law sheet are wanted); GitHub and main authorities remain authoritative. Historical counts/headlines are not reset; all training holds remain.",
+  "note": "Current-status cache reconciled through 2026-10-31 from M1's 30 Oct close in #2029, claude-211's six-bar evidence and current roadmap state. M1 is complete; M2 and M3 are in progress; M4–M8 are not complete. M7 runtime/harness work is in progress on a synthetic stand-in. Current headlines/statuses live in their normal fields, while prior headlines, artifacts and holds are preserved in explicit `historical` fields rather than deleted. No acceptance bar changes.",
   "tracker": {
     "issue": 2028,
     "title": "[Roadmap] UOR-R4 - path to a native conversation and memory alpha"
@@ -10,47 +10,98 @@
       "issue": 2029,
       "id": "M1",
       "title": "Language base: a geometric stack language model good enough to carry chat",
-      "lab": "deepseek",
-      "status": "in-progress",
+      "lab": "antigravity",
+      "status": "complete",
       "headline": {
-        "label": "reply acceptable",
-        "current": 37,
-        "target": 116,
-        "of": 232,
-        "unit": "acceptable replies",
-        "suspended": true
+        "label": "M1 closing bars",
+        "current": 6,
+        "target": 6,
+        "of": 6,
+        "unit": "closing bars"
       },
       "secondary": [
         {
-          "label": "v5 memory check_pass",
-          "current": 20,
-          "target": 34,
-          "of": 40
+          "label": "DEV integer top-1 (seeds 1/2)",
+          "text": "7,002 / 7,001",
+          "target": 6324,
+          "of": 14287,
+          "unit": "correct first guesses"
+        },
+        {
+          "label": "Apple M1 decode tok/s, bar-f remeasurement (seeds 1/2)",
+          "text": "10,876 / 10,566",
+          "note": "Median, 192-token prefill and 64-token decode"
         }
       ],
-      "panel": "v5-reply",
-      "base_artifact": "D10 (10% recall dose, adopted under D22 5f)",
+      "panel": "",
+      "qualification_panels": ["DEV", "Fresh V2", "held-out-phrasing p-f"],
+      "base_artifact": "antigravity-110 two seeded UORLUT01 artifacts (04652a3d…, 1b49e8bd…)",
       "mechanisms": [
-        "exact-memory",
-        "pointer-key",
-        "read-binding",
-        "spiralcore-fbs"
+        "flock-read",
+        "hamilton-gate"
+      ],
+      "composition": [
+        "Flock FrozenZeroV1",
+        "DiscreteHamiltonGateV1",
+        "DiscreteQuaternionRecurrenceV1",
+        "PositionHolonomyV1",
+        "OrbitRootSnapNormV1",
+        "OrbitRootCausalPointerV1",
+        "OuterL1V1"
       ],
       "lines": [
         {
-          "name": "exact addressed memory",
-          "count": 0,
-          "of": 3
-        },
-        {
-          "name": "evaluation integrity",
-          "count": 1,
-          "of": 3,
-          "lab": "kimi",
-          "note": "Recorded operator card6134571032; no reset by instruction repair."
+          "name": "saved discrete six-bar close",
+          "count": 6,
+          "of": 6,
+          "lab": "antigravity",
+          "note": "Two seeded UORLUT01 artifacts; exact export agreement and B4 at both seeds."
         }
       ],
-      "next": "Rung-0 sheet Amendment2 TEST FITNESS: FIT (design) — Claude 6159328025 confirmed on merged blob 6159394631, Codex 6159308818 exact-head 6159343268 (PR2415 5c189cf59). FIT lifts no hold. Execution gates in order: Codex implements+qualifies the admission diff (controller wiring, trained-checkpoint eval, per-kind sensitivity counters, P1/P2 pilot reporting) at e7d926fbe+only-that-diff; Claude reviews that exact diff; Kimi binds final executable/PTX/source identities + resource admission; owner alone releases D4. Pilot scope preserved: seed1, 1640 batches, VectorBlock 0..1639 only, Route NOT_RUN, ~1.784h/$1.62 UNVERIFIED known-component subtotal; fresh transfer UNAVAILABLE/NOT_RUN; full two-seed run is a later owner decision. M1 reply headline SUSPENDED under R14.",
+      "historical": {
+        "previous_panel": "v5-reply",
+        "previous_mechanisms": [
+          "exact-memory",
+          "pointer-key",
+          "read-binding",
+          "spiralcore-fbs"
+        ],
+        "previous_lines": [
+          {
+            "name": "exact addressed memory",
+            "count": 0,
+            "of": 3
+          },
+          {
+            "name": "evaluation integrity",
+            "count": 1,
+            "of": 3,
+            "lab": "kimi",
+            "note": "Recorded operator card6134571032; no reset by instruction repair."
+          }
+        ],
+        "previous_status": "in-progress",
+        "previous_headline": {
+          "label": "reply acceptable",
+          "current": 37,
+          "target": 116,
+          "of": 232,
+          "unit": "acceptable replies",
+          "suspended": true
+        },
+        "previous_secondary": [
+          {
+            "label": "v5 memory check_pass",
+            "current": 20,
+            "target": 34,
+            "of": 40
+          }
+        ],
+        "previous_base_artifact": "D10 (10% recall dose, adopted under D22 5f)",
+        "previous_next": "Rung-0 sheet Amendment2 TEST FITNESS: FIT (design) — Claude 6159328025 confirmed on merged blob 6159394631, Codex 6159308818 exact-head 6159343268 (PR2415 5c189cf59). FIT lifts no hold. Execution gates in order: Codex implements+qualifies the admission diff (controller wiring, trained-checkpoint eval, per-kind sensitivity counters, P1/P2 pilot reporting) at e7d926fbe+only-that-diff; Claude reviews that exact diff; Kimi binds final executable/PTX/source identities + resource admission; owner alone releases D4. Pilot scope preserved: seed1, 1640 batches, VectorBlock 0..1639 only, Route NOT_RUN, ~1.784h/$1.62 UNVERIFIED known-component subtotal; fresh transfer UNAVAILABLE/NOT_RUN; full two-seed run is a later owner decision. M1 reply headline SUSPENDED under R14.",
+        "negative_scope": "K16-A scored 65 and 463 of 14,287 below unigram 1,226 and T2 6,300; K16-R collapsed to 19 or 20 cells. These results remain dated evidence."
+      },
+      "next": "M2 grounded replies. Claude-219's point-key opening improves free generation at three seeds on fresh p-v, but only partially; claude-220 serves the point key inside one float model on fresh p-w with exact parity; claude-222 has built the integer point table, search and /8 record; claude-224 has built the panel decode and grade; claude-227 passed retention GPU parity within the 3% bar; claude-228 built the run's reference/read-back/BOS checks; claude-229 found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so no bar result or throughput is reported. claude-231 built the nearest readout and export on native and browser paths; claude-232 missed greedy parity in every cell, so the mismatch must be localized before parity is rechecked and p-x rerun. M1 does not establish useful chat. p-f has 0.625 verbatim TRAIN reference replies.",
       "project_manager": "kimi",
       "training_hold": false
     },
@@ -58,11 +109,11 @@
       "issue": 2030,
       "id": "M2",
       "title": "Grounded reply from exact memory: the native learner completes correct replies",
-      "lab": "codex",
-      "status": "blocked-on-owner",
+      "lab": "",
+      "status": "in-progress",
       "headline": {
-        "label": "complete correct replies (dev)",
-        "current": 437,
+        "label": "complete correct replies on one accepted saved model (dev)",
+        "current": 0,
         "target": 256,
         "of": 512,
         "unit": "replies",
@@ -70,39 +121,58 @@
       },
       "secondary": [
         {
-          "label": "opened transfer diagnostic (not fresh qualification)",
+          "label": "genuinely fresh complete correct replies",
           "current": 0,
-          "target": null,
-          "of": 128,
-          "note": "40% genuinely fresh acceptance remains; the opened0/128 cannot qualify it."
+          "target": 40,
+          "of": 100,
+          "unit": "percent",
+          "note": "Fresh acceptance remains unqualified; M1 does not establish complete replies."
         }
       ],
       "panel": "m2-reply512",
-      "base_artifact": "saved437 parent; linked unified-bound-content-437 NOT_RUN",
+      "fresh_panel": "m2-fresh256",
+      "base_artifact": "unselected; M1's language-base artifact does not automatically select M2",
       "mechanisms": [
         "legal-construction",
         "carrier-credit",
         "spiralcore-fbs"
       ],
-      "lines": [
-        {
-          "name": "unified geometric route/action/learning integration",
-          "count": 12,
-          "of": 3,
-          "note": "Projection PR2279 count8, head/writer PR2301 count9, complete-path PR2318 count10, metadata PR2319 count11; masked TRAIN-reference repair count12 in protected source PR2328 merge9e904a834; documentation closeout is the same integrated unit, no additional increment. No model-quality gain or headline reset; all prior source/results and training/M2 holds preserved."
-        }
-      ],
-      "next": "Masked TRAIN count-reference repair at2fd6358bb implemented; 11 finite controls PASS (9 metadata,2 CUDA), Amendment5 independent Claude CONFIRM FIT6146716704; owner answer (both sheets wanted) is recorded: the discrete-law M2 sheet (m2-pin-train-mask-sheet-discrete-2026-10-26) is landed with non-author TEST FITNESS: FIT (antigravity-104 #2851, pinning mw-balp/train/response_mask.u8 b5e7352d..., expected_train_targets=2425925, stage-t-run #2836, trunk-run #2844, m2-reply512 >= 256/512 and sealed m2-fresh256 >= 52/128 pairs), while the companion D37-basis sheet (m2-pin-train-mask-sheet-2026-10-23) remains NOT_FIT pending D29 float module #2823, D11 exporter #2820 and a sealed float fresh-transfer slice; global training and separate M2 training/rental holds HELD. Full M2 learned intent/compiler, fresh transfer and D11 remain unqualified; no automatic campaign.",
-      "training_hold": true,
-      "rental_hold": true,
-      "projection_kernel_authorization": "Current Codex claim2029#6136794551 only; build and finite GPU tests authorized, completed, own pod deleted. Training remains held."
+      "lines": [],
+      "historical": {
+        "previous_lines": [
+          {
+            "name": "unified geometric route/action/learning integration",
+            "count": 12,
+            "of": 3,
+            "note": "Projection PR2279 count8, head/writer PR2301 count9, complete-path PR2318 count10, metadata PR2319 count11; masked TRAIN-reference repair count12 in protected source PR2328 merge9e904a834; documentation closeout is the same integrated unit, no additional increment. No model-quality gain or headline reset; all prior source/results and training/M2 holds preserved."
+          }
+        ],
+        "previous_status": "blocked-on-owner",
+        "previous_headline": {
+          "label": "complete correct replies (dev)",
+          "current": 437,
+          "target": 256,
+          "of": 512,
+          "unit": "replies",
+          "direction": "open"
+        },
+        "previous_base_artifact": "saved437 parent; linked unified-bound-content-437 NOT_RUN",
+        "negative_scope": "The 437/512 seen-row result fell to 0/128 on a fresh draw. It is a panel-fitting lesson, not qualified current progress. Previous training/rental holds and the old next-step record are retained here; D67 removed the blanket owner hold, with D41's donor pass the named exception.",
+        "previous_training_hold": true,
+        "previous_rental_hold": true,
+        "previous_projection_kernel_authorization": "Current Codex claim2029#6136794551 only; build and finite GPU tests authorized, completed, own pod deleted. Training remains held.",
+        "previous_next": "Masked TRAIN count-reference repair at2fd6358bb implemented; 11 finite controls PASS (9 metadata,2 CUDA), Amendment5 independent Claude CONFIRM FIT6146716704; owner answer (both sheets wanted) is recorded: the discrete-law M2 sheet (m2-pin-train-mask-sheet-discrete-2026-10-26) is landed with non-author TEST FITNESS: FIT (antigravity-104 #2851, pinning mw-balp/train/response_mask.u8 b5e7352d..., expected_train_targets=2425925, stage-t-run #2836, trunk-run #2844, m2-reply512 >= 256/512 and sealed m2-fresh256 >= 52/128 pairs), while the companion D37-basis sheet (m2-pin-train-mask-sheet-2026-10-23) remains NOT_FIT pending D29 float module #2823, D11 exporter #2820 and a sealed float fresh-transfer slice; global training and separate M2 training/rental holds HELD. Full M2 learned intent/compiler, fresh transfer and D11 remain unqualified; no automatic campaign."
+      },
+      "next": "One unified model must produce complete correct replies on DEV and a genuinely fresh panel, then export cleanly to D11. Claude-219's point-key opening improves free generation at three seeds on fresh p-v, but only partially; claude-220 serves the point key inside one float model on fresh p-w with exact parity; claude-222 has built the integer point table, search and /8 record; claude-224 has built the panel decode and grade; claude-227 passed retention GPU parity within the 3% bar; claude-228 built the run's reference/read-back/BOS checks; claude-229 found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so no bar result or throughput is reported. claude-231 built the nearest readout and export on native and browser paths; claude-232 missed greedy parity in every cell, so the mismatch must be localized before parity is rechecked and p-x rerun.",
+      "training_hold": false,
+      "rental_hold": false
     },
     "m3": {
       "issue": 2031,
       "id": "M3",
       "title": "Durable conversation memory: provenance, conflict, abstention, reset and restart",
-      "lab": "codex",
-      "status": "paused",
+      "lab": "",
+      "status": "in-progress",
       "headline": {
         "label": "typed outcomes qualified on the saved model",
         "current": 0,
@@ -112,7 +182,7 @@
         "vacuous": true
       },
       "panel": "m3-memory",
-      "base_artifact": "stack_grounded_session (#1568) + typed-script evaluator (#1578)",
+      "base_artifact": "unselected; a selected M1 or M2 model is required; M1's completion alone is not M3 qualification",
       "mechanisms": [
         "exact-memory"
       ],
@@ -123,7 +193,13 @@
           "of": 3
         }
       ],
-      "next": "Preserve durable-memory interfaces and known defects; no automatic qualification campaign while shared compliance dependencies and holds remain."
+      "historical": {
+        "previous_status": "paused",
+        "previous_base_artifact": "stack_grounded_session (#1568) + typed-script evaluator (#1578)",
+        "previous_next": "Preserve durable-memory interfaces and known defects; no automatic qualification campaign while shared compliance dependencies and holds remain.",
+        "oracle_scope": "True-address 80/80 against no-memory 0/80 and sieve 20/80 is exact-read/oracle evidence, not learned address formation or M3 qualification."
+      },
+      "next": "Wire and qualify the object-store consumer on the selected model: provenance, contradiction/correction, abstention, reset and process restart with token-identical continuation."
     },
     "m4": {
       "issue": 2032,
@@ -132,44 +208,66 @@
       "lab": "claude",
       "status": "not-started",
       "headline": {
-        "label": "softmax at runtime",
-        "text": "softmax at runtime: yes",
-        "target": 0,
-        "target_display": "no (D23 prohibits softmax project-wide)",
+        "label": "accepted model served through D11 and CLI",
+        "current": 0,
+        "target": 1,
         "of": 1,
-        "unit": "prohibited site",
-        "note": "the live prompt's qualitative headline; D23 makes \"no\" the only accepted value. Acceptance items 1-3 (D11 parity, kernel audit, fresh-process restore) remain open."
+        "unit": "qualified milestone",
+        "note": "M1's exported artifacts do not close M4's full model, quality, session and audit path."
       },
       "secondary": [
         {
-          "label": "served BPB at 512 windows",
-          "current": 0.886838,
+          "label": "held-out quality at 512 windows",
+          "text": "not measured on the accepted model; target ≤0.90 BPB",
           "target": 0.9,
           "of": null
         }
       ],
       "panel": "m4-served",
-      "base_artifact": "19.9M chat stack, 0.933 BPB served",
+      "base_artifact": "unselected; the accepted M3 model is required before M4 qualification",
       "mechanisms": [
         "flock-read",
         "e8-orbit-memory",
         "spin-weights"
       ],
-      "lines": [
-        {
-          "name": "starling read",
-          "count": 3,
-          "of": 3,
-          "note": "3/3 after #2338 (rung-0b source; headline unchanged). D21 pivot card #2032 6150703214: continue with ONE decisive run (design card section 5 + P1-P3), gated on rung 0, the key-address credit FIT and the owner hold release."
+      "lines": [],
+      "historical": {
+        "previous_lines": [
+          {
+            "name": "starling read",
+            "count": 3,
+            "of": 3,
+            "note": "3/3 after #2338 (rung-0b source; headline unchanged). D21 pivot card #2032 6150703214: continue with ONE decisive run (design card section 5 + P1-P3), gated on rung 0, the key-address credit FIT and the owner hold release."
+          },
+          {
+            "name": "wide learned flock read",
+            "count": 0,
+            "of": 3,
+            "note": "Historical line/cache dispute retained; inactive old campaign. Inherit exact count from live milestone before a materially amended registration; no reset by repair."
+          }
+        ],
+        "previous_headline": {
+          "label": "softmax at runtime",
+          "text": "softmax at runtime: yes",
+          "target": 0,
+          "target_display": "no (D23 prohibits softmax project-wide)",
+          "of": 1,
+          "unit": "prohibited site",
+          "note": "the live prompt's qualitative headline; D23 makes \"no\" the only accepted value. Acceptance items 1-3 (D11 parity, kernel audit, fresh-process restore) remain open."
         },
-        {
-          "name": "wide learned flock read",
-          "count": 0,
-          "of": 3,
-          "note": "Historical line/cache dispute retained; inactive old campaign. Inherit exact count from live milestone before a materially amended registration; no reset by repair."
-        }
-      ],
-      "next": "Murmuration read (card #2032 6151093135, owner-approved 13 Oct): S1 flock transport mean + S2 FBS tree source and section-4 finite controls (FIT), then the decisive run after rung 0 and the owner hold release. Rung-0b rank read retired as evidence.",
+        "previous_secondary": [
+          {
+            "label": "served BPB at 512 windows",
+            "current": 0.886838,
+            "target": 0.9,
+            "of": null,
+            "note": "Historical 19.9M chat stack at 512 windows under a different protocol; not current M4 evidence or a like-for-like score. The older 0.877 float / 0.933 served pair used 512 and 64 windows respectively, so that pair is not directly comparable."
+          }
+        ],
+        "previous_base_artifact": "19.9M chat stack, 0.933 BPB served",
+        "previous_next": "Murmuration read (card #2032 6151093135, owner-approved 13 Oct): S1 flock transport mean + S2 FBS tree source and section-4 finite controls (FIT), then the decisive run after rung 0 and the owner hold release. Rung-0b rank read retired as evidence."
+      },
+      "next": "Select the accepted model, complete the lawful-likelihood held-out score, export it through UORLUT01 and qualify the full native/CLI/session/audit path. PRLL is built and registered; GPU held-out scoring remains open.",
       "training_hold": false
     },
     "m5": {
@@ -221,7 +319,7 @@
       "id": "M7",
       "title": "Distribution: capability API, WASM runtime and the Pages Studio",
       "lab": "",
-      "status": "not-started",
+      "status": "in-progress",
       "headline": {
         "label": "native model served through the API, WASM and Studio",
         "current": 0,
@@ -232,10 +330,15 @@
       },
       "secondary": [],
       "panel": "m7-distribution",
-      "base_artifact": "a local Rust API exists (capability API tests in uor-r4-integer); WASM qualification not started; no Studio deployment of the native model",
+      "base_artifact": "local Rust API and integer WASM engine; Studio worker/page and desktop shell verified on the 469,252-byte synthetic stand-in; no accepted model bundle",
       "mechanisms": [],
       "lines": [],
-      "next": "WASM qualification and a Studio deployment of the native model; depends on M4 serving under D11.",
+      "historical": {
+        "previous_status": "not-started",
+        "previous_base_artifact": "a local Rust API exists (capability API tests in uor-r4-integer); WASM qualification not started; no Studio deployment of the native model",
+        "previous_next": "WASM qualification and a Studio deployment of the native model; depends on M4 serving under D11."
+      },
+      "next": "Accepted-model WASM, CLI and browser parity and distribution; depends on M4 serving under D11.",
       "carried_from": "#1172, #1173"
     },
     "m8": {
@@ -257,7 +360,10 @@
       "base_artifact": "follows #962/#954/#964 and #955/#1088 on the same native path, with #963 cost evidence and #1172/#1173 distribution scope",
       "mechanisms": [],
       "lines": [],
-      "next": "A clearly labelled release; depends on M3-M7. Not startable under the current training hold.",
+      "historical": {
+        "previous_next": "A clearly labelled release; depends on M3-M7. Not startable under the current training hold."
+      },
+      "next": "A clearly labelled release after M1-M7; no blanket training hold (D67).",
       "carried_from": "#965"
     }
   },
@@ -318,7 +424,7 @@
     },
     {
       "id": "D25",
-      "rule": "Current geometric operator phase: OP2 first -> OP1 G2 only -> OP3a -> lawful rung0 after hold release -> OP4/rung0b; OP3b later research. Training and independent M2 rental hold remain. FIT lifts no hold; preserve peer work and frozen constraint set.",
+      "rule": "Geometry only, no softmax and no dense matmul remain. Runs proceed under the lab's D67 pre-run review; D41's donor pass needs the owner at dispatch. The earlier operator-phase sequence and independent M2 rental hold are historical, not current holds.",
       "scope": "all",
       "source": "docs/integration/DECISIONS.md"
     },
@@ -348,13 +454,13 @@
     },
     {
       "id": "D32",
-      "rule": "Active discrete geometric substrate (`crates/uor-r4-discrete`, Dose 1): model computation and its instruments are discrete/exact and GPU-only - no floating-point forward, gradients, optimizer or numerical model instrument on that path, and no matrix multiplication. Use native SpiralCore/E8/FBS geometry with one integer input/carry/output writer. D37 revises D32's offline-training float ban in separately scanned float modules; the discrete path, D11 serving and the October 14 zeta-zero exception are unchanged. Both training holds remain HELD; a FIT review releases neither.",
+      "rule": "Active discrete geometric substrate (`crates/uor-r4-discrete`, Dose 1): model computation and its instruments are discrete/exact and GPU-only - no floating-point forward, gradients, optimizer or numerical model instrument on that path, and no matrix multiplication. Use native SpiralCore/E8/FBS geometry with one integer input/carry/output writer. D37 revises D32's offline-training float ban in separately scanned float modules; the discrete path, D11 serving and the October 14 zeta-zero exception are unchanged. Runs use the lab's D67 pre-run review; D41's donor pass needs the owner at dispatch.",
       "scope": "all",
       "source": "docs/integration/DECISIONS.md"
     },
     {
       "id": "D37",
-      "rule": "Floating point is legal in offline training only: float forward passes, gradients and optimizers, and offline numerical training instruments, in a separately scanned float module that names its pre-registration (R12/D31), remains geometric (SpiralCore/E8/FBS, icosian/quaternion, prime/zeta), has its own scanned allowlist entry added and reviewed with that pre-registration (never by widening the discrete crate's scan), and reports its export gap. Softmax/squashing (D23/D25) and dense matrix multiplication (D25/D30) stay banned everywhere; model compute stays GPU-only (D24); the exported/served artifact is D11 integer/table only, with no float, transcendental or multiplier instruction; the October 14 complex-plane zeta-zero exception stays separate; archived float sheets return only by re-registration and a fresh FIT; the active discrete Dose 1 and all holds are unchanged. Releases no hold, FIT or compute.",
+      "rule": "Floating point is legal in offline training only: float forward passes, gradients and optimizers, and offline numerical training instruments, in a separately scanned float module that names its pre-registration (R12/D31), remains geometric (SpiralCore/E8/FBS, icosian/quaternion, prime/zeta), has its own scanned allowlist entry added and reviewed with that pre-registration (never by widening the discrete crate's scan), and reports its export gap. Softmax/squashing (D23/D25) and dense matrix multiplication (D25/D30) stay banned everywhere; model compute stays GPU-only (D24); the exported/served artifact is D11 integer/table only, with no float or transcendental instruction; D80/D81 allow hardware integer multiply and divide. The October 14 complex-plane zeta-zero exception stays separate; archived float sheets return by re-registration, fresh FIT and the lab's D67 pre-run review, with D41's donor pass the named owner exception.",
       "scope": "all",
       "source": "docs/integration/DECISIONS.md"
     }

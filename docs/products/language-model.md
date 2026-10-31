@@ -1,89 +1,127 @@
 # The language model
 
-The core product is a language model: a program that reads text and predicts what comes next, and so can hold a conversation. Most language models today are transformers that do billions of decimal multiplications per word. UOR-R4 tries a different route. It predicts text with geometry (prime-number addresses, rotations in four dimensions, exact look-up memory), and it ships as one file of whole numbers that an ordinary laptop or browser can run with whole-number arithmetic only, never decimals. That file is meant to be the one thing every client loads. **It does not ship yet.** As of 29 Oct 2026 the project is pre-alpha, 0 of the 8 milestones are complete, and no model holds a useful conversation ([NOW](../integration/NOW.md)). Nothing ships until a trained model passes M1 to M8.
+The core product is a language model: a program that reads text and predicts what comes next, so it
+can eventually hold a conversation. UOR-R4 tries to do that with geometry and exact memory rather
+than a transformer's dense arithmetic. It is meant to ship as one `UORLUT01` integer file that an
+ordinary laptop or browser can run without floating-point arithmetic. **M1 is complete, but that
+product does not ship yet.** No model holds a useful conversation and no alpha release exists.
 
-Labels used below: **proof** (derived from definitions or code), **measurement** (a recorded run with its artifact), **hypothesis** (untested). See [`docs/formal_vocabulary.md`](../formal_vocabulary.md) and the [glossary](../start/glossary.md).
+Labels: **proof** (derived from definitions or code), **measurement** (a recorded run), and
+**hypothesis** (untested). See [`docs/formal_vocabulary.md`](../formal_vocabulary.md) and the
+[glossary](../start/glossary.md).
 
 ```mermaid
 flowchart LR
-  T["Train on rented GPUs<br/>(crates/uor-r4-discrete)"] --> X["Export to one integer file<br/>UORLUT01"]
-  X --> A["Audit: 0 multiply,<br/>0 divide, 0 float"]
-  A --> S["Serve on the device<br/>(crates/uor-r4-integer)"]
-  S --> C1["Command line<br/>uor-chat"]
-  S --> C2["Web client<br/>WebAssembly"]
-  S --> C3["Desktop client<br/>native"]
+  T["Train on GPUs<br/>discrete, or offline float"] --> X["Export to UORLUT01<br/>and measure export gap"]
+  X --> A["Audit: integer only;<br/>no float or dense matmul"]
+  A --> S["Serve on the device<br/>uor-r4-integer"]
+  S --> C1["Command line"]
+  S --> C2["WebAssembly"]
+  S --> C3["Native desktop"]
 ```
 
-*The model's life in one line. Training happens once, offline, on a GPU. Everything after the export runs on the user's machine using whole numbers only.*
+*Training happens offline on a GPU. The exported integer artifact is the product boundary.*
 
 ## What the model is meant to be
 
-**A geometric model, not a transformer.** The project calls it the UOR-R4 Geometric Language Model. Technically it is an autoregressive geometric state model with exact addressed memory: it keeps a running state, updates it with each token through rotations and table look-ups, and reads facts from an exact memory by address ([architecture](../model/architecture.md)). The charter forbids the expensive parts of a transformer outright: no softmax or other squashing functions and no dense matrix multiplication, anywhere: training, evaluation, tooling and serving ([charter](../../CHARTER.md), sections 3.2 and 3.3).
+**A geometric autoregressive state model with exact addressed memory.** Prime addresses, zeta
+phases, E8/H4/icosian rotations and SpiralCore/FBS routing replace transformer machinery. Exact
+identity remains separate from geometric address. Conversation with durable memory comes first,
+then coding and reasoning, on one model.
 
-**One model for every job.** Conversation with durable memory comes first, then coding and reasoning, all on the same model ([charter](../../CHARTER.md), section 1).
+**Fast and local.** The lead metric is tokens per second on ordinary hardware, with context and
+decode reported separately. A small quality gap is acceptable if the model is much cheaper.
 
-**Fast and local.** The lead metric is tokens per second on an ordinary machine, with decode and context reported separately. A small quality gap is acceptable if the model is much cheaper to run.
+**Integer at serving.** D11 bans floating point and transcendental arithmetic and excludes dense
+matrix multiplication. Since D80 and D81 it allows the hardware integer multiply and divide. Offline
+training may use float under D37, but every float candidate must report its export gap and ship as
+an integer artifact.
 
-## How it will be delivered
+## What exists now
 
-The deliverable is **one checksum-pinned D11 integer artifact in the `UORLUT01` format**, released at milestone M8 ([project track](../integration/project-track.md), M8).
+The M1 closing artifact is antigravity-110's discrete `trunk-joint-pointer-v1-d11`, a 19-table
+`uor-r4.lut-discrete-trunk/1` model saved as two seeded `UORLUT01` files. It is not the separate
+float-trained FBS `lut-stack/5` trunk.
 
-- **D11** is the serving contract. Its five rules are: no floating point or maths library (R1); no multiply or divide instruction (R2, amended by D80 and D81 on 28 Oct 2026, which allow the integer multiply and divide); reading every weight for every token is an interim stage, not the end state (R3; the charter no longer treats dense table maps as an allowed stepping stone for new exports); no transformer backbone (R4); energy claimed only when measured (R5) ([D11](../integration/DECISIONS.md#d11--native-multiplier-free-transformerless-serving-for-every-lab-d10-superseded)).
-- **`UORLUT01`** is the file format. It holds an 8-byte magic string, a JSON header, 4-bit weight codes in groups with one scale byte each, and small integer tables for the few nonlinear steps ([`format.rs`](../../crates/uor-r4-integer/src/stack/format.rs); **proof** by reading the code). The reader computes the SHA-256 hash of the whole file as it loads it, so a release can pin that hash. Details are on the [releases page](./releases-and-artifacts.md).
-- **Training may use decimals; serving may not.** Since 18 October, offline training may use floating point, but the shipped file is integer, and every float-trained candidate must report its *export gap*: its served score minus its float score on the same evaluator ([D37](../integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised), [charter](../../CHARTER.md) section 3.7).
-- **The engine is `crates/uor-r4-integer`.** It runs the file natively (the `uor-chat` and `uor-r4-stack` command-line programs) and as WebAssembly (`UOR-Foundation/uor-r4#2654`). The [serving page](../model/serving-and-export.md) shows how it multiplied without a multiply instruction before D80, and how it uses the hardware multiply now.
+| Test | Seed 1 | Seed 2 | Controls |
+|---|---:|---:|---|
+| DEV integer top-1 | **7,002 / 14,287** | **7,001 / 14,287** | unigram 1,226; T2 6,300 |
+| Fresh V2 integer top-1 | **7,215 / 14,479** | **7,228 / 14,479** | unigram 1,279; T2 6,582 |
+| p-f held-out phrasing | **7,850 / 15,953** | **7,872 / 15,953** | unigram 1,409; T2 7,375; band 81 |
+| Apple M1 decode | **10,876 tok/s** | **10,566 tok/s** | median; 192-token prefill, 64-token decode |
 
-## Status today
+Both seeds have exact export/reference agreement and pass B4. These results close M1
+([#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029)), with the older close grade for
+bars (a)–(e) and claude-211's panel score for bar (f) ([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 
-| Question | Answer | Kind | Source |
-|---|---|---|---|
-| Does a trained model exist in `UORLUT01` under today's rules? | No model that holds a conversation. A float-trained trunk (FBS) has been exported to integers, on the DEV panel only (claude-180 to 182), and serves, but it is not the product | measurement | [lut-serving dossier](../mechanisms/lut-serving.md); [pipeline map](../model/pipeline-map.md) |
-| Does the serving engine work? | Yes, on a synthetic stand-in model: native audit 44 symbol ranges clean; WebAssembly 7 of 7 serving functions clean; save and restore reload identically | measurement | [project track](../integration/project-track.md) M4; [WebAssembly record](../labs/wasm-serving-runtime-2026-10-18/README.md) |
-| Is the engine exact? | On older float models it reproduced its float reference almost exactly: engine difference 2.7e-7 BPB on a matched 512-window check | measurement | [criterion-2 record](../../archive/labs/criterion2-protocol-pin-2026-10-09/README.md) |
-| What model is being trained? | The discrete model in `crates/uor-r4-discrete`, integer from end to end on the GPU | — | [training](../model/training.md) |
-| How far is it? | M1 is in progress; the reply bar is suspended and M1 closes on the charter 4.8 bar through the saved-model path (D79). In the latest two-seed run (K16, 18–19 October) the best arm and seed reached top-1 of 463 of 14,287 development rows, and no arm met its bars | measurement | [K16 outcome call](../labs/k16-outcome-call-2026-10-19/README.md) |
-| Is training running? | Runs go ahead on the lab's own pre-run review. The latest line, 27 to 29 Oct, trains the FBS trunk on GPUs | — | [charter](../../CHARTER.md) section 5.1 |
+**The limitation is part of the result:** 62.5% of p-f's reference replies are verbatim TRAIN
+replies. M1 shows reading new prompt phrasings into known reply kinds, not new reply kinds or useful
+conversation.
 
-### Where it stands on 29 Oct 2026
+## Two model paths, not one joined model
 
-- **Pre-alpha.** No model holds a useful conversation. M1 is in progress and no registered closing run has passed the charter 4.8 bar.
-- **Served in integers.** The FBS trunk is exported and served in integers on the M1 laptop at 4,829 tok/s (claude-177, snapped; 4,217 to 4,504 tok/s with the exact `lut-stack/5` contract), with replies byte-identical to the engine before the multiply and divide. The served model is inside the export-gap bar against the trained one, not identical to it (claude-182).
-- **No typed chat yet.** R7, the text path, is not built: FBS artifacts take token ids only.
-- **The composition, briefly.** The trunk routes (a learned table, SpiralCore position, a recurrence with a Hamilton gate, Hamming copy heads) and exact turn memory stores. Exact memory names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, but only the first word of a reply (claude-161). The full part-by-part table is the [pipeline map](../model/pipeline-map.md).
-- **Order of work.** First carry the memory past a reply's first word. Then serve the model's parts in integers. Then R7, so a typed question gets a typed reply. Then one model trained with all of it and scored on prompts, with tokens/s. Cost work comes after. See [PLAN](../../PLAN.md).
+- **The discrete path** produced the M1 artifact. It trains integer geometric state and exports
+  through table-native `UORLUT01` schemas.
+- **The float-trained FBS trunk** trains offline under D37 and exports with exact rotations and its DEV export gap inside the bar under `lut-stack/5`
+  at DEV scope. It is the current complete-reply research line, not the M1 artifact.
 
-For scale, the M1 closing bar asks the exported model's integer top-1 to beat two simple count tables on the same panel, the unigram table (1,226 of 14,287) and the successor table (6,300 of 14,287), on two seeds ([charter](../../CHARTER.md), section 4.8). The K16 run was graded on the model's own evaluator, not through the export, so the comparison is a rough guide only.
+Claude-217's cycle-step experiment ends every registered loop but leaves content underpowered, so
+greedy remains the decode. Exact turn memory keys on exact first token ids and misses reworded
+prompts ([claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)). Claude-218 found
+trunk-state keys offline; [claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md)
+then served the point key for the first reply token in free generation on fresh p-v. It improves
+templates by +13/+8/+12 and exact replies by +9/+8/+12 at three seeds, but reaches only 12–18% of
+the forced-opening lift. [Claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md) then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade. [Claude-227](../loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; [Claude-228](../loop/tasks/point-key-integer/claude-228/REPORT.md) built the run's reference/read-back/BOS checks; [Claude-229](../loop/tasks/point-key-integer/claude-229/REPORT.md) found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so no bar result or throughput is reported. [Claude-231](../loop/tasks/integer-nearest-readout/claude-231/REPORT.md) built the nearest readout and export on native and browser paths; [claude-232](../loop/tasks/integer-nearest-readout/claude-232/REPORT.md) then missed greedy parity in every cell, so the mismatch must be localized before the p-x rerun.
+This is not a useful-chat result.
 
-**What about the models on Hugging Face?** The four 214M-parameter checkpoints in `caseyallard/uor-r4-geometric-214m` are **historical**. They are float models trained before the softmax and matmul bans. Their measured results were TinyStories validation NLL 1.032 and FineWeb development NLL 2.90 → 2.073; the chat versions could rewrite and summarize but got code and arithmetic wrong ([model card](https://huggingface.co/caseyallard/uor-r4-geometric-214m), the Hugging Face model card). They are not the D11 product.
+## The artifact format and serving boundary
 
-**An earlier export of a float stack missed its bar.** On 10 October three 29M-parameter float models were exported and served exactly by D11, at 1.20 to 1.24 bits per byte, far from the 0.90 target. The record puts the gap in the model, not the engine ([D11 serving record](../../archive/labs/d11-serving-2026-10-10/README.md); **measurement**).
+`UORLUT01` begins with an 8-byte magic string and a JSON header, then aligned integer data sections.
+The reader checks offsets and lengths and computes the file's SHA-256 as it loads, so a release can
+pin that identity ([`format.rs`](../../crates/uor-r4-integer/src/stack/format.rs)). Table-native
+schemas include `lut-discrete/1` and `lut-discrete-trunk/1`. The separate FBS `lut-stack/5` is a
+4-bit float-to-integer stack with exact rotations, not a table-native discrete schema; older dense
+`/1`, `/2` and `/3` schemas are not a description of today's M1 artifact.
+
+The serving engine is [`crates/uor-r4-integer`](../../crates/uor-r4-integer/). It serves native and
+WebAssembly artifacts, with save/restore formats such as `UR4SESS1`. An engine audit proves the
+absence of refused instructions, not model quality. M4 still requires the accepted model's full
+quality, CLI, session and audit path; M7's distribution check is separate.
 
 ## The eight milestones in plain words
 
-Each milestone is a GitHub milestone with an issue. The bars are frozen there; the [project track](../integration/project-track.md) still shows the old M1 bar (0.90 BPB through the D11 export) and has not yet been updated, so charter section 4.8 governs. Changing any bar is the owner's decision.
+| # | Meaning | Current state |
+|---|---|---|
+| M1 | **It predicts text.** Six bars through the saved integer model, including fresh and held-out-phrasing transfer | **Complete** |
+| M2 | **It answers from memory.** ≥256/512 complete correct DEV replies and ≥40% fresh | In progress |
+| M3 | **It remembers across sessions.** Provenance, correction, abstention, reset and restart | In progress |
+| M4 | **It is served.** Accepted model and export gap; held-out quality **≤0.90 BPB**; M1–M3 bars through `uor-chat`; bit-identical continuation after restore; full CLI/session/audit path | Not complete; accepted model path not started |
+| M5 | **It is cheap on a laptop.** Latency, memory, energy and selected access measured | Not started |
+| M6 | **It reasons and codes.** Frozen tasks with executable oracles and causal ablation | Not started |
+| M7 | **It runs everywhere the same.** Library, CLI and browser parity plus client-only Studio | Runtime/harness on synthetic stand-in; accepted model open |
+| M8 | **It is released.** One versioned, checksum-pinned artifact meeting M1–M7 | Not started |
 
-| # | Plain meaning | Bar, briefly | Issue |
-|---|---|---|---|
-| M1 | **It predicts text.** A saved discrete model passes its admission and occupancy checks on two seeds, and through the integer export beats both count tables | Charter 4.8 bars (a)–(e), including a fresh pre-registered transfer panel | #2029 |
-| M2 | **It answers from memory.** It replies correctly using facts stored in exact memory | ≥ 256 of 512 complete correct replies on development, ≥ 40% on a fresh panel | #2030 |
-| M3 | **It remembers across sessions.** It tracks where a fact came from, accepts corrections, abstains on unknown facts, resets, and survives a restart | All five memory checks; a saved and restored session continues token for token | #2031 |
-| M4 | **It is served.** The chosen model is exported to `UORLUT01` and served by the command line | Audits at 0; export gap reported; ≤ 0.90 BPB held out plus the M1–M3 bars through `uor-chat`; bit-identical continuation after restore | #2032 |
-| M5 | **It is cheap on a laptop.** Its real cost is measured | ms per token, peak memory, mJ per token, and weights read per token, all reproducible | #2033 |
-| M6 | **It reasons and codes.** The same served model solves unseen multi-step and coding tasks | Frozen reasoning panel with compile-and-test oracles, plus a causal ablation | #2034 |
-| M7 | **It runs everywhere the same.** Library, command line and browser give bit-identical tokens; the Studio makes no remote model calls | Parity across three hosts; WebAssembly audit 7 of 7 on the shipped model | #2035 |
-| M8 | **It is released.** One versioned, checksum-pinned `UORLUT01` file meets M1–M7 | Reproducible install, release notes with the exact scores, independent check on consumer hardware | #2036 |
+M4's quality work includes a lawful likelihood (`PRLL`), but GPU held-out scoring remains open. M1
+does not select the M2/M3/M4 model automatically, and an engine audit alone closes no milestone.
 
-Two notes. First, M4's quality bar is still written in bits per byte (≤ 0.90), while M1's was changed on 19 October to a top-1 comparison; the charter says BPB returns as a later bar once the model has a lawful likelihood ([charter](../../CHARTER.md), section 4.8). Second, M4's audit criterion is already green, but it is a check on the engine, not on a model, so it cannot close M4 by itself ([project track](../integration/project-track.md), M4).
+## Historical models and open questions
 
-## Open questions
+The four 214M-parameter checkpoints on Hugging Face predate today's rules and used softmax and
+matrix multiplication. They are historical evidence, not the D11 product. K16's 65 and 463 of
+14,287 were also important negative results, but they predate the M1 close.
 
-- What is the export gap of the discrete model through `UORLUT01`, and does the format need a new schema for table-native models rather than 4-bit dense groups? Never measured ([lut-serving dossier](../mechanisms/lut-serving.md)).
-- How many of the roughly 30.2M parameters read per token in the older 29M stack can addressed reads remove before tokens per second moves? This is the D5 end state, unmeasured until M5 ([D5](../integration/DECISIONS.md#d5--per-token-parameter-sparsity-is-the-terminal-serving-invariant)).
-- The engine cannot yet serve a product-key or addressed memory read; the exporter refuses it ([lut-serving dossier](../mechanisms/lut-serving.md)).
+Open questions now centre on complete generation rather than M1:
+
+- Can exact memory key a reworded known question so a new phrasing starts the right reply?
+- Can one joined model produce complete correct replies and durable memory, then pass M4's full
+  serving path?
+- What are the full-path latency, memory traffic and energy per token? M5 has not measured them.
+- Can library, CLI and browser produce bit-identical tokens and sessions on the accepted model?
 
 ## Go deeper
 
-- [Model architecture](../model/architecture.md), [training](../model/training.md), [serving and export](../model/serving-and-export.md).
-- [Releases and artifacts](./releases-and-artifacts.md) for the file format and checksums.
-- Code: [`crates/uor-r4-discrete/`](../../crates/uor-r4-discrete/) (the model being trained), [`crates/uor-r4-integer/`](../../crates/uor-r4-integer/) (the serving engine).
-- [NOW](../integration/NOW.md) for this week's work; [project track](../integration/project-track.md) for the milestone definitions.
+- [Model architecture](../model/architecture.md), [training](../model/training.md), and [serving and export](../model/serving-and-export.md).
+- [Releases and artifacts](./releases-and-artifacts.md) for format, checksums and the future M8 release.
+- [M1 close](../labs/m1-close-saved-model/README.md) and [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md).
+- Code: [`crates/uor-r4-discrete/`](../../crates/uor-r4-discrete/) and [`crates/uor-r4-integer/`](../../crates/uor-r4-integer/).
+- The one [PLAN](../../PLAN.md) and the long-form [project track](../integration/project-track.md).

@@ -59,7 +59,7 @@ Rules for keeping a notebook:
 
 *Source of the counts: [`archive/catalog.jsonl`](../../../archive/catalog.jsonl), records dated 12 October 2026 or later whose outcome is positive, negative, inconclusive, diagnostic-stop or blocked, counted with `jq`. Pages with 0 rows have records on those dates, but all of them are tooling, planning or process records. The page says so.*
 
-The other fourteen lines in the audit catalog (for example `m2-exact-memory` and `m1-float-rung0`) have no notebook yet. Each gets one the next time it produces a result. The project is pre-alpha: 0 of 8 milestones are complete, and no row on any page is a language result.
+The other fourteen lines in the audit catalog (for example `m2-exact-memory` and `m1-float-rung0`) have no notebook yet. Each gets one the next time it produces a result. The project is pre-alpha: 1 of 8 milestones is complete. The M1 close is a measured language-base result; rows on other pages remain construction, mechanism or scoped oracle evidence unless their panel and artifact say otherwise.
 
 ## Where the rows came from
 
@@ -69,5 +69,5 @@ The first rows were seeded from the audit catalog, which read every lab record i
 
 - [How research is done now](../README.md), including the sheet, review and release rules.
 - [What the project knows](../findings.md) and [what is still open](../open-questions.md).
-- [`docs/integration/NOW.md`](../../integration/NOW.md): the current plan, which with these notebooks replaces the old running state log.
+- [`PLAN.md`](../../../PLAN.md) and rendered [`STATE.md`](../../../STATE.md): the current plan and status, which with these notebooks replaces the old running state log.
 - [`archive/CATALOG.md`](../../../archive/CATALOG.md): every archived record, by date, lab, line and verdict.

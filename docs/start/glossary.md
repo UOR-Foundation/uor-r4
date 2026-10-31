@@ -1,6 +1,6 @@
 # Glossary
 
-**In one paragraph.** UOR-R4 uses a lot of words that come from three places: language models (token, softmax, BPB), geometry (quaternion, E8, icosian) and the project's own rulebook (FIT, KEEP, PARKED). This page defines each one in a sentence or two and links to the page that explains it properly. Words are in alphabetical order. If you meet a code name such as K16 or A8 in a record, look for it here too. The project is pre-alpha: 0 of its 8 milestones are complete and no model holds a useful conversation yet ([STATUS](../../STATUS.md)).
+**In one paragraph.** UOR-R4 uses a lot of words that come from three places: language models (token, softmax, BPB), geometry (quaternion, E8, icosian) and the project's own rulebook (FIT, KEEP, PARKED). This page defines each one in a sentence or two and links to the page that explains it properly. Words are in alphabetical order. If you meet a code name such as K16 or A8 in a record, look for it here too. The project is pre-alpha: 1 of its 8 milestones is complete and no model holds a useful conversation yet ([PLAN](../../PLAN.md) and rendered [STATE](../../STATE.md)).
 
 ```mermaid
 flowchart LR
@@ -18,8 +18,8 @@ flowchart LR
   subgraph rules["How the work is judged"]
     direction LR
     CH["Charter and D-entries"] --> FT["FIT sheet"]
-    FT --> RL["Owner release"]
-    RL --> NB["Notebook row<br/>(KEEP, PARKED)"]
+    FT --> RV["Lab pre-run review (D67)<br/>D41 donor: owner at dispatch"]
+    RV --> NB["Notebook row<br/>(KEEP, PARKED)"]
   end
 ```
 
@@ -55,7 +55,7 @@ flowchart LR
 
 **BPE (byte-pair encoding).** The way the tokenizer builds its pieces. It starts from the 256 single bytes and repeatedly glues the most common neighbouring pair into a new piece. The pinned tokenizer has 4,096 pieces: 3 special ones, 256 bytes and 3,837 merges. See [tokenizer](../mechanisms/tokenizer.md) and [data and tokenizer](../model/data-and-tokenizer.md).
 
-**BVG-K (batched verified coordinates).** A faster version of the learning step. It scores K table entries in one GPU launch and commits them together only if their joint loss beats the best single move. Scoring was about 16 times faster at K=16 (**measurement**), but it has never run as a learning law. See [training](../model/training.md).
+**BVG-K (batched verified coordinates).** A faster version of the learning step. It scores K table entries in one GPU launch and commits them together only if their joint loss beats the best single move. Scoring was about 16 times faster at K=16 (**measurement**), and BVG-K was used in Stage T and the saved M1 model; its independent effect is not isolated. See [training](../model/training.md).
 
 ## C
 
@@ -75,9 +75,9 @@ flowchart LR
 
 **D-entries (D11, D22, D37 and the rest).** Numbered owner decisions, from D0 to D41, that used to be the project's rulebook. The charter now holds the rules that still bind, and the [decision map](../rules/decision-map.md) says what became of each decision. The ones you will meet most are [D11](#d11), [D22](#d22) and [D37](#d37).
 
-<a id="d11"></a>**D11.** The serving contract: the finished model runs with whole numbers only. It has five rules. Two of them are that the served program uses no floating point and no multiply or divide instruction. Since D80 and D81 (28 Oct 2026) the hardware integer multiply and divide are allowed; floating point is still banned. See [serving and export](../model/serving-and-export.md).
+<a id="d11"></a>**D11.** The serving contract: the finished model runs with whole numbers only. It has five rules covering arithmetic, access, architecture and evidence. No floating point, transcendental arithmetic, dense matrix multiplication or transformer backbone is allowed; D80 and D81 (28 Oct 2026) permit the hardware integer multiply and divide. See [serving and export](../model/serving-and-export.md).
 
-**D19 object store.** A store that keeps bytes exactly, in a tree of fingerprinted pieces, so repeats are stored once and any range can be checked. It is built and tested (20 integration tests pass in the delivery record, 60 after later work), but no model uses it yet. See [object store](../mechanisms/object-store.md).
+**D19 object store.** A store that keeps bytes exactly, in a tree of fingerprinted pieces, so repeats are stored once and any range can be checked. It is built and tested (20 integration tests pass in the delivery record, 60 after later work). Joining it to the selected model is in progress; M3 is not qualified. See [object store](../mechanisms/object-store.md).
 
 <a id="d22"></a>**D22.** The owner's rule that a negative result closes one tested configuration, never a mechanism. Stopping a mechanism needs the owner. This is why no mechanism has a "retired" status. See [the rules](../rules/README.md) and [decision map](../rules/decision-map.md).
 
@@ -99,7 +99,7 @@ flowchart LR
 
 **Exact memory.** The idea of writing a fact once under an exact name (a prime-based address) and reading it back exactly, instead of smearing it across weights. The trained forms tested so far missed their bars, so the mechanism is PARKED. See [exact memory](../mechanisms/exact-memory.md).
 
-**Exact turn memory.** A table keyed by the first 8 tokens of the user's turn that returns the reply's opening word. On DEV it named 598.7 and 598.3 of 1,226 reply openings at two seeds (claude-161). It does not yet carry a reply past its first word and is not served. See [pipeline map](../model/pipeline-map.md).
+**Exact turn memory.** Tables keyed by the user's first 8 tokens: the opening table returns the reply's opening word, and the completed reply table extends later rows. On DEV the opening table named 598.7 and 598.3 of 1,226 reply openings at two seeds (claude-161). The `/7` engine serves both tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open. See [pipeline map](../model/pipeline-map.md).
 
 **Export gap.** The quality lost when a model trained with decimals is snapped into the whole-number file that ships. It is the served score minus the float score on the same evaluator. A float candidate whose gap exceeds the two-seed noise band is disqualified. On the FBS trunk it was measured on 29 Oct 2026: under `lut-stack/5` the served model is inside the bar on both seeds, net 6 and −8 rows against F_I 24 on DEV (claude-182). See [serving and export](../model/serving-and-export.md).
 
@@ -107,7 +107,7 @@ flowchart LR
 
 **FBS.** The project's name for the three-branch tree that holds earlier words in order. The tree is built by [SpiralCore](#spiralcore) and gives the context at most 243 positions ($3^5$). See [SpiralCore](../geometry/spiralcore.md) and [SpiralCore/FBS projection](../mechanisms/spiralcore-fbs.md).
 
-**FIT (TEST FITNESS: FIT).** The verdict of a review, by someone other than the author, that a pre-registered test is fit to answer its question. A fresh-context subagent counts as a non-author. A FIT releases nothing by itself: the owner still has to release the run. See [the rules](../rules/README.md) and [training](../model/training.md).
+**FIT (TEST FITNESS: FIT).** The verdict of a review, by someone other than the author, that a pre-registered test is fit to answer its question. A fresh-context subagent counts as a non-author. A FIT releases nothing by itself: the lab's D67 pre-run review is also required, and D41's donor pass still needs the owner at dispatch. See [the rules](../rules/README.md) and [training](../model/training.md).
 
 **Fixed-order backward.** The training backward pass sums in a fixed order, so two training runs give the same model byte for byte (claude-179). See [training](../model/training.md).
 
@@ -121,7 +121,7 @@ flowchart LR
 
 **H4.** The symmetry group of the 600-cell, a regular solid in four dimensions. Its 120 roots are the [icosians](#icosian). See [E8, H4 and the 600-cell](../geometry/e8-h4-and-the-600-cell.md).
 
-<a id="hamilton-gate"></a>**Hamilton gate.** A gate for a feed-forward layer that turns the gate signal into a rotation in four dimensions and rotates the value by it, so no sigmoid is needed. A rotation keeps a vector's length, so the gate steers a signal rather than switching it off. It is built and tested (READY), and has never been trained. See [Hamilton gate](../mechanisms/hamilton-gate.md).
+<a id="hamilton-gate"></a>**Hamilton gate.** A gate for a feed-forward layer that turns the gate signal into a rotation in four dimensions and rotates the value by it, so no sigmoid is needed. A rotation keeps a vector's length, so the gate steers a signal rather than switching it off. It is ACTIVE and trained in the discrete M1 composition and on the FBS trunk. See [Hamilton gate](../mechanisms/hamilton-gate.md).
 
 **Hamming distance.** The number of positions at which two bit strings differ. It costs one XOR and one bit count. The model uses it as a tie-break inside its reads. See [VSA and Hamming distance](../geometry/vsa-and-hamming.md).
 
@@ -129,9 +129,9 @@ flowchart LR
 
 <a id="hinge-loss"></a>**Hinge loss.** A loss that asks only whether the right answer beats its strongest rivals by a fixed gap. If it does, the loss is zero. If not, the loss is the shortfall. It needs no probabilities. The live version is an integer hinge. See [rank-margin](../mechanisms/rank-margin.md).
 
-**Hold.** An owner order that stops a kind of work until the owner lifts it. Training, the second milestone's training and rental, and Stage B are held work. Since D65–D69, a lab runs held work on its own pre-run review, which reads the whole project first, and the owner can reverse it (AGENTS.md). A FIT review alone lifts none of them. See [charter](../../CHARTER.md), sections 5.1 and 5.10.
+**Hold.** An owner order that stops a kind of work until the owner lifts it. The older blanket training holds are retired: under D67 a lab runs training and evaluation on its own pre-run review, which the owner can reverse. D41's donor pass is the named owner-at-dispatch exception. A FIT review alone releases no hold. See [charter](../../CHARTER.md), sections 5.1 and 5.10.
 
-**Hopf map.** A map that takes a point on a four-dimensional sphere (a unit quaternion) to a point on an ordinary sphere. It forgets one angle, called the fibre, so many states cast the same shadow. The kept-fibre idea is built as a helper but is not part of the current read, and the mechanism is PARKED. See [the Hopf map and the kept fibre](../geometry/hopf-observation.md).
+**Hopf map.** A map that takes a point on a four-dimensional sphere (a unit quaternion) to a point on an ordinary sphere. It forgets one angle, called the fibre, so many states cast the same shadow. The kept-fibre map is built and READY for a language test; the older sector-routing form is PARKED. Neither is part of M1's read. See [the Hopf map and the kept fibre](../geometry/hopf-observation.md).
 
 ## I
 
@@ -139,7 +139,7 @@ flowchart LR
 
 **Instrument.** A measuring tool, such as a test panel or a checker. If an instrument is faulty, that is a fix, not a negative result about the mechanism. See [what the project knows](../research/findings.md).
 
-**Integer serving.** Running the finished model with whole numbers only: adds, shifts, comparisons and table look-ups, and since D80 and D81 the integer multiply and divide. This is [D11](#d11). Serving audits are green on 44 native symbol ranges and 7 of 7 WebAssembly functions, with the allowed integer multiplies and divides counted since claude-175 and used since claude-177 (**measurement**), but no trained model has been served this way. See [serving and export](../model/serving-and-export.md).
+**Integer serving.** Running the finished model with whole numbers only: adds, shifts, comparisons and table look-ups, and since D80 and D81 the integer multiply and divide. This is [D11](#d11). Serving audits are green on 44 native symbol ranges and 7 of 7 WebAssembly functions, with the allowed integer multiplies and divides counted since claude-175 and used since claude-177 (**measurement**). The discrete M1 pair and the separate FBS trunk have been served this way. See [serving and export](../model/serving-and-export.md).
 
 ## K
 
@@ -149,13 +149,13 @@ flowchart LR
 
 ## L
 
-**Lab.** Any contributor, human or AI, working under the charter. The registry holds four labs: Claude, Antigravity, DeepSeek and Kimi (Codex has left it). Kimi sits in the project-manager seat. Labs choose work from [NOW.md](../integration/NOW.md) and may not type an owner release. See [the rules](../rules/README.md#what-labs-may-do-and-what-they-may-not).
+**Lab.** Any contributor, human or AI, working under the charter. The registry holds four labs: Claude, Antigravity, DeepSeek and Kimi (Codex has left it). Kimi sits in the project-manager seat. Labs choose work from [PLAN.md](../../PLAN.md). See [the rules](../rules/README.md#what-labs-may-do-and-what-they-may-not).
 
 **`lut-stack/5`, `lut-stack/6`.** Versions of the integer file format for the float-trained FBS trunk. `/5` keeps the rotations exact instead of snapping them to the 120 roots, which put the export gap inside its bar on both seeds and serves at 4,217 to 4,504 tok/s on the M1 laptop (claude-180 to 186). `/6` also carries the Hamming reads (claude-188); the session refuses `/6` until it serves them. See [serving and export](../model/serving-and-export.md).
 
 ## M
 
-**M1 to M8 (milestones).** The eight GitHub milestones that define the road to an alpha release. None is complete. In plain words:
+**M1 to M8 (milestones).** The eight GitHub milestones that define the road to an alpha release. **M1 is complete; M2 and M3 are in progress; M4–M8 are not complete.** In plain words:
 
 | # | Meaning |
 |---|---|
@@ -172,22 +172,22 @@ Source: [language model](../products/language-model.md) and [where we're going](
 
 **Matmul (matrix multiplication, GEMM).** Multiplying a long list of numbers by a large grid of learned numbers. It is nearly all the arithmetic of a transformer, and the project bans it everywhere: training, tests, tools and serving. A geometric feed-forward block is allowed. A dense one is not. See [charter](../../CHARTER.md), section 3.3.
 
-**Mechanism.** One geometric replacement for one part of a transformer, such as the read, the loss or the optimiser. The project tracks 27, each with its own page. See the [mechanism board](../mechanisms/README.md).
+**Mechanism.** One geometric replacement for one part of a transformer, such as the read, the loss or the optimiser. The project tracks 28 board entries, with the Hopf observation's two states sharing one page. See the [mechanism board](../mechanisms/README.md).
 
 <a id="mechanism-status"></a>**Mechanism status (ACTIVE, READY, PARKED).** The only three statuses a mechanism can have:
-- **ACTIVE**: on the current model path (10 mechanisms).
-- **READY**: built and tested but not yet trained into a model (4).
-- **PARKED**: the tested forms failed or broke a rule, and the page lists what would reopen it (13).
+- **ACTIVE**: on the current model path (12 mechanisms).
+- **READY**: built and tested but not yet trained into a model (5).
+- **PARKED**: the tested forms failed or broke a rule, and the page lists what would reopen it (11).
 
 There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mechanisms/README.md).
 
-**MLP (feed-forward layer).** The block in a transformer that processes each token after attention, usually with big grids of multiplications and a gate. UOR-R4's candidates are the [Hamilton gate](#hamilton-gate) and the [SpiralCore/FBS projection](../mechanisms/spiralcore-fbs.md); neither has been trained.
+**MLP (feed-forward layer).** The block in a transformer that processes each token after attention, usually with big grids of multiplications and a gate. The [Hamilton gate](#hamilton-gate) is trained in M1 and on FBS; the [SpiralCore/FBS routes](../mechanisms/spiralcore-fbs.md) are ACTIVE on the separate FBS trunk, while the dated float projection form remains READY. M1 uses discrete Hamilton/quaternion recurrence, not FBS projection.
 
 ## N
 
 **Nat.** A unit of prediction error: the natural logarithm of how surprised the model was. Lower is better; bits per byte is a related score.
 
-**Notebook.** One page per line of research, with one row per result: date, what ran, the number, the bar, the verdict and an artifact link. Notebooks plus [NOW.md](../integration/NOW.md) replaced the old running log. See [research notebooks](../research/notebook/README.md).
+**Notebook.** One page per line of research, with one row per result: date, what ran, the number, the bar, the verdict and an artifact link. Notebooks retain the results; [PLAN](../../PLAN.md) and rendered [STATE](../../STATE.md) carry the current plan and status. See [research notebooks](../research/notebook/README.md).
 
 **NOT_RUN.** A record that a planned test was never executed. It is not a pass and it is not a failure. See [what the project knows](../research/findings.md).
 
@@ -195,23 +195,23 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 <a id="orbit"></a>**Orbit.** A set of points that one group of moves carries into one another. The model uses a single orbit of 16 E8 roots, each a signed rearrangement of (2, 2, 0, 0, 0, 0, 0, 0). See [E8, H4 and the 600-cell](../geometry/e8-h4-and-the-600-cell.md).
 
-**Owner.** Casey Allard, the project lead. He sets the charter, the holds, the spending and the milestone bars, and personally types each run release.
+**Owner.** Casey Allard, the project lead. He sets the charter, technical constraints and GPU caps. Runs go through the lab's own D67 pre-run review; D41's donor pass is the named owner-at-dispatch exception.
 
-**Owner release.** The typed phrase by which the owner personally lets one pre-registered run start. One release covers all arms and seeds of one sheet. No lab types it. See [charter](../../CHARTER.md), section 5.1.
+**Owner release.** An owner approval in the lab's own chat, recorded verbatim with its time. Since D67, GPU/training runs go through the lab's own pre-run review rather than a blanket owner release; D41's donor pass is the named owner-at-dispatch exception. See [charter](../../CHARTER.md), section 5.1.
 
 ## P
 
 **PARKED.** A mechanism status. See [mechanism status](#mechanism-status).
 
-**PM seat.** The project-manager role: it sequences work and keeps [NOW.md](../integration/NOW.md). Kimi holds it, with a cover lab named by the owner. See [the rules](../rules/README.md#who-decides-what).
+**PM seat.** The project-manager role: it sequences work and keeps [PLAN.md](../../PLAN.md). Kimi holds it, with a cover lab named by the owner. See [the rules](../rules/README.md#who-decides-what).
 
-**Pre-alpha.** The project's honest stage. Parts are built and tested, but 0 of 8 milestones are complete and no model holds a useful conversation. See [STATUS](../../STATUS.md).
+**Pre-alpha.** The project's honest stage. M1 is complete (1 of 8 milestones), but no model holds a useful conversation and no alpha release exists. See [PLAN](../../PLAN.md) and rendered [STATE](../../STATE.md).
 
 **Pre-registration (sheet).** A one-page plan, written before a run, that states the bar, the noise, the controls, the seeds, the cost and what each outcome would decide. It is needed only before GPU training or evaluation and before any run a milestone claim rests on. See [the rules](../rules/README.md).
 
 <a id="prime-address"></a>**Prime address.** The exact name of a token: the (id + 1)-th prime number, so no two tokens collide. For example the 4,096th prime is 38,873. It is kept separate from the geometric [address](#address). See [primes and zeta phases](../geometry/primes-and-zeta.md).
 
-<a id="primezeta-codebook"></a>**PrimeZeta codebook.** The table that turns each token's prime into eight angles taken from the Riemann zeta zeros, and the angles into a starting vector. It gives all 4,096 tokens distinct vectors (**measurement**). The distinctness comes from a cell-balancing step, not from the angles; whether the zeta angles help at all has not been tested. See [prime-zeta codebook](../mechanisms/prime-zeta-codebook.md).
+<a id="primezeta-codebook"></a>**PrimeZeta codebook.** The table that turns each token's prime into eight angles taken from the Riemann zeta zeros, and the angles into a starting vector. It gives all 4,096 tokens distinct vectors (**measurement**). The distinctness comes from a cell-balancing step, not from the angles. A zero-update comparison found no admission advantage over simple injective controls; a trained effect remains untested. See [prime-zeta codebook](../mechanisms/prime-zeta-codebook.md) and the [comparison](../labs/r-prime-zeta-vs-nulls/README.md).
 
 ## Q
 
@@ -229,13 +229,13 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 **READY.** A mechanism status. See [mechanism status](#mechanism-status).
 
-<a id="relation-read"></a>**Relation read.** A Flock read plus the ability to follow simple links between positions, such as "the word right after the earlier copy of this word". This is how copying is meant to work. It has trained twice, and both runs stopped before a verdict. See [Relation read](../mechanisms/relation-read.md).
+<a id="relation-read"></a>**Relation read.** A Flock read plus the ability to follow simple links between positions, such as "the word right after the earlier copy of this word". This is how copying is meant to work. It has trained three times. Stage T's `T16_rel` reached 4,096 batches and 425 relation moves before the `relation_off` ablation reduced admission and top-1; the two earlier runs stopped before a verdict. See [Relation read](../mechanisms/relation-read.md).
 
 **Root.** One of the fixed points of E8 used as a block value. See [orbit](#orbit).
 
-<a id="route-read"></a>**Route read.** An attention replacement that walks a small tree of addresses, stepping toward the nearest branch at each level, and picks up one earlier word at the end. It never scores the whole history. It is the base read of every trained discrete model, but its own contribution is unattributed. See [Route read](../mechanisms/route-read.md).
+<a id="route-read"></a>**Route read.** An attention replacement that walks a small tree of addresses, stepping toward the nearest branch at each level, and picks up one earlier word at the end. It never scores the whole history. It was the base read of the pilot, rung-0 and K16 artifacts; M1 uses Flock plus the orbit-root causal pointer, and Route's own contribution remains unattributed. See [Route read](../mechanisms/route-read.md).
 
-**Route + exact memory.** The 28 Oct plan after claude-155: the trunk routes the prompt and exact memory stores what each question should produce. Exact turn memory keyed by the user's first 8 tokens named 598.7 and 598.3 of the 1,226 DEV reply openings at two seeds, against about 266 to 281 for an empty-table control (claude-161). It moves only a reply's first word. See [pipeline map](../model/pipeline-map.md).
+**Route + exact memory.** The 28 Oct plan after claude-155: the trunk routes the prompt and exact memory stores what each question should produce. Exact turn memory keyed by the user's first 8 tokens named 598.7 and 598.3 of the 1,226 DEV reply openings at two seeds, against about 266 to 281 for an empty-table control (claude-161). Claude-161's opening table moves only a reply's first word; the completed reply table extends later rows, and `/7` serves both on synthetic fixtures with trained-artifact parity and memory-session restore open. See [pipeline map](../model/pipeline-map.md).
 
 **Rung 0.** The first full-length run on the discrete path (seed 1, 16,404 updates, scored on the 14,287 development rows). Its bars were unreachable because only 1,920 targets were admitted, which pointed the work at [admission](../mechanisms/admission.md). See [route read](../mechanisms/route-read.md).
 
@@ -249,21 +249,21 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 <a id="spiralcore"></a>**SpiralCore.** An exact-geometry source credited to Matthew. From the octonion multiplication table it yields moves that shuffle the eight coordinates and flip some signs. Each move can be undone exactly. The integer form is the core of the current model. See [SpiralCore](../geometry/spiralcore.md).
 
-**Studio.** The single-page interface meant to be the shell of both the web and desktop clients. It is not yet connected to the new engine. See [web client](../products/web-client.md).
+**Studio.** The single-page interface meant to be the shell of both the web and desktop clients. It is connected to the integer WebAssembly worker with self-hosted assets and a stack-bound tokenizer. It verifies a synthetic stand-in and serves the publicly released M1 model as top-8 next-token prediction, not chat; no qualified conversational product is bundled. See [web client](../products/web-client.md).
 
 ## T
 
 <a id="t2"></a>**T2.** A table built from the training text. It looks up the last word and returns the next word seen most often after it. It gets 6,300 of the 14,287 DEV first guesses right, and it is one of the two count tables a trained model must beat (**measurement**). See [host diagnostics](../../archive/labs/host-diagnostics-2026-10-17/README.md).
 
-**Ternary.** Used in two ways here. A ternary weight or gate takes one of three values: −1, 0 or +1. A ternary tree has three branches per node. Dense ternary weights are PARKED because every weight is still touched for every word. See [ternary and XOR](../mechanisms/ternary-xor.md).
+**Ternary.** Used in two ways here. A ternary weight or gate takes one of three values: −1, 0 or +1. A ternary tree has three branches per node. The ternary-weight mechanism is READY, while its dense form remains barred because every weight is touched for every word; a lawful successor remains open. See [ternary and XOR](../mechanisms/ternary-xor.md).
 
 **Token.** One numbered piece of text, a word or part of a word. The model never sees letters. See [tokenizer](../mechanisms/tokenizer.md).
 
 **Tokenizer.** The component that cuts text into tokens and turns tokens back into text. The pinned one has 4,096 pieces (identity `d36d3e87`). See [tokenizer](../mechanisms/tokenizer.md).
 
-**Tokens/s (tokens per second).** How many tokens the model reads or writes per second. It is the project's lead metric, with decode speed and context speed reported separately. It has never been measured for the current model. See [charter](../../CHARTER.md), section 1.
+**Tokens/s (tokens per second).** How many tokens the model reads or writes per second. It is the project's lead metric, with decode speed and context speed reported separately. The saved discrete M1 pair measures 10,876 and 10,566 native decode tok/s on Apple M1; the separate FBS export has its own rates. See [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md).
 
-**Tauri.** A toolkit that wraps a web page as a desktop app. The planned desktop client would use it to share the web interface.
+**Tauri.** The toolkit used by the existing desktop shell to share the web interface. The shell is verified on a synthetic artifact, with no qualified trained product bundle.
 
 <a id="top-1"></a>**Top-1 (and top-8).** The number of DEV rows on which the model's first guess (or any of its first eight) is the right next token, out of 14,287. M1 requires the top-1 of the model, through the integer export, to beat the [unigram](#unigram) and [T2](#t2) tables. See [charter](../../CHARTER.md), section 4.8.
 
@@ -271,11 +271,11 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 ## U
 
-<a id="unigram"></a>**Unigram.** A table of word counts that ignores context and always guesses by overall frequency. It gets 1,226 of the 14,287 DEV first guesses right. The best trained discrete model got 65 and 463 (**measurement**). See [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md).
+<a id="unigram"></a>**Unigram.** A table of word counts that ignores context and always guesses by overall frequency. It gets 1,226 of the 14,287 DEV first guesses right. The saved M1 discrete model got 7,002 and 7,001; older K16-A got 65 and 463 (**measurement**). See [M1 close](../labs/m1-close-saved-model/README.md) and [K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md).
 
 **UOR.** Short for Universal Object Reference, the foundation named as copyright holder in the project's MIT licence ([LICENSE](../../LICENSE)). A "UOR address" in this project is the prime-based name described under [prime address](#prime-address).
 
-**UORLUT01.** The container format for the finished model: one file of 4-bit codes and small integer tables, pinned by checksum. It is what the engine serves. See [serving and export](../model/serving-and-export.md) and [releases and artifacts](../products/releases-and-artifacts.md).
+**UORLUT01.** The checksum-pinned container for integer model artifacts. Dense/FBS schemas include 4-bit codes and small integer tables; M1's table-native `lut-discrete-trunk/1` instead stores named integer tables with zero 4-bit matrix sections. See [serving and export](../model/serving-and-export.md) and [releases and artifacts](../products/releases-and-artifacts.md).
 
 ## V
 
@@ -283,11 +283,11 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 ## W
 
-**W2.** The next queued test: FIT-reviewed and awaiting an owner release (cost about $0.91, estimated). It decides whether the wall is the model's representation or its learning law, and includes count-table arms the headline bars lack. See [open questions](../research/open-questions.md).
+**W2.** The completed read-code capacity capture from the pre-M1 sequence. It helped distinguish representation limits from learning-law limits and included count-table arms. The saved model has since passed M1; see [open questions](../research/open-questions.md).
 
 **WASM (WebAssembly).** A compact, sandboxed machine code that browsers run. The integer serving engine is built for it, with 7 of 7 serving functions free of float instructions (**measurement**). See [web client](../products/web-client.md).
 
-**Whole-table nearest (readout).** The chosen way to turn a final vector into a word: compare the vector with every row of the 4,096-word table and take the nearest. It was chosen over the native writer on 28 Oct because the writer's admission failed at seed 2 (top-1 493 against 6,909 for nearest, claude-150). The served session still reads the native writer today. See [pipeline map](../model/pipeline-map.md).
+**Whole-table nearest (readout).** The chosen way to turn a final vector into a word: compare the vector with every row of the 4,096-word table and take the nearest. It was chosen over the native writer on 28 Oct because the writer's admission failed at seed 2 (top-1 493 against 6,909 for nearest, claude-150). The separate FBS session still reads its native writer; M1's readout is `OuterL1V1`. See [pipeline map](../model/pipeline-map.md).
 
 **Writer (shared vector writer).** The one component that handles a token's vector on the way in, along the carry and on the way out, using the same format everywhere. It builds the cells and picks the nearest token among the admitted ones. See [architecture](../model/architecture.md).
 
@@ -301,6 +301,6 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 - [FAQ](./faq.md): the questions newcomers ask most, answered with links.
 - [What is UOR-R4](./what-is-uor-r4.md): the five-minute explanation.
-- [Mechanism board](../mechanisms/README.md): all 27 mechanisms and their status.
+- [Mechanism board](../mechanisms/README.md): all 28 mechanisms and their status.
 - [Geometry chapters](../geometry/README.md): one illustrated page per geometric idea.
 - [`docs/formal_vocabulary.md`](../formal_vocabulary.md): the rules for proof, measurement and hypothesis.

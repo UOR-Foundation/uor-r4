@@ -17,9 +17,9 @@ M3 is the claim that a conversation can be stored and come back exactly, with an
 
 ## What is missing
 
-m3-memory is not qualified and its status is paused (`STATUS.md:18`: evaluator and session built, not qualified; waits on an M1 or M2 model). The evaluator and session exist (`stack_grounded_session`, the typed-script multi-turn evaluator, `IntegerStackSession`, and the `UR4SESS1` session file) but have never run on a trained M1 or M2 model. Note that `crates/uor-r4-training/src/stack_grounded_session.rs` describes itself (line 6) as "a float development path, not a D11 serving kernel": the integer-path verdict must come from `IntegerStackSession`, not from that module alone.
+m3-memory is not qualified on the selected model. The object-store consumer and frozen 384-item host-control panel are built and pass, but the on-model M3 run still needs an M1-or-M2 model selection; M1's completion alone is not M3 qualification ([consumer record](../../labs/object-store-consumer-m3/README.md)). The evaluator and session exist (`stack_grounded_session`, the typed-script multi-turn evaluator, `IntegerStackSession`, and the `UR4SESS1` session file). `crates/uor-r4-training/src/stack_grounded_session.rs` describes itself (line 6) as "a float development path, not a D11 serving kernel": the integer-path verdict must come from `IntegerStackSession`, not from that module alone.
 
-No such model is selected yet. M1 has no passing result, and M2 is held with 437/512 saved development replies, 0/128 on a transfer check, and a fresh test that is `NOT_RUN` (`STATUS.md:17`). `ROADMAP.md:16` states the M3 bar only as "Memory persists across sessions and answers stay grounded". No per-check count or threshold is registered; registering them is step 3 below.
+M1 is complete, and M2 is in progress under D67 rather than a blanket owner hold. The older 437/512 then 0/128 result remains a panel-fitting lesson, not the current saved-model result. The M3 bar is "Memory persists across sessions and answers stay grounded". The six per-sub-panel thresholds are registered in the consumer record; the on-model qualification has not run.
 
 ## Done when
 
@@ -28,15 +28,15 @@ On the selected artifact:
 - Provenance, contradiction and correction, abstention on unstated or retracted facts, explicit reset and process restart all pass.
 - Saved and restored sessions continue identically token for token (`IntegerStackSession` plus `UR4SESS1`).
 
-The pass threshold for each check is not yet registered.
+The six per-sub-panel thresholds are registered in the [consumer record](../../labs/object-store-consumer-m3/README.md); the on-model run has not happened.
 
 ## How to start
 
 1. **Read the code and run the host tests.** Open `crates/uor-r4-integer/src/session_codec.rs` (`UR4SESS1` `encode` and `decode`), `crates/uor-r4-integer/src/stack/session.rs` (`IntegerStackSession`), `crates/uor-r4-training/src/stack_grounded_session.rs` and `crates/uor-r4-training/src/grounded_session_eval.rs`. Run `~/.cargo/bin/cargo test -p uor-r4-integer --features serving-wasm`; without that feature the serving modules (`session_codec`, `stack`) are not compiled, and the last recorded run was 165 passed (`docs/labs/wasm-serving-runtime-2026-10-18/README.md:30`). Confirm which file holds the typed-script multi-turn evaluator; `grounded_session_eval.rs` (frozen-script diagnostics, schema `uor-r4.grounded-script/1`) is the likely one.
 2. **First deliverable: a coverage note on the issue.** List each of the six behaviours (provenance, contradiction and correction, abstention, reset, process restart, token-for-token restore) against the evaluator case that tests it, or mark it missing. State whether `m3-memory-turn-discriminator-gate` and `m3-policy-precedence-and-sieve-tests` change the evaluator. Confirm the evaluator scores with exact typed-script graders and no softmax, squashing or matrix multiply.
-3. **Draft the pre-registration sheet.** Name the selected artifact by hash (blocked until M1 or M2 yields one). Freeze the typed-script panel as files, list each with its SHA-256, and keep it separate from any development scripts. Register the per-check thresholds, seeds, GPU, stop rule and cost. Ask a non-author for a TEST FITNESS: FIT review.
+3. **Draft the pre-registration sheet.** Select an M1 or M2 artifact and name it by hash; M1's completion alone does not qualify M3. Freeze the typed-script panel as files, list each with its SHA-256, and keep it separate from any development scripts. Register the per-check thresholds, seeds, GPU, stop rule and cost. Ask a non-author for a TEST FITNESS: FIT review.
 4. **Write the finite restore control first, as a failing test.** In `crates/uor-r4-integer/tests/`, build a synthetic stack (see `crates/uor-r4-integer/src/bin/mk-synthetic-stack.rs`, a binary that needs `--features serving-wasm`; run the new test with the same feature), run a few turns, save with `UR4SESS1`, restore in a fresh process, and require the continued token stream to equal an uninterrupted run.
-5. **Wait for the owner.** M2 and training are held, and one typed owner release covers one pre-registered sheet; Casey types it. After release, run the sheet on a GPU (outside contributors attach hardware specs to the PR).
+5. **Select the model and run the pre-run review.** Select the M1 or M2 candidate; the on-model M3 run then follows its registered FIT and the lab's D67 pre-run review, with no blanket owner hold. Outside contributors attach hardware specs to the PR.
 6. **Open a PR** that says `Closes #<this issue>` (or `References` if partial), and record the verdict as one row in `docs/research/notebook/m3-durable-memory.md`.
 
 ## Rules that apply
@@ -50,7 +50,7 @@ The pass threshold for each check is not yet registered.
 ## Sources
 
 - [`ROADMAP.md:16`](../../../ROADMAP.md)
-- [`STATUS.md:17-18`](../../../STATUS.md) (M2 and M3 rows)
+- [`PLAN.md`](../../../PLAN.md) and the [consumer record](../../labs/object-store-consumer-m3/README.md) (current M2/M3 state and registered thresholds)
 - `docs/labs/wasm-serving-runtime-2026-10-18/README.md:30` (the host test command and count)
 - issue#2031
 

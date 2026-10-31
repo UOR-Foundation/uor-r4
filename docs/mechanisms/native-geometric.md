@@ -91,8 +91,8 @@ with $m$ the score masses. That function is banned. The allowed replacement is t
 
 ## What would reopen it
 
-1. **A new pre-registration with a `TEST FITNESS: FIT` review**, after the owner lifts the separate hold on this line's training and rental. It replaces the softplus ranking with an allowed hinge and runs on GPU in its own scanned module (D37).
-2. **A genuinely unexposed decisive panel**: at least 200 fresh rows or at least 2 seeds (D22), not the 512-row practice panel. The 256-row `m2-fresh256` panel ([`docs/harness/panels/m2-fresh256.json`](../harness/panels/m2-fresh256.json)) is frozen (`inputs.json` `sha256:1de2fc28…`, `labels.json` `sha256:3b5c5477…`; non-author construction/overlap/control/seal `TEST FITNESS: FIT` and byte-identical upload/readback at `fb8c5e4f`). It remains `NOT_RUN` until a compliant candidate is owner-released.
+1. **A new pre-registration with a `TEST FITNESS: FIT` review**, followed by the lab's pre-run review under D67. It replaces the softplus ranking with an allowed hinge and runs on GPU in its own scanned module (D37).
+2. **A genuinely unexposed decisive panel**: at least 200 fresh rows or at least 2 seeds (D22), not the 512-row practice panel. The 256-row `m2-fresh256` panel ([`docs/harness/panels/m2-fresh256.json`](../harness/panels/m2-fresh256.json)) is frozen (`inputs.json` `sha256:1de2fc28…`, `labels.json` `sha256:3b5c5477…`; non-author construction/overlap/control/seal `TEST FITNESS: FIT` and byte-identical upload/readback at `fb8c5e4f`). It remains `NOT_RUN` until a compliant candidate passes the lab's pre-run review under D67.
 3. **Rebuild and re-qualify the quarantined kernels** without the hidden dense contraction (D29).
 4. **Join the line to the shared integer vector writer**, so the language path and the compile-and-emit path use one geometric representation.
 5. **A result from the relation-read reranker** ([relation-read](./relation-read.md), D34) that needs exact multi-version identity memory. That is the natural route back for the version-chain selectors.

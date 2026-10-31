@@ -1,6 +1,6 @@
 # The geometry of UOR-R4
 
-Most chat AIs predict the next word by multiplying very large grids of decimal numbers. UOR-R4 is a bet that a different set of tools can do the same job more cheaply: rotations in a few dimensions, exact whole-number addresses built from primes, and lookup tables. This section explains those tools one chapter at a time, with pictures. It also says which ones the model uses today and which are research that has not yet been put to work. The project is pre-alpha: 0 of its 8 milestones are complete, and no model holds a useful conversation yet ([`STATUS.md`](../../STATUS.md)).
+Most chat AIs predict the next word by multiplying very large grids of decimal numbers. UOR-R4 is a bet that a different set of tools can do the same job more cheaply: rotations in a few dimensions, exact whole-number addresses built from primes, and lookup tables. This section explains those tools one chapter at a time, with pictures. It also says which ones the model uses today and which are research that has not yet been put to work. The project is pre-alpha: 1 of its 8 milestones is complete, and no model holds a useful conversation yet ([`PLAN.md`](../../PLAN.md) and rendered [`STATE.md`](../../STATE.md)).
 
 ![A map of the geometric pieces and how they connect: the six-prime registry, semiprimes, the complete graph K6, the icosahedral axes, the 120 icosians, quaternions, Z[phi], octonions and the Fano plane, Cl(0,6) bivectors, E8, the Hopf map and VSA codes, with each link marked as verified maths, used in a model, pre-registered, or a labelling choice](../figures/geometry/connections.svg)
 
@@ -54,7 +54,7 @@ Each chapter opens in plain words, shows its figure, gives the mathematics, and 
 | [Quaternions and rotation](./quaternions-and-rotation.md) | Four-number rotations, and why rotating keeps length but adding does not | Lineage, plus unit quaternions in the table constructor. M1's kernel uses signed actions on 8D blocks |
 | [E8, H4 and the 600-cell](./e8-h4-and-the-600-cell.md) | The 120 icosians, the 600-cell, and the 240 roots of E8 | A 16-root piece of E8 is the carrier |
 | [Golden integers](./golden-integers.md) | Exact arithmetic with $a+b\varphi$, no rounding | Fixed integer arithmetic in `uor-r4-core`, used by retained research code |
-| [The Hopf map and the kept fibre](./hopf-observation.md) | A 3D shadow of a 4D rotation, and the angle it forgets | No (PARKED) |
+| [The Hopf map and the kept fibre](./hopf-observation.md) | A 3D shadow of a 4D rotation, and the angle it forgets | Kept-fibre map READY; older sector routing PARKED; not in M1 |
 | [Primes and zeta phases](./primes-and-zeta.md) | Prime addresses, zeta-zero angles, and the starting table | Yes: the starting table (ACTIVE) |
 | [VSA and Hamming distance](./vsa-and-hamming.md) | Long bit codes, XOR, and counting differing bits | Hamming is a tie-break in the reads; trained VSA codes are PARKED |
 | [SpiralCore](./spiralcore.md) | The octonion table, the 64-state action, and the ternary tree | Yes: the integer transport (ACTIVE) |
@@ -94,7 +94,7 @@ A served kernel has no floating point. Under D11 as first written it also had no
 
 $$37 \times 43 = (T[2] \ll 4) + T[11] = (74 \ll 4) + 407 = 1184 + 407 = 1591.$$
 
-A 4-bit weight is a single digit, so one product is one table read. Division is restoring long division, square root is digit-by-digit, and the kernels are kept opaque to the optimiser so that an add chain is not folded back into a multiply. Products are taken modulo $2^{64}$ or $2^{128}$ to match the earlier integer engine. The code is in `crates/uor-r4-integer/src/stack/kernels.rs` (`stack_mul_u64`, `stack_div_u64`, `stack_isqrt`), and the ARM64 audit is `scripts/audit_zero_matmul_serving.py --stack`. The numbers in the example are illustrative and are not taken from the code. The serving contract is described on the [D11 integer serving page](../mechanisms/lut-serving.md). It is ACTIVE as the export boundary, but no lawful trained model has been exported through it yet.
+A 4-bit weight is a single digit, so one product is one table read. Division is restoring long division, square root is digit-by-digit, and the kernels are kept opaque to the optimiser so that an add chain is not folded back into a multiply. Products are taken modulo $2^{64}$ or $2^{128}$ to match the earlier integer engine. The code is in `crates/uor-r4-integer/src/stack/kernels.rs` (`stack_mul_u64`, `stack_div_u64`, `stack_isqrt`), and the ARM64 audit is `scripts/audit_zero_matmul_serving.py --stack`. The numbers in the example are illustrative and are not taken from the code. The serving contract is described on the [D11 integer serving page](../mechanisms/lut-serving.md). It is ACTIVE as the export boundary: the discrete M1 pair and the separate FBS `lut-stack/5` trunk have been exported and served at their declared scopes.
 
 ## Reproduce the figures
 
@@ -116,4 +116,4 @@ python3 docs/figures/geometry/generate.py
 - [Architecture source map](../architecture.md) and the [mechanism board](../mechanisms/README.md).
 - Checks for the maths: [`verify_connections.py`](../figures/geometry/verify_connections.py).
 - The previous single-page version of this guide, with the retained float designs: [historical geometry tour](../../archive/history/geometry-float-form-2026-10.md).
-- Live numbers: [`STATUS.md`](../../STATUS.md).
+- Live numbers: [`PLAN.md`](../../PLAN.md) and rendered [`STATE.md`](../../STATE.md).
