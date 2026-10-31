@@ -1,6 +1,6 @@
 # FACTS: documentation status at 30 Oct 2026
 
-Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md). ORDER: [ORDER.md](ORDER.md). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `62308fcbce74170316fd5672716fc313b37aca16`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
+Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md). ORDER: [ORDER.md](ORDER.md). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `4195ce2bf83d703b1acd3eb868c888d1da053479`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
 
 Every public number in this refresh must link to this sheet's committed evidence. This is a factual baseline, not a new measurement or a capability claim.
 
@@ -69,7 +69,11 @@ Every public number in this refresh must link to this sheet's committed evidence
   - [`integer-nearest-readout`](../../../../roadmap/items/integer-nearest-readout.md) repairs the readout and checks integer/float greedy parity before rerunning p-x. No throughput is reported; resident memory is provisional on the wrong decoder.
 - **Latest merged implementation: claude-231**, [nearest-readout report](../../integer-nearest-readout/claude-231/REPORT.md), merged on `main` as `62308fcbce74170316fd5672716fc313b37aca16`:
   - `head = "native_vector_nearest"` and its export are built on native and browser paths: 395 integer-library tests with one ignored, seven negative gates and full serving/WASM audits. The nearest branch uses the trained whole-table rule after memory and the Hamming read, with the point-key override unchanged.
-  - End-to-end greedy parity and the p-x rerun are NOT_RUN. Nearest decode is 1,365 tok/s and prefill 1,405 tok/s, about 2.85× the writer's cost; prefill-scan removal is a separate optimization.
+  - At this implementation's base, end-to-end greedy parity and the p-x rerun were NOT_RUN. Nearest decode is 1,365 tok/s and prefill 1,405 tok/s, about 2.85× the writer's cost; prefill-scan removal is a separate optimization.
+- **Latest merged result: claude-232**, [token-parity report](../../integer-nearest-readout/claude-232/REPORT.md), merged on `main` as `4195ce2bf83d703b1acd3eb868c888d1da053479`:
+  - First-token agreement on DEV is 291, 285 and 284 of 310 at seeds 1–3; on p-w it is 911, 777 and 64 of 1,202. Every cell missed the bar. Whole-reply agreement on DEV is 83, 163 and 127; on p-w it is 60, 113 and 36.
+  - The nearest readout was necessary but not sufficient. The gap is largest on exact-key misses; p-w seed 3 over-concentrates on one first token. The trunk, Hamming read and readout remain suspects, not located causes.
+  - **Next:** localize the mismatch layer by layer on real prompts, then recheck parity before the p-x rerun. No new tok/s was measured here; useful chat remains unproven.
 - **D67:** no blanket owner release holds every training step. The D41 donor pass is the remaining named owner-at-dispatch exception. Do not restore retired "every training step is held" language.
 
 ## 3. Historical facts to preserve, not present as current
@@ -114,7 +118,7 @@ Every public number in this refresh must link to this sheet's committed evidence
 
 - #3430 (claude-218) was active at the baseline and merged at `5ec6e36a8f69d3b0c9acf993cc3e09acc7be4646` during verification. #3439 (claude-219) then merged at `e44f68e65` with the fresh p-v free-generation result. Both are included; Claude's research files remain untouched by this unit.
 - #3441 registered the M7 Studio live/model-sources item; #3442/#3444 rebuilt and published it. During final repair, #3445 added the public M1 release/top-8 Studio path, #3446 served `/7` integer turn memory, #3447 redesigned the console, #3448 supplied the workable v2 Workspace/Agent interface and #3451 polished it. `origin/main` `437d1ddf5` is merged forward; their implementations and generated roadmap view are preserved. This unit changes only documentation and does not publish the Studio or edit `.github/**`.
-- #3443 merged claude-220 on `main` as `c3d5cb684336a59cb12a8b5021430585bc3b751a` during final review: one float model serves the point key on p-w at all three seeds with exact claude-219 parity. #3449 then registered `point-key-integer` (#3450), #3452 delivered claude-222's integer table, search and `/8` record, #3453 registered claude-223's grading scope and unit order, #3454 delivered claude-224's panel decode and grade, #3455 registered the retention prerequisite (#3456), #3457 delivered claude-226's retained recurrence and flag, #3458 passed claude-227's retention GPU parity, #3459 delivered claude-228's run instruments, #3460 recorded claude-229's row-0 instrument fault, #3461 registered the readout repair, and #3463 delivered claude-231's nearest readout and export. `origin/main` `62308fcbce74170316fd5672716fc313b37aca16` is merged forward; end-to-end greedy parity precedes the p-x rerun. Claude's research source and records remain untouched by this unit.
+- #3443 merged claude-220 on `main` as `c3d5cb684336a59cb12a8b5021430585bc3b751a` during final review: one float model serves the point key on p-w at all three seeds with exact claude-219 parity. #3449 then registered `point-key-integer` (#3450), #3452 delivered claude-222's integer table, search and `/8` record, #3453 registered claude-223's grading scope and unit order, #3454 delivered claude-224's panel decode and grade, #3455 registered the retention prerequisite (#3456), #3457 delivered claude-226's retained recurrence and flag, #3458 passed claude-227's retention GPU parity, #3459 delivered claude-228's run instruments, #3460 recorded claude-229's row-0 instrument fault, #3461 registered the readout repair, #3463 delivered claude-231's nearest readout and export, and #3464 recorded claude-232's parity MISS in every cell. `origin/main` `4195ce2bf83d703b1acd3eb868c888d1da053479` is merged forward; layer-by-layer localization precedes the next parity check and p-x rerun. Claude's research source and records remain untouched by this unit.
 - #3426's figure tooling fixes landed through #3438 and were merged forward before figure regeneration.
 - #3435/#3424: discrete/source-interface code only, no documentation overlap at baseline.
 - #3323 (antigravity-113): `exact-memory.md` and `object-store.md` stay untouched even though they were once considered by the older documentation refresh.
@@ -132,6 +136,7 @@ Every public number in this refresh must link to this sheet's committed evidence
 - [Real run row-0 instrument fault](../../point-key-integer/claude-229/REPORT.md)
 - [Readout repair item](../../../../roadmap/items/integer-nearest-readout.md)
 - [Nearest-readout implementation](../../integer-nearest-readout/claude-231/REPORT.md)
+- [Nearest-readout token-parity result](../../integer-nearest-readout/claude-232/REPORT.md)
 - [Pipeline map](../../../../model/pipeline-map.md)
 - [Mechanism board](../../../../mechanisms/README.md)
 - [Studio wiring record](../../../../labs/m7-studio-connect-wasm-engine/README.md)

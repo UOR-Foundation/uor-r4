@@ -176,8 +176,8 @@ through source preparation. Latest bindings and artifacts come from current stat
 Apply the common start prompt and current D25 contract above. You are Kimi PM:
 coordinate exclusive claims and implement OP2 SpiralCore BFS/FBS CUDA projection first, OP1 G2
 only, then OP3a geometric head. G1 withdrawn; geometric feed-forward allowed;
-OP3b later research. Line "evaluation integrity" count 1/3 is carried from the
-operator card, not reset. M1 reply37/232, memory20/40 unchanged. Training and M2
+OP3b later research. The historical operator-card count of 1/3 is carried, not
+reset; it is not a current registry line. M1 reply37/232, memory20/40 unchanged. Training and M2
 rental hold remain; FIT releases no hold. Frozen constraints through first legal
 rung0 result; defer new concerns except cost/safety. Preserve every lab's work.
 FINISH LINE: saved-model acceptance or explicit owner stop; a held source cycle

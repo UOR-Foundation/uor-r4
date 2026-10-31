@@ -107,7 +107,7 @@ than assuming table lookup implies sparsity.
 - **Joined FBS serving:** memory, readout and text/chat distribution are not all in one integer session.
 - **M5:** full-path memory traffic and energy on the accepted model.
 - **M7:** library/CLI/browser token and session parity on the accepted model, not only the synthetic stand-in.
-- **Addressed/product-key memory:** the older exporter refuses it. The real point-key export and p-x run happened, but claude-229 was row 0's instrument fault, not a usable bar result. Claude-231 built the nearest readout on native and browser paths; greedy parity and the p-x rerun are NOT_RUN.
+- **Addressed/product-key memory:** the older exporter refuses it. The real point-key export and p-x run happened, but claude-229 was row 0's instrument fault, not a usable bar result. Claude-231 built the nearest readout on native and browser paths; [claude-232](../loop/tasks/integer-nearest-readout/claude-232/REPORT.md) missed greedy parity in every cell, so the p-x rerun waits on localizing the mismatch.
 
 The web client is connected to the current integer worker. DeepSeek's #3442/#3444 rebuilt and
 published the Studio; #3445 then wired the publicly released M1 trunk for top-8 next-token
