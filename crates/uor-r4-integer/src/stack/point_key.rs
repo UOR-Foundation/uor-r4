@@ -140,6 +140,100 @@ impl ServedPointKey {
         }
         Ok((named, least))
     }
+
+    /// The least L1 distance at Q12 from `query` to a row naming `target` (claude-224), or `None`
+    /// when no row names it or the query is not the table's width: the input to parity's rounding
+    /// bound. It is off the step's path.
+    pub(crate) fn least_distance_to(&self, query: &[i32], target: u32) -> Option<i64> {
+        if query.len() != self.width {
+            return None;
+        }
+        self.points
+            .chunks_exact(self.width)
+            .zip(&self.targets)
+            .filter(|&(_, &t)| t == target)
+            .map(|(row, _)| query.iter().zip(row).map(|(&x, &p)| i64::from(x.abs_diff(i32::from(p)))).sum())
+            .min()
+    }
+}
+
+/// Why a panel reply ended (claude-224).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReplyEnd {
+    /// The decode named BOS, which ends a greedy reply unkept, as on the float side.
+    Bos,
+    /// The reply holds its `reply_tokens`.
+    Length,
+    /// Prompt and reply fill the artifact's context. The float side slides its window there; the
+    /// integer session cannot, so both integer arms are capped the same way.
+    Context,
+}
+
+/// Whether a greedy reply of `reply` tokens after a `prompt`-token prompt ends before keeping
+/// `token`: at BOS, or keeps it and then ends, at its length or a full context.
+/// `None` keeps `token` and decodes on.
+pub fn reply_stop(token: u32, reply: usize, prompt: usize, reply_tokens: usize, context: usize) -> Option<ReplyEnd> {
+    if token == MEMORY_BOS_ID {
+        Some(ReplyEnd::Bos)
+    } else if reply + 1 >= reply_tokens {
+        Some(ReplyEnd::Length)
+    } else if prompt + reply + 1 >= context {
+        Some(ReplyEnd::Context)
+    } else {
+        None
+    }
+}
+
+/// One panel prompt's greedy reply on the integer engine (claude-224).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PanelReply {
+    pub reply: Vec<u32>,
+    /// The token the served point key named at the opening, and its least distance at Q12, if it
+    /// served there.
+    pub keyed: Option<(u32, i64)>,
+    /// With a float name given, the least distance at Q12 to a row naming it, if the table has one.
+    pub float_distance: Option<i64>,
+    pub end: ReplyEnd,
+}
+
+/// `prompt`'s greedy reply, in a fresh session: the prompt stepped with the reply start marked at
+/// its last token, so the turn memory keys and moves as served, then each chosen token fed back,
+/// until [`reply_stop`]. A `/8` stack's point key names the opening where the exact key misses.
+/// `float_keyed` is the float side's served name for this prompt, whose least distance in this
+/// table is recorded.
+pub fn panel_reply(
+    model: &super::IntegerStackModel,
+    prompt: &[u32],
+    reply_tokens: usize,
+    float_keyed: Option<u32>,
+) -> Result<PanelReply, StackError> {
+    let context = model.shape().context;
+    if prompt.is_empty() || prompt.len() > context || reply_tokens == 0 {
+        return Err(StackError::Numerics("a panel prompt must be 1 to context tokens, with a reply of 1 or more".to_owned()));
+    }
+    let mut session = model.session();
+    let mut step = None;
+    for (row, &token) in prompt.iter().enumerate() {
+        if row + 1 == prompt.len() {
+            session.mark_reply_start();
+        }
+        step = Some(session.step_native(token)?);
+    }
+    let step = step.ok_or(StackError::MissingData)?;
+    let keyed = session.last_point_key();
+    let float_distance = float_keyed.and_then(|f| model.point_key_distance(&step.query_q12, f));
+    let (mut reply, mut token) = (Vec::new(), step.token);
+    let end = loop {
+        let stop = reply_stop(token, reply.len(), prompt.len(), reply_tokens, context);
+        if stop != Some(ReplyEnd::Bos) {
+            reply.push(token);
+        }
+        if let Some(end) = stop {
+            break end;
+        }
+        token = session.step_native(token)?.token;
+    };
+    Ok(PanelReply { reply, keyed, float_distance, end })
 }
 
 /// The float sheet's window length (`SHEET_CONTEXT`), which [`point_key_windows`] cuts TRAIN at.
@@ -266,6 +360,20 @@ mod point_key_tests {
         // A nearer single row beats a more common farther one.
         let near = served(2, vec![1, 1, 1, 1, 0, 1], vec![6, 6, 7]);
         assert_eq!(near.name(&[0, 0], &mut tied).unwrap(), (7, 1));
+    }
+
+    /// claude-224: the float name's least distance is the exact L1 sum to the nearest row naming
+    /// it, the least over every such row; `None` for a name no row holds or a query of another
+    /// width.
+    #[test]
+    fn the_least_distance_to_a_name_is_its_nearest_rows_l1_sum() {
+        // Rows naming 7 at L1 6 and 13 from [0, 0]; a row naming 8 at 1.
+        let key = served(2, vec![2, -4, 6, 7, 1, 0], vec![7, 7, 8]);
+        assert_eq!(key.least_distance_to(&[0, 0], 7), Some(6), "the least of the rows naming 7");
+        assert_eq!(key.least_distance_to(&[6, 7], 7), Some(0));
+        assert_eq!(key.least_distance_to(&[3, 3], 8), Some(5));
+        assert_eq!(key.least_distance_to(&[0, 0], 9), None, "no row names 9");
+        assert_eq!(key.least_distance_to(&[0], 7), None, "another width");
     }
 
     /// claude-222: a table holding BOS or an id past the vocabulary is refused, and so is a

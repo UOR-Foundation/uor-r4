@@ -35,10 +35,57 @@
 use std::process::{Command, ExitCode};
 use std::time::Instant;
 
+use serde::Deserialize;
 use serde_json::json;
-use uor_r4_integer::stack::IntegerStackModel;
+use uor_r4_integer::stack::{panel_reply, IntegerStackModel, ReplyEnd};
 
-const USAGE: &str = "usage: fbs-toks ARTIFACT [--prompt ID,ID,...] [--stages] [--parts]";
+const USAGE: &str = "usage: fbs-toks ARTIFACT [--prompt ID,ID,...] [--stages] [--parts]\n       fbs-toks ARTIFACT --replies PROMPTS_JSON --out FILE [--reply-tokens N]";
+
+/// One panel prompt for `--replies` (claude-224), as `train-in-space --panel-prompts` writes it:
+/// the reply's corpus position, the prompt's ids, the reference reply, and optionally the float
+/// side's served name at the opening.
+#[derive(Deserialize)]
+struct PanelPrompt {
+    position: usize,
+    prompt: Vec<u32>,
+    reference: Vec<u32>,
+    #[serde(default)]
+    float_keyed: Option<u32>,
+}
+
+/// `--replies` (point-key-integer unit 2, claude-224): each prompt's greedy reply on this
+/// artifact (`panel_reply`), written new to `out` as JSON. Each sample holds the opening's
+/// point-key name and least distance at Q12, where the key served, and the float name's least
+/// distance. It prints one JSON line: rows, keyed openings, capped replies and the file's sha256.
+fn replies(model: &IntegerStackModel, prompts: &str, out: &str, reply_tokens: usize) -> Result<(), String> {
+    let bytes = std::fs::read(prompts).map_err(|e| format!("{prompts}: {e}"))?;
+    let rows: Vec<PanelPrompt> = serde_json::from_slice(&bytes).map_err(|e| format!("{prompts}: {e}"))?;
+    let (mut samples, mut keyed, mut capped) = (Vec::with_capacity(rows.len()), 0usize, 0usize);
+    for row in &rows {
+        let reply = panel_reply(model, &row.prompt, reply_tokens, row.float_keyed)
+            .map_err(|e| format!("position {}: {e}", row.position))?;
+        keyed += usize::from(reply.keyed.is_some());
+        capped += usize::from(reply.end == ReplyEnd::Context);
+        samples.push(json!({
+            "position": row.position,
+            "prompt": row.prompt,
+            "reply": reply.reply,
+            "reference": row.reference,
+            "keyed": reply.keyed.map(|k| k.0),
+            "served_distance_q12": reply.keyed.map(|k| k.1),
+            "float_keyed": row.float_keyed,
+            "float_distance_q12": reply.float_distance,
+            "end": format!("{:?}", reply.end).to_lowercase(),
+        }));
+    }
+    let text = serde_json::to_vec(&samples).map_err(|e| e.to_string())?;
+    uor_r4_integer::fbs_snapshot::write_new_file(std::path::Path::new(out), &text).map_err(|e| format!("{out}: {e}"))?;
+    println!(
+        "{}",
+        json!({ "rows": rows.len(), "keyed": keyed, "capped": capped, "out": out, "sha256": hex::encode(<sha2::Sha256 as sha2::Digest>::digest(&text)) })
+    );
+    Ok(())
+}
 const PREFILL: usize = 128;
 const DECODE: usize = 64;
 const WARMUP: usize = 1;
@@ -355,6 +402,18 @@ fn hardware() -> serde_json::Value {
 
 fn run() -> Result<(), String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.iter().any(|a| a == "--replies") {
+        let (path, prompts, out, reply_tokens) = match args.as_slice() {
+            [path, r, prompts, o, out] if r == "--replies" && o == "--out" => (path, prompts, out, DECODE),
+            [path, r, prompts, o, out, t, n] if r == "--replies" && o == "--out" && t == "--reply-tokens" => {
+                (path, prompts, out, n.parse().map_err(|_| format!("--reply-tokens {n}: {USAGE}"))?)
+            }
+            _ => return Err(USAGE.to_owned()),
+        };
+        let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+        let model = IntegerStackModel::parse(&bytes).map_err(|e| format!("parse: {e}"))?;
+        return replies(&model, prompts, out, reply_tokens);
+    }
     let parts = args.iter().any(|a| a == "--parts");
     let stages = parts || args.iter().any(|a| a == "--stages");
     let args: Vec<String> = args
