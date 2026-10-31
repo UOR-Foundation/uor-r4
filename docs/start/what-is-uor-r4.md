@@ -75,7 +75,7 @@ separate float-trained trunk called FBS carries the complete-reply research; it 
 M1 model ([pipeline map](../model/pipeline-map.md)). On the FBS path:
 
 - The trunk **routes**. A recurrence with a Hamilton gate and a SpiralCore rotation carries position. A Hamming read (XOR and popcount over 64-bit codes) copies words seen earlier.
-- Exact memory **stores**. Memory keyed by the user's first 8 tokens names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, against 266.3 and 281.0 for an empty-table control (claude-161). It moves only the first word of a reply. After it, replies are still templates.
+- Exact memory **stores**. Memory keyed by the user's first 8 tokens names 598.7 and 598.3 of DEV's 1,226 reply openings at two seeds, against 266.3 and 281.0 for an empty-table control (claude-161). Claude-161's opening table moves only the first word of a reply; the completed reply table extends later rows. The `/7` engine serves both on synthetic fixtures, with trained-artifact parity and memory-session restore still open.
 - The model is **served as integers**. On an M1 laptop a served token runs at 4,217 to 4,504 tok/s under the exact `lut-stack/5` contract (claude-182, claude-186). The served model is inside the export-gap bar on both seeds: net 6 and −8 rows against F_I 24 on DEV (claude-182). The `/7` engine serves the opening and later-reply memory tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open.
 - Text in and out (R7) is not built. The artifacts take token ids only.
 

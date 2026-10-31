@@ -235,7 +235,7 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 <a id="route-read"></a>**Route read.** An attention replacement that walks a small tree of addresses, stepping toward the nearest branch at each level, and picks up one earlier word at the end. It never scores the whole history. It is the base read of every trained discrete model, but its own contribution is unattributed. See [Route read](../mechanisms/route-read.md).
 
-**Route + exact memory.** The 28 Oct plan after claude-155: the trunk routes the prompt and exact memory stores what each question should produce. Exact turn memory keyed by the user's first 8 tokens named 598.7 and 598.3 of the 1,226 DEV reply openings at two seeds, against about 266 to 281 for an empty-table control (claude-161). It moves only a reply's first word. See [pipeline map](../model/pipeline-map.md).
+**Route + exact memory.** The 28 Oct plan after claude-155: the trunk routes the prompt and exact memory stores what each question should produce. Exact turn memory keyed by the user's first 8 tokens named 598.7 and 598.3 of the 1,226 DEV reply openings at two seeds, against about 266 to 281 for an empty-table control (claude-161). Claude-161's opening table moves only a reply's first word; the completed reply table extends later rows, and `/7` serves both on synthetic fixtures with trained-artifact parity and memory-session restore open. See [pipeline map](../model/pipeline-map.md).
 
 **Rung 0.** The first full-length run on the discrete path (seed 1, 16,404 updates, scored on the 14,287 development rows). Its bars were unreachable because only 1,920 targets were admitted, which pointed the work at [admission](../mechanisms/admission.md). See [route read](../mechanisms/route-read.md).
 

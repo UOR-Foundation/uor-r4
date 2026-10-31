@@ -8,7 +8,7 @@ on new phrasing, remember across sessions, and run as one product. That remains 
 ```mermaid
 flowchart TD
   A["M1: saved integer model<br/>beats count tables"] --> B{"Can it start the right reply<br/>on new phrasing?"}
-  B -- "point key gives a partial gain" --> M["claude-220: float key; claude-222/224: integer instruments<br/>retention parity passed; unit 4 next"]
+  B -- "point key gives a partial gain" --> M["claude-220: float key; claude-222/224/228: integer instruments<br/>row 0 instrument fault; unit 5 readout repair"]
   M --> R["Complete correct replies<br/>and durable memory"]
   R --> S["Full serving, cost,<br/>distribution and release"]
 ```
@@ -56,8 +56,9 @@ three seeds with exact claude-219 parity, while recalling TRAIN replies rather t
 [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table,
 search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md)
 has built the panel decode and grade. [Claude-227](../loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity
-within the 3% bar; unit 4's real TRAIN export, p-x scoring and laptop measurement on client hardware
-is next. Useful conversation remains unproven.
+within the 3% bar; [claude-228](../loop/tasks/point-key-integer/claude-228/REPORT.md) built the run's reference/read-back/BOS checks; [claude-229](../loop/tasks/point-key-integer/claude-229/REPORT.md) found an instrument fault: the
+integer session uses the native writer instead of the trained whole-table nearest readout, so all grade
+pairs are (0, 0). Unit 5 repairs the readout and checks parity before rerunning p-x. Useful conversation remains unproven.
 
 ## What remains open beyond that key
 

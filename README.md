@@ -63,7 +63,7 @@ then served the point key inside one float model on fresh p-w: templates improve
 at three seeds, with exact claude-219 parity. That gain recalls TRAIN replies rather than
 generalizing. [Claude-222](docs/loop/tasks/point-key-integer/claude-222/REPORT.md) has now built the
 integer point table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](docs/loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade.
-[Claude-227](docs/loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; [Claude-228](docs/loop/tasks/point-key-integer/claude-228/REPORT.md) built the run's reference/read-back/BOS checks; unit 4's real TRAIN export, p-x scoring and laptop measurement is next. Useful conversation
+[Claude-227](docs/loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; [Claude-228](docs/loop/tasks/point-key-integer/claude-228/REPORT.md) built the run's reference/read-back/BOS checks; [Claude-229](docs/loop/tasks/point-key-integer/claude-229/REPORT.md) found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so no bar result or throughput is reported. Unit 5 repairs the readout and checks parity before rerunning p-x. Useful conversation
 remains unproven.
 
 ## The three products

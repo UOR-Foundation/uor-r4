@@ -456,7 +456,7 @@ fn architecture() -> Result<String, Fail> {
     s.legend(645.0, &[St::Working, St::Progress, St::Planned]);
     s.finish(
         "The two model paths, 30 October 2026",
-        "The saved discrete 19-table model has closed M1 at all six bars on two seeds: DEV 7,002 / 7,001, Fresh V2 7,215 / 7,228 and p-f 7,850 / 7,872, with exact export agreement and Apple M1 decode at 10,876 / 10,566 tok/s. Separately, BPE-4096 token ids feed the float-trained FBS trunk: learned table, SpiralCore position, recurrence with Hamilton gate and RMS norm, Hamming reads and exact turn memory. The FBS export through lut-stack/5 is exact at DEV scope; D11 integer serving uses integer multiply and divide with floats banned. The current blocker is reply opening on new phrasing, not the completed count-table bar or loop suppression alone.",
+        "The saved discrete 19-table model has closed M1 at all six bars on two seeds: DEV 7,002 / 7,001, Fresh V2 7,215 / 7,228 and p-f 7,850 / 7,872, with exact export agreement and Apple M1 decode at 10,876 / 10,566 tok/s. Separately, BPE-4096 token ids feed the float-trained FBS trunk: learned table, SpiralCore position, recurrence with Hamilton gate and RMS norm, Hamming reads and exact turn memory. The /7 engine serves opening and later-reply memory tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open. The FBS export through lut-stack/5 is exact at DEV scope; D11 integer serving uses integer multiply and divide with floats banned. The current blocker is reply opening on new phrasing, not the completed count-table bar or loop suppression alone.",
     )
 }
 
@@ -577,7 +577,7 @@ fn architecture_narrow() -> Result<String, Fail> {
         348.0,
         "Green: served. Hatched: trained, not yet served.",
     );
-    s.finish("Two model paths, M1 complete, narrow layout", "The saved discrete 19-table model has closed M1 at all six bars on two seeds. The separate float-trained FBS trunk uses a learned table, SpiralCore position, a Hamilton-gated recurrence and exact turn memory, with an exact lut-stack/5 export at DEV scope. The current gap is reply opening on new phrasing and a memory key that reworded known questions can reach, then joined integer serving and R7. This is structure, not a useful-chat claim.")
+    s.finish("Two model paths, M1 complete, narrow layout", "The saved discrete 19-table model has closed M1 at all six bars on two seeds. The separate float-trained FBS trunk uses a learned table, SpiralCore position, a Hamilton-gated recurrence and exact turn memory, with an exact lut-stack/5 export at DEV scope. The /7 engine serves opening and later-reply memory tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open. The current gap is reply opening on new phrasing and a memory key that reworded known questions can reach, then joined integer serving and R7. This is structure, not a useful-chat claim.")
 }
 
 fn compliant_path() -> Result<String, Fail> {
@@ -1196,7 +1196,7 @@ fn milestones() -> Result<String, Fail> {
             St::Progress,
             [
                 "table/search + decode/grade",
-                "instruments built; unit 4 next",
+                "row 0: repair readout next",
                 "p-x score/measure open",
                 "",
             ],
@@ -1292,7 +1292,7 @@ fn milestones() -> Result<String, Fail> {
     s.legend(636.0, &[St::Complete, St::Progress, St::Planned]);
     s.finish(
         "Milestones M1 to M8",
-        "30 October 2026: 1 of 8 milestones complete. M1 language base complete at all six bars on two seeds (DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228; p-f 7,850 / 7,872; exact export and B4; Apple M1 decode 10,876 / 10,566 tok/s). M2 grounded reply and M3 durable memory are in progress: claude-220 serves the point key inside one float model with a partial gain; claude-222 built the integer point table and search synthetically; claude-224 built the panel decode and grade; claude-227 passed retention GPU parity within the 3% bar; claude-228 built the run's reference/read-back/BOS checks; unit 4's real TRAIN export, p-x scoring and laptop measurement is next. M4 to M8 are not complete. M7 runtime and Studio harness work is in progress on a synthetic stand-in, with accepted-model parity open. M1 is not useful-chat qualification.",
+        "30 October 2026: 1 of 8 milestones complete. M1 language base complete at all six bars on two seeds (DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228; p-f 7,850 / 7,872; exact export and B4; Apple M1 decode 10,876 / 10,566 tok/s). M2 grounded reply and M3 durable memory are in progress: claude-220 serves the point key inside one float model with a partial gain; claude-222 built the integer point table and search synthetically; claude-224 built the panel decode and grade; claude-227 passed retention GPU parity within the 3% bar; claude-229's real run found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so all grade pairs are (0, 0). Unit 5 repairs the readout and checks parity before rerunning p-x. M4 to M8 are not complete. M7 runtime and Studio harness work is in progress on a synthetic stand-in, with accepted-model parity open. M1 is not useful-chat qualification.",
     )
 }
 

@@ -27,7 +27,7 @@ The integer artifact cannot hold the float table, since no floating point is all
 
 ## What is missing
 
-**Completed units:** claude-222 (#3452) built the integer point table, its least-L1/commonest-target search and the `/8` record, with 380 library tests, 18 negative gates and a full serving audit. Claude-224 (#3454, [REPORT](../../loop/tasks/point-key-integer/claude-224/REPORT.md)) then built the panel prompts, integer decode and grade, with 383 integer-library tests, 185 float-library tests, a full serving audit and 13 negative gates. These are synthetic/host instruments, not a real TRAIN export or panel evaluation. Claude-227 completed [`integer-retention-rates`](integer-retention-rates.md) with GPU parity inside the 3% bar: 1,531 / 1,536 sequences and 4,023 / 4,096 single tokens. Three full snapshots are stored. Claude-228 built the run's reference/read-back/BOS instruments, with 390 integer-library tests with one ignored and four negative gates. Unit 4's real export, fresh p-x scoring, tok/s and resident memory remain open under its fresh sheet and pre-run review.
+**Completed units:** claude-222 (#3452) built the integer point table, its least-L1/commonest-target search and the `/8` record, with 380 library tests, 18 negative gates and a full serving audit. Claude-224 (#3454, [REPORT](../../loop/tasks/point-key-integer/claude-224/REPORT.md)) then built the panel prompts, integer decode and grade, with 383 integer-library tests, 185 float-library tests, a full serving audit and 13 negative gates. These are synthetic/host instruments, not a real TRAIN export or panel evaluation. Claude-227 completed [`integer-retention-rates`](integer-retention-rates.md) with GPU parity inside the 3% bar: 1,531 / 1,536 sequences and 4,023 / 4,096 single tokens. Three full snapshots are stored. Claude-228 built the run's reference/read-back/BOS instruments, with 390 integer-library tests with one ignored and four negative gates. Claude-229's real run found row 0, an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so every grade pair is (0, 0) and no throughput is reported. Unit 5 repairs the readout and checks integer/float greedy parity before rerunning p-x.
 
 - **A table built by the integer engine.**
   - It holds TRAIN's opening points at the writer query's representation (i16 Q12: 212,968 × 256 × 2 B, about 109 MB) and their targets.
@@ -104,14 +104,12 @@ The model throughout is (r-drop)'s sealed step-16,384 checkpoints at seeds 1–3
    - The independent reference scan checks every served opening in `panel_reply`; `fbs-export --point-key` reads the table back as built; a BOS name is refused at the step.
    - **Checks:** 390 integer-library tests with one ignored, four negative gates and a full serving audit. These checks stop the run on mismatch.
    - [`integer-retention-rates`](integer-retention-rates.md) is complete (claude-226 and claude-227), so the integer artifact serves (r-drop)'s retained recurrence.
-4. **Next: the real run,** on the laptop, under a prep sheet with a fresh FIT and a pre-run review.
+4. **Ran: the real run (claude-229), on the laptop: row 0, an instrument fault.**
    - (r-drop)'s full snapshots at seeds 1–3 are in the store at `results/claude/integer-retention-rates-parity-2026-10-31/out/full/`, so no pod is needed.
-   - The steps: `fbs-export`, and `fbs-export --point-key` over TRAIN; the fresh panel p-x drawn with its census; the arms on p-x, p-w, p-v and DEV at seeds 1–3; and tok/s.
-   - **Ran 31 Oct (claude-229): row 0, an instrument fault.**
-     - Done-when 2's instruments held (8,295 served openings).
-     - But integer greedy is not the trained model's decode: its first token equals claude-220's float greedy on 0 of 310 DEV prompts.
-     - The likely cause: (r-drop) is a cell-objective model, decoded as the whole table's nearest token, while the integer session serves the native writer.
-     - Nothing was counted. p-x stays the deciding panel ([lab record](../../labs/point-key-integer/README.md)).
+   - The steps ran under a fresh FIT and pre-run review: `fbs-export`, and `fbs-export --point-key` over TRAIN; the fresh panel p-x drawn with its census; the arms on p-x, p-w, p-v and DEV at seeds 1–3.
+   - Done-when 2's instruments held (8,295 served openings), but integer greedy is not the trained model's decode: its first token equals claude-220's float greedy on 0 of 310 DEV prompts and 2 of 1,202 p-w prompts at seed 1.
+   - The likely cause: (r-drop) is a cell-objective model, decoded as the whole table's nearest token, while the integer session serves the native writer.
+   - Nothing was counted and no throughput is reported. p-x stays the deciding panel ([lab record](../../labs/point-key-integer/README.md)).
 5. **Serve the trained model's readout in the integer artifact,** under its own item, checked by end-to-end token parity against claude-220's stored float greedy on DEV and p-w. Then rerun unit 4's sheet on p-x, as its row 0 prescribes.
 
 ## Rules that apply
