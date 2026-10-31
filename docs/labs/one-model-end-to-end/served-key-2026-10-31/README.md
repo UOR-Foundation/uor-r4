@@ -23,12 +23,13 @@ Lab: claude. Item: [one-model-end-to-end](../../../roadmap/items/one-model-end-t
 - **Parity is exact.** At every split and seed, every served token is the keys file's name: 1,172 on p-w, 385 on p-v and 19 on DEV. The distance drift is 0.0 at every one, so the decode's own point at the opening is bit-equal to the batched forward's.
 - **The served files equal claude-219's keyed-point files byte for byte** on p-v and DEV at every seed, once `served_distance` is stripped.
 - **claude-219's other p-v and DEV files reproduce byte for byte** (14 of 14 checks a seed).
-- **The table reads back to the same values,** and is served from the copy read back.
+- **The table read back to the same values** (the run's check, a max-abs gap of 0; at review it became bit for bit), and is served from the copy read back. It is saved in each scoring run's `out/`, rebuilt from that run's own checkpoint.
 
 ## Tokens per second
 
-- **Decode on p-w, three seeds sharing one RTX 5090:** greedy 54.2–55.3 tok/s a process, the served arm 52.6–54.1, about 2% slower.
-- **The served search:** 1,172 a seed, one a reply, in 37.1–37.6 s with three processes sharing the GPU, so 32 ms a search. Alone, in the probe on DEV, it took 5.8 ms (19 searches in 0.11 s).
+- **Decode on p-w, three seeds sharing one RTX 5090:** greedy 54.2–55.3 tok/s a process, the served arm 52.6–54.1, 2–3% slower.
+- **The served search:** 1,172 a seed, one a reply, in 37.1–37.6 s with three processes sharing the GPU, so at most 32 ms a search. Alone, in the probe on DEV, it took at most 5.8 ms (19 searches in 0.11 s).
+  - These are upper bounds: the run's timer started before the forward's GPU kernels had finished, so each holds the forward's tail. The code now synchronizes the device first.
 - **Residency** (the decision's condition (e)): the table is 218,931,272 bytes, resident per checkpoint. That is 657 MB in the store for three seeds, and the whole table is scanned at each keyed opening.
 
 ## The forced opening (row 1 does not hold)
@@ -73,4 +74,4 @@ The protocol's free-generation measures (`generation`), greedy against served, o
 - **The served key makes the model give more complete, verbatim TRAIN replies:** 1.4–1.9 times greedy's verbatim count, with fewer new n-grams.
 - **The gain is recall, not new wording.** p-w's references are 0.647 verbatim TRAIN replies (its census), so recalling the right one is the measured gain.
 - **Repetition falls,** and distinct-2 rises.
-- **DEV's measures are unchanged.**
+- **DEV's measures are nearly unchanged** (verbatim within 4 a seed).

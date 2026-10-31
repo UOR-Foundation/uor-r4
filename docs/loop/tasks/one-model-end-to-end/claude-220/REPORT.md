@@ -9,9 +9,10 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 ## Tokens per second
 
-- **Decode, on p-w with three seeds sharing one RTX 5090:** greedy 54.2–55.3 tok/s a process, the served arm 52.6–54.1, about 2% slower.
+- **Decode, on p-w with three seeds sharing one RTX 5090:** greedy 54.2–55.3 tok/s a process, the served arm 52.6–54.1, 2–3% slower.
 - **The served search:** one a reply, a single query against 212,968 TRAIN opening points.
-  - It took 32 ms a search with three processes sharing the GPU (1,172 searches in 37.1–37.6 s a seed), and 5.8 ms alone (the probe on DEV, 19 in 0.11 s).
+  - It took at most 32 ms a search with three processes sharing the GPU (1,172 searches in 37.1–37.6 s a seed), and at most 5.8 ms alone (the probe on DEV, 19 in 0.11 s).
+  - These are upper bounds. The run's timer started before the forward's GPU kernels had finished, so each figure holds the forward's tail too (the review, slice A). The code now synchronizes the device before the timer, so a later run times the search alone.
   - It scans the whole 218 MB table each time.
 - **Residency:** the table is 218,931,272 bytes, resident per checkpoint, and 657 MB in the store for three seeds.
 
@@ -24,7 +25,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - **The served key closes about 18% of the gap to a right first token.**
   - A forced reference opening lifts templates on p-w by +230/+219/+238 of 1,202. The served key lifts them by +41/+40/+42.
   - Its openings are right on 28–32% of the 1,172 it names.
-- **The search is not cheap under sharing.** It costs 32 ms with three processes on the GPU, against 5.8 ms alone, and it scans 218 MB each time. A served model on a client needs the integer table and a faster search.
+- **The search is not cheap under sharing.** It costs up to 32 ms with three processes on the GPU, against up to 5.8 ms alone, and it scans 218 MB each time. A served model on a client needs the integer table and a faster search.
 - **DEV says nothing new.** The served key opens 19 of its 310 replies, since the exact key fires on the rest. Every DEV pair is within its band.
 - **The probe stopped once at my own time rule,** an instrument of cost.
   - The rule took 1,053 s × 18, but 253 s of the probe were one-off overhead, and three seeds sharing the GPU decode at half speed, not a third.
@@ -40,7 +41,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - **Loops are fewer** (130/167, 132/243, 72/344), and DEV is not lower.
 - **The served key is exactly the measured key.**
   - At every split and seed, every served token equals the keys file's name (1,172 on p-w, 385 on p-v, 19 on DEV), with a distance drift of 0.0. The decode's own point at the opening is bit-equal to the batched forward's.
-  - The served files equal claude-219's keyed-point files byte for byte on p-v and DEV at every seed.
+  - The served files equal claude-219's keyed-point files byte for byte on p-v and DEV at every seed, once `served_distance` is stripped.
 - **claude-219's result reproduces.** Its p-v and DEV files, 14 checks a seed, reproduce byte for byte from the served model.
 - **Power was as argued after FIT round 1:** b + c of 48–59 a seed, against claude-219's 10–19 on p-v.
 - **Replies complete more and repeat less.** p-w's complete replies rise from 990/889/929 to 1,048/1,006/1,072, and the repeated 4-gram rate falls (0.529/0.639/0.587 to 0.471/0.554/0.434).
@@ -51,7 +52,10 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - **The served key** (`ServedKey`, `served_opening`, `set_served_key`, `take_served_searches`).
   - In `decode_reply`, at the reply's first step under the greedy rule, where the turn memory's exact first-8 key misses, the opening row's own point from that forward is named by `l1_named` against the table, with no extra forward.
   - Each served sample keeps its token as `keyed` and its least distance as `served_distance`.
-- **The table** (`--served-key 1`, `--opening-table PATH`): TRAIN's opening points under the trunk, built in the keys pass, saved to `out/opening-table.safetensors` (`save_opening_table`, never replacing a file), read back to the same values (`load_opening_table`), and served from the copy read back.
+- **The table** (`--served-key 1`): TRAIN's opening points under the trunk, built in the keys pass, saved to the scoring run's `out/opening-table.safetensors` (`save_opening_table`, which creates the file new and never replaces one), read back (`load_opening_table`), and served from the copy read back.
+  - **The run checked the read-back by value** (a max-abs gap of 0). At review the check became bit for bit (`same_bits`), which a +0.0 against a −0.0 would fail.
+  - **Not beside the checkpoint.** The ORDER said the table is saved beside the checkpoint and loaded with it. It is saved in each scoring run's `out/`, beside that seed's scores, and rebuilt from that run's own checkpoint each time, since the checkpoint folders are sealed inputs.
+  - **`--opening-table PATH` is removed.** It loaded a saved table instead of building one, and nothing tied that table to its checkpoint: a seed-1 table could serve seed 2, and parity would still hold, since both sides read the same table (the review, slice A). This run never used it.
 - **The served arm** (`samples-{split}-served-memory.json`), through the shared decode helper, with `ScoredFile::search`, the search's count and seconds.
 - **The grade** (`--served-grade 1`, `served_grade`):
   - parity (`served_parity`, `ServedParity::holds`, failing past 1% or on no served opening);
@@ -59,6 +63,11 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - the decision (`served_outcome`, with `KeyedReading::harmless` split from `carries`, whose meaning for claude-219's grade is unchanged);
   - the protocol's free-generation measures (`generation`).
 - **`IdSample` drops `Eq`** for its new f32 field.
+- **The review's fixes** (`bf91fae13`, slices A and B):
+  - the served key refuses a non-finite distance, and `--served-key` refuses a checkpoint with no turn memory;
+  - the greedy-only guard is `serves_at`;
+  - `served_parity` compares each served token with the keys file as read, never the copy it rewrites, and refuses a non-finite distance;
+  - the grade refuses a panel other than p-w and p-v.
 - **Also written:** the 1,200-conversation panel p-w (seed 2121) and its census, the two decision cards, the sheet, the lab page, the grade, and one notebook row.
 - **The local jobs and watcher** are in `local/claude/claude-220/`:
   - `job.sh`, sha256 `0dd3b6cfec56b38091bf731d52931d4aa55d24a8b4f9fd341a662ae14107d40d`;
@@ -68,14 +77,16 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 The tables are on the [lab page](../../../../labs/one-model-end-to-end/served-key-2026-10-31/README.md).
 - **The run:** one RTX 5090 (`vast-58466776`, $0.563/h), about 3 h 20 min, about $1.90.
-- **Built** at `eb762e602` (binary `e2c8057f…5acb`). Later commits change docs, the decision card, and test lines only.
+- **Built** at `eb762e602` (binary `e2c8057f…5acb`). Later commits change docs, the decision card and tests, and add the review's fixes (`bf91fae13`).
+  - Those fixes change no decode's arithmetic: they remove the unused flag, synchronize the device before the search timer, check the read-back bit for bit, and add refusals.
+  - The grade, re-run on the sealed run at the new head, is byte-identical.
 - **Sealed** at `results/claude/one-model-end-to-end-served-key-2026-10-31/run-eb762e60/`: 129 files, `SHA256SUMS` sha256 `482008278ddf2ca1d5acb7f51a3e433091d83a2913b369a818f183273bd4e069`, read back OK. The pod is down.
 - **The tables' sha256s:** `31f1fbc1…1317`, `03e8b8ac…c1c9` and `8364bf6a…d54c` at seeds 1–3.
 - **The grade:** [grade-p-w.json](../../../../labs/one-model-end-to-end/served-key-2026-10-31/grade-p-w.json), sha256 `6984f5c03af1f86e69493bc6fb0d65ca32df668e289426b2ccd2f1c54a2b5950`.
 
 ## Checks run at the head
 
-- **The crate's host tests** (`cargo test --release --locked -p uor-r4-float-train`): all pass, 180 in the library. The CUDA code type-checks with the stub nvcc.
+- **The crate's host tests** (`cargo test --release --locked -p uor-r4-float-train`): all pass, 181 in the library. The CUDA code type-checks with the stub nvcc.
 - **Negative gates on the host,** each failing with its rule set aside and passing when restored:
   - the table's never-replaced check;
   - parity's 1% rule;
@@ -83,12 +94,21 @@ The tables are on the [lab page](../../../../labs/one-model-end-to-end/served-ke
   - the pooled guard;
   - the guard's harm condition;
   - the thin seed beside a harmed one.
+- **The review's negative gates** (at `bf91fae13`), each failing at its own assertion:
+  - the greedy-only guard (`&& rule == DecodeRule::Greedy` removed);
+  - parity against the keys file as read;
+  - a finite distance;
+  - parity at every split and seed (only the first read);
+  - the bit-for-bit check (−0.0 read as +0.0);
+  - the f64 table's refusal;
+  - the grade's panel refusal.
+- **Not testable on the host:** the device synchronize and the turn-memory refusal. Both are read in review.
 - **On the pod:**
   - the crate's CUDA tests pass, including the served key's own;
   - every input matches its sha256;
   - the probe and the main run reproduce claude-219's files (7 checks, then 14 a seed);
   - the served files equal claude-219's keyed-point files on DEV and p-v.
-- **The grade on the sealed run:** exit 0, with no refusal.
+- **The grade on the sealed run:** exit 0, with no refusal. Re-run at `bf91fae13`, it gives the same file byte for byte (sha256 `6984f5c0…5950`).
 
 ## Skills used
 
