@@ -61,8 +61,8 @@ the 385 openings it gives, only **12–18%** of the lift from forcing the right 
 cheaper sign key is inconclusive at this panel size. [Claude-220](docs/loop/tasks/one-model-end-to-end/claude-220/REPORT.md)
 then served the point key inside one float model on fresh p-w: templates improve by **+41/+40/+42**
 at three seeds, with exact claude-219 parity. That gain recalls TRAIN replies rather than
-generalizing. Next, export the point table to the integer engine and score the integer model end
-to end. Useful conversation remains unproven.
+generalizing. Next, complete [point-key-integer](docs/roadmap/items/point-key-integer.md) (#3450),
+then score the integer model end to end. Useful conversation remains unproven.
 
 ## The three products
 

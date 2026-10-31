@@ -1,6 +1,6 @@
 # ORDER: comprehensive 30 Oct documentation refresh
 
-Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `d2f0354a91a26039c6ec4628b943be6d3daeb424`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
+Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `437d1ddf5e16d7ba7e08df0789343760d9fde1cd`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
 
 ## Goal and chain
 
