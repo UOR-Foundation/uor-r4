@@ -5173,3 +5173,83 @@ fn a_turn_memory_session_restore_is_refused() {
     b.step_native(11).expect("step");
     assert!(b.last_memory_move().is_none());
 }
+
+/// claude-222: a point table for the synthetic `/7` stack, `rows` rows of its width.
+fn synthetic_point_key(bytes: &[u8], rows: usize) -> super::PointKeyImage {
+    let shape = IntegerStackModel::parse(bytes).expect("served").shape().clone();
+    let points = (0..rows * shape.width).map(|i| ((i * 37) % 2001) as i16 - 1000).collect();
+    let targets = (0..rows).map(|r| 2 + (r as u32 * 7) % (shape.vocab as u32 - 2)).collect();
+    super::PointKeyImage {
+        width: shape.width,
+        points,
+        targets,
+    }
+}
+
+/// `bytes`' JSON header and its data sections.
+fn header_and_data(bytes: &[u8]) -> (Value, Vec<u8>) {
+    let len = u64::from_le_bytes(bytes[8..16].try_into().expect("length")) as usize;
+    let header = serde_json::from_slice(&bytes[16..16 + len]).expect("header");
+    (header, bytes[(16 + len).div_ceil(64) * 64..].to_vec())
+}
+
+/// claude-222: the served point key added to a `/7` turn-memory stack is a `/8` stack whose table
+/// reads back as written, with the `/7` data unchanged byte for byte. Adding it is deterministic,
+/// and it is refused on a stack that already has one, on a stack without the turn memory, and at
+/// another width.
+#[test]
+fn a_point_key_round_trips_through_the_lut_stack_8_record() {
+    let bytes = super::synthetic::synthetic_turn_memory_artifact(7, 8, 192, false);
+    let image = synthetic_point_key(&bytes, 5);
+    let with = super::add_point_key_uorlut01(&bytes, &image).expect("the /8 stack");
+    assert_eq!(with, super::add_point_key_uorlut01(&bytes, &image).expect("again"), "deterministic");
+    let read = super::read_memory_uorlut01(&with).expect("read").expect("a memory");
+    assert_eq!(read.point.as_ref(), Some(&image), "the table reads back as written");
+    assert_eq!(super::read_memory_uorlut01(&bytes).expect("read").expect("a memory").point, None);
+    let ((old_header, old), (new_header, new)) = (header_and_data(&bytes), header_and_data(&with));
+    assert_eq!(&new[..old.len()], &old[..], "the /7 sections are unchanged");
+    assert_eq!(new_header["schema"], json!(super::STACK_FBS_POINT_SCHEMA));
+    assert_eq!(new_header["point"], json!({ "rows": 5, "width": image.width, "exp": super::POINT_KEY_EXP }));
+    assert_eq!(new_header["memory"], old_header["memory"]);
+    IntegerStackModel::parse(&with).expect("served /8");
+    assert!(super::add_point_key_uorlut01(&with, &image).is_err(), "a stack with a table already");
+    let plain = super::export_fbs_trunk_uorlut01(&synthetic_fbs_trunk(7)).expect("export");
+    assert!(super::add_point_key_uorlut01(&plain, &image).is_err(), "a stack without the turn memory");
+    let narrow = super::PointKeyImage {
+        width: image.width - 1,
+        points: vec![0; (image.width - 1) * 5],
+        targets: image.targets.clone(),
+    };
+    assert!(super::add_point_key_uorlut01(&bytes, &narrow).is_err(), "another width");
+}
+
+/// claude-222: the schema names the point key, and the record is checked: under `/7`, `/8` without
+/// the record, the record without the turn memory, rows its targets do not hold, another width or
+/// exponent, and an unknown field are each refused. A `/8` session's restore is refused as a `/7`
+/// one's is.
+#[test]
+fn the_lut_stack_8_schema_and_record_are_checked() {
+    let bytes = super::synthetic::synthetic_turn_memory_artifact(7, 8, 192, false);
+    let with = super::add_point_key_uorlut01(&bytes, &synthetic_point_key(&bytes, 5)).expect("the /8 stack");
+    let refused = |b: Vec<u8>| IntegerStackModel::parse(&b).is_err();
+    assert!(refused(with_header(&with, |h| h["schema"] = json!(super::STACK_FBS_MEMORY_SCHEMA))), "the record under /7");
+    assert!(refused(with_header(&bytes, |h| h["schema"] = json!(super::STACK_FBS_POINT_SCHEMA))), "/8 without the record");
+    assert!(
+        refused(with_header(&with, |h| {
+            h.as_object_mut().expect("object").remove("memory");
+        })),
+        "the record without the turn memory"
+    );
+    assert!(refused(with_header(&with, |h| h["point"]["rows"] = json!(4))), "rows the targets do not hold");
+    assert!(refused(with_header(&with, |h| h["point"]["width"] = json!(3))), "another width");
+    assert!(refused(with_header(&with, |h| h["point"]["exp"] = json!(-11))), "another exponent");
+    assert!(refused(with_header(&with, |h| h["point"]["extra"] = json!(1))), "an unknown field");
+    let model = IntegerStackModel::parse(&with).expect("served /8");
+    let mut session = model.session();
+    session.step_native(10).expect("step");
+    let saved = session.save_state();
+    match model.session().restore_state(&saved) {
+        Err(StackError::Shape(m)) => assert_eq!(m, "a session of a turn memory cannot be restored yet: its turn state is not saved"),
+        other => panic!("expected the turn-memory restore refusal, got {other:?}"),
+    }
+}
