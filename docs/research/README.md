@@ -78,6 +78,6 @@ To find a record, use the generated index [`archive/CATALOG.md`](../../archive/C
 
 - [What the project knows](./findings.md): the lessons and the measured results behind them.
 - [What is still open](./open-questions.md): the tests nobody has run and the cheapest decisive ones.
-- [How the project got here](./history.md): seven phases and 32 eras, 10 June to 31 October 2026; the 15 October audit cutoff is followed by Phase G.
+- [How the project got here](./history.md): seven phases and 32 eras, 10 June to 31 October 2026; the 15 October audit cutoff is followed by Phases F and G.
 - [Mechanism board](../mechanisms/README.md) and the [charter](../../CHARTER.md).
 - [`PLAN.md`](../../PLAN.md) and rendered [`STATE.md`](../../STATE.md) for the current plan and status, and [`docs/harness/README.md`](../harness/README.md) for the research harness.

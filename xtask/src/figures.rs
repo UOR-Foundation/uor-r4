@@ -1263,14 +1263,14 @@ fn milestones() -> Result<String, Fail> {
         s.text([x, cy + 6.0], (16.0, 700, INK), "middle", id);
     }
     s.path(
-        &format!("M100,{} L100,112 L529,112 L529,{}", cy - 32.0, cy - 34.0),
+        &format!("M100,{} L100,112 L386,112 L386,{}", cy - 32.0, cy - 34.0),
         BLUE,
         2.0,
         None,
         true,
     );
     s.path(
-        &format!("M243,{} L243,124 L529,124", cy - 32.0),
+        &format!("M243,{} L243,124 L386,124", cy - 32.0),
         BLUE,
         2.0,
         None,
@@ -1287,7 +1287,7 @@ fn milestones() -> Result<String, Fail> {
         [315.0, 106.0],
         (12.5, 700, BLUE),
         "middle",
-        "M1 + M2 + M3 join at M4",
+        "selected M1 or M2 → M3 → M4",
     );
     for (i, (id, name, st, lines)) in items.iter().enumerate() {
         let col = (i % 4) as f64;
@@ -1304,7 +1304,7 @@ fn milestones() -> Result<String, Fail> {
     s.legend(636.0, &[St::Complete, St::Progress, St::Planned]);
     s.finish(
         "Milestones M1 to M8",
-        "M1 closed 30 October; status through 31 October 2026: 1 of 8 milestones complete. M1 language base complete at all six bars on two seeds (DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228; p-f 7,850 / 7,872; exact 14,287-row DEV export and B4; Apple M1 decode 10,876 / 10,566 tok/s). M2 grounded reply and M3 durable memory are in progress: claude-220 serves the point key inside one float model with a partial gain; claude-222 built the integer point table and search synthetically; claude-224 built the panel decode and grade; claude-227 passed retention GPU parity within the 3% bar; claude-228 built the run's reference/read-back/BOS instruments; claude-229's real run found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so all grade pairs are (0, 0). Claude-231 built the nearest readout on native and browser paths; claude-232 missed greedy parity in every cell, so the mismatch must be localized before the p-x rerun. M1, M2 and M3 each have a path to M4; M4 to M8 are not complete. M7 runtime and Studio harness work is in progress on a synthetic stand-in, with accepted-model parity open. On p-f, 62.5% of reference replies are verbatim TRAIN replies: reference-data overlap, not a generated-copy rate or new reply kinds; M1 is not useful-chat qualification.",
+        "M1 closed 30 October; status through 31 October 2026: 1 of 8 milestones complete. M1 language base complete at all six bars on two seeds (DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228; p-f 7,850 / 7,872; exact 14,287-row DEV export and B4; Apple M1 decode 10,876 / 10,566 tok/s). M2 grounded reply and M3 durable memory are in progress: claude-220 serves the point key inside one float model with a partial gain; claude-222 built the integer point table and search synthetically; claude-224 built the panel decode and grade; claude-227 passed retention GPU parity within the 3% bar; claude-228 built the run's reference/read-back/BOS instruments; claude-229's real run found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so all grade pairs are (0, 0). Claude-231 built the nearest readout on native and browser paths; claude-232 missed greedy parity in every cell, so the mismatch must be localized before the p-x rerun. The selected M1 or M2 model passes M3 before M4; M1/M2 do not bypass M3. M4 to M8 are not complete. M7 runtime and Studio harness work is in progress on a synthetic stand-in, with accepted-model parity open. On p-f, 62.5% of reference replies are verbatim TRAIN replies: reference-data overlap, not a generated-copy rate or new reply kinds; M1 is not useful-chat qualification.",
     )
 }
 

@@ -26,6 +26,10 @@ A replacement being ACTIVE means it is on a current model path, not that it has 
 independent advantage. READY means built and tested but not trained in; PARKED means tested forms
 failed or broke a rule while the mechanism stays open. See the [mechanism board](../mechanisms/README.md).
 
+![Transformer parts and their geometric replacements, with current status and the M1 composition distinguished from the FBS trunk](../figures/start/transformer-vs-geometry.svg)
+
+*The replacement map at 31 October 2026: M1 is complete, while FBS and durable-reply work continue.*
+
 ## What M1 established
 
 The saved discrete 19-table model has exact 14,287-row DEV export/reference agreement and passes B4. It scores:
