@@ -1,6 +1,6 @@
 # ORDER: comprehensive 30 Oct documentation refresh
 
-Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `f4beaaf79980c2dfb5a4ffa5c9edbf63a81add7d`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
+Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `4f8f62ecd03ce79c05a0dfa214429d57e6154433`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
 
 ## Goal and chain
 
@@ -70,4 +70,4 @@ The final review identified nine roadmap items whose current text still describe
 
 ## Scope decision: claude-222 implementation status
 
-`point-key-integer` is added only to record the merged claude-222 first unit: the integer point table, search and `/8` record, with its 380 library tests, 18 negative gates and full serving audit, and the remaining claude-223 real-table export, p-x and laptop measurements. No acceptance bar, model code, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation correction together.
+`point-key-integer` is added only to record the merged claude-222 first unit: the integer point table, search and `/8` record, with its 380 library tests, 18 negative gates and full serving audit, plus the remaining unit-2 panel decode/grade and subsequent real-table export, p-x and laptop measurements. No acceptance bar, model code, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation correction together.

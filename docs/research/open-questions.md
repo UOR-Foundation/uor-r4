@@ -54,8 +54,8 @@ forced-opening lift; the sign key is inconclusive at this panel size. [Claude-22
 then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at
 three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing.
 [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table,
-search and `/8` record, with 380 library tests and a full serving audit. The open question is whether
-claude-223 can run the real TRAIN export, p-x scoring and laptop measurement well enough on client
+search and `/8` record, with 380 library tests and a full serving audit. Next is unit 2's panel
+decode/grade, followed by the real TRAIN export, p-x scoring and laptop measurement on client
 hardware. Useful conversation remains unproven.
 
 ## What remains open beyond that key

@@ -27,7 +27,7 @@ The integer artifact cannot hold the float table, since no floating point is all
 
 ## What is missing
 
-**Completed first unit (claude-222, #3452):** the integer point table, its least-L1/commonest-target search and the `/8` record are built, with 380 library tests, 18 negative gates and a full serving audit. This is synthetic-only: real TRAIN export, p-x scoring, tok/s and resident memory remain open. The next unit is claude-223 ([report](../../loop/tasks/point-key-integer/claude-222/REPORT.md)).
+**Completed first unit (claude-222, #3452):** the integer point table, its least-L1/commonest-target search and the `/8` record are built, with 380 library tests, 18 negative gates and a full serving audit. This is synthetic-only: real TRAIN export, p-x scoring, tok/s and resident memory remain open. The next unit is unit 2: panel decode/grade and subsequent real export/measurement ([claude-223's scope update](../../loop/tasks/infra-loop-harness/claude-223/REPORT.md)).
 
 - **A table built by the integer engine.**
   - It holds TRAIN's opening points at the writer query's representation (i16 Q12: 212,968 × 256 × 2 B, about 109 MB) and their targets.
