@@ -211,7 +211,7 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 <a id="prime-address"></a>**Prime address.** The exact name of a token: the (id + 1)-th prime number, so no two tokens collide. For example the 4,096th prime is 38,873. It is kept separate from the geometric [address](#address). See [primes and zeta phases](../geometry/primes-and-zeta.md).
 
-<a id="primezeta-codebook"></a>**PrimeZeta codebook.** The table that turns each token's prime into eight angles taken from the Riemann zeta zeros, and the angles into a starting vector. It gives all 4,096 tokens distinct vectors (**measurement**). The distinctness comes from a cell-balancing step, not from the angles; whether the zeta angles help at all has not been tested. See [prime-zeta codebook](../mechanisms/prime-zeta-codebook.md).
+<a id="primezeta-codebook"></a>**PrimeZeta codebook.** The table that turns each token's prime into eight angles taken from the Riemann zeta zeros, and the angles into a starting vector. It gives all 4,096 tokens distinct vectors (**measurement**). The distinctness comes from a cell-balancing step, not from the angles. A zero-update comparison found no admission advantage over simple injective controls; a trained effect remains untested. See [prime-zeta codebook](../mechanisms/prime-zeta-codebook.md) and the [comparison](../labs/r-prime-zeta-vs-nulls/README.md).
 
 ## Q
 
