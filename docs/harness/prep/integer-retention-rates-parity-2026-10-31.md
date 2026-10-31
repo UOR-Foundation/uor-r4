@@ -49,13 +49,13 @@ All arms read one snapshot of one trunk and one set of float readouts.
 5. **`I-Finite`:** `fbs-snapshot` and both `fbs-compare` runs exit 0. `fbs-compare` exits non-zero only when the snapshot does not export, parse or serve, or a readout does not fit.
 6. **`I-Readout-Retained`:** F was taken under retention. Its only test is the run itself: if d_ret exceeds d_dec on `sequences` by more than 2√(d_dec + d_ret), F is the decay reading's. That is an instrument fault in `fbs-snapshot`'s config reading, not a gate result.
 
-## 5. Base artifact and data
+## 5. Base artifact and data split
 
 - **Base:** (r-drop) s1, step 16,384, from `caseyallard/uor-r4-store:results/claude/one-model-end-to-end-2026-10-29/training-460fe46e/s1/r-drop-s1/`.
   - **Its run config:** `retain_rates: true`, `fold_scores: false`, `reflect_floor: false`, `hamming_read: 4`, `turn_memory: 8`, `turn_memory_reply: true`.
   - **Its model config:** width 256, context 192, pattern `rrrrrr`, `rec_gates: "geometric"`, Hamilton gates, rotation on, vocabulary 4,096.
   - **The trunk:** `model.safetensors`, 4,457,344 bytes. Seeds 2 and 3 are fetched only for the by-product.
-- **Data:** none beyond the checkpoint. The readouts' sequences are fixed by `fbs_float_readout`: token (37s + 11t + 1) mod 4,096. They are synthetic, not text, which parity does not need.
+- **Data split:** none, and no corpus is read. The readouts' inputs are the 4,096 single tokens and 8 sequences fixed by `fbs_float_readout`: token (37s + 11t + 1) mod 4,096. They are synthetic, not text, which parity does not need. No TRAIN, DEV or panel split is opened.
 - **Pins:**
   - the pushed head;
   - the three binaries' sha256 (`binaries.sha256`);
