@@ -71,7 +71,9 @@ seeds. Keyed openings are right on 27–31% of cases, so this is a partial gain,
 sign key is inconclusive at this panel size. [Claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md)
 then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at
 three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing.
-Next, export the point table to the integer engine and score the integer model end to end.
+[Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table,
+search and `/8` record, with 380 library tests and a full serving audit. Next, claude-223 runs the
+real TRAIN export, p-x scoring and laptop measurement.
 
 ## What does not work yet
 

@@ -27,9 +27,11 @@ The integer artifact cannot hold the float table, since no floating point is all
 
 ## What is missing
 
+**Completed first unit (claude-222, #3452):** the integer point table, its least-L1/commonest-target search and the `/8` record are built, with 380 library tests, 18 negative gates and a full serving audit. This is synthetic-only: real TRAIN export, p-x scoring, tok/s and resident memory remain open. The next unit is claude-223 ([report](../../loop/tasks/point-key-integer/claude-222/REPORT.md)).
+
 - **A table built by the integer engine.**
   - It holds TRAIN's opening points at the writer query's representation (i16 Q12: 212,968 × 256 × 2 B, about 109 MB) and their targets.
-  - It is taken with the memory off, by an export pass that runs the integer session over TRAIN's openings (a new `fbs-point-key`). It and the panel arms run on the bit-exact laptop engine, by the owner's allowance (below).
+  - It is taken with the memory off, by an export pass that runs the integer session over TRAIN's openings (`fbs-export --point-key`). It and the panel arms run on the bit-exact laptop engine, by the owner's allowance (below).
   - claude-220's float `opening-table.safetensors` is never quantized into it. Neither is any float snapshot, which is why the float exporter and snapshot files are outside this item's scope.
 - **The served search in the integer session.**
   - **Where:** at `stack_step_fbs`'s first reply step, and its timed twin. Where the turn memory's opening read misses its exact key, the memory moves nothing, so `b.query_q12` is the trunk's own point. The search overrides the native token there.

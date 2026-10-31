@@ -56,7 +56,7 @@ Claude-218 found trunk-state memory keys that improved reply openings offline.
 [Claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md) then served the point key
 for the first reply token in free generation on fresh p-v: templates improve by +13/+8/+12 and
 exact replies by +9/+8/+12 at three seeds. It reaches only 12–18% of the forced-opening lift; the
-sign key is inconclusive at this panel size. [Claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md) then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. The next unit is [point-key-integer](../roadmap/items/point-key-integer.md) (#3450): export the point table to the integer engine, then score the integer model end to end. Useful chat remains unproven. Then every required part
+sign key is inconclusive at this panel size. [Claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md) then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table, search and `/8` record, with 380 library tests and a full serving audit. Next, claude-223 runs the real TRAIN export, p-x scoring and laptop measurement. Useful chat remains unproven. Then every required part
 must run in integer serving and one joined model must be scored on fresh prompts. See
 [PLAN.md](../../PLAN.md) and the [pipeline map](../model/pipeline-map.md).
 

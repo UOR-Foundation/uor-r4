@@ -25,7 +25,8 @@ M1's two-seed results are **7,002 / 7,001** on DEV (T2 6,300), **7,215 / 7,228**
 62.5% reference-reply overlap with TRAIN means this is a scoped language-base result, not useful
 conversation. M2 is the next capability milestone. Claude-220 serves the point key inside one
 float model on fresh p-w, improving templates by +41/+40/+42 at three seeds with exact claude-219
-parity; the gain recalls TRAIN replies, not new wording. Next, complete
-[point-key-integer](docs/roadmap/items/point-key-integer.md) (#3450), then score the integer model end to end.
+parity; the gain recalls TRAIN replies, not new wording. Claude-222 has built the integer point
+table, search and `/8` record, with 380 library tests and a full serving audit. Next, claude-223
+runs the real TRAIN export, p-x scoring and laptop measurement.
 Every run goes ahead on its own pre-run review (D67, [charter](CHARTER.md) §5.1). The one plan is
 [PLAN.md](PLAN.md) (D77).
