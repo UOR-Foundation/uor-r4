@@ -20,11 +20,11 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 17 |
+| ready | 18 |
 | held | 10 |
 | decision | 1 |
 | done | 87 |
-| total | 115 |
+| total | 116 |
 
 ## Start here
 
@@ -141,6 +141,7 @@ These items are ready and open to anyone.
 | [Bring every status page, picture and tracker up to 30 Oct 2026](items/docs-status-refresh.md) | ready | a lab | no | none | [#3380](https://github.com/UOR-Foundation/uor-r4/issues/3380) |
 | [Serve the Hamming read from the integer artifact on the laptop](items/integer-hamming-read.md) | ready | a lab | yes | [float-training-module](items/float-training-module.md), [spiralcore-fbs-offline-float-sheet](items/spiralcore-fbs-offline-float-sheet.md) | [#3385](https://github.com/UOR-Foundation/uor-r4/issues/3385) |
 | [Score one model end to end on prompts it has not seen, with tokens per second](items/one-model-end-to-end.md) | ready | a lab | yes | [turn-memory-reply](items/turn-memory-reply.md) | [#3407](https://github.com/UOR-Foundation/uor-r4/issues/3407) |
+| [Serve the point key's opening in the integer artifact on the laptop](items/point-key-integer.md) | ready | a lab | no | [one-model-end-to-end](items/one-model-end-to-end.md), [turn-memory-integer](items/turn-memory-integer.md) | [#3450](https://github.com/UOR-Foundation/uor-r4/issues/3450) |
 | [Split the training backward, and run a cheaper rival search against (a)](items/training-step-cost.md) | ready | a lab | yes | [fbs-cost-profile](items/fbs-cost-profile.md) | [#3391](https://github.com/UOR-Foundation/uor-r4/issues/3391) |
 | [Serve the turn memory from the integer artifact on the laptop](items/turn-memory-integer.md) | ready | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | [#3392](https://github.com/UOR-Foundation/uor-r4/issues/3392) |
 | [Make the native writer's admission hold at every seed](items/writer-admission.md) | ready | a lab | yes | [one-decoder](items/one-decoder.md) | [#3394](https://github.com/UOR-Foundation/uor-r4/issues/3394) |
@@ -294,6 +295,7 @@ flowchart LR
   n_owner_decision_float_path_scope["owner-decision-float-path-scope"]
   n_pipeline_map["pipeline-map"]
   n_pipeline_map_revision["pipeline-map-revision"]
+  n_point_key_integer["point-key-integer"]
   n_r_finite_relational_head["r-finite-relational-head"]
   n_r_quaternion_transport_order["r-quaternion-transport-order"]
   n_r_rank_objective_keeps_cells["r-rank-objective-keeps-cells"]
@@ -414,6 +416,7 @@ flowchart LR
   n_m8_release_packaging --> n_m8_independent_verification
   n_object_store_consumer_m3 --> n_m3_qualify_memory
   n_one_decoder --> n_writer_admission
+  n_one_model_end_to_end --> n_point_key_integer
   n_owner_decision_float_path_scope --> n_d11_exporter_float_trunk
   n_owner_decision_float_path_scope --> n_float_training_module
   n_pipeline_map --> n_pipeline_map_revision
@@ -424,5 +427,6 @@ flowchart LR
   n_route_plus_memory --> n_turn_memory_reply
   n_spiralcore_fbs_offline_float_sheet --> n_in_space_trunk_to_text
   n_spiralcore_fbs_offline_float_sheet --> n_integer_hamming_read
+  n_turn_memory_integer --> n_point_key_integer
   n_turn_memory_reply --> n_one_model_end_to_end
 ```
