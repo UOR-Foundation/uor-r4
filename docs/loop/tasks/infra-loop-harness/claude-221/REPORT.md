@@ -69,7 +69,7 @@ None.
 
 - **The item's first unit:** the integer table, its search, and the artifact record. It takes its claim through `loop next` once this merges.
 - **Settled in that unit's sheet:** the export pass's cost over TRAIN's openings, the GPU evaluator's bit-exactness check, the fresh panel p-x's seed, and the bar's rows.
-- **The GPU evaluator's design:** its crate and files, and whether to build it or score on the laptop, are decided in a decision card, with the owner's answer if it has come.
+- **The GPU evaluator** is built unless the owner allows laptop scoring (#2028). Until then a decision card decides only its crate and files.
 
 ## Plain summary
 

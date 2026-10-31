@@ -42,7 +42,7 @@ The integer artifact cannot hold the float table, since no floating point is all
   - The integer engine is CPU code, and `uor-r4-integer` has no CUDA path.
   - CHARTER §3.6 keeps "panel scoring, qualification and milestone evaluation of an exported artifact" as GPU research compute (§3.5), and §3.5 calls a host fallback "a defect to fix with a kernel".
   - So the export pass over TRAIN and the panel arms need a CUDA form of the integer session's step and the table search, bit-exact against the laptop engine on a fixed prompt set. It is built ahead with nvcc, never NVRTC.
-  - Its crate and files are added to this item's scope by the unit that decides them. That unit's decision card weighs this kernel work against the owner's call below.
+  - It is built unless the owner allows laptop scoring (the owner's call below). That unit's decision card decides only its crate and files, which it adds to this item's scope.
 - **Optionally, the sign code** (6.8 MB, the Hamming form that `integer-hamming-read`'s popcount fits). It is reported only, since claude-219 read it too thin to tell.
 
 ## Done when
