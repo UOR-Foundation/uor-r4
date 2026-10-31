@@ -110,10 +110,12 @@
 //! DEV and each panel (`prompts-{split}.json`), for `fbs-toks --replies`. With `--runs` (claude-220's
 //! `out`), it also writes each seed's prompts with its float served names, refusing a served sample
 //! that is not its prompt's (`in_space_long::panel_prompts`). The `--samples` and `--reply-tokens`
-//! must be the scored run's. `train-in-space --data-root DIR --integer-grade 1 --runs DIR [--panel
-//! NAME=DIR ...]` grades the integer served arm against integer greedy, with parity against the
-//! float key, from each `r-drop-s{n}`'s `integer-{served,greedy}-{split}.json`
-//! (`in_space_long::integer_grade`). One JSON line.
+//! must be the scored run's. `train-in-space --data-root DIR --integer-grade 1 --runs DIR
+//! --keys-runs DIR [--panel NAME=DIR ...]` grades the integer served arm against integer greedy,
+//! with parity against the float key, from each `r-drop-s{n}`'s
+//! `integer-{served,greedy}-{split}.json` (`in_space_long::integer_grade`). `--keys-runs` is the
+//! float served run, claude-220's `out`, whose names each integer served file must carry for its
+//! seed. One JSON line.
 //!
 //! `train-in-space --data-root DIR --controls 1 --out DIR [--fresh-v2 DIR] [--panel NAME=DIR ...]`: the
 //! protocol's recall controls (I-D, claude-211) on the laptop: (T) the memory's tables and (S) the
@@ -645,7 +647,10 @@ fn main() -> Result<()> {
         let runs = runs
             .ok_or_else(|| FloatTrainError::Invalid("--integer-grade needs --runs DIR".to_owned()))?;
         let names: Vec<String> = extra_panels.iter().map(|(name, _)| name.clone()).collect();
-        let graded = integer_grade(&data_root, &runs, &names)?;
+        let float_runs = keys_runs
+            .as_deref()
+            .ok_or_else(|| FloatTrainError::Invalid("--integer-grade needs --keys-runs DIR, the float served run whose names parity reads".to_owned()))?;
+        let graded = integer_grade(&data_root, &runs, &names, float_runs)?;
         println!("{}", serde_json::to_string(&graded)?);
         return Ok(());
     }

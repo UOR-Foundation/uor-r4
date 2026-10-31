@@ -208,8 +208,8 @@ pub fn panel_reply(
     float_keyed: Option<u32>,
 ) -> Result<PanelReply, StackError> {
     let context = model.shape().context;
-    if prompt.is_empty() || prompt.len() >= context || reply_tokens == 0 {
-        return Err(StackError::Numerics("a panel prompt must be 1 to context − 1 tokens, with a reply of 1 or more".to_owned()));
+    if prompt.is_empty() || prompt.len() > context || reply_tokens == 0 {
+        return Err(StackError::Numerics("a panel prompt must be 1 to context tokens, with a reply of 1 or more".to_owned()));
     }
     let mut session = model.session();
     let mut step = None;
@@ -360,6 +360,20 @@ mod point_key_tests {
         // A nearer single row beats a more common farther one.
         let near = served(2, vec![1, 1, 1, 1, 0, 1], vec![6, 6, 7]);
         assert_eq!(near.name(&[0, 0], &mut tied).unwrap(), (7, 1));
+    }
+
+    /// claude-224: the float name's least distance is the exact L1 sum to the nearest row naming
+    /// it, the least over every such row; `None` for a name no row holds or a query of another
+    /// width.
+    #[test]
+    fn the_least_distance_to_a_name_is_its_nearest_rows_l1_sum() {
+        // Rows naming 7 at L1 6 and 13 from [0, 0]; a row naming 8 at 1.
+        let key = served(2, vec![2, -4, 6, 7, 1, 0], vec![7, 7, 8]);
+        assert_eq!(key.least_distance_to(&[0, 0], 7), Some(6), "the least of the rows naming 7");
+        assert_eq!(key.least_distance_to(&[6, 7], 7), Some(0));
+        assert_eq!(key.least_distance_to(&[3, 3], 8), Some(5));
+        assert_eq!(key.least_distance_to(&[0, 0], 9), None, "no row names 9");
+        assert_eq!(key.least_distance_to(&[0], 7), None, "another width");
     }
 
     /// claude-222: a table holding BOS or an id past the vocabulary is refused, and so is a

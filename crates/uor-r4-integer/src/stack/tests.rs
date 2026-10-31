@@ -5446,5 +5446,7 @@ fn a_panel_reply_records_the_point_keys_opening_and_is_capped() {
     assert_eq!(greedy.reply.len(), context - prompt.len(), "greedy is capped the same way");
     let short = panel_reply(&model8, prompt, 3, None).expect("served");
     assert_eq!((short.reply.len(), short.end), (3, ReplyEnd::Length));
-    assert!(panel_reply(&model8, &vec![12; context], 4, None).is_err(), "a prompt that fills the context");
+    let full = panel_reply(&model8, &vec![12; context], 4, None).expect("a prompt that fills the context");
+    assert_eq!((full.reply.len(), full.end), (1, ReplyEnd::Context), "its opening, and no step past the context");
+    assert!(panel_reply(&model8, &vec![12; context + 1], 4, None).is_err(), "a prompt past the context");
 }

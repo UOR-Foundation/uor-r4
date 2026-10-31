@@ -3061,28 +3061,45 @@ pub fn panel_prompts(
         write_new(&out.join(&file), &serde_json::to_vec(prompts)?)?;
         written.push((file, prompts.len()));
         let Some(runs) = served_runs else { continue };
+        let mut seeds = 0;
         for seed in 1..=3u8 {
             let path = runs.join(format!("r-drop-s{seed}")).join(format!("samples-{split}-served-memory.json"));
             if !path.exists() {
                 continue;
             }
-            let served: Vec<IdSample> = read_scored(&path)?;
-            if served.len() != prompts.len() {
-                return Err(invalid(format!("{}: {} samples, not the split's {} prompts", path.display(), served.len(), prompts.len())));
-            }
-            let mut keyed = prompts.clone();
-            for (p, s) in keyed.iter_mut().zip(&served) {
-                if (p.position, &p.prompt, &p.reference) != (s.position, &s.prompt, &s.reference) {
-                    return Err(invalid(format!("{}: the sample at {} is not the prompt's (an instrument fault)", path.display(), s.position)));
-                }
-                p.float_keyed = s.keyed;
-            }
+            let keyed = attach_float_names(prompts, &read_scored::<Vec<IdSample>>(&path)?)
+                .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
             let file = format!("prompts-{split}-s{seed}.json");
             write_new(&out.join(&file), &serde_json::to_vec(&keyed)?)?;
             written.push((file, keyed.len()));
+            seeds += 1;
+        }
+        // A served run holds DEV at every seed: without it, `--runs` is not that run (a fresh
+        // panel, which no float arm served, is written plain only).
+        if split == "dev" && seeds != 3 {
+            return Err(invalid(format!("--runs {}: DEV's served files are not there at seeds 1–3", runs.display())));
         }
     }
     Ok(written)
+}
+
+/// `prompts` with each one's float served name from `served`, a scored run's served arm on the
+/// same split (claude-224). Refused unless it holds exactly these prompts, sample by sample: the
+/// float arm decoded them.
+fn attach_float_names(prompts: &[PanelPrompt], served: &[IdSample]) -> Result<Vec<PanelPrompt>> {
+    if served.len() != prompts.len() {
+        return Err(invalid(format!("{} samples, not the split's {} prompts", served.len(), prompts.len())));
+    }
+    prompts
+        .iter()
+        .zip(served)
+        .map(|(p, s)| {
+            if (p.position, &p.prompt, &p.reference) != (s.position, &s.prompt, &s.reference) {
+                return Err(invalid(format!("the sample at {} is not the prompt's (an instrument fault)", s.position)));
+            }
+            Ok(PanelPrompt { float_keyed: s.keyed, ..p.clone() })
+        })
+        .collect()
 }
 
 /// One reply as `fbs-toks --replies` writes it (claude-224).
@@ -3208,6 +3225,28 @@ fn integer_reading(
     Ok(r)
 }
 
+/// The float names an integer served arm carries must be this seed's (claude-224). With the float
+/// side's served samples of the split, each sample's `float_keyed` is that file's `keyed` at the
+/// same position. Without them, which is a split no float arm served, it carries none. Anything
+/// else is an instrument fault: parity would read another seed's names, or none.
+fn check_float_names(split: &str, seed: u8, served: &[IntegerSample], float: Option<&[IdSample]>) -> Result<()> {
+    let fault = |what: &str| invalid(format!("{split} s{seed} integer: {what} (an instrument fault)"));
+    match float {
+        Some(float) => {
+            if float.len() != served.len()
+                || served.iter().zip(float).any(|(s, f)| s.position != f.position || s.float_keyed != f.keyed)
+            {
+                return Err(fault("its float names are not this seed's served file's"));
+            }
+        }
+        None if served.iter().any(|s| s.float_keyed.is_some()) => {
+            return Err(fault("it carries float names, but no float arm served this split"));
+        }
+        None => {}
+    }
+    Ok(())
+}
+
 /// The integer grade (point-key-integer unit 2, claude-224), on the laptop.
 /// - **What it reads:** the integer served arm against integer greedy on DEV and each panel, at seeds 1–3, with their parity against the float key and their free-generation measures.
 /// - **`carries`:** each panel's per-seed reading of done-when 4's bar against that seed's DEV (claude-220's `carries`). The rows are the run's sheet's.
@@ -3224,7 +3263,7 @@ pub struct IntegerGrade {
 /// [`IntegerGrade`] of `runs`.
 /// - **The files:** each `r-drop-s{seed}` there holds `integer-greedy-{split}.json` (from `/7`) and `integer-served-{split}.json` (from `/8`), as `fbs-toks --replies` writes them, for DEV and each name of `panels`.
 /// - **TRAIN's templates and replies** come from `data_root`, as in [`served_grade`].
-pub fn integer_grade(data_root: &Path, runs: &Path, panels: &[String]) -> Result<IntegerGrade> {
+pub fn integer_grade(data_root: &Path, runs: &Path, panels: &[String], float_runs: &Path) -> Result<IntegerGrade> {
     let bos = hs::SHEET_BOS_ID;
     let tokenizer = pinned_tokenizer(data_root)?;
     let eos = tokenizer.token_id("<|eos|>").ok_or_else(|| invalid("the pinned tokenizer has no <|eos|>"))?;
@@ -3241,6 +3280,9 @@ pub fn integer_grade(data_root: &Path, runs: &Path, panels: &[String]) -> Result
         for &split in &splits {
             let read = |arm: &str| -> Result<Vec<IntegerSample>> { read_scored(&dir.join(format!("integer-{arm}-{split}.json"))) };
             let (served, greedy) = (read("served")?, read("greedy")?);
+            let float = float_runs.join(format!("r-drop-s{seed}")).join(format!("samples-{split}-served-memory.json"));
+            let names = if float.exists() { Some(read_scored::<Vec<IdSample>>(&float)?) } else { None };
+            check_float_names(split, seed, &served, names.as_deref())?;
             let reading = integer_reading(split, seed, &served, &greedy, eos, &keep, &digits)?;
             grade.parity.push(integer_parity(split, seed, &served));
             let capped = |arm: &[IntegerSample]| arm.iter().filter(|s| s.end == "context").count();
@@ -11148,6 +11190,42 @@ mod tests {
             float_distance_q12: None,
             end: "length".to_owned(),
         }
+    }
+
+    /// claude-224: a seed's float names attach only to the prompts its served arm decoded, and an
+    /// integer served file must carry this seed's names, or none where no float arm served.
+    #[test]
+    fn the_float_names_are_the_seeds_own() {
+        let prompt = |position| PanelPrompt { position, prompt: vec![2, 3], reference: vec![4], float_keyed: None };
+        let sample = |position, keyed| IdSample {
+            position,
+            prompt: vec![2, 3],
+            reply: vec![4],
+            reference: vec![4],
+            reply_text: String::new(),
+            reference_text: String::new(),
+            reply_keys: 0,
+            reply_named: 0,
+            reference_keys: 0,
+            reference_named: 0,
+            admitted: Vec::new(),
+            stepped: Vec::new(),
+            keyed,
+            served_distance: None,
+        };
+        let prompts = [prompt(10), prompt(20)];
+        let served = [sample(10, Some(7)), sample(20, None)];
+        let named = attach_float_names(&prompts, &served).unwrap();
+        assert_eq!(named.iter().map(|p| p.float_keyed).collect::<Vec<_>>(), [Some(7), None]);
+        assert!(attach_float_names(&prompts, &served[..1]).is_err(), "another count");
+        let mut moved = served.clone();
+        moved[1].position = 21;
+        assert!(attach_float_names(&prompts, &moved).is_err(), "another prompt");
+        let int = |position, float| IntegerSample { position, float_keyed: float, ..integer_sample(None, vec![4], vec![4]) };
+        assert!(check_float_names("p-w", 1, &[int(10, Some(7)), int(20, None)], Some(&served)).is_ok());
+        assert!(check_float_names("p-w", 1, &[int(10, Some(8)), int(20, None)], Some(&served)).is_err(), "another seed's name");
+        assert!(check_float_names("p-x", 1, &[int(10, None), int(20, None)], None).is_ok());
+        assert!(check_float_names("p-x", 1, &[int(10, Some(7)), int(20, None)], None).is_err(), "names where no float arm served");
     }
 
     /// claude-224: parity's classes are the item's, fixed before any panel is read. An integer
