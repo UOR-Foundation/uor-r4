@@ -25,6 +25,8 @@ No measurement: this unit records an item.
   - trunk parity on the GPU with `fbs-compare` on (r-drop) s1, under a sheet;
   - the serving audit and the WASM build.
 - **`point-key-integer` now depends on it,** and its run step says why.
+- **The rate score's other flags are settled for (r-drop)** (the review's finding). `fold_scores` and `reflect_floor` also change the score before selection, and both are off in its run config. So the item serves `retain_rates` alone, and its snapshot refuses a config with either on.
+- **The review checked the core claim independently:** CLAIM TRUE. The integer geometric recurrence's λ and keep depend only on the rate index, and no path applies retention.
 - **DeepSeek's Studio is unaffected.** It serves the M1 discrete trunk and `fbs-dual-c131`, both trained before the retention switch (their owner log on #2028).
 
 ## What changed

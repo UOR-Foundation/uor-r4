@@ -29,11 +29,16 @@ Found by claude-225 reading the code, before any run.
   - λ_i = 1 − 2^−(i+1) at Q31, that is `(1 << 31) − (1 << (30 − i))`.
   - keep_i = isqrt(2^62 − λ_i²) at Q31, a precomputed table beside `GEOMETRIC_KEEP_Q31`, with no multiply in the step's audited path beyond what D80 allows.
   - Its floor matches the float side's clamp.
+- **The rate score's other two flags, settled for (r-drop):** `fold_scores` and `reflect_floor` (`geometric_stack_native.rs`) also change the score before the rate is selected, and the integer step only clamps.
+  - (r-drop)'s run config has both off (`"fold_scores": false`, `"reflect_floor": false`), so the clamp is the float rule for it, and this item serves `retain_rates` alone.
+  - A checkpoint trained with either on needs its own form too. The snapshot refuses such a run's config until that form exists.
 - **Trunk parity on the GPU** (CHARTER §3.5, the float reference): `fbs-compare`, the integer trunk's readouts against `fbs-snapshot`'s float readouts, on (r-drop) seed 1 at step 16,384, as the D11 exporter units measured it.
 
 ## Done when
 
-1. **The snapshot and the artifact carry the reading.** An artifact without it decodes exactly as today, and an engine without the retained form refuses one with it.
+1. **The snapshot and the artifact carry the reading.**
+   - An artifact without it decodes exactly as today, and an engine without the retained form refuses one with it.
+   - A run config with `fold_scores` or `reflect_floor` on is refused by the snapshot.
 2. **The retained recurrence matches a test-side f64 reference** of the float rule at every rate index, within one unit of its rounding, with a negative gate.
 3. **Parity, under a prep sheet with a fresh FIT and a pre-run review:** `fbs-compare` on (r-drop) s1, the integer readout against the float readout, reported as earlier exporter units reported it. The bar is registered in the sheet.
 4. **The serving audit** (`audit_zero_matmul_serving.py --stack`) and the WASM build pass.
