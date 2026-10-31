@@ -12,9 +12,9 @@ scope: [crates/uor-r4-training/**, docs/formal_vocabulary.md, docs/geometry/quat
 
 ## Why it matters
 
-The Hamilton gate is ACTIVE and trained in the discrete M1 composition and on the FBS trunk. It is meant to replace the sigmoid gate that the rules now ban. A sigmoid gate can shut a channel, and a unit rotation cannot, so the suppression question remains open even though training and serving now exist. See [the Hamilton gate page](../../mechanisms/hamilton-gate.md).
+The Hamilton gate is ACTIVE and trained in the discrete M1 composition and on the FBS trunk. It is meant to replace the sigmoid gate that the rules now ban. A sigmoid gate can shut a channel, and a unit rotation cannot, so broader downstream suppression questions remain open even though training and serving now exist. See [the Hamilton gate page](../../mechanisms/hamilton-gate.md).
 
-## Outcome and remaining questions
+## What is missing
 
 The suppression result is settled per block: `Supp_Hamilton` measured 0 of 78,888,960 blocks near the guard core and 0 of 986,112 downstream rows below 0.8, with a mixed export result. The remaining questions are identity-preconditioned or residual initialization at 1,024 steps or more, matched full-rung comparison, cross-block/downstream behavior, and whether near-zero blocks are usable in practice. See [the Hamilton mechanism record](../../mechanisms/hamilton-gate.md) and [the offline-float lab record](../../labs/hamilton-gate-offline-float-sheet/README.md).
 

@@ -11,9 +11,13 @@ notebook: docs/research/notebook/float-training.md
 scope: [crates/uor-r4-float-train/**, crates/uor-r4-integer/**, docs/mechanisms/hamilton-gate.md, docs/harness/prep/hamilton-gate-offline-float-sheet*, docs/labs/hamilton-gate-offline-float-sheet/**, docs/loop/tasks/hamilton-gate-offline-float-sheet/**]
 ---
 
-## Outcome and remaining questions
+## Why it matters
 
-The offline-float sheet completed language-fit and export-gap measurements. The Hamilton gate is ACTIVE and trained in the discrete M1 composition and on the FBS trunk, whose icosian-snapped form exports and serves exactly under `lut-stack/5` at DEV scope. Per-block suppression is measured: 0 of 78,888,960 blocks near the guard core and 0 of 986,112 downstream rows below 0.8, with a mixed export result. Remaining work is identity-preconditioned/residual initialization at 1,024 steps or more, a matched full-rung comparison, and cross-block/downstream behavior ([mechanism record](../../mechanisms/hamilton-gate.md), [lab record](../../labs/hamilton-gate-offline-float-sheet/README.md)).
+The offline-float sheet completed language-fit and export-gap measurements. The Hamilton gate is ACTIVE and trained in the discrete M1 composition and on the FBS trunk, whose icosian-snapped form exports and serves exactly under `lut-stack/5` at DEV scope. Per-block suppression is measured: 0 of 78,888,960 blocks near the guard core and 0 of 986,112 downstream rows below 0.8, with a mixed export result.
+
+## What is missing
+
+Remaining work is identity-preconditioned/residual initialization at 1,024 steps or more, a matched full-rung comparison, and cross-block/downstream behavior ([mechanism record](../../mechanisms/hamilton-gate.md), [lab record](../../labs/hamilton-gate-offline-float-sheet/README.md)).
 
 ## Done when
 
