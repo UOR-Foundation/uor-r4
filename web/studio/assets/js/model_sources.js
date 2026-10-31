@@ -739,7 +739,7 @@ function renderAll(container) {
     if (primaryEntries.length) {
         var trained = el('section', 'source-group');
         trained.appendChild(el('h3', null, 'Trained M1 model'));
-        trained.appendChild(el('p', 'hint', 'The M1-closing 19-table trunk export (uor-r4.lut-discrete-trunk/1). Load it to run top-8 next-token prediction in the browser; it is a language base, not a chat assistant. The download and load are user-initiated.'));
+        trained.appendChild(el('p', 'hint', 'M1-closing 19-table trunk export; next-token prediction only, not a chat assistant. User-initiated download.'));
         for (var t = 0; t < primaryEntries.length; t += 1) trained.appendChild(publishedModelCard(primaryEntries[t]));
         container.appendChild(trained);
     }
@@ -756,7 +756,7 @@ function renderAll(container) {
     if (researchEntries.length) {
         var research = el('section', 'source-group');
         research.appendChild(el('h3', null, 'Research artifacts (experimental)'));
-        research.appendChild(el('p', 'hint', 'Earlier trained exports kept for inspection. The FBS stack trunks have no token writer, so they are not generation-capable in this Studio; greedy continuation on a base model repeats tokens.'));
+        research.appendChild(el('p', 'hint', 'Earlier exports kept for inspection; not generation-capable in this Studio.'));
         for (var q = 0; q < researchEntries.length; q += 1) research.appendChild(publishedModelCard(researchEntries[q]));
         container.appendChild(research);
     }
@@ -795,15 +795,22 @@ function bundledCard() {
 function publishedModelCard(entry) {
     const card = el('div', 'source-card');
     const active = state.active.kind === 'wasm' && state.wasm.id === entry.id;
-    card.appendChild(cardHeader(entry.primary ? 'M1' : 'Published', entry.label, entry.note || ('Loads from ' + (entry.host || entry.url) + ' only when you click Load.'), active));
-    const pins = [];
-    if (entry.schema) pins.push(entry.schema);
-    pins.push('format ' + (entry.format || 'UORLUT01'));
-    if (entry.sizeBytes) pins.push(formatBytes(entry.sizeBytes));
-    if (entry.sha256) pins.push('sha256 ' + shortSha(entry.sha256));
-    pins.push(entry.tokenizerUrl ? 'stack-bound tokenizer' : 'no tokenizer');
-    card.appendChild(el('div', 'source-detail', pins.join(' · ')));
-    card.appendChild(el('div', 'source-detail', 'User-initiated remote load: bytes are fetched from ' + (entry.host || 'its host') + ' only after you click Load.'));
+    const badge = entry.primary ? 'PRIMARY' : (/c131|fbs/i.test(String(entry.id || '')) ? 'RESEARCH' : 'EVIDENCE');
+    card.appendChild(cardHeader(badge, entry.label, entry.note || ('Loads from ' + (entry.host || entry.url) + ' only when you click Load.'), active));
+    const metadata = el('div', 'source-meta');
+    [
+        ['Format', entry.schema || entry.format || 'UORLUT01'],
+        ['Size', entry.sizeBytes ? formatBytes(entry.sizeBytes) : 'unknown'],
+        ['SHA-256', entry.sha256 ? shortSha(entry.sha256) : 'not pinned'],
+        ['Tokenizer', entry.tokenizerUrl ? 'stack-bound' : 'none']
+    ].forEach(function (pair) {
+        const item = el('span', 'source-meta-pair');
+        item.appendChild(el('b', null, pair[0]));
+        item.appendChild(document.createTextNode(pair[1]));
+        metadata.appendChild(item);
+    });
+    card.appendChild(metadata);
+    card.appendChild(el('div', 'source-detail', 'Remote download starts only when you click Load.'));
     const actions = el('div', 'source-card-actions');
     const load = button('Load published model', 'load-published', { className: 'btn-secondary btn-small' });
     load.dataset.modelId = entry.id;

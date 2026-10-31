@@ -27,7 +27,7 @@
     </script>
 </head>
 <body data-view="chat">
-    <a class="skip-link" href="#chatInput">Skip to composer</a>
+    <a class="skip-link" href="#mainColumn">Skip to main content</a>
     <div class="app-shell" id="app" data-rail="expanded" data-sidebar="expanded" data-inspector="expanded">
         <header class="topbar" role="banner">
             <div class="topbar-left">
@@ -87,19 +87,19 @@
                     <button class="nav-footer-item" id="btnHelpNav" type="button">Help &amp; shortcuts <kbd class="nav-kbd">?</kbd></button>
                     <div class="nav-version"><span>Studio v2 · offline</span><button class="nav-command-hint" id="btnCommandPaletteNav" type="button"><kbd class="kbd">⌘K</kbd> Commands</button></div>
                     <div class="visually-hidden">
-                        <button id="btnNewChat2" type="button">New chat compat</button>
+                        <button data-compat="btnNewChat2" type="button">New chat compat</button>
                         <button id="btnOpenModelSources" type="button">Model sources compat</button>
-                        <button id="btnToggleInspector" type="button">Context compat</button>
-                        <button id="btnToggleInspector2" type="button">Context compat 2</button>
-                        <button id="btnToggleInspector3" type="button">Context compat 3</button>
-                        <button id="btnToggleInspector4" type="button">Context compat 4</button>
+                        <button data-compat="btnToggleInspector" type="button">Context compat</button>
+                        <button data-compat="btnToggleInspector2" type="button">Context compat 2</button>
+                        <button data-compat="btnToggleInspector3" type="button">Context compat 3</button>
+                        <button data-compat="btnToggleInspector4" type="button">Context compat 4</button>
                         <button id="btnInspectorCollapse" type="button">Context collapse compat</button>
                         <button id="btnOpenFolderSettings" type="button">Open folder compat</button>
                     </div>
                 </div>
             </aside>
 
-            <main class="main-column" id="mainColumn">
+            <main class="main-column" id="mainColumn" tabindex="-1">
                 <section class="view chat-panel" id="chatPanel" data-view="chat" aria-label="Chat">
                     <header class="view-head">
                         <div class="view-head-text">
@@ -204,7 +204,7 @@
                             <div class="providers-head">
                                 <div>
                                     <span class="micro-label">PROVIDERS</span>
-                                    <p class="hint">Local WASM artifacts, the published M1 trunk and OpenAI-compatible APIs. A remote model or API is only contacted after your explicit click.</p>
+                                    <p class="hint">Load a local artifact or the published M1 trunk; a remote model or API is contacted only after your explicit click.</p>
                                 </div>
                                 <span class="badge">on-device first</span>
                             </div>
@@ -381,13 +381,13 @@
         </div>
 
         <footer class="statusbar" role="contentinfo">
-            <div class="status-group status-workspace"><span class="status-label">WORKSPACE</span><span class="status-item" id="statusWorkspaceLabel">uor-r4 (main)</span><span class="status-sep" aria-hidden="true">·</span><span class="status-item footer-offline" id="footerOffline" title="Offline-first interface: no external requests are made while the page loads.">Offline-first interface: no external requests are made while the page loads.</span></div>
-            <div class="status-group status-agent"><span class="status-label">ENGINE</span><span class="status-item" id="engineStatusText">Engine: local WASM · starting</span><span class="status-item" id="footerEngine">Engine: starting</span></div>
-            <div class="status-group status-model"><span class="status-label">MODEL</span><span class="status-item" id="modelStatusText">Model: none</span><span class="status-item" id="footerTokenizer">Tokenizer: awaiting model</span></div>
-            <div class="status-group status-context"><span class="status-label">CONTEXT</span><span class="status-item" id="statusContext">Context: 0 files</span></div>
-            <div class="status-group status-privacy"><span class="status-label">PRIVACY</span><span class="status-item" id="privacyStatusText">Privacy: Local only</span></div><div class="status-group status-storage"><span class="status-label">STORAGE</span><span class="status-item" id="footerStorage">Storage: 0.0 MB / 10,240 MB</span></div>
+            <div class="status-group status-workspace"><span class="status-label">WORKSPACE</span><span class="status-item" id="statusWorkspaceLabel">uor-r4</span><span class="status-sep" aria-hidden="true">·</span><span class="status-item footer-offline">offline-first</span></div>
+            <div class="status-group status-agent"><span class="status-label">ENGINE</span><span class="status-item" id="engineStatusText">local WASM · starting</span></div>
+            <div class="status-group status-model"><span class="status-label">MODEL</span><span class="status-item" id="modelStatusText">none</span></div>
+            <div class="status-group status-context"><span class="status-label">CONTEXT</span><span class="status-item" id="statusContext">0 files</span></div>
+            <div class="status-group status-privacy"><span class="status-label">PRIVACY</span><span class="status-item" id="privacyStatusText">Local only</span></div><div class="status-group status-storage"><span class="status-label">STORAGE</span><span class="status-item" id="footerStorage">0.0 MB / 10,240 MB</span></div>
             <div class="status-right"><span class="status-item status-hint"><kbd class="kbd">⌘K</kbd> Commands</span><span class="status-sep" aria-hidden="true">·</span><span class="status-item status-clock" id="statusClock">--:--</span></div>
-            <div class="visually-hidden"><span id="engineStatus">Engine: starting</span><span id="modelStatus">No model loaded</span><span id="privacyStatus">Local only</span><span id="footerBranch">main</span><span id="statusFolder">no folder</span><span id="statusSession">session: new</span></div>
+            <div class="visually-hidden"><span id="engineStatus">Engine: starting</span><span id="modelStatus">No model loaded</span><span id="privacyStatusLegacy">Local only</span><span id="footerBranch">main</span><span id="footerOffline">Offline-first interface: no external requests are made while the page loads.</span><span id="footerEngine">Engine: starting</span><span id="footerTokenizer">Tokenizer: awaiting model</span><span id="statusFolder">no folder</span><span id="statusSession">session: new</span></div>
         </footer>
     </div>
 
@@ -1305,6 +1305,11 @@
         }
 
         function finishGenerationWithError(errorText) {
+            var friendlyError = String(errorText);
+            if (/ContextFull/i.test(friendlyError)) {
+                friendlyError = 'The bundled demo has a 64-token context. Shorten the prompt, or load the M1 trunk / an API provider for a longer context.';
+            }
+            errorText = friendlyError;
             var placeholder = document.querySelector('#chatMessages .msg[data-streaming="true"]');
             if (placeholder) {
                 placeholder.dataset.streaming = 'false';
