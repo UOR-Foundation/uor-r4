@@ -58,7 +58,7 @@ search and `/8` record, with 380 library tests and a full serving audit. [Claude
 has built the panel decode and grade. [Claude-227](../loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity
 within the 3% bar; [claude-228](../loop/tasks/point-key-integer/claude-228/REPORT.md) built the run's reference/read-back/BOS checks; [claude-229](../loop/tasks/point-key-integer/claude-229/REPORT.md) found an instrument fault: the
 integer session uses the native writer instead of the trained whole-table nearest readout, so all grade
-pairs are (0, 0). Unit 5 repairs the readout and checks parity before rerunning p-x. Useful conversation remains unproven.
+pairs are (0, 0). [integer-nearest-readout](../roadmap/items/integer-nearest-readout.md) repairs the readout and checks parity before rerunning p-x. Useful conversation remains unproven.
 
 ## What remains open beyond that key
 
