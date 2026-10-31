@@ -8,7 +8,7 @@ on new phrasing, remember across sessions, and run as one product. That remains 
 ```mermaid
 flowchart TD
   A["M1: saved integer model<br/>beats count tables"] --> B{"Can it start the right reply<br/>on new phrasing?"}
-  B -- "point key gives a partial gain" --> M["claude-220: float key; claude-222/224: integer instruments<br/>retention built; GPU parity, then unit 3"]
+  B -- "point key gives a partial gain" --> M["claude-220: float key; claude-222/224: integer instruments<br/>retention parity passed; unit 3 next"]
   M --> R["Complete correct replies<br/>and durable memory"]
   R --> S["Full serving, cost,<br/>distribution and release"]
 ```
@@ -55,9 +55,9 @@ then served the point key inside one float model on fresh p-w: templates improve
 three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing.
 [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table,
 search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md)
-has built the panel decode and grade. [Claude-226](../loop/tasks/integer-retention-rates/claude-226/REPORT.md) has built the retention
-recurrence and flag; GPU parity on (r-drop) s1 must pass before unit 3's real TRAIN export, p-x
-scoring and laptop measurement on client hardware. Useful conversation remains unproven.
+has built the panel decode and grade. [Claude-227](../loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity
+within the 3% bar; unit 3's real TRAIN export, p-x scoring and laptop measurement on client hardware
+is next. Useful conversation remains unproven.
 
 ## What remains open beyond that key
 

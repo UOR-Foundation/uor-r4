@@ -13,17 +13,17 @@ scope: [crates/uor-r4-float-train/src/fbs_export.rs, crates/uor-r4-float-train/s
 
 ## Why it matters
 
-The project's first hurdle is one working model end to end, served from its integer artifact. The trained model and the served one must compute the same recurrence. Claude-226 has now built the retained reading and its artifact flag; their GPU parity on the trained checkpoint remains to be proven.
+The project's first hurdle is one working model end to end, served from its integer artifact. The trained model and the served one must compute the same recurrence. Claude-226 built the retained reading and its artifact flag, and claude-227 proved their GPU parity on the trained checkpoint within the registered 3% bar.
 
 - **The float trunk's retention reading:** with `retain_rates` on, a recurrence lane carries 1 − 2^−(k+1) of its state at each token, with the input share keep = √(1 − λ²). `geometric_stack_native.rs`: "On (`in_space_long`, 27 Oct 2026): a lane carries `1 - 2^-(k+1)`, so entry `k` holds about `2^(k+1)` tokens."
 - **Every one-model-end-to-end checkpoint since then trained with it.** (r-drop), which claude-217 to claude-220 scored, has `"retain_rates": true` in its run's `config.json`, and claude-220 scored it with `--retain-rates 1`.
 - **Before claude-226, the integer artifact served only the off reading,** λ = 2^−(k+1), and the exporter carried no flag. Claude-225 found that mismatch by reading the code, before any run.
 - **Claude-226 built the flag and retained recurrence** ([REPORT](../../loop/tasks/integer-retention-rates/claude-226/REPORT.md), #3457): 386 integer-library tests, 186 float-library tests, nine negative gates and a full serving audit. Earlier snapshots still export byte for byte, and an older engine refuses the new `geometric-retention` reading.
-- **GPU parity is still NOT_RUN.** [`point-key-integer`](point-key-integer.md)'s real run waits for that check, not for the recurrence implementation.
+- **Claude-227 passed GPU parity** ([REPORT](../../loop/tasks/integer-retention-rates/claude-227/REPORT.md), #3458): the retained artifact agrees on 1,531 / 1,536 sequences (0.33% residual) and 4,023 / 4,096 single tokens (1.78%), both inside the 3% bar. The decay control agrees on only 17 and 84. The item is done; [`point-key-integer`](point-key-integer.md)'s real run is next.
 
 ## What is missing
 
-- **Trunk parity on the GPU** (CHARTER §3.5, the float reference): `fbs-compare`, the integer trunk's readouts against `fbs-snapshot`'s float readouts, on (r-drop) seed 1 at step 16,384, as the D11 exporter units measured it. `fbs-snapshot` now reads the run config and takes its float reference under retention too.
+- **No remaining gate in this item.** Parity is measured at the registered seed-1 checkpoint, with a known residual: the 1.78% single-token gap is inside the bar but its cause is not located. No throughput is measured here. Three full snapshots are stored for the point-key run.
 - **The completed integer form, for reference:** `rec_gates = "geometric-retention"`; λ_i = 1 − 2^−(i+1) at Q31 and keep_i = isqrt(2^62 − λ_i²), using precomputed tables with a test-side f64 reference. A run with `fold_scores` or `reflect_floor` on is refused; both are off in (r-drop), so this item serves `retain_rates` alone.
 
 ## Done when

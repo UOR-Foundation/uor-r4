@@ -72,7 +72,7 @@ sign key is inconclusive at this panel size. [Claude-220](../loop/tasks/one-mode
 then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at
 three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing.
 [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table,
-search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade. [Claude-226](../loop/tasks/integer-retention-rates/claude-226/REPORT.md) has built the retention recurrence and flag; GPU parity on (r-drop) s1 must pass before unit 3's real TRAIN export, p-x scoring and laptop measurement.
+search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade. [Claude-227](../loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; unit 3's real TRAIN export, p-x scoring and laptop measurement is next.
 
 ## What does not work yet
 
@@ -103,7 +103,7 @@ multiplication and are historical evidence, not the D11 product.
 | Fresh V2 / p-f | 7,215 / 7,228; 7,850 / 7,872 | [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
 | Useful conversation | Not established | [latest free-generation evidence](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md) |
 | Next capability milestone | M2: grounded complete replies | [PLAN](../../PLAN.md) |
-| Immediate gate | Retention GPU parity on (r-drop) s1, then unit 3's real TRAIN export, p-x scoring and laptop measurement | [claude-226](../loop/tasks/integer-retention-rates/claude-226/REPORT.md), [point-key item](../roadmap/items/point-key-integer.md) |
+| Immediate gate | Unit 3's real TRAIN export, p-x scoring and laptop measurement after retention parity passed | [claude-227](../loop/tasks/integer-retention-rates/claude-227/REPORT.md), [point-key item](../roadmap/items/point-key-integer.md) |
 | Products shipped | None; M1 is not an alpha release | [products](../products/README.md) |
 
 ## Go deeper

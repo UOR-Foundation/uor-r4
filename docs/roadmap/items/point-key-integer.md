@@ -27,7 +27,7 @@ The integer artifact cannot hold the float table, since no floating point is all
 
 ## What is missing
 
-**Completed units:** claude-222 (#3452) built the integer point table, its least-L1/commonest-target search and the `/8` record, with 380 library tests, 18 negative gates and a full serving audit. Claude-224 (#3454, [REPORT](../../loop/tasks/point-key-integer/claude-224/REPORT.md)) then built the panel prompts, integer decode and grade, with 383 integer-library tests, 185 float-library tests, a full serving audit and 13 negative gates. These are synthetic/host instruments, not a real TRAIN export or panel evaluation. Claude-226 has built the [`integer-retention-rates`](integer-retention-rates.md) recurrence and flag; unit 3 now waits on that item's GPU parity on (r-drop) s1. Its real export, fresh p-x scoring, tok/s and resident memory remain open under its fresh sheet and pre-run review.
+**Completed units:** claude-222 (#3452) built the integer point table, its least-L1/commonest-target search and the `/8` record, with 380 library tests, 18 negative gates and a full serving audit. Claude-224 (#3454, [REPORT](../../loop/tasks/point-key-integer/claude-224/REPORT.md)) then built the panel prompts, integer decode and grade, with 383 integer-library tests, 185 float-library tests, a full serving audit and 13 negative gates. These are synthetic/host instruments, not a real TRAIN export or panel evaluation. Claude-227 completed [`integer-retention-rates`](integer-retention-rates.md) with GPU parity inside the 3% bar: 1,531 / 1,536 sequences and 4,023 / 4,096 single tokens. Three full snapshots are stored. Unit 3's real export, fresh p-x scoring, tok/s and resident memory remain open under its fresh sheet and pre-run review.
 
 - **A table built by the integer engine.**
   - It holds TRAIN's opening points at the writer query's representation (i16 Q12: 212,968 × 256 × 2 B, about 109 MB) and their targets.
@@ -100,10 +100,10 @@ The model throughout is (r-drop)'s sealed step-16,384 checkpoints at seeds 1–3
    - **The grade:** `train-in-space --integer-grade` reads the integer arms by their own tokens, compares served names with claude-220's float served files (done-when 3), and reads the bar of done-when 4.
    - **Checks:** 383 integer-library tests, 185 float-library tests, 13 negative gates and a full serving audit.
    - **Limit:** both integer arms stop at BOS, 64 reply tokens or the shared 192-token context. Long-prompt replies are capped identically, and the real grade must report that count.
-3. **Next: the real run,** after the [`integer-retention-rates`](integer-retention-rates.md) GPU parity check.
-   - Claude-226 built the retained recurrence and flag. Parity on (r-drop) s1 is still NOT_RUN, so the real export has not yet proven the trained trunk.
+3. **Next: the real run,** with [`integer-retention-rates`](integer-retention-rates.md) complete.
+   - Claude-227 passed GPU parity within the 3% bar: 1,531 / 1,536 sequences and 4,023 / 4,096 single tokens. Three full snapshots are already stored, so no new pod snapshot run is needed.
    - It runs under a prep sheet with a fresh FIT and a pre-run review:
-   - (r-drop)'s snapshots on a pod;
+   - read the three stored snapshots and check `retain_rates` in each;
    - `fbs-export` and `fbs-export --point-key` over TRAIN on the laptop;
    - the fresh panel p-x drawn with its census;
    - the arms on p-x, p-w, p-v and DEV at seeds 1–3, tok/s and resident memory.
