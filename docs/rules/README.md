@@ -79,7 +79,7 @@ A **lab** is any contributor, human or AI, working under the charter. The rules 
 | Labs | Which task to pick from `PLAN.md`, how to implement it, their own pre-run and decision reviews, and the exact-head review of pull requests. | `CHARTER.md` §5.1, §5.3, §5.5 |
 | Subagents | Reviews, adversarial tests and research. They never make critical decisions: a change to a bar, status, scope or stop rule belongs to the top lab session after its decision review; §3 and the caps stay with the owner. | `CHARTER.md` §5.1, §5.2 |
 
-Two rules guard the owner's role without creating a wait. An unanswered ask becomes the lab's own decision review under D67, and Casey's own words beat any written acceptance text, with his directions recorded verbatim the same day (`CHARTER.md` §5.1). The old blanket Training, M2 and Stage B holds are released; D41's donor pass is the named owner-at-dispatch exception.
+Two rules guard the owner's role without creating a wait. An unanswered ask becomes the lab's own decision review under D68, and Casey's own words beat any written acceptance text, with his directions recorded verbatim the same day (`CHARTER.md` §5.1). The old blanket Training, M2 and Stage B holds are released; D41's donor pass is the named owner-at-dispatch exception.
 
 ## How evidence is judged
 

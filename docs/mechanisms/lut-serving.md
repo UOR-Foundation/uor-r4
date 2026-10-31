@@ -18,7 +18,7 @@ The arithmetic. A transformer runs on large matrix multiplications. Here the sam
 
 ![Three panels: table look-ups replace weight products; older and M1 integer exports agree exactly, with rounding costs shown for the older weights; 44 native and 7 WebAssembly serving symbols have zero float instructions, while integer multiply and divide are allowed and counted.](../figures/mechanisms/lut-serving.svg)
 
-*Left, table reads replace weight products; products of two runtime values can use the hardware multiply since claude-177. Middle, older 29M export checks and their weight-rounding costs; the discrete M1 pair has exact 14,287-row agreement and B4 pass. A separate strip compares the 0.90 BPB bar with served readings of 1.20138, 1.24233 and 1.24402. Right, the instruction audit counts zero floats and permits integer multiplies and divides.*
+*Left, a dense/FBS 4-bit projection, not M1's table-native discrete schema: table reads replace weight products; products of two runtime values can use the hardware multiply since claude-177. Middle, older 29M export checks and their weight-rounding costs; the discrete M1 pair has exact 14,287-row agreement and B4 pass. A separate strip compares the 0.90 BPB bar with served readings of 1.20138, 1.24233 and 1.24402. Right, the instruction audit counts zero floats and permits integer multiplies and divides.*
 
 ## Its chapter in the project's history
 

@@ -428,7 +428,7 @@ fn architecture() -> Result<String, Fail> {
     s.section(512.0, "M1 COMPLETE · CURRENT GAPS IN PLAN.md");
     s.card(
         [40.0, 530.0, 340.0, 66.0],
-        St::Working,
+        St::Complete,
         "M1 complete (discrete)",
         &["six bars, two seeds; exact D11 export"],
         false,
@@ -1065,7 +1065,7 @@ fn training_pipeline() -> Result<String, Fail> {
     );
     s.card(
         [600.0, 488.0, 560.0, 116.0],
-        St::Working,
+        St::Complete,
         "M1 complete (discrete)",
         &[
             "DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228;",

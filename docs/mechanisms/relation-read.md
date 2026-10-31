@@ -1,12 +1,12 @@
 # Relation read (finite relational head)
 
-**Status: ACTIVE.** It is built, passes 9 of 9 finite CUDA controls, and has trained twice. Both training runs were stopped by loss of admission before the read could be judged, so there is no verdict yet ([A8 dose record](../labs/a8-dose-2026-10-19/README.md)).
+**Status: ACTIVE.** It is built, passes 9 of 9 finite CUDA controls, and has trained three times. The first two runs stopped by loss of admission. Stage T's separate `T16_rel` run reached 4,096 batches at Q1 and committed 425 relation moves; its `relation_off` ablation dropped admission and top-1. There is no paired Route-control verdict, and M1's close is Flock + orbit-root pointer, not a Relation result ([A8 dose](../labs/a8-dose-2026-10-19/README.md), [Stage T](../labs/m1-bvg-k-stage-t-training/README.md)).
 
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run, **hypothesis** means an untested idea (see [the charter](../../CHARTER.md), section 4.6). Unfamiliar project terms (K16, A8, admission, NOT_RUN) are in the [glossary](../start/glossary.md).
 
 ## In plain words
 
-Much of language works by copying. When you meet a word you saw earlier, the next word is often the one that followed it last time. The [Flock read](./flock-read.md) finds earlier positions that look like the current one, but it cannot say "take the word right after that earlier copy." Relation adds that ability. It lets the read follow simple links between positions: the word right after, a sibling in the same phrase, the same word again. Each kind of link is controlled by one three-position dial: off, boost or penalise. With every dial off, the model behaves exactly like Flock. The dials have been trained twice, but never long enough to judge them.
+Much of language works by copying. When you meet a word you saw earlier, the next word is often the one that followed it last time. The [Flock read](./flock-read.md) finds earlier positions that look like the current one, but it cannot say "take the word right after that earlier copy." Relation adds that ability. It lets the read follow simple links between positions: the word right after, a sibling in the same phrase, the same word again. Each kind of link is controlled by one three-position dial: off, boost or penalise. With every dial off, the model behaves exactly like Flock. The dials have been trained three times, but there is no paired Route-control verdict. Stage T's third run reached Q1 rather than stopping for admission loss.
 
 ## What it replaces in a transformer
 

@@ -114,7 +114,7 @@
       "issue": 2030,
       "id": "M2",
       "title": "Grounded reply from exact memory: the native learner completes correct replies",
-      "lab": "codex",
+      "lab": "",
       "status": "in-progress",
       "headline": {
         "label": "complete correct replies on one accepted saved model (dev)",
@@ -176,7 +176,7 @@
       "issue": 2031,
       "id": "M3",
       "title": "Durable conversation memory: provenance, conflict, abstention, reset and restart",
-      "lab": "codex",
+      "lab": "",
       "status": "in-progress",
       "headline": {
         "label": "typed outcomes qualified on the saved model",

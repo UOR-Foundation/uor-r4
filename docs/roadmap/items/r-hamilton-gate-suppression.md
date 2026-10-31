@@ -14,9 +14,9 @@ scope: [crates/uor-r4-training/**, docs/formal_vocabulary.md, docs/geometry/quat
 
 The Hamilton gate is ACTIVE and trained in the discrete M1 composition and on the FBS trunk. It is meant to replace the sigmoid gate that the rules now ban. A sigmoid gate can shut a channel, and a unit rotation cannot, so the suppression question remains open even though training and serving now exist. See [the Hamilton gate page](../../mechanisms/hamilton-gate.md).
 
-## What is missing
+## Outcome and remaining questions
 
-The claim that a norm-preserving Hamilton gate can suppress a signal is a **hypothesis**, "a reading of the dossier only" (`docs/research/open-questions.md`). The mechanism page says: "This is a reading of the formula; the records do not discuss it." Nothing in the sources shows it was checked.
+The suppression result is settled per block: `Supp_Hamilton` measured 0 of 78,888,960 blocks near the guard core and 0 of 986,112 downstream rows below 0.8, with a mixed export result. The remaining questions are identity-preconditioned or residual initialization at 1,024 steps or more, matched full-rung comparison, cross-block/downstream behavior, and whether near-zero blocks are usable in practice. See [the Hamilton mechanism record](../../mechanisms/hamilton-gate.md) and [the offline-float lab record](../../labs/hamilton-gate-offline-float-sheet/README.md).
 
 What the page already derives from the formula (**proof**): with `r = sqrt(|g|^2 + 1e-12)` and `q = g/r`, the output length is `|q||u|`, so it equals `|u|` unless the gate block is near zero. The factor is 0.71 at `|g| = 1e-6`, and a zero gate block gives zero output. What is not settled:
 
@@ -45,7 +45,7 @@ A proof or finite test that settles whether such a gate can suppress a signal, l
 
 ## Sources
 
-- [`docs/research/open-questions.md:97`](../../../docs/research/open-questions.md)
-- [`docs/mechanisms/hamilton-gate.md`](../../../docs/mechanisms/hamilton-gate.md) (its Code section still names the inactive `geometric_stack.rs` and the never-compiled parity file)
+- [`docs/mechanisms/hamilton-gate.md`](../../../docs/mechanisms/hamilton-gate.md) (settled per-block suppression and remaining full-rung questions)
+- [`docs/labs/hamilton-gate-offline-float-sheet/README.md`](../../../docs/labs/hamilton-gate-offline-float-sheet/README.md)
 - [`crates/uor-r4-training/src/geometric_stack_native.rs`](../../../crates/uor-r4-training/src/geometric_stack_native.rs)
 - [`crates/uor-r4-training/src/cuda_stack.cu`](../../../crates/uor-r4-training/src/cuda_stack.cu)

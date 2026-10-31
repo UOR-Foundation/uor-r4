@@ -25,9 +25,9 @@ This item closes M1's bars (a)–(e); the separate `m1-heldout-phrasing-transfer
 
 ## Done when
 
-One saved discrete model: (a) starting reach at no fewer than 4,894 of 14,287; (b) reach kept on both seeds (G-Adm); (c) more than 16 of 256 cells in use plus the D39 occupancy condition (G-Occ); (d) integer top-1 through the integer export beats the unigram table (1,226) and the next-word table (6,300) on each of two seeds, with tokens per second reported; (e) the gain holds on a fresh sealed panel.
+**Approved close-grade contract, 30 Oct 2026:** [decision log 6515151261](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6515151261) approves one saved discrete model passing all six parts at both seeds: (a) self-contained D11 `UORLUT01`; (b) exact 14,287-row export/reference agreement and B4; (c) tokens/s reported; (d) DEV integer top-1 above unigram 1,226 and T2 6,300, with required target 6,324 = T2 + 24; (e) Fresh V2 transfer with paired band 82; and (f) held-out-phrasing transfer with its own census and paired band, supplied by `panel-score.json`.
 
-**Approved close-grade contract, 30 Oct 2026:** [decision log 6515151261](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6515151261) approves the completed outcome above: (a) self-contained D11 loading, (b) exact export agreement and B4, (c) tokens/s, (d) DEV integer top-1 above both count tables with target 6,324 = T2 + 24, (e) Fresh V2 transfer, and the separate `panel-score.json` for (f), held-out-phrasing transfer. The older D39 starting-reach, G-Adm and G-Occ conditions in this Done-when list remain upstream/historical requirements, not a relabelling of the close-grade fields. This records the approved close, not a new acceptance rule.
+**Historical upstream evidence, superseded as M1 closing criteria by that decision:** the earlier D39 starting-reach (4,894), G-Adm and G-Occ conditions and the older D39 acceptance text remain preserved below as upstream/historical evidence, not as a second current bar. This records the approved close and its supersession; it does not invent a new acceptance rule.
 
 ## How to start
 

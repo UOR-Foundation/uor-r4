@@ -16,11 +16,11 @@ An entry gives the date, what changed, which charter clauses it touches, and who
 
 ## 30 October 2026: M1 closes; mission status records 1 of 8 (D83)
 
-**Decided by:** M1's close was approved through claude-211's whole-chain decision review on #2029. Kimi records it here under the owner-approved documentation plan, answer **"Approved Plan"** at `2026-10-30T15:30:07Z`.
+**Decided by:** M1's close and its supersession of the older D39 closing criteria were approved through claude-211's whole-chain decision review on #2029, [decision log 6515151261](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6515151261). Kimi records it here under the owner-approved documentation plan, answer **"Approved Plan"** at `2026-10-30T15:30:07Z`.
 
 **What changed:**
-1. **Mission status only.** CHARTER §1 and AGENTS.md now record pre-alpha, 1 of 8 milestones complete; DECISIONS.md appends D83. The desktop product line now names the synthetic-verified shell rather than "spec only."
-2. **No rule changes.** No acceptance bar, technical constraint, GPU cap, workflow rule or owner release changes. D82 and every other clause remain as written.
+1. **Mission status and the approved record.** CHARTER §1 and AGENTS.md now record pre-alpha, 1 of 8 milestones complete; DECISIONS.md appends D83. The approved close-grade contract and its supersession are cited explicitly rather than relabelled. The desktop product line now names the synthetic-verified shell rather than "spec only."
+2. **No new rule invented by this documentation.** D83 records the approved close and its supersession; it does not invent a new bar. Status-only plan pointers now use `PLAN.md` and rendered `STATE.md`/`HANDOFF.md` for current records; retired `NOW.md`/`STATUS.md` citations remain historical.
 3. **Evidence and limit.** antigravity-110's saved integer artifacts pass all six bars at both seeds. The older close grade covers (a)–(e), and claude-211 supplies bar (f): p-f 7,850 / 7,872 against T2 7,375, band 81. The 0.625 reference-reply overlap with TRAIN means this is reading new phrasings into known reply kinds, not useful conversation.
 
 ## 29 October 2026: M1 adds a held-out-phrasing bar (D82)

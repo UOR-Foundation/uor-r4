@@ -45,7 +45,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 </defs>
 <rect class="bg" x="0" y="0" width="960" height="548"/>
 
-<text class="title" x="24" y="36">The web client: one download, then everything stays in the tab</text>
+<text class="title" x="24" y="36">The web client: local WASM in the tab; optional user API</text>
 <text class="sub" x="24" y="58">Solid: verified on a synthetic stand-in. Dashed: accepted-model work remains open.</text>
 
 <!-- Browser window -->
@@ -113,8 +113,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 
 <!-- Right: optional API, not a default server -->
 <line class="flow" x1="772" y1="240" x2="808" y2="240" marker-end="url(#arr)"/>
-<line class="cross" x1="782" y1="230" x2="798" y2="250"/>
-<line class="cross" x1="798" y1="230" x2="782" y2="250"/>
+<text class="note" x="812" y="270">not the default</text>
 <rect class="ext-none" x="812" y="210" width="124" height="60" rx="8"/>
 <text class="name" x="874" y="236" text-anchor="middle">Optional API</text>
 <text class="detail" x="874" y="254" text-anchor="middle">user-chosen</text>
