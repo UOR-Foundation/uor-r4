@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: true
 depends_on: [float-training-module, spiralcore-fbs-offline-float-sheet]
 notebook: docs/research/notebook/m4-serving.md
-scope: [crates/uor-r4-integer/src/stack/hamming.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-float-train/src/fbs_export.rs, crates/uor-r4-float-train/src/bin/fbs-snapshot.rs, docs/harness/prep/integer-hamming-read*, docs/loop/tasks/integer-hamming-read/**, docs/research/notebook/m4-serving.md, docs/roadmap/items/integer-hamming-read.md]
+scope: [crates/uor-r4-integer/src/stack/hamming.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-float-train/src/fbs_export.rs, crates/uor-r4-float-train/src/bin/fbs-snapshot.rs, crates/uor-r4-float-train/src/flock_read_hamming.rs, docs/harness/prep/integer-hamming-read*, docs/loop/tasks/integer-hamming-read/**, docs/research/notebook/m4-serving.md, docs/roadmap/items/integer-hamming-read.md]
 ---
 
 ## Why it matters
@@ -56,7 +56,17 @@ It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-
   2. the copy heads served, with synthetic controls against an exact reference;
   3. the type heads;
   4. the exporter reading `hamming_read.safetensors`: `fbs-snapshot` (`crates/uor-r4-float-train/src/bin/fbs-snapshot.rs`, the only path from a checkpoint to a snapshot) loads it with `HammingReads::load` and carries it, and `check_checkpoint_reads` stops refusing it. The conversion is a `pub fn` in `fbs_export.rs`, which can read `HammingRead`'s `pub(crate)` fields (the binary, a separate crate, cannot). The float readout read always runs on the readout, at `HAMMING_READOUT_DEPTH` (6), and the integer engine takes the read whose depth is the layer count as the readout; so the export refuses a trunk whose layer count is not `HAMMING_READOUT_DEPTH` (a 2-layer trunk would otherwise serve the stream read on the readout) (claude-199);
-  5. the float parity on claude-146's checkpoints (GPU, under a prep sheet: the trunk runs only on CUDA);
+  5. the float parity on claude-146's checkpoints (GPU, under a prep sheet: the trunk runs only on CUDA). It starts with a trace, because claude-233 (#3465) found the gap first. On (r-drop) step 16,384, the trunk alone agrees with its float D11 forward at s1 and s3 (5 and 11 of 1,536 positions differ); with the read it does not (694 and 823). Casey chose this step next (31 Oct 2026, in chat): "Trace attention first". claude-234 recorded the method:
+     - **The float side, on the GPU.** A capture inside `flock_read_hamming.rs`'s `apply` and `apply_readout` writes, per (position, head, read), the query code, the kept positions with their distances, and the distance at the 16th place. It is off by default, so training is unchanged. It runs in the D11 readout (`fbs_float_readout_on`) on claude-233's sequences.
+     - **The integer side, on the laptop.** The same record from `stack/hamming.rs`, served from the artifact exported from the same checkpoint.
+     - **The comparison.** The share of kept sets equal to float's, and top-1. A set that differs is put down to one cause:
+       - the same codes but a different set, which is a tie across the 16th place, decided by the tie rule;
+       - a different query or key code, which is a sign flip.
+       Anything else is an instrument fault, repaired before any number is read.
+     - **Two arms beside the plain D11 forward,** one per lead:
+       - **The tie rule.** The float `choose_sorted` keeps the first 16 of a GPU arg-sort, whose order among ties is not specified. The integer `nearest` keeps ascending distance, then ascending `s`. The arm gives the float the integer's rule, by sorting on a key built from the distance and `s` that is exact in f32 at these sizes, behind the same off-by-default switch.
+       - **The read's parameters.** The D11 readout loads `hamming_read.safetensors` at full f32 (`fbs-snapshot.rs`), and `round_tables_as_exported` rounds only the trunk's tables. The artifact holds the rotations and weights at 2^-24 and the margins at 2^-16. The arm rounds the read's parameters as exported.
+     - A lead that closes the gap is fixed in the port or the exporter. Then the parity is measured against the bar the sheet registers, on claude-146's checkpoints as done-when 2 says, and on (r-drop), which the one-model path ships;
   6. the speed.
 
 ## Done when
@@ -75,7 +85,7 @@ It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-
 
 ## Cancel if
 
-The integer runtime already has a Hamming read on main, or the float read is withdrawn.
+Another unit already meets this item's done-when on main (the read served at parity with its float forward, and its speed measured), or the float read is withdrawn. The read existing on main is not a cancel: it has been there since claude-189, and its parity is unmet (claude-233).
 
 ## How to start
 
