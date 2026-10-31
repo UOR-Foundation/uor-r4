@@ -37,7 +37,7 @@ six closing bars on both seeds
 | Fresh V2, 14,479 rows | **7,215 / 7,228** | unigram 1,279; T2 6,582 | Beats both beyond the paired band of 82 |
 | Held-out phrasing p-f, 15,953 rows | **7,850 / 7,872** | unigram 1,409; T2 7,375 | Beats both beyond the paired band of 81 |
 
-The same saved artifacts have zero export/reference gap and pass the planted-fault control. They
+The same saved artifacts have zero export/reference gap on the 14,287-row DEV panel at both seeds and pass the planted-fault control. They
 serve at a median **10,876 / 10,566 decode tokens per second on an Apple M1**, measured with a
 192-token prefill and 64-token decode for bar (f); the older close-grade bar (c) reports 11,026 /
 10,573 tok/s. Bar (f) uses prompts whose phrasing templates are absent

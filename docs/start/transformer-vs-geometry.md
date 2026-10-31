@@ -28,7 +28,7 @@ failed or broke a rule while the mechanism stays open. See the [mechanism board]
 
 ## What M1 established
 
-The saved discrete 19-table model has exact export/reference agreement and passes B4. It scores:
+The saved discrete 19-table model has exact 14,287-row DEV export/reference agreement and passes B4. It scores:
 
 - DEV **7,002 / 7,001** of 14,287 against unigram 1,226 and T2 6,300;
 - Fresh V2 **7,215 / 7,228** of 14,479 against unigram 1,279 and T2 6,582;

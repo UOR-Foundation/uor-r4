@@ -33,7 +33,7 @@ flowchart LR
 Give the discrete model an attention-like read of context. Under the rules (no softmax, no dense
 matmul, integer serving), the read could be a tree walk (Route), a small neighbour set rotated into
 the query's frame (Flock), or a link-following rule (Relation). The yardstick became six bars on one
-saved model: self-contained D11, exact export and B4, tokens/s, DEV above both count tables, Fresh V2
+saved model: self-contained D11, exact 14,287-row DEV export and B4, tokens/s, DEV above both count tables, Fresh V2
 transfer, and held-out-phrasing transfer ([CHARTER §4.8](../../../CHARTER.md#4-evidence)).
 
 ## What happened, in order

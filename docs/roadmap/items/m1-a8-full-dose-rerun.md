@@ -12,7 +12,7 @@ scope: [crates/uor-r4-discrete/**, docs/harness/prep/m1-a8-full-dose-rerun*, doc
 
 ## Why it matters
 
-Tests whether reach survives training, the then-current D39 G-Adm condition, and gives the first run in which ranking can be judged with admission intact. G-Adm is upstream/historical evidence, not the approved close-grade M1 bar (b), which is exact export/reference agreement and B4.
+Tests whether reach survives training, the then-current D39 G-Adm condition, and gives the first run in which ranking can be judged with admission intact. G-Adm is upstream/historical evidence, not the approved close-grade M1 bar (b), which is exact 14,287-row DEV export/reference agreement and B4.
 
 ## What is missing
 

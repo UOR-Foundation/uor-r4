@@ -31,7 +31,7 @@ useful conversation.
 ## What M1 established
 
 The saved discrete model passes six bars at both seeds: a self-contained D11 artifact; exact
-export/reference agreement and a planted-fault control; tokens per second; DEV integer top-1 above
+14,287-row DEV export/reference agreement and a planted-fault control; tokens per second; DEV integer top-1 above
 unigram and T2; Fresh V2 transfer; and held-out-phrasing transfer.
 
 - DEV: **7,002 / 7,001** of 14,287 against unigram 1,226 and T2 6,300.

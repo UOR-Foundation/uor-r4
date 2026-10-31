@@ -73,7 +73,7 @@ They share:
 - the tokenizer and the data;
 - the D11 runtime crate, [`crates/uor-r4-integer`](../../crates/uor-r4-integer).
 
-They share no table, no trunk and no artifact format. This page follows the FBS trunk for the current complete-reply work, while the discrete path supplies the M1 result. The M1 pair also scores 7,215 / 7,228 on Fresh V2 and 7,850 / 7,872 on p-f at two seeds, with exact export agreement and Apple M1 decode at 10,876 / 10,566 tok/s ([Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)). The p-f reference replies are 62.5% verbatim TRAIN replies, so M1 is not useful-chat qualification.
+They share no table, no trunk and no artifact format. This page follows the FBS trunk for the current complete-reply work, while the discrete path supplies the M1 result. The M1 pair also scores 7,215 / 7,228 on Fresh V2 and 7,850 / 7,872 on p-f at two seeds, with exact 14,287-row DEV export agreement and Apple M1 decode at 10,876 / 10,566 tok/s ([Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)). The p-f reference replies are 62.5% verbatim TRAIN replies, so M1 is not useful-chat qualification.
 
 ## The chain at a glance
 
@@ -88,7 +88,7 @@ They share no table, no trunk and no artifact format. This page follows the FBS 
 | 7 | Readout | writer **23 µs, 0.6%**; whole-table nearest **486 µs** | whole-table search **13.0 ms, 13%** | a query point in ℝ²⁵⁶ → a token id | yes. The decision is to serve nearest (claude-150), at 21 times the writer's cost |
 | 8 | Decode loop | **36 µs outside the step, 1% of the plain token** | none | an id → the next id, greedy | ids only: the FBS artifact has no text path |
 | 9 | Training | none | **96.5 ms a step, 31,718 context tok/s** at (a) | windows → float weights | yes |
-| 10 | Integer export | once per model | none | a float snapshot → a `UORLUT01` integer artifact | discrete M1: exact 14,287-row agreement and B4 pass. FBS `/5`: inside the export-gap bar at DEV scope |
+| 10 | Integer export | once per model | none | a float snapshot → a `UORLUT01` integer artifact | discrete M1: exact 14,287-row DEV agreement and B4 pass. FBS `/5`: inside the export-gap bar at DEV scope |
 | 11 | Serving on M1 | **3.77 ms a token (the step 3.73), 265 tok/s** | none | the artifact and prompt ids → reply ids | — |
 
 Serving shares are of a step on claude-126's width-256 export ([claude-158](../loop/tasks/fbs-cost-profile/claude-158/REPORT.md)); training shares are of claude-152's (a) step ([claude-157](../loop/tasks/fbs-cost-profile/claude-157/REPORT.md)). The two platforms differ in hardware, number type and what a step holds, so shares are compared only within each column.

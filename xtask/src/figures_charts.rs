@@ -584,7 +584,7 @@ fn status_vs_baselines() -> Result<String, Fail> {
         fy,
         NOTE,
         Anchor::Start,
-        "Exact export/reference agreement and B4 pass at both seeds.",
+        "Exact 14,287-row DEV export/reference agreement and B4 pass at both seeds.",
     );
     d.text(
         EDGE,

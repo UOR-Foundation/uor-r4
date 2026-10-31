@@ -101,7 +101,7 @@ context-free successor table. See [open questions](./open-questions.md) for what
 
 | Result | Scope and caveat | Source |
 |---|---|---|
-| **M1 complete:** DEV 7,002 / 7,001 of 14,287 against unigram 1,226 and T2 6,300 | Two seeded discrete `UORLUT01` artifacts; exact export agreement and B4 pass | [M1 close](../labs/m1-close-saved-model/README.md) |
+| **M1 complete:** DEV 7,002 / 7,001 of 14,287 against unigram 1,226 and T2 6,300 | Two seeded discrete `UORLUT01` artifacts; exact 14,287-row DEV export agreement and B4 pass | [M1 close](../labs/m1-close-saved-model/README.md) |
 | Fresh V2: 7,215 / 7,228 of 14,479 against unigram 1,279 and T2 6,582 | Paired band 82 at both seeds | [Fresh transfer](../labs/m1-fresh-panel-transfer/README.md) |
 | p-f: 7,850 / 7,872 of 15,953 against unigram 1,409 and T2 7,375, band 81 | New prompt phrasings at K = 1,024; 62.5% of reference replies are verbatim TRAIN, so known reply kinds, not new reply kinds or chat | [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
 | Apple M1 decode 10,876 / 10,566 tok/s | Median, 192-token prefill and 64-token decode; native, not browser | [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |

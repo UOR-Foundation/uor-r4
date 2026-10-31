@@ -26,7 +26,7 @@ The saved 19-table `uor-r4.lut-discrete-trunk/1` model passes all six bars on tw
 - DEV **7,002 / 7,001** of 14,287 against unigram 1,226 and T2 6,300;
 - Fresh V2 **7,215 / 7,228** of 14,479 against unigram 1,279 and T2 6,582;
 - p-f **7,850 / 7,872** of 15,953 against unigram 1,409 and T2 7,375, beyond paired band 81;
-- exact 14,287-row export/reference agreement and B4;
+- exact 14,287-row DEV export/reference agreement and B4;
 - Apple M1 decode **10,876 / 10,566 tok/s** under the bar-f protocol.
 
 p-f has no prompt value-masked templates in TRAIN at K = 1,024, so it tests new phrasings. But

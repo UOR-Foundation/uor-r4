@@ -11,7 +11,7 @@ Labels used below: **proof** means derived from definitions or code, **measureme
 
 ## In plain words
 
-This is how a finished model runs on an ordinary laptop or in a web browser using only whole numbers: adds, shifts and table look-ups. There is no decimal arithmetic. Since D80 and D81 (28 Oct 2026) the chip's own whole-number multiply and divide are allowed too, and since claude-177 the stack's kernels use them. A dense/FBS model is exported to a compact file, mostly 4-bit numbers; M1's table-native `lut-discrete-trunk/1` instead stores named integer lookup tables and has zero 4-bit matrix sections. A checker then reads the compiled program and counts machine instructions to prove that no decimal arithmetic sneaks in, and it counts the multiplies and divides it now allows. The discrete M1 pair and the separate FBS trunk have been exported and served; the M1 pair has exact export/reference agreement and native Apple M1 decode at 10,876 / 10,566 tok/s. Neither result is useful-chat qualification.
+This is how a finished model runs on an ordinary laptop or in a web browser using only whole numbers: adds, shifts and table look-ups. There is no decimal arithmetic. Since D80 and D81 (28 Oct 2026) the chip's own whole-number multiply and divide are allowed too, and since claude-177 the stack's kernels use them. A dense/FBS model is exported to a compact file, mostly 4-bit numbers; M1's table-native `lut-discrete-trunk/1` instead stores named integer lookup tables and has zero 4-bit matrix sections. A checker then reads the compiled program and counts machine instructions to prove that no decimal arithmetic sneaks in, and it counts the multiplies and divides it now allows. The discrete M1 pair and the separate FBS trunk have been exported and served; the M1 pair has exact 14,287-row DEV export/reference agreement and native Apple M1 decode at 10,876 / 10,566 tok/s. Neither result is useful-chat qualification.
 
 ## What it replaces in a transformer
 
@@ -19,7 +19,7 @@ The arithmetic. A transformer runs on large matrix multiplications. Here the sam
 
 ![Three panels: table look-ups replace weight products; older and M1 integer exports agree exactly, with rounding costs shown for the older weights; 44 native and 7 WebAssembly serving symbols have zero float instructions, while integer multiply and divide are allowed and counted.](../figures/mechanisms/lut-serving.svg)
 
-*Left, a dense/FBS 4-bit projection, not M1's table-native discrete schema: table reads replace weight products; products of two runtime values can use the hardware multiply since claude-177. Middle, older 29M export checks and their weight-rounding costs; the discrete M1 pair has exact 14,287-row agreement and B4 pass. A separate strip compares the 0.90 BPB bar with served readings of 1.20138, 1.24233 and 1.24402. Right, the instruction audit counts zero floats and permits integer multiplies and divides.*
+*Left, a dense/FBS 4-bit projection, not M1's table-native discrete schema: table reads replace weight products; products of two runtime values can use the hardware multiply since claude-177. Middle, older 29M export checks and their weight-rounding costs; the discrete M1 pair has exact 14,287-row DEV agreement and B4 pass. A separate strip compares the 0.90 BPB bar with served readings of 1.20138, 1.24233 and 1.24402. Right, the instruction audit counts zero floats and permits integer multiplies and divides.*
 
 ## Its chapter in the project's history
 

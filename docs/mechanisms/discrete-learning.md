@@ -1,6 +1,6 @@
 # Discrete geometric learning (exact-move counterfactual training)
 
-**Status: ACTIVE.** It is the learning rule of the live discrete model path, `crates/uor-r4-discrete`. The pilot, K=8 dose, four K16 runs and Relation stops are preserved as negative or diagnostic history. Stage T and the later 19-table joint-pointer Hamilton trunk then produced the saved M1 model: DEV 7,002 / 7,001, Fresh V2 7,215 / 7,228 and p-f 7,850 / 7,872 at two seeds, with exact export agreement. That is a whole-model M1 result, not an independent ablation for this learning rule or useful chat. New training goes through the lab's pre-run review (D67), not a blanket owner hold ([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
+**Status: ACTIVE.** It is the learning rule of the live discrete model path, `crates/uor-r4-discrete`. The pilot, K=8 dose, four K16 runs and Relation stops are preserved as negative or diagnostic history. Stage T and the later 19-table joint-pointer Hamilton trunk then produced the saved M1 model: DEV 7,002 / 7,001, Fresh V2 7,215 / 7,228 and p-f 7,850 / 7,872 at two seeds, with exact 14,287-row DEV export agreement. That is a whole-model M1 result, not an independent ablation for this learning rule or useful chat. New training goes through the lab's pre-run review (D67), not a blanket owner hold ([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run, **hypothesis** means an untested idea. See [`docs/formal_vocabulary.md`](../formal_vocabulary.md).
 
@@ -36,7 +36,7 @@ The 15 non-identity moves are bivector rotations. The step picks $m^*=\arg\min_m
 
 **Speed-ups.** The row-parallel kernel (`rows_v1`) computes the baseline once per row and each candidate once per row and lane, instead of replaying every row serially per candidate. It reproduces the serial losses on every checked case (**measurement**: Route read 3.843 s to 0.0691 s per proposal, 55.6 times faster, 64 rows; Route-mode index coverage was widened after review). BVG-K (batched verified coordinates) scores up to 64 coordinates per launch and commits a block only if its joint loss beats the best single move.
 
-**Rule check.** No softmax, exp, softplus, sigmoid or tanh (D23), and no matrix multiplication (D30): the choice is an integer minimum, distances are integer L1 and Hamming, and moves are table lookups. The saved 19-table discrete model exports through `uor-r4.lut-discrete-trunk/1` with exact 14,287-row agreement and B4 pass, and serves at 10,876 / 10,566 native decode tok/s on Apple M1. D37 allows offline float training; that needs a separate scanned module and a reported export gap.
+**Rule check.** No softmax, exp, softplus, sigmoid or tanh (D23), and no matrix multiplication (D30): the choice is an integer minimum, distances are integer L1 and Hamming, and moves are table lookups. The saved 19-table discrete model exports through `uor-r4.lut-discrete-trunk/1` with exact 14,287-row DEV agreement and B4 pass, and serves at 10,876 / 10,566 native decode tok/s on Apple M1. D37 allows offline float training; that needs a separate scanned module and a reported export gap.
 
 ## What has been tried
 
@@ -69,7 +69,7 @@ $P_{succ}$ is the 3,847-row copy-successor sub-panel (see [relation-read](./rela
 - Frequent-token revisits and a full corpus pass (one 16,404-coordinate pass uses 1,049,856 of 2,425,925 training targets).
 - The independent effects of BVG-K and Flock reads at dose; both were used in the M1 composition without isolated attribution.
 - All 240 E8 roots, the icosian and quaternion adapters, and $\mathbb{Z}[\varphi]$ pairs.
-- Useful generated conversation, complete correct replies and M2 acceptance. M1 has exact export agreement and Apple M1 decode measured, but that is not useful chat.
+- Useful generated conversation, complete correct replies and M2 acceptance. M1 has exact 14,287-row DEV export agreement and Apple M1 decode measured, but that is not useful chat.
 - Fresh-slice transfer for the older runs; M1's Fresh V2 and p-f transfer have now been measured.
 - A float credit sheet on the same geometry (D37 allows it; none is registered).
 

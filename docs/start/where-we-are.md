@@ -28,7 +28,7 @@ adds bar (f), and [M1 #2029](https://github.com/UOR-Foundation/uor-r4/issues/202
 | Held-out-phrasing p-f | **7,850 / 15,953** | **7,872 / 15,953** | unigram 1,409; T2 7,375; paired band 81 |
 | Apple M1 decode | **10,876 tok/s** | **10,566 tok/s** | bar-f remeasurement; median, 192-token prefill and 64-token decode |
 
-The older close-grade bar (c) reports 11,026 / 10,573 tok/s; the table keeps the separate bar-f remeasurement. Both seeds have exact 14,287-row export/reference agreement and pass the planted-fault B4 control.
+The older close-grade bar (c) reports 11,026 / 10,573 tok/s; the table keeps the separate bar-f remeasurement. Both seeds have exact 14,287-row DEV export/reference agreement and pass the planted-fault B4 control.
 Sources: [M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), and [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md).
 
 **What bar (f) proves, and its limit.** At K = 1,024, no p-f prompt value-masked template occurs
@@ -41,7 +41,7 @@ generated-copy rate, and not new reply kinds or useful conversation.
 | Part | Evidence | Scope | Source |
 |---|---|---|---|
 | Discrete geometric language base | M1's six bars on two saved integer artifacts | Next-token ranking on DEV, Fresh V2 and p-f, not free conversation | [M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
-| Integer serving (D11) | Exact export/reference agreement and planted-fault control; integer multiply and divide are allowed, floats remain banned | The M1 pair and the separate FBS `lut-stack/5` export | [serving dossier](../mechanisms/lut-serving.md) |
+| Integer serving (D11) | Exact 14,287-row DEV export/reference agreement and planted-fault control; integer multiply and divide are allowed, floats remain banned | The M1 pair and the separate FBS `lut-stack/5` export | [serving dossier](../mechanisms/lut-serving.md) |
 | Exact-read oracle | True-address 80/80 against 0/80 no-memory and 20/80 sieve | Exact-read oracle only, not learned address formation or M3 | [exact memory](../mechanisms/exact-memory.md) |
 | Object-store consumer | Consumer built; frozen 384-item host-control panel passes | On-model M3 run needs a selected M1 or M2 model; host controls are not M3 qualification | [consumer record](../labs/object-store-consumer-m3/README.md) |
 | Browser worker and Studio | Synthetic parity harness and live M1 top-8 next-token prediction, with self-hosted assets and stack-bound tokenizers | Language base, not chat; no qualified bundled product or M7 accepted-model parity | [web client](../products/web-client.md) |
