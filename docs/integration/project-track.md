@@ -124,6 +124,15 @@ Current behavior is local by default, with only an explicit user-configured web 
 - **Original D39 item 5, preserved:** a float candidate is disqualified when its export gap exceeds the two-seed noise band on the same evaluator; the band is fixed per sheet at FIT time. Float scores are instrument readings, never decision metrics.
 - **Original D21 progress control, restored by D39 item 6 and preserved:** after three consecutive merged PRs on one line that do not move the owning milestone's headline, the next action is a pivot card on the milestone issue. M1's interim headline exists so this rule can fire again.
 
+**Original binding rule text, preserved at item start as history:**
+- **D23 / D25 / D30.** No softmax, softplus, sigmoid, tanh or GELU anywhere, including renamed and table forms, in objectives, gradients, sampling, teachers or comparators; no dense matrix multiplication or GEMM anywhere, including wrapper laundering.
+- **D24.** Model compute runs on the GPU, with no host fallback.
+- **D37.** Float is legal in **offline training only**, in a separate scanned geometric module with its own allowlist entry added at pre-registration; the served artifact is D11 integer, and every float-trained candidate reports its export gap.
+- **D11.** Served computation has no floating point and no transcendental arithmetic. Since D80 and D81 (28 Oct) it may use the hardware integer multiply and divide.
+- **D22 / D31.** A negative closes a configuration, never a mechanism. A tooling or numerical failure is a blocker to fix, not a negative, and an unreachable instrument is `INSTRUMENT_UNREACHABLE`, not a mechanism result.
+- **D39 item 7.** Labs pick work from `NOW.md` and the milestone queues, post a one-line intent note on the owning issue, and continue unless the PM redirects; every gate above is unchanged.
+- **Delivery.** Named paths, protected PR, exact-head checks/review, and verification of the actual merge commit on a fresh `origin/main`. An open PR is pending, not merged.
+
 ## Superseded sections — original anchors preserved
 
 These headings remain as pointers so old inbound links resolve to history rather than a current plan.

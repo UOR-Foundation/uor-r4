@@ -35,7 +35,7 @@ const DEFAULT_OUT: &str = "docs/figures";
 /// Correct first guesses on the 14,287-position DEV panel.
 /// Sources: `docs/labs/m1-close-saved-model/README.md` (saved M1 model top-1,
 /// seed 1 = 7,002, seed 2 = 7,001) and
-/// `docs/labs/host-diagnostics-2026-10-17/README.md` (unigram table 1,226 and
+/// `archive/labs/host-diagnostics-2026-10-17/README.md` (unigram table 1,226 and
 /// next-word table T2 6,300, both on the full 14,287 panel). Close-grade bar (d)
 /// requires T2 + 24 = 6,324. The older K16 values are historical, not the current best.
 const PANEL_POSITIONS: u64 = 14_287;

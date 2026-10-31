@@ -50,7 +50,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 
 <!-- Panel A -->
 <rect class="panel" x="16" y="56" width="928" height="262" rx="6"/>
-<text class="h" x="32" y="82">A. One projection built from adds and table reads</text>
+<text class="h" x="32" y="82">A. Dense/FBS projection built from adds and table reads</text>
 <rect class="box" x="32" y="100" width="110" height="40" rx="5"/>
 <text class="b mid" x="87" y="118">activation x</text><text class="s mid" x="87" y="133">(an integer)</text>
 <line class="arrow" x1="87" y1="142" x2="87" y2="158"/>

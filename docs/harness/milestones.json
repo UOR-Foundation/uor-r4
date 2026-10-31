@@ -424,7 +424,7 @@
     },
     {
       "id": "D25",
-      "rule": "Geometry only, no softmax and no dense matmul remain. Runs proceed under the lab's D67 pre-run review; D41's donor pass needs the owner at dispatch. The earlier operator-phase sequence and independent M2 rental hold are historical, not current holds.",
+      "rule": "Historical D25 summary preserved verbatim: Current geometric operator phase: OP2 first -> OP1 G2 only -> OP3a -> lawful rung0 after hold release -> OP4/rung0b; OP3b later research. Training and independent M2 rental hold remain. FIT lifts no hold; preserve peer work and frozen constraint set. D67 subsequently removed blanket M2 training/rental holds; D41's donor pass remains the owner-at-dispatch exception.",
       "scope": "all",
       "source": "docs/integration/DECISIONS.md"
     },
