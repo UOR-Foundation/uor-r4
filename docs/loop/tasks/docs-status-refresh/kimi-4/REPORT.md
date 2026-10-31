@@ -37,7 +37,7 @@ This is a documentation and evidence-propagation unit. It ran no model training,
 - Repaired the fifth review's findings: corrected six hand-figure status lines and the lineage's historical/current framing; set DEV's required target to 6,324 = T2 6,300 + 24; distinguished FBS routes from the READY float projection and M1's exact composition; restored M1/M4 `previous_next` verbatim; and corrected the factual minor findings on status links, M2 priority, figure descriptions, object-store consumption and close-grade/bar-f speed provenance.
 - Corrected all three Studio status areas to 1/8, native M1 decode, stack-bound ByteLevel BPE, self-hosted assets, and the synthetic stand-in with no bundled qualified model. Strengthened the existing checks against stale status.
 - Preserved `archive/**`, all other `docs/labs/**`, dated notebook rows, `docs/integration/current-state.md`, Claude's research files, and antigravity-113's two mechanism pages. `STATE.md`, `HANDOFF.md`, and `docs/roadmap/README.md` remain for the designated render workflow, not hand edits.
-- Diff size: 117 files, 2,550 insertions and 1,831 deletions, including this REPORT and the complete non-archive README inventory.
+- Diff size: 117 files, 2,526 insertions and 1,811 deletions, including this REPORT and the complete non-archive README inventory.
 
 ## Measurements
 
