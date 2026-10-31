@@ -63,8 +63,8 @@ The FBS native rates are different measurements from the M1 pair's: 4,217–4,32
 `UORLUT01` starts with an 8-byte magic string and JSON header, then aligned integer data sections.
 The reader validates offsets and lengths and computes SHA-256 as it loads. Table-native schemas
 include `lut-discrete/1` and `lut-discrete-trunk/1`. The separate FBS `lut-stack/5` is a 4-bit
-float-to-integer stack with exact rotations, not a table-native discrete schema. Older dense `/1`,
-`/2` and `/3` families are historical and do not describe the M1 artifact
+float-to-integer stack with exact rotations, not a table-native discrete schema. Older dense
+`lut-stack/1`, `/2` and `/3` families are historical and do not describe the M1 artifact
 ([`format.rs`](../../crates/uor-r4-integer/src/stack/format.rs)).
 
 Exact geometry can be tables: the 120-element icosian Cayley table, Lorentz arcosh values and Q30

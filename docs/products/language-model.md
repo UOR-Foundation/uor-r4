@@ -81,7 +81,7 @@ The reader checks offsets and lengths and computes the file's SHA-256 as it load
 pin that identity ([`format.rs`](../../crates/uor-r4-integer/src/stack/format.rs)). Table-native
 schemas include `lut-discrete/1` and `lut-discrete-trunk/1`. The separate FBS `lut-stack/5` is a
 4-bit float-to-integer stack with exact rotations, not a table-native discrete schema; older dense
-`/1`, `/2` and `/3` schemas are not a description of today's M1 artifact.
+`lut-stack/1`, `/2` and `/3` schemas are not a description of today's M1 artifact.
 
 The serving engine is [`crates/uor-r4-integer`](../../crates/uor-r4-integer/). It serves native and
 WebAssembly artifacts, with save/restore formats such as `UR4SESS1`. An engine audit proves the

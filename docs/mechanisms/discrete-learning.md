@@ -80,7 +80,7 @@ SpiralCore/FBS discrete learning; counterfactual-choose-apply-validate training;
 ## Code
 
 - [`discrete.cu`](../../crates/uor-r4-discrete/src/discrete.cu): forward pass, 16-lane counterfactual, choose, apply, validate, shared writer.
-- [`device.rs`](../../crates/uor-r4-discrete/src/device.rs) and [`training.rs`](../../crates/uor-r4-discrete/src/training.rs): `propose`, `apply`, the corpus driver and the D67 pre-run review.
+- [`device.rs`](../../crates/uor-r4-discrete/src/device.rs) and [`training.rs`](../../crates/uor-r4-discrete/src/training.rs): `propose`, `apply` and the corpus driver. New runs follow the lab's D67 pre-run review.
 - [`rows_source.rs`](../../crates/uor-r4-discrete/src/rows_source.rs) and [`bvgk_source.rs`](../../crates/uor-r4-discrete/src/bvgk_source.rs): row-parallel counterfactual and BVG-K.
 - [`attention_audited.rs`](../../crates/uor-r4-discrete/src/attention_audited.rs): the admission-preserving controller. [`spiralcore_operator.rs`](../../crates/uor-r4-core/src/spiralcore_operator.rs): the 64-element group.
 - [`wider_carrier_source.rs`](../../crates/uor-r4-discrete/src/wider_carrier_source.rs) and [`wider_carrier.rs`](../../crates/uor-r4-discrete/src/wider_carrier.rs): wider code carrier ($B = 6, 8$ blocks) CUDA qualification kernels and zero-training capacity grader.

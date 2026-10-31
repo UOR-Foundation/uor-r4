@@ -90,7 +90,7 @@ flowchart TD
   class r4g1,nat,stack,cc,lc,ptr,mem,e8 PARKED
 ```
 
-Five mechanisms have no recorded parent or child, so they are not drawn: admission, the tokenizer, Hopf observation, read binding and VSA. Source for all edges: the `family_tree` field of the [mechanism board](../labs/repo-renormalization-2026-10-19/audit/mechanisms/board.json) (19 October 2026).
+Five mechanisms have no recorded parent or child, so they are shown in a separate no-lineage strip rather than in the family tree: admission, the tokenizer, Hopf observation, read binding and VSA. Source for all edges: the `family_tree` field of the [mechanism board](../labs/repo-renormalization-2026-10-19/audit/mechanisms/board.json) (19 October 2026).
 
 ## ACTIVE: on a current model path (12)
 
