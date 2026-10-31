@@ -34,6 +34,7 @@ use super::flock::{
 };
 use super::format::{
     Container, Fixed, MatrixView, StackNumerics, StackPointer, StackShape, StackTransportSnap,
+    StackTurnMemory,
 };
 use super::kernels::{
     grid_apply, grid_valid, mul_i128, shift, shift_wide, stack_activation, stack_activation_tables,
@@ -46,6 +47,9 @@ use super::kernels::{
     NORM_FINE_EXP, RESIDUAL_EXP,
 };
 use super::hamming::{hamming_image, ServedHamming};
+use super::memory::{memory_image, MemoryAnchors, ServedTurnMemory};
+#[cfg(test)]
+use super::memory::MemoryMove;
 use super::StackError;
 
 /// Exponent of the recurrence state.
@@ -510,6 +514,10 @@ pub struct IntegerStackModel {
     /// The SpiralCore/FBS trunk and native writer of an FBS shape; `None` on
     /// a dense stack, whose `layers`, `embed` and `head` hold the maps.
     fbs: Option<Box<FbsModel>>,
+    /// The turn memory of a `uor-r4.lut-stack/7` artifact (units 2-3 of
+    /// `turn-memory-integer`); `None` on a stack without one, whose steps are the
+    /// trunk's alone.
+    memory: Option<Box<ServedTurnMemory>>,
     exp_table: Vec<u32>,
     silu_table: Vec<i32>,
     gelu_table: Vec<i32>,
@@ -688,14 +696,13 @@ impl IntegerStackModel {
         // A Hamming read (`lut-stack/6`) is served on an FBS shape only, and `Container::parse`
         // refuses it on any other; `fbs_model` refuses the parts not served yet (claude-194).
         let artifact = Container::parse(bytes)?;
-        // A turn memory (`lut-stack/7`) is checked section by section, then refused: this engine
-        // does not serve it yet (claude-198), and serving the trunk without it would differ from
-        // the float model, which depends on it.
-        if super::memory::memory_image(&artifact)?.is_some() {
-            return Err(StackError::Shape(
-                "this engine does not serve the turn memory yet (uor-r4.lut-stack/7)",
-            ));
-        }
+        // A turn memory (`lut-stack/7`) is checked section by section and repacked for the
+        // session, which forms its keys and applies its moves (units 2-3 of
+        // `turn-memory-integer`). Dropping it would serve a trunk the float model depends on.
+        let memory = match memory_image(&artifact)? {
+            Some(image) => Some(Box::new(ServedTurnMemory::new(image))),
+            None => None,
+        };
         if artifact.shape.read_binary() && artifact.shape.head_dim() > BITCODE_LANES {
             return Err(StackError::Shape(
                 "a binary read's head width exceeds the 256-lane sign code",
@@ -932,6 +939,7 @@ impl IntegerStackModel {
             pointer,
             layers,
             fbs,
+            memory,
             exp_table,
             silu_table,
             gelu_table,
@@ -981,7 +989,7 @@ impl IntegerStackModel {
     /// evaluator of the view alone would drop the read.
     pub fn fbs_image(&self) -> Option<FbsImage<'_>> {
         let fbs = self.fbs.as_deref()?;
-        if fbs.hamming.is_some() {
+        if fbs.hamming.is_some() || self.memory.is_some() {
             return None;
         }
         let layers = fbs
@@ -1014,6 +1022,19 @@ impl IntegerStackModel {
     /// SHA-256 of the artifact bytes.
     pub fn artifact_sha256(&self) -> &str {
         &self.sha256
+    }
+
+    /// The turn memory the artifact carries, if any (`uor-r4.lut-stack/7`): its recorded key
+    /// sizes, table counts and weight exponent. A model without one serves the trunk alone.
+    pub fn turn_memory(&self) -> Option<&StackTurnMemory> {
+        self.memory.as_ref().map(|memory| &memory.record)
+    }
+
+    /// How many opening and reply keys the turn memory's tables hold, if it has one.
+    pub fn turn_memory_table_lengths(&self) -> Option<(usize, Option<usize>)> {
+        self.memory
+            .as_ref()
+            .map(|memory| (memory.opening_len(), memory.reply_len()))
     }
 
     /// The transport snap the artifact records (the served recurrence snaps
@@ -1282,6 +1303,7 @@ impl IntegerStackModel {
                 Vec::new()
             },
             states,
+            memory: MemoryServing::default(),
             b: Buffers {
                 x: vec![0; d],
                 norm: vec![0; d],
@@ -1575,6 +1597,19 @@ struct Buffers {
     native_token: u32,
 }
 
+/// A session's turn-memory state (units 2-3 of `turn-memory-integer`): the caller's reply start
+/// and the turn anchor's ids kept from the opening row for the reply table's keys.
+#[derive(Default)]
+struct MemoryServing {
+    /// The token index of the reply's first generated token, from the caller's signal.
+    reply_start: Option<usize>,
+    anchors: MemoryAnchors,
+    #[cfg(test)]
+    last_move: Option<MemoryMove>,
+    #[cfg(test)]
+    readout_before: Vec<i64>,
+}
+
 /// Incremental decoding of one stream of at most `context` positions.
 pub struct IntegerStackSession<'m> {
     model: &'m IntegerStackModel,
@@ -1599,6 +1634,8 @@ pub struct IntegerStackSession<'m> {
     /// Boxed, like the model's layers, for a power-of-two stride.
     #[allow(clippy::vec_box)]
     states: Vec<Box<LayerState>>,
+    /// The turn memory's serving state; empty for a model without one.
+    memory: MemoryServing,
     b: Buffers,
 }
 
@@ -1670,6 +1707,36 @@ pub(super) fn max_serialized_session_bytes(model: &IntegerStackModel) -> u64 {
 impl IntegerStackSession<'_> {
     pub fn position(&self) -> usize {
         self.position
+    }
+
+    /// Mark that the turn memory's reply begins at the next token this session predicts (units
+    /// 2-3 of `turn-memory-integer`): the token stepped next is the prompt's last, so its row is
+    /// the opening table's row and every later row is a reply row. A plain `step(token)` carries
+    /// no roles, so the caller supplies where the reply begins; a model without a turn memory
+    /// ignores the signal.
+    pub fn mark_reply_start(&mut self) {
+        self.memory.reply_start = Some(self.position + 1);
+    }
+
+    /// Clear the reply start: no row is keyed or moved, and the turn memory's moves are off.
+    pub fn clear_reply_start(&mut self) {
+        self.memory.reply_start = None;
+        self.memory.anchors = MemoryAnchors::default();
+    }
+
+    /// Whether the model serves a turn memory (`uor-r4.lut-stack/7`).
+    pub fn has_turn_memory(&self) -> bool {
+        self.model.memory.is_some()
+    }
+
+    /// The turn memory's record the session's model serves, if any.
+    pub fn turn_memory_record(&self) -> Option<&StackTurnMemory> {
+        self.model.turn_memory()
+    }
+
+    /// The turn memory's opening and reply key counts, if it serves one.
+    pub fn turn_memory_table_lengths(&self) -> Option<(usize, Option<usize>)> {
+        self.model.turn_memory_table_lengths()
     }
 
     /// Enable the diagnostic snap trace (default off): each step records the
@@ -1930,6 +1997,14 @@ impl IntegerStackSession<'_> {
     /// so that after restoration, subsequent step calls produce bit-for-bit identical
     /// outputs to continuing the original session.
     pub fn restore_state(&mut self, saved: &SerializedStackSession) -> Result<(), StackError> {
+        // A turn memory's turn state (the caller's reply start and the anchor's ids) is not saved
+        // yet (units 2-3 of `turn-memory-integer`): restoring would silently differ from
+        // continuing, so it is refused until that state is saved.
+        if self.model.memory.is_some() {
+            return Err(StackError::Shape(
+                "a session of a turn memory cannot be restored yet: its turn state is not saved",
+            ));
+        }
         // A read's type heads keep each position's payload, which a saved session does not carry
         // (claude-195): restoring would silently differ from continuing, so it is refused.
         let fbs = self.model.fbs.as_deref();
@@ -3065,6 +3140,31 @@ fn stack_step_fbs(
     if let Some(hamming) = &fbs.hamming {
         hamming.readout(&session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.scratch[..d]);
     }
+    // The turn memory's move (units 2-3), after the Hamming readout as in the float trunk: the
+    // opening table at the reply's first step's row, the reply table each later row.
+    if let Some(memory) = &model.memory {
+        if let Some(reply_start) = session.memory.reply_start {
+            #[cfg(test)]
+            {
+                session.memory.readout_before.clear();
+                session.memory.readout_before.extend_from_slice(&b.scratch[..d]);
+            }
+            let moved = memory.apply(
+                &session.tokens,
+                session.position,
+                reply_start,
+                &mut session.memory.anchors,
+                &fbs.writer_table,
+                &mut b.scratch[..d],
+            );
+            #[cfg(test)]
+            {
+                session.memory.last_move = moved;
+            }
+            #[cfg(not(test))]
+            let _ = moved;
+        }
+    }
     for (q, &v) in b.query_q12.iter_mut().zip(&b.scratch[..d]) {
         *q = to_exp_i32(v, NORM_FINE_EXP, Q12_EXP).clamp(-32768, 32767);
     }
@@ -3194,6 +3294,31 @@ fn stack_step_fbs_timed(
     stack_norm_gain(&mut b.scratch[..d], &fbs.final_gain);
     if let Some(hamming) = &fbs.hamming {
         hamming.readout(&session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.scratch[..d]);
+    }
+    // The turn memory's move (units 2-3), after the Hamming readout as in the float trunk: the
+    // opening table at the reply's first step's row, the reply table each later row.
+    if let Some(memory) = &model.memory {
+        if let Some(reply_start) = session.memory.reply_start {
+            #[cfg(test)]
+            {
+                session.memory.readout_before.clear();
+                session.memory.readout_before.extend_from_slice(&b.scratch[..d]);
+            }
+            let moved = memory.apply(
+                &session.tokens,
+                session.position,
+                reply_start,
+                &mut session.memory.anchors,
+                &fbs.writer_table,
+                &mut b.scratch[..d],
+            );
+            #[cfg(test)]
+            {
+                session.memory.last_move = moved;
+            }
+            #[cfg(not(test))]
+            let _ = moved;
+        }
     }
     for (q, &v) in b.query_q12.iter_mut().zip(&b.scratch[..d]) {
         *q = to_exp_i32(v, NORM_FINE_EXP, Q12_EXP).clamp(-32768, 32767);
@@ -4126,6 +4251,25 @@ impl IntegerStackSession<'_> {
     /// nothing after the norm writes `b.scratch` before the next step.
     pub(super) fn fbs_norm_output(&self) -> &[i64] {
         &self.b.scratch[..self.model.shape.width]
+    }
+
+    /// The last FBS step's turn-memory move (the key formed and the id it named), if the memory
+    /// was on and the row keyed.
+    pub(super) fn last_memory_move(&self) -> Option<&MemoryMove> {
+        self.memory.last_move.as_ref()
+    }
+
+    /// The last FBS step's final norm output before the turn memory's move.
+    pub(super) fn fbs_norm_output_before_memory(&self) -> &[i64] {
+        &self.memory.readout_before
+    }
+
+    /// A token's writer-table row at Q12 (the memory move's target point's source).
+    pub(super) fn fbs_writer_row(&self, token: u32) -> Option<&[i16]> {
+        let fbs = self.model.fbs.as_deref()?;
+        let width = self.model.shape.width;
+        let at = token as usize * width;
+        fbs.writer_table.get(at..at + width)
     }
 }
 
