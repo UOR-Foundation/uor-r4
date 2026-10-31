@@ -36,7 +36,7 @@ The writer's token is on both sides, so this compares queries and the writer's p
 
 **Bar per variant:** d ≤ 3% of the positions in each section (claude-227's bar, with the same basis): at most 46 of 1,536 sequence positions and 122 of 4,096 single tokens. A variant **misses** if either section is over.
 
-**The read against its own trunk, within a seed.** h_s **exceeds** t_s (s = 1 or 3) when, in a section where h_s misses, d(h_s) − d(t_s) > 2√(d(h_s) + d(t_s)). That is claude-227's test (b).
+**The read against its own trunk, within a seed.** h_s **exceeds** t_s (s = 1 or 3) when, in any section where h_s misses, d(h_s) − d(t_s) > 2√(d(h_s) + d(t_s)). That is claude-227's test (b).
 
 **t1 always passes outside row 0.** I-Repro holds it within 3 positions of claude-227's d of 5 and 73.
 
@@ -65,6 +65,7 @@ The rows are read in order, and the first that holds applies. Outside row 0 they
    - If the counts move while the snapshot and artifact match, the cause is named as the GPU readout.
 6. **`I-Finite`:** `fbs-snapshot`, `fbs-export` and `fbs-compare` exit 0 for each variant.
    - A variant whose tool fails is logged, the others still run for diagnosis, and the job ends with EXIT 7.
+   - A failed reading check (exit 6, checks 3 and 4) stops the job there, so later variants do not run.
    - Any variant without its `compare.json` is row 0.
 
 ## 5. Base artifact and data split
@@ -110,7 +111,17 @@ The minor points were also taken:
 
 The reviewer found the arms, the writer copy and its checks, the power and the caps sound.
 
-TEST FITNESS: PENDING (round 2)
+**Round 2** (a fresh reviewer, at `85e25a6d6`): both blockers fixed, no new blocker.
+- **The edge cases:**
+  - t3 missing only on its sequences reads T, with the caveat.
+  - h1 missing with t3 missing always reads B, since I-Repro holds t1 at most 8 and 76.
+  - h3 a hair over t3 reads T.
+- **Minor points taken:**
+  - "exceeds" applies in any section where h misses;
+  - an exit-6 check stops later variants (§4.6);
+  - each fetch has its own log.
+
+TEST FITNESS: FIT
 
 ## 10. Pre-run review
 
