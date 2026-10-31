@@ -144,8 +144,44 @@ All paths are on the laptop. `R` is the run folder in the unit's worktree (`loca
 
 ## 9. Non-author TEST FITNESS review
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
+
+Three fresh non-author reviewers, 31 Oct. Each round's budget ended before the whole sheet, so each next round took what the last left.
+- **Round 1: NOT_FIT.**
+  - It checked the grade against the bar (`carries`, which is (a)–(d) exactly; pairing enforced by `integer_reading`), p-x without float names, the rows and the power.
+  - **Required:** row 2 had offered "a larger panel", a redraw the item forbids. Removed.
+  - **Advisories, each made:**
+    - tok/s by each arm's own rate, not a raw difference in wall time;
+    - p-x's capped count beside each seed's b + c;
+    - the wall-time record separated from `I-Reference-Scan`;
+    - p-x's prompt count added to `I-Prompts`.
+- **Round 2: no fault found, unfinished.**
+  - `fbs-toks --replies` writes exactly `IntegerSample`'s fields, with `end` as "context" at the cap, and its flags are as step 5 writes them.
+  - `check_served_point` stops the decode.
+  - `fbs-export --point-key`'s argument order, its read-back refusal before writing, and its printed sha256 and row count are as steps 2–3 read them.
+  - Every `train-in-space` flag exists.
+  - `build_point_key` makes one row per TRAIN opening.
+- **Round 3: FIT.**
+  - `--integer-grade` prints only the grade's JSON line to stdout, and `--data-root` is parsed.
+  - Every §4 check can fail.
+  - Rows 0–3 are exhaustive, mutually exclusive, read from p-x only, and redraw no panel.
 
 ## 10. Pre-run review
 
-PENDING
+Lab: claude, 31 Oct 2026. This is the author's own review under CHARTER §5.10, of the whole chain before the run.
+- **The chain.** The goal is one model end to end, served from its integer artifact.
+  - claude-220's float model served the point key and carried on p-w.
+  - This item serves it in integers: claude-222 the table, claude-224 the decode and grade, claude-228 the instruments, and claude-226–227 the retained recurrence, which (r-drop) needs.
+  - This run reads form C's own bar on a fresh panel. Row 1 makes the integer model with the point key the one to serve; rows 2–3 go to a decision card.
+- **Tools and inputs present:**
+  - every binary builds from the base (`fbs-export` `3011c994…`, `fbs-toks` `bc61968b…`, `train-in-space` `060e951e…`);
+  - the three snapshots are fetched and match the store, each retained once (`I-Retained`'s first half);
+  - TRAIN, DEV, p-w and p-v are on the laptop; p-x is in the store, and its census is committed;
+  - claude-220's served run is in place for the parity names.
+- **What each outcome unlocks:** §3's table. No outcome is read before every check of steps 1–4 holds, and p-x is read only by the decodes and the grade.
+- **The rules:**
+  - the owner's laptop allowance for this item's scoring (§3.6), with no GPU and no cost;
+  - no code changes: the run uses main's binaries;
+  - no comparator model and no squashing;
+  - the bar and rows are fixed above before p-x is read.
+- **Verdict: GO.**
