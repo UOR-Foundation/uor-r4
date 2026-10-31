@@ -50,7 +50,7 @@ generated-copy rate, and not new reply kinds or useful conversation.
 ## The separate FBS trunk and the current failure
 
 The float-trained FBS trunk is a second model path; it has not joined the saved discrete M1 model.
-Its `lut-stack/5` export is exact at DEV scope. The current work is complete replies on new
+Its `lut-stack/5` export keeps the rotations exact and has its DEV export gap inside the bar. The current work is complete replies on new
 phrasings, not another replay of M1.
 
 [Claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md) found that cycle and echo

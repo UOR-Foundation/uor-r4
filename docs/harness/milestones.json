@@ -260,7 +260,8 @@
             "label": "served BPB at 512 windows",
             "current": 0.886838,
             "target": 0.9,
-            "of": null
+            "of": null,
+            "note": "Historical 19.9M chat stack at 512 windows under a different protocol; not current M4 evidence or a like-for-like score. The older 0.877 float / 0.933 served pair used 512 and 64 windows respectively, so that pair is not directly comparable."
           }
         ],
         "previous_base_artifact": "19.9M chat stack, 0.933 BPB served",

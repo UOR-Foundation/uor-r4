@@ -1,14 +1,14 @@
 # The three products
 
 UOR-R4 aims to ship one thing people can use: a small, fast language model that runs on your own
-laptop or in your browser, with local computation by default and no model server required. An optional user-configured API sends prompts to the endpoint the user chooses. The three products are the **model** in
+laptop or in your browser, with local computation by default and no model server required. For the web Studio only, an optional user-configured OpenAI-compatible API sends prompts to the endpoint the user chooses; the desktop shell has no OpenAI-compatible API mode. The three products are the **model** in
 one integer file, a **web client** that runs it in a browser tab, and a **desktop client** that runs
 it natively with durable memory. **None ships today.** M1 is complete (1 of 8), but no useful
 conversation, integrated qualified product or alpha release exists.
 
 Labels: **proof**, **measurement**, **hypothesis** ([`docs/formal_vocabulary.md`](../formal_vocabulary.md), [glossary](../start/glossary.md)).
 
-![One integer model file feeding a browser-based web client and a native desktop client. Local mode has no default model server; an optional user-configured API sends prompts to the chosen endpoint.](../figures/products/product-family.svg)
+![One integer model file feeding a browser-based web client and a native desktop client. Local mode has no default model server. Only the web Studio offers an optional user-configured OpenAI-compatible API; the desktop shell has no OpenAI-compatible API mode.](../figures/products/product-family.svg)
 
 *One model file is intended to feed two clients sharing one interface and local storage.*
 
@@ -16,7 +16,7 @@ Labels: **proof**, **measurement**, **hypothesis** ([`docs/formal_vocabulary.md`
 
 | Product | What it is meant to be | What exists today | Main gate |
 |---|---|---|---|
-| [Language model](./language-model.md) | A geometric language model exported as one checksum-pinned `UORLUT01` file | The discrete M1 pair and a separate exact FBS `lut-stack/5` export, with serving evidence; no conversational product release | M2–M4, then M8 |
+| [Language model](./language-model.md) | A geometric language model exported as one checksum-pinned `UORLUT01` file | The discrete M1 pair and a separate FBS `lut-stack/5` export with exact rotations and its DEV export gap inside the bar; no conversational product release | M2–M4, then M8 |
 | [Web client](./web-client.md) | A local model in the browser: download once, run in WebAssembly on the device | Synthetic parity harness plus public M1 top-8 next-token prediction in the live Studio; no chat or qualified bundle | M7 |
 | [Desktop client](./desktop-client.md) | A Tauri app sharing the interface, with native engine, file access, durable memory and offline use | [`src-tauri/`](../../src-tauri/) backend, Studio host and GUI shell with seven integration controls on the synthetic stand-in; no qualified bundle | M3, M5, M7 |
 

@@ -61,7 +61,7 @@ The FBS path trains offline in float under D37 and exports to integer D11. It is
 | Token | Byte-level BPE, 4,096 pieces | Done |
 | → vector | Learned FBS table, 4,096 × 256 | Trained and served |
 | → vector | Position | SpiralCore transport spin, trained and served; no RoPE |
-| → vector | Mixing | FBS recurrence, Hamilton gate and SpiralCore/FBS routes, exact under `lut-stack/5` |
+| → vector | Mixing | FBS recurrence, Hamilton gate and SpiralCore/FBS routes, with exact rotations and the DEV export gap inside the bar under `lut-stack/5` |
 | → vector | Copy/look-back | Hamming read and copy heads; integer kernels exist, full joined serving remains open |
 | → vector | Storage | Exact turn memory keyed by the turn's exact first token ids; strong on familiar DEV prompts, weak on new phrasing |
 | → vector | Feed-forward and norm | Hamilton gate and RMS norm with integer square root, served |

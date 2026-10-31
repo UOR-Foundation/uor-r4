@@ -10,7 +10,7 @@ model that runs on a laptop?*
 [![Last commit](https://img.shields.io/github/last-commit/UOR-Foundation/uor-r4/main)](https://github.com/UOR-Foundation/uor-r4/commits/main)
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-ffcc4d)](https://huggingface.co/caseyallard/uor-r4-m1-model)
 
-![Four panels read left to right: a sentence split into numbered pieces; each piece placed as a point on a geometric object; the newest piece looking at only a few nearby earlier points; a few drawers opening near what was read, with the nearest word inside them picked. A band underneath reads "whole numbers: adds, compares and table look-ups, with integer multiply and divide allowed".](docs/figures/start/hero-how-it-thinks.svg)
+![Four panels read left to right: a sentence split into numbered pieces; each piece placed as a point on a geometric object; the newest piece looking at only a few nearby earlier points; a few drawers opening near what was read, with the nearest word inside them picked. A band underneath reads "Served as whole numbers: add, subtract, integer multiply/divide, compare, table look-up. No floats.".](docs/figures/start/hero-how-it-thinks.svg)
 
 *How UOR-R4 is designed to predict the next word. The picture shows the design, not a claim of useful conversation.*
 
@@ -73,7 +73,7 @@ None ships today. A trained integer artifact exists; an integrated, qualified pr
 
 - **[The model](docs/products/language-model.md):** one whole-number model file for local serving,
   with integer multiply and divide allowed by D80/D81. The saved discrete M1 pair is real; so is a
-  separate exact `lut-stack/5` FBS export. Neither is a released conversational product.
+  separate `lut-stack/5` FBS export with exact rotations and its DEV export gap inside the bar. Neither is a released conversational product.
 - **[Web client](docs/products/web-client.md):** the live Studio can load the publicly released M1
   model after an explicit click and serves top-8 next-token prediction—not chat. The synthetic
   parity harness passes; M7's accepted-model parity and a qualified product bundle remain open.

@@ -30,7 +30,7 @@ Every public number in this refresh must link to this sheet's committed evidence
 
 ## 2. Separate FBS trunk and current open research
 
-- The float-trained FBS trunk is a different path from the saved discrete M1 model. `lut-stack/5` exports/serves it exactly at DEV scope; D80/D81 allow integer multiply and divide while floats remain banned in serving. On Apple M1, earlier FBS exports served at 4,217–4,320 tok/s ([claude-182](../../d11-exporter-float-trunk/claude-182/REPORT.md)) and 4,491/4,504 tok/s after the integer square root ([claude-186](../../fbs-serving-vector-kernel/claude-186/REPORT.md)); do not mix those rates with the saved M1 artifacts' 10,876/10,566 tok/s.
+- The float-trained FBS trunk is a different path from the saved discrete M1 model. `lut-stack/5` keeps its rotations exact and has its export gap inside the bar at DEV scope; D80/D81 allow integer multiply and divide while floats remain banned in serving. On Apple M1, earlier FBS exports served at 4,217–4,320 tok/s ([claude-182](../../d11-exporter-float-trunk/claude-182/REPORT.md)) and 4,491/4,504 tok/s after the integer square root ([claude-186](../../fbs-serving-vector-kernel/claude-186/REPORT.md)); do not mix those rates with the saved M1 artifacts' 10,876/10,566 tok/s.
 - **claude-217**, `docs/loop/tasks/one-model-end-to-end/claude-217/REPORT.md`:
   - The cycle/echo steps end every registered loop, but every content decision is **underpowered (content)**; greedy remains the served decode. Loop removal is not a quality result.
   - On held-out p-s, exact-reference replies are only 3, 1 and 4 of 256 at seeds 1–3, against 38–40 on DEV.

@@ -62,7 +62,7 @@ conversation.
 
 - **The discrete path** produced the M1 artifact. It trains integer geometric state and exports
   through table-native `UORLUT01` schemas.
-- **The float-trained FBS trunk** trains offline under D37 and exports exactly under `lut-stack/5`
+- **The float-trained FBS trunk** trains offline under D37 and exports with exact rotations and its DEV export gap inside the bar under `lut-stack/5`
   at DEV scope. It is the current complete-reply research line, not the M1 artifact.
 
 Claude-217's cycle-step experiment ends every registered loop but leaves content underpowered, so

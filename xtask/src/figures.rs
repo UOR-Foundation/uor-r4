@@ -411,7 +411,7 @@ fn architecture() -> Result<String, Fail> {
             "D11 integer serving",
             [
                 "4,829 tok/s snapped, M1 laptop",
-                "4,217–4,504 tok/s exact (/5)",
+                "4,217–4,504 tok/s; /5 gap pass",
             ],
         ),
         (
@@ -456,7 +456,7 @@ fn architecture() -> Result<String, Fail> {
     s.legend(645.0, &[St::Working, St::Progress, St::Planned]);
     s.finish(
         "The two model paths, 31 October 2026",
-        "The saved discrete 19-table model has closed M1 at all six bars on two seeds: DEV 7,002 / 7,001, Fresh V2 7,215 / 7,228 and p-f 7,850 / 7,872, with exact export agreement and Apple M1 decode at 10,876 / 10,566 tok/s. Separately, BPE-4096 token ids feed the float-trained FBS trunk: learned table, SpiralCore position, recurrence with Hamilton gate and RMS norm, Hamming reads and exact turn memory. The /7 engine serves opening and later-reply memory tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open. The FBS export through lut-stack/5 is exact at DEV scope; D11 integer serving uses integer multiply and divide with floats banned. The current blocker is reply opening on new phrasing, not the completed count-table bar or loop suppression alone.",
+        "The saved discrete 19-table model has closed M1 at all six bars on two seeds: DEV 7,002 / 7,001, Fresh V2 7,215 / 7,228 and p-f 7,850 / 7,872, with exact export agreement and Apple M1 decode at 10,876 / 10,566 tok/s. Separately, BPE-4096 token ids feed the float-trained FBS trunk: learned table, SpiralCore position, recurrence with Hamilton gate and RMS norm, Hamming reads and exact turn memory. The /7 engine serves opening and later-reply memory tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open. The FBS export through lut-stack/5 has exact rotations and its export gap inside the bar at DEV scope; D11 integer serving uses integer multiply and divide with floats banned. The current blocker is reply opening on new phrasing, not the completed count-table bar or loop suppression alone.",
     )
 }
 
@@ -534,7 +534,7 @@ fn architecture_narrow() -> Result<String, Fail> {
                 [x + 10.0, 573.0],
                 (11.5, 400, BODY),
                 138.0,
-                "exact /5: 4,217–4,504",
+                "/5 pass: 4,217–4,504",
             );
         }
     }
@@ -577,7 +577,7 @@ fn architecture_narrow() -> Result<String, Fail> {
         348.0,
         "Green: served. Hatched: trained, not yet served.",
     );
-    s.finish("Two model paths, M1 complete, narrow layout", "The saved discrete 19-table model has closed M1 at all six bars on two seeds. The separate float-trained FBS trunk uses a learned table, SpiralCore position, a Hamilton-gated recurrence and exact turn memory, with an exact lut-stack/5 export at DEV scope. The /7 engine serves opening and later-reply memory tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open. The current gap is reply opening on new phrasing and a memory key that reworded known questions can reach, then joined integer serving and R7. This is structure, not a useful-chat claim.")
+    s.finish("Two model paths, M1 complete, narrow layout", "The saved discrete 19-table model has closed M1 at all six bars on two seeds. The separate float-trained FBS trunk uses a learned table, SpiralCore position, a Hamilton-gated recurrence and exact turn memory, with exact rotations and its export gap inside the bar under lut-stack/5 at DEV scope. The /7 engine serves opening and later-reply memory tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open. The current gap is reply opening on new phrasing and a memory key that reworded known questions can reach, then joined integer serving and R7. This is structure, not a useful-chat claim.")
 }
 
 fn compliant_path() -> Result<String, Fail> {
@@ -1076,7 +1076,7 @@ fn training_pipeline() -> Result<String, Fail> {
     s.legend(656.0, &[St::Working, St::Built, St::Progress]);
     s.finish(
         "Training and the M1 close, 31 October 2026",
-        "Data, pre-registration, a non-author TEST FITNESS review and the lab's own pre-run review come before GPU time. The saved discrete 19-table model has closed M1 at all six bars on two seeds, with exact export agreement and Apple M1 decode at 10,876 / 10,566 tok/s. The separate float-trained FBS trunk uses a fixed-order backward and exports exactly through lut-stack/5 at DEV scope. p-f reference replies are 62.5% verbatim TRAIN, so M1 is not useful-chat qualification; current work is new-phrasing reply opening and a reachable memory key.",
+        "Data, pre-registration, a non-author TEST FITNESS review and the lab's own pre-run review come before GPU time. The saved discrete 19-table model has closed M1 at all six bars on two seeds, with exact export agreement and Apple M1 decode at 10,876 / 10,566 tok/s. The separate float-trained FBS trunk uses a fixed-order backward and exports with exact rotations and its export gap inside the bar through lut-stack/5 at DEV scope. p-f reference replies are 62.5% verbatim TRAIN, so M1 is not useful-chat qualification; current work is new-phrasing reply opening and a reachable memory key.",
     )
 }
 
@@ -1163,12 +1163,12 @@ fn serving_pipeline() -> Result<String, Fail> {
         [40.0, 576.0],
         (12.5, 400, MUTED),
         1120.0,
-        "FBS lut-stack/5 exact: 4,217–4,504 tok/s. Studio and desktop use a synthetic stand-in; M5 and M7 remain open.",
+        "FBS /5 DEV gap pass: 4,217–4,504 tok/s. Studio and desktop use a synthetic stand-in; M5 and M7 remain open.",
     );
     s.legend(636.0, &[St::Working, St::Built, St::Progress]);
     s.finish(
         "The D11 serving pipeline, 31 October 2026",
-        "The integer engine serves the saved discrete M1 pair and the separate float-trained FBS trunk. The M1 pair has exact export agreement and reaches 10,876 / 10,566 native decode tok/s on Apple M1 under the bar-f remeasurement; the older close-grade bar-c rate is 11,026 / 10,573. FBS lut-stack/5 is exact at DEV scope and reaches 4,217–4,504 tok/s; the separate snapped artifact reaches 4,829 tok/s. Integer multiply and divide are allowed and floats are banned. Next, a reachable memory key on new phrasing, joined integer serving and R7. Studio and desktop use a synthetic stand-in, not a qualified product bundle.",
+        "The integer engine serves the saved discrete M1 pair and the separate float-trained FBS trunk. The M1 pair has exact export agreement and reaches 10,876 / 10,566 native decode tok/s on Apple M1 under the bar-f remeasurement; the older close-grade bar-c rate is 11,026 / 10,573. FBS lut-stack/5 has exact rotations and its export gap inside the bar at DEV scope and reaches 4,217–4,504 tok/s; the separate snapped artifact reaches 4,829 tok/s. Integer multiply and divide are allowed and floats are banned. Next, a reachable memory key on new phrasing, joined integer serving and R7. Studio and desktop use a synthetic stand-in, not a qualified product bundle.",
     )
 }
 

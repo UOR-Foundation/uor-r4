@@ -33,10 +33,10 @@ The rates are exact powers of two, from $1/2$ down to $2^{-16}$, and $\kappa$ is
 
 **A reading of the source (proof from the table, not a recorded finding).** Every table entry satisfies $\lambda\le\tfrac12$, so a step keeps at most half of the old state times a rotation. The historical rate $\lambda=\exp(8\,\sigma(g)\log\sigma(d))$ can approach 1 as the opening goes to 0. Whether a table capped at one half per step keeps enough long memory is untested.
 
-The historical mode refused non-GPU devices, export and quantisation-aware training. The pre-registered fit and D11 export have now run; `lut-stack/5` carries the FBS recurrence exactly at DEV scope. The historical mode stays the default so old artifacts reproduce.
+The historical mode refused non-GPU devices, export and quantisation-aware training. The pre-registered fit and D11 export have now run; `lut-stack/5` carries the FBS recurrence with exact rotations and the export gap inside its bar at DEV scope. The historical mode stays the default so old artifacts reproduce.
 
 **Rule check.**
-- *D11 (integer serving):* designed for it, since the rates are table reads, the opening is a clamp and the scan is rotations. The FBS `lut-stack/5` export now carries this geometric recurrence exactly at DEV scope; the older blocked-export note is historical.
+- *D11 (integer serving):* designed for it, since the rates are table reads, the opening is a clamp and the scan is rotations. The FBS `lut-stack/5` export now carries this geometric recurrence with exact rotations and the export gap inside its bar at DEV scope; the older blocked-export note is historical.
 - *D23 (no softmax or squashing):* a grep on 13 October found 0 squash-family tokens in the geometric arms (the historical branches keep 8 by design).
 - *D25/D30 (no dense matrix multiplication):* a clamp, a table read, a scan and a per-block rotation. The no-matmul and no-softmax counters were unchanged by the delivering PR.
 - *D32/D37:* a float operator. D32 froze it and D37 allows it back only by a new offline sheet ([decisions](../integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised)). The saved discrete M1 model carries a separate `DiscreteQuaternionRecurrenceV1`; these READY float recurrence gates are not that M1 component and belong to the FBS path.

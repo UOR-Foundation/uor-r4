@@ -96,7 +96,7 @@ Today's discrete M1 export has zero row gap at its measured panels; the FBS `/5`
 registered band at DEV. These are different contracts and should not be averaged.
 
 Older float geometric stacks had larger gaps. Matched 512-window measurements were about 0.009 BPB,
-mostly from weight rounding, and three 29M artifacts served at 1.20–1.24 BPB against a 0.90 bar.
+mostly from weight rounding, and three 29M artifacts served at 1.20–1.24 BPB against a 0.90 bar. The older 0.877 float / 0.933 served pair used 512 and 64 windows respectively, so it is not a like-for-like comparison; the separate 19.9M reading of 0.886838 at 512 windows used a different protocol.
 Those results are historical and do not negate the M1 export or the FBS `/5` result. A dense model
 streamed through tables is still dense, which is why D5 asks for selected addressed reads rather
 than assuming table lookup implies sparsity.

@@ -13,7 +13,7 @@ scope: [crates/uor-r4-float-train/**, crates/uor-r4-integer/**, docs/mechanisms/
 
 ## Why it matters
 
-The offline-float sheet completed language-fit and export-gap measurements. The Hamilton gate is ACTIVE and trained in the discrete M1 composition and on the FBS trunk, whose icosian-snapped form exports and serves exactly under `lut-stack/5` at DEV scope. Per-block suppression is measured: 0 of 78,888,960 blocks near the guard core and 0 of 986,112 downstream rows below 0.8, with a mixed language-fit result and `G-Hamilton-ExportGap = PASS`.
+The offline-float sheet completed language-fit and export-gap measurements. The Hamilton gate is ACTIVE and trained in the discrete M1 composition and on the FBS trunk, whose unsnapped exact-unit-quaternion form exports and serves under `lut-stack/5`, with exact rotations and the export gap inside its bar at DEV scope. Per-block suppression is measured: 0 of 78,888,960 blocks near the guard core and 0 of 986,112 downstream rows below 0.8, with a mixed language-fit result and `G-Hamilton-ExportGap = PASS`.
 
 ## What is missing
 
