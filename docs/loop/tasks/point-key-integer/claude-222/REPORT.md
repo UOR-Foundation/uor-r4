@@ -45,7 +45,7 @@ The search scans every row at each keyed opening. That is one keyed opening a re
 - `stack/memory.rs`: `MemoryImage::point` and `ServedTurnMemory::point`.
 - `stack/session.rs`: the override in both steps, `last_move` in every build, and the `point_tied` buffer.
 - `stack/mod.rs`: the module and its exports.
-- `stack/tests.rs`: six tests.
+- `stack/tests.rs`: five tests.
 - `bin/fbs-export.rs`: the `--point-key` mode.
 - `ORDER.md`: the builder's file, amended at slice C.
 
@@ -58,11 +58,18 @@ The search scans every row at each keyed opening. That is one keyed opening a re
 
 ## Checks run at the head
 
-- **Fourteen negative gates,** each failing at its own assertion with its rule set aside, and passing when restored:
-  - **the search:** ties to the smaller id; a nearer row resets the tied set; BOS refused;
-  - **the record:** `/8` is the point stack's schema; the record needs the turn memory; the rows its targets hold; unknown fields denied;
-  - **the step:** the override; only on a miss; only at the opening; the timed twin's override;
-  - **the builder:** an opening follows a prompt token; the prefix never crosses the document's start; read at the opening row.
+- **Eighteen negative gates,** each failing with its rule set aside, and passing when restored:
+  - **the search:** ties to the smaller id; a nearer row resets the tied set; BOS refused; an id past the vocabulary refused;
+  - **the record:** `/8` is the point stack's schema; the record needs the turn memory; the rows its targets hold; unknown fields denied; the old sections kept (a one-byte shift makes the `/8` stack unreadable);
+  - **the step:** the override; only on a miss; only at the opening; the timed twin's override; a `/8` session's restore refused (the base's rule set aside);
+  - **the builder:** an opening follows a prompt token; the prefix never crosses the document's start; read at the opening row; a mask byte past 1 refused.
+- **The review's fixes** (`1c39f5a0b`):
+  - the UORT token count is a checked multiply;
+  - a mask byte other than 0 or 1 is refused;
+  - the search's no-error invariant is noted at the step;
+  - a test assertion that could not fail is dropped.
+
+  The UORT check is in the binary, so no unit test reaches it.
 - **The WASM library build:** `cargo check --target wasm32-unknown-unknown --features serving-wasm --lib` finishes.
 - **Clippy:** no new warning in the changed files.
 
