@@ -140,8 +140,8 @@ These headings remain as pointers so old inbound links resolve to history rather
 
 ## Post-dose optimization path
 
-Archived 2026-10-18. Text:
-[Post-dose optimization path and owner direction, October 18](https://github.com/UOR-Foundation/uor-r4/blob/main/archive/history/project-track-archive-2026-10-18.md#post-dose-optimization-path--owner-direction-october-18).
+Original 19 October section, preserved at its recorded source:
+[project-track at ec9a790fe](https://github.com/UOR-Foundation/uor-r4/blob/ec9a790fe5be73cd673f082eba86ced551b22d12/docs/integration/project-track.md#post-dose-optimization-path). The separate [18 October archive snapshot](../../archive/history/project-track-archive-2026-10-18.md#post-dose-optimization-path--owner-direction-october-18) contains the earlier text, not the later 19 October additions.
 
 ## Research dependencies and exit conditions
 
