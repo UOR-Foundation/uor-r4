@@ -29,11 +29,11 @@ use candle_core::Device;
 use sha2::{Digest, Sha256};
 use uor_r4_float_train::fbs_export::{
     check_checkpoint_reads, check_readout_reads, fbs_float_readout, fbs_hamming_snapshot,
-    fbs_memory_snapshot, fbs_trunk_snapshot, round_tables_as_exported,
+    fbs_memory_snapshot, fbs_trunk_snapshot, round_tables_as_exported, run_rate_reading,
 };
 use uor_r4_float_train::flock_read_hamming::{set_hamming_reads, HammingReads};
 use uor_r4_float_train::flock_read_memory::TurnMemory;
-use uor_r4_float_train::geometric_stack::StackModel;
+use uor_r4_float_train::geometric_stack::{set_retention_rates, StackModel};
 use uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT;
 use uor_r4_float_train::Result;
 use uor_r4_integer::fbs_snapshot::{write_new_file, FbsReadoutMode};
@@ -60,6 +60,16 @@ fn main() -> Result<()> {
     // the GPU is opened.
     check_checkpoint_reads(dir)?;
     check_readout_reads(dir, readouts.len())?;
+    // The run's rate reading (integer-retention-rates, claude-226), from its `config.json` two
+    // levels above `models/step-N`. The snapshot carries it, and the float readouts below are
+    // taken under it, as the run trained and scored.
+    let run_config = dir
+        .parent()
+        .and_then(Path::parent)
+        .map(|run| run.join("config.json"))
+        .ok_or_else(|| uor_r4_float_train::FloatTrainError::Invalid("MODEL_DIR is not a run's models/step-N".to_owned()))?;
+    let retain = run_rate_reading(&std::fs::read_to_string(&run_config)?)?;
+    set_retention_rates(retain);
     let device = Device::new_cuda(0)?;
     let model = StackModel::load(dir, &device)?;
     let mut snapshot = fbs_trunk_snapshot(&model)?;
@@ -70,6 +80,7 @@ fn main() -> Result<()> {
         .map(|reads| fbs_hamming_snapshot(&reads, snapshot.layers.len(), snapshot.width))
         .transpose()?;
     snapshot.hamming = hamming;
+    snapshot.retain_rates = retain;
     write(out, &serde_json::to_vec(&snapshot)?)?;
     // The readouts are the float model with its Hamming reads (claude-200): `StackModel::hidden`
     // applies the reads set on this thread, here on the trunk's GPU.

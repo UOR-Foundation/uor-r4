@@ -88,6 +88,37 @@ pub(super) const GEOMETRIC_KEEP_Q31: [u64; 16] = [
     2_147_483_646,
     2_147_483_647,
 ];
+/// The retained reading's rates (integer-retention-rates, claude-226). A lane carries
+/// `lambda_i = 1 - 2^-(i+1)` of its state, `(1 << 31) - (1 << (30 - i))` in Q31, as the float
+/// trunk's `retain_rates` reads the same table entry. Entry 0 is 1/2 in both readings.
+pub(super) const RETAIN_LAMBDA_Q31: [u64; 16] = retain_lambdas();
+/// The retained rates' energy-preserving drive weights `isqrt((1 << 62) - lambda_i^2)` in Q31,
+/// the float side's `keep = sqrt(1 - lambda^2)`.
+pub(super) const RETAIN_KEEP_Q31: [u64; 16] = retain_keeps();
+
+/// [`RETAIN_LAMBDA_Q31`], built at compile time.
+const fn retain_lambdas() -> [u64; 16] {
+    let mut table = [0u64; 16];
+    let mut i = 0;
+    while i < 16 {
+        table[i] = (1u64 << 31) - (1u64 << (30 - i));
+        i += 1;
+    }
+    table
+}
+
+/// [`RETAIN_KEEP_Q31`], built at compile time, so the step reads a table and multiplies nothing.
+const fn retain_keeps() -> [u64; 16] {
+    let lambdas = retain_lambdas();
+    let mut table = [0u64; 16];
+    let mut i = 0;
+    while i < 16 {
+        let lambda = lambdas[i] as u128;
+        table[i] = ((1u128 << 62) - lambda * lambda).isqrt() as u64;
+        i += 1;
+    }
+    table
+}
 /// The rotation norm's epsilon, `1e-6`, at exponent -32.
 const ROTATION_EPSILON: u128 = 4_295;
 /// An unsnapped Hamilton gate's norm epsilon at exponent -32 (claude-181): the
@@ -3638,7 +3669,12 @@ fn stack_lanes(
             let offset = offsets.get(lane).copied().unwrap_or(0);
             let s_q16 = decay.saturating_add(offset).clamp(0, 1 << 16);
             let idx = ((s_q16 >> 12) as usize).min(15);
-            (1u64 << (30 - idx), GEOMETRIC_KEEP_Q31[idx])
+            // The retained reading (claude-226) carries 1 - 2^-(idx+1) where decay carries 2^-(idx+1).
+            if s.rec_retention() {
+                (RETAIN_LAMBDA_Q31[idx], RETAIN_KEEP_Q31[idx])
+            } else {
+                (1u64 << (30 - idx), GEOMETRIC_KEEP_Q31[idx])
+            }
         } else {
             let rate = rates.get(lane).copied().unwrap_or(0);
             let opening = stack_sigmoid_q31(i64::from(decay), &model.exp_table, n.exp_step_log2);

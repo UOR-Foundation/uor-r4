@@ -149,6 +149,7 @@ pub fn synthetic_fbs_trunk_with(seed: u64, s: FbsSynth) -> FbsTrunkSnapshot {
         width: d,
         mlp,
         context,
+        retain_rates: false,
         rms_eps: 1e-5,
         kept_cells: s.kept,
         embed: rand_vec(&mut rng, vocab * d, 1.5),

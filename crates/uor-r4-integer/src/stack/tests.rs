@@ -5450,3 +5450,65 @@ fn a_panel_reply_records_the_point_keys_opening_and_is_capped() {
     assert_eq!((full.reply.len(), full.end), (1, ReplyEnd::Context), "its opening, and no step past the context");
     assert!(panel_reply(&model8, &vec![12; context + 1], 4, None).is_err(), "a prompt past the context");
 }
+
+/// claude-226: the retained rates are the float trunk's `retain_rates` rule at Q31. Each lane
+/// carries `1 - 2^-(i+1)` exactly, and its drive weight is `sqrt(1 - lambda^2)` within one unit.
+/// Entry 0 is one half in both readings, so the readings first differ at entry 1.
+#[test]
+fn the_retained_rates_are_the_float_rule_at_q31() {
+    use super::session::{GEOMETRIC_KEEP_Q31, RETAIN_KEEP_Q31, RETAIN_LAMBDA_Q31};
+    for i in 0..16 {
+        let lambda = 1.0 - 2f64.powi(-(i as i32 + 1));
+        assert_eq!(RETAIN_LAMBDA_Q31[i] as f64, lambda * 2f64.powi(31), "lambda {i}");
+        let keep = (1.0 - lambda * lambda).sqrt() * 2f64.powi(31);
+        assert!((RETAIN_KEEP_Q31[i] as f64 - keep).abs() <= 1.0, "keep {i}: {} against {keep}", RETAIN_KEEP_Q31[i]);
+    }
+    assert_eq!((RETAIN_LAMBDA_Q31[0], RETAIN_KEEP_Q31[0]), (1 << 30, GEOMETRIC_KEEP_Q31[0]), "entry 0, one half");
+    assert_ne!(RETAIN_LAMBDA_Q31[1], 1 << 29, "entry 1 differs");
+}
+
+/// claude-226: a snapshot trained with retention exports `rec_gates = "geometric-retention"`, and
+/// its integer session serves the retained f64 reference at every row, its query within 2 Q12
+/// units. The decay reading's reference is not what it serves. A value the engine does not know is
+/// refused by its own validation, as an engine before this unit refuses the new one.
+#[test]
+fn a_retained_fbs_stack_serves_the_retained_reference() {
+    let mut snap = synthetic_fbs_trunk(20261026);
+    snap.retain_rates = true;
+    let bytes = super::export_fbs_trunk_uorlut01(&snap).expect("export");
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+    assert!(model.shape().rec_retention() && model.shape().rec_geometric());
+    let sequence = [0u32, 5, 11, 19, 3, 27, 14, 31];
+    let want = snap.forward_f32(&sequence, true).expect("the retained reference");
+    let mut decay = snap.clone();
+    decay.retain_rates = false;
+    let decayed = decay.forward_f32(&sequence, true).expect("the decay reference");
+    let q12 = |v: f64| (v * 4096.0).round() as i32;
+    let mut session = model.session();
+    let mut apart = 0;
+    for (row, &token) in sequence.iter().enumerate() {
+        let got = session.step_native(token).expect("step");
+        for (j, (&g, &w)) in got.query_q12.iter().zip(&want[row].query).enumerate() {
+            assert!((g - q12(w)).abs() <= 2, "row {row} channel {j}: {g} against the retained reference's {}", q12(w));
+        }
+        apart += usize::from(got.query_q12.iter().zip(&decayed[row].query).any(|(&g, &d)| (g - q12(d)).abs() > 2));
+    }
+    assert!(apart > 0, "the decay reading's reference is what the retained stack serves");
+    let refused = with_header(&bytes, |h| h["shape"]["rec_gates"] = json!("geometric-other"));
+    assert!(IntegerStackModel::parse(&refused).is_err(), "an unknown reading is refused");
+}
+
+/// claude-226: a snapshot without the flag, as every one before it, exports byte for byte as one
+/// that says `retain_rates: false`, and serves the decay reading.
+#[test]
+fn a_snapshot_without_the_flag_exports_as_before() {
+    let snap = synthetic_fbs_trunk(20261026);
+    let mut json: Value = serde_json::to_value(&snap).expect("json");
+    assert!(json.get("retain_rates").is_none(), "false is not written");
+    json.as_object_mut().expect("object").remove("retain_rates");
+    let old: super::FbsTrunkSnapshot = serde_json::from_value(json).expect("an old snapshot");
+    let bytes = super::export_fbs_trunk_uorlut01(&old).expect("export");
+    assert_eq!(bytes, super::export_fbs_trunk_uorlut01(&snap).expect("export"));
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+    assert!(model.shape().rec_geometric() && !model.shape().rec_retention());
+}
