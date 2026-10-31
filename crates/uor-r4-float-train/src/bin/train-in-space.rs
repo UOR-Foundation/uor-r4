@@ -98,6 +98,13 @@
 //! grades them against greedy on the laptop (`in_space_long::keyed_grade`); with `--panel p-u=DIR`
 //! on claude-218's run, it predicts their exact replies, the sheet's power check. One JSON line.
 //!
+//! `--served-key 1`, with `--opening-keys 1`, adds the served arm (claude-220): greedy with the
+//! memory on, and the point key named in the decode itself from the opening row's own point
+//! against TRAIN's opening table (`samples-{split}-served-memory.json`). The table is built,
+//! saved to `--out`'s `opening-table.safetensors`, read back to the same bits, and served.
+//! `train-in-space --data-root DIR --served-grade 1 --runs DIR --panel p-w=DIR --panel p-v=DIR`
+//! grades the served arm against greedy on the laptop (`in_space_long::served_grade`). One JSON line.
+//!
 //! `train-in-space --data-root DIR --controls 1 --out DIR [--fresh-v2 DIR] [--panel NAME=DIR ...]`: the
 //! protocol's recall controls (I-D, claude-211) on the laptop: (T) the memory's tables and (S) the
 //! longest suffix over TRAIN, as rows files the grader pairs with the arms.
@@ -124,7 +131,7 @@ use candle_core::Device;
 use uor_r4_float_train::flock_read_opening::OpeningAnchor;
 use uor_r4_float_train::flock_read_register::RegisterSelect;
 use uor_r4_float_train::in_space_long::{
-    cell_grade, cells_ok, census, context_reach, controls, cut_grade, cycle_grade, decode_speed, key_grade, keyed_grade, fbs_arm_named, grade,
+    cell_grade, cells_ok, census, context_reach, controls, cut_grade, cycle_grade, decode_speed, key_grade, keyed_grade, served_grade, fbs_arm_named, grade,
     gradient_norms, inspect_run, opening_bound, overturn, read_grade, reply_bound, root_separation,
     run_long, run_recall, score_rows, scopes_ok, DecodeRule, LongConfig, PointObjective, ReadScope,
     TrainSplit, DEFAULT_REGISTER_PICKS, MEMORY_DROPOUT_MAX,
@@ -155,9 +162,11 @@ fn main() -> Result<()> {
     let mut cycle_on = false;
     let mut keys_on = false;
     let mut keyed: Vec<(String, f32)> = Vec::new();
+    let mut served_on = false;
     let mut cycle_grade_on = false;
     let mut key_grade_on = false;
     let mut keyed_grade_on = false;
+    let mut served_grade_on = false;
     let mut key_levels: Vec<(String, u8)> = Vec::new();
     let mut keys_runs: Option<PathBuf> = None;
     let mut scopes: Vec<ReadScope> = Vec::new();
@@ -236,9 +245,11 @@ fn main() -> Result<()> {
             "--cycle-step" => cycle_on = switch(&value)?,
             "--opening-keys" => keys_on = switch(&value)?,
             "--keyed-decode" => keyed = keyed_decode_arg(&value)?,
+            "--served-key" => served_on = switch(&value)?,
             "--cycle-grade" => cycle_grade_on = switch(&value)?,
             "--key-grade" => key_grade_on = switch(&value)?,
             "--keyed-grade" => keyed_grade_on = switch(&value)?,
+            "--served-grade" => served_grade_on = switch(&value)?,
             "--key-levels" => key_levels = key_levels_arg(&value)?,
             "--keys-runs" => keys_runs = Some(PathBuf::from(&value)),
             "--reply-read-train" => {
@@ -494,10 +505,11 @@ fn main() -> Result<()> {
         cycle_grade_on,
         key_grade_on,
         keyed_grade_on,
+        served_grade_on,
     ];
     if modes.iter().filter(|&&m| m).count() > 1 {
         return Err(FloatTrainError::Invalid(
-            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1, --grade 1, --cell-grade 1, --read-grade 1, --cut-grade 1, --cycle-grade 1, --key-grade 1 or --keyed-grade 1"
+            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1, --grade 1, --cell-grade 1, --read-grade 1, --cut-grade 1, --cycle-grade 1, --key-grade 1, --keyed-grade 1 or --served-grade 1"
                 .to_owned(),
         ));
     }
@@ -536,6 +548,7 @@ fn main() -> Result<()> {
             || cycle_grade_on
             || key_grade_on
             || keyed_grade_on
+            || served_grade_on
             || config.reply_read_train.is_some()
             || !scopes.is_empty()
         {
@@ -578,6 +591,11 @@ fn main() -> Result<()> {
             "--keyed-decode applies to --score-rows with --opening-keys 1 only".to_owned(),
         ));
     }
+    if served_on && !keys_on {
+        return Err(FloatTrainError::Invalid(
+            "--served-key applies to --score-rows with --opening-keys 1 only".to_owned(),
+        ));
+    }
     if cycle_grade_on {
         let runs = runs
             .ok_or_else(|| FloatTrainError::Invalid("--cycle-grade needs --runs DIR".to_owned()))?;
@@ -594,6 +612,18 @@ fn main() -> Result<()> {
         let runs = runs
             .ok_or_else(|| FloatTrainError::Invalid("--key-grade needs --runs DIR".to_owned()))?;
         let graded = key_grade(&data_root, &runs, keys_runs.as_deref(), &extra_panels, &key_levels)?;
+        println!("{}", serde_json::to_string(&graded)?);
+        return Ok(());
+    }
+    if served_grade_on {
+        if !key_levels.is_empty() || keys_runs.is_some() {
+            return Err(FloatTrainError::Invalid(
+                "--served-grade reads one run's keys at +∞; it takes no --key-levels or --keys-runs".to_owned(),
+            ));
+        }
+        let runs = runs
+            .ok_or_else(|| FloatTrainError::Invalid("--served-grade needs --runs DIR".to_owned()))?;
+        let graded = served_grade(&data_root, &runs, &extra_panels)?;
         println!("{}", serde_json::to_string(&graded)?);
         return Ok(());
     }
@@ -744,6 +774,7 @@ fn main() -> Result<()> {
             cycle_on,
             keys_on,
             &keyed,
+            served_on,
             &device,
         )? {
             println!("{}", serde_json::to_string(&file)?);
