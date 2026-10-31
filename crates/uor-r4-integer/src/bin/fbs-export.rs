@@ -33,8 +33,9 @@ use std::process::ExitCode;
 use sha2::{Digest, Sha256};
 use uor_r4_integer::fbs_snapshot::write_new_file;
 use uor_r4_integer::stack::{
-    add_point_key_uorlut01, build_point_key, export_fbs_trunk_uorlut01_with, point_key_windows,
-    FbsExportSnaps, FbsTrunkSnapshot, IntegerStackModel, POINT_KEY_BOS, POINT_KEY_WINDOW,
+    add_point_key_uorlut01, build_point_key, check_point_key_read_back,
+    export_fbs_trunk_uorlut01_with, point_key_windows, FbsExportSnaps, FbsTrunkSnapshot,
+    IntegerStackModel, POINT_KEY_BOS, POINT_KEY_WINDOW,
 };
 
 const USAGE: &str = "usage: fbs-export [--raw-gates] [--raw-transition] SNAPSHOT_JSON OUT_PATH\n       fbs-export --point-key ARTIFACT TOKENS_U16 RESPONSE_MASK_U8 OUT_PATH";
@@ -45,12 +46,22 @@ fn uort_tokens(path: &str) -> Result<Vec<u32>, String> {
     if bytes.len() < 64 || &bytes[..4] != b"UORT" {
         return Err(format!("{path}: not a UORT token file"));
     }
-    let count = u64::from_le_bytes(bytes[8..16].try_into().map_err(|_| format!("{path}: truncated"))?) as usize;
+    let count = u64::from_le_bytes(
+        bytes[8..16]
+            .try_into()
+            .map_err(|_| format!("{path}: truncated"))?,
+    ) as usize;
     let payload = &bytes[64..];
     if count.checked_mul(2) != Some(payload.len()) {
-        return Err(format!("{path}: the header counts {count} tokens, the payload holds {} bytes", payload.len()));
+        return Err(format!(
+            "{path}: the header counts {count} tokens, the payload holds {} bytes",
+            payload.len()
+        ));
     }
-    Ok(payload.chunks_exact(2).map(|w| u32::from(u16::from_le_bytes([w[0], w[1]]))).collect())
+    Ok(payload
+        .chunks_exact(2)
+        .map(|w| u32::from(u16::from_le_bytes([w[0], w[1]])))
+        .collect())
 }
 
 /// `--point-key`: the `/8` stack of a `/7` one, with TRAIN's point table.
@@ -62,13 +73,20 @@ fn point_key(paths: &[String]) -> Result<(), String> {
     let model = IntegerStackModel::parse(&bytes).map_err(|e| format!("{artifact}: {e}"))?;
     let tokens = uort_tokens(tokens)?;
     let mask = std::fs::read(mask).map_err(|e| format!("{mask}: {e}"))?;
-    let windows = point_key_windows(&tokens, &mask, POINT_KEY_WINDOW, POINT_KEY_BOS).map_err(|e| format!("windows: {e}"))?;
+    let windows = point_key_windows(&tokens, &mask, POINT_KEY_WINDOW, POINT_KEY_BOS)
+        .map_err(|e| format!("windows: {e}"))?;
     let image = build_point_key(&model, &windows).map_err(|e| format!("the table: {e}"))?;
     let rows = image.rows();
     let with = add_point_key_uorlut01(&bytes, &image).map_err(|e| format!("the /8 stack: {e}"))?;
     IntegerStackModel::parse(&with).map_err(|e| format!("the /8 stack does not parse: {e}"))?;
+    // The run's instrument (claude-228): the table reads back from these bytes as built.
+    check_point_key_read_back(&with, &image).map_err(|e| format!("the /8 stack: {e}"))?;
     write_new_file(Path::new(out), &with).map_err(|e| format!("{out}: {e}"))?;
-    println!("{}  {out}  {rows} openings in {} windows", hex::encode(Sha256::digest(&with)), windows.len());
+    println!(
+        "{}  {out}  {rows} openings in {} windows",
+        hex::encode(Sha256::digest(&with)),
+        windows.len()
+    );
     Ok(())
 }
 

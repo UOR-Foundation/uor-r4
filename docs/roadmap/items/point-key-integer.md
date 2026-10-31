@@ -100,13 +100,13 @@ The model throughout is (r-drop)'s sealed step-16,384 checkpoints at seeds 1–3
    - **The grade:** `train-in-space --integer-grade` reads the integer arms by their own tokens, compares served names with claude-220's float served files (done-when 3), and reads the bar of done-when 4.
    - **Checks:** 383 integer-library tests, 185 float-library tests, 13 negative gates and a full serving audit.
    - **Limit:** both integer arms stop at BOS, 64 reply tokens or the shared 192-token context. Long-prompt replies are capped identically, and the real grade must report that count.
-3. **Next: the real run,** with [`integer-retention-rates`](integer-retention-rates.md) complete.
-   - Claude-227 passed GPU parity within the 3% bar: 1,531 / 1,536 sequences and 4,023 / 4,096 single tokens. Three full snapshots are already stored, so no new pod snapshot run is needed.
-   - It runs under a prep sheet with a fresh FIT and a pre-run review:
-   - read the three stored snapshots and check `retain_rates` in each;
-   - `fbs-export` and `fbs-export --point-key` over TRAIN on the laptop;
-   - the fresh panel p-x drawn with its census;
-   - the arms on p-x, p-w, p-v and DEV at seeds 1–3, tok/s and resident memory.
+3. **Done: the run's instruments** (claude-228, #3459, merged as `c71e85788`), done-when 2, on the laptop with finite tests and no real-model run.
+   - The independent reference scan checks every served opening in `panel_reply`; `fbs-export --point-key` reads the table back as built; a BOS name is refused at the step.
+   - **Checks:** 390 integer-library tests with one ignored, four negative gates and a full serving audit. These checks stop the run on mismatch.
+   - [`integer-retention-rates`](integer-retention-rates.md) is complete (claude-226 and claude-227), so the integer artifact serves (r-drop)'s retained recurrence.
+4. **Next: the real run,** on the laptop, under a prep sheet with a fresh FIT and a pre-run review.
+   - (r-drop)'s full snapshots at seeds 1–3 are in the store at `results/claude/integer-retention-rates-parity-2026-10-31/out/full/`, so no pod is needed.
+   - The steps: `fbs-export`, and `fbs-export --point-key` over TRAIN; the fresh panel p-x drawn with its census; the arms on p-x, p-w, p-v and DEV at seeds 1–3; and tok/s.
 
 ## Rules that apply
 

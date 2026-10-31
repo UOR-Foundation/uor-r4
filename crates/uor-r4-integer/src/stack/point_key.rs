@@ -155,6 +155,64 @@ impl ServedPointKey {
             .map(|(row, _)| query.iter().zip(row).map(|(&x, &p)| i64::from(x.abs_diff(i32::from(p)))).sum())
             .min()
     }
+
+    /// A second, plain implementation of [`Self::name`]'s rule, for the run's instrument
+    /// (claude-228, the item's done-when 2): every row's L1 distance at Q12 into a list, the least
+    /// of them, the targets at it counted in an ordered map, then the largest count, ties to the
+    /// smaller id. It shares no code with `name` and is off the step's path. `None` for a query of
+    /// another width.
+    pub(crate) fn reference_name(&self, query: &[i32]) -> Option<(u32, i64)> {
+        if query.len() != self.width {
+            return None;
+        }
+        let distances: Vec<i64> = self
+            .points
+            .chunks_exact(self.width)
+            .map(|row| query.iter().zip(row).map(|(&x, &p)| (i64::from(x) - i64::from(p)).abs()).sum())
+            .collect();
+        let least = *distances.iter().min()?;
+        let mut counts = std::collections::BTreeMap::<u32, usize>::new();
+        for (&distance, &target) in distances.iter().zip(&self.targets) {
+            if distance == least {
+                *counts.entry(target).or_default() += 1;
+            }
+        }
+        // The map iterates ids upward, so a later id replaces the held one only on a larger count.
+        let mut named: Option<(u32, usize)> = None;
+        for (&target, &count) in &counts {
+            if named.is_none_or(|(_, best)| count > best) {
+                named = Some((target, count));
+            }
+        }
+        named.map(|(target, _)| (target, least))
+    }
+}
+
+/// The run's instrument at a served opening (claude-228, the item's done-when 2): the name and least
+/// distance the point key served must equal the reference scan's of the same query against the
+/// same table, or the decode stops.
+pub(crate) fn check_served_point(
+    model: &super::IntegerStackModel,
+    query: &[i32],
+    served: (u32, i64),
+) -> Result<(), StackError> {
+    let reference = model.point_key_reference(query);
+    if reference != Some(served) {
+        return Err(StackError::Numerics(format!(
+            "the point key served {served:?}, where the reference scan names {reference:?}"
+        )));
+    }
+    Ok(())
+}
+
+/// The run's instrument at export (claude-228, the item's done-when 2): the table `stack` reads back
+/// as, from its own bytes, must equal the one built, byte for byte.
+pub fn check_point_key_read_back(stack: &[u8], built: &PointKeyImage) -> Result<(), StackError> {
+    let read = super::memory::read_memory_uorlut01(stack)?.and_then(|memory| memory.point);
+    if read.as_ref() != Some(built) {
+        return Err(StackError::Numerics("the point table does not read back as built".to_owned()));
+    }
+    Ok(())
 }
 
 /// Why a panel reply ended (claude-224).
@@ -221,6 +279,10 @@ pub fn panel_reply(
     }
     let step = step.ok_or(StackError::MissingData)?;
     let keyed = session.last_point_key();
+    // The step's `query_q12` is the buffer the served search read (claude-228).
+    if let Some(served) = keyed {
+        check_served_point(model, &step.query_q12, served)?;
+    }
     let float_distance = float_keyed.and_then(|f| model.point_key_distance(&step.query_q12, f));
     let (mut reply, mut token) = (Vec::new(), step.token);
     let end = loop {
@@ -387,5 +449,49 @@ mod point_key_tests {
         assert!(PointKeyImage { width: 2, points: vec![0; 3], targets: vec![3, 4] }.check(100).is_err(), "rows × width");
         let key = served(1, vec![0, 4], vec![3, 4]);
         assert!(key.name(&[0, 0], &mut Vec::new()).is_err(), "a wrong-width query");
+    }
+
+    /// claude-228: the reference scan, a second implementation of the rule, names as the search
+    /// does. The random tables hold few values and few ids, so ties at the least distance and ties
+    /// in counts are common, and the hand cases pin each half of the rule.
+    #[test]
+    fn the_reference_scan_names_as_the_search_does() {
+        let commonest = served(2, vec![1, 1, 2, 0, -1, -1, 0, 2, 50, 50], vec![9, 5, 9, 4, 3]);
+        assert_eq!(commonest.reference_name(&[0, 0]), Some((9, 2)), "the commonest of the tied");
+        let even = served(2, vec![1, 1, 2, 0, -1, -1, 0, 2], vec![9, 5, 5, 9]);
+        assert_eq!(even.reference_name(&[0, 0]), Some((5, 2)), "a tie in counts goes to the smaller id");
+        assert_eq!(even.reference_name(&[0]), None, "another width");
+        let mut state = 0x2026_1031u64;
+        let mut next = |m: u64| {
+            state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+            (state >> 33) % m
+        };
+        let (mut cases, mut count_ties) = (0usize, 0usize);
+        for _ in 0..400 {
+            let (width, rows) = (1 + next(3) as usize, 1 + next(12) as usize);
+            let points = (0..rows * width).map(|_| next(5) as i16 - 2).collect();
+            let targets = (0..rows).map(|_| 1 + next(4) as u32).collect();
+            let key = served(width, points, targets);
+            let mut tied = Vec::with_capacity(key.rows());
+            for _ in 0..8 {
+                let query: Vec<i32> = (0..width).map(|_| next(7) as i32 - 3).collect();
+                assert_eq!(key.name(&query, &mut tied).ok(), key.reference_name(&query), "query {query:?}");
+                // `tied` is sorted: count the cases where two ids share the largest count.
+                let mut runs: Vec<usize> = tied.chunk_by(|a, b| a == b).map(<[u32]>::len).collect();
+                runs.sort_unstable();
+                count_ties += usize::from(runs.len() > 1 && runs[runs.len() - 1] == runs[runs.len() - 2]);
+                cases += 1;
+            }
+        }
+        assert!(count_ties > 100, "only {count_ties} of {cases} cases tie in counts");
+    }
+
+    /// claude-228: a BOS name never serves. The search refuses it at the step, even from a table
+    /// that skipped the image's check.
+    #[test]
+    fn a_bos_name_is_refused_at_the_step() {
+        let key = ServedPointKey::new(PointKeyImage { width: 1, points: vec![0, 5], targets: vec![MEMORY_BOS_ID, 3] });
+        assert!(key.name(&[0], &mut Vec::new()).is_err(), "BOS at the least distance");
+        assert_eq!(key.name(&[5], &mut Vec::new()).unwrap(), (3, 0), "another row's name serves");
     }
 }
