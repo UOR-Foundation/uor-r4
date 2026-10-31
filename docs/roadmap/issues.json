@@ -32,6 +32,7 @@
   "infra-outsider-repairs": 3433,
   "integer-hamming-read": 3385,
   "integer-mul-div-serving": 3386,
+  "integer-nearest-readout": 3462,
   "integer-retention-rates": 3456,
   "legal-construction-exact-solve": 2828,
   "loop-render-review-hardening": 3044,

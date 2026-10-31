@@ -422,7 +422,7 @@ impl StackShape {
             .is_some_and(|p| p != "spiralcore_fbs")
         {
             Some("the projection is not spiralcore_fbs")
-        } else if self.head.as_deref().is_some_and(|h| h != "native_vector") {
+        } else if self.head.as_deref().is_some_and(|h| h != "native_vector" && h != "native_vector_nearest") {
             Some("the head is not native_vector")
         } else if self.projection_fbs()
             && !(self.rec_geometric()
@@ -629,10 +629,18 @@ impl StackShape {
         self.projection.as_deref() == Some("spiralcore_fbs")
     }
 
-    /// Whether the output head is the native vector writer
-    /// (`head == "native_vector"`).
+    /// Whether the output head is the native vector head (`head == "native_vector"`, or
+    /// `"native_vector_nearest"`, which reads the same writer table).
     pub fn head_native_vector(&self) -> bool {
-        self.head.as_deref() == Some("native_vector")
+        matches!(self.head.as_deref(), Some("native_vector" | "native_vector_nearest"))
+    }
+
+    /// Whether the native head serves the whole table's L1-nearest token to the query, not the
+    /// writer's pick among its kept cells (`head == "native_vector_nearest"`,
+    /// integer-nearest-readout, claude-231): how a model trained with the `cell` or `nearest`
+    /// objective decodes. An engine before it refuses the value by [`StackShape::validate`].
+    pub fn head_nearest(&self) -> bool {
+        self.head.as_deref() == Some("native_vector_nearest")
     }
 
     /// Whether the feed-forward block uses the icosian-snapped Hamilton gate
@@ -1580,7 +1588,7 @@ pub fn export_fbs_trunk_uorlut01_with(
         raw_gates: !snaps.gates,
         raw_transition: !snaps.transition,
         projection: Some("spiralcore_fbs".to_owned()),
-        head: Some("native_vector".to_owned()),
+        head: Some(if snap.readout_nearest { "native_vector_nearest" } else { "native_vector" }.to_owned()),
         kept_cells: Some(snap.kept_cells),
     };
     // `validate` holds the width and MLP width to multiples of the group (32),
@@ -1779,7 +1787,7 @@ pub fn export_fbs_trunk_uorlut01_with(
         "source": {
             "exporter": "uor-r4-integer::stack::export_fbs_trunk_uorlut01",
             "projection": "spiralcore_fbs",
-            "head": "native_vector",
+            "head": if snap.readout_nearest { "native_vector_nearest" } else { "native_vector" },
             "rec_gates": if snap.retain_rates { "geometric-retention" } else { "geometric" },
             "gate": "hamilton",
         },

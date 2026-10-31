@@ -291,6 +291,33 @@ pub struct FbsTrunkSnapshot {
     /// so every earlier snapshot parses and exports as before.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub retain_rates: bool,
+    /// Whether the trunk decodes as the whole table's L1-nearest token, as a model trained with
+    /// the `cell` or `nearest` objective does ([`run_readout_nearest`], integer-nearest-readout,
+    /// claude-231). The export then serves `head = "native_vector_nearest"`. False, and not
+    /// written, for the writer's pick, so every earlier snapshot parses and exports as before.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub readout_nearest: bool,
+}
+
+/// The readout a run's `config.json` trained for (integer-nearest-readout, claude-231): its
+/// `objective`, where `cell` and `nearest` decode as the whole table's nearest token and `sheet`
+/// and `voronoi` as the writer's pick (the float trainer's `PointObjective::decodes_nearest`). A
+/// config without an objective is a run from before the objectives, read by its writer. Any other
+/// value is refused.
+pub fn run_readout_nearest(config: &str) -> Result<bool, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(config).map_err(|e| format!("the run config: {e}"))?;
+    match value.get("objective") {
+        None | Some(serde_json::Value::Null) => Ok(false),
+        Some(serde_json::Value::String(o)) => match o.as_str() {
+            "cell" | "nearest" => Ok(true),
+            "sheet" | "voronoi" => Ok(false),
+            other => Err(format!(
+                "the run config's objective {other:?} is not sheet, voronoi, nearest or cell"
+            )),
+        },
+        Some(other) => Err(format!("the run config's objective {other} is not a name")),
+    }
 }
 
 /// The longest memory key, and the width a reply key is padded to: the float memory's

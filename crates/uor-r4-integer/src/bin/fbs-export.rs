@@ -6,13 +6,19 @@
 //! build, and this serving-build binary turns it into the artifact.
 //!
 //! ```text
-//! fbs-export [--raw-gates] [--raw-transition] SNAPSHOT_JSON OUT_PATH
+//! fbs-export [--raw-gates] [--raw-transition] [--run-config CONFIG_JSON] SNAPSHOT_JSON OUT_PATH
 //! ```
 //!
 //! `--raw-gates` serves the two Hamilton gates, and `--raw-transition` the
 //! recurrence transition, unsnapped: the unit quaternion of each 4-block by
 //! integer square root and division, under `uor-r4.lut-stack/5` (claude-181).
 //! With neither, the gates and the transition snap to the 120 icosians.
+//!
+//! `--run-config` reads the run's `config.json` for its readout (integer-nearest-readout,
+//! claude-231): a `cell` or `nearest` objective serves the whole table's nearest token
+//! (`head = "native_vector_nearest"`), for a snapshot taken before `fbs-snapshot` recorded it. It
+//! refuses a config whose `retain_rates` disagrees with the snapshot's, or whose objective reads
+//! the writer for a snapshot that reads nearest.
 //!
 //! It parses the artifact back before writing it, never replaces or leaves a
 //! partial `OUT_PATH` (`fbs_snapshot::write_new_file`), and prints its sha256.
@@ -31,14 +37,14 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use sha2::{Digest, Sha256};
-use uor_r4_integer::fbs_snapshot::write_new_file;
+use uor_r4_integer::fbs_snapshot::{run_readout_nearest, write_new_file};
 use uor_r4_integer::stack::{
     add_point_key_uorlut01, build_point_key, check_point_key_read_back,
     export_fbs_trunk_uorlut01_with, point_key_windows, FbsExportSnaps, FbsTrunkSnapshot,
     IntegerStackModel, POINT_KEY_BOS, POINT_KEY_WINDOW,
 };
 
-const USAGE: &str = "usage: fbs-export [--raw-gates] [--raw-transition] SNAPSHOT_JSON OUT_PATH\n       fbs-export --point-key ARTIFACT TOKENS_U16 RESPONSE_MASK_U8 OUT_PATH";
+const USAGE: &str = "usage: fbs-export [--raw-gates] [--raw-transition] [--run-config CONFIG_JSON] SNAPSHOT_JSON OUT_PATH\n       fbs-export --point-key ARTIFACT TOKENS_U16 RESPONSE_MASK_U8 OUT_PATH";
 
 /// A `UORT` token file's ids: its 64-byte header, whose count must match, then little-endian u16s.
 fn uort_tokens(path: &str) -> Result<Vec<u32>, String> {
@@ -96,8 +102,9 @@ fn run() -> Result<(), String> {
         return point_key(&args[1..]);
     }
     let mut snaps = FbsExportSnaps::SNAPPED;
-    let mut paths = Vec::new();
-    for arg in args {
+    let (mut paths, mut run_config) = (Vec::new(), None::<String>);
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
         match arg.as_str() {
             "--raw-gates" if !snaps.gates => return Err("--raw-gates given twice".to_owned()),
             "--raw-transition" if !snaps.transition => {
@@ -105,6 +112,15 @@ fn run() -> Result<(), String> {
             }
             "--raw-gates" => snaps.gates = false,
             "--raw-transition" => snaps.transition = false,
+            "--run-config" if run_config.is_some() => {
+                return Err("--run-config given twice".to_owned())
+            }
+            "--run-config" => {
+                run_config = Some(
+                    args.next()
+                        .ok_or_else(|| format!("--run-config needs a path: {USAGE}"))?,
+                )
+            }
             flag if flag.starts_with("--") => return Err(format!("{flag}: {USAGE}")),
             _ => paths.push(arg),
         }
@@ -113,8 +129,31 @@ fn run() -> Result<(), String> {
         return Err(USAGE.to_owned());
     };
     let bytes = std::fs::read(snapshot).map_err(|e| format!("{snapshot}: {e}"))?;
-    let snap: FbsTrunkSnapshot =
+    let mut snap: FbsTrunkSnapshot =
         serde_json::from_slice(&bytes).map_err(|e| format!("{snapshot}: {e}"))?;
+    // The run's readout (integer-nearest-readout, claude-231), for a snapshot taken before
+    // `fbs-snapshot` recorded it. The config's rate reading must agree with the snapshot's.
+    if let Some(config) = &run_config {
+        let text = std::fs::read_to_string(config).map_err(|e| format!("{config}: {e}"))?;
+        let nearest = run_readout_nearest(&text).map_err(|e| format!("{config}: {e}"))?;
+        if snap.readout_nearest && !nearest {
+            return Err(format!(
+                "{snapshot} decodes by nearest, but {config}'s objective decodes by the writer"
+            ));
+        }
+        let retain = serde_json::from_str::<serde_json::Value>(&text)
+            .map_err(|e| format!("{config}: {e}"))?
+            .get("retain_rates")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        if retain != snap.retain_rates {
+            return Err(format!(
+                "{config}'s retain_rates is {retain}, {snapshot}'s is {}",
+                snap.retain_rates
+            ));
+        }
+        snap.readout_nearest = nearest;
+    }
     let artifact =
         export_fbs_trunk_uorlut01_with(&snap, snaps).map_err(|e| format!("export: {e}"))?;
     IntegerStackModel::parse(&artifact)
