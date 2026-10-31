@@ -21,7 +21,7 @@ Not measured here: this unit changes the item's text and runs nothing.
     - the float side, a capture inside `apply` and `apply_readout`, off by default. It writes the query and key codes as well as the kept positions, so the two causes can be told apart;
     - the integer side, the same record from `stack/hamming.rs`;
     - the timing on the same laptop pass: decode tokens/s against context, with the read and without (step 6's measurement, taken early; Casey, 31 Oct 2026, in chat: "Yes, fold it in");
-    - the comparison, kept-set share and top-1:
+    - the comparison, kept-set share and top-1, each split by head kind:
       - every copy-head set, and every stream-read type-head set, is judged at every position, since their codes do not depend on the read's own output;
       - a readout type-head set is judged only where the stream read agrees up to its position, and otherwise counted as downstream;
       - a judged set that differs is either a tie across the 16th place (the same codes wherever either side keeps) or a sign flip;
