@@ -1,7 +1,7 @@
 # Prep sheet: parity of the retained trunk on the GPU (integer-retention-rates done-when 3, claude-227), 2026-10-31
 
 - Item: [integer-retention-rates](../../roadmap/items/integer-retention-rates.md) (#3456). ORDER: [claude-227](../../loop/tasks/integer-retention-rates/claude-227/ORDER.md).
-- Run: one GPU job on one leased RTX 5090. Steps: `fbs-snapshot` with its three readouts on (r-drop) s1's trunk, then `fbs-export` and `fbs-compare --parity-only` on two artifacts. The job is `local/claude/claude-227/job.sh` at the pushed head; this sheet quotes its steps.
+- Run: one GPU job on one leased RTX 5090. Steps: `fbs-snapshot` with its three readouts on (r-drop) s1's trunk, then `fbs-export` and `fbs-compare --parity-only` on two artifacts. The job is `local/claude/claude-227/job.sh`, which is not in git. It runs against the pushed head, and its copy is stored with the outputs. This sheet quotes its steps.
 
 ## 1. Question
 

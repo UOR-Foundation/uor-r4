@@ -6,11 +6,13 @@ Item: [integer-retention-rates](../../roadmap/items/integer-retention-rates.md) 
 
 - **Sheet:** [integer-retention-rates-parity-2026-10-31](../../harness/prep/integer-retention-rates-parity-2026-10-31.md). It got FIT in two non-author rounds and passed its pre-run review.
 - **Run:**
-  - one RTX 5090 (`vast-58504603`), 07:07–07:20Z, about $0.25;
-  - job `local/claude/claude-227/job.sh` (sha256 `de6adae7…`, stored beside the outputs) at head `9e6836242`;
+  - one RTX 5090 (`vast-58504603`), from bootstrap at 07:07:38Z; the job ran 07:09:16–07:11:01Z;
+  - about $0.25 by the session's estimate (no stored file records the deletion time);
+  - the job is `local/claude/claude-227/job.sh`, which is not in git. Its copy is stored beside the outputs (6,898 B, sha256 `de6adae7…`, outside `SHA256SUMS`), and it ran against the pushed head `9e6836242`;
   - EXIT 0.
 - **Store:** `caseyallard/uor-r4-store:results/claude/integer-retention-rates-parity-2026-10-31/`.
-  - `out/` holds 46 files under `SHA256SUMS`, verified on the pod and listed back from the store before the pod went down.
+  - `out/` holds 46 files: 45 under `SHA256SUMS`, and that file itself.
+  - The session checked the sums on the pod (`sha256sum -c`, before the upload; it is not recorded in a stored file), and listed the store back before the pod went down.
   - `pod-workspace-uor-r4/` holds the pod's job and bootstrap records.
 - **Input:** (r-drop) s1, step 16,384, trunk alone (`model.safetensors` sha256 `c5fcbb90…`), with its run config (`retain_rates: true`). The six files of each seed passed the run's own sums.
 - **Instruments, all green:**

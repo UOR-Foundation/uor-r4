@@ -18,7 +18,9 @@ No measurement. This run is parity only; the served model's tok/s comes with poi
 - **`uor-pod down` failed its laptop archive** ("uor-r4/pods: Is a directory") and kept the pod, billing.
   - The run's outputs were already in the store and listed back. I also stored the pod's `/workspace/uor-r4`, then destroyed the pod with `--confirm-archived`.
   - This is tooling; it is logged in `local/claude/FRICTION.md`.
-- **The single tokens' residual, 1.78%, is the larger one.** It is inside the bar, but above claude-126's 1.4% single-token reading and above this run's 0.33% on sequences. So the exporter's own residual sits mostly at position 0, where retention plays no part.
+- **The single tokens' residual, 1.78%, is the larger one.** It is inside the bar, but above claude-126's 1.4% single-token reading and above this run's 0.33% on sequences. Its cause is not located.
+  - Retention does act at position 0: from the zero state, keep = √(1 − λ²) differs between the readings at every index past 0, which is why the decay control misses 97.9% of single tokens.
+  - The 8 sequences hold only 8 first positions, so they cannot say where the single-token residual comes from (this unit's review).
 - **The by-product snapshots' `retain_rates` was not checked in the files.** `fbs-snapshot` read it from each run's config as in the trunk arm. Point-key-integer's run checks it when it exports them.
 - **CI's "harness rules and tests" also fails `harness.documented_commands`** on three of DeepSeek's REPORTs on main (deepseek-75, deepseek-1, deepseek-2): each documents a `pr-check` call with a stray arrow as a flag. That is not this unit's, and not a required check.
 
@@ -42,7 +44,7 @@ No measurement. This run is parity only; the served model's tok/s comes with poi
   - every tool exiting 0;
   - the readout agreeing with the retained artifact, not the decay one (`I-Readout-Retained`).
 - **The by-product:** three full snapshots, seeds 1–3, with the memory and the Hamming read, about 60.8 MB each. Point-key-integer's run needs no pod for them.
-- **The cost:** one 5090 for about 15 minutes, about $0.25 against the sheet's $2 ceiling. The builds were warm, since bootstrap had built the same code.
+- **The cost:** about $0.25 against the sheet's $2 ceiling, by the session's estimate. That is $0.95/h from bootstrap at 07:07:38Z to the deletion after the upload. The job ran 07:09:16–07:11:01Z, and no stored file records the deletion time. The builds were warm, since bootstrap had built the same code.
 
 ## What changed
 
@@ -53,7 +55,7 @@ No measurement. This run is parity only; the served model's tok/s comes with poi
 
 ## Measurements
 
-- **The store:** `caseyallard/uor-r4-store:results/claude/integer-retention-rates-parity-2026-10-31/`. `out/` holds 46 files under `SHA256SUMS`, with `job.sh` and `pod-workspace-uor-r4/` beside it.
+- **The store:** `caseyallard/uor-r4-store:results/claude/integer-retention-rates-parity-2026-10-31/`. `out/` holds 46 files: 45 under `SHA256SUMS`, and that file itself. `job.sh` and `pod-workspace-uor-r4/` sit beside it.
 - **The largest query gaps** (retained): 3.89 on the sequences and 5.50 on the single tokens. The decay control's are 16.00 in both.
 
 ## Checks run at the head
