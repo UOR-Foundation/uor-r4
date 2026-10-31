@@ -22,8 +22,9 @@ Four copies of (r-drop) step 16,384, each without the turn memory: `fbs-snapshot
 
 **The steps for each:**
 1. `fbs-snapshot` writes the snapshot and its plain, export and D11 readouts. The read is applied to the readouts (claude-200) and carried in the snapshot.
-2. `fbs-export` (writer head, snapped).
-3. `fbs-compare --parity-only` against the D11 readout.
+2. **The writer copy.** The run's `objective` is `cell`, so the snapshot carries `"readout_nearest":true` (claude-231), and its artifact would serve the nearest token. The D11 readout's token is always the native writer's (`hidden_and_next`). So the export and the compare read a copy of the snapshot less exactly that last field (23 bytes), which is how claude-227's snapshots were written.
+3. `fbs-export` of the writer copy (writer head, snapped).
+4. `fbs-compare --parity-only` of the writer copy against the D11 readout.
 
 **The readings,** per section (`single_tokens`: 4,096; `sequences`: 8 × 192 = 1,536):
 - the writer token agreement, d = positions − agreements;
@@ -50,6 +51,9 @@ The rows are read in order; the first that holds applies.
 1. **`I-Data`:** each seed's six files pass the run's own sums.
 2. **`I-Export-Tests`:** the `fbs_export::` GPU tests pass at the head, with at least one run.
 3. **`I-Reading-Carried`:** every snapshot carries `"retain_rates":true` once. The h snapshots carry a read, and the t snapshots none.
+   - Every snapshot carries `"readout_nearest":true` once.
+   - Its writer copy is exactly 23 bytes shorter and carries no flag.
+   - Its artifact holds no `native_vector_nearest`.
 4. **`I-Artifact-Identity`:** each artifact's sha256 equals its comparison's `artifact_sha256`.
 5. **`I-Repro`:** t1 reproduces claude-227's counts exactly: 1,531 of 1,536 sequence positions and 4,023 of 4,096 single tokens. That ties this job's instrument to the earlier one.
 6. **`I-Finite`:** `fbs-snapshot`, `fbs-export` and `fbs-compare` exit 0 for each variant. A variant that fails is reported as such and is not counted.
