@@ -36,7 +36,7 @@ use uor_r4_float_train::flock_read_memory::TurnMemory;
 use uor_r4_float_train::geometric_stack::{set_retention_rates, StackModel};
 use uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT;
 use uor_r4_float_train::Result;
-use uor_r4_integer::fbs_snapshot::{write_new_file, FbsReadoutMode};
+use uor_r4_integer::fbs_snapshot::{run_readout_nearest, write_new_file, FbsReadoutMode};
 
 fn write(path: &str, json: &[u8]) -> Result<()> {
     write_new_file(Path::new(path), json)?;
@@ -67,8 +67,17 @@ fn main() -> Result<()> {
         .parent()
         .and_then(Path::parent)
         .map(|run| run.join("config.json"))
-        .ok_or_else(|| uor_r4_float_train::FloatTrainError::Invalid("MODEL_DIR is not a run's models/step-N".to_owned()))?;
-    let retain = run_rate_reading(&std::fs::read_to_string(&run_config)?)?;
+        .ok_or_else(|| {
+            uor_r4_float_train::FloatTrainError::Invalid(
+                "MODEL_DIR is not a run's models/step-N".to_owned(),
+            )
+        })?;
+    let config = std::fs::read_to_string(&run_config)?;
+    let retain = run_rate_reading(&config)?;
+    // And its readout (integer-nearest-readout, claude-231): a cell or nearest objective decodes
+    // as the whole table's nearest token.
+    let nearest =
+        run_readout_nearest(&config).map_err(uor_r4_float_train::FloatTrainError::Invalid)?;
     set_retention_rates(retain);
     let device = Device::new_cuda(0)?;
     let model = StackModel::load(dir, &device)?;
@@ -81,6 +90,7 @@ fn main() -> Result<()> {
         .transpose()?;
     snapshot.hamming = hamming;
     snapshot.retain_rates = retain;
+    snapshot.readout_nearest = nearest;
     write(out, &serde_json::to_vec(&snapshot)?)?;
     // The readouts are the float model with its Hamming reads (claude-200): `StackModel::hidden`
     // applies the reads set on this thread, here on the trunk's GPU.

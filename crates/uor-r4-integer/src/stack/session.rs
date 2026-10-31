@@ -37,7 +37,7 @@ use super::format::{
     StackTurnMemory,
 };
 use super::kernels::{
-    grid_apply, grid_valid, mul_i128, shift, shift_wide, stack_activation, stack_activation_tables,
+    grid_apply, grid_valid, mul_i128, shift, shift_wide, stack_activation, stack_activation_tables, stack_argmax,
     stack_dequant_row, stack_div_u128, stack_dot, stack_exp_neg, stack_gemv, stack_gemv_pairs,
     stack_hamilton, stack_isqrt, stack_l2_distance, stack_lift, stack_lorentz_distance,
     stack_mix_row, stack_mul_u128, stack_mul_u64, stack_pair_tables, stack_pointer_mixture,
@@ -2509,6 +2509,31 @@ impl IntegerStackSession<'_> {
         })
     }
 
+    /// Feed one token and return the served greedy next token and its margin in Q16 units: what
+    /// the browser's `wasm_step` serves (integer-nearest-readout, claude-231).
+    /// - **A dense stack:** the integer argmax of its logits (first on ties), with top1 − top2.
+    /// - **A SpiralCore/FBS model:** its native head's token, the writer's pick or, under
+    ///   `head_nearest`, the whole table's nearest. Its step has no logits, so its margin is 0.
+    ///   Before this, the browser took the argmax of the FBS step's empty logits, token 0.
+    pub fn serve_step(&mut self, token: u32) -> Result<(u32, i32), StackError> {
+        if self.model.fbs.is_some() {
+            self.step(token)?;
+            return Ok((self.b.native_token, 0));
+        }
+        let logits = self.step(token)?;
+        let next = stack_argmax(logits) as u32;
+        let (mut top1, mut top2) = (i32::MIN, i32::MIN);
+        for &v in logits.iter() {
+            if v > top1 {
+                top2 = top1;
+                top1 = v;
+            } else if v > top2 {
+                top2 = v;
+            }
+        }
+        Ok((next, top1.saturating_sub(top2)))
+    }
+
     /// Execute one single-threaded step while measuring the nanosecond duration
     /// of each of the four phases (`ingestion`, `routing`, `memory_lookup`,
     /// `emission`).
@@ -3232,13 +3257,14 @@ fn stack_step_fbs(
     for (q, &v) in b.query_q12.iter_mut().zip(&b.scratch[..d]) {
         *q = to_exp_i32(v, NORM_FINE_EXP, Q12_EXP).clamp(-32768, 32767);
     }
-    b.native_token = stack_native_writer(
-        fbs,
-        s.vocab,
-        &b.query_q12,
-        &mut b.cells,
-        &mut b.native_kept,
-    );
+    // A model trained with the cell or nearest objective decodes as the whole table's nearest token
+    // (integer-nearest-readout, claude-231); it keeps no cells.
+    b.native_token = if s.head_nearest() {
+        b.native_kept.fill(0);
+        stack_whole_table_nearest(fbs, s.vocab, &b.query_q12)
+    } else {
+        stack_native_writer(fbs, s.vocab, &b.query_q12, &mut b.cells, &mut b.native_kept)
+    };
     // The served point key (claude-222): where the opening's exact key missed, the commonest
     // target among TRAIN's L1-nearest openings to this query names the reply's first token. Its
     // search cannot fail here: parsing refused a table of another width, with no rows or naming
@@ -3401,13 +3427,12 @@ fn stack_step_fbs_timed(
         *q = to_exp_i32(v, NORM_FINE_EXP, Q12_EXP).clamp(-32768, 32767);
     }
     lap(&mut since, ns);
-    b.native_token = stack_native_writer(
-        fbs,
-        s.vocab,
-        &b.query_q12,
-        &mut b.cells,
-        &mut b.native_kept,
-    );
+    b.native_token = if s.head_nearest() {
+        b.native_kept.fill(0);
+        stack_whole_table_nearest(fbs, s.vocab, &b.query_q12)
+    } else {
+        stack_native_writer(fbs, s.vocab, &b.query_q12, &mut b.cells, &mut b.native_kept)
+    };
     // The served point key (claude-222), timed with the writer.
     let mut served = None;
     if point_miss {

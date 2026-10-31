@@ -3,9 +3,10 @@
 //! This module is the load/session/step/save/restore export set the Studio
 //! worker drives. It exists only with `serving-wasm` on `wasm32`, and it owns
 //! no model logic: every call forwards to the preserved engine
-//! ([`crate::stack::IntegerStackModel::parse`], [`IntegerStackSession::step`],
-//! [`stack_argmax`], [`IntegerStackSession::save_state`]). Greedy selection
-//! is the engine's own integer argmax (first on ties), so save → terminate →
+//! ([`crate::stack::IntegerStackModel::parse`], [`IntegerStackSession::serve_step`],
+//! [`IntegerStackSession::save_state`]). Greedy selection is the engine's own: a
+//! dense stack's integer argmax (first on ties), or a SpiralCore/FBS model's
+//! native head (claude-231), so save → terminate →
 //! restore reproduces a greedy stream byte-for-byte as long as the artifact
 //! bytes are the same sealed ones.
 //!
@@ -35,7 +36,7 @@
 #![cfg(all(target_arch = "wasm32", feature = "serving-wasm"))]
 
 use crate::discrete_d11::IntegerDiscreteModel;
-use crate::stack::{stack_argmax, IntegerStackModel, StackError};
+use crate::stack::{IntegerStackModel, StackError};
 use core::sync::atomic::{AtomicU64, Ordering};
 use std::cell::RefCell;
 
@@ -136,20 +137,12 @@ pub struct StepOut {
 #[inline(never)]
 pub fn wasm_step(handle: u32, token: u32) -> Result<StepOut, String> {
     with_slot_mut(handle, |slot| {
-        let logits = slot.session.step(token).map_err(take_error)?;
-        let next = stack_argmax(logits) as u32;
-        let (mut top1, mut top2) = (i32::MIN, i32::MIN);
-        for &v in logits.iter() {
-            if v > top1 {
-                top2 = top1;
-                top1 = v;
-            } else if v > top2 {
-                top2 = v;
-            }
-        }
+        // The session's served choice (claude-231): a dense stack's argmax, or an FBS model's
+        // native token, the writer's or the whole table's nearest by its head.
+        let (next, margin_q16) = slot.session.serve_step(token).map_err(take_error)?;
         Ok(StepOut {
             next,
-            margin_q16: top1.saturating_sub(top2),
+            margin_q16,
             position: slot.session.position() as u32,
         })
     })
