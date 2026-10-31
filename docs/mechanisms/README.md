@@ -20,7 +20,7 @@ Every number in the tables is a **measurement** from a recorded run or test, lin
 
 ## M1 closed 30 Oct; current mechanisms on 31 Oct 2026
 
-Two model paths remain distinct. The saved discrete 19-table model has closed M1 at all six bars: DEV 7,002 / 7,001, Fresh V2 7,215 / 7,228 and p-f 7,850 / 7,872 at two seeds, with exact 14,287-row DEV export agreement and Apple M1 decode at 10,876 / 10,566 tok/s ([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)). The separate float-trained FBS trunk is the current complete-reply line:
+Two model paths remain distinct. The saved discrete 19-table model has closed M1 at all six bars: DEV 7,002 / 7,001, Fresh V2 7,215 / 7,228 and p-f 7,850 / 7,872 at two seeds, with exact 14,287-row DEV export agreement and Apple M1 decode at 10,876 / 10,566 tok/s under the bar-f remeasurement ([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)). The separate float-trained FBS trunk is the current complete-reply line:
 
 - **Router:** the FBS recurrence, Hamilton gate and SpiralCore/FBS routes, trained and served with exact rotations and its DEV export gap inside the bar under `lut-stack/5`.
 - **Position:** SpiralCore transport spin in the recurrence, with no RoPE.

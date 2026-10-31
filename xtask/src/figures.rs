@@ -372,7 +372,7 @@ fn architecture() -> Result<String, Fail> {
         [626.0, 290.0, 240.0, 62.0],
         St::Working,
         "Exact turn memory",
-        &["/7: opening + later rows"],
+        &["/7 synthetic: open+reply"],
         false,
     );
     for (a, b) in [(150.0, 190.0), (366.0, 406.0), (1076.0, 1100.0)] {
@@ -499,7 +499,7 @@ fn architecture_narrow() -> Result<String, Fail> {
             318.0,
             St::Working,
             "Copy and exact turn memory",
-            "/7 serves opening + later rows",
+            "/7 synthetic: open+reply",
         ),
         (
             400.0,
@@ -951,7 +951,7 @@ fn operators() -> Result<String, Fail> {
 fn training_pipeline() -> Result<String, Fail> {
     let mut s = Svg::new("training-pipeline", 1200.0, 680.0);
     s.header(
-        "Training: float on the GPU, exported exactly to integers",
+        "Training: FBS float; M1 discrete",
         &format!(
             "{DATE}. Float training is offline only (D37); serving is D11 integers. Unit REPORTs: docs/loop/tasks/."
         ),

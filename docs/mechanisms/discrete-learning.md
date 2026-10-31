@@ -36,7 +36,7 @@ The 15 non-identity moves are bivector rotations. The step picks $m^*=\arg\min_m
 
 **Speed-ups.** The row-parallel kernel (`rows_v1`) computes the baseline once per row and each candidate once per row and lane, instead of replaying every row serially per candidate. It reproduces the serial losses on every checked case (**measurement**: Route read 3.843 s to 0.0691 s per proposal, 55.6 times faster, 64 rows; Route-mode index coverage was widened after review). BVG-K (batched verified coordinates) scores up to 64 coordinates per launch and commits a block only if its joint loss beats the best single move.
 
-**Rule check.** No softmax, exp, softplus, sigmoid or tanh (D23), and no matrix multiplication (D30): the choice is an integer minimum, distances are integer L1 and Hamming, and moves are table lookups. The saved 19-table discrete model exports through `uor-r4.lut-discrete-trunk/1` with exact 14,287-row DEV agreement and B4 pass, and serves at 10,876 / 10,566 native decode tok/s on Apple M1. D37 allows offline float training; that needs a separate scanned module and a reported export gap.
+**Rule check.** No softmax, exp, softplus, sigmoid or tanh (D23), and no matrix multiplication (D30): the choice is an integer minimum, distances are integer L1 and Hamming, and moves are table lookups. The saved 19-table discrete model exports through `uor-r4.lut-discrete-trunk/1` with exact 14,287-row DEV agreement and B4 pass, and serves at 10,876 / 10,566 native decode tok/s on Apple M1 under the bar-f remeasurement. D37 allows offline float training; that needs a separate scanned module and a reported export gap.
 
 ## What has been tried
 

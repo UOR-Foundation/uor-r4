@@ -19,7 +19,7 @@
 <path d="M190,294 L190,318" fill="none" stroke="#424A53" stroke-width="2" marker-end="url(#ah)"/>
 <rect x="32" y="318" width="316" height="58" rx="10" fill="#E3F4EE" stroke="#007A5E" stroke-width="2.5"/>
 <text x="46" y="344" font-size="15" font-weight="700" fill="#1F2328" text-anchor="start">Copy and exact turn memory</text>
-<text x="46" y="365" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">/7 serves opening + later rows</text>
+<text x="46" y="365" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">/7 synthetic: open+reply</text>
 <path d="M190,376 L190,400" fill="none" stroke="#424A53" stroke-width="2" marker-end="url(#ah)"/>
 <rect x="32" y="400" width="316" height="58" rx="10" fill="url(#hP)" stroke="#B87A00" stroke-width="2"/>
 <text x="46" y="426" font-size="15" font-weight="700" fill="#1F2328" text-anchor="start">Readout → next token</text>
