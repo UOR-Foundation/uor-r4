@@ -1,49 +1,49 @@
 # ORDER: integer-hamming-read, claude-234
 
-Lab: claude. Item: [integer-hamming-read](../../../../roadmap/items/integer-hamming-read.md). Base: `5ed1018fe`.
+Lab: claude. Item: [integer-hamming-read](../../../../roadmap/items/integer-hamming-read.md) (#3385). Base: `5ed1018fe`.
 
 ## Goal
 
-The item's done-when reads:
+Make step 5, the read's float parity, traceable, so the next unit can run it. Casey chose this step first (31 Oct 2026, in chat, verbatim): "Trace attention first".
 
-> 1. The integer runtime runs the whole read as claude-146's REPORT describes it, all four heads of both reads, under D11's rules (CHARTER §3.6: integer only, no float or transcendental instruction; since D80 and D81 the hardware integer multiply and divide are allowed once [`integer-mul-div-serving`](integer-mul-div-serving.md)'s audits allow them, and until then products go through D11's tables):
->    - **copy heads:** keys and queries from the table's points through the key rotation. These depend only on the token, so their codes can be built once per vocabulary entry;
->    - **type heads:** queries from the residual through the query rotation, and payloads from the residual at `s` through the value rotation. These rotate the state at run time, so each product goes through D11's tables;
->    - the codes packed into 64-bit words; the match by `popcount(q XOR k)`; the 16 nearest earlier positions `1 ≤ s < t`; the weights `max(0, m − d)/m`; the stream read after layer 2 and the move on the readout, each product through the tables.
-> 2. **Parity,** against the float forward of the same stored checkpoint (claude-146's language runs, `caseyallard/uor-r4-store:results/claude/hamming-read-2026-10-27/`), on DEV. No D11 tolerance exists for this read yet, so the unit's prep sheet pre-registers the bar for two numbers, and the REPORT gives both:
->    - the share of (position, head, read) kept sets equal to float's. One sign flip in an integer rotation changes a code, so this is not assumed to be exact;
->    - top-1 agreement between the integer and float decoded ids.
->    
->    The float reference is computed on the GPU (CHARTER §3.5); the integer side runs on the laptop, as serving does.
-> 3. **Speed on this laptop:** `fbs-toks` decode tokens/s against context, with the read and without, on the same artifact.
-> 4. One notebook row; the result on main.
+claude-233 (#3465) measured the gap. On (r-drop) step 16,384, the trunk alone agrees with its float D11 forward at s1 and s3 (d 5 and 11 of 1,536 sequence positions). With the Hamming read, the trunk does not (694 and 823).
+
+Two leads come from the code, and the trace must tell them apart:
+- **The tie rule.** The float `choose_sorted` (`flock_read_hamming.rs`) keeps the first 16 of a GPU arg-sort, whose tie order is not specified. The integer `nearest` (`stack/hamming.rs`) keeps ascending distance, then ascending position.
+- **The read's parameters.** The float D11 readout loads `hamming_read.safetensors` at full f32 (`fbs-snapshot.rs:97`). `round_tables_as_exported` rounds only the trunk's tables. The artifact holds the rotations and weights at 2^-24 and the margins at 2^-16.
+
+A per-head trace needs the float read's own codes and kept positions. Those exist only inside `flock_read_hamming.rs`'s `apply`, which is not in this item's scope. The harness reads an item's scope from origin/main, so the scope change merges alone first, as claude-214 (#3422) did for one-model-end-to-end.
+
+This unit:
+1. adds `crates/uor-r4-float-train/src/flock_read_hamming.rs` to the item's scope;
+2. records step 5's trace method in the item, so the next unit's sheet starts from it.
 
 ## Cancel probe (run first)
 
-To fill in.
+The item's cancel condition reads: "The integer runtime already has a Hamming read on main, or the float read is withdrawn."
+- The read is on main (claude-189, claude-194, claude-195, claude-200), but its done-when 2, parity, is not met: claude-233's row R. The condition was written before the port, so it is stale wording, not a cancel.
+- The float read is not withdrawn: (r-drop) trains with it.
+
+Result: not cancelled. Class: instrument (the stale wording is amended here).
 
 ## Files in scope
 
-- `crates/uor-r4-integer/src/stack/hamming.rs`
-- `crates/uor-r4-integer/src/stack/mod.rs`
-- `crates/uor-r4-integer/src/stack/session.rs`
-- `crates/uor-r4-integer/src/stack/format.rs`
-- `crates/uor-r4-integer/src/fbs_snapshot.rs`
-- `crates/uor-r4-integer/src/stack/synthetic.rs`
-- `crates/uor-r4-integer/src/stack/tests.rs`
-- `crates/uor-r4-integer/src/bin/fbs-toks.rs`
-- `crates/uor-r4-integer/src/bin/fbs-export.rs`
-- `crates/uor-r4-float-train/src/fbs_export.rs`
-- `crates/uor-r4-float-train/src/bin/fbs-snapshot.rs`
-- `docs/harness/prep/integer-hamming-read*`
-- `docs/loop/tasks/integer-hamming-read/**`
-- `docs/research/notebook/m4-serving.md`
 - `docs/roadmap/items/integer-hamming-read.md`
+- `docs/loop/tasks/integer-hamming-read/claude-234/**`
 
 ## Done when
 
-To fill in.
+1. The item's `scope:` includes `crates/uor-r4-float-train/src/flock_read_hamming.rs`. The cancel condition names parity, not the read's existence.
+2. The item's step 5 records the trace:
+   - the float read's codes and kept sets, captured inside `apply`;
+   - the integer read's, from the same artifact;
+   - the per-(position, head, read) kept-set share, split by cause;
+   - the two leads above.
+3. `cargo run -p xtask -- roadmap render` leaves no diff; the REPORT is written; a fresh review approves; the PR is merged and verified.
 
 ## Stop and ask if
 
-To fill in.
+- the render or a harness check needs a file outside this scope: decide by decision review, and keep the change docs-only;
+- the read's design in the item turns out to disagree with `flock_read_hamming.rs` on main: record what main does, and carry it to the next unit.
+
+(Stop and decide; never stop and wait.)
