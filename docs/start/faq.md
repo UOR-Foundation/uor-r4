@@ -80,11 +80,11 @@ You can build it and run its checks, but you cannot hold a useful chat with it. 
 
 ### 14. Is there a web or desktop app?
 
-No qualified conversational app ships. The Studio is connected to the integer WebAssembly worker and verified with self-hosted assets and a stack-bound tokenizer on a synthetic stand-in. The Tauri desktop shell also verifies durable session behavior on a synthetic artifact. Neither bundles a qualified trained product model ([products](../products/README.md), [web client](../products/web-client.md), [desktop client](../products/desktop-client.md)).
+No qualified conversational app ships. The live Studio can load the publicly released M1 model after an explicit click and serves top-8 next-token prediction, not chat. Its synthetic parity harness passes. The Tauri desktop shell verifies durable session behavior on a synthetic artifact. Neither client bundles a qualified conversational product ([products](../products/README.md), [web client](../products/web-client.md), [desktop client](../products/desktop-client.md)).
 
 ### 15. What about the models on Hugging Face?
 
-Four 214 million parameter checkpoints are public, but they are historical: trained before the no-softmax and no-matrix-multiplication rules, in the float form, and not the served model. Their chat variants rewrite and summarise usably, while code and arithmetic are wrong ([data and tokenizer](../model/data-and-tokenizer.md), [README](../../README.md#where-we-are)).
+The M1-closing pair is public at [`caseyallard/uor-r4-m1-model`](https://huggingface.co/caseyallard/uor-r4-m1-model); the Studio serves it as top-8 next-token prediction, not chat. Public research releases also hold the four-table Stage-T base exports and the FBS pair, which has no trained token writer. Four 214 million parameter checkpoints are public too, but they are historical: trained before the no-softmax and no-matrix-multiplication rules, in the float form, and not the served model. Their chat variants rewrite and summarise usably, while code and arithmetic are wrong ([releases](../products/releases-and-artifacts.md), [data and tokenizer](../model/data-and-tokenizer.md), [README](../../README.md#where-we-are)).
 
 ### 16. How fast is it? How much does it cost to train?
 

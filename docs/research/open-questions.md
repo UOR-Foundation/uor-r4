@@ -80,7 +80,8 @@ These should not be repeated as if untouched:
   agreement and B4 pass.
 - **Does a lawful likelihood exist for later BPB scoring?** `PRLL` is built and registered. Its GPU
   held-out scoring is the open part.
-- **Does the Studio connect to the integer engine?** Yes, on a synthetic stand-in. Accepted-model
+- **Does the Studio connect to the integer engine?** Yes. It verifies a synthetic stand-in and also
+  serves the publicly released M1 trunk as top-8 next-token prediction, not chat. Accepted-model
   parity is still open.
 - **Does every training step need a typed owner release?** No. D67 uses the lab's own pre-run review;
   D41's donor pass is the named owner-at-dispatch exception.

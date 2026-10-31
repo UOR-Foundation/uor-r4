@@ -1,6 +1,6 @@
 # Releases and artifacts
 
-A release is how a finished model reaches people: a numbered version, a file you can download, and a fingerprint (a checksum) that proves the file is exactly the one that was tested. For UOR-R4 the file is meant to be one integer-only model file in a format called `UORLUT01`, released at milestone M8. That release does not exist. Two old software releases are on GitHub from the summer, plus one pinned-corpus data release, but both software releases belong to an earlier engine and neither is a qualified model. The release automation still targets that older engine too. This page explains the file format, the release machinery as it is, the Hugging Face repositories, and how checksums bind them together. **Nothing ships until a trained model passes M1 to M8.**
+A release is how a finished model reaches people: a numbered version, a file you can download, and a fingerprint (a checksum) that proves the file is exactly the one that was tested. For UOR-R4 the product file is meant to be one integer-only model file in a format called `UORLUT01`, released at milestone M8. **That M8 release does not exist.** Separately, checksum-pinned research artifacts are now public on Hugging Face, including the M1 pair; they are not a qualified conversational product or M8 release. Two old software releases are on GitHub from the summer, plus one pinned-corpus data release, but both software releases belong to an earlier engine and neither is a qualified model. The release automation still targets that older engine too. This page explains the file format, the release machinery as it is, the Hugging Face repositories, and how checksums bind them together. **No product ships until a trained model passes M1 to M8.**
 
 Labels used below: **proof** (derived from definitions or code), **measurement** (a recorded run with its artifact), **hypothesis** (untested). See the [glossary](../start/glossary.md).
 
@@ -65,11 +65,14 @@ Missing today: a release workflow for `UORLUT01`, WebAssembly and desktop packag
 
 | Repository | Visibility | What it holds | Status |
 |---|---|---|---|
+| [`caseyallard/uor-r4-m1-model`](https://huggingface.co/caseyallard/uor-r4-m1-model) | Public (model, MIT) | The M1-closing 19-table discrete trunk pair, 86,536,132 and 84,943,328 bytes, with stack-bound tokenizers | **Current research artifact.** Studio top-8 next-token prediction, not chat; not an M8 product release |
+| [`caseyallard/uor-r4-m1-discrete`](https://huggingface.co/caseyallard/uor-r4-m1-discrete) | Public (model, MIT) | Four-table Stage-T base exports and tokenizer | Earlier discrete research artifacts, not the closing M1 pair |
+| [`caseyallard/uor-r4-fbs-dual-c131`](https://huggingface.co/caseyallard/uor-r4-fbs-dual-c131) | Public (model, MIT) | Separate trained FBS trunk pair and tokenizers | Research artifacts; no trained token writer, so the Studio does not generate from them |
 | [`caseyallard/uor-r4-geometric-214m`](https://huggingface.co/caseyallard/uor-r4-geometric-214m) | Public (model, MIT) | Four 214M-parameter float checkpoints: `base-tinystories`, `base-planA`, `chat-planA-b8`, `chat-smoltalk-b16`, with configs, sanitized run reports and the byte-level BPE tokenizer | **Historical.** Trained before the softmax and matmul bans; not the D11 product |
 | [`datasets/caseyallard/uor-r4-data`](https://huggingface.co/datasets/caseyallard/uor-r4-data) | Public (dataset, MIT plus CDLA-Sharing-1.0) | Project-generated data: the tokenizer, the memory-dialogue sets `mw-balp` and `mw-orcp` with the fine-tune manifest, the dev split, conversational panels, TinyStories tokenized for the native learner | Live data |
 | `caseyallard/uor-r4-store` | Private | The labs' working store: `data/*` (about 2.7 GB, checked against `MD5SUMS`), base models, pinned toolchain and crate-registry archives, project binaries `bin/<sha>` with `SHA256SUMS`, pod setup, and `results/<lab>/<topic-date>/` | Working store; never a release channel |
 
-Both public repositories were published on 9 October 2026. Sources: the two Hugging Face repository pages; [compute guide](../labs/compute.md). The public model repository's visibility is inferred from the listing, which showed no private flag.
+The historical model and data repositories were published on 9 October 2026. DeepSeek's #3445 records the three public research-model releases, their exact bytes and SHA-256 pins, and the Studio's explicit-click M1 download ([report](../loop/tasks/m7-studio-live-model-sources/deepseek-3/REPORT.md)); [compute guide](../labs/compute.md) covers the private working store.
 
 ## How checksums tie it together
 

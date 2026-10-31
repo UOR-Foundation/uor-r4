@@ -81,7 +81,7 @@ Stopping a loop does not repair a reply that began wrong
 | Product | What it will be | What exists today |
 |---|---|---|
 | [The model](../products/language-model.md) | One integer `UORLUT01` model for local serving | The M1 pair and a separate FBS export, but no conversational product release |
-| [Web client](../products/web-client.md) | The Studio running that file locally in WebAssembly | Worker, interface, offline assets and stack-bound tokenizer verified on a synthetic stand-in; no qualified bundle |
+| [Web client](../products/web-client.md) | The Studio running that file locally in WebAssembly | Synthetic parity harness plus public M1 top-8 next-token prediction; no chat or qualified bundle |
 | [Desktop client](../products/desktop-client.md) | A Tauri app sharing the interface with durable memory and offline use | Native shell and durable session restore verified on a synthetic artifact; no qualified bundle |
 
 Nothing ships until a trained model passes the remaining product bars. Serving an exported D11

@@ -6,7 +6,10 @@ use serde_json::{json, Value};
 
 use super::format::MAX_READ_CACHE_BYTES;
 use super::{IntegerStackModel, StackError, StackShape, MAGIC};
-use super::synthetic::{fbs_synthetic_non_square, fbs_synthetic_tiny_gain, synthetic_fbs_trunk, Lcg};
+use super::synthetic::{
+    fbs_synthetic_non_square, fbs_synthetic_tiny_gain, synthetic_fbs_trunk, synthetic_fbs_trunk_with,
+    synthetic_turn_memory, FbsSynth, FBS_SYNTH_SMALL, Lcg,
+};
 
 /// A container under construction: the header's section lists and the data.
 struct Builder {
@@ -4574,8 +4577,6 @@ fn the_payload_cache_is_bounded() {
     }
 }
 
-/// The session's refusal of a turn memory it does not serve yet (claude-198).
-const MEMORY_REFUSED: &str = "this engine does not serve the turn memory yet (uor-r4.lut-stack/7)";
 /// The record's refusal of a reply turn out of range or apart from its table (claude-198).
 const REPLY_TURN_REFUSED: &str = "a reply table's turn must be from 1 to 16 ids, and only with the table";
 
@@ -4694,10 +4695,20 @@ fn memories_round_trip_in_lut_stack_7() {
             _ => panic!("{what}: the reply table did not round-trip"),
         }
         assert_eq!(super::read_hamming_uorlut01(&bytes).expect(what).is_some(), with_hamming, "{what}");
-        match IntegerStackModel::parse(&bytes) {
-            Err(StackError::Shape(m)) => assert_eq!(m, MEMORY_REFUSED, "{what}"),
-            other => panic!("{what}: expected the memory refusal, got {:?}", other.err()),
-        }
+        // Units 2-3 serve the memory: the engine parses it and names its record and tables.
+        let model = IntegerStackModel::parse(&bytes).expect(what);
+        let record = model.turn_memory().expect("the served memory record");
+        assert_eq!(record.k, memory.k, "{what}");
+        assert_eq!(record.key_window, 192, "{what}");
+        assert_eq!(
+            model.turn_memory_table_lengths(),
+            Some((
+                memory.opening.len(),
+                memory.reply.as_ref().map(|r| r.entries.len()),
+            )),
+            "{what}"
+        );
+        assert!(model.session().has_turn_memory(), "{what}");
     }
     // The same trunk without the memory is served, and reads back no memory.
     let plain = super::export_fbs_trunk_uorlut01(&base).expect("export");
@@ -4805,4 +4816,360 @@ fn malformed_memories_are_refused_by_their_text() {
         Err(StackError::Shape(m)) => assert_eq!(m, "a turn memory needs a SpiralCore/FBS stack"),
         other => panic!("a memory on a dense stack: expected the shape refusal, got {other:?}"),
     }
+}
+
+
+/// The turn-memory tests' stream: <|bos|>, a turn whose prompt holds an internal <|eos|> (token
+/// 1), the turn's 8 last ids, then reply_len reply tokens. The reply starts at token 12; the
+/// prompt's last token is row 11. The turn is longer than the opening table's k (4), so the reply
+/// keys carry reply_turn (8) ids, not k.
+fn turn_memory_script(reply_len: usize) -> (Vec<u32>, usize) {
+    let mut tokens = vec![0u32, 10, 11, 1, 12, 13, 14, 15, 16, 17, 18, 19];
+    let reply_start = tokens.len();
+    tokens.extend((0..reply_len).map(|i| 20 + (i as u32 % 40)));
+    (tokens, reply_start)
+}
+
+/// A small trunk with room for the turn memory's 192-token window tests, at context positions.
+fn turn_memory_trunk(context: usize) -> super::FbsTrunkSnapshot {
+    synthetic_fbs_trunk_with(7, FbsSynth { context, ..FBS_SYNTH_SMALL })
+}
+
+/// The session's turn anchor at row at: the first limit ids after the last <|bos|>/<|eos|> at or
+/// before it, from at's 192-block (empty when at is itself <|bos|>/<|eos|>).
+fn anchor_turn(tokens: &[u32], at: usize, limit: usize, key_window: usize) -> Vec<u32> {
+    let block = at / key_window * key_window;
+    let mut start = block;
+    for i in (block..=at).rev() {
+        if tokens[i] == 0 || tokens[i] == 1 {
+            start = i + 1;
+            break;
+        }
+    }
+    if start > at {
+        return Vec::new();
+    }
+    tokens[start..=at].iter().copied().take(limit).collect()
+}
+
+/// The float trainer's mask-based reply-row turn (reply_rows): the window's prompt run back from
+/// the reply's start to the last response token or <|bos|>.
+fn mask_turn(
+    tokens: &[u32],
+    mask: &[u8],
+    reply_start: usize,
+    row: usize,
+    limit: usize,
+    key_window: usize,
+) -> Vec<u32> {
+    let block = row / key_window * key_window;
+    if reply_start <= block {
+        return Vec::new();
+    }
+    let mut first = reply_start;
+    while first > block && tokens[first - 1] != 0 && mask[first - 1] == 0 {
+        first -= 1;
+    }
+    tokens[first..reply_start].iter().copied().take(limit).collect()
+}
+
+/// The session's reply key at row: the opening anchor's ids (empty once the prompt has left the
+/// row's key block), then MAX, the block-visible reply length and MAX, the row's id.
+fn expected_reply_key(
+    tokens: &[u32],
+    row: usize,
+    reply_start: usize,
+    reply_turn: usize,
+    key_window: usize,
+) -> Vec<u32> {
+    let block = row / key_window * key_window;
+    let prompt_last = reply_start - 1;
+    let mut key = Vec::new();
+    if prompt_last >= block {
+        key.extend(anchor_turn(tokens, prompt_last, reply_turn, key_window));
+    }
+    let visible = block.max(reply_start);
+    key.extend([u32::MAX, (row + 1 - visible) as u32, u32::MAX, tokens[row]]);
+    key
+}
+
+/// Units 2-3: the session's keys follow the item's rule - the anchor after the last
+/// <|bos|>/<|eos|>, the caller's reply start, training's 192-token blocks whatever the session's
+/// context - and the mask rule's gap at an internal <|eos|> is pinned.
+#[test]
+fn turn_memory_keys_follow_the_item_rule() {
+    let (key_window, reply_turn) = (192usize, 8usize);
+    let (tokens, reply_start) = turn_memory_script(192);
+    let mut snap = turn_memory_trunk(400);
+    snap.memory = Some(synthetic_turn_memory(snap.vocab, snap.width, 4, key_window, true, 0, 198));
+    // The third reference row: the session's context is not the key window.
+    assert_eq!(snap.context, 400);
+    let bytes = super::export_fbs_trunk_uorlut01(&snap).expect("export /7");
+    let model = IntegerStackModel::parse(&bytes).expect("served /7");
+    assert_eq!(model.shape().context, 400);
+    assert_eq!(model.turn_memory().expect("record").key_window, key_window);
+    assert_eq!(model.turn_memory_table_lengths(), Some((0, Some(0))));
+    let mask: Vec<u8> = (0..tokens.len()).map(|i| u8::from(i >= reply_start)).collect();
+    let mut session = model.session();
+    let mut moved = 0usize;
+    for row in 0..tokens.len() {
+        if row + 1 == reply_start {
+            session.mark_reply_start();
+        }
+        session.step_native(tokens[row]).expect("step");
+        if row + 1 < reply_start {
+            assert!(session.last_memory_move().is_none(), "row {row}: a prompt row moved");
+            continue;
+        }
+        let mv = session.last_memory_move().expect("a keyed row").clone();
+        if row + 1 == reply_start {
+            // The opening table's row: the anchor's first k ids, after the internal <|eos|>.
+            assert_eq!(mv.key, vec![12, 13, 14, 15], "opening row {row}");
+            assert!(mv.opening);
+        } else {
+            if row == reply_start {
+                // The reply key's turn is reply_turn (8) ids, longer than the opening table's k.
+                assert_eq!(&mv.key[..8], &[12, 13, 14, 15, 16, 17, 18, 19], "row {row}");
+            }
+            assert_eq!(&mv.key, &expected_reply_key(&tokens, row, reply_start, reply_turn, key_window), "row {row}");
+            assert!(!mv.opening);
+            if row < key_window {
+                // Training's mask-based reply turn reaches back past the internal <|eos|>; the
+                // session's anchor rule stops at it. The gap is measured here, not hidden.
+                assert_eq!(mask_turn(&tokens, &mask, reply_start, row, reply_turn, key_window), vec![10, 11, 1, 12, 13, 14, 15, 16], "row {row}");
+                assert_ne!(&mv.key[..4], &[10, 11, 1, 12], "row {row}: the mask rule's turn appears in the session key");
+            } else if row < key_window + 8 {
+                // The second reference row: a reply cut by the window. The prompt has left the
+                // row's block, so the turn is empty and the length is the block-visible reply.
+                assert!(mask_turn(&tokens, &mask, reply_start, row, reply_turn, key_window).is_empty(), "row {row}");
+                assert_eq!(mv.key[0], u32::MAX, "row {row}");
+                assert_eq!(mv.key[1], (row + 1 - key_window) as u32, "row {row}");
+            }
+        }
+        moved += 1;
+    }
+    assert!(moved > key_window, "the decoded reply crossed the key window's block boundary");
+}
+
+/// Units 2-3: the opening table moves the reply's first step's row and the reply table each later
+/// row, n + w(c - n), after the Hamming readout. A zero weight, an unseen key, a memory without a
+/// reply table and a session without the reply-start signal move nothing.
+#[test]
+fn turn_memory_moves_the_readout_point() {
+    use super::{FbsMemoryEntry, FbsReplyTable, MEMORY_PAD};
+    let (tokens, reply_start) = turn_memory_script(8);
+    let width = FBS_SYNTH_SMALL.d as usize;
+    let stack = |memory: Option<super::FbsMemorySnapshot>| -> IntegerStackModel {
+        let mut snap = turn_memory_trunk(24);
+        snap.memory = memory;
+        IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&snap).expect("export")).expect("served")
+    };
+    let tables = |opening_weight: f32, reply_weight: f32, hit: bool| -> super::FbsMemorySnapshot {
+        let (opening_key, reply_key) = if hit {
+            (
+                vec![12, 13, 14, 15],
+                vec![12, 13, 14, 15, 16, 17, 18, 19, MEMORY_PAD, 1, MEMORY_PAD, 20],
+            )
+        } else {
+            (
+                vec![90, 91, 92, 93],
+                vec![90, 91, 92, 93, 94, 95, 96, 97, MEMORY_PAD, 1, MEMORY_PAD, 20],
+            )
+        };
+        super::FbsMemorySnapshot {
+            k: 4,
+            key_window: 192,
+            opening: vec![FbsMemoryEntry { key: opening_key, value: 42 }],
+            opening_weight: vec![opening_weight; width],
+            reply: Some(FbsReplyTable {
+                turn: 8,
+                entries: vec![FbsMemoryEntry { key: reply_key, value: 43 }],
+                weight: vec![reply_weight; width],
+            }),
+        }
+    };
+    // The float rule's move at f64: n + w(c - n), c the stored token's writer-table point.
+    let moved = |before: &[i64], target: &[i16], weight: f32| -> Vec<i64> {
+        let denom = 2f64.powi(24);
+        let quantized = (f64::from(weight) * denom).round();
+        before
+            .iter()
+            .zip(target)
+            .map(|(&n, &t)| {
+                let nf = n as f64 / denom;
+                let cf = (i64::from(t) << 12) as f64 / denom;
+                ((nf + (quantized / denom) * (cf - nf)) * denom).round() as i64
+            })
+            .collect()
+    };
+    let hit_model = stack(Some(tables(0.5, 0.25, true)));
+    let mut session = hit_model.session();
+    for (row, &token) in tokens.iter().enumerate() {
+        if row + 1 == reply_start {
+            session.mark_reply_start();
+        }
+        let opening_hit = row + 1 == reply_start;
+        let reply_hit = row == reply_start;
+        session.step_native(token).expect("step");
+        let mv = session.last_memory_move();
+        if row + 1 < reply_start {
+            assert!(mv.is_none(), "row {row}: a prompt row moved");
+            continue;
+        }
+        if !opening_hit && !reply_hit {
+            // A later reply row keys the reply table too, but no entry holds its key: it hits
+            // nothing and moves nothing.
+            let mv = mv.expect("a keyed reply row").clone();
+            assert_eq!(mv.stored, None, "row {row}");
+            assert_eq!(session.fbs_norm_output_before_memory(), session.fbs_norm_output(), "row {row}");
+            continue;
+        }
+        let mv = mv.expect("a keyed row").clone();
+        let (stored, weight) = if opening_hit { (42u32, 0.5f32) } else { (43, 0.25) };
+        assert_eq!(mv.stored, Some(stored), "row {row}");
+        assert_eq!(session.fbs_norm_output_before_memory().len(), width);
+        let target = session.fbs_writer_row(stored).expect("writer row");
+        let expected = moved(session.fbs_norm_output_before_memory(), target, weight);
+        assert_eq!(session.fbs_norm_output(), &expected[..], "row {row}");
+    }
+    // A zero weight is no read, bit for bit, though the key still hits.
+    let zero_model = stack(Some(tables(0.0, 0.0, true)));
+    let mut zero = zero_model.session();
+    for (row, &token) in tokens.iter().enumerate() {
+        if row + 1 == reply_start {
+            zero.mark_reply_start();
+        }
+        zero.step_native(token).expect("step");
+        if row + 1 == reply_start || row == reply_start {
+            let want = if row + 1 == reply_start { 42 } else { 43 };
+            assert_eq!(zero.last_memory_move().expect("a keyed row").stored, Some(want));
+            assert_eq!(zero.fbs_norm_output_before_memory(), zero.fbs_norm_output(), "row {row}");
+        }
+    }
+    // An unseen key hits nothing and moves nothing.
+    let unseen_model = stack(Some(tables(0.5, 0.25, false)));
+    let mut unseen = unseen_model.session();
+    for (row, &token) in tokens.iter().enumerate() {
+        if row + 1 == reply_start {
+            unseen.mark_reply_start();
+        }
+        unseen.step_native(token).expect("step");
+        if row + 1 == reply_start || row == reply_start {
+            assert_eq!(unseen.last_memory_move().expect("a keyed row").stored, None, "row {row}");
+            assert_eq!(unseen.fbs_norm_output_before_memory(), unseen.fbs_norm_output(), "row {row}");
+        }
+    }
+    // A memory without a reply table moves only the opening row.
+    let opening_model = stack(Some(super::FbsMemorySnapshot {
+        k: 4,
+        key_window: 192,
+        opening: tables(0.5, 0.5, true).opening,
+        opening_weight: vec![0.5; width],
+        reply: None,
+    }));
+    let mut opening_only = opening_model.session();
+    for (row, &token) in tokens.iter().enumerate() {
+        if row + 1 == reply_start {
+            opening_only.mark_reply_start();
+        }
+        opening_only.step_native(token).expect("step");
+        if row + 1 == reply_start {
+            assert_eq!(opening_only.last_memory_move().expect("opening").stored, Some(42));
+        } else if row >= reply_start {
+            assert!(opening_only.last_memory_move().is_none(), "row {row}: no reply table");
+        }
+    }
+    // Without the caller's signal no row is keyed or moved; the step is the trunk's.
+    let plain = stack(None);
+    let signalled_model = stack(Some(tables(0.5, 0.25, true)));
+    let mut with_memory = signalled_model.session();
+    let mut without = plain.session();
+    for &token in &tokens {
+        with_memory.step_native(token).expect("step");
+        without.step_native(token).expect("step");
+        assert!(with_memory.last_memory_move().is_none(), "an unsignalled session keyed a row");
+        assert_eq!(with_memory.fbs_norm_output(), without.fbs_norm_output());
+    }
+}
+
+/// Units 2-3: the turn memory's move comes after the Hamming readout, as in the float trunk: the
+/// /7 step's pre-move final norm equals the same trunk's /6 (Hamming only) readout.
+#[test]
+fn turn_memory_moves_after_the_hamming_readout() {
+    use super::synthetic::synthetic_hamming;
+    let (tokens, reply_start) = turn_memory_script(8);
+    let base = turn_memory_trunk(24);
+    let width = base.width;
+    let mut read = synthetic_hamming(width, base.layers.len(), 4, 188);
+    for r in &mut read.reads {
+        r.weight[width..].fill(0.0);
+    }
+    let mut hamming_only = base.clone();
+    hamming_only.hamming = Some(read.clone());
+    let mut with_memory = base.clone();
+    with_memory.hamming = Some(read);
+    with_memory.memory = Some(super::FbsMemorySnapshot {
+        k: 4,
+        key_window: 192,
+        opening: vec![super::FbsMemoryEntry { key: vec![12, 13, 14, 15], value: 42 }],
+        opening_weight: vec![0.5; width],
+        reply: None,
+    });
+    let hamming = IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&hamming_only).expect("export /6"))
+        .expect("served /6");
+    let memory = IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&with_memory).expect("export /7"))
+        .expect("served /7");
+    let mut readout = hamming.session();
+    let mut moved = memory.session();
+    for (row, &token) in tokens.iter().enumerate() {
+        if row + 1 == reply_start {
+            readout.mark_reply_start();
+            moved.mark_reply_start();
+        }
+        readout.step_native(token).expect("step");
+        moved.step_native(token).expect("step");
+        if row + 1 == reply_start {
+            assert_eq!(moved.last_memory_move().expect("opening").stored, Some(42));
+            // The /6 readout is the Hamming read applied to the trunk's final norm; the /7 step's
+            // pre-move point must be exactly that, so the memory moved after it.
+            assert_eq!(moved.fbs_norm_output_before_memory(), readout.fbs_norm_output());
+            assert_ne!(moved.fbs_norm_output(), moved.fbs_norm_output_before_memory(), "the memory's move must be applied");
+        }
+    }
+}
+
+/// Units 2-3: a session of a turn memory refuses a restore until its turn state is saved; a
+/// memory-free session restores as before, and memory-free models have no record and ignore the
+/// reply-start signal.
+#[test]
+fn a_turn_memory_session_restore_is_refused() {
+    let bytes = super::synthetic::synthetic_turn_memory_artifact(7, 8, 192, false);
+    let model = IntegerStackModel::parse(&bytes).expect("served /7");
+    assert!(model.turn_memory().is_some());
+    let mut session = model.session();
+    assert!(session.has_turn_memory());
+    session.step_native(10).expect("step");
+    let saved = session.save_state();
+    let mut fresh = model.session();
+    match fresh.restore_state(&saved) {
+        Err(StackError::Shape(m)) => assert_eq!(
+            m,
+            "a session of a turn memory cannot be restored yet: its turn state is not saved"
+        ),
+        other => panic!("expected the turn-memory restore refusal, got {other:?}"),
+    }
+    // A memory-free artifact: no record, no tables, the signal ignored, and a restore works.
+    let plain = IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&synthetic_fbs_trunk(7)).expect("export"))
+        .expect("served");
+    assert!(plain.turn_memory().is_none());
+    assert_eq!(plain.turn_memory_table_lengths(), None);
+    let mut a = plain.session();
+    assert!(!a.has_turn_memory());
+    a.step_native(10).expect("step");
+    let saved = a.save_state();
+    let mut b = plain.session();
+    b.restore_state(&saved).expect("a memory-free session restores");
+    b.mark_reply_start();
+    b.step_native(11).expect("step");
+    assert!(b.last_memory_move().is_none());
 }

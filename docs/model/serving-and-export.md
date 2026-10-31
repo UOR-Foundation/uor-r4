@@ -109,10 +109,11 @@ than assuming table lookup implies sparsity.
 - **M7:** library/CLI/browser token and session parity on the accepted model, not only the synthetic stand-in.
 - **Addressed/product-key memory:** the older exporter refuses it; the needed integer path is not built.
 
-The web client is connected to the current integer worker on a synthetic stand-in; it no longer
-simply "points at a retired engine." DeepSeek's #3442 supplies the rebuilt Studio and model sources;
-#3444 records the verified live `/studio/` publish and closes #3440. The mdBook workflow publishes
-preview on main and production only by manual dispatch. This unit publishes neither.
+The web client is connected to the current integer worker. DeepSeek's #3442/#3444 rebuilt and
+published the Studio; #3445 then wired the publicly released M1 trunk for top-8 next-token
+prediction and `/7` turn-memory serving. The M1 model is a language base, not a chat assistant;
+accepted-model parity remains open. The mdBook workflow publishes preview on main and production
+only by manual dispatch. This documentation unit publishes neither.
 
 ## Go deeper
 

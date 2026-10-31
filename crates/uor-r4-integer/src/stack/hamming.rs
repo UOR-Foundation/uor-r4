@@ -358,7 +358,7 @@ const NORM_RAISE: u32 = (NORM_FINE_EXP - COPY_MEAN_EXP) as u32;
 const READOUT_SHIFT: u32 = (NORM_FINE_EXP - HAMMING_WEIGHT_EXP - COPY_MEAN_EXP) as u32;
 
 /// `value / 2^shift`, rounded half away from zero, as the float's `round()`.
-fn round_shift(value: i128, shift: u32) -> i128 {
+pub(super) fn round_shift(value: i128, shift: u32) -> i128 {
     let half = 1i128 << (shift - 1);
     if value >= 0 {
         (value + half) >> shift

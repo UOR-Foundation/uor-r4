@@ -3,7 +3,10 @@
 //! must reproduce `step_native` on the same trunks (claude-128's GPU
 //! evaluator, through the `fbs-synthetic` feature). Test inputs, not a model.
 
-use super::{FbsHammingRead, FbsHammingSnapshot, FbsRoutes, FbsTrunkLayer, FbsTrunkSnapshot};
+use super::{
+    FbsHammingRead, FbsHammingSnapshot, FbsMemoryEntry, FbsMemorySnapshot, FbsReplyTable,
+    FbsRoutes, FbsTrunkLayer, FbsTrunkSnapshot, MEMORY_PAD,
+};
 
 /// The tests' linear congruential generator.
 pub struct Lcg(pub u64);
@@ -188,4 +191,80 @@ pub fn synthetic_hamming(width: usize, layers: usize, heads: usize, seed: u64) -
         })
         .collect();
     FbsHammingSnapshot { heads, depths, reads }
+}
+/// A synthetic turn memory for a trunk of `vocab` and `width` (units 2-3 of
+/// `turn-memory-integer`): `count` opening keys of 1 to `k` ids and, with `reply`, reply keys
+/// `turn (0 to 8 ids), MAX, length (1 to 192), MAX, last id` (the float trainer's reply turn is 8
+/// ids, whatever `k`), each table in ascending key order, with weights in `[-1, 1]`.
+pub fn synthetic_turn_memory(
+    vocab: usize,
+    width: usize,
+    k: usize,
+    key_window: usize,
+    reply: bool,
+    count: usize,
+    seed: u64,
+) -> FbsMemorySnapshot {
+    let mut rng = Lcg(seed);
+    let weight = |rng: &mut Lcg| -> Vec<f32> {
+        (0..width).map(|_| ((rng.next() % 2001) as f32 - 1000.0) / 1000.0).collect()
+    };
+    let table = |rng: &mut Lcg, count: usize, key: &mut dyn FnMut(&mut Lcg) -> Vec<u32>| {
+        let mut entries: Vec<FbsMemoryEntry> = (0..count)
+            .map(|_| FbsMemoryEntry {
+                key: key(rng),
+                value: (rng.next() % vocab as u64) as u32,
+            })
+            .collect();
+        entries.sort();
+        entries.dedup_by(|a, b| a.key == b.key);
+        entries
+    };
+    let opening = table(&mut rng, count, &mut |rng| {
+        let len = 1 + (rng.next() % k as u64) as usize;
+        (0..len).map(|_| (rng.next() % vocab as u64) as u32).collect()
+    });
+    let opening_weight = weight(&mut rng);
+    let reply = reply.then(|| {
+        let entries = table(&mut rng, count, &mut |rng| {
+            let turn = (rng.next() % 9) as usize;
+            let mut key: Vec<u32> = (0..turn).map(|_| (rng.next() % vocab as u64) as u32).collect();
+            key.extend([MEMORY_PAD, 1 + (rng.next() % 192) as u32, MEMORY_PAD, (rng.next() % vocab as u64) as u32]);
+            key
+        });
+        FbsReplyTable {
+            turn: 8,
+            entries,
+            weight: weight(&mut rng),
+        }
+    });
+    FbsMemorySnapshot {
+        k,
+        key_window,
+        opening,
+        opening_weight,
+        reply,
+    }
+}
+
+/// A synthetic `uor-r4.lut-stack/7` artifact of claude-122's small trunk with a turn memory, for
+/// the session's key and move tests: `k` opening ids and, with `reply`, a reply table over 8-id
+/// turns, in a `key_window`-token window.
+pub fn synthetic_turn_memory_artifact(
+    seed: u64,
+    k: usize,
+    key_window: usize,
+    reply: bool,
+) -> Vec<u8> {
+    let mut snap = synthetic_fbs_trunk(seed);
+    snap.memory = Some(synthetic_turn_memory(
+        snap.vocab,
+        snap.width,
+        k,
+        key_window,
+        reply,
+        40,
+        seed ^ 0x5eed,
+    ));
+    super::export_fbs_trunk_uorlut01(&snap).expect("the synthetic turn-memory stack exports")
 }

@@ -9,6 +9,12 @@
 //! restore reproduces a greedy stream byte-for-byte as long as the artifact
 //! bytes are the same sealed ones.
 //!
+//! **The turn memory (`uor-r4.lut-stack/7`).** Units 2-3 of `turn-memory-integer` serve the
+//! trunk's turn memory: the session takes where the reply begins from its caller
+//! (`mark_reply_start`), keys the opening and reply tables as the item states, and moves the
+//! readout point. `memory_info` reports the record, and a memory session refuses a restore until
+//! its turn state is saved (it is not saved yet).
+//!
 //! **Session pairing without `unsafe`.** This crate is
 //! `#![forbid(unsafe_code)]`, so a session (which borrows its model) cannot
 //! be paired with its model in one owning struct. The serving surface
@@ -28,6 +34,7 @@
 
 #![cfg(all(target_arch = "wasm32", feature = "serving-wasm"))]
 
+use crate::discrete_d11::IntegerDiscreteModel;
 use crate::stack::{stack_argmax, IntegerStackModel, StackError};
 use core::sync::atomic::{AtomicU64, Ordering};
 use std::cell::RefCell;
@@ -170,6 +177,49 @@ pub fn wasm_restore(handle: u32, state: &[u8]) -> Result<(), String> {
     })
 }
 
+/// The turn memory the loaded model serves (units 2-3 of `turn-memory-integer`), as a JSON
+/// object: its key sizes and table counts, or `null` for a stack without one. The Studio worker
+/// reports this in its capabilities and uses `present` to skip session restores, which a
+/// memory session refuses.
+pub fn wasm_memory_info(handle: u32) -> Result<String, String> {
+    with_slot(handle, |slot| {
+        let Some(record) = slot.session.turn_memory_record() else {
+            return Ok("null".to_string());
+        };
+        let (opening, reply) = slot
+            .session
+            .turn_memory_table_lengths()
+            .unwrap_or((0, None));
+        let reply_turn = record
+            .reply_turn
+            .map_or_else(|| "null".to_string(), |turn| turn.to_string());
+        let reply_entries = reply.map_or_else(|| "null".to_string(), |n| n.to_string());
+        Ok(format!(
+            "{{\"present\":true,\"k\":{},\"key_window\":{},\"reply_turn\":{},\"opening_entries\":{},\"reply_entries\":{},\"reply_key_len\":{},\"weight_exp\":{}}}",
+            record.k, record.key_window, reply_turn, opening, reply_entries,
+            record.reply_key_len, record.weight_exp,
+        ))
+    })
+}
+
+/// Mark that the turn memory's reply begins at the next token the session predicts: the token
+/// stepped next is the prompt's last (its row is the opening table's row), and every later row is
+/// a reply row. A model without a memory ignores it.
+pub fn wasm_mark_reply_start(handle: u32) -> Result<(), String> {
+    with_slot_mut(handle, |slot| {
+        slot.session.mark_reply_start();
+        Ok(())
+    })
+}
+
+/// Clear the reply start: no row is keyed or moved.
+pub fn wasm_clear_reply_start(handle: u32) -> Result<(), String> {
+    with_slot_mut(handle, |slot| {
+        slot.session.clear_reply_start();
+        Ok(())
+    })
+}
+
 /// Weights touched per token (their R3 per-token parameter-reads number).
 #[inline(never)]
 pub fn wasm_weights_per_token(handle: u32) -> Result<u64, String> {
@@ -194,4 +244,110 @@ pub fn wasm_alloc_events() -> u64 {
 /// Models leaked for the module lifetime (one per `wasm_load_stack`).
 pub fn wasm_leaked_models() -> u64 {
     LEAKED_MODELS.load(Ordering::Relaxed)
+}
+
+// The M1 discrete artifact (`uor-r4.lut-discrete/1`) is a different runtime:
+// it has no incremental session, so it is served as stateless prefix
+// evaluation. It keeps its own handle space; one loaded model per worker.
+
+/// One loaded discrete model (leaked, `'static`).
+struct DiscreteSlot {
+    model: &'static IntegerDiscreteModel,
+}
+
+thread_local! {
+    static DISCRETE_SLOTS: RefCell<Vec<Option<Box<DiscreteSlot>>>> = const { RefCell::new(Vec::new()) };
+}
+
+static LEAKED_DISCRETE: AtomicU64 = AtomicU64::new(0);
+
+/// One opaque call into the discrete slot table.
+#[inline(never)]
+fn with_discrete<R>(
+    handle: u32,
+    f: impl FnOnce(&DiscreteSlot) -> Result<R, String>,
+) -> Result<R, String> {
+    DISCRETE_SLOTS.with(|t| {
+        let handle = core::hint::black_box(handle);
+        let table = t.borrow();
+        let i = handle as usize;
+        if i >= table.len() {
+            return Err(format!("unknown discrete handle {handle}"));
+        }
+        match &table[i] {
+            Some(slot) => f(slot.as_ref()),
+            None => Err(format!("unknown discrete handle {handle}")),
+        }
+    })
+}
+
+/// Load a `uor-r4.lut-discrete/1` M1 artifact from bytes. Returns its handle.
+#[inline(never)]
+pub fn wasm_load_discrete(artifact: &[u8]) -> Result<u32, String> {
+    let model =
+        IntegerDiscreteModel::from_bytes(artifact).map_err(|e| format!("{e:?}"))?;
+    DISCRETE_SLOTS.with(|t| {
+        let mut table = t.borrow_mut();
+        let Some((i, slot)) = table.iter_mut().enumerate().find(|(_, s)| s.is_none()) else {
+            table.push(None);
+            let i = table.len() - 1;
+            let model_ref: &'static IntegerDiscreteModel = Box::leak(Box::new(model));
+            LEAKED_DISCRETE.fetch_add(1, Ordering::Relaxed);
+            table[i] = Some(Box::new(DiscreteSlot { model: model_ref }));
+            return Ok(i as u32);
+        };
+        let model_ref: &'static IntegerDiscreteModel = Box::leak(Box::new(model));
+        LEAKED_DISCRETE.fetch_add(1, Ordering::Relaxed);
+        *slot = Some(Box::new(DiscreteSlot { model: model_ref }));
+        Ok(i as u32)
+    })
+}
+
+/// Evaluate a causal token prefix with a loaded discrete model. Returns JSON
+/// with the top-1 and top-8 predicted next tokens (the M1 model is a
+/// next-token predictor; it has no incremental session).
+#[inline(never)]
+pub fn wasm_discrete_predict(handle: u32, ids: &[u32]) -> Result<String, String> {
+    with_discrete(handle, |slot| {
+        let evaluation = slot
+            .model
+            .evaluate_prefix(ids)
+            .map_err(|e| format!("{e:?}"))?;
+        let shape = slot.model.shape();
+        let out = serde_json::json!({
+            "schema": "uor-r4.wasm-discrete-prediction/1",
+            "artifact_sha256": slot.model.artifact_sha256(),
+            "prediction": evaluation.prediction,
+            "top8": evaluation.top8,
+            "admitted_cells": evaluation.admitted_cells,
+            "prompt_tokens": ids.len(),
+            "vocabulary": shape.vocabulary,
+            "context": shape.context,
+            "blocks": shape.blocks,
+        });
+        serde_json::to_string(&out).map_err(|e| e.to_string())
+    })
+}
+
+/// Static facts about a loaded discrete model.
+#[inline(never)]
+pub fn wasm_discrete_info(handle: u32) -> Result<String, String> {
+    with_discrete(handle, |slot| {
+        let shape = slot.model.shape();
+        let out = serde_json::json!({
+            "schema": "uor-r4.wasm-discrete-info/1",
+            "artifact_sha256": slot.model.artifact_sha256(),
+            "vocabulary": shape.vocabulary,
+            "blocks": shape.blocks,
+            "context": shape.context,
+            "kept_cells": shape.kept_cells,
+            "stages": shape.stages,
+            "read_mode": shape.read_mode,
+            "read_kept": shape.read_kept,
+            "read_sweeps": shape.read_sweeps,
+            "seed": shape.seed,
+            "epoch": shape.epoch,
+        });
+        serde_json::to_string(&out).map_err(|e| e.to_string())
+    })
 }

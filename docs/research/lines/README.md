@@ -31,7 +31,7 @@ A research line is one sustained question the project worked on, such as "how do
 | [`eval-panels`](eval-panels.md): evaluation panels and graders | 7 Aug to 14 Oct | 14 | 5 | Panels frozen; reply headline suspended |
 | [`geometric-intelligence-aug`](geometric-intelligence-aug.md): the August geometric programme | 25 to 30 Aug | 9 | 7 | Closed |
 | [`data-tokenizer`](data-tokenizer.md): data and tokenizer | 16 Aug to 19 Oct | 8 | 1 | Active tokenizer; 16,384-piece trainer and donor corpus prepared, not run |
-| [`m7-distribution`](m7-distribution.md): API, browser runtime and Studio | 3 Sep to 15 Oct | 8 | 0 | Runtime and Studio harness on a synthetic stand-in; accepted parity open |
+| [`m7-distribution`](m7-distribution.md): API, browser runtime and Studio | 3 Sep to 15 Oct | 8 | 0 | Synthetic parity harness and public M1 top-8 prediction in the Studio; accepted parity open |
 | [`spiralcore-wire`](spiralcore-wire.md): SpiralCore wire transport | 18 Oct | 7 | 0 | Side exploration, off the model path |
 | [`m5-energy`](m5-energy.md): laptop energy and cost | 25 Sep to 18 Oct | 4 | 1 | Not started; no joules per token measured |
 | [`m1-prime-zeta`](m1-prime-zeta.md): the prime-zeta codebook | 14 Oct | 3 | 2 | Active as baseline start |

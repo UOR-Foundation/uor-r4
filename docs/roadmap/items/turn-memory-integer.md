@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: true
 depends_on: [route-plus-memory]
 notebook: docs/research/notebook/m4-serving.md
-scope: [crates/uor-r4-integer/src/stack/memory.rs, crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-float-train/src/bin/fbs-snapshot.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-float-train/src/fbs_export.rs, crates/uor-r4-float-train/src/flock_read_memory.rs, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, docs/harness/prep/turn-memory-integer*, docs/loop/tasks/turn-memory-integer/**, docs/research/notebook/m4-serving.md, docs/roadmap/items/turn-memory-integer.md]
+scope: [crates/uor-r4-integer/src/wasm_serve.rs, crates/uor-r4-integer/src/wasm_bindgen_exports.rs, crates/uor-r4-integer/src/stack/memory.rs, crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-float-train/src/bin/fbs-snapshot.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-float-train/src/fbs_export.rs, crates/uor-r4-float-train/src/flock_read_memory.rs, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, docs/harness/prep/turn-memory-integer*, docs/loop/tasks/turn-memory-integer/**, docs/research/notebook/m4-serving.md, docs/roadmap/items/turn-memory-integer.md]
 ---
 
 ## Why it matters
@@ -87,6 +87,10 @@ Read:
 5. the cost.
 
 `integer-hamming-read` and `fbs-serving-kernels` also edit `session.rs`, and the float-side items edit `in_space_long.rs` and `train-in-space.rs`. This item runs when none of those is claimed.
+
+## Progress (30 October 2026): units 2-3 served
+
+The integer session now serves the `/7` turn memory (units 2-3): `IntegerStackModel::parse` builds both tables; the session takes the caller's reply start (`mark_reply_start`), keys the opening and reply tables exactly as this item states, and applies the moves after the Hamming readout (whole sum rounded once, half away from zero; integer only). The wasm surface exposes `memoryInfo`/`markReplyStart`/`clearReplyStart`. Evidence: engine lib tests 372 passed (+4 new) with the test-side float-rule reference and six negative gates; wasm audit 7/7 with the move reached (mul 26/div 12, float 0); a memory session's restore/export/import is refused (the turn state is not saved yet). Units 4 (DEV parity against the sealed claude-194 checkpoints under a pre-registered sheet; also blocked until integer-hamming-read step 4 puts the Hamming read in the exporter) and 5 (cost) remain open, so the item stays ready. No trained `/7` artifact exists yet; the serving is verified on synthetic artifacts and the reference.
 
 ## Rules that apply
 

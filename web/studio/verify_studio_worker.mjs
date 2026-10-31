@@ -288,9 +288,10 @@ assert(runtimeMsg.engine === 'uor-r4-integer/serving-wasm', `unexpected engine t
 await sendToWorker({ action: 'engine_info', id: 'limit_probe' });
 const infoMsg = await waitForMessage((m) => m.action === 'engine_info_result' || m.action === 'operation_error');
 assert(infoMsg.action === 'engine_info_result', `engine_info failed: ${JSON.stringify(infoMsg)}`);
-assert(Array.isArray(infoMsg.served_schemas) && infoMsg.served_schemas.length === 6 && infoMsg.served_schemas[5] === 'uor-r4.lut-stack/6', `served schemas should be /1-/6, got ${JSON.stringify(infoMsg.served_schemas)}`);
+assert(Array.isArray(infoMsg.served_schemas) && infoMsg.served_schemas.length === 7 && infoMsg.served_schemas[6] === 'uor-r4.lut-stack/7', `served schemas should be /1-/7, got ${JSON.stringify(infoMsg.served_schemas)}`);
 assert(Array.isArray(infoMsg.parse_schemas) && infoMsg.parse_schemas.includes('uor-r4.lut-stack/7'), `parse schemas should include /7, got ${JSON.stringify(infoMsg.parse_schemas)}`);
-assert(Array.isArray(infoMsg.refused_schemas) && infoMsg.refused_schemas.some((s) => s.schema === 'uor-r4.lut-stack/7' && /turn memory/.test(s.reason)), `refused schemas should name the /7 turn-memory refusal, got ${JSON.stringify(infoMsg.refused_schemas)}`);
+assert(Array.isArray(infoMsg.refused_schemas) && infoMsg.refused_schemas.length === 0, `no served schema should be refused now, got ${JSON.stringify(infoMsg.refused_schemas)}`);
+assert(infoMsg.turn_memory_served === true, 'engine_info should report the turn memory served');
 
 // 2. Load the synthetic stack via `load_model` -> `loadStack`.
 await sendToWorker({

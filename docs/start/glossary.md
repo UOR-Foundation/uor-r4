@@ -249,7 +249,7 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 <a id="spiralcore"></a>**SpiralCore.** An exact-geometry source credited to Matthew. From the octonion multiplication table it yields moves that shuffle the eight coordinates and flip some signs. Each move can be undone exactly. The integer form is the core of the current model. See [SpiralCore](../geometry/spiralcore.md).
 
-**Studio.** The single-page interface meant to be the shell of both the web and desktop clients. It is connected to the integer WebAssembly worker and verified on a synthetic stand-in with self-hosted assets and a stack-bound tokenizer; no qualified model is bundled. See [web client](../products/web-client.md).
+**Studio.** The single-page interface meant to be the shell of both the web and desktop clients. It is connected to the integer WebAssembly worker with self-hosted assets and a stack-bound tokenizer. It verifies a synthetic stand-in and serves the publicly released M1 model as top-8 next-token prediction, not chat; no qualified conversational product is bundled. See [web client](../products/web-client.md).
 
 ## T
 

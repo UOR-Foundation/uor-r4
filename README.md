@@ -69,9 +69,9 @@ None ships today. A trained integer artifact exists; an integrated, qualified pr
 - **[The model](docs/products/language-model.md):** one whole-number model file for local serving,
   with integer multiply and divide allowed by D80/D81. The saved discrete M1 pair is real; so is a
   separate exact `lut-stack/5` FBS export. Neither is a released conversational product.
-- **[Web client](docs/products/web-client.md):** the Studio and integer WebAssembly worker are
-  connected and verified on a synthetic stand-in, with self-hosted assets and a stack-bound
-  tokenizer. No qualified model is bundled, and M7's accepted-model parity remains open.
+- **[Web client](docs/products/web-client.md):** the live Studio can load the publicly released M1
+  model after an explicit click and serves top-8 next-token prediction—not chat. The synthetic
+  parity harness passes; M7's accepted-model parity and a qualified product bundle remain open.
 - **[Desktop client](docs/products/desktop-client.md):** the Tauri shell exists and verifies
   durable session behavior on a synthetic artifact. It has no qualified trained product bundle.
 
