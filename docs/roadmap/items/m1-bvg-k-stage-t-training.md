@@ -16,22 +16,19 @@ Stage 2, 'pick the learning law': the first learning-law candidate that stays wh
 
 ## What is missing
 
-Stage T of W3 was held for the K16 outcome, which is now recorded (no KEEP), and for an owner release. Estimated at about $12 for two seeds. It is only warranted if W2 blames the learning law (H_law).
+**Run outcome: complete; the Stage 2 writer bar was not met.** Stage T ran on 25 October with D67/D68 PASS and all five Step 0 controls passing. On `T16_fz`, BVG-K raised full-DEV admission to 5,009 of 14,287 with G-Adm and 256/256 G-Occ PASS; checkpoint-restricted tables reached `T_restr(A_W) = 2,140` and `G_restr(A_W) = 3,084`. The writer scored 455 on `T16_fz` and 371 on `T16_rel`, below unigram 1,226, so `stage2_bar_met_two_seeds = false`. The registered result is `DIAGNOSTIC_STOP_CONSECUTIVE_REJECTIONS`, `mechanism_negative = false`, not a Stage 2 pass or an M1 close by itself ([Stage T record](../../labs/m1-bvg-k-stage-t-training/README.md)).
 
-**Waits on `m1-address-key-full-vector` (#2834), since 25 Oct (claude-107's D68 card, carried out by claude-109).**
-- W2 returned H_mixed, whose registered row says "do not change the learning law yet". The code-utilization diagnostic routes A1a to #2834.
-- Stage T stays on the M1 close (D79). When it runs, its decision review weighs #2834's result first.
-- **Instrument work owed before any arm runs:**
-  - the D40-audited runner is K = 1 and seed 1 only, and needs a block evidence mode (a K = 16 read block can straddle the Combine/Relation gates);
-  - seed-2 A8 configs;
-  - the sheet's five Step 0 controls;
-  - the checkpoint-restricted W2 tables.
+**Original pre-run status, retained only as history:** Stage T waited on #2834, seed-2 configs, block evidence, Step 0 controls and checkpoint-restricted W2 tables. Those instruments and the two-seed runs are now complete; their exact limitations remain in the sealed record.
 
 ## Done when
 
-Stage 2 bar: 'beat the unigram table, then the admission-matched next-word table (the version W2 produces, not the 6,300 full-panel table), on two seeds.'
+**Original acceptance text, unchanged:** Stage 2 bar: 'beat the unigram table, then the admission-matched next-word table (the version W2 produces, not the 6,300 full-panel table), on two seeds.'
+
+**Observed outcome:** the two-seed run is complete at its registered diagnostic-stop scope, but the writer bar above was not met. The later saved-model M1 close is a separate evidence record, not a retroactive Stage T pass.
 
 ## How to start
+
+**Historical pre-run procedure; Stage T has run.**
 
 Open these first:
 
@@ -51,10 +48,8 @@ Open these first:
 
 ## Sources
 
-- [`docs/integration/NOW.md:66`](../../../docs/integration/NOW.md)
-- [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:110`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
-- [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:125-127`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
-- [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:21`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
-- [`docs/research/open-questions.md:5-13`](../../../docs/research/open-questions.md)
-- [`docs/start/where-were-going.md:46`](../../../docs/start/where-were-going.md)
+- [Stage T record](../../labs/m1-bvg-k-stage-t-training/README.md) and [antigravity-84 REPORT](../../loop/tasks/m1-bvg-k-stage-t-training/antigravity-84/REPORT.md), including the two-seed diagnostic stop and unmet writer bar
+- [W2 code-utilization record](../../labs/m1-w2-code-utilization/README.md)
+- [Current open-questions record](../../research/open-questions.md) and [where we are going](../../start/where-were-going.md)
+- [19 October pre-run audit](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md), retained as history
 

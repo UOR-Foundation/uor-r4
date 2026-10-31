@@ -16,11 +16,13 @@ Routes all later spend: H_rep means fix the read and address metric and do not f
 
 ## What is missing
 
-W2's own checkpoint-restricted evaluation is `T = 3,414`, `G = 6,300`, `W = 149`: H_mixed. Its read-code table is informative beyond the writer but not beyond the bigram; the next step is a code-utilization diagnostic, not a learning-law change. The separate Stage T follow-up reached `T_restr(A_W) = 2,140` and `G_restr(A_W) = 3,084` on `T16_fz`, both above unigram 1,226, and identifies representation/read-code and within-cell ranking as separate constraints. Cost is recorded in the Stage T report, not the old $0.91 estimate.
+**Outcome: complete.** W2's checkpoint-restricted evaluation is `T = 3,414`, `G = 6,300`, `W = 149`: H_mixed. Its read-code table is informative beyond the writer but not beyond the bigram. The follow-up code-utilization diagnostic is also complete: QA A1a, QB B2 and QC C1; code-count admission 9,064 against the writer's 1,920; code × query 7,262 against the bigram's 6,300; and the registered data-scaling projection 3,552 below the H_law line, so G1 was declined ([diagnostic record](../../labs/m1-w2-code-utilization/README.md)). The separate Stage T follow-up reached `T_restr(A_W) = 2,140` and `G_restr(A_W) = 3,084` on `T16_fz`, both above unigram 1,226, and identifies representation/read-code and within-cell ranking as separate constraints. Cost is recorded in the Stage T report, not the old $0.91 estimate.
 
 ## Done when
 
-The registered W2 sheet runs once with all arms; H_rep or H_law is recorded as one notebook row, and the admission-matched next-word table number (needed for the Stage 2 bar) is produced.
+**Original acceptance text, retained as history:** the registered W2 sheet runs once with all arms; H_rep or H_law is recorded as one notebook row, and the admission-matched next-word table number (needed for the Stage 2 bar) is produced.
+
+**Observed outcome:** the run completed and recorded H_mixed instead of either anticipated classification. This label preserves the original acceptance text rather than inventing a new bar; the follow-up outcomes above are dated evidence, not a rewritten acceptance rule.
 
 ## How to start
 
@@ -43,10 +45,8 @@ Open these first:
 
 ## Sources
 
-- [Historical `NOW.md` snapshot, line 65](../../../archive/integration/NOW-2026-10-22.md)
-- [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:110`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
-- [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:115-118`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
-- [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:31`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
 - [W2 capacity-capture record](../../labs/m1-w2-capacity-capture/README.md)
+- [Completed code-utilization diagnostic](../../labs/m1-w2-code-utilization/README.md)
 - [Stage T follow-up record](../../labs/m1-bvg-k-stage-t-training/README.md)
+- [Historical `NOW.md` snapshot, line 65](../../../archive/integration/NOW-2026-10-22.md) and [19 October pre-run audit](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
 
