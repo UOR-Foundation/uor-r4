@@ -5190,6 +5190,12 @@ fn synthetic_point_key(bytes: &[u8], rows: usize) -> super::PointKeyImage {
 /// opening key when `hit`, and an unseen one when not. Its reply table holds a key no row hits, so
 /// every later reply row is keyed and misses.
 fn point_key_test_stack(hit: bool) -> Vec<u8> {
+    point_key_test_stack_with(hit, false)
+}
+
+/// [`point_key_test_stack`] with its readout: the writer's pick, or the whole table's nearest
+/// (claude-231).
+fn point_key_test_stack_with(hit: bool, nearest: bool) -> Vec<u8> {
     use super::{FbsMemoryEntry, FbsMemorySnapshot, FbsReplyTable, MEMORY_PAD};
     let width = FBS_SYNTH_SMALL.d as usize;
     let mut snap = turn_memory_trunk(24);
@@ -5206,6 +5212,7 @@ fn point_key_test_stack(hit: bool) -> Vec<u8> {
             weight: vec![0.5; width],
         }),
     });
+    snap.readout_nearest = nearest;
     super::export_fbs_trunk_uorlut01(&snap).expect("export")
 }
 
@@ -5561,6 +5568,7 @@ fn a_snapshot_without_the_flag_exports_as_before() {
     let snap = synthetic_fbs_trunk(20261026);
     let mut json: Value = serde_json::to_value(&snap).expect("json");
     assert!(json.get("retain_rates").is_none(), "false is not written");
+    assert!(json.get("readout_nearest").is_none(), "nor is the writer readout (claude-231)");
     json.as_object_mut().expect("object").remove("retain_rates");
     let old: super::FbsTrunkSnapshot = serde_json::from_value(json).expect("an old snapshot");
     let bytes = super::export_fbs_trunk_uorlut01(&old).expect("export");
@@ -5568,4 +5576,120 @@ fn a_snapshot_without_the_flag_exports_as_before() {
     assert_eq!(hex::encode(Sha256::digest(&bytes)), "2eda9536d128c310eff1f84875bac832355790b5dd21d4dfa98aeb60b0de700d");
     let model = IntegerStackModel::parse(&bytes).expect("parse");
     assert!(model.shape().rec_geometric() && !model.shape().rec_retention());
+    assert!(model.shape().head_native_vector() && !model.shape().head_nearest(), "the writer head");
+}
+
+/// claude-231: the nearest head. `validate` accepts `native_vector_nearest`, and an engine without
+/// it refuses it by its own `validate` ("the head is not native_vector"), pinned on an unknown head.
+/// Both heads are native, and only the new one reads nearest.
+#[test]
+fn the_nearest_head_is_a_native_head_and_an_unknown_one_is_refused() {
+    let mut snap = synthetic_fbs_trunk(20261031);
+    snap.readout_nearest = true;
+    let model = IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&snap).expect("export")).expect("parse");
+    let shape = model.shape().clone();
+    assert_eq!(shape.head.as_deref(), Some("native_vector_nearest"));
+    assert!(shape.head_native_vector() && shape.head_nearest());
+    assert!(shape.validate().is_ok(), "the nearest head is valid");
+    let mut other = shape.clone();
+    other.head = Some("native_vector_other".to_owned());
+    assert!(matches!(other.validate(), Err(StackError::Shape("the head is not native_vector"))));
+    let mut writer = shape;
+    writer.head = Some("native_vector".to_owned());
+    assert!(writer.head_native_vector() && !writer.head_nearest());
+}
+
+/// claude-231: a nearest stack serves the whole table's L1-nearest token at every step, checked by a
+/// test-side reference scan of the step's own query over the writer table (ties to the smaller id).
+/// The writer stack of the same snapshot computes the same queries and serves its own pick, which
+/// differs somewhere. The browser's `serve_step` serves `step_native`'s token under both heads,
+/// where it took the empty logits' argmax, 0, before.
+#[test]
+fn a_nearest_stack_serves_the_whole_tables_nearest_token() {
+    let mut snap = synthetic_fbs_trunk(20261031);
+    let writer = IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&snap).expect("export")).expect("parse");
+    snap.readout_nearest = true;
+    let nearest = IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&snap).expect("export")).expect("parse");
+    let table = nearest.fbs_image().expect("an FBS model").writer_table.to_vec();
+    let (vocab, d) = (nearest.shape().vocab, nearest.shape().width);
+    let reference = |q: &[i32]| -> u32 {
+        let (mut best, mut least) = (0u32, i64::MAX);
+        for v in 0..vocab {
+            let l1: i64 = q.iter().zip(&table[v * d..(v + 1) * d]).map(|(&x, &t)| (i64::from(x) - i64::from(t)).abs()).sum();
+            if l1 < least {
+                (best, least) = (v as u32, l1);
+            }
+        }
+        best
+    };
+    let mut differ = 0usize;
+    for run in 0..6usize {
+        let (mut a, mut b) = (nearest.session(), writer.session());
+        let (mut browser_a, mut browser_b) = (nearest.session(), writer.session());
+        let (mut timed, mut ns) = (nearest.session(), Vec::new());
+        for t in 0..nearest.shape().context {
+            let token = ((t * 7 + run * 11 + 3) % vocab) as u32;
+            let near = a.step_native(token).expect("nearest step");
+            assert_eq!(near.token, reference(&near.query_q12), "run {run} step {t}: the whole table's nearest");
+            let pick = b.step_native(token).expect("writer step");
+            assert_eq!(pick.query_q12, near.query_q12, "run {run} step {t}: the head changes no query");
+            differ += usize::from(pick.token != near.token);
+            assert_eq!(browser_a.serve_step(token).expect("browser"), (near.token, 0), "run {run} step {t}: nearest");
+            assert_eq!(browser_b.serve_step(token).expect("browser"), (pick.token, 0), "run {run} step {t}: the writer");
+            // The timed twin (`fbs-toks --stages`) serves the same, and its search beside agrees.
+            let (stepped, beside) = timed.measure_fbs_step_stages(token, &mut ns).expect("timed step");
+            assert_eq!((stepped.token, beside), (near.token, near.token), "run {run} step {t}: the timed twin");
+        }
+    }
+    assert!(differ > 0, "the writer's pick and the nearest token differ somewhere");
+}
+
+/// claude-231: the point key's override of a missed opening holds under the nearest head, and the
+/// unkeyed greedy opening is the whole table's nearest.
+#[test]
+fn the_point_key_still_names_the_opening_under_the_nearest_head() {
+    use super::panel_reply;
+    let (tokens, reply_start) = turn_memory_script(8);
+    let mask: Vec<u8> = (0..tokens.len()).map(|p| u8::from(p >= reply_start)).collect();
+    let bytes = point_key_test_stack_with(false, true);
+    let model7 = IntegerStackModel::parse(&bytes).expect("served /7");
+    assert!(model7.shape().head_nearest());
+    let windows = super::point_key_windows(&tokens, &mask, 192, 0).expect("windows");
+    let image = super::build_point_key(&model7, &windows).expect("the table");
+    let model8 = IntegerStackModel::parse(&super::add_point_key_uorlut01(&bytes, &image).expect("/8")).expect("served /8");
+    let prompt = &tokens[..reply_start];
+    let served = panel_reply(&model8, prompt, 4, None).expect("served");
+    let (named, _) = served.keyed.expect("the key served");
+    assert_eq!(served.reply[0], named, "the opening is the key's name");
+    assert_eq!(panel_reply(&model7, prompt, 4, None).expect("greedy").keyed, None, "no table");
+}
+
+/// claude-231: `serve_step` on a dense stack is the browser's old step: the integer argmax of the
+/// step's logits (first on ties) and top1 − top2, read here by a sort.
+#[test]
+fn serve_step_on_a_dense_stack_is_the_logits_argmax_and_margin() {
+    let model = IntegerStackModel::parse(&artifact(7)).expect("a dense stack");
+    let (mut stepped, mut served) = (model.session(), model.session());
+    for t in 0..4u32 {
+        let logits = stepped.step(t).expect("step").to_vec();
+        let mut sorted = logits.clone();
+        sorted.sort_unstable_by(|x, y| y.cmp(x));
+        let want = (super::stack_argmax(&logits) as u32, sorted[0].saturating_sub(sorted[1]));
+        assert_eq!(served.serve_step(t).expect("serve"), want, "step {t}");
+    }
+}
+
+/// claude-231: the run's readout is its objective: `cell` and `nearest` read nearest, `sheet` and
+/// `voronoi` the writer, a config without one the writer, and anything else is refused.
+#[test]
+fn the_run_readout_is_its_objective() {
+    use crate::fbs_snapshot::run_readout_nearest as readout;
+    assert_eq!(readout(r#"{"objective":"cell"}"#), Ok(true));
+    assert_eq!(readout(r#"{"objective":"nearest"}"#), Ok(true));
+    assert_eq!(readout(r#"{"objective":"sheet"}"#), Ok(false));
+    assert_eq!(readout(r#"{"objective":"voronoi"}"#), Ok(false));
+    assert_eq!(readout(r#"{"steps":16384}"#), Ok(false), "a run from before the objectives");
+    assert!(readout(r#"{"objective":"other"}"#).is_err());
+    assert!(readout(r#"{"objective":3}"#).is_err());
+    assert!(readout("not json").is_err());
 }

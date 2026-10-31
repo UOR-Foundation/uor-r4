@@ -293,6 +293,8 @@ pub fn fbs_trunk_snapshot(model: &StackModel) -> Result<FbsTrunkSnapshot> {
         memory: None,
         // Nor is the rate reading: `fbs-snapshot` sets it from the run's config (claude-226).
         retain_rates: false,
+        // Nor the readout: `fbs-snapshot` sets it from the run's objective (claude-231).
+        readout_nearest: false,
     })
 }
 
