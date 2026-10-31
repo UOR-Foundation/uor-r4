@@ -47,7 +47,7 @@ The readout was necessary: at s1, under the writer, claude-229's first token agr
   | Exact key hits | 291 | 280 (96.2%) |
   | Exact key misses | 19 | 11 (58%) |
 
-  At a hit the memory moves the query toward the stored reply, so the nearest pick is clear-cut. At a miss the query is unmoved and the margins are small, so an error in any layer flips it.
+  At a hit the memory moves the query toward the stored reply, so the nearest pick is clear-cut. At a miss the query is unmoved and its margins are likely small (not measured here), so an error in any layer can flip it.
 - **p-w is mostly misses:** 1,172 of its 1,202 openings at every seed. Its agreement is 76%, 65% and 5%.
   - The misses are the same at every seed, so they do not explain the spread across seeds, which is unexplained.
   - DEV against p-w changes the panel too (this unit's review).

@@ -26,7 +26,7 @@ No new measurement; claude-231 timed the nearest head at 1,365 tok/s decode on (
   - At s2, 340 is its first token on 496 prompts, against the float model's 192.
 - **Even exact-key hits disagree on 3.8%** (11 of 291 on DEV s1), which is over the 3% bar on its own.
 - **The cause is not located,** and the suspects are every layer on the miss path: the trunk, the Hamming read, and the readout table.
-  - At a hit, the memory moves the query toward a stored reply, so the nearest pick is clear-cut. At a miss, the query is unmoved and the margins are small, so an error in any layer flips the token.
+  - At a hit, the memory moves the query toward a stored reply, so the nearest pick is clear-cut. At a miss, the query is unmoved and its margins are likely small (not measured here), so an error in any layer can flip the token.
   - A one-token collapse also looks like one readout point winning every nearest search (this unit's review).
   - **What has been checked:**
     - claude-227's parity checked the trunk alone, on synthetic sequences;
