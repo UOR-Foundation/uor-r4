@@ -63,7 +63,7 @@ then served the point key inside one float model on fresh p-w: templates improve
 at three seeds, with exact claude-219 parity. That gain recalls TRAIN replies rather than
 generalizing. [Claude-222](docs/loop/tasks/point-key-integer/claude-222/REPORT.md) has now built the
 integer point table, search and `/8` record, with 380 library tests and a full serving audit. Next,
-unit 2's panel decode/grade and then the real TRAIN export, p-x scoring and laptop measurement. Useful conversation
+unit 3's real TRAIN export, p-x scoring and laptop measurement, now that [claude-224](docs/loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade. Useful conversation
 remains unproven.
 
 ## The three products

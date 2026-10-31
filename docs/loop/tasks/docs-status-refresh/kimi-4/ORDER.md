@@ -1,6 +1,6 @@
 # ORDER: comprehensive 30 Oct documentation refresh
 
-Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `4f8f62ecd03ce79c05a0dfa214429d57e6154433`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
+Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `18c4c3da70f35b5c8c9348297df05cfd4d8e452d`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
 
 ## Goal and chain
 
@@ -70,4 +70,8 @@ The final review identified nine roadmap items whose current text still describe
 
 ## Scope decision: claude-222 implementation status
 
-`point-key-integer` is added only to record the merged claude-222 first unit: the integer point table, search and `/8` record, with its 380 library tests, 18 negative gates and full serving audit, plus the remaining unit-2 panel decode/grade and subsequent real-table export, p-x and laptop measurements. No acceptance bar, model code, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation correction together.
+`point-key-integer` is added only to record the merged claude-222 first unit: the integer point table, search and `/8` record, with its 380 library tests, 18 negative gates and full serving audit, plus what was then the remaining unit-2 panel decode/grade and subsequent real-table export, p-x and laptop measurements. No acceptance bar, model code, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation correction together.
+
+## Scope decision: claude-224 implementation status
+
+During repair, #3454 merged claude-224 on `main` as `18c4c3da70f35b5c8c9348297df05cfd4d8e452d`. The same living documentation scope records its completed unit-2 panel prompts, integer decode and grade, its 383 integer-library and 185 float-library tests, 13 negative gates and full serving audit, the shared 192-token context cap, and unit 3's remaining real export, fresh p-x score and laptop measurements. No acceptance bar, model code, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation corrections together.

@@ -27,7 +27,7 @@ The integer artifact cannot hold the float table, since no floating point is all
 
 ## What is missing
 
-**Completed first unit (claude-222, #3452):** the integer point table, its least-L1/commonest-target search and the `/8` record are built, with 380 library tests, 18 negative gates and a full serving audit. This is synthetic-only: real TRAIN export, p-x scoring, tok/s and resident memory remain open. The next unit is unit 2: panel decode/grade and subsequent real export/measurement ([claude-223's scope update](../../loop/tasks/infra-loop-harness/claude-223/REPORT.md)).
+**Completed units:** claude-222 (#3452) built the integer point table, its least-L1/commonest-target search and the `/8` record, with 380 library tests, 18 negative gates and a full serving audit. Claude-224 (#3454, [REPORT](../../loop/tasks/point-key-integer/claude-224/REPORT.md)) then built the panel prompts, integer decode and grade, with 383 integer-library tests, 185 float-library tests, a full serving audit and 13 negative gates. These are synthetic/host instruments, not a real TRAIN export or panel evaluation. Unit 3's real export, fresh p-x scoring, tok/s and resident memory remain open under its fresh sheet and pre-run review.
 
 - **A table built by the integer engine.**
   - It holds TRAIN's opening points at the writer query's representation (i16 Q12: 212,968 × 256 × 2 B, about 109 MB) and their targets.
@@ -95,15 +95,16 @@ The model throughout is (r-drop)'s sealed step-16,384 checkpoints at seeds 1–3
 ## The units (31 October 2026)
 
 1. **Done: the integer table, its search, the step, the `/8` record and the builder** (claude-222, #3452, merged as `f4beaaf79`). This is done-when 1, on the synthetic stack: 380 library tests, a full pass of the serving audit, and 18 negative gates.
-2. **The panel decode and the grade,** on the laptop, with finite tests and no run.
-   - **The decode:** a `fbs-toks` mode decodes a panel's prompts with the memory on, under greedy, from a `/7` or `/8` artifact. It writes the replies in claude-220's sample shape.
-   - **The grade:** it lives in `in_space_long.rs` and `train-in-space.rs`, beside claude-220's `served_grade`. It reads the integer arms by their own tokens, and compares the served names with claude-220's float served files (done-when 3). It reads the bar of done-when 4.
-   - **Why the decode and the grade sit in different crates:** the float crate links `uor-r4-integer` without `serving-wasm`, so it cannot decode the stack.
-3. **The run,** under a prep sheet with a fresh FIT and a pre-run review:
+2. **Done: the panel decode and the grade** (claude-224, #3454, merged as `18c4c3da7`), on the laptop with finite tests and no real-model run.
+   - **The decode:** `fbs-toks --replies` decodes a panel's prompts with the memory on, under greedy, from a `/7` or `/8` artifact and writes claude-220's sample shape.
+   - **The grade:** `train-in-space --integer-grade` reads the integer arms by their own tokens, compares served names with claude-220's float served files (done-when 3), and reads the bar of done-when 4.
+   - **Checks:** 383 integer-library tests, 185 float-library tests, 13 negative gates and a full serving audit.
+   - **Limit:** both integer arms stop at BOS, 64 reply tokens or the shared 192-token context. Long-prompt replies are capped identically, and the real grade must report that count.
+3. **Next: the real run,** under a prep sheet with a fresh FIT and a pre-run review:
    - (r-drop)'s snapshots on a pod;
    - `fbs-export` and `fbs-export --point-key` over TRAIN on the laptop;
    - the fresh panel p-x drawn with its census;
-   - the arms on p-x, p-w, p-v and DEV at seeds 1–3, and tok/s.
+   - the arms on p-x, p-w, p-v and DEV at seeds 1–3, tok/s and resident memory.
 
 ## Rules that apply
 

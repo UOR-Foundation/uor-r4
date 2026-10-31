@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="960" role="img" aria-labelledby="t d">
 <title id="t">The road from today to the products</title>
-<desc id="d">A left-to-right road from M1's completed language-base result to the remaining products. Milestone 1 is done: the saved discrete model passed all six bars on two seeds (DEV 7,002 / 7,001 and p-f 7,850 / 7,872). Claude-219's point-key opening improves free generation at three seeds on fresh p-v, but reaches only 12–18% of the forced-opening lift; the sign key is inconclusive at this panel size. Current work trains and serves the point key in one integer model and scores it end to end; useful chat remains unproven. Then: serve every part in integers, connect typed text through R7, train and score one joined model, then measure cost and revisit Flock. Every run uses the lab's own pre-run review. M2 and M3 are in progress; M4 to M8 remain open, ending at the model file, web client and desktop shell.</desc>
+<desc id="d">A left-to-right road from M1's completed language-base result to the remaining products. Milestone 1 is done: the saved discrete model passed all six bars on two seeds (DEV 7,002 / 7,001 and p-f 7,850 / 7,872). Claude-219's point-key opening improves free generation at three seeds on fresh p-v, but reaches only 12–18% of the forced-opening lift; the sign key is inconclusive at this panel size. Claude-222 built the integer table/search and claude-224 built the panel decode/grade; unit 3's real TRAIN export, p-x scoring and laptop measurement come next; useful chat remains unproven. Then: serve every part in integers, connect typed text through R7, train and score one joined model, then measure cost and revisit Flock. Every run uses the lab's own pre-run review. M2 and M3 are in progress; M4 to M8 remain open, ending at the model file, web client and desktop shell.</desc>
 <style>
 svg { --bg:#ffffff; --ink:#1f2328; --body:#2b3138; --muted:#57606a; --rule:#d0d7de; --panel:#f6f8fa;
       --blue:#0072b2; --sky:#56b4e9; --green:#007a5e; --orange:#e69f00; --verm:#d55e00; --purple:#7a4fa3; --pink:#cc79a7;
@@ -99,7 +99,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <text class="stage" x="250" y="186" text-anchor="middle">STAGE 1</text>
 <text class="name" x="250" y="204" text-anchor="middle">Reach reply opening</text>
 <text class="name" x="250" y="220" text-anchor="middle">on new phrasing</text>
-<text class="detail" x="250" y="236" text-anchor="middle">point key (claude-219)</text>
+<text class="detail" x="250" y="236" text-anchor="middle">unit 3 real run next</text>
 <rect class="tag-build" x="180" y="258" width="140" height="20" rx="10"/><text class="tag-build-text" x="250" y="272" text-anchor="middle">current work</text>
 
 <!-- Stage 2 -->

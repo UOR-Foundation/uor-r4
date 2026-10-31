@@ -22,9 +22,9 @@ acquire a `lab:*` label. A maintainer runs those gates for you.
    [README](../../README.md) and [docs/architecture.md](../architecture.md).
 2. Read [HARD-RULES.md](HARD-RULES.md). It is the only document you must read before
    writing code.
-3. Pick work. Model work in M1–M4 ([#2029]–[#2032]) is gated and owned; M5–M8
-   ([#2033]–[#2036]) each declare a dependency on the M4 served model and are
-   `not-started`. Genuinely open: documentation and claim-wording fixes, reproducing a
+3. Pick work. M1 is complete; model work in M2–M4 ([#2030]–[#2032]) is gated and owned.
+   M5, M6 and M8 are not started; M7 runtime/harness is in progress on a synthetic stand-in,
+   with accepted-model parity open. Genuinely open: documentation and claim-wording fixes, reproducing a
    recorded negative result, tooling and CI that does not touch the model path, and
    issues labelled `good first issue` (ask and one is seeded for you).
 4. Post an intent note on the owning milestone issue, or on [#2028] for tracker work,

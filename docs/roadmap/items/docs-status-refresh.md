@@ -50,5 +50,5 @@ On 30 Oct the owner assigned Kimi the follow-up: "Please make sure the documenta
 
 - The owner's words of 29 and 30 Oct 2026 (quoted above).
 - Closed M1 #2029; `docs/labs/m1-close-saved-model/evidence/m1-close-grade.json` for bars (a)–(e); `docs/labs/m1-heldout-phrasing-transfer/evidence/panel-score.json` and `docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md` for bar (f).
-- Latest merged end-to-end evidence, including `docs/loop/tasks/one-model-end-to-end/claude-220/REPORT.md`, with claude-219 as its precursor.
+- Latest merged end-to-end evidence, including `docs/loop/tasks/one-model-end-to-end/claude-220/REPORT.md`, with claude-219 as its precursor, `docs/loop/tasks/point-key-integer/claude-222/REPORT.md` for the synthetic integer implementation, and `docs/loop/tasks/point-key-integer/claude-224/REPORT.md` for the panel decode and grade.
 - `xtask/src/figures.rs`, `xtask/src/figures_charts.rs`, `xtask/src/figures_math.rs` and `docs/harness/milestones.json`.
