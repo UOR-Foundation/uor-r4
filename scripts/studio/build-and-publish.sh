@@ -28,6 +28,9 @@
 #     --skip-verify           skip the Studio verification harnesses
 #     --public-model-url U    optional public http(s) UORLUT01 URL to list in models.json
 #     --public-model-label L  label for that URL (default: Public model)
+#     --trained-manifest FILE stage one to four trained models from a JSON manifest
+#                             (scripts/stage-studio-site.sh --trained-manifest); each may be
+#                             bundled same-origin or listed remote-only by URL
 #     --stage-dir DIR         copy the staged studio tree to DIR for inspection
 #     --keep-worktree         keep the throwaway publish worktree and print its path
 #   ENV:
@@ -48,6 +51,7 @@ build=1
 verify=1
 public_url=''
 public_label='Public model'
+trained_manifest=''
 stage_dir=''
 keep_worktree=0
 
@@ -63,6 +67,7 @@ while [ "$#" -gt 0 ]; do
         --skip-verify) verify=0; shift ;;
         --public-model-url) public_url=${2:?--public-model-url needs a value}; shift 2 ;;
         --public-model-label) public_label=${2:?--public-model-label needs a value}; shift 2 ;;
+        --trained-manifest) trained_manifest=${2:?--trained-manifest needs a path}; shift 2 ;;
         --stage-dir) stage_dir=${2:?--stage-dir needs a path}; shift 2 ;;
         --keep-worktree) keep_worktree=1; shift ;;
         -h|--help) sed -n '1,60p' "${BASH_SOURCE[0]}"; exit 0 ;;
@@ -177,7 +182,11 @@ trap cleanup EXIT
 
 say ""
 say "== stage: web/studio -> $staging/studio (+ models.json)"
-scripts/stage-studio-site.sh web/studio "$staging/studio" "$public_url" "$public_label"
+stage_args=(web/studio "$staging/studio" "$public_url" "$public_label")
+if [ -n "$trained_manifest" ]; then
+    stage_args+=(--trained-manifest "$trained_manifest")
+fi
+scripts/stage-studio-site.sh "${stage_args[@]}"
 if [ -n "$stage_dir" ]; then
     rm -rf "$stage_dir"
     mkdir -p "$stage_dir"

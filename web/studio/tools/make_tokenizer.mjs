@@ -21,10 +21,11 @@ const STACK_SCHEMA_PREFIX = 'uor-r4.lut-stack/';
 const STACK_SCHEMA_MIN = 1;
 const STACK_SCHEMA_MAX = 7;
 const DISCRETE_SCHEMA = 'uor-r4.lut-discrete/1';
+const DISCRETE_TRUNK_SCHEMA = 'uor-r4.lut-discrete-trunk/1';
 
 /// True for the engine's `uor-r4.lut-stack/1`..`/7` family and the legacy discrete header.
 export function supportedStackSchema(schema) {
-    if (schema === DISCRETE_SCHEMA) return true;
+    if (schema === DISCRETE_SCHEMA || schema === DISCRETE_TRUNK_SCHEMA) return true;
     if (typeof schema !== 'string' || !schema.startsWith(STACK_SCHEMA_PREFIX)) return false;
     const level = Number(schema.slice(STACK_SCHEMA_PREFIX.length));
     return Number.isInteger(level) && level >= STACK_SCHEMA_MIN && level <= STACK_SCHEMA_MAX;

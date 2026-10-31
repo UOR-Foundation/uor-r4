@@ -85,6 +85,33 @@
                         </div>
                     </div>
                 </div>
+                <div class="predictor" id="predictorPane" hidden>
+                    <div class="predictor-inner">
+                        <div class="predictor-head">
+                            <h2 class="predictor-title" id="predictorTitle">Next-token predictor</h2>
+                            <span class="badge" id="predictorBadge">M1 language base</span>
+                        </div>
+                        <p class="hint" id="predictorNote">M1 is a language base, not a chat assistant; the browser runtime serves top-8 next-token prediction, greedy continuation repeats tokens.</p>
+                        <label class="field" for="predictorInput">
+                            <span class="field-label">Prompt</span>
+                            <textarea id="predictorInput" class="input" rows="3" placeholder="Type a short prompt; the tokenizer turns it into integer token ids."></textarea>
+                        </label>
+                        <div class="predictor-actions">
+                            <button class="btn btn-primary" id="btnPredict" type="button">Predict top 8 next tokens</button>
+                            <span class="hint" id="predictorStatus" role="status" aria-live="polite">Load the M1 model to enable prediction.</span>
+                        </div>
+                        <div class="predictor-result" id="predictorResult" hidden>
+                            <div class="predictor-meta">
+                                <span id="predictorPrediction"></span>
+                                <span id="predictorMs"></span>
+                                <span class="chip" id="predictorSha" data-tone="muted"><span class="chip-dot" aria-hidden="true"></span>sha256 unverified</span>
+                                <span id="predictorModelInfo"></span>
+                            </div>
+                            <ol class="predictor-top" id="predictorTop"></ol>
+                            <p class="hint">Top-8 token ids and their decoded text. Greedy continuation from the M1 base repeats tokens, so these are not fluent continuations; the browser runtime exposes next-token prediction only.</p>
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <section class="panel editor-panel" id="editorPanel" aria-label="Editor">
@@ -137,6 +164,7 @@
     <script type="module">
         import { mountModelSources, ModelSources } from './assets/js/model_sources.js';
         import { configFromSources, streamChatCompletions } from './assets/js/studio_api.js';
+        import { encodeTextWithArtifact } from './assets/js/uor_tokenizer_artifact.js';
 
         var CONVERSATIONS_KEY = 'uor.studio.conversations.v1';
         var EDITOR_KEY = 'uor.studio.editor.v1';
@@ -172,6 +200,11 @@
             activeStreamId: null,
             editorSaveTimer: null,
             booted: false,
+            tokenizerArtifact: null,
+            expectedSha256: '',
+            modelMeta: null,
+            maxNewTokens: MAX_NEW_TOKENS,
+            lastWorkerError: '',
         };
 
         function $(selector, root) {
@@ -491,6 +524,148 @@
             }
         }
 
+        /* ------------------------------------------------------------ next-token predictor (discrete M1 model) */
+
+        function isDiscreteCapabilities(caps) {
+            return Boolean(caps && (String(caps.schema || '').indexOf('uor-r4.lut-discrete') === 0 || caps.engine === 'uor-r4-integer/discrete'));
+        }
+
+        function discreteVocabSize() {
+            var shape = (app.caps && app.caps.shape) || {};
+            return Number(shape.vocab || shape.vocabulary || 0);
+        }
+
+        function setPredictorMode(on) {
+            var pane = $('#predictorPane');
+            var scroll = $('#chatScroll');
+            var composer = $('.chat-panel .composer');
+            var title = $('.chat-panel .panel-title');
+            var badge = $('#chatSourceBadge');
+            if (pane) pane.hidden = !on;
+            if (scroll) scroll.hidden = on;
+            if (composer) composer.hidden = on;
+            if (title) title.textContent = on ? 'Next-token predictor' : 'Chat';
+            if (badge) badge.textContent = on ? 'M1 language base' : (app.mode === 'api' ? 'API' : 'Local WASM');
+            document.documentElement.dataset.predictorMode = on ? 'true' : 'false';
+            if (on) {
+                var input = $('#predictorInput');
+                if (input && !input.value) input.value = '';
+                var status = $('#predictorStatus');
+                if (status && app.caps) status.textContent = 'Ready: ' + discreteVocabSize() + ' vocabulary tokens, ' + ((app.caps.shape && app.caps.shape.context) || '?') + ' context.';
+                fillPredictorModelInfo();
+            }
+        }
+
+        function fillPredictorModelInfo() {
+            var node = $('#predictorModelInfo');
+            if (!node) return;
+            if (!app.caps) { node.textContent = ''; return; }
+            var shape = app.caps.shape || {};
+            var parts = [];
+            if (app.caps.schema) parts.push(app.caps.schema);
+            if (Number(app.caps.artifact_bytes) > 0) parts.push((Math.round((Number(app.caps.artifact_bytes) / (1024 * 1024)) * 10) / 10) + ' MB');
+            if (Number.isFinite(app.loadMs)) parts.push('loaded in ' + (app.loadMs >= 1000 ? (Math.round(app.loadMs / 100) / 10) + ' s' : Math.round(app.loadMs) + ' ms'));
+            if (app.caps.can_predict !== undefined) parts.push(app.caps.can_predict ? 'top-8 prediction' : 'no prediction');
+            if (shape.context) parts.push('context ' + shape.context);
+            if (app.caps.status_label) parts.push(app.caps.status_label);
+            node.textContent = parts.join(' · ');
+        }
+
+        function fillPredictorSha() {
+            var chip = $('#predictorSha');
+            if (!chip) return;
+            var verified = app.caps && app.caps.sha256_verified === true;
+            var sha = (app.caps && (app.caps.expected_sha256 || app.caps.artifact_sha256)) || app.expectedSha256 || '';
+            chip.dataset.tone = verified ? 'ok' : 'muted';
+            chip.textContent = '';
+            var dot = document.createElement('span');
+            dot.className = 'chip-dot';
+            dot.setAttribute('aria-hidden', 'true');
+            chip.appendChild(dot);
+            chip.appendChild(document.createTextNode('sha256 ' + (sha ? String(sha).slice(0, 12) + '… ' : '') + (verified ? 'verified' : 'unbound')));
+        }
+
+        function renderDiscretePrediction(message) {
+            var result = $('#predictorResult');
+            var list = $('#predictorTop');
+            var status = $('#predictorStatus');
+            if (!result || !list) return;
+            var rawTop = Array.isArray(message.top8) ? message.top8 : message.top;
+            var top = Array.isArray(rawTop) ? rawTop.map(Number).filter(function (id) { return Number.isInteger(id) && id >= 0; }) : [];
+            var decoded = Array.isArray(message.decoded) ? message.decoded : [];
+            var byId = {};
+            decoded.forEach(function (entry) { if (entry && typeof entry.id === 'number') byId[entry.id] = entry.text; });
+            list.textContent = '';
+            top.forEach(function (id, index) {
+                var item = document.createElement('li');
+                item.className = 'predictor-token';
+                var rank = document.createElement('span');
+                rank.className = 'predictor-rank';
+                rank.textContent = '#' + (index + 1);
+                var tokenId = document.createElement('span');
+                tokenId.className = 'predictor-token-id';
+                tokenId.textContent = 'id ' + id;
+                var text = document.createElement('span');
+                text.className = 'predictor-token-text';
+                text.textContent = JSON.stringify(typeof byId[id] === 'string' ? byId[id] : '');
+                item.appendChild(rank);
+                item.appendChild(tokenId);
+                item.appendChild(text);
+                list.appendChild(item);
+            });
+            var prediction = Number.isInteger(message.prediction) ? message.prediction : (top.length ? top[0] : null);
+            $('#predictorPrediction').textContent = prediction === null ? '' : 'Greedy token: id ' + prediction + (typeof byId[prediction] === 'string' ? ' ' + JSON.stringify(byId[prediction]) : '');
+            var durationMs = Number.isFinite(Number(message.durationMs)) ? Number(message.durationMs) : Number(message.ms);
+            $('#predictorMs').textContent = Number.isFinite(durationMs) ? Math.round(durationMs * 100) / 100 + ' ms' : '';
+            var promptTokens = Number(message.prompt_tokens || message.promptLength || 0);
+            fillPredictorSha();
+            result.hidden = false;
+            if (status) status.textContent = 'Predicted ' + (top.length ? top.length + ' candidates' : 'a token') + (Number.isFinite(durationMs) ? ' in ' + Math.round(durationMs * 100) / 100 + ' ms' : '') + (promptTokens ? ' over ' + promptTokens + ' prompt tokens.' : '.');
+            document.documentElement.dataset.predictorTop = JSON.stringify(top);
+            document.documentElement.dataset.predictorTopCount = String(top.length);
+            document.documentElement.dataset.predictorMs = String(Number.isFinite(durationMs) ? durationMs : 0);
+            document.documentElement.dataset.predictorPromptLength = String(promptTokens || 0);
+            document.documentElement.dataset.predictorDecoded = JSON.stringify(decoded);
+        }
+
+        function runPrediction() {
+            var status = $('#predictorStatus');
+            if (!app.worker || !app.caps || !isDiscreteCapabilities(app.caps)) {
+                toast('Load the M1 discrete model first under Model sources.', 'warn');
+                return;
+            }
+            if (!app.tokenizerArtifact) {
+                toast('This model has no stack-bound tokenizer loaded; prediction needs it to encode the prompt.', 'error');
+                if (status) status.textContent = 'No stack-bound tokenizer is loaded for this artifact.';
+                return;
+            }
+            var input = $('#predictorInput');
+            var prompt = input ? input.value : '';
+            if (!prompt || !prompt.trim()) {
+                toast('Type a prompt to predict from.', 'warn');
+                return;
+            }
+            var vocab = discreteVocabSize();
+            var tokenIds;
+            try {
+                tokenIds = encodeTextWithArtifact(prompt, vocab, app.tokenizerArtifact);
+            } catch (error) {
+                toast('Tokenizer could not encode the prompt: ' + error, 'error');
+                if (status) status.textContent = 'Tokenizer error: ' + error;
+                return;
+            }
+            if (!tokenIds || tokenIds.length === 0) {
+                toast('The tokenizer returned no token ids for that prompt.', 'error');
+                return;
+            }
+            if (status) status.textContent = 'Predicting from ' + tokenIds.length + ' prompt tokens…';
+            app.worker.postMessage({
+                action: 'predict_discrete',
+                id: 'predict-' + Date.now().toString(36),
+                payload: { tokenIds: tokenIds, topK: 8 },
+            });
+        }
+
         /* ------------------------------------------------------------ status & toasts */
 
         function setChip(selectorOrEl, tone, text, title) {
@@ -643,12 +818,28 @@
                 app.caps = message.capabilities;
                 app.workerState = 'ready';
                 setEngineStatus('ready', 'ok', 'Engine: ' + (app.caps.engine || 'serving-wasm') + ' · ' + describeCapabilities());
-                setModelStatus(app.caps.status_label || 'loaded', app.caps.synthetic ? 'warn' : 'ok', describeCapabilities());
+                setModelStatus((app.caps.status_label || 'loaded') + ' · ' + (app.caps.schema || 'schema?'), app.caps.synthetic ? 'warn' : 'ok', describeCapabilities());
+                document.documentElement.dataset.modelSchema = app.caps.schema || '';
+                document.documentElement.dataset.modelSha256 = app.caps.artifact_sha256 || '';
+                document.documentElement.dataset.modelShaVerified = app.caps.sha256_verified === true
+                    ? 'true'
+                    : (app.caps.sha256_verified === null || app.caps.sha256_verified === undefined ? 'unbound' : 'false');
+                document.documentElement.dataset.modelSize = String(app.caps.artifact_bytes || '');
+                document.documentElement.dataset.modelTokenizer = app.caps.tokenizer_label || '';
+                document.documentElement.dataset.modelSource = app.caps.source || '';
+                document.documentElement.dataset.modelSourceLabel = app.caps.source_label || '';
+                document.documentElement.dataset.modelDiscrete = isDiscreteCapabilities(app.caps) ? 'true' : 'false';
+                var loadMs = app.loadStartedAt ? ((window.performance && performance.now ? performance.now() : Date.now()) - app.loadStartedAt) : null;
+                app.loadMs = loadMs;
+                document.documentElement.dataset.modelLoadMs = loadMs === null ? '' : String(Math.round(loadMs));
+                setPredictorMode(isDiscreteCapabilities(app.caps));
+                fillPredictorSha();
+                fillPredictorModelInfo();
                 updateCapabilitiesFooter();
                 updateComposerState();
                 renderMessages();
                 restoreActiveConversation();
-                toast('Model loaded: ' + (app.caps.file_name || 'stack') + ' (' + Math.round((app.caps.artifact_bytes || 0) / 1024) + ' KB).', 'success');
+                toast('Model loaded: ' + (app.caps.file_name || 'stack') + ' · ' + (app.caps.schema || 'stack') + ' (' + Math.round((app.caps.artifact_bytes || 0) / 1024) + ' KB' + (app.caps.sha256_verified === true ? ', sha256 verified' : '') + ').', 'success');
                 return;
             }
             if (message.action === 'stream_token') {
@@ -663,6 +854,10 @@
             }
             if (message.action === 'generate_complete') {
                 finishLocalGeneration(message);
+                return;
+            }
+            if (message.action === 'discrete_prediction_result') {
+                renderDiscretePrediction(message);
                 return;
             }
             if (message.action === 'generate_error') {
@@ -689,6 +884,8 @@
             }
             if (message.action === 'operation_error') {
                 var workerError = String(message.error || 'Operation failed.');
+                app.lastWorkerError = workerError;
+                document.documentElement.dataset.lastWorkerError = workerError;
                 if (app.workerState !== 'ready') {
                     app.workerState = 'error';
                     var reason = /pkg|dynamically imported module|Failed to fetch/i.test(workerError)
@@ -792,8 +989,9 @@
         function generationTokenLimit() {
             // The worker keeps one running session; prompt tokens and generated tokens
             // share the stack context. Leave generous room for the prompt so a normal
-            // prompt cannot overflow a small demo context.
-            var limit = MAX_NEW_TOKENS;
+            // prompt cannot overflow a small demo context. ?max_new_tokens=N (1..256) is
+            // a small demo/testing control; it never exceeds the context-derived limit.
+            var limit = Number.isInteger(app.maxNewTokens) && app.maxNewTokens > 0 ? app.maxNewTokens : MAX_NEW_TOKENS;
             var context = app.caps && app.caps.shape ? Number(app.caps.shape.context) : 0;
             if (context > 4) limit = Math.min(limit, Math.floor(context / 2));
             return Math.max(1, limit);
@@ -931,14 +1129,26 @@
             if (detail.kind === 'wasm' && detail.bytes) {
                 app.mode = 'wasm';
                 app.apiConfig = null;
+                app.tokenizerArtifact = detail.tokenizerArtifact || null;
+                app.expectedSha256 = detail.expectedSha256 || '';
+                app.modelMeta = detail.meta || null;
                 setModelStatus('loading ' + (detail.fileName || 'artifact') + '…', 'warn');
                 updatePrivacyStatus();
                 updateComposerState();
                 if (app.worker) {
-                    app.worker.postMessage({
-                        action: 'load_model',
-                        payload: { bytes: detail.bytes, fileName: detail.fileName || 'stack.lut' },
-                    });
+                    var sourceKind = detail.meta && detail.meta.kind === 'bundled'
+                        ? 'bundled'
+                        : (detail.meta && (detail.meta.kind === 'url' || detail.meta.kind === 'published') ? 'url' : 'file');
+                    var payload = {
+                        bytes: detail.bytes,
+                        fileName: detail.fileName || 'stack.lut',
+                        source: sourceKind,
+                        sourceLabel: (detail.meta && (detail.meta.label || detail.meta.fileName)) || '',
+                    };
+                    if (detail.expectedSha256) payload.expectedSha256 = detail.expectedSha256;
+                    if (detail.tokenizerArtifact) payload.tokenizerArtifact = detail.tokenizerArtifact;
+                    app.loadStartedAt = (window.performance && performance.now) ? performance.now() : Date.now();
+                    app.worker.postMessage({ action: 'load_model', payload: payload });
                 }
                 setView('chat');
                 return;
@@ -1142,6 +1352,8 @@
             var send = $('#btnSend');
             var stop = $('#btnStop');
             var input = $('#chatInput');
+            var predict = $('#btnPredict');
+            if (predict) predict.addEventListener('click', runPrediction);
             if (send) send.addEventListener('click', sendFromComposer);
             if (stop) stop.addEventListener('click', stopGeneration);
             if (input) {
@@ -1186,6 +1398,11 @@
         function boot() {
             if (app.booted) return;
             app.booted = true;
+            var requestedMaxTokens = Number(new URLSearchParams(window.location.search).get('max_new_tokens'));
+            app.maxNewTokens = Number.isInteger(requestedMaxTokens) && requestedMaxTokens > 0
+                ? Math.min(MAX_NEW_TOKENS, requestedMaxTokens)
+                : MAX_NEW_TOKENS;
+            document.documentElement.dataset.maxNewTokens = String(app.maxNewTokens);
             loadConversations();
             loadEditor();
             bindHeader();
@@ -1207,6 +1424,48 @@
             setView('chat');
             document.addEventListener('uor-model-source-changed', onModelSourceChanged);
             document.documentElement.dataset.studioReady = '1';
+            // Narrow diagnostics surface used by the local headless verification helpers.
+            window.UORStudioDiagnostics = {
+                version: 'studio-diagnostics/1',
+                model: function () {
+                    return app.caps ? {
+                        schema: app.caps.schema || null,
+                        engine: app.caps.engine || null,
+                        shape: app.caps.shape || null,
+                        sha256: app.caps.artifact_sha256 || null,
+                        sha256_verified: app.caps.sha256_verified,
+                        tokenizer: app.caps.tokenizer_label || null,
+                        predictor_mode: document.documentElement.dataset.predictorMode === 'true',
+                    } : null;
+                },
+                tokenizerLoaded: function () { return Boolean(app.tokenizerArtifact); },
+                predict: function () { runPrediction(); },
+                predictIds: function (tokenIds) {
+                    if (!app.worker || !app.caps) throw new Error('no model is loaded');
+                    app.worker.postMessage({
+                        action: 'predict_discrete',
+                        id: 'diagnostic-predict',
+                        payload: { tokenIds: Array.from(tokenIds || []).map(Number), topK: 8 },
+                    });
+                },
+                attemptGenerate: function (prompt) {
+                    if (!app.worker) throw new Error('the engine worker is not ready');
+                    app.worker.postMessage({
+                        action: 'generate',
+                        id: 'diagnostic-generate',
+                        payload: { conversationId: 'diagnostic', messages: [{ role: 'user', content: String(prompt || 'x') }], options: { max_new_tokens: 1 } },
+                    });
+                },
+                installPredictorFixture: function (caps, tokenizerArtifact) {
+                    app.caps = caps;
+                    app.tokenizerArtifact = tokenizerArtifact || null;
+                    app.mode = 'wasm';
+                    app.apiConfig = null;
+                    setPredictorMode(true);
+                    fillPredictorSha();
+                    if (app.caps) app.caps.sha256_verified = app.caps.sha256_verified === true;
+                },
+            };
             document.dispatchEvent(new CustomEvent('uor-studio-ready'));
         }
 

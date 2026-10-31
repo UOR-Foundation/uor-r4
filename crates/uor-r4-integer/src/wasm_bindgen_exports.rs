@@ -103,3 +103,21 @@ pub fn alloc_events() -> u64 {
 pub fn leaked_models() -> u64 {
     crate::wasm_serve::wasm_leaked_models()
 }
+
+/// Load a `uor-r4.lut-discrete/1` M1 artifact (the trained discrete runtime).
+#[wasm_bindgen(js_name = loadDiscrete)]
+pub fn load_discrete(artifact: &[u8]) -> Result<u32, JsError> {
+    crate::wasm_serve::wasm_load_discrete(artifact).map_err(|e| JsError::new(&e))
+}
+
+/// Evaluate a causal prefix; returns JSON with the top-1/top-8 next tokens.
+#[wasm_bindgen(js_name = predictDiscrete)]
+pub fn predict_discrete(handle: u32, ids: &[u32]) -> Result<String, JsError> {
+    crate::wasm_serve::wasm_discrete_predict(handle, ids).map_err(|e| JsError::new(&e))
+}
+
+/// Static facts about a loaded discrete model, as JSON.
+#[wasm_bindgen(js_name = discreteInfo)]
+pub fn discrete_info(handle: u32) -> Result<String, JsError> {
+    crate::wasm_serve::wasm_discrete_info(handle).map_err(|e| JsError::new(&e))
+}
