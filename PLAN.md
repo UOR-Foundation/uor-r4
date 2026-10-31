@@ -58,7 +58,9 @@ Directions from the owner, recorded verbatim with the time (the same day). Statu
 Pending owner *answers* are not directions and never enter this table. Since D65–D69 no step
 waits for one: an unanswered ask becomes the lab's own decision review, logged for the owner.
 
-## The path to M1, by unblock count
+## The path to M1, by unblock count (historical completion record)
+
+All nine steps below are complete at their recorded scopes. This table preserves the original dependency plan, not a queue of future M1 work.
 
 The M1 bar is CHARTER §4.8 (D39). Through the D11 export, on each of two seeds, integer top-1 must
 beat both the unigram table (1,226/14,287) and the T2 successor table (6,300/14,287) on the same
@@ -122,10 +124,11 @@ earlier path is free.
 
 ## Approved sequences
 
-- **The W-sequence.**
-  - W2 read-code capacity capture is step 1 above. It runs on its own pre-run review (D67) and no longer waits for a lease.
-  - W3 BVG-K discrete batched-coordinate law: C1 qualified on 18 Oct, C2 controls met, Stage T is step 4.
-  - W4 is one float-credit sheet, run only if W2 gives H_law and W3 fails (conditional, D37).
+- **The W-sequence (completed M1 history).**
+  - W2 read-code capacity capture is **done**: H_mixed, with `T = 3,414`, `G = 6,300` and `W = 149` ([record](docs/labs/m1-w2-capacity-capture/README.md)).
+  - The W2 code-utilization diagnostic is also **done**: code-count admission 9,064 against the writer's 1,920; code × query 7,262 against the bigram's 6,300; the registered data-scaling projection 3,552 stayed below the H_law line, so its G1 arm was declined ([record](docs/labs/m1-w2-code-utilization/README.md)).
+  - W3 BVG-K discrete batched-coordinate law: C1/C2 qualified and Stage T completed, reaching 5,009 of 14,287 with G-Adm/G-Occ ([record](docs/labs/m1-bvg-k-stage-t-training/README.md)).
+  - W4's conditional float-credit sheet was not needed for M1's close; its original H_law-plus-W3-failure condition remains historical.
 - **The K16 outcome follow-ups** stay pending with fresh UNAVAILABLE_NOT_RUN (sealed).
 - **The loop.** PRs 2–12 are merged. The reset is D76 (gates) and D77 (this plan). Next, `loop next` ranks by unblock count.
 
