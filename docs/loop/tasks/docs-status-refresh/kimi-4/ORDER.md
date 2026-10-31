@@ -47,3 +47,7 @@ The fourth independent review identified a small set of public pages that either
 ## Scope decision: historical session guide
 
 The historical session guide's counts no longer match the corrected registry. Only `docs/labs/session-goal.md` is added for a current registry cross-check and an explicit historical marker for its old prompts. Harness source and fixture files are excluded from this documentation-only unit. No model code, bar, evidence record or other lab file changes. Approved in this top session on 30 Oct 2026; reverse by removing this scope entry and its text correction together.
+
+## Scope decision: living contributor status links
+
+The changed-page scan found retired plan/status links in the living contributor guide. `docs/contributing/OUTSIDE.md` is added only to replace those links with `PLAN.md` and rendered `STATE.md`. No guidance, bar, code or other lab file changes. Approved in this top session on 30 Oct 2026; reverse by removing this scope entry and its link correction together.

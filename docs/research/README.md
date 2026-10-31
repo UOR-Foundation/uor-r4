@@ -9,7 +9,7 @@ flowchart LR
   C -- no --> D["Build, test, run<br/>host checks"]
   C -- yes --> E["One-page sheet"]
   E --> F["Review by someone<br/>who is not the author"]
-  F --> G["Owner releases<br/>the sheet once"]
+  F --> G["Lab D67 pre-run review<br/>passes"]
   G --> H["Run on the GPU"]
   D --> I["New notebook row"]
   H --> I
@@ -80,4 +80,4 @@ To find a record, use the generated index [`archive/CATALOG.md`](../../archive/C
 - [What is still open](./open-questions.md): the tests nobody has run and the cheapest decisive ones.
 - [How the project got here](./history.md): five phases and 32 eras, 10 June to 15 October.
 - [Mechanism board](../mechanisms/README.md) and the [charter](../../CHARTER.md).
-- [`NOW.md`](../integration/NOW.md) for the current plan, and [`docs/harness/README.md`](../harness/README.md) for the research harness.
+- [`PLAN.md`](../../PLAN.md) and rendered [`STATE.md`](../../STATE.md) for the current plan and status, and [`docs/harness/README.md`](../harness/README.md) for the research harness.

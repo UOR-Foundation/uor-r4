@@ -43,7 +43,7 @@ Open these first:
 
 ## Sources
 
-- [`docs/integration/NOW.md:26-30`](../../../docs/integration/NOW.md)
+- [Historical `NOW.md` snapshot, lines 26-30](../../../archive/integration/NOW-2026-10-22.md)
 - [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:14`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
 - [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:32`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
 - [`docs/mechanisms/README.md:88`](../../../docs/mechanisms/README.md)

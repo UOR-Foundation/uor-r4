@@ -69,5 +69,5 @@ The first rows were seeded from the audit catalog, which read every lab record i
 
 - [How research is done now](../README.md), including the sheet, review and release rules.
 - [What the project knows](../findings.md) and [what is still open](../open-questions.md).
-- [`docs/integration/NOW.md`](../../integration/NOW.md): the current plan, which with these notebooks replaces the old running state log.
+- [`PLAN.md`](../../../PLAN.md) and rendered [`STATE.md`](../../../STATE.md): the current plan and status, which with these notebooks replaces the old running state log.
 - [`archive/CATALOG.md`](../../../archive/CATALOG.md): every archived record, by date, lab, line and verdict.

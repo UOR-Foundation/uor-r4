@@ -27,7 +27,7 @@ The registered W2 sheet runs once with all arms; H_rep or H_law is recorded as o
 Open these first:
 
 - `docs/integration/DECISIONS.md`
-- `docs/integration/NOW.md`
+- `PLAN.md` and rendered `STATE.md`
 - `docs/labs/course-correction-2026-10-18/audits/d37-reactivation-architect.md`
 - `docs/labs/k16-outcome-call-2026-10-19/README.md`
 - `docs/research/open-questions.md`
@@ -43,7 +43,7 @@ Open these first:
 
 ## Sources
 
-- [`docs/integration/NOW.md:65`](../../../docs/integration/NOW.md)
+- [Historical `NOW.md` snapshot, line 65](../../../archive/integration/NOW-2026-10-22.md)
 - [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:110`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
 - [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:115-118`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
 - [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:31`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)

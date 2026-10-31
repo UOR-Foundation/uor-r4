@@ -11,7 +11,7 @@ flowchart TD
   need -- "Yes" --> sheet["Pre-registration: one-page sheet<br/>bar, noise, controls, seeds,<br/>cost, what each outcome decides"]
   sheet --> fit{"FIT review by someone<br/>other than the author"}
   fit -- "Not fit" --> sheet
-  fit -- "FIT" --> release["Owner release:<br/>one per sheet, typed by Casey"]
+  fit -- "FIT" --> release["Lab D67 pre-run review:<br/>whole project, tools, inputs,<br/>FIT and lease checked"]
   release --> run["Run on the GPU via uor-pod"]
   run --> row["Notebook row: date, what ran,<br/>number, bar, verdict, artifact"]
   doit --> row

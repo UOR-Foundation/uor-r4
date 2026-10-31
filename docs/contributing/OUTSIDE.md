@@ -18,9 +18,8 @@ acquire a `lab:*` label. A maintainer runs those gates for you.
 
 ## Start here
 
-1. Read [NOW.md](../integration/NOW.md) — the current plan on one page — then the
-   [README](../../README.md), [STATUS.md](../../STATUS.md) and
-   [docs/architecture.md](../architecture.md).
+1. Read [PLAN.md](../../PLAN.md) and rendered [STATE.md](../../STATE.md) — the current plan and status — then the
+   [README](../../README.md) and [docs/architecture.md](../architecture.md).
 2. Read [HARD-RULES.md](HARD-RULES.md). It is the only document you must read before
    writing code.
 3. Pick work. Model work in M1–M4 ([#2029]–[#2032]) is gated and owned; M5–M8
