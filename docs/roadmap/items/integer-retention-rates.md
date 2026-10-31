@@ -3,7 +3,7 @@ id: integer-retention-rates
 title: Serve the recurrence's retention reading in the integer artifact
 milestone: research
 area: serving
-status: ready
+status: done
 open_to: lab
 needs_gpu: true
 depends_on: [d11-exporter-float-trunk]
