@@ -25,7 +25,7 @@ quaternion recurrence, `PositionHolonomyV1`, `OrbitRootSnapNormV1`, a four-block
 | Token table | Shared input/carry/output vector table; exact token identity stays separate from geometric address | Trained |
 | Ordered context | At most 243 positions; recorded runs use 192 | Built and used |
 | Reads | Flock read and orbit-root causal pointer using hard selection, not softmax | Trained in the M1 composition; Route and Relation are other discrete mechanisms, not isolated by this whole-model pass |
-| Writer and admission | 16×16 address cells; bounded candidate shortlist before nearest-token choice | Trained; full 19-table export carries the final readout |
+| Writer and readout | Post-rotation `OuterL1V1` candidate scoring and nearest-token choice | Trained; full 19-table export carries the final readout |
 | Objective and learning | Integer rank-margin hinge and discrete legal moves, including BVG-K batched verified coordinates | Trained; produced the saved model |
 | Position | Discrete quaternion recurrence and `PositionHolonomyV1` | Trained in the M1 composition |
 | Normalization | `OrbitRootSnapNormV1` | Trained in the M1 composition; discrete normalization, not the FBS RMS norm |

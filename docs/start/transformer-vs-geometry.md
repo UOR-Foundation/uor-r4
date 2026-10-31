@@ -16,7 +16,7 @@ seeds. Useful conversation is still open, and the separate FBS complete-reply li
 | Attention / look-back | [Route](../mechanisms/route-read.md), [Flock](../mechanisms/flock-read.md) and [Relation](../mechanisms/relation-read.md) reads: tree walk, neighbour consensus and copy links | ACTIVE; independent effects are not all isolated |
 | Feed-forward | [Hamilton rotation gate](../mechanisms/hamilton-gate.md) is in M1 and FBS; [SpiralCore/FBS routes](../mechanisms/spiralcore-fbs.md) are on the FBS trunk only | Hamilton trained in M1 and FBS; FBS routes trained and served; dated float projection form READY |
 | Normalization | RMS norm with integer square root on the FBS trunk; `OrbitRootSnapNormV1` on the discrete M1 trunk | Each served in its own model; not the same normalization mechanism |
-| Output head | [Admission](../mechanisms/admission.md): open a few address cells, then rank inside them | ACTIVE; M1's 19-table readout is measured |
+| Output head | [Admission](../mechanisms/admission.md): open a few address cells, then rank inside them | ACTIVE; M1's post-rotation `OuterL1V1` readout is measured |
 | Loss | [Rank-margin hinge](../mechanisms/rank-margin.md): right token must beat its strongest rival by a fixed gap | ACTIVE; no likelihood is formed |
 | Optimizer | [Discrete learning](../mechanisms/discrete-learning.md): try every legal rotation and keep only strict improvements, including BVG-K | ACTIVE; produced the M1 model |
 | Matrix-multiply runtime | [D11 integer serving](../mechanisms/lut-serving.md): integer adds, shifts, tables, multiply and divide, but no float or dense matmul | ACTIVE; the M1 pair and a separate FBS export serve |

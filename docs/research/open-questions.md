@@ -72,7 +72,7 @@ pairs are (0, 0). [Claude-231](../loop/tasks/integer-nearest-readout/claude-231/
 4. **Cost and scale (M5 and beyond).** What are the full-path latency, memory traffic and energy per
    token? Arithmetic counts do not answer them. How does ability scale with data, width and context?
 5. **Distribution (M7).** Do library, CLI and browser produce bit-identical tokens and sessions on
-   the accepted model, with a truthful client-only Studio?
+   the accepted model, with a local-by-default Studio and only an explicit user-configured web API?
 6. **Generalisation beyond known reply kinds.** p-f holds out prompt phrasing but shares most
    reference replies with TRAIN. A stronger test needs novel reply kinds and correct content, not
    just new n-grams or loop suppression.
