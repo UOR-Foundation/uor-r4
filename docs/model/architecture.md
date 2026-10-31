@@ -31,7 +31,7 @@ quaternion recurrence, `PositionHolonomyV1`, `OrbitRootSnapNormV1`, a four-block
 | Normalization | `OrbitRootSnapNormV1` | Trained in the M1 composition; discrete normalization, not the FBS RMS norm |
 | Feed-forward | Discrete Hamilton gate | Trained in the M1 composition |
 | Position and normalization on the separate FBS path | SpiralCore transport spin and RMS norm with integer square root | FBS-only; not M1's projection or normalization mechanism |
-| Export | Table-native `uor-r4.lut-discrete-trunk/1` | Exact 14,287-row agreement and B4 pass |
+| Export | Table-native `uor-r4.lut-discrete-trunk/1` | Exact 14,287-row DEV agreement and B4 pass |
 | Serving | D11 integer engine on an Apple M1 | 10,876 / 10,566 decode tok/s under the bar-f protocol |
 
 For implementation detail, see [`crates/uor-r4-discrete`](../../crates/uor-r4-discrete/README.md),

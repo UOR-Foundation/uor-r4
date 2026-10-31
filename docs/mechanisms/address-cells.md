@@ -68,7 +68,7 @@ Every number in the last four rows is a count of reachable target words on the d
 
 ## What comes next
 
-The mechanism is ACTIVE, so this is a plan, not a reopening. A8's finite qualification and full-dose rerun are complete at their declared scopes, and M1 export is exact. The next admission-preserving rerun is **NOT_RUN**, so do not claim it. Next is independent evidence of address formation and of the placement's effect on complete replies. The early no-op and $K=8$ occupancy risks remain in the record, and Relation's independent effect still needs a paired ablation on the current model.
+The mechanism is ACTIVE, so this is a plan, not a reopening. A8's finite qualification and full-dose rerun are complete at their declared scopes, and M1's 14,287-row DEV export is exact. The next admission-preserving rerun is **NOT_RUN**, so do not claim it. Next is independent evidence of address formation and of the placement's effect on complete replies. The early no-op and $K=8$ occupancy risks remain in the record, and Relation's independent effect still needs a paired ablation on the current model.
 
 ## Also known as
 

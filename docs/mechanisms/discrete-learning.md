@@ -65,7 +65,7 @@ $P_{succ}$ is the 3,847-row copy-successor sub-panel (see [relation-read](./rela
 
 - Route-frame and gate learning in the pilot (only vector blocks 0 to 1,639 moved).
 - A collision-free start together with a wide enough shortlist ($K$ of about 34 or more, or cells placed by address structure).
-- The admission-preserving rule actually running on a GPU.
+- The next admission-preserving rerun after the full-dose run reached Q1 and stopped at batch 5,248; its outcome is **NOT_RUN**. The M1 whole-model pass does not isolate the placement's effect.
 - Frequent-token revisits and a full corpus pass (one 16,404-coordinate pass uses 1,049,856 of 2,425,925 training targets).
 - The independent effects of BVG-K and Flock reads at dose; both were used in the M1 composition without isolated attribution.
 - All 240 E8 roots, the icosian and quaternion adapters, and $\mathbb{Z}[\varphi]$ pairs.

@@ -1064,12 +1064,13 @@ fn training_pipeline() -> Result<String, Fail> {
         true,
     );
     s.card(
-        [600.0, 488.0, 560.0, 116.0],
+        [600.0, 488.0, 560.0, 140.0],
         St::Complete,
         "M1 complete (discrete)",
         &[
             "DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228;",
             "p-f 7,850 / 7,872; Apple M1 decode 10,876 / 10,566 tok/s",
+            "p-f refs: 62.5% verbatim TRAIN",
         ],
         true,
     );
@@ -1184,7 +1185,7 @@ fn milestones() -> Result<String, Fail> {
             "Language base",
             St::Complete,
             [
-                "six bars, two seeds:",
+                "six bars; 62.5% TRAIN refs",
                 "DEV 7,002 / 7,001;",
                 "p-f 7,850 / 7,872;",
                 "Fresh V2 7,215 / 7,228",

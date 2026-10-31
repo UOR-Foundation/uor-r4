@@ -85,11 +85,7 @@ then a clean D11 export with the export gap reported. The old 437/512 seen-row s
 
 ### M3 `#2031` — durable conversation memory: in progress
 
-On the selected M1/M2 artifact, `m3-memory` passes provenance, contradiction and correction,
-abstention on unstated or retracted facts, explicit reset and process restart. Saved and restored
-sessions continue identically token for token (`IntegerStackSession` + `UR4SESS1`), and non-memory
-prose does not silently overwrite stored facts. The true-address 80/80 oracle is exact-read evidence,
-not learned address formation or M3 completion.
+**Original M3 acceptance text, preserved at item start:** on the selected M1/M2 artifact, `m3-memory` passes **provenance**, **contradiction and correction**, **abstention** on unstated or retracted facts, **explicit reset** and **process restart**; saved and restored sessions continue identically token-for-token (`IntegerStackSession` + `UR4SESS1`); and non-memory conversational prose does not silently overwrite stored facts (`#1718`). The on-model run remains open; host controls and the true-address 80/80 oracle are not learned address formation or M3 completion.
 
 ### M4 `#2032` — one served model through D11 and a CLI: not complete; accepted model path not started
 
@@ -115,10 +111,9 @@ rather than memorized templates.
 
 ### M7 `#2035` — distribution: runtime delivered, accepted model open
 
-The accepted M4 `UORLUT01` artifact produces bit-identical token completions and session snapshots
-across the Rust library, CLI and browser `serving-wasm` worker. The `.wasm` passes its declared
-serving audit, and Pages Studio defaults to client-side operation with truthful capability reporting;
-only an explicit user-configured web API sends prompts to the chosen endpoint. Existing synthetic-stand-in parity is an instrument result, not M7 completion.
+**Original M7 acceptance text, preserved at item start:** the qualified M4 `UORLUT01` artifact produces bit-identical token completions and session snapshots across the Rust library, the `uor-chat` CLI and the browser `serving-wasm` worker; the compiled `.wasm` passes `scripts/audit_zero_matmul_wasm.py --serving --call-graph --tap` (7/7, `mul=div=float=0`); and Pages Studio runs entirely client-side in a Web Worker with truthful capability reporting and zero remote model calls.
+
+Current behavior is local by default, with only an explicit user-configured web API sending prompts to the chosen endpoint; current audits allow and count integer multiply/divide under D80/D81. Those are status/evidence updates, not a new acceptance condition. Existing synthetic-stand-in parity is an instrument result, not M7 completion.
 
 ### M8 `#2036` — alpha release: not started
 

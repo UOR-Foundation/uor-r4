@@ -138,6 +138,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <text class="ms" x="570" y="318" text-anchor="middle"><tspan class="msb">M1</tspan> complete: DEV 7,002/7,001; Fresh 7,215/7,228; p-f 7,850/7,872</text>
 <rect class="mpill" x="812" y="300" width="132" height="26" rx="13"/>
 <text class="ms" x="878" y="318" text-anchor="middle"><tspan class="msb">M2</tspan> grounded reply</text>
+<text class="detail" x="24" y="338">p-f: 62.5% reference replies verbatim TRAIN</text>
 <rect class="mpill" x="664" y="334" width="134" height="26" rx="13"/>
 <text class="ms" x="731" y="352" text-anchor="middle"><tspan class="msb">M4</tspan> one served model</text>
 <rect class="mpill" x="812" y="334" width="132" height="26" rx="13"/>
