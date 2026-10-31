@@ -13,6 +13,8 @@ No measurement: this unit amends an item.
   - #3440's, DeepSeek's `m7-studio-live-model-sources`, whose item file changed on main in `d2f0354a9` without a sync.
 
   The sync has no single-item option, and this ORDER stops on anything but #3450's update. So #3450's issue body follows at the next sync (the PM's weekly run, or the next lab's). The item file, the source of truth, is amended here.
+
+  This is the ORDER's stop rule ("the sync plans anything but #3450's update") acting. The lab settled it by its own decision, with no post-and-wait: writing another lab's issue is not this order's to do. Done-when bullet 2 is therefore deferred to the next sync.
 - **The item's "everything runs on the laptop" was wrong in one step:** `fbs-snapshot` loads the float checkpoint on CUDA. That step is now named as a brief pod step.
 
 ## What worked
