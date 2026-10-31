@@ -131,7 +131,7 @@ flowchart LR
 
 **Hold.** An owner order that stops a kind of work until the owner lifts it. Training, the second milestone's training and rental, and Stage B are held work. Since D65–D69, a lab runs held work on its own pre-run review, which reads the whole project first, and the owner can reverse it (AGENTS.md). A FIT review alone lifts none of them. See [charter](../../CHARTER.md), sections 5.1 and 5.10.
 
-**Hopf map.** A map that takes a point on a four-dimensional sphere (a unit quaternion) to a point on an ordinary sphere. It forgets one angle, called the fibre, so many states cast the same shadow. The kept-fibre idea is built as a helper but is not part of the current read, and the mechanism is PARKED. See [the Hopf map and the kept fibre](../geometry/hopf-observation.md).
+**Hopf map.** A map that takes a point on a four-dimensional sphere (a unit quaternion) to a point on an ordinary sphere. It forgets one angle, called the fibre, so many states cast the same shadow. The kept-fibre map is built and READY for a language test; the older sector-routing form is PARKED. Neither is part of M1's read. See [the Hopf map and the kept fibre](../geometry/hopf-observation.md).
 
 ## I
 
@@ -229,7 +229,7 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 **READY.** A mechanism status. See [mechanism status](#mechanism-status).
 
-<a id="relation-read"></a>**Relation read.** A Flock read plus the ability to follow simple links between positions, such as "the word right after the earlier copy of this word". This is how copying is meant to work. It has trained twice, and both runs stopped before a verdict. See [Relation read](../mechanisms/relation-read.md).
+<a id="relation-read"></a>**Relation read.** A Flock read plus the ability to follow simple links between positions, such as "the word right after the earlier copy of this word". This is how copying is meant to work. It has trained three times. Stage T's `T16_rel` reached 4,096 batches and 425 relation moves before the `relation_off` ablation reduced admission and top-1; the two earlier runs stopped before a verdict. See [Relation read](../mechanisms/relation-read.md).
 
 **Root.** One of the fixed points of E8 used as a block value. See [orbit](#orbit).
 
@@ -275,7 +275,7 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 **UOR.** Short for Universal Object Reference, the foundation named as copyright holder in the project's MIT licence ([LICENSE](../../LICENSE)). A "UOR address" in this project is the prime-based name described under [prime address](#prime-address).
 
-**UORLUT01.** The container format for the finished model: one file of 4-bit codes and small integer tables, pinned by checksum. It is what the engine serves. See [serving and export](../model/serving-and-export.md) and [releases and artifacts](../products/releases-and-artifacts.md).
+**UORLUT01.** The checksum-pinned container for integer model artifacts. Dense/FBS schemas include 4-bit codes and small integer tables; M1's table-native `lut-discrete-trunk/1` instead stores named integer tables with zero 4-bit matrix sections. See [serving and export](../model/serving-and-export.md) and [releases and artifacts](../products/releases-and-artifacts.md).
 
 ## V
 

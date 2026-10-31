@@ -42,8 +42,9 @@ generated-copy rate, and not new reply kinds or useful conversation.
 |---|---|---|---|
 | Discrete geometric language base | M1's six bars on two saved integer artifacts | Next-token ranking on DEV, Fresh V2 and p-f, not free conversation | [close and bar-f records](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
 | Integer serving (D11) | Exact export/reference agreement and planted-fault control; integer multiply and divide are allowed, floats remain banned | The M1 pair and the separate FBS `lut-stack/5` export | [serving dossier](../mechanisms/lut-serving.md) |
-| Exact object store/oracle | True-address 80/80 against 0/80 no-memory and 20/80 sieve | Exact-read oracle only, not learned address formation or M3 | [exact memory](../mechanisms/exact-memory.md) |
-| Browser worker and Studio | Integer WebAssembly worker, self-hosted assets, stack-bound tokenizer and truthful synthetic-stand-in reporting | No qualified bundled model or M7 product parity | [web client](../products/web-client.md) |
+| Exact-read oracle | True-address 80/80 against 0/80 no-memory and 20/80 sieve | Exact-read oracle only, not learned address formation or M3 | [exact memory](../mechanisms/exact-memory.md) |
+| Object-store consumer | Consumer built; frozen 384-item host-control panel passes | On-model M3 run awaits M2 selection; host controls are not M3 qualification | [consumer record](../labs/object-store-consumer-m3/README.md) |
+| Browser worker and Studio | Synthetic parity harness and live M1 top-8 next-token prediction, with self-hosted assets and stack-bound tokenizers | Language base, not chat; no qualified bundled product or M7 accepted-model parity | [web client](../products/web-client.md) |
 | Desktop shell | Native Tauri/Rust backend and durable session restore on the seed-5 synthetic artifact | No qualified trained product bundle | [desktop client](../products/desktop-client.md) |
 
 ## The separate FBS trunk and the current failure
@@ -98,9 +99,9 @@ multiplication and are historical evidence, not the D11 product.
 | Milestones complete | **1 of 8 (M1)** | [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) |
 | Saved model top-1 on DEV | 7,002 / 7,001 of 14,287 | [M1 close](../labs/m1-close-saved-model/README.md) |
 | Fresh V2 / p-f | 7,215 / 7,228; 7,850 / 7,872 | [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
-| Useful conversation | Not established | [current end-to-end evidence](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md) |
+| Useful conversation | Not established | [latest free-generation evidence](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md) |
 | Next capability milestone | M2: grounded complete replies | [PLAN](../../PLAN.md) |
-| Immediate research problem | New-phrasing reply opening and a memory key that reworded questions can reach | [claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md) |
+| Immediate research problem | New-phrasing reply opening and a memory key that reworded questions can reach | [claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md) |
 | Products shipped | None; M1 is not an alpha release | [products](../products/README.md) |
 
 ## Go deeper

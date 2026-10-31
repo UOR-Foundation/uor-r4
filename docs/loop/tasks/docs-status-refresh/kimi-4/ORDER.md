@@ -1,6 +1,6 @@
 # ORDER: comprehensive 30 Oct documentation refresh
 
-Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`. PR base at the last completed review: `e16ada251b38ef9869612e10bc6c10f8d7a49f1f`; exact reviewed head: `f6acd4b8a9e01acfca4506ac070f72349cfe46de`. Newer `origin/main` `1f83dd4b2f76e16912f5793a58a4687548f1c237` is integrated before the final review.
+Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `1f83dd4b2f76e16912f5793a58a4687548f1c237`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
 
 ## Goal and chain
 
@@ -59,3 +59,7 @@ The README inventory identified `web/studio/README.md` as a living public page w
 ## Scope decision: living labs onboarding hub
 
 The exact-head review identified `docs/labs/README.md` as the live labs onboarding hub, not dated evidence. It is added only to make M1, the current planning pointers and lab-entry status lead the page, with the dated joining records preserved below as history. No dated `docs/labs/**` evidence, model code, acceptance rule or other lab file changes. Approved in this top session on 30 Oct 2026; reverse by removing this scope entry and its documentation correction together.
+
+## Scope decision: live Studio evidence and its public item
+
+The exact-head review found the live/staged M1 distinction and a future-dated redesign in `docs/roadmap/items/m7-studio-live-model-sources.md`. Kimi verified the existing live gh-pages `e62ea481` bundle and M1 manifest directly; this item is added only to record that evidence, remove the future date and make the non-repository workflow-proposal attribution consistent. No deployment, Studio source, owner workflow, model code or other lab evidence changes. Approved in this top session on 30 Oct 2026; reverse by removing this scope entry and its documentation correction together.

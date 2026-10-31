@@ -54,7 +54,7 @@ Each chapter opens in plain words, shows its figure, gives the mathematics, and 
 | [Quaternions and rotation](./quaternions-and-rotation.md) | Four-number rotations, and why rotating keeps length but adding does not | Lineage, plus unit quaternions in the table constructor. M1's kernel uses signed actions on 8D blocks |
 | [E8, H4 and the 600-cell](./e8-h4-and-the-600-cell.md) | The 120 icosians, the 600-cell, and the 240 roots of E8 | A 16-root piece of E8 is the carrier |
 | [Golden integers](./golden-integers.md) | Exact arithmetic with $a+b\varphi$, no rounding | Fixed integer arithmetic in `uor-r4-core`, used by retained research code |
-| [The Hopf map and the kept fibre](./hopf-observation.md) | A 3D shadow of a 4D rotation, and the angle it forgets | No (PARKED) |
+| [The Hopf map and the kept fibre](./hopf-observation.md) | A 3D shadow of a 4D rotation, and the angle it forgets | Kept-fibre map READY; older sector routing PARKED; not in M1 |
 | [Primes and zeta phases](./primes-and-zeta.md) | Prime addresses, zeta-zero angles, and the starting table | Yes: the starting table (ACTIVE) |
 | [VSA and Hamming distance](./vsa-and-hamming.md) | Long bit codes, XOR, and counting differing bits | Hamming is a tie-break in the reads; trained VSA codes are PARKED |
 | [SpiralCore](./spiralcore.md) | The octonion table, the 64-state action, and the ternary tree | Yes: the integer transport (ACTIVE) |

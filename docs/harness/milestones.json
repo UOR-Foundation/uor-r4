@@ -56,13 +56,6 @@
           "of": 6,
           "lab": "antigravity",
           "note": "Two seeded UORLUT01 artifacts; exact export agreement and B4 at both seeds."
-        },
-        {
-          "name": "evaluation integrity",
-          "count": 1,
-          "of": 3,
-          "lab": "kimi",
-          "note": "Recorded operator card6134571032; no reset by instruction repair."
         }
       ],
       "historical": {

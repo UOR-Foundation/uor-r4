@@ -46,7 +46,7 @@ Only the occupancy rows test the Hopf map itself, and they tested one projection
 
 | Mechanism | Status | Use |
 |---|---|---|
-| [Hopf observation](../mechanisms/hopf-observation.md) | PARKED | Telemetry in the older `uor-r4-integer` chat runtime only (not M1). Per-session holonomy and winding are recorded, and they change no output |
+| [Hopf observation](../mechanisms/hopf-observation.md) | Kept-fibre map READY; sector routing PARKED | Telemetry in the older `uor-r4-integer` chat runtime only (not M1). Per-session holonomy and winding are recorded, and they change no output |
 | [Route read](../mechanisms/route-read.md) | ACTIVE | Does not use a Hopf quantity. Hyperbolic keys were once pitched as an address geometry |
 | [Flock read](../mechanisms/flock-read.md), [relation read](../mechanisms/relation-read.md) | ACTIVE | Do not use a Hopf quantity |
 | [Prime-zeta codebook](../mechanisms/prime-zeta-codebook.md) | ACTIVE | Shares the unit-quaternion helpers; the table uses points on the 3-sphere, not the Hopf map |
