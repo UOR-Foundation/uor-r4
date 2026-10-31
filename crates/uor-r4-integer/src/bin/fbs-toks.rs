@@ -57,9 +57,17 @@ struct PanelPrompt {
 /// artifact (`panel_reply`), written new to `out` as JSON. Each sample holds the opening's
 /// point-key name and least distance at Q12, where the key served, and the float name's least
 /// distance. It prints one JSON line: rows, keyed openings, capped replies and the file's sha256.
-fn replies(model: &IntegerStackModel, prompts: &str, out: &str, reply_tokens: usize) -> Result<(), String> {
+/// Each keyed opening matched the reference scan (claude-228): `panel_reply` stops the decode on
+/// any that does not, so `reference_checked` is the keyed count of a decode that finished.
+fn replies(
+    model: &IntegerStackModel,
+    prompts: &str,
+    out: &str,
+    reply_tokens: usize,
+) -> Result<(), String> {
     let bytes = std::fs::read(prompts).map_err(|e| format!("{prompts}: {e}"))?;
-    let rows: Vec<PanelPrompt> = serde_json::from_slice(&bytes).map_err(|e| format!("{prompts}: {e}"))?;
+    let rows: Vec<PanelPrompt> =
+        serde_json::from_slice(&bytes).map_err(|e| format!("{prompts}: {e}"))?;
     let (mut samples, mut keyed, mut capped) = (Vec::with_capacity(rows.len()), 0usize, 0usize);
     for row in &rows {
         let reply = panel_reply(model, &row.prompt, reply_tokens, row.float_keyed)
@@ -79,10 +87,11 @@ fn replies(model: &IntegerStackModel, prompts: &str, out: &str, reply_tokens: us
         }));
     }
     let text = serde_json::to_vec(&samples).map_err(|e| e.to_string())?;
-    uor_r4_integer::fbs_snapshot::write_new_file(std::path::Path::new(out), &text).map_err(|e| format!("{out}: {e}"))?;
+    uor_r4_integer::fbs_snapshot::write_new_file(std::path::Path::new(out), &text)
+        .map_err(|e| format!("{out}: {e}"))?;
     println!(
         "{}",
-        json!({ "rows": rows.len(), "keyed": keyed, "capped": capped, "out": out, "sha256": hex::encode(<sha2::Sha256 as sha2::Digest>::digest(&text)) })
+        json!({ "rows": rows.len(), "keyed": keyed, "reference_checked": keyed, "capped": capped, "out": out, "sha256": hex::encode(<sha2::Sha256 as sha2::Digest>::digest(&text)) })
     );
     Ok(())
 }
@@ -404,9 +413,19 @@ fn run() -> Result<(), String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|a| a == "--replies") {
         let (path, prompts, out, reply_tokens) = match args.as_slice() {
-            [path, r, prompts, o, out] if r == "--replies" && o == "--out" => (path, prompts, out, DECODE),
-            [path, r, prompts, o, out, t, n] if r == "--replies" && o == "--out" && t == "--reply-tokens" => {
-                (path, prompts, out, n.parse().map_err(|_| format!("--reply-tokens {n}: {USAGE}"))?)
+            [path, r, prompts, o, out] if r == "--replies" && o == "--out" => {
+                (path, prompts, out, DECODE)
+            }
+            [path, r, prompts, o, out, t, n]
+                if r == "--replies" && o == "--out" && t == "--reply-tokens" =>
+            {
+                (
+                    path,
+                    prompts,
+                    out,
+                    n.parse()
+                        .map_err(|_| format!("--reply-tokens {n}: {USAGE}"))?,
+                )
             }
             _ => return Err(USAGE.to_owned()),
         };

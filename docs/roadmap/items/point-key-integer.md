@@ -97,13 +97,14 @@ The model throughout is (r-drop)'s sealed step-16,384 checkpoints at seeds 1–3
    - **The decode:** a `fbs-toks` mode decodes a panel's prompts with the memory on, under greedy, from a `/7` or `/8` artifact. It writes the replies in claude-220's sample shape.
    - **The grade:** it lives in `in_space_long.rs` and `train-in-space.rs`, beside claude-220's `served_grade`. It reads the integer arms by their own tokens, and compares the served names with claude-220's float served files (done-when 3). It reads the bar of done-when 4.
    - **Why the decode and the grade sit in different crates:** the float crate links `uor-r4-integer` without `serving-wasm`, so it cannot decode the stack.
-3. **The run,** after [`integer-retention-rates`](integer-retention-rates.md) (found by claude-225).
-   - (r-drop) trained with `retain_rates`, whose recurrence the integer artifact does not serve yet, so its export would not be the trained trunk.
-   - It runs under a prep sheet with a fresh FIT and a pre-run review:
-   - (r-drop)'s snapshots on a pod;
-   - `fbs-export` and `fbs-export --point-key` over TRAIN on the laptop;
-   - the fresh panel p-x drawn with its census;
-   - the arms on p-x, p-w, p-v and DEV at seeds 1–3, and tok/s.
+3. **The run's instruments** (claude-228), done-when 2, on the laptop with finite tests:
+   - the reference scan at every served opening (`panel_reply`);
+   - the table read back as built (`fbs-export --point-key`);
+   - a BOS name refused at the step.
+4. **The run,** on the laptop, under a prep sheet with a fresh FIT and a pre-run review.
+   - [`integer-retention-rates`](integer-retention-rates.md) is done (claude-226 and claude-227): the integer artifact now serves (r-drop)'s retained recurrence.
+   - (r-drop)'s full snapshots at seeds 1–3 are in the store at `results/claude/integer-retention-rates-parity-2026-10-31/out/full/`, so no pod is needed.
+   - The steps: `fbs-export`, and `fbs-export --point-key` over TRAIN; the fresh panel p-x drawn with its census; the arms on p-x, p-w, p-v and DEV at seeds 1–3; and tok/s.
 
 ## Rules that apply
 

@@ -94,7 +94,8 @@ pub use format::{
 pub use memory::{read_memory_uorlut01, MemoryImage, MemoryTableImage};
 pub use format::{add_point_key_uorlut01, StackPointKey, POINT_KEY_EXP, STACK_FBS_POINT_SCHEMA};
 pub use point_key::{
-    build_point_key, panel_reply, point_key_windows, reply_stop, PanelReply, PointKeyImage, PointKeyWindow, ReplyEnd,
+    build_point_key, check_point_key_read_back, panel_reply, point_key_windows, reply_stop, PanelReply, PointKeyImage,
+    PointKeyWindow, ReplyEnd,
     POINT_KEY_BOS, POINT_KEY_WINDOW,
 };
 pub use hamming::{copy_weight_q31, read_hamming_uorlut01, CopyHeads, HammingImage, HammingReadImage, TypeHeads, COPY_MEAN_EXP};
