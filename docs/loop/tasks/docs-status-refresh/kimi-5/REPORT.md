@@ -9,6 +9,7 @@ This is a documentation-only unit. No model training, GPU evaluation, paid compu
 - The guide said `discrete.cu` had 577 lines and 12 entries. Current source has 718 lines and 13; `discrete_carrier_select` was missing from the table.
 - It described five generated modules and cubin assembly for six modules. Current `build.rs` assembles nine modules: the ordinary module plus eight specialized modules, with 42 entries total.
 - The first mdBook build failed because `mermaid.min.js` had not been installed in the fresh worktree. Running the standard `mdbook-mermaid install .` setup fixed the environment; no check or source assertion was weakened.
+- The first exact-head review found that the guide's sentence could attribute all 42 entries to the eight specialized modules alone. I made the arithmetic explicit: 29 specialized entries plus 13 ordinary entries, 42 across all nine modules.
 
 ## What changed
 
