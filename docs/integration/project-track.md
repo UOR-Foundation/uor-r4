@@ -64,9 +64,17 @@ must run in integer serving and one joined model must be scored on fresh prompts
 
 ### M1 `#2029` — language base: complete
 
-One saved model passes (a)–(f) above on each of two seeds. The older 116/232 reply bar is not a
-closing condition, and BPB returns as a later bar once a lawful likelihood exists. D83 records the
-close; no acceptance bar changes here.
+**Original D39 acceptance text, preserved at item start rather than rewritten:** one saved discrete rung-0 artifact passes:
+
+- **(a)** `G-Pre` admission ceiling ≥ **4,894**;
+- **(b)** `G-Adm` on **both seeds**;
+- **(c)** `G-Occ` with **> 16 occupied cells and an actual R > 0 row**;
+- **(d)** **≤ 0.90 BPB** on the chat held-out stream **through the D11 export**, with the export gap reported;
+- **(e)** a **fresh, pre-registered transfer panel**.
+
+The 116/232 reply bar is **BLOCKED under R14** (no instrument) and is **not a closing condition**. **Interim headline (D39 item 6):** injective codebook + Q4 admission ≥ 4,894 — a legibility instrument so D21 progress control can fire again, not a language claim.
+
+**Dated close outcome:** D83 and [decision log 6515151261](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6515151261) record the pre-existing D68 whole-project lab decision closing M1 on 30 October 2026. The original acceptance text is retained as history; this PR writes no new acceptance bar.
 
 ### M2 `#2030` — grounded reply from exact memory: in progress
 

@@ -28,7 +28,9 @@ On the selected artifact:
 - Provenance, contradiction and correction, abstention on unstated or retracted facts, explicit reset and process restart all pass.
 - Saved and restored sessions continue identically token for token (`IntegerStackSession` plus `UR4SESS1`).
 
-The six per-sub-panel thresholds are registered in the [consumer record](../../labs/object-store-consumer-m3/README.md); the on-model run has not happened.
+The pass threshold for each check is not yet registered.
+
+That is the original acceptance text at item start, preserved rather than rewritten in this PR. The current six per-sub-panel thresholds are recorded in the [consumer record](../../labs/object-store-consumer-m3/README.md); the on-model run has not happened.
 
 ## How to start
 

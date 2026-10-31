@@ -29,7 +29,9 @@ From the mechanism page and the archived record:
 
 ## Done when
 
-The saved 1,960-variable case is solved in exact arithmetic and the result is recorded as a legal feasible step, with its objective and optimality bound; an infeasibility proof is the alternative. D78 closed on a step within 0.03259% of optimal, not a proof of optimality. Scoring that result on the real panel is a separate step.
+The saved 1,960-variable case is solved in exact arithmetic and the result is recorded as an optimal assignment with its objective, or as an infeasibility proof. Scoring that result on the real panel is a separate step.
+
+This is the original acceptance text, preserved rather than weakened in this PR. D78's actual close was a step within 0.03259% of optimal, not a proof of optimality.
 
 **Closed on its result (D78, owner, 24 Oct 2026).** On `attempt2` the exact solver holds a legal step that satisfies all 380 guards (objective `-94674498416698555/4503599627370496`, about -21.02196). It certifies that this step is within `0.00685092` (0.03259%) of the best possible (Unit 12, #3152). Optimality itself is unproven. The saved case is one step of the older M2 learner, and its gradient comes from that learner's banned pooled-ranking loss. So the effort moves to the live form of legal construction, the discrete block apply (`m1-bvg-k-block-apply-c2` and then Stage T, on the M1 path). Scoring the old step on a panel would be a new item, and it needs a compliant objective first.
 

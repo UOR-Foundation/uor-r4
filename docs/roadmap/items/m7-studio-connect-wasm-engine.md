@@ -24,7 +24,9 @@ Nothing for this item — delivered by PR #2978 (see the resolution note above).
 
 ## Done when
 
-M7 criterion 3: in local/default mode the Studio runs client-side in a browser Web Worker with truthful capability reporting and no remote model calls; an explicit user-configured web API sends prompts only to the chosen endpoint, with no automatic remote model calls. The `.wasm` module passes `scripts/audit_zero_matmul_wasm.py --serving --call-graph --tap` (7/7 PASS, zero float instructions; integer multiply and divide are allowed and counted under D80/D81). The 18 October record counts 7 serving functions, not whole modules; its mul=0, div=0 wording is historical.
+M7 criterion 3: the Studio runs entirely client-side in a browser Web Worker with truthful capability reporting and zero remote model calls; the `.wasm` module passes `scripts/audit_zero_matmul_wasm.py --serving --call-graph --tap` (7/7 PASS, mul=0, div=0, float=0). The 18 October record counts 7 serving functions, not whole modules.
+
+This is the original criterion at item start, met on the local worker path and preserved as history. Current behavior is local by default, with only an explicit user-configured web API sending prompts to the chosen endpoint; current D80/D81 audits allow and count integer multiply/divide. Neither is a new acceptance condition written by this PR.
 
 ## How to start
 

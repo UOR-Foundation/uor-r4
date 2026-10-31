@@ -20,7 +20,9 @@ The admission-preserving A8 rerun ran on 25 October 2026 with D67/D68 PASS. Froz
 
 ## Done when
 
-Paired DEV verdict recorded for the registered arms and seeds; reach kept under the then-current D39 G-Adm condition or a registered diagnostic stop classified as instrument versus mechanism; this A8 run leaves the fresh slice sealed; the later M1 bar-(e) opening and score are recorded separately.
+Paired DEV verdict recorded for the registered arms and seeds; reach kept (M1 bar (b), G-Adm) or a registered diagnostic stop classified as instrument versus mechanism; fresh slice stays sealed.
+
+This is the original acceptance text, preserved rather than rewritten in this PR. The later M1 bar-(e) opening and score are recorded separately.
 
 ## How to start
 

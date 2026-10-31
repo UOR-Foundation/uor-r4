@@ -1,6 +1,6 @@
 ---
 id: m1-close-saved-model
-title: Close M1 bars (a)–(e) with one saved discrete model
+title: Close M1 with one saved discrete model passing all five bars
 milestone: M1
 area: training
 status: done
@@ -25,7 +25,9 @@ This item closes M1's bars (a)–(e); the separate `m1-heldout-phrasing-transfer
 
 ## Done when
 
-**This item supplies bars (a)–(e); the separate `m1-heldout-phrasing-transfer` item supplies bar (f). Combined M1 acceptance record, 30 Oct 2026:** [decision log 6515151261](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6515151261) approves one saved discrete model passing all six parts at both seeds: (a) self-contained D11 `UORLUT01`; (b) exact 14,287-row DEV export/reference agreement and B4; (c) tokens/s reported; (d) DEV integer top-1 above unigram 1,226 and T2 6,300, with required target 6,324 = T2 + 24; (e) Fresh V2 transfer with paired band 82; and (f) held-out-phrasing transfer with its own census and paired band, supplied by the separate item's `panel-score.json`. This item's title and acceptance scope remain (a)–(e), not a claim that it supplied bar (f).
+One saved discrete model: (a) starting reach at no fewer than 4,894 of 14,287; (b) reach kept on both seeds (G-Adm); (c) more than 16 of 256 cells in use plus the D39 occupancy condition (G-Occ); (d) integer top-1 through the integer export beats the unigram table (1,226) and the next-word table (6,300) on each of two seeds, with tokens per second reported; (e) the gain holds on a fresh sealed panel.
+
+This is the original acceptance text, preserved rather than rewritten in this PR. The separate `m1-heldout-phrasing-transfer` item supplies the later bar-f outcome. [Decision log 6515151261](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6515151261) records the pre-existing D68 approval of the six-part close and supersession of these older criteria; it is dated evidence, not a new acceptance condition written here.
 
 **Historical upstream evidence, superseded as M1 closing criteria by that pre-existing D68 whole-project lab decision review under CHARTER §5.1, not by a new acceptance rule written in this documentation:** the older D39 starting-reach (4,894), G-Adm and G-Occ conditions remain preserved in the [D39 decision row](../../integration/DECISIONS.md#d39--m1-closing-bar-k16-reachability-gate-post-qualification-sequence-and-lab-self-direction-owner-2026-10-18), [dated integration log](../../integration/current-state.md) and [project-track archive](../../../archive/history/project-track-archive-2026-10-18.md) as upstream/historical requirements, not a second current bar. This records the approved close and its supersession; it does not invent a new acceptance rule.
 
