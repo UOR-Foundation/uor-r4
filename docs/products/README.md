@@ -18,7 +18,7 @@ Labels: **proof**, **measurement**, **hypothesis** ([`docs/formal_vocabulary.md`
 |---|---|---|---|
 | [Language model](./language-model.md) | A geometric language model exported as one checksum-pinned `UORLUT01` file | The discrete M1 pair and a separate FBS `lut-stack/5` export with exact rotations and its DEV export gap inside the bar; no conversational product release | M2–M4, then M8 |
 | [Web client](./web-client.md) | A local model in the browser: download once, run in WebAssembly on the device | Synthetic parity harness plus public M1 top-8 next-token prediction in the live Studio; no chat or qualified bundle | M7 |
-| [Desktop client](./desktop-client.md) | A Tauri app sharing the interface, with native engine, file access, durable memory and offline use | [`src-tauri/`](../../src-tauri/) backend, Studio host and GUI shell with seven integration controls on the synthetic stand-in; no qualified bundle | M3, M5, M7 |
+| [Desktop client](./desktop-client.md) | A Tauri app sharing the interface, with native engine, file access, durable memory and offline use | [`src-tauri/`](../../src-tauri/) backend, Studio host and GUI shell with seven integration controls on the synthetic stand-in; no qualified bundle | M3, M4, M5, M7 |
 
 [Releases and artifacts](./releases-and-artifacts.md) covers the file format, future M8 release,
 Hugging Face repositories and checksum binding.
@@ -66,7 +66,7 @@ memory keys on exact first token ids and misses reworded prompts. [Claude-220](.
 4. **M7** proves library/CLI/browser parity and truthful local-by-default Studio behavior, with optional user-configured web API.
 5. **M8** releases one versioned, checksum-pinned model that meets every earlier bar.
 
-The desktop client rides on M3 for memory, M5 for laptop cost and M7 for the shared interface.
+The desktop client rides on M3 for memory, M4 for the accepted integer artifact, M5 for laptop cost and M7 for the shared interface.
 Full definitions are in the [project track](../integration/project-track.md).
 
 ## Go deeper

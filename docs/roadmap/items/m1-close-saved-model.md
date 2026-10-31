@@ -1,6 +1,6 @@
 ---
 id: m1-close-saved-model
-title: Close M1 with one saved discrete model passing all five bars
+title: Close M1's close-grade bars (a)–(e) with one saved discrete model
 milestone: M1
 area: training
 status: done
