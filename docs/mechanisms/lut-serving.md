@@ -1,8 +1,9 @@
 # D11 integer table serving (UORLUT01)
 
-**Status: ACTIVE, by D72's own condition (recorded on 29 Oct 2026 by claude-183).** D72 (owner ruling, 24 Oct 2026) set it READY "until a lawful trained model is exported through it". Two exports have met that:
-- **The discrete path, 26 Oct (antigravity-96, #2839).** The four Stage T checkpoints were exported through `uor-r4.lut-discrete/1` with an export gap of exactly 0 on the 14,287-row DEV panel.
-- **A D37 float-trained SpiralCore/FBS trunk, 29 Oct (claude-182, `uor-r4.lut-stack/5`).** It was inside the export-gap bar on both seeds, at DEV scope.
+**Status: ACTIVE, by D72's own condition (recorded on 29 Oct 2026 by claude-183).** D72 (owner ruling, 24 Oct 2026) set it READY "until a lawful trained model is exported through it". The condition has been met on three artifact lines:
+- **The discrete Stage T path, 26 Oct (antigravity-96, #2839).** Four Stage T checkpoints were exported through `uor-r4.lut-discrete/1` with an export gap of exactly 0 on the 14,287-row DEV panel.
+- **The closing M1 pair (antigravity-110, #3312).** The 19-table `uor-r4.lut-discrete-trunk/1` artifacts match their reference on all 14,287 DEV rows at both seeds and pass B4.
+- **A separate D37 float-trained SpiralCore/FBS trunk, 29 Oct (claude-182, `uor-r4.lut-stack/5`).** It was inside the export-gap bar on both seeds, at DEV scope.
 
 See "What has been tried". It is the end-of-pipeline contract: the finished model must ship as one integer artifact, and this engine runs it. The engine reproduces its reference answers exactly, and its serving audits are green (since claude-175 they count the hardware multiplies and divides, which the stack uses since claude-177). A table-native schema (`uor-r4.lut-discrete/1`) exports `DiscreteModel` snapshots into `UORLUT01` (`discrete.table`, `discrete.cells`, `discrete.routes`, `discrete.gates`) and evaluates `Route`, `Flock`, and `Relation` prefixes in `uor-r4-integer` with exact integer parity against the CUDA-qualified witnesses (#2838). The float trunk's export is scored at DEV scope only; its fresh split has not been read.
 

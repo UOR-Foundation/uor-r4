@@ -24,14 +24,14 @@ The owner added bar (f) to M1 on 29 Oct (D82, CHARTER §4 item 8): "M1 also requ
 
 ## What is missing
 
-**Outcome: complete.** Before the close, this item needed a fresh held-out-phrasing panel with these properties:
+**Outcome: complete.** The following were the requirements before the close, not unfinished work:
   - It is drawn by `heldout-panel` (`docs/labs/one-model-end-to-end/instrument/`, claude-204) at a seed no unit has used. claude-204 used 2041–2043.
   - Its cell is `dev,dev`, in dialogue protocol 2, with 400 conversations.
   - It is stored in the HF store with a `SHA256SUMS`.
 - **The panel's census, against the saved model's own TRAIN.** The panel must hold new templates by claude-202's rule (value-masked prompt share at K = 1,024 at most 0.5). That is counted against the TRAIN split the saved model was trained on.
   - The M1 sheets pin that split (`docs/harness/prep/m1-fresh-panel-transfer-2026-10-26.md:62-65`, sha `3dee858f…`).
   - Its size is in question (claude-202). The census reads the file as it is, and the panel is counted against it.
-- **Scoring the saved model on the panel.** That is the integer top-1 of antigravity-110's two-seed `UORLUT01` artifacts, against TRAIN's unigram and T2 tables, on the GPU (CHARTER §3.5). `m1-d11-artifact-scorer`'s `fresh-score` reads only the sealed Fresh V2 today; it needs an unpinned panel, with its sha recorded.
+- **Scoring the saved model on the panel.** That was the integer top-1 of antigravity-110's two-seed `UORLUT01` artifacts, against TRAIN's unigram and T2 tables, on the GPU (CHARTER §3.5). `m1-d11-artifact-scorer`'s `fresh-score` originally read only sealed Fresh V2 and needed an unpinned panel, with its sha recorded.
 
 ## Done when
 

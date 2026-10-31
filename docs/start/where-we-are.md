@@ -64,8 +64,7 @@ remains the decode. On held-out p-s:
   DEV but only 14–16 of 1,400 on p-s, so a reworded known question can find no stored key.
 
 [Claude-218](../loop/tasks/one-model-end-to-end/claude-218/REPORT.md) then found trunk-state memory
-keys that improved reply openings offline. The latest merged experiment,
-[claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md), tested them in free
+keys that improved reply openings offline. [Claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md) then tested them in free
 generation on fresh p-v. Serving the point key for the first reply token where exact memory misses
 improves template replies by **+13, +8 and +12** and exact replies by **+9, +8 and +12** at three
 seeds. Keyed openings are right on 27–31% of cases, so this is a partial gain, not useful chat. The

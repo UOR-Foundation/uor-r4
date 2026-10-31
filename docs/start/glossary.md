@@ -18,8 +18,8 @@ flowchart LR
   subgraph rules["How the work is judged"]
     direction LR
     CH["Charter and D-entries"] --> FT["FIT sheet"]
-    FT --> RL["Owner release"]
-    RL --> NB["Notebook row<br/>(KEEP, PARKED)"]
+    FT --> RV["Lab pre-run review (D67)<br/>D41 donor: owner at dispatch"]
+    RV --> NB["Notebook row<br/>(KEEP, PARKED)"]
   end
 ```
 
@@ -255,7 +255,7 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 <a id="t2"></a>**T2.** A table built from the training text. It looks up the last word and returns the next word seen most often after it. It gets 6,300 of the 14,287 DEV first guesses right, and it is one of the two count tables a trained model must beat (**measurement**). See [host diagnostics](../../archive/labs/host-diagnostics-2026-10-17/README.md).
 
-**Ternary.** Used in two ways here. A ternary weight or gate takes one of three values: −1, 0 or +1. A ternary tree has three branches per node. Dense ternary weights are PARKED because every weight is still touched for every word. See [ternary and XOR](../mechanisms/ternary-xor.md).
+**Ternary.** Used in two ways here. A ternary weight or gate takes one of three values: −1, 0 or +1. A ternary tree has three branches per node. Dense ternary weights are READY: the dense form is barred because every weight is touched for every word, but a lawful successor remains open. See [ternary and XOR](../mechanisms/ternary-xor.md).
 
 **Token.** One numbered piece of text, a word or part of a word. The model never sees letters. See [tokenizer](../mechanisms/tokenizer.md).
 
@@ -287,7 +287,7 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 **WASM (WebAssembly).** A compact, sandboxed machine code that browsers run. The integer serving engine is built for it, with 7 of 7 serving functions free of float instructions (**measurement**). See [web client](../products/web-client.md).
 
-**Whole-table nearest (readout).** The chosen way to turn a final vector into a word: compare the vector with every row of the 4,096-word table and take the nearest. It was chosen over the native writer on 28 Oct because the writer's admission failed at seed 2 (top-1 493 against 6,909 for nearest, claude-150). The served session still reads the native writer today. See [pipeline map](../model/pipeline-map.md).
+**Whole-table nearest (readout).** The chosen way to turn a final vector into a word: compare the vector with every row of the 4,096-word table and take the nearest. It was chosen over the native writer on 28 Oct because the writer's admission failed at seed 2 (top-1 493 against 6,909 for nearest, claude-150). The separate FBS session still reads its native writer; M1's readout is `OuterL1V1`. See [pipeline map](../model/pipeline-map.md).
 
 **Writer (shared vector writer).** The one component that handles a token's vector on the way in, along the carry and on the way out, using the same format everywhere. It builds the cells and picks the nearest token among the admitted ones. See [architecture](../model/architecture.md).
 

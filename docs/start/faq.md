@@ -54,7 +54,7 @@ The owner's reason is cost, not taste: "to ban expensive operations" ([charter](
 
 ### 8. Why no matrix multiplication?
 
-Matrix multiplication is nearly all of a transformer's arithmetic, so removing it is the point of the project ([charter](../../CHARTER.md), section 3.3). A geometric feed-forward block, such as the [Hamilton gate](../mechanisms/hamilton-gate.md), is allowed. A dense one is not. One mechanism, [spin-native weights](../mechanisms/spin-weights.md), matched a dense model's score but only by running a dense block multiplication, so it is PARKED.
+Matrix multiplication is nearly all of a transformer's arithmetic, so removing it is the point of the project ([charter](../../CHARTER.md), section 3.3). A geometric feed-forward block, such as the [Hamilton gate](../mechanisms/hamilton-gate.md), is allowed. A dense one is not. One mechanism, [spin-native weights](../mechanisms/spin-weights.md), matched a dense model's score but only by running a dense block multiplication. Its current status is READY: the tested dense form is barred, while a lawful Hamilton-block successor remains open.
 
 ### 9. Why use GPUs for research but laptops for serving?
 

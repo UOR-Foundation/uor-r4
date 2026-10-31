@@ -17,7 +17,7 @@ M1 bar (e) stops a result that only fits its development panel from closing M1. 
 
 ## What is missing
 
-M1 bar (e) needs the gain to hold on a fresh, sealed test panel registered in advance. The fresh slice remains sealed: the 19 October outcome call records fresh transfer as `NOT_TRIGGERED` (binding `4bd108ad…`, unopened), and the A8 sheet names the fresh V2 tokens, mask and seal as `0b7e754c…`, `a1cda529…` and `df5d074a…`. The `trunk-joint-pointer-v1-d11` model has now passed bars (a)–(d) on `ft/dev` across both seeds, so Step 4 can score that model once. Frozen `ft/dev` is not reported as fresh.
+**Before the close (historical requirement).** M1 bar (e) needed the gain to hold on a fresh, sealed test panel registered in advance. The 19 October outcome call recorded fresh transfer as `NOT_TRIGGERED` (binding `4bd108ad…`, unopened), and the A8 sheet named the fresh V2 tokens, mask and seal as `0b7e754c…`, `a1cda529…` and `df5d074a…`. The `trunk-joint-pointer-v1-d11` model had passed bars (a)–(d) on `ft/dev` across both seeds, so Step 4 could score that model once. The registered run has now opened and scored that panel as recorded below; frozen `ft/dev` is not reported as fresh.
 
 The fresh panel's size, noise floor and thresholds are registered in `docs/harness/prep/m1-fresh-panel-transfer-2026-10-26.md`: 14,479 eligible targets, 3,594 `P_succ` rows, and the paired `max(floor, ceil(2 * sqrt(b + c)), two-seed spread)` rules. CHARTER §4.3 requires decisive runs to use at least 2 seeds or at least 200 fresh rows, with bars no narrower than measured noise and a fresh transfer number with every development gain.
 

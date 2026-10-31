@@ -63,3 +63,7 @@ The exact-head review identified `docs/labs/README.md` as the live labs onboardi
 ## Scope decision: live Studio evidence and its public item
 
 The exact-head review found the live/staged M1 distinction and a future-dated redesign in `docs/roadmap/items/m7-studio-live-model-sources.md`. Kimi verified the existing live gh-pages `e62ea481` bundle and M1 manifest directly; this item is added only to record that evidence, remove the future date and make the non-repository workflow-proposal attribution consistent. No deployment, Studio source, owner workflow, model code or other lab evidence changes. Approved in this top session on 30 Oct 2026; reverse by removing this scope entry and its documentation correction together.
+
+## Scope decision: stale roadmap status items
+
+The final review identified nine roadmap items whose current text still describes pre-M1 results, retired holds, or a paused Studio deploy: `m1-fresh-panel-transfer`, `m1-export-gap-and-toks`, `m2-train-grounded-replies`, `m2-fresh-heldout-panel`, `m2-pin-train-mask-sheet`, `m3-qualify-memory`, `m7-studio-connect-wasm-engine`, `m7-studio-self-host-page-assets`, and `m8-release-packaging`. They are added only for sourced status corrections and current pointers. No acceptance bar, model code, evidence, owner workflow, or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation corrections together.

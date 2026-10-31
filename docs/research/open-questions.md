@@ -8,7 +8,7 @@ on new phrasing, remember across sessions, and run as one product. That remains 
 ```mermaid
 flowchart TD
   A["M1: saved integer model<br/>beats count tables"] --> B{"Can it start the right reply<br/>on new phrasing?"}
-  B -- "point key gives a partial gain" --> M["Train and serve the point key in integers<br/>score one model end to end"]
+  B -- "point key gives a partial gain" --> M["claude-220 serves the key in float<br/>next: point-key-integer (#3450)"]
   M --> R["Complete correct replies<br/>and durable memory"]
   R --> S["Full serving, cost,<br/>distribution and release"]
 ```
@@ -50,9 +50,11 @@ So a loop-free reply is not necessarily a correct reply. Claude-218 found trunk-
 improved openings offline. [Claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md)
 then served the point key for the first reply token in free generation on fresh p-v: templates
 improve by +13/+8/+12 and exact replies by +9/+8/+12 at three seeds. It reaches only 12–18% of the
-forced-opening lift; the sign key is inconclusive at this panel size. The open question is whether
-an integer point-key table and search can serve one complete model well enough on client hardware.
-Useful conversation remains unproven.
+forced-opening lift; the sign key is inconclusive at this panel size. [Claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md)
+then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at
+three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing.
+The open question is whether `point-key-integer` (#3450) can export that table and search to serve
+one complete model well enough on client hardware. Useful conversation remains unproven.
 
 ## What remains open beyond that key
 

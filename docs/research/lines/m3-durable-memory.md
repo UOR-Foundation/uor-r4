@@ -5,7 +5,7 @@ Milestone M3 asks that a conversation's memory survive between sessions and that
 | | |
 |---|---|
 | **Catalog id** | `m3-durable-memory` |
-| **Time span** | 3 Oct to 18 Oct 2026 |
+| **Catalog time span** | 3 Oct to 18 Oct 2026; the later consumer record is 22–25 Oct |
 | **Milestone** | M3, durable conversation memory (28 of 33 records) |
 | **Records** | 33 |
 | **Outcomes** | tooling 27 · inconclusive 2 · plan 2 · positive 1 · review 1 |

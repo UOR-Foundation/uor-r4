@@ -71,7 +71,7 @@ These findings concern the supplied draft. They are not a negative language expe
 | [Route read](../mechanisms/route-read.md) | ACTIVE | Walks the ternary tree (context cap 243 positions, $3^5$) and composes a transport action at each level |
 | [Flock read](../mechanisms/flock-read.md) | ACTIVE | Carries kept payloads into the query's frame by the precomputed transport between roots |
 | [Discrete learning](../mechanisms/discrete-learning.md) | ACTIVE | Learns over the 15 generator moves |
-| [Ternary and XOR](../mechanisms/ternary-xor.md) | PARKED | The ternary binder tree and trit gates; its parts live in discrete learning |
+| [Ternary and XOR](../mechanisms/ternary-xor.md) | READY | The ternary binder tree and trit gates; its parts live in discrete learning, while the dense form remains barred |
 
 On 29 Oct 2026: SpiralCore transport is the position and routing backbone of the float-trained FBS trunk, and the trunk is served exactly in integers under `lut-stack/5` (claude-182). Only its type-spin configuration closed (claude-151). See the [pipeline map](../model/pipeline-map.md).
 

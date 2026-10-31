@@ -65,6 +65,7 @@ Here $\mathcal{N}_e(i)$ are node $i$'s neighbours under link type $e$. Candidate
 | 2026-10-19 | Injective codebook as the start | 127 of 3,847 against a gate of 500; run not dispatched | diagnostic-stop | [injective preflight](../labs/injective-preflight-and-c2-qualify-2026-10-19/README.md) |
 | 2026-10-19 | A8 dose: Relation against the control | At batch 4,096, Relation: 1,351 to 551, stopped there under its half-start rule. Control: 1,351 to 857, then ran the full dose. Trits 275/124/87 | diagnostic-stop | [A8 dose](../labs/a8-dose-2026-10-19/README.md) |
 | 2026-10-19 | Admission-preserving rerun, pre-registered | Passed its fitness review; nothing run | inconclusive | [admission-preserving](../labs/admission-preserving-2026-10-19/README.md) |
+| 2026-10-25 | Stage T `T16_rel`, third Relation training run | Reached 4,096 batches and 425 relation moves; the `relation_off` ablation then reduced admission and top-1 | paired ablation, not a Route-control verdict | [Stage T](../labs/m1-bvg-k-stage-t-training/README.md) |
 
 **Reading these honestly.** In the A8 dose, the Relation arm fell faster, which coincides with 87 accepted relation-trit updates. That is co-occurrence, not attribution. Both arms lost admission to learning moves, and the sheet named this risk before the run. Under the project's diagnostic-stop rule (D31) and the rule that a negative closes a configuration, never a mechanism (D22), these are diagnostic stops: not negatives, and not a KEEP. The fresh transfer slice has never been opened.
 

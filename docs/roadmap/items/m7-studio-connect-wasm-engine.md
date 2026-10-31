@@ -12,7 +12,7 @@ scope: [web/**, crates/uor-r4-integer/**, docs/products/**, docs/labs/m7-studio-
 
 ## Why it matters
 
-This delivers the web client product as soon as a model exists: the Studio page runs the model on your own device with no server. Delivered by PR #2978 (`24f9d8ab6`, merged 2026-10-22, verified) with its antigravity-21 repair: the Studio worker now loads the integer `serving-wasm` engine (`pkg/uor_r4_integer.js`; `loadStack`, `step`, `saveSession`, `restoreSession`), no `uor_r4_wasm_router` reference remains under `web/`, and the worker verification records zero remote requests. The Pages deploy stays paused (D36) until a qualified M4 artifact exists. See [the web client](../../products/web-client.md).
+This delivers the web client product as soon as a model exists: the Studio page runs the model on your own device with no server. Delivered by PR #2978 (`24f9d8ab6`, merged 2026-10-22, verified) with its antigravity-21 repair: the Studio worker now loads the integer `serving-wasm` engine (`pkg/uor_r4_integer.js`; `loadStack`, `step`, `saveSession`, `restoreSession`), no `uor_r4_wasm_router` reference remains under `web/`, and the worker verification records zero remote requests. The Studio is now live at gh-pages `454bb30fc`, serving the public M1 model as top-8 next-token prediction, not chat; M7's accepted-model parity remains open. See [the web client](../../products/web-client.md).
 
 ## Resolution (2026-10-23, PM flip by kimi-26)
 

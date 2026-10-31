@@ -45,12 +45,10 @@ conversation. See [CHARTER §4.8](../../CHARTER.md#4-evidence) and the [closing 
 
 ## The current order of work
 
-1. **Train and serve the point key in one integer model.** Claude-218 found trunk-state keys that
+1. **Complete `point-key-integer` (#3450).** Claude-218 found trunk-state keys that
    improved openings offline; [claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md)
-   tested them in free generation on fresh p-v. The point key improves templates by +13/+8/+12 and
-   exact replies by +9/+8/+12 at three seeds. It reaches only 12–18% of the forced-opening lift;
-   the sign key is inconclusive at this panel size. The integer table, client-sized search and
-   end-to-end score remain open.
+   showed a partial free-generation gain on fresh p-v, and [claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md)
+   then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. Next, export the point table to the integer engine and score the integer model end to end ([item](../roadmap/items/point-key-integer.md)).
 2. **Serve every required part in integers.** Finish the served read, memory and readout rather
    than treating an export or an audit alone as the whole model.
 3. **Train and score one model end to end.** Measure complete generated replies on untouched
@@ -92,9 +90,10 @@ artifact on the user's device is the product and is allowed; research compute re
 
 Can the model start a correct reply when the user's phrasing is new, rather than only retrieve or
 continue a familiar template? M1 answered the narrower next-token count-table question. It did not
-answer that broader generation question. Claude-219's point-key opening improves free generation
-on fresh p-v, but only partially. Its integer table, client-sized search and whole-model score are
-still unproven; useful conversation has not been established.
+answer that broader generation question. Claude-220 serves the point key inside one float model
+on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while
+recalling TRAIN replies rather than generalizing. The integer table, client-sized search and
+whole-model score are still unproven; useful conversation has not been established.
 
 ## Where it stands
 
@@ -102,7 +101,7 @@ still unproven; useful conversation has not been established.
 |---|---|---|
 | Milestones complete | **1 of 8 (M1)** | [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) |
 | Next milestone | M2: grounded complete replies | [PLAN](../../PLAN.md) |
-| Immediate problem | Train and serve the point key in one integer model; score it end to end | [claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md) |
+| Immediate problem | Complete `point-key-integer` (#3450): export the point table and score the integer model end to end | [claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md), [item](../roadmap/items/point-key-integer.md) |
 | M4 | Lawful likelihood built; full accepted-model serving and held-out score open | [serving and export](../model/serving-and-export.md) |
 | Products shipped | None | [products](../products/README.md) |
 
