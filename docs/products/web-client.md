@@ -12,9 +12,9 @@ The web client is meant to be a language model that lives in a browser tab. You 
 
 Labels: **proof**, **measurement**, **hypothesis**. See [`docs/formal_vocabulary.md`](../formal_vocabulary.md) and the [glossary](../start/glossary.md).
 
-![A browser window with three layers: the Studio interface, a Web Worker holding the integer engine, and browser storage for the model and saved sessions. Local WASM mode keeps prompts on the device; an optional user-configured API sends prompts to the chosen endpoint.](../figures/products/web-client-architecture.svg)
+![A browser window with three layers: the Studio interface, a Web Worker holding the integer engine, and browser storage split between verified synthetic session snapshots and a dashed, planned model cache. Local WASM mode keeps prompts on the device; an optional user-configured API sends prompts to the chosen endpoint.](../figures/products/web-client-architecture.svg)
 
-*The intended design: one verified download, then local computation in the tab.*
+*Current model downloads require an explicit load; the download-once persistent cache is planned. Session save/restore is verified on the synthetic stand-in.*
 
 ## How it is meant to work
 

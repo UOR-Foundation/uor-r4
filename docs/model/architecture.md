@@ -6,9 +6,9 @@ complete**: a saved discrete model passed all six bars on two seeds. No model ho
 conversation. Two model paths exist and have not joined: the discrete M1 path and the float-trained
 FBS trunk.
 
-![The current two-path pipeline: the saved discrete model reaching its integer export, and the separate float-trained FBS trunk working toward complete replies.](../figures/model/pipeline.svg)
+![Two separate pipelines: the completed discrete M1 lane uses PositionHolonomyV1, Flock plus an orbit-root causal pointer, discrete Hamilton mixing, OrbitRootSnapNormV1 and OuterL1V1 readout; the float-trained FBS lane separately uses SpiralCore position, FBS recurrence, Hamming copy heads, exact turn memory and whole-table nearest readout.](../figures/model/pipeline.svg)
 
-*The discrete M1 artifact and the FBS research line are different models, not one joined pipeline.*
+*The upper discrete M1 lane and lower FBS research lane are different models, not one joined pipeline; only the D11 integer serving boundary is shared.*
 
 Labels follow [`docs/formal_vocabulary.md`](../formal_vocabulary.md): **proof**, **measurement**,
 **hypothesis**. A construction control is not a language result, and `NOT_RUN` is never a pass.

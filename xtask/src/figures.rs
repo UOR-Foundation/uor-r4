@@ -71,7 +71,8 @@ impl St {
     /// (fill, stroke, stroke width, dash)
     fn card(self) -> (&'static str, &'static str, f64, Option<&'static str>) {
         match self {
-            St::Working | St::Complete => ("#E3F4EE", GREEN, 2.5, None),
+            St::Working => ("#E3F4EE", GREEN, 2.5, None),
+            St::Complete => ("#B7E2D2", GREEN, 3.0, None),
             St::Built => ("#E4EFF8", BLUE, 1.75, None),
             St::Historical => ("#F6F8FA", "#8C959F", 1.5, Some("4 4")),
             St::Progress => ("url(#hP)", "#B87A00", 2.0, None),

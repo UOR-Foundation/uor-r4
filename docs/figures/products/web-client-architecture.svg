@@ -85,18 +85,20 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <rect class="call" x="576" y="334" width="124" height="24" rx="12"/><text class="mono" x="638" y="350" text-anchor="middle">restoreSession</text>
 <text class="note" x="262" y="376">integer adds, shifts, table look-ups, and allowed integer multiply/divide (D80/D81)</text>
 
-<!-- Worker <-> storage (verified on the stand-in) -->
-<line class="flow" x1="400" y1="434" x2="400" y2="400" marker-end="url(#arr)"/>
-<text class="note" x="390" y="422" text-anchor="end">load model</text>
+<!-- Planned model-cache wiring; verified synthetic session wiring -->
+<line class="flow-plan" x1="400" y1="434" x2="400" y2="400" marker-end="url(#arr)"/>
+<text class="note" x="390" y="422" text-anchor="end">model cache planned</text>
 <line class="flow" x1="580" y1="400" x2="580" y2="434" marker-end="url(#arr)"/>
 <text class="note" x="590" y="422">save session</text>
 
-<!-- Layer 3: browser storage (verified on the stand-in) -->
+<!-- Layer 3: solid synthetic session storage; dashed planned model cache -->
 <rect class="solid" x="230" y="438" width="520" height="76" rx="8"/>
 <text class="layer" x="246" y="460">Browser storage</text>
 <text class="note-plan" x="734" y="460" text-anchor="end">session verified; model cache planned</text>
-<path class="file" d="M262,470 L276,470 L284,478 L284,500 L262,500 Z"/>
+<rect class="planned" x="246" y="468" width="204" height="38" rx="6"/>
+<path class="planned" d="M262,470 L276,470 L284,478 L284,500 L262,500 Z"/>
 <text class="mono" x="294" y="490">model.uorlut01</text>
+<rect class="pane" x="462" y="468" width="274" height="38" rx="6"/>
 <rect class="file" x="480" y="472" width="22" height="26" rx="3"/>
 <line class="flow" x1="485" y1="481" x2="497" y2="481"/>
 <line class="flow" x1="485" y1="489" x2="497" y2="489"/>

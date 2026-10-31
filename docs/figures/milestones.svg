@@ -7,7 +7,7 @@
 <text x="40" y="52" font-size="26" font-weight="700" fill="#1F2328" text-anchor="start">Progress toward the alpha</text>
 <text x="40" y="80" font-size="14.5" font-weight="400" fill="#57606A" text-anchor="start">Pre-alpha, 31 October 2026: 1 of 8 complete (M1). No model holds a useful conversation yet. Each milestone closes only on a saved model.</text>
 <path d="M60,168 L1140,168" fill="none" stroke="#8C959F" stroke-width="4"/>
-<circle cx="100" cy="168" r="30" fill="#E3F4EE" stroke="#007A5E" stroke-width="3"/>
+<circle cx="100" cy="168" r="30" fill="#B7E2D2" stroke="#007A5E" stroke-width="3"/>
 <text x="100" y="174" font-size="16" font-weight="700" fill="#1F2328" text-anchor="middle">M1</text>
 <circle cx="243" cy="168" r="30" fill="#FFF0CC" stroke="#B87A00" stroke-width="3"/>
 <text x="243" y="174" font-size="16" font-weight="700" fill="#1F2328" text-anchor="middle">M2</text>
@@ -27,7 +27,7 @@
 <path d="M243,136 L243,124 L386,124" fill="none" stroke="#0072B2" stroke-width="2"/>
 <path d="M386,136 L386,118 L529,118 L529,134" fill="none" stroke="#0072B2" stroke-width="2" marker-end="url(#ah)"/>
 <text x="315" y="106" font-size="12.5" font-weight="700" fill="#0072B2" text-anchor="middle">selected M1 or M2 → M3 → M4</text>
-<rect x="40" y="230" width="265" height="172" rx="10" fill="#E3F4EE" stroke="#007A5E" stroke-width="2.5"/>
+<rect x="40" y="230" width="265" height="172" rx="10" fill="#B7E2D2" stroke="#007A5E" stroke-width="3"/>
 <text x="54" y="256" font-size="15" font-weight="700" fill="#1F2328" text-anchor="start">M1  Language base</text>
 <text x="54" y="277" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">six bars; p-f refs 62.5% TRAIN</text>
 <text x="54" y="293" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">DEV 7,002 / 7,001;</text>
@@ -81,7 +81,7 @@
 <text x="937.5" y="577" font-size="11" font-weight="700" fill="#424A53" text-anchor="middle" letter-spacing="0.4">PLANNED</text>
 <path d="M40,614 L1160,614" fill="none" stroke="#D0D7DE" stroke-width="1"/>
 <text x="40" y="636" font-size="13.5" font-weight="700" fill="#1F2328" text-anchor="start">Status</text>
-<rect x="110" y="621" width="34" height="20" rx="5" fill="#E3F4EE" stroke="#007A5E" stroke-width="2"/>
+<rect x="110" y="621" width="34" height="20" rx="5" fill="#B7E2D2" stroke="#007A5E" stroke-width="2"/>
 <text x="152" y="636" font-size="13" font-weight="400" fill="#2B3138" text-anchor="start">Complete</text>
 <rect x="239.2" y="621" width="34" height="20" rx="5" fill="url(#hP)" stroke="#B87A00" stroke-width="2"/>
 <text x="281.2" y="636" font-size="13" font-weight="400" fill="#2B3138" text-anchor="start">In progress</text>
