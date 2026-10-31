@@ -11,19 +11,19 @@ flowchart TD
   need -- "Yes" --> sheet["Pre-registration: one-page sheet<br/>bar, noise, controls, seeds,<br/>cost, what each outcome decides"]
   sheet --> fit{"FIT review by someone<br/>other than the author"}
   fit -- "Not fit" --> sheet
-  fit -- "FIT" --> release["Owner release:<br/>one per sheet, typed by Casey"]
+  fit -- "FIT" --> release["Lab D67 pre-run review:<br/>whole project, tools, inputs,<br/>FIT and lease checked"]
   release --> run["Run on the GPU via uor-pod"]
   run --> row["Notebook row: date, what ran,<br/>number, bar, verdict, artifact"]
   doit --> row
 ```
 
-*How work moves from an idea to a recorded result. Only the Yes branch that needs GPU spend or a milestone claim goes through a sheet, a review and an owner release.*
+*How work moves from an idea to a recorded result. Only the Yes branch that needs GPU spend or a milestone claim goes through a sheet, a FIT review and the lab's pre-run review.*
 
 ## Why there are rules at all
 
 The owner's stated goal behind every ban, in his own words from 18 October 2026, is "to ban expensive operations" and to optimise for "fast local ai that can train fast and run fast" and reaches "almost frontier level capability" (`CHARTER.md` §1, from decision D37). Each rule removes a cost that a dense neural network pays, or protects the evidence that tells the project whether its geometric replacement works. When a case is unclear, the charter says to choose what trains and serves fastest on a laptop through the geometric path, and to write the choice down.
 
-The project's headline metric is tokens per second: how fast the model reads and writes text, with decode speed and context speed measured separately. A small quality gap is acceptable (`CHARTER.md` §1). The project is pre-alpha, 0 of its 8 milestones are complete, and no model holds a useful conversation yet (`STATUS.md`; see [the mechanism board](../mechanisms/README.md)).
+The project's headline metric is tokens per second: how fast the model reads and writes text, with decode speed and context speed measured separately. A small quality gap is acceptable (`CHARTER.md` §1). The project is pre-alpha, 1 of its 8 milestones is complete, and no model holds a useful conversation yet ([PLAN](../../PLAN.md) and rendered [STATE](../../STATE.md); see [the mechanism board](../mechanisms/README.md)).
 
 These are rules, so the labels "proof", "measurement" and "hypothesis" from `docs/formal_vocabulary.md` do not apply to them. The "why" given for each rule below is the reason the charter itself states. It is not a measured result.
 
@@ -54,18 +54,17 @@ Source: `CHARTER.md` §3; the first column gives its clause numbers.
 A **lab** is any contributor, human or AI, working under the charter. The rules in sections 3 and 5 give these limits.
 
 **Labs may:**
-- Choose their own work from `NOW.md`, post a one-line intent note, claim a branch and carry on unless redirected (`CHARTER.md` §5.3).
+- Choose their own work from `PLAN.md`, post a one-line intent note, claim a branch and carry on unless redirected (`CHARTER.md` §5.3).
 - Build, run finite kernel tests and run host checks without any pre-registration (§4.5).
-- Train in float offline once a sheet, FIT and typed release exist (training is currently held; §3.7, §4.5, §5.1), and report the export gap on the same evaluator.
+- Train in float offline with a sheet, a non-author FIT and the lab's own whole-project pre-run review under D67, and report the export gap on the same evaluator (§3.7, §4.5, §5.1).
 - Serve the integer model on a user's device and measure it (§3.6).
 - Review their own pull request at the exact head, from a fresh context (§5.5), and use a fresh-context subagent as the non-author FIT reviewer (§4.5).
 
 **Labs may not:**
 - Use a banned operation anywhere, including in comparators, or in renamed form (§3.2, §3.3).
 - Run research compute on the CPU, or spend GPU on work that cannot change a decision (§3.5).
-- Start GPU training or a milestone-bearing run without a sheet, a FIT review and a typed owner release (§4.5, §5.1).
+- Start GPU training or a milestone-bearing run without a sheet, a non-author FIT and the lab's own pre-run review (§4.5, §5.1). D41's donor pass is the named exception that also needs the owner at dispatch.
 - Use a neural comparator, teacher or grader, apart from the single D41 donor pass (§3.10).
-- Type an owner release themselves. Casey types it personally with `UOR_LAB` unset; labs only stage the commands (§5.1, from D40).
 - Cancel a healthy run because a self-set budget ran out, or touch another session's GPU or files (§5.4).
 - Stop a mechanism. That needs the owner (§4.1).
 - Delete research. Negatives, unique source and other labs' work go to the archive unchanged (§4.7).
@@ -75,12 +74,12 @@ A **lab** is any contributor, human or AI, working under the charter. The rules 
 
 | Who | Decides | Source |
 |---|---|---|
-| The owner (Casey) | The charter, the technical constraints, holds, spending caps, milestone bars and exceptions. Releases each pre-registered run. Stops a mechanism. | `CHARTER.md` §5.1 |
-| The project-manager seat (Kimi, with a cover lab named by the owner when Kimi is offline) | The order of work. Keeps `NOW.md` with the roster. Operating notes may never contradict the charter. | `CHARTER.md` §5.2 |
-| Labs | Which task to pick from `NOW.md`, how to implement it, and the exact-head review of pull requests. | `CHARTER.md` §5.3, §5.5 |
-| Subagents | Reviews, adversarial tests and research. They never make critical decisions: a change to a bar, a status, a constraint or a spend goes to the manager or the owner as a decision card. | `CHARTER.md` §5.2 |
+| The owner (Casey) | The charter, technical constraints and GPU caps; stopping a mechanism; the D41 donor-pass release. | `CHARTER.md` §5.1, §5.2 |
+| The project-manager seat (Kimi, with a cover lab named by the owner when Kimi is offline) | The order of work from `PLAN.md`. Operating notes may never contradict the charter. | `CHARTER.md` §5.2 |
+| Labs | Which task to pick from `PLAN.md`, how to implement it, their own pre-run and decision reviews, and the exact-head review of pull requests. | `CHARTER.md` §5.1, §5.3, §5.5 |
+| Subagents | Reviews, adversarial tests and research. They never make critical decisions: a change to a bar, status, scope or stop rule belongs to the top lab session after its decision review; §3 and the caps stay with the owner. | `CHARTER.md` §5.1, §5.2 |
 
-Two rules guard the owner's role. A pending owner question means wait. And Casey's own words beat any written acceptance text, with his directions recorded verbatim the same day (`CHARTER.md` §5.1). The training hold, the M2 hold and the Stage B hold remain until the owner releases them, and a passing FIT review releases none of them.
+Two rules guard the owner's role without creating a wait. An unanswered ask becomes the lab's own decision review under D68, and Casey's own words beat any written acceptance text, with his directions recorded verbatim the same day (`CHARTER.md` §5.1). The old blanket Training, M2 and Stage B holds are released; D41's donor pass is the named owner-at-dispatch exception.
 
 ## How evidence is judged
 
@@ -91,7 +90,8 @@ Section 4 of the charter is about not fooling ourselves.
 - **Power.** A decisive run uses at least 2 seeds or at least 200 fresh rows, with bars no narrower than the measured noise, and reports a fresh transfer number with every development gain (§4.3).
 - **Controls and pivots.** Compare against lawful non-neural baselines such as count tables. After three results on one line that do not move its headline number, write a pivot note: stop, or run one decisive experiment (§4.4).
 - **Claims.** Write "measured X on Y against Z". A test pass is not trained capability, and `NOT_RUN` is not a pass (§4.6).
-- **The first-milestone closing bar.** For milestone M1, the integer model's top-1 accuracy through the D11 export must beat both the unigram table (1,226 of 14,287) and the T2 successor table (6,300 of 14,287) on the same development panel, on each of two seeds, with tokens per second reported (§4.8).
+- **The first-milestone closing bar (original text preserved).** For milestone M1, the integer model's top-1 accuracy through the D11 export must beat both the unigram table (1,226 of 14,287) and the T2 successor table (6,300 of 14,287) on the same development panel, on each of two seeds, with tokens per second reported (§4.8).
+- **Dated close outcome, not a new bar in this PR.** [Decision log 6515151261](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6515151261) records the pre-existing D68 whole-project lab decision approving M1's close and the supersession of the older criteria. The original D39 acceptance text and upstream evidence remain linked in the M1 item and dated records; this documentation does not rewrite them.
 
 ## Where it stands
 
@@ -99,8 +99,8 @@ Section 4 of the charter is about not fooling ourselves.
 |---|---|---|
 | Charter | Adopted 19 October 2026 by the owner at checkpoint 1 of the repository renormalisation. | `CHARTER.md`; [change log](changes.md) |
 | Old rules D0 to D41 and the long `AGENTS.md` | Replaced by the charter. Each decision keeps its heading and a one-sentence fate in the live index; full text is preserved unchanged in the archive. | [`decision-map.md`](decision-map.md); [archived original](../../archive/integration/DECISIONS-2026-10-19.md) |
-| Training, M2 and Stage B | Remain HELD until the owner releases them. | `CHARTER.md` §5.1 |
-| Pre-alpha status | 0 of 8 milestones complete; no useful conversation yet. | `STATUS.md` |
+| Training, M2 and Stage B | Go through the lab's own whole-project pre-run review under D67; D41's donor pass is the named owner-at-dispatch exception. | `CHARTER.md` §5.1, §5.10 |
+| Pre-alpha status | 1 of 8 milestones complete (M1); no useful conversation yet. | `PLAN.md`, rendered `STATE.md` |
 
 ## Go deeper
 

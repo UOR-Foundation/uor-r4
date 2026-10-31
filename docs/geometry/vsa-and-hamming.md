@@ -60,7 +60,7 @@ Hamming distance on E8 labels is not the E8 lattice distance, and decision D32 t
 |---|---|---|
 | [Flock read](../mechanisms/flock-read.md), [route read](../mechanisms/route-read.md), [relation read](../mechanisms/relation-read.md) | ACTIVE | Coordinate Hamming distance as one ranking or tie-break factor on the 16-root carrier |
 | [VSA](../mechanisms/vsa.md) | PARKED | Trained 4096-bit codes in the held prose learner. Reopening needs a lawful retraining, for example a Hamming binding on the discrete writer |
-| [Ternary and XOR arithmetic](../mechanisms/ternary-xor.md) | PARKED | Dense ternary or XOR weight contractions. A dense ternary sum is still a dense sum under D25 |
+| [Ternary and XOR arithmetic](../mechanisms/ternary-xor.md) | READY | Dense ternary or XOR weight contractions are barred, but the mechanism remains open for a lawful form; a dense ternary sum is still dense under D25 |
 
 On 29 Oct 2026: the Hamming read (XOR and popcount over 64-bit sign codes) is in the FBS trunk as copy heads and type heads (claude-146). Its integer kernel for the copy heads is built and matches an f64 reference (claude-189), but the served session does not run it yet. See the [pipeline map](../model/pipeline-map.md).
 

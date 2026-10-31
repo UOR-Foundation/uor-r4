@@ -31,57 +31,52 @@ const BLUE: &str = "#0072B2";
 const GREEN: &str = "#007A5E";
 const ORANGE: &str = "#E69F00";
 const VERM: &str = "#D55E00";
-const PURPLE: &str = "#7A4FA3";
 const PANEL: &str = "#F6F8FA";
 const RULE: &str = "#D0D7DE";
-const DATE: &str = "29 October 2026";
+const DATE: &str = "31 October 2026";
 
 /// Where a piece of the project stands. "Built" means source built and tested,
-/// not trained; "Held" means it waits on an owner hold.
+/// not trained.
 #[derive(Clone, Copy, PartialEq)]
 enum St {
     Working,
+    Complete,
     Built,
     Historical,
     Progress,
     Planned,
-    Held,
-    Paused,
 }
 
 impl St {
     fn label(self) -> &'static str {
         match self {
             St::Working => "WORKING",
+            St::Complete => "COMPLETE",
             St::Built => "BUILT & TESTED",
             St::Historical => "HISTORICAL · INACTIVE",
             St::Progress => "IN PROGRESS",
             St::Planned => "PLANNED",
-            St::Held => "HELD",
-            St::Paused => "PAUSED",
         }
     }
     fn legend(self) -> &'static str {
         match self {
             St::Working => "Working",
+            St::Complete => "Complete",
             St::Built => "Built & tested",
             St::Historical => "Historical · inactive",
             St::Progress => "In progress",
             St::Planned => "Planned",
-            St::Held => "Held by the owner",
-            St::Paused => "Paused",
         }
     }
     /// (fill, stroke, stroke width, dash)
     fn card(self) -> (&'static str, &'static str, f64, Option<&'static str>) {
         match self {
             St::Working => ("#E3F4EE", GREEN, 2.5, None),
+            St::Complete => ("#B7E2D2", GREEN, 3.0, None),
             St::Built => ("#E4EFF8", BLUE, 1.75, None),
             St::Historical => ("#F6F8FA", "#8C959F", 1.5, Some("4 4")),
             St::Progress => ("url(#hP)", "#B87A00", 2.0, None),
             St::Planned => ("#FFFFFF", "#6E7781", 1.75, Some("6 5")),
-            St::Held => ("#F4F0F8", PURPLE, 2.0, Some("9 4")),
-            St::Paused => ("#F6F8FA", "#8C959F", 1.75, Some("2 4")),
         }
     }
     /// (fill, stroke, text, dash)
@@ -94,13 +89,11 @@ impl St {
         Option<&'static str>,
     ) {
         match self {
-            St::Working => (GREEN, GREEN, "#FFFFFF", None),
+            St::Working | St::Complete => (GREEN, GREEN, "#FFFFFF", None),
             St::Built => (BLUE, BLUE, "#FFFFFF", None),
             St::Historical => ("#E6E9ED", "#8C959F", INK, Some("4 3")),
             St::Progress => (ORANGE, "#B87A00", INK, None),
             St::Planned => ("#FFFFFF", "#6E7781", ARROW, Some("4 3")),
-            St::Held => (PURPLE, PURPLE, "#FFFFFF", None),
-            St::Paused => ("#8C959F", "#8C959F", "#FFFFFF", None),
         }
     }
 }
@@ -318,12 +311,12 @@ impl Svg {
 fn architecture() -> Result<String, Fail> {
     let mut s = Svg::new("architecture", 1200.0, 660.0);
     s.header(
-        "UOR-R4: the FBS trunk, token → vector → integer → token",
+        "UOR-R4: two paths, one integer serving boundary",
         &format!(
-            "{DATE} · the trunk routes, exact memory stores (claude-155); pre-alpha, no M1 bar met"
+            "{DATE} · M1 complete on the saved discrete model; FBS works on new-phrasing reply opening"
         ),
     );
-    s.section(116.0, "THE MODEL · ONE MECHANISM PER PART");
+    s.section(116.0, "FLOAT-TRAINED FBS PATH · ONE MECHANISM PER PART");
     s.card(
         [190.0, 140.0, 390.0, 64.0],
         St::Working,
@@ -378,9 +371,9 @@ fn architecture() -> Result<String, Fail> {
     );
     s.card(
         [626.0, 290.0, 240.0, 62.0],
-        St::Progress,
+        St::Working,
         "Exact turn memory",
-        &["first word only; not served"],
+        &["/7 synthetic: open+reply"],
         false,
     );
     for (a, b) in [(150.0, 190.0), (366.0, 406.0), (1076.0, 1100.0)] {
@@ -419,7 +412,7 @@ fn architecture() -> Result<String, Fail> {
             "D11 integer serving",
             [
                 "4,829 tok/s snapped, M1 laptop",
-                "4,217–4,504 tok/s exact (/5)",
+                "4,217–4,504 tok/s; /5 gap pass",
             ],
         ),
         (
@@ -433,26 +426,26 @@ fn architecture() -> Result<String, Fail> {
             s.arrow(x + 256.0, 444.0, x + 288.0, 444.0, false);
         }
     }
-    s.section(512.0, "NOT YET IN THE MODEL · THE PATH FORWARD IN PLAN.md");
+    s.section(512.0, "M1 COMPLETE · CURRENT GAPS IN PLAN.md");
     s.card(
         [40.0, 530.0, 340.0, 66.0],
-        St::Planned,
-        "Memory past the first word",
-        &["turn-memory-reply: map gap 1"],
+        St::Complete,
+        "M1 complete (discrete)",
+        &["six bars, two seeds; exact DEV export"],
         false,
     );
     s.card(
         [406.0, 530.0, 350.0, 66.0],
         St::Progress,
-        "Parts served in integers",
-        &["Hamming hooks, memory, readout"],
+        "New-phrasing opening",
+        &["memory key that reworded questions reach"],
         false,
     );
     s.card(
         [782.0, 530.0, 378.0, 66.0],
         St::Planned,
-        "Text in / out (R7)",
-        &["not built: FBS takes token ids only"],
+        "Joined serving and R7",
+        &["integer parts, then typed text in and out"],
         false,
     );
     s.fit(
@@ -461,10 +454,13 @@ fn architecture() -> Result<String, Fail> {
         1120.0,
         "The key has no \"trained\" state: In progress also marks a part that is trained but not yet served.",
     );
-    s.legend(645.0, &[St::Working, St::Progress, St::Planned]);
+    s.legend(
+        645.0,
+        &[St::Complete, St::Working, St::Progress, St::Planned],
+    );
     s.finish(
-        "The FBS trunk model, 29 October 2026",
-        "BPE-4096 token ids are looked up in the learned FBS table. SpiralCore transport spin gives position; the FBS recurrence with the Hamilton gate and RMS norm routes; the Hamming-read copy heads and exact turn memory are trained but not yet served, and the memory moves only a reply's first word. The readout chosen is whole-table nearest; the served session still reads the native writer. Training is float on the GPU with a fixed-order backward; export through lut-stack/5 is exact; D11 integer serving reaches 4,829 tok/s snapped on the M1 laptop, with integer multiply and divide allowed and floats banned.",
+        "The two model paths, 31 October 2026",
+        "The saved discrete 19-table model has closed M1 at all six bars on two seeds: DEV 7,002 / 7,001, Fresh V2 7,215 / 7,228 and p-f 7,850 / 7,872, with exact 14,287-row DEV export agreement and Apple M1 decode at 10,876 / 10,566 tok/s. Separately, BPE-4096 token ids feed the float-trained FBS trunk: learned table, SpiralCore position, recurrence with Hamilton gate and RMS norm, Hamming reads and exact turn memory. The /7 engine serves opening and later-reply memory tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open. The FBS export through lut-stack/5 has exact rotations and its export gap inside the bar at DEV scope; D11 integer serving uses integer multiply and divide with floats banned. The immediate gate is localizing claude-232's parity MISS before p-x, followed by joined serving and a reachable memory key on new phrasing. On p-f, 62.5% of reference replies are verbatim TRAIN replies: reference-data overlap, not a generated-copy rate or new reply kinds.",
     )
 }
 
@@ -474,7 +470,7 @@ fn architecture_narrow() -> Result<String, Fail> {
         [16.0, 28.0],
         (18.0, 700, INK),
         "start",
-        "The FBS trunk model",
+        "Two model paths, M1 complete",
     );
     s.fit(
         [16.0, 50.0],
@@ -506,8 +502,8 @@ fn architecture_narrow() -> Result<String, Fail> {
         (
             318.0,
             St::Progress,
-            "Copy and exact turn memory",
-            "trained; not served; memory: 1st word",
+            "Exact memory; copy read open",
+            "/7 synthetic: open+reply",
         ),
         (
             400.0,
@@ -534,10 +530,25 @@ fn architecture_narrow() -> Result<String, Fail> {
     ] {
         s.rect([x, 518.0, 158.0, 62.0], 5.0, ("#FFFFFF", BLUE, 1.5, None));
         s.fit([x + 10.0, 543.0], (14.0, 700, INK), 138.0, title);
-        s.fit([x + 10.0, 565.0], (12.5, 400, BODY), 138.0, detail);
+        if x == 16.0 {
+            s.fit([x + 10.0, 565.0], (12.5, 400, BODY), 138.0, detail);
+        } else {
+            s.fit([x + 10.0, 558.0], (12.5, 400, BODY), 138.0, "4,829 snapped");
+            s.fit(
+                [x + 10.0, 573.0],
+                (11.5, 400, BODY),
+                138.0,
+                "/5 pass: 4,217–4,504",
+            );
+        }
     }
     s.arrow(174.0, 549.0, 206.0, 549.0, false);
-    s.text([16.0, 618.0], (14.0, 700, BLUE), "start", "NEXT (PLAN.md)");
+    s.text(
+        [16.0, 618.0],
+        (14.0, 700, BLUE),
+        "start",
+        "M1 DONE · NEXT (PLAN.md)",
+    );
     s.rect(
         [16.0, 636.0, 348.0, 48.0],
         5.0,
@@ -547,17 +558,18 @@ fn architecture_narrow() -> Result<String, Fail> {
         [30.0, 665.0],
         (14.0, 400, INK),
         320.0,
-        "Memory past a reply's first word",
+        "M1 complete: six bars, two seeds",
     );
     s.rect(
-        [16.0, 698.0, 348.0, 88.0],
+        [16.0, 698.0, 348.0, 112.0],
         5.0,
         ("#FFFFFF", MUTED, 1.25, Some("5 4")),
     );
     for (i, t) in [
-        "Parts served in integers: in progress",
-        "R7 text in / out: not built",
-        "Serving: integer × ÷ allowed; no floats",
+        "Current: new-phrasing reply opening",
+        "and a reachable exact memory key",
+        "Localize parity MISS before p-x",
+        "p-f refs: 62.5% verbatim TRAIN",
     ]
     .iter()
     .enumerate()
@@ -565,12 +577,12 @@ fn architecture_narrow() -> Result<String, Fail> {
         s.fit([30.0, 722.0 + 24.0 * i as f64], (14.0, 400, BODY), 320.0, t);
     }
     s.fit(
-        [16.0, 812.0],
+        [16.0, 824.0],
         (12.0, 400, MUTED),
         348.0,
-        "Green: served. Hatched: trained, not yet served.",
+        "Green: served. Hatched: in progress/synthetic.",
     );
-    s.finish("The FBS trunk model, narrow layout", "The same model as architecture.svg, arranged for narrow Markdown columns. BPE-4096 ids are looked up in the learned FBS table; SpiralCore spin gives position; the FBS recurrence with the Hamilton gate and RMS norm routes and is served. The Hamming-read copy and exact turn memory are trained but not served; the readout chosen is whole-table nearest while the session still reads the native writer. Float GPU training; D11 integer serving at 4,829 tok/s snapped on the M1 laptop. This is structure, not a language-quality claim.")
+    s.finish("Two model paths, M1 complete, narrow layout", "The saved discrete 19-table model has closed M1 at all six bars on two seeds. The separate float-trained FBS trunk uses a learned table, SpiralCore position, a Hamilton-gated recurrence and exact turn memory, with exact rotations and its export gap inside the bar under lut-stack/5 at DEV scope. The /7 engine serves opening and later-reply memory tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open. Next, localize claude-232's parity MISS before p-x, then joined integer serving and R7. On p-f, 62.5% of reference replies are verbatim TRAIN replies: reference-data overlap, not a generated-copy rate, new reply kinds or useful conversation.")
 }
 
 fn compliant_path() -> Result<String, Fail> {
@@ -944,7 +956,7 @@ fn operators() -> Result<String, Fail> {
 fn training_pipeline() -> Result<String, Fail> {
     let mut s = Svg::new("training-pipeline", 1200.0, 680.0);
     s.header(
-        "Training: float on the GPU, exported exactly to integers",
+        "Training: FBS float; M1 discrete",
         &format!(
             "{DATE}. Float training is offline only (D37); serving is D11 integers. Unit REPORTs: docs/loop/tasks/."
         ),
@@ -1057,19 +1069,20 @@ fn training_pipeline() -> Result<String, Fail> {
         true,
     );
     s.card(
-        [600.0, 488.0, 560.0, 116.0],
-        St::Progress,
-        "The M1 bar (CHARTER §4.8)",
+        [600.0, 488.0, 560.0, 140.0],
+        St::Complete,
+        "M1 complete (discrete)",
         &[
-            "integer top-1 must beat the unigram (1,226) and T2 successor",
-            "(6,300) tables on DEV at two seeds; no closing run has passed",
+            "DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228;",
+            "p-f 7,850 / 7,872; Apple M1 decode 10,876 / 10,566 tok/s",
+            "p-f refs: 62.5% verbatim TRAIN",
         ],
         true,
     );
-    s.legend(656.0, &[St::Working, St::Built, St::Progress]);
+    s.legend(656.0, &[St::Complete, St::Working, St::Built, St::Progress]);
     s.finish(
-        "The training pipeline, 29 October 2026",
-        "Data, pre-registration, a non-author TEST FITNESS review and the lab's own pre-run review come before GPU time. The FBS trunk trains in float on a Vast.ai GPU pod with a deterministic fixed-order backward, is evaluated on the DEV panel at two seeds with tokens/s, and its results are kept. The export through lut-stack/5 keeps the rotations exact. No closing run has passed the M1 bar.",
+        "Training and the M1 close, 31 October 2026",
+        "Data, pre-registration, a non-author TEST FITNESS review and the lab's own pre-run review come before GPU time. The saved discrete 19-table model has closed M1 at all six bars on two seeds, with exact 14,287-row DEV export agreement and Apple M1 decode at 10,876 / 10,566 tok/s. The separate float-trained FBS trunk uses a fixed-order backward and exports with exact rotations and its export gap inside the bar through lut-stack/5 at DEV scope. p-f reference replies are 62.5% verbatim TRAIN, so M1 is not useful-chat qualification; current work localizes claude-232's parity MISS before p-x and new-phrasing reply opening.",
     )
 }
 
@@ -1085,9 +1098,9 @@ fn serving_pipeline() -> Result<String, Fail> {
         St::Working,
         "Exported artifacts",
         &[
-            "uor-r4.lut-stack/5: the FBS trunk,",
-            "unsnapped and exact; the session",
-            "refuses /6 until it serves Hamming",
+            "lut-discrete-trunk/1: the M1 pair;",
+            "lut-stack/5: the separate FBS trunk;",
+            "/6 carries more Hamming hooks",
         ],
         true,
     );
@@ -1140,12 +1153,28 @@ fn serving_pipeline() -> Result<String, Fail> {
     s.arrow(340.0, 448.0, 370.0, 448.0, false);
     s.arrow(790.0, 448.0, 820.0, 448.0, false);
 
-    s.fit([40.0, 540.0], (12.5, 400, MUTED), 1120.0, "Served speed on the M1 laptop: 270 tok/s, then 3,042 with exact kernels (claude-163 to 170), then 4,829 snapped with integer multiply and divide");
-    s.fit([40.0, 558.0], (12.5, 400, MUTED), 1120.0, "(claude-177); lut-stack/5 exact: 4,217–4,504. No vector kernel yet. The Pages Studio runs the older R4G1 router in WASM (frozen); M5 and M7 not built.");
+    s.fit(
+        [40.0, 540.0],
+        (12.5, 400, MUTED),
+        1120.0,
+        "Saved discrete M1 pair: 10,876 / 10,566 native decode tok/s on Apple M1.",
+    );
+    s.fit(
+        [40.0, 558.0],
+        (12.5, 400, MUTED),
+        1120.0,
+        "Separate FBS serving: 270, then 3,042 with exact structured kernels, then 4,829 snapped tok/s; integer multiply and divide (claude-163–177).",
+    );
+    s.fit(
+        [40.0, 576.0],
+        (12.5, 400, MUTED),
+        1120.0,
+        "FBS /5 DEV gap pass: 4,217–4,504 tok/s. Studio: synthetic parity plus public M1 top-8 prediction; desktop: synthetic stand-in; neither is a qualified product.",
+    );
     s.legend(636.0, &[St::Working, St::Built, St::Progress]);
     s.finish(
-        "The D11 serving pipeline, 29 October 2026",
-        "The integer engine serves the FBS trunk exported as lut-stack/5, unsnapped and exact, with integer multiply and divide allowed and floats banned; replies are byte-identical. It reaches 4,829 tok/s snapped on the M1 laptop. Next, the Hamming reads, the turn memory and the chosen readout are served in integers. The native learner has its own integer runtime and terminal chat.",
+        "The D11 serving pipeline, 31 October 2026",
+        "The integer engine serves the saved discrete M1 pair and the separate float-trained FBS trunk. The M1 pair has exact 14,287-row DEV export agreement and reaches 10,876 / 10,566 native decode tok/s on Apple M1 under the bar-f remeasurement; the older close-grade bar-c rate is 11,026 / 10,573. FBS lut-stack/5 has exact rotations and its export gap inside the bar at DEV scope and reaches 4,217–4,504 tok/s; the separate snapped artifact reaches 4,829 tok/s. Integer multiply and divide are allowed and floats are banned. Next, localize claude-232's parity MISS before p-x, then a reachable memory key and joined integer serving with R7. Studio has synthetic parity plus public M1 top-8 next-token prediction after an explicit download; desktop uses a synthetic stand-in. Neither is a qualified product. On p-f, 62.5% of reference replies are verbatim TRAIN replies: reference-data overlap, not a generated-copy rate or new reply kinds.",
     )
 }
 
@@ -1153,39 +1182,39 @@ fn milestones() -> Result<String, Fail> {
     let mut s = Svg::new("milestones", 1200.0, 660.0);
     s.header(
         "Progress toward the alpha",
-        &format!("Pre-alpha, {DATE}: 0 of 8 complete. No model holds a useful conversation yet. Each milestone closes only on a saved model."),
+        &format!("Pre-alpha, {DATE}: 1 of 8 complete (M1). No model holds a useful conversation yet. Each milestone closes only on a saved model."),
     );
     let items: [(&str, &str, St, [&str; 4]); 8] = [
         (
             "M1",
             "Language base",
-            St::Progress,
+            St::Complete,
             [
-                "reply bar 37 of 116:",
-                "suspended; closes on",
-                "the §4.8 bar via a saved",
-                "model (D79); not yet",
+                "six bars; p-f refs 62.5% TRAIN",
+                "DEV 7,002 / 7,001;",
+                "p-f 7,850 / 7,872;",
+                "Fresh V2 7,215 / 7,228",
             ],
         ),
         (
             "M2",
             "Grounded reply",
-            St::Held,
+            St::Progress,
             [
-                "437/512 dev replies,",
-                "0/128 fresh transfer;",
-                "blocked on the owner",
+                "table/search + decode/grade",
+                "nearest built; parity MISS",
+                "localize; p-x rerun open",
                 "",
             ],
         ),
         (
             "M3",
             "Durable memory",
-            St::Paused,
+            St::Progress,
             [
-                "evaluator and session",
-                "built; waits on an",
-                "M1 or M2 model",
+                "consumer built; M3 run",
+                "awaits M1/M2 selection",
+                "in progress",
                 "",
             ],
         ),
@@ -1193,12 +1222,7 @@ fn milestones() -> Result<String, Fail> {
             "M4",
             "One served model",
             St::Planned,
-            [
-                "one model end to end,",
-                "served on the laptop:",
-                "not started",
-                "",
-            ],
+            ["accepted model through", "D11 and CLI: open", "", ""],
         ),
         (
             "M5",
@@ -1215,8 +1239,8 @@ fn milestones() -> Result<String, Fail> {
         (
             "M7",
             "Distribution",
-            St::Planned,
-            ["API, WASM, Studio;", "local API only so far", "", ""],
+            St::Progress,
+            ["runtime on synthetic;", "accepted parity open", "", ""],
         ),
         (
             "M8",
@@ -1240,24 +1264,31 @@ fn milestones() -> Result<String, Fail> {
         s.text([x, cy + 6.0], (16.0, 700, INK), "middle", id);
     }
     s.path(
-        &format!("M100,{} L100,112 L529,112 L529,{}", cy - 32.0, cy - 34.0),
+        &format!("M100,{} L100,112 L386,112 L386,{}", cy - 32.0, cy - 34.0),
         BLUE,
         2.0,
         None,
         true,
     );
     s.path(
-        &format!("M243,{} L243,124 L529,124", cy - 32.0),
+        &format!("M243,{} L243,124 L386,124", cy - 32.0),
         BLUE,
         2.0,
         None,
         false,
     );
+    s.path(
+        &format!("M386,{} L386,118 L529,118 L529,{}", cy - 32.0, cy - 34.0),
+        BLUE,
+        2.0,
+        None,
+        true,
+    );
     s.text(
         [315.0, 106.0],
         (12.5, 700, BLUE),
         "middle",
-        "M1 + M2 join at M4",
+        "selected M1 or M2 → M3 → M4",
     );
     for (i, (id, name, st, lines)) in items.iter().enumerate() {
         let col = (i % 4) as f64;
@@ -1271,10 +1302,10 @@ fn milestones() -> Result<String, Fail> {
             true,
         );
     }
-    s.legend(636.0, &[St::Progress, St::Held, St::Paused, St::Planned]);
+    s.legend(636.0, &[St::Complete, St::Progress, St::Planned]);
     s.finish(
         "Milestones M1 to M8",
-        "29 October 2026: 0 of 8 milestones complete. M1 language base in progress (the reply bar, 37 of target 116, is suspended; M1 closes on the CHARTER 4.8 bar via the saved-model path, D79, and no closing run has passed it); M2 grounded reply blocked on the owner (437 of 512 development replies, 0 of 128 on fresh transfer); M3 durable memory paused; M4 to M8 not started.",
+        "M1 closed 30 October; status through 31 October 2026: 1 of 8 milestones complete. M1 language base complete at all six bars on two seeds (DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228; p-f 7,850 / 7,872; exact 14,287-row DEV export and B4; Apple M1 decode 10,876 / 10,566 tok/s). M2 grounded reply and M3 durable memory are in progress: claude-220 serves the point key inside one float model with a partial gain; claude-222 built the integer point table and search synthetically; claude-224 built the panel decode and grade; claude-227 passed retention GPU parity within the 3% bar; claude-228 built the run's reference/read-back/BOS instruments; claude-229's real run found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so all grade pairs are (0, 0). Claude-231 built the nearest readout on native and browser paths; claude-232 missed greedy parity in every cell, so the mismatch must be localized before the p-x rerun. The selected M1 or M2 model passes M3 before M4; M1/M2 do not bypass M3. M4 to M8 are not complete. M7 runtime and Studio harness work is in progress on a synthetic stand-in, with accepted-model parity open. On p-f, 62.5% of reference replies are verbatim TRAIN replies: reference-data overlap, not a generated-copy rate or new reply kinds; M1 is not useful-chat qualification.",
     )
 }
 

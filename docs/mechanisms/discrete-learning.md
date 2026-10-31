@@ -1,12 +1,12 @@
 # Discrete geometric learning (exact-move counterfactual training)
 
-**Status: ACTIVE.** It is the learning rule of the only live model path, `crates/uor-r4-discrete`. It has trained a short pilot, a full K=8 dose, the four K16 runs (runs with a shortlist of K=16 cells; see the [glossary](../start/glossary.md)) and the Relation runs that stopped at the first checkpoint. None has shown a language gain or beaten its frozen control, and training stays held until the owner releases each run ([K16 outcome](../labs/k16-outcome-call-2026-10-19/README.md)).
+**Status: ACTIVE.** It is the learning rule of the live discrete model path, `crates/uor-r4-discrete`. The pilot, K=8 dose, four K16 runs and Relation stops are preserved as negative or diagnostic history. Stage T and the later 19-table joint-pointer Hamilton trunk then produced the saved M1 model: DEV 7,002 / 7,001, Fresh V2 7,215 / 7,228 and p-f 7,850 / 7,872 at two seeds, with exact 14,287-row DEV export agreement. That is a whole-model M1 result, not an independent ablation for this learning rule or useful chat. On p-f, 62.5% of reference replies are verbatim TRAIN replies: reference-data overlap, not a generated-copy rate or new reply kinds. New training goes through the lab's pre-run review (D67), not a blanket owner hold ([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run, **hypothesis** means an untested idea. See [`docs/formal_vocabulary.md`](../formal_vocabulary.md).
 
 ## In plain words
 
-The model is a big table of small whole-number vectors, one per word, plus a few routing choices. To teach it, the machine picks one table entry and tries every allowed rotation of it, 16 options counting "leave it alone". For each option it replays a batch of training examples and counts the mistakes with whole-number arithmetic. It keeps the best option only if that is strictly better than leaving the entry alone. There are no gradients, no decimals and no matrix multiplication. Every step stays inside the values the finished model can hold. So far the method has moved some counts but has not produced better language.
+The model is a big table of small whole-number vectors, one per word, plus a few routing choices. To teach it, the machine picks one table entry and tries every allowed rotation of it, 16 options counting "leave it alone". For each option it replays a batch of training examples and counts the mistakes with whole-number arithmetic. It keeps the best option only if that is strictly better than leaving the entry alone. There are no gradients, no decimals and no matrix multiplication. Every step stays inside the values the finished model can hold. Earlier forms moved counts without producing better language; the later 19-table model passed M1, but that whole-model result does not isolate this rule's independent effect.
 
 ## What it replaces in a transformer
 
@@ -36,7 +36,7 @@ The 15 non-identity moves are bivector rotations. The step picks $m^*=\arg\min_m
 
 **Speed-ups.** The row-parallel kernel (`rows_v1`) computes the baseline once per row and each candidate once per row and lane, instead of replaying every row serially per candidate. It reproduces the serial losses on every checked case (**measurement**: Route read 3.843 s to 0.0691 s per proposal, 55.6 times faster, 64 rows; Route-mode index coverage was widened after review). BVG-K (batched verified coordinates) scores up to 64 coordinates per launch and commits a block only if its joint loss beats the best single move.
 
-**Rule check.** No softmax, exp, softplus, sigmoid or tanh (D23), and no matrix multiplication (D30): the choice is an integer minimum, distances are integer L1 and Hamming, and moves are table lookups. The snapshot is integer, but it has not been exported or audited against the D11 serving form, no serving engine for it exists and no export gap or tokens per second has been measured. D37 allows offline float training; that would need a separate scanned module and a reported export gap.
+**Rule check.** No softmax, exp, softplus, sigmoid or tanh (D23), and no matrix multiplication (D30): the choice is an integer minimum, distances are integer L1 and Hamming, and moves are table lookups. The saved 19-table discrete model exports through `uor-r4.lut-discrete-trunk/1` with exact 14,287-row DEV agreement and B4 pass, and serves at 10,876 / 10,566 native decode tok/s on Apple M1 under the bar-f remeasurement. D37 allows offline float training; that needs a separate scanned module and a reported export gap.
 
 ## What has been tried
 
@@ -65,12 +65,12 @@ $P_{succ}$ is the 3,847-row copy-successor sub-panel (see [relation-read](./rela
 
 - Route-frame and gate learning in the pilot (only vector blocks 0 to 1,639 moved).
 - A collision-free start together with a wide enough shortlist ($K$ of about 34 or more, or cells placed by address structure).
-- The admission-preserving rule actually running on a GPU.
+- The next admission-preserving rerun after the full-dose run reached Q1 and stopped at batch 5,248; its outcome is **NOT_RUN**. The M1 whole-model pass does not isolate the placement's effect.
 - Frequent-token revisits and a full corpus pass (one 16,404-coordinate pass uses 1,049,856 of 2,425,925 training targets).
-- The BVG-K learning law as a training run, and Flock reads trained in at dose.
+- The independent effects of BVG-K and Flock reads at dose; both were used in the M1 composition without isolated attribution.
 - All 240 E8 roots, the icosian and quaternion adapters, and $\mathbb{Z}[\varphi]$ pairs.
-- Any generated text, reply grade, bits per byte or tokens per second from a trained discrete model.
-- An integer serving engine for the snapshot, and fresh-slice transfer for any run (the fresh slice is sealed and unopened).
+- Useful generated conversation, complete correct replies and M2 acceptance. M1 has exact 14,287-row DEV export agreement and Apple M1 decode measured, but that is not useful chat.
+- Fresh-slice transfer for the older runs; M1's Fresh V2 and p-f transfer have now been measured.
 - A float credit sheet on the same geometry (D37 allows it; none is registered).
 
 ## Also known as
@@ -80,7 +80,7 @@ SpiralCore/FBS discrete learning; counterfactual-choose-apply-validate training;
 ## Code
 
 - [`discrete.cu`](../../crates/uor-r4-discrete/src/discrete.cu): forward pass, 16-lane counterfactual, choose, apply, validate, shared writer.
-- [`device.rs`](../../crates/uor-r4-discrete/src/device.rs) and [`training.rs`](../../crates/uor-r4-discrete/src/training.rs): `propose`, `apply`, the corpus driver and the training hold.
+- [`device.rs`](../../crates/uor-r4-discrete/src/device.rs) and [`training.rs`](../../crates/uor-r4-discrete/src/training.rs): `propose`, `apply` and the corpus driver. New runs follow the lab's D67 pre-run review.
 - [`rows_source.rs`](../../crates/uor-r4-discrete/src/rows_source.rs) and [`bvgk_source.rs`](../../crates/uor-r4-discrete/src/bvgk_source.rs): row-parallel counterfactual and BVG-K.
 - [`attention_audited.rs`](../../crates/uor-r4-discrete/src/attention_audited.rs): the admission-preserving controller. [`spiralcore_operator.rs`](../../crates/uor-r4-core/src/spiralcore_operator.rs): the 64-element group.
 - [`wider_carrier_source.rs`](../../crates/uor-r4-discrete/src/wider_carrier_source.rs) and [`wider_carrier.rs`](../../crates/uor-r4-discrete/src/wider_carrier.rs): wider code carrier ($B = 6, 8$ blocks) CUDA qualification kernels and zero-training capacity grader.

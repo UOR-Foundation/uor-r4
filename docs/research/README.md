@@ -9,20 +9,20 @@ flowchart LR
   C -- no --> D["Build, test, run<br/>host checks"]
   C -- yes --> E["One-page sheet"]
   E --> F["Review by someone<br/>who is not the author"]
-  F --> G["Owner releases<br/>the sheet once"]
+  F --> G["Lab D67 pre-run review<br/>passes"]
   G --> H["Run on the GPU"]
   D --> I["New notebook row"]
   H --> I
   I --> J["Sealed artifacts and<br/>old records go to archive/"]
 ```
 
-*The path of one piece of work. Only the right-hand branch needs a sheet, a review and an owner release.*
+*The path of one piece of work. Only the right-hand branch needs a sheet, a FIT review and the lab's pre-run review.*
 
 Terms follow the [glossary](../start/glossary.md). Claims are labelled **proof**, **measurement** or **hypothesis** as defined in [`formal_vocabulary.md`](../formal_vocabulary.md). The rules below are the research clauses of the [charter](../../CHARTER.md); section numbers point there.
 
 ## The working rules
 
-**One notebook per research line (charter §5.6).** A *line* is one sustained question, such as "how the discrete model reads context". Its notebook lives at `docs/research/notebook/<line>.md`. Each result is one row: date, what ran, the number, the bar it was tested against, the verdict and a link to the artifact. A dated evidence folder is kept only when a run seals artifacts. The one-page plan for the whole project is [`NOW.md`](../integration/NOW.md); with the notebooks, it replaces the old running log (`current-state.md`).
+**One notebook per research line (charter §5.6).** A *line* is one sustained question, such as "how the discrete model reads context". Its notebook lives at `docs/research/notebook/<line>.md`. Each result is one row: date, what ran, the number, the bar it was tested against, the verdict and a link to the artifact. A dated evidence folder is kept only when a run seals artifacts. The one plan for the whole project is [`PLAN.md`](../../PLAN.md); with the notebooks and rendered STATE/HANDOFF, it replaces the old running log (`current-state.md`).
 
 **A sheet only where it decides spend (§4.5).** A *sheet* is a pre-registration of one page: the bar, the noise, the controls, the seeds, the cost and what each outcome would decide. It needs a review by a non-author, called a FIT review, before:
 
@@ -31,7 +31,7 @@ Terms follow the [glossary](../start/glossary.md). Claims are labelled **proof**
 
 A fresh-context subagent counts as a non-author. Builds, finite kernel tests and host checks need no sheet. Old float sheets come back only as new sheets with a new FIT. A FIT review releases nothing by itself.
 
-**One owner release per sheet (§5.1).** The owner types one release phrase personally for each sheet. It covers all the sheet's arms, seeds and registered stop rules. Labs stage the commands and then check the records; no lab types a release for the owner.
+**A pre-run review for each run (§5.1, D67).** A GPU or training run goes ahead on the lab's own whole-project pre-run review, inside the caps. D41's donor pass is the named owner-at-dispatch exception; there is no blanket owner release for every sheet. Labs stage the commands and check the records.
 
 **Mechanism statuses (§4.1).** Every mechanism is **ACTIVE** (on the model path), **READY** (built and tested but not yet trained in) or **PARKED** (the tested forms failed or broke a rule). A PARKED page lists what would reopen it. There is no terminal status. The [mechanism board](../mechanisms/README.md) shows the current state. This is the rule from decision D22 (a negative closes a configuration, never a mechanism).
 
@@ -51,7 +51,7 @@ A fresh-context subagent counts as a non-author. Builds, finite kernel tests and
 
 The research line that is current is the FBS trunk line, which carries the model's replies. See the [pipeline map](../model/pipeline-map.md) for the two model paths. Four labs work in the loop (claude, antigravity, deepseek and kimi). Its results since 27 Oct are in [what the project knows](./findings.md).
 
-The catalog groups its 1,173 records into 20 lines. The ten largest are below. Counts are catalog records, which mix lab records and lane results, so they show where effort went and not how many experiments ran.
+The current catalog groups its **1,175 records** into 20 lines ([archive catalog](https://github.com/UOR-Foundation/uor-r4/blob/main/archive/CATALOG.md)); the 19 October audit had 1,173. The ten largest are below. Counts are catalog records, which mix lab records and lane results, so they show where effort went and not how many experiments ran.
 
 | Line (catalog id) | Records | First to last date | What it covers |
 |---|---:|---|---|
@@ -78,6 +78,6 @@ To find a record, use the generated index [`archive/CATALOG.md`](../../archive/C
 
 - [What the project knows](./findings.md): the lessons and the measured results behind them.
 - [What is still open](./open-questions.md): the tests nobody has run and the cheapest decisive ones.
-- [How the project got here](./history.md): five phases and 32 eras, 10 June to 15 October.
+- [How the project got here](./history.md): seven phases and 32 eras, 10 June to 31 October 2026; the 15 October audit cutoff is followed by Phases F and G.
 - [Mechanism board](../mechanisms/README.md) and the [charter](../../CHARTER.md).
-- [`NOW.md`](../integration/NOW.md) for the current plan, and [`docs/harness/README.md`](../harness/README.md) for the research harness.
+- [`PLAN.md`](../../PLAN.md) and rendered [`STATE.md`](../../STATE.md) for the current plan and status, and [`docs/harness/README.md`](../harness/README.md) for the research harness.

@@ -1,12 +1,12 @@
 # Prime-zeta codebook
 
-**Status: ACTIVE.** The constructor is built and qualified, and its table is wired in as the start for new training lineages. No trained artifact has started from it yet: rung 0 and K16 began from a seeded 16-vector table. It is the baseline arm of the 19 October pre-flights and the fallback cell inside the [address-structured table](./address-cells.md). No run has yet trained it against its two matched controls. That comparison is `NOT_RUN` and held ([construction record](../../archive/labs/prime-zeta-construction-2026-10-14/README.md)).
+**Status: ACTIVE.** The constructor is built and qualified, and its table is wired in as the start for new training lineages. Rung 0 and K16 began from a seeded 16-vector table, so their early failures are not PrimeZeta verdicts. It is the baseline arm of the 19 October pre-flights and the fallback cell inside the [address-structured table](./address-cells.md). The 25 October zero-update comparison against injective nulls was a **configuration loss**: P8 lost to Q0, Q1, R0 and R1, tied Q2 and won only R2 ([result](../labs/r-prime-zeta-vs-nulls/README.md)). A trained semantic advantage remains unproven ([construction record](../../archive/labs/prime-zeta-construction-2026-10-14/README.md)).
 
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run, **hypothesis** means an untested idea (see [the charter](../../CHARTER.md), section 4.6). Unfamiliar project terms (K16, A8, admission, NOT_RUN) are in the [glossary](../start/glossary.md).
 
 ## In plain words
 
-A language model has to start every word somewhere. The usual start is random numbers. In this project the random start gave 4,096 words only 16 different starting positions, so many words were indistinguishable. This mechanism gives every word its own fixed address instead. A word's place in the vocabulary picks a prime (2, 3, 5, and so on), and the prime is turned into a set of angles using the known frequencies of the Riemann zeta zeros. Everything is computed once, offline, and stored as a table of small whole numbers. Whether the zeta angles help beyond simply keeping words distinct has not been tested.
+A language model has to start every word somewhere. The usual start is random numbers. In this project the random start gave 4,096 words only 16 different starting positions, so many words were indistinguishable. This mechanism gives every word its own fixed address instead. A word's place in the vocabulary picks a prime (2, 3, 5, and so on), and the prime is turned into a set of angles using the known frequencies of the Riemann zeta zeros. Everything is computed once, offline, and stored as a table of small whole numbers. At zero updates, the zeta-angle table did not outperform simple injective controls; whether training gives those angles a useful effect remains untested.
 
 ## What it replaces in a transformer
 
@@ -55,21 +55,22 @@ Almost all of the evidence concerns construction and admission. No row measures 
 | 14 Oct | Construction qualification, bounded GPU controls, zero training | Bit-exact on two CPU architectures; 4,096/4,096 unique vectors, 256/256 cells; 4,090/4,096 tokens differ from TangentNull and 4,096/4,096 from NormalNull; 17 base plus 6 PrimeZeta controls pass with 0 applied updates; 0 float instructions; pod cost about $0.13 | positive | [record](../../archive/labs/prime-zeta-construction-2026-10-14/README.md) |
 | 18 Oct | Wired in as the start for new lineages; host census on the 14,287-row development panel | Distinct vectors 16 to 4,096; reachable rows (alias ceiling) 1,986 to 14,287; tie mass 12,301 rows to 0. Host check only | positive | [wiring](../labs/injective-codebook-init-2026-10-18/README.md), [census](../labs/coverage-census-2026-10-18/README.md) |
 | 19 Oct | Zero-update pre-flight at K=8 | Aliasing gone, but words spread over all 256 cells, so only about 8 of 256 target cells are opened. Admitted 127 of 3,847 against a gate of 500. Run not started | diagnostic stop | [pre-flight](../labs/injective-preflight-and-c2-qualify-2026-10-19/README.md) |
+| 25 Oct | Zero-update comparison against quota-only and random injective nulls | P8 admitted 127/3,847 against 178–188 for the strongest nulls; lost to Q0, Q1, R0 and R1, tied Q2 and won only R2 | **configuration loss** under D22 | [comparison](../labs/r-prime-zeta-vs-nulls/README.md) |
 
-**Reading these honestly.** The last row closes the configuration "spread words evenly at K=8". The record calls it an instrument-reachability problem, not a failure of prime-zeta geometry. The older retrieval results ran on a previous store, and one of them was a banded-storage artifact. None tests zeta phases inside a token codebook on the current stack, and the #958 and #973 results never isolated the zeta term. D22 applies: these close configurations, not the mechanism.
+**Reading these honestly.** The pre-flight closes the configuration "spread words evenly at K=8". The record calls it an instrument-reachability problem, not a failure of prime-zeta geometry. The 25 October comparison then tested PrimeZeta against pure-integer injective controls on the current stack and lost at that zero-update scope. That is a configuration negative, not a mechanism-wide rejection or a trained language result. Older retrieval results ran on a previous store, one was a banded-storage artifact, and #958/#973 never isolated the zeta term. D22 applies throughout.
 
 ## What has never been tested
 
 - **Trained attribution.** PrimeZeta against TangentNull, NormalNull and a quota-only injective control, at matched budget, with at least 2 seeds or 200 fresh rows.
 - **Meaning in the phases.** Primes are assigned by token id, which is arbitrary, so the phases encode identity and not meaning. No test checks whether phase-near words behave alike (hypothesis).
-- **Any language effect.** Every result is construction, census or zero-update admission.
+- **Any trained language effect.** Existing results are construction, census or zero-update admission.
 - **Seed variance.** The table is a function of token id alone. Seed diversity needs a declared extra axis, such as a channel offset or batch order.
 - **Special tokens** (start, end, pad) with reserved small primes or fixed points.
 - **Zeta phases as a position encoding** on the discrete stack.
 
 ## What comes next
 
-The mechanism is ACTIVE, so this is a plan, not a reopening. A trained-in comparison needs its own pre-registered sheet that passes `TEST FITNESS: FIT`, plus the owner's training release. The sheet should report admission, top-1 and top-8, separated hinge losses and fresh transfer. Since the address-structured table now places words by their predecessors, a second question is whether this table still earns its place as the fallback, or whether a random injective table would do the same job.
+The mechanism is ACTIVE, so this is a plan, not a reopening. The registered zero-update null comparison is done and lost at that scope; a trained-in comparison now needs its own pre-registered sheet with a fresh FIT and the lab's pre-run review under D67. It should report admission, top-1/top-8, separated hinge losses and fresh transfer. Since the address-structured table places words by their predecessors, a second question is whether this table still earns its fallback place or whether a random injective table would do the same job.
 
 ## Also known as
 

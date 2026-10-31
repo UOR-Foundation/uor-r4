@@ -2,7 +2,7 @@
 
 **Status: ACTIVE.** It is the output step of the current model and the first measured binding limit, seen on rung 0 and for the top-8 bar (after K16, the cause of the weak ranking is open): the correct word often is not in the shortlist at all ([attention-state record](../labs/attention-state-2026-10-18/README.md)).
 
-**29 Oct 2026.** On the float-trained FBS trunk, the native writer's admission failed at seed 2: top-1 493 against whole-table nearest's 6,909 (claude-150). The decision is to serve whole-table nearest. The served session still reads the native writer today (`crates/uor-r4-integer/src/stack/session.rs`, `writer.table`), so serving nearest is part of the path forward. `writer-admission` is ready as the next attempt on admission. Details in the [pipeline map](../model/pipeline-map.md).
+**29 Oct 2026, with the current serving result.** On the float-trained FBS trunk, the native writer's admission failed at seed 2: top-1 493 against whole-table nearest's 6,909 (claude-150). The decision is to serve whole-table nearest. Claude-231 built the nearest readout on native and browser paths; [claude-232](../loop/tasks/integer-nearest-readout/claude-232/REPORT.md) then missed greedy parity in every cell, so the mismatch must be localized before p-x. `writer-admission` remains ready as independent work on the cheaper writer, not a substitute for that parity gate. Details in the [pipeline map](../model/pipeline-map.md).
 
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run, **hypothesis** means an untested idea (see [the charter](../../CHARTER.md), section 4.6). Unfamiliar project terms (K16, A8, admission, NOT_RUN) are in the [glossary](../start/glossary.md).
 
@@ -68,7 +68,7 @@ Terms: $P_{succ}$ is the 3,847-row copy-successor sub-panel (see [relation-read]
 
 ## What comes next
 
-1. **Admission-preserving A8 rerun** with the 64-batch anchor guard. The controller is merged (`UOR-Foundation/uor-r4#2782`). Finite qualification and an owner-typed release are outstanding.
+1. **Next admission-preserving rerun** with the 64-batch anchor guard. The controller is merged (`UOR-Foundation/uor-r4#2782`), finite qualification passed 5/5 with D67 pre-run review PASS, and the full-dose rerun reached Q1 before a diagnostic stop. A further rerun needs its own D67 pre-run review; D41's donor pass is the only owner-at-dispatch exception.
 2. **Occupancy-regularised or load-balanced rank objective**, the registered route after the K16 collapse.
 3. **A finer address metric** if admission stays capped at $K=16$.
 4. **$K>8$ on an injective, address-structured codebook.**

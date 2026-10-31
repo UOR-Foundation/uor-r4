@@ -1,6 +1,6 @@
 # The Hopf map and the kept fibre
 
-In the project's quaternion designs, a rotation state is a point on a four-dimensional sphere (the current model M1 carries 8D integer blocks instead). The Hopf map takes a three-dimensional shadow of that point. The shadow forgets one angle, so many different states cast the same shadow. This chapter explains what the map does, what the forgotten angle is, and what the project does and does not do with it. Short version: the idea is built and unit-tested as a helper, it is not part of the current model's read, and nothing yet shows that keeping the forgotten angle helps language. The mechanism's status is PARKED ([mechanism page](../mechanisms/hopf-observation.md)).
+In the project's quaternion designs, a rotation state is a point on a four-dimensional sphere (the current model M1 carries 8D integer blocks instead). The Hopf map takes a three-dimensional shadow of that point. The shadow forgets one angle, so many different states cast the same shadow. This chapter explains what the map does, what the forgotten angle is, and what the project does and does not do with it. Short version: the idea is built and unit-tested as a helper, it is not part of the current model's read, and nothing yet shows that keeping the forgotten angle helps language. The kept-fibre map is READY for a language test; the older sector-routing form is PARKED ([mechanism page](../mechanisms/hopf-observation.md)).
 
 ![Hopf observation: the map from the 3-sphere to the 2-sphere loses a circle coordinate, the fibre](../figures/geometry/hopf-fibration.svg)
 
@@ -46,7 +46,7 @@ Only the occupancy rows test the Hopf map itself, and they tested one projection
 
 | Mechanism | Status | Use |
 |---|---|---|
-| [Hopf observation](../mechanisms/hopf-observation.md) | PARKED | Telemetry in the older `uor-r4-integer` chat runtime only (not M1). Per-session holonomy and winding are recorded, and they change no output |
+| [Hopf observation](../mechanisms/hopf-observation.md) | Kept-fibre map READY; sector routing PARKED | Telemetry in the older `uor-r4-integer` chat runtime only (not M1). Per-session holonomy and winding are recorded, and they change no output |
 | [Route read](../mechanisms/route-read.md) | ACTIVE | Does not use a Hopf quantity. Hyperbolic keys were once pitched as an address geometry |
 | [Flock read](../mechanisms/flock-read.md), [relation read](../mechanisms/relation-read.md) | ACTIVE | Do not use a Hopf quantity |
 | [Prime-zeta codebook](../mechanisms/prime-zeta-codebook.md) | ACTIVE | Shares the unit-quaternion helpers; the table uses points on the 3-sphere, not the Hopf map |

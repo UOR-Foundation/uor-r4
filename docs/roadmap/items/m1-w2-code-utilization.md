@@ -23,26 +23,23 @@ The Stage T item (`m1-bvg-k-stage-t-training`, #2836) is "only warranted if W2 b
 
 ## What is missing
 
-W2 measured the code table (T 3,414), the query-token bigram (G 6,300), the unigram (U 1,226) and the writer (W 149). It bounded two losses from aggregates only. At least 989 hits are lost after admission. At least 2,276 of T's 3,414 hits fall on rows where the writer never admitted the target's cell. Four things are not measured:
-- how many of the 65,536 codes the read realizes, and whether the code keeps the last token's identity;
-- how much admission a code-keyed rule could recover;
-- whether the code adds information beyond the query token;
-- whether more TRAIN data could lift T across W2's H_law line.
+**Outcome: complete.** The stored-capture diagnostic reproduced every W2 number exactly and answered all three registered questions: QA A1a, QB B2 and QC C1. Code-count admission scored 9,064 against the writer's 1,920 and the fixed frequent-cell list's 5,935; the sets are not load-matched, so this is not a load-controlled model result. The data-scaling projection was 3,552, below the H_law line, so the full-TRAIN G1 capture was declined. The code × query table scored 7,262 against the bigram's 6,300, showing information beyond the last token. These are host diagnostics on one checkpoint and DEV's 14,287 rows, not model scores ([record](../../labs/m1-w2-code-utilization/README.md)).
 
-All of these are host post-processing of the stored W2 capture. That capture is in the HF store `caseyallard/uor-r4-store`:
-- `results/claude/w2-capacity-2026-10-25/run-b.tar`, sha256 `6aa0a766…`;
-- its inputs, under `w2-inputs/2026-10-25/`.
-
-No new GPU run is needed. The full-TRAIN capture is the one arm that would need one, and the sheet will register it only conditionally.
+The original pre-run text below described four unmeasured questions. They are now measured. The notebook-row write remains tracked separately as #3189; the sealed lab record and claude-95 REPORT hold the result.
 
 ## Done when
 
+**Original acceptance text, retained as history:**
 - The registered sheet `docs/harness/prep/m1-w2-code-utilization-2026-10-25.md` (with its non-author FIT) runs once on the stored W2 capture.
 - Each of its questions records one band, and the bands go in as one row in `docs/research/notebook/m1-discrete-attention.md`.
 - The full-TRAIN GPU capture is either registered under its own pre-run review or declined, as the sheet's data-scaling question decides.
 - An instrument fault is recorded instead if any recomputed W2 number differs from the sealed record.
 
+**Observed outcome:** all three bands are recorded in the sealed record; G1 was declined and no precedence-0 fault occurred. The notebook-row tooling gap is #3189, not a reason to rerun the diagnostic.
+
 ## How to start
+
+**Historical pre-run procedure; the diagnostic is complete.**
 
 Open these first:
 
@@ -74,11 +71,11 @@ Open these first:
 
 ## Sources
 
-- [`docs/labs/m1-w2-capacity-capture/README.md`](../../../docs/labs/m1-w2-capacity-capture/README.md)
-- [`docs/harness/prep/m1-read-code-capacity-2026-10-17.md:132-145`](../../../docs/harness/prep/m1-read-code-capacity-2026-10-17.md)
-- [`docs/roadmap/items/m1-address-key-full-vector.md:19`](../../../docs/roadmap/items/m1-address-key-full-vector.md)
-- [`docs/roadmap/items/m1-bvg-k-stage-t-training.md`](../../../docs/roadmap/items/m1-bvg-k-stage-t-training.md)
+- [Completed code-utilization record](../../labs/m1-w2-code-utilization/README.md) and [claude-95 REPORT](../../loop/tasks/m1-w2-code-utilization/claude-95/REPORT.md)
+- [W2 capacity-capture record](../../labs/m1-w2-capacity-capture/README.md)
+- [Registered W2 sheet](../../../docs/harness/prep/m1-read-code-capacity-2026-10-17.md) and [code-utilization sheet](../../../docs/harness/prep/m1-w2-code-utilization-2026-10-25.md)
+- [Stage T item](m1-bvg-k-stage-t-training.md) for the subsequent diagnostic-stop outcome
 
-## Cancel if
+## Cancel if (historical pre-run guard)
 
 The stored W2 capture cannot be authenticated against its pins (run-b.tar `6aa0a766…`, train-stream `70a58767…`, query-sidecar `6d5d4f5d…`), or a later W2 rerun on another checkpoint supersedes the seed-1 Q4 capture before this runs.

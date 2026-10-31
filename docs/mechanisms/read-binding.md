@@ -76,7 +76,7 @@ An exact-by-construction variant (`read_lineage = phase_bind`) gives each value 
 
 ## What would reopen it
 
-1. **Re-register on an allowed read.** Use an offline float sheet (D37) on a read that is not a softmax attention (a rank-table, flock or relation read). It must be a separately scanned module with an integer export and a reported export gap, plus a fresh `TEST FITNESS: FIT` review and an owner release.
+1. **Re-register on an allowed read.** Use an offline float sheet (D37) on a read that is not a softmax attention (a rank-table, flock or relation read). It must be a separately scanned module with an integer export and a reported export gap, plus a fresh `TEST FITNESS: FIT` review and the lab's pre-run review (D67).
 2. **Or port the signal to the discrete read.** Define the discrete analogue of bound against competing mass on a routed, flocking or relation read, and supervise it from the start of training.
 3. **Meet the fair-test conditions.** Supervise from the start, not as a late bolt-on. Use at least 3 seeds, at least 120 memory rows, a matched $W=0$ control and held-out masses. Add a head-ablation check that the bound head drives the answer. The bar is a gain of at least 5 rows of 40 over the control.
 4. **Change the supervision, not its length or sharpness.** Per-head supervision, or routing the output through the binding head, are the named candidates.

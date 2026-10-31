@@ -9,7 +9,7 @@
 | **Milestone** | M1 (9 records) and M4 (15 records, the starling work); 14 untagged |
 | **Records** | 38 |
 | **Outcomes** | negative 7 · plan 7 · tooling 7 · inconclusive 5 · review 5 · positive 4 · diagnostic-stop 2 · process 1 |
-| **State** | Preserved, not active. D37 (18 Oct) made offline float training legal again, but it has not been used |
+| **State** | Historical line. D37 made offline float training legal again, and the separate FBS trunk now uses it; M1 is complete on the discrete path |
 
 Counts: `archive/catalog.jsonl`. Terms follow the [glossary](../../start/glossary.md); ACTIVE, READY and PARKED are defined on the [mechanism board](../../mechanisms/README.md).
 
@@ -51,10 +51,10 @@ Hard geometric selection gives unselected keys no gradient, so it needs a traini
 
 ## Current state
 
-Preserved evidence, not a live line. The surviving parts are READY, never trained: [Hamilton gate](../../mechanisms/hamilton-gate.md), [recurrence gates](../../mechanisms/recurrence-gates.md) and [SpiralCore/FBS](../../mechanisms/spiralcore-fbs.md). [Flock read](../../mechanisms/flock-read.md) is ACTIVE on the discrete path and [spin weights](../../mechanisms/spin-weights.md) is PARKED. Archived float sheets return only as new sheets with a fresh review.
+Preserved evidence, not a live line. [Hamilton gate](../../mechanisms/hamilton-gate.md) is ACTIVE on M1 and FBS; [SpiralCore/FBS routes](../../mechanisms/spiralcore-fbs.md) are ACTIVE on FBS only, while the dated float projection form stays READY. M1 uses Flock `FrozenZeroV1`, `DiscreteHamiltonGateV1`, `DiscreteQuaternionRecurrenceV1`, an orbit-root causal pointer and post-rotation `OuterL1V1`, not FBS projection. [Recurrence gates](../../mechanisms/recurrence-gates.md) is READY with its 1,024-step fit and mixed export outcome, and [Flock read](../../mechanisms/flock-read.md) is ACTIVE. [Spin weights](../../mechanisms/spin-weights.md) is READY by D74. Archived float sheets return only as new sheets with a fresh review and the lab's D67 pre-run review.
 
 ## 29 Oct 2026
 
-The float route is live again as the FBS trunk, trained in float on the GPU and exported to integers (owner direction, 28 Oct; D37 keeps float training offline-only). The trunk has about 63,744 trainable values, and the 4,096 by 256 word table holds about 94% of the model. On held-out text it gets about 60% next word, against 44% for word pairs and 49% for the counting model (claude-142). The Hamming read (claude-146) is the copy mechanism. The diagnosis (claude-155) is that the trunk routes but cannot store; exact memory is the storage. Training is deterministic since claude-179. See [the pipeline map](../../model/pipeline-map.md) and [claude-161](../../loop/tasks/route-plus-memory/claude-161/REPORT.md). The starling result above still stands as history. No milestone is claimed.
+The float route is live again as the FBS trunk, trained in float on the GPU and exported to integers (owner direction, 28 Oct; D37 keeps float training offline-only). The trunk has about 63,744 trainable values, and the 4,096 by 256 word table holds about 94% of the model. On held-out text it gets about 60% next word, against 44% for word pairs and 49% for the counting model (claude-142). The Hamming read (claude-146) is the copy mechanism. The diagnosis (claude-155) is that the trunk routes but cannot store; exact memory is the storage. Training is deterministic since claude-179. See [the pipeline map](../../model/pipeline-map.md) and [claude-161](../../loop/tasks/route-plus-memory/claude-161/REPORT.md). The starling result above still stands as history. M1 is complete on the separate discrete model, not claimed for this FBS trunk or useful chat.
 
 **Go deeper:** the [generated catalog page](../../../archive/catalog/m1-float-rung0.md) lists all 38 records.

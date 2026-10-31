@@ -1,6 +1,6 @@
 # GPUs and CUDA
 
-The project trains and tests its model on graphics cards (GPUs), not on the laptop's processor. The programs that run on a GPU are called kernels, and the project writes them in CUDA, NVIDIA's language for GPUs. Every kernel is compiled before it runs. For the active model, an audit reads the compiled result and refuses instructions the project has banned: decimal arithmetic, tensor-core matrix instructions and approximate exponentials. The cards are rented by the hour from a marketplace through one script, under hard limits on how many and how much. The rented GPUs are used for qualification runs and a few short training doses. No trained language model has come out of them yet.
+The project trains and tests its model on graphics cards (GPUs), not on the laptop's processor. The programs that run on a GPU are called kernels, and the project writes them in CUDA, NVIDIA's language for GPUs. Every kernel is compiled before it runs. For the active model, an audit reads the compiled result and refuses instructions the project has banned: decimal arithmetic, tensor-core matrix instructions and approximate exponentials. The cards are rented by the hour from a marketplace through one script, under hard limits on how many and how much. The rented GPUs are used for qualification runs and training doses. They produced the saved discrete M1 pair, which passed all six bars at two seeds; no model holds a useful conversation yet.
 
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run, **hypothesis** means an untested idea. See [`docs/formal_vocabulary.md`](../formal_vocabulary.md) and the [glossary](../start/glossary.md).
 
@@ -96,10 +96,10 @@ The laptop does non-model work: editing, compiling CPU-only builds, static check
 |---|---|---|---|
 | Active kernels and PTX admission | Built and qualified on pods. The 19 October A8 dose trained two arms and was stopped for diagnosis, which the record says is not a mechanism negative | measurement | [A8 record](../labs/a8-dose-2026-10-19/README.md), [discrete crate](../../crates/uor-r4-discrete/README.md) |
 | NVRTC | Banned and removed from the active path | status | [D29](../integration/DECISIONS.md#d29--no-banned-mechanism-in-any-compiled-or-loaded-module-vendor-runtime-content-counts) |
-| Float training kernels | Held, with no PTX audit | status | [compute guide](../labs/compute.md) |
-| Training | Held; a run starts only on the owner's own typed release (D40) | status | [A8 record](../labs/a8-dose-2026-10-19/README.md) |
+| Legacy float training kernels | Held as legacy, with no equivalent PTX audit; current FBS offline training uses precision flags and the lab's D67 pre-run review | status | [compute guide](../labs/compute.md), [float-training crate](../../crates/uor-r4-float-train/README.md) |
+| Training | Goes through the lab's own pre-run review (D67); D41's donor pass is the named owner-at-dispatch exception | status | [A8 record](../labs/a8-dose-2026-10-19/README.md), [charter](../../CHARTER.md) §5.1 |
 | CUDA in CI | None; qualification is on pods | status | `.github/workflows/` |
-| A trained language model from these GPUs | **Does not exist**. 0 of 8 milestones are complete | status | [project track](../integration/project-track.md) |
+| A trained language model from these GPUs | **Exists and has closed M1**: the saved discrete pair passes all six bars at two seeds; useful conversation remains unqualified | measurement | [M1 close](../labs/m1-close-saved-model/README.md), [project track](../integration/project-track.md) |
 
 ## Go deeper
 

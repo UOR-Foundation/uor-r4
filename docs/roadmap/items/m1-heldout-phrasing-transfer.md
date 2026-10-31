@@ -20,18 +20,18 @@ The owner added bar (f) to M1 on 29 Oct (D82, CHARTER §4 item 8): "M1 also requ
 - **A held-out-phrasing panel tests new phrasings.** M-world v2's `dev_phrasing × dev_value` cell is that. claude-204 drew P-dev from it with `heldout-panel`: 0.000 of P-dev's prompt templates occur in TRAIN.
 - **P-dev is reserved** for one-model-end-to-end's training-run decisions, so bar (f) needs its own panel, drawn the same way at a new seed.
 
-M1 (#2029) stays open until a saved model passes (a) to (f). antigravity-110's saved model passed (a) to (e), so this item measures it on (f) first.
+**Completed 30 Oct 2026:** antigravity-110's saved model passed bar (f) at both seeds, closing #2029 after all six bars passed. On p-f (seed 2051, 15,953 rows, 0.000 TRAIN prompt templates at K = 1,024), integer top-1 is 7,850 / 7,872 against T2's 7,375 (paired band 81) and unigram's 1,409. Apple M1 decode is 10,876 / 10,566 tok/s. The updated scorer reports `CLOSED_PASS`: the older close-grade JSON covers bars (a)–(e), while this item's `panel-score.json` supplies bar (f). The limit: 0.625 of p-f's reference replies are verbatim TRAIN replies, so this is reading new phrasings into known reply kinds, not useful chat.
 
 ## What is missing
 
-- **A fresh held-out-phrasing panel.**
+**Outcome: complete.** The following were the requirements before the close, not unfinished work:
   - It is drawn by `heldout-panel` (`docs/labs/one-model-end-to-end/instrument/`, claude-204) at a seed no unit has used. claude-204 used 2041–2043.
   - Its cell is `dev,dev`, in dialogue protocol 2, with 400 conversations.
   - It is stored in the HF store with a `SHA256SUMS`.
 - **The panel's census, against the saved model's own TRAIN.** The panel must hold new templates by claude-202's rule (value-masked prompt share at K = 1,024 at most 0.5). That is counted against the TRAIN split the saved model was trained on.
   - The M1 sheets pin that split (`docs/harness/prep/m1-fresh-panel-transfer-2026-10-26.md:62-65`, sha `3dee858f…`).
   - Its size is in question (claude-202). The census reads the file as it is, and the panel is counted against it.
-- **Scoring the saved model on the panel.** That is the integer top-1 of antigravity-110's two-seed `UORLUT01` artifacts, against TRAIN's unigram and T2 tables, on the GPU (CHARTER §3.5). `m1-d11-artifact-scorer`'s `fresh-score` reads only the sealed Fresh V2 today; it needs an unpinned panel, with its sha recorded.
+- **Scoring the saved model on the panel.** That was the integer top-1 of antigravity-110's two-seed `UORLUT01` artifacts, against TRAIN's unigram and T2 tables, on the GPU (CHARTER §3.5). `m1-d11-artifact-scorer`'s `fresh-score` originally read only sealed Fresh V2 and needed an unpinned panel, with its sha recorded.
 
 ## Done when
 

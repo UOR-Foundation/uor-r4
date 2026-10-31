@@ -61,7 +61,7 @@ The frozen kernel contract permits only XOR, AND, OR, shifts, rotates, bit count
 | Integer serving ([D11](../integration/DECISIONS.md#d11--native-multiplier-free-transformerless-serving-for-every-lab-d10-superseded)) | The frozen kernel is D11's ancestor and is compliant as a kernel. No per-token parameter-access count was recorded, so the sparsity rule (D5-b) is unmeasured |
 | No softmax ([D23](../integration/DECISIONS.md#d23---no-softmax-anywhere-in-the-active-project)) | Run-time scoring is softmax-free by contract. The offline path used the teacher's probabilities, and the retired compiler and runtime modules carry float and softmax content that may not be restored |
 | No matrix multiplication ([D30](../integration/DECISIONS.md)) | The frozen runtime has none. Compiling needs a transformer forward pass, which is banned anywhere, and no transformer teacher or comparator is allowed (D28) |
-| Offline float ([D37](../integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised)) | Float compiling would be legal in principle, but the teacher is separately banned. Nothing here is on the discrete GPU path, and the graph crates no longer build against the current core |
+| Offline float ([D37](../integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised)) | Float compiling would be legal in principle, but the teacher is separately banned. Nothing here is on the discrete GPU path; the graph crates are repaired to build against the current core, while the R4G1 mechanism stays PARKED |
 
 ## What has been tried
 
@@ -113,8 +113,8 @@ R4G1; TLA / TLA6 / TLA7 runtime; transformerless graph; graph compiler and certi
 
 - [`graph-format`](../../crates/uor-r4-graph-format/src/lib.rs): the R4G1 container, two-stage validation and a canonical serializer (11,450 lines, 187 tests). Frozen. [`scoring_semantics.rs`](../../crates/uor-r4-graph-format/src/scoring_semantics.rs): the saturating fixed-point score rules.
 - [`graph-runtime`](../../crates/uor-r4-graph-runtime/src/engine.rs): the multiplier-free table kernel `predict_step` (4,946 lines, 53 tests). Frozen.
-- [`proof-model`](../../crates/uor-r4-proof-model/src/kani_proofs.rs): the executable proof specification for allocation, bounds and top-k determinism. To be repaired.
-- [`graph-compiler`](../../crates/uor-r4-graph-compiler/src) (34,424 lines, 28 stages) and [`graph-certify`](../../crates/uor-r4-graph-certify/src) (25,799 lines): compile and verify graphs against the teacher. Historical; to be repaired.
+- [`proof-model`](../../crates/uor-r4-proof-model/src/kani_proofs.rs): the executable proof specification for allocation, bounds and top-k determinism. Repaired to build on the current core; its mechanism stays parked.
+- [`graph-compiler`](../../crates/uor-r4-graph-compiler/src) (34,424 lines, 28 stages) and [`graph-certify`](../../crates/uor-r4-graph-certify/src) (25,799 lines): compile and verify graphs against the teacher. Historical source, repaired to build on the current core.
 - [`graph-cli`](../../crates/uor-r4-graph-cli/src) and [`api`](../../crates/uor-r4-api/src): the command-line library and the typed facade. [`model-source`](../../crates/uor-r4-model-source/src): the teacher side, kept as a comparator.
 - [`transformerless/runtime.rs`](../../crates/uor-r4-core/src/transformerless/runtime.rs): the original in-core runtime, retired.
 - [Inference contract](../inference_contract.md): the normative list of permitted operations.

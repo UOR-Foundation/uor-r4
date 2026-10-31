@@ -16,17 +16,19 @@ BVG-K is the faster discrete learning law that Stage 2 tries first if W2 blames 
 
 ## What is missing
 
-Stage C2 (block propose, verify and apply) is already qualified. The lab record [injective-preflight-and-c2-qualify-2026-10-19](../../../docs/labs/injective-preflight-and-c2-qualify-2026-10-19/README.md) says "BVG-K C2 qualification PASS" (dispatch 6257564516, 2026-10-19, about 13 minutes, roughly $0.40). Its receipt is `docs/labs/injective-preflight-and-c2-qualify-2026-10-19/evidence/bvgk-c2-qualify-20261019/report/bvgk-qualification.json`, SHA-256 `2fff942fa2b802e180c9bd87336692730d6beaf22f2c0bac8867afb0dea345f3`. The controls that passed were V0 source identity, RC re-carry parity, the UT/JR/DC/V3 block sweep (decision coverage met), RF refusals and the C1R rerun of C1 parity. All 3,419 updates were on synthetic fixture devices, and `Device::apply` was never called. Stage C1 was qualified earlier: K-coordinate scoring exact (5,130/5,130), sabotage FAILs as required, K=16 scores 16 coordinates per launch at 16.25x throughput.
+**Outcome: complete.** Stage C2 (block propose, verify and apply) qualified with V0 source identity, RC re-carry parity, the UT/JR/DC/V3 block sweep, RF refusals and C1R parity. All 3,419 updates were on synthetic fixture devices, and `Device::apply` was never called. The receipt is `docs/labs/injective-preflight-and-c2-qualify-2026-10-19/evidence/bvgk-c2-qualify-20261019/report/bvgk-qualification.json`, SHA-256 `2fff942fa2b802e180c9bd87336692730d6beaf22f2c0bac8867afb0dea345f3`. Stage C1 also passed: 5,130/5,130 exact K-coordinate scoring and K=16 at 16.25x throughput.
 
-What remains is the Stage T pre-registration sheet. Stage T (the training run) is not registered yet. Once its sheet has a non-author FIT, it runs on the lab's own pre-run review inside the GPU caps (D67; held work released by D77). The sheet is docs only, so the scope covers no crate code (owner log, claude-90). The C2 sheet also lists three things it leaves uncovered: no GPU control compares the BVG-K apply kernel with the ordinary single-move kernel; K=1 identity with today's law (V1) needs a driver transition; and driver-level controls (block-transition accounting, FrozenZeroV1, the all-ineligible no-op batch, V9 checkpoint and resume) are not covered. The Stage T sheet must say how each is covered.
+The Stage T sheet, FIT, D67/D68 reviews and two-seed run are now complete. Its five Step 0 controls covered the C2 gaps, and its actual outcome was a diagnostic stop with the Stage 2 writer bar unmet, not a Stage 2 pass ([Stage T record](../../labs/m1-bvg-k-stage-t-training/README.md)). No further pre-registration work remains on this item.
 
 ## Done when
 
-Already met: Stage C2 finite controls PASS (block apply exact) and are recorded, with the receipt above.
+**Original acceptance text, retained as history:** Stage C2 finite controls PASS and are recorded, and a one-page Stage T pre-registration sheet is posted complete enough for non-author FIT. The Stage 2 writer bar remains quoted in the Stage T item; it was not rewritten here.
 
-Still to do: a one-page Stage T pre-registration sheet is posted on the issue, complete enough for a non-author TEST FITNESS: FIT review. Nothing in it runs until its FIT and the lab's own pre-run review (D67). Its bar is the Stage 2 bar: "beat the unigram table, then the admission-matched next-word table (the version W2 produces, not the 6,300 full-panel table), on two seeds." The estimate to carry is about $12 for two seeds.
+**Observed outcome:** C2 passed and the Stage T sheet/reviews/run are complete. Stage T's diagnostic-stop result is separate from C2's finite-control pass.
 
 ## How to start
+
+**Historical pre-registration procedure; both C2 and the Stage T sheet/run are complete.**
 
 1. Read `docs/labs/injective-preflight-and-c2-qualify-2026-10-19/README.md`, the C2 sheet `docs/harness/prep/m1-bvgk-stagec2-block-qualification-2026-10-18.md` (use its layout), the row 7 entry in `docs/integration/NOW.md`, and `docs/mechanisms/discrete-learning.md`. Also read the K16 outcome record `docs/labs/k16-outcome-call-2026-10-19/README.md` (no KEEP) and the W2 entry in NOW.md, because NOW.md row 7 holds Stage T for the K16 outcome, and row 8 runs the float-credit sheet only if W2 blames the learning law (H_law). W2 is done: H_mixed (#3177, `docs/labs/m1-w2-capacity-capture/README.md`), so the sheet waits on the code-utilization diagnostic and on a base that passes Q1 (the A8 full dose); see the owner log on #2835.
 2. Skim the code the sheet will name: `crates/uor-r4-discrete/src/bvgk_block.rs`, `bvgk_device.rs`, `bvgk_qualification.rs` and `bvgk_source.rs`. Run the host checks with `~/.cargo/bin/cargo check -p uor-r4-discrete`. If the crate does not build without nvcc on your machine, say so on the issue; do not start a GPU run.
@@ -45,7 +47,7 @@ Still to do: a one-page Stage T pre-registration sheet is posted on the issue, c
 
 ## Sources
 
-- [`docs/integration/NOW.md:66`](../../../docs/integration/NOW.md)
-- [`docs/start/where-were-going.md:46`](../../../docs/start/where-were-going.md)
-- [`docs/labs/injective-preflight-and-c2-qualify-2026-10-19/README.md`](../../../docs/labs/injective-preflight-and-c2-qualify-2026-10-19/README.md)
-- [`docs/harness/prep/m1-bvgk-stagec2-block-qualification-2026-10-18.md`](../../../docs/harness/prep/m1-bvgk-stagec2-block-qualification-2026-10-18.md)
+- [C2 qualification record](../../../docs/labs/injective-preflight-and-c2-qualify-2026-10-19/README.md) and [C2 sheet](../../../docs/harness/prep/m1-bvgk-stagec2-block-qualification-2026-10-18.md)
+- [Stage T record](../../labs/m1-bvg-k-stage-t-training/README.md) for the completed sheet, reviews, Step 0 controls and two-seed diagnostic-stop outcome
+- [Current project direction](../../start/where-were-going.md)
+- [Historical `NOW.md` snapshot](../../../archive/integration/NOW-2026-10-22.md), retained as pre-registration history

@@ -12,15 +12,17 @@ scope: [crates/uor-r4-discrete/**, docs/harness/prep/m1-a8-full-dose-rerun*, doc
 
 ## Why it matters
 
-Tests whether reach survives training, which is M1 bar (b), and gives the first run in which ranking can be judged with admission intact.
+Tests whether reach survives training, the then-current D39 G-Adm condition, and gives the first run in which ranking can be judged with admission intact. G-Adm is upstream/historical evidence, not the approved close-grade M1 bar (b), which is exact 14,287-row DEV export/reference agreement and B4.
 
 ## What is missing
 
-The admission-preserving A8 rerun is pre-registered and FIT-reviewed but never run. The first A8 dose hit the registered Q1 stop: Relation P_succ fell 1,351 -> 551 (below half of init) while FrozenZero held 857 at Q1 and 797 at completion. Full-dose approval and release are separate from the finite qualification.
+The admission-preserving A8 rerun ran on 25 October 2026 with D67/D68 PASS. FrozenZero reached Q1 with `1,106 / 3,847`, `4,292 / 14,287` and `871 / 14,287`, then continued to a diagnostic stop at batch 5,248 under the 64-batch whole-interval rejection cadence; Relation stopped at batch 1,600. This A8 run did not open Fresh V2; the later M1 bar-(e) run opened and scored it at 7,215 / 7,228. This is an instrument/cadence-granularity stop, not a mechanism negative or an A8 `5,009` result; that number belongs to Stage T.
 
 ## Done when
 
 Paired DEV verdict recorded for the registered arms and seeds; reach kept (M1 bar (b), G-Adm) or a registered diagnostic stop classified as instrument versus mechanism; fresh slice stays sealed.
+
+This is the original acceptance text, preserved rather than rewritten in this PR. The later M1 bar-(e) opening and score are recorded separately.
 
 ## How to start
 
@@ -43,10 +45,8 @@ Open these first:
 
 ## Sources
 
-- [`docs/integration/NOW.md:26-30`](../../../docs/integration/NOW.md)
-- [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:14`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
-- [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:32`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
-- [`docs/mechanisms/README.md:88`](../../../docs/mechanisms/README.md)
-- [`docs/research/open-questions.md:34`](../../../docs/research/open-questions.md)
-- [`docs/start/where-we-are.md:56`](../../../docs/start/where-we-are.md)
+- [A8 full-dose rerun record](../../labs/m1-a8-full-dose-rerun/README.md) and [antigravity-57 REPORT](../../loop/tasks/m1-a8-full-dose-rerun/antigravity-57/REPORT.md) for the completed 25 October run and diagnostic stops
+- [Address cells mechanism](../../mechanisms/address-cells.md) for the current evidence summary
+- [Historical `NOW.md` snapshot, lines 26-30](../../../archive/integration/NOW-2026-10-22.md)
+- [19 October audit](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md), retained as pre-run history, not evidence that the later rerun remains unrun
 

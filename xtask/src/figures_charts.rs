@@ -33,13 +33,13 @@ const DEFAULT_OUT: &str = "docs/figures";
 // ------------------------------------------------------------------ constants
 
 /// Correct first guesses on the 14,287-position DEV panel.
-/// Sources: `docs/labs/k16-outcome-call-2026-10-19/README.md` (Fields table:
-/// variant A top-1, seed 1 = 65, seed 2 = 463) and
-/// `docs/labs/host-diagnostics-2026-10-17/README.md` (unigram table 1,226 and
-/// next-word table T2 6,300, both on the full 14,287 panel). Variant R (101 and
-/// 230) is omitted: it collapsed to 19-20 of 256 cells.
+/// Sources: `docs/labs/m1-close-saved-model/README.md` (saved M1 model top-1,
+/// seed 1 = 7,002, seed 2 = 7,001) and
+/// `archive/labs/host-diagnostics-2026-10-17/README.md` (unigram table 1,226 and
+/// next-word table T2 6,300, both on the full 14,287 panel). Close-grade bar (d)
+/// requires T2 + 24 = 6,324. The older K16 values are historical, not the current best.
 const PANEL_POSITIONS: u64 = 14_287;
-const M1_BAR: u64 = 6_300;
+const M1_BAR: u64 = 6_324;
 
 /// (label, sub-label, value, is_trained_model), top to bottom.
 const BASELINE_BARS: [(&str, &str, u64, bool); 4] = [
@@ -55,11 +55,11 @@ const BASELINE_BARS: [(&str, &str, u64, bool); 4] = [
         1_226,
         false,
     ),
-    ("Trained model, seed 2", "variant A", 463, true),
-    ("Trained model, seed 1", "variant A", 65, true),
+    ("Saved M1 model, seed 2", "integer UORLUT01", 7_001, true),
+    ("Saved M1 model, seed 1", "integer UORLUT01", 7_002, true),
 ];
 
-/// The five phases A to E of `docs/research/history.md`: (letter, first day,
+/// The historical audit phases A to E of `docs/research/history.md`: (letter, first day,
 /// last day, plain name, tone). Phases B and E overlap their neighbours by a day
 /// or two, as the history page states them.
 const PHASES: [(&str, &str, &str, &str, &str); 5] = [
@@ -522,11 +522,11 @@ fn status_vs_baselines() -> Result<String, Fail> {
     let mut d = Doc::new("status-vs-baselines", 440.0);
     d.heading(
         "Correct first guesses on 14,287 development-panel positions",
-        "The best trained model against two simple count tables, on one scale. Higher is better.",
+        "The saved M1 model against two simple count tables, on one scale. Higher is better.",
     );
     // Legend.
     d.rect([EDGE, 68.0, 16.0, 12.0], 2.0, "blue", None);
-    d.text(EDGE + 24.0, 79.0, LBL, Anchor::Start, "Trained model");
+    d.text(EDGE + 24.0, 79.0, LBL, Anchor::Start, "Saved M1 model");
     d.rect([160.0, 68.0, 16.0, 12.0], 2.0, "muted", None);
     d.text(184.0, 79.0, LBL, Anchor::Start, "Count table");
 
@@ -567,7 +567,7 @@ fn status_vs_baselines() -> Result<String, Fail> {
         );
     }
 
-    // The new M1 bar.
+    // M1's closing target: T2 6,300 plus 24, passed at both seeds.
     let bx = x(M1_BAR);
     d.line([bx, top - 12.0, bx, axis_y], "verm", 2.0, Some("6 4"));
     d.text(
@@ -575,7 +575,7 @@ fn status_vs_baselines() -> Result<String, Fail> {
         top - 24.0,
         LBL,
         Anchor::Start,
-        "new M1 bar: beat both tables, on each of two seeds",
+        "M1 target 6,324 (T2 + 24): passed at both seeds",
     );
 
     let fy = axis_y + 64.0;
@@ -584,18 +584,18 @@ fn status_vs_baselines() -> Result<String, Fail> {
         fy,
         NOTE,
         Anchor::Start,
-        "Variant R (101 and 230) is omitted: it collapsed to 19 or 20 of 256 cells.",
+        "Exact 14,287-row DEV export/reference agreement and B4 pass at both seeds.",
     );
     d.text(
         EDGE,
         fy + 16.0,
         NOTE,
         Anchor::Start,
-        "Source: docs/labs/k16-outcome-call-2026-10-19; docs/labs/host-diagnostics-2026-10-17.",
+        "Source: docs/labs/m1-close-saved-model; archive/labs/host-diagnostics-2026-10-17/README.md.",
     );
     d.finish(
-        "Trained model against count tables",
-        "Horizontal bars on one scale from 0 to 14,287 development-panel positions. Next-word table 6,300, unigram table 1,226, trained model seed 2 463, trained model seed 1 65. A dashed line at 6,300 marks the new M1 bar: beat both tables on each of two seeds. The trained model is far below both tables.",
+        "Saved M1 model against count tables",
+        "Horizontal bars on one scale from 0 to 14,287 development-panel positions. Next-word table 6,300, unigram table 1,226, saved M1 model seed 2 7,001, saved M1 model seed 1 7,002. A dashed line at 6,324 marks M1's closing target: T2 6,300 plus 24. Both seeds pass the target and beat both tables.",
     )
 }
 
@@ -870,7 +870,7 @@ fn timeline(records: &[Record]) -> Result<String, Fail> {
     let mut d = Doc::new("timeline", 560.0);
     d.heading(
         "Five approaches in sequence, and the records each day left behind",
-        "Catalog records per day, 10 June to 19 October 2026, under the five phases A to E.",
+        "Historical audit records per day, 10 June to 19 October 2026, under phases A to E; later Phase F/G are in docs/research/history.md.",
     );
 
     // Phase bands in two lanes so the overlaps stay readable.
@@ -1008,7 +1008,7 @@ fn timeline(records: &[Record]) -> Result<String, Fail> {
     let h = ky + 56.0;
     d.h = h;
     let desc = format!(
-        "A time axis from 10 June to 19 October 2026. Two rows of bands mark the five phases A to E. Below, an area chart of catalog records per day: nothing before {} (GitHub items only), then a rise to a peak of {} records on {}.",
+        "A time axis from 10 June to 19 October 2026. Two rows of bands mark the historical audit phases A to E; the later Phase F and Phase G are not shown. Below, an area chart of catalog records per day: nothing before {} (GitHub items only), then a rise to a peak of {} records on {}.",
         day_month(first_rec),
         peak,
         day_month(peak_day)

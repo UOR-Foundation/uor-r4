@@ -16,11 +16,11 @@ Qualifies the version of A8 that protects reach before any full-dose rerun; the 
 
 ## What is missing
 
-The admission-preserving controller and its qualification producer are on main (#2782, #2783), but real CUDA qualification, restoration and timing are NOT_RUN. The finite stage's bounded updates and restoration controls need their own FIT, costed owner approval, PM dispatch and owner release.
+**Outcome: complete at the finite-qualification scope.** The admission-preserving controller and qualification producer are on main (#2782, #2783). Real CUDA qualification passed all `5/5` stage checks on both Relation and FrozenZero, with restoration and timing recorded under D67 and the sheet-bound source `fd409fcdf`. The timing projection triggered the registered instrument-class gate-cost stop and required the full-dose replan; it was not a mechanism negative. The subsequent full-dose diagnostic run is recorded separately, and the next admission-preserving rerun is **NOT_RUN**.
 
 ## Done when
 
-All finite qualification controls PASS on CUDA with restoration and timing recorded (currently NOT_RUN), under the sheet-bound source fd409fcdf.
+All finite qualification controls PASS on CUDA with restoration and timing recorded, under the sheet-bound source fd409fcdf. **Completed:** both arms passed `5/5`; see the qualification record below.
 
 ## How to start
 
@@ -42,8 +42,7 @@ Open these first:
 
 ## Sources
 
-- [`docs/integration/NOW.md:18-34`](../../../docs/integration/NOW.md)
-- [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:32`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
-- [`docs/mechanisms/README.md:88`](../../../docs/mechanisms/README.md)
-- [`docs/start/where-we-are.md:56`](../../../docs/start/where-we-are.md)
+- [Finite CUDA qualification record](../../labs/m1-a8-finite-cuda-qualification/README.md) and [antigravity-56 REPORT](../../loop/tasks/m1-a8-finite-cuda-qualification/antigravity-56/REPORT.md) (`5/5` on both arms, restoration and timing)
+- [Address cells mechanism](../../mechanisms/address-cells.md) and [current project status](../../start/where-we-are.md)
+- [19 October audit](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md), retained as pre-qualification history, not evidence for the current result
 

@@ -1,57 +1,91 @@
 # Research line: discrete attention for the language base (M1)
 
-This is the line that carries the project today. It asks one question: can a model that uses only integers and small geometric moves learn to read earlier text well enough to predict the next word? So far the answer is no. The best trained discrete model gets the next word right in 65 and 463 of 14,287 development rows, below a plain word-count table that gets 1,226.
+This line asked whether a model using integers and small geometric moves could learn to read earlier
+text well enough to predict the next word. **At M1's registered bars, the answer is yes.** A saved
+discrete model beats unigram and T2 at two seeds through its integer export. That does not establish
+useful conversation or the independent effect of every mechanism.
 
 | | |
 |---|---|
 | **Catalog id** | `m1-discrete-attention` |
-| **Time span** | 7 Aug to 19 Oct 2026 (two early records; the work in earnest runs 19 Sep to 19 Oct; 3 records undated) |
-| **Milestone** | M1, the language base (141 of 199 records) |
-| **Records** | 199 |
-| **Outcomes** | tooling 40 · plan 38 · positive 27 · inconclusive 26 · review 26 · process 16 · negative 14 · blocked 6 · diagnostic-stop 6 |
-| **State** | Active. M1 is not met and training is held |
+| **Time span** | 7 Aug to 30 Oct 2026 |
+| **Milestone** | M1, the language base |
+| **Records** | 199 in the 19 Oct audit, plus the later M1 and generation records linked below |
+| **State** | **Complete at M1 scope; M2 and new-phrasing generation are next** |
 
-Counts: `archive/catalog.jsonl`. M1 is the first of the eight milestones; 0 of 8 are complete (`docs/integration/NOW.md`). Terms follow the [glossary](../../start/glossary.md); ACTIVE, READY and PARKED are defined on the [mechanism board](../../mechanisms/README.md).
+Counts through 19 Oct: `archive/catalog.jsonl`. Terms follow the [glossary](../../start/glossary.md);
+ACTIVE, READY and PARKED are defined on the [mechanism board](../../mechanisms/README.md).
 
 ```mermaid
 flowchart LR
-  A["Sep to early Oct<br/>Float readers and<br/>attention latches"] --> B["13 to 14 Oct<br/>First integer GPU path,<br/>first pilot (A2)"]
-  B --> C["15 to 18 Oct<br/>Admission wall;<br/>56x faster scoring"]
-  C --> D["18 Oct<br/>Four 16-cell runs (K16)"]
-  D --> E["19 Oct<br/>No keep; address cells<br/>and their dose (A8)"]
-  E --> F["Next: admission-<br/>preserving rerun"]
+  A["Sep–early Oct<br/>float readers and latches"] --> B["13–14 Oct<br/>integer GPU path"]
+  B --> C["15–18 Oct<br/>admission wall and row-parallel speed"]
+  C --> D["18–19 Oct<br/>K16 and A8 negatives"]
+  D --> E["25–26 Oct<br/>Stage T and exact export"]
+  E --> F["30 Oct<br/>M1 complete"]
+  F --> G["Next: reply opening<br/>on new phrasing"]
 ```
 
-*Two terms used below. Admission is the shortlist of words the read can see; a word outside it can never be chosen. Top-1 means the right word ranked first.*
+*M1 is a saved-model result. The next question is complete generation, not another repetition of the count-table test.*
 
 ## What it set out to do
 
-Give the discrete model an attention-like read of context. Under the owner's rules (no softmax, no matrix multiplication, integer serving) the read must be a tree walk ([Route](../../mechanisms/route-read.md)), a small neighbour set rotated into the query's frame ([Flock](../../mechanisms/flock-read.md)) or a link-following rule such as "the word after the earlier copy of this word" ([Relation](../../mechanisms/relation-read.md)). The line's yardstick is milestone M1: a saved discrete artifact that, after export to integer serving and on each of two seeds, beats a unigram table and a successor table on the same development rows ([charter](../../../CHARTER.md), item 8 of the research clauses).
+Give the discrete model an attention-like read of context. Under the rules (no softmax, no dense
+matmul, integer serving), the read could be a tree walk (Route), a small neighbour set rotated into
+the query's frame (Flock), or a link-following rule (Relation). The yardstick became six bars on one
+saved model: self-contained D11, exact 14,287-row DEV export and B4, tokens/s, DEV above both count tables, Fresh V2
+transfer, and held-out-phrasing transfer ([CHARTER §4.8](../../../CHARTER.md#4-evidence)).
 
 ## What happened, in order
 
-1. **Float readers and latches (19 Sep to 5 Oct).** A hard capture-and-hold gate let saved models answer 128 of 128 original and stress rows, against 47 to 59 for same-size controls ([latch](../../../archive/integration/geometric-attention-latch-2026-10-01.md)). Fresh complete replies stayed low: a directed cue relation scored 0/32 and its cue-only control 1/32 ([cue carrier](../../../archive/integration/geometric-cue-carrier-2026-10-04.md)).
-2. **First integer GPU path (13 to 14 Oct).** All eleven construction controls passed, then 25 of 25 ([discrete learning](../../../archive/labs/discrete-geometric-learning-2026-10-13/README.md), [driver cost](../../../archive/labs/discrete-driver-cost-2026-10-13/README.md)). The first training pilot (A2, 1,640 batches) raised top-1 from 17 to 82 and top-8 from 173 to 1,169 of 14,287, while the loss total rose from 13,816,032 to 13,884,032 ([pilot](../../../archive/labs/a2-pilot-2026-10-14/README.md)). The diagnosis: the starting table had only 16 distinct vectors for 4,096 tokens ([diagnosis](../../../archive/labs/a2-pilot-diagnosis-2026-10-14/README.md)).
-3. **The admission wall (15 to 17 Oct).** Re-scoring saved checkpoints with 8 to 16 kept cells never reached the 4,894 admission bar (best 2,400 at 16), so capacity had to be trained in ([sweep](../../../archive/labs/rung0-stage-a-sweep-2026-10-15/README.md)). Repeated qualification restarts (five by the last record) stopped on build, interface and lint errors and then on a 99-against-100 timing count ([restart 5](../../../archive/labs/k16-qualification-restart5-2026-10-16/README.md)). A host check found that a context-free successor table already scores 6,300 of 14,287 ([host diagnostics](../../../archive/labs/host-diagnostics-2026-10-17/README.md)).
-4. **Speed (16 to 18 Oct).** In a three-batch diagnostic, over 99.99% of each proposal's time was one scoring kernel; a row-parallel version gave equal losses about 56 times faster (3.843 s to 0.0691 s) ([rows parity](../../labs/counterfactual-rows-parity-2026-10-18/README.md)).
-5. **The paired test and the 16-cell runs (18 to 19 Oct).** The first paired attention test (Dose 1) was stopped by the owner at 904 and 1,065 batches, before any checkpoint, to switch to the row-parallel driver (a diagnostic stop, not a verdict). The paired row-parallel run that followed (Dose 2) reached its registered collapse stop at 4,096 batches in both arms (the Relation read and a frozen control): admission on 3,847 copy-successor rows (development rows where copying the word after the previous occurrence would be right) fell from 2,034 to 225 (Relation) and 205 (frozen control) ([Q1 diagnosis](../../labs/attention-rows-q1-diagnosis-2026-10-18/README.md)). Four runs of the 16-cell experiment (K16) used two training objectives, an address-margin loss (A) and an occupancy-rank loss (R), with two seeds each. They accepted 407, 130, 410 and 129 moves. The occupancy-rank loss collapsed to 19 or 20 occupied cells; the margin loss lost admission. Verdict: no KEEP (no run met its own target), and the fresh slice stays sealed ([outcome call](../../labs/k16-outcome-call-2026-10-19/README.md)).
-6. **Address cells (19 Oct).** Placing each token's cell near its predecessors' cells lifted starting admission from 127 to 1,351 of 3,847 at zero training; a shuffled control got 476 ([pre-flight](../../labs/address-cells-preflight-2026-10-19/README.md)). Training then eroded it in the address-cell dose (A8): Relation 1,351 to 551 (stopped), frozen control 857 ([A8 dose](../../labs/a8-dose-2026-10-19/README.md)). A controller that audits admission every 64 batches is built; its GPU qualification has not been run (NOT_RUN) ([controller](../../labs/admission-anchor-controller-2026-10-19/README.md)).
+1. **Float readers and latches (19 Sep–5 Oct).** A hard capture-and-hold gate answered 128/128
+   original and stress rows, against 47–59 for controls. Fresh complete replies stayed low.
+2. **First integer GPU path (13–14 Oct).** Eleven then 25 construction controls passed. The first
+   pilot raised top-1 from 17 to 82 and top-8 from 173 to 1,169, while total loss rose. The starting
+   table had only 16 distinct vectors for 4,096 tokens.
+3. **The admission wall (15–17 Oct).** Re-scored checkpoints never reached the 4,894 admission bar.
+   A context-free successor table already scored 6,300 of 14,287.
+4. **Row-parallel speed (16–18 Oct).** A row-parallel proposal matched exact losses and was about 56
+   times faster in a non-gating diagnostic.
+5. **Paired tests and K16 (18–19 Oct).** K16-A scored 65 and 463. K16-R collapsed to 19 or 20 cells.
+   No run was kept, and the fresh slice stayed sealed.
+6. **A8 address cells (19 Oct).** Predecessor-structured placement lifted starting admission from
+   127 to 1,351 of 3,847, then training eroded it. Relation stopped at 551; the frozen control held 857.
+7. **Stage T exports (25–26 Oct), then the 19-table M1 trunk (30 Oct).** Stage T's four-table exports came first. The later joint-pointer Hamilton trunk produced the two seeded M1 `UORLUT01` artifacts with exact 14,287-row DEV export agreement. DEV scored 7,002 and 7,001; Fresh V2 scored 7,215 and 7,228, at both seeds above both controls ([M1 close](../../labs/m1-close-saved-model/README.md), [Fresh V2](../../labs/m1-fresh-panel-transfer/README.md)).
+8. **Held-out phrasing (30 Oct).** p-f has no prompt value-masked templates in TRAIN at K = 1,024.
+   The saved model scored 7,850 and 7,872 of 15,953 against T2's 7,375, beyond paired band 81.
+   Its separate DEV export agreement was exact on 14,287 rows; Apple M1 decode is 10,876 and
+   10,566 tok/s. M1 closed at all six bars.
+9. **The next failure (30 Oct).** On the separate FBS generation path, claude-217's cycle step ends
+   every registered loop but content is underpowered. On p-s, teacher-forced reply openings are 17.4%, 13.7% and
+   18.6% at three seeds, against about 80% on later tokens. Exact-key memory misses reworded prompts.
 
 ## Key results
 
 | Result | Kind | Source |
 |---|---|---|
-| Address-margin runs (K16-A, two seeds): top-1 65 and 463, top-8 547 and 1,295, admission 2,237 and 3,167 of 14,287 (bar 4,894) | measurement | [outcome call](../../labs/k16-outcome-call-2026-10-19/README.md) |
-| Unigram table 1,226; context-free successor table (T2) 6,300 of 14,287 | measurement | [host diagnostics](../../../archive/labs/host-diagnostics-2026-10-17/README.md) |
-| Aliasing does not explain the ranking failure: the alias ceiling rose to about 9,000 rows yet top-1 stayed low | measurement | [outcome call](../../labs/k16-outcome-call-2026-10-19/README.md) |
-| Address cells: 127 to 1,351 of 3,847 at zero training | measurement | [pre-flight](../../labs/address-cells-preflight-2026-10-19/README.md) |
+| Saved M1 model: DEV 7,002 / 7,001 of 14,287 against unigram 1,226 and T2 6,300 | measurement | [M1 close](../../labs/m1-close-saved-model/README.md) |
+| Fresh V2: 7,215 / 7,228 of 14,479 against unigram 1,279 and T2 6,582 | measurement | [Fresh transfer](../../labs/m1-fresh-panel-transfer/README.md) |
+| p-f: 7,850 / 7,872 of 15,953 against unigram 1,409 and T2 7,375, band 81; 62.5% of reference replies are verbatim TRAIN replies (reference overlap, not a generated-copy rate) | measurement | [bar-f report](../../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
+| Apple M1 decode 10,876 / 10,566 tok/s | measurement | [bar-f report](../../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
+| K16-A: 65 and 463 below unigram 1,226 and T2 6,300 | dated configuration negative | [K16 outcome](../../labs/k16-outcome-call-2026-10-19/README.md) |
+| A8 address cells: 127 to 1,351 of 3,847 at zero training, then erosion | measurement | [pre-flight](../../labs/address-cells-preflight-2026-10-19/README.md), [A8 dose](../../labs/a8-dose-2026-10-19/README.md) |
+| Teacher-forced p-s reply openings 17.4%, 13.7%, 18.6% against about 80% on later tokens | measurement | [claude-217](../../loop/tasks/one-model-end-to-end/claude-217/REPORT.md) |
 
 ## What it taught
 
-Check the instrument first (lesson 1 in [what the project knows](../findings.md)): a register-count mismatch, a mismatched JSON key and a hash-domain bug each blocked a run or rejected a valid artifact without testing any mechanism. Development is not fresh (lesson 4), and a pass is not a language result. The mechanisms in play are [discrete learning](../../mechanisms/discrete-learning.md), [admission](../../mechanisms/admission.md), [address cells](../../mechanisms/address-cells.md) and the three reads linked above.
+Check the instrument first: register mismatches, JSON keys and hash domains can block a valid run
+without testing a mechanism. Development is not fresh, and a pass is not a language result. A fresh
+panel can hold new values without new phrasings; p-f adds new phrasings but still shares 62.5% of its
+reference replies with TRAIN. The saved-model result is meaningful because it uses the integer
+artifact, two seeds and paired controls—not because the geometry looks elegant.
 
 ## Current state
 
-M1 is not met. No trained discrete artifact beats the unigram table. The cheapest approved next steps are the read-code capacity capture (W2) and the admission-preserving rerun of the address-cell dose (A8) (`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md`, section 4). Any further training needs a new owner release.
+M1 is complete at its declared scope. The next questions are M2/M3: complete correct replies,
+durable memory and a joined served model. On new phrasing, the immediate blocker is reply opening
+and an exact memory key that reworded known questions can reach. The M1 discrete model and the FBS
+trunk remain separate.
 
-**Go deeper:** the [generated catalog page](../../../archive/catalog/m1-discrete-attention.md) lists all 199 records.
+**Go deeper:** the [generated catalog page](../../../archive/catalog/m1-discrete-attention.md) lists
+all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked above.

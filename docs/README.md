@@ -1,11 +1,11 @@
 # UOR-R4 documentation
 
-Read online (planned; live once the site workflow deploys): <https://uor-foundation.github.io/uor-r4/>. The earlier Studio web app moves to <https://uor-foundation.github.io/uor-r4/studio/>.
+Read online: <https://uor-foundation.github.io/uor-r4/>. Production publication is by manual dispatch; pushes to main update the preview site. The earlier Studio web app moves to <https://uor-foundation.github.io/uor-r4/studio/>.
 
 **In one paragraph.** This is the map of the UOR-R4 documentation. UOR-R4 is an open research
 project building a language model that predicts text with geometry and whole-number arithmetic
 instead of a transformer's large grids of decimal multiplications, so that it can run fast on a
-laptop or in a browser. It is **pre-alpha**: 0 of its 8 milestones are complete, and no model built
+laptop or in a browser. It is **pre-alpha**: 1 of its 8 milestones is complete, and no model built
 under its rules holds a useful conversation yet ([where we are](start/where-we-are.md)). The pages
 here explain what the project is, where it stands and where it is going in plain words first, then
 give the evidence for every claim so an expert can check it. Use the table below to jump to the page
@@ -32,7 +32,7 @@ sources.*
 | You want to… | Start here |
 |---|---|
 | Understand the project in five minutes | [What UOR-R4 is](start/what-is-uor-r4.md), then the [glossary](start/glossary.md) and [FAQ](start/faq.md) |
-| Know where the project stands, with numbers | [Where we are](start/where-we-are.md) and the short [STATUS](../STATUS.md) page |
+| Know where the project stands, with numbers | [Where we are](start/where-we-are.md), [PLAN](../PLAN.md) and rendered [STATE](../STATE.md) |
 | Know where it is going | [Where we're going](start/where-were-going.md) and the milestone table in [ROADMAP](../ROADMAP.md) |
 | See which transformer part each mechanism replaces | [Transformer vs geometry](start/transformer-vs-geometry.md) |
 | Find your way around the folders | [How the repository is laid out](start/repository-layout.md) |
@@ -82,13 +82,13 @@ a failed run closes one configuration, never a mechanism ([charter](../CHARTER.m
 
 | Item | State | Source |
 |---|---|---|
-| Milestones complete | 0 of 8 | [STATUS](../STATUS.md) |
+| Milestones complete | **1 of 8 (M1)** | [PLAN](../PLAN.md), rendered [STATE](../STATE.md) |
 | Model that holds a conversation | None | [where we are](start/where-we-are.md) |
 | Mechanisms | 28: 12 ACTIVE, 5 READY, 11 PARKED | [mechanism board](mechanisms/README.md) |
 | Research lines with their own page | 17 | [research lines](research/lines/README.md) |
-| Records in the archive catalog | 1,173 | [archive catalog](../archive/CATALOG.md) |
+| Records in the archive catalog | 1,175 | [archive catalog](../archive/CATALOG.md) |
 
-**29 Oct 2026.** Pre-alpha, 0 of 8 milestones complete. Route plus exact memory (claude-161) names 598.7 / 598.3 of DEV's 1,226 reply openings at two seeds, but moves only the first word of a reply. `lut-stack/5` exports and serves the FBS trunk (claude-182). The order of work (carry the memory past the first word, serve the parts in integers, build the text path R7, then train, export and score one model) is in [PLAN.md](../PLAN.md).
+**M1 closed 30 Oct; current research through 31 Oct 2026.** Pre-alpha, 1 of 8 milestones complete. The saved discrete M1 model scores 7,002 / 7,001 on DEV, 7,215 / 7,228 on Fresh V2 and 7,850 / 7,872 on p-f, at two seeds. It serves at 10,876 / 10,566 decode tok/s on an Apple M1. The limit is 62.5% verbatim TRAIN reference replies on p-f, not useful chat. Claude-220 serves the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. [Claude-222](loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade. [Claude-227](loop/tasks/integer-retention-rates/claude-227/REPORT.md) passed retention GPU parity within the 3% bar; [Claude-228](loop/tasks/point-key-integer/claude-228/REPORT.md) built the run's reference/read-back/BOS checks; [Claude-229](loop/tasks/point-key-integer/claude-229/REPORT.md) found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so no bar result or throughput is reported. [Claude-231](loop/tasks/integer-nearest-readout/claude-231/REPORT.md) built the nearest readout and export on native and browser paths; [claude-232](loop/tasks/integer-nearest-readout/claude-232/REPORT.md) then missed greedy parity in every cell, so the mismatch must be localized before the p-x rerun ([where we are](start/where-we-are.md), [PLAN](../PLAN.md)).
 
 ## Go deeper
 

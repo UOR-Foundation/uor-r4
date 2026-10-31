@@ -82,7 +82,7 @@ BPB means bits per byte on held-out text, lower is better.
 ## What would reopen it
 
 1. **Run the next rung the record names**, GPU only and pre-registered with a fresh `TEST FITNESS: FIT` review: raise $k$ from 8 to 16, and add learned per-orbit residual offsets on the E8 frame. The offsets separate "fixed addresses" from "value capacity" as the cause of the 0.023 gap.
-2. **Replace the sigmoid gate** with one that obeys the no-softmax rule, such as a rank table with a hard threshold or exact selection. Register it as an offline float sheet (D37) in a separately scanned module with an integer export (integer value tables, E8 decode as table lookups) and a reported export gap. An owner release is required.
+2. **Replace the sigmoid gate** with one that obeys the no-softmax rule, such as a rank table with a hard threshold or exact selection. Register it as an offline float sheet (D37) in a separately scanned module with an integer export (integer value tables, E8 decode as table lookups) and a reported export gap. The lab's pre-run review is required under D67.
 3. **Keep the fair-test conditions.** A capacity-matched control (P, the learned-key twin, which uses a float sigmoid gate), taken from stored rung-1 outputs or replaced by a lawful count-table control because new neural controls are barred until the model works end to end (charter section 3.10); routing health (orbit entropy and slot share), matched training steps, the same panel, and at least 2 seeds.
 4. **Provide a served form.** Integer serving refuses product-key memory today, and a multiply-add saving did not appear in tokens per second for the learned-key twin. Report tokens per second.
 

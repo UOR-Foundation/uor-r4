@@ -17,7 +17,7 @@ M1 bar (e) stops a result that only fits its development panel from closing M1. 
 
 ## What is missing
 
-M1 bar (e) needs the gain to hold on a fresh, sealed test panel registered in advance. The fresh slice remains sealed: the 19 October outcome call records fresh transfer as `NOT_TRIGGERED` (binding `4bd108ad…`, unopened), and the A8 sheet names the fresh V2 tokens, mask and seal as `0b7e754c…`, `a1cda529…` and `df5d074a…`. The `trunk-joint-pointer-v1-d11` model has now passed bars (a)–(d) on `ft/dev` across both seeds, so Step 4 can score that model once. Frozen `ft/dev` is not reported as fresh.
+**Before the close (historical requirement).** M1 bar (e) needed the gain to hold on a fresh, sealed test panel registered in advance. The 19 October outcome call recorded fresh transfer as `NOT_TRIGGERED` (binding `4bd108ad…`, unopened), and the A8 sheet named the fresh V2 tokens, mask and seal as `0b7e754c…`, `a1cda529…` and `df5d074a…`. The `trunk-joint-pointer-v1-d11` model had passed bars (a)–(d) on `ft/dev` across both seeds, so Step 4 could score that model once. The registered run has now opened and scored that panel ([Fresh V2 record](../../labs/m1-fresh-panel-transfer/README.md)); frozen `ft/dev` is not reported as fresh.
 
 The fresh panel's size, noise floor and thresholds are registered in `docs/harness/prep/m1-fresh-panel-transfer-2026-10-26.md`: 14,479 eligible targets, 3,594 `P_succ` rows, and the paired `max(floor, ceil(2 * sqrt(b + c)), two-seed spread)` rules. CHARTER §4.3 requires decisive runs to use at least 2 seeds or at least 200 fresh rows, with bars no narrower than measured noise and a fresh transfer number with every development gain.
 
@@ -26,6 +26,8 @@ The fresh panel's size, noise floor and thresholds are registered in `docs/harne
 ## Done when
 
 '(e) Fresh transfer. The gain holds on a fresh, sealed test panel registered in advance.' Read with bar (d), "the gain" is integer top-1 through the D11 export beating the unigram table (1,226 of 14,287) and the next-word table (6,300 of 14,287) on each of two seeds. Step 3 has registered the fresh-panel thresholds and noise floor in `docs/harness/prep/m1-fresh-panel-transfer-2026-10-26.md`; Step 4 applies them on the single fresh opening.
+
+This is the original acceptance text, preserved rather than rewritten in this PR. The later approved close-grade outcome, including DEV's required 6,324 target, is recorded separately in [decision log 6515151261](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6515151261).
 
 ## How to start
 
@@ -45,8 +47,8 @@ The fresh panel's size, noise floor and thresholds are registered in `docs/harne
 
 ## Sources
 
-- [`ROADMAP.md:14`](../../../ROADMAP.md)
-- [`docs/integration/NOW.md:85`](../../../docs/integration/NOW.md)
-- [`docs/start/where-were-going.md:34`](../../../docs/start/where-were-going.md)
-- [`docs/start/faq.md:111`](../../../docs/start/faq.md)
+- [`ROADMAP.md`](../../../ROADMAP.md)
+- [`archive/integration/NOW-2026-10-22.md:85`](../../../archive/integration/NOW-2026-10-22.md)
+- [`docs/start/where-were-going.md: What M1 established`](../../../docs/start/where-were-going.md#what-m1-established)
+- [`docs/start/faq.md: the 437/512 and 0.877 records`](../../../docs/start/faq.md#21-what-happened-to-the-437-of-512-and-the-0877-results-i-may-have-seen)
 

@@ -71,7 +71,7 @@ The context vector bundles an associative transition context and up to four "ort
 
 ## What would reopen it
 
-1. **A lawful retraining of the fixed-code term**, either as an offline float learner under D37 with a fresh `TEST FITNESS: FIT` review and a D11 integer export gap, or as a Hamming binding on the discrete writer, with owner release where a hold applies.
+1. **A lawful retraining of the fixed-code term**, either as an offline float learner under D37 with a fresh `TEST FITNESS: FIT` review, the lab's D67 pre-run review and a D11 integer export gap, or as a Hamming binding on the discrete writer. D41's donor pass is the only owner-at-dispatch exception.
 2. **The freeze-after-warm-up test for mode 2**, to settle the moving-codes hypothesis.
 3. **A redundancy test with the exact copy head switched off**, plus a scale sweep (0, 250, 500, 1000, 2000, 4000), so a null cannot be blamed on a tiny scale or on duplicated evidence.
 4. **A role-times-filler test on held-out phrasing** against an equal-bit ordinary codebook, reporting the share of decisions that flip, with exact word and occurrence identity kept apart from the sketch.

@@ -13,11 +13,11 @@ scope: [crates/uor-r4-float-train/**, crates/uor-r4-integer/**, docs/mechanisms/
 
 ## Why it matters
 
-It would give the first language-fit evidence for any lawful feed-forward or gate part.
+The offline-float sheet completed language-fit and export-gap measurements. The Hamilton gate is ACTIVE and trained in the discrete M1 composition and on the FBS trunk, whose unsnapped exact-unit-quaternion form exports and serves under `lut-stack/5`, with exact rotations and the export gap inside its bar at DEV scope. Per-block suppression is measured: 0 of 78,888,960 blocks near the guard core and 0 of 986,112 downstream rows below 0.8, with a mixed language-fit result and `G-Hamilton-ExportGap = PASS`.
 
 ## What is missing
 
-The Hamilton gate has 944 tests, GPU parity of 43 passed and 0 failed, and 18 CUDA controls, but it has never been trained. It still needs the icosian snap before export. The claim that a norm-preserving gate can suppress a signal is only a dossier reading.
+Remaining work is identity-preconditioned/residual initialization at 1,024 steps or more, a matched full-rung comparison, and cross-block/downstream behavior ([mechanism record](../../mechanisms/hamilton-gate.md), [lab record](../../labs/hamilton-gate-offline-float-sheet/README.md)).
 
 ## Done when
 
@@ -28,7 +28,7 @@ An offline-float (D37) sheet reports a language fit on the integer DEV metrics a
 Open these first:
 
 - `docs/mechanisms/hamilton-gate.md`
-- `docs/labs/repo-renormalization-2026-10-19/audit/mechanisms/hamilton-gate.json`
+- `docs/labs/hamilton-gate-offline-float-sheet/README.md`
 
 ## Rules that apply
 
