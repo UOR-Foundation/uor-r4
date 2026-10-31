@@ -401,6 +401,64 @@ pub struct FbsHammingRead {
     pub weight: Vec<f32>,
 }
 
+/// The schema a [`HammingTrace`] carries.
+pub const HAMMING_TRACE_SCHEMA: &str = "uor-r4.hamming-trace/1";
+
+/// What each Hamming read chose, per window, read and head (claude-235, the item's step 5). The
+/// float D11 readout writes one (`fbs-snapshot --hamming-trace`), the integer session another
+/// (`fbs-toks --hamming-trace`), and `fbs-toks --hamming-trace-compare` holds the two side by side.
+/// A head matches on one 64-bit word, so every code is one `u64`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HammingTrace {
+    /// [`HAMMING_TRACE_SCHEMA`].
+    pub schema: String,
+    /// Who wrote it: `float-d11` or `integer`.
+    pub side: String,
+    /// The float arm (`d11`, `d11-tie`, `d11-rounded`, `d11-tie-rounded`), or `integer`.
+    pub arm: String,
+    /// Heads per read: the first `heads / 2` are copy heads, the rest type heads.
+    pub heads: usize,
+    /// The most positions a head keeps (`HAMMING_KEPT`).
+    pub kept: usize,
+    /// One entry per window read, in the order read.
+    pub windows: Vec<HammingTraceWindow>,
+}
+
+/// One window's trace.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HammingTraceWindow {
+    /// The window's token ids.
+    pub ids: Vec<u32>,
+    /// Each read in the order the forward runs them: the stream read, then the readout read.
+    pub reads: Vec<HammingTraceRead>,
+}
+
+/// One read's choices over one window.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HammingTraceRead {
+    /// The read's depth: the layers before it, or the layer count for the readout read.
+    pub depth: usize,
+    /// One entry per head, in head order.
+    pub heads: Vec<HammingTraceHead>,
+}
+
+/// One head's codes and choices at every position of one window.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HammingTraceHead {
+    /// Each position's query code: the head's 64 coordinates' sign bits, a coordinate at or above
+    /// 0 a 1, bit `i` the head's coordinate `i` (as `pack_signs` packs them).
+    pub query: Vec<u64>,
+    /// Each position's key code, packed the same way. Position 0's names no candidate.
+    pub key: Vec<u64>,
+    /// Each position's kept positions: real candidates only (`1 ≤ s < t`, fewer than `kept`
+    /// when `t ≤ kept`), in no set order.
+    pub kept: Vec<Vec<u32>>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
