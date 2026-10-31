@@ -48,7 +48,9 @@ Result: **go**. The probe reads the code, so it is an instrument check.
    - A stack with it is `uor-r4.lut-stack/8`, which the `/7` engine refuses by its schema check.
    - The writer writes it, and parsing checks every size and id.
    - The table round-trips byte for byte.
-4. **The builder, `bin/fbs-point-key.rs`.** It reads a `/7` artifact and a TRAIN split, and writes the `/8` artifact.
+4. **The builder, `fbs-export --point-key`.** It reads a `/7` artifact and a TRAIN split, and writes the `/8` artifact.
+   - It is a mode of `bin/fbs-export.rs`, not a new binary. The crate sets `autobins = false`, so a new binary needs a `Cargo.toml` entry outside the item's scope (amended at slice C).
+   - Its logic is the library's `point_key_windows` and `build_point_key`, so the tests reach it.
    - It replays each window that holds an opening through the integer session, with the memory off. The windows and openings are float's `windows_of` and `opens_reply` rule, ported as integer position logic.
    - At each opening row it takes `b.query_q12` and the reply's first token.
    - Here it is tested on the synthetic stack with a tiny split only.
@@ -57,7 +59,7 @@ Result: **go**. The probe reads the code, so it is an instrument check.
 ## Files in scope
 
 - `crates/uor-r4-integer/src/stack/{point_key.rs (new), format.rs, memory.rs, session.rs, mod.rs, tests.rs, synthetic.rs}`
-- `crates/uor-r4-integer/src/bin/fbs-point-key.rs` (new)
+- `crates/uor-r4-integer/src/bin/fbs-export.rs` (the `--point-key` mode; the item lists it). It replaces a new `bin/fbs-point-key.rs`, whose `[[bin]]` entry would need `Cargo.toml`, outside the item's scope.
 - `crates/uor-r4-integer/src/wasm_serve.rs` and `crates/uor-r4-integer/src/wasm_bindgen_exports.rs`, only if `memory_info` or the restore refusal must name the table
 - `docs/loop/tasks/point-key-integer/claude-222/**`
 - `docs/roadmap/items/point-key-integer.md` (a progress note only)

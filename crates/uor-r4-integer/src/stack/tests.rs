@@ -5189,30 +5189,35 @@ fn synthetic_point_key(bytes: &[u8], rows: usize) -> super::PointKeyImage {
 /// claude-222: the served point key names the reply's first token where the opening table's exact
 /// key misses, from that row's own query. Every other row, an opening the key hits, and a session
 /// without the reply-start signal decode as the `/7` stack does, token for token.
+/// claude-222: a `/7` stack of the small trunk whose opening table holds `turn_memory_script`'s
+/// opening key when `hit`, and an unseen one when not. Its reply table holds a key no row hits, so
+/// every later reply row is keyed and misses.
+fn point_key_test_stack(hit: bool) -> Vec<u8> {
+    use super::{FbsMemoryEntry, FbsMemorySnapshot, FbsReplyTable, MEMORY_PAD};
+    let width = FBS_SYNTH_SMALL.d as usize;
+    let mut snap = turn_memory_trunk(24);
+    let key = if hit { vec![12, 13, 14, 15] } else { vec![90, 91, 92, 93] };
+    let unseen = vec![90, 91, 92, 93, 94, 95, 96, 97, MEMORY_PAD, 1, MEMORY_PAD, 20];
+    snap.memory = Some(FbsMemorySnapshot {
+        k: 4,
+        key_window: 192,
+        opening: vec![FbsMemoryEntry { key, value: 42 }],
+        opening_weight: vec![0.5; width],
+        reply: Some(FbsReplyTable {
+            turn: 8,
+            entries: vec![FbsMemoryEntry { key: unseen, value: 43 }],
+            weight: vec![0.5; width],
+        }),
+    });
+    super::export_fbs_trunk_uorlut01(&snap).expect("export")
+}
+
 #[test]
 fn the_point_key_names_a_missed_opening_and_leaves_the_rest() {
-    use super::{FbsMemoryEntry, FbsMemorySnapshot, FbsReplyTable, MEMORY_PAD};
     let (tokens, reply_start) = turn_memory_script(8);
     let width = FBS_SYNTH_SMALL.d as usize;
-    let stack = |hit: bool| -> Vec<u8> {
-        let mut snap = turn_memory_trunk(24);
-        let key = if hit { vec![12, 13, 14, 15] } else { vec![90, 91, 92, 93] };
-        // A reply table no row hits, so every later reply row is keyed and misses: the point key
-        // must still serve only the opening.
-        let unseen = vec![90, 91, 92, 93, 94, 95, 96, 97, MEMORY_PAD, 1, MEMORY_PAD, 20];
-        snap.memory = Some(FbsMemorySnapshot {
-            k: 4,
-            key_window: 192,
-            opening: vec![FbsMemoryEntry { key, value: 42 }],
-            opening_weight: vec![0.5; width],
-            reply: Some(FbsReplyTable {
-                turn: 8,
-                entries: vec![FbsMemoryEntry { key: unseen, value: 43 }],
-                weight: vec![0.5; width],
-            }),
-        });
-        super::export_fbs_trunk_uorlut01(&snap).expect("export")
-    };
+    // The point key must serve only the opening, though every later reply row misses too.
+    let stack = point_key_test_stack;
     // Each row's token and query, and the opening row's move, with or without the signal.
     let decode = |bytes: &[u8], signal: bool| -> (Vec<(u32, Vec<i32>)>, Option<Option<u32>>) {
         let model = IntegerStackModel::parse(bytes).expect("served");
@@ -5275,6 +5280,61 @@ fn the_point_key_names_a_missed_opening_and_leaves_the_rest() {
         })
         .collect();
     assert_eq!(timed, miss8.iter().map(|s| s.0).collect::<Vec<_>>(), "the timed twin decodes as the step");
+}
+
+/// claude-222: TRAIN's openings are read in the float trunk's windows, and so are their rows. The
+/// first run of a document starts at its `<|bos|>`. A later run's causal prefix starts inside the
+/// document and never crosses its start. A target after a reply token is no opening, and a window
+/// without one is skipped.
+#[test]
+fn the_point_key_windows_are_the_float_trunks_openings() {
+    let windows = |tokens: &[u32], mask: &[u8], context| super::point_key_windows(tokens, mask, context, 0).expect("windows");
+    let w = |input: Vec<u32>, openings: Vec<(usize, u32)>| super::PointKeyWindow { input, openings };
+    assert_eq!(
+        windows(&[0, 5, 6, 7, 8, 9, 0, 10, 11, 12], &[0, 0, 0, 1, 1, 0, 0, 0, 1, 1], 4),
+        [w(vec![0, 5, 6], vec![(2, 7)]), w(vec![0, 10], vec![(1, 11)])]
+    );
+    assert_eq!(
+        windows(&[0, 1, 2, 3, 4, 5, 6, 7], &[0, 0, 0, 0, 0, 0, 1, 1], 3),
+        [w(vec![3, 4, 5], vec![(2, 6)])],
+        "a later run's prefix starts inside the document"
+    );
+    assert!(super::point_key_windows(&[0, 1], &[0], 4, 0).is_err(), "a mask of another length");
+}
+
+/// claude-222: the builder's table holds the integer trunk's own query at TRAIN's opening rows,
+/// exactly the session's with no reply-start signal. Served from the `/8` stack it builds, it names
+/// a TRAIN opening that the exact key misses by that opening's own target.
+#[test]
+fn the_point_key_builder_reads_the_trunks_own_points_at_trains_openings() {
+    let (tokens, reply_start) = turn_memory_script(8);
+    let mask: Vec<u8> = (0..tokens.len()).map(|p| u8::from(p >= reply_start)).collect();
+    let bytes = point_key_test_stack(false);
+    let model = IntegerStackModel::parse(&bytes).expect("served /7");
+    let windows = super::point_key_windows(&tokens, &mask, 192, 0).expect("windows");
+    assert_eq!(windows, [super::PointKeyWindow { input: tokens[..reply_start].to_vec(), openings: vec![(reply_start - 1, tokens[reply_start])] }]);
+    let image = super::build_point_key(&model, &windows).expect("the table");
+    let mut session = model.session();
+    let own: Vec<i16> = tokens[..reply_start]
+        .iter()
+        .map(|&t| session.step_native(t).expect("step").query_q12)
+        .last()
+        .expect("a row")
+        .iter()
+        .map(|&q| q as i16)
+        .collect();
+    assert_eq!((image.points, image.targets.clone()), (own, vec![tokens[reply_start]]));
+    let built = super::build_point_key(&model, &windows).expect("the table");
+    let served = IntegerStackModel::parse(&super::add_point_key_uorlut01(&bytes, &built).expect("/8")).expect("served /8");
+    let mut session = served.session();
+    let mut opening = None;
+    for (row, &token) in tokens[..reply_start].iter().enumerate() {
+        if row + 1 == reply_start {
+            session.mark_reply_start();
+        }
+        opening = Some(session.step_native(token).expect("step").token);
+    }
+    assert_eq!(opening, Some(tokens[reply_start]), "the TRAIN opening's own target");
 }
 
 /// `bytes`' JSON header and its data sections.

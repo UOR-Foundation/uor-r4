@@ -142,6 +142,93 @@ impl ServedPointKey {
     }
 }
 
+/// The float sheet's window length (`SHEET_CONTEXT`), which [`point_key_windows`] cuts TRAIN at.
+pub const POINT_KEY_WINDOW: usize = 192;
+/// The `<|bos|>` id the windows split documents at.
+pub const POINT_KEY_BOS: u32 = MEMORY_BOS_ID;
+
+/// One TRAIN window holding openings (claude-222): the window's tokens up to its last opening row,
+/// and each opening's row in it and its target, the reply's first token.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PointKeyWindow {
+    pub input: Vec<u32>,
+    pub openings: Vec<(usize, u32)>,
+}
+
+/// TRAIN's openings in the float trunk's windows (claude-218's `opening_points`).
+/// - **The windows** are `build_document_windows`: each `bos`-bounded document's targets cut into
+///   runs of at most `context`, each read from a causal prefix of at most `context` tokens that never
+///   crosses the document's start.
+/// - **An opening** is a scored target (`mask[p] == 1`, not `bos`) whose previous token is a prompt
+///   token (`mask[p - 1] == 0`, `opens_reply`), read at row `p - 1` of its window.
+///
+/// Positions only, so the integer crate needs no float code.
+pub fn point_key_windows(
+    tokens: &[u32],
+    mask: &[u8],
+    context: usize,
+    bos: u32,
+) -> Result<Vec<PointKeyWindow>, StackError> {
+    if tokens.len() != mask.len() || context == 0 {
+        return Err(StackError::Numerics("the split's mask is not its tokens' length, or the context is 0".to_owned()));
+    }
+    let starts: Vec<usize> = (0..tokens.len()).filter(|&p| tokens[p] == bos).collect();
+    let mut windows = Vec::new();
+    for (doc, &start) in starts.iter().enumerate() {
+        let end = starts.get(doc + 1).copied().unwrap_or(tokens.len());
+        let mut cursor = start + 1;
+        while cursor < end {
+            let target_end = (cursor + context).min(end);
+            let from = (target_end - 1).saturating_sub(context).max(start);
+            let openings: Vec<(usize, u32)> = (cursor..target_end)
+                .filter(|&p| tokens[p] != bos && mask[p] == 1 && mask[p - 1] == 0)
+                .map(|p| (p - 1 - from, tokens[p]))
+                .collect();
+            if let Some(&(last, _)) = openings.last() {
+                windows.push(PointKeyWindow {
+                    input: tokens[from..=from + last].to_vec(),
+                    openings,
+                });
+            }
+            cursor = target_end;
+        }
+    }
+    Ok(windows)
+}
+
+/// The point table of `model` over `windows` (claude-222). Each window is stepped in a fresh
+/// session from its first token, with no reply-start signal, so the turn memory keys and moves
+/// nothing. Each opening's row gives the writer's own Q12 query, which is the integer trunk's own
+/// point (the item's condition (b)), and its target.
+pub fn build_point_key(
+    model: &super::IntegerStackModel,
+    windows: &[PointKeyWindow],
+) -> Result<PointKeyImage, StackError> {
+    let width = model.shape().width;
+    let (mut points, mut targets) = (Vec::new(), Vec::new());
+    for window in windows {
+        let mut session = model.session();
+        let mut next = window.openings.iter().peekable();
+        for (row, &token) in window.input.iter().enumerate() {
+            let step = session.step_native(token)?;
+            while let Some(&&(at, target)) = next.peek() {
+                if at != row {
+                    break;
+                }
+                if step.query_q12.len() != width {
+                    return Err(StackError::Numerics("the stack's query is not its width".to_owned()));
+                }
+                points.extend(step.query_q12.iter().map(|&q| q.clamp(-32768, 32767) as i16));
+                targets.push(target);
+                next.next();
+            }
+        }
+    }
+    let image = PointKeyImage { width, points, targets };
+    image.check(model.shape().vocab)?;
+    Ok(image)
+}
+
 #[cfg(test)]
 mod point_key_tests {
     use super::*;
