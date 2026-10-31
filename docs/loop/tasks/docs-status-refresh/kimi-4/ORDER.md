@@ -1,6 +1,6 @@
 # ORDER: comprehensive 30 Oct documentation refresh
 
-Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`. PR base at the last completed review: `e16ada251b38ef9869612e10bc6c10f8d7a49f1f`; exact reviewed head: `f6acd4b8a9e01acfca4506ac070f72349cfe46de`. Newer `origin/main` `1f83dd4b2f76e16912f5793a58a4687548f1c237` is to be integrated before the final review.
+Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`. PR base at the last completed review: `e16ada251b38ef9869612e10bc6c10f8d7a49f1f`; exact reviewed head: `f6acd4b8a9e01acfca4506ac070f72349cfe46de`. Newer `origin/main` `1f83dd4b2f76e16912f5793a58a4687548f1c237` is integrated before the final review.
 
 ## Goal and chain
 

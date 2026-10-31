@@ -1,6 +1,6 @@
 # FACTS: documentation status at 30 Oct 2026
 
-Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md). ORDER: [ORDER.md](ORDER.md). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; PR base at the last completed review: `e16ada251b38ef9869612e10bc6c10f8d7a49f1f`; exact reviewed head: `f6acd4b8a9e01acfca4506ac070f72349cfe46de`; newer `origin/main` to integrate before the final review: `1f83dd4b2f76e16912f5793a58a4687548f1c237`.
+Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md). ORDER: [ORDER.md](ORDER.md). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; PR base at the last completed review: `e16ada251b38ef9869612e10bc6c10f8d7a49f1f`; exact reviewed head: `f6acd4b8a9e01acfca4506ac070f72349cfe46de`; newer `origin/main` integrated before the final review: `1f83dd4b2f76e16912f5793a58a4687548f1c237`.
 
 Every public number in this refresh must link to this sheet's committed evidence. This is a factual baseline, not a new measurement or a capability claim.
 
@@ -83,7 +83,7 @@ Every public number in this refresh must link to this sheet's committed evidence
 ## 7. Active collaboration boundaries at the baseline
 
 - #3430 (claude-218) was active at the baseline and merged at `5ec6e36a8f69d3b0c9acf993cc3e09acc7be4646` during verification. #3439 (claude-219) then merged at `e44f68e65` with the fresh p-v free-generation result. Both are included; Claude's research files remain untouched by this unit.
-- #3441 registered the M7 Studio live/model-sources item; #3442 merged the rebuilt client and publisher; #3444 recorded the verified live publish and closed #3440. Their source and generated roadmap view are preserved. This unit does not publish the Studio or edit `.github/**`.
+- #3441 registered the M7 Studio live/model-sources item; #3442/#3444 rebuilt and published it. During final repair, #3445 added the public M1 release/top-8 Studio path, #3446 served `/7` integer turn memory, and #3447 redesigned the console. `origin/main` `1f83dd4b2` is merged forward; their implementations and generated roadmap view are preserved. This unit changes only documentation and does not publish the Studio or edit `.github/**`.
 - #3426's figure tooling fixes landed through #3438 and were merged forward before figure regeneration.
 - #3435/#3424: discrete/source-interface code only, no documentation overlap at baseline.
 - #3323 (antigravity-113): `exact-memory.md` and `object-store.md` stay untouched even though they were once considered by the older documentation refresh.

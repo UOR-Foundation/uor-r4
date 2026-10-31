@@ -260,5 +260,5 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <text class="small" x="148" y="526">0.0691 s (55.6 times faster)</text>
 
 <text class="note" x="24" y="562">Square shading and bar heights are illustrative; only 6 of the 64 rows are drawn. The 64 x 16 layout, the timings and the K = 16 ratios are data.</text>
-<text class="note" x="24" y="578">This discrete path is not what the 27-29 Oct work trained. The timing is a non-gating measurement that was not qualified.</text>
+<text class="note" x="24" y="578">Stage T and the M1 lineage used BVG-K. The timing is a non-gating measurement that was not qualified.</text>
 </svg>
