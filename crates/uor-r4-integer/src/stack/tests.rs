@@ -5260,6 +5260,21 @@ fn the_point_key_names_a_missed_opening_and_leaves_the_rest() {
     let (quiet8, opening) = decode(&with_table(&stack(false), &miss7[at].1, named), false);
     assert_eq!(opening, None, "no row keyed");
     assert_eq!(quiet7.iter().map(|s| s.0).collect::<Vec<_>>(), quiet8.iter().map(|s| s.0).collect::<Vec<_>>());
+    // The timed twin serves the key as the step does.
+    let model = IntegerStackModel::parse(&with_table(&stack(false), &miss7[at].1, named)).expect("served");
+    let mut session = model.session();
+    let mut ns = Vec::new();
+    let timed: Vec<u32> = tokens
+        .iter()
+        .enumerate()
+        .map(|(row, &token)| {
+            if row + 1 == reply_start {
+                session.mark_reply_start();
+            }
+            session.measure_fbs_step_stages(token, &mut ns).expect("timed step").0.token
+        })
+        .collect();
+    assert_eq!(timed, miss8.iter().map(|s| s.0).collect::<Vec<_>>(), "the timed twin decodes as the step");
 }
 
 /// `bytes`' JSON header and its data sections.
