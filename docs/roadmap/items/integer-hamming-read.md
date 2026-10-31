@@ -59,13 +59,18 @@ It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-
   5. the float parity on claude-146's checkpoints (GPU, under a prep sheet: the trunk runs only on CUDA). It starts with a trace, because claude-233 (#3465) found the gap first. On (r-drop) step 16,384, the trunk alone agrees with its float D11 forward at s1 and s3 (5 and 11 of 1,536 positions differ); with the read it does not (694 and 823). Casey chose this step next (31 Oct 2026, in chat): "Trace attention first". claude-234 recorded the method:
      - **The float side, on the GPU.** A capture inside `flock_read_hamming.rs`'s `apply` and `apply_readout` writes, per (position, head, read), the query code, the key code, the kept positions with their distances, and the distance at the 16th place. Only real candidates are written: at `t ≤ 16` there are fewer than 16, and the float drops its masked entries by `real`. The capture is off by default, so training is unchanged. It runs in the D11 readout (`fbs_float_readout_on`) on claude-233's sequences.
      - **The integer side, on the laptop.** The same record from `stack/hamming.rs`, served from the artifact exported from the same checkpoint.
-     - **The timing, on the same laptop pass.** `fbs-toks` decode tokens/s against context, with the read and without, on the same artifact: done-when 3, step 6's measurement, taken early. The timing does not depend on the parity. It gives the read's long-context cost, the number that decides whether a cheaper read is worth building: the Flock tree read (about log n steps), or a fixed-size hypervector bundle. Casey's call (31 Oct 2026, in chat): "Yes, fold it in".
-     - **The comparison.** The share of kept sets equal to float's, and top-1.
-       - **Which sets are judged.** The stream read's inputs come from the trunk below it, which the read does not feed (`geometric_stack_native.rs`, after layer 2), so each of its sets is judged on its own. The readout read sees the stream read's output, so a readout set is judged only where every stream-read set at its position and before agrees; the other readout sets are counted apart, as downstream.
+     - **The timing, on the same laptop pass.** `fbs-toks` decode tokens/s against context, with the read and without, on the same artifact: done-when 3, step 6's measurement, taken early. The timing does not depend on the parity. It gives the read's long-context cost, the number that decides whether a cheaper read is worth building. The two candidates are untested:
+       - the Flock tree read, whose cost of about log n steps is a hypothesis, never measured in integer form ([flock read](../../mechanisms/flock-read.md));
+       - a fixed-size hypervector bundle, whose mechanism is PARKED ([vector-symbolic binding](../../mechanisms/vsa.md)). Casey's call (31 Oct 2026, in chat): "Yes, fold it in".
+     - **The comparison.** The share of kept sets equal to float's, and top-1, each split by head kind.
+       - **Which sets are judged.** Only one kind of code depends on the residual: the type heads' queries. Copy heads' queries and keys, and type heads' keys, are built from tokens' points (claude-189, claude-195). So:
+         - every copy-head set, at both reads, is judged at every position;
+         - every stream-read type-head set is judged too. Its query comes from the trunk below the read, which the read does not feed (`geometric_stack_native.rs`, after layer 2);
+         - a readout type-head set is judged only where every stream-read set agrees at its position and before it, since the readout's residual carries the stream read's output. The other readout type-head sets are counted apart, as downstream.
        - **The cause of a judged set that differs:**
-         - the same query code, and the same key code at every candidate, but a different set: a tie across the 16th place, decided by the tie rule;
-         - a different query code, or a different key code at a position either side keeps: a sign flip.
-       - Anything else is an instrument fault, repaired before any number is read.
+         - **A tie across the 16th place,** decided by the tie rule: the same query code, and the same key code at every position either side keeps. Each member that is in only one of the two sets must then sit at the 16th-place distance; if one does not, that is an instrument fault.
+         - **A sign flip:** anything else. A copy-head code or a type-head key depends only on the table and the read's rotations, so its flip comes from rounding, never from the trunk. A type-head query can flip from either; the parameters arm below separates the read's own rounding.
+       - An instrument fault is repaired before any number is read.
      - **Two arms beside the plain D11 forward,** one per lead:
        - **The tie rule.** The float `choose_sorted` keeps the first 16 of a GPU arg-sort, whose order among ties is not specified. The integer `nearest` keeps ascending distance, then ascending `s`. The arm gives the float the integer's rule, behind the same off-by-default switch. It sorts on the key `h·T + s`, where `h` is the distance in bits and `T` the sequence length. The float's distance is a mean L1 between ±1 codes, `2h` over the head's width. The key is an integer far below 2^24, so it is exact in f32.
        - **The read's parameters.** The D11 readout loads `hamming_read.safetensors` at full f32 (`fbs-snapshot.rs`), and `round_tables_as_exported` rounds only the trunk's tables. The artifact holds the rotations and weights at 2^-24 and the margins at 2^-16. The arm rounds the read's parameters as exported.
@@ -88,7 +93,7 @@ It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-
 
 ## Cancel if
 
-Another unit already meets this item's done-when on main (the read served at parity with its float forward, and its speed measured), or the float read is withdrawn. The read existing on main is not a cancel. Its copy-head kernel came in with claude-189, and it has been served since claude-194, 195 and 200, but its parity is unmet (claude-233).
+Another unit already meets this item's done-when on main (the read served at parity with its float forward, and its speed measured), or the float read is withdrawn. The read existing on main is not a cancel. Its copy-head kernel came in with claude-189. claude-194 and 195 serve its copy and type heads, and claude-200's export carries its parameters. Its parity is unmet (claude-233).
 
 ## How to start
 
