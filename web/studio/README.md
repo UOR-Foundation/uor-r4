@@ -7,6 +7,24 @@ integer serving engine (`crates/uor-r4-integer`, `--features serving-wasm`) runn
 Worker. It is served from the project's documentation site at **`/studio/`**
 (<https://uor-foundation.github.io/uor-r4/studio/> once the live branch is published).
 
+### Interface (31 October 2026 redesign)
+
+An agent-console shell: command bar (wordmark, workspace breadcrumb, project chip, command search,
+view switch, theme/new), icon rail, collapsible sessions sidebar with a runtime environment card, a
+central transcript with a quiet console hero and a terminal-frame composer, a full-width Model
+providers page, a compact context inspector (active model, runtime, shortcuts), and a mono status
+bar (engine/model/privacy/storage/clock). Warm graphite + ember palette with a designed light theme,
+toggled from the rail or palette and persisted in localStorage (`uor.studio.theme`); chrome toggles
+persist in `uor.studio.ui.v1`; `prefers-reduced-motion` disables animation. The command palette
+opens with Cmd/Ctrl+K (also `#command-palette`), groups actions (new chat, load demo/M1/local/URL/API,
+switch views, theme and chrome) and supports arrow/Enter navigation, focus trap and Escape. QA deep
+links `#view=chat|model|editor` and `?theme=dark|light` exist for screenshots and tests.
+
+The shell is presentation only: every existing element id/handler, the data-studio-ready boot
+contract, the status markers and the engine/worker/model-source/API layer are unchanged, so
+`verify_studio_page.mjs`, `verify_studio_page_load.mjs`, `verify_studio_worker.mjs` and
+`verify_desktop_client.mjs` pass at the redesign head.
+
 This directory holds the page source. **The wasm bundle, the demo model and the tokenizer are
 generated, never committed** (CHARTER §3.13 forbids committed binaries and corpora); the generated
 files live in the gitignored `pkg/` and are produced by the build below or by
