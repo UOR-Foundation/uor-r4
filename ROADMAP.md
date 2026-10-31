@@ -26,6 +26,6 @@ M1's two-seed results are **7,002 / 7,001** on DEV (T2 6,300), **7,215 / 7,228**
 conversation. M2 is the next capability milestone. Claude-220 serves the point key inside one
 float model on fresh p-w, improving templates by +41/+40/+42 at three seeds with exact claude-219
 parity; the gain recalls TRAIN replies, not new wording. Claude-222 has built the integer point
-table, search and `/8` record, with 380 library tests and a full serving audit. Next, unit 3's real TRAIN export, p-x scoring and laptop measurement, now that [claude-224](docs/loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade.
+table, search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](docs/loop/tasks/point-key-integer/claude-224/REPORT.md) has built the panel decode and grade. Before unit 3's real TRAIN export, p-x scoring and laptop measurement, [integer-retention-rates](docs/roadmap/items/integer-retention-rates.md) must make the integer recurrence match the trained model.
 Every run goes ahead on its own pre-run review (D67, [charter](CHARTER.md) §5.1). The one plan is
 [PLAN.md](PLAN.md) (D77).

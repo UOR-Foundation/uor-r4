@@ -55,8 +55,9 @@ then served the point key inside one float model on fresh p-w: templates improve
 three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing.
 [Claude-222](../loop/tasks/point-key-integer/claude-222/REPORT.md) has built the integer point table,
 search and `/8` record, with 380 library tests and a full serving audit. [Claude-224](../loop/tasks/point-key-integer/claude-224/REPORT.md)
-has built the panel decode and grade. Next is unit 3's real TRAIN export, p-x scoring and laptop
-measurement on client hardware. Useful conversation remains unproven.
+has built the panel decode and grade. Before unit 3's real TRAIN export, p-x scoring and laptop measurement on client hardware,
+[integer-retention-rates](../roadmap/items/integer-retention-rates.md) must make the integer recurrence
+match the trained model. Useful conversation remains unproven.
 
 ## What remains open beyond that key
 

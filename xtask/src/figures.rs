@@ -1196,7 +1196,7 @@ fn milestones() -> Result<String, Fail> {
             St::Progress,
             [
                 "table/search + decode/grade",
-                "built; unit 3 run next",
+                "retention fix before unit 3",
                 "p-x score/measure open",
                 "",
             ],
@@ -1292,7 +1292,7 @@ fn milestones() -> Result<String, Fail> {
     s.legend(636.0, &[St::Complete, St::Progress, St::Planned]);
     s.finish(
         "Milestones M1 to M8",
-        "30 October 2026: 1 of 8 milestones complete. M1 language base complete at all six bars on two seeds (DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228; p-f 7,850 / 7,872; exact export and B4; Apple M1 decode 10,876 / 10,566 tok/s). M2 grounded reply and M3 durable memory are in progress: claude-220 serves the point key inside one float model with a partial gain; claude-222 built the integer point table and search synthetically; claude-224 built the panel decode and grade; unit 3's real TRAIN export, p-x scoring and laptop measurement are next. M4 to M8 are not complete. M7 runtime and Studio harness work is in progress on a synthetic stand-in, with accepted-model parity open. M1 is not useful-chat qualification.",
+        "30 October 2026: 1 of 8 milestones complete. M1 language base complete at all six bars on two seeds (DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228; p-f 7,850 / 7,872; exact export and B4; Apple M1 decode 10,876 / 10,566 tok/s). M2 grounded reply and M3 durable memory are in progress: claude-220 serves the point key inside one float model with a partial gain; claude-222 built the integer point table and search synthetically; claude-224 built the panel decode and grade; the integer-retention-rates fix must first match the trained recurrence, then unit 3's real TRAIN export, p-x scoring and laptop measurement can run. M4 to M8 are not complete. M7 runtime and Studio harness work is in progress on a synthetic stand-in, with accepted-model parity open. M1 is not useful-chat qualification.",
     )
 }
 
