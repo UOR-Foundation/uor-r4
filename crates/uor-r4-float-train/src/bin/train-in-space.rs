@@ -105,6 +105,18 @@
 //! `train-in-space --data-root DIR --served-grade 1 --runs DIR --panel p-w=DIR --panel p-v=DIR`
 //! grades the served arm against greedy on the laptop (`in_space_long::served_grade`). One JSON line.
 //!
+//! `train-in-space --data-root DIR --panel-prompts 1 --out DIR [--panel NAME=DIR ...] [--runs DIR] --samples 1536 --reply-tokens 64`
+//! (point-key-integer, claude-224) writes, with no model, the prompts a `--score-rows` run decodes on
+//! DEV and each panel (`prompts-{split}.json`), for `fbs-toks --replies`. With `--runs` (claude-220's
+//! `out`), it also writes each seed's prompts with its float served names, refusing a served sample
+//! that is not its prompt's (`in_space_long::panel_prompts`). The `--samples` and `--reply-tokens`
+//! must be the scored run's. `train-in-space --data-root DIR --integer-grade 1 --runs DIR
+//! --keys-runs DIR [--panel NAME=DIR ...]` grades the integer served arm against integer greedy,
+//! with parity against the float key, from each `r-drop-s{n}`'s
+//! `integer-{served,greedy}-{split}.json` (`in_space_long::integer_grade`). `--keys-runs` is the
+//! float served run, claude-220's `out`, whose names each integer served file must carry for its
+//! seed. One JSON line.
+//!
 //! `train-in-space --data-root DIR --controls 1 --out DIR [--fresh-v2 DIR] [--panel NAME=DIR ...]`: the
 //! protocol's recall controls (I-D, claude-211) on the laptop: (T) the memory's tables and (S) the
 //! longest suffix over TRAIN, as rows files the grader pairs with the arms.
@@ -131,7 +143,7 @@ use candle_core::Device;
 use uor_r4_float_train::flock_read_opening::OpeningAnchor;
 use uor_r4_float_train::flock_read_register::RegisterSelect;
 use uor_r4_float_train::in_space_long::{
-    cell_grade, cells_ok, census, context_reach, controls, cut_grade, cycle_grade, decode_speed, key_grade, keyed_grade, served_grade, fbs_arm_named, grade,
+    cell_grade, cells_ok, census, context_reach, controls, cut_grade, cycle_grade, decode_speed, key_grade, keyed_grade, served_grade, integer_grade, panel_prompts, fbs_arm_named, grade,
     gradient_norms, inspect_run, opening_bound, overturn, read_grade, reply_bound, root_separation,
     run_long, run_recall, score_rows, scopes_ok, DecodeRule, LongConfig, PointObjective, ReadScope,
     TrainSplit, DEFAULT_REGISTER_PICKS, MEMORY_DROPOUT_MAX,
@@ -167,6 +179,8 @@ fn main() -> Result<()> {
     let mut key_grade_on = false;
     let mut keyed_grade_on = false;
     let mut served_grade_on = false;
+    let mut panel_prompts_on = false;
+    let mut integer_grade_on = false;
     let mut key_levels: Vec<(String, u8)> = Vec::new();
     let mut keys_runs: Option<PathBuf> = None;
     let mut scopes: Vec<ReadScope> = Vec::new();
@@ -250,6 +264,8 @@ fn main() -> Result<()> {
             "--key-grade" => key_grade_on = switch(&value)?,
             "--keyed-grade" => keyed_grade_on = switch(&value)?,
             "--served-grade" => served_grade_on = switch(&value)?,
+            "--panel-prompts" => panel_prompts_on = switch(&value)?,
+            "--integer-grade" => integer_grade_on = switch(&value)?,
             "--key-levels" => key_levels = key_levels_arg(&value)?,
             "--keys-runs" => keys_runs = Some(PathBuf::from(&value)),
             "--reply-read-train" => {
@@ -493,8 +509,8 @@ fn main() -> Result<()> {
         bound,
         reply,
         census_on,
-        // `--score-rows` writes to `--out` without training.
-        out.is_some() && score.is_none() && !controls_on,
+        // `--score-rows`, `--controls` and `--panel-prompts` write to `--out` without training.
+        out.is_some() && score.is_none() && !controls_on && !panel_prompts_on,
         score.is_some(),
         overturn_on,
         controls_on,
@@ -506,10 +522,12 @@ fn main() -> Result<()> {
         key_grade_on,
         keyed_grade_on,
         served_grade_on,
+        panel_prompts_on,
+        integer_grade_on,
     ];
     if modes.iter().filter(|&&m| m).count() > 1 {
         return Err(FloatTrainError::Invalid(
-            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1, --grade 1, --cell-grade 1, --read-grade 1, --cut-grade 1, --cycle-grade 1, --key-grade 1, --keyed-grade 1 or --served-grade 1"
+            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1, --grade 1, --cell-grade 1, --read-grade 1, --cut-grade 1, --cycle-grade 1, --key-grade 1, --keyed-grade 1, --served-grade 1, --panel-prompts 1 or --integer-grade 1"
                 .to_owned(),
         ));
     }
@@ -549,6 +567,8 @@ fn main() -> Result<()> {
             || key_grade_on
             || keyed_grade_on
             || served_grade_on
+            || panel_prompts_on
+            || integer_grade_on
             || config.reply_read_train.is_some()
             || !scopes.is_empty()
         {
@@ -612,6 +632,25 @@ fn main() -> Result<()> {
         let runs = runs
             .ok_or_else(|| FloatTrainError::Invalid("--key-grade needs --runs DIR".to_owned()))?;
         let graded = key_grade(&data_root, &runs, keys_runs.as_deref(), &extra_panels, &key_levels)?;
+        println!("{}", serde_json::to_string(&graded)?);
+        return Ok(());
+    }
+    if panel_prompts_on {
+        let out = out
+            .ok_or_else(|| FloatTrainError::Invalid("--panel-prompts needs --out DIR".to_owned()))?;
+        for (file, rows) in panel_prompts(&data_root, &extra_panels, config.samples, config.reply_tokens, runs.as_deref(), &out)? {
+            println!("{}", serde_json::json!({ "file": file, "rows": rows }));
+        }
+        return Ok(());
+    }
+    if integer_grade_on {
+        let runs = runs
+            .ok_or_else(|| FloatTrainError::Invalid("--integer-grade needs --runs DIR".to_owned()))?;
+        let names: Vec<String> = extra_panels.iter().map(|(name, _)| name.clone()).collect();
+        let float_runs = keys_runs
+            .as_deref()
+            .ok_or_else(|| FloatTrainError::Invalid("--integer-grade needs --keys-runs DIR, the float served run whose names parity reads".to_owned()))?;
+        let graded = integer_grade(&data_root, &runs, &names, float_runs)?;
         println!("{}", serde_json::to_string(&graded)?);
         return Ok(());
     }
