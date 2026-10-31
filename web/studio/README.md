@@ -7,7 +7,7 @@ integer serving engine (`crates/uor-r4-integer`, `--features serving-wasm`) runn
 Worker. It is served from the project's documentation site at **`/studio/`**
 (<https://uor-foundation.github.io/uor-r4/studio/>). The current live publish is gh-pages `e62ea481`; `d8e67c66` was the earlier pre-M1 publish.
 
-### Interface (latest merged redesign)
+### First console redesign (superseded by v2)
 
 An agent-console shell: command bar (wordmark, workspace breadcrumb, project chip, command search,
 view switch, theme/new), icon rail, collapsible sessions sidebar with a runtime environment card, a
@@ -24,6 +24,44 @@ The shell is presentation only: every existing element id/handler, the data-stud
 contract, the status markers and the engine/worker/model-source/API layer are unchanged, so
 `verify_studio_page.mjs`, `verify_studio_page_load.mjs`, `verify_studio_worker.mjs` and
 `verify_desktop_client.mjs` pass at the redesign head.
+
+### Workable AI studio (31 October 2026, second redesign)
+
+The console shell above was superseded after owner feedback that it was "janky" with menus that
+were "not organized or labeled very well". The page is now a workable AI studio:
+
+- **One labeled navigation sidebar** with exactly four destinations: **Agent** (chat, context and
+  build tasks; ⌘1), **Workspace** (file tree, editor tabs and save; ⌘2), **Models** (local engine,
+  published M1, remote API providers; ⌘3) and **Guide** (workflows, shortcuts, limits; ⌘4). A
+  permanent **Sessions** section lists title/preview/relative time with a `⋯` menu (Rename,
+  Duplicate, Export JSON, Delete with an in-app confirm). Settings (⌘,) and Help (?) live in the
+  sidebar footer. The old icon rail, segmented view switch and duplicate controls are gone; their
+  element ids remain as hidden compatibility controls for scripts and verifiers.
+- **Workspace** opens a local folder with the File System Access API (tree, open files as editor
+  tabs, active tab drives content/name/language/status, dirty dots, ⌘S save back to disk,
+  ⇧⌘S save-as download). Browsers without the API use the import-files fallback and download save;
+  directory access is memory-only and never uploaded.
+- **Agent** takes context attachments (current editor file, workspace files, pasted text) as chips
+  with sizes and a token hint; six Build task templates fill structured prompts; assistant messages
+  can be copied, inserted into the editor, saved as a file or retried; the composer states whether
+  the active mode is local WASM (stays on device) or an OpenAI-compatible API (prompts leave the
+  device). No API code lives here - the API integration remains another lab's work.
+- **Models** is four labeled sections: Local engine (offline), Published models (M1 seed 1 PRIMARY,
+  seed 2), API providers (remote add/use/test/edit/remove) and a collapsed Research (experimental)
+  section. **Settings** has Appearance (theme, reduce motion), Editor (font, tab size, wrap), Data
+  (sessions/draft storage and clearing) and About. **Guide** is the product documentation.
+- **Command palette** (⌘K, also `#command-palette`) has eight groups - Navigation, Sessions,
+  Workspace, Agent, Models, Build, Interface, Help - with label, one-line description and only
+  implemented shortcuts; the list scrolls with the footer pinned. The implemented shortcut map is:
+  ⌘K, ⌘, , ⌘1-4, ⌘B, ⌘I, ⌘S, ⇧⌘S, Enter/Shift+Enter, Esc and ?. QA deep links `#view=`,
+  `?theme=` and `#command-palette` exist for screenshots/tests.
+- **Responsive:** at 390px the navigation is a labeled drawer, the inspector is hidden, the composer
+  is sticky and the status bar is two labeled rows; measured `scrollWidth == innerWidth`.
+- **Contract:** every pre-existing element id and handler is preserved (hidden compatibility block
+  where the UI moved), the two status markers and the data-studio-ready boot contract are intact,
+  the engine/worker/model-source/API layer is untouched, no external assets or requests are added,
+  and all four verifiers pass with assertions untouched. The page remains offline-first: no
+  external request at load; remote model/API contacts are user-initiated only.
 
 This directory holds the page source. **The wasm bundle, the demo model and the tokenizer are
 generated, never committed** (CHARTER §3.13 forbids committed binaries and corpora); the generated

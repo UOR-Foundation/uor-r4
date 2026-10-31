@@ -154,6 +154,10 @@ function loadState() {
 
 const state = loadState();
 let mounted = null; // { container, render }
+// The Studio may move rendered source groups out of the mount container (the
+// Models page regroups them into labeled sections). Delegation is therefore
+// document-level, scoped to the manager's own containers.
+const MODEL_SCOPE_SELECTOR = '#modelSourceMount, #modelsSections, #modelSourcesPanel, #inspector';
 let message = { tone: 'muted', text: '' };
 let editing = null; // { id: string|null, values: {...} }
 
@@ -173,9 +177,17 @@ function setMessage(tone, text) {
 function updateMessageNode() {
     if (!mounted) return;
     const node = mounted.container.querySelector('[data-role="status"]');
-    if (!node) return;
-    node.textContent = message.text || '';
-    node.className = 'source-status source-status-' + (message.tone || 'muted');
+    if (node) {
+        node.textContent = message.text || '';
+        node.className = 'source-status source-status-' + (message.tone || 'muted');
+    }
+    // The regrouped Models page moves the cards out of the mount; mirror the
+    // status into its visible verification row so errors are never silent.
+    const visible = document.getElementById('modelsVerifyRow');
+    if (visible) {
+        visible.textContent = message.text || '';
+        visible.dataset.tone = message.tone || 'muted';
+    }
 }
 
 function emit(detail) {
@@ -668,15 +680,15 @@ const api = {
         container.classList.add('model-sources');
         renderAll(container);
         loadModelCatalog();
-        container.addEventListener('click', onClick);
-        container.addEventListener('submit', onSubmit);
-        container.addEventListener('change', onChange);
+        document.addEventListener('click', onClick);
+        document.addEventListener('submit', onSubmit);
+        document.addEventListener('change', onChange);
         return {
             render: () => renderAll(container),
             unmount: () => {
-                container.removeEventListener('click', onClick);
-                container.removeEventListener('submit', onSubmit);
-                container.removeEventListener('change', onChange);
+                document.removeEventListener('click', onClick);
+                document.removeEventListener('submit', onSubmit);
+                document.removeEventListener('change', onChange);
                 container.textContent = '';
                 mounted = null;
             },
@@ -938,7 +950,7 @@ function applyPresetToForm(form) {
 
 async function onClick(event) {
     const target = event.target.closest('[data-action]');
-    if (!target || !mounted.container.contains(target)) return;
+    if (!mounted || !target || !target.closest(MODEL_SCOPE_SELECTOR)) return;
     const action = target.dataset.action;
     try {
         if (action === 'load-bundled') {
@@ -1003,7 +1015,7 @@ async function loadBundled() {
 
 function onSubmit(event) {
     const form = event.target.closest('[data-role="api-form"]');
-    if (!form) return;
+    if (!form || !form.closest(MODEL_SCOPE_SELECTOR)) return;
     event.preventDefault();
     try {
         const values = readForm(form);
@@ -1023,6 +1035,7 @@ function onSubmit(event) {
 }
 
 async function onChange(event) {
+    if (!event.target.closest(MODEL_SCOPE_SELECTOR)) return;
     const input = event.target.closest('[data-role="model-file"]');
     if (input && input.files && input.files[0]) {
         try {
