@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: false
 depends_on: [one-model-end-to-end, turn-memory-integer]
 notebook: docs/research/notebook/float-training.md
-scope: [crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/stack/memory.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/point_key.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/src/bin/fbs-point-key.rs, crates/uor-r4-integer/src/wasm_serve.rs, crates/uor-r4-integer/src/wasm_bindgen_exports.rs, docs/roadmap/items/point-key-integer.md, docs/harness/prep/point-key-integer*, docs/labs/point-key-integer/**, docs/loop/tasks/point-key-integer/**, docs/research/notebook/float-training.md]
+scope: [crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/stack/memory.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/point_key.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/src/bin/fbs-point-key.rs, crates/uor-r4-integer/src/wasm_serve.rs, crates/uor-r4-integer/src/wasm_bindgen_exports.rs, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, docs/roadmap/items/point-key-integer.md, docs/harness/prep/point-key-integer*, docs/labs/point-key-integer/**, docs/loop/tasks/point-key-integer/**, docs/research/notebook/float-training.md]
 ---
 
 ## Why it matters
@@ -83,11 +83,27 @@ The model throughout is (r-drop)'s sealed step-16,384 checkpoints at seeds 1–3
   - `turn-memory-integer`'s item, and DeepSeek's integer turn memory (#3446, the `/7` turn memory in the integer session);
   - `crates/uor-r4-integer/src/stack/{memory.rs,session.rs,format.rs}` at the plug-in point.
 - **Before claiming:** check that neither `integer-hamming-read` nor `fbs-serving-kernels` holds a claim on `session.rs`, and that no Studio worktree plans edits to `session.rs` or `wasm_serve.rs`.
-- **Which run goes where:** everything runs on the laptop's bit-exact integer engine. That covers builds, the finite unit tests, the export pass over TRAIN, the panel arms, the scoring of done-when 3 and 4, and tok/s and resident memory. The float references need no new run: they are claude-220's sealed served files.
+- **Which run goes where:**
+  - **The laptop's bit-exact integer engine:** everything that runs the integer artifact. That covers builds, the finite unit tests, the export pass over TRAIN, the panel arms, the scoring of done-when 3 and 4, and tok/s and resident memory.
+  - **A pod, briefly:** turning (r-drop)'s checkpoints into snapshots. `fbs-snapshot` loads the float checkpoint on CUDA.
+  - **No new run:** the float references are claude-220's sealed served files.
 - **The owner's allowance (31 Oct 2026, in claude's chat).**
   - **The question:** CHARTER §3.6 keeps "panel scoring, qualification and milestone evaluation of an exported artifact" as GPU research compute, and the integer engine has no GPU path. Asked how this item's deciding panel is scored, the owner answered: "I want both. If the laptop bit-exact will allow us to proceed right now I think we should do that, but eventually we want the performance boost that we get by building our custom CUDA drivers".
   - **What it covers:** this item's scoring, on the bit-exact laptop engine, and nothing more. It is the owner's own answer, recorded here. `CHARTER.md` is an owner file, and its text is unchanged.
 - **Settle in the sheet:** the export pass's cost over TRAIN's 212,968 openings, and how it is split across the laptop's cores.
+
+## The units (31 October 2026)
+
+1. **Done: the integer table, its search, the step, the `/8` record and the builder** (claude-222, #3452, merged as `f4beaaf79`). This is done-when 1, on the synthetic stack: 380 library tests, a full pass of the serving audit, and 18 negative gates.
+2. **The panel decode and the grade,** on the laptop, with finite tests and no run.
+   - **The decode:** a `fbs-toks` mode decodes a panel's prompts with the memory on, under greedy, from a `/7` or `/8` artifact. It writes the replies in claude-220's sample shape.
+   - **The grade:** it lives in `in_space_long.rs` and `train-in-space.rs`, beside claude-220's `served_grade`. It reads the integer arms by their own tokens, and compares the served names with claude-220's float served files (done-when 3). It reads the bar of done-when 4.
+   - **Why the decode and the grade sit in different crates:** the float crate links `uor-r4-integer` without `serving-wasm`, so it cannot decode the stack.
+3. **The run,** under a prep sheet with a fresh FIT and a pre-run review:
+   - (r-drop)'s snapshots on a pod;
+   - `fbs-export` and `fbs-export --point-key` over TRAIN on the laptop;
+   - the fresh panel p-x drawn with its census;
+   - the arms on p-x, p-w, p-v and DEV at seeds 1–3, and tok/s.
 
 ## Rules that apply
 
