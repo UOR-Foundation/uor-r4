@@ -7,7 +7,7 @@ integer serving engine (`crates/uor-r4-integer`, `--features serving-wasm`) runn
 Worker. It is served from the project's documentation site at **`/studio/`**
 (<https://uor-foundation.github.io/uor-r4/studio/>), live since 30 October 2026 from gh-pages `d8e67c66`.
 
-### Interface (31 October 2026 redesign)
+### Interface (latest merged redesign)
 
 An agent-console shell: command bar (wordmark, workspace breadcrumb, project chip, command search,
 view switch, theme/new), icon rail, collapsible sessions sidebar with a runtime environment card, a

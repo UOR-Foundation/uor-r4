@@ -35,7 +35,7 @@ On 30 Oct the owner assigned Kimi the follow-up: "Please make sure the documenta
 
 ## How to start
 
-- After the scope PR merges, reopen #3380 manually with `gh issue reopen 3380`, then run roadmap sync; sync does not reopen closed issues. Write the facts sheet from #2029, claude-211 and the latest merged REPORTs before editing public prose.
+- **Completed:** scope PR #3431 merged, #3380 was reopened, and roadmap sync ran; sync does not itself reopen closed issues. The facts sheet was then written from #2029, claude-211 and the latest merged REPORTs before public prose changed.
 - Inventory living pages and edit them in coherent front-door, book, figure and tracker commits. Do not race Claude's active research, antigravity-113's two held mechanism pages, or a competing documentation draft.
 - Deliver the content PR, verify it on fresh `main`, then synchronize issues and render the generated views.
 

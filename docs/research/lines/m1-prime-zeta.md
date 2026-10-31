@@ -1,6 +1,6 @@
 # Research line: the prime-zeta codebook (M1)
 
-Every word needs a starting address. The discrete model had been starting from a seeded table that left 4,096 words sharing only 16 distinct addresses. This line built a fixed, repeatable table instead: each word gets a prime number, and the prime is turned into a vector through the phases of the Riemann zeta zeros. All 4,096 words now get unique addresses. The line has three catalog records, and one of them says plainly what the construction does not show.
+Every word needs a starting address. The discrete model had been starting from a seeded table that left 4,096 words sharing only 16 distinct addresses. This line built a fixed, repeatable table instead: each word gets a prime number, and the prime is turned into a vector through the phases of the Riemann zeta zeros. All 4,096 words now get unique addresses. The line has three catalog records, plus a later zero-update comparison that found no advantage for PrimeZeta over simple injective controls.
 
 | | |
 |---|---|
@@ -36,6 +36,7 @@ Token $v$ gets the prime $p_{\mathrm{id}(v)+1}$, so the vocabulary maps one to o
 1. **Older reference work (undated).** Replacing a stub router with sixteen zeta-window projections raised top-1 from 0.17 to 1.00, but only on a six-sentence fixture ([record](../../../archive/zeta_projection_246.md)). An audit checked every consumer of the stored zeta state vector before widening its storage ([audit](../../../archive/debanding_audit_434.md)).
 2. **14 Oct: construction qualified.** The generator was built, with no training and no corpus rows. All 4,096 of 4,096 tokens receive unique vectors, 17 of 17 base CUDA controls and 6 of 6 prime-zeta controls pass, and the tables match across macOS and Linux ([construction record](../../../archive/labs/prime-zeta-construction-2026-10-14/README.md)).
 3. **18 to 19 Oct: used as a starting point.** Starting from the injective table fixed aliasing but spread tokens over all 256 cells, so only 127 of 3,847 copy-successor rows had the right cell in view at 8 kept cells, below the 500 gate ([pre-flight](../../labs/injective-preflight-and-c2-qualify-2026-10-19/README.md)). Address-structured cells (see the [M1 line](m1-discrete-attention.md)) lifted that to 1,351 at zero training, and prime-zeta remains the fallback inside that table.
+4. **25 Oct: zero-update null comparison lost.** P8 admitted 127 of 3,847 against 178–188 for the strongest nulls. It lost to Q0, Q1, R0 and R1, tied Q2 and won only R2. This is a configuration negative under D22, not a mechanism-wide rejection or a trained language result ([comparison](../../labs/r-prime-zeta-vs-nulls/README.md)).
 
 ## Where it stands
 
@@ -52,6 +53,6 @@ An injective table is necessary, not sufficient. Uniqueness solved aliasing, and
 
 ## Current state
 
-ACTIVE. The trained-in test against the two nulls (a shifted-ordinate null and a permuted-prime null) is not yet run; it needs a fresh FIT and the lab's D67 pre-run review at matched budget with at least two seeds. Prime-zeta is a deterministic function of token id, so identical seeds give identical tables; seed variance needs another declared axis.
+ACTIVE. The 25 October zero-update comparison was a configuration loss: P8 admitted 127/3,847 against 178–188 for the strongest nulls, lost to Q0, Q1, R0 and R1, tied Q2 and won only R2. The trained-in test against the two original nulls (a shifted-ordinate null and a permuted-prime null) is not yet run; it needs a fresh FIT and the lab's D67 pre-run review at matched budget with at least two seeds. Prime-zeta is a deterministic function of token id, so identical seeds give identical tables; seed variance needs another declared axis.
 
 **Go deeper:** the [generated catalog page](../../../archive/catalog/m1-prime-zeta.md) lists the three records.

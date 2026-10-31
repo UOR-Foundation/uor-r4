@@ -62,6 +62,8 @@ Every public number in this refresh must link to this sheet's committed evidence
 ## 5. Mechanism and rule state
 
 - The board has **28 mechanisms: 12 ACTIVE, 5 READY, 11 PARKED**. A whole-model M1 pass does not establish each mechanism's independent effect.
+- **Prime-zeta negative retained:** the 25 October zero-update comparison was a configuration loss. P8 admitted 127/3,847 against 178–188 for the strongest nulls, lost to Q0, Q1, R0 and R1, tied Q2 and won only R2. Keep the mechanism ACTIVE without erasing that outcome ([record](../../../../labs/r-prime-zeta-vs-nulls/README.md)).
+- **Durable memory:** the object-store consumer and frozen 384-item host-control panel are built and pass; the on-model M3 run awaits M2 selection. Host controls are not M3 qualification ([consumer record](../../../../labs/object-store-consumer-m3/README.md)).
 - **D11:** integer serving may use hardware integer multiply and divide (D80/D81); floats, transcendentals and dense matmul remain banned. Do not restore multiplier/divide-free wording as current.
 - **D37:** float is allowed only in offline training with the export gap; the discrete path stays integer. The saved M1 model and FBS trunk must not be joined in prose or figures. M1 uses discrete Hamilton/quaternion recurrence, `PositionHolonomyV1` and `OrbitRootSnapNormV1`, not FBS projection or the FBS RMS normalization.
 - **A8 evidence scope:** finite qualification passed 5/5 with D67 PASS; the full-dose admission-preserving rerun reached Q1 `4,292 / 14,287`, `1,106 / 3,847` and `871 / 14,287` before a diagnostic stop. Stage T—not A8—reached `5,009 / 14,287` with G-Adm/G-Occ. The next admission-preserving rerun is NOT_RUN.
