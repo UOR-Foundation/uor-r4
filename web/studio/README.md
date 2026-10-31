@@ -1,11 +1,11 @@
 # Studio (`web/studio`) — the browser client
 
-**Live:** https://uor-foundation.github.io/uor-r4/studio/ — the current gh-pages `e62ea481` publish serves the M1-capable 626,889-byte wasm bundle (sha256 `d7bcaf40…`), and `models.json` lists both M1 seeds. Kimi verified the live bundle and manifest; Kimi did not publish them. The earlier `d8e67c66` publish had the pre-M1 495,334-byte `d971fe7d…` bundle (see the item's Resolution).
+**Live:** https://uor-foundation.github.io/uor-r4/studio/ — the current gh-pages `454bb30fc` publish serves the M1-capable 626,889-byte wasm bundle (sha256 `d7bcaf40…`), and `models.json` lists both M1 seeds. Kimi verified the live bundle and manifest; Kimi did not publish them. The earlier `d8e67c66` publish had the pre-M1 495,334-byte `d971fe7d…` bundle (see the item's Resolution).
 
 The Studio is the project's in-browser interface: editor, chat panel and model manager, with the
 integer serving engine (`crates/uor-r4-integer`, `--features serving-wasm`) running in a Web
 Worker. It is served from the project's documentation site at **`/studio/`**
-(<https://uor-foundation.github.io/uor-r4/studio/>). The current live publish is gh-pages `e62ea481`; `d8e67c66` was the earlier pre-M1 publish.
+(<https://uor-foundation.github.io/uor-r4/studio/>). The current live publish is gh-pages `454bb30fc`; `d8e67c66` was the earlier pre-M1 publish.
 
 ### First console redesign (superseded by v2)
 
@@ -117,7 +117,7 @@ find site -mindepth 1 -maxdepth 1 ! -name .git ! -name studio -exec rm -rf {} +
 ```
 
 So a built Studio published once to `gh-pages` / `gh-pages-preview` **persists across every later
-book deploy**. The current live app at `/studio/` is gh-pages `e62ea481`, with the M1-capable
+book deploy**. The current live app at `/studio/` is gh-pages `454bb30fc`, with the M1-capable
 integer wasm bundle and both M1 seeds in `models.json` verified by HTTP and hash checks. The earlier
 `d8e67c66` publish was pre-M1. Publishing a newer page means replacing that directory once.
 
