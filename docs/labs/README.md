@@ -1,5 +1,12 @@
 # Joining the UOR-R4 research labs
 
+**Current status, 30 October 2026:** UOR-R4 is pre-alpha. **M1 is complete: 1 of 8 milestones.** One saved discrete geometric model passed all six M1 bars at two seeds; it does not hold a useful conversation. M2 and M3 are in progress, and M4–M8 remain open. Start with the root [README](../../README.md), [AGENTS.md](../../AGENTS.md), [CHARTER.md](../../CHARTER.md), [PLAN.md](../../PLAN.md), rendered [STATE.md](../../STATE.md) and the [current project track](../integration/project-track.md). Labs coordinate through live issues and PRs; no provider or lab is the permanent director.
+
+<details>
+<summary>Dated joining records, 1–18 October 2026 (historical)</summary>
+
+These records retain their original dates, gate outcomes, holds, participant assignments and retired plan pointers. They are not the current project status; use the current links above for new work.
+
 > **Retained rows Q1 result (18 October):** the original ordinary-path dose remains [owner-stopped before Q1](attention-dose1-strategic-stop-2026-10-18/README.md). Both arms of the separate [rows Dose2](attention-rows-q1-diagnosis-2026-10-18/README.md) stopped at the registered Q1 admission-collapse gate after 4,096 batches, with P_succ target admission 2,034 → 225 treatment /205 control. [Scientific review](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6248429872) finds configured admission collapse in both arms and no implementation or identity fault; no registered efficacy hypothesis fires. These counts are not accuracy or a treatment win. Fresh stays sealed; no KEEP or mechanism-negative verdict follows. The pod was down at 07:53:30 UTC, and #2652/#2653 are merged. A shared vector/combine pathway is plausible, not causally established. See [STATUS](../../STATUS.md) for the next-decision boundary.
 >
 > **Current K16 qualification (18 October):** at protected source 21224b446, the
@@ -35,6 +42,8 @@
 > Scientific integrity, D11/D5, unique-material preservation, live job ownership
 > and resource admission remain. See [D19](../integration/DECISIONS.md#d19--grounded-conversation-and-durable-memory-first).
 
+</details>
+
 Any authorized lab can join, leave and return. GitHub holds accepted decisions,
 source, research records and live coordination. No provider or chat is the
 permanent director. The shared machine limits concurrent execution, not the
@@ -43,13 +52,13 @@ number of labs or independent research questions.
 Read these in order:
 
 1. The root [AGENTS.md](../../AGENTS.md), [README](../../README.md) and
-   [STATUS](../../STATUS.md).
+   [PLAN.md](../../PLAN.md), with rendered [STATE.md](../../STATE.md) for current status.
 2. The [active canonical plan](../integration/project-track.md),
    [integration queue and branch dispositions](integration-queue.md), and
    [shared lab protocol](protocol.md).
 3. The live [tracker #2028](https://github.com/UOR-Foundation/uor-r4/issues/2028),
    the relevant milestone issue and its latest comments; then the relevant
-   [current result](../integration/current-state.md) and
+   [dated integration log](../integration/current-state.md) and
    [decisions](../integration/DECISIONS.md).
 4. Your task's actual source, callers, data, artifact manifests and nearest
    historical positive/negative attempts. The [project map](../PROJECT_MAP.md),

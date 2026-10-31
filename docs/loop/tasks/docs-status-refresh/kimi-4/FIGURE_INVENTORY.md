@@ -14,7 +14,7 @@ There are **68 tracked SVGs: 17 generated outputs and 51 hand-maintained figures
 
 Every remaining path below is included in the status/caption review.
 
-On 30 October a second pass re-reviewed all 51 paths' status text, captions and accessible descriptions. Six mechanism statuses were corrected, the lineage was labelled historical with current statuses, and the Hamilton, transformer and LUT descriptions were reconciled. The changed status figures and DEV chart were inspected at desktop and 390 px; SpiralCore's status moved to its own line after an actual overflow was found and fixed. All 17 generated figures were regenerated, with the DEV target 6,324 visible.
+On 30 October a second pass re-reviewed all 51 paths' status text, captions and accessible descriptions. Six mechanism statuses were corrected, the lineage was labelled historical with current statuses, and the Hamilton, transformer and LUT descriptions were reconciled. The changed status figures and DEV chart were inspected at desktop and 390 px; SpiralCore's status moved to its own line after an actual overflow was found and fixed. All 17 generated figures were regenerated, with the DEV target 6,324 visible. A later exact-head review nevertheless caught stale Hamilton and BVG-K labels; those labels and their accessible text are corrected in the final repair rather than treating the source review as infallible.
 
 docs/figures/geometry/600-cell-icosians.svg
 docs/figures/geometry/connections.svg

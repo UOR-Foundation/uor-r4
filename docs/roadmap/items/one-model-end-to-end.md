@@ -28,7 +28,7 @@ So before the model the project ships is trained, the scoring must be able to te
 ## What is missing
 
 - **A census of the data:**
-  - the TRAIN size conflict: 7,512,797 tokens (`hamilton_sheet.rs:81-82`) against 26,214,400 for the same `tokens.u16` sha (`docs/harness/prep/m1-fresh-panel-transfer-2026-10-26.md:62-65`);
+  - the TRAIN size correction: [claude-202's census](../../loop/tasks/one-model-end-to-end/claude-202/REPORT.md) measured 7,512,797 tokens and 2,425,925 eligible targets in the pinned TRAIN file. The older sheet's 26,214,400 / 10,975,281 figures for the same `tokens.u16` SHA match neither its header nor its payload and are not the corpus count;
   - a TRAIN reply index;
   - which panel, if any, holds templates TRAIN never shows.
 - **The check that could overturn the diagnosis:** whether (r) falls below (r0) where no key matches.

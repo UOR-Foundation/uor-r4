@@ -153,7 +153,7 @@ Each row names a part of a standard transformer, says what it does, and lists th
 | Activation and gating | Decides how much signal passes | [hamilton-gate](hamilton-gate.md) (A), [recurrence-gates](recurrence-gates.md) (R) |
 | Recurrent sequence mixing | Carries a running memory along | [recurrence-gates](recurrence-gates.md) (R), [geometric-stack](geometric-stack.md) (P); M1 separately uses `DiscreteQuaternionRecurrenceV1` |
 | Projections and matmul | The big grids of multiplications | [lut-serving](lut-serving.md) (A), [spiralcore-fbs](spiralcore-fbs.md) (A), [spin-weights](spin-weights.md) (R), [ternary-xor](ternary-xor.md) (R) |
-| **Normalization** | Keeps numbers in a stable range | FBS: RMS norm with an integer square root, served. No separate normalization component is declared in the M1 composition; its discrete quaternion recurrence is not an FBS normalization mechanism. |
+| **Normalization** | Keeps numbers in a stable range | FBS: RMS norm with an integer square root, served. M1 uses discrete `PositionHolonomyV1` and `OrbitRootSnapNormV1`, not the FBS RMS normalization. |
 | Output head | Scores every word and picks one | [admission](admission.md) (A), [discrete-learning](discrete-learning.md) (A) |
 | Loss | Measures how wrong a guess was | [rank-margin](rank-margin.md) (A), [read-binding](read-binding.md) (P) |
 | Optimizer | Decides how to change the model | [discrete-learning](discrete-learning.md) (A), [carrier-credit](carrier-credit.md) (P), [legal-construction](legal-construction.md) (P) |

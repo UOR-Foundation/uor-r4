@@ -94,7 +94,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <rect class="box sb" x="526" y="222" width="112" height="40" rx="5"/><text class="t c" x="582" y="239">Hamilton product</text><text class="n c" x="582" y="255">q ⊗ u</text>
 <rect class="box" x="466" y="232" width="42" height="20" rx="10"/><text class="n b c" x="487" y="246">up u</text>
 <path class="nf sm w1" d="M466 242H450" marker-end="url(#a-muted)"/><path class="nf sm w1" d="M508 242H524" marker-end="url(#a-muted)"/>
-<rect class="box dash" x="500" y="338" width="140" height="56" rx="6"/><text class="n c" x="570" y="356">Later: the product as</text><text class="n c" x="570" y="371">a table read; needs</text><text class="n c" x="570" y="386">the icosian snap</text>
+<rect class="box sb" x="500" y="338" width="140" height="56" rx="6"/><text class="n c" x="570" y="356">Now: table reads serve</text><text class="n c" x="570" y="371">FBS /4 snapped and</text><text class="n c" x="570" y="386">/5 exact at DEV</text>
 <path class="nf sm w1 dash" d="M638 242H650V366H643" marker-end="url(#a-muted)"/>
 <text class="n" x="332" y="424">The same operation is the output gate of</text><text class="n" x="332" y="440">the geometric recurrence.</text>
 <rect class="panel" x="670" y="48" width="274" height="420" rx="8"/>
@@ -123,6 +123,6 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <text class="n c" x="820" y="336">gate block length |g|</text>
 <text class="tb" x="684" y="364">Backward factor 1 / r</text><text class="n" x="684" y="380">r = √(|g|² + 10⁻¹²). Above 10⁻⁶ the</text><text class="n" x="684" y="395">factor is 1/|g|; below it, it flattens.</text>
 <text class="n b" x="684" y="418">From the formula, not a measurement.</text>
-<text class="n" x="684" y="434">Weight decay can push a block toward</text><text class="n" x="684" y="449">zero; no real run has checked this.</text>
+<text class="n" x="684" y="434">Weight decay can push a block toward</text><text class="n" x="684" y="449">zero; 256-step checked; full-rung open.</text>
 <text class="n" x="16" y="492">Left: arrow lengths follow the sigmoid formula; Hamilton angles are illustrative. Right: drawn from the formula. Status: ACTIVE; trained and served in M1 and FBS.</text>
 </svg>

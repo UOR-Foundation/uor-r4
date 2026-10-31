@@ -17,10 +17,10 @@ Counts: `archive/catalog.jsonl`. The store follows decision D19 (a model-indepen
 flowchart LR
   A["3 to 5 Oct<br/>Chat-memory<br/>diagnostics"] --> B["14 to 15 Oct<br/>Design, build, byte tests"]
   B --> C["17 to 18 Oct<br/>Replication, audit,<br/>repair, cross-language"]
-  C --> D["Not yet<br/>A model that reads it;<br/>M3 bars"]
+  C --> D["Consumer built<br/>On-model M3 run<br/>awaits M2 selection"]
 ```
 
-*Most of the work sits in the third box. The fourth box has not started.*
+*The storage consumer and its controls are built; the selected model's on-model M3 qualification remains open.*
 
 ## What it set out to do
 
@@ -49,6 +49,6 @@ A byte store is a reliable component, and its tests show that it stores and retu
 
 ## Current state
 
-READY. Nothing consumes the store and no M3 bar has been run ([board](../../mechanisms/README.md)). The next step is to wire it in and run the M3 bars. Exact addressed memory as a read is still unbuilt ([exact memory](../../mechanisms/exact-memory.md)).
+READY. The store and its consumer are built, but the on-model M3 run awaits M2's model selection and no M3 bar has been run ([consumer record](../../labs/object-store-consumer-m3/README.md)). The next step is to run M3 on the selected model, not to repeat storage-only work. Exact addressed memory as a read is still unbuilt ([exact memory](../../mechanisms/exact-memory.md)).
 
 **Go deeper:** the [generated catalog page](../../../archive/catalog/m3-durable-memory.md) lists all 33 records.

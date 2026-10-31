@@ -1,6 +1,6 @@
 # FACTS: documentation status at 30 Oct 2026
 
-Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md). ORDER: [ORDER.md](ORDER.md). Base: `ec9a790fe5be73cd673f082eba86ced551b22d12`.
+Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md). ORDER: [ORDER.md](ORDER.md). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; PR base at the last completed review: `e16ada251b38ef9869612e10bc6c10f8d7a49f1f`; exact reviewed head: `f6acd4b8a9e01acfca4506ac070f72349cfe46de`; newer `origin/main` to integrate before the final review: `1f83dd4b2f76e16912f5793a58a4687548f1c237`.
 
 Every public number in this refresh must link to this sheet's committed evidence. This is a factual baseline, not a new measurement or a capability claim.
 
@@ -10,7 +10,7 @@ Every public number in this refresh must link to this sheet's committed evidence
 - **Closing artifact:** antigravity-110's saved `trunk-joint-pointer-v1-d11`, a 19-table `uor-r4.lut-discrete-trunk/1` discrete model, exported as two seeded `UORLUT01` files:
   - seed 1 `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d` (86,536,132 B);
   - seed 2 `1b49e8bd823a1021e31de55c767111f9cf43807d3e6d007644e49281935877de` (84,943,328 B).
-- **Composition:** Flock `FrozenZeroV1`, discrete Hamilton gate, discrete quaternion recurrence, four-block orbit-root causal pointer, and post-rotation outer-L1 readout. This is not the separately float-trained FBS trunk.
+- **Composition:** Flock `FrozenZeroV1`, discrete Hamilton gate, discrete quaternion recurrence, `PositionHolonomyV1`, `OrbitRootSnapNormV1`, four-block orbit-root causal pointer, and post-rotation outer-L1 readout. The normalization is discrete, not the FBS RMS norm, and this is not the separately float-trained FBS trunk.
 - **Evidence split:** `docs/labs/m1-close-saved-model/evidence/m1-close-grade.json` covers bars (a)–(e) and is not called six-bar evidence. `docs/labs/m1-heldout-phrasing-transfer/evidence/panel-score.json` supplies bar (f). #2029 and `docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md` join them into the six-bar close.
 
 ### M1 measured results
@@ -63,10 +63,11 @@ Every public number in this refresh must link to this sheet's committed evidence
 
 - The board has **28 mechanisms: 12 ACTIVE, 5 READY, 11 PARKED**. A whole-model M1 pass does not establish each mechanism's independent effect.
 - **D11:** integer serving may use hardware integer multiply and divide (D80/D81); floats, transcendentals and dense matmul remain banned. Do not restore multiplier/divide-free wording as current.
-- **D37:** float is allowed only in offline training with the export gap; the discrete path stays integer. The saved M1 model and FBS trunk must not be joined in prose or figures. M1 uses discrete Hamilton/quaternion recurrence, not FBS projection, and declares no separate normalization component.
+- **D37:** float is allowed only in offline training with the export gap; the discrete path stays integer. The saved M1 model and FBS trunk must not be joined in prose or figures. M1 uses discrete Hamilton/quaternion recurrence, `PositionHolonomyV1` and `OrbitRootSnapNormV1`, not FBS projection or the FBS RMS normalization.
 - **A8 evidence scope:** finite qualification passed 5/5 with D67 PASS; the full-dose admission-preserving rerun reached Q1 `4,292 / 14,287`, `1,106 / 3,847` and `871 / 14,287` before a diagnostic stop. Stage T—not A8—reached `5,009 / 14,287` with G-Adm/G-Occ. The next admission-preserving rerun is NOT_RUN.
 - **Serving evidence split:** the older close-grade bar (c) reports 11,026 / 10,573 tok/s; the bar-f remeasurement reports 10,876 / 10,566 tok/s on Apple M1. Keep the remeasurement beside bar (f), not silently substituted for the older bar (c).
 - **Key tradeoff:** claude-218 selected the 32-byte sign key over the 1 KB point key under its offline row-3 rule. Claude-219's free-generation evidence selects the point key for the next integer-serving unit instead; the sign key is underpowered at p-v's size. Do not present the earlier offline selection as the current next step.
+- **Sealed-label anomaly:** `fresh_transfer_gate_receipt.family` in `m1-close-grade.json` says "Stage T B=4 C=192 Relation read (FrozenZeroV1)", while the M1 candidate is Flock plus orbit-root pointer. Do not edit sealed evidence; annotate it rather than treating that label as the M1 composition.
 - **Exact memory:** the true-address oracle is 80/80 against 0/80 no-memory and 20/80 sieve, but that is oracle scope, not learned address formation or M3 qualification. Antigravity-113's `exact-memory.md` and `object-store.md` remain outside this unit.
 - **Historical milestone cache:** current status/headline fields may move to the six-bar close; older counts, negatives and holds must remain in explicit history fields rather than disappear.
 

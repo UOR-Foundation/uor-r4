@@ -20,7 +20,7 @@ W2's own checkpoint-restricted evaluation is `T = 3,414`, `G = 6,300`, `W = 149`
 
 ## Done when
 
-The registered W2 sheet runs once with all arms; H_rep or H_law is recorded as one notebook row, and the admission-matched next-word table number (needed for the Stage 2 bar) is produced.
+The registered W2 sheet runs once with all arms; H_rep, H_law or H_mixed is recorded as one notebook row, and the admission-matched next-word table number (needed for the Stage 2 bar) is produced. The recorded outcome is H_mixed.
 
 ## How to start
 

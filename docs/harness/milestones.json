@@ -44,6 +44,8 @@
         "Flock FrozenZeroV1",
         "DiscreteHamiltonGateV1",
         "DiscreteQuaternionRecurrenceV1",
+        "PositionHolonomyV1",
+        "OrbitRootSnapNormV1",
         "OrbitRootCausalPointerV1",
         "OuterL1V1"
       ],

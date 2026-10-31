@@ -48,5 +48,5 @@ Open these first:
 - [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:32`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
 - [`docs/mechanisms/README.md:88`](../../../docs/mechanisms/README.md)
 - [A8 full-dose rerun record](../../labs/m1-a8-full-dose-rerun/README.md)
-- [`docs/start/where-we-are.md:56`](../../../docs/start/where-we-are.md)
+- [`docs/labs/m1-a8-full-dose-rerun/README.md`](../../../docs/labs/m1-a8-full-dose-rerun/README.md)
 

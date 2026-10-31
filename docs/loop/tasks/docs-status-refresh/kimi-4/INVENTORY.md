@@ -4,8 +4,8 @@ Lab: kimi. Base: `ec9a790fe5be73cd673f082eba86ced551b22d12`.
 
 The tracked non-archive README set has **246 files** (245 matched recursively plus the root README), including the three added while this unit was in review. Each is assigned to exactly one class below; the raw paths follow.
 
-- **36 living public project READMEs:** root README; the 15 crate/profile/fixture READMEs; `conformance/features/suites`; `data/panels`; the documentation, geometry, harness, loop, mechanism, product, reference, research, research-line, notebook and rules hubs; `tools/lab-runner`; `tools/uor-knowledge`; `web/README.md`; and `web/studio/README.md`. These are review/edit candidates only where their current claims are stale.
-- **174 dated lab/evidence READMEs:** every `docs/labs/**` entry below, including claude-218's memory-key record and claude-219's keyed-opening record. Read as evidence, never rewritten by this housekeeping unit.
+- **37 living public project READMEs:** root README; the 15 crate/profile/fixture READMEs; `conformance/features/suites`; `data/panels`; the documentation, geometry, harness, labs, loop, mechanism, product, reference, research, research-line, notebook and rules hubs; `tools/lab-runner`; `tools/uor-knowledge`; `web/README.md`; and `web/studio/README.md`. These are review/edit candidates only where their current claims are stale.
+- **173 dated lab/evidence READMEs:** every dated `docs/labs/**` entry below, including claude-218's memory-key record and claude-219's keyed-opening record. Read as evidence, never rewritten by this housekeeping unit. `docs/labs/README.md` is the living onboarding hub and belongs to the class above.
 - **1 generated roadmap view:** `docs/roadmap/README.md`. Regenerate only through the designated render flow; do not include in the content PR.
 - **35 side-project, vendor or local README files:** `.codex-lab`, `.kimi-code`, `projects/**`, `third_party/**`, and the historical `tools/r4-softmax-trainer` example. Audit for links and obvious misrepresentation, but do not restyle or rewrite them for the main project's status.
 

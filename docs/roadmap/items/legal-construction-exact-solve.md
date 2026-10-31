@@ -23,13 +23,13 @@ From the mechanism page and the archived record:
 - The program runs offline in a pure-Rust solver (`microlp`) with a 4,096-node branch-and-bound cap. It returned `InternalError("Singular matrix")` and no assignment.
 - A scale-aware pivot threshold did not make the backend usable on the saved problem.
 - The record's own next step is to instrument the exact failing LP basis and factorization context.
-- The classification is open. The page says it is not yet assessed against D30, because the guard test forms a 380-by-1,960 Jacobian product and the solver does dense LU. The page adds that a rerun would have to be classified or run on the GPU, and CHARTER §3.5 makes research compute GPU-only, so a host solve is not yet cleared. It also says the float solver can return only as an offline float sheet under D37, with a fresh review, an owner release, a separately scanned module and a reported export gap; whether an exact-arithmetic solver falls under that is for the PM to say.
+- The classification is open. The page says it is not yet assessed against D30, because the guard test forms a 380-by-1,960 Jacobian product and the solver does dense LU. The page adds that a rerun would have to be classified or run on the GPU, and CHARTER §3.5 makes research compute GPU-only, so a host solve is not yet cleared. It also says the float solver can return only as an offline float sheet under D37, with a fresh review, the lab's D67 pre-run review, a separately scanned module and a reported export gap; D41's donor pass is the named owner-at-dispatch exception. whether an exact-arithmetic solver falls under that is for the PM to say.
 - The pooled-ranking loss behind the older M2 learner used banned softmax and softplus forms, so a rerun on the real panel needs a compliant objective. The solve itself minimises a saved gradient `g·δ`.
 - No bar for what "scored" must beat is registered.
 
 ## Done when
 
-The saved 1,960-variable case is solved in exact arithmetic and the result is recorded as an optimal assignment with its objective, or as an infeasibility proof. Scoring that result on the real panel is a separate step.
+The saved 1,960-variable case is solved in exact arithmetic and the result is recorded as a legal feasible step, with its objective and optimality bound; an infeasibility proof is the alternative. D78 closed on a step within 0.03259% of optimal, not a proof of optimality. Scoring that result on the real panel is a separate step.
 
 **Closed on its result (D78, owner, 24 Oct 2026).** On `attempt2` the exact solver holds a legal step that satisfies all 380 guards (objective `-94674498416698555/4503599627370496`, about -21.02196). It certifies that this step is within `0.00685092` (0.03259%) of the best possible (Unit 12, #3152). Optimality itself is unproven. The saved case is one step of the older M2 learner, and its gradient comes from that learner's banned pooled-ranking loss. So the effort moves to the live form of legal construction, the discrete block apply (`m1-bvg-k-block-apply-c2` and then Stage T, on the M1 path). Scoring the old step on a panel would be a new item, and it needs a compliant objective first.
 

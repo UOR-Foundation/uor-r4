@@ -20,7 +20,7 @@ Chat assistants run on **transformers**: programs that spend much of their effor
 large grids of decimal numbers. UOR-R4 bets that a different toolkit can do the same job more
 cheaply: geometric rotations, whole-number addresses built from primes, small lookup tables and an
 exact memory. The goal is a fast language model that trains quickly and runs on your own laptop or
-in your browser, with nothing sent to a server. The project is open research and **pre-alpha**:
+in your browser, with local computation by default and an optional user-configured API that sends prompts to the chosen endpoint. The project is open research and **pre-alpha**:
 **one milestone is complete, but no model built under its rules holds a useful conversation yet.**
 [What UOR-R4 is](docs/start/what-is-uor-r4.md) explains the bet in five minutes.
 
@@ -101,8 +101,8 @@ tested forms failed or broke a rule while the mechanism stays open.
 
 Position and normalization have replacements on the FBS trunk: SpiralCore transport spin and RMS
 norm with an integer square root. M1 instead uses Flock `FrozenZeroV1`, `DiscreteHamiltonGateV1`,
-`DiscreteQuaternionRecurrenceV1`, an orbit-root causal pointer and post-rotation `OuterL1V1`—not FBS
-projection or a separate normalization component. M1 does not establish every replacement's
+`DiscreteQuaternionRecurrenceV1`, `PositionHolonomyV1`, `OrbitRootSnapNormV1`, an orbit-root causal pointer and post-rotation `OuterL1V1`—not FBS
+projection or the FBS RMS normalization. M1 does not establish every replacement's
 independent effect. The board lists
 **28 mechanisms: 12 ACTIVE, 5 READY and 11 PARKED**. Part by part:
 [transformer vs geometry](docs/start/transformer-vs-geometry.md).

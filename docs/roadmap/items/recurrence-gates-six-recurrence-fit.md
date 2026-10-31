@@ -42,6 +42,6 @@ Open these first:
 ## Sources
 
 - [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:135`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
-- [`docs/mechanisms/README.md:102`](../../../docs/mechanisms/README.md)
-- [`docs/start/transformer-vs-geometry.md:36`](../../../docs/start/transformer-vs-geometry.md)
+- [`docs/labs/recurrence-gates-six-recurrence-fit/README.md`](../../../docs/labs/recurrence-gates-six-recurrence-fit/README.md)
+- [`docs/mechanisms/recurrence-gates.md`](../../../docs/mechanisms/recurrence-gates.md)
 

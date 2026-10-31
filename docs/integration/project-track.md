@@ -21,8 +21,8 @@ M1–M8 are issues [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029)
 ## Current state: M1 closed, generation open
 
 The saved discrete `trunk-joint-pointer-v1-d11` model passed all six bars at both seeds. Its
-composition is Flock `FrozenZeroV1`, a discrete Hamilton gate, discrete quaternion recurrence, a
-four-block orbit-root causal pointer and post-rotation outer-L1 readout.
+composition is Flock `FrozenZeroV1`, a discrete Hamilton gate, discrete quaternion recurrence,
+`PositionHolonomyV1`, `OrbitRootSnapNormV1`, a four-block orbit-root causal pointer and post-rotation outer-L1 readout.
 
 | Bar | Evidence at two seeds |
 |---|---|

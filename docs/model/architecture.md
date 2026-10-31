@@ -27,7 +27,7 @@ quaternion recurrence, a four-block orbit-root causal pointer, and post-rotation
 | Reads | Flock read and orbit-root causal pointer using hard selection, not softmax | Trained in the M1 composition; Route and Relation are other discrete mechanisms, not isolated by this whole-model pass |
 | Writer and admission | 16×16 address cells; bounded candidate shortlist before nearest-token choice | Trained; full 19-table export carries the final readout |
 | Objective and learning | Integer rank-margin hinge and discrete legal moves, including BVG-K batched verified coordinates | Trained; produced the saved model |
-| Position and feed-forward | Discrete quaternion recurrence and Hamilton gate | Trained in the M1 composition; no separate normalization component is declared |
+| Position and feed-forward | Discrete quaternion recurrence, `PositionHolonomyV1`, `OrbitRootSnapNormV1` and Hamilton gate | Trained in the M1 composition; discrete normalization, not the FBS RMS norm |
 | Position and normalization on the separate FBS path | SpiralCore transport spin and RMS norm with integer square root | FBS-only; not M1's projection or normalization mechanism |
 | Export | Table-native `uor-r4.lut-discrete-trunk/1` | Exact 14,287-row agreement and B4 pass |
 | Serving | D11 integer engine on an Apple M1 | 10,876 / 10,566 decode tok/s under the bar-f protocol |
