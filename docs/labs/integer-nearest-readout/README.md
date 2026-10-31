@@ -7,7 +7,7 @@ Item: [integer-nearest-readout](../../roadmap/items/integer-nearest-readout.md) 
 - **Sheet:** [integer-nearest-readout-locate-2026-10-31](../../harness/prep/integer-nearest-readout-locate-2026-10-31.md). It passed FIT in round 2, then a pre-run review (GO). Both rounds are recorded in the sheet.
 - **Where it ran:** one RTX 5090 (Vast pod `vast-58521974`), at the pushed head `ecabcc93b`. The job ran 10:32–10:37Z with EXIT 0; the pod was up about 16 minutes, roughly $0.30, then deleted.
 - **Store:** `caseyallard/uor-r4-store:results/claude/integer-nearest-readout-locate-2026-10-31/`, listed back.
-  - **`out/`:** 80 files under `SHA256SUMS`, each checked on the pod before upload.
+  - **`out/`:** 79 files plus `SHA256SUMS`, each checked on the pod before upload.
   - **The job:** `job.sh` (sha256 `1f8c4b9c…`), beside `out/`.
   - **`reading/`:** the reading (`read.sh`), the diagnostics (`diag.sh`), their outputs and the watcher, under their own sums.
 - **The arms:** (r-drop) step 16,384, without the turn memory:
@@ -46,7 +46,7 @@ The bar is d ≤ 46 of 1,536 sequence positions and ≤ 122 of 4,096 single toke
 - **`R-Exercised`: the read is measured on the sequences.** The float read alone moves the D11 token on 1,129 (s1) and 1,117 (s3) of 1,536 sequence positions, against a bar of 46.
   - It moves none of the 4,096 single tokens.
   - The pre-run review expected the read to be barely exercised, since no token repeats inside these sequences. That expectation did not hold.
-- **The integer read is not inert.** An integer read that did nothing would match the float h token where the float read left t's token in place:
+- **The integer read is not inert** (worked out after the run from the registered counts; not a registered reading). An integer read that did nothing would match the float h token where the float read left t's token in place:
   - 402–412 positions at s1 (1,536 − 1,129, ± t1's 5);
   - 408–430 at s3 (± t3's 11).
 
@@ -60,26 +60,30 @@ These come from `reading/diag.sh` over the stored float readouts.
 
 - **The served export is snapped.**
   - `fbs-export` snaps the Hamilton gates and the transition to the 120 icosians unless it is given `--raw-gates --raw-transition`.
-  - claude-232 exported with `--run-config` alone, as this run did.
+  - claude-232 exported with `--run-config` and neither raw flag. This run used neither raw flag either, and no `--run-config`, since its writer copies serve the writer.
 - **For the trunk alone, the snapped D11 float forward sits far from the trained forward.**
   - Over t1's 1,536 sequence positions, the D11 query differs from the plain (trained) float query by a median 46% of the plain query's L1 norm (range 18–83%). The norm's median is 580.
-  - The export gates alone account for a median 28%, and the snapped tables with the Q12 query a further 40%.
+  - Plain to export, the export mode's Q12-rounded snapped gates alone: a median 28% of the plain query's L1.
+  - Export to D11, which adds the transition snap, the rounded tables and the Q12 query (and snaps the gates without Q12 rounding): a median 40% of the export query's L1.
+  - These are separate medians over different norms; they do not add up to the 46%.
   - The writer's token differs between plain and D11 on 1,336 of 1,536 positions, and 1,334 at s3.
 - **What that means for the earlier records:**
   - claude-227's parity, and this run's t rows, hold the artifact against its own D11 forward, not against the trained one.
   - claude-227's record says "within the exporter's known residual". On this model that residual is not small.
   - claude-232's float side is the trained model, so this gap is on its path.
-- **claude-180 to claude-182 found the gate snap carries most of the D11 gap** (d11-exporter-float-trunk, #2820). They built the unsnapped contract (`lut-stack/5`), which was inside the export-gap bar on dual-c131 at both seeds.
+- **claude-180 to claude-182 found the gate snap carries most of the D11 gap** (d11-exporter-float-trunk, #2820). They built the unsnapped contract (`lut-stack/5`), which was inside the export-gap bar on dual-c131 at both seeds; the other three configurations still missed under it.
   - The format accepts unsnapped forms beside retention, the read and the memory: a geometric transition needs the icosian snap only when the transition is snapped.
   - The unsnapped contract has not been run on (r-drop).
 - **The nearest token is not measured here.** Whether this gap moves the nearest token, the one the trained model decodes, is not measured. The writer's pick is a fragile probe, and this run did not measure the nearest token on these readouts.
 
 ### Next
 
-1. **Re-export and rerun claude-232's parity.** Re-export claude-227's full (r-drop) snapshots unsnapped (`--raw-gates --raw-transition --run-config`), and rerun claude-232's end-to-end parity on the laptop against the same stored float replies, under a new sheet.
+Row R's registered next step is the read's trace (step 2 below). The diagnostic adds step 1 before it, so the trace's float side is not itself the snapped forward.
+
+1. **First, because of the diagnostic: re-export and rerun claude-232's parity.** Re-export claude-227's full (r-drop) snapshots unsnapped (`--raw-gates --raw-transition --run-config`), and rerun claude-232's end-to-end parity on the laptop against the same stored float replies, under a new sheet.
    - This reads the export gap's share of the miss on real prompts, with the memory on.
    - Before that, check that the unsnapped session serves the nearest head, the read and the memory together.
-2. **The read's trace:** integer-hamming-read's step 5 (#3385). Trace the read's hooks, integer against float, on a stored h snapshot: which heads and which positions diverge. Its float side should be the trained forward, or an unsnapped one, so the two gaps are not confused.
+2. **The read's trace, row R's registered step:** integer-hamming-read's step 5 (#3385). Trace the read's hooks, integer against float, on a stored h snapshot: which heads and which positions diverge. Its float side should be the trained forward, or an unsnapped one, so the two gaps are not confused.
 3. **The item stays `ready`.**
 
 ## End-to-end token parity against the trained model (claude-232, 31 Oct 2026): MISS

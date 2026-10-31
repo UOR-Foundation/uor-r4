@@ -14,11 +14,13 @@ No new measurement: this run compares queries and tokens, not speed. claude-231 
   - The query moves past 1e-3 on 1,526 and 1,528 positions, against 435 and 513 for the trunk alone. Its largest gap is 8.04 and 8.19, against 3.89 and 2.83.
   - Each read arm exceeds its own trunk: 689 > 2√699 ≈ 52.9, and 812 > 2√834 ≈ 57.8.
   - The sheet's row R applies. This form of the integer read is negative; the read as a mechanism is not closed (§4.1).
-- **The integer read is only partly right.** An integer read that did nothing would agree on 402–412 positions at s1 and 408–430 at s3. It agrees on 842 and 713, so it carries part of the float read's effect, not all of it.
+- **The integer read is only partly right** (worked out after the run from the registered counts; not a registered reading). An integer read that did nothing would agree on 402–412 positions at s1 and 408–430 at s3. It agrees on 842 and 713, so it carries part of the float read's effect, not all of it.
 - **A second gap, found after the reading (a diagnostic, not registered): the served export is snapped, and the snapped D11 forward sits far from the trained forward.**
   - `fbs-export` snaps the Hamilton gates and the transition to the 120 icosians unless it is given `--raw-gates --raw-transition`. claude-232 used neither flag, nor did this run.
   - For the trunk alone at s1, the D11 query differs from the plain (trained) query by a median 46% of its L1 norm, ranging from 18% to 83%.
-  - The export gates alone account for a median 28%, and the snapped tables with the Q12 query a further 40%.
+  - Plain to export, the export mode's Q12-rounded snapped gates alone: a median 28% of the plain query's L1.
+  - Export to D11, which adds the transition snap, the rounded tables and the Q12 query (and snaps the gates without Q12 rounding): a median 40% of the export query's L1.
+  - These are separate medians over different norms; they do not add up to the 46%.
   - The writer's token differs between the two on 1,336 of 1,536 positions.
 - **So claude-227's parity holds the artifact against its own D11 forward, not against the trained forward.**
   - Its record's "within the exporter's known residual" understates that residual on this model.
@@ -44,7 +46,7 @@ No new measurement: this run compares queries and tokens, not speed. claude-231 
   - the pre-run review added `R-Exercised` and the watcher's seal wait.
 - **Cost:** one RTX 5090 for about 16 minutes, about $0.30. The pod was deleted, and 0 pods are running.
 - **The sealed run:** `results/claude/integer-nearest-readout-locate-2026-10-31/`, listed back:
-  - `out/`: 80 files under `SHA256SUMS`, checked on the pod;
+  - `out/`: 79 files plus `SHA256SUMS`, checked on the pod;
   - `job.sh`;
   - `reading/`: `read.sh`, `diag.sh`, their outputs and the watcher, under their own sums.
 
@@ -74,11 +76,13 @@ None.
 
 ## Still open
 
-- **Next for this item: the unsnapped re-export, then claude-232's parity again.**
+Row R's registered next step is the read's trace, integer-hamming-read's step 5 (#3385). The diagnostic adds one step before it, so the trace's float side is not itself the snapped forward.
+
+- **First, because of the diagnostic: the unsnapped re-export, then claude-232's parity again.**
   - Re-export claude-227's full (r-drop) snapshots with `--raw-gates --raw-transition --run-config`, the `lut-stack/5` forms of claude-181 and claude-182.
   - Rerun claude-232's laptop parity against the same stored float replies, under a new sheet.
   - First check that the unsnapped session serves the nearest head, the read and the memory together.
-- **integer-hamming-read's step 5 (#3385): trace the read's hooks, integer against float,** on a stored h snapshot: which heads and which positions diverge. Its float side should be the trained or unsnapped forward, so the two gaps are not confused.
+- **Then row R's step, integer-hamming-read's step 5 (#3385): trace the read's hooks, integer against float,** on a stored h snapshot: which heads and which positions diverge. Its float side should be the trained or unsnapped forward, so the two gaps are not confused.
 - **claude-227's record** (`docs/labs/integer-retention-rates/README.md`): its "computes what the trained trunk computes" should say "its own D11 forward". That needs a unit with that file in scope.
 - **The item stays `ready`.** point-key-integer's rerun waits on it.
 
@@ -86,10 +90,10 @@ References #3462.
 
 ## Plain summary
 
-We checked two parts of the converted model separately against the trained model, on a graphics card.
+We checked two parts of the converted model separately, on a graphics card, against the converter's own decimal version of the model.
 
-The main body of the model is computed correctly in whole numbers at both settings we tried: it matches the converter's own decimal version. The part that looks back at earlier words does not: with it switched on, the converted model's choice differs about half the time.
+The main body of the model is computed correctly in whole numbers at both settings we tried: it matches that decimal version. The part that looks back at earlier words does not: with it switched on, the converted model's choice differs about half the time.
 
-We also found a second, separate cause. The converter rounds some of the model's rotations to a fixed set of shapes, and that moves the model's internal reading a long way from the trained one. An earlier unit built a converter option that skips this rounding, and it closed the same kind of gap on other models.
+We also found a second, separate cause. The converter rounds some of the model's rotations to a fixed set of shapes, and that moves the model's internal reading a long way from the trained one. An earlier unit built a converter option that skips this rounding. On one other model, at two settings, it brought the same kind of gap inside its bar; on three others it still fell short.
 
 So the next step is to convert without the rounding and check again against the trained model's answers. Then trace the look-back part.
