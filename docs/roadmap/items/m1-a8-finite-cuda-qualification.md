@@ -43,7 +43,6 @@ Open these first:
 ## Sources
 
 - [Finite CUDA qualification record](../../labs/m1-a8-finite-cuda-qualification/README.md) and [antigravity-56 REPORT](../../loop/tasks/m1-a8-finite-cuda-qualification/antigravity-56/REPORT.md) (`5/5` on both arms, restoration and timing)
-- [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:32`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
-- [`docs/mechanisms/README.md:88`](../../../docs/mechanisms/README.md)
-- [`docs/start/where-we-are.md:56`](../../../docs/start/where-we-are.md)
+- [Address cells mechanism](../../mechanisms/address-cells.md) and [current project status](../../start/where-we-are.md)
+- [19 October audit](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md), retained as pre-qualification history, not evidence for the current result
 

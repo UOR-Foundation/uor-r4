@@ -107,3 +107,7 @@ During repair, #3454 merged claude-224 on `main` as `18c4c3da70f35b5c8c9348297df
 ## Scope decision: nearest-readout parity result
 
 #3464 then merged claude-232 on `main` as `4195ce2bf83d703b1acd3eb868c888d1da053479`. The same living documentation scope records the parity MISS in every cell: DEV first-token agreement 291/285/284 of 310 and p-w agreement 911/777/64 of 1,202 at seeds 1–3. The next work localizes the mismatch across the trunk, Hamming read and readout before parity and p-x can pass. No acceptance bar, model code, evidence or other lab's active research changes. Approved in this top session on 31 Oct 2026; reverse by removing this scope entry and its documentation corrections together.
+
+## Scope decision: active M1/M3/M4 dependency pages
+
+The exact-head review at `340337195` identified three active dependency pages whose current text still asserted pre-M1 status, retired owner-release rules or a retired zero-multiply/divide audit. The top Kimi session reviewed the A8 qualification record, M3 consumer thresholds and M1/M4 serving evidence and adds only `m1-a8-finite-cuda-qualification.md`, `object-store-consumer-m3.md` and `m4-export-uorlut01-cli.md` to the item scope. These edits record existing evidence and D67/D80/D81 status without changing an acceptance bar, technical rule, model, sealed record or other lab's active work. Original item-start status is retained only as explicit history. Approved in this top session on 31 Oct 2026; reverse by removing these scope entries and their documentation corrections together.

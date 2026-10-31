@@ -13,7 +13,7 @@ scope: [crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/st
 
 ## Why it matters
 
-The project's first hurdle is one working model end to end: token → vector → vector → integer → token (`PLAN.md`). The point key is the float model's working opening, and the integer artifact does not serve it yet.
+The project's first hurdle is one working model end to end: token → vector → vector → integer → token (`PLAN.md`). The integer table, search and `/8` record are built, and the point-key override serves the integer session's own opening. Claude-232's end-to-end greedy parity check then missed every cell, so the trained readout is not yet reproduced and this item remains ready.
 
 - **claude-219 found the point key.** At a reply's opening where the turn memory's exact first-8 key misses, the trunk's opening point is named by its L1-nearest TRAIN openings.
 - **claude-220 serves it inside the float model's decode** ([REPORT](../../loop/tasks/one-model-end-to-end/claude-220/REPORT.md), merged as `c3d5cb684`, #3443). Its registered outcome is row 2: the served key carries the reply at all three seeds on the fresh 1,200-conversation panel p-w.

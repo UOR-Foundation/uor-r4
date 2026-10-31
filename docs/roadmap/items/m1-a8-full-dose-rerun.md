@@ -45,9 +45,8 @@ Open these first:
 
 ## Sources
 
+- [A8 full-dose rerun record](../../labs/m1-a8-full-dose-rerun/README.md) and [antigravity-57 REPORT](../../loop/tasks/m1-a8-full-dose-rerun/antigravity-57/REPORT.md) for the completed 25 October run and diagnostic stops
+- [Address cells mechanism](../../mechanisms/address-cells.md) for the current evidence summary
 - [Historical `NOW.md` snapshot, lines 26-30](../../../archive/integration/NOW-2026-10-22.md)
-- [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:14`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
-- [`docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md:32`](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md)
-- [`docs/mechanisms/README.md:88`](../../../docs/mechanisms/README.md)
-- [A8 full-dose rerun record](../../labs/m1-a8-full-dose-rerun/README.md)
+- [19 October audit](../../../docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md), retained as pre-run history, not evidence that the later rerun remains unrun
 
