@@ -20,6 +20,7 @@ Not measured here: this unit changes the item's text and runs nothing.
   - **Step 5** now records the trace:
     - the float side, a capture inside `apply` and `apply_readout`, off by default. It writes the query and key codes as well as the kept positions, so the two causes can be told apart;
     - the integer side, the same record from `stack/hamming.rs`;
+    - the timing on the same laptop pass: decode tokens/s against context, with the read and without (step 6's measurement, taken early; Casey, 31 Oct 2026, in chat: "Yes, fold it in");
     - the comparison, kept-set share and top-1:
       - each stream-read set is judged on its own;
       - a readout set is judged only where the stream read agrees up to its position, and otherwise counted as downstream;
@@ -49,7 +50,7 @@ None.
 
 ## Still open
 
-- **The trace unit (next):** a prep sheet with its FIT and pre-run review, then one GPU pod for the float side's three arms with the capture, the integer side on the laptop, and the comparison. Does the gap close under the integer's tie rule, under the rounded parameters, or under neither?
+- **The trace unit (next):** a prep sheet with its FIT and pre-run review, then one GPU pod for the float side's three arms with the capture, the integer side on the laptop, and the comparison. Does the gap close under the integer's tie rule, under the rounded parameters, or under neither? And what does the read cost per token as the context grows?
 - **Kept for later:** the unsnapped re-export and claude-232's parity rerun under it (claude-233's diagnostic lead for the trunk's own export gap).
 
 ## Plain summary
