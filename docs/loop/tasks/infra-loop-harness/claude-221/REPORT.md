@@ -20,7 +20,12 @@ No measurement: this unit records an item.
   - The exact instrument checks fail the unit.
   - Parity is reported with its near-tie margin fixed in the item (512 Q12 units, the bound on an order rounding alone can flip).
   - The scope lists the files the work needs, and drops the float snapshot files.
-  - `needs_gpu` is false, with the reason: the float references are sealed, and the integer runs are the served artifact on the laptop, as `turn-memory-integer`'s parity ran its integer side.
+- **Round 2 found the no-GPU fix contradicted CHARTER §3.6:** "Panel scoring, qualification and milestone evaluation of an exported artifact remain GPU research compute". So `needs_gpu` is true again, and the runs are split:
+  - builds, finite tests, tok/s and resident memory run on the laptop;
+  - the export pass over TRAIN, the panel arms and the scoring run on the GPU.
+- **Named as missing work:** `uor-r4-integer` has no CUDA path, so an exact integer evaluator on the GPU, bit-exact against the laptop engine, is listed.
+- **The owner's question:** whether the bit-exact laptop engine may score the deciding panel instead is a §3.6 call. It goes to the owner's queue once (#2028), and the kernel work does not wait for it.
+- **Also from round 2:** the near-tie class is reworded as "within the rounding bound", since the integer points are the integer trunk's own, not rounded float points.
 
 ## What worked
 
@@ -46,7 +51,7 @@ No measurement: this unit records an item.
   - By milestone: research 39.
 - **The sync plan:** 0 labels, 1 issue to create, 0 to update, 0 to close, 0 milestone checklists.
 - **Applied:** created #3450.
-- **After the review's fixes,** a second sync planned and applied exactly one update, #3450's body. The rendered row's GPU column now reads "no".
+- **After each review round,** a sync planned and applied exactly one update, #3450's body. That happened twice. The rendered row's GPU column read "no" after round 1 and "yes" again after round 2.
 
 ## Checks run at the head
 
@@ -63,7 +68,8 @@ None.
 ## Still open
 
 - **The item's first unit:** the integer table, its search, and the artifact record. It takes its claim through `loop next` once this merges.
-- **Settled in that unit's sheet:** the export pass's cost over TRAIN's openings and its split across the laptop's cores, the fresh panel p-x's seed, and the bar's rows.
+- **Settled in that unit's sheet:** the export pass's cost over TRAIN's openings, the GPU evaluator's bit-exactness check, the fresh panel p-x's seed, and the bar's rows.
+- **The GPU evaluator's design:** its crate and files, and whether to build it or score on the laptop, are decided in a decision card, with the owner's answer if it has come.
 
 ## Plain summary
 
