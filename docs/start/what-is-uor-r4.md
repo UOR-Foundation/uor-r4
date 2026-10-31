@@ -86,11 +86,11 @@ full status and its limits.
 
 | Item | State | Source |
 |---|---|---|
-| Milestones complete | **1 of 8 (M1)** | [STATUS](../../STATUS.md), [PLAN](../../PLAN.md) |
+| Milestones complete | **1 of 8 (M1)** | [PLAN](../../PLAN.md), rendered [STATE](../../STATE.md) |
 | Whole-number serving engine | Built. Native and WebAssembly audits pass; integer multiply and divide are allowed, floats remain banned | [WASM runtime record](../labs/wasm-serving-runtime-2026-10-18/README.md), [serving dossier](../mechanisms/lut-serving.md) |
 | A model trained under today's rules in that engine | The saved discrete M1 pair and a separate FBS export exist; neither is useful chat or a released product. New work uses the lab's pre-run review, not a blanket owner hold | [where we are](./where-we-are.md), [charter](../../CHARTER.md) section 5 |
 | Saved M1 model | 7,002 and 7,001 correct first guesses out of 14,287 on DEV, above unigram 1,226 and T2 6,300; p-f 7,850 and 7,872 | [M1 close](../labs/m1-close-saved-model/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
-| Apple M1 decode for the M1 pair | 10,876 and 10,566 tokens per second, with a 192-token prefill and 64-token decode | [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
+| Apple M1 decode for the M1 pair | Bar-f remeasurement 10,876 and 10,566 tokens per second, with a 192-token prefill and 64-token decode; older close-grade bar (c) 11,026 and 10,573 | [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md), [close grade](../labs/m1-close-saved-model/README.md) |
 
 M1 reads new prompt phrasings into known reply kinds; 62.5% of p-f's reference replies are verbatim TRAIN replies, so this is not useful conversation. K16's older 65 and 463 are history, not the current best. [Where we are](./where-we-are.md) explains both the result and its limits.
 

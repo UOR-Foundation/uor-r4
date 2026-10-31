@@ -1,6 +1,6 @@
 # The geometry of UOR-R4
 
-Most chat AIs predict the next word by multiplying very large grids of decimal numbers. UOR-R4 is a bet that a different set of tools can do the same job more cheaply: rotations in a few dimensions, exact whole-number addresses built from primes, and lookup tables. This section explains those tools one chapter at a time, with pictures. It also says which ones the model uses today and which are research that has not yet been put to work. The project is pre-alpha: 1 of its 8 milestones is complete, and no model holds a useful conversation yet ([`STATUS.md`](../../STATUS.md)).
+Most chat AIs predict the next word by multiplying very large grids of decimal numbers. UOR-R4 is a bet that a different set of tools can do the same job more cheaply: rotations in a few dimensions, exact whole-number addresses built from primes, and lookup tables. This section explains those tools one chapter at a time, with pictures. It also says which ones the model uses today and which are research that has not yet been put to work. The project is pre-alpha: 1 of its 8 milestones is complete, and no model holds a useful conversation yet ([`PLAN.md`](../../PLAN.md) and rendered [`STATE.md`](../../STATE.md)).
 
 ![A map of the geometric pieces and how they connect: the six-prime registry, semiprimes, the complete graph K6, the icosahedral axes, the 120 icosians, quaternions, Z[phi], octonions and the Fano plane, Cl(0,6) bivectors, E8, the Hopf map and VSA codes, with each link marked as verified maths, used in a model, pre-registered, or a labelling choice](../figures/geometry/connections.svg)
 
@@ -116,4 +116,4 @@ python3 docs/figures/geometry/generate.py
 - [Architecture source map](../architecture.md) and the [mechanism board](../mechanisms/README.md).
 - Checks for the maths: [`verify_connections.py`](../figures/geometry/verify_connections.py).
 - The previous single-page version of this guide, with the retained float designs: [historical geometry tour](../../archive/history/geometry-float-form-2026-10.md).
-- Live numbers: [`STATUS.md`](../../STATUS.md).
+- Live numbers: [`PLAN.md`](../../PLAN.md) and rendered [`STATE.md`](../../STATE.md).
