@@ -91,8 +91,8 @@
                         <button id="btnOpenModelSources" type="button">Model sources compat</button>
                         <button data-compat="btnToggleInspector" type="button">Context compat</button>
                         <button data-compat="btnToggleInspector2" type="button">Context compat 2</button>
-                        <button data-compat="btnToggleInspector3" type="button">Context compat 3</button>
-                        <button data-compat="btnToggleInspector4" type="button">Context compat 4</button>
+                        <button id="btnToggleInspector3" type="button">Context compat 3</button>
+                        <button id="btnToggleInspector4" type="button">Context compat 4</button>
                         <button id="btnInspectorCollapse" type="button">Context collapse compat</button>
                         <button id="btnOpenFolderSettings" type="button">Open folder compat</button>
                     </div>
@@ -1222,7 +1222,7 @@
             }
             if (message.action === 'storage_status_result' && message.storage) {
                 var storage = $('#footerStorage');
-                if (storage) storage.textContent = 'Storage: ' + message.storage.usageMB + ' MB used of ' + message.storage.quotaMB + ' MB';
+                if (storage) storage.textContent = message.storage.usageMB + ' MB / ' + message.storage.quotaMB + ' MB';
                 return;
             }
             if (message.action === 'operation_error') {

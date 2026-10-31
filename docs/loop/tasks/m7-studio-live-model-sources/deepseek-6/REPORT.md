@@ -14,7 +14,8 @@ Lab: deepseek. Item: [m7-studio-live-model-sources](../../../../roadmap/items/m7
 - Status bar: plain value text (no label duplication), PRIVACY and STORAGE always visible, two-row labeled mobile grid (WORKSPACE/ENGINE then PRIVACY/STORAGE) with values not clipped, workspace selector no longer truncated.
 - Typography/contrast: assistant transcript is sans 13.5px/1.6, user 13px; --text-faint raised to #a3948a dark / #7a6753 light, light-theme inline links #7a3410, labels/status raised to >=10-11px; body font scale tightened.
 - Models: one intro line, one M1 note, PRIMARY/EVIDENCE/RESEARCH badges, labeled metadata pairs (Format/Size/SHA-256/Tokenizer), no duplicate cards, unchanged local/API behavior.
-- Accessibility: duplicate id attributes removed (179 unique ids), Settings/Help lock modal focus (focus on open, Tab cycles, focus returns on close), skip link targets #mainColumn, working Models status mirror stays visible.
+- Accessibility: duplicate id attributes removed while the full 180-id contract from main is preserved (compat buttons restored where they were the only carrier of a base id), Settings/Help lock modal focus (focus on open, Tab cycles, focus returns on close), skip link targets #mainColumn, working Models status mirror stays visible.
+- Final consistency pass: the legacy predictor toggle no longer renames the page title to Chat (it stays Agent); desktop status values are short enough not to ellipsize (offline sentence moved out of the bar, model shown as its short label); Help lists the implemented F2 rename key; the legacy storage handler writes a bare value instead of prefixing Storage:.
 - No engine/worker/studio_api/crates/verifier edits; no external requests/assets added; the 100 base ids, markers, data-studio-ready and the four verifier contracts remain intact.
 
 ## Measurements
@@ -37,6 +38,7 @@ working-discipline, scope-guard, solution-integrity; ux-critique and gate score 
 - File System Access write-back remains Chromium-only (documented fallback); no committed browser harness yet.
 - The synthetic 64-token demo is not a language model; the assistant can still emit token ids. The M1 trunk is next-token prediction only; API mode is another lab's work.
 - Mobile hides MODEL and CONTEXT groups in the status bar to keep two readable rows; the values remain in the Agent header and composer context line.
+- V4 design debt (accepted by the Lead): the CSS still carries an inherited ~20-value type ladder (about 8-10 rendered sizes). This pass fixes the reading surfaces (assistant 13.5px sans, user 13px), labels and contrast, but does not consolidate every remaining size; the UX gate allows one visual follow-up when no hard gate fails, and the full ladder consolidation is recorded as the next Studio design task rather than silently claimed done.
 
 ## Plain summary
 
