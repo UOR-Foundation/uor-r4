@@ -150,7 +150,11 @@
             status.id = 'modelsVerifyRow';
             sections.appendChild(status);
         }
-        Array.prototype.slice.call(mount.querySelectorAll('.source-group')).forEach(function (group) {
+        var freshGroups = mount.querySelectorAll('.source-group');
+        if (freshGroups.length) {
+            Array.prototype.slice.call(document.querySelectorAll('.models-section-body')).forEach(function (body) { body.textContent = ''; });
+        }
+        Array.prototype.slice.call(freshGroups).forEach(function (group) {
             var heading = group.querySelector('h3');
             var text = heading ? heading.textContent : '';
             var def = MODELS_SECTIONS.find(function (item) { return item.match.test(text); }) || MODELS_SECTIONS[0];
@@ -658,10 +662,34 @@
     function runPalette(index) { var command = paletteCommands[index]; if (!command) return; closePalette(); window.setTimeout(function () { try { command.run(); } catch (error) { toast(String(error && error.message ? error.message : error), 'error'); } }, 20); }
 
     /* dialogs */
-    function openSettings() { var dialog = document.getElementById('settingsDialog'); if (!dialog) return; dialog.hidden = false; updateSettingsInfo(); var close = document.getElementById('btnCloseSettings'); if (close) close.focus(); }
-    function closeSettings() { var dialog = document.getElementById('settingsDialog'); if (dialog) dialog.hidden = true; }
-    function openHelp() { var dialog = document.getElementById('helpDialog'); if (dialog) dialog.hidden = false; }
-    function closeHelp() { var dialog = document.getElementById('helpDialog'); if (dialog) dialog.hidden = true; }
+    var modalReturnFocus = null;
+    function modalFocusables(dialog) {
+        return Array.prototype.slice.call(dialog.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(function (node) { return !node.disabled && node.getClientRects().length; });
+    }
+    function openModal(dialog) {
+        if (!dialog) return;
+        modalReturnFocus = document.activeElement;
+        dialog.hidden = false;
+        window.setTimeout(function () { var first = modalFocusables(dialog)[0]; if (first) first.focus(); }, 20);
+    }
+    function closeModal(dialog) {
+        if (!dialog) return;
+        dialog.hidden = true;
+        if (modalReturnFocus && modalReturnFocus.focus) modalReturnFocus.focus();
+        modalReturnFocus = null;
+    }
+    function trapModalTab(event, dialog) {
+        var nodes = modalFocusables(dialog);
+        if (!nodes.length) return;
+        var first = nodes[0];
+        var last = nodes[nodes.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+    function openSettings() { var dialog = document.getElementById('settingsDialog'); if (!dialog) return; openModal(dialog); updateSettingsInfo(); }
+    function closeSettings() { closeModal(document.getElementById('settingsDialog')); }
+    function openHelp() { openModal(document.getElementById('helpDialog')); }
+    function closeHelp() { closeModal(document.getElementById('helpDialog')); }
     function updateSettingsInfo() {
         var label = document.getElementById('settingsWorkspaceLabel');
         var files = window.__studioFiles;
@@ -699,13 +727,15 @@
         var storage = textOf('#footerStorage').replace(/^Storage:\s*/i, '');
         var mode = hook('getMode') ? hook('getMode')() : 'wasm';
         var api = mode === 'api';
-        setText('#engineStatusText', 'Engine: local WASM · ' + engine);
-        setText('#modelStatusText', /no model/i.test(model) ? 'Model: none' : 'Model: ' + model);
-        setText('#privacyStatusText', api ? 'Privacy: API (leaves device)' : 'Privacy: Local only');
-        setText('#footerStorage', 'Storage: ' + String(storage || 'unknown').replace('MB used of ', ' MB / ').replace(/\s+/g, ' '));
-        setText('#statusContextLabel', 'Context: ' + (hook('getAttachments') ? hook('getAttachments')().length : 0) + ' files');
-        setText('#statusWorkspaceLabel', (window.__studioFiles && window.__studioFiles.workspaceName && window.__studioFiles.workspaceName()) ? window.__studioFiles.workspaceName() + ' (main)' : 'uor-r4 (main)');
-        setText('#statusContext', (hook('getAttachments') ? hook('getAttachments')().length : 0) + ' files');
+        var attachmentCount = hook('getAttachments') ? hook('getAttachments')().length : 0;
+        setText('#engineStatusText', 'local WASM · ' + engine);
+        var modelShort = /no model/i.test(model) ? 'none' : model.split(' · ')[0];
+        if (modelShort.length > 42) modelShort = modelShort.slice(0, 41) + '…';
+        setText('#modelStatusText', modelShort);
+        setText('#privacyStatusText', api ? 'API (leaves device)' : 'Local only');
+        setText('#footerStorage', String(storage || 'unknown').replace('MB used of ', ' MB / ').replace(/\s+/g, ' '));
+        setText('#statusWorkspaceLabel', (window.__studioFiles && window.__studioFiles.workspaceName && window.__studioFiles.workspaceName()) ? window.__studioFiles.workspaceName() : 'uor-r4');
+        setText('#statusContext', attachmentCount + ' file' + (attachmentCount === 1 ? '' : 's'));
         setText('#composerModeNote', api ? 'API — prompts leave this device' : 'Local WASM — prompts stay on this device');
         var modeNote = document.getElementById('composerModeNote');
         if (modeNote) modeNote.setAttribute('data-mode', api ? 'api' : 'local');
@@ -848,6 +878,8 @@
                 if (row) { event.preventDefault(); var id = row.getAttribute('data-id'); var title = (row.querySelector('.session-title') || {}).textContent || 'Untitled session'; var menu = row.querySelector('.conv-menu'); renameInline(row, id, title); if (menu) menu.setAttribute('aria-expanded', 'false'); }
                 return;
             }
+            var openModalDialog = document.querySelector('.modal-backdrop:not([hidden])');
+            if (event.key === 'Tab' && openModalDialog) { trapModalTab(event, openModalDialog); return; }
             if (event.key === 'Escape') {
                 if (paletteOpen) { event.preventDefault(); event.stopPropagation(); closePalette(); return; }
                 var settingsDialog = document.getElementById('settingsDialog');

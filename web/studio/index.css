@@ -18,7 +18,7 @@ html[data-theme="dark"] {
     --text: #f0e9df;
     --text-soft: #cabfae;
     --text-muted: #97897a;
-    --text-faint: #6b6055;
+    --text-faint: #a3948a;
     --accent: #e8894a;
     --accent-bright: #ffa268;
     --accent-dim: #b8672f;
@@ -49,7 +49,7 @@ html[data-theme="light"] {
     --text: #221a11;
     --text-soft: #4a3c2d;
     --text-muted: #756353;
-    --text-faint: #9a8876;
+    --text-faint: #7a6753;
     --accent: #b2521c;
     --accent-bright: #c9611f;
     --accent-dim: #8f3f14;
@@ -1152,7 +1152,7 @@ body[data-view="editor"] #editorPanel {
     border-radius: 5px;
     background: var(--surface-2);
     color: var(--text);
-    font-size: 12.5px;
+    font-size: 13px;
     line-height: 1.55;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -1166,9 +1166,9 @@ body[data-view="editor"] #editorPanel {
     width: 100%;
     padding: 2px 2px 2px 0;
     color: var(--text-soft);
-    font-family: 'Fira Code', 'SF Mono', ui-monospace, Menlo, monospace;
-    font-size: 12px;
-    line-height: 1.65;
+    font-family: var(--sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif);
+    font-size: 13.5px;
+    line-height: 1.6;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
@@ -3625,3 +3625,49 @@ body[data-view="workspace"] #workspaceView { display: flex; }
 .msg-action { color: var(--text-muted); }
 
 .legacy-compat { display: none !important; }
+
+/* ---------------------------------------------------------------- deepseek-6 polish (mobile status, contrast, a11y) */
+
+html[data-theme="light"] .inline-link { color: #7a3410; }
+.statusbar .status-item { color: var(--text-soft); }
+
+@media (max-width: 780px) {
+    .topbar-center { display: none; }
+    .workspace-crumb { max-width: none; }
+    .workspace-crumb #topWorkspaceName { overflow: visible; text-overflow: clip; max-width: none; }
+    .statusbar {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 3px 10px;
+        padding: 5px 10px;
+        font-size: 10px;
+        min-height: 0;
+        flex-wrap: nowrap;
+        overflow: visible;
+        white-space: nowrap;
+    }
+    .status-group { border-right: none; padding-right: 0; gap: 3px; min-width: 0; overflow: hidden; }
+    .status-workspace { grid-column: auto; flex: 0 0 auto; overflow: hidden; }
+    .status-workspace .footer-offline { display: none; }
+    .status-sep { display: none; }
+    .status-right { display: none; }
+    .status-label { font-size: 8.5px; letter-spacing: 0.08em; color: var(--text-muted); flex: 0 0 auto; }
+    .status-item { font-size: 9.5px; overflow: hidden; text-overflow: ellipsis; }
+}
+
+/* deepseek-6: labeled model metadata instead of a dot-soup */
+.source-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0 6px; }
+.source-meta-pair { font-family: 'Fira Code', 'SF Mono', ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--text-muted); white-space: nowrap; }
+.source-meta-pair b { color: var(--text-soft); font-weight: 600; margin-right: 4px; }
+
+/* deepseek-6: the storage value and privacy group are real status fields, never hidden */
+.statusbar #footerStorage { display: block !important; }
+.statusbar .status-group.status-privacy { display: flex !important; }
+
+@media (max-width: 780px) {
+    .statusbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .statusbar .status-model, .statusbar .status-context { display: none !important; }
+}
+
+/* deepseek-6: the full offline sentence lives in the Guide/hero; the bar keeps only short values */
+.statusbar .footer-offline { display: none !important; }
