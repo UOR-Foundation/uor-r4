@@ -16,6 +16,7 @@ No measurement. The integer decode's tok/s is unit 3's, under its sheet.
   - So both integer arms end where prompt and reply fill the artifact's context (192), as well as at BOS or 64 tokens. They are capped identically, which keeps the bar a fair paired test.
   - Parity's opening name needs only the prompt.
   - The longest p-w prompt is 186 tokens, which leaves it 6 reply tokens. The grade reports the capped count per split and seed.
+  - A prompt of the context's full 192 tokens still decodes its opening, with no step past the context. At first `panel_reply` refused it; the review's fix is pinned by a test.
 - **claude-220's `keyed_reading` could not be reused whole.** It reads the keys files and the forced arm, and the integer arms have neither. The integer reading keeps its measures (exact replies, templates, loops, `right`) and builds a `KeyedReading`, so `carries` and `harmless` read it unchanged.
 - **`--out` counted as the training mode,** so `--panel-prompts` with `--out` was refused. The mode list now exempts it, as it already did `--controls`.
 
@@ -26,7 +27,7 @@ No measurement. The integer decode's tok/s is unit 3's, under its sheet.
   - each prompt is its window through the first scored offset;
   - each reference is its `reference_reply`.
 
-  On claude-220's sealed run, every split's prompts equal its served files' (1,202 on p-w, 393 on p-v, 310 on DEV), and the float served names carried are its (1,172, 385 and 19). A mismatch would have been refused.
+  On claude-220's sealed run, every split's prompts equal its served files' (1,202 on p-w, 393 on p-v, 310 on DEV), and the float served names carried are its at each of the three seeds (1,172, 385 and 19 at every seed). A mismatch would have been refused (`attach_float_names`). A `--runs` folder without DEV's served files at seeds 1–3 is refused too.
 - **The decode** (`fbs-toks ARTIFACT --replies PROMPTS --out FILE [--reply-tokens N]`, over `panel_reply`).
   - Each prompt runs in a fresh session, with the reply start marked at its last token, then greedy.
   - It records the opening's point-key name and least distance at Q12 where the key served. It also records the float name's least distance in the table, from `point_key_distance`, off the step's path.
@@ -43,32 +44,37 @@ No measurement. The integer decode's tok/s is unit 3's, under its sheet.
   - the model gains `point_key_rows()` and `point_key_distance()`.
 - **`stack/point_key.rs`:** `least_distance_to`; `reply_stop` and `ReplyEnd` (Bos, Length, Context); `panel_reply` and `PanelReply`.
 - **`stack/mod.rs`:** exports.
-- **`stack/tests.rs`:** two tests.
+- **`stack/tests.rs`:** two tests; `point_key.rs` one more (`least_distance_to`).
 - **`bin/fbs-toks.rs`:** the `--replies` mode.
-- **`crates/uor-r4-float-train/src/in_space_long.rs`:** `PanelPrompt`, `split_prompts`, `panel_prompts`, `IntegerSample`, `POINT_KEY_ROUNDING_BOUND`, `IntegerParity`, `integer_parity`, `integer_reading`, `IntegerGrade` and `integer_grade`, with three tests.
+- **`crates/uor-r4-float-train/src/in_space_long.rs`:** `PanelPrompt`, `split_prompts`, `panel_prompts`, `IntegerSample`, `POINT_KEY_ROUNDING_BOUND`, `IntegerParity`, `integer_parity`, `integer_reading`, `attach_float_names`, `check_float_names`, `IntegerGrade` and `integer_grade`, with four tests. The grade needs `--keys-runs` (claude-220's `out`), and refuses an integer served file whose float names are not that seed's.
 - **`bin/train-in-space.rs`:** the two modes, and the mode list.
 
 ## Measurements
 
-- **The integer crate's library tests** (`--features serving-wasm`): 382 pass, against 380 at the base.
-- **The float crate:** 184 pass in the library, against 181 at the base.
+- **The integer crate's library tests** (`--features serving-wasm`): 383 pass, against 380 at the base.
+- **The float crate:** 185 pass in the library, against 181 at the base.
 - **The serving audit** (`audit_zero_matmul_serving.py --stack`): FULL PASS, with 0 forbidden instructions across 44 symbol ranges and 123 reachable functions.
 - **The host check:** the prompts of p-w, p-v and DEV equal claude-220's sealed served files', and so do the keyed counts.
 
 ## Checks run at the head
 
-- **Nine negative gates,** each failing at its own assertion with its rule set aside, and passing when restored:
+- **Thirteen negative gates,** each failing at its own assertion with its rule set aside, and passing when restored:
   - **the decode:**
     - the stop at BOS;
     - at the length;
     - at the context;
     - the served record;
     - the float name's rows;
+    - the L1 sum (a `max` in its place);
+    - a full-context prompt's opening;
   - **the grade:**
     - the prompt through the first scored offset;
     - the rounding bound's `≤`;
     - an unkeyed reply is greedy's;
-    - a served reply opens with its key.
+    - a served reply opens with its key;
+    - the float names attach only to their prompts;
+    - the integer file carries this seed's names.
+- **The review's fixes** (`5ad69ab93`): the float names checked per seed, `attach_float_names` tested, DEV's seeds required, a full-context prompt's opening decoded, and `least_distance_to` pinned at nonzero distances.
 - **The stub-nvcc CUDA check** (`cargo check --features cuda --all-targets`): clean.
 - **The WASM library build:** finishes.
 
