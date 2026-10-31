@@ -20,7 +20,7 @@ All arms read one snapshot of one trunk and one set of float readouts.
 - **A_ret, the retained artifact:** `fbs-export` of the snapshot, which carries `"retain_rates":true`.
 - **A_dec, the decay control:** `fbs-export` of the same snapshot with the flag set false. It is the only change, checked byte for byte with the flag stripped. This is the trunk an engine before claude-226 served.
 
-`fbs-compare --parity-only SNAPSHOT readout.json readout-export.json readout-d11.json` gives, per section (`single_tokens`, `sequences`): the `positions`, the positions where F's token equals the integer session's (`d11_gpu_token_equals_integer_token`), and the largest query gap. For arm X in section s, d_X,s = positions − agreements.
+`fbs-compare --parity-only SNAPSHOT readout.json readout-export.json readout-d11.json` gives, per section (`single_tokens`, `sequences`): the `positions`, the positions where F's token equals the integer session's (`d11_gpu_token_equals_integer_token`), and the largest query gap. For arm X in section s, d_X,s = positions − agreements. It counts token disagreements only, as claude-126's m2 did, never kept-cell differences (claude-127's "2 to 3% of positions" counted those too).
 
 ## 3. Bar and decision table
 
@@ -29,9 +29,10 @@ All arms read one snapshot of one trunk and one set of float readouts.
 | `G-Ret-Parity` | **(a)** d_ret,s ≤ 3% of the positions in **each** section, **and** **(b)** on `sequences`, d_dec − d_ret > 2√(d_dec + d_ret) | Done-when 3 is met and the item is done. Point-key-integer's run serves the retained artifacts. | See below. |
 
 - **Why 3% for (a):** a correct exporter's residual on this trunk family. claude-126's clean seed differed on 1.4% of single tokens and 1.6% of DEV-window positions at 6 layers. After claude-127's repair, about 1% of single tokens differed at 6 layers. Twice the larger reading leaves room for a new trunk's rounding, and still catches an export fault like claude-126 seed 1's (31% and 63%).
+  - **Carried over from text to synthetic sequences** (FIT advisory 3). Those residuals were read on single tokens and DEV text windows; this run's sequences are synthetic, where the residual may differ. On 1,536 positions, 3% is 46. A miss of (a) on `sequences` with a pass on `single_tokens` therefore names the input as a possible cause in its diagnosis, and does not by itself place the fault in the exporter.
 - **Why (b) is safe without per-position tokens:** let b count the positions where A_ret agrees and A_dec does not, and c the reverse. Then d_dec − d_ret = b − c exactly, and b + c ≤ d_dec + d_ret. So (b) implies b − c > 2√(b + c), the paired test, and is stricter than it. Without (b), a pass of (a) could not tell the retained reading from the decay one.
-- **(a) fails, any (b): an instrument fault.** The retained export does not compute the trained trunk.
-  - The next unit traces the sequences' largest query gaps, layer by layer, against claude-127's residual.
+- **(a) fails, any (b): an instrument fault.** The retained artifact does not match the trained trunk's D11 readout within the bar.
+  - The next unit locates it, in the exporter or in the synthetic inputs (see above). It traces the sequences' largest query gaps, layer by layer, against claude-127's residual.
   - The point-key run is held until the fault is repaired. It is never a mechanism verdict.
 - **(a) passes, (b) fails: inconclusive on the reading.**
   - The retained artifact agrees with the trained trunk, so the point-key run may serve it. But on these sequences the trunk's tokens do not tell the readings apart.
@@ -63,10 +64,10 @@ All arms read one snapshot of one trunk and one set of float readouts.
 
 ## 6. Steps and minimum test power
 
-1. Pin the source at the pushed head; the job refuses a dirty tree or a reused output folder.
-2. **Probe a:** the `fbs_export::` GPU tests (`I-Export-Tests`).
-3. **The builds:** `fbs-snapshot` (`--features cuda`), then `fbs-export` and `fbs-compare` (`-p uor-r4-integer --features serving-wasm`).
-4. **The data:** fetch and check (`I-Data`).
+1. **The data:** fetch and check (`I-Data`), first, so a store fault stops before the builds. The fetch is claude-220's, which passed on these files.
+2. Pin the source at the pushed head; the job refuses a dirty tree or a reused output folder.
+3. **Probe a:** the `fbs_export::` GPU tests (`I-Export-Tests`).
+4. **The builds:** `fbs-snapshot` (`--features cuda`), then `fbs-export` and `fbs-compare` (`-p uor-r4-integer --features serving-wasm`).
 5. **The snapshot:** the trunk copy, then `fbs-snapshot` with the three readouts (`I-Finite`). Then the control (`I-Reading-Carried`).
 6. **Each arm:** `fbs-export`, then `fbs-compare --parity-only` (`I-Artifact-Identity`, `I-Finite`). The job logs the counts, never the bar.
 7. **The by-product, with no reading taken:** `fbs-snapshot` on each seed's full checkpoint (memory and read carried, no readouts). These are the snapshots point-key-integer's run exports on the laptop. A refusal is reported and leaves the bar unaffected.
@@ -80,14 +81,47 @@ All arms read one snapshot of one trunk and one set of float readouts.
   - The builds take about 10–15 minutes and the tests a few. Each `fbs-snapshot` and `fbs-compare` takes seconds to a minute.
   - The estimate is under $1, with a ceiling of $2 (`--hours 1`, renewed while healthy).
 - **Stop rule:**
-  - Any instrument check that fails stops the job, with its exit code (3 data, 4 tests or build, 5 a tool, 6 an identity check), and never counts as a gate result.
+  - Any instrument check that fails stops the job, with its exit code (3 data, 4 tests or build, 5 a tool, 6 an identity check), and never counts as a gate result. Every exit, a stop included, copies the step logs and `EXIT` into the output folder and seals it with its `SHA256SUMS` (FIT advisory 1).
   - Never cancel a healthy run for a self-set time estimate; extend the lease.
   - A watcher is armed for the pod from launch to down.
 
 ## 8. Non-author TEST FITNESS review
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
+
+- **Round 1 (a fresh non-author reviewer, 31 Oct): FIT, provisional.**
+  - No REQUIRED finding in what it checked. It stopped at its context budget before three checks.
+  - It made three advisories, each applied: logs and `EXIT` reach the store on every exit; the data fetch runs before the builds; and the bar's carry-over from text to synthetic sequences is stated.
+- **Round 2 (a second fresh non-author reviewer, 31 Oct): FIT.** It ran the three checks:
+  1. The float switch is process-wide, and λ has one site, which the D11 mode shares. `fbs-snapshot` sets the switch before the load and every readout.
+  2. The export writes `geometric-retention` exactly when `retain_rates` is true, and the session uses the retained tables exactly then.
+  3. The cited residuals match claude-126 and claude-127.
+
+  Of its optional advisories, d counts token disagreements only, and the (a)-fail row is worded to match the carry-over sentence.
 
 ## 9. Pre-run review
 
-PENDING
+Lab: claude, 31 Oct 2026. This is the author's own review under CHARTER §5.10, of the whole chain before the lease.
+
+- **The chain.** The goal is one model end to end (token → vector → vector → integer → token).
+  - The shipped model is (r-drop), trained with retention since 27 Oct.
+  - Its integer artifact served the decay reading until claude-226. This run shows the retained artifact computes the trained trunk.
+  - Point-key-integer's run (#3450, claude-228) serves (r-drop)'s artifacts, and this run's by-product writes its three snapshots. Nothing else depends on the outcome.
+- **Tools and inputs present:**
+  - every binary builds from the pushed head, with no new code;
+  - the three seeds' checkpoints and run configs are in the HF store (`hf_fs ls`, 31 Oct), and their sums are checked in the job;
+  - `fbs-snapshot`'s refusal of readouts beside a memory is avoided by the trunk copy, which both FIT rounds read.
+- **What each outcome unlocks:** §3's table.
+  - PASS closes done-when 3 and the item.
+  - (a) failing holds the point-key run behind a located fault.
+  - (b) failing alone lets the run proceed, and the next unit reads DEV windows.
+  - No outcome is read before the comparisons are stored.
+- **The rules:**
+  - research compute on the GPU (§3.5);
+  - the integer artifact runs inside the GPU job only for its parity (§3.6), with no float reference run on the host;
+  - no comparator model, no squashing, and no dense products added: the run adds no code.
+- **The lease:**
+  - `uor-pod status` showed 0 pods running, against the caps of 4 pods and $8/h.
+  - One RTX 5090 (`--count 1`, about $0.95/h), `--hours 1`, renewed by the watcher while healthy.
+  - The watcher stops on `EXIT`, a lost pod, a 30-minute stall or 2 hours.
+- **Verdict: GO.**
