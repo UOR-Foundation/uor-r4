@@ -6,7 +6,7 @@ area: serving
 status: ready
 open_to: lab
 needs_gpu: false
-depends_on: [one-model-end-to-end, turn-memory-integer]
+depends_on: [one-model-end-to-end, turn-memory-integer, integer-retention-rates]
 notebook: docs/research/notebook/float-training.md
 scope: [crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/stack/memory.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/point_key.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/src/bin/fbs-point-key.rs, crates/uor-r4-integer/src/wasm_serve.rs, crates/uor-r4-integer/src/wasm_bindgen_exports.rs, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, docs/roadmap/items/point-key-integer.md, docs/harness/prep/point-key-integer*, docs/labs/point-key-integer/**, docs/loop/tasks/point-key-integer/**, docs/research/notebook/float-training.md]
 ---
@@ -97,7 +97,9 @@ The model throughout is (r-drop)'s sealed step-16,384 checkpoints at seeds 1–3
    - **The decode:** a `fbs-toks` mode decodes a panel's prompts with the memory on, under greedy, from a `/7` or `/8` artifact. It writes the replies in claude-220's sample shape.
    - **The grade:** it lives in `in_space_long.rs` and `train-in-space.rs`, beside claude-220's `served_grade`. It reads the integer arms by their own tokens, and compares the served names with claude-220's float served files (done-when 3). It reads the bar of done-when 4.
    - **Why the decode and the grade sit in different crates:** the float crate links `uor-r4-integer` without `serving-wasm`, so it cannot decode the stack.
-3. **The run,** under a prep sheet with a fresh FIT and a pre-run review:
+3. **The run,** after [`integer-retention-rates`](integer-retention-rates.md) (found by claude-225).
+   - (r-drop) trained with `retain_rates`, whose recurrence the integer artifact does not serve yet, so its export would not be the trained trunk.
+   - It runs under a prep sheet with a fresh FIT and a pre-run review:
    - (r-drop)'s snapshots on a pod;
    - `fbs-export` and `fbs-export --point-key` over TRAIN on the laptop;
    - the fresh panel p-x drawn with its census;
