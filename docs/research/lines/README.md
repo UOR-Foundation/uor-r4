@@ -11,7 +11,7 @@ A research line is one sustained question the project worked on, such as "how do
 - **Records** are catalog entries. They mix lab records, lane results, reviews and plans, so they show where effort went and not how many experiments ran. Source: `archive/catalog.jsonl`, counted with `jq` on the field `line`.
 - **Results** are the records whose outcome is positive, negative, inconclusive or diagnostic-stop. The rest are plans, tooling, process, review, operations and blocked runs. A *blocked* record is a run that could not start; it is not a negative.
 - **Span** is the first to last dated record in the catalog in 2026, not a current-status cutoff. Some records carry no date and are left out of the span; newer results appear after the table.
-- A positive record reports that the target the record itself set was met, at the scope it states. Many are narrow, scored on a panel the authors wrote, and none is a language result.
+- A positive record reports that the target the record itself set was met, at the scope it states. Many are narrow, scored on a panel the authors wrote, and none establishes useful conversation.
 - **State** follows the project's vocabulary. *Active* means on the current model path. *Parked* means the tested forms failed or broke a rule and the mechanism stays open (decision D22). *Closed* means the line stopped (a line label only: its mechanisms keep their board status); a negative closes a configuration and never a mechanism. *Preserved* is evidence kept inactive.
 
 ## All lines

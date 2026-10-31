@@ -78,10 +78,7 @@ The 116/232 reply bar is **BLOCKED under R14** (no instrument) and is **not a cl
 
 ### M2 `#2030` — grounded reply from exact memory: in progress
 
-At least 256 of 512 complete correct replies on the `m2-reply512` development panel and at least
-40% on a genuinely fresh held-out panel, through one unified geometric model with no banned forms,
-then a clean D11 export with the export gap reported. The old 437/512 seen-row score followed by
-0/128 on fresh data is a panel-fitting lesson, not qualified current progress.
+**Original M2 acceptance text, preserved at item start:** ≥ **256 / 512** complete correct replies on the `m2-reply512` development panel **and** ≥ **40%** on a genuinely fresh held-out panel (D22), using **one** unified geometric model path — no softmax/sigmoid/tanh (D23/D25), no matmul (D25), GPU-only model compute (D24); learned relation/action/span extraction and emission through the shared geometric carrier, with no hand-coded phrase tables or external teachers (D28); and a clean export to D11 integer serving with the export gap reported (D37). The old 437/512 seen-row score followed by 0/128 on fresh data is a panel-fitting lesson, not qualified current progress.
 
 ### M3 `#2031` — durable conversation memory: in progress
 
@@ -89,25 +86,15 @@ then a clean D11 export with the export gap reported. The old 437/512 seen-row s
 
 ### M4 `#2032` — one served model through D11 and a CLI: not complete; accepted model path not started
 
-The chosen M1/M2/M3 model exports to `UORLUT01` and reports its export gap, meets its held-out
-quality bar of ≤0.90 BPB and the M1–M3 reply/memory bars through `uor-chat`, and restores sessions identically in
-a fresh process or WASM worker. D11 bans float, transcendental arithmetic and dense matmul; D80/D81
-allow integer multiply and divide. `PRLL` is built and registered, but GPU held-out scoring and the
-accepted full path remain open. Engine audits alone do not close M4.
+**Original M4 acceptance text, preserved at item start:** both the native binary (`uor-chat` / `uor-r4-stack`) and the WASM serving binary pass the D11 static call-graph audits with **0** float, **0** softmax/squashing, **0** matmul and **0** hardware `mul`/`div`; the chosen M1/M2 model exports to `UORLUT01` and reports its training-to-D11 export gap, meets the **≤ 0.90 BPB** held-out bar plus the M1/M2/M3 reply and memory bars through `uor-chat`; and saving a live session then restoring it in a fresh process or WASM worker produces bit-identical continuation tokens. D80/D81 later allow and count integer multiply/divide. `PRLL` is built and registered, but GPU held-out scoring and the accepted full path remain open; engine audits alone do not close M4.
 
 ### M5 `#2033` — laptop cost (D5): not started
 
-Measure full-path latency (`ms/tok`), peak RSS (MB), energy (mJ/tok) and selected parameter access
-on the accepted M4 artifact across ingestion, routing, memory lookup and emission. Report D5-a
-residency and D5-b selected access separately, with no hidden host/CPU float fallback or uncounted
-service overhead.
+**Original M5 acceptance text, preserved at item start:** full-path latency (`ms/tok`), peak RSS (`MB`), energy (`mJ/tok`) and `weights_per_token` / total parameter ratio measured and reproducible on the accepted M4 `D11` artifact across ingestion, routing, memory lookup and token emission; D5-a residency and D5-b selected access reported as the separate halves D38 made them; no hidden host/CPU float fallback (D24) and no uncounted daemon or service overhead.
 
 ### M6 `#2034` — reasoning and coding on the same model: not started
 
-The served M4 model passes the frozen `m6-reasoning` panel of unseen multi-step compositions,
-altered constraints and executable coding tasks checked by deterministic oracles. A causal
-intermediate-state ablation shows dependence on geometric state transport and addressed memory
-rather than memorized templates.
+**Original M6 acceptance text, preserved at item start:** the served M4 model passes the frozen `m6-reasoning` panel of unseen multi-step compositions, altered constraints and executable coding tasks checked by deterministic compile/test oracles (D28); and a causal intermediate-state ablation shows the result depends on the model's geometric state transport and addressed memory rather than on memorized templates.
 
 ### M7 `#2035` — distribution: runtime delivered, accepted model open
 
@@ -117,9 +104,7 @@ Current behavior is local by default, with only an explicit user-configured web 
 
 ### M8 `#2036` — alpha release: not started
 
-One versioned, checksum-pinned `UORLUT01` artifact meets M1–M7, with reproducible installation,
-release notes binding exact scores and known limitations, and independent verification on consumer
-hardware. M1 alone is not an alpha release.
+**Original M8 acceptance text, preserved at item start:** one versioned, checksum-pinned `UORLUT01` artifact meets the frozen acceptance bars of **M1–M7**; reproducible installation, release notes binding the exact measured scores and known limitations, and independent verification on consumer hardware. M1 alone is not an alpha release.
 
 ## Rules that bind every row
 
@@ -136,6 +121,8 @@ hardware. M1 alone is not an alpha release.
   is the named owner-at-dispatch exception. There is no blanket owner hold.
 - **Delivery.** Named paths, protected PR, exact-head review and checks, merge queue, then
   verification of the actual merge on fresh `main`. Open PRs are pending, not merged.
+- **Original D39 item 5, preserved:** a float candidate is disqualified when its export gap exceeds the two-seed noise band on the same evaluator; the band is fixed per sheet at FIT time. Float scores are instrument readings, never decision metrics.
+- **Original D21 progress control, restored by D39 item 6 and preserved:** after three consecutive merged PRs on one line that do not move the owning milestone's headline, the next action is a pivot card on the milestone issue. M1's interim headline exists so this rule can fire again.
 
 ## Superseded sections — original anchors preserved
 

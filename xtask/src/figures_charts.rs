@@ -59,7 +59,7 @@ const BASELINE_BARS: [(&str, &str, u64, bool); 4] = [
     ("Saved M1 model, seed 1", "integer UORLUT01", 7_002, true),
 ];
 
-/// The five phases A to E of `docs/research/history.md`: (letter, first day,
+/// The historical audit phases A to E of `docs/research/history.md`: (letter, first day,
 /// last day, plain name, tone). Phases B and E overlap their neighbours by a day
 /// or two, as the history page states them.
 const PHASES: [(&str, &str, &str, &str, &str); 5] = [
@@ -591,7 +591,7 @@ fn status_vs_baselines() -> Result<String, Fail> {
         fy + 16.0,
         NOTE,
         Anchor::Start,
-        "Source: docs/labs/m1-close-saved-model; docs/labs/host-diagnostics-2026-10-17.",
+        "Source: docs/labs/m1-close-saved-model; archive/labs/host-diagnostics-2026-10-17/README.md.",
     );
     d.finish(
         "Saved M1 model against count tables",
@@ -870,7 +870,7 @@ fn timeline(records: &[Record]) -> Result<String, Fail> {
     let mut d = Doc::new("timeline", 560.0);
     d.heading(
         "Five approaches in sequence, and the records each day left behind",
-        "Catalog records per day, 10 June to 19 October 2026, under the five phases A to E.",
+        "Historical audit records per day, 10 June to 19 October 2026, under phases A to E; later Phase F/G are in docs/research/history.md.",
     );
 
     // Phase bands in two lanes so the overlaps stay readable.
@@ -1008,7 +1008,7 @@ fn timeline(records: &[Record]) -> Result<String, Fail> {
     let h = ky + 56.0;
     d.h = h;
     let desc = format!(
-        "A time axis from 10 June to 19 October 2026. Two rows of bands mark the five phases A to E. Below, an area chart of catalog records per day: nothing before {} (GitHub items only), then a rise to a peak of {} records on {}.",
+        "A time axis from 10 June to 19 October 2026. Two rows of bands mark the historical audit phases A to E; the later Phase F and Phase G are not shown. Below, an area chart of catalog records per day: nothing before {} (GitHub items only), then a rise to a peak of {} records on {}.",
         day_month(first_rec),
         peak,
         day_month(peak_day)

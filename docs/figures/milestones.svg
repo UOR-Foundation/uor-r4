@@ -25,10 +25,10 @@
 <text x="1101" y="174" font-size="16" font-weight="700" fill="#1F2328" text-anchor="middle">M8</text>
 <path d="M100,136 L100,112 L529,112 L529,134" fill="none" stroke="#0072B2" stroke-width="2" marker-end="url(#ah)"/>
 <path d="M243,136 L243,124 L529,124" fill="none" stroke="#0072B2" stroke-width="2"/>
-<text x="315" y="106" font-size="12.5" font-weight="700" fill="#0072B2" text-anchor="middle">M1 + M2 join at M4</text>
+<text x="315" y="106" font-size="12.5" font-weight="700" fill="#0072B2" text-anchor="middle">M1 + M2 + M3 join at M4</text>
 <rect x="40" y="230" width="265" height="172" rx="10" fill="#E3F4EE" stroke="#007A5E" stroke-width="2.5"/>
 <text x="54" y="256" font-size="15" font-weight="700" fill="#1F2328" text-anchor="start">M1  Language base</text>
-<text x="54" y="277" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">six bars; 62.5% TRAIN refs</text>
+<text x="54" y="277" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">six bars; p-f refs 62.5% TRAIN</text>
 <text x="54" y="293" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">DEV 7,002 / 7,001;</text>
 <text x="54" y="309" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">p-f 7,850 / 7,872;</text>
 <text x="54" y="325" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">Fresh V2 7,215 / 7,228</text>

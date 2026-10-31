@@ -501,7 +501,7 @@ fn architecture_narrow() -> Result<String, Fail> {
         (
             318.0,
             St::Working,
-            "Copy and exact turn memory",
+            "Exact memory; copy read open",
             "/7 synthetic: open+reply",
         ),
         (
@@ -1188,7 +1188,7 @@ fn milestones() -> Result<String, Fail> {
             "Language base",
             St::Complete,
             [
-                "six bars; 62.5% TRAIN refs",
+                "six bars; p-f refs 62.5% TRAIN",
                 "DEV 7,002 / 7,001;",
                 "p-f 7,850 / 7,872;",
                 "Fresh V2 7,215 / 7,228",
@@ -1279,7 +1279,7 @@ fn milestones() -> Result<String, Fail> {
         [315.0, 106.0],
         (12.5, 700, BLUE),
         "middle",
-        "M1 + M2 join at M4",
+        "M1 + M2 + M3 join at M4",
     );
     for (i, (id, name, st, lines)) in items.iter().enumerate() {
         let col = (i % 4) as f64;

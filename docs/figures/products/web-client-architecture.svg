@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 548" width="960" role="img" aria-labelledby="t d">
 <title id="t">Web client architecture</title>
-<desc id="d">A browser window with three stacked layers. Top: the Studio page (index.html) with the v2 Workspace/Agent/Models/Guide interface and Sessions, connected to the integer worker and verified on a synthetic stand-in. Middle: a Web Worker holding the WebAssembly engine (uor-r4-integer, serving-wasm feature) with its calls init, loadStack, step, saveSession and restoreSession, tested on a synthetic model. Bottom: browser storage holding the model file (model.uorlut01) and session snapshots (UR4SESS1), also verified on the synthetic stand-in. Solid wiring means verified on that stand-in; accepted-model parity remains open. Integer adds, shifts and table look-ups are used, with hardware integer multiply and divide allowed by D80 and D81. Outside the window on the left, a static file host sends one dashed arrow in, labelled first visit only: page and model file, check SHA-256. On the right, local WASM mode keeps prompts on the device; an optional user-configured OpenAI-compatible API sends prompts to the user's chosen endpoint.</desc>
+<desc id="d">A browser window with three stacked layers. Top: the Studio page (index.html) with the v2 Workspace/Agent/Models/Guide interface and Sessions, connected to the integer worker and verified on a synthetic stand-in. Middle: a Web Worker holding the WebAssembly engine (uor-r4-integer, serving-wasm feature) with its calls init, loadStack, step, saveSession and restoreSession, tested on a synthetic model. Bottom: browser storage. Session snapshots (UR4SESS1) are verified on the synthetic stand-in; the download-once model cache is planned, not delivered. Solid wiring means verified on that stand-in; accepted-model parity and the model cache remain open. Integer adds, shifts and table look-ups are used, with hardware integer multiply and divide allowed by D80 and D81. Outside the window on the left, a static file host sends one dashed arrow in, labelled first visit only: page and model file, check SHA-256. On the right, local WASM mode keeps prompts on the device; an optional user-configured OpenAI-compatible API sends prompts to the user's chosen endpoint.</desc>
 <style>
 svg { --bg:#ffffff; --ink:#1f2328; --body:#2b3138; --muted:#57606a; --rule:#d0d7de; --panel:#f6f8fa;
       --blue:#0072b2; --sky:#56b4e9; --green:#007a5e; --orange:#e69f00; --verm:#d55e00; --purple:#7a4fa3; --pink:#cc79a7;
@@ -94,7 +94,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 <!-- Layer 3: browser storage (verified on the stand-in) -->
 <rect class="solid" x="230" y="438" width="520" height="76" rx="8"/>
 <text class="layer" x="246" y="460">Browser storage</text>
-<text class="note-plan" x="734" y="460" text-anchor="end">synthetic verified; accepted model open</text>
+<text class="note-plan" x="734" y="460" text-anchor="end">session verified; model cache planned</text>
 <path class="file" d="M262,470 L276,470 L284,478 L284,500 L262,500 Z"/>
 <text class="mono" x="294" y="490">model.uorlut01</text>
 <rect class="file" x="480" y="472" width="22" height="26" rx="3"/>

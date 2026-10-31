@@ -73,7 +73,7 @@ flowchart LR
 
 ## D
 
-**D-entries (D11, D22, D37 and the rest).** Numbered owner decisions, from D0 to D41, that used to be the project's rulebook. The charter now holds the rules that still bind, and the [decision map](../rules/decision-map.md) says what became of each decision. The ones you will meet most are [D11](#d11), [D22](#d22) and [D37](#d37).
+**D-entries (D11, D22, D37 and the rest).** Numbered owner decisions, from D0 to D41 plus later D67, D68, D72, D76, D77, D80, D81, D82 and D83, that used to be the project's rulebook. The charter now holds the rules that still bind, and the [decision map](../rules/decision-map.md) says what became of each decision. The ones you will meet most are [D11](#d11), [D22](#d22) and [D37](#d37).
 
 <a id="d11"></a>**D11.** The serving contract: the finished model runs with whole numbers only. It has five rules covering arithmetic, access, architecture and evidence. No floating point, transcendental arithmetic, dense matrix multiplication or transformer backbone is allowed; D80 and D81 (28 Oct 2026) permit the hardware integer multiply and divide. See [serving and export](../model/serving-and-export.md).
 
@@ -287,7 +287,7 @@ There is no "retired" status, by [D22](#d22). Source: [mechanism board](../mecha
 
 **WASM (WebAssembly).** A compact, sandboxed machine code that browsers run. The integer serving engine is built for it, with 7 of 7 serving functions free of float instructions (**measurement**). See [web client](../products/web-client.md).
 
-**Whole-table nearest (readout).** The chosen way to turn a final vector into a word: compare the vector with every row of the 4,096-word table and take the nearest. It was chosen over the native writer on 28 Oct because the writer's admission failed at seed 2 (top-1 493 against 6,909 for nearest, claude-150). The separate FBS session still reads its native writer; M1's readout is `OuterL1V1`. See [pipeline map](../model/pipeline-map.md).
+**Whole-table nearest (readout).** The chosen way to turn a final vector into a word: compare the vector with every row of the 4,096-word table and take the nearest. It was chosen over the native writer on 28 Oct because the writer's admission failed at seed 2 (top-1 493 against 6,909 for nearest, claude-150). Before claude-231 the separate FBS session read its native writer; claude-231 added `native_vector_nearest`, but claude-232 missed parity, so localization precedes p-x. M1's readout is `OuterL1V1`. See [pipeline map](../model/pipeline-map.md).
 
 **Writer (shared vector writer).** The one component that handles a token's vector on the way in, along the carry and on the way out, using the same format everywhere. It builds the cells and picks the nearest token among the admitted ones. See [architecture](../model/architecture.md).
 
