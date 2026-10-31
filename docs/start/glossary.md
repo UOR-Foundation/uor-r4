@@ -172,7 +172,7 @@ Source: [language model](../products/language-model.md) and [where we're going](
 
 **Matmul (matrix multiplication, GEMM).** Multiplying a long list of numbers by a large grid of learned numbers. It is nearly all the arithmetic of a transformer, and the project bans it everywhere: training, tests, tools and serving. A geometric feed-forward block is allowed. A dense one is not. See [charter](../../CHARTER.md), section 3.3.
 
-**Mechanism.** One geometric replacement for one part of a transformer, such as the read, the loss or the optimiser. The project tracks 28, each with its own page. See the [mechanism board](../mechanisms/README.md).
+**Mechanism.** One geometric replacement for one part of a transformer, such as the read, the loss or the optimiser. The project tracks 28 board entries, with the Hopf observation's two states sharing one page. See the [mechanism board](../mechanisms/README.md).
 
 <a id="mechanism-status"></a>**Mechanism status (ACTIVE, READY, PARKED).** The only three statuses a mechanism can have:
 - **ACTIVE**: on the current model path (12 mechanisms).

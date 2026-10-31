@@ -12,6 +12,7 @@ Every public number in this refresh must link to this sheet's committed evidence
   - seed 2 `1b49e8bd823a1021e31de55c767111f9cf43807d3e6d007644e49281935877de` (84,943,328 B).
 - **Composition:** Flock `FrozenZeroV1`, discrete Hamilton gate, discrete quaternion recurrence, `PositionHolonomyV1`, `OrbitRootSnapNormV1`, four-block orbit-root causal pointer, and post-rotation outer-L1 readout. The normalization is discrete, not the FBS RMS norm, and this is not the separately float-trained FBS trunk.
 - **Evidence split:** `docs/labs/m1-close-saved-model/evidence/m1-close-grade.json` covers bars (a)–(e) and is not called six-bar evidence. `docs/labs/m1-heldout-phrasing-transfer/evidence/panel-score.json` supplies bar (f). #2029 and `docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md` join them into the six-bar close.
+- **Decision authority:** [#2029 comment 6515151261](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6515151261) is headed `[claude] owner log: decision card, M1 complete (claude-211, 30 Oct 2026). Logged for Casey, and reversible.` It records claude-211's D67–D69 whole-chain review approving the close and supersession, not a direct owner sign-off. Claude-211 supplies bar (f); the owner log records the lab decision.
 
 ### M1 measured results
 
