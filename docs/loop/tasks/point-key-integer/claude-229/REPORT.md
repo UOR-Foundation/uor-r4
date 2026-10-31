@@ -18,9 +18,14 @@ Lab: claude. Item: [point-key-integer](../../../../roadmap/items/point-key-integ
     - The integer session serves the native writer, and computes nearest only beside it for timing (`stack_whole_table_nearest`).
     - PLACE.md's table has carried this gap since 29 Oct ("the served session still reads the native writer"). The planning of claude-225 through claude-229 did not re-read it.
 - **The sheet's instruments could not see it.** Every check compared the integer artifact with itself (served against greedy, the search against a reference scan), or the trunk's writer token with the GPU's writer token (claude-227). None compared integer greedy with the trained model's own decode. Three FIT rounds did not ask for that check either.
+- **No §4 check failed, so the row-0 reading goes past the sheet's letter.** By the letter, an all-false `carries` with every §4 check holding reads as row 3 ("carries at no seed").
+  - The decision (the claude lab's own decision review, §5.1, logged for Casey, who can reverse it) is that the result is not called: an instrument fault, read as row 0.
+  - The ground is CHARTER §4.1–4.2: classify instrument against mechanism before calling a result. A decoder that names the trained model's first token on 0 of 310 DEV prompts is not the model the bar tests.
+  - That evidence comes from DEV and p-w against claude-220's stored float replies, not from p-x (this unit's review).
 - **Nothing is counted, and form C's bar is untested in integers.**
-  - p-x was decoded and graded under the fault. Its reading carries no information about the mechanism: neither arm made a single template or exact match.
-  - The sheet's row 0 ("Repair in a new unit, then rerun") keeps p-x as the deciding panel.
+  - p-x was decoded and graded once, under the fault. Its reading carries no information about the mechanism: neither arm made a single template or exact match.
+  - The sheet's row 0 ("Repair in a new unit, then rerun") keeps p-x as the deciding panel. The rerun's sheet fixes its bar before reading, without consulting these outputs.
+- **The resident-memory figures were measured on the wrong decoder,** so they are provisional, like the timings.
 - **The CI check "harness rules and tests"** fails on DeepSeek's three documented-command REPORTs on main, not on this unit.
 
 ## What worked
@@ -29,12 +34,12 @@ Lab: claude. Item: [point-key-integer](../../../../roadmap/items/point-key-integ
   - every served opening matched the reference scan: 8,295 openings, `reference_checked` = `keyed` in all 24 decodes;
   - each `/8` table read back as built, with 212,968 rows (`I-Rows`);
   - no BOS was named;
-  - every artifact's sha256 equals its printed one, and `/7`'s `rec_gates` is `geometric-retention`;
+  - every artifact's sha256 equals its printed one, and every `/7` and `/8` header's `rec_gates` is `geometric-retention`;
   - the snapshots matched the store, each retained once, which closes claude-227's open check.
 - **The fresh panel p-x** (seed 2131, 1,200 conversations, 149,800 tokens): a byte-identical second draw, stored with its sums, and a census in which DEV's and Fresh V2's rows reproduce p-w's census exactly.
 - **The point table's build, on the laptop:** about 2,010 s a seed with the three in parallel, as a 200,000-token slice projected (51.7 s for 5,680 openings).
 - **The prompts:** 310, 1,202 and 393 per seed, as claude-224 found, and p-x at 1,204.
-- **Resident memory:** about 190.6 MB for greedy and 410 MB for served.
+- **Resident memory:** about 190.6 MB for greedy and 410 MB for served, on the wrong decoder, so provisional.
 
 ## What changed
 
