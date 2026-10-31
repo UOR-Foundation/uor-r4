@@ -6,7 +6,7 @@ area: serving
 status: ready
 open_to: lab
 needs_gpu: false
-depends_on: [one-model-end-to-end, turn-memory-integer, integer-retention-rates]
+depends_on: [one-model-end-to-end, turn-memory-integer, integer-retention-rates, integer-nearest-readout]
 notebook: docs/research/notebook/float-training.md
 scope: [crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/stack/memory.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/point_key.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/src/bin/fbs-point-key.rs, crates/uor-r4-integer/src/wasm_serve.rs, crates/uor-r4-integer/src/wasm_bindgen_exports.rs, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, docs/roadmap/items/point-key-integer.md, docs/harness/prep/point-key-integer*, docs/labs/point-key-integer/**, docs/loop/tasks/point-key-integer/**, docs/research/notebook/float-training.md]
 ---
@@ -110,7 +110,7 @@ The model throughout is (r-drop)'s sealed step-16,384 checkpoints at seeds 1–3
    - Done-when 2's instruments held (8,295 served openings), but integer greedy is not the trained model's decode: its first token equals claude-220's float greedy on 0 of 310 DEV prompts and 2 of 1,202 p-w prompts at seed 1.
    - The likely cause: (r-drop) is a cell-objective model, decoded as the whole table's nearest token, while the integer session serves the native writer.
    - Nothing was counted and no throughput is reported. p-x stays the deciding panel ([lab record](../../labs/point-key-integer/README.md)).
-5. **Serve the trained model's readout in the integer artifact,** under its own item, checked by end-to-end token parity against claude-220's stored float greedy on DEV and p-w. Then rerun unit 4's sheet on p-x, as its row 0 prescribes.
+5. **Serve the trained model's readout in the integer artifact,** under [`integer-nearest-readout`](integer-nearest-readout.md) (recorded by claude-230), checked by end-to-end token parity against claude-220's stored float greedy on DEV and p-w. Then rerun unit 4's sheet on p-x, as its row 0 prescribes, with an added `I-Greedy-Parity` check.
 
 ## Rules that apply
 
