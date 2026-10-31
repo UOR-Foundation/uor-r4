@@ -84,7 +84,7 @@ The model throughout is (r-drop)'s sealed step-16,384 checkpoints at seeds 1–3
 - **Which run goes where:** everything runs on the laptop's bit-exact integer engine. That covers builds, the finite unit tests, the export pass over TRAIN, the panel arms, the scoring of done-when 3 and 4, and tok/s and resident memory. The float references need no new run: they are claude-220's sealed served files.
 - **The owner's allowance (31 Oct 2026, in claude's chat).**
   - **The question:** CHARTER §3.6 keeps "panel scoring, qualification and milestone evaluation of an exported artifact" as GPU research compute, and the integer engine has no GPU path. Asked how this item's deciding panel is scored, the owner answered: "I want both. If the laptop bit-exact will allow us to proceed right now I think we should do that, but eventually we want the performance boost that we get by building our custom CUDA drivers".
-  - **What it covers:** this item's scoring, on the bit-exact laptop engine. The charter's text is unchanged; it is an owner path.
+  - **What it covers:** this item's scoring, on the bit-exact laptop engine, and nothing more. It is the owner's own answer, recorded here. `CHARTER.md` is an owner file, and its text is unchanged.
 - **Settle in the sheet:** the export pass's cost over TRAIN's 212,968 openings, and how it is split across the laptop's cores.
 
 ## Rules that apply

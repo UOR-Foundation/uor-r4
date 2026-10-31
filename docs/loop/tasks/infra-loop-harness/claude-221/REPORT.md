@@ -63,7 +63,8 @@ No measurement: this unit records an item.
 - `cargo run -q --locked -p xtask -- roadmap sync` (dry): exactly one create, nothing else.
 - `cargo run -q --locked -p xtask -- roadmap sync --apply`: created #3450 and wrote both generated files.
 - `cargo run -q --locked -p xtask -- roadmap render --check`: current.
-- **Nothing else changed:** no owner path, bar, status, other item or code. The rendered page changed only by the new item.
+- **Nothing else changed:** no owner file (`CHARTER.md` and the rest are untouched), no bar, status, other item or code. The rendered page changed only by the new item.
+- **The item records one owner answer:** the 31 Oct allowance to score this item on the bit-exact laptop engine, for this item only.
 
 ## Skills used
 
