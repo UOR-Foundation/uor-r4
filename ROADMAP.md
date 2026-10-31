@@ -17,7 +17,7 @@ closes only when its full bar is met on a saved model. The evidence and limitati
 | [M4 One served model](https://github.com/UOR-Foundation/uor-r4/issues/2032) | The chosen model exports to `UORLUT01`, with held-out quality at or below **0.90 BPB**, passes the full D11/CLI quality, session and audit bars, and reports its export gap | not complete; accepted model path not started |
 | [M5 Laptop cost](https://github.com/UOR-Foundation/uor-r4/issues/2033) | Measured energy per token, memory and tokens per second on an M1-class laptop, with selected parameter access reported | not started |
 | [M6 Reasoning and coding](https://github.com/UOR-Foundation/uor-r4/issues/2034) | Unseen multi-step compositions and executable coding tasks on the same model, with causal state/memory ablation | not started |
-| [M7 API, browser and Studio](https://github.com/UOR-Foundation/uor-r4/issues/2035) | Bit-identical tokens and sessions across library, CLI and browser on the accepted model; truthful client-only Studio | engine/harness delivered on a synthetic stand-in; accepted model open |
+| [M7 API, browser and Studio](https://github.com/UOR-Foundation/uor-r4/issues/2035) | Bit-identical tokens and sessions across library, CLI and browser on the accepted model; truthful local-by-default Studio, with optional user-configured web API | engine/harness delivered on a synthetic stand-in; accepted model open |
 | [M8 Alpha release](https://github.com/UOR-Foundation/uor-r4/issues/2036) | One versioned, checksum-pinned artifact meets M1–M7, with reproducible installation and independent consumer-hardware verification | not started |
 
 M1's two-seed results are **7,002 / 7,001** on DEV (T2 6,300), **7,215 / 7,228** on Fresh V2

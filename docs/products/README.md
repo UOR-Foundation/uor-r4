@@ -63,7 +63,7 @@ memory keys on exact first token ids and misses reworded prompts. [Claude-220](.
 1. **M2 and M3** produce complete grounded replies and durable memory on the selected model.
 2. **M4** exports and qualifies that model through D11 and the command line.
 3. **M5** measures laptop cost, **M6** adds reasoning and coding on the same model.
-4. **M7** proves library/CLI/browser parity and truthful client-only Studio behavior.
+4. **M7** proves library/CLI/browser parity and truthful local-by-default Studio behavior, with optional user-configured web API.
 5. **M8** releases one versioned, checksum-pinned model that meets every earlier bar.
 
 The desktop client rides on M3 for memory, M5 for laptop cost and M7 for the shared interface.

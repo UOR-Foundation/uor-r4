@@ -98,7 +98,7 @@ quality, CLI, session and audit path; M7's distribution check is separate.
 | M4 | **It is served.** Accepted model and export gap; held-out quality **≤0.90 BPB**; M1–M3 bars through `uor-chat`; bit-identical continuation after restore; full CLI/session/audit path | Not complete; accepted model path not started |
 | M5 | **It is cheap on a laptop.** Latency, memory, energy and selected access measured | Not started |
 | M6 | **It reasons and codes.** Frozen tasks with executable oracles and causal ablation | Not started |
-| M7 | **It runs everywhere the same.** Library, CLI and browser parity plus client-only Studio | Runtime/harness on synthetic stand-in; accepted model open |
+| M7 | **It runs everywhere the same.** Library, CLI and browser parity plus a local-by-default Studio with optional user-configured web API | Runtime/harness on synthetic stand-in; accepted model open |
 | M8 | **It is released.** One versioned, checksum-pinned artifact meeting M1–M7 | Not started |
 
 M4's quality work includes a lawful likelihood (`PRLL`), but GPU held-out scoring remains open. M1

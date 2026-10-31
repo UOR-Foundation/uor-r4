@@ -109,8 +109,8 @@ rather than memorized templates.
 
 The accepted M4 `UORLUT01` artifact produces bit-identical token completions and session snapshots
 across the Rust library, CLI and browser `serving-wasm` worker. The `.wasm` passes its declared
-serving audit, and Pages Studio runs entirely client-side with truthful capability reporting and no
-remote model calls. Existing synthetic-stand-in parity is an instrument result, not M7 completion.
+serving audit, and Pages Studio defaults to client-side operation with truthful capability reporting;
+only an explicit user-configured web API sends prompts to the chosen endpoint. Existing synthetic-stand-in parity is an instrument result, not M7 completion.
 
 ### M8 `#2036` — alpha release: not started
 

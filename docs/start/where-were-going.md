@@ -22,7 +22,7 @@ Terms are in the [glossary](./glossary.md). Labels are **proof**, **measurement*
 | M4 | One served model | The accepted model through D11 and the command line, with held-out quality at or below **0.90 BPB**, export-gap and session bars | Not complete; accepted model path not started | [#2032](https://github.com/UOR-Foundation/uor-r4/issues/2032) |
 | M5 | Laptop cost | Energy, memory, latency and selected parameter access on an M1-class laptop | Not started | [#2033](https://github.com/UOR-Foundation/uor-r4/issues/2033) |
 | M6 | Reasoning and coding | Unseen multi-step and executable coding tasks on the same model, with causal ablation | Not started | [#2034](https://github.com/UOR-Foundation/uor-r4/issues/2034) |
-| M7 | API, browser and Studio | Bit-identical tokens and sessions across library, CLI and browser, with truthful client-only Studio | Runtime/harness on synthetic stand-in; accepted model open | [#2035](https://github.com/UOR-Foundation/uor-r4/issues/2035) |
+| M7 | API, browser and Studio | Bit-identical tokens and sessions across library, CLI and browser, with truthful local-by-default Studio, with optional user-configured web API | Runtime/harness on synthetic stand-in; accepted model open | [#2035](https://github.com/UOR-Foundation/uor-r4/issues/2035) |
 | M8 | Alpha release | One versioned, checksum-pinned model meeting M1–M7, independently verified | Not started | [#2036](https://github.com/UOR-Foundation/uor-r4/issues/2036) |
 
 A milestone closes only when its full bar is met on a saved model. M1's close does not imply M2 or
@@ -71,7 +71,7 @@ Stopping a loop does not repair a reply that began wrong
   and audit path. A lawful likelihood (`PRLL`) exists, but GPU held-out scoring remains open.
 - **M5:** measure real laptop cost rather than infer efficiency from arithmetic counts.
 - **M6:** add reasoning and coding on the same model with executable checks and causal ablation.
-- **M7:** prove library/CLI/browser parity on the accepted model and ship a truthful client-only Studio.
+- **M7:** prove library/CLI/browser parity on the accepted model and ship a truthful local-by-default Studio, with optional user-configured web API.
 - **M8:** cut one versioned, checksum-pinned release and verify it independently on consumer hardware.
 
 ## The three products at the end

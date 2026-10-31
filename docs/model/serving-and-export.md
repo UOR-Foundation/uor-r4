@@ -112,7 +112,7 @@ than assuming table lookup implies sparsity.
 
 The web client is connected to the current integer worker. DeepSeek's #3442/#3444 rebuilt and
 published the Studio; #3445 then wired the publicly released M1 trunk for top-8 next-token
-prediction, and #3446 served `/7` integer turn memory. The M1 model is a language base, not a chat assistant;
+prediction, and #3446 served `/7` integer turn memory on synthetic fixtures; trained-artifact parity and memory-session restore remain open. The M1 model is a language base, not a chat assistant;
 accepted-model parity remains open. The mdBook workflow publishes preview on main and production
 only by manual dispatch. This documentation unit publishes neither.
 

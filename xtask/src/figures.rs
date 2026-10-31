@@ -430,7 +430,7 @@ fn architecture() -> Result<String, Fail> {
         [40.0, 530.0, 340.0, 66.0],
         St::Complete,
         "M1 complete (discrete)",
-        &["six bars, two seeds; exact D11 export"],
+        &["six bars, two seeds; exact DEV export"],
         false,
     );
     s.card(
@@ -1187,7 +1187,7 @@ fn milestones() -> Result<String, Fail> {
                 "six bars, two seeds:",
                 "DEV 7,002 / 7,001;",
                 "p-f 7,850 / 7,872;",
-                "complete",
+                "Fresh V2 7,215 / 7,228",
             ],
         ),
         (

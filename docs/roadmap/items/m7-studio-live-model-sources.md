@@ -26,7 +26,7 @@ This item is the source-repo change and the built-artifact publish. The Pages wo
 
 - The published /studio/ was the old deploy: CDN loads, old router engine, stale engine-status banner, and no working wasm bundle at studio/pkg/uor_r4_integer*.
 - The wasm bundle was not built by any workflow and web/studio/pkg is gitignored; the build recipe existed only in web/README.md and the verification scripts.
-- At item start, the engine parsed uor-r4.lut-stack/1-7 and served /1-/6, refusing a /7 turn-memory stack; the Studio worker accepted only /1. The source page already had a local UORLUT01 file loader and Model Manager, gated to /1, with no model URL or remote-API source. **Current:** `/7` turn memory is served; memory-session restore/export/import remains open until its turn state is saved.
+- At item start, the engine parsed uor-r4.lut-stack/1-7 and served /1-/6, refusing a /7 turn-memory stack; the Studio worker accepted only /1. The source page already had a local UORLUT01 file loader and Model Manager, gated to /1, with no model URL or remote-API source. **Current:** `/7` turn memory is served on synthetic fixtures; trained-artifact parity and memory-session restore/export/import remain open until its turn state is saved.
 - The page was visually cluttered: ~7k lines with inline CSS, repeated status/provenance blocks, stale "frozen per D36" and "0/8 milestones" claims, and no model-source panel.
 - No documented, repeatable publish step existed for agents or the owner; the workflow path filter excluded web/** and crates/uor-r4-integer/**.
 

@@ -69,7 +69,7 @@
 <text x="40" y="512" font-size="14" font-weight="700" fill="#0072B2" text-anchor="start">M1 COMPLETE · CURRENT GAPS IN PLAN.md</text>
 <rect x="40" y="530" width="340" height="66" rx="10" fill="#E3F4EE" stroke="#007A5E" stroke-width="2.5"/>
 <text x="54" y="556" font-size="15" font-weight="700" fill="#1F2328" text-anchor="start">M1 complete (discrete)</text>
-<text x="54" y="577" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">six bars, two seeds; exact D11 export</text>
+<text x="54" y="577" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">six bars, two seeds; exact DEV export</text>
 <rect x="406" y="530" width="350" height="66" rx="10" fill="url(#hP)" stroke="#B87A00" stroke-width="2"/>
 <text x="420" y="556" font-size="15" font-weight="700" fill="#1F2328" text-anchor="start">New-phrasing opening</text>
 <text x="420" y="577" font-size="12.5" font-weight="400" fill="#2B3138" text-anchor="start">memory key that reworded questions reach</text>
