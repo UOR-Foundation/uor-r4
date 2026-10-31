@@ -4,164 +4,348 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="dark light">
-    <meta name="description" content="UOR-R4 Studio: an offline-first editor and chat interface for the geometric language model project. The local model runs in a Web Worker; an optional OpenAI-compatible API can be configured.">
-    <title>UOR-R4 Studio</title>
+    <meta name="description" content="UOR-R4 Studio: an offline-first agent console for the geometric language model project.">
+    <title>UOR-R4 Studio — agent console</title>
     <link rel="stylesheet" href="./assets/css/uor_offline_fonts.css">
     <link rel="stylesheet" href="./index.css">
+    <script>
+        (function () {
+            try {
+                var stored = window.localStorage.getItem('uor.studio.theme');
+                var params = new URLSearchParams(window.location.search);
+                var requested = params.get('theme') || (window.location.hash === '#theme=light' ? 'light' : (window.location.hash === '#theme=dark' ? 'dark' : null));
+                var theme = stored === 'light' || stored === 'dark' ? stored : requested;
+                if (theme !== 'light' && theme !== 'dark') {
+                    theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+                }
+                document.documentElement.dataset.theme = theme;
+                document.documentElement.style.colorScheme = theme;
+            } catch (error) {
+                document.documentElement.dataset.theme = 'dark';
+            }
+        }());
+    </script>
 </head>
-<body>
-    <a class="skip-link" href="#chatPanel">Skip to chat</a>
-    <div class="app" id="app">
-        <header class="app-header">
-            <div class="brand">
-                <div class="brand-mark" aria-hidden="true">R4</div>
-                <div class="brand-text">
-                    <div class="brand-title">UOR-R4 <span>Studio</span></div>
-                    <div class="brand-subtitle">Local-first geometric language model</div>
+<body data-view="chat">
+    <a class="skip-link" href="#chatInput">Skip to composer</a>
+    <div class="app-shell" id="app" data-rail="expanded" data-sidebar="expanded" data-inspector="expanded">
+        <header class="topbar" role="banner">
+            <div class="topbar-left">
+                <button class="icon-btn rail-toggle" id="btnToggleRail" type="button" aria-label="Collapse icon rail" aria-expanded="true" title="Toggle rail">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h10"/></svg>
+                </button>
+                <div class="brand-lockup" aria-label="UOR-R4 Studio">
+                    <span class="brand-glyph" aria-hidden="true">◈</span>
+                    <span class="brand-word">UOR</span>
+                    <span class="brand-micro">STUDIO</span>
                 </div>
-            </div>
-            <div class="header-status" aria-label="Project and runtime status">
+                <nav class="breadcrumb" aria-label="Workspace">
+                    <span class="crumb-dim">uor-r4</span><span class="crumb-sep">/</span><span class="crumb-main">main</span>
+                </nav>
                 <span class="chip" id="projectStatus" data-tone="accent" title="M1 closed on 30 October 2026; no useful conversation is established yet.">
                     <span class="chip-dot" aria-hidden="true"></span>Pre-alpha · M1 complete · 1 of 8 milestones
                 </span>
-                <span class="chip" id="engineStatus" data-tone="warn" title="Browser engine state">
-                    <span class="chip-dot" aria-hidden="true"></span>Engine: starting
-                </span>
-                <span class="chip" id="modelStatus" data-tone="muted" title="Active model source">
-                    <span class="chip-dot" aria-hidden="true"></span>No model loaded
-                </span>
-                <span class="chip" id="privacyStatus" data-tone="ok" title="Where prompts are processed">
-                    <span class="chip-dot" aria-hidden="true"></span>Local only
-                </span>
             </div>
-            <div class="header-actions">
-                <div class="view-switcher" role="group" aria-label="Studio panes">
-                    <button class="btn btn-ghost" id="viewBtnChat" type="button" aria-pressed="true">Chat</button>
-                    <button class="btn btn-ghost" id="viewBtnModel" type="button" aria-pressed="false">Model</button>
-                    <button class="btn btn-ghost" id="viewBtnEditor" type="button" aria-pressed="false">Editor</button>
+            <div class="topbar-center">
+                <button class="command-search" id="commandSearch" type="button" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K" title="Search or run a command">
+                    <svg class="command-search-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4"/><path d="m10 10 3.2 3.2"/></svg>
+                    <span>Search or run a command</span>
+                    <kbd class="kbd">⌘K</kbd>
+                </button>
+                <div class="segmented" role="group" aria-label="View switch">
+                    <button class="seg-btn" id="viewBtnChat" type="button" aria-pressed="true">Chat</button>
+                    <button class="seg-btn" id="viewBtnModel" type="button" aria-pressed="false">Model</button>
+                    <button class="seg-btn" id="viewBtnEditor" type="button" aria-pressed="false">Editor</button>
                 </div>
-                <button class="btn btn-secondary" id="btnOpenModelSources" type="button">Model sources</button>
-                <button class="btn btn-primary" id="btnNewChatTop" type="button">New chat</button>
+            </div>
+            <div class="topbar-right">
+                <button class="icon-btn" id="btnTheme" type="button" aria-label="Toggle color theme" title="Toggle theme">
+                    <svg class="icon-sun" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.4 1.4M11.55 11.55l1.4 1.4M12.95 3.05l-1.4 1.4M4.45 11.55l-1.4 1.4"/></svg>
+                    <svg class="icon-moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 9.6A6 6 0 0 1 6.4 2.5a6 6 0 1 0 7.1 7.1z"/></svg>
+                </button>
+                <button class="icon-btn" id="btnNewChatTop" type="button" aria-label="New chat" title="New chat">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>
+                </button>
+                <button class="icon-btn mobile-only" id="btnMobileMenu" type="button" aria-label="Open sessions" aria-expanded="false" title="Sessions">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h8"/></svg>
+                </button>
             </div>
         </header>
 
-        <main class="workspace" aria-label="Studio workspace">
-            <aside class="panel model-panel" id="modelSourcesPanel" aria-label="Model sources and conversations">
-                <div class="panel-header">
-                    <h2 class="panel-title">Sources &amp; sessions</h2>
+        <div class="shell-body">
+            <nav class="rail" id="rail" aria-label="Primary navigation">
+                <button class="rail-btn" id="railChat" type="button" aria-label="Chat" title="Chat" aria-pressed="true">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 4h14v9H8l-4 3v-3H3z"/></svg>
+                </button>
+                <button class="rail-btn" id="railModel" type="button" aria-label="Model sources" title="Model sources" aria-pressed="false">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5 17 6v8l-7 3.5L3 14V6z"/><path d="M3 6l7 3.5L17 6M10 9.5v8"/></svg>
+                </button>
+                <button class="rail-btn" id="railEditor" type="button" aria-label="Editor" title="Editor" aria-pressed="false">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h9l3 3v11H4z"/><path d="M7 8h6M7 11h6M7 14h4"/></svg>
+                </button>
+                <span class="rail-divider" aria-hidden="true"></span>
+                <button class="rail-btn" id="btnToggleSidebar" type="button" aria-label="Toggle sessions sidebar" aria-expanded="true" title="Toggle sessions">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 4h14v12H3zM8 4v12"/></svg>
+                </button>
+                <button class="rail-btn" id="railPalette" type="button" aria-label="Command palette" title="Command palette ⌘K">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5h12M4 10h12M4 15h8"/></svg>
+                </button>
+                <button class="rail-btn" id="railTheme" type="button" aria-label="Toggle color theme" title="Toggle theme">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="4"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2"/></svg>
+                </button>
+                <button class="rail-btn" id="railHelp" type="button" aria-label="Keyboard help" title="Keyboard help">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M8 8a2 2 0 1 1 2.6 1.9c-.4.2-.6.5-.6.9v.6"/><circle cx="10" cy="14" r="0.6"/></svg>
+                </button>
+                <span class="rail-spacer" aria-hidden="true"></span>
+                <button class="rail-btn" id="railSessionsBottom" type="button" aria-label="New chat" title="New chat">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>
+                </button>
+            </nav>
+
+            <aside class="sidebar" id="sidebar" aria-label="Sessions and environment">
+                <div class="sidebar-head">
+                    <span class="micro-label">SESSIONS</span>
+                    <span class="sidebar-head-actions">
+                        <button class="icon-btn icon-btn-sm" id="btnNewChat" type="button" aria-label="New chat" title="New chat"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
+                        <button class="icon-btn icon-btn-sm" id="btnSidebarCollapse" type="button" aria-label="Collapse sidebar" title="Collapse sidebar"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg></button>
+                    </span>
                 </div>
-                <div class="panel-body">
-                    <div id="modelSourceMount"></div>
-                    <section class="source-group" aria-label="Conversations">
-                        <h3>Conversations</h3>
-                        <button class="btn btn-secondary btn-small" id="btnNewChat" type="button">New chat</button>
-                        <div class="conversation-list" id="conversationList" aria-live="polite"></div>
-                        <p class="hint">Sessions are stored in this browser. Local-mode checkpoints keep the engine state so a reload can continue a reply stream.</p>
-                    </section>
+                <label class="sidebar-search" for="sessionSearch">
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4"/><path d="m10 10 3.2 3.2"/></svg>
+                    <input id="sessionSearch" type="search" placeholder="Filter sessions…" autocomplete="off" spellcheck="false">
+                </label>
+                <div class="conversation-list" id="conversationList" aria-live="polite"></div>
+                <div class="environment-card" aria-label="Environment">
+                    <div class="environment-head"><span class="micro-label">ENVIRONMENT</span><span class="dot dot-ok" aria-hidden="true"></span></div>
+                    <dl class="env-rows">
+                        <div><dt>OFFLINE</dt><dd>yes</dd></div>
+                        <div><dt>ENGINE</dt><dd id="envEngine">starting</dd></div>
+                        <div><dt>MODEL</dt><dd id="envModel">none</dd></div>
+                        <div><dt>TOKENIZER</dt><dd id="envTokenizer">awaiting model</dd></div>
+                    </dl>
+                    <button class="ghost-btn" id="btnOpenModelSources" type="button">Model sources <span aria-hidden="true">→</span></button>
                 </div>
             </aside>
 
-            <section class="panel chat-panel" id="chatPanel" aria-label="Chat">
-                <div class="panel-header">
-                    <h2 class="panel-title">Chat</h2>
-                    <span class="badge" id="chatSourceBadge">Local WASM</span>
-                    <button class="btn btn-ghost btn-small" id="btnNewChat2" type="button">New</button>
-                </div>
-                <div class="chat-scroll" id="chatScroll">
-                    <div class="chat-messages" id="chatMessages" aria-live="polite" aria-relevant="additions text"></div>
-                </div>
-                <div class="composer">
-                    <div class="composer-inner">
-                        <div class="composer-box">
-                            <label class="visually-hidden" for="chatInput">Message</label>
-                            <textarea id="chatInput" rows="1" placeholder="Write a prompt. Enter sends, Shift+Enter adds a line."></textarea>
-                            <button class="btn btn-primary" id="btnSend" type="button">Send</button>
-                            <button class="btn btn-secondary" id="btnStop" type="button" hidden>Stop</button>
+            <main class="main-column" id="mainColumn">
+                <section class="view chat-panel" id="chatPanel" data-view="chat" aria-label="Chat">
+                    <header class="view-head">
+                        <div class="view-head-text">
+                            <h1 class="panel-title" id="chatViewTitle">Chat</h1>
+                            <p class="view-subtitle">Integer-only geometric model · local WASM runtime</p>
                         </div>
-                        <div class="composer-meta">
-                            <span id="generationMetrics">Ready</span>
-                            <span class="spacer"></span>
-                            <span class="composer-hint">Enter sends · Shift+Enter adds a line</span>
+                        <div class="view-head-actions">
+                            <span class="badge" id="chatSourceBadge">Local WASM</span>
+                            <button class="ghost-btn" id="btnNewChat2" type="button">New chat</button>
+                            <button class="icon-btn icon-btn-sm inspector-toggle" id="btnToggleInspector" type="button" aria-label="Toggle context inspector" aria-expanded="true" title="Toggle context inspector"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3H3v10h7M6 3v10M12 6l2 2-2 2"/></svg></button>
                         </div>
-                    </div>
-                </div>
-                <div class="predictor" id="predictorPane" hidden>
-                    <div class="predictor-inner">
-                        <div class="predictor-head">
-                            <h2 class="predictor-title" id="predictorTitle">Next-token predictor</h2>
-                            <span class="badge" id="predictorBadge">M1 language base</span>
+                    </header>
+                    <div class="chat-body">
+                        <div class="chat-scroll" id="chatScroll">
+                            <div class="chat-messages" id="chatMessages" aria-live="polite" aria-relevant="additions text"></div>
                         </div>
-                        <p class="hint" id="predictorNote">M1 is a language base, not a chat assistant; the browser runtime serves top-8 next-token prediction, greedy continuation repeats tokens.</p>
-                        <label class="field" for="predictorInput">
-                            <span class="field-label">Prompt</span>
-                            <textarea id="predictorInput" class="input" rows="3" placeholder="Type a short prompt; the tokenizer turns it into integer token ids."></textarea>
-                        </label>
-                        <div class="predictor-actions">
-                            <button class="btn btn-primary" id="btnPredict" type="button">Predict top 8 next tokens</button>
-                            <span class="hint" id="predictorStatus" role="status" aria-live="polite">Load the M1 model to enable prediction.</span>
-                        </div>
-                        <div class="predictor-result" id="predictorResult" hidden>
-                            <div class="predictor-meta">
-                                <span id="predictorPrediction"></span>
-                                <span id="predictorMs"></span>
-                                <span class="chip" id="predictorSha" data-tone="muted"><span class="chip-dot" aria-hidden="true"></span>sha256 unverified</span>
-                                <span id="predictorModelInfo"></span>
+                        <div class="composer">
+                            <div class="composer-inner">
+                                <div class="composer-box">
+                                    <span class="composer-prompt" aria-hidden="true">›</span>
+                                    <label class="visually-hidden" for="chatInput">Message</label>
+                                    <textarea id="chatInput" rows="1" placeholder="Ask the model, or run a command with ⌘K"></textarea>
+                                    <button class="send-btn" id="btnSend" type="button" aria-label="Send message" title="Send (Enter)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4"/></svg></button>
+                                    <button class="stop-btn" id="btnStop" type="button" hidden>Stop</button>
+                                </div>
+                                <div class="composer-meta">
+                                    <span id="generationMetrics">Ready</span>
+                                    <span class="spacer"></span>
+                                    <span class="composer-hint">Enter sends · Shift+Enter adds a line · Esc stops</span>
+                                </div>
                             </div>
-                            <ol class="predictor-top" id="predictorTop"></ol>
-                            <p class="hint">Top-8 token ids and their decoded text. Greedy continuation from the M1 base repeats tokens, so these are not fluent continuations; the browser runtime exposes next-token prediction only.</p>
+                        </div>
+                        <div class="predictor" id="predictorPane" hidden>
+                            <div class="predictor-inner">
+                                <div class="predictor-head">
+                                    <h2 class="predictor-title" id="predictorTitle">Next-token predictor</h2>
+                                    <span class="badge" id="predictorBadge">M1 language base</span>
+                                </div>
+                                <p class="hint" id="predictorNote">M1 is a language base, not a chat assistant; the browser runtime serves top-8 next-token prediction, greedy continuation repeats tokens.</p>
+                                <label class="field" for="predictorInput">
+                                    <span class="field-label">Prompt</span>
+                                    <textarea id="predictorInput" class="input" rows="3" placeholder="Type a short prompt; the stack-bound tokenizer turns it into integer token ids."></textarea>
+                                </label>
+                                <div class="predictor-actions">
+                                    <button class="primary-btn" id="btnPredict" type="button">Predict top 8 next tokens</button>
+                                    <span class="hint" id="predictorStatus" role="status" aria-live="polite">Load the M1 model to enable prediction.</span>
+                                </div>
+                                <div class="predictor-result" id="predictorResult" hidden>
+                                    <div class="predictor-meta">
+                                        <span id="predictorPrediction"></span>
+                                        <span id="predictorMs"></span>
+                                        <span class="chip" id="predictorSha" data-tone="muted"><span class="chip-dot" aria-hidden="true"></span>sha256 unverified</span>
+                                        <span id="predictorModelInfo"></span>
+                                    </div>
+                                    <ol class="predictor-top" id="predictorTop"></ol>
+                                    <p class="hint">Top-8 token ids and their decoded text. Greedy continuation from the M1 base repeats tokens, so these are not fluent continuations; the browser runtime exposes next-token prediction only.</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </section>
+                </section>
 
-            <section class="panel editor-panel" id="editorPanel" aria-label="Editor">
-                <div class="panel-header">
-                    <h2 class="panel-title">Editor</h2>
-                    <span class="badge" id="editorSavedBadge">Saved locally</span>
-                </div>
-                <div class="panel-body">
-                    <div class="editor-toolbar">
-                        <label class="visually-hidden" for="editorFileName">Document name</label>
-                        <input class="editor-name" id="editorFileName" value="notes.md" autocomplete="off" spellcheck="false">
-                        <label class="visually-hidden" for="editorLanguage">Document language</label>
-                        <select class="editor-lang" id="editorLanguage">
-                            <option value="markdown">Markdown</option>
-                            <option value="text">Text</option>
-                            <option value="rust">Rust</option>
-                            <option value="json">JSON</option>
-                            <option value="html">HTML</option>
-                            <option value="css">CSS</option>
-                        </select>
-                        <button class="btn btn-ghost btn-small" id="btnEditorNew" type="button">New</button>
-                        <button class="btn btn-ghost btn-small" id="btnEditorOpen" type="button">Open</button>
-                        <button class="btn btn-ghost btn-small" id="btnEditorDownload" type="button">Download</button>
-                        <button class="btn btn-secondary btn-small" id="btnEditorCopy" type="button">Copy</button>
-                        <button class="btn btn-primary btn-small" id="btnEditorUsePrompt" type="button">Use as prompt</button>
+                <section class="view model-view" id="modelView" data-view="model" aria-label="Model sources">
+                    <header class="view-head">
+                        <div class="view-head-text">
+                            <h1 class="panel-title">Model</h1>
+                            <p class="view-subtitle">Local WASM artifacts, published trained models and OpenAI-compatible APIs</p>
+                        </div>
+                        <div class="view-head-actions">
+                            <span class="badge">on-device first</span>
+                            <button class="icon-btn icon-btn-sm inspector-toggle" id="btnToggleInspector2" type="button" aria-label="Toggle context inspector" aria-expanded="true" title="Toggle context inspector"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3H3v10h7M6 3v10M12 6l2 2-2 2"/></svg></button>
+                        </div>
+                    </header>
+                    <div class="model-view-body" id="modelViewMount">
+                        <aside class="model-sources-panel" id="modelSourcesPanel" aria-label="Model sources">
+                            <div class="providers-head">
+                                <div>
+                                    <span class="micro-label">PROVIDERS</span>
+                                    <p class="hint">Local WASM artifacts, the published M1 trunk and OpenAI-compatible APIs. A remote model or API is only contacted after your explicit click.</p>
+                                </div>
+                                <span class="badge">on-device first</span>
+                            </div>
+                            <div id="modelSourceMount"></div>
+                        </aside>
                     </div>
-                    <label class="visually-hidden" for="editorText">Editor content</label>
-                    <textarea id="editorText" spellcheck="false" placeholder="Draft a prompt or a snippet here. Nothing is uploaded."></textarea>
-                    <div class="editor-statusbar">
-                        <span id="editorStats">0 lines</span>
-                        <span class="spacer"></span>
-                        <span id="editorUnsaved">Saved</span>
-                    </div>
-                    <p class="editor-hint">Kept in this browser's local storage. Use as prompt sends the document to the chat composer, never to a server.</p>
-                </div>
-                <input class="visually-hidden" id="editorFileInput" type="file" accept=".md,.txt,.rs,.json,.html,.css,.js,.toml,.yml,.yaml">
-            </section>
-        </main>
+                </section>
 
-        <footer class="app-footer">
-            <span class="footer-offline" id="footerOffline">Offline-first interface: no external requests are made while the page loads.</span>
-            <span class="footer-detail" id="footerEngine">Engine: starting</span>
-            <span class="footer-detail" id="footerTokenizer">Tokenizer: awaiting model</span>
-            <span class="spacer"></span>
-            <span class="footer-detail" id="footerStorage">Storage: unknown</span>
+                <section class="view editor-panel" id="editorPanel" data-view="editor" aria-label="Editor">
+                    <header class="view-head">
+                        <div class="view-head-text">
+                            <h1 class="panel-title">Editor</h1>
+                            <p class="view-subtitle">Plain-text scratchpad · stored in this browser only</p>
+                        </div>
+                        <div class="view-head-actions">
+                            <span class="badge" id="editorSavedBadge">Saved locally</span>
+                            <button class="icon-btn icon-btn-sm inspector-toggle" id="btnToggleInspector3" type="button" aria-label="Toggle context inspector" aria-expanded="true" title="Toggle context inspector"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3H3v10h7M6 3v10M12 6l2 2-2 2"/></svg></button>
+                        </div>
+                    </header>
+                    <div class="editor-shell">
+                        <div class="editor-toolbar" role="toolbar" aria-label="Editor actions">
+                            <label class="visually-hidden" for="editorFileName">Document name</label>
+                            <input class="editor-name" id="editorFileName" value="notes.md" autocomplete="off" spellcheck="false">
+                            <label class="visually-hidden" for="editorLanguage">Document language</label>
+                            <select class="editor-lang" id="editorLanguage">
+                                <option value="markdown">Markdown</option>
+                                <option value="text">Text</option>
+                                <option value="rust">Rust</option>
+                                <option value="json">JSON</option>
+                                <option value="html">HTML</option>
+                                <option value="css">CSS</option>
+                            </select>
+                            <span class="toolbar-sep" aria-hidden="true"></span>
+                            <button class="ghost-btn" id="btnEditorNew" type="button">New</button>
+                            <button class="ghost-btn" id="btnEditorOpen" type="button">Open</button>
+                            <button class="ghost-btn" id="btnEditorDownload" type="button">Download</button>
+                            <button class="ghost-btn" id="btnEditorCopy" type="button">Copy</button>
+                            <button class="primary-btn primary-btn-sm" id="btnEditorUsePrompt" type="button">Use as prompt</button>
+                        </div>
+                        <label class="visually-hidden" for="editorText">Editor content</label>
+                        <textarea id="editorText" class="editor-area" spellcheck="false" placeholder="Draft a prompt or a snippet here. Nothing is uploaded."></textarea>
+                        <div class="editor-statusbar">
+                            <span id="editorStats">0 lines</span>
+                            <span class="spacer"></span>
+                            <span id="editorUnsaved">Saved</span>
+                        </div>
+                        <p class="editor-hint">Kept in this browser's local storage. Use as prompt sends the document to the chat composer, never to a server.</p>
+                    </div>
+                    <input class="visually-hidden" id="editorFileInput" type="file" accept=".md,.txt,.rs,.json,.html,.css,.js,.toml,.yml,.yaml">
+                </section>
+            </main>
+
+            <aside class="inspector" id="inspector" aria-label="Context inspector">
+                <div class="inspector-head">
+                    <span class="micro-label">CONTEXT</span>
+                    <button class="icon-btn icon-btn-sm" id="btnInspectorCollapse" type="button" aria-label="Collapse context inspector" title="Collapse inspector"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></button>
+                </div>
+                <div class="inspector-scroll">
+                    <section class="ctx-card" aria-label="Active model">
+                        <div class="ctx-card-head"><span class="micro-label">ACTIVE MODEL</span><span class="dot dot-muted" id="ctxModelDot" aria-hidden="true"></span></div>
+                        <p class="ctx-model-label" id="ctxModelLabel">No model loaded</p>
+                        <p class="ctx-model-meta" id="ctxModelMeta">Load the synthetic demo or a trained stack artifact.</p>
+                        <p class="ctx-model-sha" id="ctxModelSha" hidden></p>
+                        <div class="ctx-actions">
+                            <button class="ghost-btn" id="ctxLoadModel" type="button">Manage model sources</button>
+                        </div>
+                    </section>
+                    <section class="ctx-card" aria-label="Runtime">
+                        <div class="ctx-card-head"><span class="micro-label">RUNTIME</span></div>
+                        <dl class="ctx-rows">
+                            <div><dt>ENGINE</dt><dd id="ctxEngine">starting</dd></div>
+                            <div><dt>TOKENIZER</dt><dd id="ctxTokenizer">awaiting model</dd></div>
+                            <div><dt>PRIVACY</dt><dd id="ctxPrivacy">local only</dd></div>
+                            <div><dt>STORAGE</dt><dd id="ctxStorage">unknown</dd></div>
+                            <div><dt>WEIGHTS/TOK</dt><dd id="ctxWeights">—</dd></div>
+                            <div><dt>CHECKPOINT</dt><dd id="ctxCheckpoint">—</dd></div>
+                        </dl>
+                    </section>
+                    <section class="ctx-card" aria-label="Keyboard shortcuts">
+                        <div class="ctx-card-head"><span class="micro-label">SHORTCUTS</span></div>
+                        <ul class="shortcut-list">
+                            <li><kbd class="kbd">⌘K</kbd><span>Command palette</span></li>
+                            <li><kbd class="kbd">Enter</kbd><span>Send message</span></li>
+                            <li><kbd class="kbd">Esc</kbd><span>Stop generation</span></li>
+                            <li><kbd class="kbd">⌘B</kbd><span>Toggle sessions</span></li>
+                        </ul>
+                    </section>
+                </div>
+            </aside>
+        </div>
+
+        <footer class="statusbar" role="contentinfo">
+            <div class="status-left">
+                <span class="status-brand" aria-hidden="true">◈</span>
+                <span class="status-item">uor-r4</span>
+                <span class="status-sep" aria-hidden="true">/</span>
+                <span class="status-item" id="footerBranch">main</span>
+                <span class="status-sep" aria-hidden="true">/</span>
+                <span class="status-item footer-offline" id="footerOffline" title="Offline-first interface: no external requests are made while the page loads.">Offline-first interface: no external requests are made while the page loads.</span>
+            </div>
+            <div class="status-middle">
+                <span class="chip chip-status" id="engineStatus" data-tone="warn" title="Browser engine state"><span class="chip-dot" aria-hidden="true"></span>Engine: starting</span>
+                <span class="chip chip-status" id="modelStatus" data-tone="muted" title="Active model source"><span class="chip-dot" aria-hidden="true"></span>No model loaded</span>
+                <span class="status-item status-verbose" id="footerTokenizer">Tokenizer: awaiting model</span>
+                <span class="status-item status-verbose" id="footerEngine">Engine: starting</span>
+            </div>
+            <div class="status-right">
+                <span class="status-item status-verbose" id="footerStorage">Storage: unknown</span>
+                <span class="chip chip-status" id="privacyStatus" data-tone="ok" title="Where prompts are processed"><span class="chip-dot" aria-hidden="true"></span>Local only</span>
+                <span class="status-sep" aria-hidden="true">·</span>
+                <span class="status-item status-clock" id="statusClock">--:--:--</span>
+                <span class="status-sep" aria-hidden="true">·</span>
+                <span class="status-item status-hint">⌘K command palette</span>
+            </div>
         </footer>
     </div>
-    <div id="toastRegion" aria-live="polite" aria-atomic="false"></div>
+
+    <div class="palette-backdrop" id="commandPalette" role="dialog" aria-modal="true" aria-labelledby="paletteTitle" hidden>
+        <div class="palette" role="document">
+            <div class="palette-input-row">
+                <span class="palette-prompt" aria-hidden="true">›</span>
+                <label class="visually-hidden" for="paletteInput">Search or run a command</label>
+                <input id="paletteInput" type="text" placeholder="Search or run a command…" autocomplete="off" spellcheck="false" aria-controls="paletteList" aria-autocomplete="list">
+                <kbd class="kbd">Esc</kbd>
+            </div>
+            <h2 class="visually-hidden" id="paletteTitle">Command palette</h2>
+            <div class="palette-list" id="paletteList" role="listbox" aria-label="Commands"></div>
+            <div class="palette-footer">
+                <span><kbd class="kbd">↑</kbd><kbd class="kbd">↓</kbd> navigate</span>
+                <span><kbd class="kbd">↵</kbd> run</span>
+                <span><kbd class="kbd">Esc</kbd> close</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="false"></div>
 
     <script type="module">
+
         import { mountModelSources, ModelSources } from './assets/js/model_sources.js';
         import { configFromSources, streamChatCompletions } from './assets/js/studio_api.js';
         import { encodeTextWithArtifact } from './assets/js/uor_tokenizer_artifact.js';
@@ -460,39 +644,70 @@
             var empty = document.createElement('div');
             empty.className = 'chat-empty';
             empty.id = 'chatEmptyState';
-            var title = document.createElement('h2');
+            var mark = document.createElement('div');
+            mark.className = 'empty-mark';
+            mark.textContent = '\u25c8';
+            mark.setAttribute('aria-hidden', 'true');
+            var headline = document.createElement('h2');
+            headline.className = 'empty-headline';
             var copy = document.createElement('p');
-            var list = document.createElement('ol');
-            var action = document.createElement('button');
-            action.type = 'button';
-            action.className = 'btn btn-secondary btn-small';
-            action.textContent = 'Open model sources';
-            action.addEventListener('click', function () { setView('model'); });
-            if (app.mode === 'api') {
-                title.textContent = 'API mode';
-                var endpoint = app.apiConfig && app.apiConfig.baseUrl ? app.apiConfig.baseUrl : 'the configured endpoint';
-                copy.textContent = 'Prompts typed here are sent to ' + endpoint + ' and leave this device. UOR-R4 is pre-alpha: no model holds a useful conversation yet, so treat API replies as an external baseline, not a project result.';
-                list.appendChild(listItem('Send a message to test the configured endpoint.'));
-                list.appendChild(listItem('Switch to a local model source to keep prompts on this device.'));
-                list.appendChild(listItem('API keys are stored only in this browser and are never committed.'));
-                action.textContent = 'Manage API sources';
-            } else if (app.caps) {
-                title.textContent = 'Local engine ready: ' + (app.caps.status_label || 'model loaded');
-                copy.textContent = 'The local engine runs a UORLUT01 stack artifact through the integer WebAssembly runtime. The bundled seed-5 stack is a synthetic stand-in: its output verifies the serving path and is not language.';
-                list.appendChild(listItem('Generate tokens to exercise the browser serving path.'));
-                list.appendChild(listItem('M1 closed on 30 October 2026 (a saved D11 model passes its bars); a useful conversation is still ahead.'));
-                list.appendChild(listItem('Load a different .lut or .bin stack under Model sources to compare artifacts.'));
-            } else {
-                title.textContent = 'No local model loaded';
-                copy.textContent = 'The Studio is an offline-first interface over the integer WebAssembly engine. Load the bundled synthetic demo, a local UORLUT01 stack file, or configure an OpenAI-compatible API to begin.';
-                list.appendChild(listItem('Open Model sources and load the bundled synthetic demo (available once a wasm build produces pkg/synthetic-stack.lut).'));
-                list.appendChild(listItem('Or choose a local .lut / .bin stack artifact from this device.'));
-                list.appendChild(listItem('Optional: configure an API endpoint under OpenAI-compatible API. Prompts then leave this device.'));
+            copy.className = 'empty-desc';
+            var list = document.createElement('div');
+            list.className = 'empty-cmd-list';
+            var note = document.createElement('p');
+            note.className = 'empty-note';
+            function commandRow(key, title, description, onClick) {
+                var row = document.createElement('button');
+                row.type = 'button';
+                row.className = 'empty-cmd';
+                var keyNode = document.createElement('span');
+                keyNode.className = 'empty-key';
+                keyNode.textContent = key;
+                var titleNode = document.createElement('span');
+                titleNode.className = 'empty-cmd-title';
+                titleNode.textContent = title;
+                var descNode = document.createElement('span');
+                descNode.className = 'empty-cmd-desc';
+                descNode.textContent = description;
+                var enterNode = document.createElement('span');
+                enterNode.className = 'empty-enter';
+                enterNode.setAttribute('aria-hidden', 'true');
+                enterNode.textContent = '\u21b5';
+                row.appendChild(keyNode);
+                row.appendChild(titleNode);
+                row.appendChild(descNode);
+                row.appendChild(enterNode);
+                row.addEventListener('click', onClick);
+                list.appendChild(row);
             }
-            empty.appendChild(title);
+            if (app.mode === 'api') {
+                var endpoint = app.apiConfig && app.apiConfig.baseUrl ? app.apiConfig.baseUrl : 'the configured endpoint';
+                headline.textContent = 'API baseline mode.';
+                copy.textContent = 'Prompts typed here are sent to ' + endpoint + ' and leave this device. UOR-R4 is pre-alpha: no model holds a useful conversation yet, so treat API replies as an external baseline, not a project result.';
+                commandRow('01', 'Focus composer', 'Type a prompt to exercise the configured endpoint.', function () { var input = $('#chatInput'); if (input) input.focus(); });
+                commandRow('02', 'Manage API sources', 'Base URL, model and key live in this browser only.', function () { setView('model'); });
+                commandRow('03', 'Switch to local', 'Keep prompts on this device with a local stack artifact.', function () { setView('model'); });
+                note.textContent = 'API keys are stored in this browser\u2019s localStorage and are never committed.';
+            } else if (app.caps) {
+                headline.textContent = 'Local engine ready.';
+                copy.textContent = 'A UORLUT01 artifact is loaded in the integer WebAssembly runtime. ' + (app.caps.status_label || 'Model loaded') + '. The bundled seed-5 stack is a synthetic stand-in: its output verifies the serving path and is not language.';
+                commandRow('01', 'Send a prompt', 'Exercise the local serving path from the composer.', function () { var input = $('#chatInput'); if (input) input.focus(); });
+                commandRow('02', 'Model sources', 'Load the M1 trunk, another stack artifact or an API source.', function () { setView('model'); });
+                commandRow('03', 'Open editor', 'Draft a prompt or snippet in the plain-text workspace.', function () { setView('editor'); });
+                note.textContent = 'M1 closed 30 October 2026 \u00b7 a useful conversation is still ahead \u00b7 offline-first: no external requests at load.';
+            } else {
+                headline.textContent = 'Exact integers. No matrices.';
+                copy.textContent = 'An offline-first agent console for the geometric language model. Load the published M1 trunk for next-token prediction, start the bundled synthetic demo, or attach an OpenAI-compatible API \u2014 nothing leaves this device unless you choose a remote source.';
+                commandRow('01', 'Load synthetic demo', 'Browser serving path \u00b7 seed-5 stand-in', function () { var button = document.querySelector('[data-action="load-bundled"]'); if (button) button.click(); else setView('model'); });
+                commandRow('02', 'Load M1 model', 'Top-8 next-token prediction \u00b7 trained 19-table trunk', function () { var button = document.querySelector('[data-action="load-published"][data-model-id="published-m1-trunk-seed1"]'); if (button) button.click(); else setView('model'); });
+                commandRow('03', 'Open editor', 'Plain-text scratchpad \u00b7 stored in this browser', function () { setView('editor'); });
+                note.textContent = 'Pre-alpha \u00b7 M1 complete \u00b7 1 of 8 milestones \u00b7 offline-first interface: no external requests are made while the page loads.';
+            }
+            empty.appendChild(mark);
+            empty.appendChild(headline);
             empty.appendChild(copy);
             empty.appendChild(list);
-            empty.appendChild(action);
+            empty.appendChild(note);
             container.appendChild(empty);
         }
 
@@ -522,6 +737,7 @@
                 var input = $('#chatInput');
                 if (input && window.matchMedia('(max-width: 780px)').matches) input.focus();
             }
+            document.dispatchEvent(new CustomEvent('uor-view-changed', { detail: { view: view } }));
         }
 
         /* ------------------------------------------------------------ next-token predictor (discrete M1 model) */
@@ -1469,11 +1685,58 @@
             document.dispatchEvent(new CustomEvent('uor-studio-ready'));
         }
 
+
+        // Interface hooks for the agent-console layer (theme, palette, chrome). Engine paths untouched.
+        window.__studioUi = {
+            version: 'agent-console/1',
+            setView: setView,
+            startNewChat: startNewChat,
+            toast: toast,
+            focusComposer: function () {
+                setView('chat');
+                var input = $('#chatInput');
+                if (input) { input.focus(); return true; }
+                return false;
+            },
+            loadSyntheticDemo: function () {
+                var button = document.querySelector('[data-action="load-bundled"]');
+                if (button) { button.click(); return true; }
+                return false;
+            },
+            loadM1Model: function () {
+                var button = document.querySelector('[data-action="load-published"][data-model-id="published-m1-trunk-seed1"]');
+                if (button) { button.click(); return true; }
+                return false;
+            },
+            openLocalFile: function () {
+                var input = document.querySelector('[data-role="model-file"]') || document.querySelector('#modelFileInput');
+                if (input) { input.click(); return true; }
+                return false;
+            },
+            promptUrl: function () {
+                setView('model');
+                var input = document.querySelector('#modelUrlInput');
+                if (input) { input.focus(); return true; }
+                return false;
+            },
+            addApi: function () {
+                var button = document.querySelector('[data-action="add-api"]');
+                if (button) { button.click(); return true; }
+                return false;
+            },
+            openModelSources: function () {
+                setView('model');
+                return true;
+            }
+        };
+
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', boot);
         } else {
             boot();
         }
+    
     </script>
+    <script type="module" src="./assets/js/studio_ui.js"></script>
 </body>
 </html>
