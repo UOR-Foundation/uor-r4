@@ -5496,6 +5496,11 @@ fn a_retained_fbs_stack_serves_the_retained_reference() {
     assert!(apart > 0, "the decay reading's reference is what the retained stack serves");
     let refused = with_header(&bytes, |h| h["shape"]["rec_gates"] = json!("geometric-other"));
     assert!(IntegerStackModel::parse(&refused).is_err(), "an unknown reading is refused");
+    // The refusal an engine before this unit makes is its shape validation's, pinned here.
+    let mut other = model.shape().clone();
+    other.rec_gates = Some("geometric-other".to_owned());
+    assert!(matches!(other.validate(), Err(StackError::Shape("the recurrence gates are not geometric"))));
+    assert!(model.shape().validate().is_ok(), "the retained reading is valid");
 }
 
 /// claude-226: a snapshot without the flag, as every one before it, exports byte for byte as one
