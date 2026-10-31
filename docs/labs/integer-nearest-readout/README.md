@@ -36,7 +36,7 @@ First-token disagreement must be at most ⌊0.03 n⌋: 9 on DEV, 36 on p-w.
 | p-w s2 | 777 of 1,202 | 425 | 113 |
 | p-w s3 | 64 of 1,202 | 1,138 | 36 |
 
-The readout was necessary: under the writer, claude-229's first token agreed on 0 of 310 DEV prompts. It is not sufficient: the integer model still decodes differently from the trained one, and far more on p-w.
+The readout was necessary: at s1, under the writer, claude-229's first token agreed on 0 of 310 DEV and 2 of 1,202 p-w prompts; under nearest, on 291 and 911. It is not sufficient: the integer model still decodes differently from the trained one, and far more on p-w.
 
 ### Where it differs (readings after the bar; they locate, they do not decide)
 
@@ -47,14 +47,22 @@ The readout was necessary: under the writer, claude-229's first token agreed on 
   | Exact key hits | 291 | 280 (96.2%) |
   | Exact key misses | 19 | 11 (58%) |
 
-  At a hit the memory moves the query toward the stored reply. At a miss the query is the trunk's, with the Hamming read.
-- **p-w is mostly misses** (1,172 of its 1,202 openings at every seed), and its agreement falls with it: 76%, 65% and 5%.
-- **On p-w s3 the integer model collapses:** its first token is 351 on 1,128 of 1,202 prompts, where the float model's are spread (318 on 219, 1155 on 130, 2611 on 124, 340 on 94).
-- **So the first suspect is the trunk with its Hamming read, on real prompts, at seed 3 most.** claude-227's parity checked the trunk alone, on synthetic sequences. The Hamming read's integer form has not been checked on a trained model (integer-hamming-read's step 5, #3385).
+  At a hit the memory moves the query toward the stored reply, so the nearest pick is clear-cut. At a miss the query is unmoved and the margins are small, so an error in any layer flips it.
+- **p-w is mostly misses:** 1,172 of its 1,202 openings at every seed. Its agreement is 76%, 65% and 5%.
+  - The misses are the same at every seed, so they do not explain the spread across seeds, which is unexplained.
+  - DEV against p-w changes the panel too (this unit's review).
+- **The integer model over-concentrates on p-w.**
+  - At s3 it collapses: its first token is 351 on 1,128 of 1,202 prompts, where the float model's are spread (318 on 219, 1155 on 130, 2611 on 124, 340 on 94).
+  - At s2, 340 is its first token on 496 prompts, against the float model's 192.
+  - A collapse like this also fits one readout point winning every nearest search.
+- **So the suspects are every layer on the miss path:** the trunk, the Hamming read, and the readout table. These are leads, not findings.
+  - claude-227's parity checked the trunk alone, on synthetic sequences.
+  - claude-231 checked the readout only against an integer reference scan.
+  - The Hamming read's integer form has not been checked on a trained model (integer-hamming-read's step 5, #3385).
 
 ### Next
 
-Locate the gap on the GPU:
-- **Trunk plus read against trunk alone:** claude-227's procedure, with the Hamming read in both the snapshot and the readouts, on (r-drop) s3 and s1. Also the readouts on real prompts (DEV and p-w windows) in place of the fixed sequences.
-- `fbs-compare`'s token is the writer's on both sides, and its query gaps carry the comparison.
+Locate the gap layer by layer, as the sheet's MISS row says (trunk, Hamming read, memory, readout), on the first disagreeing prompts:
+- **On the GPU:** claude-227's procedure with the Hamming read in both the snapshot and the readouts, on (r-drop) s3 and s1, on real prompts (DEV and p-w windows), trunk plus read against trunk alone. `fbs-compare`'s token is the writer's on both sides; its query gaps carry the comparison.
+- **The readout table:** the integer writer table's rows against the float decode's table, and the nearest pick at the disagreeing openings.
 - The item stays `ready`.
