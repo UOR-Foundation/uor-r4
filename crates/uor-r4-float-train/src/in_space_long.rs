@@ -2502,10 +2502,19 @@ impl KeyedReading {
     fn carries(&self, dev: &KeyedReading) -> bool {
         let band = |(b, c): (usize, usize)| 2.0 * ((b + c) as f64).sqrt();
         let net = |(b, c): (usize, usize)| b as f64 - c as f64;
-        match (self.template, self.exact, self.loops, dev.template) {
-            (Some(t), Some(e), Some(l), Some(d)) => {
-                t.0 + t.1 >= 10 && net(t) > band(t) && net(e) >= -band(e) && net(l) <= band(l) && net(d) >= -band(d)
-            }
+        match self.template {
+            Some(t) => t.0 + t.1 >= 10 && net(t) > band(t) && self.harmless(dev),
+            None => false,
+        }
+    }
+
+    /// Bars (b)–(d) alone: exact replies and DEV's templates not lower beyond their bands, and
+    /// loops not higher, so a seed that fails to carry fails on (a)'s templates alone.
+    fn harmless(&self, dev: &KeyedReading) -> bool {
+        let band = |(b, c): (usize, usize)| 2.0 * ((b + c) as f64).sqrt();
+        let net = |(b, c): (usize, usize)| b as f64 - c as f64;
+        match (self.exact, self.loops, dev.template) {
+            (Some(e), Some(l), Some(d)) => net(e) >= -band(e) && net(l) <= band(l) && net(d) >= -band(d),
             _ => false,
         }
     }
@@ -2745,6 +2754,243 @@ pub fn keyed_grade(
         grade.next = Some(next.to_owned());
         grade.ships = ships;
     }
+    Ok(grade)
+}
+
+/// The panels the served grade reads (claude-220's sheet), with their token and mask sha256s:
+/// p-v, claude-219's deciding panel, where the served key must give claude-219's keyed-point
+/// replies, and p-w, the fresh panel (seed 2121, 1,200 conversations) that decides.
+const SERVED_PANELS: [(&str, &str, &str); 2] = [
+    KEYED_PANELS[1],
+    (
+        "p-w",
+        "038b0085e6888d988d4b0b6ceb7846015f21f1c40f26ec3286ddcc049c17d217",
+        "797fc23474231595ae42b9cfbf7930ae2021b13d23d8b8b3d4fb3c7dda06ec16",
+    ),
+];
+
+/// The parity count of a served arm (claude-220's sheet, FIT round 1): of the replies the served
+/// key opened, how many it opened with the run's keys-file name for the same opening; and, where
+/// they agree, the largest gap between the served search's least distance and the keys file's,
+/// 0 when the decode's point and the batched forward's are equal.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct ServedParity {
+    pub split: String,
+    pub seed: u8,
+    pub served: usize,
+    pub agree: usize,
+    pub max_drift: f32,
+}
+
+impl ServedParity {
+    /// The sheet's rule: parity holds when at most 1% of the served openings disagree.
+    fn holds(&self) -> bool {
+        self.served > 0 && (self.served - self.agree) * 100 <= self.served
+    }
+}
+
+/// [`ServedParity`] for `served` at `openings`, and `picks` with the point key's names and
+/// distances replaced at each served opening by the served key's own, so that [`keyed_reading`]
+/// reads the served arm by its own tokens (the sheet's rule (a)).
+fn served_parity(
+    split: &str,
+    seed: u8,
+    openings: &GradeOpenings,
+    picks: &SeedPicks,
+    served: &[IdSample],
+) -> Result<(ServedParity, SeedPicks)> {
+    let at: std::collections::HashMap<usize, usize> =
+        openings.positions.iter().enumerate().map(|(i, &p)| (p, i)).collect();
+    let mut keys = picks.keys.clone();
+    let mut parity = ServedParity { split: split.to_owned(), seed, served: 0, agree: 0, max_drift: 0.0 };
+    for s in served {
+        let Some(token) = s.keyed else { continue };
+        let i = *at.get(&s.position).ok_or_else(|| {
+            invalid(format!("{split} s{seed}: a served opening at {} is not the split's (an instrument fault)", s.position))
+        })?;
+        let distance = s
+            .served_distance
+            .filter(|d| d.is_finite())
+            .ok_or_else(|| invalid(format!("{split} s{seed}: a served token at {} has no finite distance", s.position)))?;
+        parity.served += 1;
+        // Against the keys file as read, never the copy this loop rewrites.
+        if picks.keys.point_target[i] == token {
+            parity.agree += 1;
+            parity.max_drift = parity.max_drift.max((distance - picks.keys.point_distance[i]).abs());
+        }
+        keys.point_target[i] = token;
+        keys.point_distance[i] = distance;
+    }
+    Ok((parity, SeedPicks { keys, base: picks.base.clone(), served: picks.served.clone() }))
+}
+
+/// The served sheet's row (claude-220): 1 where any split's parity fails ([`ServedParity::holds`]),
+/// else [`keyed_outcome`]'s row for the served arm's `(p-w, DEV)` readings at seeds 1–3, except
+/// that row 3 is read only where every seed is harmless on bars (b)–(d) ([`KeyedReading::harmless`]):
+/// then a row 4 whose seeds pooled gain beyond their band on p-w's templates is row 3 (FIT rounds 1
+/// and 2), and wherever a seed has a harm, a row 3 is row 4 (round 3).
+fn served_outcome(
+    forced: &[ForcedReading],
+    by_seed: Vec<(KeyedReading, KeyedReading)>,
+    parity: &[ServedParity],
+) -> u8 {
+    let (b, c) = by_seed.iter().fold((0, 0), |(b, c), (p, _)| {
+        let (pb, pc) = p.template.unwrap_or((0, 0));
+        (b + pb, c + pc)
+    });
+    let harmless = by_seed.iter().all(|(p, d)| p.harmless(d));
+    let pooled_gain = b as f64 - c as f64 > 2.0 * ((b + c) as f64).sqrt() && harmless;
+    match keyed_outcome(forced, &[("point", by_seed)]).0 {
+        _ if !parity.iter().all(ServedParity::holds) => 1,
+        4 if pooled_gain => 3,
+        // A thin seed beside a harmed one is a harm, not a power shortfall (FIT round 3).
+        3 if !harmless => 4,
+        row => row,
+    }
+}
+
+/// The served grade (claude-220), on the laptop: on p-w (deciding), p-v and DEV at seeds 1–3,
+/// the forced arm against greedy on p-w; the served key's parity with the run's keys file
+/// ([`served_parity`]); the served arm against greedy, read by [`keyed_reading`] by its own
+/// tokens, which refuses any reply its opening does not fix; and the protocol's free-generation
+/// measures ([`generation`]) for greedy and the served arm. With the sheet's decision
+/// ([`served_outcome`]): parity or the forced arm failing is row 1, then [`keyed_outcome`]'s rows
+/// on p-w, with row 3 only where every seed is harmless.
+#[derive(Clone, Debug, Serialize)]
+pub struct ServedGrade {
+    pub parity: Vec<ServedParity>,
+    pub forced: Vec<ForcedReading>,
+    pub readings: Vec<KeyedReading>,
+    /// `(split, seed, arm, measures)`, the arm `greedy` or `served`.
+    pub generation: Vec<(String, u8, String, Generation)>,
+    pub row: Option<u8>,
+    pub next: Option<String>,
+}
+
+/// [`ServedGrade`] from the run in `runs` (`r-drop-s{1,2,3}`), on `panels`' p-w and p-v, each
+/// checked by its sha256s.
+pub fn served_grade(data_root: &Path, runs: &Path, panels: &[(String, PathBuf)]) -> Result<ServedGrade> {
+    if let Some((name, _)) = panels.iter().find(|(n, _)| !SERVED_PANELS.iter().any(|(s, _, _)| *s == n.as_str())) {
+        return Err(invalid(format!("--served-grade reads p-w and p-v only, not --panel {name}")));
+    }
+    let bos = hs::SHEET_BOS_ID;
+    let panel = |name: &str| -> Result<(Vec<u32>, Vec<u8>)> {
+        let (_, want, want_mask) =
+            SERVED_PANELS.iter().find(|(n, _, _)| *n == name).ok_or_else(|| invalid("not a served panel"))?;
+        let dir = &panels
+            .iter()
+            .find(|(n, _)| n == name)
+            .ok_or_else(|| invalid(format!("--served-grade needs --panel {name}=DIR")))?
+            .1;
+        let (tokens, mask, sha) = load_unpinned_uort(dir)?;
+        let mask_sha = crate::sha256_bytes(&mask);
+        if sha != *want || mask_sha != *want_mask {
+            return Err(invalid(format!(
+                "--panel {name}: tokens sha256 {sha} and mask {mask_sha}, not the sheet's {want} and {want_mask}"
+            )));
+        }
+        Ok((tokens, mask))
+    };
+    let tokenizer = pinned_tokenizer(data_root)?;
+    let eos = tokenizer.token_id("<|eos|>").ok_or_else(|| invalid("the pinned tokenizer has no <|eos|>"))?;
+    let digits = digit_tokens(&fs::read_to_string(data_root.join("tokenizer.json"))?)?;
+    let (train_tokens, train_mask) = load_train_split(data_root)?;
+    let keep = top_tokens(&train_tokens, OPENING_TEMPLATE_K, bos);
+    let (train_windows, _) = hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, bos)?;
+    let train_rows = opening_rows(&train_windows, &train_mask);
+    let exact = KeyTable::new(train_rows.iter().map(|r| (PromptKey::First(8).of(&r.prompt), r.target)));
+    let oracle = KeyTable::new(
+        train_rows
+            .iter()
+            .map(|r| (value_mask(reply_at(&train_tokens, &train_mask, r.position), &keep, &digits), r.target)),
+    );
+    let train_turns = split_turns(&train_tokens, &train_mask, bos).replies;
+    let train_replies: std::collections::HashSet<u128> = train_turns.iter().map(|r| census_hash(r)).collect();
+    drop((train_rows, train_windows));
+    let (dev_tokens, dev_mask) = hs::load_pinned_uort_split(
+        &data_root.join("ft/dev/tokens.u16"),
+        &data_root.join("ft/dev/response_mask.u8"),
+        hs::PINNED_DEV_TOKENS_SHA256,
+        hs::PINNED_DEV_MASK_SHA256,
+        hs::EXPECTED_DEV_TOKENS,
+        hs::EXPECTED_DEV_ELIGIBLE_TARGETS,
+        hs::SHEET_VOCAB,
+        bos,
+    )?;
+    let (pw_tokens, pw_mask) = panel("p-w")?;
+    let (pv_tokens, pv_mask) = panel("p-v")?;
+    let openings_of = |name: &str, tokens: &[u32], mask: &[u8]| {
+        grade_openings(name, tokens, mask, &exact, &oracle, &keep, &digits, &train_replies)
+    };
+    let splits = [
+        openings_of("p-w", &pw_tokens, &pw_mask)?,
+        openings_of("p-v", &pv_tokens, &pv_mask)?,
+        openings_of("dev", &dev_tokens, &dev_mask)?,
+    ];
+    let samples = |seed: u8, split: &str, arm: &str| -> Result<Vec<IdSample>> {
+        let file = match (split, arm) {
+            ("dev", "greedy") => "samples-memory.json".to_owned(),
+            (split, arm) => format!("samples-{split}-{arm}-memory.json"),
+        };
+        read_scored(&runs.join(format!("r-drop-s{seed}")).join(file))
+    };
+    let mut grade = ServedGrade {
+        parity: Vec::new(),
+        forced: Vec::new(),
+        readings: Vec::new(),
+        generation: Vec::new(),
+        row: None,
+        next: None,
+    };
+    let mut by_seed = Vec::new();
+    for seed in 1..=3u8 {
+        let mut pw_dev: (Option<KeyedReading>, Option<KeyedReading>) = (None, None);
+        for openings in &splits {
+            let split = openings.name.as_str();
+            let picks = seed_picks(runs, None, seed, openings)?;
+            let (greedy, forced, served) = (samples(seed, split, "greedy")?, samples(seed, split, "forced")?, samples(seed, split, "served")?);
+            if split == "p-w" {
+                grade.forced.push(forced_reading(split, seed, &greedy, &forced, eos, &keep, &digits)?);
+            }
+            let (parity, own) = served_parity(split, seed, openings, &picks, &served)?;
+            grade.parity.push(parity);
+            let reading = keyed_reading(
+                (split, "point", seed, f32::INFINITY),
+                openings,
+                &own,
+                &greedy,
+                &forced,
+                Some(&served),
+                eos,
+                &keep,
+                &digits,
+            )?;
+            for (arm, replies) in [("greedy", &greedy), ("served", &served)] {
+                let replies: Vec<Vec<u32>> = replies.iter().map(|s| s.reply.clone()).collect();
+                grade.generation.push((split.to_owned(), seed, arm.to_owned(), generation(&replies, &train_turns, eos)));
+            }
+            match split {
+                "p-w" => pw_dev.0 = Some(reading.clone()),
+                "dev" => pw_dev.1 = Some(reading.clone()),
+                _ => {}
+            }
+            grade.readings.push(reading);
+        }
+        if let (Some(p), Some(d)) = pw_dev {
+            by_seed.push((p, d));
+        }
+    }
+    let row = served_outcome(&grade.forced, by_seed, &grade.parity);
+    grade.row = Some(row);
+    grade.next = Some(
+        match row {
+            1 => "an instrument check: the forced arm did not lift on p-w at some seed, or the served key's parity with the keys file failed",
+            2 => "the one float model serves the point key; next, its integer export under its own item, then the integer model end to end",
+            3 => "underpowered at some seed: a larger panel, or the seeds pooled under a fresh sheet",
+            _ => "the served key does not carry on a second fresh panel; next, train the trunk's opening point to gather paraphrases",
+        }
+        .to_owned(),
+    );
     Ok(grade)
 }
 
@@ -3777,10 +4023,77 @@ struct DecodedReply {
     /// Under [`DecodeRule::CycleStep`], each step's mark ([`cycle_step_pick`]), a final step
     /// that picked BOS included; empty under any other rule.
     stepped: Vec<u8>,
+    /// The served point key's first token and its least L1 distance ([`served_opening`], claude-220), where it gave one.
+    served: Option<(u32, f32)>,
+}
+
+/// The served point key's table (claude-220): TRAIN's opening points under the trunk, on the
+/// model's device, and their targets, as [`opening_points`] builds them and `opening-table.safetensors`
+/// holds them.
+#[derive(Clone)]
+struct ServedKey {
+    points: Tensor,
+    targets: std::sync::Arc<Vec<u32>>,
 }
 
 thread_local! {
     static FORCED_OPENING: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
+    static SERVED_KEY: std::cell::RefCell<Option<ServedKey>> = const { std::cell::RefCell::new(None) };
+    /// The served key's searches on this thread since the last [`take_served_searches`]: how
+    /// many, and their wall time in microseconds.
+    static SERVED_SEARCHES: std::cell::Cell<(u64, u64)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+/// The served point key for the next [`decode_reply`] calls on this thread, or none.
+fn set_served_key(key: Option<ServedKey>) {
+    SERVED_KEY.with(|k| *k.borrow_mut() = key);
+}
+
+/// The served key's searches since the last call, `(count, microseconds)`, and a reset.
+fn take_served_searches() -> (u64, u64) {
+    SERVED_SEARCHES.with(|c| c.replace((0, 0)))
+}
+
+/// The served point key's first token (claude-220) for the opening that ends `window`, from the
+/// opening row's own `point` (`(1, width)`, from the decode's forward). Where the turn memory's
+/// exact key misses the opening (the memory moves nothing there, so `point` is the trunk's), it
+/// is the commonest target among the served table's L1-nearest TRAIN openings, ties to the
+/// smaller id, as [`l1_named`] names them. None where no key is served, the memory is off, or
+/// the exact key fires. A key naming BOS is an instrument fault.
+fn served_opening(window: &[u32], point: &Tensor) -> Result<Option<(u32, f32)>> {
+    let Some(key) = SERVED_KEY.with(|k| k.borrow().clone()) else {
+        return Ok(None);
+    };
+    let Some(memory) = crate::flock_read_memory::turn_memory() else {
+        return Ok(None);
+    };
+    let last = window.len() - 1;
+    if memory.stored(window, window.len(), &[last])?.1[last] == 1.0 {
+        return Ok(None);
+    }
+    // The forward's kernels finish first, so the timer holds the search alone.
+    point.device().synchronize()?;
+    let started = Instant::now();
+    let named = l1_named(point, &key.points, &key.targets)?;
+    let micros = started.elapsed().as_micros() as u64;
+    SERVED_SEARCHES.with(|c| {
+        let (n, us) = c.get();
+        c.set((n + 1, us + micros));
+    });
+    let first = named.first().ok_or_else(|| invalid("the served key named nothing"))?;
+    if first.target == hs::SHEET_BOS_ID {
+        return Err(invalid("the served key names BOS (an instrument fault)"));
+    }
+    if !first.distance.is_finite() {
+        return Err(invalid("the served key's distance is not finite (an instrument fault)"));
+    }
+    Ok(Some((first.target, first.distance)))
+}
+
+/// Whether the served point key may name the next token of `reply` under `rule` (claude-220):
+/// at the reply's first step, under the greedy rule only.
+fn serves_at(reply: &[u32], rule: DecodeRule) -> bool {
+    reply.is_empty() && rule == DecodeRule::Greedy
 }
 
 /// The reply's first token for the next [`decode_reply`] calls on this thread, or none: the
@@ -3843,6 +4156,7 @@ fn decode_reply(
         let mut reply = Vec::with_capacity(reply_tokens);
         let mut admitted = Vec::new();
         let mut stepped = Vec::new();
+        let mut served = None;
         for step in 0..reply_tokens {
             // A forced opening (claude-218) is the reply's first token, taken without a forward,
             // so no opening row is read or moved for it.
@@ -3898,8 +4212,17 @@ fn decode_reply(
                 crate::flock_read_memory::set_memory_rows(None);
                 crate::flock_read_memory::set_reply_rows(None);
                 let hidden = hidden?;
-                let scores = nearest_scores(&hidden.narrow(0, window.len() - 1, 1)?, &table)?;
+                let point = hidden.narrow(0, window.len() - 1, 1)?;
+                // The served point key (claude-220) names the opening where the exact key misses,
+                // from this forward's own point, under the greedy rule only.
+                if serves_at(&reply, rule) {
+                    served = served_opening(window, &point)?;
+                }
+                let scores = nearest_scores(&point, &table)?;
                 match rule {
+                    DecodeRule::Greedy if reply.is_empty() && served.is_some() => {
+                        served.map(|(token, _)| token).ok_or_else(|| invalid("the served key gave no token"))?
+                    }
                     DecodeRule::Greedy => *scores
                         .argmax(1)?
                         .to_vec1::<u32>()?
@@ -3968,6 +4291,7 @@ fn decode_reply(
             tokens: reply,
             admitted,
             stepped,
+            served,
         })
     })
 }
@@ -4444,7 +4768,7 @@ impl ScoredRows {
 }
 
 /// One greedy reply ([`score_rows`]): ids, for the grader, and text, to read.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct IdSample {
     /// The corpus position of the reply's first target.
     pub position: usize,
@@ -4480,6 +4804,11 @@ pub struct IdSample {
     /// ([`keyed_opening`]). None, and not written, where it did not and under every other arm.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keyed: Option<u32>,
+    /// Under the served arm (claude-220), the served key's least L1 distance where it gave the
+    /// first token, beside the keys file's for the same opening (the parity count). None, and
+    /// not written, elsewhere.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub served_distance: Option<f32>,
 }
 
 /// One file [`score_rows`] wrote, with its nearest and writer hits when it holds rows.
@@ -4501,6 +4830,10 @@ pub struct ScoredFile {
     /// each rule's decode tok/s (claude-213).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub decode: Option<(usize, f64)>,
+    /// The served point key's searches in a samples file's decode (claude-220): how many, and
+    /// their wall seconds, inside `decode`'s.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search: Option<(u64, f64)>,
 }
 
 /// The rows the tables control (T) names, and its hits among them, at the openings and at the
@@ -4597,11 +4930,16 @@ fn reference_reply(window: &CausalWindow, tokens: usize) -> Vec<u32> {
 ///     with the memory on: `samples-{split}-forced-memory.json`;
 ///   - for each `(key, τ)` of `keyed` (claude-219, which needs `keys`), greedy with the memory on
 ///     and the reply's first token the key's name where [`keyed_opening`] fires:
-///     `samples-{split}-keyed-{key}-memory.json`.
+///     `samples-{split}-keyed-{key}-memory.json`;
+///   - with `served_arm` (claude-220, which needs `keys`), greedy with the memory on and the point
+///     key named in the decode itself from the opening row's own point ([`served_opening`]):
+///     `samples-{split}-served-memory.json`, with the search's count and seconds.
 ///
 ///   Each records its reply-table hits under generation and under teacher forcing (I-F).
 /// - **Keys.** With `keys`, every split's openings named by the trunk keys ([`OpeningKeys`],
-///   claude-218), taken with the memory off before the decodes: `keys-{split}.json`.
+///   claude-218), taken with the memory off before the decodes: `keys-{split}.json`. Their
+///   TRAIN table is built from TRAIN; with `served_arm` it is saved to
+///   `out/opening-table.safetensors`, read back to the same bits, and the copy read back is served.
 ///
 /// `checkpoint` is a `step-N` directory; the flags and `arm` must match its run's.
 #[allow(clippy::too_many_arguments)]
@@ -4624,9 +4962,16 @@ pub fn score_rows(
     cycle: bool,
     keys: bool,
     keyed: &[(String, f32)],
+    served_arm: bool,
     device: &Device,
 ) -> Result<Vec<ScoredFile>> {
     check_run_arm(checkpoint, arm)?;
+    if served_arm && !keys {
+        return Err(invalid("--served-key reads the opening keys, so it needs --opening-keys 1"));
+    }
+    if served_arm && samples == 0 {
+        return Err(invalid("--served-key decodes samples, so it needs --samples of 1 or more"));
+    }
     if !keyed_ok(keyed) {
         return Err(invalid("--keyed-decode wants distinct trunk keys (sign, hsign, point), each with a τ of 0 or more"));
     }
@@ -4704,22 +5049,45 @@ pub fn score_rows(
     set_trained_cut(trained);
     println!("[cut] scoring with the trained cut: {}", trained.map_or("none", |s| s.name()));
     let memory = crate::flock_read_memory::turn_memory();
+    if served_arm && memory.is_none() {
+        return Err(invalid("--served-key serves where the turn memory's exact key misses, so it needs a checkpoint with a turn memory"));
+    }
     // The opening keys (claude-218), with the memory off: TRAIN's opening points under this
     // trunk, and each split's openings named by the nearest of them. Taken before the decodes,
     // so the keyed arms (claude-219) can read them, and written after them, as before.
+    let mut served_key = None;
+    let mut table_rows = None;
     let named_openings: Vec<OpeningKeys> = if keys {
         crate::flock_read_memory::set_turn_memory(None);
+        // The served table (claude-220), built from TRAIN; with `served_arm` it is saved to `out`
+        // and read back, which must give the same bits, and the copy read back is the one served.
         let (train_tokens, train_mask) = load_train_split(data_root)?;
         let train_windows = windows_of(&train_tokens, &train_mask)?;
-        let (train, train_targets, _) = opening_points(&model, &train_windows, &train_mask, seed, step)?;
+        let (built, targets, _) = opening_points(&model, &train_windows, &train_mask, seed, step)?;
         drop((train_windows, train_tokens, train_mask));
-        splits
+        let (train, train_targets) = if served_arm {
+            let path = out.join(OPENING_TABLE_FILE);
+            save_opening_table(&path, &built, &targets)?;
+            let (points, back) = load_opening_table(&path, device)?;
+            if back != targets || !same_bits(&points, &built)? {
+                return Err(invalid("the opening table does not read back as saved (an instrument fault)"));
+            }
+            table_rows = Some(back.len());
+            (points, back)
+        } else {
+            (built, targets)
+        };
+        let named = splits
             .iter()
             .map(|split| {
                 let (query, targets, positions) = opening_points(&model, &split.windows, &split.mask, seed, step)?;
                 opening_keys(&split.name, &query, targets, positions, &train, &train_targets)
             })
-            .collect::<Result<_>>()?
+            .collect::<Result<_>>()?;
+        if served_arm {
+            served_key = Some(ServedKey { points: train, targets: std::sync::Arc::new(train_targets) });
+        }
+        named
     } else {
         Vec::new()
     };
@@ -4747,6 +5115,7 @@ pub fn score_rows(
                 panel_sha256: split.sha256.clone(),
                 tables: None,
                 decode: None,
+                search: None,
             });
         }
         // Greedy with the memory on and off; the Flock rules, and greedy under each read scope
@@ -4772,7 +5141,7 @@ pub fn score_rows(
                     let prompt = &window.input_ids[..=off];
                     // The prompt's own flags: an earlier reply in it is limited as in training.
                     let flags = window_input_mask(std::slice::from_ref(window), &split.mask)?;
-                    let DecodedReply { tokens: reply, admitted, stepped } = decode_reply(
+                    let DecodedReply { tokens: reply, admitted, stepped, .. } = decode_reply(
                         &model,
                         PointObjective::Cell,
                         prompt,
@@ -4802,6 +5171,7 @@ pub fn score_rows(
                         admitted,
                         stepped,
                         keyed: None,
+                        served_distance: None,
                     });
                 }
                 let file = match (split.name.as_str(), rule) {
@@ -4839,12 +5209,15 @@ pub fn score_rows(
                     panel_sha256: split.sha256.clone(),
                     tables: None,
                     decode: Some((decoded, seconds)),
+                    search: None,
                 });
             }
             // Greedy with each reply's first token given, where `openings` gives one (the arms
             // below): the token is taken without a forward, and the rest decodes from the prompt
-            // and it, as served. With `record`, each reply keeps the token it was given.
-            let opened = |openings: &[Option<u32>], record: bool| -> Result<(Vec<IdSample>, usize, f64)> {
+            // and it, as served. With `record`, each reply keeps the token it was given. With
+            // `serve`, the served point key names the opening in the decode itself (claude-220),
+            // and each reply keeps the token it gave.
+            let opened = |openings: &[Option<u32>], record: bool, serve: bool| -> Result<(Vec<IdSample>, usize, f64)> {
                 let mut replies = Vec::with_capacity(prompts.len());
                 let started = std::time::Instant::now();
                 for (index, (window, &opening)) in prompts.iter().zip(openings).enumerate() {
@@ -4852,6 +5225,7 @@ pub fn score_rows(
                     let prompt = &window.input_ids[..=off];
                     let reference = reference_reply(window, reply_tokens);
                     set_forced_opening(opening);
+                    set_served_key(if serve { served_key.clone() } else { None });
                     let decoded = decode_reply(
                         &model,
                         PointObjective::Cell,
@@ -4865,7 +5239,14 @@ pub fn score_rows(
                         &[],
                     );
                     set_forced_opening(None);
-                    let reply = decoded?.tokens;
+                    set_served_key(None);
+                    let decoded = decoded?;
+                    let (given, distance) = match (serve, decoded.served) {
+                        (true, Some((token, distance))) => (Some(token), Some(distance)),
+                        (true, None) => (None, None),
+                        (false, _) => (opening.filter(|_| record), None),
+                    };
+                    let reply = decoded.tokens;
                     let (reply_keys, reply_named) = reply_key_hits(prompt, cut_at_eos(&reply, eos), named);
                     let (reference_keys, reference_named) =
                         reply_key_hits(prompt, cut_at_eos(&reference, eos), named);
@@ -4882,7 +5263,8 @@ pub fn score_rows(
                         reference_named,
                         admitted: Vec::new(),
                         stepped: Vec::new(),
-                        keyed: opening.filter(|_| record),
+                        keyed: given,
+                        served_distance: distance,
                     });
                 }
                 // A given token had no forward, so the speed counts only the decoded ones.
@@ -4896,17 +5278,24 @@ pub fn score_rows(
             // The forced-opening arm (claude-218), each reply's first token its reference's, so
             // what a right opening alone lifts is read beside greedy; and the keyed arms
             // (claude-219), the first token a trunk key's name where the exact key misses.
-            let mut arms: Vec<(String, Vec<Option<u32>>, bool)> = Vec::new();
+            // And the served arm (claude-220): the point key named in the decode itself, from the
+            // table read back from disk.
+            let mut arms: Vec<(String, Vec<Option<u32>>, bool, bool)> = Vec::new();
             if keys && on {
                 let openings = prompts.iter().map(|w| reference_reply(w, reply_tokens).first().copied()).collect();
-                arms.push((format!("samples-{}-forced-{label}.json", split.name), openings, false));
+                arms.push((format!("samples-{}-forced-{label}.json", split.name), openings, false, false));
                 for (key, tau) in keyed {
                     let openings = keyed_openings(&prompts, &named_openings[at], key, *tau, active.as_ref())?;
-                    arms.push((format!("samples-{}-keyed-{key}-{label}.json", split.name), openings, true));
+                    arms.push((format!("samples-{}-keyed-{key}-{label}.json", split.name), openings, true, false));
+                }
+                if served_arm {
+                    arms.push((format!("samples-{}-served-{label}.json", split.name), vec![None; prompts.len()], false, true));
                 }
             }
-            for (file, openings, record) in arms {
-                let (replies, decoded, seconds) = opened(&openings, record)?;
+            for (file, openings, record, serve) in arms {
+                take_served_searches();
+                let (replies, decoded, seconds) = opened(&openings, record, serve)?;
+                let (searches, micros) = take_served_searches();
                 write_new(&out.join(&file), &serde_json::to_vec(&replies)?)?;
                 written.push(ScoredFile {
                     file,
@@ -4916,6 +5305,7 @@ pub fn score_rows(
                     panel_sha256: split.sha256.clone(),
                     tables: None,
                     decode: Some((decoded, seconds)),
+                    search: serve.then_some((searches, micros as f64 / 1e6)),
                 });
             }
         }
@@ -4933,9 +5323,63 @@ pub fn score_rows(
             panel_sha256: split.sha256.clone(),
             tables: None,
             decode: None,
+            search: None,
+        });
+    }
+    if let Some(rows) = table_rows {
+        written.push(ScoredFile {
+            file: OPENING_TABLE_FILE.to_owned(),
+            rows,
+            nearest_hits: None,
+            writer_hits: None,
+            panel_sha256: None,
+            tables: None,
+            decode: None,
+            search: None,
         });
     }
     Ok(written)
+}
+
+/// The served point key's table file (claude-220), in a scoring run's `out`.
+pub const OPENING_TABLE_FILE: &str = "opening-table.safetensors";
+
+/// Saves the served table (claude-220): TRAIN's opening `points` (`(n, width)`, f32) and their
+/// `targets` (u32), as `points` and `targets`. It never replaces a file: the path is created
+/// new before the table is written into it.
+fn save_opening_table(path: &Path, points: &Tensor, targets: &[u32]) -> Result<()> {
+    let (n, _) = points.dims2()?;
+    if n != targets.len() {
+        return Err(invalid("the opening table wants one target per point"));
+    }
+    write_new(path, &[]).map_err(|e| invalid(format!("{e}; a table is never replaced")))?;
+    let targets = Tensor::from_vec(targets.to_vec(), n, points.device())?;
+    let tensors = std::collections::HashMap::from([("points".to_owned(), points.clone()), ("targets".to_owned(), targets)]);
+    candle_core::safetensors::save(&tensors, path)?;
+    Ok(())
+}
+
+/// Whether two f32 tensors hold the same shape and the same bits: a +0.0 against a −0.0, or
+/// a NaN, differs, where a difference of values would not see it.
+fn same_bits(a: &Tensor, b: &Tensor) -> Result<bool> {
+    let bits = |t: &Tensor| -> Result<Vec<u32>> {
+        Ok(t.flatten_all()?.to_vec1::<f32>()?.into_iter().map(f32::to_bits).collect())
+    };
+    Ok(a.dims() == b.dims() && bits(a)? == bits(b)?)
+}
+
+/// The served table [`save_opening_table`] wrote, on `device`: its points and targets.
+fn load_opening_table(path: &Path, device: &Device) -> Result<(Tensor, Vec<u32>)> {
+    let tensors = candle_core::safetensors::load(path, device)?;
+    let get = |name: &str| {
+        tensors.get(name).cloned().ok_or_else(|| invalid(format!("{}: no {name} tensor", path.display())))
+    };
+    let (points, targets) = (get("points")?, get("targets")?.to_vec1::<u32>()?);
+    let (n, _) = points.dims2()?;
+    if n != targets.len() || points.dtype() != DType::F32 {
+        return Err(invalid(format!("{}: not an opening table of f32 points with one target each", path.display())));
+    }
+    Ok((points, targets))
 }
 
 /// The longest suffix (S) reads: the longest context suffix it looks for in TRAIN.
@@ -5124,6 +5568,7 @@ pub fn controls(
                 panel_sha256: sha.clone(),
                 tables: (label == "T").then_some(named),
                 decode: None,
+                search: None,
             });
         }
     }
@@ -8626,6 +9071,7 @@ mod tests {
             admitted: Vec::new(),
             stepped: Vec::new(),
             keyed: None,
+            served_distance: None,
         };
         let greedy = [sample(0, vec![7, 7, 7], vec![5, 6, 1]), sample(1, vec![5, 9, 1], vec![5, 8, 1])];
         let forced = [sample(0, vec![5, 6, 1], vec![5, 6, 1]), sample(1, vec![5, 8, 1], vec![5, 8, 1])];
@@ -10116,6 +10562,50 @@ mod tests {
     /// claude-218: a forced opening is the reply's first token, and the rest is greedy from the
     /// prompt and that token; and the opening points are exactly the trunk's points at the
     /// scored rows that open a reply, as `row_picks` sees them.
+    /// claude-220: at an opening the memory's exact key misses, the served key names the reply's
+    /// first token from the decode's own point by the table's nearest TRAIN opening, and the
+    /// reply continues as a forced one with that token; where the exact key fires, the decode
+    /// is greedy's; and only the missed opening counts a search.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_served_key_names_a_missed_opening_from_the_decodes_own_point() {
+        use crate::flock_read_opening::{opening_slots, OpeningAnchor};
+        let device = Device::new_cuda(0).unwrap();
+        let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
+        let a: Vec<u32> = std::iter::once(hs::SHEET_BOS_ID).chain((1..=24u32).map(|i| (i * 37) % 4096 + 2)).collect();
+        let b: Vec<u32> = std::iter::once(hs::SHEET_BOS_ID).chain((1..=24u32).map(|i| (i * 53) % 4096 + 2)).collect();
+        let point_of = |p: &[u32]| {
+            crate::flock_read::points(&model, p, 1, p.len()).unwrap().narrow(0, p.len() - 1, 1).unwrap()
+        };
+        let decode = |p: &[u32], n: usize| {
+            decode_reply(&model, PointObjective::Cell, p, n, 1, DecodeRule::Greedy, 0, None, ReadScope::Full, &[]).unwrap()
+        };
+        // A memory whose table holds a's own turn key, with a zero weight, so it moves nothing.
+        let slots = opening_slots(&a, 8, OpeningAnchor::Turn);
+        let key: Vec<u32> = slots[a.len() - 1].iter().map(|&s| a[s]).collect();
+        let pb = point_of(&b);
+        let width = pb.dim(1).unwrap();
+        let memory = crate::flock_read_memory::TurnMemory::new(8, std::collections::HashMap::from([(key, 5u32)]), width, &device).unwrap();
+        crate::flock_read_memory::set_turn_memory(Some(memory));
+        let greedy_a = decode(&a, 12).tokens;
+        // The table: b's own opening point, target 77, and a far point, target 88.
+        let points = Tensor::cat(&[pb.clone(), (&pb + 100.0).unwrap()], 0).unwrap();
+        set_served_key(Some(ServedKey { points, targets: std::sync::Arc::new(vec![77, 88]) }));
+        take_served_searches();
+        let served_b = decode(&b, 12);
+        assert_eq!((served_b.tokens[0], served_b.served.map(|s| s.0)), (77, Some(77)), "the missed opening takes the nearest's target");
+        assert_eq!(served_b.served.map(|s| s.1), Some(0.0), "the decode's own point is the table's row, bit for bit");
+        let served_a = decode(&a, 12);
+        assert_eq!((served_a.tokens.as_slice(), served_a.served.is_none()), (greedy_a.as_slice(), true), "the exact key fires: greedy");
+        assert_eq!(take_served_searches().0, 1, "only the missed opening is searched");
+        set_served_key(None);
+        set_forced_opening(Some(77));
+        let forced_b = decode(&b, 12).tokens;
+        set_forced_opening(None);
+        assert_eq!(served_b.tokens, forced_b, "the rest decodes as the forced reply with that token");
+        crate::flock_read_memory::set_turn_memory(None);
+    }
+
     #[cfg(feature = "cuda")]
     #[test]
     fn a_forced_opening_continues_greedy_and_the_opening_points_are_the_rows() {
@@ -10310,6 +10800,168 @@ mod tests {
         assert_eq!(keyed_openings(&prompts, &bos, "point", 0.125, Some(&memory)).unwrap(), [None, None]);
     }
 
+    /// claude-220: the served table reads back exactly as it was saved, and is never replaced.
+    #[test]
+    fn the_opening_table_reads_back_as_saved_and_is_never_replaced() {
+        /// Removes the test's folder however the test ends.
+        struct Gone(PathBuf);
+        impl Drop for Gone {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let dir = std::env::temp_dir().join(format!("claude-220-table-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let _gone = Gone(dir.clone());
+        let path = dir.join(OPENING_TABLE_FILE);
+        let values: Vec<f32> = vec![0.5, -1.25, 3.0, 0.0, -0.0, 7.75];
+        let points = Tensor::from_vec(values.clone(), (3, 2), &Device::Cpu).unwrap();
+        save_opening_table(&path, &points, &[9, 4, 9]).unwrap();
+        let (back, targets) = load_opening_table(&path, &Device::Cpu).unwrap();
+        assert_eq!(targets, [9, 4, 9]);
+        assert_eq!(back.dims(), [3, 2]);
+        let bits = |v: Vec<f32>| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
+        assert_eq!(bits(back.flatten_all().unwrap().to_vec1::<f32>().unwrap()), bits(values.clone()));
+        assert!(same_bits(&back, &points).unwrap(), "the read-back's bits are the saved ones");
+        assert!(save_opening_table(&path, &points, &[9, 4, 9]).is_err(), "a table is never replaced");
+        assert_eq!(load_opening_table(&path, &Device::Cpu).unwrap().1, [9, 4, 9], "the refused save left the table whole");
+        assert!(save_opening_table(&dir.join("other.safetensors"), &points, &[9, 4]).is_err(), "one target per point");
+        let wide = dir.join("f64.safetensors");
+        let points_f64 = Tensor::from_vec(values.iter().map(|&x| f64::from(x)).collect::<Vec<_>>(), (3, 2), &Device::Cpu).unwrap();
+        save_opening_table(&wide, &points_f64, &[9, 4, 9]).unwrap();
+        assert!(load_opening_table(&wide, &Device::Cpu).is_err(), "a table of f64 points is not served");
+        // The read-back check is by bits: −0.0 against +0.0 differs, though their values are equal.
+        let signed = Tensor::from_vec(vec![0.5f32, -1.25, 3.0, -0.0, -0.0, 7.75], (3, 2), &Device::Cpu).unwrap();
+        assert!(!same_bits(&signed, &points).unwrap());
+        assert!(!same_bits(&points.reshape((2, 3)).unwrap(), &points).unwrap(), "the shape is part of it");
+    }
+
+    /// claude-220: the served key names only a reply's first token, and only under greedy.
+    #[test]
+    fn the_served_key_serves_greedys_first_step_only() {
+        assert!(serves_at(&[], DecodeRule::Greedy));
+        assert!(!serves_at(&[5], DecodeRule::Greedy), "past the first step");
+        for rule in [DecodeRule::FLOCK, DecodeRule::FlockCell { k: 4, margin_milli: 0 }, DecodeRule::CycleStep { k: 4, n: 4 }] {
+            assert!(!serves_at(&[], rule), "{rule:?} decodes as it did");
+        }
+    }
+
+    /// claude-220 (FIT round 1): the parity count compares each served token with the keys
+    /// file's name and measures the distance drift where they agree; the served arm is read by its
+    /// own tokens; parity failing is row 1; and row 4 turns to row 3 when the seeds pooled show
+    /// a gain beyond their band.
+    #[test]
+    fn the_served_parity_counts_disagreements_and_the_pooled_seeds_guard_row_4() {
+        let n4 = |v: [u32; 4]| v.to_vec();
+        let keys = OpeningKeys {
+            split: "p".to_owned(),
+            train_openings: 4,
+            table_bytes: 0,
+            positions: vec![10, 20, 30, 40],
+            targets: n4([3, 7, 6, 6]),
+            point_target: n4([5, 7, 8, 9]),
+            point_distance: vec![0.0, 0.25, 0.5, 0.75],
+            point_ties: n4([1; 4]),
+            sign_target: n4([5; 4]),
+            sign_distance: vec![1.0; 4],
+            sign_ties: n4([1; 4]),
+            point_ms: 0,
+            sign_ms: 0,
+            hsign_target: n4([5; 4]),
+            hsign_distance: vec![1.0; 4],
+            hsign_ties: n4([1; 4]),
+            hsign_ms: 0,
+        };
+        let openings = GradeOpenings {
+            name: "p".to_owned(),
+            positions: vec![10, 20, 30, 40],
+            targets: n4([3, 7, 6, 6]),
+            exact: vec![(3, true), (0, false), (0, false), (0, false)],
+            oracle: vec![0; 4],
+            known: vec![false; 4],
+        };
+        let picks = SeedPicks { keys, base: n4([3, 4, 8, 5]), served: n4([3, 4, 8, 5]) };
+        let served = |position: usize, keyed: Option<u32>, distance: Option<f32>| IdSample {
+            position,
+            prompt: vec![2],
+            reply: vec![1],
+            reference: vec![1],
+            reply_text: String::new(),
+            reference_text: String::new(),
+            reply_keys: 0,
+            reply_named: 0,
+            reference_keys: 0,
+            reference_named: 0,
+            admitted: Vec::new(),
+            stepped: Vec::new(),
+            keyed,
+            served_distance: distance,
+        };
+        // 10 fires (no served token); 20 and 30 agree with the keys file (drift 0 and 0.125); 40
+        // disagrees (9 against 2).
+        let arm = [served(10, None, None), served(20, Some(7), Some(0.25)), served(30, Some(8), Some(0.625)), served(40, Some(2), Some(0.7))];
+        let (parity, own) = served_parity("p", 1, &openings, &picks, &arm).unwrap();
+        assert_eq!((parity.served, parity.agree, parity.max_drift), (3, 2, 0.125));
+        assert!(!parity.holds(), "1 of 3 disagreeing is past 1%");
+        assert_eq!((own.keys.point_target[3], own.keys.point_distance[3]), (2, 0.7), "read by its own token");
+        assert!(served_parity("p", 1, &openings, &picks, &[served(40, Some(2), None)]).is_err(), "a served token needs its distance");
+        assert!(served_parity("p", 1, &openings, &picks, &[served(40, Some(2), Some(f32::NAN))]).is_err(), "a finite one");
+        // Each served token is compared with the keys file as read: a second token at 40 does
+        // not agree with the first.
+        let twice = [served(40, Some(2), Some(0.7)), served(40, Some(2), Some(0.7))];
+        let (parity, _) = served_parity("p", 1, &openings, &picks, &twice).unwrap();
+        assert_eq!((parity.served, parity.agree), (2, 0));
+        // The grade reads p-w and p-v, and refuses any other panel before it reads anything.
+        let other = [("p-u".to_owned(), PathBuf::from("/nowhere"))];
+        let refused = served_grade(Path::new("/nowhere"), Path::new("/nowhere"), &other).err().map(|e| e.to_string());
+        assert!(refused.is_some_and(|e| e.contains("p-w and p-v only")), "another panel is refused");
+        assert!(served_parity("p", 1, &openings, &picks, &[served(50, Some(2), Some(0.1))]).is_err(), "an opening the split lacks");
+        // The rows.
+        let at = |t: (usize, usize)| KeyedReading {
+            split: "p-w".to_owned(),
+            key: "point".to_owned(),
+            seed: 1,
+            tau: f32::INFINITY,
+            replies: 1200,
+            keyed: 0,
+            right: 0,
+            predicted_exact: (0, 0),
+            exact: Some((0, 0)),
+            template: Some(t),
+            loops: Some((0, 0)),
+        };
+        let lift = ForcedReading { split: "p-w".to_owned(), seed: 1, replies: 1200, exact: (50, 0), template: (50, 0) };
+        let forced = [lift.clone(), lift.clone(), lift];
+        let seeds = |t: [(usize, usize); 3]| t.iter().map(|&t| (at(t), at((0, 0)))).collect::<Vec<_>>();
+        let held = |served: usize, agree: usize| ServedParity { split: "p-w".to_owned(), seed: 1, served, agree, max_drift: 0.0 };
+        assert_eq!(served_outcome(&forced, seeds([(20, 0); 3]), &[held(1000, 1000)]), 2);
+        assert_eq!(served_outcome(&forced, seeds([(20, 0); 3]), &[held(1000, 989)]), 1, "past 1% disagreeing");
+        assert_eq!(served_outcome(&forced, seeds([(20, 0); 3]), &[held(1000, 990)]), 2, "1% is within");
+        assert_eq!(served_outcome(&forced, seeds([(20, 0); 3]), &[held(10, 10), held(1000, 989)]), 1, "every split and seed");
+        // A seed below the bar but not thin: row 4 only when the pooled seeds show no gain.
+        assert_eq!(served_outcome(&forced, seeds([(20, 0), (20, 0), (10, 8)]), &[held(10, 10)]), 3);
+        assert_eq!(served_outcome(&forced, seeds([(10, 8); 3]), &[held(10, 10)]), 4);
+        // A seed whose templates gain but whose loops rise beyond their band keeps row 4: a harm
+        // is not a power shortfall (FIT round 2).
+        let mut harmed = seeds([(20, 0), (20, 0), (25, 3)]);
+        harmed[2].0.loops = Some((12, 2));
+        assert_eq!(served_outcome(&forced, harmed, &[held(10, 10)]), 4);
+        // Nor does a thin seed make a harm underpowered (FIT round 3): one thin seed, one seed
+        // with a loop harm, one that carries, is row 4.
+        let mut thin_and_harmed = seeds([(4, 2), (30, 0), (20, 0)]);
+        thin_and_harmed[1].0.loops = Some((30, 2));
+        assert_eq!(served_outcome(&forced, thin_and_harmed, &[held(10, 10)]), 4);
+        assert_eq!(served_outcome(&forced, seeds([(4, 2), (20, 0), (20, 0)]), &[held(10, 10)]), 3, "thin alone is row 3");
+        // Exact replies and DEV's templates are harms too (round 4's note), beside a thin seed.
+        let mut exact_harm = seeds([(4, 2), (30, 0), (20, 0)]);
+        exact_harm[1].0.exact = Some((2, 30));
+        assert_eq!(served_outcome(&forced, exact_harm, &[held(10, 10)]), 4);
+        let mut dev_harm = seeds([(4, 2), (30, 0), (20, 0)]);
+        dev_harm[1].1.template = Some((2, 30));
+        assert_eq!(served_outcome(&forced, dev_harm, &[held(10, 10)]), 4);
+        assert!(!held(0, 0).holds(), "no served opening is no parity");
+    }
+
     /// claude-219: the keyed grade predicts each keyed reply from the greedy and forced ones,
     /// refuses an arm whose tokens or replies are not those, counts exact, template and loop pairs
     /// against greedy, and reads the sheet's table in order.
@@ -10329,6 +10981,7 @@ mod tests {
             admitted: Vec::new(),
             stepped: Vec::new(),
             keyed,
+            served_distance: None,
         };
         // Four openings; the exact key fires on the first. The point key names 5, 7, 8 and 9 at
         // distances 0, 0.1, 0.2 and 0.9. The end of turn is 1.
@@ -10507,6 +11160,7 @@ mod tests {
             admitted,
             stepped: Vec::new(),
             keyed: None,
+            served_distance: None,
         };
         let before = r#"{"position":7,"prompt":[1,2],"reply":[3],"reference":[4],"reply_text":"a","reference_text":"b","reply_keys":0,"reply_named":0,"reference_keys":0,"reference_named":0}"#;
         assert_eq!(serde_json::to_string(&sample(Vec::new())).unwrap(), before);
@@ -10750,6 +11404,7 @@ mod tests {
             admitted: Vec::new(),
             stepped,
             keyed: None,
+            served_distance: None,
         };
         let samples = [
             sample(vec![STEP_NEAREST, STEP_OFF, STEP_NEAREST, STEP_OFF]),
@@ -10792,6 +11447,7 @@ mod tests {
             admitted: Vec::new(),
             stepped: marks,
             keyed: None,
+            served_distance: None,
         };
         // Token 7 opens a TRAIN reply; 9 does not. The end of turn is 1. Greedy loops on prompts
         // 0 and 1 (5 6 7 8 twice) and completes prompt 2.
