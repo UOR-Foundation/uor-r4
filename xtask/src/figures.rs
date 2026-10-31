@@ -1163,12 +1163,12 @@ fn serving_pipeline() -> Result<String, Fail> {
         [40.0, 576.0],
         (12.5, 400, MUTED),
         1120.0,
-        "FBS /5 DEV gap pass: 4,217–4,504 tok/s. Studio and desktop use a synthetic stand-in; M5 and M7 remain open.",
+        "FBS /5 DEV gap pass: 4,217–4,504 tok/s. Studio: synthetic parity plus public M1 top-8 prediction; desktop: synthetic stand-in; neither is a qualified product.",
     );
     s.legend(636.0, &[St::Working, St::Built, St::Progress]);
     s.finish(
         "The D11 serving pipeline, 31 October 2026",
-        "The integer engine serves the saved discrete M1 pair and the separate float-trained FBS trunk. The M1 pair has exact export agreement and reaches 10,876 / 10,566 native decode tok/s on Apple M1 under the bar-f remeasurement; the older close-grade bar-c rate is 11,026 / 10,573. FBS lut-stack/5 has exact rotations and its export gap inside the bar at DEV scope and reaches 4,217–4,504 tok/s; the separate snapped artifact reaches 4,829 tok/s. Integer multiply and divide are allowed and floats are banned. Next, a reachable memory key on new phrasing, joined integer serving and R7. Studio and desktop use a synthetic stand-in, not a qualified product bundle.",
+        "The integer engine serves the saved discrete M1 pair and the separate float-trained FBS trunk. The M1 pair has exact export agreement and reaches 10,876 / 10,566 native decode tok/s on Apple M1 under the bar-f remeasurement; the older close-grade bar-c rate is 11,026 / 10,573. FBS lut-stack/5 has exact rotations and its export gap inside the bar at DEV scope and reaches 4,217–4,504 tok/s; the separate snapped artifact reaches 4,829 tok/s. Integer multiply and divide are allowed and floats are banned. Next, a reachable memory key on new phrasing, joined integer serving and R7. Studio has synthetic parity plus public M1 top-8 next-token prediction after an explicit download; desktop uses a synthetic stand-in. Neither is a qualified product.",
     )
 }
 

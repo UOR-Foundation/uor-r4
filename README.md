@@ -20,7 +20,7 @@ Chat assistants run on **transformers**: programs that spend much of their effor
 large grids of decimal numbers. UOR-R4 bets that a different toolkit can do the same job more
 cheaply: geometric rotations, whole-number addresses built from primes, small lookup tables and an
 exact memory. The goal is a fast language model that trains quickly and runs on your own laptop or
-in your browser, with local computation by default and an optional user-configured API that sends prompts to the chosen endpoint. The project is open research and **pre-alpha**:
+in your browser, with local computation by default and, in the web Studio only, an optional user-configured OpenAI-compatible API that sends prompts to the chosen endpoint; the desktop shell has no OpenAI-compatible API mode. The project is open research and **pre-alpha**:
 **one milestone is complete, but no model built under its rules holds a useful conversation yet.**
 [What UOR-R4 is](docs/start/what-is-uor-r4.md) explains the bet in five minutes.
 

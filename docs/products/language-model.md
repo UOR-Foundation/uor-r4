@@ -50,7 +50,7 @@ float-trained FBS `lut-stack/5` trunk.
 | p-f held-out phrasing | **7,850 / 15,953** | **7,872 / 15,953** | unigram 1,409; T2 7,375; band 81 |
 | Apple M1 decode | **10,876 tok/s** | **10,566 tok/s** | median; 192-token prefill, 64-token decode |
 
-Both seeds have exact export/reference agreement and pass B4. These results close M1
+The speed row is the bar-f remeasurement; the older close-grade bar (c) reports 11,026 / 10,573 tok/s. Both seeds have exact 14,287-row DEV export/reference agreement and pass B4. These results close M1
 ([#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029)), with the older close grade for
 bars (a)–(e) and claude-211's panel score for bar (f) ([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 

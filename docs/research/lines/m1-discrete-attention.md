@@ -51,9 +51,7 @@ transfer, and held-out-phrasing transfer ([CHARTER §4.8](../../../CHARTER.md#4-
    No run was kept, and the fresh slice stayed sealed.
 6. **A8 address cells (19 Oct).** Predecessor-structured placement lifted starting admission from
    127 to 1,351 of 3,847, then training eroded it. Relation stopped at 551; the frozen control held 857.
-7. **Stage T and the 19-table trunk (25–26 Oct).** BVG-K and the joint-pointer Hamilton trunk produced
-   two seeded `UORLUT01` artifacts with exact export agreement. DEV scored 7,002 and 7,001; Fresh V2
-   scored 7,215 and 7,228, at both seeds above both controls.
+7. **Stage T exports (25–26 Oct), then the 19-table M1 trunk (30 Oct).** Stage T's four-table exports came first. The later joint-pointer Hamilton trunk produced the two seeded M1 `UORLUT01` artifacts with exact 14,287-row DEV export agreement. DEV scored 7,002 and 7,001; Fresh V2 scored 7,215 and 7,228, at both seeds above both controls ([M1 close](../../labs/m1-close-saved-model/README.md), [Fresh V2](../../labs/m1-fresh-panel-transfer/README.md)).
 8. **Held-out phrasing (30 Oct).** p-f has no prompt value-masked templates in TRAIN at K = 1,024.
    The saved model scored 7,850 and 7,872 of 15,953 against T2's 7,375, beyond paired band 81.
    Its separate DEV export agreement was exact on 14,287 rows; Apple M1 decode is 10,876 and

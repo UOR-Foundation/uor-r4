@@ -58,7 +58,7 @@ Every number in the last four rows is a count of reachable target words on the d
 ## What has never been tested
 
 - The independent effect of this placement on language and learned address formation. M1 is a whole-model result, not an A8 ablation.
-- Any accuracy, ranking, bits-per-byte or reply quality for this table.
+- Any isolated A8-specific accuracy, ranking, bits-per-byte or reply-quality effect. The saved M1 whole-model pass does not isolate this placement's effect.
 - Placement that also uses successor edges. Version 1 lets only already-placed predecessors pull a word.
 - Placement keyed on the real read centre instead of the last word's cell.
 - The compact 32-cell form, $K\approx34$ or more, and partly injective tables.

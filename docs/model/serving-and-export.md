@@ -92,7 +92,7 @@ remain unintegrated fixtures; the serving path uses scalar table kernels.
 ## Export gaps, old and current
 
 The export gap is the served score minus the float score on the same evaluator and positions.
-Today's discrete M1 export has zero row gap at its measured panels; the FBS `/5` gap is inside its
+Today's discrete M1 export has zero row gap on the 14,287-row DEV panel at both seeds; the FBS `/5` gap is inside its
 registered band at DEV. These are different contracts and should not be averaged.
 
 Older float geometric stacks had larger gaps. Matched 512-window measurements were about 0.009 BPB,

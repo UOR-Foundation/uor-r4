@@ -89,7 +89,8 @@ and $8/h across all labs, and a healthy run is not cancelled for a self-set budg
 | 18 Oct | Relation/control to Q1 | Copy-successor admission fell to 225/205 of 3,847 | diagnostic stop |
 | 19 Oct | K16, two objectives/two seeds | A scored 65 and 463; R collapsed to 19 or 20 cells | negative configuration |
 | 19 Oct | A8 dose | Relation admission 1,351→551; control 857 | diagnostic stop |
-| 25–26 Oct | Stage T and 19-table export | Exact export and M1 (a)–(e) on two seeds | positive at M1 scope |
+| 25–26 Oct | Stage T four-table exports | Exact export at four checkpoints, before the M1 closing pair | positive at Stage T scope |
+| 30 Oct | 19-table M1 export and close | Bars (a)–(e) at two seeds: DEV 7,002 / 7,001 and Fresh V2 7,215 / 7,228, with exact 14,287-row DEV export agreement ([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md)) | M1 bars (a)–(e) complete |
 | 30 Oct | p-f bar (f) | 7,850 / 7,872 against T2 7,375, band 81 | M1 complete |
 
 A negative closes a configuration, never a mechanism. These records are preserved because they show
