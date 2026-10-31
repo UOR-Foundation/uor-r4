@@ -1,6 +1,6 @@
 # The research lines
 
-A research line is one sustained question the project worked on, such as "how does the discrete model read earlier text". The audit sorted all 1,173 recorded pieces of work into 20 lines. This page lists them, shows when each ran, and says in a word where each stands. Seventeen lines have at least three records and get their own page. None has produced a model that holds a useful conversation: the project is pre-alpha and **1 of its 8 milestones is complete (M1)** ([PLAN](../../../PLAN.md), [STATE](../../../STATE.md)).
+A research line is one sustained question the project worked on, such as "how does the discrete model read earlier text". The 19 October audit sorted all 1,173 recorded pieces of work into 20 lines. This page lists them, shows when each ran, and says in a word where each stands. Seventeen lines have at least three records and get their own page. None has produced a model that holds a useful conversation: the project is pre-alpha and **1 of its 8 milestones is complete (M1)** ([PLAN](../../../PLAN.md), [STATE](../../../STATE.md)).
 
 ![A timeline from July to October 2026 of the 12 largest of the 20 research lines, with one dot per dated record; the 8 smaller lines are not shown](../../figures/research-lines-timeline.svg)
 

@@ -88,7 +88,7 @@ They share no table, no trunk and no artifact format. This page follows the FBS 
 | 7 | Readout | writer **23 µs, 0.6%**; whole-table nearest **486 µs** | whole-table search **13.0 ms, 13%** | a query point in ℝ²⁵⁶ → a token id | yes. The decision is to serve nearest (claude-150), at 21 times the writer's cost |
 | 8 | Decode loop | **36 µs outside the step, 1% of the plain token** | none | an id → the next id, greedy | ids only: the FBS artifact has no text path |
 | 9 | Training | none | **96.5 ms a step, 31,718 context tok/s** at (a) | windows → float weights | yes |
-| 10 | Integer export | once per model | none | a float snapshot → a `UORLUT01` integer artifact | discrete M1: exact 14,287-row DEV agreement and B4 pass. FBS `/5`: inside the export-gap bar at DEV scope |
+| 10 | Integer export | once per model | none | a trained model snapshot (discrete tables or FBS float weights) → a `UORLUT01` integer artifact | discrete M1: exact 14,287-row DEV agreement and B4 pass. FBS `/5`: inside the export-gap bar at DEV scope |
 | 11 | Serving on M1 | **3.77 ms a token (the step 3.73), 265 tok/s** | none | the artifact and prompt ids → reply ids | — |
 
 Serving shares are of a step on claude-126's width-256 export ([claude-158](../loop/tasks/fbs-cost-profile/claude-158/REPORT.md)); training shares are of claude-152's (a) step ([claude-157](../loop/tasks/fbs-cost-profile/claude-157/REPORT.md)). The two platforms differ in hardware, number type and what a step holds, so shares are compared only within each column.

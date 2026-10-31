@@ -19,6 +19,8 @@ On 30 Oct the owner assigned Kimi the follow-up: "Please make sure the documenta
 
 ## What is missing
 
+**Item-start gap narrative, now historical except post-merge issue/render verification.**
+
 - **M1 closed after the 29 Oct refresh.** #2029 and claude-211 record two saved integer artifacts passing all six bars, but the README, root roadmap, book, milestone cache, status figures, crate READMEs and Studio text still carry earlier states. The older `m1-close-grade.json` covers bars (a)–(e); claude-211's `panel-score.json` and REPORT supply bar (f), and both parts belong in the cancel probe.
 - **Current pages and tracker inputs mix dates and model paths.** K16's dated negative is sometimes presented as the current best; the saved discrete M1 model is conflated with the separate float-trained FBS trunk; `m1-close-saved-model` still says five bars and `m1-heldout-phrasing-transfer` still says M1 stays open.
 - **The previous refresh left named negatives and holds.** Two book links from `docs/research/notebook/m4-serving.md` were already broken; `docs/mechanisms/exact-memory.md` and `object-store.md` were held for antigravity-113 and are excluded here. `docs/integration/current-state.md` is a dated log, not a page to rewrite.

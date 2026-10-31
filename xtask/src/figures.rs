@@ -579,7 +579,7 @@ fn architecture_narrow() -> Result<String, Fail> {
         [16.0, 824.0],
         (12.0, 400, MUTED),
         348.0,
-        "Green: served. Hatched: trained, not yet served.",
+        "Green: served. Hatched: in progress/synthetic.",
     );
     s.finish("Two model paths, M1 complete, narrow layout", "The saved discrete 19-table model has closed M1 at all six bars on two seeds. The separate float-trained FBS trunk uses a learned table, SpiralCore position, a Hamilton-gated recurrence and exact turn memory, with exact rotations and its export gap inside the bar under lut-stack/5 at DEV scope. The /7 engine serves opening and later-reply memory tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open. Next, localize claude-232's parity MISS before p-x, then joined integer serving and R7. On p-f, 62.5% of reference replies are verbatim TRAIN replies: reference-data overlap, not a generated-copy rate, new reply kinds or useful conversation.")
 }

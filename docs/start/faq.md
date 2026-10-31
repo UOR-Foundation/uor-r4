@@ -28,7 +28,7 @@ No, by design. The charter says the project is "not a transformer" (section 1), 
 
 ### 3. Does it work yet?
 
-M1's narrow next-token test passes; no useful conversation is established. The saved discrete model beats both count tables at both seeds through its integer export, with exact 14,287-row DEV export/reference agreement and tokens per second reported. The integer serving engine, exact object-store oracle, Studio worker and desktop shell also work at their declared scopes. A passing construction control alone is not a language result; M1 is a panel result, not useful chat ([open questions](../research/open-questions.md)).
+M1's narrow next-token test passes; no useful conversation is established. The saved discrete model beats both count tables at both seeds through its integer export, with exact 14,287-row DEV export/reference agreement and tokens per second reported. The integer serving engine, the object-store consumer's frozen host-control panel, the separate true-address exact-read oracle, the Studio worker and desktop shell also work at their declared scopes. The host-control panel is not M3 qualification. A passing construction control alone is not a language result; M1 is a panel result, not useful chat ([open questions](../research/open-questions.md)).
 
 The separate float-trained FBS `lut-stack/5` trunk is also exported with exact rotations and its DEV export gap inside the bar. The two model paths do not join, and complete correct replies remain open ([pipeline map](../model/pipeline-map.md)).
 

@@ -42,5 +42,5 @@
 <text x="30" y="746" font-size="14" font-weight="400" fill="#2B3138" text-anchor="start">and a reachable exact memory key</text>
 <text x="30" y="770" font-size="14" font-weight="400" fill="#2B3138" text-anchor="start">Localize parity MISS before p-x</text>
 <text x="30" y="794" font-size="14" font-weight="400" fill="#2B3138" text-anchor="start">p-f refs: 62.5% verbatim TRAIN</text>
-<text x="16" y="824" font-size="12" font-weight="400" fill="#57606A" text-anchor="start">Green: served. Hatched: trained, not yet served.</text>
+<text x="16" y="824" font-size="12" font-weight="400" fill="#57606A" text-anchor="start">Green: served. Hatched: in progress/synthetic.</text>
 </svg>

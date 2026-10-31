@@ -13,7 +13,7 @@ notebook: docs/research/notebook/m1-discrete-attention.md
 
 ## Why it matters
 
-This item records M1's approved close-grade bars (a)–(e); the separate `m1-heldout-phrasing-transfer` item closes bar (f). Together they unblock M2, M4 and everything after.
+This item records M1's approved close-grade bars (a)–(e); the separate `m1-heldout-phrasing-transfer` item closes bar (f). Together they unblock M2 and make M1 available for M3 selection; M4 remains gated by M3.
 
 ## What is missing
 
