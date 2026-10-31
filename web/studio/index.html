@@ -278,7 +278,7 @@
                                 <span class="micro-label">01 · QUICK START</span>
                                 <h3>Open a workspace, then ask the agent</h3>
                                 <ol class="guide-list">
-                                    <li>Open <button class="inline-link" data-guide-nav="files" type="button">Files</button> and choose <strong>Open folder…</strong> (File System Access API).</li>
+                                    <li>Open <button class="inline-link" data-guide-nav="workspace" type="button">Workspace</button> and choose <strong>Open folder…</strong> (File System Access API).</li>
                                     <li>Click a file to open an editor tab; save edits back to disk with <kbd class="kbd">⌘S</kbd>.</li>
                                     <li>In <button class="inline-link" data-guide-nav="agent" type="button">Agent</button>, attach the active file as context and describe the task.</li>
                                     <li>Configure an API provider under <button class="inline-link" data-guide-nav="models" type="button">Models</button> when Claude's API endpoint is available; until then the local engine serves next-token prediction only.</li>
@@ -320,13 +320,15 @@
                             <h3>Shortcuts</h3>
                             <dl class="guide-shortcut-grid">
                                 <div><dt><kbd class="kbd">⌘K</kbd></dt><dd>Command palette</dd></div>
+                                <div><dt><kbd class="kbd">⌘1–4</kbd></dt><dd>Agent / Workspace / Models / Guide</dd></div>
                                 <div><dt><kbd class="kbd">⌘B</kbd></dt><dd>Toggle navigation</dd></div>
-                                <div><dt><kbd class="kbd">⌘I</kbd></dt><dd>Toggle context inspector</dd></div>
+                                <div><dt><kbd class="kbd">⌘I</kbd></dt><dd>Toggle context panel</dd></div>
                                 <div><dt><kbd class="kbd">⌘S</kbd></dt><dd>Save active file</dd></div>
-                                <div><dt><kbd class="kbd">⌘O</kbd></dt><dd>Open folder</dd></div>
+                                <div><dt><kbd class="kbd">⇧⌘S</kbd></dt><dd>Save as a copy</dd></div>
                                 <div><dt><kbd class="kbd">⌘,</kbd></dt><dd>Settings</dd></div>
-                                <div><dt><kbd class="kbd">Enter</kbd></dt><dd>Send / run selection</dd></div>
+                                <div><dt><kbd class="kbd">Enter</kbd> / <kbd class="kbd">Shift+Enter</kbd></dt><dd>Send / newline</dd></div>
                                 <div><dt><kbd class="kbd">Esc</kbd></dt><dd>Stop generation / close dialog</dd></div>
+                                <div><dt><kbd class="kbd">?</kbd></dt><dd>This shortcut reference</dd></div>
                             </dl>
                         </section>
                     </div>
@@ -425,15 +427,16 @@
             <div class="modal-body">
                 <table class="help-table">
                     <tbody>
-                        <tr><td><kbd class="kbd">⌘K</kbd></td><td>Command palette (grouped)</td></tr>
+                        <tr><td><kbd class="kbd">⌘K</kbd></td><td>Command palette</td></tr>
+                        <tr><td><kbd class="kbd">⌘1 ⌘2 ⌘3 ⌘4</kbd></td><td>Agent / Workspace / Models / Guide</td></tr>
                         <tr><td><kbd class="kbd">⌘B</kbd></td><td>Toggle navigation sidebar</td></tr>
-                        <tr><td><kbd class="kbd">⌘I</kbd></td><td>Toggle context inspector</td></tr>
-                        <tr><td><kbd class="kbd">⌘S</kbd></td><td>Save active editor tab</td></tr>
-                        <tr><td><kbd class="kbd">⌘O</kbd></td><td>Open workspace folder</td></tr>
+                        <tr><td><kbd class="kbd">⌘I</kbd></td><td>Toggle context panel</td></tr>
+                        <tr><td><kbd class="kbd">⌘S</kbd></td><td>Save active file</td></tr>
+                        <tr><td><kbd class="kbd">⇧⌘S</kbd></td><td>Save as a copy</td></tr>
                         <tr><td><kbd class="kbd">⌘,</kbd></td><td>Open settings</td></tr>
-                        <tr><td><kbd class="kbd">1–5</kbd></td><td>Jump to Agent / Files / Editor / Models / Guide</td></tr>
                         <tr><td><kbd class="kbd">Enter</kbd> / <kbd class="kbd">Shift+Enter</kbd></td><td>Send message / newline</td></tr>
-                        <tr><td><kbd class="kbd">Esc</kbd></td><td>Close dialog, palette, or stop generation</td></tr>
+                        <tr><td><kbd class="kbd">Esc</kbd></td><td>Close palette/dialog or stop generation</td></tr>
+                        <tr><td><kbd class="kbd">?</kbd></td><td>Open this shortcut reference</td></tr>
                     </tbody>
                 </table>
                 <p class="hint">Full workflows live in <button class="inline-link" id="btnHelpGuide" type="button">Guide</button>.</p>
@@ -457,6 +460,27 @@
                 <span><kbd class="kbd">Esc</kbd> close</span>
             </div>
         </div>
+    </div>
+
+    <div class="legacy-compat" id="legacyCompat" hidden aria-hidden="true">
+        <nav id="rail" aria-label="Legacy navigation compatibility">
+            <button id="railChat" type="button">Chat</button>
+            <button id="railModel" type="button">Models</button>
+            <button id="railEditor" type="button">Editor</button>
+            <button id="railPalette" type="button">Commands</button>
+            <button id="railTheme" type="button">Theme</button>
+            <button id="railHelp" type="button">Help</button>
+            <button id="railSessionsBottom" type="button">New session</button>
+        </nav>
+        <aside id="sidebar" aria-label="Legacy sessions compatibility">
+            <button id="btnToggleSidebar" type="button">Toggle sessions</button>
+            <button id="btnSidebarCollapse" type="button">Collapse sessions</button>
+        </aside>
+        <button id="btnMobileMenu" type="button">Menu</button>
+        <span id="editorSavedBadge">Saved locally</span>
+        <span id="envEngine">starting</span>
+        <span id="envModel">none</span>
+        <span id="envTokenizer">awaiting model</span>
     </div>
 
     <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="false"></div>

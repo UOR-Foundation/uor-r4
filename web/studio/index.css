@@ -3623,3 +3623,5 @@ body[data-view="workspace"] #workspaceView { display: flex; }
 .visually-hidden { display: none !important; }
 .msg-actions { opacity: 1; }
 .msg-action { color: var(--text-muted); }
+
+.legacy-compat { display: none !important; }

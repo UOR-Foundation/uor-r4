@@ -726,6 +726,14 @@
         if (ctxLabel) ctxLabel.textContent = folder || 'No folder open';
         var ctxMeta = document.getElementById('ctxWorkspaceMeta');
         if (ctxMeta) ctxMeta.textContent = folder ? (files.mode() === 'directory' ? 'Read/write access to this folder.' : 'Demo/imported files for this session.') : 'Open a folder in Workspace.';
+        var legacySaved = document.getElementById('editorSavedBadge');
+        if (legacySaved) {
+            var saveState = document.getElementById('editorSaveState');
+            legacySaved.textContent = saveState && saveState.textContent ? saveState.textContent : (document.getElementById('editorUnsaved') ? document.getElementById('editorUnsaved').textContent : 'Saved locally');
+        }
+        setText('#envEngine', engine);
+        setText('#envModel', /no model/i.test(model) ? 'none' : model);
+        setText('#envTokenizer', tokenizer || 'awaiting model');
         var sessionsCount = document.getElementById('settingsSessionCount');
         if (sessionsCount) sessionsCount.textContent = sessions.length + ' session' + (sessions.length === 1 ? '' : 's') + ' · ' + sessions.reduce(function (sum, session) { return sum + (session.messageCount || 0); }, 0) + ' messages';
         var draftCount = document.getElementById('settingsDraftCount');
@@ -796,6 +804,17 @@
             window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
             toast('Exported ' + sessions.length + ' session(s).', 'success');
         });
+        // legacy id compatibility wiring (elements are display:none but must work when queried)
+        on('railChat', 'click', function () { activateSection('agent'); });
+        on('railModel', 'click', function () { activateSection('models'); });
+        on('railEditor', 'click', function () { activateSection('workspace'); });
+        on('railPalette', 'click', openPalette);
+        on('railTheme', 'click', toggleTheme);
+        on('railHelp', 'click', openHelp);
+        on('railSessionsBottom', 'click', newSessionAction);
+        on('btnToggleSidebar', 'click', function () { toggleChrome('nav'); });
+        on('btnSidebarCollapse', 'click', function () { toggleChrome('nav'); });
+        on('btnMobileMenu', 'click', function () { toggleChrome('nav'); });
         on('btnNewChat', 'click', newSessionAction);
         on('btnAttachContext', 'click', attachContext);
         on('btnClearAttachments', 'click', clearAttachments);
