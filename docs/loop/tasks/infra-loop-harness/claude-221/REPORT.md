@@ -10,15 +10,27 @@ No measurement: this unit records an item.
 
 - **`loop claim infra-loop-harness` refused:** its `PLAN.md` overlaps Kimi's open docs-status-refresh order (#3436). The ORDER is hand-written, scoped to files that order does not touch.
 - **The first item draft's title was 90 characters,** over `roadmap check`'s 80-character limit. It is shortened to "Serve the point key's opening in the integer artifact on the laptop".
+- **The fresh review found CHANGES** in the item as first synced:
+  - **The only bar could not fail.** It was parity against the float key's names on panels already read, with "near-tie" undefined, and it dropped the decision card's "its own bar on a fresh panel" for form C.
+  - **The scope was incomplete:** it missed `stack/tests.rs`, `stack/synthetic.rs`, `fbs-export`, `fbs-toks`, a panel driver and the WASM files. It also listed the float snapshot and exporter files, which condition (b) forbids building the table from.
+  - **`needs_gpu: true`** answered a question the item left to the sheet.
+
+  All three are fixed:
+  - The deciding bar is form C's own on a fresh panel p-x: integer served against integer greedy, claude-220's `carries` and `harmless`, at seeds 1–3, with rows registered before p-x is read.
+  - The exact instrument checks fail the unit.
+  - Parity is reported with its near-tie margin fixed in the item (512 Q12 units, the bound on an order rounding alone can flip).
+  - The scope lists the files the work needs, and drops the float snapshot files.
+  - `needs_gpu` is false, with the reason: the float references are sealed, and the integer runs are the served artifact on the laptop, as `turn-memory-integer`'s parity ran its integer side.
 
 ## What worked
 
 - **The item [`point-key-integer`](../../../../roadmap/items/point-key-integer.md) is recorded,** and its issue is #3450. It is claude-220's condition (d), "the export needs its own item", now that claude-220 read row 2 (#3443, `c3d5cb684`).
 - **It carries condition (b):** the integer form's bar is measured with the integer trunk's own points, for both the query and the table, never with float points quantized after the fact.
 - **Its done-when, in brief:**
-  - an integer table built by the integer engine (i16 Q12, about 109 MB);
-  - its search at `stack_step_fbs`'s first reply step, where the exact key misses;
-  - parity against claude-220's float served names on p-w, p-v and DEV, each difference classed;
+  - an integer table built by the integer engine (i16 Q12, about 109 MB), and its search at `stack_step_fbs`'s first reply step, where the exact key misses;
+  - exact instrument checks that fail the unit;
+  - parity against claude-220's float served names on p-w, p-v and DEV, reported, with its classes fixed in advance;
+  - the deciding bar on a fresh panel p-x, at seeds 1–3;
   - tok/s on the laptop.
 
 ## What changed
@@ -34,6 +46,7 @@ No measurement: this unit records an item.
   - By milestone: research 39.
 - **The sync plan:** 0 labels, 1 issue to create, 0 to update, 0 to close, 0 milestone checklists.
 - **Applied:** created #3450.
+- **After the review's fixes,** a second sync planned and applied exactly one update, #3450's body. The rendered row's GPU column now reads "no".
 
 ## Checks run at the head
 
@@ -50,9 +63,7 @@ None.
 ## Still open
 
 - **The item's first unit:** the integer table, its search, and the artifact record. It takes its claim through `loop next` once this merges.
-- **Settled in that unit's sheet:**
-  - where the table is built and what it costs;
-  - whether the parity evaluation runs on the laptop or must run on the GPU (CHARTER §3.5).
+- **Settled in that unit's sheet:** the export pass's cost over TRAIN's openings and its split across the laptop's cores, the fresh panel p-x's seed, and the bar's rows.
 
 ## Plain summary
 
