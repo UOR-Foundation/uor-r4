@@ -129,7 +129,7 @@ flowchart LR
 
 <a id="hinge-loss"></a>**Hinge loss.** A loss that asks only whether the right answer beats its strongest rivals by a fixed gap. If it does, the loss is zero. If not, the loss is the shortfall. It needs no probabilities. The live version is an integer hinge. See [rank-margin](../mechanisms/rank-margin.md).
 
-**Hold.** An owner order that stops a kind of work until the owner lifts it. Training, the second milestone's training and rental, and Stage B are held work. Since D65–D69, a lab runs held work on its own pre-run review, which reads the whole project first, and the owner can reverse it (AGENTS.md). A FIT review alone lifts none of them. See [charter](../../CHARTER.md), sections 5.1 and 5.10.
+**Hold.** An owner order that stops a kind of work until the owner lifts it. The older blanket training holds are retired: under D67 a lab runs training and evaluation on its own pre-run review, which the owner can reverse. D41's donor pass is the named owner-at-dispatch exception. A FIT review alone releases no hold. See [charter](../../CHARTER.md), sections 5.1 and 5.10.
 
 **Hopf map.** A map that takes a point on a four-dimensional sphere (a unit quaternion) to a point on an ordinary sphere. It forgets one angle, called the fibre, so many states cast the same shadow. The kept-fibre map is built and READY for a language test; the older sector-routing form is PARKED. Neither is part of M1's read. See [the Hopf map and the kept fibre](../geometry/hopf-observation.md).
 

@@ -56,9 +56,7 @@ M1's result does not qualify useful conversation.
 The open research problem is complete replies on new phrasing. Claude-217's cycle step ends every
 registered loop but leaves content underpowered, so greedy remains the decode. On p-s, reply
 openings are 17.4%, 13.7% and 18.6% at three seeds, against about 80% on later tokens. Exact turn
-memory keys on exact first token ids and misses reworded prompts. The next work is a memory key
-that new phrasings can reach, then one joined model through integer serving and M2–M4
-([claude-217](../loop/tasks/one-model-end-to-end/claude-217/REPORT.md)).
+memory keys on exact first token ids and misses reworded prompts. [Claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md) now serves the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. Next, export the point table to the integer engine, then qualify the joined model through integer serving and M2–M4.
 
 ## The order things must happen in
 

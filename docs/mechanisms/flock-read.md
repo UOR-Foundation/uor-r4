@@ -1,6 +1,6 @@
 # Flock read (starling / murmuration neighbour read)
 
-**Status: ACTIVE.** The integer Flock kernel passes its finite CUDA construction controls and runs inside every Relation and control arm. But no run has ever isolated what the Flock read itself contributes ([attention-state record](../labs/attention-state-2026-10-18/README.md)).
+**Status: ACTIVE.** The integer Flock kernel passes its finite CUDA construction controls and runs inside every Relation and control arm. It is also the M1 `FrozenZeroV1` read, with the orbit-root causal pointer and the rest of the M1 composition. No run has isolated what Flock itself contributes ([attention-state record](../labs/attention-state-2026-10-18/README.md), [M1 close](../labs/m1-close-saved-model/README.md)).
 
 **29 Oct 2026.** On the float-trained FBS trunk, the flock read ran as cell D (claude-144, 145): 235 reply openings against a bar of 236 at seed 1, and 264 against 271 at seed 2, out of 1,226 on DEV. That closes this configuration, not the mechanism (D22). Flock remains the leading track for reading by meaning, and is revisited after the model runs end to end (steps in the [pipeline map](../model/pipeline-map.md)).
 

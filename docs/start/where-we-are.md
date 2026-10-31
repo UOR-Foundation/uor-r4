@@ -69,8 +69,10 @@ keys that improved reply openings offline. The latest merged experiment,
 generation on fresh p-v. Serving the point key for the first reply token where exact memory misses
 improves template replies by **+13, +8 and +12** and exact replies by **+9, +8 and +12** at three
 seeds. Keyed openings are right on 27–31% of cases, so this is a partial gain, not useful chat. The
-sign key is inconclusive at this panel size. Next, train and serve the point key in one integer
-model and score it end to end.
+sign key is inconclusive at this panel size. [Claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md)
+then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at
+three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing.
+Next, export the point table to the integer engine and score the integer model end to end.
 
 ## What does not work yet
 
@@ -99,9 +101,9 @@ multiplication and are historical evidence, not the D11 product.
 | Milestones complete | **1 of 8 (M1)** | [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) |
 | Saved model top-1 on DEV | 7,002 / 7,001 of 14,287 | [M1 close](../labs/m1-close-saved-model/README.md) |
 | Fresh V2 / p-f | 7,215 / 7,228; 7,850 / 7,872 | [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
-| Useful conversation | Not established | [latest free-generation evidence](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md) |
+| Useful conversation | Not established | [latest free-generation evidence](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md) |
 | Next capability milestone | M2: grounded complete replies | [PLAN](../../PLAN.md) |
-| Immediate research problem | New-phrasing reply opening and a memory key that reworded questions can reach | [claude-219](../loop/tasks/one-model-end-to-end/claude-219/REPORT.md) |
+| Immediate research problem | New-phrasing reply opening and a memory key that reworded questions can reach | [claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md) |
 | Products shipped | None; M1 is not an alpha release | [products](../products/README.md) |
 
 ## Go deeper

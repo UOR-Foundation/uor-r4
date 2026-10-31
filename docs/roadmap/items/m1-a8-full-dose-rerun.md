@@ -12,15 +12,15 @@ scope: [crates/uor-r4-discrete/**, docs/harness/prep/m1-a8-full-dose-rerun*, doc
 
 ## Why it matters
 
-Tests whether reach survives training, which is M1 bar (b), and gives the first run in which ranking can be judged with admission intact.
+Tests whether reach survives training, the then-current D39 G-Adm condition, and gives the first run in which ranking can be judged with admission intact. G-Adm is upstream/historical evidence, not the approved close-grade M1 bar (b), which is exact export/reference agreement and B4.
 
 ## What is missing
 
-The admission-preserving A8 rerun ran on 25 October 2026 with D67/D68 PASS. FrozenZero reached Q1 with `1,106 / 3,847`, `4,292 / 14,287` and `871 / 14,287`, then stopped for diagnosis under the 64-batch whole-interval rejection cadence; Relation stopped at batch 1,600. Fresh V2 remains sealed. This is an instrument/cadence-granularity stop, not a mechanism negative or an A8 `5,009` result; that number belongs to Stage T.
+The admission-preserving A8 rerun ran on 25 October 2026 with D67/D68 PASS. FrozenZero reached Q1 with `1,106 / 3,847`, `4,292 / 14,287` and `871 / 14,287`, then continued to a diagnostic stop at batch 5,248 under the 64-batch whole-interval rejection cadence; Relation stopped at batch 1,600. Fresh V2 remains sealed. This is an instrument/cadence-granularity stop, not a mechanism negative or an A8 `5,009` result; that number belongs to Stage T.
 
 ## Done when
 
-Paired DEV verdict recorded for the registered arms and seeds; reach kept (M1 bar (b), G-Adm) or a registered diagnostic stop classified as instrument versus mechanism; fresh slice stays sealed.
+Paired DEV verdict recorded for the registered arms and seeds; reach kept under the then-current D39 G-Adm condition or a registered diagnostic stop classified as instrument versus mechanism; fresh slice stays sealed.
 
 ## How to start
 

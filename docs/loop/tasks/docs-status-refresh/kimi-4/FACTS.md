@@ -1,6 +1,6 @@
 # FACTS: documentation status at 30 Oct 2026
 
-Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md). ORDER: [ORDER.md](ORDER.md). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `1f83dd4b2f76e16912f5793a58a4687548f1c237`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
+Lab: kimi. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md). ORDER: [ORDER.md](ORDER.md). Original base: `ec9a790fe5be73cd673f082eba86ced551b22d12`; current PR base: `c3d5cb684336a59cb12a8b5021430585bc3b751a`. Earlier exact-head reviews inspected `f6acd4b8a9e01acfca4506ac070f72349cfe46de`, `9fb906dc37ab6fc1ec2b36d5ae007c44b1053394` and `95cb7388ada0386e9c3c1bea31f1766809f7938b`. Those are historical provenance, not the final head; the final head is the commit named in the PR and its fresh review.
 
 Every public number in this refresh must link to this sheet's committed evidence. This is a factual baseline, not a new measurement or a capability claim.
 
@@ -41,7 +41,12 @@ Every public number in this refresh must link to this sheet's committed evidence
 - **Latest merged result: claude-219**, [keyed-opening report](../../one-model-end-to-end/claude-219/REPORT.md), merged as `e44f68e65`:
   - On fresh p-v, 393 prompts at each of three seeds, the point key supplies the first reply token where exact memory misses, then greedy continues. Template pairs are **(16,3), (9,1), (14,2)**, net **+13/+8/+12**; exact pairs are **(12,3), (9,1), (14,2)**, net **+9/+8/+12**. Each passes its paired band without higher loops or lower DEV.
   - The gain is partial: keyed openings are right on **105–119 of 385 (27–31%)**, reaching **12–18%** of the forced-opening lift of +71/+66/+73 templates. Fewer loops are not a quality gain because more replies end early, including 49–58 short `Noted.` openings per seed.
-  - The sign key's pairs have `b + c < 10` at every seed, so it is **inconclusive at this panel size**, not proven ineffective. The next unit trains and serves the point key in one integer model and scores it end to end. The client-sized integer table and nearest search, and useful conversation, remain open.
+  - The sign key's pairs have `b + c < 10` at every seed, so it is **inconclusive at this panel size**, not proven ineffective.
+- **Latest merged result: claude-220**, [served-key report](../../one-model-end-to-end/claude-220/REPORT.md), merged on `main` as `c3d5cb684336a59cb12a8b5021430585bc3b751a`:
+  - One float model now serves the point key itself on fresh p-w (1,200 conversations), reproducing claude-219's keyed files exactly on p-v and DEV. Template pairs are **(50,9), (44,4), (47,5)**, net **+41/+40/+42** at three seeds; exact pairs are **(48,9), (44,4), (47,4)**, all passing their bands without lower DEV.
+  - The gain is recall of TRAIN replies, not generalization: served replies are more often verbatim TRAIN replies and have fewer new n-grams. The key closes about 18% of the forced-opening gap and is right on 28–32% of its 1,172 openings per seed.
+  - The table is 218,931,272 bytes per checkpoint and scanned at each keyed opening; search is at most 32 ms with three processes sharing one RTX 5090 and at most 5.8 ms alone, both upper bounds. These are float GPU evaluations, not integer serving speed.
+  - **Next:** export the point table to the integer engine, then score the integer model end to end. Client-sized search and useful conversation remain open.
 - **D67:** no blanket owner release holds every training step. The D41 donor pass is the remaining named owner-at-dispatch exception. Do not restore retired "every training step is held" language.
 
 ## 3. Historical facts to preserve, not present as current
@@ -86,6 +91,7 @@ Every public number in this refresh must link to this sheet's committed evidence
 
 - #3430 (claude-218) was active at the baseline and merged at `5ec6e36a8f69d3b0c9acf993cc3e09acc7be4646` during verification. #3439 (claude-219) then merged at `e44f68e65` with the fresh p-v free-generation result. Both are included; Claude's research files remain untouched by this unit.
 - #3441 registered the M7 Studio live/model-sources item; #3442/#3444 rebuilt and published it. During final repair, #3445 added the public M1 release/top-8 Studio path, #3446 served `/7` integer turn memory, and #3447 redesigned the console. `origin/main` `1f83dd4b2` is merged forward; their implementations and generated roadmap view are preserved. This unit changes only documentation and does not publish the Studio or edit `.github/**`.
+- #3443 merged claude-220 on `main` as `c3d5cb684336a59cb12a8b5021430585bc3b751a` during final review: one float model serves the point key on p-w at all three seeds with exact claude-219 parity. It is included, and the next step is the point table's integer export. Claude's research source and records remain untouched by this unit.
 - #3426's figure tooling fixes landed through #3438 and were merged forward before figure regeneration.
 - #3435/#3424: discrete/source-interface code only, no documentation overlap at baseline.
 - #3323 (antigravity-113): `exact-memory.md` and `object-store.md` stay untouched even though they were once considered by the older documentation refresh.

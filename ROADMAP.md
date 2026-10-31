@@ -23,8 +23,9 @@ closes only when its full bar is met on a saved model. The evidence and limitati
 M1's two-seed results are **7,002 / 7,001** on DEV (T2 6,300), **7,215 / 7,228** on Fresh V2
 (T2 6,582), and **7,850 / 7,872** on the held-out-phrasing p-f panel (T2 7,375). The p-f panel's
 62.5% reference-reply overlap with TRAIN means this is a scoped language-base result, not useful
-conversation. M2 is the next capability milestone. Claude-219's point-key opening improves free
-generation at three seeds on fresh p-v, but only partially. The next work trains and serves that
-key in one integer model and scores it end to end.
+conversation. M2 is the next capability milestone. Claude-220 serves the point key inside one
+float model on fresh p-w, improving templates by +41/+40/+42 at three seeds with exact claude-219
+parity; the gain recalls TRAIN replies, not new wording. Next, export the point table to the
+integer engine and score the integer model end to end.
 Every run goes ahead on its own pre-run review (D67, [charter](CHARTER.md) §5.1). The one plan is
 [PLAN.md](PLAN.md) (D77).

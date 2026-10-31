@@ -5,7 +5,7 @@
 The Studio is the project's in-browser interface: editor, chat panel and model manager, with the
 integer serving engine (`crates/uor-r4-integer`, `--features serving-wasm`) running in a Web
 Worker. It is served from the project's documentation site at **`/studio/`**
-(<https://uor-foundation.github.io/uor-r4/studio/>), live since 30 October 2026 from gh-pages `d8e67c66`.
+(<https://uor-foundation.github.io/uor-r4/studio/>). The current live publish is gh-pages `e62ea481`; `d8e67c66` was the earlier pre-M1 publish.
 
 ### Interface (latest merged redesign)
 
@@ -79,9 +79,9 @@ find site -mindepth 1 -maxdepth 1 ! -name .git ! -name studio -exec rm -rf {} +
 ```
 
 So a built Studio published once to `gh-pages` / `gh-pages-preview` **persists across every later
-book deploy**. The 30 October 2026 app now live at `/studio/` was published from gh-pages
-`d8e67c66`, with the integer wasm bundle, synthetic demo and model-source panel verified by HTTP and
-hash checks. Publishing a newer page means replacing that directory once.
+book deploy**. The current live app at `/studio/` is gh-pages `e62ea481`, with the M1-capable
+integer wasm bundle and both M1 seeds in `models.json` verified by HTTP and hash checks. The earlier
+`d8e67c66` publish was pre-M1. Publishing a newer page means replacing that directory once.
 
 **The publisher.** `scripts/studio/build-and-publish.sh` does the whole unit:
 

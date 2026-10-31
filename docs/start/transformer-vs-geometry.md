@@ -12,10 +12,10 @@ seeds. Useful conversation is still open, and the separate FBS complete-reply li
 |---|---|---|
 | Tokenizer | [Byte-level BPE](../mechanisms/tokenizer.md), 4,096 pieces, identity `d36d3e87` | ACTIVE; pinned to corpora, panels and artifacts |
 | Embedding table | [Prime-zeta codebook](../mechanisms/prime-zeta-codebook.md) and [address cells](../mechanisms/address-cells.md): prime/zeta addresses on a 16×16 board | ACTIVE; construction and placement results exist, independent language effects remain open |
-| Position | SpiralCore transport spin on the FBS trunk; discrete quaternion recurrence in the M1 composition | Trained and served in their respective models; independent order effects remain open |
+| Position | SpiralCore transport spin on the FBS trunk; `PositionHolonomyV1` with the discrete quaternion recurrence in the M1 composition | Trained and served in their respective models; independent order effects remain open |
 | Attention / look-back | [Route](../mechanisms/route-read.md), [Flock](../mechanisms/flock-read.md) and [Relation](../mechanisms/relation-read.md) reads: tree walk, neighbour consensus and copy links | ACTIVE; independent effects are not all isolated |
 | Feed-forward | [Hamilton rotation gate](../mechanisms/hamilton-gate.md) is in M1 and FBS; [SpiralCore/FBS routes](../mechanisms/spiralcore-fbs.md) are on the FBS trunk only | Hamilton trained in M1 and FBS; FBS routes trained and served; dated float projection form READY |
-| Normalization | RMS norm with integer square root on the FBS trunk; `PositionHolonomyV1` and `OrbitRootSnapNormV1` on the discrete M1 trunk | Each served in its own model; not the same normalization mechanism |
+| Normalization | RMS norm with integer square root on the FBS trunk; `OrbitRootSnapNormV1` on the discrete M1 trunk | Each served in its own model; not the same normalization mechanism |
 | Output head | [Admission](../mechanisms/admission.md): open a few address cells, then rank inside them | ACTIVE; M1's 19-table readout is measured |
 | Loss | [Rank-margin hinge](../mechanisms/rank-margin.md): right token must beat its strongest rival by a fixed gap | ACTIVE; no likelihood is formed |
 | Optimizer | [Discrete learning](../mechanisms/discrete-learning.md): try every legal rotation and keep only strict improvements, including BVG-K | ACTIVE; produced the M1 model |
