@@ -44,8 +44,8 @@ M7 criterion 3: the Studio runs entirely client-side in a browser Web Worker wit
 
 ## Sources
 
-- [`STATUS.md:22`](../../../STATUS.md)
-- [`docs/start/where-were-going.md:74`](../../../docs/start/where-were-going.md)
+- [rendered `STATE.md`](../../../STATE.md) and [`PLAN.md`](../../../PLAN.md)
+- [current Studio model-source record](m7-studio-live-model-sources.md)
 - issue#2035
 - [`docs/products/web-client.md`](../../products/web-client.md)
 - [`docs/labs/wasm-serving-runtime-2026-10-18/README.md`](../../labs/wasm-serving-runtime-2026-10-18/README.md)

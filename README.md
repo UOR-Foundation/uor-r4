@@ -8,7 +8,7 @@ model that runs on a laptop?*
 [![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-yellow)](PLAN.md)
 [![Milestones: 1 of 8 complete](https://img.shields.io/badge/milestones-1%2F8%20complete-blue)](#where-we-are)
 [![Last commit](https://img.shields.io/github/last-commit/UOR-Foundation/uor-r4/main)](https://github.com/UOR-Foundation/uor-r4/commits/main)
-[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-ffcc4d)](https://huggingface.co/caseyallard/uor-r4-geometric-214m)
+[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-ffcc4d)](https://huggingface.co/caseyallard/uor-r4-m1-model)
 
 ![Four panels read left to right: a sentence split into numbered pieces; each piece placed as a point on a geometric object; the newest piece looking at only a few nearby earlier points; a few drawers opening near what was read, with the nearest word inside them picked. A band underneath reads "whole numbers: adds, compares and table look-ups, with integer multiply and divide allowed".](docs/figures/start/hero-how-it-thinks.svg)
 

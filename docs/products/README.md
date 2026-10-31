@@ -42,7 +42,7 @@ comparison exists.
 | Item | State | Source |
 |---|---|---|
 | Milestones complete | **1 of 8 (M1)** | [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) |
-| Saved discrete M1 model | DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228; p-f 7,850 / 7,872; Apple M1 decode 10,876 / 10,566 tok/s | [M1 close](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
+| Saved discrete M1 model | DEV 7,002 / 7,001; Fresh V2 7,215 / 7,228; p-f 7,850 / 7,872; Apple M1 decode 10,876 / 10,566 tok/s | [M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
 | Separate FBS trunk | Exact `lut-stack/5` export at DEV scope; not joined to the M1 artifact | [pipeline map](../model/pipeline-map.md) |
 | Integer serving engine, native and WebAssembly | Audits green; integer multiply and divide allowed; float remains banned | [serving dossier](../mechanisms/lut-serving.md) |
 | Studio connected to the integer engine | Synthetic parity harness passes; the live Studio serves the public M1 model as top-8 next-token prediction, not chat; desktop remains synthetic-only | [web client](./web-client.md), [desktop client](./desktop-client.md) |

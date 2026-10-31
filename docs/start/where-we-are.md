@@ -100,10 +100,10 @@ multiplication and are historical evidence, not the D11 product.
 |---|---|---|
 | Milestones complete | **1 of 8 (M1)** | [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) |
 | Saved model top-1 on DEV | 7,002 / 7,001 of 14,287 | [M1 close](../labs/m1-close-saved-model/README.md) |
-| Fresh V2 / p-f | 7,215 / 7,228; 7,850 / 7,872 | [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
+| Fresh V2 / p-f | 7,215 / 7,228; 7,850 / 7,872 | [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
 | Useful conversation | Not established | [latest free-generation evidence](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md) |
 | Next capability milestone | M2: grounded complete replies | [PLAN](../../PLAN.md) |
-| Immediate research problem | New-phrasing reply opening and a memory key that reworded questions can reach | [claude-220](../loop/tasks/one-model-end-to-end/claude-220/REPORT.md) |
+| Immediate gate | Retention GPU parity on (r-drop) s1, then unit 3's real TRAIN export, p-x scoring and laptop measurement | [claude-226](../loop/tasks/integer-retention-rates/claude-226/REPORT.md), [point-key item](../roadmap/items/point-key-integer.md) |
 | Products shipped | None; M1 is not an alpha release | [products](../products/README.md) |
 
 ## Go deeper

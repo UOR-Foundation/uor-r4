@@ -93,7 +93,7 @@ Under the [charter](../../CHARTER.md), serving this artifact on client devices (
 - The float trunk's export on the fresh split. Its export gap is measured at DEV scope only (claude-182), and on one passing configuration. The discrete path's export was measured on 26 Oct (antigravity-96).
 - Hardware-counter measurement of memory traffic per token (D5-a) and of parameters touched per token (D5-b). Milestone M5 has not run.
 - Whole-system energy per token with a validated sampler. The only earlier figures (5.7 and 21.0 millijoules per token) came from a truncated capture.
-- Integer serving of a product-key or other addressed memory read. The kernel is not built.
+- Real trained-model use of the integer point-key path. The synthetic point table/search and `/8` record are built (claude-222), and panel decode/grade exists (claude-224); real TRAIN export, fresh p-x scoring, tok/s and resident memory are NOT_RUN. The older product-key addressed-memory kernel remains unbuilt.
 - A comparison with the SIMD kernels on the serving hot path.
 - Free-running generation speed and fresh-split performance on the accepted model. The 184.58 tokens/s figure was input-driven forward throughput, not a substitute for the M1 pair's native decode measurements or for M7 browser parity.
 
@@ -102,7 +102,7 @@ Under the [charter](../../CHARTER.md), serving this artifact on client devices (
 This mechanism is ACTIVE (D72's condition is met), so nothing here needs reopening. Two sub-parts are held:
 
 1. **The D10 engine and its SIMD crate** stay frozen, non-mission comparators. D80 and D81 allow hardware integer multiply and divide in the current D11 serving path, but they do not restore the old D10 engine or its dense schemas.
-2. **Serving of product-key or addressed memory** needs an integer read kernel. The exporter refuses it today.
+2. **Serving of the older product-key or addressed memory** still needs an integer read kernel; that exporter refuses it. The separate integer point-key table/search and `/8` record exist only as synthetic/host instruments, with real trained export and fresh panel NOT_RUN.
 
 **Open questions.** The discrete M1 and FBS `/5` export gaps are measured at their declared scopes; the open work is the accepted model's full serving path, addressed memory and cost. How many of the 30.2 million parameters touched per token can selected reads remove before tokens per second move, given that arithmetic count was not time? Are the audit scripts, which are Python, to be ported to Rust and run in CI?
 

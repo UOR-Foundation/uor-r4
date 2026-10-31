@@ -17,7 +17,7 @@ Labels follow [`docs/formal_vocabulary.md`](../formal_vocabulary.md): **proof**,
 
 The saved artifact is `trunk-joint-pointer-v1-d11`, a 19-table `uor-r4.lut-discrete-trunk/1`
 `UORLUT01` model. Its composition is Flock `FrozenZeroV1`, a discrete Hamilton gate, discrete
-quaternion recurrence, a four-block orbit-root causal pointer, and post-rotation outer-L1 readout.
+quaternion recurrence, `PositionHolonomyV1`, `OrbitRootSnapNormV1`, a four-block orbit-root causal pointer, and post-rotation outer-L1 readout.
 
 | Stage | Mechanism and representation | State at the M1 close |
 |---|---|---|

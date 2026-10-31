@@ -107,7 +107,7 @@ than assuming table lookup implies sparsity.
 - **Joined FBS serving:** memory, readout and text/chat distribution are not all in one integer session.
 - **M5:** full-path memory traffic and energy on the accepted model.
 - **M7:** library/CLI/browser token and session parity on the accepted model, not only the synthetic stand-in.
-- **Addressed/product-key memory:** the older exporter refuses it; the needed integer path is not built.
+- **Addressed/product-key memory:** the older exporter refuses it. The separate synthetic integer point-key search and `/8` record exist, with panel decode/grade; the real trained export and fresh panel are NOT_RUN.
 
 The web client is connected to the current integer worker. DeepSeek's #3442/#3444 rebuilt and
 published the Studio; #3445 then wired the publicly released M1 trunk for top-8 next-token
