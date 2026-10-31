@@ -8,7 +8,7 @@ on new phrasing, remember across sessions, and run as one product. That remains 
 ```mermaid
 flowchart TD
   A["M1: saved integer model<br/>beats count tables"] --> B{"Can it start the right reply<br/>on new phrasing?"}
-  B -- "point key gives a partial gain" --> M["claude-220 serves the key in float<br/>next: point-key-integer (#3450)"]
+  B -- "point key gives a partial gain" --> M["claude-220: float key; claude-222/224: integer instruments<br/>next: retention rates (#3456), then unit 3"]
   M --> R["Complete correct replies<br/>and durable memory"]
   R --> S["Full serving, cost,<br/>distribution and release"]
 ```

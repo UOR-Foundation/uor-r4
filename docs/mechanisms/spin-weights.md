@@ -1,4 +1,3 @@
-c=1
 # Spin-native weights (quaternion and icosian maps)
 
 **Status: READY (owner ruling, 24 Oct 2026, D74).** The quaternion weights, snapped to a residual pair of icosians with a 2-bit scale, met their bar on a small test (1.5148 bits per byte: not distinguishable from a dense model with the same total parameters, and 0.107 behind a dense model of the same width; a single-icosian snap lost badly), but only by running a dense Hamilton-block multiplication, which the owner's rules ban. The code that ran them now refuses to run. The mechanism stays open.

@@ -89,10 +89,10 @@ Both feed the trunk.
 - `pipeline-map-revision` (claude-159);
 - `route-plus-memory` (claude-161), whose exact turn memory doubled reply openings against an empty-table control.
 
-**The order since 29 Oct** is the open owner direction above: `turn-memory-reply` first, then the integer serving of the parts, R7, and one model end to end. Until 29 Oct, `loop next` ranked these items by unblock count, and `turn-memory-reply`, which unblocks no item, was never offered.
+**The 29 Oct order is historical.** The open owner direction above first named `turn-memory-reply`, then the integer serving of the parts, R7, and one model end to end. Until 29 Oct, `loop next` ranked these items by unblock count, and `turn-memory-reply`, which unblocks no item, was never offered.
 
-The [map](docs/model/pipeline-map.md)'s order of work goes on with these, each with its cost per token beside its result:
-- `turn-memory-reply` (R1's follow-up): carry the memory past a reply's first word.
+The [map](docs/model/pipeline-map.md)'s current order of work goes on with these, each with its cost per token beside its result:
+- `turn-memory-reply` (R1's follow-up) is **done**. [Claude-222 and claude-224](docs/loop/tasks/point-key-integer/claude-224/REPORT.md) built the integer table/search and panel decode/grade; [`integer-retention-rates`](docs/roadmap/items/integer-retention-rates.md) (#3456) must match the trained recurrence before point-key unit 3's real export, fresh p-x score and laptop measurement.
 - `writer-admission` (R2): make the native writer's admission hold at every seed, so the cheap readout is right.
 - `fbs-serving-kernels` (R3): **done** (claude-163 to claude-170). Exact structured kernels took the M1's served token from 270 to 3,042–3,044 tok/s, replies byte-identical. Its follow-ups, a NEON kernel and fewer snap candidates, are `fbs-serving-vector-kernel`. Host work.
 - `training-step-cost` (R4): split the training backward, and try a cheaper rival search.
