@@ -501,16 +501,19 @@ pub struct HammingCompareRow {
     pub downstream: usize,
     /// Type-head sets the second trace does not hold (its read serves no type heads).
     pub not_served: usize,
-    /// Of the judged sets that are real kept sets, how many have their two query codes `d` bits
-    /// apart, at index `d` (0 to 64): a few bits is a coordinate near a sign, half the word codes
-    /// that share nothing.
+    /// Of the judged sets that are real kept sets, the empty ones at rows 0 and 1 included, how
+    /// many have their two query codes `d` bits apart, at index `d` (0 to 64): a few bits is a
+    /// coordinate near a sign, half the word codes that share nothing.
     pub query_bits: Vec<usize>,
 }
 
-/// One side's kept set at row `t`, sorted, or why it cannot be a real kept set: real candidates
-/// are `1 ≤ s < t`, each once, `min(kept, t − 1)` of them.
-fn kept_set(kept: &[u32], t: usize, most: usize) -> Result<Vec<u32>, String> {
-    let mut set = kept.to_vec();
+/// One side's kept set at row `t`, sorted, or why it cannot be the set that side chose: real
+/// candidates are `1 ≤ s < t`, each once, `min(kept, t − 1)` of them, and by the side's own codes
+/// no candidate it leaves out is nearer the query than one it keeps (bit distance; the order
+/// among equal distances is the side's own). A side whose recorded codes are not the ones it
+/// chose with fails here, so its differences are never read as sign flips.
+fn kept_set(head: &HammingTraceHead, t: usize, most: usize) -> Result<Vec<u32>, String> {
+    let mut set = head.kept[t].to_vec();
     set.sort_unstable();
     let want = most.min(t.saturating_sub(1));
     if set.len() != want {
@@ -519,21 +522,30 @@ fn kept_set(kept: &[u32], t: usize, most: usize) -> Result<Vec<u32>, String> {
     if set.windows(2).any(|w| w[0] == w[1]) || set.iter().any(|&s| s == 0 || s as usize >= t) {
         return Err(format!("{set:?} are not distinct positions 1 ≤ s < {t}"));
     }
+    let distance = |s: usize| (head.query[t] ^ head.key[s]).count_ones();
+    if let Some(place) = set.iter().map(|&s| distance(s as usize)).max() {
+        let nearer = (1..t).find(|&s| distance(s) < place && set.binary_search(&(s as u32)).is_err());
+        if let Some(s) = nearer {
+            return Err(format!(
+                "a member {place} bits from the query is kept and position {s}, {} bits, is not: these are not the codes the set was chosen with",
+                distance(s)
+            ));
+        }
+    }
     Ok(set)
 }
 
 /// Compare the `first` trace with the `second` on the same windows (claude-235): normally the
 /// float D11 readout's against the integer session's. A record that does not line up (other
-/// windows, reads, heads or lengths) is refused; a set that cannot be a kept set is counted an
-/// instrument fault.
+/// windows, reads, heads or lengths) is refused; a set that cannot be a kept set, or is not the
+/// nearest by its own side's recorded codes, is counted an instrument fault.
 ///
 /// Every copy-head set, and every type-head set of the first read, is judged at every position:
 /// their codes come from the table or from the trunk below the read. A later read's type-head
 /// set is judged only where every earlier read's sets agree at its position and before it, and
 /// counted as downstream elsewhere. A judged set that differs is a tie when both sides have the
-/// same query code and the same key code at every position either keeps, and each position only
-/// one keeps sits at the last kept place's distance (else an instrument fault); anything else is
-/// a sign flip.
+/// same query code and the same key code at every position either keeps; anything else is a
+/// sign flip.
 pub fn compare_hamming_traces(
     first: &HammingTrace,
     second: &HammingTrace,
@@ -608,10 +620,7 @@ pub fn compare_hamming_traces(
                     }
                 }
                 for t in 0..time {
-                    let (sa, sb) = (
-                        kept_set(&ha.kept[t], t, most),
-                        kept_set(&hb.kept[t], t, most),
-                    );
+                    let (sa, sb) = (kept_set(ha, t, most), kept_set(hb, t, most));
                     let same = matches!((&sa, &sb), (Ok(x), Ok(y)) if x == y);
                     agree[t] &= same;
                     if r > 0 && h >= copy && !earlier[t] {
@@ -655,27 +664,9 @@ pub fn compare_hamming_traces(
                         .iter()
                         .all(|&s| ha.key[s as usize] == hb.key[s as usize]);
                     match (query_same, keys_same) {
-                        (true, true) => {
-                            // Both sets are the same size, so each side keeps an odd position;
-                            // with every odd one at `place`, the second's last place is `place` too.
-                            let place = sa.iter().map(|&s| distance(ha, s)).max();
-                            let odd_at_place = union
-                                .iter()
-                                .filter(|s| {
-                                    sa.binary_search(s).is_err() || sb.binary_search(s).is_err()
-                                })
-                                .all(|&s| Some(distance(ha, s)) == place);
-                            if odd_at_place {
-                                row.ties += 1;
-                            } else {
-                                row.instrument_faults += 1;
-                                if faults.len() < MAX_FAULTS_LISTED {
-                                    faults.push(format!(
-                                        "window {w}, read {r}, head {h}, position {t}: the same codes, but a position only one side keeps is off the last kept place's distance"
-                                    ));
-                                }
-                            }
-                        }
+                        // Both sets are the nearest by the same codes on their union, so each
+                        // position only one keeps sits at the last kept place of both: a tie.
+                        (true, true) => row.ties += 1,
                         (false, true) => row.query_flips += 1,
                         (true, false) => row.key_flips += 1,
                         (false, false) => row.query_and_key_flips += 1,

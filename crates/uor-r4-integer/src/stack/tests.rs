@@ -5802,12 +5802,28 @@ fn a_tie_at_the_last_place(trace: &crate::fbs_snapshot::HammingTrace) -> (usize,
     panic!("no copy-head row ties across its last kept place with a nearer member and a farther candidate");
 }
 
+/// claude-235: re-choose `head`'s set at row `t` by its own codes after a planted code change:
+/// the `kept` nearest, its old members first among equal distances, so only what the change
+/// moves changes. Whether the set changed.
+fn rechoose(head: &mut crate::fbs_snapshot::HammingTraceHead, t: usize, kept: usize) -> bool {
+    let mut old = head.kept[t].clone();
+    old.sort_unstable();
+    let mut set: Vec<u32> = (1..t as u32).collect();
+    set.sort_by_key(|&s| ((head.query[t] ^ head.key[s as usize]).count_ones(), old.binary_search(&s).is_err(), s));
+    set.truncate(kept.min(t.saturating_sub(1)));
+    set.sort_unstable();
+    let changed = set != old;
+    head.kept[t] = set;
+    changed
+}
+
 /// claude-235: the comparison classes a planted difference by the item's rule. A set swapping a
 /// member for a candidate at the same last-place distance is a tie, and the readout read's type
-/// sets from that row on are downstream. A swap with the query code flipped is a query flip, and
-/// with a kept position's key flipped a key flip. A set one short, or a swap with the same codes
-/// that brings in a farther candidate or drops a nearer member, is an instrument fault. Traces
-/// that do not line up are refused.
+/// sets from that row on are downstream. A changed query code, a changed key code, and both,
+/// with the sets re-chosen by them, are a query flip, key flips, and a query-and-key flip. A set
+/// one short, a set its codes do not choose, or a swap with the same codes that brings in a
+/// farther candidate or drops a nearer member, is an instrument fault. Traces that do not line up
+/// are refused.
 #[test]
 fn the_trace_comparison_classes_ties_flips_and_instrument_faults() {
     use crate::fbs_snapshot::compare_hamming_traces;
@@ -5833,27 +5849,53 @@ fn the_trace_comparison_classes_ties_flips_and_instrument_faults() {
     assert_eq!(tie.rows[3].downstream, (time - t) * types, "the readout's type sets from row {t} on");
     assert_eq!(tie.rows[2].judged, tie.rows[2].equal, "the readout's copy sets are still judged");
 
+    // Planted code changes, each set re-chosen by its side's new codes. The query at row `t` made
+    // `out`'s key changes that row alone: a query flip. `out`'s key made the row's query changes
+    // its sets from row `t` on, each a key flip; both at once make row `t` a query-and-key flip.
+    let original = &integer.windows[0].reads[0].heads[h];
+    let named = original.key[out as usize];
+    let moved = (original.query[t] ^ named).count_ones() as usize;
     let query = planted(&|head| {
-        swap(head, member, out);
-        head.query[t] ^= 1;
+        head.query[t] = named;
+        assert!(rechoose(head, t, integer.kept), "the query names {out}");
     });
     assert_eq!(causes(&query), (1, 0, 1, 0, 0, 0), "{:?}", query.rows[0]);
-    let bits = |c: &crate::fbs_snapshot::HammingTraceComparison| (c.rows[0].query_bits[0], c.rows[0].query_bits[1]);
-    assert_eq!(bits(&tie), (tie.rows[0].judged, 0), "no query differs");
-    assert_eq!(bits(&query), (query.rows[0].judged - 1, 1), "one query differs, by one bit");
+    let bits = |c: &crate::fbs_snapshot::HammingTraceComparison, d: usize| (c.rows[0].query_bits[0], c.rows[0].query_bits[d]);
+    assert_eq!(bits(&tie, 1), (tie.rows[0].judged, 0), "no query differs");
+    assert_eq!(bits(&query, moved), (query.rows[0].judged - 1, 1), "one query differs, by {moved} bits");
+    let rekey = |head: &mut crate::fbs_snapshot::HammingTraceHead, code: u64| {
+        head.key[out as usize] = code;
+        for r in out as usize + 1..time {
+            let changed = rechoose(head, r, integer.kept);
+            assert!(changed || r != t, "row {t} keeps {out}");
+        }
+    };
     let key = planted(&|head| {
-        swap(head, member, out);
-        head.key[out as usize] ^= 1;
+        let code = head.query[t];
+        rekey(head, code);
     });
-    assert_eq!(causes(&key), (1, 0, 0, 1, 0, 0), "{:?}", key.rows[0]);
+    let flips = key.rows[0].judged - key.rows[0].equal;
+    assert_eq!(causes(&key), (flips, 0, 0, flips, 0, 0), "{:?}", key.rows[0]);
+    let both = planted(&|head| {
+        let code = !head.query[t];
+        head.query[t] = code;
+        rekey(head, code);
+    });
+    let flips = both.rows[0].judged - both.rows[0].equal;
+    assert_eq!(causes(&both), (flips, 0, 0, flips - 1, 1, 0), "{:?}", both.rows[0]);
+    // A set kept with codes it was not chosen by (the query complemented) is an instrument fault.
+    let unchosen = planted(&|head| head.query[t] = !head.query[t]);
+    assert_eq!(causes(&unchosen), (1, 0, 0, 0, 0, 1), "{:?}", unchosen.rows[0]);
+    assert!(unchosen.faults[0].contains("not the codes the set was chosen with"), "{:?}", unchosen.faults);
 
     let short = planted(&|head| {
         head.kept[t].pop();
     });
     assert_eq!(causes(&short), (1, 0, 0, 0, 0, 1), "{:?}", short.rows[0]);
     assert!(short.faults[0].contains(&format!("{} kept, not {}", integer.kept - 1, integer.kept)), "{:?}", short.faults);
-    // Off the place's distance: a farther candidate in for the member at the place (the place
-    // moves), or the candidate at the place in for a nearer member (the place stays).
+    // Off the place's distance, so not the nearest by its codes: a farther candidate in for the
+    // member at the place (the place moves), or the candidate at the place in for a nearer member
+    // (the place stays).
     for (from, to) in [(member, far), (near, out)] {
         let off = planted(&|head| swap(head, from, to));
         assert_eq!(causes(&off), (1, 0, 0, 0, 0, 1), "{to} in for {from}: {:?}", off.rows[0]);

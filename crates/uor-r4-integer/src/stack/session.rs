@@ -1783,7 +1783,8 @@ impl IntegerStackSession<'_> {
     }
 
     /// Record every Hamming read's choices from the next step on (claude-235), or stop and drop
-    /// what is recorded. Off in a fresh session; the served steps are the same either way.
+    /// what is recorded. Off in a fresh session; the served steps are the same either way, but a
+    /// traced step copies and records each read's inputs, so never time a session with it on.
     pub fn set_hamming_trace(&mut self, on: bool) {
         self.hamming_trace = on.then(Vec::new);
     }

@@ -89,6 +89,18 @@ fn hamming_trace(arm: &str, model_dir: &str, readout: &str, trace: &str) -> Resu
             "unknown trace arm {arm}: d11, d11-tie, d11-rounded or d11-tie-rounded"
         ))
     })?;
+    // Both outputs are refused before the GPU runs, so a run never leaves a readout without its
+    // trace.
+    if readout == trace {
+        return Err(FloatTrainError::Invalid(format!(
+            "D11_READOUT_JSON and TRACE_JSON are both {readout}"
+        )));
+    }
+    if let Some(path) = [readout, trace].into_iter().find(|p| Path::new(p).exists()) {
+        return Err(FloatTrainError::Invalid(format!(
+            "{path} exists, and the trace never replaces a file"
+        )));
+    }
     let dir = Path::new(model_dir);
     check_checkpoint_reads(dir)?;
     check_readout_reads(dir, 1)?;
@@ -133,21 +145,24 @@ fn hamming_trace(arm: &str, model_dir: &str, readout: &str, trace: &str) -> Resu
     write(trace, &trace_json)
 }
 
+fn usage() -> ! {
+    eprintln!(
+        "usage: fbs-snapshot MODEL_DIR OUT_JSON [READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]]\n       fbs-snapshot --hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON"
+    );
+    std::process::exit(2);
+}
+
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if let [flag, arm, model_dir, readout, trace] = args.as_slice() {
-        if flag == "--hamming-trace" {
-            return hamming_trace(arm, model_dir, readout, trace);
-        }
+    if args.first().is_some_and(|flag| flag == "--hamming-trace") {
+        let [_, arm, model_dir, readout, trace] = args.as_slice() else {
+            usage();
+        };
+        return hamming_trace(arm, model_dir, readout, trace);
     }
     let (model_dir, out, readouts) = match args.as_slice() {
         [model_dir, out, readouts @ ..] if readouts.len() <= 3 => (model_dir, out, readouts),
-        _ => {
-            eprintln!(
-                "usage: fbs-snapshot MODEL_DIR OUT_JSON [READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]]\n       fbs-snapshot --hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON"
-            );
-            std::process::exit(2);
-        }
+        _ => usage(),
     };
     let dir = Path::new(model_dir);
     // Every read the checkpoint holds is carried, or the export is refused (claude-198), before
