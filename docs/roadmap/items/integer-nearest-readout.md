@@ -23,7 +23,8 @@ The project's first hurdle is one working model end to end, served from its inte
 
 ## What is missing
 
-- **Layer-by-layer localization of claude-232's MISS,** on real DEV and p-w prompts: the trunk, Hamming read, memory and readout. Then recheck end-to-end parity against the stored float replies before rerunning p-x.
+- **Layer-by-layer localization of claude-232's MISS,** on real DEV and p-w prompts: the trunk, Hamming read, memory and readout. Then recheck end-to-end parity before rerunning p-x.
+  - Two differences between claude-232's sides are found since, neither a rounding residual: the float reference's tie order (claude-238, claude-240) and the integer side's icosian snap (claude-233). claude-243 re-reads the parity with both removed, under its decision card.
   - The completed check covered the whole served model. Its instruments held, and the sealed run is `results/claude/integer-nearest-readout-parity-2026-10-31/`.
   - The float replies are sealed data, so this item does not wait on [`one-model-end-to-end`](one-model-end-to-end.md), which made them.
 - **The completed readout, for reference:** `head = "native_vector_nearest"`, with the whole table's `−L1` scan at Q12 and ties to the smaller id. The browser uses `IntegerStackSession::serve_step`, so FBS models no longer fall back to token 0. The nearest scan costs about 2.85× a token at 1,365 decode and 1,405 prefill tok/s; prefill-scan removal is a separate optimization, not parity evidence.
@@ -35,10 +36,12 @@ The project's first hurdle is one working model end to end, served from its inte
    - The browser path (`wasm_serve`'s step) gives the same token as the session's nearest on one artifact, with a test.
    - The serving audit (`audit_zero_matmul_serving.py --stack`) and the WASM build pass.
 3. **End-to-end token parity passes its bar, under a prep sheet with a fresh FIT and a pre-run review.**
-   - Integer greedy of (r-drop) step 16,384, memory on, against claude-220's stored float greedy on DEV and p-w at seeds 1–3.
+   - Integer greedy of (r-drop) step 16,384, memory on, exported raw (`fbs-export --raw-gates --raw-transition`, R), against the float greedy decoded again on the GPU with the read's tie rule on (F′: claude-220's arm-G command at the unit's head), on DEV and p-w at seeds 1–3.
+     - claude-232's snapped export (S) and claude-220's stored replies (F) are kept as readings.
+     - Both changes are claude-243's [decision card](../../loop/tasks/integer-nearest-readout/claude-243/DECISION.md), logged on #3462; Casey can reverse it. "Done" applies to the raw export, and the item then names its recipe as the served artifact's.
    - It is reported as first-token agreement and whole-reply agreement. The bar is registered in the sheet against the exporter's known rounding residual (claude-227: 0.33% of sequence positions).
    - **The item is done only when the bar passes.** On a miss, the sheet's row is recorded, the item stays `ready`, and the next unit locates the gap.
-   - Integer decodes run on the laptop: product serving (CHARTER §3.6), under the owner's 31 Oct allowance for this chain. The float side is stored GPU output.
+   - Integer decodes run on the laptop: product serving (CHARTER §3.6), under the owner's 31 Oct allowance for this chain. The float side runs on the GPU.
 4. **Tokens per second,** with the nearest scan counted (4,096 rows a token), and the resident memory.
 5. **One notebook row, and a REPORT with the negatives first.**
 

@@ -70,7 +70,7 @@ The card proposes:
   - **I-Raw:** each R artifact's shape must carry `head = native_vector_nearest`, `rec_gates = geometric-retention`, and the raw gate and transition flags. Its parse must give the `/7` schema.
 - **Speed (done-when 4):** `fbs-toks` decode and prefill tok/s on R s1, with the nearest scan counted, and the peak resident memory, on this M1 on AC power.
 - **Compute:** one Vast RTX 5090, inside the caps, under a prep sheet with a fresh FIT and a pre-run review (CHARTER §4.5).
-  - claude-220's three seeds took 9,840 to 9,995 s side by side on one 5090, at about 93% GPU use and 11.4 GB.
+  - claude-220's three seeds took 9,840 to 9,995 s side by side on one 5090, at about 93% GPU use and 11,354 MiB at the peak.
   - A fourth process, I-Repeat's, puts the run near 3 h 40 min, about $2.30 with setup. The sheet gives the estimate.
 
 ## Cancel probe (run first)

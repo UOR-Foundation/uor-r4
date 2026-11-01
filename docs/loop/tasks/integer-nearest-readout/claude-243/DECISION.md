@@ -50,9 +50,11 @@ So against F, an exact port of the read cannot meet the bar, and S carries a kno
 - **"Done" applies to the raw artifact.** If R passes, done-when 3 is met for `fbs-export --raw-gates --raw-transition`, and the item records that recipe as the served artifact's.
   - The default export still snaps, and point-key-integer's artifacts use it. Making raw the default, or the snap faithful, is a follow-up the item records; this unit does not change the default.
   - If S also passes, the snap is shown harmless here, and either export is the served one.
-- **The bar's margin without the snap.** It was registered against claude-227's snapped residual (0.33% of sequence positions, against a D11 forward that snaps too). The raw export's rounding residual against the trained forward is not measured. The 3% bar is kept, not re-derived; the sheet says so, and a narrow miss is located before it is read.
+- **The bar's margin without the snap.** It was registered against claude-227's snapped residual (0.33% of sequence positions, against a D11 forward that snaps too). The raw export's rounding residual against the trained forward is not measured. The 3% bar is kept, not re-derived, and the sheet says so. Any cell over the bar is a MISS, however narrow, and the MISS row's next unit locates the gap.
 - **F′ also differs from F by the code since `eb762e602`** on the three decode files: `c3d5cb684` (claude-220's own merge, after its decode build), `18c4c3da7` (claude-224), `62e3cfed4` (claude-235), `ebe0930ba` (claude-237), `fe1619192` (claude-238) and `cef022733` (claude-239).
-  - Read from the code, not tested: on arm G's path, the only change is the tie rule. The `in_space_long.rs` changes are in the served arm, the opening table and the graders. claude-238's `as_trained` keeps the read's rotations unsnapped, which `in_space_long.rs` (itself `HamiltonActive`) already did.
+  - Read from the code, not tested: on arm G's path, the only change to the arithmetic is the tie rule.
+    - The `in_space_long.rs` changes run in the same process, since the command passes `--opening-keys 1 --served-key 1`, but they leave G's output alone: a refactor (`serves_at`), a timer's `synchronize`, and new checks that can only refuse a run.
+    - claude-238's `as_trained` keeps the read's rotations unsnapped, which `in_space_long.rs` (itself `HamiltonActive`) already did.
   - F′ against F is read with this confound named. It decides nothing, and the REPORT does not credit the tie rule alone with it.
 
 ## Recommendation: B
@@ -82,7 +84,14 @@ The item's done-when 3 text is amended to name R and F′, with S and F kept as 
   - **Minor 4:** "the same flags" had no check. The ORDER adds I-Flags.
   - **Minor 5:** F′ against F cannot separate the tie rule from code drift. Stated above.
   - On B itself: an integer fault still shows against F′; the bar value and grader are unchanged; nothing in §3 or the caps is touched. B is the right call over A and C.
-- **Round 2:** to be filled in.
+- **Round 2, at `655b76503`: APPROVE.** A second fresh-context reviewer checked each round-1 finding against the diff and the revision's new claims against the code:
+  - the six commits are exactly `git log eb762e602..origin/main` on the three decode files;
+  - under `HamiltonActive` with export and capture off, the gate passes through, so `as_trained` changes no arithmetic; nothing changed in `hamilton_sheet.rs`, `geometric_stack.rs`, the kernels or the lock file; with the trace off, the tie key is the read's only change;
+  - I-Flags holds, and claude-220's timing (9,840 to 9,995 s; 92.6% GPU use over busy rows; 11,354 MiB peak) matches its logs.
+  - Two nits, both applied: the `in_space_long.rs` changes are output-neutral on G's path, not off it; and "narrow miss" is gone, since any cell over the bar is a MISS.
+  - On B: no new route lets a broken integer port pass. The one residual risk is the margin, which this card names.
+
+**Approved** by the claude lab's top session, 1 Nov 2026, after both rounds. Logged on #3462 for Casey, who can reverse it.
 
 ## What a reversal costs
 
