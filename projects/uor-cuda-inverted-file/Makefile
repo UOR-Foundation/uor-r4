@@ -3,7 +3,7 @@ CPPFLAGS ?= -Iinclude -Isrc
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -Werror -pedantic -O2
 BUILD_DIR := build
 
-.PHONY: all host-test test cuda cuda-test clean
+.PHONY: all host-test test cuda cuda-test check-nvcc clean
 all: host-test
 
 $(BUILD_DIR):
@@ -21,11 +21,31 @@ host-test: $(BUILD_DIR)/admission_test $(BUILD_DIR)/inverted_file_test
 
 test: host-test
 
-cuda:
-	@command -v nvcc >/dev/null 2>&1 || { echo 'NOT_RUN: nvcc is unavailable; CUDA compilation was not performed'; exit 2; }
+NVCC ?= nvcc
+UOR_NVCC_ARCH ?= compute_80
+SM_ARCH = $(subst compute_,sm_,$(UOR_NVCC_ARCH))
 
-cuda-test:
-	@command -v nvcc >/dev/null 2>&1 || { echo 'CudaUnavailable: CUDA tests were not run'; exit 2; }
+$(BUILD_DIR)/admit: src/admission.cpp src/admission.hpp src/admit_main.cpp | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/admission.cpp src/admit_main.cpp -o $@
+
+$(BUILD_DIR)/uor_inverted_file.ptx: src/kernels.cu | $(BUILD_DIR)
+	$(NVCC) -ptx -std=c++17 -arch=$(UOR_NVCC_ARCH) -o $@ $<
+
+$(BUILD_DIR)/uor_inverted_file.cubin: $(BUILD_DIR)/uor_inverted_file.ptx $(BUILD_DIR)/admit
+	./$(BUILD_DIR)/admit $(BUILD_DIR)/uor_inverted_file.ptx
+	$(NVCC) -cubin --gpu-code=$(SM_ARCH) -o $@ $(BUILD_DIR)/uor_inverted_file.ptx
+
+$(BUILD_DIR)/cuda_parity_test: src/cuda_driver.cpp src/cuda_driver.hpp tests/cuda_parity_test.cpp $(BUILD_DIR)/uor_inverted_file.cubin
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/cuda_driver.cpp tests/cuda_parity_test.cpp -lcuda -o $@
+
+check-nvcc:
+	@command -v $(NVCC) >/dev/null 2>&1 || { echo 'NOT_RUN: nvcc is unavailable; CUDA compilation and tests were not performed'; exit 2; }
+
+cuda: check-nvcc $(BUILD_DIR)/uor_inverted_file.cubin
+	@echo 'AOT CUDA module built and admitted'
+
+cuda-test: check-nvcc $(BUILD_DIR)/cuda_parity_test
+	./$(BUILD_DIR)/cuda_parity_test
 
 clean:
 	rm -rf $(BUILD_DIR) dist
