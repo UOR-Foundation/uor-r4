@@ -1,6 +1,6 @@
 # ORDER: rebase, review, and rescope the typed Studio design, kimi-1
 
-Lab: kimi. Item: [m7-studio-live-model-sources](../../../../roadmap/items/m7-studio-live-model-sources.md) (#3440, completed parent). Base: `381ae4d98b0a5100d241a268d283629ab9b5fd1f`. Owner request: "rebase, review, and rescope this" for the Studio shell upgrade; no implementation requested.
+Lab: kimi. Item: [m7-studio-live-model-sources](../../../../roadmap/items/m7-studio-live-model-sources.md) (#3440, completed parent). New item: `studio-typed-shell-upgrade` (#3500). Base: `381ae4d98b0a5100d241a268d283629ab9b5fd1f`. Owner request: "rebase, review, and rescope this" for the Studio shell upgrade; no implementation requested.
 
 ## Goal
 
