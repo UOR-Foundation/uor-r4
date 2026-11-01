@@ -115,7 +115,7 @@ The grader runs every check below in order and stops at the first failure. Nothi
    - The four local manifests each equal the store's copy, fetched afresh for this unit into `local/claude/claude-246/probe/`, and each has the sha256 registered in §5.
    - claude-244's check of R's artifacts against `R/a7/SHA256SUMS` is not carried: R is not opened here, and its picks are read only from the sealed decodes above.
 3. **I-NoKey:** every row of R's six stored greedy files has `keyed` null, so no opening of R was served by a point key.
-4. **I-Exit:** claude-244's sealed `grade.log` ends `GRADE-DONE` and logs six forced decodes. Its runner stopped on any decode's non-zero exit before that line. `margins_negative` is 0 in every cell (check 8).
+4. **I-Exit:** claude-244's sealed `grade.log` ends `GRADE-DONE` and logs six forced decodes. Its runner stopped on any decode's non-zero exit before that line. `margins_negative` is 0 in every cell (check 9).
 5. **Q4's carry:** in each of claude-244's six sealed cells, `kappa` equals (c − q)/(1 − q), with c = `d_low`/`d` and q = `all_low`/`positions_counted`, to within 1e-12, and `d` > 0.
 6. **The row identity:** at every seed, `position` is unique. The three seeds list the same positions in the same order, and each position carries the same prompt and reference at the three seeds. p-w has 135 cut-window rows (`prompt[0] ≠ 0`) at every seed.
 7. **The sampler check** (§4.1) is recorded as passing, and `in_space_long.rs` at F′'s commit is the blob it was made on.
