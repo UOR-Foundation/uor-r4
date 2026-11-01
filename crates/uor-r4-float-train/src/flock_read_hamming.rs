@@ -1141,6 +1141,7 @@ mod tests {
                 }
             }
         }
+        println!("{crossing} rows tie across the 16th place; off, {broken} kept sets differ");
         assert!(crossing > 100, "too few ties across the 16th place: {crossing}");
         assert!(broken > 0, "off, the sort broke every tie as the rule does");
     }
