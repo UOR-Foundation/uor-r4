@@ -50,6 +50,10 @@ Process peak RSS was 25,912 KiB. The benchmark includes the 4,096-token table, s
 
 Exact-head adversarial review is recorded in the PR after it runs.
 
+## Skills used
+
+No repository skill was invoked. A fresh-context subagent independently audited the Hamming hook order, rounding, cache bounds and test matrix before implementation; its findings were reconciled against the serving source.
+
 ## Still open
 
 - Exact turn memory and its restore/reset continuation.
