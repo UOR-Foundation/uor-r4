@@ -4,7 +4,6 @@ title: "UOR Inverted-File CUDA Example"
 type: software
 license: MIT
 version: 0.1.0
-date-released: 2026-11-01
 repository-code: "https://github.com/UOR-Foundation/uor-r4/tree/main/projects/uor-cuda-inverted-file"
 abstract: "An exact integer inverted-file index for codebook-quantized vectors, with a CPU oracle, optional CUDA Driver API implementation, and build-time PTX admission enforcement."
 authors:
