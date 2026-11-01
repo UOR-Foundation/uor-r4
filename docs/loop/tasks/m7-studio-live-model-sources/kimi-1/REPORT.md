@@ -16,7 +16,7 @@ The foundation is now limited to the typed store, narrow adapters, fixture-backe
 
 Resolved all five builder questions by decision: use additive progress/operation hooks rather than DOM scraping or a duplicate downloader; keep `modelSources.v1` as the live compatibility/provider key without a second secret store; disable new runs on selection/artifact divergence; pin source/privacy per generation; and give API sources a separate selected/test state rather than artifact readiness. Added stale-operation rejection, the full persistence-key inventory, native dialogs/progress, and final parity/cutover gates.
 
-Size before this report: five files, 261 insertions and two deletions. This report is the only additional file. D76 advisories are limited to the explicitly reviewed new item/design paths; no size cap applies.
+Size before this report: five files, 261 insertions and two deletions. This report is the only additional file. D76 scope advisories cover the explicitly reviewed new item, design, and canonical issue-map paths; the requested rebase also puts the pre-existing design commit before this ORDER, so commit-order remains advisory only. No size cap applies.
 
 ## Measurements
 
