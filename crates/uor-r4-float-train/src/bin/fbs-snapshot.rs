@@ -30,6 +30,21 @@
 //! - `d11-rounded`: `d11` with the reads' parameters rounded as exported;
 //! - `d11-tie-rounded`: both.
 //!
+//! The third form (claude-240) makes an evaluation copy of a checkpoint saved before claude-179:
+//!
+//! ```text
+//! fbs-snapshot --rebind-fbs-backward MODEL_DIR OUT_MODEL_DIR
+//! ```
+//!
+//! claude-179 (#3367) changed only the projection's backward kernel, so the forward a readout
+//! runs is unchanged. But each plan's fingerprint hashes the whole `spiralcore_fbs.cu`, and
+//! `StackModel::load` refuses the older checkpoints. The copy's config names the kernel as it is
+//! now, and its tensors and run config are copied byte for byte. The copy is refused unless:
+//! - the kernel's text through `spiralcore_fbs_fwd` is the text before claude-179;
+//! - every saved fingerprint (the plans', and the vector head's `geometry`, the 8/8 plan's) is
+//!   the current plan's with only the kernel's hash put back;
+//! - the copy then loads, with every check `StackModel::load` makes.
+//!
 //! It never replaces or leaves a partial output file, and it prints each
 //! file's sha256.
 //!
@@ -59,6 +74,7 @@ use uor_r4_float_train::hamilton_sheet::{
     EXPECTED_DEV_TOKENS, PINNED_DEV_MASK_SHA256, PINNED_DEV_TOKENS_SHA256, SHEET_BOS_ID,
     SHEET_CONTEXT, SHEET_VOCAB,
 };
+use uor_r4_float_train::spiralcore_fbs::{ProjectionPlan, FBS_SOURCE_SHA256, SCHEMA};
 use uor_r4_float_train::spiralcore_fbs_sheet::PARITY_WINDOW_STRIDE;
 use uor_r4_float_train::{FloatTrainError, Result};
 use uor_r4_integer::fbs_snapshot::{
@@ -250,15 +266,164 @@ fn hamming_trace(
     write(trace, &trace_json)
 }
 
+/// claude-240: `spiralcore_fbs.cu` before claude-179 (as at `df1d7892`, where claude-146 trained),
+/// and its text through the end of `spiralcore_fbs_fwd`, which claude-179 left unchanged.
+const PRE_179_KERNEL_SHA256: &str =
+    "517bffcc3c2029ddd171e75fd8fc1eb532755b30e683c66bd230382416480b0d";
+const FORWARD_TEXT_SHA256: &str =
+    "c98de18bc4724f682da5dc68712a76c2d4c80003e0e48b937185450ddea4c680";
+
+/// A projection kernel's text through the end of `spiralcore_fbs_fwd`: up to the first line `}`
+/// after its header. Every function the forward calls is defined above it.
+fn forward_text(kernel: &str) -> Option<&str> {
+    let header = kernel.find("__global__ void spiralcore_fbs_fwd(")?;
+    let end = header + kernel[header..].find("\n}\n")? + 3;
+    Some(&kernel[..end])
+}
+
+/// The fingerprint a plan had before claude-179: its serialized form, as `ProjectionPlan::new`
+/// hashes it, with the kernel's hash put back to `PRE_179_KERNEL_SHA256`. Refused unless the
+/// serialized form is the fingerprint's own and names the current kernel exactly once.
+fn pre_179_fingerprint(plan: &ProjectionPlan, kernel_sha256: &str) -> Result<String> {
+    let json = serde_json::to_string(plan)?;
+    if hex::encode(Sha256::digest(json.as_bytes())) != plan.fingerprint()
+        || json.matches(kernel_sha256).count() != 1
+    {
+        return Err(FloatTrainError::Invalid(
+            "a plan's serialized form is not its fingerprint's, or names the kernel twice"
+                .to_owned(),
+        ));
+    }
+    let legacy = json.replace(kernel_sha256, PRE_179_KERNEL_SHA256);
+    Ok(hex::encode(Sha256::digest(legacy.as_bytes())))
+}
+
+/// `--rebind-fbs-backward MODEL_DIR OUT_MODEL_DIR` (claude-240): the module docs' third form.
+fn rebind_fbs_backward(model_dir: &str, out_dir: &str) -> Result<()> {
+    let invalid = |m: String| FloatTrainError::Invalid(m);
+    let kernel = include_str!("../spiralcore_fbs.cu");
+    let forward = forward_text(kernel).map(|t| hex::encode(Sha256::digest(t.as_bytes())));
+    if forward.as_deref() != Some(FORWARD_TEXT_SHA256) {
+        return Err(invalid(
+            "the projection's forward kernel is not the one before claude-179".to_owned(),
+        ));
+    }
+    let kernel_sha256 = hex::encode(Sha256::digest(kernel.as_bytes()));
+    let (dir, out) = (Path::new(model_dir), Path::new(out_dir));
+    let run_of = |d: &Path| d.parent().and_then(Path::parent).map(Path::to_path_buf);
+    let out_run =
+        run_of(out).ok_or_else(|| invalid(format!("{out_dir} is not a run's models/step-N")))?;
+    if out_run.exists() {
+        return Err(invalid(format!(
+            "{} exists, and the copy never replaces one",
+            out_run.display()
+        )));
+    }
+    let bytes = std::fs::read(dir.join("config.json"))?;
+    let saved: serde_json::Value = serde_json::from_slice(&bytes)?;
+    let binding = saved
+        .get("spiralcore_fbs_projection")
+        .ok_or_else(|| invalid("the checkpoint carries no projection identity".to_owned()))?;
+    if binding.get("schema").and_then(|v| v.as_str()) != Some(SCHEMA)
+        || binding.get("fbs_source_sha256").and_then(|v| v.as_str()) != Some(FBS_SOURCE_SHA256)
+    {
+        return Err(invalid(
+            "the identity's schema or FBS source is not this build's".to_owned(),
+        ));
+    }
+    let plans = binding
+        .get("plans")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| invalid("the identity has no plans".to_owned()))?;
+    // Each fingerprint the config saves: the projection's plans, and the vector head's
+    // `geometry`, the 8/8 plan's (`WriterSpec::binding`).
+    let mut saved_fps: Vec<(String, &str)> = plans
+        .iter()
+        .map(|(key, fp)| (key.clone(), fp.as_str().unwrap_or_default()))
+        .collect();
+    if let Some(head) = saved.get("native_vector_head") {
+        let geometry = head.get("geometry").and_then(|v| v.as_str());
+        saved_fps.push((
+            "8/8".to_owned(),
+            geometry.ok_or_else(|| invalid("the vector head has no geometry".to_owned()))?,
+        ));
+    }
+    let mut text = String::from_utf8(bytes).map_err(|e| invalid(e.to_string()))?;
+    for (key, saved_fp) in &saved_fps {
+        let (key, saved_fp) = (key.as_str(), *saved_fp);
+        let (input, output) = key
+            .split_once('/')
+            .and_then(|(i, o)| Some((i.parse::<usize>().ok()?, o.parse::<usize>().ok()?)))
+            .ok_or_else(|| invalid(format!("plan {key} is not INPUT/OUTPUT")))?;
+        let plan = ProjectionPlan::new(input, output)?;
+        if pre_179_fingerprint(&plan, &kernel_sha256)? != saved_fp {
+            return Err(invalid(format!(
+                "plan {key}: the saved fingerprint is not this plan's with the kernel before claude-179"
+            )));
+        }
+        // The config is otherwise copied byte for byte: each saved fingerprint appears once.
+        if text.matches(saved_fp).count() != 1 {
+            return Err(invalid(format!(
+                "plan {key}'s fingerprint is not in the config once"
+            )));
+        }
+        text = text.replace(saved_fp, plan.fingerprint());
+        println!("plan {key}: {saved_fp} -> {}", plan.fingerprint());
+    }
+    // The tensors, every other file of the step and the run's config, byte for byte.
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_file() {
+            return Err(invalid(format!("{} is not a file", entry.path().display())));
+        }
+        files.push(entry.file_name());
+    }
+    std::fs::create_dir_all(out)?;
+    std::fs::copy(
+        run_of(dir)
+            .ok_or_else(|| invalid(format!("{model_dir} is not a run's models/step-N")))?
+            .join("config.json"),
+        out_run.join("config.json"),
+    )?;
+    for name in files.iter().filter(|n| *n != "config.json") {
+        std::fs::copy(dir.join(name), out.join(name))?;
+    }
+    write(&out.join("config.json").to_string_lossy(), text.as_bytes())?;
+    // The copy loads, with every check the loader makes, on the CPU before any GPU opens. A copy
+    // that does not load is removed: the run folder did not exist before this call.
+    let loads =
+        StackModel::load(out, &Device::Cpu).and_then(|_| HammingReads::load(out, &Device::Cpu));
+    if let Err(e) = loads {
+        std::fs::remove_dir_all(&out_run)?;
+        return Err(e);
+    }
+    println!(
+        "rebound: {} fingerprints, {} files; the copy loads",
+        saved_fps.len(),
+        files.len()
+    );
+    Ok(())
+}
+
 fn usage() -> ! {
     eprintln!(
-        "usage: fbs-snapshot [--dev DATA_ROOT] MODEL_DIR OUT_JSON [READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]]\n       fbs-snapshot [--dev DATA_ROOT] --hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON"
+        "usage: fbs-snapshot [--dev DATA_ROOT] MODEL_DIR OUT_JSON [READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]]\n       fbs-snapshot [--dev DATA_ROOT] --hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON\n       fbs-snapshot --rebind-fbs-backward MODEL_DIR OUT_MODEL_DIR"
     );
     std::process::exit(2);
 }
 
 fn main() -> Result<()> {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
+    if args
+        .first()
+        .is_some_and(|flag| flag == "--rebind-fbs-backward")
+    {
+        let [_, model_dir, out_dir] = args.as_slice() else {
+            usage();
+        };
+        return rebind_fbs_backward(model_dir, out_dir);
+    }
     let dev = if args.first().is_some_and(|flag| flag == "--dev") {
         if args.len() < 2 {
             usage();
@@ -324,7 +489,74 @@ fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{output_place, sample_windows, scored_prefix, CausalWindow, PARITY_WINDOW_STRIDE};
+    use super::{
+        forward_text, output_place, pre_179_fingerprint, sample_windows, scored_prefix,
+        CausalWindow, ProjectionPlan, FORWARD_TEXT_SHA256, PARITY_WINDOW_STRIDE,
+    };
+    use sha2::{Digest, Sha256};
+
+    /// claude-240: claude-179 changed the projection kernel after `spiralcore_fbs_fwd` only, so
+    /// its text through the forward is the text before claude-179. An edit inside the forward
+    /// moves the hash; one after it does not.
+    #[test]
+    fn the_forward_kernel_is_the_one_before_claude_179() {
+        let hash = |k: &str| forward_text(k).map(|t| hex::encode(Sha256::digest(t.as_bytes())));
+        let kernel = include_str!("../spiralcore_fbs.cu");
+        assert_eq!(hash(kernel).as_deref(), Some(FORWARD_TEXT_SHA256));
+        let after = format!("{kernel}\n// a later kernel\n");
+        assert_eq!(hash(&after).as_deref(), Some(FORWARD_TEXT_SHA256));
+        let inside = kernel.replacen("spiralcore_fbs_fwd(", "spiralcore_fbs_fwd( ", 1);
+        assert_ne!(hash(&inside).as_deref(), Some(FORWARD_TEXT_SHA256));
+    }
+
+    /// claude-240: claude-146's checkpoints (`df1d7892`, all three seeds) saved these five plan
+    /// fingerprints and the vector head's `geometry` (8/8). Each is this build's plan with only
+    /// the kernel's hash put back, and none is this build's own, which is why `StackModel::load`
+    /// refuses them.
+    #[test]
+    fn claude_146s_fingerprints_are_this_builds_plans_with_the_kernel_before_claude_179() {
+        let kernel = hex::encode(Sha256::digest(include_bytes!("../spiralcore_fbs.cu")));
+        for (input, output, saved) in [
+            (
+                256,
+                256,
+                "2653ea424190eb64e231b66f112eae74e52df8fd2a6760a24c5a09771ee6fbbf",
+            ),
+            (
+                256,
+                320,
+                "b5da61c685f8d329260d5800fda2949ff904965fcdded8eb109b5db587a8b434",
+            ),
+            (
+                256,
+                384,
+                "21945c345063470c9451eaad8f3c5b847cd0552418299087695c7e20bdce4c43",
+            ),
+            (
+                256,
+                512,
+                "60ab6ef386dcea9fef54500ce3cd65a7f615be0c4c1de70308bc8224d5a2cf9b",
+            ),
+            (
+                384,
+                256,
+                "afd76e112421753939844c60dfe6418ad32c3a7ba701d87b354d3c91f4d11479",
+            ),
+            (
+                8,
+                8,
+                "5048316155f79ce6a908ad2f19794025fe633671aae61d10081ff194e2678bc5",
+            ),
+        ] {
+            let plan = ProjectionPlan::new(input, output).unwrap();
+            assert_eq!(
+                pre_179_fingerprint(&plan, &kernel).unwrap(),
+                saved,
+                "{input}/{output}"
+            );
+            assert_ne!(plan.fingerprint(), saved, "{input}/{output}");
+        }
+    }
 
     /// claude-240: a DEV window is cut after its last scored position, so its BOS padding never
     /// reaches the parity counts, and every scored position and its prefix stay.
