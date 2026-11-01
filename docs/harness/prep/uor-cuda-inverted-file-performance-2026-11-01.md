@@ -61,3 +61,7 @@ The repair confines prediction/status publication to thread 0, checks every laun
 ## Timing-boundary rejection and final rerun
 
 The corrected publication/warmup/oracle runs completed, but review then found complete-caller timing included oracle comparison and measurement bookkeeping. Those runs at `ae4a6951` are also rejected for timing evidence and were archived at `local/kimi/cuda-performance-5/` and `local/kimi/cuda-performance-6/` before pod deletion. The complete-caller clock now stops immediately after the public scan and before oracle comparison or measurement construction. A new pushed head and FIT are required before recollecting both cards; the rejected numbers are not valid for claims.
+
+## Final corrected rerun FITs
+
+**TEST FITNESS: FIT**, non-author, 2026-11-01, RTX 5090 rerun at `719a9a7861deb595dfc5269ffec8a5e7e53cb39b` with `compute_120`/`sm_120`, new root `cuda-performance-7`; and separate RTX 4090 rerun at the same source with `compute_89`/`sm_89`, new root `cuda-performance-8`. Each requires the 504-row correctness file, 240 records with per-launch oracle checks, complete-caller warmups, and complete-caller timing that ends immediately after the public scan, before oracle comparison or measurement construction. Every earlier measurement root remains rejected and is not valid for claims. Any source change requires a new pushed head and FIT.
