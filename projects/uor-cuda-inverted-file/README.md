@@ -39,6 +39,20 @@ The CUDA path compiles `src/kernels.cu` to PTX, runs the admission tool, assembl
 
 Generated files stay under `build/` and are ignored. `make clean` removes them.
 
+### Optional local telemetry
+
+The standalone CPU example can emit OTLP/HTTP JSON without an SDK or network dependency:
+
+```sh
+make instrumented-example                         # default: no telemetry output
+UOR_OTEL_OUT=build/trace.json make instrumented-example
+make telemetry-test                               # IDs, JSON, default-off, and CPU parity
+```
+
+Only an explicit `UOR_OTEL_OUT` path enables the file sink. Each run uses random trace/span IDs; the fixed codebook's SHA-256 digest stays an artifact attribute and is never an execution ID. The build span is the parent of update, probe, and full-scan spans. The sink replaces the file with the current complete in-memory trace after each operation.
+
+This instruments the **CPU oracle**, not the CUDA kernels. It does not send data to a collector or emit prompt/completion content. Collector interoperability, GPU timing, and production export are **NOT_RUN**. See [`../../docs/telemetry/uor-conventions.md`](../../docs/telemetry/uor-conventions.md).
+
 ## Algorithm and API
 
 The codebook contains 16 roots of eight `int32` values. A token's cell is:

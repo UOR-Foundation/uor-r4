@@ -32,6 +32,7 @@ public:
 
     [[nodiscard]] bool enabled() const;
     [[nodiscard]] Status export_trace(const Resource& resource, const Span& span) const;
+    [[nodiscard]] Status export_trace(const Resource& resource, const std::vector<Span>& spans) const;
 
 private:
     std::filesystem::path output_;

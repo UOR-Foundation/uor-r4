@@ -120,5 +120,6 @@
   "turn-memory-integer": 3392,
   "turn-memory-reply": 3393,
   "uor-cuda-inverted-file": 3475,
+  "uor-telemetry": 3478,
   "writer-admission": 3394
 }

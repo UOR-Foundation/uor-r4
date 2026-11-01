@@ -3,7 +3,7 @@ CPPFLAGS ?= -Iinclude -Isrc
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -Werror -pedantic -O2
 BUILD_DIR := build
 
-.PHONY: all host-test test cuda cuda-test check-nvcc evidence clean
+.PHONY: all host-test telemetry-test instrumented-example test cuda cuda-test check-nvcc evidence clean
 all: host-test
 
 $(BUILD_DIR):
@@ -25,11 +25,21 @@ $(BUILD_DIR)/telemetry_ids_test: src/sha256.cpp src/sha256.hpp src/telemetry_ids
 $(BUILD_DIR)/telemetry_test: src/telemetry.cpp src/telemetry.hpp src/telemetry_ids.cpp tests/telemetry_test.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/telemetry.cpp src/telemetry_ids.cpp tests/telemetry_test.cpp -o $@
 
-telemetry-test: $(BUILD_DIR)/telemetry_ids_test $(BUILD_DIR)/telemetry_test
+$(BUILD_DIR)/instrumented_test: src/instrumented.cpp src/instrumented.hpp src/telemetry.cpp src/sha256.cpp src/telemetry_ids.cpp src/inverted_file.cpp src/codebook.cpp tests/instrumented_test.cpp | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/instrumented.cpp src/telemetry.cpp src/sha256.cpp src/telemetry_ids.cpp src/inverted_file.cpp src/codebook.cpp tests/instrumented_test.cpp -o $@
+
+$(BUILD_DIR)/instrumented_example: src/instrumented.cpp src/telemetry.cpp src/sha256.cpp src/telemetry_ids.cpp src/inverted_file.cpp src/codebook.cpp examples/instrumented.cpp | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/instrumented.cpp src/telemetry.cpp src/sha256.cpp src/telemetry_ids.cpp src/inverted_file.cpp src/codebook.cpp examples/instrumented.cpp -o $@
+
+telemetry-test: $(BUILD_DIR)/telemetry_ids_test $(BUILD_DIR)/telemetry_test $(BUILD_DIR)/instrumented_test
 	./$(BUILD_DIR)/telemetry_ids_test
 	./$(BUILD_DIR)/telemetry_test
+	./$(BUILD_DIR)/instrumented_test
 
-test: host-test
+instrumented-example: $(BUILD_DIR)/instrumented_example
+	./$(BUILD_DIR)/instrumented_example
+
+test: host-test telemetry-test
 
 NVCC ?= nvcc
 UOR_NVCC_ARCH ?= compute_80

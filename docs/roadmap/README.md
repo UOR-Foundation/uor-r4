@@ -20,11 +20,11 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 23 |
+| ready | 24 |
 | held | 10 |
 | decision | 1 |
 | done | 88 |
-| total | 122 |
+| total | 123 |
 
 ## Start here
 
@@ -149,6 +149,7 @@ These items are ready and open to anyone.
 | [Split the training backward, and run a cheaper rival search against (a)](items/training-step-cost.md) | ready | a lab | yes | [fbs-cost-profile](items/fbs-cost-profile.md) | [#3391](https://github.com/UOR-Foundation/uor-r4/issues/3391) |
 | [Serve the turn memory from the integer artifact on the laptop](items/turn-memory-integer.md) | ready | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | [#3392](https://github.com/UOR-Foundation/uor-r4/issues/3392) |
 | [Package a standalone UOR inverted-file CUDA example](items/uor-cuda-inverted-file.md) | ready | a lab | no | none | [#3475](https://github.com/UOR-Foundation/uor-r4/issues/3475) |
+| [Add opt-in artifact telemetry to the standalone CUDA example](items/uor-telemetry.md) | ready | a lab | no | [uor-cuda-inverted-file](items/uor-cuda-inverted-file.md) | [#3478](https://github.com/UOR-Foundation/uor-r4/issues/3478) |
 | [Make the native writer's admission hold at every seed](items/writer-admission.md) | ready | a lab | yes | [one-decoder](items/one-decoder.md) | [#3394](https://github.com/UOR-Foundation/uor-r4/issues/3394) |
 | [Build a sigmoid-free gate for E8 orbit memory and rerun it on GPU](items/e8-orbit-memory-sigmoid-free-iteration.md) | held | a lab | yes | [float-training-module](items/float-training-module.md) | [#2822](https://github.com/UOR-Foundation/uor-r4/issues/2822) |
 | [Run the Hopf retained-fibre language test](items/hopf-retained-fibre-test.md) | held | a lab | yes | none | [#2825](https://github.com/UOR-Foundation/uor-r4/issues/2825) |
@@ -319,6 +320,8 @@ flowchart LR
   n_training_step_cost["training-step-cost"]
   n_turn_memory_integer["turn-memory-integer"]
   n_turn_memory_reply["turn-memory-reply"]
+  n_uor_cuda_inverted_file["uor-cuda-inverted-file"]
+  n_uor_telemetry["uor-telemetry"]
   n_writer_admission["writer-admission"]
   n_d11_exporter_float_trunk --> n_integer_retention_rates
   n_d41_driver_math_pilot --> n_m2_donor_corpus_generation
@@ -448,4 +451,5 @@ flowchart LR
   n_spiralcore_fbs_offline_float_sheet --> n_integer_hamming_read
   n_turn_memory_integer --> n_point_key_integer
   n_turn_memory_reply --> n_one_model_end_to_end
+  n_uor_cuda_inverted_file --> n_uor_telemetry
 ```

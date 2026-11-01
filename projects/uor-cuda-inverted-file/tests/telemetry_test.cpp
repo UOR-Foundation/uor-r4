@@ -60,6 +60,16 @@ int main() {
     expect(json.find("prompt") == std::string::npos, "no prompt content");
     expect(json.find("\"code\":0") != std::string::npos, "success status serialized");
 
+    Span child{"uor.cuda.index.probe",
+               SpanIds{span.ids.trace_id, "fedcba9876543210", span.ids.span_id}, 200, 300, {}};
+    expect(enabled.export_trace(resource, std::vector<Span>{span, child}) == Status::Ok,
+           "batch export succeeds");
+    const auto batch = read_file(output);
+    expect(batch.find(span.name) != std::string::npos && batch.find(child.name) != std::string::npos,
+           "one JSON document retains every operation");
+    expect(batch.find("\"parentSpanId\":\"0123456789abcdef\"") != std::string::npos,
+           "batch preserves the child parent link");
+
     Span invalid = span;
     invalid.ids.trace_id = "not-a-trace-id";
     expect(enabled.export_trace(resource, invalid) == Status::InvalidArgument, "invalid ID refused");

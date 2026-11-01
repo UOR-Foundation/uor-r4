@@ -59,26 +59,38 @@ Telemetry::Telemetry(std::filesystem::path output) : output_(std::move(output)) 
 bool Telemetry::enabled() const { return !output_.empty(); }
 
 Status Telemetry::export_trace(const Resource& resource, const Span& span) const {
+    return export_trace(resource, std::vector<Span>{span});
+}
+
+Status Telemetry::export_trace(const Resource& resource, const std::vector<Span>& spans) const {
     if (output_.empty()) return Status::Ok;
-    if (span.name.empty() || !valid_id(span.ids.trace_id, 32) ||
-        !valid_id(span.ids.span_id, 16) || span.end_unix_nano < span.start_unix_nano ||
-        (!span.ids.parent_span_id.empty() && !valid_id(span.ids.parent_span_id, 16))) {
-        return Status::InvalidArgument;
+    if (spans.empty()) return Status::InvalidArgument;
+    for (const auto& span : spans) {
+        if (span.name.empty() || !valid_id(span.ids.trace_id, 32) ||
+            !valid_id(span.ids.span_id, 16) || span.end_unix_nano < span.start_unix_nano ||
+            (!span.ids.parent_span_id.empty() && !valid_id(span.ids.parent_span_id, 16))) {
+            return Status::InvalidArgument;
+        }
     }
     std::ostringstream json;
     json << "{\"resourceSpans\":[{\"resource\":{\"attributes\":"
          << attributes(resource.attributes)
-         << "},\"scopeSpans\":[{\"scope\":{\"name\":\"uor-cuda-inverted-file\"},"
-         << "\"spans\":[{\"traceId\":\"" << span.ids.trace_id
-         << "\",\"spanId\":\"" << span.ids.span_id << "\",";
-    if (!span.ids.parent_span_id.empty()) {
-        json << "\"parentSpanId\":\"" << span.ids.parent_span_id << "\",";
+         << "},\"scopeSpans\":[{\"scope\":{\"name\":\"uor-cuda-inverted-file\"},\"spans\":[";
+    for (std::size_t i = 0; i < spans.size(); ++i) {
+        const auto& span = spans[i];
+        if (i != 0) json << ',';
+        json << "{\"traceId\":\"" << span.ids.trace_id
+             << "\",\"spanId\":\"" << span.ids.span_id << "\",";
+        if (!span.ids.parent_span_id.empty()) {
+            json << "\"parentSpanId\":\"" << span.ids.parent_span_id << "\",";
+        }
+        json << "\"name\":\"" << escape(span.name)
+             << "\",\"kind\":1,\"startTimeUnixNano\":\"" << span.start_unix_nano
+             << "\",\"endTimeUnixNano\":\"" << span.end_unix_nano
+             << "\",\"attributes\":" << attributes(span.attributes)
+             << ",\"status\":{\"code\":0}}";
     }
-    json << "\"name\":\"" << escape(span.name)
-         << "\",\"kind\":1,\"startTimeUnixNano\":\"" << span.start_unix_nano
-         << "\",\"endTimeUnixNano\":\"" << span.end_unix_nano
-         << "\",\"attributes\":" << attributes(span.attributes)
-         << ",\"status\":{\"code\":0}}]}]}]}";
+    json << "]}]}]}";
     std::ofstream output(output_, std::ios::trunc);
     if (!output) return Status::CudaFailure;
     output << json.str() << '\n';
