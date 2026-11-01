@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: false
 depends_on: [m7-studio-live-model-sources]
 done_class: host
-scope: [web/studio/src/**, web/studio/package.json, web/studio/package-lock.json, web/studio/tsconfig*.json, web/studio/vite.config.*, web/studio/index.html, web/studio/index.css, web/studio/README.md, docs/products/web-client.md, scripts/stage-studio-site.sh, scripts/studio/**, docs/superpowers/specs/2026-10-31-studio-shell-upgrade-design.md, docs/loop/tasks/studio-typed-shell-upgrade/**, docs/roadmap/items/studio-typed-shell-upgrade.md, docs/roadmap/issues.json]
+scope: [web/studio/src/**, web/studio/assets/js/model_sources.js, web/studio/package.json, web/studio/package-lock.json, web/studio/tsconfig*.json, web/studio/vite.config.*, web/studio/index.html, web/studio/index.css, web/studio/README.md, docs/products/web-client.md, scripts/stage-studio-site.sh, scripts/studio/**, docs/superpowers/specs/2026-10-31-studio-shell-upgrade-design.md, docs/loop/tasks/studio-typed-shell-upgrade/**, docs/roadmap/items/studio-typed-shell-upgrade.md, docs/roadmap/issues.json]
 ---
 
 ## Why it matters
@@ -21,10 +21,10 @@ There is no typed shell or implementation yet; only a rebased design exists. The
 
 ## Done when
 
-- A foundation PR adds the typed lifecycle store, narrow engine/persistence adapters, and fixture-backed tests without changing the live page, existing engine files, publisher, or real browser data.
-- Later workflow PRs migrate the shell and every current feature, with a parity record for each feature and no change to the engine/worker/model-source/API files.
+- A foundation PR adds the typed lifecycle store, narrow engine/persistence adapters, and fixture-backed tests without changing the live page, engine/worker/tokenizer/API implementations, publisher, or real browser data. Only the design's additive model-source progress and operation hooks are permitted.
+- Later workflow PRs migrate the shell and every current feature with a parity record for each, preserving those same implementation boundaries.
 - Source selection, artifact readiness, download bytes, finalization, file dirty/save state, session generation, and endpoint privacy derive from one store, including stale-load rejection and disabled empty-state actions.
-- One-time copy-forward migration preserves old keys byte-identically, tolerates unknown fields, never logs credentials, and passes migration tests before any write or marker.
+- One-time copy-forward migration preserves old keys byte-identically, except the live `modelSources.v1` compatibility key, which is never copied into a second secret store and may keep changing under its existing writer. Migration tolerates unknown fields, never logs credentials, and passes tests before any write or marker.
 - Legacy and new checks pass at their respective pages, including worker parity, offline requests, keyboard/focus, mobile, and accessibility. Full feature parity and a fresh exact-head review precede cutover; production publication is a separate owner decision.
 - Preact/Vite/TypeScript and test dependencies are pinned; generated output, node_modules, model artifacts, credentials, and `.github/**` are not committed or edited.
 
