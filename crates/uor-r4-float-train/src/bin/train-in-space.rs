@@ -105,6 +105,13 @@
 //! `train-in-space --data-root DIR --served-grade 1 --runs DIR --panel p-w=DIR --panel p-v=DIR`
 //! grades the served arm against greedy on the laptop (`in_space_long::served_grade`). One JSON line.
 //!
+//! `--decision-trace SPLIT=POSITIONS_JSON`, once per split, adds to `--score-rows` Q5's decision
+//! trace on the float side (integer-nearest-readout, claude-251): for the windows of the scored
+//! split `SPLIT` whose first scored position the JSON array names, every decision of claude-247's
+//! five kinds in the memory pass's own forward, written new as `decision-trace-{SPLIT}.json`
+//! (`uor-r4.decision-trace/1`, side `F`, the f32 values as `f32::to_bits`). It changes no rows
+//! file, and refuses a position that names no window and a checkpoint with a read R does not serve.
+//!
 //! `train-in-space --data-root DIR --panel-prompts 1 --out DIR [--panel NAME=DIR ...] [--runs DIR] --samples 1536 --reply-tokens 64`
 //! (point-key-integer, claude-224) writes, with no model, the prompts a `--score-rows` run decodes on
 //! DEV and each panel (`prompts-{split}.json`), for `fbs-toks --replies`. With `--runs` (claude-220's
@@ -162,6 +169,7 @@ fn main() -> Result<()> {
     let mut census_on = false;
     let mut fresh_v2 = None;
     let mut extra_panels: Vec<(String, PathBuf)> = Vec::new();
+    let mut traces: Vec<(String, Vec<usize>)> = Vec::new();
     let mut score = None;
     let mut overturn_on = false;
     let mut controls_on = false;
@@ -326,6 +334,7 @@ fn main() -> Result<()> {
                 scored.push(arm);
             }
             "--fresh-v2" => fresh_v2 = Some(PathBuf::from(&value)),
+            "--decision-trace" => traces.push(decision_trace_arg(&value)?),
             "--panel" => {
                 let panel = panel_arg(&value)?;
                 if extra_panels.iter().any(|(name, _)| *name == panel.0) {
@@ -616,6 +625,11 @@ fn main() -> Result<()> {
             "--served-key applies to --score-rows with --opening-keys 1 only".to_owned(),
         ));
     }
+    if !traces.is_empty() && score.is_none() {
+        return Err(FloatTrainError::Invalid(
+            "--decision-trace applies to --score-rows only".to_owned(),
+        ));
+    }
     if cycle_grade_on {
         let runs = runs
             .ok_or_else(|| FloatTrainError::Invalid("--cycle-grade needs --runs DIR".to_owned()))?;
@@ -814,6 +828,7 @@ fn main() -> Result<()> {
             keys_on,
             &keyed,
             served_on,
+            &traces,
             &device,
         )? {
             println!("{}", serde_json::to_string(&file)?);
@@ -896,6 +911,26 @@ fn panel_arg(value: &str) -> Result<(String, PathBuf)> {
             "--panel takes NAME=DIR".to_owned(),
         )),
     }
+}
+
+/// `--decision-trace SPLIT=POSITIONS_JSON` (claude-251): the split and the positions, a JSON array
+/// of the windows' first scored positions, read from the file.
+fn decision_trace_arg(value: &str) -> Result<(String, Vec<usize>)> {
+    let Some((split, path)) = value.split_once('=').filter(|(s, p)| !s.is_empty() && !p.is_empty())
+    else {
+        return Err(FloatTrainError::Invalid(
+            "--decision-trace takes SPLIT=POSITIONS_JSON".to_owned(),
+        ));
+    };
+    let positions: Vec<usize> = serde_json::from_slice(&std::fs::read(path)?).map_err(|e| {
+        FloatTrainError::Invalid(format!("--decision-trace {split}: {path} is not a JSON array of positions: {e}"))
+    })?;
+    if positions.is_empty() {
+        return Err(FloatTrainError::Invalid(format!(
+            "--decision-trace {split}: {path} names no position"
+        )));
+    }
+    Ok((split.to_owned(), positions))
 }
 
 /// `--key-levels sign=L,hsign=L,point=L` (claude-218): each trunk key's level, 1–10 (q10 to q100).

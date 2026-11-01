@@ -458,6 +458,13 @@ pub struct HammingTraceHead {
     /// Each position's kept positions: real candidates only (`1 ≤ s < t`, fewer than `kept`
     /// when `t ≤ kept`), in no set order.
     pub kept: Vec<Vec<u32>>,
+    /// Each position's query coordinates as `f32::to_bits`, where a float side asks for them
+    /// (claude-251's decision trace); empty, and not written, otherwise.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub query_f32: Vec<Vec<u32>>,
+    /// Each position's key coordinates, the same way.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub key_f32: Vec<Vec<u32>>,
 }
 
 /// The schema a [`DecisionTrace`] carries.
@@ -521,8 +528,13 @@ pub struct DecisionStep {
 #[serde(deny_unknown_fields)]
 pub struct DecisionLayer {
     /// Each lane's rate score, `clamp(decay + offset, 0, 2^16)` at Q16: the value its bucket is
-    /// chosen from.
+    /// chosen from. R's; empty, and not written, on a float side.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub score_q16: Vec<i32>,
+    /// Each lane's rate score as the float selection kernel reads it, as `f32::to_bits`. A float
+    /// side's; empty, and not written, on R.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub score_f32: Vec<u32>,
     /// Each lane's entry of the 16-entry table of λ and keep, as used: the forced entry where
     /// one was forced.
     pub entry: Vec<u8>,
@@ -551,6 +563,13 @@ pub struct DecisionHead {
     pub key: u64,
     /// The kept positions at `t`, nearest first, ties to the earlier position.
     pub kept: Vec<u32>,
+    /// The query's coordinates at `t` as `f32::to_bits`, which the code's sign bits read. A
+    /// float side's; empty, and not written, on R.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub query_f32: Vec<u32>,
+    /// The key's coordinates at `t`, the same way.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub key_f32: Vec<u32>,
 }
 
 /// The turn memory's exact lookup at one step.
@@ -565,16 +584,31 @@ pub struct DecisionMemory {
     pub opening: bool,
 }
 
-/// The nearest at one step: the whole table's top two by `−L1` at Q12, and the query.
+/// The nearest at one step: the whole table's top two by `−L1`, and the query. R writes the
+/// `_q12` fields; a float side writes the `_f64` and `_f32` ones (claude-251), and each leaves the
+/// other's out.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DecisionNearest {
     pub pick: u32,
-    pub score_q12: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub score_q12: Option<i64>,
+    /// The pick's score in R's units, `−2^12 · Σ_j |q_j − e_{u,j}|` in f64 over the f32 query and
+    /// table, as `f64::to_bits`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub score_f64: Option<u64>,
     pub runner_up: u32,
-    pub runner_score_q12: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runner_score_q12: Option<i64>,
+    /// The runner-up's score, the same way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runner_score_f64: Option<u64>,
     /// The query at Q12, so any token `u`'s score `−Σ_j |Q_j − T_{u,j}|` can be computed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub query_q12: Vec<i32>,
+    /// A float side's query as `f32::to_bits`, so any token's score can be computed the same way.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub query_f32: Vec<u32>,
 }
 
 /// The decisions to force, per window (claude-247's forced replay, set Φ).
@@ -1433,6 +1467,37 @@ fn copy_trace(
 mod tests {
     use super::*;
 
+    /// claude-251: a step in claude-249's R shape reads and writes byte for byte as before, and a
+    /// float side's step keeps its f32 and f64 bits exactly and writes none of R's numbers.
+    #[test]
+    fn an_r_step_writes_as_before_and_a_float_step_keeps_its_bits() {
+        let r = r#"{"layers":[{"score_q16":[65536,0],"entry":[15,0],"read":{"depth":2,"heads":[{"query":5,"key":0,"kept":[2,1]}]}},{"score_q16":[3,4],"entry":[0,0],"read":null}],"readout":null,"memory":{"key":[11,12],"stored":null,"opening":true},"nearest":{"pick":7,"score_q12":-120,"runner_up":3,"runner_score_q12":-131,"query_q12":[4096,-2048]}}"#;
+        let step: DecisionStep = serde_json::from_str(r).expect("an R step parses");
+        assert_eq!(serde_json::to_string(&step).expect("it writes"), r);
+        let mut float = step.clone();
+        let layer = &mut float.layers[0];
+        layer.score_q16.clear();
+        layer.score_f32 = vec![1.0f32.to_bits(), (-0.0f32).to_bits()];
+        let head = &mut layer.read.as_mut().expect("a read").heads[0];
+        head.query_f32 = vec![0.5f32.to_bits(), f32::MIN_POSITIVE.to_bits()];
+        head.key_f32 = vec![(-3.25f32).to_bits(), 0.0f32.to_bits()];
+        float.layers[1].score_q16.clear();
+        float.layers[1].score_f32 = vec![0.1875f32.to_bits(), 0.25f32.to_bits()];
+        let nearest = float.nearest.as_mut().expect("a nearest");
+        (nearest.score_q12, nearest.runner_score_q12) = (None, None);
+        nearest.score_f64 = Some((-119.875f64).to_bits());
+        nearest.runner_score_f64 = Some((-131.0f64 / 3.0).to_bits());
+        nearest.query_q12.clear();
+        nearest.query_f32 = vec![1.0f32.to_bits(), (-0.5f32).to_bits()];
+        let json = serde_json::to_string(&float).expect("it writes");
+        assert!(!json.contains("_q12") && !json.contains("_q16"), "{json}");
+        let back: DecisionStep = serde_json::from_str(&json).expect("it parses");
+        assert_eq!(back, float);
+        let nearest = back.nearest.expect("a nearest");
+        assert_eq!(nearest.runner_score_f64.map(f64::from_bits), Some(-131.0f64 / 3.0));
+        assert_eq!(f32::from_bits(back.layers[0].score_f32[1]).to_bits(), (-0.0f32).to_bits());
+    }
+
     /// claude-237: the control turns each lane on the left by its gate's unit and packs each copy
     /// head's coordinates in coordinate order, laid out by entry and then copy head. Lane 0's
     /// gate `2i` turns `(a, b, c, d)` to `(−b, a, −d, c)`; lane 1 is past the copy heads.
@@ -1527,6 +1592,8 @@ mod tests {
                             query: ids.iter().map(|&v| codes[v as usize]).collect(),
                             key,
                             kept: vec![Vec::new(); ids.len()],
+                            query_f32: Vec::new(),
+                            key_f32: Vec::new(),
                         }],
                     }],
                 }],

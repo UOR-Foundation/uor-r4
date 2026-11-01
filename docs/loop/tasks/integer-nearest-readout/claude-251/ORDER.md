@@ -32,6 +32,8 @@ F is F′ rerun: `train-in-space --score-rows` with claude-243's arguments for t
 
 The item's scope. This unit edits `fbs_snapshot.rs`, `bin/fbs-toks.rs` (the R-only scores become optional), `flock_read_hamming.rs`, `flock_read_memory.rs`, `geometric_stack_native.rs`, `in_space_long.rs`, `bin/train-in-space.rs`, this folder and the item.
 
+- **Amended 1 Nov (claude-251):** also `stack/hamming.rs` and `stack/session.rs`, in the item's scope, where R builds the trace records whose float fields are new. R's values and bytes do not change.
+
 ## Done when
 
 1. **The trace.** `train-in-space --score-rows … --decision-trace TRACE --trace-positions POSITIONS` writes side F's trace for the named windows only, in R's order. The order is: layer by layer, the buckets in lane order and each read at its depth; then the readout read, the memory and the nearest.
