@@ -55,9 +55,11 @@ its milestone before compute") and session-goal.md rule 4.
      split and no fresh-transfer plan for a KEEP (D22 §4);
    - the run cannot change a decision: whatever comes out, the next step is the same;
    - the configuration is already excluded by D23 (any softmax, log-softmax,
-     implicit cross-entropy softmax or renamed equivalent) or D24 (CPU model
-     compute, GPU work that cannot change a decision, or a baseline those rules
-     forbid) — such a campaign is cancelled, not pre-registered;
+     implicit cross-entropy softmax or renamed equivalent) or D24/D84 (CPU model
+     compute outside the named development program, non-qualifying CPU output
+     treated as qualification evidence, GPU work that cannot change a decision,
+     or a baseline those rules forbid) — such a campaign is cancelled, not
+     pre-registered;
    - the prior failures of this *configuration* are not addressed: a sheet that
      does not fix the recipe, dose, window, key, objective, base or steps that
      failed is a repeat;

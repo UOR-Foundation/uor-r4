@@ -110,8 +110,10 @@ Current behavior is local by default, with only an explicit user-configured web 
 
 - **Geometry only (§3.1–§3.3).** No softmax, squashing or normalized exponential, and no dense
   matrix multiplication, in training, evaluation, instruments, serving or tooling.
-- **Research compute is GPU-only (§3.5).** Client-device serving of the D11 artifact is the product
-  and is allowed (§3.6).
+- **Research compute is GPU-first (§3.5).** GPU results qualify training and evaluation. The
+  owner-authorized D84 CPU program runs development research only and cannot replace a GPU bar
+  without a later owner decision. Client-device serving of the D11 artifact is the product and is
+  allowed (§3.6).
 - **Float only offline (D37).** Use a separately scanned geometric module and report the export gap;
   the discrete path stays integer.
 - **D11 serving.** No float or transcendental arithmetic; D80/D81 allow integer multiply and divide.

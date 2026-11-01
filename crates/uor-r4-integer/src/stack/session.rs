@@ -46,7 +46,10 @@ use super::kernels::{
     stack_snap_select, stack_square, to_exp_i32, PackedMatrix, ARCOSH_TABLE_LEN, PRODUCT_EXP,
     NORM_FINE_EXP, RESIDUAL_EXP,
 };
-use super::hamming::{hamming_image, HammingStepRead, ServedHamming};
+use super::hamming::{hamming_image, HammingStepRead, ReadForce, ServedHamming};
+use crate::fbs_snapshot::{
+    DecisionForceWindow, DecisionHead, DecisionLayer, DecisionMemory, DecisionRead, DecisionStep,
+};
 use super::memory::{memory_image, MemoryAnchors, MemoryMove, ServedTurnMemory};
 use super::StackError;
 
@@ -1392,6 +1395,7 @@ impl IntegerStackModel {
                 .and_then(|f| f.hamming.as_ref())
                 .map_or_else(Vec::new, |h| h.payload_caches(context)),
             hamming_trace: None,
+            decision: None,
             pointer_keys: vec![0; pointer_dim * context],
             pointer_lifts: if pointer_lorentz {
                 vec![0; context]
@@ -1438,6 +1442,7 @@ impl IntegerStackModel {
                 copy: vec![0; pointer_vocab],
                 mixture: vec![0; pointer_vocab],
                 snap_trace: None,
+                bucket_trace: None,
                 query_q12: vec![0; if self.fbs.is_some() { d } else { 0 }],
                 cells: vec![0; if self.fbs.is_some() { 256 } else { 0 }],
                 native_kept: vec![0; self.fbs.as_ref().map_or(0, |f| f.kept_cells)],
@@ -1688,6 +1693,9 @@ struct Buffers {
     mixture: Vec<i32>,
     /// The opt-in snap trace; `None` (the default) records nothing.
     snap_trace: Option<SnapTrace>,
+    /// One layer's rate buckets, `Some` only inside a step traced by Q5's decision trace
+    /// (claude-249).
+    bucket_trace: Option<BucketTrace>,
     /// The native writer's query at Q12, its 256 cell scores and its kept
     /// cells and token (empty on a dense stack).
     query_q12: Vec<i32>,
@@ -1716,6 +1724,69 @@ struct MemoryServing {
     readout_before: Vec<i64>,
 }
 
+/// Q5's decision trace while it is on (claude-249): the window's forced set, and what each step
+/// decided, in the forward's order.
+struct DecisionState {
+    layers: usize,
+    lanes: usize,
+    /// The forced rate buckets, `[step][layer][lane]` flattened, up to the last one forced.
+    buckets: Vec<Option<u8>>,
+    /// Each Hamming read's forced codes ([`ServedHamming::forcing`]); empty without a read.
+    reads: Vec<ReadForce>,
+    /// The read the step's last hook recorded, taken by the step at once.
+    recorded: Vec<HammingStepRead>,
+    steps: Vec<DecisionStep>,
+}
+
+impl DecisionState {
+    /// Layer `layer`'s bucket trace at step `step`, with its lanes' forced entries.
+    fn layer_trace(&self, step: usize, layer: usize) -> BucketTrace {
+        let at = (step * self.layers + layer) * self.lanes;
+        BucketTrace {
+            forced: (at..at + self.lanes)
+                .map(|i| self.buckets.get(i).copied().flatten())
+                .collect(),
+            score_q16: Vec::with_capacity(self.lanes),
+            entry: Vec::with_capacity(self.lanes),
+        }
+    }
+
+    /// The read the last hook recorded, as the trace writes it; `None` where none ran.
+    fn take_read(&mut self) -> Option<DecisionRead> {
+        self.recorded.pop().map(|read| DecisionRead {
+            depth: read.depth,
+            heads: read
+                .heads
+                .into_iter()
+                .map(|h| DecisionHead {
+                    query: h.query,
+                    key: h.key,
+                    kept: h.kept,
+                })
+                .collect(),
+        })
+    }
+}
+
+/// One layer's rate buckets in a traced step (claude-249): each lane's forced entry, if any, and
+/// each lane's score and the entry it used, in lane order.
+struct BucketTrace {
+    forced: Vec<Option<u8>>,
+    score_q16: Vec<i32>,
+    entry: Vec<u8>,
+}
+
+impl BucketTrace {
+    /// Lane `lane`'s entry, from its score `s_q16` and the entry `own` the score chooses: the
+    /// forced entry where one is forced. Both the score and the entry used are recorded.
+    fn decide(&mut self, lane: usize, s_q16: i32, own: usize) -> usize {
+        let used = self.forced.get(lane).copied().flatten().map_or(own, usize::from);
+        self.score_q16.push(s_q16);
+        self.entry.push(used as u8);
+        used
+    }
+}
+
 /// Incremental decoding of one stream of at most `context` positions.
 pub struct IntegerStackSession<'m> {
     model: &'m IntegerStackModel,
@@ -1735,6 +1806,8 @@ pub struct IntegerStackSession<'m> {
     hamming_payloads: Vec<Vec<i64>>,
     /// While `Some`, each Hamming read's choices at every step (claude-235's trace).
     hamming_trace: Option<Vec<HammingStepRead>>,
+    /// While `Some`, Q5's decision trace and its forced set (claude-249).
+    decision: Option<Box<DecisionState>>,
     /// The pointer head's keys `[position][dim]` (exponent -16) and Lorentz
     /// key lifts `[position]` (exponent -32), for the whole context.
     pointer_keys: Vec<i32>,
@@ -1829,6 +1902,81 @@ impl IntegerStackSession<'_> {
     /// while it is off.
     pub fn take_hamming_trace(&mut self) -> Option<Vec<HammingStepRead>> {
         self.hamming_trace.as_mut().map(std::mem::take)
+    }
+
+    /// Record every decision of claude-247's five kinds from the next step on, under the forced
+    /// set `force` (Q5's trace, claude-249): each layer's rate buckets and the stream read after
+    /// it, the readout read and the turn memory's lookup. The nearest is the caller's to add, from
+    /// the step's query. A forced bucket replaces the entry its score chooses, and a forced code
+    /// the computed one; an empty set forces nothing, and the steps are then the served ones.
+    ///
+    /// It turns the Hamming trace off. Refused: a session that has stepped; a model off the
+    /// card's path, which then makes a decision the trace does not record: one that is not
+    /// SpiralCore/FBS, whose recurrence is not geometric, that is snapped, whose gate is not the
+    /// Hamilton gate, whose head is not the nearest, or that serves a point key; and a forced set
+    /// naming a step, layer, lane, entry, read or head outside the model, or one decision twice.
+    pub fn set_decision_trace(&mut self, force: &DecisionForceWindow) -> Result<(), StackError> {
+        let model = self.model;
+        let Some(fbs) = model.fbs.as_deref() else {
+            return Err(StackError::Shape("the decision trace reads a SpiralCore/FBS model"));
+        };
+        if !model.shape.rec_geometric() {
+            return Err(StackError::Shape(
+                "the decision trace reads the geometric recurrence's rate buckets",
+            ));
+        }
+        // A snapped gate or transition picks the nearest icosian, a decision the trace does not
+        // record; a snapped transition is the header's `transport_snap`.
+        if !model.shape.raw_gates || !model.shape.raw_transition {
+            return Err(StackError::Shape(
+                "the decision trace reads an unsnapped artifact: the snap is not a decision it records",
+            ));
+        }
+        if !model.shape.gate_hamilton() || !model.shape.head_nearest() || model.point_key_rows().is_some() {
+            return Err(StackError::Shape(
+                "the decision trace reads the Hamilton gate and the nearest head, with no point key",
+            ));
+        }
+        if self.position != 0 {
+            return Err(StackError::Shape("the decision trace starts in a fresh session"));
+        }
+        let (layers, lanes, context) = (fbs.layers.len(), model.shape.lanes(), model.shape.context);
+        let mut buckets = Vec::new();
+        for bucket in &force.buckets {
+            if bucket.step >= context || bucket.layer >= layers || bucket.lane >= lanes || bucket.entry > 15 {
+                return Err(StackError::Shape(
+                    "a forced bucket names a step, layer, lane or entry outside the model",
+                ));
+            }
+            let at = (bucket.step * layers + bucket.layer) * lanes + bucket.lane;
+            if buckets.len() <= at {
+                buckets.resize(at + 1, None);
+            }
+            if buckets[at].replace(bucket.entry).is_some() {
+                return Err(StackError::Shape("a bucket is forced twice"));
+            }
+        }
+        let reads = match &fbs.hamming {
+            Some(hamming) => hamming.forcing(&force.codes, context)?,
+            None if force.codes.is_empty() => Vec::new(),
+            None => return Err(StackError::Shape("a forced code names a read the model does not have")),
+        };
+        self.hamming_trace = None;
+        self.decision = Some(Box::new(DecisionState {
+            layers,
+            lanes,
+            buckets,
+            reads,
+            recorded: Vec::new(),
+            steps: Vec::new(),
+        }));
+        Ok(())
+    }
+
+    /// The decisions recorded since [`Self::set_decision_trace`], one entry per step, and the
+    /// trace turned off; `None` while it is off.
+    pub fn take_decision_trace(&mut self) -> Option<Vec<DecisionStep>> {
+        self.decision.take().map(|d| d.steps)
     }
 
     /// Mark that the turn memory's reply begins at the next token this session predicts (units
@@ -3253,6 +3401,13 @@ fn stack_step_fbs(
     for (x, &t) in b.x.iter_mut().zip(&fbs.writer_table[at..at + d]) {
         *x = to_exp_i32(i64::from(t), Q12_EXP, RESIDUAL_EXP);
     }
+    // Q5's decision trace (claude-249): this step's decisions, in the forward's order.
+    let mut traced = session.decision.is_some().then(|| DecisionStep {
+        layers: Vec::with_capacity(fbs.layers.len()),
+        readout: None,
+        memory: None,
+        nearest: None,
+    });
     for (l, (layer, layer_state)) in fbs.layers.iter().zip(session.states.iter_mut()).enumerate() {
         let LayerState::Recurrence { state, history } = layer_state.as_mut() else {
             // `session` builds a recurrence state for every `r` of the pattern.
@@ -3263,7 +3418,11 @@ fn stack_step_fbs(
         stack_norm_gain(&mut b.scratch[..d], &layer.rec_gain);
         stack_fbs_gather(&layer.rec_in, &b.scratch[..d], NORM_FINE_EXP, &mut b.branches);
         stack_fbs_gather(&layer.rec_gate, &b.scratch[..d], NORM_FINE_EXP, &mut b.gate_out);
+        if let Some(decision) = session.decision.as_deref() {
+            b.bucket_trace = Some(decision.layer_trace(session.position, l));
+        }
         let act_exp = stack_recurrence_core(model, layer.tables(), state, history, b, false);
+        let buckets = b.bucket_trace.take();
         stack_fbs_gather(&layer.rec_out, &b.act[..d], act_exp, &mut b.proj);
         for (x, p) in b.x.iter_mut().zip(&b.proj) {
             *x = x.saturating_add(*p);
@@ -3279,7 +3438,18 @@ fn stack_step_fbs(
             *x = x.saturating_add(*p);
         }
         if let Some(hamming) = &fbs.hamming {
-            hamming.stream(l + 1, &session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.x, session.hamming_trace.as_mut());
+            let (trace, force) = match session.decision.as_deref_mut() {
+                Some(decision) => (Some(&mut decision.recorded), Some(decision.reads.as_slice())),
+                None => (session.hamming_trace.as_mut(), None),
+            };
+            hamming.stream(l + 1, &session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.x, trace, force);
+        }
+        if let (Some(step), Some(decision), Some(buckets)) = (traced.as_mut(), session.decision.as_deref_mut(), buckets) {
+            step.layers.push(DecisionLayer {
+                score_q16: buckets.score_q16,
+                entry: buckets.entry,
+                read: decision.take_read(),
+            });
         }
         #[cfg(test)]
         super::hamming::LAYER_TRACE.with(|trace| {
@@ -3291,7 +3461,14 @@ fn stack_step_fbs(
     stack_rms_norm_fine(&b.x, n.rms_eps, &mut b.scratch[..d]);
     stack_norm_gain(&mut b.scratch[..d], &fbs.final_gain);
     if let Some(hamming) = &fbs.hamming {
-        hamming.readout(&session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.scratch[..d], session.hamming_trace.as_mut());
+        let (trace, force) = match session.decision.as_deref_mut() {
+            Some(decision) => (Some(&mut decision.recorded), Some(decision.reads.as_slice())),
+            None => (session.hamming_trace.as_mut(), None),
+        };
+        hamming.readout(&session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.scratch[..d], trace, force);
+    }
+    if let (Some(step), Some(decision)) = (traced.as_mut(), session.decision.as_deref_mut()) {
+        step.readout = decision.take_read();
     }
     // The turn memory's move (units 2-3), after the Hamming readout as in the float trunk: the
     // opening table at the reply's first step's row, the reply table each later row.
@@ -3315,8 +3492,18 @@ fn stack_step_fbs(
             // own point there: the point key's (claude-222).
             point_miss = memory.point.is_some()
                 && moved.as_ref().is_some_and(|m| m.opening && m.stored.is_none());
+            if let Some(step) = traced.as_mut() {
+                step.memory = moved.as_ref().map(|m| DecisionMemory {
+                    key: m.key.clone(),
+                    stored: m.stored,
+                    opening: m.opening,
+                });
+            }
             session.memory.last_move = moved;
         }
+    }
+    if let (Some(step), Some(decision)) = (traced, session.decision.as_deref_mut()) {
+        decision.steps.push(step);
     }
     for (q, &v) in b.query_q12.iter_mut().zip(&b.scratch[..d]) {
         *q = to_exp_i32(v, NORM_FINE_EXP, Q12_EXP).clamp(-32768, 32767);
@@ -3385,6 +3572,13 @@ fn stack_step_fbs_timed(
     ns: &mut Vec<u64>,
     parts: bool,
 ) -> Result<u32, StackError> {
+    // The timed step records no decisions, so a traced session's later steps would fall out of
+    // line with its window.
+    if session.decision.is_some() {
+        return Err(StackError::Shape(
+            "a traced session steps untimed: the timed step does not record the decision trace",
+        ));
+    }
     use std::time::Instant;
     let lap = |since: &mut Instant, ns: &mut Vec<u64>| {
         let now = Instant::now();
@@ -3453,14 +3647,14 @@ fn stack_step_fbs_timed(
         }
         // A Hamming read is timed inside the block it follows, so the stage list is unchanged.
         if let Some(hamming) = &fbs.hamming {
-            hamming.stream(l + 1, &session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.x, session.hamming_trace.as_mut());
+            hamming.stream(l + 1, &session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.x, session.hamming_trace.as_mut(), None);
         }
         lap(&mut since, ns);
     }
     stack_rms_norm_fine(&b.x, n.rms_eps, &mut b.scratch[..d]);
     stack_norm_gain(&mut b.scratch[..d], &fbs.final_gain);
     if let Some(hamming) = &fbs.hamming {
-        hamming.readout(&session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.scratch[..d], session.hamming_trace.as_mut());
+        hamming.readout(&session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.scratch[..d], session.hamming_trace.as_mut(), None);
     }
     // The turn memory's move (units 2-3), after the Hamming readout as in the float trunk: the
     // opening table at the reply's first step's row, the reply table each later row.
@@ -3660,7 +3854,7 @@ fn stack_recurrence_core(
     history[..d].copy_from_slice(drive);
     let (decays, rotations) = b.gate_out.split_at(lanes);
     let (wide, rates, offsets) = (&b.wide[..d], t.rates, t.decay_offset);
-    let lanes_of = |first: usize, held: &mut [i64], trace: Option<&mut SnapTrace>| {
+    let lanes_of = |first: usize, held: &mut [i64], trace: Option<&mut SnapTrace>, buckets: Option<&mut BucketTrace>| {
         // `first` is a channel index (four per lane); without learned
         // rotations there are no rotation logits.
         let (lane, count, channels) = (first >> 2, held.len() >> 2, held.len());
@@ -3692,17 +3886,18 @@ fn stack_recurrence_core(
             );
             return;
         };
-        stack_lanes(model, held, pushed, decays, rates, offsets, rotations, trace)
+        stack_lanes(model, held, pushed, decays, rates, offsets, rotations, trace, buckets)
     };
+    let buckets = b.bucket_trace.as_mut();
     match &mut b.snap_trace {
-        // The opt-in snap trace records lanes in order, on one thread.
-        Some(trace) => lanes_of(0, state, Some(trace)),
-        None if parallel && lanes >= 2 << LANE_TASK_LOG2 => {
+        // The opt-in snap trace and Q5's bucket trace record lanes in order, on one thread.
+        Some(trace) => lanes_of(0, state, Some(trace), buckets),
+        None if buckets.is_none() && parallel && lanes >= 2 << LANE_TASK_LOG2 => {
             split_rows(0, state, LANE_TASK_LOG2 + 2, &|first, held: &mut [i64]| {
-                lanes_of(first, held, None)
+                lanes_of(first, held, None, None)
             });
         }
-        None => lanes_of(0, state, None),
+        None => lanes_of(0, state, None, buckets),
     }
     if s.rec_geometric() {
         for ((out_lane, h_lane), g_lane) in b.scratch[..d]
@@ -3742,7 +3937,8 @@ const LANE_TASK_LOG2: u32 = if cfg!(test) { 0 } else { 5 };
 /// each) from their convolved drive `wide`, decay logits `decays`, decay
 /// rates `rates` (or geometric `offsets`) and raw rotations (four per lane;
 /// empty without learned rotations). Lanes are independent, so any split of
-/// them computes the same integers.
+/// them computes the same integers. A geometric lane's rate bucket goes
+/// through `buckets` where Q5's decision trace is on (claude-249).
 #[inline(never)]
 #[allow(clippy::too_many_arguments)]
 fn stack_lanes(
@@ -3754,6 +3950,7 @@ fn stack_lanes(
     offsets: &[i32],
     rotations: &[i32],
     mut trace: Option<&mut SnapTrace>,
+    mut buckets: Option<&mut BucketTrace>,
 ) {
     let (s, n) = (&model.shape, &model.numerics);
     // Read once per layer: both are string compares on the shape.
@@ -3769,6 +3966,10 @@ fn stack_lanes(
             let offset = offsets.get(lane).copied().unwrap_or(0);
             let s_q16 = decay.saturating_add(offset).clamp(0, 1 << 16);
             let idx = ((s_q16 >> 12) as usize).min(15);
+            let idx = match buckets.as_deref_mut() {
+                Some(buckets) => buckets.decide(lane, s_q16, idx),
+                None => idx,
+            };
             // The retained reading (claude-226) carries 1 - 2^-(idx+1) where decay carries 2^-(idx+1).
             if retention {
                 (RETAIN_LAMBDA_Q31[idx], RETAIN_KEEP_Q31[idx])

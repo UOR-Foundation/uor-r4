@@ -52,9 +52,10 @@ every source you are working from was refreshed in this session.
    milestone issue or the top of `current-state.md`, the live plan wins and the
    old record keeps its text as evidence.
 7. **Check the interlock you are about to work under.** For model work:
-   `python3 scripts/check_no_softmax.py` is the D23 ratchet, and D24 forbids CPU
-   model compute and non-decisive GPU work. A mechanism brief written before
-   D23/D24 may still describe a now-excluded configuration.
+   `python3 scripts/check_no_softmax.py` is the D23 ratchet. D24 forbids
+   non-decisive GPU work and CPU model compute outside the named D84 program.
+   A mechanism brief written before D23/D24/D84 may still describe an excluded
+   configuration.
 8. **Record what was loaded and why.** The context you loaded, the sources with
    their paths, the ones you dropped and the reason — normally the harness brief
    already lists these; keep that list in the session's first status card so the

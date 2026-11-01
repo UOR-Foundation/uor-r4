@@ -1,5 +1,13 @@
 {
   "carrier-credit-hard-selection": 2819,
+  "cpu-discrete-training-path": 3501,
+  "cpu-discrete-writer-core": 3502,
+  "cpu-quantization-exact-memory": 3503,
+  "cpu-shared-vector-forward": 3504,
+  "cpu-shared-vector-train": 3505,
+  "cpu-training-pilot": 3506,
+  "cpu-training-program": 3507,
+  "cpu-whole-path-exact-updates": 3510,
   "d11-exporter-float-trunk": 2820,
   "d41-driver-math-pilot": 2821,
   "docs-status-refresh": 3380,

@@ -81,7 +81,7 @@ flowchart LR
 
 <a id="d22"></a>**D22.** The owner's rule that a negative result closes one tested configuration, never a mechanism. Stopping a mechanism needs the owner. This is why no mechanism has a "retired" status. See [the rules](../rules/README.md) and [decision map](../rules/decision-map.md).
 
-<a id="d24"></a>**D24.** The owner's rule of 12 October 2026 that no model compute runs on the CPU: training, evaluation and every research measurement of the model are GPU work. Serving the exported [D11](#d11) integer artifact on a client device is the product, not research compute (charter 3.6). See [the rules](../rules/README.md).
+<a id="d24"></a>**D24.** The owner's rule of 12 October 2026 that model compute is GPU-first: training, evaluation and qualification use the GPU by default, and GPU is spent only where a run can change a decision. D84 allows only the named owner-authorized CPU training program to run development training, evaluation and parity locally; those results do not replace a GPU qualification bar. Serving the exported [D11](#d11) integer artifact on a client device is the product, not research compute (charter 3.6). See [the rules](../rules/README.md).
 
 <a id="d37"></a>**D37.** The owner's rule of 18 October that floating point is legal in offline training. Softmax-like functions and matrix multiplication stay banned, and every float-trained candidate must report its export gap. See [training](../model/training.md).
 

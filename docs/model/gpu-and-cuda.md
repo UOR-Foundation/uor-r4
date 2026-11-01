@@ -81,7 +81,7 @@ The rules are written in [`docs/labs/compute.md`](../labs/compute.md) and printe
 | Results | `down` copies the run, job, pod and evaluation folders off the pod first, or uploads them to the private store. Pods are not kept as storage |
 | No fallback | If no GPU is free and the caps are reached, wait or ask the owner. Never run model work on the laptop CPU |
 
-The laptop does non-model work: editing, compiling CPU-only builds, static checks and grading stored outputs. All model compute is GPU work (D24). Serving a finished model on the user's own device is a separate matter and is allowed ([charter](../../CHARTER.md), section 3.6).
+The laptop does non-model work: editing, compiling CPU-only builds, static checks and grading stored outputs. GPU model results qualify by default (D24). The owner-authorized D84 CPU program may also run its named development-training and parity units on the workstation; those results do not replace a GPU qualification bar. Serving a finished model on the user's own device is a separate matter and is allowed ([charter](../../CHARTER.md), section 3.6).
 
 **Measured costs.**
 
