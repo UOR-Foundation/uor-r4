@@ -434,15 +434,13 @@ fn phi_q32_is_the_rounded_fixed_point_golden_ratio() {
     assert_eq!(super::PHI_Q32, (phi * 4294967296.0).round() as u128);
 }
 
-#[test]
-fn snap_selection_matches_an_independent_exact_oracle() {
-    use super::stack_snap_select;
+/// The snap's choice, independent of the kernel: the exact dot product against
+/// a root is (P + B*sqrt(5)) / 4 with P = 2*delta_a + delta_b, so two
+/// candidates compare by the sign of (P1 - P2) - (B2 - B1)*sqrt(5), decided in
+/// i128 by the sign-aware square rule (no floats, no kernel code shared). The
+/// lowest index wins an exact tie.
+fn snap_oracle(raw: [i32; 4]) -> usize {
     use crate::h4_classifier::H4_ROOT_COEFFICIENTS;
-    let mut rng = Lcg(0x5eed);
-    // Independent of the kernel: the exact dot product against a root is
-    // (P + B*sqrt(5)) / 4 with P = 2*delta_a + delta_b, so two candidates
-    // compare by the sign of (P1 - P2) - (B2 - B1)*sqrt(5), decided in i128
-    // by the sign-aware square rule (no floats, no kernel code shared).
     let greater = |(p1, b1): (i128, i128), (p2, b2): (i128, i128)| -> bool {
         let dp = p1 - p2;
         let db = b2 - b1;
@@ -454,32 +452,56 @@ fn snap_selection_matches_an_independent_exact_oracle() {
             dp >= 0 || dp * dp < 5 * db * db
         }
     };
-    let oracle = |raw: [i32; 4]| -> usize {
-        let mut best = (usize::MAX, (i128::MIN, i128::MIN));
-        for (j, root) in H4_ROOT_COEFFICIENTS.iter().enumerate() {
-            let mut p = 0i128;
-            let mut bsum = 0i128;
-            for c in 0..4 {
-                let [a, b] = root[c];
-                let x = i128::from(raw[c]);
-                p += x * (2 * i128::from(a) + i128::from(b));
-                bsum += x * i128::from(b);
-            }
-            if best.0 == usize::MAX || greater((p, bsum), best.1) {
-                best = (j, (p, bsum));
-            }
+    let mut best = (usize::MAX, (i128::MIN, i128::MIN));
+    for (j, root) in H4_ROOT_COEFFICIENTS.iter().enumerate() {
+        let mut p = 0i128;
+        let mut bsum = 0i128;
+        for c in 0..4 {
+            let [a, b] = root[c];
+            let x = i128::from(raw[c]);
+            p += x * (2 * i128::from(a) + i128::from(b));
+            bsum += x * i128::from(b);
         }
-        best.0
-    };
+        if best.0 == usize::MAX || greater((p, bsum), best.1) {
+            best = (j, (p, bsum));
+        }
+    }
+    best.0
+}
+
+#[test]
+fn snap_selection_matches_an_independent_exact_oracle() {
+    use super::stack_snap_select;
+    use crate::h4_classifier::H4_ROOT_COEFFICIENTS;
+    let mut rng = Lcg(0x5eed);
     for _ in 0..2000 {
         let raw: [i32; 4] = std::array::from_fn(|_| (rng.next() % 200_001) as i32 - 100_000);
-        assert_eq!(stack_snap_select(raw), oracle(raw), "raw {raw:?}");
+        assert_eq!(stack_snap_select(raw), snap_oracle(raw), "raw {raw:?}");
     }
     // Exact ties break to the lowest index; the zero vector selects root 0.
     assert_eq!(stack_snap_select([0; 4]), 0);
     let axis = H4_ROOT_COEFFICIENTS[0];
     let raw: [i32; 4] = std::array::from_fn(|c| i32::from(axis[c][0]) * 1000);
     assert_eq!(stack_snap_select(raw), 0);
+}
+
+#[test]
+fn snap_selection_matches_the_oracle_on_every_query_from_minus_8_to_8() {
+    // Every query with each coordinate in -8..=8 (claude-241): zeros, equal
+    // magnitudes and exact ties, on the scan and on the fast path alike.
+    let mut grid = 0;
+    for w in -8..=8 {
+        for x in -8..=8 {
+            for y in -8..=8 {
+                for z in -8..=8 {
+                    let raw = [w, x, y, z];
+                    assert_eq!(super::stack_snap_select(raw), snap_oracle(raw), "{raw:?}");
+                    grid += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(grid, 83_521);
 }
 
 #[test]
