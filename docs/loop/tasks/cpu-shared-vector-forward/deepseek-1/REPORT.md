@@ -19,16 +19,16 @@ Lab: deepseek. Item: [cpu-shared-vector-forward](../../../../roadmap/items/cpu-s
 
 ## Measurements
 
-- `cargo test -p uor-r4-cpu-train`: 15 passed, 0 failed; 5 are FBS-forward tests.
+- `cargo test -p uor-r4-cpu-train`: 17 passed, 0 failed; 7 are FBS-forward tests.
 - One-layer, three-layer and six-layer tests compare every step's complete `query_q12`, token and kept-cell vector against `IntegerStackSession::step_native` across eight tokens.
 - Writer-head parity passes on a two-layer model; nearest-head parity passes on one-, three- and six-layer models.
-- Six-layer shape (`vocab=4096`, `width=256`, `mlp=384`, `context=192`, nearest head): 64 timed steps in 19.876 ms, **3,219.991 tokens/s**, checksum `11743905789448238222`.
+- Six-layer shape (`vocab=4096`, `width=256`, `mlp=384`, `context=192`, nearest head): 64 timed steps in 19.811 ms, **3,230.533 tokens/s**, checksum `11743905789448238222`.
 
 This is exact synthetic-forward throughput. It does not include Hamming reads, turn memory, training, language quality or a trained checkpoint.
 
 ## Checks run at the head
 
-- `cargo test --locked -p uor-r4-cpu-train`: PASS, 15 tests.
+- `cargo test --locked -p uor-r4-cpu-train`: PASS, 17 tests.
 - `cargo clippy --locked -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings`: PASS.
 - `cargo run --locked --release -p uor-r4-cpu-train --bin cpu-fbs-forward-bench`: PASS; reading above.
 - `cargo fmt --package uor-r4-cpu-train`: PASS.

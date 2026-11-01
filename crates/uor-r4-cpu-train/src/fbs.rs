@@ -6,7 +6,8 @@
 
 use uor_r4_integer::h4_classifier::H4_ROOT_COEFFICIENTS;
 use uor_r4_integer::stack::{
-    stack_snap_select, FbsImage, FbsLayerImage, FbsMapImage, Fixed, GROUP, PHI_Q32,
+    stack_snap_select, FbsImage, FbsLayerImage, FbsMapImage, Fixed, IntegerStackModel, GROUP,
+    PHI_Q32,
 };
 
 const RESIDUAL_EXP: i32 = FbsImage::RESIDUAL_EXP;
@@ -111,12 +112,34 @@ pub struct CpuFbsForward {
     writer_table: Vec<i16>,
     roots_q12: [[i32; 8]; 16],
     kept_cells: usize,
+    context: usize,
+    position: usize,
     state: Vec<Vec<i64>>,
     history: Vec<Vec<i32>>,
 }
 
 impl CpuFbsForward {
-    pub fn from_image(image: FbsImage<'_>, rms_eps: Fixed) -> Result<Self> {
+    pub fn from_model(model: &IntegerStackModel) -> Result<Self> {
+        let shape = model.shape();
+        if !shape.projection_fbs()
+            || !shape.rec_geometric()
+            || !shape.gate_hamilton()
+            || shape.raw_gates
+            || shape.raw_transition
+            || shape.pointer.is_some()
+            || shape.pattern.bytes().any(|kind| kind != b'r')
+        {
+            return Err(invalid(
+                "CPU FBS forward requires a snapped, no-read, recurrence-only FBS model",
+            ));
+        }
+        let image = model.fbs_image().ok_or_else(|| {
+            invalid("CPU FBS forward does not yet support Hamming reads or turn memory")
+        })?;
+        Self::from_image(image, model.rms_epsilon(), shape.context)
+    }
+
+    fn from_image(image: FbsImage<'_>, rms_eps: Fixed, context: usize) -> Result<Self> {
         let width = image.final_gain.len();
         if width == 0 || !width.is_multiple_of(GROUP) || !width.is_multiple_of(4) {
             return Err(invalid("FBS width must be a positive multiple of 32"));
@@ -156,6 +179,8 @@ impl CpuFbsForward {
             writer_table: image.writer_table.to_vec(),
             roots_q12: *image.roots_q12,
             kept_cells: image.kept_cells,
+            context,
+            position: 0,
         })
     }
 
@@ -172,6 +197,12 @@ impl CpuFbsForward {
             return Err(invalid(format!(
                 "token {token} is outside vocabulary {}",
                 self.vocab
+            )));
+        }
+        if self.position >= self.context {
+            return Err(invalid(format!(
+                "context is full at {} positions",
+                self.context
             )));
         }
         let d = self.width;
@@ -241,6 +272,7 @@ impl CpuFbsForward {
                 self.kept_cells,
             ),
         };
+        self.position += 1;
         Ok(CpuFbsStep {
             token,
             kept_cells,
@@ -278,6 +310,23 @@ fn validate_layer(layer: &Layer, width: usize, mlp: usize) -> Result<()> {
         if map.atoms.len() != map.codes.len() {
             return Err(invalid("FBS route atom/code lengths differ"));
         }
+    }
+    validate_atoms(&layer.rec_in, width / 8)?;
+    validate_atoms(&layer.rec_gate, width / 8)?;
+    validate_atoms(&layer.rec_out, width / 8)?;
+    validate_atoms(&layer.mlp_gate, width / 8)?;
+    validate_atoms(&layer.mlp_up, width / 8)?;
+    validate_atoms(&layer.mlp_down, mlp / 8)?;
+    Ok(())
+}
+
+fn validate_atoms(map: &Map, input_blocks: usize) -> Result<()> {
+    if map
+        .atoms
+        .iter()
+        .any(|&atom| usize::from(atom) >= input_blocks)
+    {
+        return Err(invalid("FBS route atom lies outside its input"));
     }
     Ok(())
 }
@@ -674,7 +723,10 @@ fn bit_length(value: u64) -> i32 {
 mod tests {
     use super::*;
     use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
-    use uor_r4_integer::stack::{export_fbs_trunk_uorlut01, IntegerStackModel};
+    use uor_r4_integer::stack::{
+        export_fbs_trunk_uorlut01, export_fbs_trunk_uorlut01_with, FbsExportSnaps,
+        IntegerStackModel,
+    };
 
     fn fixture(seed: u64, layers: usize, nearest: bool) -> (IntegerStackModel, CpuFbsForward) {
         let mut snapshot = synthetic_fbs_trunk_with(
@@ -695,8 +747,7 @@ mod tests {
         snapshot.readout_nearest = nearest;
         let bytes = export_fbs_trunk_uorlut01(&snapshot).unwrap();
         let model = IntegerStackModel::parse(&bytes).unwrap();
-        let cpu =
-            CpuFbsForward::from_image(model.fbs_image().unwrap(), model.rms_epsilon()).unwrap();
+        let cpu = CpuFbsForward::from_model(&model).unwrap();
         (model, cpu)
     }
 
@@ -747,5 +798,47 @@ mod tests {
         let altered = corrupted.step(5, CpuFbsHead::Nearest).unwrap();
         assert_eq!(expected.query_q12.len(), altered.query_q12.len());
         assert_ne!(expected.query_q12, altered.query_q12);
+    }
+
+    #[test]
+    fn raw_gate_and_transition_artifacts_are_refused() {
+        let snapshot = synthetic_fbs_trunk_with(
+            23,
+            FbsSynth {
+                vocab: 512,
+                d: 64,
+                mlp: 96,
+                layers: 1,
+                context: 16,
+                kept: 8,
+                gain_lo: 0.75,
+                gain_span: 1.5,
+                table: 0.5,
+                decay_step: 0.25,
+            },
+        );
+        let bytes = export_fbs_trunk_uorlut01_with(
+            &snapshot,
+            FbsExportSnaps {
+                gates: false,
+                transition: false,
+            },
+        )
+        .unwrap();
+        let model = IntegerStackModel::parse(&bytes).unwrap();
+        assert!(CpuFbsForward::from_model(&model).is_err());
+    }
+
+    #[test]
+    fn context_exhaustion_matches_serving() {
+        let (model, mut cpu) = fixture(29, 1, true);
+        let mut session = model.session();
+        for step in 0..16 {
+            let token = (step % 512) as u32;
+            session.step_native(token).unwrap();
+            cpu.step(token, CpuFbsHead::Nearest).unwrap();
+        }
+        assert!(session.step_native(0).is_err());
+        assert!(cpu.step(0, CpuFbsHead::Nearest).is_err());
     }
 }

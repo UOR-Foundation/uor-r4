@@ -25,20 +25,14 @@ fn main() {
     );
     let bytes = export_fbs_trunk_uorlut01(&snapshot).expect("synthetic FBS artifact");
     let model = IntegerStackModel::parse(&bytes).expect("parse FBS artifact");
-    let image = model.fbs_image().expect("no-read FBS image");
-    let mut forward =
-        CpuFbsForward::from_image(image, model.rms_epsilon()).expect("CPU FBS forward");
+    let mut forward = CpuFbsForward::from_model(&model).expect("CPU FBS forward");
 
     for step in 0..WARMUP_STEPS {
         forward
             .step((step * 97 + 11) as u32, CpuFbsHead::Nearest)
             .expect("warmup");
     }
-    forward = CpuFbsForward::from_image(
-        model.fbs_image().expect("no-read FBS image"),
-        model.rms_epsilon(),
-    )
-    .expect("fresh CPU FBS forward");
+    forward = CpuFbsForward::from_model(&model).expect("fresh CPU FBS forward");
 
     let started = Instant::now();
     let mut checksum = 0u64;
