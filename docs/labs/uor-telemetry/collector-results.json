@@ -1,0 +1,31 @@
+{
+  "schema": "uor-r4.telemetry-collector-results/1",
+  "date": "2026-11-01",
+  "collector": "otel/opentelemetry-collector-contrib:0.164.0",
+  "collector_image_sha256": "340c9ca6a36617084c6661bdc4f0fe92b7cda5a805d61673ec8db375fddc522b",
+  "curl_image_sha256": "3fb7e13e5d179a845c97d78204f3f1064d1907037f26a3ebf91710571151fd93",
+  "transport": "OTLP/HTTP JSON inside the collector's own network namespace",
+  "endpoint": "127.0.0.1:4318/v1/traces",
+  "http_status": 200,
+  "response": "{\"partialSuccess\":{}}",
+  "operations_decoded": [
+    "uor.cuda.index.build",
+    "uor.cuda.index.update",
+    "uor.cuda.index.probe",
+    "uor.cuda.index.full_scan"
+  ],
+  "spans_decoded": 4,
+  "trace_id": "2bcf737d44ec9b619db3c1db79488566",
+  "build_span_id": "5099af27a3b4ca7b",
+  "child_parent_ids_match_build": true,
+  "dropped_attributes_per_span": 0,
+  "artifact_payload_sha256": "9d98bd50f46cdedd5c481a8d696a609936bbc540997e7eaef6af2bdb3bc15597",
+  "artifact_byte_size": "512",
+  "collector_stopped": true,
+  "hf_store_commit": "4df3c78a8d4652ec4b713dc621e5ddf67b7d8cd9",
+  "hf_download_readback_verified": true,
+  "production_export": "NOT_RUN",
+  "sdk_interoperability": "NOT_RUN",
+  "multi_runtime_interoperability": "NOT_RUN",
+  "upstream_acceptance": "NOT_CLAIMED"
+}
