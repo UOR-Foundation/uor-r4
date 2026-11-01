@@ -15,7 +15,7 @@ Lab: deepseek. Item: [cpu-training-program](../../../../roadmap/items/cpu-traini
 - D84 amends CHARTER §3.5 from absolute GPU-only research compute to GPU-first compute. Only a named, separately scanned CPU program authorized by the owner may run CPU training, evaluation or parity as development research. CPU evidence does not replace a GPU qualification bar without a later owner decision. The program item is marked done because this PR delivers its registration/authority scope; the seven child items carry the actual repairs.
 - AGENTS.md, the hard-rule summary, PM rules, the compute skill, the milestone registry and the live onboarding/model/geometry/start pages now state the same boundary.
 - The CPU training program preserves ten historical family dispositions, including the banned teacher/dense/softmax forms, the retained whole-path/exact-update reference and the old loss-versus-capability negatives.
-- Seven child items register the order: exact discrete writer core; discrete reads/counterfactuals/BVG-K; shared-vector forward; lawful shared-vector training; quantization plus exact memory; a bounded pilot; and whole-path exact-update/recovery parity.
+- Seven child items register the order: exact discrete writer core; discrete reads/counterfactuals/BVG-K; shared-vector forward; lawful shared-vector training; quantization plus exact memory; whole-path exact-update/recovery parity; and the bounded pilot.
 - Roadmap sync created #3501-#3507 and #3510. This registration PR closes #3507; the seven child issues remain open.
 
 ## Measurements
