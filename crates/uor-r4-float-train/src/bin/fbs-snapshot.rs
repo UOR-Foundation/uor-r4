@@ -18,9 +18,11 @@
 //! The second form (claude-235) writes the D11 readout of a checkpoint with
 //! Hamming reads and what each read chose on its fixed sequences
 //! (`uor-r4.hamming-trace/1`), for one arm:
-//! - `d11`: as the first form's D11 readout;
-//! - `d11-tie`: with the integer session's tie rule;
-//! - `d11-rounded`: with the reads' parameters rounded as exported;
+//! - `d11`: with the integer session's tie rule turned off, so the GPU sort's own order breaks
+//!   the reads' ties (the first form's D11 readout before claude-239);
+//! - `d11-tie`: with the rule, as the first form's D11 readout since claude-239, the rule's
+//!   default;
+//! - `d11-rounded`: `d11` with the reads' parameters rounded as exported;
 //! - `d11-tie-rounded`: both.
 //!
 //! It never replaces or leaves a partial output file, and it prints each
