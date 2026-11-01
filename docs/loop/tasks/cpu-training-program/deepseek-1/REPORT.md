@@ -2,7 +2,7 @@
 
 Lab: deepseek. Item: [cpu-training-program](../../../../roadmap/items/cpu-training-program.md) (#3507). Base: `381ae4d98`.
 
-## Negatives first
+## What did not work
 
 - **No CPU training method has been repaired in this unit.** It records authority, dispositions and the implementation sequence. No model compute ran, and the new notebook has no result rows.
 - **The repository-wide `cargo test -p uor-r4-harness` is red on the base.** On clean `origin/main`, the representative tests for the milestone-registry mismatch, the malformed CUDA performance sheet and the registry PR gate fail unchanged. The full suite at this head reports 663 passed, 14 failed and 1 ignored. These findings predate this documentation branch and are outside its scope.
@@ -17,7 +17,11 @@ Lab: deepseek. Item: [cpu-training-program](../../../../roadmap/items/cpu-traini
 - Six child items register the order: exact discrete writer core; discrete reads/counterfactuals/BVG-K; shared-vector forward; lawful shared-vector training; quantization plus exact memory; and a bounded pilot.
 - Roadmap sync created #3501-#3507. This PR references #3507 rather than closing it; the finishing authority/registration unit will close it after review and merge.
 
-## Checks
+## Measurements
+
+This unit runs no model compute. The registration counts are 9 historical families, 6 child implementation items, 7 new roadmap issues (#3501-#3507), and 132 total roadmap items after sync. The local diagnostic readings retained in the program page are labelled as unsealed component ceilings and are not re-run here.
+
+## Checks run at the head
 
 - `cargo run -q -p xtask -- roadmap check`: PASS, 132 items.
 - `cargo run -q -p xtask -- roadmap render --check`: PASS, current.
@@ -29,8 +33,16 @@ Lab: deepseek. Item: [cpu-training-program](../../../../roadmap/items/cpu-traini
 - `cargo test -q -p uor-r4-harness`: FAIL, 663 passed / 14 failed / 1 ignored. Representative failures were rerun at clean `origin/main` and fail there unchanged.
 - `uor-harness check`: FAIL on the same pre-existing malformed pre-registration sheet, with warnings; no claim of a green global check.
 
-## Open
+## Skills used
+
+No repository skill was invoked. Three fresh-context subagents were used earlier for independent architecture, FBS-path and historical-family audits; their findings were checked against the source and consolidated here by the top session.
+
+## Still open
 
 - Merge this registration unit, sync main and then claim `cpu-discrete-writer-core` (#3502).
 - The first implementation unit must prove exact writer/admission parity before any CPU read, update or corpus pilot.
 - No CPU result may enter a milestone claim until a later owner decision names that qualification path.
+
+## Plain summary
+
+The owner has authorized a scoped CPU research exception. GPU remains the authority, all historical training families keep their recorded dispositions, and six isolated units now give the repair a concrete order. No trainer has been claimed as working yet.
