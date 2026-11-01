@@ -4,6 +4,7 @@
 - **The run:** one GPU job on one leased RTX 5090, `local/claude/claude-240/job.sh`.
   - It is not in git. The job copies itself into the outputs, so the seal covers it.
   - It runs against the pushed head.
+  - **Attempt 2.** Attempt 1 stopped at its first snapshot step: `StackModel::load` refused claude-146's checkpoints, whose saved kernel identity predates claude-179. The repair is an evaluation copy, held to its run's sealed inspection (§4.10, §11).
 - **The laptop side:** the integer traces, the comparisons, the copy-code checks and the timing run on the laptop from the stored outputs, as serving does.
 
 ## 1. Question
@@ -40,6 +41,11 @@ With the GPU sort's own order, the forward as trained missed both bars: d was 17
 | `d11-tie` (fixed) | the 8 fixed sequences of 192 | the integer session's | the bridge |
 
 **On the pod, per seed: the float side only** (CHARTER §3.5).
+0. **The evaluation copy and its inspections** (attempt 2, §11):
+   - `fbs-snapshot --rebind-fbs-backward MODEL_DIR COPY_DIR` writes the copy (§4.10);
+   - `fbs-snapshot --inspect as-trained DATA_ROOT COPY_RUN` and `--inspect tie-rule` run the trainer's `--inspect` of the copy, with the read's ties broken as trained and by the rule.
+
+   Every form below reads the copy as `MODEL_DIR`.
 1. **The snapshot and DEV's readouts:** `fbs-snapshot --dev DATA_ROOT MODEL_DIR snapshot.json readout.json readout-export.json readout-d11.json`.
 2. **The fixed sequences:** `fbs-snapshot MODEL_DIR` (no `--dev`) writes `snapshot.json` and the three fixed readouts.
 3. **The traces:** `fbs-snapshot --dev DATA_ROOT --hamming-trace ARM MODEL_DIR readout-d11.json trace.json` for `d11-tie` and `d11`, and the same without `--dev` for the bridge.
@@ -145,6 +151,30 @@ The single tokens reach no read, so their agreement is reported only.
 9. **`I-Finite`:** every tool exits 0.
    - An arm whose tool fails is logged, the others still run, and the job ends with EXIT 7.
    - A missing comparison or trace is row 0.
+10. **`I-Rebind`, the copy is the checkpoint as claude-146 evaluated it** (attempt 2, §11), per seed:
+   - **The static half, on the pod.** `--rebind-fbs-backward` refuses unless:
+     - the kernel's text through `spiralcore_fbs_fwd` hashes to the text before claude-179;
+     - each of the six saved fingerprints (five plans and the vector head's 8/8 `geometry`) is this build's plan with only the kernel's hash put back;
+     - the copy then loads, with every check `StackModel::load` makes.
+
+     Then the job checks that the copy's tensors and run config are the pinned files byte for byte; that it holds 4 files; and that its step config is the checkpoint's with exactly the six printed fingerprints replaced.
+   - **The Gate R half, read on the laptop.** Two inspections are held to claude-146's sealed inspection at step 16,384, over all 14,287 of DEV's scored rows, field by field over the sealed line's own 20 fields. Fields the head's inspection gained after claude-146 are not compared.
+     - **H:** the copy's inspection as trained, at this head.
+     - **C, the control:** claude-146's own build, `train-in-space` at `df1d7892`, inspecting the original checkpoint with claude-146's command. It loads there unchanged. C only classifies a miss of H, so a C that does not build or run is recorded and the job goes on.
+     - **The counts:** `scored_rows`, `top1_hits`, `nearest.hits`, `nearest.opening_rows`, `nearest.opening_hits`, `nearest.commonest_opening_rows`, `nearest.opening_distinct_picks`, `admitted_hits`, `token_unviolated_hits`, `probe_rows` and `distinct_first_cells`. The other nine fields are floats (margins, spreads, means) and a string.
+   - **The rows, per seed, read in order:**
+
+     | Row | H | C | The seed |
+     |---|---|---|---|
+     | holds | every field equal | (recorded) | the copy is the checkpoint as claude-146 evaluated it |
+     | holds on counts | every count equal, a float differs | every count equal, a float differs | holds; the pod's floats do not reproduce claude-146's own build either. The REPORT says so |
+     | 0, the head | otherwise | every count equal, and H differs in a count; or every field equal | row 0: this head's forward or evaluator differs from claude-146's build. `inspect_run` itself has changed since `df1d7892`, so a decision review classifies which |
+     | 0, unclassified | otherwise | a count differs, or C did not run | row 0: the pod or the build. The control is repeated on another pod |
+
+   - **Every seed is held to it.** "Meets" is at all three seeds (§3), so a seed in a row 0 means no parity call. Its numbers, and the other seeds', are still computed and reported as readings.
+   - **The rule:** the REPORT says whether H's line and the inspection under the rule differ. If they are equal, DEV has no tie that moves the inspection, and the gate cannot see which rule ran. The rule is then pinned only by `I-GPU-Tests` and the form's own test.
+   - **What the class rests on:** the static half proves only that the copy is the checkpoint, byte for byte, with the forward kernel's text unchanged. The Hamming read's Rust forward and the native stack have changed since `df1d7892`: hooks that are off unless set, an `as_trained` path, and the tie rule. That the copy computes claude-146's forward at this head rests on H and C, not on the rebind.
+   - **The sealed inspections' pins** are claude-146's seal lines (§5).
 
 ## 5. Base artifact and data split
 
@@ -161,6 +191,17 @@ The single tokens reach no read, so their agreement is reported only.
   | `models/step-016384/model.safetensors` | `cad51f17104025c18a194a2394d0c0f5d9464ea56c7c8e5bbaaa41d2cec4073d` | `42e327b020358651dc12a1385f1c8bc82022dd6a1fd4cdb419f11408b87561fc` | `a55a5318fc3592c2a2559ae9706980f63a64e10be18c766415b919372385d0cb` |
 
   - On the laptop (1 Nov), `fbs-snapshot --dev` read each checkpoint through its read check (`check_checkpoint_reads`), its objective and its rate reading, up to the GPU. The read's own load comes after the GPU opens and is first exercised on the pod.
+  - **The evaluation copies (attempt 2).** The forms read each seed's copy (§4.10). On the laptop (1 Nov), the three copies loaded through `StackModel::load` and `HammingReads::load`. Their tensors and run configs equal the originals byte for byte, and each step config differs only in its six fingerprints.
+  - **claude-146's sealed inspections**, its `train-in-space --inspect` of each run at `df1d7892` (`target-sm120`), pinned by its seal:
+
+    | Seed | File | sha256 |
+    |---|---|---|
+    | s1 | `lang-df1d7892/inspect-hamming-s1.out` | `c6223dbfac14aec7d2ba1ecfcaaf382d90ed7b858fbbd601fa571094db86e624` |
+    | s2 | `lang-df1d7892/inspect-hamming-s2.out` | `17d86bb7787e6c03402774af6ee739b039ec9161578c53f0ad740a3912ebfeba` |
+    | s3 | `lang-s3-df1d7892/inspect-hamming-s3.out` | `0bec386e2555fa204b0f2872bd981598fbcaf7a0262b9344657c870619aa0a1d` |
+
+    s1's step-16,384 line reads, among its counts, 368 top-1 hits and 8,687 nearest hits of 14,287.
+  - **The control's source:** `df1d7892542dcdba1a45dd64387d4a123868055c`. Its `rust-toolchain.toml` and `Cargo.lock` equal this head's.
 - **Data split: DEV only.** `w2-inputs/2026-10-25/driver-data/ft/dev/`:
   - `tokens.u16` `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b`;
   - `response_mask.u8` `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078`.
@@ -175,17 +216,17 @@ The single tokens reach no read, so their agreement is reported only.
 ## 6. Steps
 
 **On the pod:**
-1. The data, every file checked (`I-Data`).
+1. The data, every file checked (`I-Data`), and claude-146's three sealed inspections against their pins and its seal.
 2. The source pin at the pushed head, clean.
 3. `I-GPU-Tests` at the head.
-4. The build: `fbs-snapshot` (cuda).
-5. Per seed: the DEV snapshot form, the fixed snapshot form, the pod's half of `I-Snapshot`; the three traces; `I-Default`.
+4. The build: `fbs-snapshot` (cuda); the GPU's name and compute capability recorded. Then the control: `train-in-space` (cuda) at `df1d7892`, in its own source and target folders.
+5. Per seed: the copy and `I-Rebind`'s static half; the copy's two inspections and the control's; then, on the copy, the DEV snapshot form, the fixed snapshot form, the pod's half of `I-Snapshot`; the three traces; `I-Default`.
 6. `SHA256SUMS`; the output is stored to `results/claude/integer-hamming-read-dev-2026-11-01/` and listed back; then release and down.
 
 **On the laptop,** with `fbs-export`, `fbs-compare` and `fbs-toks` built at the same head (serving-wasm):
 
 7. The stored output fetched, and checked against its sums. The laptop's head, its clean tree and each tool's sha256 are recorded in `reading/`. A crate or Cargo file that differs from the pod's head (its `head.txt`), or a tree not clean there, is row 0.
-8. Per seed: the writer copy, the artifact and the laptop's half of `I-Snapshot`; the three top-1 comparisons.
+8. Per seed: `I-Rebind`'s Gate R half (§4.10); the writer copy, the artifact and the laptop's half of `I-Snapshot`; the three top-1 comparisons.
 9. Per seed: the two integer traces, then the three trace comparisons (`I-Shape`, `I-Faults`).
 10. The copy codes for the three arms (`I-Copy` on `d11-tie`).
 11. The tie dependence from the two DEV readouts.
@@ -214,6 +255,8 @@ The single tokens reach no read, so their agreement is reported only.
   - **claude-238's measured steps, on the fixed sequences** (`job.log`): a snapshot form with three readouts took 78–79 s, and a trace 27–30 s. Its pod was up about 15 minutes in all.
   - DEV has 3.8 times the sequence positions, but each sequence is one forward, and the 4,096 single tokens are read in every readout either way. Even at twice claude-238's step times, a seed takes about 6 minutes.
   - So about 35 minutes in all, under $0.50. The job runs with `--hours 2` and a $2 ceiling.
+  - **Attempt 2 adds:** the control's build, a few minutes in its own target folder; per seed, the copy (seconds) and three inspections of one checkpoint each. claude-146's inspection of nine checkpoints took 17 s.
+  - The watcher's seed-1 time now starts at the copy.
   - `uor-pod up` takes `--count 1`: claude-238's pod was billed for two GPUs because it was left off.
 - **The throughput check:**
   - the job logs each step's start and end;
@@ -280,3 +323,18 @@ It read the sheet, `fbs-snapshot.rs`, `fbs_export.rs`, `hamilton_sheet.rs`, `flo
 - This run is the item's step 5, in PLACE.md's order: serve the working model's parts in integers, the read's parity before its speed.
 - Each row of §3 names what it unlocks.
 - `uor-pod status`, 1 Nov: 0 pods, $0/h of $8/h; a 5090 at $0.563/h, 2 h leased, `--count 1`.
+
+## 11. Attempt 1, and the decision review
+
+**Attempt 1 (1 Nov, at `50a824385`): row 0, an instrument fault, before any measurement.**
+- The pod passed `I-Data`, the source pin, `I-GPU-Tests` (44 passed, the six named among them) and the build.
+- The first snapshot step then refused s1: `Invalid("native projection compiler/operator/FBS identity is missing or stale")`. The job ended with EXIT 6.
+- It was up about 5 minutes, about $0.05. Its output is stored at `results/claude/integer-hamming-read-dev-2026-11-01-fail1/`. Attempt 2 stores to the unused main root (L-002).
+- **The cause.** `StackModel::load` requires the saved projection identity, and the vector head's, to equal this build's. Each plan's fingerprint hashes its plan, which carries the sha256 of the whole `spiralcore_fbs.cu`. claude-179 (`bcf2f57f7`, #3367) changed that file after claude-146 trained: only the backward kernel and two new reduce kernels. The forward's text is unchanged.
+
+**The decision (the ORDER's stop rule "`fbs-snapshot` refuses it"), by a fresh decision reviewer that did not write the work:**
+- **Round 1 (at `e7dd3e40e`): REVISE.** The rebind is sound and minimal. On the laptop, its three copies equal the originals byte for byte, less the six fingerprints. The reviewer's four findings, each applied here (§4.10):
+  1. *Major:* claude-146 inspected on `target-sm120`, and the pod is the same architecture, so the gate holds every sealed field, floats included. Counts alone are the gate only where the control's floats do not reproduce either.
+  2. *Major:* `inspect_run` has changed since `df1d7892`, and the pod could be the cause, so a miss is classified with a control: claude-146's own build on the original checkpoint, on the same pod. Each seed has its own row.
+  3. *Minor:* the static half proves only the copy and the forward kernel's text. That the copy computes claude-146's forward rests on H and C.
+  4. *Minor:* the gate cannot see the rule if DEV has no tie that moves the inspection, so the REPORT says whether the two inspections differ.

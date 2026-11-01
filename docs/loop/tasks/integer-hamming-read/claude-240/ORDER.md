@@ -82,6 +82,8 @@ Class: **instrument** (the parity reference's inputs). The unit goes ahead.
    - the CUDA build type-checks with the stub nvcc.
 2. **A prep sheet** (`docs/harness/prep/integer-hamming-read-dev-2026-11-01.md`) registers the bars, with a fresh FIT and a fresh pre-run review, each posted on #3385.
 3. **One pod job** produces each seed's outputs on DEV: the snapshot, the plain, export and D11 readouts, and the `d11-tie` and `d11` traces. It also produces the fixed-sequence `d11-tie` trace.
+   - **Attempt 2 (amended 1 Nov, after attempt 1's refusal and its decision review, the sheet's §11):** the forms read each seed's evaluation copy (`fbs-snapshot --rebind-fbs-backward`). The job also produces the copy's two inspections (`fbs-snapshot --inspect`) and the control's, which the sheet's `I-Rebind` holds to claude-146's sealed inspection.
+   - A CPU test pins each of the two new forms' rules, and each fails with its rule set aside.
    - The outputs are sealed and stored before release and down.
    - The laptop computes the integer side from the stored files: the export, `fbs-compare --parity-only`, the integer traces, the comparisons and the copy codes. It also takes a context sweep on s1's artifact, a reading for done-when 3, not a bar (amended 1 Nov, with the sheet).
 4. **The REPORT** gives both numbers per seed and arm, and the sheet's row. Also:
@@ -95,6 +97,7 @@ Class: **instrument** (the parity reference's inputs). The unit goes ahead.
 Each of these means stop and decide in a decision review, never stop and wait:
 - DEV's pins or window count differ from the trainer's (14,287 targets, 428 windows), or the sample's from the sheet's (54 windows, 5,795 positions, 4,823 past t = 17);
 - a claude-146 checkpoint fails a pin, or `fbs-snapshot` refuses it;
+  - **Met on 1 Nov (attempt 1).** `StackModel::load` refused s1, whose saved kernel identity predates claude-179; s2 and s3 save the same six fingerprints. Class: instrument. The decision review (the sheet's §11, logged on #3385) chose an evaluation copy that rebinds only the identity, held to claude-146's sealed inspection with claude-146's own build as the control;
 - the sample rule's test passes with the rule set aside;
 - the throughput check projects the job past 2 hours;
 - any instrument check in the sheet fails. That is row 0: repair, never count.
