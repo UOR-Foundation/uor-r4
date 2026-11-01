@@ -1,6 +1,6 @@
 # CUDA package release and outreach drafts
 
-Status: **ready for community review after protected delivery; not submitted and not endorsed by NVIDIA.** The measured implementation is `719a9a7861deb595dfc5269ffec8a5e7e53cb39b`. Earlier rejected attempts are excluded from every claim below.
+Status: **prepared for planned `cuda-inverted-file-v0.1.0`; publication and published-asset verification are pending. Not submitted and not endorsed by NVIDIA.** The measured implementation is `719a9a7861deb595dfc5269ffec8a5e7e53cb39b`. Earlier rejected attempts are excluded from every claim below.
 
 ## Release summary
 
@@ -73,4 +73,4 @@ The full-scan comparator uses parallel distance evaluation with deterministic se
 - End-to-end speedup, portability beyond the named cards/grid, energy, or a cross-library comparison.
 - NVIDIA acceptance, production deployment, or any language-model capability.
 
-Only after the protected PR and fresh-main verification should the owner decide whether to open the clarification issue or forum thread. A Foundation Sandbox application is optional, not an NVIDIA endorsement or a required next step.
+The source/evidence release definition is prepared for protected delivery; actual publication and published-asset verification remain pending. Opening the clarification issue or forum thread remains a separate owner decision after publication; a Foundation Sandbox application is optional, not an NVIDIA endorsement or a required next step.

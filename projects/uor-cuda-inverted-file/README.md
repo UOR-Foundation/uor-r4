@@ -85,14 +85,12 @@ Do not infer any of the following without a later registered measurement:
 - A comparison with Faiss or another library.
 - Any language-model or useful-conversation capability.
 
-The summary is in `docs/labs/uor-cuda-inverted-file/`; raw manifests and per-run logs are in the linked retained run roots and Hugging Face commits. Final corrected measurements at `719a9a78` pass on RTX 5090/580.178.04 and RTX 4090/580.95.05; earlier attempts are explicitly rejected and not used for claims. Energy, other architectures/drivers, and cross-library comparisons are **NOT_RUN**. The host-only clean-consumer check and corrected independent replication **PASS** at their declared scopes; public release remains a separate gate.
+The summary is in `docs/labs/uor-cuda-inverted-file/`; raw manifests and per-run logs are in the linked retained run roots and Hugging Face commits. Final corrected measurements at `719a9a78` pass on RTX 5090/580.178.04 and RTX 4090/580.95.05; earlier attempts are explicitly rejected and not used for claims. Energy, other architectures/drivers, and cross-library comparisons are **NOT_RUN**. The host-only clean-consumer check and corrected independent replication pass at their declared scopes.
 
-## Before a public release
+## Release preparation and community review
 
-- Build from a clean clone and run the full host suite.
-- Compile and run CUDA parity on supported hardware, including negative controls and repeated determinism checks.
-- Measure against a tuned full-scan control on at least two architectures, separating kernel-only from end-to-end results.
-- Publish raw evidence and exact scope rather than extrapolating the original bucket-writer's results.
-- Keep MIT licensing and source-commit provenance. A Foundation Sandbox application and NVIDIA/community feedback should follow only after an external consumer can build and use the example.
+The planned `cuda-inverted-file-v0.1.0` source/evidence archive has [prepared release instructions](RELEASE.md). It will include the clean-consumer host result, two-card/two-driver measurements, independent corrected replication, raw-evidence links, MIT licensing, and source-commit provenance. **Publication and published-asset verification are pending; no public release URL is claimed yet.**
 
-See `PROVENANCE.md`, `RESULTS.md`, `CITATION.cff`, and `OUTREACH.md` for provenance, measured results, and release/outreach drafts.
+This release is intended for community review, not as an NVIDIA-endorsed sample or the UOR-R4 model's M8 release. NVIDIA/community feedback and any upstream submission remain separate decisions.
+
+See `PROVENANCE.md`, `RESULTS.md`, `CITATION.cff`, and `OUTREACH.md` for provenance, measured results, citation metadata, and outreach drafts.
