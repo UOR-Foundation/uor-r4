@@ -82,4 +82,4 @@ These are unsealed component ceilings, not training rates or language evidence. 
 
 ## End state
 
-The program closes only when every historical family has a supported, superseded or rejected disposition, the implemented paths have finite parity and deterministic resume, and at least one CPU pilot has been compared with the same evaluator and controls as its GPU counterpart. Until then, do not describe CPU training as qualified project training.
+The overall repair effort is complete only when every historical family has a supported, superseded or rejected disposition, the implemented paths have finite parity and deterministic resume, and at least one CPU pilot has been compared with the same evaluator and controls as its GPU counterpart. The `cpu-training-program` registration item is closed now; the child items carry the remaining work. Until that work lands, do not describe CPU training as qualified project training.

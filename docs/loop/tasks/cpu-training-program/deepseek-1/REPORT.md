@@ -26,7 +26,7 @@ This unit runs no model compute. The registration counts are 10 historical famil
 
 - `cargo run -q -p xtask -- roadmap check`: PASS, 133 items.
 - `cargo run -q -p xtask -- roadmap render --check`: PASS, current.
-- `cargo run -q -p xtask -- links`: exit 0; 23,846 links checked, 1,219 pre-existing broken-link reports remain in the repository-wide count.
+- `cargo run -q -p xtask -- links`: exit 0; 23,852 links checked, 1,216 pre-existing broken-link reports remain in the repository-wide count.
 - `cargo test -q -p uor-r4-harness --test lab_registry_cli --test loop_shared_files --test loop_review --test loop_claim --test loop_next`: PASS, 5, 7, 34, 33 and 37 tests.
 - `uor-harness loop gates --full`: PASS, 11/11 green.
 - `uor-harness loop pr-check --local`: PASS. The expected scope advisory names 15 files outside the reused documentation parent, because the new program and child items do not exist at the merge base; the commit-order and FILEMAP advisories also remain. Owner paths, rule sources, ORDER and REPORT pass.
