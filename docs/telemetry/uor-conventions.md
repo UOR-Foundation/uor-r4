@@ -6,7 +6,7 @@ Status: experimental, repository-local attributes for the standalone inverted-fi
 
 The only consumer is `projects/uor-cuda-inverted-file`. Telemetry is disabled unless the caller explicitly supplies an output path. The example reads `UOR_OTEL_OUT`; an unset variable means no output file, endpoint, socket, collector, or network code. The file sink writes OTLP/HTTP JSON locally and replaces it with the current in-memory trace after each operation. It is not a production exporter, queue, uploader, or OpenTelemetry SDK.
 
-The consumer emits operation names, numeric operation parameters, status, timing, and fixed-codebook metadata. It does **not** emit prompt or completion text, user-turn hashes, credentials, or environment contents. This example instruments the **CPU oracle**, not GPU execution. No collector ingestion or GPU timing has been verified.
+The consumer emits operation names, numeric operation parameters, status, timing, and fixed-codebook metadata. It does **not** emit prompt or completion text, user-turn hashes, credentials, or environment contents. This example instruments the **CPU oracle**, not GPU execution. Collector ingestion was verified separately with official Collector Contrib 0.164.0 over loopback; GPU timing remains **NOT_RUN**.
 
 ## Execution identity is not artifact identity
 
@@ -37,4 +37,4 @@ Span names are `uor.cuda.index.build`, `uor.cuda.index.update`, `uor.cuda.index.
 
 Do not propose UOR-specific geometry, addresses, or hash-shaped execution IDs to OpenTelemetry. A potentially reusable contribution is a **generic loaded-model artifact-digest convention**: an optional resource attribute identifying the exact bytes loaded by an inference process, with explicit digest algorithm and identity scope. It would leave execution IDs random and would not prescribe UOR, SHA-256, a model format, or collection of user content.
 
-Before such a proposal, find the owning OpenTelemetry semantic-conventions issue path, check existing model/resource attributes and prior art, produce a small vendor-neutral example, and obtain privacy and cardinality review. A real OpenTelemetry SDK/collector interoperability test is also needed; this repository's local JSON file test does not establish that compatibility. No upstream issue or pull request has been opened by this unit.
+The official Collector Contrib 0.164.0 accepted and decoded this example's four spans over loopback with no dropped attributes, establishing collector—not SDK or multi-runtime—interoperability. Before an upstream proposal, check current model/resource attributes and prior art, produce a real loaded-model example plus a second runtime, and obtain privacy/cardinality review. See [the generic draft](model-artifact-convention.md). No upstream issue or pull request has been opened by this unit.

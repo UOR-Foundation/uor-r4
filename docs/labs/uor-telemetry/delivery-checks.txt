@@ -1,0 +1,247 @@
++ make -s -C projects/uor-cuda-inverted-file telemetry-test evidence
+telemetry ID tests: all hashing, width, uniqueness, and parent checks passed
+telemetry exporter tests: default-off, OTLP shape, attributes, and refusal checks passed
+instrumented telemetry tests: default-off, operation spans, artifact identity, and parity passed
+7b6f674abcef33a37753de8aac6000ff1584e983ebeb4eb35fc67bf5d45d5e7d  evidence/host-test-1.log
+7b6f674abcef33a37753de8aac6000ff1584e983ebeb4eb35fc67bf5d45d5e7d  evidence/host-test-2.log
+7b6f674abcef33a37753de8aac6000ff1584e983ebeb4eb35fc67bf5d45d5e7d  evidence/clean-clone-test.log
++ /Users/casey.allard/.cargo/bin/cargo test -q --locked -p uor-r4-harness the_real_sheets
+
+running 3 tests
+...
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 675 filtered out; finished in 0.15s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 24 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 18 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 19 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 34 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 28 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 31 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 33 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 50 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 31 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 37 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
++ /Users/casey.allard/.cargo/bin/cargo test -q --locked -p xtask
+
+running 220 tests
+....................................................................................... 87/220
+....................................................................................... 174/220
+..............................................
+test result: ok. 220 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+
++ /Users/casey.allard/.cargo/bin/cargo run -q --locked -p uor-r4-claim-wording -- .
+Claim-wording gate passed: no unlinked machine-verified/exact-equivalence wording.
++ /Users/casey.allard/.cargo/bin/cargo run -q --locked -p xtask -- roadmap check
+roadmap check: 124 items OK
+  by status: ready 22, held 10, decision 1, done 91
+  by milestone: M1 24, M2 9, M3 6, M4 4, M5 1, M6 5, M7 4, M8 2, research 47, infra 22
++ /Users/casey.allard/.cargo/bin/cargo run -q --locked -p xtask -- roadmap render --check
+roadmap render --check: /Users/casey.allard/uor-r4/.worktrees/kimi-otel-release/docs/roadmap/README.md is current
++ /Users/casey.allard/.cargo/bin/cargo run -q --locked -p xtask -- docs-catalog --check
+catalog: 1175 records, 20 lines, 0 paths not found
++ /Users/casey.allard/.cargo/bin/cargo run -q --locked -p xtask -- book-stage
+book-stage: 104 pages and 70 figure files staged in /Users/casey.allard/uor-r4/.worktrees/kimi-otel-release/target/book-src
++ /Users/casey.allard/.cargo/bin/mdbook-mermaid install .
+[2026-11-01T11:44:44Z INFO  mdbook_mermaid] Reading configuration file ./book.toml
+[2026-11-01T11:44:44Z INFO  mdbook_mermaid] Writing additional files to project directory at .
+[2026-11-01T11:44:44Z INFO  mdbook_mermaid] Files & configuration for mdbook-mermaid are installed. You can start using it in your book.
+[2026-11-01T11:44:44Z INFO  mdbook_mermaid] Add a code block like:
+    ```mermaid
+    graph TD;
+        A-->B;
+        A-->C;
+        B-->D;
+        C-->D;
+    ```
++ /Users/casey.allard/.cargo/bin/mdbook build
+2026-11-01 06:44:44 [INFO] (mdbook::book): Book building has started
+Warning: The mdbook-mermaid preprocessor was built against version 0.4.36 of mdbook, but we're being called from version 0.4.40
+2026-11-01 06:44:44 [INFO] (mdbook::book): Running the html backend
++ /Users/casey.allard/.cargo/bin/cargo run -q --locked -p xtask -- book-check
+book-check: 105 pages, 0 broken links
++ jq -e . docs/labs/uor-telemetry/collector-results.json
+{
+  "schema": "uor-r4.telemetry-collector-results/1",
+  "source_base": "78c58082ad5e1a7825c13b3ee8d6caf15e447554",
+  "trace_sha256": "f95ab0e7d7342e8c4a2aba9b62807c1b12e6535e3eea004c2cae528dc15881d6",
+  "instrumented_source_sha256": "68b5e227f881cba6b86cbdbe47ef9d831d8b5ec913d14288cbc77f01b310a9b2",
+  "date": "2026-11-01",
+  "collector": "otel/opentelemetry-collector-contrib:0.164.0",
+  "collector_image_sha256": "340c9ca6a36617084c6661bdc4f0fe92b7cda5a805d61673ec8db375fddc522b",
+  "curl_image_sha256": "3fb7e13e5d179a845c97d78204f3f1064d1907037f26a3ebf91710571151fd93",
+  "transport": "OTLP/HTTP JSON inside the collector's own network namespace",
+  "endpoint": "127.0.0.1:4318/v1/traces",
+  "http_status": 200,
+  "response": "{\"partialSuccess\":{}}",
+  "operations_decoded": [
+    "uor.cuda.index.build",
+    "uor.cuda.index.update",
+    "uor.cuda.index.probe",
+    "uor.cuda.index.full_scan"
+  ],
+  "spans_decoded": 4,
+  "trace_id": "2bcf737d44ec9b619db3c1db79488566",
+  "build_span_id": "5099af27a3b4ca7b",
+  "child_parent_ids_match_build": true,
+  "dropped_attributes_per_span": 0,
+  "artifact_payload_sha256": "9d98bd50f46cdedd5c481a8d696a609936bbc540997e7eaef6af2bdb3bc15597",
+  "artifact_byte_size": "512",
+  "collector_stopped": true,
+  "hf_store_commit": "4df3c78a8d4652ec4b713dc621e5ddf67b7d8cd9",
+  "hf_download_readback_verified": true,
+  "production_export": "NOT_RUN",
+  "sdk_interoperability": "NOT_RUN",
+  "multi_runtime_interoperability": "NOT_RUN",
+  "upstream_acceptance": "NOT_CLAIMED"
+}
++ git diff --check

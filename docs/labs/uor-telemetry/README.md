@@ -22,12 +22,12 @@ See [evidence.json](evidence.json) for the machine-readable result and [the loca
 
 - CUDA AOT compilation: **NOT_RUN** (`nvcc` unavailable on Darwin arm64).
 - CUDA Driver API execution, CPU/GPU parity, and GPU timing: **NOT_RUN**.
-- Collector ingestion and interoperability with an OpenTelemetry SDK: **NOT_RUN**.
-- Network transmission: no network code or endpoint was added; no collector was run.
+- Collector ingestion: **PASS** with official Collector Contrib 0.164.0 over loopback; all four spans and metadata decoded, with no dropped attributes. See [collector results](collector-results.json).
+- OpenTelemetry SDK and multi-runtime interoperability: **NOT_RUN**. No application network exporter was added; the explicit collector ran only for the check and was stopped.
 - Production telemetry, performance, energy, portability, model capability, and upstream acceptance: not measured or claimed.
 
 The fixed-codebook digest identifies only those 512 payload bytes, not a model, executable, source revision, or run. Random execution IDs are correlation identifiers, not UOR addresses or security tokens. Each export creates a collision-resistant, exclusively owned temporary directory and renames only its own complete file over the current trace where the platform supports replacement; concurrent writers cannot share or clobber a fixed temporary path, and a failed replacement preserves the prior destination. This is intended for example use, not production export. `TelemetryFailure` reports an export I/O failure rather than mislabeling it as CUDA; CPU operation errors take precedence, and completed CPU side effects are not rolled back. Timestamps use wall-clock start plus steady-clock elapsed time; disabled wrappers call only the original CPU operation.
 
 ## Next upstream step
 
-Evaluate a vendor-neutral loaded-model artifact-digest attribute with the OpenTelemetry semantic-conventions community, after checking prior art, privacy/cardinality, and real SDK/collector interoperability. Do not submit UOR hashes as trace or span IDs.
+Open a discussion issue with the generic operator problem and collector evidence, then add a real loaded-model consumer and second independent runtime/example before any YAML PR. Check prior art and privacy/cardinality throughout. Do not submit UOR hashes as trace or span IDs.
