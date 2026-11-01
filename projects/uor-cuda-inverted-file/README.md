@@ -95,4 +95,4 @@ The summary is in `docs/labs/uor-cuda-inverted-file/`; raw manifests and per-run
 - Publish raw evidence and exact scope rather than extrapolating the original bucket-writer's results.
 - Keep MIT licensing and source-commit provenance. A Foundation Sandbox application and NVIDIA/community feedback should follow only after an external consumer can build and use the example.
 
-See `PROVENANCE.md`, `RESULTS.md`, and `CITATION.cff`.
+See `PROVENANCE.md`, `RESULTS.md`, `CITATION.cff`, and `OUTREACH.md` for provenance, measured results, and release/outreach drafts.

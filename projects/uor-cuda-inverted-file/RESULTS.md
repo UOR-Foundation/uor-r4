@@ -49,6 +49,10 @@ At final source `719a9a7861deb595dfc5269ffec8a5e7e53cb39b`, both cards passed al
 
 These are per-card, same-source, same-configuration results, not cross-card or end-to-end speedups. Wrapper overhead dominates the direct and complete-caller scopes. Raw evidence is linked from the report. Earlier measurements at `7badaf6c` and `ae4a6951` are explicitly rejected for publication/protocol/timing defects and are not used for claims.
 
+## Independent corrected replication and clean consumer
+
+At the same source, a non-author rerun on another RTX 5090 (driver 595.71.05) passed all 504 correctness rows and produced 240 records with oracle/index checks and verified source/module/hash manifests. Full-scan/probe kernel medians were 0.111856/0.165024 ms. Evidence: https://huggingface.co/datasets/caseyallard/uor-r4-store/commit/dddfebf8a5ccd006a5f9e0045e1e46b2feeacb82. The final-source external clean-consumer check also passed with identical file hashes and all host checks. See `OUTREACH.md` for release and community-discussion drafts; no upstream submission has been made.
+
 ## NOT_RUN
 
 The laptop still has no `nvcc`; the successful CUDA result came from leased GPUs, not the laptop. The following remain **NOT_RUN**, not passes:

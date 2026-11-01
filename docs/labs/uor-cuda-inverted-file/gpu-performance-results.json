@@ -39,7 +39,16 @@
   "all_status_ok": true,
   "oracle_match": true,
   "index_match": true,
-  "non_author_replication": "IN_PROGRESS",
+  "non_author_replication": {
+    "status": "PASS",
+    "gpu": "NVIDIA GeForce RTX 5090",
+    "driver_release": "595.71.05",
+    "hf_store_commit": "dddfebf8a5ccd006a5f9e0045e1e46b2feeacb82",
+    "correctness_rows": 504,
+    "measurements": 240,
+    "full_scan_kernel_median_ms": 0.1118560025,
+    "probe_kernel_median_ms": 0.1650239975
+  },
   "external_consumer": "PASS_HOST_ONLY",
   "serial_fallback_over_4096": "NOT_RUN",
   "energy": "NOT_RUN",

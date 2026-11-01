@@ -37,4 +37,4 @@ Machine-readable summaries are in `docs/labs/uor-cuda-inverted-file/gpu-performa
 
 ## Next decision
 
-A non-author corrected RTX 5090 replication is in progress. Public release and upstream outreach remain on hold until that replication and the final exact-head review pass. No NVIDIA issue, performance announcement, or upstream acceptance is claimed.
+The independent corrected RTX 5090 replication passed at driver 595.71.05 with the same source, 504 correctness rows, and 240 records. Its full-scan/probe kernel medians were 0.111856/0.165024 ms, and its source/module/hash manifests and Hugging Face read-back verify at `dddfebf8a5ccd006a5f9e0045e1e46b2feeacb82`. The host-only clean-consumer check also passed. The remaining step is final exact-head review and preparation of release/outreach drafts; no NVIDIA issue, performance announcement, or upstream acceptance is claimed.
