@@ -1,6 +1,6 @@
 # Standalone UOR inverted-file CUDA package — host verification
 
-Date: 2026-11-01. Lab: kimi. Item: `uor-cuda-inverted-file` (#3475). Base: `3d39b0c720dbe95693efe8aea93b3873247a7ba1`.
+Date: 2026-11-01. Lab: kimi. Item: `uor-cuda-inverted-file` (#3475). Base: `7d8a0c2642600f5ff02d5ef30d130ec8fe8056d8`; subsequent fixture-sensitivity and CUDA-contract repairs are identified by their delivery PR.
 
 This record covers a new standalone CUDA C++17 package in `projects/uor-cuda-inverted-file`. It is not a model evaluation or a repeat of the original bucket-writer GPU qualification.
 

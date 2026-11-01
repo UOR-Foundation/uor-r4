@@ -1,6 +1,6 @@
 # Verification results
 
-Date: 2026-11-01. Source base: `3d39b0c720dbe95693efe8aea93b3873247a7ba1`.
+Date: 2026-11-01. Source base: `7d8a0c2642600f5ff02d5ef30d130ec8fe8056d8`; subsequent fixture-sensitivity and CUDA-contract repairs are identified by their delivery PR.
 
 ## Host and clean-copy results
 

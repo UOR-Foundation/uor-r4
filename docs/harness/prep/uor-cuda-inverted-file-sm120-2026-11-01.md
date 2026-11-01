@@ -1,0 +1,40 @@
+# Prep sheet: standalone inverted-file CUDA correctness on one RTX 5090, 2026-11-01
+
+- Item: `uor-cuda-inverted-file` (#3475). ORDER: `docs/loop/tasks/uor-cuda-inverted-file/kimi-2/ORDER.md`.
+- Source: the pushed pre-lease repair head, recorded verbatim in the run identity and evidence manifest. Original base: `7d8a0c264`.
+- Scope: finite AOT build and CUDA correctness only. No training, model evaluation, performance claim, portability claim, or release decision.
+
+## Question
+
+Does the repaired standalone package compile and admit its emitted PTX/cubin on an explicitly selected RTX 5090 (`sm_120`), then execute all four CUDA Driver API operations with meaningful full-vector CPU-oracle parity and byte-identical repeated row results?
+
+## Pre-lease instrument review and repairs
+
+The first non-author review was **NOT_FIT**. It found an unreachable CUDA ABSENT→cell branch, zeroed middle blocks that could not discriminate full-vector ranking, missing deterministic row evidence, and recipe/preservation gaps. No lease or spend occurred.
+
+The repaired host suite now varies all 32 vector elements, retains zero/extreme controls, and requires at least three top-8 changes and one prediction change between varied and zero-middle fixtures. It covers the CPU ABSENT/reinsertion/status contract. CUDA reinsertion now handles ABSENT before validating the old cell; member upload capacity remains the full table while only actual member bytes are copied. The cubin recipe uses `-arch=$(SM_ARCH)` and explicit CUDA include/stub paths. The new CUDA test syntax-checks on the host and emits 498 deterministic rows per execution.
+
+## Arms and controls
+
+1. **Identity and recipe.** Run `scripts/pod/uor-pod status`; select exactly `--gpu 5090 --count 1`, never the GPU-type fallback. Record `nvidia-smi` name/driver/compute capability, `nvcc --version`, `make -n cuda`, `make -n cuda-test`, pushed HEAD, clean status, and source hashes. Require compute capability 12.0 and a compatible Toolkit/driver. Use no model-crate bootstrap; setup is limited to the standalone package and required CUDA toolchain.
+2. **Comparator and sensitivity.** Run `make host-test` at the same head on laptop and pod and compare normalized output. Require the host fixture-sensitivity checks on both. A red oracle or sensitivity check is a gate defect, not a CUDA result.
+3. **AOT and admission.** Run `UOR_NVCC_ARCH=compute_120 make cuda`. Preserve emitted PTX/cubin and admission output outside `build/` before any clean. Require exactly the four declared entries, admission success, and `cuobjdump` architecture `sm_120`; record module hashes.
+4. **Negative admission control.** Add a fifth entry to a scratch PTX copy and require the admission tool to reject it. This proves the gate can fail without changing the retained module.
+5. **CUDA correctness.** Run `make cuda-test -- --out <run.tsv>` (or directly `./build/cuda_parity_test --out <run.tsv>` if the Make target does not forward arguments) for V ∈ {64,256}, K ∈ {1,8,16}, four query seeds per cell, 64 incremental updates with fresh-build equality, non-root refusal, explicit CPU removal/CUDA reinsertion, and extreme signed-integer controls. Every row checks status and, for scans, prediction/top-8/admitted invariants plus CPU equality. There are 83 rows per configuration and **498 rows per execution**.
+6. **Determinism.** Execute the test three times. Preserve and compare all three row files byte-for-byte and record module hashes before/after each. Preserve the first module before a clean rebuild; compare PTX/cubin hashes after rebuilding. Different compiler bytes with identical rows are a compiler-reproducibility observation, not a semantic failure.
+
+## Decision table
+
+- **Recipe/instrument fault:** SSH/setup/toolchain/include/flag failure, wrong card/capability, missing input, invalid fixture, or a failed archive. No CUDA conclusion. Repair the instrument and rerun only what was affected.
+- **Module/source defect:** a matching-architecture admitted module fails to load, or any row has a parity/refusal/status/invariant mismatch with the oracle and sensitivity checks green. Stop before benchmarking; make the smallest host-tested repair and use a new pushed head/run id.
+- **Pass:** all 498 rows pass in each of three byte-identical executions; AOT/admission and negative controls pass. This unlocks only the separately reviewed matched full-scan performance instrument and additional-architecture/driver work. It is not a performance or release claim.
+
+## Exact negative scope
+
+This is one card/driver/Toolkit and a fixed grid. V ∈ {1,4096}, stale/corrupt CSR at the CUDA update boundary, all-absent CUDA scans, K ∈ {0,17}, concurrent kernels, performance, tuned comparisons, additional architectures/drivers, energy, cross-library comparison, and external replication remain **NOT_RUN**. Single-threaded build/update kernels make the determinism check intentionally weak; it is not a concurrency qualification. Admission runs per build, not once per test execution.
+
+## Resources and preservation
+
+One leased RTX 5090 on Vast, initially one hour at the displayed rate (about $0.563/h; actual provider uptime/rate is reported). Setup, three short executions, negative controls, and archival are projected below 40 minutes; renew a healthy instrument delay rather than canceling it for an estimate. Stop and tear down on a source defect because host repair needs no GPU. No other pod/GPU is touched, and the shared ≤4 pods/≤$8/h caps apply.
+
+The original evidence root is `/workspace/uor-r4/evals/cuda-release-1/` on the pod, within the tool's archive coverage. Copy every command, source/module checksum, PTX/cubin, row file, failure, and retry there before teardown. Pull and verify SHA-256 locally under `local/kimi/cuda-release-1/`; retain new attempts under new run ids, never rewrite a sealed root. Local build preparation adds less than 100 MiB and remote evidence is expected below 20 MiB. No generated binary is committed.

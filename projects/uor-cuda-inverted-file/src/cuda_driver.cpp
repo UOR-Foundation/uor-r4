@@ -42,6 +42,15 @@ Status upload(const std::vector<T>& source, Buffer& buffer) {
     return write(buffer, source.data());
 }
 
+template <typename T>
+Status upload_capacity(const std::vector<T>& source, std::size_t capacity, Buffer& buffer) {
+    if (source.size() > capacity) return Status::InvalidArgument;
+    const auto status = allocate(buffer, capacity * sizeof(T));
+    if (status != Status::Ok) return status;
+    buffer.bytes = source.size() * sizeof(T);
+    return write(buffer, source.data());
+}
+
 template <typename T, std::size_t N>
 Status upload(const std::array<T, N>& source, Buffer& buffer) {
     const auto status = allocate(buffer, N * sizeof(T));
@@ -175,8 +184,7 @@ Status update(const Table& table, std::uint32_t moved_token, Index& index) {
     if ((status = upload(table_values, table_d)) != Status::Ok ||
         (status = upload(root_values, roots_d)) != Status::Ok ||
         (status = upload(index.offsets, offsets_d)) != Status::Ok ||
-        (status = allocate(members_d, count * sizeof(std::uint32_t))) != Status::Ok ||
-        (status = write(members_d, index.members.data())) != Status::Ok ||
+        (status = upload_capacity(index.members, count, members_d)) != Status::Ok ||
         (status = upload(index.cells, cells_d)) != Status::Ok ||
         (status = allocate(absent_d, sizeof(std::uint32_t))) != Status::Ok ||
         (status = write(absent_d, &index.absent_count)) != Status::Ok ||

@@ -42,6 +42,7 @@ instrumented-example: $(BUILD_DIR)/instrumented_example
 test: host-test telemetry-test
 
 NVCC ?= nvcc
+CUDA_HOME ?= /usr/local/cuda
 UOR_NVCC_ARCH ?= compute_80
 SM_ARCH = $(subst compute_,sm_,$(UOR_NVCC_ARCH))
 
@@ -53,10 +54,10 @@ $(BUILD_DIR)/uor_inverted_file.ptx: src/kernels.cu | $(BUILD_DIR)
 
 $(BUILD_DIR)/uor_inverted_file.cubin: $(BUILD_DIR)/uor_inverted_file.ptx $(BUILD_DIR)/admit
 	./$(BUILD_DIR)/admit $(BUILD_DIR)/uor_inverted_file.ptx
-	$(NVCC) -cubin --gpu-code=$(SM_ARCH) -o $@ $(BUILD_DIR)/uor_inverted_file.ptx
+	$(NVCC) -cubin -arch=$(SM_ARCH) -o $@ $(BUILD_DIR)/uor_inverted_file.ptx
 
 $(BUILD_DIR)/cuda_parity_test: src/cuda_driver.cpp src/cuda_driver.hpp include/uor_inverted_file.hpp src/inverted_file.cpp src/codebook.cpp tests/cuda_parity_test.cpp $(BUILD_DIR)/uor_inverted_file.cubin
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/cuda_driver.cpp src/inverted_file.cpp src/codebook.cpp tests/cuda_parity_test.cpp -lcuda -o $@
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -I$(CUDA_HOME)/include src/cuda_driver.cpp src/inverted_file.cpp src/codebook.cpp tests/cuda_parity_test.cpp -L$(CUDA_HOME)/lib64/stubs -lcuda -o $@
 
 check-nvcc:
 	@command -v $(NVCC) >/dev/null 2>&1 || { echo 'NOT_RUN: nvcc is unavailable; CUDA compilation and tests were not performed'; exit 2; }

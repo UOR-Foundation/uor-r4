@@ -148,7 +148,10 @@ extern "C" __global__ void uor_if_update(
     const U new_cell = token_cell(roots, table + moved_token * 32);
     if (new_cell == ABSENT) { *status = 2; return; }
     if (old_cell == new_cell) { *status = 0; return; }
-    if (old_cell > 255 || offsets[old_cell + 1] > offsets[256]) { *status = 3; return; }
+    if (old_cell != ABSENT && (old_cell > 255 || offsets[old_cell] > offsets[old_cell + 1])) {
+        *status = 3;
+        return;
+    }
     U remove_pos = ABSENT;
     if (old_cell != ABSENT) {
         for (U pos = offsets[old_cell]; pos < offsets[old_cell + 1]; ++pos) {

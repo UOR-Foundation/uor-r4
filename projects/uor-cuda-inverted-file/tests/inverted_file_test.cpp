@@ -38,7 +38,12 @@ const std::array<Block, 16> roots{{
 }};
 
 Token token_at(uint32_t i) {
-    return Token{roots[(i * 7 + 1) % 16], Block{}, Block{}, roots[(i * 11 + 3) % 16]};
+    Token token{roots[(i * 7 + 1) % 16], Block{}, Block{}, roots[(i * 11 + 3) % 16]};
+    for (uint32_t d = 0; d < 8; ++d) {
+        token[1][d] = static_cast<int32_t>((i * 29 + d * 7) % 37) - 18;
+        token[2][d] = static_cast<int32_t>((i * 13 + d * 5) % 41) - 20;
+    }
+    return token;
 }
 
 Table table_of(uint32_t count) {
@@ -47,7 +52,24 @@ Table table_of(uint32_t count) {
     return table;
 }
 
+Table zero_table_of(uint32_t count) {
+    Table table;
+    for (uint32_t i = 0; i < count; ++i) {
+        table.tokens.push_back(Token{roots[(i * 7 + 1) % 16], Block{}, Block{}, roots[(i * 11 + 3) % 16]});
+    }
+    return table;
+}
+
 Query query_at(uint32_t seed) {
+    Query query{roots[seed % 16], Block{}, Block{}, roots[(seed * 5 + 1) % 16]};
+    for (uint32_t d = 0; d < 8; ++d) {
+        query[1][d] = static_cast<int32_t>((seed * 11 + d * 3) % 23) - 11;
+        query[2][d] = static_cast<int32_t>((seed * 17 + d * 2) % 19) - 9;
+    }
+    return query;
+}
+
+Query zero_query_at(uint32_t seed) {
     return Query{roots[seed % 16], Block{}, Block{}, roots[(seed * 5 + 1) % 16]};
 }
 
@@ -239,6 +261,26 @@ int main() {
     auto reversed = bucket;
     std::reverse(reversed.top8.begin(), reversed.top8.end());
     expect(reversed.top8 != full.top8, "reversed tie order detected");
+
+    uint32_t top8_changes = 0;
+    uint32_t prediction_changes = 0;
+    for (const uint32_t v : {64u, 256u}) {
+        const Table varied_table = table_of(v);
+        const Table zero_table = zero_table_of(v);
+        for (const uint32_t k : {1u, 8u, 16u}) {
+            for (uint32_t seed = 0; seed < 4; ++seed) {
+                ScanResult varied, zero;
+                expect(uor_inverted_file::full_scan(varied_table, query_at(seed), k, varied) == Status::Ok,
+                       "varied-middle sensitivity probe");
+                expect(uor_inverted_file::full_scan(zero_table, zero_query_at(seed), k, zero) == Status::Ok,
+                       "zero-middle sensitivity control");
+                if (varied.top8 != zero.top8) ++top8_changes;
+                if (varied.prediction != zero.prediction) ++prediction_changes;
+            }
+        }
+    }
+    expect(top8_changes >= 3, "middle-block content changes at least three top-8 rows");
+    expect(prediction_changes >= 1, "middle-block content changes at least one prediction");
 
     Table extreme = table_of(2);
     for (auto& token : extreme.tokens) {
