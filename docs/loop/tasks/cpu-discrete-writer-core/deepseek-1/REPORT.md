@@ -24,10 +24,10 @@ Lab: deepseek. Item: [cpu-discrete-writer-core](../../../../roadmap/items/cpu-di
 - `cargo test -p uor-r4-cpu-train`: 7 passed, 0 failed.
 - Existing host-oracle parity: 256 / 256 deterministic queries matched `writer_score_full_outer_l1` exactly for top-8 and admitted-cell order.
 - Benchmark, 32,768 timed rows after 128 warm-up rows:
-  - 1 thread: 221,526 rows/s, 147.919 ms;
-  - 8 threads: 1,319,832 rows/s, 24.827 ms;
-  - 16 threads: 2,332,450 rows/s, 14.049 ms;
-  - 32 threads: 3,970,189 rows/s, 8.254 ms.
+  - 1 thread: 221,990 rows/s, 147.611 ms;
+  - 8 threads: 1,523,446 rows/s, 21.509 ms;
+  - 16 threads: 2,392,580 rows/s, 13.696 ms;
+  - 32 threads: 3,292,424 rows/s, 9.953 ms.
 - Every thread count produced checksum `4667609706970220960`.
 
 This benchmark measures component decisions on synthetic canonical vectors. It is not training throughput, a model result or evidence that the synthetic distribution matches a trained checkpoint.
