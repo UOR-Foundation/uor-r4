@@ -10,8 +10,8 @@ Record the owner's 1 November 2026 authorization as D84, preserve GPU as the qua
 
 - `CHARTER.md`, `AGENTS.md`, `PLAN.md`
 - `docs/rules/changes.md`, `docs/rules/README.md`, `docs/rules/decision-map.md`, `docs/integration/DECISIONS.md`, `docs/integration/project-track.md`
-- `docs/contributing/HARD-RULES.md`, `docs/harness/pm-rules.md`, `docs/harness/milestones.json`, `docs/harness/skills/cost-and-compute-admission/SKILL.md`
-- `docs/geometry/README.md`, `docs/model/gpu-and-cuda.md`, `docs/labs/README.md`, `docs/labs/compute.md`, `docs/labs/session-goal.md`
+- `docs/contributing/HARD-RULES.md`, `docs/harness/pm-rules.md`, `docs/harness/milestones.json`, `docs/harness/skills/cost-and-compute-admission/SKILL.md`, `docs/harness/skills/context-hydration/SKILL.md`, `docs/harness/skills/experiment-prereg/SKILL.md`, `docs/harness/skills/research-plan-cycle/SKILL.md`
+- `docs/geometry/README.md`, `docs/model/gpu-and-cuda.md`, `docs/model/pipeline-map.md`, `docs/labs/README.md`, `docs/labs/compute.md`, `docs/labs/session-goal.md`
 - `docs/products/desktop-client.md`, `docs/products/web-client.md`, `docs/start/faq.md`, `docs/start/glossary.md`, `docs/start/where-were-going.md`
 - `docs/research/cpu-training-program.md`, `docs/research/notebook/cpu-training.md`, `docs/research/notebook/README.md`, `docs/SUMMARY.md`
 - `docs/roadmap/items/cpu-*.md`, `docs/roadmap/issues.json`

@@ -39,9 +39,11 @@ D22 are in [DECISIONS.md](../../../integration/DECISIONS.md#d21--three-negatives
    noise, base artifact, data split, seeds/rows, steps, stop rule and complete
    cost, posted on the milestone issue, then a `TEST FITNESS: FIT` review on that
    issue. Existing training/M2 rental holds remain; FIT releases no hold.
-   Admit resources per `cost-and-compute-admission`: non-model CPU work locally,
-   all model/reference work on GPU only through `scripts/pod/uor-pod` within the
-   caps (≤ 4 pods, ≤ $8/h all labs, no new spending class).
+   Admit resources per `cost-and-compute-admission`: non-model CPU work locally;
+   qualification model/reference work on the GPU through `scripts/pod/uor-pod`
+   within the caps (≤ 4 pods, ≤ $8/h all labs, no new spending class). D84's
+   named CPU program may run only its development training and parity units
+   locally, with no qualification claim.
 5. **Run, then score on the frozen acceptance panel** (`panel-scoring`). A run is
    scored on the panel it pre-registered against, not on a new metric invented
    afterwards. If the run is healthy, extend it — never cancel it because a
