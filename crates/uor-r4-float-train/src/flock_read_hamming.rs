@@ -1237,7 +1237,8 @@ mod tests {
     }
 
     /// claude-237: the check's snap chooses as the GPU's D11 gate hook does
-    /// (`hamilton_sheet::icosian_snap_cuda_tensor`), on spread lanes and an all-zero lane.
+    /// (`hamilton_sheet::icosian_snap_cuda_tensor`): bit for bit on spread lanes and on 0.0 and
+    /// −0.0 lanes, and one of the two tied roots on four exact-tie lanes.
     #[cfg(feature = "cuda")]
     #[test]
     fn the_copy_code_snap_is_the_gpu_hooks_own() {

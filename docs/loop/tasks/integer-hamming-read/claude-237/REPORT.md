@@ -13,7 +13,7 @@ This unit measured no speed: it is a host check of codes, and it changed nothing
 - **The snap is pinned only on the laptop's side, not yet on the GPU's.** The CPU cannot run the trainer's snap: `icosian_snap_cuda_tensor` is CUDA-only, and the trainer's CPU model compute refuses with "D24/D29: CPU model compute is unavailable". So a float-train test pins the 120 roots bit for bit against `hamilton_sheet::h4_unit_roots_f32`, and a `#[cfg(feature = "cuda")]` test compares the port's snap with the GPU's own. That CUDA test type-checks with a stub nvcc, but has never run. It is owed to the next pod.
 - **The first placement did not build.** The ORDER first put the check in `fbs-snapshot`. Under D29 the float trainer reaches only the integer crate's native modules, and the served `CopyHeads` sit behind `serving-wasm`. The check moved to `fbs-toks` in the integer crate's serving build (commit `c859e14b1`, and the ORDER's done-when 1).
 - **Two things the check cannot tell.**
-  - **A trace's own consistency is a weak check here.** The readout's 8 sequences never repeat a token: 1,536 positions give 1,536 distinct tokens, so 3,072 (token, copy head) pairs. "0 inconsistent" therefore only says that each token's recorded query code equals its own recorded key code. It cannot test determinism across positions.
+  - **A trace's own consistency is a weak check here.** As claude-235 found, the readout's sequences never repeat a token: their ids step by 11, so 1,536 positions give 3,072 distinct (token, copy head) pairs, the 3,072 `pairs` each output counts. "0 inconsistent" therefore only says that each token's recorded query code equals its own recorded key code. It cannot test determinism across positions.
   - **A trace from another checkpoint whose ids and depths fit is not refused.** The check would report 0 equal codes. It records every input's sha256, so a reader can match the trace to its artifact.
 
 ## The stage, named
@@ -29,26 +29,32 @@ All four runs agree. Each one is one of claude-233's artifacts (h1 or h3) agains
 
 - **The keys agree in the same way.** Of 3,056 key codes, the float trace equals (a) at 172 and 10 (h1) and at 327 and 15 (h3), and equals (a′) at 3,056 in every run. There are 16 fewer keys than queries because the last position of each of the 8 sequences is no position's earlier one.
 - **The d11-rounded arm gives the same counts as d11, in every cell.** This is claude-235's finding again: rounding the read's parameters as exported changes no code.
-- **The four stages the ORDER names:**
+- **The four stages the ORDER names are cleared, and the cause is a fifth:**
   - **The integer arithmetic is not the cause.** (a) equals (b), the integer session's `CopyHeads` codes, on 8,192 of 8,192 codes (4,096 entries × 2 heads) at both depths of both artifacts, with 0 differing bits.
   - **The float arithmetic is not the cause.** The port behind (a) is pinned bit for bit to the trainer's own `hamilton_gate_fwd_cpu` and `pack_signs` (a float-train test).
   - **The record is not the cause.** The integer trace equals its own session's codes: 3,072 of 3,072 queries and 3,056 of 3,056 keys in every run. A stack test pins the served codes to `CopyHeads::code`.
   - **The GPU forward's inputs are not the cause, at the resolution a snap leaves.** (a′) is computed from the artifact's own table and rotations, and it reproduces the GPU's codes bit for bit. A different table would flip signs near 0 even after a snap. A rotation that differed only slightly would not, because the snap hides it.
-  - **The GPU forward's arithmetic is the stage.** In D11 mode, `with_d11_mode` sets `HamiltonArm::HamiltonIcosianHard` through `with_d11_snaps(D11Snaps::ALL)`. With that arm, `hamilton_sheet::try_hamilton_gate_fwd_cuda` (`hamilton_sheet.rs:1014`, called from `geometric_stack_native_cuda.rs:96` on every CUDA Hamilton gate) replaces each gate with `icosian_snap_cuda_tensor`. The read's `rotate` (`flock_read_hamming.rs:525`) is a `hamilton_gate`, so all of the read's rotations are snapped too: the key rotation (lines 589 and 598), the type heads' query rotation (590) and value rotation (623), and a step rotation when there is one (608).
+  - **The GPU forward's arithmetic is the stage,** a fifth one, which the ORDER did not list. In D11 mode, `with_d11_mode` sets `HamiltonArm::HamiltonIcosianHard` through `with_d11_snaps(D11Snaps::ALL)`. With that arm, `hamilton_sheet::try_hamilton_gate_fwd_cuda` (`hamilton_sheet.rs:1014`, called from `geometric_stack_native_cuda.rs:96` on every CUDA Hamilton gate) replaces each gate with `icosian_snap_cuda_tensor`. The read's `rotate` (`flock_read_hamming.rs:525`) is a `hamilton_gate`, so it reaches the hook.
+    - **Measured:** the key rotation (lines 589 and 598) is snapped. (a′) snaps only that rotation, and it reproduces the trace.
+    - **Read from the code, not measured:** the type heads' query rotation (590) and value rotation (623), and a step rotation when there is one (608), go through the same `rotate`, so they are snapped too.
 - **The differing bits are not rounding.** Binned by the control's value at each differing bit (|v| below 10⁻⁶, 10⁻⁵, 10⁻⁴, 10⁻³, 10⁻², 10⁻¹, and at or above it), they sit mostly between 10⁻³ and 10⁻¹. Some are at 0.1 or more: 273 and 695 at h1's depths 2 and 6, 57 and 476 at h3's. A grid's rounding cannot flip a value that far from 0, but a different rotation can.
 - **Where the other two sides stand.**
-  - **Training does not snap.** `in_space_long.rs` trains under `with_gate_mode(HamiltonArm::HamiltonActive, …)`. With that arm, the hook's match passes the gate through (`_ => gate_tensor.clone()`).
+  - **The checkpoints' trainer does not snap.** The checkpoints came from `train-in-space` (`in_space_long.rs`): their run config carries `turn_memory_dropout`, a field only that trainer has. It trains under `with_gate_mode(HamiltonArm::HamiltonActive, …)` with export mode off. With that arm, the hook's match passes the gate through (`_ => gate_tensor.clone()`). The D11 training path (`with_d11_training`) is used only by `spiralcore_fbs_sheet.rs`.
   - **The artifact does not snap.** The item's design (claude-187) reads "Rotations are stored raw, and normalized at serving", by the integer `stack_rotation`.
 
   So the float D11 reference is the side that differs from both.
 
 ## The decision, and its review
 
-The ORDER's stop rule reads: "The stage is the float trainer or the GPU forward's own inputs. Then the fix changes the float model or the export, outside this scope. The lab decides by a decision review and writes the next step. A GPU re-run needs a prep sheet and its FIT." The stage is the GPU forward's arithmetic, inside a file this ORDER scopes (`flock_read_hamming.rs`). Its fix still needs a GPU, both to fail a test and to measure the effect.
+The ORDER's stop rule reads: "The stage is the float trainer or the GPU forward's own inputs. Then the fix changes the float model or the export, outside this scope. The lab decides by a decision review and writes the next step. A GPU re-run needs a prep sheet and its FIT." The stage found is the GPU forward's arithmetic, which the rule does not name, so it is applied here by analogy. The fix sits in a file this ORDER scopes (`flock_read_hamming.rs`), but it still needs a GPU, both to fail a test and to measure the effect.
 
 - **The options:**
-  - **(A) Keep the read out of the D11 gate hook in the float forward** (chosen, next unit). The float reference then computes the read as training did and as the artifact serves it. One way is to run the read's own `hamilton_gate` calls under a scoped `with_gate_mode(HamiltonActive, …)`. That also stops the read's calls from advancing `fwd_call_idx`, which numbers the trunk's gates for snap capture. The next unit's ORDER picks the form and scopes the file it needs.
-  - **(B) Snap the read in the integer port and the export as well.** Rejected. It would serve a read the model never trained with, against claude-187's design.
+  - **(A) Keep the read out of the D11 gate hook in the float forward** (chosen, next unit). The float reference then computes the read as training did and as the artifact serves it. The next unit's ORDER picks the form and scopes the files it needs, with three constraints the decision review set:
+    - **Not a scoped `with_gate_mode`.** That function (`hamilton_sheet.rs:1978`) restores only the export and telemetry flags. It leaves the arm at `HamiltonActive` and resets `fwd_call_idx` to 0, so layers 3 to 6 would run unsnapped after the stream read. The form must save and restore the whole hook state, as `with_d11_snaps` does, or route the read's `rotate` around the hook.
+    - **A trunk check.** With the fix in, the trunk-only figures (5 and 11 of 1,536 positions differing, claude-233) must stay as they are.
+    - **The Export readout mode.** `FbsReadoutMode::Export` runs under `with_d11_export_gates`, whose `icosian_export_mode` snaps every gate whatever the arm (the hook's `(_, true)` branch). The fix either keeps the read out of that path too, or the ORDER states that the Export mode is not a parity reference.
+  - **(B) Snap the read in the integer port and the export as well.** Rejected. It would serve a read the model never trained with, against claude-187's design. D11 does not require a snap: CHARTER §3.6 asks for integer-only serving, and the engine already serves raw gates through `stack_rotation` (`lut-stack/5`'s `raw_gates`).
+  - **(C″) Train the read under the snap.** Not taken here. It is a new configuration with its own experiment, not a repair of the reference.
   - **(C) Make fix (A) in this unit.** Rejected. Its failing test needs CUDA, and the ORDER's "fix follows here" clause asks for its effect measured on the laptop against the sealed float traces, which the fix makes obsolete. A GPU re-trace needs its own prep sheet, FIT and pre-run review.
 - **This unit's part.** The probe that found the snap became a committed control (a′) in the check. So the check names this stage itself, and will show the fix's effect on the next trace: (a) should then equal the float trace.
 - **The review:** a fresh-context decision reviewer, recorded on #3385 as `[claude] owner log:` (below, under Review).
@@ -76,10 +82,10 @@ The ORDER's stop rule reads: "The stage is the float trainer or the GPU forward'
 
 | Output | sha256 | Artifact | Float trace | Integer trace |
 |---|---|---|---|---|
-| `copy-codes-h1-s1-d11.json` | `61183f95…c3a9` | `28b01bba…9054` | `2ef1584a…82cc` | `a8dbc19c…bdfc` |
-| `copy-codes-h1-s1-d11-rounded.json` | `193de6b7…7fc7e` | `28b01bba…9054` | the d11-rounded trace | `a8dbc19c…bdfc` |
-| `copy-codes-h3-s3-d11.json` | `99c56b73…083` | `1d1d2dc8…` | `7b8a42f2…` | `cca428db…` |
-| `copy-codes-h3-s3-d11-rounded.json` | `472823b4…bec7` | `1d1d2dc8…` | the d11-rounded trace | `cca428db…` |
+| `copy-codes-h1-s1-d11.json` | `61183f95…ef45` | `28b01bba…9054` | `2ef1584a…82cc` (d11) | `a8dbc19c…bdfc` |
+| `copy-codes-h1-s1-d11-rounded.json` | `193de6b7…fc7e` | `28b01bba…9054` | `07195625…29db` (d11-rounded) | `a8dbc19c…bdfc` |
+| `copy-codes-h3-s3-d11.json` | `99c56b73…3083` | `1d1d2dc8…c566` | `7b8a42f2…3f1d` (d11) | `cca428db…d8cc` |
+| `copy-codes-h3-s3-d11-rounded.json` | `472823b4…fec7` | `1d1d2dc8…c566` | `f17f2842…44a3` (d11-rounded) | `cca428db…d8cc` |
 
 Every output holds the full sha256 of each input, and the paths it read. The artifacts are claude-233's (`results/claude/integer-nearest-readout-locate-2026-10-31/out/h{1,3}/artifact.uorlut` in the store). The float traces are claude-235's (`results/claude/integer-hamming-read-trace-2026-10-31/out/s{1,3}/{d11,d11-rounded}/trace.json`), and the integer traces are claude-235's `laptop/reading/trace-integer-s{1,3}.json`.
 
@@ -123,7 +129,19 @@ Every output holds the full sha256 of each input, and the paths it read. The art
   - **Minor: the key shift is pinned only if neighbouring codes differ.** **Fixed:** the session test asserts that they do.
   - **Minor: the CUDA test had no tie lane and has not run.** **Fixed:** a −0.0 lane and four tie lanes. That it has not run is recorded above.
 
-ROUND-2-PLACEHOLDER
+**Round 2, a fresh reviewer at `f8af79d75`,** given slice A's findings and the round-1 fix diff (APPROVE):
+- all five round-1 fixes hold: the width refusals, the snap doc, the session test's depth, head, entry and neighbour asserts, and the CUDA test's tie lanes;
+- **Minor: the CUDA test's doc comment still described its old lanes.** **Fixed:** it names the spread, 0.0, −0.0 and exact-tie lanes.
+
+**A claims check, a fresh reader at `90d7a4f86`,** given the REPORT, the notebook row, the item's step and the outputs (CORRECTIONS NEEDED, all applied):
+- the Measurements table's sha suffixes and the h3 prefixes were wrong. They now come from the outputs and `SHA256SUMS`, and the d11-rounded traces are named;
+- the plain summary said the integer version is right. It now says the copy codes are, and that the parity is still unmeasured;
+- the snap of the query, value and step rotations was stated as measured. Only the key rotation's is; the others are read from the code;
+- "training does not snap" is narrowed to the checkpoints' trainer, `train-in-space`, identified by its run config;
+- the GPU arithmetic is named a fifth stage, with the ORDER's stop rule applied by analogy;
+- the distinct-token count now follows claude-235: 3,072 distinct (token, copy head) pairs.
+
+**The decision review, a fresh reader of the whole project at `90d7a4f86`** (PASS for (A), with three corrections, all applied in "The decision, and its review" and in the item's step 5): not a scoped `with_gate_mode`, a trunk-only regression check, and the Export readout mode.
 
 ## Skills used
 
@@ -131,7 +149,7 @@ None.
 
 ## Still open
 
-- **The next unit: keep the read out of the D11 gate hook** (option A), with a CUDA test that fails without it. Then re-trace on the GPU under a prep sheet, its FIT and its pre-run review. It runs `fbs-toks --copy-codes` on the new trace: (a) should then equal the float trace at every code. Then it reads the kept-set share and top-1 against the registered bar (done-when 2).
+- **The next unit: keep the read out of the D11 gate hook** (option A, under the decision review's three constraints), with a CUDA test that fails without it. Then re-trace on the GPU under a prep sheet, its FIT and its pre-run review. It runs `fbs-toks --copy-codes` on the new trace: (a) should then equal the float trace at every code. Then it reads the kept-set share and top-1 against the registered bar (done-when 2).
 - **The CUDA-only snap test** (`the_copy_code_snap_is_the_gpus_hooks_own`) runs on that pod.
 - **claude-235's two CUDA tests for the tie switch** are still owed to the next pod run.
 - **The timing at long contexts** (done-when 3): the sweep still stops at 192.
@@ -139,4 +157,4 @@ None.
 
 ## Plain summary
 
-The integer and float versions of the model's look-back read disagreed, and this unit found why. The GPU's float reference rounds each of the read's rotations to the nearest of 120 fixed symmetric rotations. Training never did that, and the integer version doesn't either. A laptop check that applies the same rounding reproduces the GPU's codes exactly, on every token, on both seeds. Without the rounding, the laptop's float codes and the integer codes agree exactly. So the integer version is right, and the reference is wrong. The next step is to fix the reference on the GPU and measure the parity again.
+The integer and float versions of the model's look-back read disagreed, and this unit found where. The GPU's float reference rounds the read's rotations to the nearest of 120 fixed symmetric rotations. Training never did that, and the integer version doesn't either. A laptop check that applies the same rounding reproduces the GPU's codes exactly, on every token, on both seeds. Without the rounding, the laptop's float codes and the integer codes agree exactly. So the integer copy codes are right, and the GPU reference was the wrong one to compare against. This covers the copy heads' codes only. The type heads, the kept sets and the decoded tokens are still to be compared, against a fixed reference. The next step is to fix the reference on the GPU and measure the parity again.
