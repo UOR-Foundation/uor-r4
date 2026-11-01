@@ -43,7 +43,7 @@ The trunk's recurrence makes (c) the geometry's own answer, which is why long co
 ## How to start
 
 - **Read:** `stack/session.rs` where `ContextFull` is returned; `decode_reply` in `in_space_long.rs` (the slide); `hamilton_sheet.rs:1351–1360` (training's blocks); [`turn-memory-integer`](turn-memory-integer.md)'s notes on the window; the pipeline map's stages 5 and 8.
-- **Before claiming:** `integer-hamming-read`, `turn-memory-integer`, `point-key-integer` and `integer-nearest-readout` all edit `stack/session.rs`, and many open items list `docs/model/pipeline-map.md`. Check that no open order holds either.
+- **Before claiming:** `integer-hamming-read`, `turn-memory-integer`, `point-key-integer` and `integer-nearest-readout` all edit `stack/session.rs`, and `docs-status-refresh`'s scope covers `docs/model/*.md`, the pipeline map included. Check that no open order holds either.
 
 ## Rules that apply
 

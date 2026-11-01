@@ -26,7 +26,7 @@ The owner, 31 Oct 2026, in claude's chat: "why is the icosian snap 42% of our ti
 | claude-169 | the Hamilton product by shifts | 32% |
 | claude-177 | the hardware multiply and divide | 46% |
 
-**How often it runs** (claude-185): two snaps per 4-channel block in each layer's recurrence core (the lane's transition and the output gate), and one per 4-unit block in its gated product.
+**How often it runs** (claude-163): two snaps per 4-channel block in each layer's recurrence core (the lane's transition and the output gate), and one per 4-unit block in its gated product.
 
 [`fbs-serving-vector-kernel`](fbs-serving-vector-kernel.md) left "fewer golden candidates" open and "named for a follow-up item". This is that item.
 
@@ -65,7 +65,7 @@ The owner, 31 Oct 2026, in claude's chat: "why is the icosian snap 42% of our ti
 ## How to start
 
 - **Read:** `kernels.rs` from `snap_add_square_terms` to `stack_snap_rotation`, and the snap tests in its test module (`snap_select_full_scan`, `snap_difference_positive_by_squares`). The root table's order is `H4_ROOT_COEFFICIENTS`: axis roots `0..8`, half-roots `8..24`, golden blocks `24 + 8k`.
-- **Before claiming:** `integer-hamming-read`'s open order (claude-235) holds `stack/tests.rs` and `m4-serving.md`. Claim after it merges, or keep the new tests in `kernels.rs`'s own module. `docs/model/pipeline-map.md` is in many open items' scopes: check that no open order holds it.
+- **Before claiming:** `integer-hamming-read`'s open order (claude-235) holds `stack/tests.rs` and `m4-serving.md`. Claim after it merges, or keep the new tests in `kernels.rs`'s own module. `docs-status-refresh`'s scope covers `docs/model/*.md`, the pipeline map included: check that no open order of it holds the map.
 - **Timing:** no other lab's build or timing may run on the laptop during the A/B. A shared machine gave a false reading on 24 Oct.
 
 ## Rules that apply
@@ -76,6 +76,6 @@ The owner, 31 Oct 2026, in claude's chat: "why is the icosian snap 42% of our ti
 
 ## Sources
 
-- `docs/research/notebook/m4-serving.md`: the rows of claude-164, claude-165, claude-167, claude-168, claude-169, claude-177 and claude-185.
+- `docs/research/notebook/m4-serving.md`: the rows of claude-163, claude-164, claude-165, claude-167, claude-168, claude-169, claude-177 and claude-185.
 - `crates/uor-r4-integer/src/stack/kernels.rs`: `stack_snap_select`, `snap_difference_positive`, `below_d_sqrt5`, `SNAP_CANDIDATES` and `GOLDEN_AXES`.
 - [`fbs-serving-vector-kernel`](fbs-serving-vector-kernel.md): its open candidates.

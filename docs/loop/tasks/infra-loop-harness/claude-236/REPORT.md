@@ -30,6 +30,7 @@ No measurement. This unit records items. `fbs-snap-sort` records the latest serv
   - My draft listed the shares as 25% → 32% → 42% → 46%, under "its share grows while it stays the same". In unit order they are 42% (claude-167), 25% (claude-168), 32% (claude-169) and 46% (claude-177). claude-168 made the snap itself cheaper.
   - It also found three smaller points: a stale line number for the float slide (copied from `turn-memory-integer`), `pipeline-map.md` scope overlaps the items did not name, and a branch count one short.
   - All four are fixed at the head.
+  - The second round found that my fix had moved "how often it runs" from claude-163, its real source, to claude-185, and that the overlap note named "many open items" where only `docs-status-refresh`'s scope covers the map. Both are fixed: claude-163 is back, in Sources too.
 - **The snap item's two main candidates are reasoning, not code:** the rearrangement argument for golden roots, and the 2^-36 bound for the exact sign. The item's done-when tests both against the exact oracles, and says to prove or replace each.
 
 ## What worked
