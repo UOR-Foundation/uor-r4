@@ -10,7 +10,7 @@ UOR_OTEL_OUT=build/trace.json ./build/instrumented_example
 
 docker run --rm -d --name uor-otel-collector \
   -v "$PWD/examples/otel/collector.yaml:/etc/otelcol-contrib/config.yaml:ro" \
-  otel/opentelemetry-collector-contrib:0.164.0
+  otel/opentelemetry-collector-contrib@sha256:340c9ca6a36617084c6661bdc4f0fe92b7cda5a805d61673ec8db375fddc522b
 docker run --rm -i --network container:uor-otel-collector \
   -v "$PWD/build:/tmp:ro" \
   curlimages/curl@sha256:3fb7e13e5d179a845c97d78204f3f1064d1907037f26a3ebf91710571151fd93 \

@@ -10,6 +10,7 @@ Verify that the official OpenTelemetry Collector decodes the standalone example'
 
 - `projects/uor-cuda-inverted-file/examples/otel/**`
 - `docs/telemetry/model-artifact-convention.md`
+- `docs/telemetry/uor-conventions.md`
 - `docs/labs/uor-telemetry/**`
 - `docs/loop/tasks/uor-otel-artifact-convention/kimi-1/**`
 - `docs/superpowers/plans/2026-11-01-otel-artifact-convention.md`

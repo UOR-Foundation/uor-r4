@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: false
 depends_on: [uor-telemetry]
 done_class: host
-scope: [projects/uor-cuda-inverted-file/examples/otel/**, docs/telemetry/model-artifact-convention.md, docs/labs/uor-telemetry/**, docs/loop/tasks/uor-otel-artifact-convention/kimi-1/**, docs/superpowers/plans/2026-11-01-otel-artifact-convention.md, docs/roadmap/items/uor-otel-artifact-convention.md, docs/roadmap/README.md, docs/roadmap/issues.json]
+scope: [projects/uor-cuda-inverted-file/examples/otel/**, docs/telemetry/model-artifact-convention.md, docs/telemetry/uor-conventions.md, docs/labs/uor-telemetry/**, docs/loop/tasks/uor-otel-artifact-convention/kimi-1/**, docs/superpowers/plans/2026-11-01-otel-artifact-convention.md, docs/roadmap/items/uor-otel-artifact-convention.md, docs/roadmap/README.md, docs/roadmap/issues.json]
 ---
 
 ## Why it matters

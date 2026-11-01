@@ -35,9 +35,11 @@ The digest covers the exact loaded payload bytes. A different tokenizer, represe
 ## Privacy and cardinality
 
 - Do not collect prompt/completion text or hash user turns. Low-entropy user content can be brute-forced even when hashed.
-- Put artifact identity on the resource, not on every operation and not in metric labels. A content digest is high-cardinality metadata, not a useful metric dimension.
+- Prefer artifact identity on the resource, not on every operation and not in metric labels. A content digest is high-cardinality metadata, not a useful metric dimension. This is a recommendation to instrumentation authors, not a guarantee that every backend enforces it.
 - Do not use the digest as a trace/span ID, persistent machine identifier, or cross-request user correlator.
 - Keep collection opt-in. A local file or explicit collector is an experiment, not a default phone-home path.
+
+Unresolved design questions include how to represent multiple concurrently loaded models and hot replacement without misattributing results, whether identity belongs on a resource or a model-specific span link, and whether the algorithm should be embedded only in the digest rather than duplicated as a second attribute. Resource-level identity alone does not answer those cases.
 
 ## Evidence and current gaps
 

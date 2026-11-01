@@ -21,7 +21,7 @@ The debug log decoded all four operations:
 - codebook SHA-256 `9d98bd50f46cdedd5c481a8d696a609936bbc540997e7eaef6af2bdb3bc15597` and byte size `512`;
 - zero dropped attributes per span.
 
-The collector was stopped and removed. The application remains default-off and contains no network exporter. All three host telemetry test executables pass.
+The collector was stopped and removed. The application remains default-off and contains no network exporter. All three host telemetry test executables pass. Exact delivery checks—including prep parsing, 220 xtask tests, claim wording, roadmap/catalog, host evidence, and 105 book pages with zero broken links—are retained in [delivery-checks.txt](../../labs/uor-telemetry/delivery-checks.txt).
 
 Machine-readable evidence is in `docs/labs/uor-telemetry/collector-results.json`; original logs/config/trace are in `local/kimi/otel-release-1/` with SHA-256 verification and in the [project store](https://huggingface.co/datasets/caseyallard/uor-r4-store/commit/4df3c78a8d4652ec4b713dc621e5ddf67b7d8cd9), verified again after download.
 
@@ -29,4 +29,4 @@ Machine-readable evidence is in `docs/labs/uor-telemetry/collector-results.json`
 
 `docs/telemetry/model-artifact-convention.md` proposes resource-level loaded-artifact digest, algorithm, byte size, and identity-kind attributes. It excludes UOR geometry, hash-derived execution IDs, prompt/completion text, user-turn hashes, and high-cardinality metric labels. The current GenAI registry and contribution guide were read directly.
 
-The next responsible step is a real loaded-model consumer and a second independent runtime/example, followed by a discussion issue—not an automatic upstream PR. No issue, Slack post, production deployment, or upstream-acceptance claim was made here.
+The next responsible step is a discussion issue with the generic problem and collector evidence, followed by a real loaded-model consumer and a second runtime/example before any YAML PR. No issue, Slack post, production deployment, or upstream-acceptance claim was made here.

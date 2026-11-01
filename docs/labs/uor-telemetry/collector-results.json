@@ -1,5 +1,8 @@
 {
   "schema": "uor-r4.telemetry-collector-results/1",
+  "source_base": "78c58082ad5e1a7825c13b3ee8d6caf15e447554",
+  "trace_sha256": "f95ab0e7d7342e8c4a2aba9b62807c1b12e6535e3eea004c2cae528dc15881d6",
+  "instrumented_source_sha256": "68b5e227f881cba6b86cbdbe47ef9d831d8b5ec913d14288cbc77f01b310a9b2",
   "date": "2026-11-01",
   "collector": "otel/opentelemetry-collector-contrib:0.164.0",
   "collector_image_sha256": "340c9ca6a36617084c6661bdc4f0fe92b7cda5a805d61673ec8db375fddc522b",
