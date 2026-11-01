@@ -54,8 +54,9 @@ claude-243 read R against F′ on first tokens only: 64, 47 and 78 of 1,202 p-w 
 **The decision table.** The p-w cells decide, pooled over the three seeds. DEV is a reading.
 - The table reads κ, with N the pooled positions and N_low the pooled positions with g ≤ their cell's G₁₀.
 - At q = 0.10, its thresholds 4/9 and 1/6 are exactly c ≥ 0.50 and c ≥ 0.25.
-- Each threshold is compared in integers, so no rounding can move a reading across it: κ ≥ 4/9 is 9 d_low N ≥ 4 d N + 5 d N_low, and κ ≥ 1/6 is 6 d_low N ≥ d N + 5 d N_low.
-- The near-tie and mixed rows also need the excess to be clear of chance: c − q ≥ 3 √(q(1 − q)/d). Otherwise the reading is the clear-margin row, since the disagreements are then not concentrated at near ties.
+- Each κ threshold is compared in integers, so no rounding can move a reading across it: κ ≥ 4/9 is 9 d_low N ≥ 4 d N + 5 d N_low, and κ ≥ 1/6 is 6 d_low N ≥ d N + 5 d N_low.
+- The near-tie and mixed rows also need the excess to be clear of chance: c − q ≥ 3 √(q(1 − q)/d). Otherwise the reading is the clear-margin row, since the disagreements are then not shown to be concentrated at near ties. This clearance is computed in floating point: its integer form would pass 2^53, and an exact tie at it needs q(1 − q)/d to be the square of a rational.
+- A reading with κ ≥ 1/6 that is not clear of chance falls to the clear-margin row and is reported as **clear-margin (inconclusive)**. Its next unit is the same trace.
 - The rows are read top to bottom, and the first that holds is the kind.
 
 | Reading (p-w, pooled) | Kind | The next unit |
@@ -63,7 +64,7 @@ claude-243 read R against F′ on first tokens only: 64, 47 and 78 of 1,202 p-w 
 | d < 150, or q = 1 | **Underpowered**: c is reported with its standard error √(q(1 − q)/d), and no kind is read. | The mixed row's trace. |
 | κ ≥ 4/9, clear of chance | **Near-tie residual**: the gap is the export's numeric residual where R's readout is nearly tied. | It sizes the fix. If r₊ ≤ 3%, a decision card re-derives the first-token bar from this sheet's measured per-position residual. If r₊ > 3%, the readout's precision is raised. |
 | 1/6 ≤ κ < 4/9, clear of chance | **Mixed** | It traces the clear-margin disagreements (g > G₁₀) first, layer by layer: trunk, Hamming read, memory, readout. |
-| otherwise | **Clear-margin difference**: most differences are where R is not near a tie, which is a systematic difference. | The same trace as the mixed row. A residual explanation is set aside. |
+| otherwise | **Clear-margin difference**: most differences are at g > G₁₀, so where they sit, ε exceeds G₁₀/2. This does not say the cause is other than numerics. | The same trace as the mixed row; the trace finds the cause. |
 
 **The opening contrast (p-w, pooled), read beside the kind.** It is **opening-specific** if r₀ > 2 r₊ and r₀ − r₊ > 2 √(r₀(1 − r₀)/n₀ + r₊(1 − r₊)/n₊).
 - The kind picks the next unit's work. The contrast picks only where trace or precision work starts; the near-tie row's decision card has no start.
@@ -108,7 +109,7 @@ claude-243 read R against F′ on first tokens only: 64, 47 and 78 of 1,202 p-w 
 1. Build `fbs-toks` at the head (`-p uor-r4-integer --release`), then run I-Tests.
 2. Run I-Inputs.
 3. Run the six forced decodes (I-Exit).
-4. Grade with a `jq` script kept beside the outputs, its sha256 recorded in the REPORT. The checks come first (I-NoKey, I-Forced-Greedy, I-Align, I-Offset0, I-Coverage, I-RunnerUp) in all six cells. The readings are computed and written only after every check holds. The grade refuses to start unless the worktree's crates match the head that built `fbs-toks`.
+4. Grade with a `jq` script kept beside the outputs, its sha256 recorded in the REPORT. The checks come first (I-NoKey, I-Forced-Greedy, I-Align, I-Offset0, I-Coverage, I-RunnerUp) in all six cells. The readings are shown or written only after every check holds (the checks pass computes them in memory and drops them before any output). The grade refuses to start unless the worktree's crates match the head, and `fbs-toks` is rebuilt at that head right before the grade.
 5. Seal the outputs with a `SHA256SUMS` under `results/claude/integer-nearest-readout-margin-2026-11-01/`, and read them back.
 
 ## 7. Minimum test power
@@ -176,4 +177,18 @@ TEST FITNESS: NOT_FIT
   - readings written only after every check holds;
   - known-answer probes for the pooled decision as well.
 
-**Round 3:** to fill in by a fresh reviewer before any forced decode of R is read.
+**Round 3** (a fresh `delegate:reviewer`, 1 Nov 2026, on the sheet at `572666737` and the grader; it read no forced decode of R and ran neither `grade.sh` nor `fbs-toks`):
+- **What it ran:** `bash -n` on `grade.sh`, and the grader's probe block, which passes: the good cell reads as hand-counted, the checks pass holds no readings, the bad cell fires I-Forced-Greedy and I-RunnerUp once each, and 7 of 7 pooled cases decide as worked out.
+- **What it confirmed:**
+  - every round-1 and round-2 finding is fixed in the sheet and the grader;
+  - the κ algebra and its integer thresholds are exact (the products stay near 1.6e10, far under 2^53);
+  - q = 1 is caught before κ is used, every row is reachable, and each has a fixed next unit and start;
+  - the mode checks at every offset that the step's token is the whole table's nearest, and prints no reading.
+- **Its findings, none of which changes a reading or a next unit, and what was done:**
+  1. Low: the clear-margin row ruled a residual out, against §3's own caveat. Reworded above.
+  2. Low: a κ ≥ 1/6 reading not clear of chance carried the plain clear-margin label. It is now reported as clear-margin (inconclusive); the grader's label is unchanged, and the REPORT adds the word from the pooled reading's `kappa_ge_1_6` and `clear_of_chance`.
+  3. Info: the chance clearance is floating point, not integer. Said above.
+  4. Info: the checks pass computes readings in memory and drops them before output. §6 step 4 now says "shown or written".
+  5. Hardening, not a condition: the binary's head check has gaps (untracked files, two timestamps). `fbs-toks` is rebuilt at the head right before the grade; I-Forced-Greedy and I-Offset0 already tie its picks to the sealed greedy replies.
+
+TEST FITNESS: FIT
