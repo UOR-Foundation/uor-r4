@@ -99,7 +99,7 @@ pub use point_key::{
     POINT_KEY_BOS, POINT_KEY_WINDOW,
 };
 pub use hamming::{
-    copy_weight_q31, hamming_trace_window, read_hamming_uorlut01, CopyHeads, HammingImage, HammingReadImage, HammingStepHead, HammingStepRead, TypeHeads,
+    copy_weight_q31, hamming_trace_window, read_hamming_uorlut01, served_copy_codes_uorlut01, CopyHeads, HammingImage, HammingReadImage, HammingStepHead, HammingStepRead, ServedCopyCodes, TypeHeads,
     COPY_MEAN_EXP,
 };
 pub use kernels::{stack_argmax, stack_memory_select, stack_snap_select, MAX_SELECT_SIDE};
