@@ -29,6 +29,13 @@ The unit is cancelled if any check fails:
 - **(c) Row 0's sampler check can run.** claude-243's record names the commit F′ was decoded at. `in_space_long.rs` is readable at that commit, so the sheet can register the code path by file and lines.
 - **(d) Nothing else holds the item.** No open order or PR holds it.
 
+**Result (1 Nov): all four pass.**
+- **(a)** The item is `ready`, and done-when 3 names claude-245's card. No m4-serving row, REPORT or grader on the base counts a pick against the reference, and claude-245 read no data.
+- **(b)** Every input matches its manifest: claude-244's seal (45 files), claude-243's GPU run and laptop seal, and claude-232's prompts. claude-232's only failures are three a7n artifacts this grade does not read. Each of the four local manifests equals the store's copy, fetched afresh. R's six greedy files are in the laptop seal, F′'s twelve files in the GPU run's, and the six forced decodes in claude-244's.
+- **(c)** `in_space_long.rs` is readable at `4170b844744ed5f83f452d87614dc5fc9293bd23`, the commit of claude-243's binary `train-in-space-4170b844`.
+- **(d)** No open PR or order holds the item.
+- **The rows' structure,** read without any pick: at every seed, the prompt files list the same unique positions (310 and 1,202) in the same order, with the same prompt and reference. p-w has 135 cut-window rows per seed, with 5 to 18 positions each.
+
 ## Files in scope
 
 - `crates/uor-r4-integer/src/fbs_snapshot.rs`
@@ -59,7 +66,7 @@ The unit is cancelled if any check fails:
    - Row 0, with the sampler check by file and lines;
    - the outcomes, LOSS and held, and what each unlocks.
 
-   It also names its inputs by sealed path and hash, and holds the grader.
+   It also names its inputs by sealed path and hash, and names the grader by path and hash (the grader is kept in `local/claude/claude-246/` and sealed with the outputs).
    - It gets a fresh non-author FIT and a pre-run review before any file is read for a reading.
    - The sheet changes no part of the bar. A defect in the bar goes to a new decision card.
 2. **Row 0 runs first, in every cell.** The readings are computed only once every Row 0 check holds in all six cells.
