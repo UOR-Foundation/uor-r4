@@ -68,20 +68,34 @@ __device__ void rank_bucket(
     }
 }
 
+__device__ D full_token_distance(
+    const int* roots, const int* table, U token, const int* query, U k, const U* admitted
+) {
+    const U cell = token_cell(roots, table + token * 32);
+    for (U slot = 0; slot < k; ++slot) {
+        if (admitted[slot] == cell) return l1(query, table + token * 32);
+    }
+    return NO_DISTANCE;
+}
+
 __device__ void rank_full_scan(
     const int* roots, const int* table, U count, const int* query,
     U k, const U* admitted, U* top8
 ) {
+    extern __shared__ D full_distances[];
+    if (count <= 4096) {
+        for (U token = threadIdx.x; token < count; token += blockDim.x) {
+            full_distances[token] = full_token_distance(roots, table, token, query, k, admitted);
+        }
+        __syncthreads();
+    }
+    if (count > 4096 || threadIdx.x != 0) return;
     D distances[8];
     for (U i = 0; i < 8; ++i) { top8[i] = ABSENT; distances[i] = NO_DISTANCE; }
     for (U token = 0; token < count; ++token) {
-        const U cell = token_cell(roots, table + token * 32);
-        bool selected = false;
-        for (U slot = 0; slot < k; ++slot) {
-            if (admitted[slot] == cell) { selected = true; break; }
-        }
-        if (!selected) continue;
-        const D distance = l1(query, table + token * 32);
+        const D distance = count <= 4096 ? full_distances[token]
+                                         : full_token_distance(roots, table, token, query, k, admitted);
+        if (distance == NO_DISTANCE) continue;
         for (U i = 0; i < 8; ++i) {
             if (distance < distances[i] || (distance == distances[i] && token < top8[i])) {
                 for (U j = 7; j > i; --j) {
@@ -212,12 +226,18 @@ extern "C" __global__ void uor_if_full_scan(
     const U* offsets, const U* members, const U* cells,
     U k, U* predictions, U* admitted, U* top8, U* status
 ) {
-    const U row = blockIdx.x * blockDim.x + threadIdx.x;
+    const U row = blockIdx.x;
     if (row >= rows) return;
-    if (k == 0 || k > 16) { status[row] = 1; return; }
+    if (k == 0 || k > 16) {
+        if (threadIdx.x == 0) status[row] = 1;
+        return;
+    }
     const int* query = queries + row * 32;
-    admit_cells(roots, query, offsets, row, k, admitted);
+    if (threadIdx.x == 0) admit_cells(roots, query, offsets, row, k, admitted);
+    __syncthreads();
     rank_full_scan(roots, table, count, query, k, admitted + row * 16, top8 + row * 8);
-    predictions[row] = top8[row * 8];
-    status[row] = predictions[row] == ABSENT ? 1 : 0;
+    if (threadIdx.x == 0) {
+        predictions[row] = top8[row * 8];
+        status[row] = predictions[row] == ABSENT ? 1 : 0;
+    }
 }

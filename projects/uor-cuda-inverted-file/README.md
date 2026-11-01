@@ -85,7 +85,7 @@ Do not infer any of the following without a later registered measurement:
 - A comparison with Faiss or another library.
 - Any language-model or useful-conversation capability.
 
-GPU timing, additional architectures, energy, and cross-library comparisons are **NOT_RUN** for this package.
+The summary is in `docs/labs/uor-cuda-inverted-file/`; raw manifests and per-run logs are in the linked retained run roots and Hugging Face commits. Final corrected measurements at `719a9a78` pass on RTX 5090/580.178.04 and RTX 4090/580.95.05; earlier attempts are explicitly rejected and not used for claims. Energy, other architectures/drivers, and cross-library comparisons are **NOT_RUN**. The host-only clean-consumer check passes; corrected independent replication and public release remain separate gates.
 
 ## Before a public release
 
@@ -95,4 +95,4 @@ GPU timing, additional architectures, energy, and cross-library comparisons are 
 - Publish raw evidence and exact scope rather than extrapolating the original bucket-writer's results.
 - Keep MIT licensing and source-commit provenance. A Foundation Sandbox application and NVIDIA/community feedback should follow only after an external consumer can build and use the example.
 
-See `PROVENANCE.md`, `RESULTS.md`, and `CITATION.cff`.
+See `PROVENANCE.md`, `RESULTS.md`, `CITATION.cff`, and `OUTREACH.md` for provenance, measured results, and release/outreach drafts.
