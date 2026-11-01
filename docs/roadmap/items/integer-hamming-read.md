@@ -109,6 +109,18 @@ It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-
          - Restored, the 44 `flock_read_hamming::` and `fbs_export::` tests pass with `--features cuda`. A's off run keeps a different set in 307 of 512 rows.
        - **Checkpoints trained before this unit** trained with the rule off (claude-146's `choose_sorted` is one arg-sort). The `d11` arm turns the rule off; it is not shown to reproduce their training forward exactly.
        - **Next:** the bars on claude-146's checkpoints and on DEV, with the default on (done-when 2). That needs a prep sheet, its FIT and a pre-run review.
+     - **Parity on claude-146's checkpoints, on DEV (claude-240, row P): done-when 2 holds.** The sample is DEV's 54 sampled windows (every 8th of 428), each cut after its last scored position: 5,795 positions. The bars are the [prep sheet](../../harness/prep/integer-hamming-read-dev-2026-11-01.md)'s.
+       - **`d11-tie`, the float read's default, meets both bars at all three seeds:**
+         - d is 47, 72 and 49 (bar 173), so top-1 agrees at 98.8–99.2%;
+         - the copy-head sets past t = 17 are all equal;
+         - the first read's type heads are at 0.997–0.998;
+         - the second read's are at 0.987–0.991, on 7,260–7,858 judged sets (floor 965).
+         Both comparisons count 0 ties and 0 faults. `I-Copy` is clean on every arm.
+       - **`d11`, the GPU sort's own order, does not:** d is 612, 843 and 597, the barred cells are at 0.47–0.55 with thousands of ties, and the fourth cell is unmeasured.
+       - **The bridge,** `d11-tie` on the fixed sequences, gives d of 28, 19 and 21 (claude-238's bar 46).
+       - **The checkpoints load through an evaluation copy.** claude-179 changed `spiralcore_fbs.cu`'s backward after claude-146 trained, so `StackModel::load` refused the saved plan fingerprints (attempt 1, row 0). `fbs-snapshot --rebind-fbs-backward` rewrites only those six fingerprints, and refuses unless the forward's text is unchanged. The copy is held to claude-146's sealed inspection (`fbs-snapshot --inspect as-trained`), with claude-146's own build at `df1d7892` as the control. Both equal the sealed line in all 22 fields at every seed.
+       - **Decode on the M1, on battery:** 3,715–4,092 tok/s with the read, 4,508–4,852 without, at contexts 96–192 (s1's artifact). The sweep stops at the artifact's context.
+       - **Next:** the read's cost at long contexts (done-when 3), on a synthetic artifact with a longer context (`stack/synthetic.rs`), since the cost does not depend on trained weights.
   6. the speed.
 
 ## Done when
