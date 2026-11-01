@@ -18,9 +18,26 @@ The item's done-when reads:
 > 3. **Speed on this laptop:** `fbs-toks` decode tokens/s against context, with the read and without, on the same artifact.
 > 4. One notebook row; the result on main.
 
+## This unit
+
+claude-238 (#3478, `fe1619192`) put the read's float forward on its trained path. It then found the last gap on (r-drop) to be a tie rule, not arithmetic. With one tie rule on both sides, d is 6 and 27 of 1,536, inside the bar of 46. With the GPU arg-sort's own order, d is 174 and 243. The item's step 5 names the next step: the trainer and every float reference take the integer session's tie rule by default, with the two tie-switch CUDA tests that claude-235 owed.
+
+**The change, in `flock_read_hamming.rs` and `fbs-snapshot.rs` only.**
+- **`TIE` defaults to on.** Ties then break by ascending bit distance, then ascending `s`, on every thread unless `set_hamming_tie_rule(false)` turns them off.
+  - The read's codes are ±1 forward, `p + (bits − p).detach()`, so `round(mean|q − k| · width / 2)` removes only the codes' last-bit noise. Only the order among equal distances changes.
+  - The selection is detached, so no gradient moves.
+  - `tie_keys_exact` already refuses a head whose keys would pass 2^24.
+- **The docs** of `set_hamming_tie_rule`, `choose_sorted` and `fbs-snapshot`'s trace arms say the new default. `d11` and `d11-rounded` are now the explicit off arms, the sort's own order, kept so a later trace can still measure the gap.
+- **The CPU test** `the_trace_and_the_tie_rule_start_off` becomes "the trace starts off and the tie rule on".
+- **CUDA test A (new):** a real `read()` with planted ties and the trace on, at the default. Every traced kept set must equal the 16 nearest by (bits, `s`), computed on the host from the traced codes. It also runs with the rule off, to show that the plant ties across the 16th place and that the sort's own order breaks some of those ties against the rule. Without that, A could pass on a read with no ties to break.
+- **CUDA test B** (`the_tie_rule_keeps_the_integer_sessions_order`, existing) gets its first set-aside run. Its codes get last-bit noise, so the test also covers the noise that `.round()` exists for.
+
 ## Cancel probe (run first)
 
-To fill in.
+- **Does an open PR touch these files?** No open PR changes `flock_read_hamming.rs`, `fbs-snapshot.rs` or `fbs_snapshot.rs` (`gh pr list --state open`, 1 Nov).
+- **Is the default already on?** No. Main at this ORDER's base `fe1619192` has `static TIE … Cell::new(false)` at `flock_read_hamming.rs:74`. Only `fbs-snapshot`'s `--hamming-trace` form calls `set_hamming_tie_rule`.
+
+Class: **instrument** (the float reference's tie order). The unit goes ahead.
 
 ## Files in scope
 
@@ -43,8 +60,17 @@ To fill in.
 
 ## Done when
 
-To fill in.
+1. **The default is on.** The CPU test says so. The CPU suite and `loop gates --full` are green, and the CUDA code type-checks with the stub nvcc.
+2. **Both CUDA tests pass on one pod**, along with the read's and the exporter's other CUDA tests. Each fails with its own lines set aside, shown on the same pod:
+   - A fails with the read's `tie` wired to `false`;
+   - B fails with `choose_sorted`'s tie branch removed.
+
+   These are finite kernel tests with no data and no bar, so they need no prep sheet (CHARTER §4.5).
+3. **The write-up:** a REPORT, a notebook row, and the item's step 5 updated with the next step: done-when 2's parity on claude-146's checkpoints and DEV, with the default on.
 
 ## Stop and ask if
 
-To fill in.
+This is stop and decide, never stop and wait.
+- **A passes with the tie wired off:** the plant has no tie across the 16th place, or the GPU sort breaks those ties as the rule does. Either way that is an instrument fault in the test. Change the plant until the off run disagrees with the rule; do not loosen the check.
+- **B's noise moves a code past rounding:** the noise is too large, and that is an instrument fault in the test. Keep it to the last bit.
+- **Another test in the crate depends on the old default:** set the rule explicitly in that test, and name it in the REPORT. Do not turn the default back off.
