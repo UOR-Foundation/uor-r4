@@ -778,10 +778,12 @@ impl HammingRead {
 /// pass-through (`HamiltonActive`) and never its D11 or export snap. The artifact serves the
 /// rotations raw (`lut-stack/5`), and a snapped read was the float reference's own gap
 /// (claude-237). `with_d11_snaps` gives the hook back whole afterwards (arm, call index, export
-/// flag, transition snap, telemetry), so the trunk's gates after the read snap as before and keep
-/// their call numbering. It covers the forward only: a D11-bridge training step
-/// (`with_d11_training`) would still run the read's backward through the snap, and no trainer
-/// runs one with a read.
+/// flag, transition snap, telemetry), so the trunk's gates after the read snap as before and
+/// number their calls as a trunk without the read would. Whatever the arm outside, the read's
+/// forward runs as `HamiltonActive`, uncounted by telemetry and snap capture; only
+/// `in_space_long.rs` (itself `HamiltonActive`) and `fbs-snapshot` install a read, so no control
+/// arm meets one. It covers the forward only: a D11-bridge training step (`with_d11_training`)
+/// would still run the read's backward through the snap, and no trainer runs one with a read.
 fn as_trained<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
     use crate::hamilton_sheet::{is_snapping_transition, with_d11_snaps, D11Snaps};
     let snaps = D11Snaps {
