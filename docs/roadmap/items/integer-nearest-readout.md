@@ -13,21 +13,30 @@ scope: [crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-integer/src/sta
 
 ## Why it matters
 
-The project's first hurdle is one working model end to end, served from its integer artifact. The served model must decode as the trained one does. Claude-231 built that readout on native and browser paths, but claude-232's end-to-end parity check missed in every cell. The item stays ready while the mismatch is localized.
+The project's first hurdle is one working model end to end, served from its integer artifact. The served model must decode as the trained one does. Claude-231 built that readout on native and browser paths, but claude-232's end-to-end parity check missed in every cell. Claude-243's, with both sides on the same rules, meets the bar on DEV and misses on p-w. The item stays ready while the p-w gap is localized.
 
 - **The trained model decodes by nearest.** (r-drop) trained with `objective: "cell"`, and `in_space_long` decodes such a model as the whole table's nearest token: `decodes_nearest`, "Whether replies decode as the whole table's nearest token, not the writer's pick". [`one-decoder`](one-decoder.md) (claude-150) made whole-table nearest the float side's served decoder.
 - **Before claude-231, the integer session decoded by the native writer.** It computed whole-table nearest only beside the writer, for timing. In [`point-key-integer`](point-key-integer.md)'s real run (claude-229, #3460), integer greedy's first token equalled claude-220's float greedy on 0 of 310 DEV prompts and 2 of 1,202 on p-w. The float's own first token equalled the reference on 129 and 179. The run's grade read nothing and ended at row 0.
 - **Claude-231 built `head = "native_vector_nearest"` and its export** ([REPORT](../../loop/tasks/integer-nearest-readout/claude-231/REPORT.md), #3463): 395 integer-library tests with one ignored, seven negative gates and full serving/WASM audits. The nearest branch serves `stack_whole_table_nearest` on native and browser paths, after memory and the Hamming read; the point-key override stays unchanged. An older engine refuses the new head, and an artifact without it decodes byte for byte as before.
 - **Claude-232 ran end-to-end greedy parity** ([REPORT](../../loop/tasks/integer-nearest-readout/claude-232/REPORT.md), #3464) against claude-220's stored float greedy replies on DEV and p-w at seeds 1–3. It missed every cell. First-token agreement is 291, 285 and 284 of 310 on DEV, and 911, 777 and 64 of 1,202 on p-w. Whole-reply agreement is 83, 163 and 127 on DEV, and 60, 113 and 36 on p-w.
 - **The readout was necessary but not sufficient.** The gap is largest on exact-key misses, and p-w seed 3 over-concentrates on one first token. The trunk, Hamming read and readout remain suspects, not located causes. The parity bar must pass before the item closes.
+- **Claude-243 re-ran the parity with both sides on the same rules** ([REPORT](../../loop/tasks/integer-nearest-readout/claude-243/REPORT.md), #3488): the raw export (R) against the float reference re-decoded on the GPU with the read's tie rule on (F′). It is a **MISS** on p-w at every seed and meets the bar on DEV.
+  - First-token disagreement is 4, 4 and 5 of 310 on DEV (bar 9), and 64, 47 and 78 of 1,202 on p-w (bar 36). Whole-reply agreement is 188, 247 and 201 on DEV, and 488, 751 and 547 on p-w.
+  - The icosian snap was the larger difference behind claude-232's MISS: the snapped export against F′ agrees on 291/285/284 and 909/777/64 first tokens. The tie order moves at most 12 first tokens (F′ against F).
+  - The remaining p-w disagreements are diffuse; no first token is over-concentrated. The raw export's own rounding residual, the bar's margin, is not measured.
 
 ## What is missing
 
-- **Layer-by-layer localization of claude-232's MISS,** on real DEV and p-w prompts: the trunk, Hamming read, memory and readout. Then recheck end-to-end parity before rerunning p-x.
-  - Two differences between claude-232's sides are found since, neither a rounding residual: the float reference's tie order (claude-238, claude-240) and the integer side's icosian snap (claude-233). claude-243 re-reads the parity with both removed, under its decision card.
-  - The completed check covered the whole served model. Its instruments held, and the sealed run is `results/claude/integer-nearest-readout-parity-2026-10-31/`.
+- **Locate claude-243's p-w gap on R against F′,** on the first disagreeing prompts, layer by layer: the trunk, Hamming read, memory and readout. Then recheck end-to-end parity before rerunning p-x. Under a sheet; three leads, the first one first:
+  - **Measure the bar's margin:** claude-227's trunk parity on the raw export against the trained forward, on p-w windows.
+  - **Split the disagreements by exact-key status,** as claude-232 did on DEV s1. p-w is the panel where the memory names fewer replies.
+  - **Count near ties at the readout:** how close F′'s and R's two nearest rows are at the disagreeing openings.
+  - The two differences between claude-232's sides, the float reference's tie order (claude-238, claude-240) and the integer side's icosian snap (claude-233), are removed in claude-243's arms. Its sealed run is `results/claude/integer-nearest-readout-tie-parity-2026-11-01/`; claude-232's is `results/claude/integer-nearest-readout-parity-2026-10-31/`.
   - The float replies are sealed data, so this item does not wait on [`one-model-end-to-end`](one-model-end-to-end.md), which made them.
-- **The completed readout, for reference:** `head = "native_vector_nearest"`, with the whole table's `−L1` scan at Q12 and ties to the smaller id. The browser uses `IntegerStackSession::serve_step`, so FBS models no longer fall back to token 0. The nearest scan costs about 2.85× a token at 1,365 decode and 1,405 prefill tok/s; prefill-scan removal is a separate optimization, not parity evidence.
+- **Making raw the default, or the snap faithful,** is a follow-up: S against F′ now measures what the snap costs.
+- **The completed readout, for reference:** `head = "native_vector_nearest"`, with the whole table's `−L1` scan at Q12 and ties to the smaller id. The browser uses `IntegerStackSession::serve_step`, so FBS models no longer fall back to token 0.
+  - On the snapped artifact (claude-231) it decodes at 1,365 and prefills at 1,405 tok/s; the nearest scan costs about 2.85× a token. Prefill-scan removal is a separate optimization, not parity evidence.
+  - On the raw artifact (claude-243, R s1, done-when 4): 1,204 tok/s decode and 1,264 prefill (medians), 190.7 MB peak resident, under other load. The 4,096-row nearest is 65% of a decode step, so a cheaper exact nearest is the speed lead.
 
 ## Done when
 
