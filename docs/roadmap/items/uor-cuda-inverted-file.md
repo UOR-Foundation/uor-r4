@@ -3,7 +3,7 @@ id: uor-cuda-inverted-file
 title: Package a standalone UOR inverted-file CUDA example
 milestone: research
 area: mechanism
-status: ready
+status: done
 open_to: lab
 needs_gpu: false
 depends_on: []
@@ -17,7 +17,7 @@ The CSR bucketed writer and PTX admission gate are the most transferable parts o
 
 ## What is missing
 
-**Host correctness, clean-consumer validation, corrected two-card/two-driver measurements, and independent corrected replication are complete at their declared scopes.** Final source `719a9a786` passes 504 correctness rows and 240 records on RTX 5090/580.178.04 and RTX 4090/580.95.05; the independent RTX 5090/595.71.05 rerun also passes with verified evidence. Earlier attempts remain rejected. Only final review and release/outreach preparation remain; no upstream acceptance is inferred.
+Nothing remains for this item's declared packaging and evidence scope. **Host correctness, clean-consumer validation, corrected two-card/two-driver measurements, independent corrected replication, and fresh exact-head review are complete at their declared scopes.** Final source `719a9a786` passes 504 correctness rows and 240 records on RTX 5090/580.178.04 and RTX 4090/580.95.05; the independent RTX 5090/595.71.05 rerun also passes with verified evidence. PR #3489 merged with fresh APPROVE records; earlier attempts remain rejected. Actual versioned releases are tracked separately by #3492, and no upstream acceptance is inferred.
 
 ## Done when
 

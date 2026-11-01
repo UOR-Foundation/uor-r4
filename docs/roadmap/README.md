@@ -23,8 +23,8 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 | ready | 21 |
 | held | 10 |
 | decision | 1 |
-| done | 92 |
-| total | 124 |
+| done | 93 |
+| total | 125 |
 
 ## Start here
 
@@ -146,7 +146,7 @@ These items are ready and open to anyone.
 | [Measure how ability grows with width and data](items/scale-probe.md) | ready | a lab | yes | [one-model-end-to-end](items/one-model-end-to-end.md) | [#3472](https://github.com/UOR-Foundation/uor-r4/issues/3472) |
 | [Split the training backward, and run a cheaper rival search against (a)](items/training-step-cost.md) | ready | a lab | yes | [fbs-cost-profile](items/fbs-cost-profile.md) | [#3391](https://github.com/UOR-Foundation/uor-r4/issues/3391) |
 | [Serve the turn memory from the integer artifact on the laptop](items/turn-memory-integer.md) | ready | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | [#3392](https://github.com/UOR-Foundation/uor-r4/issues/3392) |
-| [Package a standalone UOR inverted-file CUDA example](items/uor-cuda-inverted-file.md) | ready | a lab | no | none | [#3475](https://github.com/UOR-Foundation/uor-r4/issues/3475) |
+| [Publish the CUDA and OpenTelemetry evidence bundles as versioned releases](items/uor-community-evidence-releases.md) | ready | a lab | no | [uor-cuda-inverted-file](items/uor-cuda-inverted-file.md), [uor-otel-artifact-convention](items/uor-otel-artifact-convention.md) | [#3492](https://github.com/UOR-Foundation/uor-r4/issues/3492) |
 | [Make the native writer's admission hold at every seed](items/writer-admission.md) | ready | a lab | yes | [one-decoder](items/one-decoder.md) | [#3394](https://github.com/UOR-Foundation/uor-r4/issues/3394) |
 | [Build a sigmoid-free gate for E8 orbit memory and rerun it on GPU](items/e8-orbit-memory-sigmoid-free-iteration.md) | held | a lab | yes | [float-training-module](items/float-training-module.md) | [#2822](https://github.com/UOR-Foundation/uor-r4/issues/2822) |
 | [Run the Hopf retained-fibre language test](items/hopf-retained-fibre-test.md) | held | a lab | yes | none | [#2825](https://github.com/UOR-Foundation/uor-r4/issues/2825) |
@@ -183,6 +183,7 @@ These items are ready and open to anyone.
 | [Route the user's turn to an exact memory built from TRAIN, read at the readout](items/route-plus-memory.md) | done | a lab | yes | none | [#3390](https://github.com/UOR-Foundation/uor-r4/issues/3390) |
 | [Measure SpiralCore/FBS descent and tokens per second in a float sheet](items/spiralcore-fbs-offline-float-sheet.md) | done | a lab | yes | [float-training-module](items/float-training-module.md), [r-secant-surrogate-descent](items/r-secant-surrogate-descent.md) | [#2891](https://github.com/UOR-Foundation/uor-r4/issues/2891) |
 | [Carry the turn memory past a reply's first word](items/turn-memory-reply.md) | done | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | [#3393](https://github.com/UOR-Foundation/uor-r4/issues/3393) |
+| [Package a standalone UOR inverted-file CUDA example](items/uor-cuda-inverted-file.md) | done | a lab | no | none | [#3475](https://github.com/UOR-Foundation/uor-r4/issues/3475) |
 | [Verify OTLP collection and prepare a generic model-artifact digest convention](items/uor-otel-artifact-convention.md) | done | a lab | no | [uor-telemetry](items/uor-telemetry.md) | [#3486](https://github.com/UOR-Foundation/uor-r4/issues/3486) |
 | [Add opt-in artifact telemetry to the standalone CUDA example](items/uor-telemetry.md) | done | a lab | no | [uor-cuda-inverted-file](items/uor-cuda-inverted-file.md) | [#3478](https://github.com/UOR-Foundation/uor-r4/issues/3478) |
 
@@ -321,6 +322,7 @@ flowchart LR
   n_training_step_cost["training-step-cost"]
   n_turn_memory_integer["turn-memory-integer"]
   n_turn_memory_reply["turn-memory-reply"]
+  n_uor_community_evidence_releases["uor-community-evidence-releases"]
   n_uor_cuda_inverted_file["uor-cuda-inverted-file"]
   n_uor_otel_artifact_convention["uor-otel-artifact-convention"]
   n_uor_telemetry["uor-telemetry"]
@@ -453,6 +455,8 @@ flowchart LR
   n_spiralcore_fbs_offline_float_sheet --> n_integer_hamming_read
   n_turn_memory_integer --> n_point_key_integer
   n_turn_memory_reply --> n_one_model_end_to_end
+  n_uor_cuda_inverted_file --> n_uor_community_evidence_releases
   n_uor_cuda_inverted_file --> n_uor_telemetry
+  n_uor_otel_artifact_convention --> n_uor_community_evidence_releases
   n_uor_telemetry --> n_uor_otel_artifact_convention
 ```

@@ -51,7 +51,7 @@ make telemetry-test                               # IDs, JSON, default-off, and 
 
 Only an explicit `UOR_OTEL_OUT` path enables the file sink. Each run uses random trace/span IDs; the fixed codebook's SHA-256 digest and 512-byte size stay artifact attributes and are never execution IDs. The build span is the parent of update, probe, and full-scan spans. The sink writes a temporary file and renames it over the current complete in-memory trace after each operation. `TelemetryFailure` reports an export I/O error separately from CUDA failures; CPU errors take precedence and completed CPU side effects are not rolled back.
 
-This instruments the **CPU oracle**, not the CUDA kernels. It does not send data to a collector or emit prompt/completion content. Collector interoperability, GPU timing, and production export are **NOT_RUN**. See [`../../docs/telemetry/uor-conventions.md`](../../docs/telemetry/uor-conventions.md).
+This instruments the **CPU oracle**, not the CUDA kernels. It does not send data to a collector or emit prompt/completion content. Official Collector Contrib 0.164.0 ingestion and decoded-span verification **PASS** over loopback; SDK/multi-runtime interoperability, GPU timing, and production export are **NOT_RUN**. See [`../../docs/telemetry/uor-conventions.md`](../../docs/telemetry/uor-conventions.md).
 
 ## Algorithm and API
 
@@ -85,7 +85,7 @@ Do not infer any of the following without a later registered measurement:
 - A comparison with Faiss or another library.
 - Any language-model or useful-conversation capability.
 
-The summary is in `docs/labs/uor-cuda-inverted-file/`; raw manifests and per-run logs are in the linked retained run roots and Hugging Face commits. Final corrected measurements at `719a9a78` pass on RTX 5090/580.178.04 and RTX 4090/580.95.05; earlier attempts are explicitly rejected and not used for claims. Energy, other architectures/drivers, and cross-library comparisons are **NOT_RUN**. The host-only clean-consumer check passes; corrected independent replication and public release remain separate gates.
+The summary is in `docs/labs/uor-cuda-inverted-file/`; raw manifests and per-run logs are in the linked retained run roots and Hugging Face commits. Final corrected measurements at `719a9a78` pass on RTX 5090/580.178.04 and RTX 4090/580.95.05; earlier attempts are explicitly rejected and not used for claims. Energy, other architectures/drivers, and cross-library comparisons are **NOT_RUN**. The host-only clean-consumer check and corrected independent replication **PASS** at their declared scopes; public release remains a separate gate.
 
 ## Before a public release
 
