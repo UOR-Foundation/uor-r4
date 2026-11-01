@@ -1,8 +1,8 @@
 use std::time::Instant;
 
 use uor_r4_cpu_train::{CpuFbsForward, CpuFbsHead};
-use uor_r4_integer::stack::export_fbs_trunk_uorlut01;
 use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, synthetic_hamming, FbsSynth};
+use uor_r4_integer::stack::{export_fbs_trunk_uorlut01, FbsMemoryEntry, FbsMemorySnapshot};
 
 const WARMUP_STEPS: usize = 4;
 const TIMED_STEPS: usize = 64;
@@ -42,19 +42,60 @@ fn main() {
     snapshot.hamming = Some(hamming);
     let with_read = export_fbs_trunk_uorlut01(&snapshot).expect("synthetic Hamming artifact");
 
-    benchmark("none", &no_read);
-    benchmark("copy", &copy_bytes);
-    benchmark("copy+type", &with_read);
+    let mut with_memory = snapshot.clone();
+    let mut reply_entries: Vec<FbsMemoryEntry> = (1..TIMED_STEPS)
+        .map(|step| {
+            let token = ((step * 97 + 11) % 4_096) as u32;
+            FbsMemoryEntry {
+                key: vec![
+                    11,
+                    uor_r4_integer::stack::MEMORY_PAD,
+                    step as u32,
+                    uor_r4_integer::stack::MEMORY_PAD,
+                    token,
+                ],
+                value: 42,
+            }
+        })
+        .collect();
+    reply_entries.sort_by(|left, right| left.key.cmp(&right.key));
+    with_memory.memory = Some(FbsMemorySnapshot {
+        k: 1,
+        key_window: 192,
+        opening: vec![FbsMemoryEntry {
+            key: vec![11],
+            value: 42,
+        }],
+        opening_weight: vec![1.0; snapshot.width],
+        reply: Some(uor_r4_integer::stack::FbsReplyTable {
+            turn: 1,
+            entries: reply_entries,
+            weight: vec![1.0; snapshot.width],
+        }),
+    });
+    let full_path =
+        export_fbs_trunk_uorlut01(&with_memory).expect("synthetic Hamming and memory artifact");
+
+    benchmark("none", &no_read, false);
+    benchmark("copy", &copy_bytes, false);
+    benchmark("copy+type", &with_read, false);
+    benchmark("copy+type+memory", &full_path, true);
 }
 
-fn benchmark(read: &str, bytes: &[u8]) {
+fn benchmark(read: &str, bytes: &[u8], memory: bool) {
     let mut forward = CpuFbsForward::from_artifact(bytes).expect("CPU FBS forward");
+    if memory {
+        forward.mark_reply_start();
+    }
     for step in 0..WARMUP_STEPS {
         forward
             .step((step * 97 + 11) as u32, CpuFbsHead::Nearest)
             .expect("warmup");
     }
     forward = CpuFbsForward::from_artifact(bytes).expect("fresh CPU FBS forward");
+    if memory {
+        forward.mark_reply_start();
+    }
 
     let started = Instant::now();
     let mut checksum = 0u64;

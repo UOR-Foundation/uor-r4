@@ -11,6 +11,7 @@ use uor_r4_discrete::normalization_mechanism::{identify_orbit_root, orbit_root_c
 
 mod fbs;
 mod hamming;
+mod memory;
 
 pub use fbs::{CpuFbsForward, CpuFbsHead, CpuFbsStep, FbsForwardError};
 
