@@ -17,16 +17,16 @@ The owner, 31 Oct 2026, in claude's chat: "why is the icosian snap 42% of our ti
 
 **The snap is the largest single kernel in a served token.** claude-177's profile, after the hardware multiply and divide, has `stack_snap_select` at 333 of 725 samples on the thread: 46% of a 207 µs step on claude-126's snapped export (width 256, 6 layers). The 42% was claude-167's reading.
 
-**Its share grows while it stays the same.** Each other kernel got faster around it:
+**Its share, unit by unit** (each row's new profile, in the order the units ran). claude-168 made the snap itself cheaper, and its share fell. Since then the kernels around it got faster, and its share rose:
 
 | Unit | Change | Snap's share |
 |---|---|---|
+| claude-167 | the multiple tables by doublings | 42% |
 | claude-168 | the snap's scores by additions | 25% |
 | claude-169 | the Hamilton product by shifts | 32% |
-| claude-167 | the multiple tables by doublings | 42% |
 | claude-177 | the hardware multiply and divide | 46% |
 
-**How often it runs** (claude-163): two snaps per 4-channel block in each layer's recurrence core (the lane's transition and the output gate), and one per 4-unit block in its gated product.
+**How often it runs** (claude-185): two snaps per 4-channel block in each layer's recurrence core (the lane's transition and the output gate), and one per 4-unit block in its gated product.
 
 [`fbs-serving-vector-kernel`](fbs-serving-vector-kernel.md) left "fewer golden candidates" open and "named for a follow-up item". This is that item.
 
@@ -39,7 +39,7 @@ The owner, 31 Oct 2026, in claude's chat: "why is the icosian snap 42% of our ti
 
 **Where its time likely goes** (read from the code, not split by a profile):
 1. **17 comparisons in series.** Each candidate is compared with the best so far, so each step waits on the one before.
-2. **Each comparison branches on the data.** The exact sign of `da + db·φ` (`snap_difference_positive`) takes up to four branches: `db`'s sign, `P`'s sign, and the two bounds of `below_d_sqrt5`. Inside a 0.04% band it takes two `u128` squares.
+2. **Each comparison branches on the data.** The exact sign of `da + db·φ` (`snap_difference_positive`) takes up to five branches: `db == 0`, `db`'s sign, `P`'s sign, and the two bounds of `below_d_sqrt5`. Inside a 0.04% band it takes two `u128` squares.
 3. **Code from the multiply ban.** The bounds' products by 2289 and 1145 are shifts and additions behind `black_box`, built when the audit refused every multiply (claude-165). D80 and D81 allow the scalar multiply now. Other `black_box`es keep the lanes out of NEON registers, whose `fmov` the audit refuses. They stay unless the audit allows another form.
 
 **Candidate exact changes, best first:**
@@ -52,7 +52,7 @@ The owner, 31 Oct 2026, in claude's chat: "why is the icosian snap 42% of our ti
 - **One fixed-point product for the exact sign.** For these ranges (`|da| ≤ 2^35`, `|db| ≤ 2^34`), the norm `da² + da·db − db²` is a nonzero integer whenever `da + db·φ ≠ 0`, and `|da − db/φ| < 2^36`. So `|da + db·φ| > 2^-36`, and the sign of `da·2^70 + db·round(φ·2^70)` in `i128` is the exact sign. That is a few scalar multiplies (`round(φ·2^70)` has 71 bits) and no branch. Check the bound in the unit before relying on it.
 - **Fewer barriers,** keeping only those the serving audit still needs.
 
-**Not this item:** a NEON kernel (the audit refuses vector forms and `fmov`). And not the unsnapped contract: `lut-stack/5` runs no snap but is about 30 µs a token slower, all in its rotation (claude-185).
+**Not this item:** a NEON kernel (the audit refuses vector forms and `fmov`). And not the unsnapped contract: `lut-stack/5` runs no snap but is about 30 µs a token slower, a 235 µs step against 205 µs, in its core and its gated product (claude-185).
 
 ## Done when
 
@@ -65,7 +65,7 @@ The owner, 31 Oct 2026, in claude's chat: "why is the icosian snap 42% of our ti
 ## How to start
 
 - **Read:** `kernels.rs` from `snap_add_square_terms` to `stack_snap_rotation`, and the snap tests in its test module (`snap_select_full_scan`, `snap_difference_positive_by_squares`). The root table's order is `H4_ROOT_COEFFICIENTS`: axis roots `0..8`, half-roots `8..24`, golden blocks `24 + 8k`.
-- **Before claiming:** `integer-hamming-read`'s open order (claude-235) holds `stack/tests.rs` and `m4-serving.md`. Claim after it merges, or keep the new tests in `kernels.rs`'s own module.
+- **Before claiming:** `integer-hamming-read`'s open order (claude-235) holds `stack/tests.rs` and `m4-serving.md`. Claim after it merges, or keep the new tests in `kernels.rs`'s own module. `docs/model/pipeline-map.md` is in many open items' scopes: check that no open order holds it.
 - **Timing:** no other lab's build or timing may run on the laptop during the A/B. A shared machine gave a false reading on 24 Oct.
 
 ## Rules that apply
@@ -76,6 +76,6 @@ The owner, 31 Oct 2026, in claude's chat: "why is the icosian snap 42% of our ti
 
 ## Sources
 
-- `docs/research/notebook/m4-serving.md`: the rows of claude-163, claude-164, claude-167, claude-168, claude-169, claude-177 and claude-185.
+- `docs/research/notebook/m4-serving.md`: the rows of claude-164, claude-165, claude-167, claude-168, claude-169, claude-177 and claude-185.
 - `crates/uor-r4-integer/src/stack/kernels.rs`: `stack_snap_select`, `snap_difference_positive`, `below_d_sqrt5`, `SNAP_CANDIDATES` and `GOLDEN_AXES`.
 - [`fbs-serving-vector-kernel`](fbs-serving-vector-kernel.md): its open candidates.

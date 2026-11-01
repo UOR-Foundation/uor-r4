@@ -26,12 +26,16 @@ No measurement. This unit records items. `fbs-snap-sort` records the latest serv
 
   This order does not edit the map. Each new item's done-when updates its own gap.
 - **The roadmap sync's dry run plans 30 body updates and one milestone checklist change that are not this PR's.** That drift is already on main, from earlier merges. `roadmap sync --apply` after this merge applies it too, from main's item files.
+- **The fresh review's first round found that my snap-share history was out of order.**
+  - My draft listed the shares as 25% → 32% → 42% → 46%, under "its share grows while it stays the same". In unit order they are 42% (claude-167), 25% (claude-168), 32% (claude-169) and 46% (claude-177). claude-168 made the snap itself cheaper.
+  - It also found three smaller points: a stale line number for the float slide (copied from `turn-memory-integer`), `pipeline-map.md` scope overlaps the items did not name, and a branch count one short.
+  - All four are fixed at the head.
 - **The snap item's two main candidates are reasoning, not code:** the rearrangement argument for golden roots, and the 2^-36 bound for the exact sign. The item's done-when tests both against the exact oracles, and says to prove or replace each.
 
 ## What worked
 
 Three new items, each with its facts quoted from a file at the base:
-1. **[`fbs-snap-sort`](../../../../roadmap/items/fbs-snap-sort.md)** (serving, laptop). The icosian snap is 46% of a served token: 333 of 725 samples in claude-177's profile on claude-126's export. Its share rose 25% → 32% → 42% → 46% as the kernels around it got faster.
+1. **[`fbs-snap-sort`](../../../../roadmap/items/fbs-snap-sort.md)** (serving, laptop). The icosian snap is 46% of a served token: 333 of 725 samples in claude-177's profile on claude-126's export. Its share went 42% (claude-167), 25% (claude-168, which made the snap itself cheaper), 32% (claude-169) and 46% (claude-177), rising as the kernels around it got faster.
    - **Where the time likely goes:** 17 exact comparisons in series, each branching on the data, plus bounds left from the multiply ban.
    - **Candidates:** sort the magnitudes and keep at most three golden roots; one fixed-point product for the exact sign.
    - **Bar:** exact against both oracles and an exhaustive 83,521-query sweep, byte-identical replies, the serving audit, and an alternating `fbs-toks --parts` A/B.

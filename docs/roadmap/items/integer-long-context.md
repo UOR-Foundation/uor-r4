@@ -18,7 +18,7 @@ The pipeline map's gap 6: "The serving session cannot slide its 192-token window
 **What is true now:**
 - **The integer session stops.** Every served step returns `StackError::ContextFull { context }` once the session holds its `context` tokens (`stack/session.rs`). `fbs-toks` times a 128-token prefill and 64 decode steps, which is all 192.
 - **Training sees 192-token blocks.** It cuts each document's targets into back-to-back chunks of 192 from its `<|bos|>`, and a row of a full chunk sees from that chunk's start (`hamilton_sheet.rs:1351–1360`, as `turn-memory-integer` records it).
-- **The float greedy decode slides** over the last 192 tokens (`in_space_long.rs:1433`), and reads no reply table once the prompt has slid out (`turn-memory-integer`).
+- **The float greedy decode slides** over the last 192 tokens (`decode_reply` in `in_space_long.rs`: `ids.len().saturating_sub(SHEET_CONTEXT)`), and reads no reply table once the prompt has slid out (`turn-memory-integer`).
 - So the trained model, its float decode and its integer session follow three different rules past 192.
 
 The map's "the integer runtime has no look-back" is out of date: the Hamming read's copy and type heads are served (claude-194, claude-195). Their parity with the float read is [`integer-hamming-read`](integer-hamming-read.md)'s, which this item depends on.
@@ -42,8 +42,8 @@ The trunk's recurrence makes (c) the geometry's own answer, which is why long co
 
 ## How to start
 
-- **Read:** `stack/session.rs` where `ContextFull` is returned; `in_space_long.rs` near line 1433 (the slide); `hamilton_sheet.rs:1351–1360` (training's blocks); [`turn-memory-integer`](turn-memory-integer.md)'s notes on the window; the pipeline map's stages 5 and 8.
-- **Before claiming:** `integer-hamming-read`, `turn-memory-integer`, `point-key-integer` and `integer-nearest-readout` all edit `stack/session.rs`. Check that no open order holds it.
+- **Read:** `stack/session.rs` where `ContextFull` is returned; `decode_reply` in `in_space_long.rs` (the slide); `hamilton_sheet.rs:1351–1360` (training's blocks); [`turn-memory-integer`](turn-memory-integer.md)'s notes on the window; the pipeline map's stages 5 and 8.
+- **Before claiming:** `integer-hamming-read`, `turn-memory-integer`, `point-key-integer` and `integer-nearest-readout` all edit `stack/session.rs`, and many open items list `docs/model/pipeline-map.md`. Check that no open order holds either.
 
 ## Rules that apply
 

@@ -49,6 +49,7 @@ The pipeline map's gap 9: "Scale caps, with one data point." Every reply result 
 
 - **Read:** claude-152's and claude-153's REPORTs (the width-256 and width-512 fits); `one-model-end-to-end`'s protocol sheet (`docs/harness/prep/one-model-end-to-end-protocol-2026-10-29.md`) for the arms and the panel; the pipeline map's stages 1, 4 and 7.
 - **Throughput first:** a short probe projects each arm's wall time before the real run (the probe ladder, `run-claude` part 4).
+- **Before claiming:** many open items list `docs/model/pipeline-map.md`, and `one-model-end-to-end` writes `float-training.md`. Check that no open order holds either.
 
 ## Rules that apply
 
