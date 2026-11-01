@@ -11,6 +11,8 @@
   "emitted_ptx_admission": "PASS: exactly 4 entries",
   "planted_fifth_entry_rejected": true,
   "negative_ptx_command_and_log_retained": true,
+  "negative_command_erratum_hf_commit": "32b4ad06c04ff680de04ecb5a566d5c43433b176",
+  "negative_command_erratum_readback_verified": true,
   "cuda_driver_execution": "PASS",
   "cuda_cpu_parity": "PASS",
   "driver_corrupt_csr_refusal": "PASS",

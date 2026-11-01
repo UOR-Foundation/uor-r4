@@ -49,3 +49,7 @@ Attempts 1 and 2 are sealed read-only at `local/kimi/cuda-release-1/` and `local
 ## Attempt 1 outcome and retry rule
 
 At `71c84dfa3b083889fb3896886da973354fa87afa`, host oracle and AOT/admission passed with the recorded `compute_120`/`sm_120` build flags, and a planted fifth PTX entry was rejected. The `cuobjdump -arch` output was empty and was not used as architecture evidence. The CUDA test then failed at C++ compilation because three `void* args[]` arrays took addresses of const `count` values. No CUDA parity execution or performance result occurred. Logs and emitted module were pulled to `local/kimi/cuda-release-1/` with SHA-256 verification, the lease was released, and `vast-58641884` was deleted. The retry changes only those three declarations to mutable values, uses a new pushed head and FIT, and writes a new evidence root (`cuda-release-2`).
+
+## Evidence erratum
+
+The original attempt-3 `admission-negative-command.txt` used a non-replayable shorthand. The sealed file was not rewritten. `local/kimi/cuda-release-3-erratum/admission-negative-command-erratum.txt` supplies the actual executed mutation, `printf "\n.visible .entry planted_extra()\n" >> /workspace/uor-r4/evals/cuda-release-3/admission-negative.ptx`, and is preserved separately in the project store at commit `32b4ad06c04ff680de04ecb5a566d5c43433b176` with download checksum verification.
