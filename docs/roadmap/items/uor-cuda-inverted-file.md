@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: false
 depends_on: []
 done_class: host
-scope: [projects/uor-cuda-inverted-file/**, docs/labs/uor-cuda-inverted-file/**, docs/loop/tasks/uor-cuda-inverted-file/kimi-1/**, docs/loop/tasks/uor-cuda-inverted-file/kimi-2/**, docs/harness/prep/uor-cuda-inverted-file-sm120-2026-11-01.md, docs/superpowers/specs/2026-10-31-cuda-inverted-file-package-design.md, docs/superpowers/plans/2026-10-31-cuda-inverted-file-package.md, docs/superpowers/plans/2026-11-01-cuda-public-readiness.md, docs/roadmap/items/uor-cuda-inverted-file.md, docs/roadmap/README.md, docs/roadmap/issues.json]
+scope: [projects/uor-cuda-inverted-file/**, docs/labs/uor-cuda-inverted-file/**, docs/loop/tasks/uor-cuda-inverted-file/kimi-1/**, docs/loop/tasks/uor-cuda-inverted-file/kimi-2/**, docs/loop/tasks/uor-cuda-inverted-file/kimi-3/**, docs/harness/prep/uor-cuda-inverted-file-sm120-2026-11-01.md, docs/harness/prep/uor-cuda-inverted-file-performance-2026-11-01.md, docs/superpowers/specs/2026-10-31-cuda-inverted-file-package-design.md, docs/superpowers/plans/2026-10-31-cuda-inverted-file-package.md, docs/superpowers/plans/2026-11-01-cuda-public-readiness.md, docs/roadmap/items/uor-cuda-inverted-file.md, docs/roadmap/README.md, docs/roadmap/issues.json]
 ---
 
 ## Why it matters
@@ -17,7 +17,7 @@ The CSR bucketed writer and PTX admission gate are the most transferable parts o
 
 ## What is missing
 
-**Host package and single-card CUDA correctness are complete at their declared scopes.** Clean-copy host evidence and one RTX 5090 AOT/Driver API correctness run exist. Performance, tuned full-scan comparisons, additional architectures/drivers, independent replication, and external-consumer validation remain **NOT_RUN** and are required before release or upstream submission.
+**Host correctness, clean-consumer validation, corrected two-card/two-driver measurements, and independent corrected replication are complete at their declared scopes.** Final source `719a9a786` passes 504 correctness rows and 240 records on RTX 5090/580.178.04 and RTX 4090/580.95.05; the independent RTX 5090/595.71.05 rerun also passes with verified evidence. Earlier attempts remain rejected. Only final review and release/outreach preparation remain; no upstream acceptance is inferred.
 
 ## Done when
 

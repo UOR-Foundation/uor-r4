@@ -1,0 +1,57 @@
+{
+  "schema": "uor-r4.cuda-inverted-file-performance-results/1",
+  "date": "2026-11-01",
+  "source": "719a9a7861deb595dfc5269ffec8a5e7e53cb39b",
+  "evidence_status": "VERIFIED_AT_DECLARED_SCOPE",
+  "previous_attempts": "REJECTED_DEFECTIVE_RACE_AND_BENCHMARK_PROTOCOL",
+  "grid": {"v": [64, 256, 1024, 4096], "k": [1, 8, 16], "query_seed": 7, "warmup": 3, "retained_repetitions": 10},
+  "correctness_rows": 504,
+  "measurements_per_card": 240,
+  "per_launch_oracle_checked": true,
+  "complete_caller_warmups": true,
+  "complete_caller_clock_stops_before_oracle": true,
+  "cards": [
+    {
+      "gpu": "NVIDIA GeForce RTX 5090",
+      "compute_capability": "12.0",
+      "driver_release": "580.178.04",
+      "cuda_toolkit": "12.8.93",
+      "hf_store_commit": "acc77e6f8b7f290deb4bab28a549be4083f3c9c4",
+      "median_ms": {
+        "full_scan": {"kernel": 0.109855998, "direct_api": 115.492653, "complete_caller": 115.4072725},
+        "probe": {"kernel": 0.1601440015, "direct_api": 115.677552, "complete_caller": 115.620386}
+      },
+      "probe_over_full_kernel_median_ratio_by_v": {"64": 1.09, "256": 1.69, "1024": 1.76, "4096": 1.81}
+    },
+    {
+      "gpu": "NVIDIA GeForce RTX 4090",
+      "compute_capability": "8.9",
+      "driver_release": "580.95.05",
+      "cuda_toolkit": "12.8.93",
+      "hf_store_commit": "89e10d8b248383b152f2db81cd421e000b7bdf10",
+      "median_ms": {
+        "full_scan": {"kernel": 0.114944, "direct_api": 188.423827, "complete_caller": 188.2719075},
+        "probe": {"kernel": 0.190448001, "direct_api": 188.4467255, "complete_caller": 188.838886}
+      },
+      "probe_over_full_kernel_median_ratio_by_v": {"64": 1.13, "256": 1.73, "1024": 1.98, "4096": 1.90}
+    }
+  ],
+  "all_status_ok": true,
+  "oracle_match": true,
+  "index_match": true,
+  "non_author_replication": {
+    "status": "PASS",
+    "gpu": "NVIDIA GeForce RTX 5090",
+    "driver_release": "595.71.05",
+    "hf_store_commit": "dddfebf8a5ccd006a5f9e0045e1e46b2feeacb82",
+    "correctness_rows": 504,
+    "measurements": 240,
+    "full_scan_kernel_median_ms": 0.1118560025,
+    "probe_kernel_median_ms": 0.1650239975
+  },
+  "external_consumer": "PASS_HOST_ONLY",
+  "serial_fallback_over_4096": "NOT_RUN",
+  "energy": "NOT_RUN",
+  "cross_library_comparison": "NOT_RUN",
+  "upstream_acceptance": "NOT_CLAIMED"
+}

@@ -40,13 +40,25 @@ At source `18a1c8ad79a468025b0e82e79705c7266abac03c`, one RTX 5090 (compute capa
 
 `cuobjdump -arch` produced an empty file and is not cited as architecture proof. Full scan used a CPU-built control CSR; probe used the GPU-built CSR.
 
+## Matched performance on two architectures and drivers
+
+At final source `719a9a7861deb595dfc5269ffec8a5e7e53cb39b`, both cards passed all 504 correctness rows and produced 240 raw measurements with per-launch oracle checks, complete-caller warmups, and complete-caller timing that stops before oracle comparison and bookkeeping. See `gpu-performance-results.json` and `kimi-3/REPORT.md` in `docs/labs/uor-cuda-inverted-file/` and `docs/loop/tasks/uor-cuda-inverted-file/`.
+
+- RTX 5090, driver 580.178.04: full-scan/probe kernel medians 0.109856/0.160144 ms; direct API 115.493/115.678 ms; complete caller 115.407/115.620 ms.
+- RTX 4090, driver 580.95.05: full-scan/probe kernel medians 0.114944/0.190448 ms; direct API 188.424/188.447 ms; complete caller 188.272/188.839 ms.
+
+These are per-card, same-source, same-configuration results, not cross-card or end-to-end speedups. Wrapper overhead dominates the direct and complete-caller scopes. Raw evidence is linked from the report. Earlier measurements at `7badaf6c` and `ae4a6951` are explicitly rejected for publication/protocol/timing defects and are not used for claims.
+
+## Independent corrected replication and clean consumer
+
+At the same source, a non-author rerun on another RTX 5090 (driver 595.71.05) passed all 504 correctness rows and produced 240 records with oracle/index checks and verified source/module/hash manifests. Full-scan/probe kernel medians were 0.111856/0.165024 ms. Evidence: https://huggingface.co/datasets/caseyallard/uor-r4-store/commit/dddfebf8a5ccd006a5f9e0045e1e46b2feeacb82. The final-source external clean-consumer check also passed with identical file hashes and all host checks. See `OUTREACH.md` for release and community-discussion drafts; no upstream submission has been made.
+
 ## NOT_RUN
 
-The laptop still has no `nvcc`; the successful CUDA result came from a leased RTX 5090, not the laptop. The following remain **NOT_RUN**, not passes:
+The laptop still has no `nvcc`; the successful CUDA result came from leased GPUs, not the laptop. The following remain **NOT_RUN**, not passes:
 
-- GPU timing, tuned/end-to-end speedup, occupancy, energy, and comparison counts.
-- Additional architectures, driver versions, independent hardware replication, and external consumers.
-- Kernel-side corrupt-CSR rejection, additional corrupt variants, all-absent CUDA scans, K=0/17, V=1/4096, and concurrent kernels.
+- Energy, other architectures/drivers, and independent external replication beyond the completed corrected check.
+- Kernel-side corrupt-CSR rejection, additional corrupt variants, all-absent CUDA scans, K=0/17, V=1, the >4096 serial fallback, and concurrent kernels.
 - Faiss or any other cross-library comparison.
 
 The original UOR-R4 bucket-writer's historical results are provenance only and are not attributed to this package.

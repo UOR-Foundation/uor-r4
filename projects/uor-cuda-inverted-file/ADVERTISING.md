@@ -1,6 +1,6 @@
 # Before advertising or submitting this CUDA package
 
-**Current decision: do not advertise performance or submit the package upstream yet.** The standalone host suite and clean-copy build pass. Single-card AOT/CUDA correctness now passes on one RTX 5090 at source `18a1c8ad7`: 504/504 rows in each of three byte-identical executions, with identical module hashes after a clean rebuild. GPU timing, tuned comparisons, additional architectures/drivers, and external replication remain **NOT_RUN**. The original UOR-R4 bucket-writer's hardware results are provenance, not results for this package.
+**Evidence gates are complete at their declared scopes; prepare, but do not automatically publish, release and outreach material.** Host and single-card correctness pass. Final corrected measurements at `719a9a78` pass on RTX 5090/580.178.04 and RTX 4090/580.95.05: 504 correctness rows and 240 measurements per card, with per-launch oracle checks, complete-caller warmups, and the corrected clock boundary. The independent corrected RTX 5090/595.71.05 replication also passes with verified source/module/hash manifests. All earlier measurements remain rejected and are not used for claims.
 
 The useful community contribution is the combination of an exact integer inverted-file index and a mechanical PTX instruction/inventory gate. It does not require adopting UOR-R4's model or geometry. That usefulness still needs the following evidence.
 
