@@ -43,6 +43,25 @@ The unit is cancelled if any check fails:
 - **(d) The leading proposal's instrument exists in scope.** `crates/uor-r4-float-train/src/bin/fbs-snapshot.rs` is on the base and in the item's scope.
 - **(e) Nothing else holds the item.** No open order or PR holds it.
 
+### Result: every check passes; the unit goes ahead
+
+- **(a) Passes.** Q5 appears only in claude-245's card and REPORT, claude-246's ORDER and REPORT, and m4-serving.md. Each one names Q5 as unread and leaves its rule to a later card. No card in the task folder registers a rule.
+- **(b) Passes.** claude-246's REPORT (merged in `d305f2d2f`) records Q1 to Q3 HELD with Q4 carried: all 29 tests hold.
+- **(c) Passes.** The set was listed from sealed files only, with `local/claude/claude-247/list-set.jq`. Its inputs:
+  - claude-232's prompts;
+  - R's forced decodes from claude-244's seal;
+  - F′'s teacher-forced rows from claude-243;
+  - each cell's G₁₀ from claude-244's sealed grade.
+
+  The listing reproduces claude-244's (d, d_low) exactly in all six cells. The set holds 184 positions in 169 rows:
+  - 11 on DEV, all on counted windows;
+  - 173 on p-w: 151 counted and 22 on cut windows.
+
+  No trace value was read. The listing does show which side named the reference at each position, a split of the a and b that claude-246 already read. The card discloses it.
+- **(d) Passes, with a gap the card must close.** `fbs-snapshot.rs` is on the base and in scope. But its float readouts apply the Hamming reads and not the turn memory or the nearest readout, and they run on DEV samples or fixed sequences, not on the panel's rows. So a float twin of R on the set's rows has to be built. The card states that as its instrument and scope.
+- **(e) Passes.** The only open PR on the item is this unit's draft, #3496.
+- **Classification: instrument.** Nothing here is a mechanism result. The gap in (d) is an instrument that does not yet exist.
+
 ## Files in scope
 
 - `crates/uor-r4-integer/src/fbs_snapshot.rs`
