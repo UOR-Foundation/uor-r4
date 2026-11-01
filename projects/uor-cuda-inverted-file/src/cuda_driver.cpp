@@ -449,12 +449,13 @@ Status benchmark_scan(const Table& table, const Query& query, std::uint32_t k,
             if (status == Status::Ok) status = uor_inverted_file::cuda::probe(table, query, k, built, result);
         }
         if (status != Status::Ok) return status;
+        const auto end_to_end_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - end_start).count();
         if (!same_result(result, oracle)) return Status::CudaFailure;
         BenchmarkMeasurement measurement = resources;
         measurement.kernel_ms = kernel_ms[iteration - warmup];
         measurement.direct_ms = direct_ms;
-        measurement.end_to_end_ms = std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - end_start).count();
+        measurement.end_to_end_ms = end_to_end_ms;
         measurement.oracle_match = true;
         measurement.oracle_prediction = oracle.prediction;
         measurements.push_back(measurement);

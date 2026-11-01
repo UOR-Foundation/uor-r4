@@ -40,7 +40,7 @@ At source `18a1c8ad79a468025b0e82e79705c7266abac03c`, one RTX 5090 (compute capa
 
 `cuobjdump -arch` produced an empty file and is not cited as architecture proof. Full scan used a CPU-built control CSR; probe used the GPU-built CSR.
 
-## Matched performance on two architectures and drivers
+## REJECTED: first matched-performance attempt (not valid for claims)
 
 At source `7badaf6ccd18fd4ec8768a197b84347c2f138795`, both cards passed all 504 correctness rows and produced 240 raw measurements with per-configuration oracle/index checks, warmup 3 plus 10 retained repetitions, fixed query seed 7, and three timing scopes. See `gpu-performance-results.json` and `kimi-3/REPORT.md` in `docs/labs/uor-cuda-inverted-file/` and `docs/loop/tasks/uor-cuda-inverted-file/`.
 

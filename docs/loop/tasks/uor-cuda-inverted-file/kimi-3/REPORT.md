@@ -37,4 +37,4 @@ Machine-readable summaries are in `docs/labs/uor-cuda-inverted-file/gpu-performa
 
 ## Next decision
 
-A non-author clean-consumer and independent RTX 5090 replication is in progress. Public release and upstream outreach remain on hold until that replication and the final review pass. No NVIDIA issue, performance announcement, or upstream acceptance is claimed.
+The non-author clean-consumer host check passed. Corrected independent GPU replication remains in progress. Public release and upstream outreach remain on hold until that replication and the final review pass. No NVIDIA issue, performance announcement, or upstream acceptance is claimed.
