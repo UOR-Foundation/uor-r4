@@ -58,24 +58,29 @@ claude-237 (#3474) found the stage where the read's two sides part. In D11 mode 
   - The share is (equal − 288) / (judged − 288).
   - The 288 are each cell's sets at t ≤ 17 (2 heads × 8 windows × 18 positions). They keep every earlier position, so they are equal by construction, and every earlier read agrees there.
   - That leaves 2,784 sets past t = 17 per cell, and the bar allows at most 139 unequal.
-  - **The second read's type heads,** the fourth cell, are judged only where every earlier read's sets agree at that position and before it (`compare_hamming_traces`). One differing first-read set makes the rest of its window downstream. So that cell's judged share and downstream count are reported, not barred: its inputs already differ wherever it is not judged.
+  - **The second read's type heads,** the fourth cell, are judged only where every earlier read's sets agree at that position and before it (`compare_hamming_traces`). One differing first-read set makes the rest of its window downstream.
+  - That cell has its own condition. **Either** its judged share past t = 17 is ≥ 0.95, on at least 278 judged sets past t = 17 (10% of 2,784); **or** P2 does not hold.
+  - With fewer judged sets the cell is unmeasured, and the arm cannot meet parity. These heads feed the readout, so a parity call needs them measured.
 
-An arm **meets parity** at a seed when P1 and P2 both hold. **Closing** at one seed only counts as not closing; both seeds' numbers are reported.
+**"Meets" always means at both seeds.**
+- An arm **meets P1** when d ≤ 46 at s1 and at s3, and **meets P2** when all four cells' conditions hold at s1 and at s3.
+- It **meets parity** when it meets P1 and P2.
+- Holding at one seed only is not meeting; both seeds' numbers are reported.
 
 The single tokens reach no read (claude-233: 0 of 4,096 moved), so they are reported only.
 
-**The rows are read in order, and the first that holds applies.** Outside rows 0 and S they are exhaustive.
+**The rows are read in order, and the first that holds applies.** Outside rows 0 and S they are exhaustive: past row B no arm meets parity, K takes every case where some arm still meets P1, and G takes the rest.
 
 | Row | Reading | Decides | Next |
 |---|---|---|---|
 | 0 | **An instrument fault** (§4) | Nothing. | Repair, then rerun. |
-| S | **`I-Copy` fails:** a float copy code differs from the CPU control at a bit whose control value is 10⁻⁶ or more | A second stage remains between the trained read and the float reference. No parity call is made. | Classify the stage (instrument or object), then trace it. The ORDER's stop rule. |
-| P | d11 meets parity at both seeds | **The item's done-when 2 holds on (r-drop)**, against the read as trained. | The same bars on claude-146's checkpoints, done-when 2's named reference, in the next unit. |
-| T | d11 misses, and d11-tie meets parity at both seeds | The remaining gap is the order among ties. | One tie rule for both sides. The trainer takes the integer session's deterministic rule by default, and the checkpoints are checked again. |
-| Q | d11-rounded meets parity at both seeds, and d11-tie does not | The cause is the read's grid in the artifact. | The exporter stores the read on finer grids. |
-| B | only d11-tie-rounded meets parity at both seeds | Both causes. | Both fixes. |
-| K | some arm meets P1 at both seeds, and none meets P2 | Top-1 holds, but the kept sets miss. | A laptop host check of the type heads' codes by coordinate magnitude, as claude-237 checked the copy heads'. |
-| G | no arm meets P1 at both seeds | The snap, ties and grid do not explain the gap. | Taken from d11-tie-rounded's judged differing sets, as claude-235's row F named them. For type-head query flips: training with the D11 forward in the loop (`with_d11_training`, claude-130). |
+| S | **`I-Copy` fails** (§4.7): a d11-rounded copy code differs from the CPU control beyond the arithmetic allowance | A second stage remains between the trained read and the float reference. No parity call is made. | Classify the stage (instrument or object), then trace it. The ORDER's stop rule. |
+| P | d11 meets parity | **The item's done-when 2 holds on (r-drop)**, against the read as trained. | The same bars on claude-146's checkpoints, done-when 2's named reference, in the next unit. |
+| T | d11-tie meets parity | The remaining gap is the order among ties. | One tie rule for both sides. The trainer takes the integer session's deterministic rule by default, and the checkpoints are checked again. |
+| Q | d11-rounded meets parity | The cause is the read's grid in the artifact. | The exporter stores the read on finer grids. |
+| B | d11-tie-rounded meets parity | Both causes. | Both fixes. |
+| K | some arm meets P1 | Top-1 holds, and the kept sets miss or go unmeasured. | A missed cell gets a laptop host check of its codes by coordinate magnitude, as claude-237 checked the copy heads'. An unmeasured fourth cell gets a comparison that feeds both sides the float's first-read outputs. |
+| G | otherwise: no arm meets P1 | The snap, ties and grid do not explain the gap. | Taken from d11-tie-rounded's judged differing sets, as claude-235's row F named them. For type-head query flips: training with the D11 forward in the loop (`with_d11_training`, claude-130). |
 
 **In every row, the REPORT gives:**
 - each arm's d, its top-1 share, its three barred cell shares, and the fourth cell's judged share and downstream count, at both seeds;
@@ -95,19 +100,32 @@ The single tokens reach no read (claude-233: 0 of 4,096 moved), so they are repo
 3. **`I-Negative`, T1 and T2 with the guard set aside.**
    - The job reverses `guard.patch`, the guard's own two hunks and none of the tests (`local/claude/claude-238/guard.patch`, sha256 `f0e91ea6…7d40`, embedded in the job). It then runs T1 and T2 alone.
    - Both must fail by name, in a run of 2 tests, after a build line that shows the test binary was rebuilt.
-   - The job restores the patch and checks that the source is clean. Only then does it run `I-GPU-Tests`, which rebuilds the restored library before anything is measured.
+   - The job restores the patch and checks three things: `git diff --exit-code` is clean, there are no untracked changes to tracked paths, and `HEAD` is the pinned head. Only then does it run `I-GPU-Tests`.
+   - The rebuild is read from each run's build line, not assumed. Both test runs must print `Compiling uor-r4-float-train`.
+   - The measuring binaries are built after the restore, and the job checks the head and the clean tree again before the builds.
    - The reversed source type-checks with the stub nvcc on the laptop (1 Nov).
-4. **`I-Trunk`, the guard does not leak into the trunk.** Each seed's trunk-alone outputs must be byte-identical to claude-233's t_s files:
+4. **`I-Trunk`, the trunk path and the toolchain.** Each seed's trunk-alone outputs must be byte-identical to claude-233's t_s files:
    - `snapshot.json`, and the plain, export and D11 readouts;
    - `compare.json` (`8300b7aa…`, `8196d5f3…`), which carries d = 5 and 11 and claude-233's `artifact_sha256`.
 
-   No read is installed there, so the guard never runs. The check pins the trunk path and the toolchain between claude-233's run head and this one.
-5. **`I-Guard-Effect`, the guard is on the readout's path.** Each seed's d11 readout must differ from claude-233's h_s `readout-d11.json` (`6b3d9d7d…`, `bf34b819…`), which claude-235's d11 arm reproduced byte for byte. If it is identical, the readout never reached `as_trained`.
+   **What it pins:** no read is installed, so the guard never runs here. The check shows the trunk's code path and the pod's toolchain are claude-233's.
+
+   **What it cannot show: a guard that leaks into the trunk.** The ORDER's stop rule read it that way, and this sheet corrects it. The leak check is T2, on the GPU, through the same `with_d11_snaps` that the checkpoint's readout calls: a gate after the read still snaps, and the capture holds only the trunk's gates.
+   - A leak cannot pass for parity. The artifact's trunk gates are snapped, so a trunk left unsnapped after the read would push d far above the bar, into row G.
+   - T2 failing is row 0, which rules row G's reading out.
+5. **`I-Guard-Effect`, a necessary check.** Each seed's d11 readout must differ from claude-233's h_s `readout-d11.json` (`6b3d9d7d…`, `bf34b819…`), which claude-235's d11 arm reproduced byte for byte. An identical readout never reached `as_trained`.
+   - A changed readout does not show that the guard covers the whole read. `I-Copy` on d11-rounded does: every copy code equal to the control computed as trained.
+   - d11's move against claude-235's 694 and 823 is reported in every row.
 6. **`I-Integer`:** each seed's integer trace is byte-identical to claude-235's (`a8dbc19c…`, `cca428db…`). Same artifact, same sequences, same session: the integer side is unchanged.
 7. **`I-Copy`, the reference computes the read as trained** (the ORDER's done-when 3). For d11-rounded at each seed and read, every copy code in the float trace equals the CPU float control (a), queries and keys, and 0 pairs are inconsistent.
-   - (a) reads the artifact's own rotations and its Q12 table, and d11-rounded reads the same rounded values. So its codes can part from (a) only by arithmetic: CPU against the GPU kernel, at most a few ulps.
-   - **A differing bit whose control value is under 10⁻⁶** (the check's first value bin) is classified as that arithmetic. It is counted and reported, and it does not fail the check. A 4-term f32 sum of unit terms rounds by about 2.4 × 10⁻⁷.
-   - **Any differing bit at 10⁻⁶ or more** is row S.
+   - (a) reads the artifact's own rotations and its Q12 table, and d11-rounded reads the same rounded values. So its codes can part from (a) only by arithmetic: the CPU control against the GPU kernel.
+   - **The allowance for that arithmetic, bounded from the format.** A Q12 coordinate is q/4096 with q an i16, so |p| ≤ 8. A unit rotation's output coordinate is a 4-term sum Σ ±r_k p_j with |r_k| ≤ 1.
+     - Rounding four products of at most 8 and three partial sums of at most 16 gives each side an error of at most about 4.8 × 10⁻⁶.
+     - Two sides, plus the f32 normalization of the rotation, put the worst CPU-against-GPU difference near 1.3 × 10⁻⁵.
+   - **A differing bit is arithmetic** when its control value is under 10⁻⁴ (the check's first three value bins, `COPY_VALUE_BINS` edges 10⁻⁶, 10⁻⁵, 10⁻⁴). At most 8 such bits are allowed per seed and read, queries and keys together. They are counted and reported.
+     - Arithmetic flips need a value within about 10⁻⁷ of 0. The expected count is well under one per read, and one flipped vocabulary code counts about twice, as a query and as a key.
+     - A real stage shows as many bits, and at larger values: claude-237's snap moved its 57 to 695 bits per cell at 0.1 or more.
+   - **Row S:** any differing bit at 10⁻⁴ or more, more than 8 under it, or an inconsistent pair. The largest differing value (`max_value`) is reported.
    - d11's counts against (a) are reported too. Its rotations differ from the artifact's by at most 2^-25.
    - `--copy-codes` also re-shows claude-237's (a) = (b) at all 8,192 codes.
 8. **`I-Faults`:**
