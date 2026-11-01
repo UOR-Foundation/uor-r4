@@ -12,21 +12,21 @@ Lab: deepseek. Item: [cpu-training-program](../../../../roadmap/items/cpu-traini
 
 ## What changed
 
-- D84 amends CHARTER §3.5 from absolute GPU-only research compute to GPU-first compute. Only a named, separately scanned CPU program authorized by the owner may run CPU training, evaluation or parity as development research. CPU evidence does not replace a GPU qualification bar without a later owner decision. The program item is marked done because this PR delivers its registration/authority scope; the six child items carry the actual repairs.
+- D84 amends CHARTER §3.5 from absolute GPU-only research compute to GPU-first compute. Only a named, separately scanned CPU program authorized by the owner may run CPU training, evaluation or parity as development research. CPU evidence does not replace a GPU qualification bar without a later owner decision. The program item is marked done because this PR delivers its registration/authority scope; the seven child items carry the actual repairs.
 - AGENTS.md, the hard-rule summary, PM rules, the compute skill, the milestone registry and the live onboarding/model/geometry/start pages now state the same boundary.
 - The CPU training program preserves nine historical family dispositions, including the banned teacher/dense/softmax forms and the old loss-versus-capability negatives.
-- Six child items register the order: exact discrete writer core; discrete reads/counterfactuals/BVG-K; shared-vector forward; lawful shared-vector training; quantization plus exact memory; and a bounded pilot.
-- Roadmap sync created #3501-#3507. This registration PR closes #3507; the six child issues remain open.
+- Seven child items register the order: exact discrete writer core; discrete reads/counterfactuals/BVG-K; shared-vector forward; lawful shared-vector training; quantization plus exact memory; a bounded pilot; and whole-path exact-update/recovery parity.
+- Roadmap sync created #3501-#3507 and #3510. This registration PR closes #3507; the seven child issues remain open.
 
 ## Measurements
 
-This unit runs no model compute. The registration counts are 9 historical families, 6 child implementation items, 7 new roadmap issues (#3501-#3507), and 132 total roadmap items after sync. The local diagnostic readings retained in the program page are labelled as unsealed component ceilings and are not re-run here.
+This unit runs no model compute. The registration counts are 10 historical families, 7 child implementation items, 8 new roadmap issues (#3501-#3507 and #3510), and 133 total roadmap items after sync. The local diagnostic readings retained in the program page are labelled as unsealed component ceilings and are not re-run here.
 
 ## Checks run at the head
 
-- `cargo run -q -p xtask -- roadmap check`: PASS, 132 items.
+- `cargo run -q -p xtask -- roadmap check`: PASS, 133 items.
 - `cargo run -q -p xtask -- roadmap render --check`: PASS, current.
-- `cargo run -q -p xtask -- links`: exit 0; 23,840 links checked, 1,216 pre-existing broken-link reports remain in the repository-wide count.
+- `cargo run -q -p xtask -- links`: exit 0; 23,846 links checked, 1,219 pre-existing broken-link reports remain in the repository-wide count.
 - `cargo test -q -p uor-r4-harness --test lab_registry_cli --test loop_shared_files --test loop_review --test loop_claim --test loop_next`: PASS, 5, 7, 34, 33 and 37 tests.
 - `uor-harness loop gates --full`: PASS, 11/11 green.
 - `uor-harness loop pr-check --local`: PASS. The expected scope advisory names 14 files outside the reused documentation parent, because the new program item does not exist at the merge base; the commit-order and FILEMAP advisories also remain. Owner paths, rule sources, ORDER and REPORT pass.
@@ -45,4 +45,4 @@ No repository skill was invoked. Three fresh-context subagents were used earlier
 
 ## Plain summary
 
-The owner has authorized a scoped CPU research exception. GPU remains the authority, all historical training families keep their recorded dispositions, and six isolated units now give the repair a concrete order. No trainer has been claimed as working yet.
+The owner has authorized a scoped CPU research exception. GPU remains the authority, all historical training families keep their recorded dispositions, and seven isolated units now give the repair a concrete order. No trainer has been claimed as working yet.

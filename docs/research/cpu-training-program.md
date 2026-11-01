@@ -26,6 +26,9 @@ This page is the durable plan behind the `cpu-training-program` roadmap item. It
 | M2 joint reply/context/prototype fit | Joint source, generation, prefix, context and prototype training | Cross-entropy improved 6.199 to 5.339 while complete replies fell 8/512 to 0 | Preserve as the loss-versus-capability negative. Do not restore the objective. |
 | Discrete counterfactual learner | Exact E8 carrier moves, Route/Flock/Relation, A8, BVG-K, Hamilton trunk | Early runs lost admission and ranking; later Stage T/M1 runs reached a passing saved model | Repair first on CPU, beginning with an exact writer/admission oracle, then read, proposal and apply parity. |
 | Shared-vector FBS trunk | Tied 4,096 x 256 token/writer table, SpiralCore/FBS, Hamilton gate, Hamming reads, exact turn memory | Strong next-token fit; incomplete reply openings and new-phrasing generalization remain open | Build a new CPU forward and trainer around this serving-aligned path. |
+| Whole-path/exact-update reference | Sampled native decisions, bounded exact updates, carrier credit and recovery traces | The retained CPU source is a decision-recording reference, not an unbiased gradient or a qualified producer | Reimplement its lawful bounded-update mechanics in the CPU crate and test exact trajectories; do not revive the failed M2 context/prototype recipe. |
+
+The September native geometric model keeps its own re-registration path in [`native-geometric-reregister-hinge`](../roadmap/items/native-geometric-reregister-hinge.md). This CPU program supplies the parity/oracle foundation if that item advances; it does not bypass that item's held status, controls or GPU qualification.
 
 ## Ordered work
 
@@ -58,6 +61,10 @@ Add Hamming reads and exact turn memory, then integer-aware continuation. Compar
 ### 6. CPU pilot and disposition
 
 Run a bounded corpus pilot on the Ryzen 9 9950X only after the component parity gates pass. Report context-tokens/s, target visits/s, peak RSS, resume determinism and complete-reply/fresh-phrasing outcomes. A final disposition report marks every historical family as repaired, superseded, or retained as a rejected configuration, with links to its evidence.
+
+### 7. Whole-path exact updates
+
+Port the historical whole-path decision-recording and bounded legal-update mechanics into the isolated CPU crate after the exact writer exists. Preserve update order, acceptance checks and recovery traces, but do not import the old M2 objective or depend on `uor-r4-training`. This closes the remaining CPU reference path and supplies an exact control for the newer trainers.
 
 ## Why this order
 

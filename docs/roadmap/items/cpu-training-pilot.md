@@ -6,7 +6,7 @@ area: training
 status: ready
 open_to: lab
 needs_gpu: false
-depends_on: [cpu-discrete-training-path, cpu-shared-vector-train, cpu-quantization-exact-memory]
+depends_on: [cpu-discrete-training-path, cpu-shared-vector-train, cpu-quantization-exact-memory, cpu-whole-path-exact-updates]
 notebook: docs/research/notebook/cpu-training.md
 done_class: host
 scope: [crates/uor-r4-cpu-train/**, Cargo.toml, Cargo.lock, docs/harness/prep/cpu-training-pilot*, docs/loop/tasks/cpu-training-pilot/**, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-training-pilot.md]

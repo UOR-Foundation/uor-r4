@@ -9,7 +9,7 @@ needs_gpu: false
 depends_on: []
 notebook: docs/research/notebook/cpu-training.md
 done_class: host
-scope: [CHARTER.md, AGENTS.md, PLAN.md, docs/rules/changes.md, docs/rules/README.md, docs/rules/decision-map.md, docs/integration/DECISIONS.md, docs/integration/project-track.md, docs/contributing/HARD-RULES.md, docs/harness/pm-rules.md, docs/harness/milestones.json, docs/harness/skills/cost-and-compute-admission/SKILL.md, docs/geometry/README.md, docs/model/gpu-and-cuda.md, docs/labs/README.md, docs/labs/compute.md, docs/labs/session-goal.md, docs/products/desktop-client.md, docs/products/web-client.md, docs/start/faq.md, docs/start/glossary.md, docs/start/where-were-going.md, docs/research/cpu-training-program.md, docs/research/notebook/cpu-training.md, docs/research/notebook/README.md, docs/SUMMARY.md, docs/roadmap/items/cpu-training-program.md, docs/roadmap/items/cpu-discrete-writer-core.md, docs/roadmap/items/cpu-discrete-training-path.md, docs/roadmap/items/cpu-shared-vector-forward.md, docs/roadmap/items/cpu-shared-vector-train.md, docs/roadmap/items/cpu-quantization-exact-memory.md, docs/roadmap/items/cpu-training-pilot.md, docs/loop/tasks/cpu-training-program/**, docs/roadmap/issues.json]
+scope: [CHARTER.md, AGENTS.md, PLAN.md, docs/rules/changes.md, docs/rules/README.md, docs/rules/decision-map.md, docs/integration/DECISIONS.md, docs/integration/project-track.md, docs/contributing/HARD-RULES.md, docs/harness/pm-rules.md, docs/harness/milestones.json, docs/harness/skills/cost-and-compute-admission/SKILL.md, docs/geometry/README.md, docs/geometry/vsa-and-hamming.md, docs/mechanisms/vsa.md, docs/model/gpu-and-cuda.md, docs/labs/README.md, docs/labs/compute.md, docs/labs/session-goal.md, docs/products/desktop-client.md, docs/products/web-client.md, docs/start/faq.md, docs/start/glossary.md, docs/start/where-were-going.md, docs/research/cpu-training-program.md, docs/research/notebook/cpu-training.md, docs/research/notebook/README.md, docs/SUMMARY.md, docs/roadmap/items/cpu-training-program.md, docs/roadmap/items/cpu-discrete-writer-core.md, docs/roadmap/items/cpu-discrete-training-path.md, docs/roadmap/items/cpu-shared-vector-forward.md, docs/roadmap/items/cpu-shared-vector-train.md, docs/roadmap/items/cpu-quantization-exact-memory.md, docs/roadmap/items/cpu-training-pilot.md, docs/roadmap/items/cpu-whole-path-exact-updates.md, docs/loop/tasks/cpu-training-program/**, docs/roadmap/issues.json]
 ---
 
 ## Why it matters
@@ -28,19 +28,20 @@ D84 now permits named CPU research, and this item registers the ordered repairs:
 4. [`cpu-shared-vector-train`](cpu-shared-vector-train.md): lawful rank-margin training on that forward.
 5. [`cpu-quantization-exact-memory`](cpu-quantization-exact-memory.md): integer-aware continuation, Hamming reads and exact turn memory.
 6. [`cpu-training-pilot`](cpu-training-pilot.md): bounded workstation pilot, performance and complete-reply/fresh-phrasing evidence.
+7. [`cpu-whole-path-exact-updates`](cpu-whole-path-exact-updates.md): exact bounded legal-update and recovery parity without importing the failed M2 objective.
 
 The family-by-family disposition and the rationale for this order are in [the CPU training repair program](../../research/cpu-training-program.md).
 
 ## Done when
 
 - D84 is recorded consistently in the charter, onboarding, hard rules, decision index and harness rule registry.
-- The six child items are registered with dependencies and non-overlapping implementation scopes.
+- The seven child items are registered with dependencies and non-overlapping implementation scopes.
 - The program preserves the CPU/GPU evidence boundary, historical negative classifications and Claude's active serving paths.
 - Roadmap validation/render, owner-path approval checks and a fresh exact-head review pass.
 
 ## Resolution
 
-D84 and the six child items were registered on 1 November 2026 by `deepseek-1`. This item's registration scope is complete; implementation continues in the child items and is not implied by this close.
+D84 and the seven child items were registered on 1 November 2026 by `deepseek-1`. This item's registration scope is complete; implementation continues in the child items and is not implied by this close.
 
 ## Cancel if
 

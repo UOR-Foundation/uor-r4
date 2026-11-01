@@ -1,6 +1,6 @@
 # Vector-symbolic binding (hypervector codes)
 
-**Status: PARKED.** Trained into the older prose learner, the idea lowered held-out bits per byte by 0.014 to 0.023 on 2 seeds and 2 slices. But that run used a CPU learner (the record says it belonged on the laptop; since 12 October the owner rule D24 bars CPU model compute), and the variants that tried to add geometry failed. The idea is not on the current discrete path. It stays open: what would reopen it is listed below ([native test](../../archive/labs/vsa-native-test-2026-10-09/README.md)).
+**Status: PARKED.** Trained into the older prose learner, the idea lowered held-out bits per byte by 0.014 to 0.023 on 2 seeds and 2 slices. But that run used a historical CPU learner that D84 does not admit, and the variants that tried to add geometry failed. The idea is not on the current discrete path. It stays open: what would reopen it is listed below ([native test](../../archive/labs/vsa-native-test-2026-10-09/README.md)).
 
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run, **hypothesis** means an untested idea (see [the charter](../../CHARTER.md), section 4.6). Unfamiliar project terms (K16, A8, admission, NOT_RUN) are in the [glossary](../start/glossary.md).
 
@@ -39,7 +39,7 @@ The context vector bundles an associative transition context and up to four "ort
 | 1, root | A hash of the word's icosian root (a point from a 120-element rotation group) | at most 120 |
 | 2, learned | The root code XOR a hash of a 5-dimensional readout, rebuilt every 1,000 steps | 4,096 |
 
-**Rule check.** The bit operations contain no softmax and no matrix multiplication. The Q15 scale multiply is a runtime product that has not been shown to be table-only, so it is **not audited** against the zero-multiplier serving rule (D11). The host learner that trained the scale was not audited against D23 here. The 9 October run used a CPU learner (the record says it was meant to run on the laptop, owner rule #2095). D24, dated 12 October, now bars CPU model compute. Binary 4,096-bit codes are not part of the current discrete path (D32). D32 welcomes XOR and Hamming comparison on ternary and E8 labels as one component of a model, not as a Hamming-only model.
+**Rule check.** The bit operations contain no softmax and no matrix multiplication. The Q15 scale multiply is a runtime product that has not been shown to be table-only, so it is **not audited** against the zero-multiplier serving rule (D11). The host learner that trained the scale was not audited against D23 here. The 9 October run used a historical CPU learner that is not admitted by D84 and remains blocked by its own evidence and the current mechanism rules. Binary 4,096-bit codes are not part of the current discrete path (D32). D32 welcomes XOR and Hamming comparison on ternary and E8 labels as one component of a model, not as a Hamming-only model.
 
 ## What has been tried
 
