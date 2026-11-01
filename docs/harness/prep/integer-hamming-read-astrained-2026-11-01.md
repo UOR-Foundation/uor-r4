@@ -47,7 +47,7 @@ claude-237 (#3474) found the stage where the read's two sides part. In D11 mode 
   - the sets judged and equal;
   - ties, query flips, key flips, both, and instrument faults;
   - the type-head sets downstream of a stream-read difference.
-- **The copy codes:** `fbs-toks ARTIFACT --copy-codes trace-ARM.json trace-integer.json copy-codes.json` for d11 and d11-rounded at each seed (`I-Copy`). Both tie arms share their parameter arm's codes.
+- **The copy codes:** `fbs-toks ARTIFACT --copy-codes trace-ARM.json trace-integer.json copy-codes.json` for all four arms at each seed. `I-Copy` is read on d11-rounded. Each tie arm's codes must equal its parameter arm's, which rows T and B depend on.
 - **The timing, a reading, not a bar:** `fbs-toks ARTIFACT --context-sweep` on h1's artifact, as claude-235 ran it. The artifact is unchanged, so this repeats claude-235's reading under today's load.
 
 ## 3. Bars and decision table
@@ -59,7 +59,7 @@ claude-237 (#3474) found the stage where the read's two sides part. In D11 mode 
   - The 288 are each cell's sets at t ≤ 17 (2 heads × 8 windows × 18 positions). They keep every earlier position, so they are equal by construction, and every earlier read agrees there.
   - That leaves 2,784 sets past t = 17 per cell, and the bar allows at most 139 unequal.
   - **The second read's type heads,** the fourth cell, are judged only where every earlier read's sets agree at that position and before it (`compare_hamming_traces`). One differing first-read set makes the rest of its window downstream.
-  - That cell has its own condition. **Either** its judged share past t = 17 is ≥ 0.95, on at least 278 judged sets past t = 17 (10% of 2,784); **or** P2 does not hold.
+  - That cell has its own condition. **Either** its judged share past t = 17, (equal − 288) / (judged − 288), is ≥ 0.95 on at least 278 judged sets past t = 17 (10% of 2,784); **or** P2 does not hold.
   - With fewer judged sets the cell is unmeasured, and the arm cannot meet parity. These heads feed the readout, so a parity call needs them measured.
 
 **"Meets" always means at both seeds.**
@@ -84,6 +84,7 @@ The single tokens reach no read (claude-233: 0 of 4,096 moved), so they are repo
 
 **In every row, the REPORT gives:**
 - each arm's d, its top-1 share, its three barred cell shares, and the fourth cell's judged share and downstream count, at both seeds;
+- every arm that meets parity, not only the first row's;
 - the guard's move against claude-235's d11, which was d = 694 and 823. The move test is claude-227's: d(old) − d(new) > 2√(d(old) + d(new)).
 
 ## 4. Instrument checks (any failure is row 0, except `I-Copy`, which is row S)
@@ -100,7 +101,8 @@ The single tokens reach no read (claude-233: 0 of 4,096 moved), so they are repo
 3. **`I-Negative`, T1 and T2 with the guard set aside.**
    - The job reverses `guard.patch`, the guard's own two hunks and none of the tests (`local/claude/claude-238/guard.patch`, sha256 `f0e91ea6…7d40`, embedded in the job). It then runs T1 and T2 alone.
    - Both must fail by name, in a run of 2 tests, after a build line that shows the test binary was rebuilt.
-   - The job restores the patch and checks three things: `git diff --exit-code` is clean, there are no untracked changes to tracked paths, and `HEAD` is the pinned head. Only then does it run `I-GPU-Tests`.
+   - The job restores the patch and checks that `git diff --exit-code HEAD` is clean (worktree and index against the head), that `git status --porcelain --untracked-files=no` is empty, and that `HEAD` is the pinned head. Only then does it run `I-GPU-Tests`.
+   - Untracked files are left out because a test may write build scratch inside the source tree. A patch reversal never creates one.
    - The rebuild is read from each run's build line, not assumed. Both test runs must print `Compiling uor-r4-float-train`.
    - The measuring binaries are built after the restore, and the job checks the head and the clean tree again before the builds.
    - The reversed source type-checks with the stub nvcc on the laptop (1 Nov).
@@ -110,7 +112,7 @@ The single tokens reach no read (claude-233: 0 of 4,096 moved), so they are repo
 
    **What it pins:** no read is installed, so the guard never runs here. The check shows the trunk's code path and the pod's toolchain are claude-233's.
 
-   **What it cannot show: a guard that leaks into the trunk.** The ORDER's stop rule read it that way, and this sheet corrects it. The leak check is T2, on the GPU, through the same `with_d11_snaps` that the checkpoint's readout calls: a gate after the read still snaps, and the capture holds only the trunk's gates.
+   **What it cannot show: a guard that leaks into the trunk.** The ORDER's stop rule first read it that way; its line is amended to match (1 Nov), and the job's behaviour is unchanged. The leak check is T2, on the GPU, through the same `with_d11_snaps` that the checkpoint's readout calls: a gate after the read still snaps, and the capture holds only the trunk's gates.
    - A leak cannot pass for parity. The artifact's trunk gates are snapped, so a trunk left unsnapped after the read would push d far above the bar, into row G.
    - T2 failing is row 0, which rules row G's reading out.
 5. **`I-Guard-Effect`, a necessary check.** Each seed's d11 readout must differ from claude-233's h_s `readout-d11.json` (`6b3d9d7d…`, `bf34b819…`), which claude-235's d11 arm reproduced byte for byte. An identical readout never reached `as_trained`.
@@ -123,9 +125,10 @@ The single tokens reach no read (claude-233: 0 of 4,096 moved), so they are repo
      - Rounding four products of at most 8 and three partial sums of at most 16 gives each side an error of at most about 4.8 × 10⁻⁶.
      - Two sides, plus the f32 normalization of the rotation, put the worst CPU-against-GPU difference near 1.3 × 10⁻⁵.
    - **A differing bit is arithmetic** when its control value is under 10⁻⁴ (the check's first three value bins, `COPY_VALUE_BINS` edges 10⁻⁶, 10⁻⁵, 10⁻⁴). At most 8 such bits are allowed per seed and read, queries and keys together. They are counted and reported.
-     - Arithmetic flips need a value within about 10⁻⁷ of 0. The expected count is well under one per read, and one flipped vocabulary code counts about twice, as a query and as a key.
-     - A real stage shows as many bits, and at larger values: claude-237's snap moved its 57 to 695 bits per cell at 0.1 or more.
-   - **Row S:** any differing bit at 10⁻⁴ or more, more than 8 under it, or an inconsistent pair. The largest differing value (`max_value`) is reported.
+     - **Why the cap is loose:** claude-237's snapped control (a′) equalled the GPU trace on every query and key in all eight cells, about 1.2 million sample bits, with no arithmetic flip.
+     - The sequences' tokens never repeat across the 8 × 192 positions. So one flipped code bit counts twice, once as a query and once as a key, and the cap allows 4 flipped code bits.
+     - A real stage shows as many bits, and at larger values: claude-237's snap moved 57 to 695 bits per cell at 0.1 or more.
+   - **Row S:** any differing bit at 10⁻⁴ or more, more than 8 under it, or an inconsistent pair. `float.query` and `float.key` each report their highest non-empty value bin.
    - d11's counts against (a) are reported too. Its rotations differ from the artifact's by at most 2^-25.
    - `--copy-codes` also re-shows claude-237's (a) = (b) at all 8,192 codes.
 8. **`I-Faults`:**
@@ -178,7 +181,7 @@ The single tokens reach no read (claude-233: 0 of 4,096 moved), so they are repo
 
 8. The stored output fetched, and checked against its sums.
 9. Per seed, the integer trace (`I-Integer`), then the eight comparisons (`I-Faults`).
-10. The copy codes for d11 and d11-rounded (`I-Copy`).
+10. The copy codes for all four arms (`I-Copy` on d11-rounded).
 11. The context sweep on h1's artifact.
 12. The rows, read from the stored comparisons.
 
@@ -190,6 +193,10 @@ The single tokens reach no read (claude-233: 0 of 4,096 moved), so they are repo
 - **P2:** per cell and seed, 2,784 sets past t = 17, against at most 139 unequal.
   - claude-235's d11 counted 2,741 to 2,774 unequal sets past t = 17 in each barred cell, so the bar separates the snapped reference from parity by an order of magnitude.
   - Copy-head cells can only fall short through ties or flips at codes (a) and (b) agree on (`I-Copy`, claude-237). So a copy cell below 0.95 in d11, with its tie arm above it, reads directly as row T.
+  - **The fourth cell's floor tightens the first read's bar.** In a window, the second read's type-head sets past t = 17 are judged only up to the first position where any first-read set differs: 2 × (that position − 18) of them.
+    - With copy heads exact, a first-read type-head difference rate p per position gives a mean judged run of about 1/(2p) positions.
+    - Reaching 278 judged sets over 8 windows needs a mean run of about 17.4, so p ≤ about 3%. At the bar's 5% the expected count is about 80.
+    - **So row P needs the first read's type-head sets about 97% equal, not 95%.** An arm between them lands in row K, with the fourth cell unmeasured. Row K's next step, a comparison that feeds both sides the float's first-read outputs, measures it then.
 - **`I-Negative`'s power:**
   - T1 asserts that the D11 and export outputs equal the pass-through's bit for bit, on off-icosian rotations that every snap moves. It also asserts a plain hook gate under D11 differs from the pass-through, so it cannot pass vacuously.
   - T2 counts the snap captures: 1 with the guard, 5 without (the read's four rotations and the trunk's gate).
@@ -211,8 +218,41 @@ The single tokens reach no read (claude-233: 0 of 4,096 moved), so they are repo
 
 ## 9. Non-author TEST FITNESS review
 
-Pending.
+**Round 1** (a fresh reviewer, at `3ff95f8b5`): NOT FIT, six findings, all taken at `ab1f713ec`.
+1. A reachable result matched no row. Now "meets" means at both seeds, K is "some arm meets P1", and G is otherwise (§3).
+2. `I-Trunk` cannot detect a guard leak, since no read is installed there. It is now named for what it pins, T2 is named as the leak check, and the sheet argues why a leak cannot pass P (§4.4).
+3. The second read's type heads were unbarred. They now carry a bar with a floor of 278 judged sets (§3).
+4. `I-Copy`'s allowance assumed unit terms. It is now bounded from the Q12 format, with a cap of 8 bits (§4.7).
+5. `I-Guard-Effect` is necessary, not sufficient. The sheet now says so, and names `I-Copy` as the sufficient check (§4.5).
+6. The clean-source check after the restore was tightened (§4.3).
+
+**Round 2** (a fresh reviewer, at `ab1f713ec`): **FIT**. All six fixes hold.
+- **It confirmed:**
+  - the arithmetic bound: the kernel contracts to FMA, `--fmad` is unset, and the worst CPU-against-GPU difference is about 1.5 × 10⁻⁵;
+  - that the sequences' tokens never repeat across positions.
+- **Its six points, all taken before the run:**
+  1. §7 now states that the fourth cell's floor needs the first read's type heads about 97% equal.
+  2. `max_value` belongs to the control-against-integer record, so the bins are reported instead.
+  3. A sentence that contradicted the bound was replaced with claude-237's evidence.
+  4. The clean check is now against `HEAD`.
+  5. The ORDER's stop-rule line is amended.
+  6. The copy codes are checked on all four arms.
+
+TEST FITNESS: FIT
 
 ## 10. Pre-run review
 
-Pending.
+**A fresh reviewer, at `ab1f713ec`: GO.**
+- **It checked:**
+  - the CLI forms against `fbs-snapshot.rs` and `fbs-compare.rs`;
+  - that the trunk copies pass the read checks;
+  - `I-Negative`: the patch reverses cleanly, each filter matches one test, the greps look in the right streams, and the restore comes before the verdict;
+  - that the five named tests exist with `cfg(feature = "cuda")`;
+  - `I-Guard-Effect`'s direction;
+  - that every exit seals the output.
+- **Its points:**
+  1. **A relative patch path would fail after the data fetches.** The job now resolves it with `realpath`.
+  2. **`I-Trunk`'s byte identity, ruled out on the laptop:**
+     - since claude-233's run head, every new serialized field is in a new struct (the trace and copy-code types);
+     - the only commit touching the trunk's readout path is claude-235's merge, whose run reproduced claude-233's readout byte for byte.
+  3. **The lease:** `uor-pod status` shows 0 pods running, and Vast's cheapest verified 5090 at $0.563/h.

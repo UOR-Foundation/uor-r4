@@ -74,5 +74,5 @@ Class: **instrument** (the reference's arithmetic). The unit goes ahead.
 
 This is stop and decide, never stop and wait.
 - **T1 cannot hold bit for bit:** decide by a decision review whether the pass-through differs from training's path. Do not loosen the test.
-- **The trunk-only d moves:** the guard leaks into the trunk. That is an instrument fault, and the run counts nothing.
+- **The trunk-only d moves:** the trunk's path or the pod's toolchain is not claude-233's. That is an instrument fault, and the run counts nothing. Amended 1 Nov after the prep sheet's FIT: this line first read it as the guard leaking into the trunk. No read is installed there, so the guard never runs; T2 is the leak check.
 - **The new float trace differs from (a):** a second stage remains. Classify it, then trace it; do not call it parity.
