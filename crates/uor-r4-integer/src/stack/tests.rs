@@ -6205,6 +6205,9 @@ fn the_decision_trace_refuses_what_is_off_rs_path() {
     let mut stepped = model.session();
     stepped.step_native(0).expect("step");
     assert!(stepped.set_decision_trace(&none).is_err(), "a session that has stepped");
+    let mut timed = model.session();
+    timed.set_decision_trace(&none).expect("a trace");
+    assert!(timed.measure_fbs_step_stages(0, &mut Vec::new()).is_err(), "a timed step of a traced session");
 
     let (context, lanes) = (model.shape().context, model.shape().lanes());
     let bucket = |step, layer, lane, entry| ForcedBucket { step, layer, lane, entry };
@@ -6222,6 +6225,7 @@ fn the_decision_trace_refuses_what_is_off_rs_path() {
         with(vec![], vec![code(0, 1, 4, CodeRole::Query)]),
         with(vec![], vec![code(0, 1, 0, CodeRole::Key)]),
         with(vec![], vec![code(2, 2, 1, CodeRole::Key), code(2, 2, 1, CodeRole::Key)]),
+        with(vec![], vec![code(3, 1, 0, CodeRole::Query), code(3, 1, 0, CodeRole::Query)]),
     ];
     for force in &outside {
         refused(&bytes, force, &format!("{force:?}"));

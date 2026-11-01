@@ -3572,6 +3572,13 @@ fn stack_step_fbs_timed(
     ns: &mut Vec<u64>,
     parts: bool,
 ) -> Result<u32, StackError> {
+    // The timed step records no decisions, so a traced session's later steps would fall out of
+    // line with its window.
+    if session.decision.is_some() {
+        return Err(StackError::Shape(
+            "a traced session steps untimed: the timed step does not record the decision trace",
+        ));
+    }
     use std::time::Instant;
     let lap = |since: &mut Instant, ns: &mut Vec<u64>| {
         let now = Instant::now();

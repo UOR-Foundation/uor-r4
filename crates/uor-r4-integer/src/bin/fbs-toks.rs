@@ -594,7 +594,8 @@ fn forced(
         let text = serde_json::to_vec(&record).map_err(|e| e.to_string())?;
         write_new_file(std::path::Path::new(path), &text).map_err(|e| format!("{path}: {e}"))?;
         line["decision_trace"] = json!(path);
-        line["decision_trace_sha256"] = json!(hex::encode(<sha2::Sha256 as sha2::Digest>::digest(&text)));
+        line["decision_trace_sha256"] =
+            json!(hex::encode(<sha2::Sha256 as sha2::Digest>::digest(&text)));
     }
     println!("{line}");
     Ok(())
@@ -1400,7 +1401,9 @@ mod tests {
             let vocab = model.shape().vocab;
             let mut checked = 0;
             for prompt in prompts(vocab).into_iter().filter(|p| p.len() <= 4) {
-                let p0 = forced_picks(&model, &prompt, &[0], None).expect("forced").picks[0];
+                let p0 = forced_picks(&model, &prompt, &[0], None)
+                    .expect("forced")
+                    .picks[0];
                 let reference: Vec<u32> = (1..=3)
                     .map(|k| ((p0 as usize + k) % vocab) as u32)
                     .collect();
@@ -1513,41 +1516,80 @@ mod tests {
             let none = DecisionForceWindow::default();
             let reference = [3u32, 5, 7];
             let mut checked = 0;
-            for prompt in prompts(model.shape().vocab).into_iter().filter(|p| p.len() <= 4) {
+            for prompt in prompts(model.shape().vocab)
+                .into_iter()
+                .filter(|p| p.len() <= 4)
+            {
                 let plain = forced_picks(&model, &prompt, &reference, None).expect("forced");
-                let traced = forced_picks(&model, &prompt, &reference, Some(&none)).expect("traced");
-                assert_eq!(forced_row(1, &traced), forced_row(1, &plain), "prompt {prompt:?}");
+                let traced =
+                    forced_picks(&model, &prompt, &reference, Some(&none)).expect("traced");
+                assert_eq!(
+                    forced_row(1, &traced),
+                    forced_row(1, &plain),
+                    "prompt {prompt:?}"
+                );
                 assert_eq!(plain.steps, None);
                 let steps = traced.steps.expect("the trace");
                 let first = prompt.len() - 1;
-                assert_eq!(steps.len(), first + plain.picks.len(), "a step for each id fed");
+                assert_eq!(
+                    steps.len(),
+                    first + plain.picks.len(),
+                    "a step for each id fed"
+                );
                 for (t, step) in steps.iter().enumerate() {
                     let Some(nearest) = &step.nearest else {
-                        assert!(t < first, "prompt {prompt:?} step {t}: the nearest from the prompt's last step");
+                        assert!(
+                            t < first,
+                            "prompt {prompt:?} step {t}: the nearest from the prompt's last step"
+                        );
                         continue;
                     };
                     let i = t - first;
-                    let top = model.whole_table_nearest_two(&nearest.query_q12).expect("top two");
+                    let top = model
+                        .whole_table_nearest_two(&nearest.query_q12)
+                        .expect("top two");
                     assert_eq!(
-                        (nearest.pick, nearest.score_q12, nearest.runner_up, nearest.runner_score_q12),
+                        (
+                            nearest.pick,
+                            nearest.score_q12,
+                            nearest.runner_up,
+                            nearest.runner_score_q12
+                        ),
                         (top[0].0, top[0].1, top[1].0, top[1].1),
                         "prompt {prompt:?} step {t}"
                     );
-                    assert_eq!((nearest.pick, nearest.runner_up), (plain.picks[i], plain.runner_up[i]));
+                    assert_eq!(
+                        (nearest.pick, nearest.runner_up),
+                        (plain.picks[i], plain.runner_up[i])
+                    );
                 }
                 let mut own = DecisionForceWindow::default();
                 for (step, s) in steps.iter().enumerate() {
                     for (layer, l) in s.layers.iter().enumerate() {
-                        own.buckets.extend(l.entry.iter().enumerate().map(|(lane, &entry)| ForcedBucket { step, layer, lane, entry }));
+                        own.buckets
+                            .extend(l.entry.iter().enumerate().map(|(lane, &entry)| {
+                                ForcedBucket {
+                                    step,
+                                    layer,
+                                    lane,
+                                    entry,
+                                }
+                            }));
                     }
                 }
-                let forced = forced_picks(&model, &prompt, &reference, Some(&own)).expect("forced to its own");
-                assert_eq!(forced_row(1, &forced), forced_row(1, &plain), "prompt {prompt:?}");
+                let forced = forced_picks(&model, &prompt, &reference, Some(&own))
+                    .expect("forced to its own");
+                assert_eq!(
+                    forced_row(1, &forced),
+                    forced_row(1, &plain),
+                    "prompt {prompt:?}"
+                );
                 assert_eq!(forced.steps.as_ref(), Some(&steps), "prompt {prompt:?}");
                 checked += 1;
             }
             assert!(checked >= 3, "{checked}");
-            let refused = forced_picks(&artifact(true), &[1], &[2], Some(&none)).expect_err("snapped");
+            let refused =
+                forced_picks(&artifact(true), &[1], &[2], Some(&none)).expect_err("snapped");
             assert!(refused.contains("the decision trace"), "{refused}");
         }
 
@@ -1571,12 +1613,15 @@ mod tests {
                     .collect();
                 serde_json::to_vec(&json!({ "schema": schema, "windows": windows })).expect("json")
             };
-            let windows = force_windows(&file(DECISION_FORCE_SCHEMA, &[9]), &rows).expect("one row");
+            let windows =
+                force_windows(&file(DECISION_FORCE_SCHEMA, &[9]), &rows).expect("one row");
             assert_eq!(windows.keys().copied().collect::<Vec<_>>(), [9]);
             assert!(force_windows(&file("uor-r4.decision-force/0", &[9]), &rows).is_err());
-            let twice = force_windows(&file(DECISION_FORCE_SCHEMA, &[9, 9]), &rows).expect_err("twice");
+            let twice =
+                force_windows(&file(DECISION_FORCE_SCHEMA, &[9, 9]), &rows).expect_err("twice");
             assert!(twice.contains("named twice"), "{twice}");
-            let unknown = force_windows(&file(DECISION_FORCE_SCHEMA, &[5]), &rows).expect_err("no row");
+            let unknown =
+                force_windows(&file(DECISION_FORCE_SCHEMA, &[5]), &rows).expect_err("no row");
             assert!(unknown.contains("names no prompt"), "{unknown}");
         }
     }
