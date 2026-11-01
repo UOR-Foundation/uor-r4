@@ -147,7 +147,7 @@ Status benchmark_file_sha256(const std::string& path, std::string& digest) {
     std::ifstream input(path, std::ios::binary);
     if (!input) return Status::InvalidArgument;
     const std::vector<char> bytes((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-    if (!input.eof()) return Status::InvalidArgument;
+    if (input.bad()) return Status::InvalidArgument;
     digest = sha256_hex(reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size());
     return Status::Ok;
 }
