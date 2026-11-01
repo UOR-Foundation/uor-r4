@@ -777,9 +777,10 @@ impl HammingRead {
 /// claude-238: runs `f`, the read's rotations, as training ran them, through the gate hook's
 /// pass-through (`HamiltonActive`) and never its D11 or export snap. The artifact serves the
 /// rotations raw (`lut-stack/5`), and a snapped read was the float reference's own gap
-/// (claude-237). `with_d11_snaps` gives the hook back whole afterwards (arm, call index, export
-/// flag, transition snap, telemetry), so the trunk's gates after the read snap as before and
-/// number their calls as a trunk without the read would. Whatever the arm outside, the read's
+/// (claude-237). `with_d11_snaps` gives the hook back whole when `f` returns, `Ok` or `Err` (arm,
+/// call index, export flag, transition snap, telemetry; a panic inside `f` skips it), so the
+/// trunk's gates after the read snap as before and number their calls as a trunk without the read
+/// would. Whatever the arm outside, the read's
 /// forward runs as `HamiltonActive`, uncounted by telemetry and snap capture; only
 /// `in_space_long.rs` (itself `HamiltonActive`) and `fbs-snapshot` install a read, so no control
 /// arm meets one. It covers the forward only: a D11-bridge training step (`with_d11_training`)
@@ -1826,7 +1827,8 @@ mod tests {
         Tensor::from_vec(values, (lanes, 4), device).unwrap()
     }
 
-    /// claude-238: `read`'s key, query and value rotations set off the icosians.
+    /// claude-238: `read`'s key, query and value rotations set off the icosians, and its step
+    /// rotation too when the type heads' spin is on.
     #[cfg(feature = "cuda")]
     fn set_off_icosian(read: &HammingRead, device: &Device) {
         let rotations = [
@@ -1834,7 +1836,8 @@ mod tests {
             &read.query_rotation,
             &read.value_rotation,
         ];
-        for (k, var) in rotations.into_iter().enumerate() {
+        let rotations = rotations.into_iter().chain(&read.step_rotation);
+        for (k, var) in rotations.enumerate() {
             var.set(&off_icosian(64, k, device)).unwrap();
         }
     }
@@ -1845,16 +1848,19 @@ mod tests {
         Ok(t.flatten_all()?.to_vec1::<f32>()?)
     }
 
-    /// claude-238: a read whose rotations sit off the icosians computes the same output, bit
-    /// for bit, under the D11 mode, the export gates and the training arm, for the stream read
-    /// and the readout. The hook does snap those rotations, so without the read's guard the
-    /// first two would differ.
+    /// claude-238: a read whose rotations sit off the icosians, its type heads' step rotation
+    /// among them, computes the same output, bit for bit, under the D11 mode, the export gates
+    /// and the training arm, for the stream read and the readout. The hook does snap those
+    /// rotations, so without the read's guard the first two would differ.
     #[cfg(feature = "cuda")]
     #[test]
     fn the_read_runs_as_trained_under_the_d11_and_export_gates() {
         use crate::hamilton_sheet::{with_d11_export_gates, with_d11_mode, with_gate_mode};
         let device = Device::new_cuda(0).unwrap();
-        let reads = HammingReads::new(4, 256, &device).unwrap();
+        let reads = HammingReads::new(4, 256, &device)
+            .unwrap()
+            .with_type_spin()
+            .unwrap();
         let read = &reads.reads[0];
         set_off_icosian(read, &device);
         read.weight
@@ -1888,20 +1894,23 @@ mod tests {
     }
 
     /// claude-238: under the D11 mode, a trunk gate after the read is still snapped, and the snap
-    /// capture holds that gate alone, none of the read's four rotations.
+    /// capture holds that gate alone, none of the read's rotations or its type heads' turns.
     #[cfg(feature = "cuda")]
     #[test]
     fn the_trunks_gates_after_the_read_still_snap() {
         use crate::hamilton_sheet::{with_d11_mode, with_gate_mode, with_snap_capture};
         let device = Device::new_cuda(0).unwrap();
-        let reads = HammingReads::new(4, 256, &device).unwrap();
+        let reads = HammingReads::new(4, 256, &device)
+            .unwrap()
+            .with_type_spin()
+            .unwrap();
         let read = &reads.reads[0];
         set_off_icosian(read, &device);
         let x = residual(1, 24, 256, &device);
         let ids: Vec<u32> = (0..24).map(|i| (i % 5) as u32).collect();
         let table = table(8, 256, &device);
         let points = x.reshape((24, 256)).unwrap();
-        let gate = off_icosian(64, 3, &device)
+        let gate = off_icosian(64, 4, &device)
             .reshape((1, 256))
             .unwrap()
             .broadcast_as((24, 256))
