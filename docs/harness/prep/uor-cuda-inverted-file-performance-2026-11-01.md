@@ -43,3 +43,7 @@ Attempt 1 at `5bc7c547e` stopped at C++ compilation before correctness or timing
 ## Attempt 2 and retry
 
 Attempt 2 at `3fd8408f2` passed all 504 correctness rows but stopped before timing because the file-hash helper treated normal EOF as an error. Logs and the 504-row file were archived at `local/kimi/cuda-performance-2/`, the pod was deleted, and no measurement was produced. Retry head `7badaf6ccd18fd4ec8768a197b84347c2f138795` changes that check to `input.bad()` and has a fresh FIT and `cuda-performance-3` evidence root.
+
+## Separate architecture FIT: RTX 4090
+
+**TEST FITNESS: FIT**, non-author, 2026-11-01. Exact source head: `7badaf6ccd18fd4ec8768a197b84347c2f138795`. Scope: one RTX 4090, compute capability 8.9, `UOR_NVCC_ARCH=compute_89` (`sm_89`), one driver release and one CUDA 12.8 toolkit captured in `gpu-info.txt` and `nvcc-info.txt`; the same V/K grid, fixed query seed 7, warmup 3 plus 10 retained repetitions, three scopes, 240 JSONL records and 504-row correctness evidence in new root `cuda-performance-4`. The 5090 evidence at `local/kimi/cuda-performance-3` and HF `c2cec27d7a9b3b9da3835fdf01403b0a0ef3a66b` is sealed and untouched. Verify `.target sm_89`, retain the emitted module and flag/identity logs, and report only a separate card row: no cross-card ratio, portability claim, release claim, or additional external replication is licensed. Any source change requires a new pushed head and FIT.
