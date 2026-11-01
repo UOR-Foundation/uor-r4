@@ -426,7 +426,7 @@ Status benchmark_scan(const Table& table, const Query& query, std::uint32_t k,
         } else {
             Index built;
             status = uor_inverted_file::build(table, built);
-            if (status == Status::Ok) status = probe(table, query, k, built, result);
+            if (status == Status::Ok) status = uor_inverted_file::cuda::probe(table, query, k, built, result);
         }
         if (status != Status::Ok) return status;
         if (!same_result(result, oracle)) return Status::CudaFailure;
