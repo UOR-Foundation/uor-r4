@@ -62,7 +62,11 @@ None. This unit is a decision card: it ran no decode and read no data, and it co
 
 ## Checks run at the head
 
-CHECKS
+Run at `efa89f6b6`, the head before this section was filled; the only later change is this REPORT's text.
+- `uor-harness loop report --check --order …/claude-245/ORDER.md`: PASS.
+- `uor-harness loop pr-check --local`: verdict PASS. Order, scope, banned-presence, commit-order, report, owner-paths, rule-sources and rendered-lock all pass. There are two D76 advisories, on read-path size and on stale FILEMAP rows; neither is from this diff.
+- `uor-harness loop gates --full`: 11 of 11 GREEN (claim-wording, fmt-claim-wording, fmt-harness, git-hooks, loop-drive, loop-gates-watch, loop-migrate, loop-next-owner-direction, loop-next-sources, loop-next-wait, loop-review-changes-blocks).
+- No code changed, so no cargo test was run.
 
 ## Skills used
 
