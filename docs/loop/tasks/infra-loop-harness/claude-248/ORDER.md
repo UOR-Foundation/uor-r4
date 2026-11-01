@@ -24,7 +24,7 @@ The five files:
 ## Cancel probe (run first)
 
 - **Are the files already in the item's scope?** At `bc4b4c959`, `integer-nearest-readout`'s `scope:` holds none of the five.
-- **Does an open order hold any of them?** Every ORDER under `docs/loop/tasks/` that names one of the five has a REPORT, and no PR is open. Other items list them in `scope:` (`one-model-end-to-end`, `training-step-cost`, `point-key-integer`, `turn-memory-integer`, `writer-admission`), but no open claim holds any of them. A shared file is allowed: the claim's overlap check orders the units.
+- **Does an open order hold any of them?** Every ORDER under `docs/loop/tasks/` that names one of the five has a REPORT, and no PR is open. Other items list them in `scope:`, by literal path (`one-model-end-to-end`, `training-step-cost`, `point-key-integer`, `turn-memory-integer`, `writer-admission`) and by wildcard (`crates/uor-r4-integer/**` in six ready `m*` items, both wildcards in a held item). No open claim holds any of them. A shared file is allowed: the claim's overlap check orders the units.
 - **Do the files exist at the base?** All five do.
 - **Classed:** instrument. Nothing cancels the unit.
 
