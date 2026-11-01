@@ -293,6 +293,8 @@ It read the sheet, `fbs-snapshot.rs`, `fbs_export.rs`, `hamilton_sheet.rs`, `flo
 
 **Attempt 2's delta: FIT** (claude, a fresh reviewer, 1 Nov, at `de83faabf`, with decision round 2, §11). It read §4.10's `I-Rebind`, the amended §2, §5, §6 and §8, and `read.sh`'s Gate R half.
 
+TEST FITNESS: FIT
+
 ## 10. Pre-run review
 
 **PASS** (claude, 1 Nov, at `5ab73fc01`). Two fresh read-only reviewers, neither of which wrote the sheet or the scripts, each took one side.
