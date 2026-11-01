@@ -18,9 +18,25 @@ The item's done-when reads:
 > 3. **Speed on this laptop:** `fbs-toks` decode tokens/s against context, with the read and without, on the same artifact.
 > 4. One notebook row; the result on main.
 
+## This unit
+
+The item's step 5 names the next check (claude-235, row F). Two facts frame it:
+- **The two sides' copy-head codes already differ at the first read.** On by design, those codes depend only on the token. Yet 89–94% of d2's copy query codes differ between the float D11 forward and the integer session, and the two sides' codes sit 2.2–3.2 bits apart on average.
+- **The trace ruled some causes out.** The rounded reads change no code. Each side's kept sets are the nearest by its own codes.
+
+This unit builds the laptop host check that names the stage where the codes part, and runs it. It compares every vocabulary entry's copy-head code, at both depths, three ways:
+- **(a) the CPU float control:** `hamilton_gate_fwd_cpu`, then `pack_signs`, on the artifact's own key rotation and Q12 writer table;
+- **(b) the integer codes the session serves:** `CopyHeads` on the same artifact;
+- **(c) the sealed traces:** the GPU float trace's codes, and the integer trace's, at each traced position, matched by its token.
+
+(a) against (b) isolates the arithmetic, since the inputs are identical. (a) against (c) isolates the GPU forward's inputs. (b) against the integer trace checks the record.
+
 ## Cancel probe (run first)
 
-To fill in.
+- **Does any open PR already touch the copy codes?** No: no open PR changes `stack/hamming.rs`, `flock_read_hamming.rs` or `kernel_controls.rs`.
+- **Has the gap closed on main?** No. Main is at this ORDER's base `62e3cfed4`. The item's step 5 still names this check as next and unclaimed.
+
+Class: **instrument** (the probe asks whether the check is still needed). It is, so the unit goes ahead.
 
 ## Files in scope
 
@@ -43,8 +59,26 @@ To fill in.
 
 ## Done when
 
-To fill in.
+1. **`fbs-snapshot --copy-codes ARTIFACT FLOAT_TRACE INTEGER_TRACE OUT_JSON`** is a CPU-only host check, run with no GPU, that compares the three ways at every read depth.
+   - It reports, per depth:
+     - the codes that agree and the bits that differ, for (a) against (b);
+     - how far from 0 the float value sits at each differing bit;
+     - each trace's agreement with (a) and (b), positions matched by token.
+   - It refuses a trace whose ids or depths do not fit the artifact.
+   - A test plants a known difference and must find it. With the comparison set aside, the test must fail.
+2. **It runs on claude-233's h1 and h3 artifacts** against claude-235's sealed d11 and d11-rounded traces. Its outputs and their sums are kept in the unit's folder.
+3. **The REPORT names the stage where the codes part,** with the evidence:
+   - the inputs the GPU forward reads;
+   - the float arithmetic;
+   - the integer arithmetic;
+   - the record.
+
+   If the fix is small and inside this scope, it follows here, and its effect on the integer trace is measured against the sealed float traces on the laptop. Otherwise the next step is written down.
+4. **One notebook row, the REPORT with negatives first, and the item's step updated.**
 
 ## Stop and ask if
 
-To fill in.
+Each of these is a stop and decide, never a wait:
+- **The stage is the float trainer or the GPU forward's own inputs.** Then the fix changes the float model or the export, outside this scope. The lab decides by a decision review and writes the next step. A GPU re-run needs a prep sheet and its FIT.
+- **The check needs a GPU or a file not on the laptop.** Then it stops, and says which.
+- **(a), (b) and (c) all agree.** Then the trace's 89–94% is an instrument fault in the record or the comparison. That is classed instrument and repaired first.
