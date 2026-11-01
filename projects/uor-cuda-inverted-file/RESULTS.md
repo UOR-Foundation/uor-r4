@@ -40,14 +40,14 @@ At source `18a1c8ad79a468025b0e82e79705c7266abac03c`, one RTX 5090 (compute capa
 
 `cuobjdump -arch` produced an empty file and is not cited as architecture proof. Full scan used a CPU-built control CSR; probe used the GPU-built CSR.
 
-## REJECTED: first matched-performance attempt (not valid for claims)
+## Matched performance on two architectures and drivers
 
-At source `7badaf6ccd18fd4ec8768a197b84347c2f138795`, both cards passed all 504 correctness rows and produced 240 raw measurements with per-configuration oracle/index checks, warmup 3 plus 10 retained repetitions, fixed query seed 7, and three timing scopes. See `gpu-performance-results.json` and `kimi-3/REPORT.md` in `docs/labs/uor-cuda-inverted-file/` and `docs/loop/tasks/uor-cuda-inverted-file/`.
+At final source `719a9a7861deb595dfc5269ffec8a5e7e53cb39b`, both cards passed all 504 correctness rows and produced 240 raw measurements with per-launch oracle checks, complete-caller warmups, and complete-caller timing that stops before oracle comparison and bookkeeping. See `gpu-performance-results.json` and `kimi-3/REPORT.md` in `docs/labs/uor-cuda-inverted-file/` and `docs/loop/tasks/uor-cuda-inverted-file/`.
 
-- RTX 5090, driver 580.178.04: full-scan/probe kernel medians 0.108528/0.161184 ms; direct API 115.454/115.337 ms; complete caller 115.531/115.505 ms.
-- RTX 4090, driver 615.78.08: full-scan/probe kernel medians 0.109568/0.181616 ms; direct API 155.017/155.131 ms; complete caller 155.072/155.403 ms.
+- RTX 5090, driver 580.178.04: full-scan/probe kernel medians 0.109856/0.160144 ms; direct API 115.493/115.678 ms; complete caller 115.407/115.620 ms.
+- RTX 4090, driver 580.95.05: full-scan/probe kernel medians 0.114944/0.190448 ms; direct API 188.424/188.447 ms; complete caller 188.272/188.839 ms.
 
-These are per-card, same-source, same-configuration results, not cross-card or end-to-end speedups. Wrapper overhead dominates the direct and complete-caller scopes. Raw evidence is linked from the report.
+These are per-card, same-source, same-configuration results, not cross-card or end-to-end speedups. Wrapper overhead dominates the direct and complete-caller scopes. Raw evidence is linked from the report. Earlier measurements at `7badaf6c` and `ae4a6951` are explicitly rejected for publication/protocol/timing defects and are not used for claims.
 
 ## NOT_RUN
 

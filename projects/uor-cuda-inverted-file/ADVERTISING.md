@@ -1,6 +1,6 @@
 # Before advertising or submitting this CUDA package
 
-**Current decision: do not advertise or submit upstream until corrected independent replication and final review complete.** Host and single-card correctness pass. The first two-card measurements at `7badaf6cc` were **REJECTED** for a full-scan publication race and benchmark warmup/oracle defects. The independent third-driver run is rejected too. A corrected rerun is required; the original UOR-R4 bucket-writer's hardware results remain provenance, not results for this package.
+**Current decision: do not advertise or submit upstream until corrected independent replication and final review complete.** Host and single-card correctness pass. Final corrected measurements at `719a9a78` pass on RTX 5090/580.178.04 and RTX 4090/580.95.05: 504 correctness rows and 240 measurements per card, with per-launch oracle checks, complete-caller warmups, and the corrected clock boundary. All earlier measurements remain rejected and are not used for claims.
 
 The useful community contribution is the combination of an exact integer inverted-file index and a mechanical PTX instruction/inventory gate. It does not require adopting UOR-R4's model or geometry. That usefulness still needs the following evidence.
 

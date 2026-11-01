@@ -17,7 +17,7 @@ The CSR bucketed writer and PTX admission gate are the most transferable parts o
 
 ## What is missing
 
-**Host correctness and a host-only clean-consumer check are complete.** The first two-card performance measurements were rejected for a publication race and benchmark protocol defects. Corrected two-card measurements and independent replication are required before release or upstream submission.
+**Host correctness, a host-only clean-consumer check, and corrected two-card/two-driver measurements are complete at their declared scopes.** Final source `719a9a786` passes 504 correctness rows and 240 records on RTX 5090/580.178.04 and RTX 4090/580.95.05, with per-launch oracle checks and the corrected timing boundary. Earlier attempts remain rejected. Corrected independent replication and final review are required before release or upstream submission.
 
 ## Done when
 
