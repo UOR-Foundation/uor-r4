@@ -1,6 +1,6 @@
 # Standalone UOR inverted-file CUDA package — host verification
 
-Date: 2026-11-01. Lab: kimi. Item: `uor-cuda-inverted-file` (#3475). Base: `3d39b0c720dbe95693efe8aea93b3873247a7ba1`.
+Date: 2026-11-01. Lab: kimi. Item: `uor-cuda-inverted-file` (#3475). Base: `7d8a0c2642600f5ff02d5ef30d130ec8fe8056d8`. Attempt 1 (`71c84dfa3`) failed C++ compilation and produced no parity result; the passing attempt-2 source was `aef414859`, with a later guard/evidence repair recorded separately.
 
 This record covers a new standalone CUDA C++17 package in `projects/uor-cuda-inverted-file`. It is not a model evaluation or a repeat of the original bucket-writer GPU qualification.
 
@@ -12,12 +12,13 @@ This record covers a new standalone CUDA C++17 package in `projects/uor-cuda-inv
 - Removal/reinsertion from `ABSENT`, non-root refusal, exact ties, and planted stale/corrupt/over-pruned controls: **PASS**.
 - Two repeated host runs and one clean-copy run produced identical test output, SHA-256 `7b6f674abcef33a37753de8aac6000ff1584e983ebeb4eb35fc67bf5d45d5e7d`.
 - Clean-copy host build required no UOR-R4 checkout or external dependency.
+- Separately, one RTX 5090 passed AOT/CUDA correctness at `18a1c8ad7`: 504/504 rows in each of three byte-identical executions, with identical module hashes after a clean rebuild. See [GPU results](gpu-sm120-results.json). Performance and additional hardware remain unmeasured.
 
 [Machine-readable host results](host-results.json) and [package results](../../../projects/uor-cuda-inverted-file/RESULTS.md) carry the exact commands and limitations.
 
 ## NOT_RUN
 
-`nvcc` was unavailable. AOT CUDA compilation and CUDA Driver API execution are **NOT_RUN**, so this record makes no GPU correctness, performance, portability, energy, or cross-library claim. GPU timing and additional-architecture evidence require a separate pre-registered run with a tuned full-scan control.
+On the laptop, `nvcc` is unavailable, so local AOT/CUDA execution is **NOT_RUN**. The separate RTX 5090 correctness result above is limited to its named source/card/grid. GPU timing, tuned comparisons, additional architectures/drivers, energy, cross-library comparison, and external replication remain **NOT_RUN**.
 
 ## Provenance
 

@@ -1,6 +1,6 @@
 # Verification results
 
-Date: 2026-11-01. Source base: `3d39b0c720dbe95693efe8aea93b3873247a7ba1`.
+Date: 2026-11-01. Source base: `7d8a0c2642600f5ff02d5ef30d130ec8fe8056d8`. Attempt 1 (`71c84dfa3`) failed C++ compilation and produced no parity result; the passing attempt-2 source was `aef414859`, with a later guard/evidence repair recorded separately.
 
 ## Host and clean-copy results
 
@@ -28,26 +28,25 @@ The clean copy was created in a fresh directory, and no UOR-R4 source path or ch
 ## Covered behavior
 
 - Clean and comment-only PTX acceptance; float/tensor/approximate-exponential rejection; missing/extra/duplicate entry rejection.
-- Seeded parity for `V ∈ {1,64,256,4096}` and `K ∈ {1,8,16}`.
+- Seeded parity for `V ∈ {1,64,256,4096}` and `K ∈ {1,8,16}`, with all 32 vector elements varied; a 24-row sensitivity check requires at least three top-8 changes and one prediction change against the zero-middle control.
 - Single-cell collapse, fewer than K occupied cells, non-root endpoint refusal, and exact token-id tie breaking.
 - Sixty-four incremental updates with fresh-build CSR equality and search parity after each update.
 - Removal to and reinsertion from `ABSENT`.
 - Stale-cell, corrupted-offset, over-pruned-result, and reversed-tie controls, with the unmodified control passing.
 
+## Single-card CUDA correctness
+
+At source `18a1c8ad79a468025b0e82e79705c7266abac03c`, one RTX 5090 (compute capability 12.0, driver 580.178.04) with CUDA 12.8.93 passed AOT compilation, four-entry admission, planted-entry rejection, and Driver API execution. All three row-producing executions passed **504/504 rows**, and the three files were byte-identical (**1,512 passing rows total**). Clean-rebuild PTX and cubin hashes were identical; rebuild and negative-admission artifacts are retained. Evidence is in `docs/labs/uor-cuda-inverted-file/gpu-sm120-results.json` and `docs/loop/tasks/uor-cuda-inverted-file/kimi-2/REPORT.md`.
+
+`cuobjdump -arch` produced an empty file and is not cited as architecture proof. Full scan used a CPU-built control CSR; probe used the GPU-built CSR.
+
 ## NOT_RUN
 
-`nvcc` was unavailable on the verification machine. Both `make cuda` and `make cuda-test` stopped with:
+The laptop still has no `nvcc`; the successful CUDA result came from a leased RTX 5090, not the laptop. The following remain **NOT_RUN**, not passes:
 
-```text
-NOT_RUN: nvcc is unavailable; CUDA compilation and tests were not performed
-```
-
-Therefore the following are **NOT_RUN**, not passes:
-
-- AOT CUDA compilation and admission on emitted module bytes.
-- CUDA Driver API execution and CPU/GPU parity.
-- GPU timing, end-to-end speedup, occupancy, energy, and comparison counts.
-- Additional architectures, driver versions, and independent hardware replication.
+- GPU timing, tuned/end-to-end speedup, occupancy, energy, and comparison counts.
+- Additional architectures, driver versions, independent hardware replication, and external consumers.
+- Kernel-side corrupt-CSR rejection, additional corrupt variants, all-absent CUDA scans, K=0/17, V=1/4096, and concurrent kernels.
 - Faiss or any other cross-library comparison.
 
 The original UOR-R4 bucket-writer's historical results are provenance only and are not attributed to this package.

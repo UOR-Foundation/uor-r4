@@ -22,7 +22,7 @@ make host-test
 
 This builds and runs:
 
-- `admission_test`: 10 admission checks covering clean/commented modules, forbidden instructions, and missing/extra/duplicate entries.
+- `admission_test`: 13 admission checks covering clean/commented modules, forbidden instructions, and missing/extra/duplicate entries.
 - `inverted_file_test`: seeded parity across `V ∈ {1,64,256,4096}` and `K ∈ {1,8,16}`, single-cell and fewer-than-K cases, non-root refusal, exact ties, 64 incremental updates, removal/reinsertion, stale/corrupt CSR detection, and over-pruning detection.
 
 No GPU, CUDA Toolkit, or UOR-R4 checkout is needed for these tests.

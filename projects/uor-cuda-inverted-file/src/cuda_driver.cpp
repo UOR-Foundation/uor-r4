@@ -12,6 +12,7 @@ namespace {
 struct Buffer {
     CUdeviceptr ptr = 0;
     std::size_t bytes = 0;
+    std::size_t capacity_bytes = 0;
 
     Buffer() = default;
     Buffer(const Buffer&) = delete;
@@ -22,6 +23,7 @@ struct Buffer {
 Status allocate(Buffer& buffer, std::size_t bytes) {
     if (bytes == 0) return Status::InvalidArgument;
     buffer.bytes = bytes;
+    buffer.capacity_bytes = bytes;
     return cuMemAlloc(&buffer.ptr, bytes) == CUDA_SUCCESS ? Status::Ok : Status::CudaFailure;
 }
 
@@ -30,15 +32,29 @@ Status write(const Buffer& buffer, const void* source) {
         ? Status::Ok : Status::CudaFailure;
 }
 
-Status read(void* destination, const Buffer& buffer) {
-    return cuMemcpyDtoH(destination, buffer.ptr, buffer.bytes) == CUDA_SUCCESS
+Status read(void* destination, const Buffer& buffer, std::size_t bytes) {
+    if (bytes > buffer.capacity_bytes) return Status::InvalidArgument;
+    return cuMemcpyDtoH(destination, buffer.ptr, bytes) == CUDA_SUCCESS
         ? Status::Ok : Status::CudaFailure;
+}
+
+Status read(void* destination, const Buffer& buffer) {
+    return read(destination, buffer, buffer.bytes);
 }
 
 template <typename T>
 Status upload(const std::vector<T>& source, Buffer& buffer) {
     const auto status = allocate(buffer, source.size() * sizeof(T));
     if (status != Status::Ok) return status;
+    return write(buffer, source.data());
+}
+
+template <typename T>
+Status upload_capacity(const std::vector<T>& source, std::size_t capacity, Buffer& buffer) {
+    if (source.size() > capacity) return Status::InvalidArgument;
+    const auto status = allocate(buffer, capacity * sizeof(T));
+    if (status != Status::Ok) return status;
+    buffer.bytes = source.size() * sizeof(T);
     return write(buffer, source.data());
 }
 
@@ -129,7 +145,7 @@ Status build(const Table& table, Index& index) {
     if (status != Status::Ok) return status;
     const auto table_values = table_bytes(table);
     const auto root_values = roots_bytes();
-    const std::uint32_t count = static_cast<std::uint32_t>(table.tokens.size());
+    std::uint32_t count = static_cast<std::uint32_t>(table.tokens.size());
     Buffer table_d, roots_d, offsets_d, members_d, cells_d, absent_d, status_d;
     if ((status = upload(table_values, table_d)) != Status::Ok ||
         (status = upload(root_values, roots_d)) != Status::Ok ||
@@ -165,18 +181,18 @@ Status update(const Table& table, std::uint32_t moved_token, Index& index) {
     if (moved_token >= table.tokens.size() || index.cells.size() != table.tokens.size()) {
         return Status::InvalidArgument;
     }
+    if (validate_structure(index) != Status::Ok) return Status::CsrInvariant;
     Session session;
     auto status = open(session);
     if (status != Status::Ok) return status;
     const auto table_values = table_bytes(table);
     const auto root_values = roots_bytes();
-    const std::uint32_t count = static_cast<std::uint32_t>(table.tokens.size());
+    std::uint32_t count = static_cast<std::uint32_t>(table.tokens.size());
     Buffer table_d, roots_d, offsets_d, members_d, cells_d, absent_d, status_d;
     if ((status = upload(table_values, table_d)) != Status::Ok ||
         (status = upload(root_values, roots_d)) != Status::Ok ||
         (status = upload(index.offsets, offsets_d)) != Status::Ok ||
-        (status = allocate(members_d, count * sizeof(std::uint32_t))) != Status::Ok ||
-        (status = write(members_d, index.members.data())) != Status::Ok ||
+        (status = upload_capacity(index.members, count, members_d)) != Status::Ok ||
         (status = upload(index.cells, cells_d)) != Status::Ok ||
         (status = allocate(absent_d, sizeof(std::uint32_t))) != Status::Ok ||
         (status = write(absent_d, &index.absent_count)) != Status::Ok ||
@@ -191,8 +207,11 @@ Status update(const Table& table, std::uint32_t moved_token, Index& index) {
     if ((status = synchronize()) != Status::Ok ||
         (status = read(&kernel_status, status_d)) != Status::Ok) return status;
     if (kernel_status != 0) return status_from_kernel(kernel_status);
-    if ((status = read(index.offsets.data(), offsets_d)) != Status::Ok ||
-        (status = read(index.members.data(), members_d)) != Status::Ok ||
+    if ((status = read(index.offsets.data(), offsets_d)) != Status::Ok) return status;
+    if (index.offsets[256] > count) return Status::CsrInvariant;
+    index.members.resize(count);
+    if ((status = read(index.members.data(), members_d,
+                       index.offsets[256] * sizeof(std::uint32_t))) != Status::Ok ||
         (status = read(index.cells.data(), cells_d)) != Status::Ok ||
         (status = read(&index.absent_count, absent_d)) != Status::Ok) return status;
     index.members.resize(index.offsets[256]);
@@ -209,7 +228,7 @@ Status run_scan(const Table& table, const Query& query, std::uint32_t k,
     const auto table_values = table_bytes(table);
     const auto root_values = roots_bytes();
     const auto query_values = query_bytes(query);
-    const std::uint32_t count = static_cast<std::uint32_t>(table.tokens.size());
+    std::uint32_t count = static_cast<std::uint32_t>(table.tokens.size());
     Buffer table_d, roots_d, queries_d, offsets_d, members_d, cells_d;
     Buffer predictions_d, admitted_d, top8_d, status_d;
     if ((status = upload(table_values, table_d)) != Status::Ok ||
