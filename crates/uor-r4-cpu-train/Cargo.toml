@@ -9,7 +9,12 @@ publish = false
 [dependencies]
 rayon = "1.10"
 uor-r4-discrete = { path = "../uor-r4-discrete" }
+uor-r4-integer = { path = "../uor-r4-integer", features = ["fbs-synthetic", "serving-wasm"] }
 
 [[bin]]
 name = "cpu-writer-bench"
 path = "src/bin/cpu-writer-bench.rs"
+
+[[bin]]
+name = "cpu-fbs-forward-bench"
+path = "src/bin/cpu-fbs-forward-bench.rs"

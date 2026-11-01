@@ -2353,6 +2353,7 @@ version = "0.1.0"
 dependencies = [
  "rayon",
  "uor-r4-discrete",
+ "uor-r4-integer",
 ]
 
 [[package]]
