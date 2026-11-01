@@ -8,6 +8,7 @@ Lab: deepseek. Item: [cpu-shared-vector-forward](../../../../roadmap/items/cpu-s
 - **Parity is synthetic, not trained-artifact evidence.** The tests construct exact artifact tables with known opening and reply hits, but no trained checkpoint or captured model panel is bound.
 - **The point-key fixtures are synthetic.** They verify a unique target, the commonest target, and the smaller-id tie; a trained point table and captured-query panel remain for the trained-artifact gate.
 - **No serving behavior changed.** `fbs_image` still returns `None` when Hamming or memory is present. The new `fbs_trunk_image` is explicitly a trunk-only evaluator view and must accompany separate read/memory execution.
+- **Several artifact modes remain explicitly refused.** The CPU forward still accepts only snapped, rotated, decay-rate, recurrence-only, no-pointer FBS artifacts. Retention-rate recurrence, artifacts without learned rotations, raw gates/transitions, pointer heads and non-recurrence patterns are rejected rather than approximated.
 
 ## What changed
 
@@ -67,4 +68,4 @@ No repository skill was invoked. A fresh-context subagent will perform the requi
 
 ## Plain summary
 
-The CPU forward now executes the current artifact's Hamming reads, opening and reply memory, and point-key fallback, and matches serving on complete final vectors and decisions in the tested configurations. This closes the unported forward path but is not yet a trained-model or training result.
+The CPU forward now executes the supported snapped, rotated, decay-rate, recurrence-only, no-pointer artifact's Hamming reads, opening and reply memory, and point-key fallback, and matches serving on complete final vectors and decisions in the tested configurations. Other artifact modes are explicitly refused. This is neither a trained-model result nor a training result.
