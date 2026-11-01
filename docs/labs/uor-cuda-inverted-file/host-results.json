@@ -5,10 +5,10 @@
   "source_file_sha256": {
     "src/inverted_file.cpp": "8903daedc6522ab4d9d02982b2ed2aa8c193613a64cb41097d7d6fe19fb14197",
     "tests/inverted_file_test.cpp": "e354ac31562e857609bb14a1be8481711c696050ab918831b7b3268d51d410d3",
-    "tests/cuda_parity_test.cpp": "9321ff98922b6b3457e86bee2385e80143d0cbea4fbc2b8fed9f33cb1ef50b72",
+    "tests/cuda_parity_test.cpp": "0860d63422b215487c7af73dec67cdcb5a3838d980af4666ccaf189da291bc62",
     "Makefile": "79406fce648367f67feec00935e2604c1f492e62e50505125d16055556df3ad8",
-    "src/kernels.cu": "b2b4f28b6681c8045cddee240ef07009f356e5ce7ffcae3642b33ce66a32644b",
-    "src/cuda_driver.cpp": "a57ba282213eb89dee87227ce0cac1693921c17194e9d2016de198f233614e62",
+    "src/kernels.cu": "fd1a8639d04e2ba3f57e03adb8ae56234b3dea69bf76579d9671ef666fab1866",
+    "src/cuda_driver.cpp": "84393520bf28c419ac4c4e6866a6f6b0180fa40298380a61232460377c66bf8c",
     "src/cuda_driver.hpp": "d7e7d1604b43a2832b6e68c696ff289fb432b5f2e2c7fd0a104887501c68769e"
   },
   "admission": {"passed": 13, "failed": 0},

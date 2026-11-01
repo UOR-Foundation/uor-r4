@@ -225,6 +225,15 @@ int main(int argc, char** argv) {
                 return 1;
             }
 
+            Index corrupt = index;
+            corrupt.offsets[1] = corrupt.offsets[256];
+            status = uor_inverted_file::cuda::update(table, 0, corrupt);
+            log_row(v, k, "refuse_corrupt_update", 0, status, status == Status::CsrInvariant);
+            if (status != Status::CsrInvariant) {
+                std::cerr << "corrupt CUDA update was not refused\n";
+                return 1;
+            }
+
             auto extreme_query = query_at(0);
             for (size_t block = 1; block < 3; ++block) extreme_query[block].fill(std::numeric_limits<int32_t>::min());
             for (auto& token : table.tokens) {

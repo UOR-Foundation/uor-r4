@@ -181,6 +181,7 @@ Status update(const Table& table, std::uint32_t moved_token, Index& index) {
     if (moved_token >= table.tokens.size() || index.cells.size() != table.tokens.size()) {
         return Status::InvalidArgument;
     }
+    if (validate_structure(index) != Status::Ok) return Status::CsrInvariant;
     Session session;
     auto status = open(session);
     if (status != Status::Ok) return status;

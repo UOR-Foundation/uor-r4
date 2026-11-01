@@ -1,6 +1,6 @@
 # Standalone UOR inverted-file CUDA package — host verification
 
-Date: 2026-11-01. Lab: kimi. Item: `uor-cuda-inverted-file` (#3475). Base: `7d8a0c2642600f5ff02d5ef30d130ec8fe8056d8`. FIT-approved CUDA correctness source: `71c84dfa3b083889fb3896886da973354fa87afa`.
+Date: 2026-11-01. Lab: kimi. Item: `uor-cuda-inverted-file` (#3475). Base: `7d8a0c2642600f5ff02d5ef30d130ec8fe8056d8`. Attempt 1 (`71c84dfa3`) failed C++ compilation and produced no parity result; the passing attempt-2 source was `aef414859`, with a later guard/evidence repair recorded separately.
 
 This record covers a new standalone CUDA C++17 package in `projects/uor-cuda-inverted-file`. It is not a model evaluation or a repeat of the original bucket-writer GPU qualification.
 
@@ -18,7 +18,7 @@ This record covers a new standalone CUDA C++17 package in `projects/uor-cuda-inv
 
 ## NOT_RUN
 
-`nvcc` was unavailable. AOT CUDA compilation and CUDA Driver API execution are **NOT_RUN**, so this record makes no GPU correctness, performance, portability, energy, or cross-library claim. GPU timing and additional-architecture evidence require a separate pre-registered run with a tuned full-scan control.
+On the laptop, `nvcc` is unavailable, so local AOT/CUDA execution is **NOT_RUN**. The separate RTX 5090 correctness result above is limited to its named source/card/grid. GPU timing, tuned comparisons, additional architectures/drivers, energy, cross-library comparison, and external replication remain **NOT_RUN**.
 
 ## Provenance
 

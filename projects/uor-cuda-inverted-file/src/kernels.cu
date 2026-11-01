@@ -144,11 +144,14 @@ extern "C" __global__ void uor_if_update(
 ) {
     if (blockIdx.x || threadIdx.x) return;
     if (moved_token >= count) { *status = 1; return; }
+    if (offsets[256] > count) { *status = 3; return; }
     const U old_cell = cells[moved_token];
     const U new_cell = token_cell(roots, table + moved_token * 32);
     if (new_cell == ABSENT) { *status = 2; return; }
     if (old_cell == new_cell) { *status = 0; return; }
-    if (old_cell != ABSENT && (old_cell > 255 || offsets[old_cell] > offsets[old_cell + 1])) {
+    if (old_cell != ABSENT &&
+        (old_cell > 255 || offsets[old_cell] > offsets[old_cell + 1] ||
+         offsets[old_cell + 1] > offsets[256])) {
         *status = 3;
         return;
     }

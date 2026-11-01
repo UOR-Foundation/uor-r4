@@ -1,6 +1,6 @@
 # Verification results
 
-Date: 2026-11-01. Source base: `7d8a0c2642600f5ff02d5ef30d130ec8fe8056d8`. FIT-approved CUDA correctness source: `71c84dfa3b083889fb3896886da973354fa87afa`.
+Date: 2026-11-01. Source base: `7d8a0c2642600f5ff02d5ef30d130ec8fe8056d8`. Attempt 1 (`71c84dfa3`) failed C++ compilation and produced no parity result; the passing attempt-2 source was `aef414859`, with a later guard/evidence repair recorded separately.
 
 ## Host and clean-copy results
 

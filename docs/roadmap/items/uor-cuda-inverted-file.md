@@ -17,7 +17,7 @@ The CSR bucketed writer and PTX admission gate are the most transferable parts o
 
 ## What is missing
 
-**Host package and clean-copy verification are complete.** The CPU oracle, four CUDA operations, admission and negative controls, provenance, and clean-clone evidence exist. AOT compilation and GPU parity remain **NOT_RUN** because no compatible `nvcc`/GPU is available on this machine. A later pre-registered hardware run is still required before release or upstream submission.
+**Host package and single-card CUDA correctness are complete at their declared scopes.** Clean-copy host evidence and one RTX 5090 AOT/Driver API correctness run exist. Performance, tuned full-scan comparisons, additional architectures/drivers, independent replication, and external-consumer validation remain **NOT_RUN** and are required before release or upstream submission.
 
 ## Done when
 
