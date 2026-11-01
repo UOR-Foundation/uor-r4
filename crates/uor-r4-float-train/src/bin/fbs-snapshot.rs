@@ -11,9 +11,14 @@
 //!   tables as exported (claude-125).
 //!
 //! ```text
-//! fbs-snapshot MODEL_DIR OUT_JSON [READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]]
-//! fbs-snapshot --hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON
+//! fbs-snapshot [--dev DATA_ROOT] MODEL_DIR OUT_JSON [READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]]
+//! fbs-snapshot [--dev DATA_ROOT] --hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON
 //! ```
+//!
+//! `--dev DATA_ROOT` (claude-240) takes every readout, and the trace, on a sample of DEV in
+//! place of the fixed sequences: `DATA_ROOT/ft/dev`, loaded with its pins, cut into the
+//! trainer's windows of `SHEET_CONTEXT` and sampled every `PARITY_WINDOW_STRIDE`-th window, as
+//! claude-126 sampled it. The snapshot itself does not depend on it.
 //!
 //! The second form (claude-235) writes the D11 readout of a checkpoint with
 //! Hamming reads and what each read chose on its fixed sequences
@@ -39,9 +44,9 @@ use std::path::{Path, PathBuf};
 use candle_core::Device;
 use sha2::{Digest, Sha256};
 use uor_r4_float_train::fbs_export::{
-    check_checkpoint_reads, check_readout_reads, fbs_float_readout, fbs_hamming_snapshot,
-    fbs_memory_snapshot, fbs_trunk_snapshot, round_hamming_as_exported, round_tables_as_exported,
-    run_rate_reading, READOUT_SEQUENCES,
+    check_checkpoint_reads, check_readout_reads, fbs_float_readout, fbs_float_readout_on,
+    fbs_hamming_snapshot, fbs_memory_snapshot, fbs_trunk_snapshot, round_hamming_as_exported,
+    round_tables_as_exported, run_rate_reading, READOUT_SEQUENCES,
 };
 use uor_r4_float_train::flock_read_hamming::{
     set_hamming_reads, set_hamming_tie_rule, set_hamming_trace, take_hamming_trace, HammingReads,
@@ -49,10 +54,16 @@ use uor_r4_float_train::flock_read_hamming::{
 };
 use uor_r4_float_train::flock_read_memory::TurnMemory;
 use uor_r4_float_train::geometric_stack::{set_retention_rates, StackModel};
-use uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT;
+use uor_r4_float_train::hamilton_sheet::{
+    build_document_windows, load_pinned_uort_split, EXPECTED_DEV_ELIGIBLE_TARGETS,
+    EXPECTED_DEV_TOKENS, PINNED_DEV_MASK_SHA256, PINNED_DEV_TOKENS_SHA256, SHEET_BOS_ID,
+    SHEET_CONTEXT, SHEET_VOCAB,
+};
+use uor_r4_float_train::spiralcore_fbs_sheet::PARITY_WINDOW_STRIDE;
 use uor_r4_float_train::{FloatTrainError, Result};
 use uor_r4_integer::fbs_snapshot::{
-    run_readout_nearest, write_new_file, FbsReadoutMode, HammingTrace, HAMMING_TRACE_SCHEMA,
+    run_readout_nearest, write_new_file, FbsFloatReadout, FbsReadoutMode, HammingTrace,
+    HAMMING_TRACE_SCHEMA,
 };
 
 fn write(path: &str, json: &[u8]) -> Result<()> {
@@ -97,8 +108,68 @@ fn output_place(path: &str) -> Result<PathBuf> {
     Ok(std::fs::canonicalize(folder)?.join(name))
 }
 
-/// `--hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON` (claude-235).
-fn hamming_trace(arm: &str, model_dir: &str, readout: &str, trace: &str) -> Result<()> {
+/// claude-240: every `PARITY_WINDOW_STRIDE`-th window, from the first (claude-126's rule).
+fn sample_windows(windows: Vec<Vec<u32>>) -> Vec<Vec<u32>> {
+    windows.into_iter().step_by(PARITY_WINDOW_STRIDE).collect()
+}
+
+/// claude-240: `--dev DATA_ROOT`'s sample. DEV is loaded with its pins and cut into the
+/// trainer's windows (`in_space_long.rs`), and every `PARITY_WINDOW_STRIDE`-th is kept. It is
+/// read before the GPU opens, so a wrong data root costs no GPU time.
+fn dev_sample(data_root: &str) -> Result<Vec<Vec<u32>>> {
+    let dev = Path::new(data_root).join("ft/dev");
+    let (tokens, mask) = load_pinned_uort_split(
+        &dev.join("tokens.u16"),
+        &dev.join("response_mask.u8"),
+        PINNED_DEV_TOKENS_SHA256,
+        PINNED_DEV_MASK_SHA256,
+        EXPECTED_DEV_TOKENS,
+        EXPECTED_DEV_ELIGIBLE_TARGETS,
+        SHEET_VOCAB,
+        SHEET_BOS_ID,
+    )?;
+    let (windows, _) = build_document_windows(&tokens, &mask, SHEET_CONTEXT, SHEET_BOS_ID)?;
+    let scored: usize = windows.iter().map(|w| w.scored_targets.len()).sum();
+    if scored != EXPECTED_DEV_ELIGIBLE_TARGETS {
+        return Err(FloatTrainError::Invalid(format!(
+            "DEV's windows score {scored} targets, not {EXPECTED_DEV_ELIGIBLE_TARGETS}"
+        )));
+    }
+    let all = windows.len();
+    let sample = sample_windows(windows.into_iter().map(|w| w.input_ids).collect());
+    println!("dev: {all} windows, {} sampled", sample.len());
+    Ok(sample)
+}
+
+/// A readout on the DEV sample when there is one, else on the fixed sequences. A sample window
+/// that is not the model's context long is refused, since the trainer cut DEV at its context.
+fn readout_on(
+    model: &StackModel,
+    mode: FbsReadoutMode,
+    dev: Option<&[Vec<u32>]>,
+) -> Result<FbsFloatReadout> {
+    let Some(sample) = dev else {
+        return fbs_float_readout(model, mode);
+    };
+    let context = model.config.context;
+    if let Some(w) = sample.iter().find(|w| w.len() != context) {
+        return Err(FloatTrainError::Invalid(format!(
+            "a DEV window is {} long, and the model's context is {context}",
+            w.len()
+        )));
+    }
+    fbs_float_readout_on(model, mode, sample)
+}
+
+/// `[--dev DATA_ROOT] --hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON` (claude-235;
+/// the DEV sample, claude-240).
+fn hamming_trace(
+    arm: &str,
+    model_dir: &str,
+    readout: &str,
+    trace: &str,
+    dev: Option<&[Vec<u32>]>,
+) -> Result<()> {
     let (tie, rounded) = trace_arm(arm).ok_or_else(|| {
         FloatTrainError::Invalid(format!(
             "unknown trace arm {arm}: d11, d11-tie, d11-rounded or d11-tie-rounded"
@@ -132,18 +203,19 @@ fn hamming_trace(arm: &str, model_dir: &str, readout: &str, trace: &str) -> Resu
     set_hamming_tie_rule(tie);
     round_tables_as_exported(&model)?;
     set_hamming_trace(true);
-    let d11 = fbs_float_readout(&model, FbsReadoutMode::D11)?;
+    let d11 = readout_on(&model, FbsReadoutMode::D11, dev)?;
     let windows = take_hamming_trace().unwrap_or_default();
     set_hamming_trace(false);
-    // Only the fixed sequences reach a read (a single token has no earlier position): each must
-    // be traced once, at every read depth.
+    // Only the sequences reach a read (a single token has no earlier position): each must be
+    // traced once, at every read depth.
+    let sequences = dev.map_or(READOUT_SEQUENCES, <[Vec<u32>]>::len);
     let depths: Vec<Vec<usize>> = windows
         .iter()
         .map(|w| w.reads.iter().map(|r| r.depth).collect())
         .collect();
-    if windows.len() != READOUT_SEQUENCES || depths.iter().any(|d| d[..] != HAMMING_DEPTHS[..]) {
+    if windows.len() != sequences || depths.iter().any(|d| d[..] != HAMMING_DEPTHS[..]) {
         return Err(FloatTrainError::Invalid(format!(
-            "the trace holds {} windows with depths {depths:?}, not {READOUT_SEQUENCES} at {HAMMING_DEPTHS:?}",
+            "the trace holds {} windows with depths {depths:?}, not {sequences} at {HAMMING_DEPTHS:?}",
             windows.len()
         )));
     }
@@ -162,18 +234,28 @@ fn hamming_trace(arm: &str, model_dir: &str, readout: &str, trace: &str) -> Resu
 
 fn usage() -> ! {
     eprintln!(
-        "usage: fbs-snapshot MODEL_DIR OUT_JSON [READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]]\n       fbs-snapshot --hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON"
+        "usage: fbs-snapshot [--dev DATA_ROOT] MODEL_DIR OUT_JSON [READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]]\n       fbs-snapshot [--dev DATA_ROOT] --hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON"
     );
     std::process::exit(2);
 }
 
 fn main() -> Result<()> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let dev = if args.first().is_some_and(|flag| flag == "--dev") {
+        if args.len() < 2 {
+            usage();
+        }
+        let root = args.drain(..2).nth(1).unwrap_or_default();
+        Some(dev_sample(&root)?)
+    } else {
+        None
+    };
+    let dev = dev.as_deref();
     if args.first().is_some_and(|flag| flag == "--hamming-trace") {
         let [_, arm, model_dir, readout, trace] = args.as_slice() else {
             usage();
         };
-        return hamming_trace(arm, model_dir, readout, trace);
+        return hamming_trace(arm, model_dir, readout, trace, dev);
     }
     let (model_dir, out, readouts) = match args.as_slice() {
         [model_dir, out, readouts @ ..] if readouts.len() <= 3 => (model_dir, out, readouts),
@@ -217,17 +299,24 @@ fn main() -> Result<()> {
         if mode == FbsReadoutMode::D11 {
             round_tables_as_exported(&model)?;
         }
-        write(
-            path,
-            &serde_json::to_vec(&fbs_float_readout(&model, mode)?)?,
-        )?;
+        write(path, &serde_json::to_vec(&readout_on(&model, mode, dev)?)?)?;
     }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::output_place;
+    use super::{output_place, sample_windows, PARITY_WINDOW_STRIDE};
+
+    /// claude-240: the DEV sample is claude-126's, every 8th window from the first, in order.
+    #[test]
+    fn the_dev_sample_keeps_every_eighth_window_from_the_first() {
+        assert_eq!(PARITY_WINDOW_STRIDE, 8);
+        let windows: Vec<Vec<u32>> = (0..17u32).map(|w| vec![w; 3]).collect();
+        assert_eq!(sample_windows(windows), vec![vec![0; 3], vec![8; 3], vec![16; 3]]);
+        // DEV's 428 windows give 54.
+        assert_eq!(sample_windows(vec![Vec::new(); 428]).len(), 54);
+    }
 
     /// claude-235: two spellings of one output are one place, so the trace refuses them.
     #[test]
