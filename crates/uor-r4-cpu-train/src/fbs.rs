@@ -6,9 +6,11 @@
 
 use uor_r4_integer::h4_classifier::H4_ROOT_COEFFICIENTS;
 use uor_r4_integer::stack::{
-    stack_snap_select, FbsImage, FbsLayerImage, FbsMapImage, Fixed, IntegerStackModel, GROUP,
-    PHI_Q32,
+    read_hamming_uorlut01, stack_snap_select, FbsImage, FbsLayerImage, FbsMapImage, Fixed,
+    IntegerStackModel, GROUP, PHI_Q32,
 };
+
+use crate::hamming::CpuHamming;
 
 const RESIDUAL_EXP: i32 = FbsImage::RESIDUAL_EXP;
 const PRODUCT_EXP: i32 = FbsImage::PRODUCT_EXP;
@@ -116,29 +118,58 @@ pub struct CpuFbsForward {
     position: usize,
     state: Vec<Vec<i64>>,
     history: Vec<Vec<i32>>,
+    tokens: Vec<u32>,
+    hamming: Option<CpuHamming>,
+    hamming_payloads: Vec<Vec<i64>>,
 }
 
 impl CpuFbsForward {
     pub fn from_model(model: &IntegerStackModel) -> Result<Self> {
-        let shape = model.shape();
-        if !shape.projection_fbs()
-            || !shape.rec_geometric()
-            || shape.rec_retention()
-            || !shape.gate_hamilton()
-            || !shape.rotation
-            || shape.raw_gates
-            || shape.raw_transition
-            || shape.pointer.is_some()
-            || shape.pattern.bytes().any(|kind| kind != b'r')
-        {
+        validate_shape(model)?;
+        if model.turn_memory().is_some() {
             return Err(invalid(
-                "CPU FBS forward requires a snapped, rotated, decay-rate, no-read, recurrence-only FBS model",
+                "CPU FBS forward does not yet support exact turn memory",
             ));
         }
         let image = model.fbs_image().ok_or_else(|| {
             invalid("CPU FBS forward does not yet support Hamming reads or turn memory")
         })?;
-        Self::from_image(image, model.rms_epsilon(), shape.context)
+        Self::from_image(image, model.rms_epsilon(), model.shape().context)
+    }
+
+    /// Parse artifact bytes and attach the Hamming reads as well as the FBS
+    /// trunk. A model without reads behaves exactly as [`Self::from_model`].
+    pub fn from_artifact(bytes: &[u8]) -> Result<Self> {
+        let parsed = IntegerStackModel::parse(bytes)
+            .map_err(|error| invalid(format!("CPU FBS artifact does not parse: {error}")))?;
+        validate_shape(&parsed)?;
+        if parsed.turn_memory().is_some() {
+            return Err(invalid(
+                "CPU FBS forward does not yet support exact turn memory",
+            ));
+        }
+        let hamming = read_hamming_uorlut01(bytes)
+            .map_err(|error| invalid(format!("CPU Hamming tables do not parse: {error}")))?;
+        let context = parsed.shape().context;
+        let model = parsed.without_hamming_read();
+        let image = model
+            .fbs_image()
+            .ok_or_else(|| invalid("CPU FBS forward could not recover the FBS trunk"))?;
+        let mut forward = Self::from_image(image, model.rms_epsilon(), context)?;
+        if let Some(hamming) = hamming {
+            let reads = CpuHamming::new(
+                &hamming,
+                &forward.writer_table,
+                forward.vocab,
+                forward.width,
+                forward.layers.len(),
+                context,
+            )
+            .map_err(invalid)?;
+            forward.hamming_payloads = reads.payload_caches(context);
+            forward.hamming = Some(reads);
+        }
+        Ok(forward)
     }
 
     fn from_image(image: FbsImage<'_>, rms_eps: Fixed, context: usize) -> Result<Self> {
@@ -183,6 +214,9 @@ impl CpuFbsForward {
             kept_cells: image.kept_cells,
             context,
             position: 0,
+            tokens: Vec::with_capacity(context),
+            hamming: None,
+            hamming_payloads: Vec::new(),
         })
     }
 
@@ -207,6 +241,7 @@ impl CpuFbsForward {
                 self.context
             )));
         }
+        self.tokens.push(token);
         let d = self.width;
         let row = token as usize * d;
         let mut x: Vec<i32> = self.writer_table[row..row + d]
@@ -253,10 +288,27 @@ impl CpuFbsForward {
             for (left, right) in x.iter_mut().zip(&projected) {
                 *left = left.saturating_add(*right);
             }
+            if let Some(hamming) = &self.hamming {
+                hamming.stream(
+                    index + 1,
+                    &self.tokens,
+                    &self.writer_table,
+                    &mut self.hamming_payloads,
+                    &mut x,
+                );
+            }
         }
 
         rms_norm_fine(&x, self.rms_eps, &mut scratch[..d]);
         apply_gain(&mut scratch[..d], &self.final_gain);
+        if let Some(hamming) = &self.hamming {
+            hamming.readout(
+                &self.tokens,
+                &self.writer_table,
+                &mut self.hamming_payloads,
+                &mut scratch[..d],
+            );
+        }
         let query_q12: Vec<i32> = scratch[..d]
             .iter()
             .map(|&value| to_exp_i32(value, NORM_FINE_EXP, Q12_EXP).clamp(-32768, 32767))
@@ -281,6 +333,25 @@ impl CpuFbsForward {
             query_q12,
         })
     }
+}
+
+fn validate_shape(model: &IntegerStackModel) -> Result<()> {
+    let shape = model.shape();
+    if !shape.projection_fbs()
+        || !shape.rec_geometric()
+        || shape.rec_retention()
+        || !shape.gate_hamilton()
+        || !shape.rotation
+        || shape.raw_gates
+        || shape.raw_transition
+        || shape.pointer.is_some()
+        || shape.pattern.bytes().any(|kind| kind != b'r')
+    {
+        return Err(invalid(
+            "CPU FBS forward requires a snapped, rotated, decay-rate, recurrence-only FBS model",
+        ));
+    }
+    Ok(())
 }
 
 fn validate_layer(layer: &Layer, width: usize, mlp: usize) -> Result<()> {
@@ -724,7 +795,9 @@ fn bit_length(value: u64) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
+    use uor_r4_integer::stack::synthetic::{
+        synthetic_fbs_trunk_with, synthetic_hamming, synthetic_turn_memory_artifact, FbsSynth,
+    };
     use uor_r4_integer::stack::{
         export_fbs_trunk_uorlut01, export_fbs_trunk_uorlut01_with, FbsExportSnaps,
         IntegerStackModel,
@@ -771,6 +844,93 @@ mod tests {
         }
     }
 
+    fn hamming_fixture(
+        seed: u64,
+        layers: usize,
+        head: CpuFbsHead,
+        copy_scale: f32,
+        type_scale: f32,
+        depths: &[usize],
+    ) -> (IntegerStackModel, CpuFbsForward, IntegerStackModel) {
+        let mut snapshot = synthetic_fbs_trunk_with(
+            seed,
+            FbsSynth {
+                vocab: 512,
+                d: 64,
+                mlp: 96,
+                layers,
+                context: 24,
+                kept: 8,
+                gain_lo: 0.75,
+                gain_span: 1.5,
+                table: 0.5,
+                decay_step: 0.25,
+            },
+        );
+        snapshot.readout_nearest = head == CpuFbsHead::Nearest;
+        let free_bytes = export_fbs_trunk_uorlut01(&snapshot).unwrap();
+        let free = IntegerStackModel::parse(&free_bytes).unwrap();
+
+        let mut hamming = synthetic_hamming(snapshot.width, layers, 4, seed ^ 194);
+        hamming.reads = hamming
+            .depths
+            .iter()
+            .zip(hamming.reads)
+            .filter(|(depth, _)| depths.contains(depth))
+            .map(|(_, read)| read)
+            .collect();
+        hamming.depths = depths.to_vec();
+        for read in &mut hamming.reads {
+            let (copy, types) = read.weight.split_at_mut(snapshot.width);
+            copy.iter_mut().for_each(|weight| *weight *= copy_scale);
+            types.iter_mut().for_each(|weight| *weight *= type_scale);
+        }
+        snapshot.hamming = Some(hamming);
+        let bytes = export_fbs_trunk_uorlut01(&snapshot).unwrap();
+        let model = IntegerStackModel::parse(&bytes).unwrap();
+        let cpu = CpuFbsForward::from_artifact(&bytes).unwrap();
+        (model, cpu, free)
+    }
+
+    fn repeating_tokens() -> [u32; 16] {
+        std::array::from_fn(|row| {
+            if row < 12 {
+                ((row * 7 + 3) % 11) as u32
+            } else {
+                ((row - 12) * 5 + 1) as u32
+            }
+        })
+    }
+
+    fn assert_hamming_parity(
+        seed: u64,
+        depths: &[usize],
+        copy_scale: f32,
+        type_scale: f32,
+        head: CpuFbsHead,
+    ) -> usize {
+        let (model, mut cpu, free) = hamming_fixture(seed, 3, head, copy_scale, type_scale, depths);
+        let mut session = model.session();
+        let mut free_session = free.session();
+        let mut changed = 0;
+        for (row, token) in repeating_tokens().into_iter().enumerate() {
+            let expected = session.step_native(token).unwrap();
+            let free_step = free_session.step_native(token).unwrap();
+            let actual = cpu.step(token, head).unwrap();
+            assert_eq!(
+                actual.query_q12, expected.query_q12,
+                "row {row}: complete query"
+            );
+            assert_eq!(actual.token, expected.token, "row {row}: token");
+            assert_eq!(
+                actual.kept_cells, expected.kept_cells,
+                "row {row}: kept cells"
+            );
+            changed += usize::from(actual.query_q12 != free_step.query_q12);
+        }
+        changed
+    }
+
     #[test]
     fn one_layer_nearest_matches_serving_forward() {
         assert_parity(7, 1, CpuFbsHead::Nearest);
@@ -789,6 +949,53 @@ mod tests {
     #[test]
     fn six_layers_match_serving_forward() {
         assert_parity(17, 6, CpuFbsHead::Nearest);
+    }
+
+    #[test]
+    fn copy_heads_at_both_hooks_match_serving() {
+        let changed = assert_hamming_parity(41, &[1, 3], 1.0, 0.0, CpuFbsHead::Writer);
+        assert!(changed > 0, "the copy reads must move the complete query");
+    }
+
+    #[test]
+    fn type_heads_at_both_hooks_match_serving() {
+        let changed = assert_hamming_parity(43, &[1, 3], 0.0, 1.0, CpuFbsHead::Nearest);
+        assert!(changed > 0, "the type reads must move the complete query");
+    }
+
+    #[test]
+    fn combined_copy_and_type_reads_match_serving() {
+        let changed = assert_hamming_parity(47, &[1, 3], 1.0, 1.0, CpuFbsHead::Writer);
+        assert!(
+            changed > 0,
+            "the combined reads must move the complete query"
+        );
+    }
+
+    #[test]
+    fn erased_copy_codes_change_the_complete_query() {
+        let (_, mut expected, _) = hamming_fixture(49, 3, CpuFbsHead::Nearest, 1.0, 1.0, &[1, 3]);
+        let mut corrupted = expected.clone();
+        corrupted.hamming.as_mut().unwrap().erase_copy_codes();
+        for token in repeating_tokens().into_iter().take(3) {
+            expected.step(token, CpuFbsHead::Nearest).unwrap();
+            corrupted.step(token, CpuFbsHead::Nearest).unwrap();
+        }
+        let expected = expected.step(7, CpuFbsHead::Nearest).unwrap();
+        let corrupted = corrupted.step(7, CpuFbsHead::Nearest).unwrap();
+        assert_ne!(expected.query_q12, corrupted.query_q12);
+    }
+
+    #[test]
+    fn stream_only_and_readout_only_reads_match_serving() {
+        assert!(assert_hamming_parity(53, &[1], 1.0, 1.0, CpuFbsHead::Nearest) > 0);
+        assert!(assert_hamming_parity(59, &[3], 1.0, 1.0, CpuFbsHead::Nearest) > 0);
+    }
+
+    #[test]
+    fn zero_weight_hamming_matches_the_read_free_trunk() {
+        let changed = assert_hamming_parity(61, &[1, 3], 0.0, 0.0, CpuFbsHead::Writer);
+        assert_eq!(changed, 0, "zero read weights must add nothing");
     }
 
     #[test]
@@ -852,6 +1059,12 @@ mod tests {
         let bytes = export_fbs_trunk_uorlut01(&snapshot).unwrap();
         let model = IntegerStackModel::parse(&bytes).unwrap();
         assert!(CpuFbsForward::from_model(&model).is_err());
+    }
+
+    #[test]
+    fn exact_turn_memory_is_refused_until_the_next_slice() {
+        let bytes = synthetic_turn_memory_artifact(67, 4, 192, false);
+        assert!(CpuFbsForward::from_artifact(&bytes).is_err());
     }
 
     #[test]
