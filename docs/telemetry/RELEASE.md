@@ -1,13 +1,13 @@
 # Opt-in UOR Artifact Telemetry 0.1.0
 
-A downloadable source-and-evidence release of the standalone OTLP/HTTP JSON example, its explicit loopback OpenTelemetry Collector check, and a vendor-neutral **draft** loaded-artifact identity convention. This is not an OpenTelemetry SDK, production exporter, accepted semantic convention, or the UOR-R4 model's M8 release.
+A prepared source-and-evidence release definition for the standalone OTLP/HTTP JSON example, its explicit loopback OpenTelemetry Collector check, and a vendor-neutral **draft** loaded-artifact identity convention. **Publication and published-asset verification are pending.** This is not an OpenTelemetry SDK, production exporter, accepted semantic convention, or the UOR-R4 model's M8 release.
 
-## Assets and verification
+## Planned assets and verification
 
 - `uor-otel-artifact-0.1.0.tar.gz`: the standalone consumer and its required source, the collector configuration, local conventions and draft proposal, collector results, and task records. No generated binaries, credentials, model checkpoint, corpus, or user content are included.
 - `SHA256SUMS`: the SHA-256 manifest for the archive.
 
-Download both assets, then verify and extract them:
+After publication, download both assets, then verify and extract them:
 
 ```sh
 shasum -a 256 -c SHA256SUMS
@@ -23,9 +23,9 @@ Telemetry is disabled unless `UOR_OTEL_OUT` is explicitly set. The default comma
 UOR_OTEL_OUT=build/trace.json make instrumented-example
 ```
 
-To repeat the collector experiment, follow `examples/otel/README.md`. It uses the official Collector Contrib image pinned by digest, binds only loopback, requires Docker, and must be stopped after inspection. Repeating it is optional; the release's recorded collector result is not represented as a new run.
+To repeat the collector experiment, follow `examples/otel/README.md`. It uses the official Collector Contrib image pinned by digest, binds only loopback, requires Docker, and must be stopped after inspection. Repeating it is optional; the recorded collector result is not represented as a new run.
 
-Release tag: `otel-artifact-v0.1.0`, targeting the protected `main` merge commit that contains this release definition.
+Planned release tag: `otel-artifact-v0.1.0`, to target the protected `main` merge commit that contains this release definition.
 
 ## Recorded collector evidence
 
@@ -35,10 +35,12 @@ The resource identifies the fixed codebook as 512 bytes with SHA-256 `9d98bd50f4
 
 Evidence archive: https://huggingface.co/datasets/caseyallard/uor-r4-store/commit/4df3c78a8d4652ec4b713dc621e5ddf67b7d8cd9
 
+Evidence roles in this package: `docs/labs/uor-telemetry/collector-results.json` is the later official-collector PASS record. `evidence.json` and `delivery-checks.txt` are preserved earlier host-only records from before that check; their `collector_interoperability: NOT_RUN` and 124-roadmap-item references are historical, not the current collector or roadmap status.
+
 ## Draft convention and remaining work
 
 `docs/telemetry/model-artifact-convention.md` proposes optional loaded-artifact digest, algorithm, byte-size, and identity-kind resource attributes for external discussion. The local `uor.*` names remain experimental and separate from proposed `gen_ai.*` names.
 
-Before any upstream YAML pull request, the project still needs a real loaded-model consumer and a second independent runtime/example, plus privacy and cardinality review. A discussion issue should come first. No OpenTelemetry issue, Slack post, or pull request is submitted by this release, and no upstream acceptance is claimed.
+Before any upstream YAML pull request, the project still needs a real loaded-model consumer and a second independent runtime/example, plus privacy and cardinality review. A discussion issue should come first. No OpenTelemetry issue, Slack post, or pull request is submitted by this release definition, and no upstream acceptance is claimed.
 
-Production export, SDK interoperability, multi-runtime interoperability, GPU telemetry, prompt/completion collection, and model-capability evidence are outside this release's measured scope.
+Production export, SDK interoperability, multi-runtime interoperability, GPU telemetry, prompt/completion collection, and model-capability evidence are outside this package's measured scope.
