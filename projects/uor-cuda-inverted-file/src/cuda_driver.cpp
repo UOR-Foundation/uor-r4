@@ -145,7 +145,7 @@ Status build(const Table& table, Index& index) {
     if (status != Status::Ok) return status;
     const auto table_values = table_bytes(table);
     const auto root_values = roots_bytes();
-    const std::uint32_t count = static_cast<std::uint32_t>(table.tokens.size());
+    std::uint32_t count = static_cast<std::uint32_t>(table.tokens.size());
     Buffer table_d, roots_d, offsets_d, members_d, cells_d, absent_d, status_d;
     if ((status = upload(table_values, table_d)) != Status::Ok ||
         (status = upload(root_values, roots_d)) != Status::Ok ||
@@ -186,7 +186,7 @@ Status update(const Table& table, std::uint32_t moved_token, Index& index) {
     if (status != Status::Ok) return status;
     const auto table_values = table_bytes(table);
     const auto root_values = roots_bytes();
-    const std::uint32_t count = static_cast<std::uint32_t>(table.tokens.size());
+    std::uint32_t count = static_cast<std::uint32_t>(table.tokens.size());
     Buffer table_d, roots_d, offsets_d, members_d, cells_d, absent_d, status_d;
     if ((status = upload(table_values, table_d)) != Status::Ok ||
         (status = upload(root_values, roots_d)) != Status::Ok ||
@@ -227,7 +227,7 @@ Status run_scan(const Table& table, const Query& query, std::uint32_t k,
     const auto table_values = table_bytes(table);
     const auto root_values = roots_bytes();
     const auto query_values = query_bytes(query);
-    const std::uint32_t count = static_cast<std::uint32_t>(table.tokens.size());
+    std::uint32_t count = static_cast<std::uint32_t>(table.tokens.size());
     Buffer table_d, roots_d, queries_d, offsets_d, members_d, cells_d;
     Buffer predictions_d, admitted_d, top8_d, status_d;
     if ((status = upload(table_values, table_d)) != Status::Ok ||
