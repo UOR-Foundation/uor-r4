@@ -30,7 +30,7 @@ These are median tokens per second, with 64 decode steps after each prefill. At 
   - That the copy computes claude-146's forward rests on `I-Rebind`'s Gate R half below, not on the rebind.
 - **`d11`, the GPU sort's own tie order, misses badly on DEV.** d is 612, 843 and 597 of 5,795. The barred cells sit at 0.47 to 0.55 past t = 17, with 4,306 to 5,111 ties in each. The fourth cell is unmeasured: only 100, 100 and 156 sets are judged past t = 17, against a floor of 965.
   - The `d11` and `d11-tie` float readouts differ in `next` at 590, 815 and 578 positions.
-  - So on these checkpoints the tie order is worth about 10% of top-1. Parity holds only with the integer session's rule on both sides, which has been the float read's default since claude-239.
+  - So on these checkpoints the tie order moves 10 to 14% of next-word choices, a top-1 drop of 9.5 to 13.3 points. Parity holds only with the integer session's rule on both sides, which has been the float read's default since claude-239.
 - **Integer rotations still flip some type-head query bits.** In the parity arm:
   - the first read's type heads differ at 21 to 29 sets of 9,646;
   - the second read's type heads differ at 64 to 101 sets of 7,260 to 7,858 judged.
@@ -46,7 +46,7 @@ These are median tokens per second, with 64 decode steps after each prefill. At 
 - row S does not apply: `I-Copy` is clean;
 - so row P is the first that holds.
 
-**`d11-tie` on DEV** (54 windows, 5,795 positions; bar P1 d ≤ 173; bar P2 ≥ 0.95 past t = 17, with 9,646 sets per cell):
+**`d11-tie` on DEV** (54 windows, 5,795 positions). Bar P1 is d ≤ 173. Bar P2 is ≥ 0.95 past t = 17, on 9,646 sets in each of the three barred cells; the fourth cell's judged count is in its column:
 
 | Seed | d | Top-1 | Copy heads, read 1 | Type heads, read 1 | Copy heads, read 2 | Type heads, read 2 (judged past t = 17; downstream) | Single tokens |
 |---|---|---|---|---|---|---|---|
@@ -131,6 +131,14 @@ The copy heads are 1.0 at every seed. On the same sequences, (r-drop) gave 6 and
 | `claude_146s_fingerprints_are_this_builds_plans_with_the_kernel_before_claude_179` | the kernel hash put back | FAILED |
 | restored | | 6 passed |
 
+These tests pin the helpers' rules. The refusals inside `rebind_fbs_backward` itself have no test of their own:
+- the existing-folder check;
+- the check that each fingerprint appears once in the config;
+- the forward-text check at the call;
+- the clean-up on a failed load.
+
+On the pod, they ran on the real checkpoints, where every copy passed them and loaded.
+
 **The docs:**
 - the prep sheet, with its FIT, its pre-run review, attempt 1, and the decision review's two rounds (§9 to §11);
 - the item's step 5 records the result;
@@ -143,6 +151,8 @@ All of them are fresh-context reviewers that did not write the work. Each record
 - **FIT:** FIT (`ec06f1318`), with five minor findings applied. For attempt 2's delta: FIT (`de83faabf`).
 - **Pre-run:** PASS (`5ab73fc01`). For attempt 2's delta: PASS (`de83faabf`).
 - **Decision review on the stop "`fbs-snapshot` refuses it":** round 1 REVISE (`e7dd3e40e`), with four findings applied; round 2 APPROVE (`de83faabf`), with three minor findings applied. Logged as `[claude] owner log:` on #3385 (comment 6556213845).
+- **Exact-head code review (at `2d2bf259f`):** APPROVE, with no blocker, no major and three minor findings. The minors are under Still open.
+- **Claims check (at `2d2bf259f`):** PASS. Every number in this REPORT, the notebook row and the item matches the sealed evidence. Its four minor wording findings are applied.
 
 ## Measurements and cost
 
@@ -150,8 +160,8 @@ All of them are fresh-context reviewers that did not write the work. Each record
   - Bootstrap ready at 09:41:21Z. The job ran from 09:41:46Z to 09:50:04Z (`out/job.log`). The control's cold build took 20 s.
   - Deleted at about 09:53Z, so about 13 minutes at $0.563/h: about $0.12. With attempt 1, the unit spent about $0.17 on GPUs.
 - **Stored** at `caseyallard/uor-r4-store:results/claude/integer-hamming-read-dev-2026-11-01/`:
-  - `out/`: 157 files, with `SHA256SUMS` `5fe0dd27fcd2ec347b668d942cc9e06ffd28aa49bf549b63b576e5f79eba2d32`;
-  - `reading/`: 123 files, with `SHA256SUMS` `5395af1a4558ee50815d0dff6125afcae4710a98ca4145b454cea2d777b30a70`.
+  - `out/`: 156 sealed files plus their `SHA256SUMS`, `5fe0dd27fcd2ec347b668d942cc9e06ffd28aa49bf549b63b576e5f79eba2d32`;
+  - `reading/`: 122 sealed files plus their `SHA256SUMS`, `5395af1a4558ee50815d0dff6125afcae4710a98ca4145b454cea2d777b30a70`.
 
   Both were listed back.
 
@@ -174,6 +184,10 @@ None.
 - **Done-when 3, the read's long-context cost.** The sweep stops at 192, the artifact's context. Timing the read past it needs an artifact with a longer context. A synthetic one in `stack/synthetic.rs` is in this item's scope, since speed does not depend on trained weights. That is the next unit.
 - **The type-head query flips** (21 to 101 sets per cell) are within the bar. They were not traced.
 - **(r-drop), the checkpoint the one-model path ships,** met the bars on the fixed sequences (claude-238), but has not been run on DEV.
+- **The exact-head review's three minors** (no blocker, no major). They are left for a later unit, because a code change now would move the head the GPU result rests on:
+  - a failed copy or write after the copy's folder is made leaves a half-written folder. A retry is refused, and nothing wrong loads, since the step config is written last;
+  - `rebind_fbs_backward`'s own refusals have no test (above);
+  - `--inspect` runs `FbsArm::OneAtomActive` only. A run on another arm is refused by `check_run_arm`, not inspected wrongly.
 - **Carried from claude-238 and claude-239:**
   - the guard's restore on a panic;
   - the read's unguarded backward;
