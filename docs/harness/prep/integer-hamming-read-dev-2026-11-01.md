@@ -65,6 +65,8 @@ With the GPU sort's own order, the forward as trained missed both bars: d was 17
 
 **The two bars, judged on `d11-tie` (DEV) at each seed:**
 - **P1, top-1:** d ≤ 173 of 5,795 sequence positions, so top-1 agreement ≥ 97.0%. This is claude-233's 3% (46 of 1,536), on DEV's count.
+  - d counts every position the forward reads, the prompt positions included, as claude-238's parity did. About 1,800 of the 5,795 are scored targets.
+  - d on the scored positions alone is not reported: `fbs-compare` gives counts, not the differing positions, and it is outside this unit's scope.
 - **P2, kept sets:** in each of the three cells the comparison judges at every position, the share of sets past t = 17 equal to the float's is ≥ 0.95. The three cells are the copy heads at both reads and the type heads at the first.
   - The share is (equal − 1,944) / (judged − 1,944).
   - The 1,944 are each cell's sets at t ≤ 17 (2 heads × 972). Up to t = 17 a read keeps every earlier position, so these are equal by construction.
@@ -86,7 +88,7 @@ The single tokens reach no read, so their agreement is reported only.
 | Row | Reading | Decides | Next |
 |---|---|---|---|
 | 0 | **An instrument fault** (§4) | Nothing. | Repair, then rerun. |
-| S | **`I-Copy` fails** (§4.7): a `d11-tie` copy code differs from the CPU control beyond the arithmetic allowance, or a pair is inconsistent | A stage remains between the read as trained and the float reference. No parity call is made. | Classify the stage (instrument or object), then trace it, as claude-237 did. |
+| S | **`I-Copy` fails** (§4.7): a `d11-tie` copy bit differs from the CPU control where the control's value is 10⁻⁴ or more, or a pair is inconsistent | A stage remains between the read as trained and the float reference. No parity call is made. | Classify the stage (instrument or object), then trace it, as claude-237 did. |
 | P | `d11-tie` meets parity | **The item's done-when 2 holds:** claude-146's checkpoints on DEV, against the float forward under its default rule. | The item's remaining done-when, the timing (step 6), from this unit's reading if it serves. |
 | K | `d11-tie` meets P1 | Top-1 holds; the kept sets miss or go unmeasured. | A missed cell is read from its flips: type-head query flips are the residual near a code's sign, and copy flips are the codes (`I-Copy`'s route). An unmeasured fourth cell gets a comparison that feeds both sides the float's first-read outputs. |
 | G | otherwise: `d11-tie` misses P1 at some seed | The read on DEV does not reach parity. | The bridge names where. If it meets claude-238's bars, the gap is in the text: read the differing positions' windows. If it misses, the gap is in the checkpoints: compare with (r-drop)'s run config and read. |
@@ -112,7 +114,10 @@ The single tokens reach no read, so their agreement is reported only.
 3. **`I-Snapshot`, per seed:**
    - on the pod: the DEV form's `snapshot.json` is byte-identical to the fixed form's (the snapshot does not depend on `--dev`), and it carries the read (`"hamming":{`), the retained reading once, and `"readout_nearest":true` once;
    - on the laptop: the writer copy is it less exactly 23 bytes and carries no flag; the artifact does not read nearest; and every `compare.json`'s `artifact_sha256` is the exported artifact's.
-4. **`I-Default`, per seed and sequences:** the snapshot form's `readout-d11.json` is byte-identical to the `d11-tie` trace form's. So the parity arm is the float read's default forward, and recording the trace leaves it unchanged. `d11`'s readout must differ from it on DEV, or the arm never reached the sort. A `d11` readout equal to it is row 0 unless the comparison counts 0 ties.
+4. **`I-Default`, per seed and sequences:** the snapshot form's `readout-d11.json` is byte-identical to the `d11-tie` trace form's. So the parity arm is the float read's default forward, and recording the trace leaves it unchanged.
+   - **`d11`, a reading:** it reached the sort when its comparison counts ties, or its kept sets differ from `d11-tie`'s (the traces' `windows`, compared on the laptop).
+   - Its readout can still equal the parity arm's: a tie at or past a head's margin has weight max(0, m − d)/m = 0. So an equal readout alone is not a fault.
+   - If neither holds, DEV had no tie at a 16th place, and the REPORT says so. Each arm's rule is pinned by `I-GPU-Tests`.
 5. **`I-Shape`:**
    - each DEV trace and readout holds 54 windows with lengths summing to 5,795;
    - each fixed one holds 8 of 192;
@@ -128,6 +133,7 @@ The single tokens reach no read, so their agreement is reported only.
    - no differing query or key bit where the control's value is 10⁻⁴ or more (`COPY_VALUE_BINS` bins 3 to 6 empty).
    - **The allowance:** claude-238's arithmetic bound, CPU against GPU, is about 1.3 × 10⁻⁵. `d11-tie`'s f32 rotations differ from the artifact's rounded ones by at most 2⁻²⁵, which adds under 10⁻⁶ (4 terms × |p| ≤ 8).
    - **Bits under 10⁻⁴ are counted and reported, with no cap.** DEV repeats tokens, so one flipped (token, head, bit) counts once per occurrence, and a count of samples measures frequency, not stages.
+   - Bins 0 to 2 are reported apart, so a bit between the allowance and 10⁻⁴ (bin 2) shows as such. It is not row S: that rule is the 10⁻⁴ line above.
    - A real stage shows at 0.1 or more: claude-237's snap moved 57 to 695 bits per cell there. claude-238 found 0 differing bits on every arm.
    - The other two arms' counts, and the control against the integer session at all 8,192 codes, are reported.
 8. **`I-Faults`:**
@@ -178,7 +184,7 @@ The single tokens reach no read, so their agreement is reported only.
 
 **On the laptop,** with `fbs-export`, `fbs-compare` and `fbs-toks` built at the same head (serving-wasm):
 
-7. The stored output fetched, and checked against its sums.
+7. The stored output fetched, and checked against its sums. The laptop's head, its clean tree and each tool's sha256 are recorded in `reading/`. A crate or Cargo file that differs from the pod's head (its `head.txt`), or a tree not clean there, is row 0.
 8. Per seed: the writer copy, the artifact and the laptop's half of `I-Snapshot`; the three top-1 comparisons.
 9. Per seed: the two integer traces, then the three trace comparisons (`I-Shape`, `I-Faults`).
 10. The copy codes for the three arms (`I-Copy` on `d11-tie`).
@@ -192,9 +198,10 @@ The single tokens reach no read, so their agreement is reported only.
   - On (r-drop) and the fixed sequences, `d11-tie` sat at 0.4% and 1.8% (6 and 27 of 1,536), and `d11` at 11% and 16%.
   - If DEV behaves like that, `d11-tie` sits near 25 to 100, and `d11` far above the bar. The bar separates the two by an order of magnitude.
 - **P2:** per cell and seed, 9,646 sets past t = 17, against at most 482 unequal. On (r-drop), `d11-tie`'s copy cells were exact, and `d11`'s were 47–48% equal.
-- **The fourth cell's floor does not tighten the first read's bar here.**
+- **The fourth cell's floor is about as tight as P2's bar.**
   - Reaching 965 judged sets over 54 windows needs about 8.9 positions past t = 17 per window, of the 89 each window has on average.
-  - With a first-read type-head difference rate p per set, the mean judged run is about 1/(2p) positions. So the floor needs p ≤ about 5.6%, which is looser than P2's 5%.
+  - With a first-read type-head difference rate p per set, the mean judged run before the first difference is about (1 − 2p)/(2p) positions. So the floor needs p ≤ about 5.0%, P2's own 5%. Short windows tighten it further.
+  - So an arm near P2's bar may land in row K with the fourth cell unmeasured. Row K says what that needs.
   - On the fixed sequences claude-238's floor needed about 3%, because each window had only 174 positions past t = 17.
 - **Seeds:** three, each with its own 5,795 positions. "Meets" at all three.
 - **Out of reach:** a fault seen only on real prompts, only through the turn memory, or only past DEV's distribution.
@@ -221,7 +228,25 @@ The single tokens reach no read, so their agreement is reported only.
 
 ## 9. Non-author TEST FITNESS review
 
-Pending.
+**FIT** (claude, a fresh reviewer that did not write the sheet, 1 Nov, at `ec06f1318`).
+
+It read the sheet, `fbs-snapshot.rs`, `fbs_export.rs`, `hamilton_sheet.rs`, `flock_read_hamming.rs` and the integer `fbs_snapshot.rs`. It checked:
+- the bars' arithmetic: 173 of 5,795; 9,646 sets past t = 17, at most 482 unequal; the floor of 965;
+- that every window reaches t = 17: 5,795 − 4,823 = 972 = 54 × 18, and `I-Data` pins the printed line;
+- that sets at t ≤ 17 are equal by construction (`kept_set` wants min(16, t − 1));
+- that the cut keeps real tokens only, and both sides read the same cut inputs;
+- that the tie key (h·T + s) is exact in f32 and orders by (bits, s);
+- that rows P, K and G are exhaustive, and the bridge decides no row;
+- the writer copy's 23 bytes, and the value bins.
+
+**Its five minor findings, each applied here:**
+1. §7: the mean run is (1 − 2p)/(2p), so the floor needs p ≤ about 5.0%, not 5.6%.
+2. §4.4: a `d11` readout equal to the parity arm's is not a fault when every tie has weight 0. The rule now reads ties and kept sets.
+3. Row S now says what `I-Copy` triggers on (10⁻⁴), and bin 2 is reported apart.
+4. §6 step 7: the laptop's tools are pinned to the pod's head.
+5. §3 P1: d counts every position. Scored-only d is not reported, and the reason is given.
+
+**Left for the pre-run review:** `fbs-compare --parity-only` on DEV's variable-length sequences (that d counts sequence positions only), and the `fbs-toks` command forms.
 
 ## 10. Pre-run review
 
