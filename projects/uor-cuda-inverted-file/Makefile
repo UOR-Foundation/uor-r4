@@ -19,6 +19,12 @@ host-test: $(BUILD_DIR)/admission_test $(BUILD_DIR)/inverted_file_test
 	./$(BUILD_DIR)/admission_test
 	./$(BUILD_DIR)/inverted_file_test
 
+$(BUILD_DIR)/telemetry_ids_test: src/sha256.cpp src/sha256.hpp src/telemetry_ids.cpp src/telemetry_ids.hpp tests/telemetry_ids_test.cpp | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/sha256.cpp src/telemetry_ids.cpp tests/telemetry_ids_test.cpp -o $@
+
+telemetry-test: $(BUILD_DIR)/telemetry_ids_test
+	./$(BUILD_DIR)/telemetry_ids_test
+
 test: host-test
 
 NVCC ?= nvcc
