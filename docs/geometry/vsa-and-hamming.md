@@ -18,7 +18,7 @@ Two standard facts (**proof**, from the definition of XOR) are worth knowing. XO
 
 ## What the older model did with it
 
-In the older native prose learner (an offline float learner on a CPU, now barred by the GPU-only rule D24), the VSA term added `vsa_scale · similarity` to the root and leaf scores. Three code modes existed.
+In the older native prose learner (an offline float learner on a CPU), the VSA term added `vsa_scale · similarity` to the root and leaf scores. That historical learner is not admitted by D84 and remains blocked by its own evidence and the later bans; D84 does not reopen it. Three code modes existed.
 
 | Mode | Code | Distinct codes |
 |---|---|---|

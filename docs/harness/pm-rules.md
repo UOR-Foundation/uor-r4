@@ -305,7 +305,7 @@ exact/no-float optimizer and instrument rulings stand unchanged.
   not run — it returns to the owner as a named exception request with the reason. Rationale: D32
   is a clean break; an FP oracle would reintroduce the exact ambiguity class it removed, and
   "instrument-only FP" is how the F32/F64 path grew back the last time.
-- **Unchanged:** D24's compute placement (harness, docs, source review and grading of stored
+- **Amended by D84:** D24 remains GPU-first (harness, docs, source review and grading of stored
   replies on the laptop are not model compute); R12's four authority questions and attribution
   order, applied to the discrete instruments; D31's instrument-defect rule; the frozen-bar
   discipline. A discrete instrument's defect is still repaired as instrumentation, never as a

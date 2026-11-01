@@ -37,7 +37,7 @@ The charter's section 3 lists thirteen technical constraints. Here they are in e
 | 3.2 | No squashing functions | No softmax, log-softmax, cross-entropy, softplus, sigmoid, tanh or GELU anywhere, including in losses, sampling and comparators, and including renamed or lookup-table versions. | They are expensive and hide a dense global normalisation. |
 | 3.3 | No matrix multiplication | No dense matmul in training, evaluation, tooling or serving, including wrappers and hand-written loops. A geometric feed-forward block is allowed; a dense MLP is not. | Matmul is the cost the project exists to remove. |
 | 3.4 | Presence counts | Banned code may not sit in any compiled or loaded module. NVRTC (runtime GPU compilation) is banned. The checks `uor-harness ratchet d23` and `d25` only ever tighten. | Code that is present eventually runs. |
-| 3.5 | Research compute is GPU-only | Training, evaluation, qualification and reference runs use the GPU. Spend GPU only where a run can change a decision. | Host runs gave wrong timing and wrong evidence, and the GPU is where the speed is. |
+| 3.5 | Research compute is GPU-first | GPU results qualify training, evaluation and reference runs by default, and GPU is spent only where a run can change a decision. D84 permits only the named owner-authorized CPU training program to run development training, evaluation and parity in its isolated module; those results cannot replace a GPU bar. | Host runs historically gave wrong timing and evidence, while a bounded CPU port can repair lawful training paths on the owner's workstation without becoming qualification evidence. |
 | 3.6 | Serving is integer, on your device | The shipped model uses no float or transcendental instruction. Since D80 and D81 (28 Oct 2026) it may use the hardware integer multiply and divide, which give exact products and quotients. Running it on a laptop CPU, in a browser (WebAssembly) or on Apple silicon is allowed, and so is measuring its speed and energy. Panel scoring, qualification and milestone evaluation of an exported artifact remain GPU research compute; only product serving and measuring its tokens/s and energy run on client devices. | The product is fast local AI on ordinary hardware. |
 | 3.7 | Float only offline, with an export gap | Float training is legal offline in a separately scanned module. Every float candidate reports how much accuracy it loses when exported to integers; a loss above the two-seed noise band disqualifies it. | Float trains faster, but only the integer artifact ships. |
 | 3.8 | Zeta exception | Float is allowed for complex-plane zeta-zero parts and prime log-phases. Everything downstream is discrete. | Zeta phases are complex numbers by nature. |
@@ -57,12 +57,13 @@ A **lab** is any contributor, human or AI, working under the charter. The rules 
 - Choose their own work from `PLAN.md`, post a one-line intent note, claim a branch and carry on unless redirected (`CHARTER.md` §5.3).
 - Build, run finite kernel tests and run host checks without any pre-registration (§4.5).
 - Train in float offline with a sheet, a non-author FIT and the lab's own whole-project pre-run review under D67, and report the export gap on the same evaluator (§3.7, §4.5, §5.1).
+- Run the named D84 CPU training and parity program as development research without treating its output as a GPU qualification result (§3.5).
 - Serve the integer model on a user's device and measure it (§3.6).
 - Review their own pull request at the exact head, from a fresh context (§5.5), and use a fresh-context subagent as the non-author FIT reviewer (§4.5).
 
 **Labs may not:**
 - Use a banned operation anywhere, including in comparators, or in renamed form (§3.2, §3.3).
-- Run research compute on the CPU, or spend GPU on work that cannot change a decision (§3.5).
+- Run CPU model compute outside the named D84 program, or spend GPU on work that cannot change a decision (§3.5).
 - Start GPU training or a milestone-bearing run without a sheet, a non-author FIT and the lab's own pre-run review (§4.5, §5.1). D41's donor pass is the named exception that also needs the owner at dispatch.
 - Use a neural comparator, teacher or grader, apart from the single D41 donor pass (§3.10).
 - Cancel a healthy run because a self-set budget ran out, or touch another session's GPU or files (§5.4).

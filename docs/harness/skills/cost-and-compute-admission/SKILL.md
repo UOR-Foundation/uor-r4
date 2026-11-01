@@ -1,6 +1,6 @@
 ---
 name: cost-and-compute-admission
-description: Admit and budget a run before execution — non-model CPU work locally, GPU-only model execution through uor-pod within the owner caps, the cumulative ledger, and the hard stops that are not negotiable.
+description: Admit and budget a run before execution — non-model CPU work locally, GPU-first model execution through uor-pod within the owner caps, the named D84 CPU development exception, the cumulative ledger, and the hard stops that are not negotiable.
 version: 1
 harness: 1
 kind: research
@@ -8,7 +8,7 @@ applies-to: [docs/labs/compute.md, scripts/pod/uor-pod, docs/harness/milestones.
 when: [before compute, cost, budget, GPU, pod, lease, storage, disk floor, admission]
 requires: []
 outputs: [a complete cost projection in the pre-registration, a pod lease under --lab and --session, a cumulative ledger charge, a release and cleanup record]
-forbidden: [CPU model compute, GPU work that cannot change a decision, exceeding 4 running pods or 8 dollars per hour, a new spending class, cancelling a healthy run on a self-set budget, touching another session's lease or files]
+forbidden: [CPU model compute outside the named D84 program, GPU work that cannot change a decision, exceeding 4 running pods or 8 dollars per hour, a new spending class, cancelling a healthy run on a self-set budget, touching another session's lease or files]
 milestones: [m1, m2, m3, m4]
 ---
 
@@ -23,14 +23,18 @@ artifacts and compute", and D24 in [DECISIONS.md](../../../integration/DECISIONS
 
 1. **Classify the work before choosing a machine.**
    - Non-model editing/build/static checks, Rust preparation and grading stored
-     outputs run locally. The native prose learner and model/parity fixtures are
-     not CPU exceptions.
-   - Model work is GPU-only through uor-pod, subject to D23–D25 and applicable
-     holds. **Training and M2 training/rental remain held; FIT lifts neither.**
-   - Model compute never runs on the CPU (D24). Training, evaluation and every
-     part of the forward that scoring, normalization or the value mix touches are
-     GPU work; a silent host-side fallback is a defect to fix with a kernel, not a
-     cost to report and not mechanism evidence.
+     outputs run locally. The historical native prose learner is not admitted by
+     D84; model or parity fixtures run as host checks only when the named CPU
+     program owns them or the repository already specifies a host oracle.
+   - Default qualification model work is GPU-only through uor-pod, subject to
+     D23–D25. A GPU or CPU training run proceeds after its required
+     pre-registration/FIT and the lab's D67 pre-run review; D67 retired the
+     blanket Training/M2 holds.
+   - Model compute outside the named D84 program never runs on the CPU (D24).
+     Training, evaluation and every part of the forward that scoring,
+     normalization or the value mix touches remain GPU work by default; a silent
+     host-side fallback is a defect. D84 CPU results are development research,
+     not qualification evidence.
 2. **Check the decision first (D24).** If the configuration is already excluded by
    D23–D25 — prohibited squashing/dense matrix multiplication, or a comparison whose baseline those rules forbid —
    or if neither outcome changes the next step, the campaign is cancelled, not

@@ -50,7 +50,7 @@ flowchart LR
 | D21 | Three non-moving results on one line force a pivot; one-off lab orders of 9 October. | Merged | 4.4 (pivot note); the lab orders are retired as executed or overtaken. |
 | D22 | A negative closes a configuration, never a mechanism; power and transfer rules; five closures reopened. | Kept | 4.1 and 4.3 |
 | D23 | No softmax anywhere, including losses, sampling, teachers and equivalent forms. | Kept | 3.2 |
-| D24 | No CPU model compute, and no GPU on work that cannot change a decision. | Kept (scope narrowed) | 3.5, now research compute only; serving on client devices is allowed (3.6). |
+| D24 | No CPU model compute, and no GPU on work that cannot change a decision. | Kept and amended by D84 | 3.5, now GPU-first; the owner-authorized CPU development program is the named exception and GPU remains the qualification authority. Serving on client devices is allowed (3.6). |
 | D25 | Geometric operator phase: squash and matmul bans, GPU-only compute, rule freeze. | Retired | Superseded by D32/D37; its bans live on in 3.2 and 3.3. |
 | D26 | Vast.ai is the default pod provider; Runpod is the emergency backup; caps of 4 pods and $8 per hour. | Kept | 5.4 |
 | D27 | Rust first, with the uor-foundation crates as the shared floor. | Kept | 3.11 |
@@ -69,6 +69,8 @@ flowchart LR
 | D40 | Owner-identity phrases are typed by the owner personally. | Kept | 5.1 (the K16 ratification is a retired one-off) |
 | D41 | One-time offline donor corpus exception (`distill-d1`), on binding conditions. | Kept | 3.10 (sole exception), 5.1 and 5.8 |
 | D42 | The owner adopts the charter and answers eight checkpoint questions. | Kept (as the adoption record) | The charter itself; see the [change log](changes.md). |
+
+Decisions after D42 are recorded in [`DECISIONS.md`](../integration/DECISIONS.md), not expanded into this D0-D42 map. D84 amended D24's compute placement on 1 November 2026; its full row and change-log entry are authoritative.
 
 ## Tally
 

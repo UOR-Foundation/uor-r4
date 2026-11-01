@@ -101,6 +101,7 @@
     - [Durable memory (M3)](research/notebook/m3-durable-memory.md)
     - [Integer serving (M4)](research/notebook/m4-serving.md)
     - [Data and tokenizer](research/notebook/data-tokenizer.md)
+    - [CPU training research](research/notebook/cpu-training.md)
     - [Research tooling and governance](research/notebook/harness-governance.md)
 
 # Rules

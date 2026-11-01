@@ -12,7 +12,7 @@ Only the owner changes it; changes are logged in [docs/rules/changes.md](docs/ru
 1. **Geometry only.** Every mechanism, training signal and fix comes from the project's geometry (CHARTER §3.1).
 2. **No softmax or squashing.** No softmax, log-softmax, softplus, sigmoid, tanh, GELU or normalized exponential anywhere, including losses, gradients, sampling and renamed or table forms (§3.2).
 3. **No matmul.** No dense matrix multiplication or GEMM in training or serving, including wrappers and hand loops (§3.3).
-4. **GPU-only research compute.** Training, evaluation and qualification run on the GPU; serving the exported integer artifact on client devices is the product and is allowed (§3.5, §3.6).
+4. **GPU-first research compute.** GPU results qualify training and evaluation by default. Only a named, separately scanned CPU program authorized by the owner (D84) may run CPU training or evaluation as development research; it cannot replace a GPU bar without a later owner decision. Serving the exported integer artifact on client devices remains the product and is allowed (§3.5, §3.6).
 5. **Never park; never wait.** Every step is one your lab can finish alone: a GPU or training run, held work included, goes ahead on your own pre-run review, and a bar or other decision on your own decision review, each reading the whole project first and logged for Casey, who can reverse it (§5.1).
 6. **Deliver through the full path:** PR → your own fresh-context adversarial exact-head review, in the same session → merge queue → verify on fresh `main` → delete the branch and worktree; other labs audit after the merge (§5.5).
 
@@ -68,7 +68,7 @@ Build: `CARGO_TARGET_DIR=local/harness-target cargo build -p uor-r4-harness` ([d
 
 ## Compute
 
-- GPU pods only through `scripts/pod/uor-pod`; Vast.ai is the default and Runpod is the emergency backup; run `uor-pod status` first.
+- GPU pods only through `scripts/pod/uor-pod`; Vast.ai is the default and Runpod is the emergency backup; run `uor-pod status` first. The owner-authorized CPU training program in D84 uses the local workstation only for its named, isolated research units.
 - At most 4 pods and $8/h across all labs; lease the GPUs you use and never touch another session's GPU, lease or files.
 - Never cancel a healthy run because a self-set budget ran out (extend it, renew the lease and note it); save results off the pod before `down`; CPU-only builds and static checks run on the laptop; CUDA kernels are built ahead with nvcc on the pod.
 
