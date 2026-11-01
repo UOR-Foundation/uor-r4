@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: false
 depends_on: [uor-cuda-inverted-file, uor-otel-artifact-convention]
 done_class: host
-scope: [projects/uor-cuda-inverted-file/**, docs/telemetry/**, docs/loop/tasks/uor-community-evidence-releases/**, docs/roadmap/items/uor-community-evidence-releases.md, docs/roadmap/README.md, docs/roadmap/issues.json]
+scope: [projects/uor-cuda-inverted-file/**, docs/telemetry/**, docs/loop/tasks/uor-community-evidence-releases/**, docs/roadmap/items/uor-community-evidence-releases.md, docs/roadmap/issues.json]
 ---
 
 ## Why it matters
@@ -17,7 +17,7 @@ The standalone inverted-file CUDA example and its opt-in OpenTelemetry experimen
 
 ## What is missing
 
-Two actual public GitHub releases do not yet exist. The CUDA implementation and measurements are complete at their declared scopes, and the official collector check passed; only release metadata, archive verification, protected delivery, publication, and read-back verification remain. SDK and multi-runtime interoperability remain NOT_RUN. No NVIDIA or OpenTelemetry submission or acceptance is implied.
+Two actual public GitHub releases do not yet exist. The CUDA implementation and measurements are complete at their declared scopes, and the official collector check passed; only release metadata, archive verification, protected delivery, publication, and read-back verification remain. SDK and multi-runtime interoperability and a real loaded-model example remain NOT_RUN; local `uor.*` attributes remain experimental. No NVIDIA or OpenTelemetry submission or acceptance is implied.
 
 ## Done when
 
