@@ -250,4 +250,33 @@ It read the sheet, `fbs-snapshot.rs`, `fbs_export.rs`, `hamilton_sheet.rs`, `flo
 
 ## 10. Pre-run review
 
-Pending.
+**PASS** (claude, 1 Nov, at `5ab73fc01`). Two fresh read-only reviewers, neither of which wrote the sheet or the scripts, each took one side.
+
+**The integer side** (`read.sh` against `fbs-compare` and `fbs-toks`): PASS, nothing blocking.
+- `fbs-compare --parity-only` takes the four files in read.sh's order. Its `sequences` section counts the readout's own sequence positions (5,795), with the single tokens apart.
+- It accepts any length from 1 to the context, and refuses readouts that hold different sequences. It prints compact JSON, so the `artifact_sha256` match works.
+- The four `fbs-toks` forms match read.sh, float before integer. Each takes its windows from its inputs; the comparison checks counts, ids and depths, with no fixed 8 or 192.
+- The jq field names are the writers' own. The 23-byte writer copy holds: the snapshot is compact, with no final newline, and the flag is its last field.
+
+**The pod side** (`job.sh` and `watch.sh` against `fbs-snapshot`, the sheet and `uor-pod`): PASS, nothing blocking.
+- The four `fbs-snapshot` forms match its parse, `--dev` before `--hamming-trace` included.
+- The DEV line matches the binary's print byte for byte.
+- The six tests exist under `--features cuda`. All 14 pins are the sheet's.
+- Every failure path seals through `end()`, with the sheet's exit codes.
+- The watcher's greps match the job's log lines, and the `uor-pod` flags exist.
+- The bootstrap leaves the source as a git checkout at `src-SHA` (`uor-pod-bootstrap.sh:447`).
+
+**The minor findings, each applied to the scripts:**
+- the laptop fetches the pod's head if it is missing, and exits 8 when a fault was logged;
+- the d11 reading compares kept sets only;
+- the watcher reports whether the seal is present, flags a projection over 2 hours, and renews the lease once before a time stop;
+- `head.txt` is written first, and the seal grep is anchored. It still picks out the 12 lines of the local copy of the seal.
+
+**What the reviewers were not asked:**
+- I-Faults' and I-Copy's counts are read from the stored comparisons at step 13, not inside read.sh.
+- The output is stored from the laptop (`uor-store put` over ssh) and listed back before `down`.
+
+**The chain and the lease:**
+- This run is the item's step 5, in PLACE.md's order: serve the working model's parts in integers, the read's parity before its speed.
+- Each row of §3 names what it unlocks.
+- `uor-pod status`, 1 Nov: 0 pods, $0/h of $8/h; a 5090 at $0.563/h, 2 h leased, `--count 1`.
