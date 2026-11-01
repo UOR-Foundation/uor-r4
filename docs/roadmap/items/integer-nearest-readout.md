@@ -41,7 +41,9 @@ The project's first hurdle is one working model end to end, served from its inte
 - **Next: the trace instrument, then the sheet that reads Q5,** under claude-247's card. Q1 to Q4 held in claude-246, so done-when 3 waits on Q5 alone.
   - **The instrument** records every decision of the card's five kinds on F, T and R: Hamming codes, kept sets, memory lookups, rate buckets and the nearest. It forces codes and rate buckets, and writes each side's query at the traced positions, so each side can score the other's pick.
     - The card's scope change is in place: `stack/hamming.rs`, `flock_read_hamming.rs`, `geometric_stack_native.rs`, `cuda_stack.cu` and `in_space_long.rs` are in this item's `scope:` (claude-248).
-    - It builds T's rounded copy beside `--rebind-fbs-backward`.
+    - **R's side is built** ([claude-249](../../loop/tasks/integer-nearest-readout/claude-249/REPORT.md)): `fbs-toks --forced --decision-trace` writes `uor-r4.decision-trace/1`, and `--force` replays rows under a `uor-r4.decision-force/1` set. On R s1, DEV s1's 308 rows outside the set equal claude-244's sealed rows exactly, traced or not, at about 47 ms per window.
+    - **Next, F's and T's sides,** writing the same schema from the float trunk, with T's rounded copy beside `--rebind-fbs-backward`. F and T record code coordinates; R records each code's word.
+    - **Then the replay driver and the near-tie grader:** the first differing code or bucket forced in forward order, structure (F, T) and arithmetic (T, R), each pick judged by G₁₀ on the reference side.
   - **The sheet** registers the card's rule verbatim, with a fresh FIT and a pre-run review. Its Row 0 is the card's: I-F, I-R, I-Twin, I-Rerun, I-Force, I-Align, I-Complete, I-Set and I-Inputs. GPU for F and T, under an hour; the laptop for R.
 - **Leads for the trace,** layer by layer: the trunk, Hamming read, memory and readout. Recheck end-to-end parity before rerunning p-x.
   - **The clear-margin disagreements** (g above G₁₀) first, as Q5 requires.

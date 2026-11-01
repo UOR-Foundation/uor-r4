@@ -460,6 +460,174 @@ pub struct HammingTraceHead {
     pub kept: Vec<Vec<u32>>,
 }
 
+/// The schema a [`DecisionTrace`] carries.
+pub const DECISION_TRACE_SCHEMA: &str = "uor-r4.decision-trace/1";
+/// The schema a [`DecisionForce`] carries.
+pub const DECISION_FORCE_SCHEMA: &str = "uor-r4.decision-force/1";
+
+/// Every discrete decision of claude-247's five kinds that one side's teacher-forced forward
+/// makes, per window and step (integer-nearest-readout, Q5's trace). Each step holds them in the
+/// forward's order: each layer's rate buckets in lane order and then the stream read after it,
+/// the readout read, the turn memory's lookup, and the nearest. `fbs-toks --forced
+/// --decision-trace` writes R's (claude-249).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DecisionTrace {
+    /// [`DECISION_TRACE_SCHEMA`].
+    pub schema: String,
+    /// `R`, the raw integer export; `F` or `T`, the float sides.
+    pub side: String,
+    pub layers: usize,
+    /// Lanes per layer, one rate bucket each.
+    pub lanes: usize,
+    /// Heads per read: the first `heads / 2` are copy heads, the rest type heads.
+    pub heads: usize,
+    /// The most positions a head keeps.
+    pub kept: usize,
+    /// One entry per window run, in the order run.
+    pub windows: Vec<DecisionWindow>,
+}
+
+/// One window's decisions: a panel row's prompt, then its reference fed one token at a time.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DecisionWindow {
+    /// The panel row's `position`, as `--forced` writes it.
+    pub position: usize,
+    /// The token stepped at each step.
+    pub ids: Vec<u32>,
+    /// The step that reads offset 0, the prompt's last.
+    pub reply_start: usize,
+    /// One entry per step.
+    pub steps: Vec<DecisionStep>,
+}
+
+/// One step's decisions, in the forward's order.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DecisionStep {
+    /// One entry per layer, in layer order.
+    pub layers: Vec<DecisionLayer>,
+    /// The readout read, on the final norm's output; `None` without one.
+    pub readout: Option<DecisionRead>,
+    /// The turn memory's lookup; `None` where none ran.
+    pub memory: Option<DecisionMemory>,
+    /// The nearest, from `reply_start` on; `None` at the prompt's earlier steps.
+    pub nearest: Option<DecisionNearest>,
+}
+
+/// One layer's rate buckets and the stream read after it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DecisionLayer {
+    /// Each lane's rate score, `clamp(decay + offset, 0, 2^16)` at Q16: the value its bucket is
+    /// chosen from.
+    pub score_q16: Vec<i32>,
+    /// Each lane's entry of the 16-entry table of λ and keep, as used: the forced entry where
+    /// one was forced.
+    pub entry: Vec<u8>,
+    /// The stream read after this layer, at depth `layer + 1`; `None` where no read runs.
+    pub read: Option<DecisionRead>,
+}
+
+/// One read's choices at one step.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DecisionRead {
+    /// The layers before the read, or the layer count for the readout read.
+    pub depth: usize,
+    /// The copy heads, then the type heads where the read serves them, in head order.
+    pub heads: Vec<DecisionHead>,
+}
+
+/// One head's codes and kept set at one step's row `t`, as used.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DecisionHead {
+    /// The query code at `t`, packed as [`HammingTraceHead::query`].
+    pub query: u64,
+    /// The key code at `t`: the code of `x_{t−1}`, which every later row reads for candidate
+    /// `t`. Row 0's is 0 and names no candidate.
+    pub key: u64,
+    /// The kept positions at `t`, nearest first, ties to the earlier position.
+    pub kept: Vec<u32>,
+}
+
+/// The turn memory's exact lookup at one step.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DecisionMemory {
+    /// The key: the token ids it was looked up by.
+    pub key: Vec<u32>,
+    /// The stored entry the key named, or `None` on a miss.
+    pub stored: Option<u32>,
+    /// Whether the row was the reply's first, the opening table's.
+    pub opening: bool,
+}
+
+/// The nearest at one step: the whole table's top two by `−L1` at Q12, and the query.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DecisionNearest {
+    pub pick: u32,
+    pub score_q12: i64,
+    pub runner_up: u32,
+    pub runner_score_q12: i64,
+    /// The query at Q12, so any token `u`'s score `−Σ_j |Q_j − T_{u,j}|` can be computed.
+    pub query_q12: Vec<i32>,
+}
+
+/// The decisions to force, per window (claude-247's forced replay, set Φ).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DecisionForce {
+    /// [`DECISION_FORCE_SCHEMA`].
+    pub schema: String,
+    pub windows: Vec<DecisionForceWindow>,
+}
+
+/// One window's forced set, which may be empty.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DecisionForceWindow {
+    /// The panel row's `position`.
+    pub position: usize,
+    pub buckets: Vec<ForcedBucket>,
+    pub codes: Vec<ForcedCode>,
+}
+
+/// A rate bucket forced to `entry` at `step`, `layer` and `lane`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ForcedBucket {
+    pub step: usize,
+    pub layer: usize,
+    pub lane: usize,
+    pub entry: u8,
+}
+
+/// Which code of a head a [`ForcedCode`] replaces.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CodeRole {
+    /// The row's query code.
+    Query,
+    /// The step's key code, which every later row reads for its candidate.
+    Key,
+}
+
+/// A code forced to `code` at `step`, for the read at `depth` and its head `head` (copy heads
+/// first, as [`DecisionRead::heads`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ForcedCode {
+    pub step: usize,
+    pub depth: usize,
+    pub head: usize,
+    pub role: CodeRole,
+    pub code: u64,
+}
+
 /// How two [`HammingTrace`]s' kept sets compare (claude-235, the item's step 5): a row per read
 /// and head kind, in read order, the copy row before the type row.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
