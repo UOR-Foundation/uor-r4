@@ -230,7 +230,7 @@ impl CpuWriterCore {
             .iter()
             .zip(self.roots[root].iter())
             .map(|(&left, &right)| left.abs_diff(right))
-            .sum()
+            .fold(0u32, u32::saturating_add)
     }
 }
 
@@ -238,7 +238,7 @@ pub fn vector_l1(left: &Vector, right: &Vector) -> u32 {
     left.iter()
         .zip(right.iter())
         .map(|(&left, &right)| left.abs_diff(right))
-        .sum()
+        .fold(0u32, u32::saturating_add)
 }
 
 #[cfg(test)]
@@ -359,6 +359,43 @@ mod tests {
         assert!(decision.admitted[..8]
             .iter()
             .all(|&cell| usize::from(cell) < CELL_COUNT));
+    }
+
+    #[test]
+    fn admission_cost_ties_choose_lower_cell_and_skip_empty_cells() {
+        let root0 = orbit_root_coords(0).unwrap();
+        let root1 = orbit_root_coords(1).unwrap();
+        let roots: Vec<[u8; TRUNK_BLOCKS]> = (0..VOCABULARY)
+            .map(|token| {
+                [
+                    0,
+                    ((token >> 4) & 15) as u8,
+                    ((token >> 8) & 15) as u8,
+                    u8::from(token >= VOCABULARY / 2),
+                ]
+            })
+            .collect();
+        let core = CpuWriterCore::from_roots(&roots, 8).unwrap();
+        let mut query = [0i32; READ_WIDTH];
+        query[..BLOCK_WIDTH].copy_from_slice(&root0);
+        for coordinate in 0..BLOCK_WIDTH {
+            query[(TRUNK_BLOCKS - 1) * BLOCK_WIDTH + coordinate] =
+                (root0[coordinate] + root1[coordinate]) / 2;
+        }
+        let decision = core.decide(&query);
+        assert_eq!(decision.admitted_count, 2);
+        assert_eq!(&decision.admitted[..2], &[0, 1]);
+        assert!(decision.admitted[2..]
+            .iter()
+            .all(|&cell| cell == ABSENT_CELL));
+    }
+
+    #[test]
+    fn distance_sums_saturate_instead_of_overflowing() {
+        assert_eq!(
+            vector_l1(&[i32::MIN; READ_WIDTH], &[i32::MAX; READ_WIDTH]),
+            u32::MAX
+        );
     }
 
     #[test]

@@ -12,6 +12,7 @@ Create the isolated CPU training crate and its first independently testable unit
 - `Cargo.toml`, `Cargo.lock`
 - `docs/loop/tasks/cpu-discrete-writer-core/deepseek-1/**`
 - `docs/research/notebook/cpu-training.md`
+- `docs/start/FILEMAP.md`
 - `docs/roadmap/items/cpu-discrete-writer-core.md`
 
 No source edit to `crates/uor-r4-discrete`, `crates/uor-r4-float-train`, or `crates/uor-r4-integer`; those are reference inputs only. No corpus training, GPU run, model artifact, deployment, or generated binary.
