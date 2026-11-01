@@ -41,6 +41,8 @@ This benchmark measures component decisions on synthetic canonical vectors. It i
 - `uor-harness ratchet d23`: PASS, baseline unchanged.
 - `uor-harness ratchet d25`: PASS, baseline unchanged.
 - `uor-harness ratchet d32`: PASS, baseline unchanged.
+- `uor-harness loop gates --full`: PASS, 11/11.
+- `uor-harness loop pr-check --local`: PASS with the documented commit-order and pre-existing FILEMAP advisories.
 - `cargo fmt --package uor-r4-cpu-train`: PASS.
 
 ## Skills used

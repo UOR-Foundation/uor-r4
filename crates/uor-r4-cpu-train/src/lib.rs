@@ -44,6 +44,10 @@ fn root_vector(root: u8) -> Result<[i32; BLOCK_WIDTH]> {
     orbit_root_coords(root).map_err(|error| invalid(format!("invalid orbit root {root}: {error}")))
 }
 
+pub fn saturating_abs_diff(left: i32, right: i32) -> u32 {
+    left.saturating_sub(right).unsigned_abs()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WriterDecision {
     pub top8: [u32; TOP_K],
@@ -229,7 +233,7 @@ impl CpuWriterCore {
         query[start..start + BLOCK_WIDTH]
             .iter()
             .zip(self.roots[root].iter())
-            .map(|(&left, &right)| left.abs_diff(right))
+            .map(|(&left, &right)| saturating_abs_diff(left, right))
             .fold(0u32, u32::saturating_add)
     }
 }
@@ -237,7 +241,7 @@ impl CpuWriterCore {
 pub fn vector_l1(left: &Vector, right: &Vector) -> u32 {
     left.iter()
         .zip(right.iter())
-        .map(|(&left, &right)| left.abs_diff(right))
+        .map(|(&left, &right)| saturating_abs_diff(left, right))
         .fold(0u32, u32::saturating_add)
 }
 
@@ -322,11 +326,7 @@ mod tests {
                 writer_score_full_outer_l1(&query, &vectors, &cell_tokens, 8).unwrap();
             let decision = core.decide(&query);
             assert_eq!(decision.top8, oracle_top8, "row {row}");
-            assert_eq!(
-                &decision.admitted[..decision.admitted_count],
-                &oracle_admitted[..decision.admitted_count],
-                "row {row}"
-            );
+            assert_eq!(decision.admitted, oracle_admitted, "row {row}");
         }
     }
 
@@ -392,6 +392,8 @@ mod tests {
 
     #[test]
     fn distance_sums_saturate_instead_of_overflowing() {
+        assert_eq!(saturating_abs_diff(i32::MAX, i32::MIN), 2_147_483_647);
+        assert_eq!(saturating_abs_diff(i32::MIN, i32::MAX), 2_147_483_648);
         assert_eq!(
             vector_l1(&[i32::MIN; READ_WIDTH], &[i32::MAX; READ_WIDTH]),
             u32::MAX
