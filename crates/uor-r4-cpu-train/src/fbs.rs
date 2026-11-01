@@ -123,14 +123,16 @@ impl CpuFbsForward {
         let shape = model.shape();
         if !shape.projection_fbs()
             || !shape.rec_geometric()
+            || shape.rec_retention()
             || !shape.gate_hamilton()
+            || !shape.rotation
             || shape.raw_gates
             || shape.raw_transition
             || shape.pointer.is_some()
             || shape.pattern.bytes().any(|kind| kind != b'r')
         {
             return Err(invalid(
-                "CPU FBS forward requires a snapped, no-read, recurrence-only FBS model",
+                "CPU FBS forward requires a snapped, rotated, decay-rate, no-read, recurrence-only FBS model",
             ));
         }
         let image = model.fbs_image().ok_or_else(|| {
@@ -825,6 +827,29 @@ mod tests {
             },
         )
         .unwrap();
+        let model = IntegerStackModel::parse(&bytes).unwrap();
+        assert!(CpuFbsForward::from_model(&model).is_err());
+    }
+
+    #[test]
+    fn retention_rate_artifacts_require_their_other_rate_tables() {
+        let mut snapshot = synthetic_fbs_trunk_with(
+            31,
+            FbsSynth {
+                vocab: 512,
+                d: 64,
+                mlp: 96,
+                layers: 1,
+                context: 16,
+                kept: 8,
+                gain_lo: 0.75,
+                gain_span: 1.5,
+                table: 0.5,
+                decay_step: 0.25,
+            },
+        );
+        snapshot.retain_rates = true;
+        let bytes = export_fbs_trunk_uorlut01(&snapshot).unwrap();
         let model = IntegerStackModel::parse(&bytes).unwrap();
         assert!(CpuFbsForward::from_model(&model).is_err());
     }
