@@ -25,15 +25,20 @@ The project's first hurdle is one working model end to end, served from its inte
   - The icosian snap was the larger difference behind claude-232's MISS: the snapped export against F′ agrees on 291/285/284 and 909/777/64 first tokens. F′ against F, the float code's change since `eb762e602`, moves at most 12 first tokens. By the code that change is the tie rule, but `train-in-space` has no switch to test it, so the reading is not credited to it.
   - The remaining p-w disagreements are diffuse; no first token is over-concentrated.
 - **Claude-244 measured the bar's margin** ([REPORT](../../loop/tasks/integer-nearest-readout/claude-244/REPORT.md)), under teacher forcing with the new `fbs-toks --forced`. R's disagreements with F′ sit where R's own top two are nearly tied: 88% of the pooled p-w disagreements are in R's lowest-margin decile, and the median margin at a disagreement is 82 to 103 times below the median over all positions. The gap is per position, not special to the opening.
+- **Claude-245 re-derived the bar** ([decision card](../../loop/tasks/integer-nearest-readout/claude-245/DECISION.md)). The same artifact flips 1.57% of DEV positions and 2.98% of p-w's, and p-w has 2.5 to 3.1 times smaller low margins. So a fixed share of disagreements grades the panel's tie density as much as the port.
+  - Done-when 3 now asks two things: that R pick the reference token as often as the trained model, with its differences at its own near ties, and that every clear-margin disagreement be accounted for by an exact trace.
+  - It no longer asks for 97% first-token identity. The new bar has not been read.
 
 ## What is missing
 
-- **Re-derive the first-token bar from the measured residual, in a decision card.** Claude-244 ([REPORT](../../loop/tasks/integer-nearest-readout/claude-244/REPORT.md)) measured where R's disagreements with F′ sit under teacher forcing, against R's own top-two margin g.
-  - On pooled p-w, 1,095 of 1,246 disagreements are in R's lowest-margin decile (c = 0.879 against q = 0.100; κ = 0.865). DEV reads the same (κ = 0.937).
-  - The gap is per position, not opening-specific: r₀ is 4.12% and r₊ is 2.89%. That is the sheet's near-tie residual row with pooled r₊ ≤ 3%, and its next unit is this card.
-  - The card needs my own fresh decision review, logged on #3462. It must say how it treats p-w s3 (r₊ 3.09% alone) and the 151 disagreements (12%) at clear margins.
-- **Then locate what remains of claude-243's p-w gap on R against F′,** layer by layer: the trunk, Hamming read, memory and readout. Recheck end-to-end parity before rerunning p-x. Under a sheet; the leads:
-  - **Trace the clear-margin disagreements** (g above G₁₀) first.
+- **Read Q1 to Q3 of claude-245's bar,** under a sheet with a fresh FIT that registers the card's positions, strata, cut-window rule and Row 0 verbatim.
+  - It is a count on claude-244's and claude-243's sealed files, on the laptop at $0. Row 0's checks and I-Align on the cut windows run before anything is read.
+  - A LOSS is classified by the trace before it is called a port fault.
+- **Then Q5: its own decision card fixes the trace's rule,** meeting the four requirements in claude-245's card. A sheet follows, with a FIT and a pre-run review, and then the trace.
+  - It covers every clear-margin disagreement: for this R, 151 on p-w's counted rows and 11 on DEV's, plus p-w's cut windows' own. Those count at every position if I-Align holds there, and at the opening only otherwise.
+  - The leading proposal reads R against its float twin T (`fbs-snapshot`, the same artifact in float) and F′. That separates R's integer arithmetic from the exported structure without a rounding bound.
+- **Leads for the trace, and for any LOSS,** layer by layer: the trunk, Hamming read, memory and readout. Recheck end-to-end parity before rerunning p-x.
+  - **The clear-margin disagreements** (g above G₁₀) first, as Q5 requires.
   - **Read F′'s own top two** at the disagreeing positions. Its sealed rows carry no scores, so claude-244's residual bound is one-sided.
   - **The cut windows' openings** disagree 2.9 to 4.4 times as often as the counted ones per seed, 3.4 pooled (claude-244, a reading).
   - **Split the disagreements by exact-key status,** as claude-232 did on DEV s1. p-w is the panel where the memory names fewer replies.
@@ -55,7 +60,12 @@ The project's first hurdle is one working model end to end, served from its inte
    - Integer greedy of (r-drop) step 16,384, memory on, exported raw (`fbs-export --raw-gates --raw-transition`, R), against the float greedy decoded again on the GPU with the read's tie rule on (F′: claude-220's arm-G command at the unit's head), on DEV and p-w at seeds 1–3.
      - claude-232's snapped export (S) and claude-220's stored replies (F) are kept as readings.
      - Both changes are claude-243's [decision card](../../loop/tasks/integer-nearest-readout/claude-243/DECISION.md), logged on #3462; Casey can reverse it. "Done" applies to the raw export, and the item then names its recipe as the served artifact's.
-   - It is reported as first-token agreement and whole-reply agreement. The bar is registered in the sheet against the exporter's known rounding residual (claude-227: 0.33% of sequence positions).
+   - **The bar is claude-245's [decision card](../../loop/tasks/integer-nearest-readout/claude-245/DECISION.md),** logged on #3462; Casey can reverse it. It replaces claude-243's first-token ⌊0.03 n⌋, which was registered against claude-227's 0.33% residual of a snapped export. Q1, Q2 and Q4 are read under teacher forcing on claude-244's counted positions, and Q3 on claude-243's free decode. A LOSS of any class fails this bar for that artifact.
+     - R picks the reference token as often as F′ does: no loss beyond 3 row-clustered SE (Q1), and at most half a point (Q2);
+     - the same holds at the opening, on free decode (Q3);
+     - R's differences sit at its own near ties (Q4: κ ≥ 4/9).
+     - **Q5:** every clear-margin disagreement is also accounted for by an exact trace, under its own card's rule.
+     - First-token and whole-reply agreement stay reported as readings; claude-243's MISS on the old bar is recorded as it is.
    - **The item is done only when the bar passes.** On a miss, the sheet's row is recorded, the item stays `ready`, and the next unit locates the gap.
    - Integer decodes run on the laptop: product serving (CHARTER §3.6), under the owner's 31 Oct allowance for this chain. The float side runs on the GPU.
 4. **Tokens per second,** with the nearest scan counted (4,096 rows a token), and the resident memory.
