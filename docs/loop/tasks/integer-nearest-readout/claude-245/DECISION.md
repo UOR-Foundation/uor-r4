@@ -67,7 +67,7 @@ Done-when 3's bar is first-token disagreement ≤ ⌊0.03 n⌋ in each cell: 9 o
   - Q2 also covers what Q1 cannot see: a loss confined to 9 rows or fewer never fails Q1, since (Σ_k d_k)² ≤ m·Σ_k d_k² over m rows.
 - **Q3, the opening, read on free decode**, from claude-243's sealed greedy replies.
   - **R is right at the opening** when its greedy reply is not empty and its first token equals reference[0]. **F′ is right** when its greedy first token equals reference[0].
-  - **It is like for like.** `files_ok` checks that both greedy files carry the row's own prompt and reference (`grade-cell.jq:20–22`). Row 0 also checks, in F′'s sampler, that its decode conditions only on the stored prompt.
+  - **It is like for like.** `files_ok` checks that both greedy files carry the row's own prompt and reference (`grade-cell.jq:20–22`). Row 0 also checks F′'s sampler (defined in Row 0 below).
   - a₀, b₀ and V₀ are formed as above, one position per row, and Q3 is Q1's test on them.
   - **It is tested in six strata:** the counted rows in each p-w cell, the counted rows pooled per panel (DEV and p-w), and p-w's cut windows pooled.
   - Two kinds of stratum cannot fail, so they are reported as readings: a DEV cell (at most 4 openings disagree) and DEV's cut windows (at most 2 disagree). DEV's pooled counted rows (11 disagree) can fail only if almost every disagreement goes F′'s way.
@@ -75,7 +75,7 @@ Done-when 3's bar is first-token disagreement ≤ ⌊0.03 n⌋ in each cell: 9 o
 - **Q4, the rounding signature:** κ ≥ 4/9, clear of chance at 3 SE, in every cell.
   - For claude-244's R this is its registered row, already met in all six cells. It is carried, and the next unit's sheet cites claude-244's sealed grade.
   - **For any other artifact or recipe,** such as a finer fixed point or a fix to a located fault, Q4 is read again.
-- **Q5, the clear margins: required, with its rule fixed by its own card.** Done-when 3 also requires an exact trace accounting for every counted disagreement where R's margin exceeds its cell's G₁₀: for this R, 151 on p-w and 11 on DEV, plus the cut windows' own if they join (below).
+- **Q5, the clear margins: required, with its rule fixed by its own card.** Done-when 3 also requires an exact trace accounting for every counted disagreement where R's margin exceeds its cell's G₁₀: for this R, 151 on p-w and 11 on DEV. p-w's cut windows add their own clear-margin disagreements: at every position if I-Align holds there, and at the opening only otherwise (below).
   - **This card does not approve the trace's rule.** Round 2 showed that a rule written here was not yet decidable.
   - **The Q5 card must meet four requirements:**
     1. Its rule, and any bound it uses, is fixed before either side's values are read.
@@ -87,13 +87,15 @@ Done-when 3's bar is first-token disagreement ≤ ⌊0.03 n⌋ in each cell: 9 o
     - It needs no rounding bound. Whether `fbs-snapshot` carries the memory and the read on this path is that card's first check.
   - Q5 is read again for any other artifact or recipe.
 - **The cut windows' later positions.** Row 0 reads I-Align on the cut windows too: F′'s rows against F′'s greedy reply, wherever its greedy prefix equals the reference.
-  - **If it holds** (0 violations, with positions checked), F′'s rows read the same window there. p-w's cut windows then join Q1 as a pooled stratum, and their clear-margin disagreements join Q5's set.
+  - **If it holds,** F′'s rows read the same window there. It holds when there are 0 violations and every p-w cut-window row at every seed (135 per seed, 405 in all) is checked at least at its opening. Offset 0 is always eligible, so a row goes unchecked only if F′'s greedy reply is empty, and any such row means it does not hold. p-w's cut windows then join Q1 as a pooled stratum, and their clear-margin disagreements join Q5's set.
   - **If not,** their later positions stay readings with no bar, and only their clear-margin opening disagreements join Q5's set.
 - **Row 0** is the instrument checks. The next unit's grader runs them all again before it reads anything. If any fails, nothing is read and the instrument is repaired. They are:
   - claude-244's `files_misaligned`, `n_wrong`, `counted_short`, `forced_greedy_violations` (with `forced_greedy_checked` > 0), `align_violations` (with `align_checked` > 0), `targets_wrong`, `coverage_missing`, `margins_negative` and `runner_up_wrong`;
   - its sheet's I-Inputs, I-NoKey and I-Exit;
   - the uniqueness of `position`;
-  - the check on F′'s sampler.
+  - **the check on F′'s sampler.** This is a code-path check, made before any file is opened. The next sheet registers it with its file and lines at the commit F′ ran at (claude-243's).
+    - It passes if F′'s greedy decode for a row conditions only on that row's stored prompt, the field `files_ok` matches, and on no reference token and no panel token outside it.
+    - It fails if the path reads anything else.
 - **Pass:** all of the following hold.
   - Q1 holds in every cell, in both pooled panels, and in p-w's cut windows if they join.
   - Q2 holds in every cell and in both pooled panels.
@@ -110,9 +112,10 @@ Done-when 3's bar is first-token disagreement ≤ ⌊0.03 n⌋ in each cell: 9 o
 
 **The order of the next units:**
 1. **Q1 to Q3,** with Row 0, are a count on sealed files, run on the laptop at $0 under a sheet with its own FIT.
-   - **LOSS:** some test fails, with Row 0 held, so b − a is beyond the null. A LOSS is not yet called a port fault.
-     - Pure rounding can itself push b − a a little above zero: a flip goes to R's runner-up, which is the reference less often than the top pick is.
-     - So the trace classifies the failing stratum first (CHARTER §4.2). The item stays `ready`.
+   - **LOSS:** some test fails, with Row 0 held. **A LOSS of any class fails done-when 3 for that artifact,** and no later card re-bars it once the count is read.
+     - Pure rounding can itself push b − a above zero: a flip goes to R's runner-up, which is the reference less often than the top pick is. The bar counts that as a loss by design, because the served artifact must serve the trained model.
+     - The trace classifies the failing stratum (CHARTER §4.2) only to choose the remedy: a finer fixed point for rounding, or a located fix for a fault. Q1 to Q5 are then read again on the new artifact. The item stays `ready`.
+     - There is one exception. If the trace finds an instrument fault that Row 0 missed, one that a rerun shows made the count itself wrong, then the reading is void. It is repaired and read again.
    - **Held:** go on to Q5.
 2. **Q5's card,** then its sheet with a FIT and a pre-run review, then the trace.
    - **PASS** (Q5 holds as well): done-when 3 is met for R. The item names R's recipe (`fbs-export --raw-gates --raw-transition`) as the served artifact's, and closes once its other done-whens are checked at that head.
@@ -140,8 +143,9 @@ Done-when 3's bar is first-token disagreement ≤ ⌊0.03 n⌋ in each cell: 9 o
   - Q3 detects a net opening loss of about 17 to 23 of 1,067 in a p-w cell (1.6 to 2.1 points), 34 of 3,201 on pooled p-w (1.1 points) and 23 of 405 in p-w's cut windows. A smaller opening loss passes.
   - **The false-fail rate.**
     - With no loss, each one-sided 3-SE test fails by chance with probability about 0.135%. There are at most 15 such tests: Q1 in up to nine strata and Q3 in six.
-    - Q2 on the three DEV cells adds about 1.3%, 0.8% and 0.2%, even if every disagreement fell in a or b.
+    - Q2 on the three DEV cells adds at most about 1.3%, 0.8% and 0.2%, even if every disagreement fell in a or b. These are normal approximations without continuity correction, which overstate them.
     - That is about 4.3% in all, under independence. Q2 is not clustered, so correlation within a reply raises its share.
+    - These rates hold when the flips are exactly zero-mean (E[b − a] = 0). Rounding that favours F′, as described under LOSS above, raises them, and the bar counts that as loss by design.
 - **The residual risks:**
   - **A fault confined to near ties that costs no accuracy** would pass, for example one that breaks near ties toward frequent tokens. It changes outputs only where R's top two are nearly tied. The item records it as a known blind spot; C, if it is ever run, would close it.
   - **Teacher forcing reads each position given the reference prefix,** so a fault in the serving loop after offset 0 would not show in Q1 or Q2.
@@ -181,6 +185,15 @@ Done-when 3's bar is first-token disagreement ≤ ⌊0.03 n⌋ in each cell: 9 o
     - the near ties are named as R's own, since F′'s margin is not measured;
     - like for like is cited to `files_ok`, with a check on F′'s sampler;
     - Q2 covers a loss confined to a few rows.
+- **The PR's exact-head review, at `05c6de032`: CHANGES, all text.** It confirmed that every round-2 fix was applied, recomputed every number, and found no owner or §3 path touched. All its findings were applied:
+  - **Major 1:** the card did not say what a LOSS means once it is classified, and the false-fail rate assumed zero-mean flips. Applied: a LOSS of any class fails done-when 3 for that artifact, and the classification only chooses the remedy. The rates are stated as holding under zero-mean flips, with rounding toward F′ counted as loss by design.
+  - **Minors 2 to 6** were applied:
+    - Q5's set names the cut windows' openings in both branches;
+    - the item and the REPORT count those openings too;
+    - the item says Q3 is read on free decode;
+    - the check on F′'s sampler is defined;
+    - I-Align on the cut windows needs every row checked at its opening.
+  - **Nit 7** was applied: the Q2 DEV terms are marked as normal approximations.
 - **Approved** by the claude lab's top session, 1 Nov 2026, after both rounds, for Q1 to Q4, the positions, the strata, the cut-window rule and Row 0, and for Q5 as a requirement. Q5's rule is not approved here.
   - The two rounds allowed are spent, so round 2's fixes are checked by this PR's exact-head review.
   - Logged on #3462 for Casey, who can reverse it.

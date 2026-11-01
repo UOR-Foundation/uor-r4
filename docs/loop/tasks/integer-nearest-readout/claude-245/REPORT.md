@@ -17,8 +17,9 @@ No new speed is claimed: this unit ran nothing. R's decode speed is still claude
   So the rule goes to its own decision card, which must meet four stated requirements. Until it holds, the item cannot close.
 - **"Done" now needs more work than a pass on the old bar would have.**
   - Q1 to Q3 are a free laptop count.
-  - Q5 accounts for every clear-margin disagreement (162 for this R) by an exact trace, which needs the float side's values on the GPU under its own card and sheet.
-- **Both decision-review rounds were REVISE.** The two allowed rounds are spent, so round 2's fixes rest on this PR's exact-head review.
+  - Q5 accounts for every clear-margin disagreement by an exact trace: 162 on this R's counted rows, plus p-w's cut windows' own. It needs the float side's values on the GPU under its own card and sheet.
+- **Both decision-review rounds were REVISE.** The two allowed rounds are spent, so round 2's fixes rested on this PR's exact-head review.
+- **The exact-head review was CHANGES, at `05c6de032`.** It found the card silent on what a LOSS means once classified. A later card could then have re-barred a rounding LOSS after the count was read. Now a LOSS of any class fails done-when 3 for that artifact. The review's five Minors and one Nit are applied too (the card's review section).
 - **The rounding residual's size is still unmeasured.** Option C, margin-aware identity against a measured ε, needs F′'s top-two scores. Its writer, `in_space_long.rs`, is outside the item's scope, so C is kept as a lead, not taken.
 - **The new bar has named blind spots:**
   - a fault confined to near ties that costs no accuracy;
@@ -62,7 +63,7 @@ None. This unit is a decision card: it ran no decode and read no data, and it co
 
 ## Checks run at the head
 
-Run at `efa89f6b6`, the head before this section was filled; the only later change is this REPORT's text.
+These were run first at `efa89f6b6`, then again on the tree with the exact-head review's fixes applied (card, item and REPORT text). The results were the same both times:
 - `uor-harness loop report --check --order …/claude-245/ORDER.md`: PASS.
 - `uor-harness loop pr-check --local`: verdict PASS. Order, scope, banned-presence, commit-order, report, owner-paths, rule-sources and rendered-lock all pass. There are two D76 advisories, on read-path size and on stale FILEMAP rows; neither is from this diff.
 - `uor-harness loop gates --full`: 11 of 11 GREEN (claim-wording, fmt-claim-wording, fmt-harness, git-hooks, loop-drive, loop-gates-watch, loop-migrate, loop-next-owner-direction, loop-next-sources, loop-next-wait, loop-review-changes-blocks).

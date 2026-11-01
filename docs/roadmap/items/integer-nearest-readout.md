@@ -35,7 +35,7 @@ The project's first hurdle is one working model end to end, served from its inte
   - It is a count on claude-244's and claude-243's sealed files, on the laptop at $0. Row 0's checks and I-Align on the cut windows run before anything is read.
   - A LOSS is classified by the trace before it is called a port fault.
 - **Then Q5: its own decision card fixes the trace's rule,** meeting the four requirements in claude-245's card. A sheet follows, with a FIT and a pre-run review, and then the trace.
-  - It covers every clear-margin disagreement: for this R, 151 on p-w and 11 on DEV.
+  - It covers every clear-margin disagreement: for this R, 151 on p-w's counted rows and 11 on DEV's, plus p-w's cut windows' own. Those count at every position if I-Align holds there, and at the opening only otherwise.
   - The leading proposal reads R against its float twin T (`fbs-snapshot`, the same artifact in float) and F′. That separates R's integer arithmetic from the exported structure without a rounding bound.
 - **Leads for the trace, and for any LOSS,** layer by layer: the trunk, Hamming read, memory and readout. Recheck end-to-end parity before rerunning p-x.
   - **The clear-margin disagreements** (g above G₁₀) first, as Q5 requires.
@@ -60,7 +60,7 @@ The project's first hurdle is one working model end to end, served from its inte
    - Integer greedy of (r-drop) step 16,384, memory on, exported raw (`fbs-export --raw-gates --raw-transition`, R), against the float greedy decoded again on the GPU with the read's tie rule on (F′: claude-220's arm-G command at the unit's head), on DEV and p-w at seeds 1–3.
      - claude-232's snapped export (S) and claude-220's stored replies (F) are kept as readings.
      - Both changes are claude-243's [decision card](../../loop/tasks/integer-nearest-readout/claude-243/DECISION.md), logged on #3462; Casey can reverse it. "Done" applies to the raw export, and the item then names its recipe as the served artifact's.
-   - **The bar is claude-245's [decision card](../../loop/tasks/integer-nearest-readout/claude-245/DECISION.md),** logged on #3462; Casey can reverse it. It replaces claude-243's first-token ⌊0.03 n⌋, which was registered against claude-227's 0.33% residual of a snapped export. The card's Q1 to Q4 are read under teacher forcing on claude-244's counted positions:
+   - **The bar is claude-245's [decision card](../../loop/tasks/integer-nearest-readout/claude-245/DECISION.md),** logged on #3462; Casey can reverse it. It replaces claude-243's first-token ⌊0.03 n⌋, which was registered against claude-227's 0.33% residual of a snapped export. Q1, Q2 and Q4 are read under teacher forcing on claude-244's counted positions, and Q3 on claude-243's free decode. A LOSS of any class fails this bar for that artifact.
      - R picks the reference token as often as F′ does: no loss beyond 3 row-clustered SE (Q1), and at most half a point (Q2);
      - the same holds at the opening, on free decode (Q3);
      - R's differences sit at its own near ties (Q4: κ ≥ 4/9).
