@@ -45,6 +45,17 @@
 //!   the current plan's with only the kernel's hash put back;
 //! - the copy then loads, with every check `StackModel::load` makes.
 //!
+//! The fourth form (claude-240) is `train-in-space --inspect` of one run, with the run config's
+//! rate, fold and floor readings and seed, and the reads' ties broken one way:
+//!
+//! ```text
+//! fbs-snapshot --inspect as-trained|tie-rule DATA_ROOT RUN_DIR
+//! ```
+//!
+//! - `as-trained`: the GPU sort's own order, as a checkpoint saved before claude-239 trained and
+//!   was inspected. On a rebound copy, its lines are compared with the run's sealed inspection;
+//! - `tie-rule`: the integer session's rule, the read's default since claude-239.
+//!
 //! It never replaces or leaves a partial output file, and it prints each
 //! file's sha256.
 //!
@@ -74,7 +85,9 @@ use uor_r4_float_train::hamilton_sheet::{
     EXPECTED_DEV_TOKENS, PINNED_DEV_MASK_SHA256, PINNED_DEV_TOKENS_SHA256, SHEET_BOS_ID,
     SHEET_CONTEXT, SHEET_VOCAB,
 };
+use uor_r4_float_train::in_space_long::{inspect_run, root_separation};
 use uor_r4_float_train::spiralcore_fbs::{ProjectionPlan, FBS_SOURCE_SHA256, SCHEMA};
+use uor_r4_float_train::spiralcore_fbs_arms::FbsArm;
 use uor_r4_float_train::spiralcore_fbs_sheet::PARITY_WINDOW_STRIDE;
 use uor_r4_float_train::{FloatTrainError, Result};
 use uor_r4_integer::fbs_snapshot::{
@@ -406,9 +419,58 @@ fn rebind_fbs_backward(model_dir: &str, out_dir: &str) -> Result<()> {
     Ok(())
 }
 
+/// An inspection's tie order: `as-trained` (the GPU sort's own) or `tie-rule` (the integer
+/// session's).
+fn inspect_ties(name: &str) -> Option<bool> {
+    match name {
+        "as-trained" => Some(false),
+        "tie-rule" => Some(true),
+        _ => None,
+    }
+}
+
+/// `--inspect TIES DATA_ROOT RUN_DIR` (claude-240): the module docs' fourth form.
+fn inspect(ties: &str, data_root: &str, run: &str) -> Result<()> {
+    let Some(tie) = inspect_ties(ties) else {
+        usage();
+    };
+    let run = Path::new(run);
+    let config: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(run.join("config.json"))?)?;
+    let flag = |name: &str| {
+        config[name]
+            .as_bool()
+            .ok_or_else(|| FloatTrainError::Invalid(format!("the run config has no {name}")))
+    };
+    let seed = config["seed"]
+        .as_u64()
+        .ok_or_else(|| FloatTrainError::Invalid("the run config has no seed".to_owned()))?;
+    let device = Device::new_cuda(0)?;
+    // `inspect_run` reads on this thread, so the rule set here is the one its reads use.
+    set_hamming_tie_rule(tie);
+    let (nearest, farthest) = root_separation()?;
+    println!(
+        "{}",
+        serde_json::json!({"address_root_separation": {"nearest": nearest, "farthest": farthest}})
+    );
+    for reading in inspect_run(
+        Path::new(data_root),
+        run,
+        flag("retain_rates")?,
+        flag("fold_scores")?,
+        flag("reflect_floor")?,
+        seed,
+        FbsArm::OneAtomActive,
+        &device,
+    )? {
+        println!("{}", serde_json::to_string(&reading)?);
+    }
+    Ok(())
+}
+
 fn usage() -> ! {
     eprintln!(
-        "usage: fbs-snapshot [--dev DATA_ROOT] MODEL_DIR OUT_JSON [READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]]\n       fbs-snapshot [--dev DATA_ROOT] --hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON\n       fbs-snapshot --rebind-fbs-backward MODEL_DIR OUT_MODEL_DIR"
+        "usage: fbs-snapshot [--dev DATA_ROOT] MODEL_DIR OUT_JSON [READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]]\n       fbs-snapshot [--dev DATA_ROOT] --hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON\n       fbs-snapshot --rebind-fbs-backward MODEL_DIR OUT_MODEL_DIR\n       fbs-snapshot --inspect as-trained|tie-rule DATA_ROOT RUN_DIR"
     );
     std::process::exit(2);
 }
@@ -423,6 +485,12 @@ fn main() -> Result<()> {
             usage();
         };
         return rebind_fbs_backward(model_dir, out_dir);
+    }
+    if args.first().is_some_and(|flag| flag == "--inspect") {
+        let [_, ties, data_root, run] = args.as_slice() else {
+            usage();
+        };
+        return inspect(ties, data_root, run);
     }
     let dev = if args.first().is_some_and(|flag| flag == "--dev") {
         if args.len() < 2 {
@@ -490,10 +558,19 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        forward_text, output_place, pre_179_fingerprint, sample_windows, scored_prefix,
-        CausalWindow, ProjectionPlan, FORWARD_TEXT_SHA256, PARITY_WINDOW_STRIDE,
+        forward_text, inspect_ties, output_place, pre_179_fingerprint, sample_windows,
+        scored_prefix, CausalWindow, ProjectionPlan, FORWARD_TEXT_SHA256, PARITY_WINDOW_STRIDE,
     };
     use sha2::{Digest, Sha256};
+
+    /// claude-240: the inspection reproduces a sealed one with the rule off, as the checkpoint
+    /// trained; the rule is the other reading. No other name is taken.
+    #[test]
+    fn the_inspection_as_trained_turns_the_tie_rule_off() {
+        assert_eq!(inspect_ties("as-trained"), Some(false));
+        assert_eq!(inspect_ties("tie-rule"), Some(true));
+        assert_eq!(inspect_ties("d11"), None);
+    }
 
     /// claude-240: claude-179 changed the projection kernel after `spiralcore_fbs_fwd` only, so
     /// its text through the forward is the text before claude-179. An edit inside the forward
