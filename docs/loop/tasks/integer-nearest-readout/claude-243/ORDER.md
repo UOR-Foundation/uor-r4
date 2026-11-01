@@ -38,11 +38,12 @@ This unit measures the parity with both sides on the same rules:
 
 ## The decision this needs
 
-Done-when 3 names claude-220's stored replies as the reference. Changing the reference is a change to a bar's scope, so it needs a decision card ([DECISION.md](DECISION.md)), approved by this session after a fresh decision review that reads the whole project. It is logged on #3462 for Casey, who can reverse it (CHARTER §5.1).
+Done-when 3 names claude-220's stored replies as the reference, and claude-232 read it on the default export, which snaps. Changing either side is a change to a bar's scope, so it needs a decision card ([DECISION.md](DECISION.md)), approved by this session after a fresh decision review that reads the whole project. It is logged on #3462 for Casey, who can reverse it (CHARTER §5.1).
 
 The card proposes:
-- the bar's reference becomes F′, the same decode as claude-220's arm G at this unit's head;
-- claude-220's F stays as a reading.
+- the bar's reference becomes F′, the same decode as claude-220's arm G at this unit's head; claude-220's F stays as a reading;
+- the bar's integer side becomes R, the raw export; claude-232's snapped S stays as a reading, the snap's control;
+- "done" applies to the raw artifact, and the item records its recipe as the served one.
 
 ## Method
 
@@ -60,14 +61,17 @@ The card proposes:
 - **The readings, with no bar:**
   - **S against F′:** the snap's share once both sides keep ties the same way.
   - **R against F and S against F:** S against F must give claude-232's numbers again; that is an instrument check.
-  - **F′ against F:** the tie rule's share, together with the decode-path changes since `eb762e602`.
+  - **F′ against F:** the code's change since `eb762e602` on G's path. By the code, that is the tie rule alone; the reading does not credit the tie rule, since `train-in-space` has no switch to test it (the card lists the commits).
   - **The whole-reply agreement of each pair.**
 - **Instrument checks:**
-  - **I-Repeat:** F′ s1 on DEV, decoded twice on the pod at this head, must give identical files. GPU greedy must be repeatable to serve as a reference.
+  - **I-Repeat:** seed 3 is decoded twice on the pod at this head, by a second process beside the main three. Its G files on DEV (`samples-memory.json`) and on p-w (`samples-p-w-greedy-memory.json`) must equal the main run's byte for byte. That is one DEV cell and the worst p-w cell. GPU greedy must be repeatable to serve as a reference.
+  - **I-Flags:** every flag of claude-220's command parses at this head with the same meaning. Checked before the pod: `git diff eb762e602 <head> -- crates/uor-r4-float-train/src/bin/train-in-space.rs` removes `--opening-table` (which claude-220's command never passed) and adds two modes, and changes no parse line of the flags the command passes.
   - **I-Float-Inputs** and **I-Prompts,** as in claude-232.
   - **I-Raw:** each R artifact's shape must carry `head = native_vector_nearest`, `rec_gates = geometric-retention`, and the raw gate and transition flags. Its parse must give the `/7` schema.
 - **Speed (done-when 4):** `fbs-toks` decode and prefill tok/s on R s1, with the nearest scan counted, and the peak resident memory, on this M1 on AC power.
-- **Compute:** one Vast RTX 5090, inside the caps, under a prep sheet with a fresh FIT and a pre-run review (CHARTER §4.5). claude-220 decoded about 54 tok/s a process, with three seeds sharing one 5090. The sheet gives the time and cost.
+- **Compute:** one Vast RTX 5090, inside the caps, under a prep sheet with a fresh FIT and a pre-run review (CHARTER §4.5).
+  - claude-220's three seeds took 9,840 to 9,995 s side by side on one 5090, at about 93% GPU use and 11.4 GB.
+  - A fourth process, I-Repeat's, puts the run near 3 h 40 min, about $2.30 with setup. The sheet gives the estimate.
 
 ## Cancel probe (run first)
 
@@ -110,6 +114,7 @@ The unit is cancelled if any check fails:
 5. **The speed and resident memory** of R s1 (done-when 4).
 6. **The record:**
    - the item's done-when 3 and 4 are recorded; the item is `done` only if the bar passes in every cell;
+   - on a pass, the item names the raw export's recipe as the served artifact's, and records making it the default as a follow-up;
    - one notebook row;
    - a REPORT, negatives first.
 
