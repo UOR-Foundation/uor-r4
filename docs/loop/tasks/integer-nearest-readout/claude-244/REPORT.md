@@ -80,7 +80,7 @@ No new decode speed is claimed. R's decode speed is still claude-243's: 1,204 to
   - `--lib nearest_two`: 2 passed.
 - **The feed's negative gate:** with `forced_picks` stepping its own previous pick instead of `reference[i - 1]`, `each_offset_reads_the_step_after_the_reference_token` fails. Restored, all 9 pass.
 - `cargo fmt --check` is clean.
-- **Clippy** gives no warning in `fbs-toks.rs` or in this unit's `session.rs` hunks. Under `--all-targets -D warnings`, the crate already has 68 errors in files and lines this unit did not touch (for example `session.rs:733`, from `0bc09d12e`).
+- **Clippy** gives no warning in `fbs-toks.rs` or in this unit's `session.rs` hunks. Under `--all-targets -D warnings`, the crate already has at least 68 errors (clippy stops at the first target that fails) in files and lines this unit did not touch (for example `session.rs:733`, from `0bc09d12e`).
 - `loop gates --full`: 11 of 11 green. `loop report --check` and `loop pr-check --local` pass.
 
 ## Skills used
