@@ -114,17 +114,17 @@ The grader runs every check below in order and stops at the first failure. Nothi
    - claude-232's six prompt files (6), against its `SHA256SUMS`.
    - The four local manifests each equal the store's copy, fetched afresh for this unit into `local/claude/claude-246/probe/`, and each has the sha256 registered in §5.
    - claude-244's check of R's artifacts against `R/a7/SHA256SUMS` is not carried: R is not opened here, and its picks are read only from the sealed decodes above.
-3. **I-NoKey:** every row of R's six stored greedy files has `keyed` null, so no opening of R was served by a point key.
+3. **I-NoKey:** each of R's six stored greedy files is non-empty, every row has a `keyed` field, and every `keyed` is null, so no opening of R was served by a point key.
 4. **I-Exit:** claude-244's sealed `grade.log` ends `GRADE-DONE` and logs six forced decodes. Its runner stopped on any decode's non-zero exit before that line. `margins_negative` is 0 in every cell (check 9).
 5. **Q4's carry:** in each of claude-244's six sealed cells, `kappa` equals (c − q)/(1 − q), with c = `d_low`/`d` and q = `all_low`/`positions_counted`, to within 1e-12, and `d` > 0.
 6. **The row identity:** at every seed, `position` is unique. The three seeds list the same positions in the same order, and each position carries the same prompt and reference at the three seeds. p-w has 135 cut-window rows (`prompt[0] ≠ 0`) at every seed.
 7. **The sampler check** (§4.1) is recorded as passing, and `in_space_long.rs` at F′'s commit is the blob it was made on.
 8. **The grader's probes,** on hand-made files with hand-counted answers:
-    - a 3-row cell (two rows counted, one cut; 7 positions, 5 counted and 2 cut) reads exactly as worked out: its positions, checks, and every row's a, b, both, a₀, b₀ and both₀;
+    - a 3-row cell (two rows counted, one cut; 7 positions, 5 counted and 2 cut) reads exactly as worked out: its positions, its whole checks object (the hand-counted checked counts and offset-0 disagreement, and every fault count at 0 by design), and every row's n, a, b, both, a₀, b₀ and both₀, the n summing to the positions;
     - its checks pass holds no readings;
     - a cut row with an empty F′ greedy reply goes unchecked, and a missing F′ row fires the cut-window violation and coverage counts;
     - seven decision cases decide as stated: all hold; a Q1 loss; a Q2 loss; a DEV cell's Q3 is a reading; the cut windows join and fail Q1; an unchecked cut row stops the join; a Q4 loss.
-9. **Each cell's checks,** with no reading kept (the checks pass computes its readings in memory and drops them before any output). All of claude-244's: `files_misaligned`, `n_wrong`, `counted_short`, `forced_greedy_violations` with `forced_greedy_checked` > 0, `align_violations` with `align_checked` > 0, `targets_wrong`, `coverage_missing`, `margins_negative` and `runner_up_wrong`, each 0 where it counts failures. Also `position` unique in the cell.
+9. **Each cell's checks,** with no reading kept (the checks pass computes its readings in memory and drops them before any output). All of claude-244's: `files_misaligned`, `n_wrong`, `counted_short`, `forced_greedy_violations` with `forced_greedy_checked` > 0, `align_violations` with `align_checked` > 0, `targets_wrong`, `coverage_missing`, `margins_negative` and `runner_up_wrong`, each 0 where it counts failures. Also `position` unique in the cell. The `*_checked` counts run along greedy prefixes that match the reference, so the runner prints only whether each is above 0.
 10. **I-Coverage,** in the same pass: each cell's positions sum to claude-244's mode-printed `positions`, and its offset-0 positions number its counted rows.
 11. **I-Offset0:** R's forced offset-0 pick against F′'s greedy first token, by claude-243's rule, reproduces 4, 4, 5 on DEV and 64, 47, 78 on p-w.
 
@@ -187,6 +187,7 @@ DEV and the held-out-phrasing panel p-w, through claude-232's prompt files: 310 
 - **The files' structure,** read with no pick compared, in all six cells: no reference is empty and none opens with `<|bos|>` (id 0). No greedy reply of R or F′ is empty, and none contains id 0. So every cut-window row is eligible for I-Align at its opening.
 - **Seen before this sheet** (disclosed, not a reading of the bar): while finding F′'s commit, the author saw claude-243's GPU log print F′'s own `nearest_hits` over every scored row of DEV and p-w at seed 1 (11,841 of 14,287 and 37,049 of 49,251). That is F′ alone, over rows and positions the bar does not count, and it gives neither a nor b. The bar was fixed in claude-245 before it was seen.
 - **No count of R against the reference was printed** in any log of R's. claude-243's fifteen decode and export logs, claude-244's twelve forced-decode logs and both units' `grade.log` hold no line naming hits, top-1, correct or accuracy. They were counted with `grep -c`, and no value was shown. So F′'s `nearest_hits` above cannot be paired with an R total.
+- **Seen in claude-244** (the author ran it): its sealed `grade.log` prints `forced_greedy_checked` and `align_checked` per cell. Each counts offsets along a greedy prefix that matches the reference, so it bounds a side's right openings from above. It gives neither r_open nor f_open, nor their difference, which is what Q3 tests.
 
 ## 6. Steps and the grader
 
@@ -199,7 +200,7 @@ DEV and the held-out-phrasing panel p-w, through claude-232's prompt files: 310 
 
 | File | sha256 |
 |---|---|
-| `grade.sh` (the runner) | `87f5b89e78e1844caf8a93b80b712db4579d14c118c0378fbe51834ba3f63ab9` |
+| `grade.sh` (the runner) | `501306372773885974eaa7b6937a6f0aae839a5f0f4c02e26ac607e5061f3248` |
 | `grade-cell.jq` (one cell: checks, then readings) | `6bac0aa087ff2db68743cef6340f326dcba1da16a5a8e9b822bebf7040029781` |
 | `decide.jq` (Q1 to Q4 over the strata, and the outcome) | `783a058c6c9ff6b615b5ab174205824bef800d6af871ca4ea395928b9e684300` |
 | `probe/decide-cases.json` (the seven decision cases) | `2275ed10710f1127a1976e9ee4fea8e03f4d05f9b3fa87e759e289779fd6e94b` |
@@ -281,7 +282,23 @@ TEST FITNESS: NOT_FIT
 
 TEST FITNESS: FIT
 
-**Round 4,** after the pre-run review's round 1 (§10): pending. Two non-author jobs read the runner in full at `87f5b89e…` and check the author's answers above at F′'s commit. The verdict above stands only if both confirm.
+**Round 4,** after the pre-run review's round 1 (§10): three small non-author jobs (fresh `delegate:reviewer`s). None ran the grader or opened a reading file.
+- **4a, the runner in full** at `87f5b89e…`. Verdict: `RUNNER: CONFIRMED`, with no Blocker or Major. Every gate comes before any write; Row 0 runs in §4's order, each check can fail and stops before the readings; no reading is printed early; every cell reads one split and seed in all five inputs; the runner writes only `grades/` and `grade.log`. Its findings, and what was done:
+  1. Minor: the checks pass printed the `*_checked` counts, which run along greedy prefixes that match the reference. Now only whether each is above 0 is printed (§4 check 9). The values claude-244's sealed log printed are disclosed in §5.3.
+  2. Minor: I-NoKey passed on a missing or renamed field. It now requires a non-empty file with `keyed` on every row (check 3).
+  3. Minor: the good probe pinned 4 of 19 checks fields and no row's n. It now pins the whole cell (check 8).
+  4. Minor: under bash 3.2 the log's last lines could land after exit, since nothing waited for `tee`. The body now runs in a pipeline into `tee`, so the log is complete when the script exits, and a failed `tee` fails the run. Tested: an `exit 3` and a failing command inside the piped body both end the script with their status.
+  5. Nit: the gates read the working-tree sheet. The sheet is committed before the run.
+  6. Nit: the runner's and `decide.jq`'s cut-window join were computed apart. The runner now stops if they disagree.
+- **4b, the author's line citations** at F′'s commit. Verdict: `CITATIONS: CONFIRMED`, all seven claims, with exact ranges: the clears are at 4520–4521, the gate's forward runs 1014–1082 and falls through at 1058, `with_gate_mode` writes at 1987–1996, and the one `secant_descent` call is in `context_reach` (4710–4829). Two Minors and a Nit, each checked by 4c or found harmless:
+  - `REPLY_MASK` (776) is set in `row_picks` and not cleared there, but `trained_points` takes it at 857, and `decode_reply` never reads it;
+  - the forced opening is read in every `decode_reply` (4471);
+  - `fwd_call_idx` keeps rising within one `with_gate_mode` call, and only the `RandomGateNull` arm reads it.
+- **4c, the Hamming read's state, and the forced opening** at F′'s commit. Verdict: `HAMMING-STATE: CONFIRMED`.
+  - Of the five statics at `flock_read_hamming.rs` 70–75, `ACTIVE` is set once per model load, `CUT` is never set on this path, `ROW_CUT` is set at 4513 and cleared at 4519 on every step, errors included, and `TIE` and `TRACE` are switched only from `bin/fbs-snapshot.rs`.
+  - Under `tracing`, lines 679–686 and 733–757 only copy and push trace records; the read returns the same either way.
+  - The forced opening and the served key are set only at 5535–5536 and cleared at 5549–5550, before `decoded?`, so on every path. The greedy loop (5446–5511) never sets either, and the served-key search returns at 4372–4374 with no key.
+- After round 4 the runner is `50130637…` (§6). Its changes are the six above, and none touches the grading logic 4a confirmed. Tested before the run where they can be: the new good probe and the boolean print on the probe cell, the gate's refusal (it stops at the pre-run line and writes no `grade.log`), the pipeline's exit status, and I-NoKey's precondition (all six files are non-empty and every row has `keyed`, read without its values). The join check can only run after the decision.
 
 ## 10. Pre-run review
 
@@ -301,4 +318,4 @@ TEST FITNESS: FIT
   - It could not tell whether a total of R's against the reference was printed anywhere. None was (§5.3).
 - **Also changed:** §5 is split into Base artifact, Data split and what was seen, for the sheet-shape rule. The runner's hash in §6 is now `87f5b89e…`.
 
-**Round 2:** pending, after FIT round 4.
+**Round 2:** pending, on the sheet and the runner after FIT round 4.
