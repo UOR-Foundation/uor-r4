@@ -38,6 +38,12 @@
 //!   (`uor-r4.hamming-trace/1`), as `fbs-snapshot --hamming-trace` writes the float's;
 //! - `--hamming-trace-compare FIRST SECOND` holds two traces side by side
 //!   (`compare_hamming_traces`) and prints the comparison;
+//! - `--copy-codes FLOAT_TRACE INTEGER_TRACE OUT_JSON` (claude-237) compares every vocabulary
+//!   entry's copy-head code three ways (`copy_code_check`): the CPU float control's and the
+//!   session's on the artifact's own key rotations and writer table, and the two traces' at
+//!   each position, matched by token, each trace also against the control with the rotations
+//!   snapped to the icosians, as the GPU's D11 forward snaps them. It writes
+//!   `uor-r4.copy-codes/1` new to `OUT_JSON`;
 //! - `--context-sweep` runs the protocol with prefills of 32, 64, 96 and 128 tokens, each
 //!   followed by the 64 decode steps, with the artifact's Hamming read and without it: decode
 //!   tokens per second against context, the read's long-context cost.
@@ -48,14 +54,15 @@ use std::time::Instant;
 use serde::Deserialize;
 use serde_json::json;
 use uor_r4_integer::fbs_snapshot::{
-    compare_hamming_traces, write_new_file, FbsFloatReadout, FbsReadoutMode, HammingTrace,
-    HAMMING_TRACE_SCHEMA,
+    compare_hamming_traces, copy_code_check, copy_code_reads, write_new_file, FbsFloatReadout,
+    FbsReadoutMode, HammingTrace, COPY_CODES_SCHEMA, HAMMING_TRACE_SCHEMA,
 };
 use uor_r4_integer::stack::{
-    hamming_trace_window, panel_reply, read_hamming_uorlut01, IntegerStackModel, ReplyEnd,
+    hamming_trace_window, panel_reply, read_hamming_uorlut01, served_copy_codes_uorlut01,
+    IntegerStackModel, ReplyEnd,
 };
 
-const USAGE: &str = "usage: fbs-toks ARTIFACT [--prompt ID,ID,...] [--stages] [--parts]\n       fbs-toks ARTIFACT --replies PROMPTS_JSON --out FILE [--reply-tokens N]\n       fbs-toks ARTIFACT --hamming-trace D11_READOUT_JSON TRACE_JSON\n       fbs-toks --hamming-trace-compare FIRST_TRACE SECOND_TRACE\n       fbs-toks ARTIFACT --context-sweep";
+const USAGE: &str = "usage: fbs-toks ARTIFACT [--prompt ID,ID,...] [--stages] [--parts]\n       fbs-toks ARTIFACT --replies PROMPTS_JSON --out FILE [--reply-tokens N]\n       fbs-toks ARTIFACT --hamming-trace D11_READOUT_JSON TRACE_JSON\n       fbs-toks --hamming-trace-compare FIRST_TRACE SECOND_TRACE\n       fbs-toks ARTIFACT --copy-codes FLOAT_TRACE INTEGER_TRACE OUT_JSON\n       fbs-toks ARTIFACT --context-sweep";
 
 /// The prefills `--context-sweep` times, each followed by `DECODE` steps (claude-235).
 const SWEEP_PREFILLS: [usize; 4] = [32, 64, 96, 128];
@@ -130,6 +137,73 @@ fn hamming_trace_compare(first: &str, second: &str) -> Result<(), String> {
             "second": { "path": second, "side": b.side, "arm": b.arm },
             "comparison": comparison,
         })
+    );
+    Ok(())
+}
+
+/// `--copy-codes` (claude-237): every vocabulary entry's copy-head code three ways
+/// (`copy_code_check`), on the artifact at `path` and the traces at `float_trace` and
+/// `integer_trace`, written new to `out`. Everything is read and checked before anything is
+/// compared or written. It prints one JSON line: the file's sha256 and, per read, the codes on
+/// which the control and the session agree, the float trace's query codes equal to each and to
+/// the snapped control, the integer trace's equal to its session, and each trace's
+/// inconsistent pairs.
+fn copy_codes(path: &str, float_trace: &str, integer_trace: &str, out: &str) -> Result<(), String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+    IntegerStackModel::parse(&bytes).map_err(|e| format!("parse: {e}"))?;
+    let served = served_copy_codes_uorlut01(&bytes)
+        .map_err(|e| format!("the Hamming reads: {e}"))?
+        .ok_or("the artifact has no Hamming read to check")?;
+    let (vocab, width, heads) = (served.vocab, served.width, served.image.record.heads);
+    let read_trace = |path: &str| -> Result<(HammingTrace, Vec<u8>), String> {
+        let text = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+        let trace = serde_json::from_slice(&text).map_err(|e| format!("{path}: {e}"))?;
+        Ok((trace, text))
+    };
+    let (float, float_text) = read_trace(float_trace)?;
+    let (integer, integer_text) = read_trace(integer_trace)?;
+    let inputs: Vec<(usize, &[i32], Vec<u64>)> = served
+        .image
+        .reads
+        .iter()
+        .zip(&served.codes)
+        .map(|(read, codes)| (read.depth, read.key_rotation.as_slice(), codes.clone()))
+        .collect();
+    let rotation_exp = served.image.record.rotation_exp;
+    let reads = copy_code_reads(&inputs, rotation_exp, &served.table, vocab, width, heads)?;
+    let bytes = bytes.as_slice();
+    let check = copy_code_check(vocab, width, heads, &reads, &float, &integer)?;
+    let sha = |b: &[u8]| hex::encode(<sha2::Sha256 as sha2::Digest>::digest(b));
+    let record = json!({
+        "schema": COPY_CODES_SCHEMA,
+        "artifact": { "path": path, "sha256": sha(bytes) },
+        "float_trace": { "path": float_trace, "sha256": sha(&float_text), "arm": float.arm },
+        "integer_trace": { "path": integer_trace, "sha256": sha(&integer_text), "arm": integer.arm },
+        "width": width,
+        "check": check,
+    });
+    let text = serde_json::to_vec(&record).map_err(|e| e.to_string())?;
+    write_new_file(std::path::Path::new(out), &text).map_err(|e| format!("{out}: {e}"))?;
+    let summary: Vec<_> = check
+        .reads
+        .iter()
+        .map(|r| {
+            json!({
+                "depth": r.depth,
+                "codes": r.control_vs_integer.codes,
+                "control_equal_integer": r.control_vs_integer.equal,
+                "float_query_equal_control": r.float.query.equal_control,
+                "float_query_equal_integer": r.float.query.equal_integer,
+                "float_query_equal_snapped": r.float.query.equal_snapped,
+                "float_query_samples": r.float.query.samples,
+                "integer_query_equal_integer": r.integer.query.equal_integer,
+                "inconsistent": [r.float.inconsistent, r.integer.inconsistent],
+            })
+        })
+        .collect();
+    println!(
+        "{}",
+        json!({ "out": out, "sha256": sha(&text), "reads": summary })
     );
     Ok(())
 }
@@ -554,6 +628,9 @@ fn run() -> Result<(), String> {
             let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
             let model = IntegerStackModel::parse(&bytes).map_err(|e| format!("parse: {e}"))?;
             return hamming_trace(&model, &bytes, readout, out);
+        }
+        [path, flag, float, integer, out] if flag == "--copy-codes" => {
+            return copy_codes(path, float, integer, out);
         }
         _ => {}
     }

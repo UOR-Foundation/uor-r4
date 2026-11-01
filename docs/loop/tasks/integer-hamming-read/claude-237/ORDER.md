@@ -59,7 +59,7 @@ Class: **instrument** (the probe asks whether the check is still needed). It is,
 
 ## Done when
 
-1. **`fbs-toks --copy-codes ARTIFACT FLOAT_TRACE INTEGER_TRACE OUT_JSON`** is a CPU-only host check, run with no GPU, that compares the three ways at every read depth.
+1. **`fbs-toks ARTIFACT --copy-codes FLOAT_TRACE INTEGER_TRACE OUT_JSON`** is a CPU-only host check, run with no GPU, that compares the three ways at every read depth.
    - **Where it lives.** It lives in the integer crate's serving build, not in `fbs-snapshot`. Under D29 the float trainer depends on the integer crate with no features, so it reaches only the native modules. The served `CopyHeads` sit behind `serving-wasm`. (Set 1 Nov, after the first builder found this.)
      - Part (a) is an f32 port of `hamilton_gate_fwd_cpu` and `pack_signs` in the native `fbs_snapshot`.
      - A float-train test pins that port bit for bit to the trainer's own.
@@ -67,7 +67,8 @@ Class: **instrument** (the probe asks whether the check is still needed). It is,
      - the codes that agree and the bits that differ, for (a) against (b);
      - how far from 0 the float value sits at each differing bit;
      - each trace's agreement with (a) and (b), positions matched by token;
-     - each trace's own consistency. A copy code depends only on the token, so the check counts the tokens that carry more than one code across a trace's positions.
+     - each trace's own consistency. A copy code depends only on the token, so the check counts the tokens that carry more than one code across a trace's positions;
+     - each trace's agreement with (a′), which is (a) with the key rotation first snapped lane by lane to the nearest of the 120 icosians. That is the snap the GPU forward's D11 mode applies to every Hamilton gate. (Added 1 Nov, after the first run found that (a′) reproduces the float trace. A float-train test pins the 120 roots, and a CUDA-only test pins the snap to the GPU's own.)
    - It refuses a trace whose ids or depths do not fit the artifact.
    - A test plants a known difference and must find it. With the comparison set aside, the test must fail.
 2. **It runs on claude-233's h1 and h3 artifacts** against claude-235's sealed d11 and d11-rounded traces. Its outputs and their sums are kept in the unit's folder.

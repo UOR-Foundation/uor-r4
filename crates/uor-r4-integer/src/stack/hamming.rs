@@ -82,6 +82,51 @@ pub(crate) fn hamming_image(artifact: &Container<'_>) -> Result<Option<HammingIm
     Ok(Some(HammingImage { record, reads }))
 }
 
+/// What the copy-code check (claude-237) takes from a stack artifact: its Hamming reads, its Q12
+/// writer table (`vocab` rows of `width`), and each read's copy-head codes as the session serves
+/// them ([`CopyHeads`]): entry `v`'s code for copy head `h` at `v * copy + h`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ServedCopyCodes {
+    pub image: HammingImage,
+    pub table: Vec<i16>,
+    pub vocab: usize,
+    pub width: usize,
+    /// One list per read, in depth order.
+    pub codes: Vec<Vec<u64>>,
+}
+
+/// The [`ServedCopyCodes`] of a `UORLUT01` stack artifact, or `None` for a stack without Hamming
+/// reads. The session's view of the trunk (`fbs_image`) leaves out an artifact with a read, so
+/// this reads the writer table itself, at the length the session checks.
+pub fn served_copy_codes_uorlut01(bytes: &[u8]) -> Result<Option<ServedCopyCodes>, StackError> {
+    let artifact = Container::parse(bytes)?;
+    let Some(image) = hamming_image(&artifact)? else {
+        return Ok(None);
+    };
+    let (vocab, width) = (artifact.shape.vocab, artifact.shape.width);
+    let table = artifact.table_i16("writer.table")?;
+    if table.len() != vocab * width {
+        return Err(StackError::TableLength {
+            name: "writer.table".to_owned(),
+            len: table.len(),
+            expected: vocab * width,
+        });
+    }
+    let copy = image.record.heads / 2;
+    let codes = image
+        .reads
+        .iter()
+        .map(|read| {
+            let heads = CopyHeads::new(&image.record, read, &table, vocab, width);
+            (0..vocab as u32)
+                .flat_map(|v| (0..copy).map(move |h| (v, h)))
+                .map(|(v, h)| heads.code(v, h))
+                .collect()
+        })
+        .collect();
+    Ok(Some(ServedCopyCodes { image, table, vocab, width, codes }))
+}
+
 /// The exponent of a copy mean: a Q12 table point times a Q31 weight.
 pub const COPY_MEAN_EXP: i32 = -43;
 

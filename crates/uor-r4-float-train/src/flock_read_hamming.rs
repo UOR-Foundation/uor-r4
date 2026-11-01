@@ -1190,6 +1190,76 @@ mod tests {
         assert_eq!(pack_signs(&coordinates), vec![1 | (1 << 63), 1 << 1]);
     }
 
+    /// claude-237: the copy-code check's CPU float control in the integer crate is this crate's
+    /// own, bit for bit: `hamilton_gate_f32` against `hamilton_gate_fwd_cpu` and `pack_signs_f32`
+    /// against `pack_signs`, over spread values, values near 0, a tiny gate, and −0.0.
+    #[test]
+    fn the_copy_code_control_is_the_trainers_own_bit_for_bit() {
+        use crate::kernel_controls::hamilton_gate_fwd_cpu;
+        use uor_r4_integer::fbs_snapshot::{hamilton_gate_f32, pack_signs_f32};
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = || {
+            state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+            ((state >> 40) as f32 / (1u64 << 24) as f32) * 4.0 - 2.0
+        };
+        let mut gate: Vec<f32> = (0..512).map(|_| next()).collect();
+        let mut up: Vec<f32> = (0..512).map(|_| next()).collect();
+        gate[..4].copy_from_slice(&[1e-7, -3e-8, 0.0, 2e-7]);
+        up[4..8].copy_from_slice(&[-0.0, 1e-30, -1e-30, 0.0]);
+        for (i, u) in up.iter_mut().enumerate().skip(8).step_by(7) {
+            *u *= 1e-6 * i as f32;
+        }
+        let ours = hamilton_gate_f32(&gate, &up);
+        let theirs = hamilton_gate_fwd_cpu(&gate, &up);
+        assert_eq!(ours.len(), theirs.len());
+        for (i, (a, b)) in ours.iter().zip(&theirs).enumerate() {
+            assert_eq!(a.to_bits(), b.to_bits(), "coordinate {i}: {a} against {b}");
+        }
+        assert_eq!(pack_signs_f32(&theirs), pack_signs(&theirs));
+        assert_eq!(pack_signs_f32(&up), pack_signs(&up), "−0.0 and the tiny values");
+    }
+
+    /// claude-237: the check's icosians in the integer crate are this crate's 120 roots, in the
+    /// same order, bit for bit.
+    #[test]
+    fn the_copy_code_icosians_are_the_trainers_own() {
+        let ours = uor_r4_integer::fbs_snapshot::icosian_roots_f32();
+        let theirs = crate::hamilton_sheet::h4_unit_roots_f32();
+        for (i, (a, b)) in ours.iter().zip(&theirs).enumerate() {
+            assert_eq!(a.map(f32::to_bits), b.map(f32::to_bits), "root {i}");
+        }
+    }
+
+    /// claude-237: the check's snap chooses as the GPU's D11 gate hook does
+    /// (`hamilton_sheet::icosian_snap_cuda_tensor`), on spread lanes and an all-zero lane.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_copy_code_snap_is_the_gpu_hooks_own() {
+        let device = Device::new_cuda(0).unwrap();
+        let Device::Cuda(cuda) = &device else {
+            unreachable!("a CUDA device")
+        };
+        let mut state = 0x2545_f491_4f6c_dd1du64;
+        let mut next = || {
+            state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+            ((state >> 40) as f32 / (1u64 << 24) as f32) * 4.0 - 2.0
+        };
+        let mut lanes: Vec<f32> = (0..4 * 512).map(|_| next()).collect();
+        lanes[..4].fill(0.0);
+        let gate = Tensor::from_vec(lanes.clone(), (8, 256), &device).unwrap();
+        let theirs = crate::hamilton_sheet::icosian_snap_cuda_tensor(cuda, &gate)
+            .unwrap()
+            .flatten_all()
+            .unwrap()
+            .to_vec1::<f32>()
+            .unwrap();
+        let ours = uor_r4_integer::fbs_snapshot::snap_icosian_f32(&lanes);
+        assert_eq!(
+            ours.iter().map(|x| x.to_bits()).collect::<Vec<_>>(),
+            theirs.iter().map(|x| x.to_bits()).collect::<Vec<_>>()
+        );
+    }
+
     #[cfg(feature = "cuda")]
     #[test]
     fn the_sorted_choice_keeps_the_same_nearest_set_as_claude_144s() {

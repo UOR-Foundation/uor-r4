@@ -7,6 +7,7 @@
 //! the handoff between the two builds; `serde_json` writes each `f32` so that
 //! it reads back exactly.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -689,9 +690,752 @@ pub fn compare_hamming_traces(
     })
 }
 
+/// The CPU float control's lane product (claude-237): the float trainer's
+/// `kernel_controls::hamilton_gate_fwd_cpu`, the CPU twin of the GPU forward's `hamilton_gate`,
+/// term for term, so that it gives the same bits (a float-train test holds the two equal). Each
+/// lane of `up` is turned on the left by the unit `g / |g|` of its lane of `gate`.
+pub fn hamilton_gate_f32(gate: &[f32], up: &[f32]) -> Vec<f32> {
+    assert_eq!(gate.len(), up.len());
+    assert_eq!(gate.len() % 4, 0);
+    let mut out = vec![0.0f32; gate.len()];
+    for i in (0..gate.len()).step_by(4) {
+        let (g0, g1, g2, g3) = (gate[i], gate[i + 1], gate[i + 2], gate[i + 3]);
+        let (u0, u1, u2, u3) = (up[i], up[i + 1], up[i + 2], up[i + 3]);
+        let r = (g0 * g0 + g1 * g1 + g2 * g2 + g3 * g3 + 1e-12f32).sqrt();
+        let (q0, q1, q2, q3) = (g0 / r, g1 / r, g2 / r, g3 / r);
+        out[i] = q0 * u0 - q1 * u1 - q2 * u2 - q3 * u3;
+        out[i + 1] = q0 * u1 + q1 * u0 + q2 * u3 - q3 * u2;
+        out[i + 2] = q0 * u2 - q1 * u3 + q2 * u0 + q3 * u1;
+        out[i + 3] = q0 * u3 + q1 * u2 - q2 * u1 + q3 * u0;
+    }
+    out
+}
+
+/// Each coordinate's sign bit, packed 64 to a word in coordinate order (claude-237): the float
+/// trainer's `flock_read_hamming::pack_signs`, held equal by the same test. A coordinate at or
+/// above 0 is a 1.
+pub fn pack_signs_f32(coordinates: &[f32]) -> Vec<u64> {
+    coordinates
+        .chunks(64)
+        .map(|chunk| {
+            chunk
+                .iter()
+                .enumerate()
+                .fold(0u64, |word, (i, &c)| word | (u64::from(c >= 0.0) << i))
+        })
+        .collect()
+}
+
+/// The copy heads' codes by the CPU float control (claude-237). Each of the `vocab` rows of
+/// `table` (`width` floats each) is turned lane by lane by the `width` floats of `key_rotation`,
+/// as the float forward turns a token's point for a copy head's query and key. Each copy head's
+/// `width / heads` coordinates are then packed by [`pack_signs_f32`]; the first `heads / 2`
+/// heads are the copy heads.
+///
+/// It returns the codes, entry `v`'s code for copy head `h` at `v * copy + h` (as `CopyHeads`
+/// lays them), and the turned copy coordinates, entry `v`'s coordinate `c` at `v * copy_width +
+/// c`, so that a differing bit's value can be read.
+pub fn float_copy_codes(
+    key_rotation: &[f32],
+    table: &[f32],
+    vocab: usize,
+    width: usize,
+    heads: usize,
+) -> Result<(Vec<u64>, Vec<f32>), String> {
+    if heads == 0
+        || !heads.is_multiple_of(2)
+        || !width.is_multiple_of(4)
+        || !width.is_multiple_of(heads)
+        || width / heads > 64
+    {
+        return Err(format!(
+            "{heads} heads over width {width}: an even count of heads of at most 64 coordinates, over whole lanes"
+        ));
+    }
+    if key_rotation.len() != width || table.len() != vocab * width {
+        return Err(format!(
+            "a rotation of {} and a table of {}, not {width} and {vocab} × {width}",
+            key_rotation.len(),
+            table.len()
+        ));
+    }
+    let (copy, head_width) = (heads / 2, width / heads);
+    let mut codes = Vec::with_capacity(vocab * copy);
+    let mut values = Vec::with_capacity(vocab * copy * head_width);
+    for row in table.chunks_exact(width) {
+        let turned = hamilton_gate_f32(key_rotation, row);
+        for h in 0..copy {
+            codes.push(pack_signs_f32(&turned[h * head_width..][..head_width])[0]);
+        }
+        values.extend_from_slice(&turned[..copy * head_width]);
+    }
+    Ok((codes, values))
+}
+
+/// The 120 unit icosians of 2I in the float trainer's order (claude-237): its
+/// `hamilton_sheet::H4_ROOT_COEFFICIENTS`, each coordinate `(a + b·φ) / 2` evaluated in f64 and
+/// rounded to f32, as its `h4_unit_roots_f32` does (a float-train test holds the two equal). The
+/// order is ±1 on each axis, then `(±½)⁴`, then `½(0, ±1, ±φ, ±1/φ)` in the 12 even orders.
+pub fn icosian_roots_f32() -> [[f32; 4]; 120] {
+    const EVEN_ORDERS: [[usize; 4]; 12] = [
+        [0, 1, 2, 3],
+        [0, 2, 3, 1],
+        [0, 3, 1, 2],
+        [1, 0, 3, 2],
+        [1, 2, 0, 3],
+        [1, 3, 2, 0],
+        [2, 0, 1, 3],
+        [2, 1, 3, 0],
+        [2, 3, 0, 1],
+        [3, 0, 2, 1],
+        [3, 1, 0, 2],
+        [3, 2, 1, 0],
+    ];
+    let mut coefficients = [[[0i8; 2]; 4]; 120];
+    for (axis, pair) in coefficients[..8].chunks_exact_mut(2).enumerate() {
+        pair[0][axis] = [-2, 0];
+        pair[1][axis] = [2, 0];
+    }
+    let mut index = 8;
+    for signs in 0..16 {
+        for (axis, c) in coefficients[index].iter_mut().enumerate() {
+            *c = [if signs & (1 << axis) == 0 { -1 } else { 1 }, 0];
+        }
+        index += 1;
+    }
+    for order in EVEN_ORDERS {
+        for signs in 0..8 {
+            let sign = |bit: i32| -> i8 {
+                if signs & bit == 0 {
+                    -1
+                } else {
+                    1
+                }
+            };
+            let signed = [[0, 0], [sign(4), 0], [0, sign(2)], [-sign(1), sign(1)]];
+            for (axis, c) in coefficients[index].iter_mut().enumerate() {
+                *c = signed[order[axis]];
+            }
+            index += 1;
+        }
+    }
+    let phi = 0.5 * (1.0 + 5.0_f64.sqrt());
+    coefficients.map(|root| root.map(|[a, b]| (0.5 * (f64::from(a) + f64::from(b) * phi)) as f32))
+}
+
+/// Each lane of `rotation` replaced by the icosian of [`icosian_roots_f32`] with the largest
+/// inner product, the first on a tie (claude-237). An all-zero lane takes root 1, the identity.
+/// This is the snap the GPU forward's D11 mode applies to every Hamilton gate
+/// (`hamilton_sheet::icosian_snap_cuda_tensor`), the Hamming read's rotations among them.
+pub fn snap_icosian_f32(rotation: &[f32]) -> Vec<f32> {
+    assert_eq!(rotation.len() % 4, 0);
+    let roots = icosian_roots_f32();
+    rotation
+        .chunks_exact(4)
+        .flat_map(|lane| {
+            if lane.iter().all(|&x| x == 0.0) {
+                return roots[1];
+            }
+            let score =
+                |root: &[f32; 4]| -> f32 { root.iter().zip(lane).map(|(r, x)| r * x).sum() };
+            let mut best = 0;
+            for (i, root) in roots.iter().enumerate().skip(1) {
+                if score(root) > score(&roots[best]) {
+                    best = i;
+                }
+            }
+            roots[best]
+        })
+        .collect()
+}
+
+/// One read's copy-head codes by the CPU float control and by the integer session, for
+/// [`copy_code_check`] (claude-237). Each code list holds entry `v`'s code for copy head `h` at
+/// `v * copy + h`; the control's turned copy coordinates hold entry `v`'s coordinate `c` at
+/// `v * copy_width + c`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CopyCodeRead {
+    pub depth: usize,
+    pub control_codes: Vec<u64>,
+    pub control_values: Vec<f32>,
+    pub integer_codes: Vec<u64>,
+    /// The control's codes with the key rotation first snapped by [`snap_icosian_f32`]: what the
+    /// GPU's D11 forward computes, whose gate hook snaps the read's rotations too.
+    pub snapped_codes: Vec<u64>,
+}
+
+/// Each read's [`CopyCodeRead`] (claude-237), from the artifact's own values: per read its depth,
+/// its raw key rotation at `2^rotation_exp` and the session's codes, and the Q12 writer `table`.
+/// The control reads the rotation as `raw · 2^rotation_exp` and the table as `q / 4096` (the
+/// grid [`q12_value`] rounds to), each in f32, so it and the session share their inputs.
+pub fn copy_code_reads(
+    reads: &[(usize, &[i32], Vec<u64>)],
+    rotation_exp: i32,
+    table: &[i16],
+    vocab: usize,
+    width: usize,
+    heads: usize,
+) -> Result<Vec<CopyCodeRead>, String> {
+    let points: Vec<f32> = table.iter().map(|&q| f32::from(q) / 4096.0).collect();
+    let scale = 2f64.powi(rotation_exp);
+    reads
+        .iter()
+        .map(|(depth, raw, integer_codes)| {
+            let rotation: Vec<f32> = raw.iter().map(|&g| (f64::from(g) * scale) as f32).collect();
+            let at = |e: String| format!("the read at depth {depth}: {e}");
+            let (control_codes, control_values) =
+                float_copy_codes(&rotation, &points, vocab, width, heads).map_err(at)?;
+            let (snapped_codes, _) =
+                float_copy_codes(&snap_icosian_f32(&rotation), &points, vocab, width, heads)
+                    .map_err(at)?;
+            Ok(CopyCodeRead {
+                depth: *depth,
+                control_codes,
+                control_values,
+                integer_codes: integer_codes.clone(),
+                snapped_codes,
+            })
+        })
+        .collect()
+}
+
+/// The schema `fbs-toks --copy-codes` writes (claude-237).
+pub const COPY_CODES_SCHEMA: &str = "uor-r4.copy-codes/1";
+
+/// The bins of a copy-code value histogram: the control's `|value|` below `1e-6`, `1e-5`,
+/// `1e-4`, `1e-3`, `1e-2` and `1e-1`, then at or above `1e-1`.
+pub const COPY_VALUE_BINS: usize = 7;
+
+fn copy_value_bin(value: f32) -> usize {
+    let size = f64::from(value).abs();
+    [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1]
+        .iter()
+        .position(|&edge| size < edge)
+        .unwrap_or(COPY_VALUE_BINS - 1)
+}
+
+/// The bits set in `word`, lowest first.
+fn set_bits(word: u64) -> impl Iterator<Item = u32> {
+    (0..64).filter(move |&b| (word >> b) & 1 == 1)
+}
+
+/// One bit where the control's code and the session's differ, with the control's turned
+/// coordinate there.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CopyCodeBit {
+    pub token: u32,
+    pub head: usize,
+    pub bit: u32,
+    pub value: f32,
+}
+
+/// The control's codes against the session's, over every vocabulary entry and copy head.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CopyControlAgainstInteger {
+    /// The codes compared (`vocab * copy`), and of them those equal.
+    pub codes: usize,
+    pub equal: usize,
+    /// The bits that differ, in all.
+    pub differing_bits: usize,
+    /// The control's `|value|` at each differing bit, by [`COPY_VALUE_BINS`] bin.
+    pub value_bins: Vec<usize>,
+    /// The largest `|value|` at a differing bit; 0 when none differs.
+    pub max_value: f32,
+    /// The first [`MAX_FAULTS_LISTED`] differing bits.
+    pub listed: Vec<CopyCodeBit>,
+}
+
+/// One trace's copy-head codes of one kind, query or key, against both sides' codes.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CopyCodeSamples {
+    /// The samples, and of them those equal to the control's code, to the session's, and to the
+    /// control's with the rotation snapped.
+    pub samples: usize,
+    pub equal_control: usize,
+    pub equal_integer: usize,
+    pub equal_snapped: usize,
+    /// How many samples sit `d` bits from the control's code, at index `d` (0 to 64), and from
+    /// the session's.
+    pub bits_from_control: Vec<usize>,
+    pub bits_from_integer: Vec<usize>,
+    /// The control's `|value|` at each bit where a sample differs from the control's code, by
+    /// [`COPY_VALUE_BINS`] bin.
+    pub value_bins: Vec<usize>,
+}
+
+/// One trace's copy heads at one read.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CopyCodeTrace {
+    pub side: String,
+    pub arm: String,
+    /// The query at each position `t`, which is `ids[t]`'s code, and the key at each `s ≥ 1`,
+    /// which is `ids[s − 1]`'s.
+    pub query: CopyCodeSamples,
+    pub key: CopyCodeSamples,
+    /// The (token, copy head) pairs the trace holds, and of them those it gives more than one
+    /// code across its queries and keys.
+    pub pairs: usize,
+    pub inconsistent: usize,
+}
+
+/// One read's codes, three ways.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CopyCodeDepth {
+    pub depth: usize,
+    pub control_vs_integer: CopyControlAgainstInteger,
+    pub float: CopyCodeTrace,
+    pub integer: CopyCodeTrace,
+}
+
+/// The copy-code check's result (claude-237): a [`CopyCodeDepth`] per read, in depth order.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CopyCodeCheck {
+    pub vocab: usize,
+    pub heads: usize,
+    pub reads: Vec<CopyCodeDepth>,
+}
+
+/// Every vocabulary entry's copy-head code three ways (claude-237, the item's step 5).
+///
+/// It compares the CPU float control's codes with the integer session's, on the same inputs
+/// (`reads`, in depth order), and both with the codes the float and the integer
+/// [`HammingTrace`]s hold at each position, matched by token; each trace also against the
+/// control with the rotation snapped. A copy code depends only on its token, so a trace that
+/// gives one (token, head) pair two codes counts it `inconsistent`.
+///
+/// Inputs that do not line up are refused before anything is compared:
+/// - codes of the wrong length;
+/// - a trace of another schema or side, or with other heads;
+/// - a window whose reads are not at `reads`' depths, whose read holds fewer than the copy heads,
+///   whose codes are not one per position, or whose ids are not entries.
+pub fn copy_code_check(
+    vocab: usize,
+    width: usize,
+    heads: usize,
+    reads: &[CopyCodeRead],
+    float: &HammingTrace,
+    integer: &HammingTrace,
+) -> Result<CopyCodeCheck, String> {
+    if heads == 0 || !heads.is_multiple_of(2) || !width.is_multiple_of(heads) || width / heads > 64
+    {
+        return Err(format!(
+            "{heads} heads over width {width}: an even count of heads of at most 64 coordinates"
+        ));
+    }
+    let (copy, head_width) = (heads / 2, width / heads);
+    if reads.is_empty() {
+        return Err("no read to check".to_owned());
+    }
+    for read in reads {
+        let codes = vocab * copy;
+        if read.control_codes.len() != codes
+            || read.integer_codes.len() != codes
+            || read.snapped_codes.len() != codes
+            || read.control_values.len() != codes * head_width
+        {
+            return Err(format!(
+                "the read at depth {}: {} control codes, {} control values, {} session codes and {} snapped codes, not {codes}, {}, {codes} and {codes}",
+                read.depth,
+                read.control_codes.len(),
+                read.control_values.len(),
+                read.integer_codes.len(),
+                read.snapped_codes.len(),
+                codes * head_width
+            ));
+        }
+    }
+    let depths: Vec<usize> = reads.iter().map(|r| r.depth).collect();
+    check_copy_trace(float, "float-d11", vocab, heads, &depths)?;
+    check_copy_trace(integer, "integer", vocab, heads, &depths)?;
+    Ok(CopyCodeCheck {
+        vocab,
+        heads,
+        reads: reads
+            .iter()
+            .enumerate()
+            .map(|(r, read)| CopyCodeDepth {
+                depth: read.depth,
+                control_vs_integer: control_against_integer(read, copy, head_width),
+                float: copy_trace(float, r, read, copy, head_width),
+                integer: copy_trace(integer, r, read, copy, head_width),
+            })
+            .collect(),
+    })
+}
+
+/// Why the `side` trace does not line up with the artifact, if it does not.
+fn check_copy_trace(
+    trace: &HammingTrace,
+    side: &str,
+    vocab: usize,
+    heads: usize,
+    depths: &[usize],
+) -> Result<(), String> {
+    if trace.schema != HAMMING_TRACE_SCHEMA {
+        return Err(format!(
+            "the {side} trace's schema is {}, not {HAMMING_TRACE_SCHEMA}",
+            trace.schema
+        ));
+    }
+    if trace.side != side {
+        return Err(format!(
+            "the {side} trace was written by the {} side",
+            trace.side
+        ));
+    }
+    if trace.heads != heads {
+        return Err(format!(
+            "the {side} trace holds {} heads, the artifact {heads}",
+            trace.heads
+        ));
+    }
+    if trace.windows.is_empty() {
+        return Err(format!("the {side} trace holds no window"));
+    }
+    for (w, window) in trace.windows.iter().enumerate() {
+        let time = window.ids.len();
+        if let Some(id) = window.ids.iter().find(|&&id| id as usize >= vocab) {
+            return Err(format!(
+                "the {side} trace's window {w}: id {id} is not one of {vocab} entries"
+            ));
+        }
+        if window
+            .reads
+            .iter()
+            .map(|r| r.depth)
+            .ne(depths.iter().copied())
+        {
+            return Err(format!(
+                "the {side} trace's window {w}: reads at depths {:?}, the artifact's at {depths:?}",
+                window.reads.iter().map(|r| r.depth).collect::<Vec<_>>()
+            ));
+        }
+        for read in &window.reads {
+            let Some(copies) = read.heads.get(..heads / 2) else {
+                return Err(format!(
+                    "the {side} trace's window {w}, depth {}: {} heads, fewer than the {} copy heads",
+                    read.depth,
+                    read.heads.len(),
+                    heads / 2
+                ));
+            };
+            if copies
+                .iter()
+                .any(|h| h.query.len() != time || h.key.len() != time)
+            {
+                return Err(format!(
+                    "the {side} trace's window {w}, depth {}: copy codes not one per position of {time}",
+                    read.depth
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The control's codes against the session's at one read.
+fn control_against_integer(
+    read: &CopyCodeRead,
+    copy: usize,
+    head_width: usize,
+) -> CopyControlAgainstInteger {
+    let mut out = CopyControlAgainstInteger {
+        codes: read.control_codes.len(),
+        value_bins: vec![0; COPY_VALUE_BINS],
+        ..Default::default()
+    };
+    for (i, (&control, &served)) in read
+        .control_codes
+        .iter()
+        .zip(&read.integer_codes)
+        .enumerate()
+    {
+        let diff = control ^ served;
+        out.equal += usize::from(diff == 0);
+        out.differing_bits += diff.count_ones() as usize;
+        for bit in set_bits(diff) {
+            let value = read.control_values[i * head_width + bit as usize];
+            out.value_bins[copy_value_bin(value)] += 1;
+            out.max_value = out.max_value.max(value.abs());
+            if out.listed.len() < MAX_FAULTS_LISTED {
+                out.listed.push(CopyCodeBit {
+                    token: (i / copy) as u32,
+                    head: i % copy,
+                    bit,
+                    value,
+                });
+            }
+        }
+    }
+    out
+}
+
+/// The copy-head codes `trace` holds at its `r`-th read, against `read`'s two sides' codes.
+fn copy_trace(
+    trace: &HammingTrace,
+    r: usize,
+    read: &CopyCodeRead,
+    copy: usize,
+    head_width: usize,
+) -> CopyCodeTrace {
+    let samples = || CopyCodeSamples {
+        bits_from_control: vec![0; 65],
+        bits_from_integer: vec![0; 65],
+        value_bins: vec![0; COPY_VALUE_BINS],
+        ..Default::default()
+    };
+    let (mut query, mut key) = (samples(), samples());
+    let mut codes: BTreeMap<(u32, usize), BTreeSet<u64>> = BTreeMap::new();
+    let mut note = |into: &mut CopyCodeSamples, token: u32, head: usize, code: u64| {
+        let i = token as usize * copy + head;
+        let (control, served) = (read.control_codes[i], read.integer_codes[i]);
+        into.samples += 1;
+        into.equal_control += usize::from(code == control);
+        into.equal_integer += usize::from(code == served);
+        into.equal_snapped += usize::from(code == read.snapped_codes[i]);
+        into.bits_from_control[(code ^ control).count_ones() as usize] += 1;
+        into.bits_from_integer[(code ^ served).count_ones() as usize] += 1;
+        for bit in set_bits(code ^ control) {
+            into.value_bins[copy_value_bin(read.control_values[i * head_width + bit as usize])] +=
+                1;
+        }
+        codes.entry((token, head)).or_default().insert(code);
+    };
+    for window in &trace.windows {
+        for (head, h) in window.reads[r].heads[..copy].iter().enumerate() {
+            for (t, &token) in window.ids.iter().enumerate() {
+                note(&mut query, token, head, h.query[t]);
+                if t + 1 < window.ids.len() {
+                    note(&mut key, token, head, h.key[t + 1]);
+                }
+            }
+        }
+    }
+    CopyCodeTrace {
+        side: trace.side.clone(),
+        arm: trace.arm.clone(),
+        query,
+        key,
+        pairs: codes.len(),
+        inconsistent: codes.values().filter(|c| c.len() > 1).count(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// claude-237: the control turns each lane on the left by its gate's unit and packs each copy
+    /// head's coordinates in coordinate order, laid out by entry and then copy head. Lane 0's
+    /// gate `2i` turns `(a, b, c, d)` to `(−b, a, −d, c)`; lane 1 is past the copy heads.
+    #[test]
+    fn float_copy_codes_turn_each_lane_and_pack_each_copy_head() {
+        let gate = [0.0, 2.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0];
+        let table = [
+            0.5, -0.25, 1.0, -2.0, 9.0, 9.0, 9.0, 9.0, //
+            -1.0, 0.0, 3.0, -0.5, 9.0, 9.0, 9.0, 9.0,
+        ];
+        let (codes, values) = float_copy_codes(&gate, &table, 2, 8, 4).expect("the control");
+        assert_eq!(values, [0.25, 0.5, 2.0, 1.0, 0.0, -1.0, 0.5, 3.0]);
+        assert_eq!(codes, [0b11, 0b11, 0b01, 0b11], "entry, then copy head");
+        assert!(
+            float_copy_codes(&gate, &table, 2, 8, 3).is_err(),
+            "odd heads"
+        );
+        assert!(
+            float_copy_codes(&gate[..4], &table, 2, 8, 4).is_err(),
+            "short rotation"
+        );
+        assert!(
+            float_copy_codes(&gate, &table[..8], 2, 8, 4).is_err(),
+            "short table"
+        );
+    }
+
+    /// claude-237: the 120 roots are distinct unit quaternions; each, at any scale, snaps to
+    /// itself; a lane near one snaps to it; and an all-zero lane takes the identity.
+    #[test]
+    fn the_snap_takes_the_nearest_of_the_120_icosians() {
+        let roots = icosian_roots_f32();
+        for (i, a) in roots.iter().enumerate() {
+            let norm: f32 = a.iter().map(|x| x * x).sum();
+            assert!((norm - 1.0).abs() < 1e-6, "root {i} has norm² {norm}");
+            for b in &roots[i + 1..] {
+                let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
+                assert!(dot < 0.9, "root {i} repeats");
+            }
+            assert_eq!(snap_icosian_f32(&a.map(|x| 2.5 * x)), a);
+        }
+        // An identity-near lane, a lane near `(½)⁴`, then a zero lane.
+        let lanes = [
+            1.072_641_3,
+            0.141_984_52,
+            0.008_908_987,
+            -0.047_924_876,
+            0.6,
+            0.4,
+            0.5,
+            0.55,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        ];
+        let snapped = snap_icosian_f32(&lanes);
+        assert_eq!(
+            snapped,
+            [1.0, 0.0, 0.0, 0.0, 0.5, 0.5, 0.5, 0.5, 1.0, 0.0, 0.0, 0.0]
+        );
+    }
+
+    /// The planted inputs of the copy-code tests: 5 entries, width 8, 2 heads (one copy head of
+    /// 4 coordinates), one read at depth 2, and one window. The session's code of entry 3 has bit
+    /// 2 flipped, where the control's value is `3e-5`; the float trace's query at position 3
+    /// (entry 3) has bit 1 flipped, where the control's value is `0.2`; the snapped control's
+    /// code of entry 1 has bit 0 set.
+    fn planted() -> (Vec<CopyCodeRead>, HammingTrace, HammingTrace) {
+        let control: Vec<u64> = vec![0b0001, 0b0010, 0b0100, 0b1000, 0b1111];
+        let mut values = vec![0.5f32; 20];
+        values[3 * 4 + 2] = 3e-5;
+        values[3 * 4 + 1] = 0.2;
+        let mut served = control.clone();
+        served[3] ^= 0b100;
+        let ids: Vec<u32> = vec![0, 1, 2, 3, 4, 3, 1];
+        let trace = |side: &str, codes: &[u64]| {
+            let key = (0..ids.len())
+                .map(|s| codes[ids[s.saturating_sub(1)] as usize])
+                .collect();
+            HammingTrace {
+                schema: HAMMING_TRACE_SCHEMA.to_owned(),
+                side: side.to_owned(),
+                arm: side.to_owned(),
+                heads: 2,
+                kept: 16,
+                windows: vec![HammingTraceWindow {
+                    ids: ids.clone(),
+                    reads: vec![HammingTraceRead {
+                        depth: 2,
+                        heads: vec![HammingTraceHead {
+                            query: ids.iter().map(|&v| codes[v as usize]).collect(),
+                            key,
+                            kept: vec![Vec::new(); ids.len()],
+                        }],
+                    }],
+                }],
+            }
+        };
+        let mut float = trace("float-d11", &control);
+        float.windows[0].reads[0].heads[0].query[3] ^= 0b10;
+        let integer = trace("integer", &served);
+        let mut snapped = control.clone();
+        snapped[1] |= 0b1;
+        let read = CopyCodeRead {
+            depth: 2,
+            control_codes: control,
+            control_values: values,
+            integer_codes: served,
+            snapped_codes: snapped,
+        };
+        (vec![read], float, integer)
+    }
+
+    /// claude-237: the check finds the planted differences and nothing else: the session's one
+    /// bit, with the control's value there and its bin; the float trace's one flipped query, and
+    /// the pair it makes inconsistent; and the integer trace's agreement with its own side.
+    #[test]
+    fn the_copy_code_check_finds_each_planted_difference() {
+        let (reads, float, integer) = planted();
+        let check = copy_code_check(5, 8, 2, &reads, &float, &integer).expect("the check");
+        assert_eq!((check.vocab, check.heads, check.reads.len()), (5, 2, 1));
+        let read = &check.reads[0];
+        assert_eq!(read.depth, 2);
+        let against = &read.control_vs_integer;
+        assert_eq!(
+            (against.codes, against.equal, against.differing_bits),
+            (5, 4, 1)
+        );
+        assert_eq!(
+            against.value_bins,
+            [0, 0, 1, 0, 0, 0, 0],
+            "3e-5 is below 1e-4"
+        );
+        assert_eq!(against.max_value, 3e-5);
+        let bit = CopyCodeBit {
+            token: 3,
+            head: 0,
+            bit: 2,
+            value: 3e-5,
+        };
+        assert_eq!(against.listed, [bit]);
+
+        let float = &read.float;
+        assert_eq!((float.query.samples, float.query.equal_control), (7, 6));
+        assert_eq!(float.query.equal_integer, 5, "entry 3 at positions 3 and 5");
+        assert_eq!(
+            float.query.equal_snapped, 4,
+            "entry 1 at positions 1 and 6, and position 3"
+        );
+        assert_eq!(&float.query.bits_from_control[..3], [6, 1, 0]);
+        assert_eq!(&float.query.bits_from_integer[..3], [5, 1, 1]);
+        assert_eq!(
+            float.query.value_bins,
+            [0, 0, 0, 0, 0, 0, 1],
+            "0.2 at bit 1"
+        );
+        assert_eq!((float.key.samples, float.key.equal_control), (6, 6));
+        assert_eq!((float.pairs, float.inconsistent), (5, 1));
+
+        let integer = &read.integer;
+        assert_eq!((integer.query.samples, integer.query.equal_integer), (7, 7));
+        assert_eq!(integer.query.equal_control, 5);
+        assert_eq!(integer.query.equal_snapped, 3, "entries 0, 2 and 4");
+        assert_eq!(integer.query.value_bins, [0, 0, 2, 0, 0, 0, 0]);
+        assert_eq!((integer.key.samples, integer.key.equal_control), (6, 4));
+        assert_eq!((integer.pairs, integer.inconsistent), (5, 0));
+    }
+
+    /// claude-237: inputs that do not line up are refused, each for its own reason.
+    #[test]
+    fn the_copy_code_check_refuses_inputs_that_do_not_line_up() {
+        type Plant = fn(&mut Vec<CopyCodeRead>, &mut HammingTrace, &mut HammingTrace);
+        let cases: [(&str, Plant); 10] = [
+            ("schema", |_, f, _| f.schema = "other".to_owned()),
+            ("written by", |_, f, _| f.side = "integer".to_owned()),
+            ("heads, the artifact", |_, _, i| i.heads = 4),
+            ("depths", |_, f, _| f.windows[0].reads[0].depth = 3),
+            ("not one of 5", |_, f, _| f.windows[0].ids[2] = 5),
+            ("fewer than", |_, f, _| f.windows[0].reads[0].heads.clear()),
+            ("one per position", |_, _, i| {
+                i.windows[0].reads[0].heads[0].key.pop();
+            }),
+            ("session codes", |r, _, _| {
+                r[0].integer_codes.pop();
+            }),
+            ("snapped codes", |r, _, _| {
+                r[0].snapped_codes.pop();
+            }),
+            ("no window", |_, f, _| f.windows.clear()),
+        ];
+        for (why, plant) in cases {
+            let (mut reads, mut float, mut integer) = planted();
+            plant(&mut reads, &mut float, &mut integer);
+            let error = copy_code_check(5, 8, 2, &reads, &float, &integer).expect_err(why);
+            assert!(error.contains(why), "{why}: {error}");
+        }
+        let (reads, float, integer) = planted();
+        assert!(copy_code_check(5, 8, 3, &reads, &float, &integer)
+            .expect_err("odd heads")
+            .contains("even count"));
+        assert!(copy_code_check(5, 8, 2, &[], &float, &integer)
+            .expect_err("no read")
+            .contains("no read"));
+    }
 
     #[test]
     fn write_new_file_never_replaces_and_never_leaves_a_partial_file() {

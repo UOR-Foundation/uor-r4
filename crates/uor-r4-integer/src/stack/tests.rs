@@ -5778,6 +5778,47 @@ fn the_hamming_trace_records_each_reads_choices_and_changes_no_step() {
     }
 }
 
+/// claude-237: the copy-code check's inputs from an artifact, on the synthetic trunk with a read
+/// after layer 1 and on the readout: the served codes are `CopyHeads`' own for every entry and
+/// copy head, and the session's own trace holds exactly those codes at every position, query and
+/// key, with no pair given two codes.
+#[test]
+fn the_copy_code_check_holds_the_session_trace_to_its_served_codes() {
+    use crate::fbs_snapshot::{copy_code_check, copy_code_reads};
+    let (integer, ..) = integer_hamming_trace();
+    let (_, _, with_read) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    let served = super::served_copy_codes_uorlut01(&with_read).expect("parse").expect("the reads");
+    let (vocab, width, heads) = (served.vocab, served.width, served.image.record.heads);
+    let copy = heads / 2;
+    for (read, codes) in served.image.reads.iter().zip(&served.codes) {
+        let copies = super::CopyHeads::new(&served.image.record, read, &served.table, vocab, width);
+        assert_eq!(codes.len(), vocab * copy);
+        for (i, &code) in codes.iter().enumerate() {
+            assert_eq!(code, copies.code((i / copy) as u32, i % copy), "entry {}, head {}", i / copy, i % copy);
+        }
+    }
+    let inputs: Vec<(usize, &[i32], Vec<u64>)> = served
+        .image
+        .reads
+        .iter()
+        .zip(&served.codes)
+        .map(|(read, codes)| (read.depth, read.key_rotation.as_slice(), codes.clone()))
+        .collect();
+    let reads = copy_code_reads(&inputs, served.image.record.rotation_exp, &served.table, vocab, width, heads)
+        .expect("the control");
+    let mut float = integer.clone();
+    float.side = "float-d11".to_owned();
+    let check = copy_code_check(vocab, width, heads, &reads, &float, &integer).expect("the check");
+    assert_eq!(check.reads.iter().map(|r| r.depth).collect::<Vec<_>>(), [1, 3]);
+    for read in &check.reads {
+        let trace = &read.integer;
+        assert!(trace.query.samples > 0 && trace.key.samples > 0);
+        assert_eq!(trace.query.equal_integer, trace.query.samples, "depth {}", read.depth);
+        assert_eq!(trace.key.equal_integer, trace.key.samples, "depth {}", read.depth);
+        assert_eq!(trace.inconsistent, 0, "depth {}", read.depth);
+    }
+}
+
 /// claude-235: one full set of the stream read's copy head at a row where a candidate it left
 /// out sits at its last kept place's distance, with a member nearer than the place and a
 /// candidate farther: the head, the row, a member at the place, the candidate, the nearer member
