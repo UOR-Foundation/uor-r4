@@ -826,7 +826,10 @@ pub fn icosian_roots_f32() -> [[f32; 4]; 120] {
 /// Each lane of `rotation` replaced by the icosian of [`icosian_roots_f32`] with the largest
 /// inner product, the first on a tie (claude-237). An all-zero lane takes root 1, the identity.
 /// This is the snap the GPU forward's D11 mode applies to every Hamilton gate
-/// (`hamilton_sheet::icosian_snap_cuda_tensor`), the Hamming read's rotations among them.
+/// (`hamilton_sheet::icosian_snap_cuda_tensor`), the Hamming read's rotations among them, up to
+/// two things a lane near a tie could show: the GPU sums the four products in its own order,
+/// and its arg-max does not promise the first of tied roots. The CUDA-only test in
+/// `flock_read_hamming.rs` compares the two.
 pub fn snap_icosian_f32(rotation: &[f32]) -> Vec<f32> {
     assert_eq!(rotation.len() % 4, 0);
     let roots = icosian_roots_f32();
@@ -1010,10 +1013,11 @@ pub struct CopyCodeCheck {
 /// gives one (token, head) pair two codes counts it `inconsistent`.
 ///
 /// Inputs that do not line up are refused before anything is compared:
-/// - codes of the wrong length;
+/// - codes of the wrong length, or wider than a head;
 /// - a trace of another schema or side, or with other heads;
 /// - a window whose reads are not at `reads`' depths, whose read holds fewer than the copy heads,
-///   whose codes are not one per position, or whose ids are not entries.
+///   whose codes are not one per position or are wider than a head, or whose ids are not
+///   entries.
 pub fn copy_code_check(
     vocab: usize,
     width: usize,
@@ -1049,10 +1053,23 @@ pub fn copy_code_check(
                 codes * head_width
             ));
         }
+        if [
+            &read.control_codes,
+            &read.integer_codes,
+            &read.snapped_codes,
+        ]
+        .iter()
+        .any(|codes| codes.iter().any(|&c| wider_than(c, head_width)))
+        {
+            return Err(format!(
+                "the read at depth {}: a code wider than the head's {head_width} bits",
+                read.depth
+            ));
+        }
     }
     let depths: Vec<usize> = reads.iter().map(|r| r.depth).collect();
-    check_copy_trace(float, "float-d11", vocab, heads, &depths)?;
-    check_copy_trace(integer, "integer", vocab, heads, &depths)?;
+    check_copy_trace(float, "float-d11", vocab, heads, head_width, &depths)?;
+    check_copy_trace(integer, "integer", vocab, heads, head_width, &depths)?;
     Ok(CopyCodeCheck {
         vocab,
         heads,
@@ -1069,12 +1086,18 @@ pub fn copy_code_check(
     })
 }
 
+/// Whether `code` sets a bit at or past a head's `head_width` coordinates.
+fn wider_than(code: u64, head_width: usize) -> bool {
+    head_width < 64 && code >> head_width != 0
+}
+
 /// Why the `side` trace does not line up with the artifact, if it does not.
 fn check_copy_trace(
     trace: &HammingTrace,
     side: &str,
     vocab: usize,
     heads: usize,
+    head_width: usize,
     depths: &[usize],
 ) -> Result<(), String> {
     if trace.schema != HAMMING_TRACE_SCHEMA {
@@ -1131,6 +1154,17 @@ fn check_copy_trace(
             {
                 return Err(format!(
                     "the {side} trace's window {w}, depth {}: copy codes not one per position of {time}",
+                    read.depth
+                ));
+            }
+            if copies.iter().any(|h| {
+                h.query
+                    .iter()
+                    .chain(&h.key)
+                    .any(|&c| wider_than(c, head_width))
+            }) {
+                return Err(format!(
+                    "the {side} trace's window {w}, depth {}: a copy code past the head's {head_width} bits",
                     read.depth
                 ));
             }
@@ -1404,7 +1438,7 @@ mod tests {
     #[test]
     fn the_copy_code_check_refuses_inputs_that_do_not_line_up() {
         type Plant = fn(&mut Vec<CopyCodeRead>, &mut HammingTrace, &mut HammingTrace);
-        let cases: [(&str, Plant); 10] = [
+        let cases: [(&str, Plant); 12] = [
             ("schema", |_, f, _| f.schema = "other".to_owned()),
             ("written by", |_, f, _| f.side = "integer".to_owned()),
             ("heads, the artifact", |_, _, i| i.heads = 4),
@@ -1419,6 +1453,12 @@ mod tests {
             }),
             ("snapped codes", |r, _, _| {
                 r[0].snapped_codes.pop();
+            }),
+            ("wider than the head's 4 bits", |r, _, _| {
+                r[0].integer_codes[4] |= 1 << 4;
+            }),
+            ("past the head's 4 bits", |_, f, _| {
+                f.windows[0].reads[0].heads[0].key[6] |= 1 << 63;
             }),
             ("no window", |_, f, _| f.windows.clear()),
         ];

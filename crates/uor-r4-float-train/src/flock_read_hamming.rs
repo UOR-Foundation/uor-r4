@@ -1199,7 +1199,9 @@ mod tests {
         use uor_r4_integer::fbs_snapshot::{hamilton_gate_f32, pack_signs_f32};
         let mut state = 0x9e37_79b9_7f4a_7c15u64;
         let mut next = || {
-            state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1);
             ((state >> 40) as f32 / (1u64 << 24) as f32) * 4.0 - 2.0
         };
         let mut gate: Vec<f32> = (0..512).map(|_| next()).collect();
@@ -1216,7 +1218,11 @@ mod tests {
             assert_eq!(a.to_bits(), b.to_bits(), "coordinate {i}: {a} against {b}");
         }
         assert_eq!(pack_signs_f32(&theirs), pack_signs(&theirs));
-        assert_eq!(pack_signs_f32(&up), pack_signs(&up), "−0.0 and the tiny values");
+        assert_eq!(
+            pack_signs_f32(&up),
+            pack_signs(&up),
+            "−0.0 and the tiny values"
+        );
     }
 
     /// claude-237: the check's icosians in the integer crate are this crate's 120 roots, in the
@@ -1241,11 +1247,28 @@ mod tests {
         };
         let mut state = 0x2545_f491_4f6c_dd1du64;
         let mut next = || {
-            state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1);
             ((state >> 40) as f32 / (1u64 << 24) as f32) * 4.0 - 2.0
         };
         let mut lanes: Vec<f32> = (0..4 * 512).map(|_| next()).collect();
         lanes[..4].fill(0.0);
+        lanes[4..8].fill(-0.0);
+        // Lanes 2 to 5 sit midway between the identity and one of its nearest icosians: a tie in
+        // exact arithmetic, which f32 rounding settles. Either side may take either root there.
+        let roots = uor_r4_integer::fbs_snapshot::icosian_roots_f32();
+        let near = roots[2..]
+            .iter()
+            .map(|root| root[0])
+            .fold(f32::MIN, f32::max);
+        let ties: Vec<usize> = (2..120).filter(|&k| roots[k][0] == near).take(4).collect();
+        assert_eq!(ties.len(), 4);
+        for (j, &k) in ties.iter().enumerate() {
+            for c in 0..4 {
+                lanes[8 + 4 * j + c] = roots[1][c] + roots[k][c];
+            }
+        }
         let gate = Tensor::from_vec(lanes.clone(), (8, 256), &device).unwrap();
         let theirs = crate::hamilton_sheet::icosian_snap_cuda_tensor(cuda, &gate)
             .unwrap()
@@ -1254,10 +1277,26 @@ mod tests {
             .to_vec1::<f32>()
             .unwrap();
         let ours = uor_r4_integer::fbs_snapshot::snap_icosian_f32(&lanes);
-        assert_eq!(
-            ours.iter().map(|x| x.to_bits()).collect::<Vec<_>>(),
-            theirs.iter().map(|x| x.to_bits()).collect::<Vec<_>>()
-        );
+        for lane in 0..512 {
+            let (a, b) = (
+                &ours[4 * lane..4 * lane + 4],
+                &theirs[4 * lane..4 * lane + 4],
+            );
+            if let Some(&k) = lane.checked_sub(2).and_then(|j| ties.get(j)) {
+                for side in [a, b] {
+                    assert!(
+                        side == &roots[1][..] || side == &roots[k][..],
+                        "lane {lane}: {side:?}"
+                    );
+                }
+            } else {
+                assert_eq!(
+                    a.iter().map(|x| x.to_bits()).collect::<Vec<_>>(),
+                    b.iter().map(|x| x.to_bits()).collect::<Vec<_>>(),
+                    "lane {lane}"
+                );
+            }
+        }
     }
 
     #[cfg(feature = "cuda")]

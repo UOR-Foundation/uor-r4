@@ -5797,6 +5797,14 @@ fn the_copy_code_check_holds_the_session_trace_to_its_served_codes() {
             assert_eq!(code, copies.code((i / copy) as u32, i % copy), "entry {}, head {}", i / copy, i % copy);
         }
     }
+    // The codes differ by depth, head, entry and position, so a wrong index or an unshifted key
+    // cannot pass the comparison below.
+    let first = &served.codes[0];
+    assert_ne!(first, &served.codes[served.codes.len() - 1], "the depths' codes");
+    assert!(copy > 1 && first.chunks(copy).any(|entry| entry[0] != entry[1]), "copy heads that differ");
+    assert!(first.chunks(copy).any(|entry| entry != &first[..copy]), "entries that differ");
+    let query = &integer.windows[0].reads[0].heads[0].query;
+    assert!(query.windows(2).any(|pair| pair[0] != pair[1]), "neighbouring positions that differ");
     let inputs: Vec<(usize, &[i32], Vec<u64>)> = served
         .image
         .reads
