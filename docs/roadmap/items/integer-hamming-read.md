@@ -96,9 +96,9 @@ It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-
          - the copy-head sets past t = 17 are all equal;
          - the first read's type heads are at 0.997;
          - the second read's type heads are at 0.993 and 0.983, on 1,570 and 1,494 judged sets.
-       - **d11, the forward as trained, does not:** d is 174 and 243. With equal codes, 1,448–1,567 of the 3,072 sets in each of the three fully judged cells tie across the 16th place, and the GPU arg-sort's unspecified order breaks them differently: d11 and d11-tie differ in top-1 at 174 and 227 of 1,536 positions. The rounded arms change no code. claude-235's two tie-switch tests were never written, so they did not run.
+       - **d11, the rule off (the GPU sort's own order, which the checkpoint trained under; not shown to reproduce its training forward exactly), does not:** d is 174 and 243. With equal codes, 1,448–1,567 of the 3,072 sets in each of the three fully judged cells tie across the 16th place, and the GPU arg-sort's unspecified order breaks them differently: d11 and d11-tie differ in top-1 at 174 and 227 of 1,536 positions. The rounded arms change no code. claude-235's two tie-switch tests were never written, so they did not run.
        - **Next:**
-         - the trainer and every float reference take the integer session's tie rule by default (`set_hamming_tie_rule`, ascending bits then ascending `s`), with the two tie-switch CUDA tests;
+         - the float read takes the integer session's tie rule by default (`set_hamming_tie_rule`, ascending bits then ascending `s`), so the trainer and `fbs-snapshot`'s readouts and traces take it unless an arm turns it off, with the two tie-switch CUDA tests;
          - then the same bars on claude-146's checkpoints and on DEV (done-when 2).
 
          Decode on the M1 under load: 3,068–4,085 tok/s with the read, 4,306–4,857 without, at contexts 96–192;
