@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <sstream>
 #include <string_view>
+#include <utility>
 
 namespace uor_inverted_file {
 namespace {
@@ -138,26 +139,47 @@ Status Telemetry::export_trace(const Resource& resource, const std::vector<Span>
              << ",\"status\":{\"code\":0}}";
     }
     json << "]}]}]}";
-    auto temporary = output_;
-    temporary += ".tmp";
+    std::filesystem::path temporary_directory;
+    bool created = false;
+    for (int attempt = 0; attempt < 32; ++attempt) {
+        auto candidate = output_;
+        candidate += ".tmp." + new_span_id();
+        std::error_code error;
+        if (std::filesystem::create_directory(candidate, error)) {
+            temporary_directory = std::move(candidate);
+            created = true;
+            break;
+        }
+        if (error) return Status::TelemetryFailure;
+    }
+    if (!created) return Status::TelemetryFailure;
+    const auto temporary = temporary_directory / output_.filename();
+    const auto cleanup = [&] {
+        std::error_code ignored;
+        std::filesystem::remove(temporary, ignored);
+        std::filesystem::remove(temporary_directory, ignored);
+    };
     {
         std::ofstream output(temporary, std::ios::trunc);
-        if (!output) return Status::TelemetryFailure;
+        if (!output) {
+            cleanup();
+            return Status::TelemetryFailure;
+        }
         output << json.str() << '\n';
         output.close();
         if (!output) {
-            std::error_code ignored;
-            std::filesystem::remove(temporary, ignored);
+            cleanup();
             return Status::TelemetryFailure;
         }
     }
     std::error_code error;
     std::filesystem::rename(temporary, output_, error);
     if (error) {
-        std::error_code ignored;
-        std::filesystem::remove(temporary, ignored);
+        cleanup();
         return Status::TelemetryFailure;
     }
+    std::error_code ignored;
+    std::filesystem::remove(temporary_directory, ignored);
     return Status::Ok;
 }
 

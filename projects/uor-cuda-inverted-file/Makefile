@@ -9,7 +9,7 @@ all: host-test
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(BUILD_DIR)/admission_test: src/admission.cpp src/admission.hpp tests/admission_test.cpp | $(BUILD_DIR)
+$(BUILD_DIR)/admission_test: src/admission.cpp src/admission.hpp include/uor_inverted_file.hpp tests/admission_test.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/admission.cpp tests/admission_test.cpp -o $@
 
 $(BUILD_DIR)/inverted_file_test: src/inverted_file.cpp src/codebook.cpp include/uor_inverted_file.hpp tests/inverted_file_test.cpp | $(BUILD_DIR)
@@ -45,7 +45,7 @@ NVCC ?= nvcc
 UOR_NVCC_ARCH ?= compute_80
 SM_ARCH = $(subst compute_,sm_,$(UOR_NVCC_ARCH))
 
-$(BUILD_DIR)/admit: src/admission.cpp src/admission.hpp src/admit_main.cpp | $(BUILD_DIR)
+$(BUILD_DIR)/admit: src/admission.cpp src/admission.hpp include/uor_inverted_file.hpp src/admit_main.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/admission.cpp src/admit_main.cpp -o $@
 
 $(BUILD_DIR)/uor_inverted_file.ptx: src/kernels.cu | $(BUILD_DIR)
@@ -55,7 +55,7 @@ $(BUILD_DIR)/uor_inverted_file.cubin: $(BUILD_DIR)/uor_inverted_file.ptx $(BUILD
 	./$(BUILD_DIR)/admit $(BUILD_DIR)/uor_inverted_file.ptx
 	$(NVCC) -cubin --gpu-code=$(SM_ARCH) -o $@ $(BUILD_DIR)/uor_inverted_file.ptx
 
-$(BUILD_DIR)/cuda_parity_test: src/cuda_driver.cpp src/cuda_driver.hpp src/inverted_file.cpp src/codebook.cpp tests/cuda_parity_test.cpp $(BUILD_DIR)/uor_inverted_file.cubin
+$(BUILD_DIR)/cuda_parity_test: src/cuda_driver.cpp src/cuda_driver.hpp include/uor_inverted_file.hpp src/inverted_file.cpp src/codebook.cpp tests/cuda_parity_test.cpp $(BUILD_DIR)/uor_inverted_file.cubin
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/cuda_driver.cpp src/inverted_file.cpp src/codebook.cpp tests/cuda_parity_test.cpp -lcuda -o $@
 
 check-nvcc:

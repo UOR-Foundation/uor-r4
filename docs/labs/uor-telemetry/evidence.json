@@ -33,8 +33,8 @@
   },
   "identity": {
     "trace_ids": [
-      "d5a347d6befa7a98faa6796597c2a4de",
-      "cbfc4aa11994f573d189fa93931f926b"
+      "bb28418e60db4274f75b625175205b80",
+      "52847b5c4cfd474c106970a6e411e2d6"
     ],
     "trace_ids_differ": true,
     "artifact_identity_kind": "fixed-codebook",

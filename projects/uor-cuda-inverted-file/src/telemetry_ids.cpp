@@ -9,7 +9,7 @@ namespace uor_inverted_file {
 namespace {
 
 std::uint64_t next_random() {
-    static std::uint64_t state = [] {
+    thread_local static std::uint64_t state = [] {
         const auto now = std::chrono::high_resolution_clock::now().time_since_epoch().count();
         const auto device = std::random_device{}();
         return (now ^ (static_cast<std::uint64_t>(device) << 32)) + 0x9e3779b97f4a7c15ULL;

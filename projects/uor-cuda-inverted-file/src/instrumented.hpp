@@ -2,7 +2,12 @@
 
 #include "telemetry.hpp"
 
+#include <chrono>
+
 namespace uor_inverted_file {
+
+[[nodiscard]] std::uint64_t telemetry_timestamp_after(std::uint64_t start,
+                                                      std::chrono::nanoseconds elapsed);
 
 class Instrumented {
 public:

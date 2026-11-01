@@ -2,6 +2,7 @@
 #include "../src/sha256.hpp"
 #include "json.hpp"
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -140,6 +141,17 @@ int main() {
            "telemetry failure does not undo or invalidate the completed CPU build");
     expect(failed_output.full_scan(fixture(), query, 0, full) == Status::InvalidArgument,
            "CPU operation errors take precedence over export errors");
+    expect(uor_inverted_file::telemetry_timestamp_after(1000, std::chrono::nanoseconds(5)) == 1005,
+           "monotonic elapsed time advances the wall-clock start");
+    expect(uor_inverted_file::telemetry_timestamp_after(1000, std::chrono::nanoseconds(-5)) == 1000,
+           "timestamp calculation cannot move the endpoint backwards");
+
+    Instrumented repeated("build/instrumented-repeated.json");
+    Index repeated_index;
+    expect(repeated.build(fixture(), repeated_index) == Status::Ok, "first repeated-session build succeeds");
+    expect(repeated.build(fixture(), repeated_index) == Status::Ok, "session remains usable on later calls");
+    expect(test_json::valid(read_file("build/instrumented-repeated.json")),
+           "repeated calls retain one valid document");
 
     if (failures != 0) {
         std::cerr << failures << " instrumented telemetry assertions failed\n";

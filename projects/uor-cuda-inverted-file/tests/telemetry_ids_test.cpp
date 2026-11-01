@@ -55,11 +55,13 @@ int main() {
     expect(traces.size() == 1000, "root trace IDs are unique");
     expect(spans.size() == 1000, "span IDs are unique within a trace");
 
-    const auto parent = new_trace_id();
+    const auto trace = new_trace_id();
+    const auto parent = new_span_id();
     const auto child = new_span_id();
-    const SpanIds context{parent, child, parent};
-    expect(context.trace_id == parent, "child shares trace ID");
-    expect(context.parent_span_id == parent, "child parent points at parent span");
+    const SpanIds context{trace, child, parent};
+    expect(context.trace_id == trace, "child shares trace ID");
+    expect(context.parent_span_id == parent && parent.size() == 16,
+           "child parent is a 16-hex span ID");
     expect(context.span_id != context.parent_span_id, "child has its own span ID");
 
     if (failures != 0) {

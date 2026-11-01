@@ -4,8 +4,15 @@
 
 #include <chrono>
 #include <string>
+#include <utility>
 
 namespace uor_inverted_file {
+
+std::uint64_t telemetry_timestamp_after(std::uint64_t start, std::chrono::nanoseconds elapsed) {
+    if (elapsed.count() <= 0) return start;
+    return start + static_cast<std::uint64_t>(elapsed.count());
+}
+
 namespace {
 
 std::uint64_t now_ns() {
@@ -59,18 +66,28 @@ Status Instrumented::emit(Span span) {
 }
 
 Status Instrumented::build(const Table& table, Index& index) {
+    if (!enabled()) return uor_inverted_file::build(table, index);
     const auto start = now_ns();
+    const auto monotonic_start = std::chrono::steady_clock::now();
     const auto status = uor_inverted_file::build(table, index);
-    Span span{"uor.cuda.index.build", SpanIds{}, start, now_ns(),
+    const auto end = telemetry_timestamp_after(
+        start, std::chrono::duration_cast<std::chrono::nanoseconds>(
+                   std::chrono::steady_clock::now() - monotonic_start));
+    Span span{"uor.cuda.index.build", SpanIds{}, start, end,
               {{"uor.operation.status", status_name(status)}}};
     const auto telemetry_status = emit(std::move(span));
     return status == Status::Ok ? telemetry_status : status;
 }
 
 Status Instrumented::update(const Table& table, std::uint32_t moved_token, Index& index) {
+    if (!enabled()) return uor_inverted_file::update(table, moved_token, index);
     const auto start = now_ns();
+    const auto monotonic_start = std::chrono::steady_clock::now();
     const auto status = uor_inverted_file::update(table, moved_token, index);
-    Span span{"uor.cuda.index.update", SpanIds{}, start, now_ns(),
+    const auto end = telemetry_timestamp_after(
+        start, std::chrono::duration_cast<std::chrono::nanoseconds>(
+                   std::chrono::steady_clock::now() - monotonic_start));
+    Span span{"uor.cuda.index.update", SpanIds{}, start, end,
               {{"uor.operation.status", status_name(status)},
                {"uor.operation.moved_token", std::to_string(moved_token)}}};
     const auto telemetry_status = emit(std::move(span));
@@ -79,9 +96,14 @@ Status Instrumented::update(const Table& table, std::uint32_t moved_token, Index
 
 Status Instrumented::probe(const Table& table, const Query& query, std::uint32_t k,
                            const Index& index, ScanResult& result) {
+    if (!enabled()) return uor_inverted_file::probe(table, query, k, index, result);
     const auto start = now_ns();
+    const auto monotonic_start = std::chrono::steady_clock::now();
     const auto status = uor_inverted_file::probe(table, query, k, index, result);
-    Span span{"uor.cuda.index.probe", SpanIds{}, start, now_ns(),
+    const auto end = telemetry_timestamp_after(
+        start, std::chrono::duration_cast<std::chrono::nanoseconds>(
+                   std::chrono::steady_clock::now() - monotonic_start));
+    Span span{"uor.cuda.index.probe", SpanIds{}, start, end,
               {{"uor.operation.status", status_name(status)},
                {"uor.operation.k", std::to_string(k)}}};
     const auto telemetry_status = emit(std::move(span));
@@ -90,9 +112,14 @@ Status Instrumented::probe(const Table& table, const Query& query, std::uint32_t
 
 Status Instrumented::full_scan(const Table& table, const Query& query, std::uint32_t k,
                                ScanResult& result) {
+    if (!enabled()) return uor_inverted_file::full_scan(table, query, k, result);
     const auto start = now_ns();
+    const auto monotonic_start = std::chrono::steady_clock::now();
     const auto status = uor_inverted_file::full_scan(table, query, k, result);
-    Span span{"uor.cuda.index.full_scan", SpanIds{}, start, now_ns(),
+    const auto end = telemetry_timestamp_after(
+        start, std::chrono::duration_cast<std::chrono::nanoseconds>(
+                   std::chrono::steady_clock::now() - monotonic_start));
+    Span span{"uor.cuda.index.full_scan", SpanIds{}, start, end,
               {{"uor.operation.status", status_name(status)},
                {"uor.operation.k", std::to_string(k)}}};
     const auto telemetry_status = emit(std::move(span));

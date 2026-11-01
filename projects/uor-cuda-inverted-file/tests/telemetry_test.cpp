@@ -1,11 +1,14 @@
 #include "../src/telemetry.hpp"
 #include "json.hpp"
 
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <string>
+#include <thread>
+#include <vector>
 
 namespace {
 
@@ -101,6 +104,30 @@ int main() {
            "file replacement failure has a telemetry-specific status");
     expect(std::filesystem::is_directory("build"), "failed replacement preserves the destination");
     expect(!std::filesystem::exists(temporary), "failed replacement removes its temporary file");
+
+    const std::filesystem::path unrelated = "build/telemetry-test.json.tmp";
+    {
+        std::ofstream file(unrelated, std::ios::trunc);
+        file << "preserve unrelated bytes";
+    }
+    expect(enabled.export_trace(resource, span) == Status::Ok, "export with a neighboring file succeeds");
+    expect(read_file(unrelated) == "preserve unrelated bytes",
+           "export never truncates or renames an unrelated temporary-looking file");
+    std::filesystem::remove(unrelated);
+
+    std::array<Status, 8> concurrent_status{};
+    std::vector<std::thread> writers;
+    for (std::size_t i = 0; i < concurrent_status.size(); ++i) {
+        writers.emplace_back([&, i] {
+            Telemetry concurrent(output);
+            concurrent_status[i] = concurrent.export_trace(resource, span);
+        });
+    }
+    for (auto& writer : writers) writer.join();
+    for (const auto status : concurrent_status) {
+        expect(status == Status::Ok, "concurrent writers use independent temporary files");
+    }
+    expect(test_json::valid(read_file(output)), "concurrent replacement leaves one complete JSON document");
 
     if (failures != 0) {
         std::cerr << failures << " telemetry exporter assertions failed\n";

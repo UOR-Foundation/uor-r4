@@ -14,7 +14,7 @@ No model, artifact, API, worker, engine, desktop, deployment, or Claude-owned co
 - `make -C projects/uor-cuda-inverted-file evidence`: PASS. Two host runs and one clean-copy run produced identical output with SHA-256 `7b6f674abcef33a37753de8aac6000ff1584e983ebeb4eb35fc67bf5d45d5e7d`.
 - Running the example in an empty directory with `UOR_OTEL_OUT` unset left the directory empty and printed `telemetry disabled: no file or endpoint created`.
 - Two explicit `UOR_OTEL_OUT=trace.json` runs each produced one `jq`-validated JSON document containing four spans. Every child pointed to the emitted build span; IDs had the required widths and lowercase hex form.
-- The final example traces were `d5a347d6befa7a98faa6796597c2a4de` and `cbfc4aa11994f573d189fa93931f926b`. Both recorded codebook byte size 512 and the same SHA-256, `9d98bd50f46cdedd5c481a8d696a609936bbc540997e7eaef6af2bdb3bc15597`.
+- The final example traces were `bb28418e60db4274f75b625175205b80` and `52847b5c4cfd474c106970a6e411e2d6`. Both recorded codebook byte size 512 and the same SHA-256, `9d98bd50f46cdedd5c481a8d696a609936bbc540997e7eaef6af2bdb3bc15597`.
 
 See [evidence.json](evidence.json) for the machine-readable result and [the local conventions](../../telemetry/uor-conventions.md) for the identity and privacy boundaries.
 
@@ -26,7 +26,7 @@ See [evidence.json](evidence.json) for the machine-readable result and [the loca
 - Network transmission: no network code or endpoint was added; no collector was run.
 - Production telemetry, performance, energy, portability, model capability, and upstream acceptance: not measured or claimed.
 
-The fixed-codebook digest identifies only those 512 payload bytes, not a model, executable, source revision, or run. Random execution IDs are correlation identifiers, not UOR addresses or security tokens. The local file sink writes a temporary file and atomically renames it over the current complete trace after each operation where the platform supports replacement; a failed replacement preserves the prior destination. It is intended for example use, not production export. `TelemetryFailure` reports an export I/O failure rather than mislabeling it as CUDA; CPU operation errors take precedence, and completed CPU side effects are not rolled back.
+The fixed-codebook digest identifies only those 512 payload bytes, not a model, executable, source revision, or run. Random execution IDs are correlation identifiers, not UOR addresses or security tokens. Each export creates a collision-resistant, exclusively owned temporary directory and renames only its own complete file over the current trace where the platform supports replacement; concurrent writers cannot share or clobber a fixed temporary path, and a failed replacement preserves the prior destination. This is intended for example use, not production export. `TelemetryFailure` reports an export I/O failure rather than mislabeling it as CUDA; CPU operation errors take precedence, and completed CPU side effects are not rolled back. Timestamps use wall-clock start plus steady-clock elapsed time; disabled wrappers call only the original CPU operation.
 
 ## Next upstream step
 
