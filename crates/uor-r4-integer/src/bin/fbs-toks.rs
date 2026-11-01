@@ -50,6 +50,12 @@
 //! - `--context-sweep --tokens TOKENS_U16` (claude-242) runs the same protocol at prefills of
 //!   128, 512, 2,048, 8,192 and 32,704 tokens, over the first 32,704 ids of a `UORT` token
 //!   file, so the contexts end at 192 to 32,768. The artifact's context must hold the last.
+//!
+//! `--forced PROMPTS_JSON --out FILE` (integer-nearest-readout, claude-244) reads the nearest
+//! head teacher-forced: each panel prompt is stepped as `--replies` steps it, then its reference
+//! is fed one token at a time, and each offset records the pick, the whole writer table's
+//! runner-up and both scores at Q12. It refuses a point-key artifact and one whose head is not
+//! the nearest one, and writes the rows new to `FILE`.
 
 use std::process::{Command, ExitCode};
 use std::time::Instant;
@@ -65,7 +71,7 @@ use uor_r4_integer::stack::{
     IntegerStackModel, ReplyEnd,
 };
 
-const USAGE: &str = "usage: fbs-toks ARTIFACT [--prompt ID,ID,...] [--stages] [--parts]\n       fbs-toks ARTIFACT --replies PROMPTS_JSON --out FILE [--reply-tokens N]\n       fbs-toks ARTIFACT --hamming-trace D11_READOUT_JSON TRACE_JSON\n       fbs-toks --hamming-trace-compare FIRST_TRACE SECOND_TRACE\n       fbs-toks ARTIFACT --copy-codes FLOAT_TRACE INTEGER_TRACE OUT_JSON\n       fbs-toks ARTIFACT --context-sweep [--tokens TOKENS_U16]";
+const USAGE: &str = "usage: fbs-toks ARTIFACT [--prompt ID,ID,...] [--stages] [--parts]\n       fbs-toks ARTIFACT --replies PROMPTS_JSON --out FILE [--reply-tokens N]\n       fbs-toks ARTIFACT --forced PROMPTS_JSON --out FILE\n       fbs-toks ARTIFACT --hamming-trace D11_READOUT_JSON TRACE_JSON\n       fbs-toks --hamming-trace-compare FIRST_TRACE SECOND_TRACE\n       fbs-toks ARTIFACT --copy-codes FLOAT_TRACE INTEGER_TRACE OUT_JSON\n       fbs-toks ARTIFACT --context-sweep [--tokens TOKENS_U16]";
 
 /// The prefills `--context-sweep` times, each followed by `DECODE` steps (claude-235).
 const SWEEP_PREFILLS: [usize; 4] = [32, 64, 96, 128];
@@ -338,6 +344,132 @@ fn replies(
     );
     Ok(())
 }
+
+/// The artifact `--forced` reads (claude-244): one with no point key, whose head is the nearest
+/// one, so that each step's pick is the whole writer table's nearest row.
+fn forced_artifact(model: &IntegerStackModel) -> Result<(), String> {
+    if model.point_key_rows().is_some() {
+        return Err(
+            "--forced reads the nearest head, and the artifact serves a point key".to_owned(),
+        );
+    }
+    if !model.shape().head_nearest() {
+        return Err(
+            "--forced reads the nearest head, and the artifact's head is not it".to_owned(),
+        );
+    }
+    Ok(())
+}
+
+/// One row's teacher-forced top two (claude-244): at each offset the pick, the runner-up and their
+/// scores at Q12, over `n` offsets; `capped` when the context cut the reference short.
+#[derive(Debug)]
+struct Forced {
+    picks: Vec<u32>,
+    runner_up: Vec<u32>,
+    score_q12: Vec<i64>,
+    runner_score_q12: Vec<i64>,
+    capped: bool,
+}
+
+/// `prompt` stepped as `panel_reply` steps it, then the `reference` fed one token at a time
+/// (claude-244). Offset 0 reads the step after the prompt's last token; offset `i` the step after
+/// `reference[i - 1]`. Each offset's pick must be the whole table's nearest row.
+fn forced_picks(
+    model: &IntegerStackModel,
+    prompt: &[u32],
+    reference: &[u32],
+) -> Result<Forced, String> {
+    let (vocab, context) = (model.shape().vocab, model.shape().context);
+    if prompt.is_empty() || prompt.len() > context {
+        return Err(format!(
+            "the prompt has {} tokens, not 1 to {context}",
+            prompt.len()
+        ));
+    }
+    if reference.is_empty() {
+        return Err("the reference is empty".to_owned());
+    }
+    let n = reference.len().min(context - prompt.len() + 1);
+    let fed = prompt.iter().chain(&reference[..n - 1]);
+    if let Some(&t) = fed.clone().find(|&&t| t as usize >= vocab) {
+        return Err(format!("token {t} is outside the vocabulary {vocab}"));
+    }
+    let mut session = model.session();
+    let mut step = None;
+    for (row, &token) in prompt.iter().enumerate() {
+        if row + 1 == prompt.len() {
+            session.mark_reply_start();
+        }
+        step = Some(session.step_native(token).map_err(|e| e.to_string())?);
+    }
+    let mut step = step.ok_or("the prompt took no step")?;
+    let mut forced = Forced {
+        picks: Vec::with_capacity(n),
+        runner_up: Vec::with_capacity(n),
+        score_q12: Vec::with_capacity(n),
+        runner_score_q12: Vec::with_capacity(n),
+        capped: reference.len() > n,
+    };
+    for i in 0..n {
+        if i > 0 {
+            step = session
+                .step_native(reference[i - 1])
+                .map_err(|e| format!("offset {i}: {e}"))?;
+        }
+        let top = model
+            .whole_table_nearest_two(&step.query_q12)
+            .map_err(|e| format!("offset {i}: {e}"))?;
+        if top[0].0 != step.token {
+            return Err(format!(
+                "offset {i}: the step picked {}, the whole table's nearest is {}",
+                step.token, top[0].0
+            ));
+        }
+        forced.picks.push(step.token);
+        forced.runner_up.push(top[1].0);
+        forced.score_q12.push(top[0].1);
+        forced.runner_score_q12.push(top[1].1);
+    }
+    Ok(forced)
+}
+
+/// One `--forced` output row (claude-244).
+fn forced_row(position: usize, forced: &Forced) -> serde_json::Value {
+    json!({
+        "position": position,
+        "picks": forced.picks,
+        "runner_up": forced.runner_up,
+        "score_q12": forced.score_q12,
+        "runner_score_q12": forced.runner_score_q12,
+    })
+}
+
+/// `--forced` (integer-nearest-readout, claude-244): each panel prompt's teacher-forced top two on
+/// a nearest-head artifact (`forced_picks`), written new to `out` as a JSON array of rows. It
+/// prints one JSON line: rows, offsets read, capped rows and the file's sha256.
+fn forced(model: &IntegerStackModel, prompts: &str, out: &str) -> Result<(), String> {
+    forced_artifact(model)?;
+    let bytes = std::fs::read(prompts).map_err(|e| format!("{prompts}: {e}"))?;
+    let rows: Vec<PanelPrompt> =
+        serde_json::from_slice(&bytes).map_err(|e| format!("{prompts}: {e}"))?;
+    let (mut written, mut positions, mut capped) = (Vec::with_capacity(rows.len()), 0usize, 0usize);
+    for row in &rows {
+        let forced = forced_picks(model, &row.prompt, &row.reference)
+            .map_err(|e| format!("position {}: {e}", row.position))?;
+        positions += forced.picks.len();
+        capped += usize::from(forced.capped);
+        written.push(forced_row(row.position, &forced));
+    }
+    let text = serde_json::to_vec(&written).map_err(|e| e.to_string())?;
+    write_new_file(std::path::Path::new(out), &text).map_err(|e| format!("{out}: {e}"))?;
+    println!(
+        "{}",
+        json!({ "rows": rows.len(), "positions": positions, "capped": capped, "out": out, "sha256": hex::encode(<sha2::Sha256 as sha2::Digest>::digest(&text)) })
+    );
+    Ok(())
+}
+
 const PREFILL: usize = 128;
 const DECODE: usize = 64;
 const WARMUP: usize = 1;
@@ -675,6 +807,15 @@ fn run() -> Result<(), String> {
         let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
         let model = IntegerStackModel::parse(&bytes).map_err(|e| format!("parse: {e}"))?;
         return replies(&model, prompts, out, reply_tokens);
+    }
+    if args.iter().any(|a| a == "--forced") {
+        let (path, prompts, out) = match args.as_slice() {
+            [path, f, prompts, o, out] if f == "--forced" && o == "--out" => (path, prompts, out),
+            _ => return Err(USAGE.to_owned()),
+        };
+        let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+        let model = IntegerStackModel::parse(&bytes).map_err(|e| format!("parse: {e}"))?;
+        return forced(&model, prompts, out);
     }
     match args.as_slice() {
         [flag, first, second] if flag == "--hamming-trace-compare" => {
@@ -1043,6 +1184,163 @@ mod tests {
         let mut past = ids;
         past[largest] = 1000;
         assert!(long_sweep_prompt(&bytes_of(&past), 1000, end).is_ok());
+    }
+
+    /// `--forced` on the synthetic nearest-head artifact (claude-244), whose context is 8.
+    #[cfg(feature = "fbs-synthetic")]
+    mod forced {
+        use super::super::*;
+        use uor_r4_integer::stack::{export_fbs_trunk_uorlut01, synthetic::synthetic_fbs_trunk};
+
+        fn artifact(nearest: bool) -> IntegerStackModel {
+            let mut snap = synthetic_fbs_trunk(7);
+            snap.readout_nearest = nearest;
+            let bytes = export_fbs_trunk_uorlut01(&snap).expect("export");
+            IntegerStackModel::parse(&bytes).expect("parse")
+        }
+
+        /// Prompts of one to five tokens, spread over the vocabulary.
+        fn prompts(vocab: usize) -> Vec<Vec<u32>> {
+            (1..=5)
+                .map(|len| {
+                    (0..len)
+                        .map(|i| ((i * 37 + len * 11 + 5) % vocab) as u32)
+                        .collect()
+                })
+                .collect()
+        }
+
+        #[test]
+        fn offset_zero_is_the_greedy_replys_first_token() {
+            let model = artifact(true);
+            forced_artifact(&model).expect("a nearest-head artifact");
+            let mut checked = 0;
+            for prompt in prompts(model.shape().vocab) {
+                let reply = panel_reply(&model, &prompt, 64, None).expect("reply").reply;
+                let forced = forced_picks(&model, &prompt, &[0]).expect("forced");
+                if let Some(&first) = reply.first() {
+                    assert_eq!(forced.picks[0], first, "prompt {prompt:?}");
+                    checked += 1;
+                }
+            }
+            assert!(checked >= 2, "{checked}");
+        }
+
+        #[test]
+        fn forced_on_the_greedy_reply_picks_the_greedy_reply() {
+            let model = artifact(true);
+            let (mut checked, mut long) = (0, 0);
+            for prompt in prompts(model.shape().vocab) {
+                let reply = panel_reply(&model, &prompt, 64, None).expect("reply").reply;
+                if reply.is_empty() {
+                    continue;
+                }
+                let forced = forced_picks(&model, &prompt, &reply).expect("forced");
+                assert!(forced.picks.len() >= reply.len(), "prompt {prompt:?}");
+                assert_eq!(
+                    &forced.picks[..reply.len()],
+                    &reply[..],
+                    "prompt {prompt:?}"
+                );
+                checked += 1;
+                long += usize::from(reply.len() >= 2);
+            }
+            assert!(checked >= 2 && long >= 1, "{checked} {long}");
+        }
+
+        #[test]
+        fn each_offset_reads_the_step_after_the_reference_token() {
+            let model = artifact(true);
+            let vocab = model.shape().vocab;
+            let mut checked = 0;
+            for prompt in prompts(vocab).into_iter().filter(|p| p.len() <= 4) {
+                let p0 = forced_picks(&model, &prompt, &[0]).expect("forced").picks[0];
+                let reference: Vec<u32> = (1..=3)
+                    .map(|k| ((p0 as usize + k) % vocab) as u32)
+                    .collect();
+                let reply = panel_reply(&model, &prompt, 64, None).expect("reply").reply;
+                assert_ne!(
+                    reference.first(),
+                    reply.first(),
+                    "the reference is not the greedy reply"
+                );
+                let forced = forced_picks(&model, &prompt, &reference).expect("forced");
+                assert_eq!(forced.picks.len(), 3, "prompt {prompt:?}");
+                let mut session = model.session();
+                for (row, &token) in prompt.iter().enumerate() {
+                    if row + 1 == prompt.len() {
+                        session.mark_reply_start();
+                    }
+                    session.step_native(token).expect("prompt step");
+                }
+                for offset in 1..=2 {
+                    let step = session.step_native(reference[offset - 1]).expect("step");
+                    let top = model
+                        .whole_table_nearest_two(&step.query_q12)
+                        .expect("top two");
+                    assert_eq!(
+                        forced.picks[offset], step.token,
+                        "prompt {prompt:?} offset {offset}"
+                    );
+                    assert_eq!(
+                        forced.runner_up[offset], top[1].0,
+                        "prompt {prompt:?} offset {offset}"
+                    );
+                }
+                checked += 1;
+            }
+            assert!(checked >= 3, "{checked}");
+        }
+
+        #[test]
+        fn a_row_holds_its_offsets_and_the_context_caps_them() {
+            let model = artifact(true);
+            let vocab = model.shape().vocab;
+            assert_eq!(model.shape().context, 8);
+            let prompt: Vec<u32> = (0..3).map(|i| ((i * 5 + 2) % vocab) as u32).collect();
+            let reference: Vec<u32> = (0..20).map(|i| ((i * 3 + 1) % vocab) as u32).collect();
+            let forced = forced_picks(&model, &prompt, &reference).expect("forced");
+            assert!(forced.capped);
+            let row = forced_row(42, &forced);
+            let keys: Vec<&str> = row
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect();
+            let mut want = vec![
+                "position",
+                "picks",
+                "runner_up",
+                "score_q12",
+                "runner_score_q12",
+            ];
+            want.sort_unstable();
+            let mut keys = keys;
+            keys.sort_unstable();
+            assert_eq!(keys, want);
+            assert_eq!(row["position"], 42);
+            for key in ["picks", "runner_up", "score_q12", "runner_score_q12"] {
+                assert_eq!(row[key].as_array().map(Vec::len), Some(6), "{key}");
+            }
+            for (s, r) in forced.score_q12.iter().zip(&forced.runner_score_q12) {
+                assert!(s >= r, "{s} {r}");
+            }
+            // A reference the context holds whole is not capped.
+            let whole = forced_picks(&model, &prompt, &reference[..6]).expect("forced");
+            assert!(!whole.capped && whole.picks.len() == 6);
+            // Refusals: an artifact whose head is not the nearest one, an empty reference, an
+            // empty prompt, a prompt past the context, and a fed token outside the vocabulary.
+            assert!(forced_artifact(&artifact(false))
+                .expect_err("not the nearest head")
+                .contains("is not it"));
+            assert!(forced_picks(&model, &prompt, &[]).is_err());
+            assert!(forced_picks(&model, &[], &reference).is_err());
+            assert!(forced_picks(&model, &[1; 9], &reference).is_err());
+            assert!(forced_picks(&model, &prompt, &[vocab as u32, 1]).is_err());
+            // The last reference token is never fed, so it may lie outside the vocabulary.
+            assert!(forced_picks(&model, &prompt, &[1, vocab as u32]).is_ok());
+        }
     }
 
     #[test]
