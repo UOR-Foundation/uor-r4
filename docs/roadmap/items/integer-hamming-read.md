@@ -3,7 +3,7 @@ id: integer-hamming-read
 title: Serve the Hamming read from the integer artifact on the laptop
 milestone: research
 area: serving
-status: ready
+status: done
 open_to: lab
 needs_gpu: true
 depends_on: [float-training-module, spiralcore-fbs-offline-float-sheet]
@@ -15,7 +15,7 @@ scope: [crates/uor-r4-integer/src/stack/hamming.rs, crates/uor-r4-integer/src/st
 
 This is unit U3 of the [pipeline map](../../model/pipeline-map.md)'s order of work. claude-146's induction-keyed Hamming read (`crates/uor-r4-float-train/src/flock_read_hamming.rs`) solves the project's recall probe: far-bucket recall 0.984–0.994 at both seeds, against chance with no read ([claude-146 REPORT](../../loop/tasks/in-space-trunk-to-text/claude-146/REPORT.md)). It exists only in the float trainer. The map's stage 5 (look-back) says: "Serving: none. The integer runtime has no Hamming read."
 
-The read is cheap to serve by construction: per position, 4 heads × 64 sign bits, 32 bytes of code per read; a token costs a popcount pass over the context per head. At a context of 32,768 that is about 2 MiB per token, against 16 GiB for a dense model's cache at Llama-2-7B's shape (the map's stage 5, proof by arithmetic). None of it is measured on the laptop.
+The read is cheap to serve by construction: per position, 4 heads × 64 sign bits, 32 bytes of code per read; a token costs a popcount pass over the context per head. At a context of 32,768 that is about 2 MiB per token, against 16 GiB for a dense model's cache at Llama-2-7B's shape (the map's stage 5, proof by arithmetic). claude-242 timed it on the laptop (step 6 below): at 32,768 the read is 97% of decode time.
 
 It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-export`, `fbs-toks`). Their item, `d11-exporter-float-trunk`, stays open for its export gap, which this unit does not need to close: its parity is the read's own, against the float forward of the same checkpoint.
 
@@ -121,7 +121,16 @@ It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-
        - **The checkpoints load through an evaluation copy.** claude-179 changed `spiralcore_fbs.cu`'s backward after claude-146 trained, so `StackModel::load` refused the saved plan fingerprints (attempt 1, row 0). `fbs-snapshot --rebind-fbs-backward` rewrites only those six fingerprints, and refuses unless the forward's text is unchanged. The copy is held to claude-146's sealed inspection (`fbs-snapshot --inspect as-trained`), with claude-146's own build at `df1d7892` as the control. Both equal the sealed line in all 22 fields at every seed.
        - **Decode on the M1, on battery:** 3,715–4,092 tok/s with the read, 4,508–4,852 without, at contexts 96–192 (s1's artifact). The sweep stops at the artifact's context.
        - **Next:** the read's cost at long contexts (done-when 3), on a synthetic artifact with a longer context (`stack/synthetic.rs`), since the cost does not depend on trained weights.
-  6. the speed.
+  6. **the speed (claude-242): done-when 3 holds, so the item is done.**
+     - **The sweep.** `fbs-toks --context-sweep --tokens` ran on claude-240's s1 artifact, re-exported at a context of 32,768, over DEV's first 32,704 ids, on this M1 on AC power. Load averages fell from 3.6 to 2.8 across the run.
+       - With the read, decode is 4,647 tok/s at 192, 3,345 at 576, 1,851 at 2,112, 659 at 8,256 and 177 at 32,768.
+       - Without it, decode is 5,462 to 6,093 at every length.
+       - The read's share of decode is 24% at 192, 66% at 2,112 and 97% at 32,768.
+     - **The cost is linear in the context:** about 167 ns per earlier position per decode token, or about 20 ns per candidate for each of the 8 head-reads. `nearest` sorts every candidate to keep 16. That is read from the code; how the time splits was not profiled.
+     - **The checks:**
+       - I-Same: the short re-export is the stored artifact byte for byte.
+       - I-Reply: the long export differs only in its header's context, and gives the same replies.
+     - **Next:** choose the 16 by counting the distances, which run 0 to 64. That gives the same set with no sort ([REPORT](../../loop/tasks/integer-hamming-read/claude-242/REPORT.md), Still open).
 
 ## Done when
 
@@ -139,7 +148,7 @@ It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-
 
 ## Cancel if
 
-Another unit already meets this item's done-when on main (the read served at parity with its float forward, and its speed measured), or the float read is withdrawn. The read existing on main is not a cancel. Its copy-head kernel came in with claude-189. claude-194 and 195 serve its copy and type heads, and claude-200's export carries its parameters. Its parity is unmet (claude-233).
+Another unit already meets this item's done-when on main (the read served at parity with its float forward, and its speed measured), or the float read is withdrawn. The read existing on main is not a cancel. Its copy-head kernel came in with claude-189. claude-194 and 195 serve its copy and type heads, and claude-200's export carries its parameters. Its parity was met by claude-240 and its speed measured by claude-242, which close it.
 
 ## How to start
 
