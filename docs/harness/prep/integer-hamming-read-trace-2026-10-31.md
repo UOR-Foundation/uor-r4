@@ -167,4 +167,23 @@ TEST FITNESS: FIT
 
 ## 10. Pre-run review
 
-Pending.
+**A fresh reviewer, at `d30031be7`: GO.** It checked the five points:
+1. **The chain:** claude-233's row R, and the owner's "Trace attention first". This run tests the two named leads. The float side needs the GPU; the integer side, the comparison and the timing run on the laptop as serving.
+2. **The tools and inputs:**
+   - the four arms in `fbs-snapshot`, and its trace-shape refusal;
+   - `fbs-compare`'s pathless output, so byte identity is a fair test;
+   - both named CUDA tests, the job's test filter and its grep;
+   - the build features;
+   - `fbs-toks`'s three forms, and `record`;
+   - all 12 pins against claude-233's sums, and claude-233's 694/823, 5/11 and 0 of 4,096 against its REPORT.
+3. **The rows:** each leads to a different fix, and they cover every outcome outside row 0.
+4. **The FIT:** consistent, and the added `compare.json` pin reviewed.
+5. **The lease:** one 5090 for an hour, inside the caps.
+
+It found no job bug. Its three minor points were taken before launch:
+1. **The comparison half of I-Repro, run on the laptop first.** `fbs-compare --parity-only` at `d30031be7`, on claude-233's h1 and h3 files (all 10 checked against its sums), writes `compare.json` byte-identical to claude-233's at both seeds (`ef617640…`, `0d9484bf…`). So the integer read with the trace off is main's, on the real artifacts.
+2. **The job copies itself into the output,** so the seal covers it.
+3. **The watcher:**
+   - a refusal now writes `EXIT`;
+   - a failed lease renewal is logged;
+   - the session acts on every watcher exit at once: store, release, down.
