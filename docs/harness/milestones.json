@@ -289,7 +289,7 @@
       "base_artifact": "depends on M4; accounting may advance with #1512, performance qualification needs a useful saved artifact from #973/#964",
       "mechanisms": [],
       "lines": [],
-      "next": "Design/accounting can advance now against #1512. Measure ingestion, compiler/router/... on the selected model once a useful saved artifact exists (D5). Note: the owner's current constraint set (D23/D24/D25) changes what 'full-path cost' can be measured on; no CPU model compute.",
+      "next": "Design/accounting can advance now against #1512. Measure ingestion, compiler/router/... on the selected model once a useful saved artifact exists (D5). The owner's constraint set (D23/D24/D25, amended by D84) keeps GPU as the qualification path; only the named CPU training program may run model compute locally as development research.",
       "carried_from": "#963"
     },
     "m6": {

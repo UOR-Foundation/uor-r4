@@ -62,8 +62,9 @@ has the surface, and `uor-harness check` lists every rule with the fix for each 
    during operator preparation. FIT does not release an owner hold.
 3. No softmax/softplus/sigmoid/tanh or equivalent forms anywhere in the executed
    model/learning/output/teacher/comparator path; no dense matrix multiplication;
-   GPU-only model compute, no host fallback. Scalar float geometric GPU learning
-   is distinct from D11 integer/table, multiplier-free serving.
+   GPU-first model compute with no silent host fallback. D84 permits only the
+   owner-authorized CPU development program. Scalar float geometric GPU learning
+   is distinct from D11 integer/table serving.
 4. Pick one bounded source dependency in the [operator plan](../../archive/labs/operator-phase-2026-10-12/README.md).
    OP2 SpiralCore/FBS projection → OP1 G2 gate → OP3a geometric head precede integrated
    training. G1 is withdrawn; geometric feed-forward blocks are permitted. OP3b
@@ -122,9 +123,10 @@ TRAINING IS HELD. M2 has a separate no-training/no-rental hold. No FIT verdict,
 source delivery, old prompt, free GPU or pod cap releases a hold. No softmax,
 softplus, sigmoid, tanh or equivalent squashing anywhere in executed model,
 objective, backward, output, teacher or comparator paths. No dense matmul/GEMM,
-including handwritten dense contractions. GPU-only model/reference execution;
-no host fallback or CPU learner. Offline scalar float geometric GPU arithmetic
-is allowed; served D11 kernels remain integer/table and multiplier-free.
+including handwritten dense contractions. GPU-first model/reference execution;
+no silent CPU fallback. The named D84 CPU development program is the only
+authorized CPU model path. Offline scalar float geometric GPU arithmetic is
+allowed; served D11 kernels remain integer/table and multiplier-free.
 
 Claim ONE bounded source dependency with explicit file ownership; coordinate
 collisions with Kimi. OP2 SpiralCore/FBS projection source -> OP1 G2 gate source -> OP3a

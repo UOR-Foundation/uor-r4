@@ -138,7 +138,7 @@ earlier path is free.
 - No softmax, squashing or normalized exponential anywhere, including renamed or table forms (D23).
 - No dense matrix multiplication or GEMM in training or serving, including wrappers and hand loops (D25/D30).
 - No transformer comparators (D28); no mesh as a coordination concept (L-021); codex keeps full access (P-5 dropped).
-- Research compute is GPU-only (D24/§3.5); float training is offline-only in a separately scanned module with an export gap reported (D37); serving stays D11 integer (D11).
+- Research compute is GPU-first (D24/§3.5). GPU results qualify training and evaluation; the owner-authorized CPU program (D84) runs development research only. Float training is offline-only in a separately scanned module with an export gap reported (D37); serving stays D11 integer (D11).
 - The pooled-ranking loss (banned forms) does not return; a reply rerun needs a compliant objective.
 - Nothing is deleted: negatives, unique source and other labs' work move byte-identical to archive/ (§4.7, L-015).
 - No new infrastructure, documentation-clarification or record-hygiene unit unless a milestone item depends on it (D77). The loop's own fixes ride inside the unit that needs them.

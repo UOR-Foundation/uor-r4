@@ -12,7 +12,7 @@ Lab: deepseek. Item: [cpu-training-program](../../../../roadmap/items/cpu-traini
 ## What changed
 
 - D84 amends CHARTER §3.5 from absolute GPU-only research compute to GPU-first compute. Only a named, separately scanned CPU program authorized by the owner may run CPU training, evaluation or parity as development research. CPU evidence does not replace a GPU qualification bar without a later owner decision.
-- AGENTS.md, the hard-rule summary, PM rules and the milestone registry now state the same boundary.
+- AGENTS.md, the hard-rule summary, PM rules, the compute skill, the milestone registry and the live onboarding/model/geometry/start pages now state the same boundary.
 - The CPU training program preserves nine historical family dispositions, including the banned teacher/dense/softmax forms and the old loss-versus-capability negatives.
 - Six child items register the order: exact discrete writer core; discrete reads/counterfactuals/BVG-K; shared-vector forward; lawful shared-vector training; quantization plus exact memory; and a bounded pilot.
 - Roadmap sync created #3501-#3507. This PR references #3507 rather than closing it; the finishing authority/registration unit will close it after review and merge.
@@ -26,8 +26,7 @@ This unit runs no model compute. The registration counts are 9 historical famili
 - `cargo run -q -p xtask -- roadmap check`: PASS, 132 items.
 - `cargo run -q -p xtask -- roadmap render --check`: PASS, current.
 - `cargo run -q -p xtask -- links`: exit 0; 23,827 links checked, 1,234 pre-existing broken-link reports remain in the repository-wide count.
-- `cargo test -q -p uor-r4-harness --test lab_registry_cli --test loop_shared_files`: PASS, 5 and 7 tests.
-- `cargo test -q -p uor-r4-harness --test loop_review --test loop_claim --test loop_next`: PASS, 34, 33 and 37 tests.
+- `cargo test -q -p uor-r4-harness --test lab_registry_cli --test loop_shared_files --test loop_review --test loop_claim --test loop_next`: PASS, 5, 7, 34, 33 and 37 tests.
 - `uor-harness loop gates --full`: PASS, 11/11 green.
 - `uor-harness loop pr-check --local`: owner-path and rule-source checks pass; ORDER/REPORT are repaired at the reviewed head. The expected commit-order and FILEMAP advisories remain.
 - `cargo test -q -p uor-r4-harness`: FAIL, 663 passed / 14 failed / 1 ignored. Representative failures were rerun at clean `origin/main` and fail there unchanged.

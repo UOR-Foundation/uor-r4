@@ -58,7 +58,7 @@ Matrix multiplication is nearly all of a transformer's arithmetic, so removing i
 
 ### 9. Why use GPUs for research but laptops for serving?
 
-They are different jobs. Research compute (training, evaluation, qualification) must run on the GPU, because host runs gave wrong timing and wrong evidence, and spending GPU only where a run can change a decision keeps costs down ([charter](../../CHARTER.md), section 3.5). The finished model, though, is meant to run on the user's own device: serving the exported integer file on a laptop CPU, in a browser or on Apple silicon is the product, and the GPU-only rule does not apply to it (section 3.6). Scoring an exported model for a milestone still counts as research compute.
+They are different jobs. GPU results are the default and remain the qualification authority, because host runs historically gave wrong timing and evidence, and spending GPU only where a run can change a decision keeps costs down ([charter](../../CHARTER.md), section 3.5). D84 permits only the named CPU training program to run development training, evaluation and parity on the workstation; those results do not replace a GPU bar. The finished model is meant to run on the user's own device: serving the exported integer file on a laptop CPU, in a browser or on Apple silicon is the product and does not require the research-compute GPU (section 3.6). Scoring an exported model for a milestone still counts as research compute.
 
 ### 10. Why can training use decimals when serving cannot?
 

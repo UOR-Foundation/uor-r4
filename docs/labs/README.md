@@ -26,7 +26,7 @@ These records retain their original dates, gate outcomes, holds, participant ass
 > interim headline injective codebook + Q4 target admission ≥ 4,894; the earlier
 > reply37/232 remains historical SUSPENDED evidence under R14.
 >
-> [D37](../integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised) permits offline floating point, retaining matmul/GEMM and softmax/squashing bans, GPU-only model compute and separately qualified D11 export. Other training, M2 and Stage B holds remain.
+> [D37](../integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised) permits offline floating point, retaining matmul/GEMM and softmax/squashing bans and separately qualified D11 export. [D84](../integration/DECISIONS.md) makes compute GPU-first: the owner-authorized CPU training program is development research and cannot replace a GPU qualification bar.
 >
 > Work claims and reviewer availability are renewable and belong in the live harness/issue. Start with the [session contract](session-goal.md), [protocol](protocol.md), [current architecture](../architecture.md) and [discrete crate](../../crates/uor-r4-discrete/README.md); the dated packets below preserve historical scope.
 

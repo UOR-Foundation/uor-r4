@@ -83,8 +83,9 @@ Stopping a loop does not repair a reply that began wrong
 | [Desktop client](../products/desktop-client.md) | A Tauri app sharing the interface with durable memory and offline use | Native shell and durable session restore verified on a synthetic artifact; no qualified bundle |
 
 Nothing ships until a trained model passes the remaining product bars. Serving an exported D11
-artifact on the user's device is the product and is allowed; research compute remains GPU-only
-([charter](../../CHARTER.md), section 3.6).
+artifact on the user's device is the product and is allowed. GPU remains the qualification
+authority; only the owner-authorized D84 CPU program runs development research locally
+([charter](../../CHARTER.md), sections 3.5-3.6).
 
 ## The biggest unknown
 
