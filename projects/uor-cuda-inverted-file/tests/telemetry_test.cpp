@@ -97,13 +97,21 @@ int main() {
     invalid.ids.trace_id = "not-a-trace-id";
     expect(enabled.export_trace(resource, invalid) == Status::InvalidArgument, "invalid ID refused");
 
-    const std::filesystem::path temporary = "build.tmp";
-    std::filesystem::remove(temporary);
-    Telemetry directory_output("build");
+    const std::filesystem::path failure_root = "build/telemetry-failure";
+    std::filesystem::remove_all(failure_root);
+    std::filesystem::create_directory(failure_root);
+    Telemetry directory_output(failure_root);
     expect(directory_output.export_trace(resource, span) == Status::TelemetryFailure,
            "file replacement failure has a telemetry-specific status");
-    expect(std::filesystem::is_directory("build"), "failed replacement preserves the destination");
-    expect(!std::filesystem::exists(temporary), "failed replacement removes its temporary file");
+    expect(std::filesystem::is_directory(failure_root), "failed replacement preserves the destination");
+    bool temporary_leftover = false;
+    const auto temporary_prefix = failure_root.filename().string() + ".tmp.";
+    for (const auto& entry : std::filesystem::directory_iterator(failure_root.parent_path())) {
+        const auto name = entry.path().filename().string();
+        if (name.compare(0, temporary_prefix.size(), temporary_prefix) == 0) temporary_leftover = true;
+    }
+    expect(!temporary_leftover, "failed replacement removes every exporter-owned temporary artifact");
+    std::filesystem::remove_all(failure_root);
 
     const std::filesystem::path unrelated = "build/telemetry-test.json.tmp";
     {
