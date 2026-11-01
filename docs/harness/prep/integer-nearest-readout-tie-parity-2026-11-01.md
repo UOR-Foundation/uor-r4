@@ -77,10 +77,13 @@ Checked in the run:
    - every panel and checkpoint matches its sums, and the panels match the pinned shas;
    - every file claude-220's run wrote is written at every seed.
 9. **`I-Repeat`:** seed 3's second process, beside the three on the same GPU, writes `samples-memory.json` and `samples-p-w-greedy-memory.json` equal to the main run's, byte for byte. A difference is row 0: GPU greedy is then no reference.
-10. **`I-Store`:** the run's outputs are stored at `results/claude/integer-nearest-readout-tie-parity-2026-11-01/` and read back to the laptop, every sha256 equal to the pod's `SHA256SUMS`.
-11. **`I-Decode`:** every `fbs-toks` exits 0, and its `keyed` is 0.
-12. **`I-Positions`:** `positions_match` = n in every graded pair.
-13. **The grader's positive probe:** F′ against itself reads n, n, n and n in every cell. With `I-S-Reproduces`, the grader reads known answers at both ends.
+10. **`I-Store`:** the run's outputs are copied off the pod to the laptop, then stored at `results/claude/integer-nearest-readout-tie-parity-2026-11-01/`. Every file in the pod's `SHA256SUMS` matches on the laptop: the outputs, the binary's and tables' sums, and the logs other than the live `job.log`. The job fails (`EXIT 9`) unless the sums hold the eight G files.
+11. **`I-Prompts-F′`:** F′'s G files carry R's prompts. At every index of every cell, F′'s `position`, `prompt` and `reference` equal the prompt file's. Without this, a change in F′'s sampling at this head would read as a MISS (L-007). On F, the same check reads 310 of 310 on DEV s1.
+12. **`I-Decode`:** every `fbs-toks` exits 0, and its `keyed` is 0.
+13. **`I-Positions`:** `positions_match` = n in every graded pair.
+14. **The grader's positive probe:** F′ against itself reads n positions, and n less F′'s empty replies for `first_agree` and `whole_agree`, in every cell (F's shortest reply has 8 tokens). With `I-S-Reproduces` re-run in the same script, the grader reads known answers at both ends.
+
+Steps 4 and 5 run as one script, `local/claude/claude-243/grade.sh`, adapted from claude-232's `log/run.sh` (its sha256 is in the pre-run review). It hard-codes every pair, reads the bar on R against F′ only, stops at the first failed check, never writes into an existing folder, and prints the row only after every check holds.
 
 ## 5. Base artifact and data split
 
@@ -91,9 +94,13 @@ Checked in the run:
 
 1. The checks of §4.1–7 (done).
 2. **The pod:** `uor-pod status`, then one RTX 5090 up and leased for this session; `job.sh <head>`, with `local/claude/claude-243/watch.sh` armed on it.
-3. **The store:** `/root/uor-store put` of the job's `out/`, `repeat/`, logs, `binary.sha256`, `tables.sha256` and `SHA256SUMS`; then the G files and the sums fetched to the laptop and checked (`I-Store`). The pod is released and taken down only after that.
-4. **R:** the six decodes on the laptop, one after another (`I-Decode`), with `/usr/bin/time -l`.
-5. **The grades:** R against F′ (the bar), then the readings, each with `I-Positions`, and the positive probe.
+3. **Off the pod, then the store:**
+   - `uor-pod ssh POD 'tar -C /workspace --exclude tie-parity/in -cf - tie-parity' > local/claude/claude-243/run.tar` (GNU tar applies `--exclude` only to the paths after it) comes first. It carries `out/`, `repeat/`, the logs, `binary.sha256`, `tables.sha256` and `SHA256SUMS`, and leaves the fetched inputs.
+   - Then it is unpacked under `local/claude/claude-243/run/` and checked with `sha256sum -c` (`I-Store`).
+   - Then `scripts/pod/uor-store put` to the store folder and `uor-store ls` to confirm.
+   - The pod is released and taken down only after that.
+4. **R:** `grade.sh` runs `I-Prompts-F′`, then the six decodes on the laptop, one after another, with `/usr/bin/time -l` (`I-Decode`).
+5. **The grades:** `grade.sh` runs the probes, then R against F′ (the bar), then the readings, each with `I-Positions`.
 6. **Speed (done-when 4):** `fbs-toks a7r-s1.uorlut` alone, the plain protocol (1 warmup and 20 timed runs of a 128-token prefill and 64 decode steps, the nearest scan inside each step), under `/usr/bin/time -l` for the peak resident memory, on AC power, with the machine's load recorded.
 7. **Seal:** R's artifacts' sums, its replies, the grades and the logs to the same store folder, read back.
 
@@ -109,13 +116,34 @@ Checked in the run:
   - claude-220's three seeds took 9,840 to 9,995 s side by side on one 5090, at 92.6% GPU use over its busy rows and 11,354 MiB at the peak.
   - I-Repeat's fourth process puts the run near 3 h 40 min, plus about 25 min for tests, build and data: about 4 h 05 min.
   - At about $0.56/h, that is about $2.30. The laptop side takes minutes.
-- **The watcher** (`watch.sh`): a spend stop at $4, a time stop at 6 hours, and a stall stop at 60 unchanged minutes. Its leases are renewed every 25 minutes.
+- **The probe ladder** (run file, Part 4 A.4):
+  - (a) The mechanism's own check is the pod's CUDA library tests, the tie rule's by name, in minutes, before any decode.
+  - (b) The throughput projection is claude-220's run of this exact command on the same GPU type.
+  - Each seed runs about 2 h 45 min, past the ladder's hour per arm. Arm G itself is about 6 min on DEV and 23 min on p-w per seed (claude-220's `main-s1.out`). The rest is arms that run because the command is claude-220's unchanged.
+  - Cutting them needs a new switch in `train-in-space.rs`. That is outside this item's scope, and it would end "the same command" that I-Flags and the card rest on. The lab's call is to run it whole, as claude-220 did after its own projection review.
+- **The watcher** (`watch.sh`): a spend stop at $4, a time stop at 6 hours, and a stall stop at 60 unchanged minutes. Its leases are renewed every 25 minutes. The longest silent stretch of a process is one p-w decode file, about 32 minutes with four processes. The job's trap leaves an `EXIT` file on every way out, so a crash is seen at the next check.
   - A spend or time stop wakes the session, which extends the stop for a healthy run and notes it. A healthy run is never cancelled for a self-set budget.
 - **Stop rule:** any §4 check that fails stops the run as row 0, never counted. The bar is read only after every check holds.
 
 ## 9. Non-author TEST FITNESS review
 
-To be filled in.
+TEST FITNESS: FIT
+
+**Round 1 (a fresh non-author reviewer, 1 Nov, at `ccf1523d3`): FIT.** It decoded nothing and read no outcome.
+- **What it checked:**
+  - no route to a false PASS: the pairing, the empty-reply rule, the slicing, ⌊0.03 n⌋ (9 and 36), and F′'s files being arm G at this head. A decoder stuck on one token cannot pass: F's most common first token covers at most 113 of 310 and 219 of 1,202.
+  - the rows cover every outcome, and match "done only when the bar passes" and "done applies to the raw export";
+  - `job.sh` against claude-220's job: the same binary call, flags and panel order. Its `wait` is on the runs' own pids, and a failed run, a missing file or a repeat mismatch each end the job loudly. The eight named tests exist, and `TIE` is never set off in this path.
+  - the watcher's stall rule against the longest silent stretch (about 32 against 60 minutes), and the cost;
+  - re-run by hand: I-Raw, I-Identity, I-S-Reproduces (6 of 6), I-Float-Inputs, I-Inputs, I-Prompts and I-Flags.
+- **Advisories, each made:**
+  1. A laptop script with the pairs hard-coded: `grade.sh` (§4).
+  2. `I-Prompts-F′` (§4.11).
+  3. The code must not move between the checks and the run: the pre-run review records `git diff --stat ccf1523d3 <run head> -- crates Cargo.lock` empty.
+  4. `job.sh`'s sums are checked (`EXIT 9`), hold the eight G files, and carry the logs.
+  5. A trap leaves an `EXIT` file on every way out.
+  6. Nits: the watcher's comment says 60 minutes and its paths are absolute; the positive probe allows for empty replies; the ORDER's spend line matches the sheet's $4; the REPORT records the export command line.
+- **Left unchecked:** the CUDA suite at this head (the pod's step 2), the checkpoint sums on the pod (step 4), and the engine's serving of raw gates (claude-181; R's decodes exercise it).
 
 ## 10. Pre-run review
 

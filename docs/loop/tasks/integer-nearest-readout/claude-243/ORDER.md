@@ -125,6 +125,6 @@ The lab answers these itself and does not wait (CHARTER §5.1):
 - **I-Repeat fails.** Then GPU greedy is not repeatable, and F′ cannot be a reference. Record row 0, an instrument fault, and stop the run. The next unit makes the decode repeatable.
 - **S against F does not give claude-232's numbers.** Then the grader or the inputs moved. Record row 0.
 - **`fbs-export` refuses the raw flags with the turn memory or the nearest head, or the R artifact does not parse.** That is a code gap inside this item's scope. The unit fixes it with a test and a negative gate before any decode, and the REPORT says so.
-- **The pod cost passes $3.** Extend and note it; a healthy run is never cancelled for a self-set budget.
+- **The pod cost passes the sheet's $4 spend stop, or its 6-hour time stop.** Extend and note it; a healthy run is never cancelled for a self-set budget.
 
 The lab makes every other call itself and records it in the REPORT (CHARTER §5.1).
