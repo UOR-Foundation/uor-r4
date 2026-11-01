@@ -167,6 +167,24 @@ The read now costs 20 to 24% of decode, against 16 to 20% at base, since the res
 
 ## Checks run at the head
 
+The code is unchanged since `6e4b25c79`, the commit every binary above was built at. The later commits are docs only.
+- **`cargo test --locked -p uor-r4-integer --features serving-wasm --no-fail-fast`:** 612 passed, 35 failed, 4 ignored.
+  - All 35 panic on a missing local input, the same count claude-182 and claude-186 recorded: 34 on a bundle or tokenizer file not found, and one on `assert!(tok_path.exists())`.
+  - The new tests and every snap test pass.
+- **`cargo fmt -p uor-r4-integer -- --check`:** clean.
+- **`uor-harness loop gates --full`:** 11 of 11 green.
+- **`uor-harness loop report --check` and `loop pr-check --local`:** PASS. The pr-check warnings are the ORDER's size, and FILEMAP rows for folders this unit does not touch.
+- **The fresh review:** see below.
+
+## Skills used
+
+- **holding-the-goal.** Each of the item's five bars was checked before the item was set `done`:
+  - exactness, with two failing negative gates and a proof for the one that cannot fail;
+  - replies, on prompts whose replies vary;
+  - both audits, with the base's own readings beside them;
+  - speed, alternating against the base binary.
+- **The snap's remaining 32%** is reported as open, not as part of the gain.
+
 ## Still open
 
 - **The snap's remaining 32%.** A next unit should split it before it changes anything:
