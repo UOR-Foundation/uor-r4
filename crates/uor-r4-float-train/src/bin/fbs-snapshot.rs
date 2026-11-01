@@ -12,7 +12,16 @@
 //!
 //! ```text
 //! fbs-snapshot MODEL_DIR OUT_JSON [READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]]
+//! fbs-snapshot --hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON
 //! ```
+//!
+//! The second form (claude-235) writes the D11 readout of a checkpoint with
+//! Hamming reads and what each read chose on its fixed sequences
+//! (`uor-r4.hamming-trace/1`), for one arm:
+//! - `d11`: as the first form's D11 readout;
+//! - `d11-tie`: with the integer session's tie rule;
+//! - `d11-rounded`: with the reads' parameters rounded as exported;
+//! - `d11-tie-rounded`: both.
 //!
 //! It never replaces or leaves a partial output file, and it prints each
 //! file's sha256.
@@ -23,20 +32,26 @@
 //! read file (the Flock, content and opening reads, the prompt register) is
 //! refused by name until its export exists.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use candle_core::Device;
 use sha2::{Digest, Sha256};
 use uor_r4_float_train::fbs_export::{
     check_checkpoint_reads, check_readout_reads, fbs_float_readout, fbs_hamming_snapshot,
-    fbs_memory_snapshot, fbs_trunk_snapshot, round_tables_as_exported, run_rate_reading,
+    fbs_memory_snapshot, fbs_trunk_snapshot, round_hamming_as_exported, round_tables_as_exported,
+    run_rate_reading, READOUT_SEQUENCES,
 };
-use uor_r4_float_train::flock_read_hamming::{set_hamming_reads, HammingReads};
+use uor_r4_float_train::flock_read_hamming::{
+    set_hamming_reads, set_hamming_tie_rule, set_hamming_trace, take_hamming_trace, HammingReads,
+    HAMMING_DEPTHS, HAMMING_KEPT,
+};
 use uor_r4_float_train::flock_read_memory::TurnMemory;
 use uor_r4_float_train::geometric_stack::{set_retention_rates, StackModel};
 use uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT;
-use uor_r4_float_train::Result;
-use uor_r4_integer::fbs_snapshot::{run_readout_nearest, write_new_file, FbsReadoutMode};
+use uor_r4_float_train::{FloatTrainError, Result};
+use uor_r4_integer::fbs_snapshot::{
+    run_readout_nearest, write_new_file, FbsReadoutMode, HammingTrace, HAMMING_TRACE_SCHEMA,
+};
 
 fn write(path: &str, json: &[u8]) -> Result<()> {
     write_new_file(Path::new(path), json)?;
@@ -44,16 +59,123 @@ fn write(path: &str, json: &[u8]) -> Result<()> {
     Ok(())
 }
 
+/// The run's `config.json`, two levels above `MODEL_DIR` (`models/step-N`).
+fn run_config(dir: &Path) -> Result<String> {
+    let path = dir
+        .parent()
+        .and_then(Path::parent)
+        .map(|run| run.join("config.json"))
+        .ok_or_else(|| {
+            FloatTrainError::Invalid("MODEL_DIR is not a run's models/step-N".to_owned())
+        })?;
+    Ok(std::fs::read_to_string(path)?)
+}
+
+/// A trace arm's switches: the tie rule, and the reads rounded as exported.
+fn trace_arm(name: &str) -> Option<(bool, bool)> {
+    match name {
+        "d11" => Some((false, false)),
+        "d11-tie" => Some((true, false)),
+        "d11-rounded" => Some((false, true)),
+        "d11-tie-rounded" => Some((true, true)),
+        _ => None,
+    }
+}
+
+/// Where an output that does not exist yet would be: its folder, resolved, and its name.
+fn output_place(path: &str) -> Result<PathBuf> {
+    let path = Path::new(path);
+    let folder = path
+        .parent()
+        .filter(|folder| !folder.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let name = path
+        .file_name()
+        .ok_or_else(|| FloatTrainError::Invalid(format!("{} names no file", path.display())))?;
+    Ok(std::fs::canonicalize(folder)?.join(name))
+}
+
+/// `--hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON` (claude-235).
+fn hamming_trace(arm: &str, model_dir: &str, readout: &str, trace: &str) -> Result<()> {
+    let (tie, rounded) = trace_arm(arm).ok_or_else(|| {
+        FloatTrainError::Invalid(format!(
+            "unknown trace arm {arm}: d11, d11-tie, d11-rounded or d11-tie-rounded"
+        ))
+    })?;
+    // Both outputs are refused before the GPU runs, so a run never leaves a readout without its
+    // trace. They are compared by where they would be, so `./t.json` and `t.json` are one file.
+    if output_place(readout)? == output_place(trace)? {
+        return Err(FloatTrainError::Invalid(format!(
+            "D11_READOUT_JSON and TRACE_JSON are both {readout}"
+        )));
+    }
+    if let Some(path) = [readout, trace].into_iter().find(|p| Path::new(p).exists()) {
+        return Err(FloatTrainError::Invalid(format!(
+            "{path} exists, and the trace never replaces a file"
+        )));
+    }
+    let dir = Path::new(model_dir);
+    check_checkpoint_reads(dir)?;
+    check_readout_reads(dir, 1)?;
+    set_retention_rates(run_rate_reading(&run_config(dir)?)?);
+    let device = Device::new_cuda(0)?;
+    let model = StackModel::load(dir, &device)?;
+    let reads = HammingReads::load(dir, &device)?.ok_or_else(|| {
+        FloatTrainError::Invalid("the checkpoint has no Hamming reads to trace".to_owned())
+    })?;
+    if rounded {
+        round_hamming_as_exported(&reads)?;
+    }
+    set_hamming_reads(Some(reads));
+    set_hamming_tie_rule(tie);
+    round_tables_as_exported(&model)?;
+    set_hamming_trace(true);
+    let d11 = fbs_float_readout(&model, FbsReadoutMode::D11)?;
+    let windows = take_hamming_trace().unwrap_or_default();
+    set_hamming_trace(false);
+    // Only the fixed sequences reach a read (a single token has no earlier position): each must
+    // be traced once, at every read depth.
+    let depths: Vec<Vec<usize>> = windows
+        .iter()
+        .map(|w| w.reads.iter().map(|r| r.depth).collect())
+        .collect();
+    if windows.len() != READOUT_SEQUENCES || depths.iter().any(|d| d[..] != HAMMING_DEPTHS[..]) {
+        return Err(FloatTrainError::Invalid(format!(
+            "the trace holds {} windows with depths {depths:?}, not {READOUT_SEQUENCES} at {HAMMING_DEPTHS:?}",
+            windows.len()
+        )));
+    }
+    let heads = windows[0].reads[0].heads.len();
+    let trace_json = serde_json::to_vec(&HammingTrace {
+        schema: HAMMING_TRACE_SCHEMA.to_owned(),
+        side: "float-d11".to_owned(),
+        arm: arm.to_owned(),
+        heads,
+        kept: HAMMING_KEPT,
+        windows,
+    })?;
+    write(readout, &serde_json::to_vec(&d11)?)?;
+    write(trace, &trace_json)
+}
+
+fn usage() -> ! {
+    eprintln!(
+        "usage: fbs-snapshot MODEL_DIR OUT_JSON [READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]]\n       fbs-snapshot --hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON"
+    );
+    std::process::exit(2);
+}
+
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|flag| flag == "--hamming-trace") {
+        let [_, arm, model_dir, readout, trace] = args.as_slice() else {
+            usage();
+        };
+        return hamming_trace(arm, model_dir, readout, trace);
+    }
     let (model_dir, out, readouts) = match args.as_slice() {
         [model_dir, out, readouts @ ..] if readouts.len() <= 3 => (model_dir, out, readouts),
-        _ => {
-            eprintln!(
-                "usage: fbs-snapshot MODEL_DIR OUT_JSON [READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]]"
-            );
-            std::process::exit(2);
-        }
+        _ => usage(),
     };
     let dir = Path::new(model_dir);
     // Every read the checkpoint holds is carried, or the export is refused (claude-198), before
@@ -63,21 +185,11 @@ fn main() -> Result<()> {
     // The run's rate reading (integer-retention-rates, claude-226), from its `config.json` two
     // levels above `models/step-N`. The snapshot carries it, and the float readouts below are
     // taken under it, as the run trained and scored.
-    let run_config = dir
-        .parent()
-        .and_then(Path::parent)
-        .map(|run| run.join("config.json"))
-        .ok_or_else(|| {
-            uor_r4_float_train::FloatTrainError::Invalid(
-                "MODEL_DIR is not a run's models/step-N".to_owned(),
-            )
-        })?;
-    let config = std::fs::read_to_string(&run_config)?;
+    let config = run_config(dir)?;
     let retain = run_rate_reading(&config)?;
     // And its readout (integer-nearest-readout, claude-231): a cell or nearest objective decodes
     // as the whole table's nearest token.
-    let nearest =
-        run_readout_nearest(&config).map_err(uor_r4_float_train::FloatTrainError::Invalid)?;
+    let nearest = run_readout_nearest(&config).map_err(FloatTrainError::Invalid)?;
     set_retention_rates(retain);
     let device = Device::new_cuda(0)?;
     let model = StackModel::load(dir, &device)?;
@@ -109,4 +221,23 @@ fn main() -> Result<()> {
         )?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::output_place;
+
+    /// claude-235: two spellings of one output are one place, so the trace refuses them.
+    #[test]
+    fn two_spellings_of_one_output_are_one_place() {
+        assert_eq!(
+            output_place("./trace.json").unwrap(),
+            output_place("trace.json").unwrap()
+        );
+        assert_ne!(
+            output_place("readout.json").unwrap(),
+            output_place("trace.json").unwrap()
+        );
+        assert!(output_place("..").is_err(), "names no file");
+    }
 }

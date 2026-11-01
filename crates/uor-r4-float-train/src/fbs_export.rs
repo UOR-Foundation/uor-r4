@@ -38,6 +38,12 @@ pub const FBS_PROJECTIONS: [&str; 6] = [
     "rec.in", "rec.gate", "rec.out", "mlp.gate", "mlp.up", "mlp.down",
 ];
 
+/// The integer artifact's Hamming exponents, as `uor-r4-integer`'s `stack/format.rs` sets them
+/// (its native build does not expose `stack`); a test holds them to that file.
+const HAMMING_ROTATION_EXP: i32 = -24;
+const HAMMING_MARGIN_EXP: i32 = -16;
+const HAMMING_WEIGHT_EXP: i32 = -24;
+
 /// Refuse a trunk the integer FBS session cannot serve, each for its own reason.
 pub fn check_fbs_export_config(
     config: &StackConfig,
@@ -479,6 +485,73 @@ pub fn round_tables_as_exported(model: &StackModel) -> Result<()> {
     Ok(())
 }
 
+/// claude-235: round the Hamming reads' parameters as the integer artifact
+/// holds them (`quantize_fixed_i32` on [`fbs_hamming_snapshot`]'s tables):
+/// the rotations at `2^HAMMING_ROTATION_EXP`, the margins at
+/// `2^HAMMING_MARGIN_EXP` and the weights at `2^HAMMING_WEIGHT_EXP`, so the
+/// float read computes with the values the integer read serves. Only the
+/// trace's rounded arms call it. Every rounded value is an exact `f32`: one
+/// whose `f32` spacing is its step or coarser is on the step already, and a
+/// finer one rounds to at most 24 significant bits. What the export or the
+/// integer read refuses is refused here, before any value changes: the type
+/// spin, a value that is not finite, a value past `i32` at its step, a margin
+/// that rounds to 0 or below, and a read count other than one per depth.
+pub fn round_hamming_as_exported(reads: &HammingReads) -> Result<()> {
+    if reads.reads.len() != HAMMING_DEPTHS.len() {
+        return Err(invalid(format!(
+            "{} Hamming reads, not one at each depth of {HAMMING_DEPTHS:?}",
+            reads.reads.len()
+        )));
+    }
+    let mut rounded = Vec::new();
+    for (depth, read) in HAMMING_DEPTHS.iter().zip(&reads.reads) {
+        if read.step_rotation.is_some() {
+            return Err(invalid(
+                "a Hamming read with the type spin (step_rotation) has no exported form to round to",
+            ));
+        }
+        for (table, var, exp) in [
+            ("query_rotation", &read.query_rotation, HAMMING_ROTATION_EXP),
+            ("key_rotation", &read.key_rotation, HAMMING_ROTATION_EXP),
+            ("value_rotation", &read.value_rotation, HAMMING_ROTATION_EXP),
+            ("margin", &read.margin, HAMMING_MARGIN_EXP),
+            ("weight", &read.weight, HAMMING_WEIGHT_EXP),
+        ] {
+            let name = format!("hamming_read.d{depth}.{table}");
+            let values = finite_table(&name, var.as_tensor().flatten_all()?.to_vec1::<f32>()?)?;
+            let steps = |v: f32| (f64::from(v) * 2f64.powi(-exp)).round();
+            if let Some(i) = values
+                .iter()
+                .position(|&v| steps(v).abs() > f64::from(i32::MAX))
+            {
+                return Err(invalid(format!(
+                    "{name}[{i}] = {} overflows i32 at 2^{exp}, and the export refuses it",
+                    values[i]
+                )));
+            }
+            if table == "margin" {
+                if let Some(i) = values.iter().position(|&v| steps(v) <= 0.0) {
+                    return Err(invalid(format!(
+                        "{name}[{i}] = {} rounds to {} at 2^{exp}, not positive, and the integer read refuses it",
+                        values[i],
+                        fixed_value(values[i], exp)
+                    )));
+                }
+            }
+            let values: Vec<f32> = values
+                .into_iter()
+                .map(|v| fixed_value(v, exp) as f32)
+                .collect();
+            rounded.push((var, values));
+        }
+    }
+    for (var, values) in rounded {
+        let tensor = var.as_tensor();
+        var.set(&Tensor::from_vec(values, tensor.shape(), tensor.device())?)?;
+    }
+    Ok(())
+}
+
 /// Refuse a trunk whose tables are not as the exported artifact holds them
 /// ([`round_tables_as_exported`]): only on those does the D11 mode compute
 /// what the artifact computes.
@@ -823,6 +896,156 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    /// claude-235: the exponents the rounding uses are the integer format's own.
+    #[test]
+    fn the_hamming_exponents_are_the_integer_formats() {
+        let format = include_str!("../../uor-r4-integer/src/stack/format.rs");
+        for (name, exp) in [
+            ("HAMMING_ROTATION_EXP", HAMMING_ROTATION_EXP),
+            ("HAMMING_MARGIN_EXP", HAMMING_MARGIN_EXP),
+            ("HAMMING_WEIGHT_EXP", HAMMING_WEIGHT_EXP),
+        ] {
+            let line = format!("pub const {name}: i32 = {exp};");
+            assert!(format.contains(&line), "stack/format.rs has no `{line}`");
+        }
+    }
+
+    /// A Hamming read's five tables, in the order the rounding takes them, and their exponents.
+    fn hamming_tables(read: &crate::flock_read_hamming::HammingRead) -> [(&Var, i32); 5] {
+        [
+            (&read.query_rotation, HAMMING_ROTATION_EXP),
+            (&read.key_rotation, HAMMING_ROTATION_EXP),
+            (&read.value_rotation, HAMMING_ROTATION_EXP),
+            (&read.margin, HAMMING_MARGIN_EXP),
+            (&read.weight, HAMMING_WEIGHT_EXP),
+        ]
+    }
+
+    /// claude-235: rounding the reads as exported puts every parameter on its export step, the
+    /// nearest one, half away from zero as `quantize_fixed_i32` rounds; leaves a value already on
+    /// its step alone (a table value of 1 or more at `2^-24` is); holds the result exactly in
+    /// `f32` (a margin of 1 or more still rounds at `2^-16`); and is idempotent. A read with the
+    /// type spin, a value that is not finite, one past `i32` at its step and a margin that rounds
+    /// to 0 are refused, with no value changed.
+    #[test]
+    fn rounding_the_hamming_reads_holds_the_exported_values() -> Result<()> {
+        let device = candle_core::Device::Cpu;
+        let (heads, width) = (4, 32);
+        let reads = HammingReads::new(heads, width, &device)?;
+        let mut rng = Lcg(235);
+        let values = |var: &Var| var.flatten_all().unwrap().to_vec1::<f32>().unwrap();
+        let all = |reads: &HammingReads| -> Vec<Vec<f32>> {
+            reads
+                .reads
+                .iter()
+                .flat_map(|read| hamming_tables(read).map(|(var, _)| values(var)))
+                .collect()
+        };
+        for read in &reads.reads {
+            for (var, exp) in hamming_tables(read) {
+                let margin = exp == HAMMING_MARGIN_EXP;
+                let mut random: Vec<f32> = (0..var.elem_count())
+                    .map(|_| (rng.next() % 2_000_001) as f32 / 1_000_003.0 - 1.0)
+                    .map(|v| if margin { v.abs() + 0.001 } else { v })
+                    .collect();
+                // One value exactly half a step past a step, which rounds away from 0.
+                random[0] = if margin { 3.5 } else { -3.5 } * 2f32.powi(exp);
+                // One past 1: three quarters of a margin step past 1, or a table value one f32
+                // spacing past 1, already on its 2^-24 step.
+                random[1] = if margin {
+                    1.0 + 3.0 * 2f32.powi(exp - 2)
+                } else {
+                    1.0 + 2f32.powi(-23)
+                };
+                var.set(&Tensor::from_vec(random, var.shape(), &device)?)?;
+            }
+        }
+        let before = all(&reads);
+        round_hamming_as_exported(&reads)?;
+        let after = all(&reads);
+        let exps = reads
+            .reads
+            .iter()
+            .flat_map(|read| hamming_tables(read).map(|(_, exp)| exp));
+        let mut moved = 0;
+        for ((old, new), exp) in before.iter().zip(&after).zip(exps) {
+            let step = 2f64.powi(exp);
+            for (&o, &n) in old.iter().zip(new) {
+                let (o, n) = (f64::from(o), f64::from(n));
+                assert_eq!((n / step).fract(), 0.0, "{n} is off its 2^{exp} step");
+                assert!(
+                    (n - o).abs() <= step / 2.0,
+                    "{o} went to {n}, past its nearest 2^{exp} step"
+                );
+                moved += usize::from(o != n);
+            }
+            let away = if exp == HAMMING_MARGIN_EXP { 4.0 } else { -4.0 };
+            assert_eq!(
+                new[0],
+                away * 2f32.powi(exp),
+                "half a step rounds away from 0"
+            );
+            if exp == HAMMING_MARGIN_EXP {
+                assert_eq!(
+                    new[1],
+                    1.0 + 2f32.powi(exp),
+                    "three quarters of a step past 1"
+                );
+            } else {
+                assert_eq!(new[1], old[1], "on its step already");
+            }
+        }
+        assert!(moved > 0, "no value moved, so the rounding had no work");
+        round_hamming_as_exported(&reads)?;
+        assert_eq!(all(&reads), after, "idempotent");
+
+        let spun = HammingReads::new(heads, width, &device)?.with_type_spin()?;
+        assert!(round_hamming_as_exported(&spun).is_err());
+        let mut short = HammingReads::new(heads, width, &device)?;
+        short.reads.pop();
+        let err = round_hamming_as_exported(&short)
+            .expect_err("a read short")
+            .to_string();
+        assert!(err.contains("not one at each depth"), "{err}");
+        // Each refusal comes before any value changes: the first read's values sit off their
+        // steps, and the planted value is in the last read.
+        for (table, at, value, text) in [
+            (1, 3, 200.0, "overflows i32"),
+            (3, 2, 2f32.powi(HAMMING_MARGIN_EXP - 2), "not positive"),
+            (4, 5, f32::NAN, "is not finite"),
+        ] {
+            let planted = HammingReads::new(heads, width, &device)?;
+            for (r, read) in planted.reads.iter().enumerate() {
+                for (k, (var, exp)) in hamming_tables(read).into_iter().enumerate() {
+                    let mut v = vec![
+                        if exp == HAMMING_MARGIN_EXP {
+                            0.5
+                        } else {
+                            2f32.powi(exp - 2)
+                        };
+                        var.elem_count()
+                    ];
+                    if r + 1 == planted.reads.len() && k == table {
+                        v[at] = value;
+                    }
+                    var.set(&Tensor::from_vec(v, var.shape(), &device)?)?;
+                }
+            }
+            let held = all(&planted);
+            let err = round_hamming_as_exported(&planted)
+                .expect_err(text)
+                .to_string();
+            assert!(err.contains(text), "{err}");
+            let unchanged = all(&planted).iter().zip(&held).all(|(a, b)| {
+                a.iter()
+                    .zip(b)
+                    .all(|(x, y)| x == y || (x.is_nan() && y.is_nan()))
+            });
+            assert!(unchanged, "{text}: a value changed before the refusal");
+        }
+        Ok(())
     }
 
     /// claude-200: saved Hamming reads snapshot exactly as they load, row-major, at the depths
