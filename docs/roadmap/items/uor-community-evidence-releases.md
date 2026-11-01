@@ -13,11 +13,11 @@ scope: [projects/uor-cuda-inverted-file/**, docs/telemetry/**, docs/loop/tasks/u
 
 ## Why it matters
 
-The standalone inverted-file CUDA example and its opt-in OpenTelemetry experiment have reviewed correctness and interoperability evidence, but evidence in repository folders is not a downloadable release. Versioned tags, source/evidence archives, release notes, and checksums give outside reviewers a concrete artifact to inspect without confusing either bundle with the UOR-R4 model's M8 release.
+The standalone inverted-file CUDA example and its opt-in OpenTelemetry experiment have reviewed correctness and official-collector interoperability evidence, but evidence in repository folders is not a downloadable release. Versioned tags, source/evidence archives, release notes, and checksums give outside reviewers a concrete artifact to inspect without confusing either bundle with the UOR-R4 model's M8 release.
 
 ## What is missing
 
-Two actual public GitHub releases do not yet exist. The CUDA implementation and measurements are complete at their declared scopes, and the official collector check passed; only release metadata, archive verification, protected delivery, publication, and read-back verification remain. No NVIDIA or OpenTelemetry submission or acceptance is implied.
+Two actual public GitHub releases do not yet exist. The CUDA implementation and measurements are complete at their declared scopes, and the official collector check passed; only release metadata, archive verification, protected delivery, publication, and read-back verification remain. SDK and multi-runtime interoperability remain NOT_RUN. No NVIDIA or OpenTelemetry submission or acceptance is implied.
 
 ## Done when
 
