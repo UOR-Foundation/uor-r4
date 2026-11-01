@@ -1,18 +1,11 @@
 #pragma once
 
+#include "../include/uor_inverted_file.hpp"
+
 #include <string_view>
 #include <vector>
 
 namespace uor_inverted_file {
-
-enum class Status {
-    Ok,
-    InvalidArgument,
-    NonRootBlock,
-    CsrInvariant,
-    CudaUnavailable,
-    CudaFailure,
-};
 
 [[nodiscard]] Status admit_ptx(
     std::string_view ptx,

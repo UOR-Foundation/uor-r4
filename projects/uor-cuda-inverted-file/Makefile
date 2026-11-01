@@ -12,8 +12,12 @@ $(BUILD_DIR):
 $(BUILD_DIR)/admission_test: src/admission.cpp src/admission.hpp tests/admission_test.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/admission.cpp tests/admission_test.cpp -o $@
 
-host-test: $(BUILD_DIR)/admission_test
+$(BUILD_DIR)/inverted_file_test: src/inverted_file.cpp src/codebook.cpp include/uor_inverted_file.hpp tests/inverted_file_test.cpp | $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/inverted_file.cpp src/codebook.cpp tests/inverted_file_test.cpp -o $@
+
+host-test: $(BUILD_DIR)/admission_test $(BUILD_DIR)/inverted_file_test
 	./$(BUILD_DIR)/admission_test
+	./$(BUILD_DIR)/inverted_file_test
 
 test: host-test
 
