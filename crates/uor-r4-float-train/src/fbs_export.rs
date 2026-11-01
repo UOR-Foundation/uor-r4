@@ -494,9 +494,15 @@ pub fn round_tables_as_exported(model: &StackModel) -> Result<()> {
 /// whose `f32` spacing is its step or coarser is on the step already, and a
 /// finer one rounds to at most 24 significant bits. What the export or the
 /// integer read refuses is refused here, before any value changes: the type
-/// spin, a value that is not finite, a value past `i32` at its step, and a
-/// margin that rounds to 0 or below.
+/// spin, a value that is not finite, a value past `i32` at its step, a margin
+/// that rounds to 0 or below, and a read count other than one per depth.
 pub fn round_hamming_as_exported(reads: &HammingReads) -> Result<()> {
+    if reads.reads.len() != HAMMING_DEPTHS.len() {
+        return Err(invalid(format!(
+            "{} Hamming reads, not one at each depth of {HAMMING_DEPTHS:?}",
+            reads.reads.len()
+        )));
+    }
     let mut rounded = Vec::new();
     for (depth, read) in HAMMING_DEPTHS.iter().zip(&reads.reads) {
         if read.step_rotation.is_some() {
@@ -514,7 +520,10 @@ pub fn round_hamming_as_exported(reads: &HammingReads) -> Result<()> {
             let name = format!("hamming_read.d{depth}.{table}");
             let values = finite_table(&name, var.as_tensor().flatten_all()?.to_vec1::<f32>()?)?;
             let steps = |v: f32| (f64::from(v) * 2f64.powi(-exp)).round();
-            if let Some(i) = values.iter().position(|&v| steps(v).abs() > f64::from(i32::MAX)) {
+            if let Some(i) = values
+                .iter()
+                .position(|&v| steps(v).abs() > f64::from(i32::MAX))
+            {
                 return Err(invalid(format!(
                     "{name}[{i}] = {} overflows i32 at 2^{exp}, and the export refuses it",
                     values[i]
@@ -529,7 +538,10 @@ pub fn round_hamming_as_exported(reads: &HammingReads) -> Result<()> {
                     )));
                 }
             }
-            let values: Vec<f32> = values.into_iter().map(|v| fixed_value(v, exp) as f32).collect();
+            let values: Vec<f32> = values
+                .into_iter()
+                .map(|v| fixed_value(v, exp) as f32)
+                .collect();
             rounded.push((var, values));
         }
     }
@@ -925,7 +937,11 @@ mod tests {
         let mut rng = Lcg(235);
         let values = |var: &Var| var.flatten_all().unwrap().to_vec1::<f32>().unwrap();
         let all = |reads: &HammingReads| -> Vec<Vec<f32>> {
-            reads.reads.iter().flat_map(|read| hamming_tables(read).map(|(var, _)| values(var))).collect()
+            reads
+                .reads
+                .iter()
+                .flat_map(|read| hamming_tables(read).map(|(var, _)| values(var)))
+                .collect()
         };
         for read in &reads.reads {
             for (var, exp) in hamming_tables(read) {
@@ -938,27 +954,45 @@ mod tests {
                 random[0] = if margin { 3.5 } else { -3.5 } * 2f32.powi(exp);
                 // One past 1: three quarters of a margin step past 1, or a table value one f32
                 // spacing past 1, already on its 2^-24 step.
-                random[1] = if margin { 1.0 + 3.0 * 2f32.powi(exp - 2) } else { 1.0 + 2f32.powi(-23) };
+                random[1] = if margin {
+                    1.0 + 3.0 * 2f32.powi(exp - 2)
+                } else {
+                    1.0 + 2f32.powi(-23)
+                };
                 var.set(&Tensor::from_vec(random, var.shape(), &device)?)?;
             }
         }
         let before = all(&reads);
         round_hamming_as_exported(&reads)?;
         let after = all(&reads);
-        let exps = reads.reads.iter().flat_map(|read| hamming_tables(read).map(|(_, exp)| exp));
+        let exps = reads
+            .reads
+            .iter()
+            .flat_map(|read| hamming_tables(read).map(|(_, exp)| exp));
         let mut moved = 0;
         for ((old, new), exp) in before.iter().zip(&after).zip(exps) {
             let step = 2f64.powi(exp);
             for (&o, &n) in old.iter().zip(new) {
                 let (o, n) = (f64::from(o), f64::from(n));
                 assert_eq!((n / step).fract(), 0.0, "{n} is off its 2^{exp} step");
-                assert!((n - o).abs() <= step / 2.0, "{o} went to {n}, past its nearest 2^{exp} step");
+                assert!(
+                    (n - o).abs() <= step / 2.0,
+                    "{o} went to {n}, past its nearest 2^{exp} step"
+                );
                 moved += usize::from(o != n);
             }
             let away = if exp == HAMMING_MARGIN_EXP { 4.0 } else { -4.0 };
-            assert_eq!(new[0], away * 2f32.powi(exp), "half a step rounds away from 0");
+            assert_eq!(
+                new[0],
+                away * 2f32.powi(exp),
+                "half a step rounds away from 0"
+            );
             if exp == HAMMING_MARGIN_EXP {
-                assert_eq!(new[1], 1.0 + 2f32.powi(exp), "three quarters of a step past 1");
+                assert_eq!(
+                    new[1],
+                    1.0 + 2f32.powi(exp),
+                    "three quarters of a step past 1"
+                );
             } else {
                 assert_eq!(new[1], old[1], "on its step already");
             }
@@ -969,6 +1003,12 @@ mod tests {
 
         let spun = HammingReads::new(heads, width, &device)?.with_type_spin()?;
         assert!(round_hamming_as_exported(&spun).is_err());
+        let mut short = HammingReads::new(heads, width, &device)?;
+        short.reads.pop();
+        let err = round_hamming_as_exported(&short)
+            .expect_err("a read short")
+            .to_string();
+        assert!(err.contains("not one at each depth"), "{err}");
         // Each refusal comes before any value changes: the first read's values sit off their
         // steps, and the planted value is in the last read.
         for (table, at, value, text) in [
@@ -979,7 +1019,14 @@ mod tests {
             let planted = HammingReads::new(heads, width, &device)?;
             for (r, read) in planted.reads.iter().enumerate() {
                 for (k, (var, exp)) in hamming_tables(read).into_iter().enumerate() {
-                    let mut v = vec![if exp == HAMMING_MARGIN_EXP { 0.5 } else { 2f32.powi(exp - 2) }; var.elem_count()];
+                    let mut v = vec![
+                        if exp == HAMMING_MARGIN_EXP {
+                            0.5
+                        } else {
+                            2f32.powi(exp - 2)
+                        };
+                        var.elem_count()
+                    ];
                     if r + 1 == planted.reads.len() && k == table {
                         v[at] = value;
                     }
@@ -987,12 +1034,15 @@ mod tests {
                 }
             }
             let held = all(&planted);
-            let err = round_hamming_as_exported(&planted).expect_err(text).to_string();
+            let err = round_hamming_as_exported(&planted)
+                .expect_err(text)
+                .to_string();
             assert!(err.contains(text), "{err}");
-            let unchanged = all(&planted)
-                .iter()
-                .zip(&held)
-                .all(|(a, b)| a.iter().zip(b).all(|(x, y)| x == y || (x.is_nan() && y.is_nan())));
+            let unchanged = all(&planted).iter().zip(&held).all(|(a, b)| {
+                a.iter()
+                    .zip(b)
+                    .all(|(x, y)| x == y || (x.is_nan() && y.is_nan()))
+            });
             assert!(unchanged, "{text}: a value changed before the refusal");
         }
         Ok(())

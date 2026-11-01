@@ -524,7 +524,8 @@ fn kept_set(head: &HammingTraceHead, t: usize, most: usize) -> Result<Vec<u32>, 
     }
     let distance = |s: usize| (head.query[t] ^ head.key[s]).count_ones();
     if let Some(place) = set.iter().map(|&s| distance(s as usize)).max() {
-        let nearer = (1..t).find(|&s| distance(s) < place && set.binary_search(&(s as u32)).is_err());
+        let nearer =
+            (1..t).find(|&s| distance(s) < place && set.binary_search(&(s as u32)).is_err());
         if let Some(s) = nearer {
             return Err(format!(
                 "a member {place} bits from the query is kept and position {s}, {} bits, is not: these are not the codes the set was chosen with",

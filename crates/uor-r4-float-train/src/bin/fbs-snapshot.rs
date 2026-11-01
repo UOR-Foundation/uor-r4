@@ -32,7 +32,7 @@
 //! read file (the Flock, content and opening reads, the prompt register) is
 //! refused by name until its export exists.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use candle_core::Device;
 use sha2::{Digest, Sha256};
@@ -82,6 +82,19 @@ fn trace_arm(name: &str) -> Option<(bool, bool)> {
     }
 }
 
+/// Where an output that does not exist yet would be: its folder, resolved, and its name.
+fn output_place(path: &str) -> Result<PathBuf> {
+    let path = Path::new(path);
+    let folder = path
+        .parent()
+        .filter(|folder| !folder.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let name = path
+        .file_name()
+        .ok_or_else(|| FloatTrainError::Invalid(format!("{} names no file", path.display())))?;
+    Ok(std::fs::canonicalize(folder)?.join(name))
+}
+
 /// `--hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON` (claude-235).
 fn hamming_trace(arm: &str, model_dir: &str, readout: &str, trace: &str) -> Result<()> {
     let (tie, rounded) = trace_arm(arm).ok_or_else(|| {
@@ -90,8 +103,8 @@ fn hamming_trace(arm: &str, model_dir: &str, readout: &str, trace: &str) -> Resu
         ))
     })?;
     // Both outputs are refused before the GPU runs, so a run never leaves a readout without its
-    // trace.
-    if readout == trace {
+    // trace. They are compared by where they would be, so `./t.json` and `t.json` are one file.
+    if output_place(readout)? == output_place(trace)? {
         return Err(FloatTrainError::Invalid(format!(
             "D11_READOUT_JSON and TRACE_JSON are both {readout}"
         )));
@@ -208,4 +221,23 @@ fn main() -> Result<()> {
         )?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::output_place;
+
+    /// claude-235: two spellings of one output are one place, so the trace refuses them.
+    #[test]
+    fn two_spellings_of_one_output_are_one_place() {
+        assert_eq!(
+            output_place("./trace.json").unwrap(),
+            output_place("trace.json").unwrap()
+        );
+        assert_ne!(
+            output_place("readout.json").unwrap(),
+            output_place("trace.json").unwrap()
+        );
+        assert!(output_place("..").is_err(), "names no file");
+    }
 }
