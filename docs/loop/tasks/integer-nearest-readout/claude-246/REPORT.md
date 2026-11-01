@@ -16,7 +16,7 @@ R's decode speed is still claude-243's: a median of 1,204 tok/s decoding R s1 on
 - **R loses slightly in some strata, though every loss is inside its bound.** b − a is R's net loss: the positions only F′ gets right, less those only R gets right. The strata where it is above zero:
   - **DEV under teacher forcing:** +1, +6 and +2 per cell, and +9 of 12,441 pooled. DEV s2's Q2 is one of the tightest margins: a net loss of 6 against a bound of 20.
   - **DEV's pooled opening (Q3):** +2 of 852, so (b − a)² = 4 against 9V = 18.
-  - **p-w's cut windows under teacher forcing:** +12 of 4,254, so 144 against 468. This is as tight as DEV s2's Q2, or tighter, depending on the measure.
+  - **p-w's cut windows under teacher forcing:** +12 of 4,254, so 144 against 468. This is slightly tighter than DEV s2's Q2 on both measures: 144 of 468 is 0.31 of the bound against 0.30, and 12 against √468 ≈ 21.6 is 0.56.
   - **p-w s2 under teacher forcing:** +2 of 13,931.
   - **p-w s1's opening (Q3):** +1 of 1,067.
   - **Among the readings, which are not tested:** +1 at DEV s1's and s3's openings, and +1 on DEV's pooled cut windows under teacher forcing.
