@@ -7,7 +7,7 @@ Lab: claude. Item: [fbs-snap-sort](../../../../roadmap/items/fbs-snap-sort.md) (
 ## What did not work, first
 
 - **The snap is still the largest single kernel.**
-  - Under the same sampler, its share fell from 283 of 630 main-thread samples (45%) to 165 of 519 (32%).
+  - Under the same sampler, its share fell from 283 of 630 main-thread samples (45%) to 165 of 519 (32%). That is one sampled run a side: a reading, not a median.
   - Its own samples fell by 42%. The candidates it scores fell from 17 to 3 or 5, so the cost that is left is mostly not the scan.
   - This unit did not split that cost. Two likely parts:
     - each comparison's exact-sign branches (`snap_difference_positive`), plus the per-query setup;
@@ -125,7 +125,7 @@ There is no vector form and no `fmov` in the native build.
 
 | | Base | New |
 |---|---|---|
-| Decode, median of six (tok/s) | 4,915 | 6,480 |
+| Decode, median of six (tok/s) | 4,915 | 6,480 (6,479.5) |
 | Decode range | 4,645 – 4,958 | 6,282 – 6,495 |
 | Prefill, 128 tokens (tok/s) | 4,833 | 6,438 |
 | Step (µs) | 204.6 | 156.5 |
@@ -145,7 +145,7 @@ The two parts that run the snap account for the whole saving: 48.3 µs, against 
 
 The read now costs 20 to 24% of decode, against 16 to 20% at base, since the rest got cheaper.
 
-**The snap's share,** from `/usr/bin/sample` at 1 ms on a plain run of each binary, as in the cancel probe. These are the main thread's top-of-stack samples:
+**The snap's share,** from `/usr/bin/sample` at 1 ms on one plain run of each binary, as in the cancel probe. These are the main thread's top-of-stack samples, one run a side, so a reading rather than a median:
 
 | | Base | New |
 |---|---|---|
