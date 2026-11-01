@@ -141,7 +141,8 @@ It does not read the readout read's choices or the pick at any q < p. Their outp
   - for a rate bucket, one layer's buckets, and the value is the score's distance to its nearest interior boundary, d = min over k = 1 to 15 of |s − k/16|.
 - **G₁₀(φ, P)**, for family φ on side P, is the k-th smallest value of φ, with k = max(1, ⌊N/10⌋), where N counts every value of φ that P's trace records in the cell. Coordinates count as |v|, and zeros count.
   - It covers all the cell's traced rows, at every position the trace records.
-  - It is computed from P's unforced run only, in P's own f32 values. P, a step's reference side, is always F or T.
+  - It is computed from P's unforced run only, in P's own values as the decision reads them. P, a step's reference side, is always F or T.
+  - "As the decision reads them" matters when the GPU build stores activations in 16 bits (`act_t`, `cuda_stack.cu:62`). There, `rate_index_of` and the code's sign read the rounded value. The trace records that value, and the sheet names the build.
 - **A code difference is a near tie** when every bit that differs has |v_P| ≤ G₁₀(φ, P), where v_P is the coordinate's value on the step's reference side P.
 - **A rate-bucket difference is a near tie** when the two sides' entries are adjacent and P's score lies within G₁₀(φ, P) of the boundary between them: |s_P − b| ≤ G₁₀(φ, P), where b is that boundary. Entries two or more apart are never a near tie.
 - **A pick difference at p is a near tie** when the step's two sides each rank the two picks within G₁₀:
@@ -160,7 +161,7 @@ It does not read the readout read's choices or the pick at any q < p. Their outp
    - within a position: layer by layer, each layer's rate buckets in lane order and each read at its own depth, as `stack_step_fbs` runs them; then the readout read, then the turn memory, then the nearest;
    - within a read: heads in head order, and within a head, the query code, the key code, then the kept set.
 
-   The sheet registers this order with its file and lines at the unit's head, and I-Align checks it.
+   The sheet registers this order with its file and lines at the unit's head, and I-Align checks it. That includes where each stream read runs (`stack_step_fbs` calls `stream(l + 1, …)` in its layer loop), and a citation either way on whether any read sits at depth 0.
 2. Take the first decision in p's causal prefix where Q differs from P:
    - **a code or a rate bucket:** add it to Φ with P's value, record whether the difference is a near tie, and go back to 1;
    - **a kept set or a memory lookup:** the step is not accounted for, and the replay stops;
@@ -223,7 +224,8 @@ A position that cannot be traced is an instrument repair, never a fault: its row
 **Readings, which are not part of the bar:**
 - for each position: f, t and r; F's own margin at p; and each step's Φ, with the largest ratio of value to G₁₀(φ, P) among its decisions;
 - the set's split by step: structure only, arithmetic only, or both;
-- every decision difference outside the prefixes, counted by family.
+- every decision difference outside the prefixes, counted by family;
+- each rate family's G₁₀ against 1/32, the largest distance an interior score can have from its nearest boundary. A layer whose scores crowd at 0 or 1 can have a loose decile, and this shows it.
 
 **Q5 is read again for any other artifact or recipe,** as claude-245 set.
 
@@ -276,7 +278,20 @@ A position that cannot be traced is an instrument repair, never a fault: its row
   - Kept sets cite `choose`'s arguments.
   - "Windows" is defined as cell × row.
 
-Round 2: pending.
+**Round 2 (fresh context, claude-opus-5-5, 1 Nov): APPROVE.** The reviewer read the revision at `230cef2cb` against the code. Its findings:
+- **Every round-1 finding is resolved, and the four requirements hold.**
+- **It confirmed the following against the code:**
+  - the bucket's boundaries agree exactly: k/16 in f32 and k · 4096 at Q16;
+  - on both sides, the score only chooses the entry in the forward;
+  - the conversion's factor, 2^12 · 256 = 2^20;
+  - the readout payload's exclusion;
+  - the replay order in `stack_step_fbs`.
+- **It raised three minors, applied here as requirements on the sheet:**
+  - the values are judged as the decision reads them under a 16-bit `act_t` build;
+  - each rate family's G₁₀ is reported against 1/32;
+  - the sheet cites where each stream read runs, including whether any sits at depth 0.
+
+**Approved,** by the claude lab's top session after these two rounds (CHARTER §5.1, §5.2). It is logged on #3462 as `[claude] owner log:`, and Casey can reverse it.
 
 ## What a reversal costs
 
