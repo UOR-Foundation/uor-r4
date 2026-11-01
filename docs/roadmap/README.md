@@ -20,10 +20,10 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 22 |
+| ready | 21 |
 | held | 10 |
 | decision | 1 |
-| done | 91 |
+| done | 92 |
 | total | 124 |
 
 ## Start here
@@ -139,7 +139,6 @@ These items are ready and open to anyone.
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
 | [Bring every status page, picture and tracker up to 31 Oct 2026](items/docs-status-refresh.md) | ready | a lab | no | none | [#3380](https://github.com/UOR-Foundation/uor-r4/issues/3380) |
-| [Serve the Hamming read from the integer artifact on the laptop](items/integer-hamming-read.md) | ready | a lab | yes | [float-training-module](items/float-training-module.md), [spiralcore-fbs-offline-float-sheet](items/spiralcore-fbs-offline-float-sheet.md) | [#3385](https://github.com/UOR-Foundation/uor-r4/issues/3385) |
 | [Serve prompts and conversations past the 192-token window](items/integer-long-context.md) | ready | a lab | yes | [integer-hamming-read](items/integer-hamming-read.md) | [#3471](https://github.com/UOR-Foundation/uor-r4/issues/3471) |
 | [Serve the trained model's readout in the integer artifact](items/integer-nearest-readout.md) | ready | a lab | no | [integer-retention-rates](items/integer-retention-rates.md), [one-decoder](items/one-decoder.md) | [#3462](https://github.com/UOR-Foundation/uor-r4/issues/3462) |
 | [Score one model end to end on prompts it has not seen, with tokens per second](items/one-model-end-to-end.md) | ready | a lab | yes | [turn-memory-reply](items/turn-memory-reply.md) | [#3407](https://github.com/UOR-Foundation/uor-r4/issues/3407) |
@@ -163,6 +162,7 @@ These items are ready and open to anyone.
 | [An exact icosian snap by sorting, in place of the 17-candidate scan](items/fbs-snap-sort.md) | done | a lab | no | [fbs-serving-vector-kernel](items/fbs-serving-vector-kernel.md) | [#3470](https://github.com/UOR-Foundation/uor-r4/issues/3470) |
 | [Run a Hamilton gate offline-float sheet with language fit and export gap](items/hamilton-gate-offline-float-sheet.md) | done | a lab | yes | [float-training-module](items/float-training-module.md), [r-secant-surrogate-descent](items/r-secant-surrogate-descent.md) | [#2824](https://github.com/UOR-Foundation/uor-r4/issues/2824) |
 | [Train the FBS trunk in its own space until its replies read their prompts](items/in-space-trunk-to-text.md) | done | a lab | yes | [float-training-module](items/float-training-module.md), [spiralcore-fbs-offline-float-sheet](items/spiralcore-fbs-offline-float-sheet.md) | [#3384](https://github.com/UOR-Foundation/uor-r4/issues/3384) |
+| [Serve the Hamming read from the integer artifact on the laptop](items/integer-hamming-read.md) | done | a lab | yes | [float-training-module](items/float-training-module.md), [spiralcore-fbs-offline-float-sheet](items/spiralcore-fbs-offline-float-sheet.md) | [#3385](https://github.com/UOR-Foundation/uor-r4/issues/3385) |
 | [Serve with the hardware integer multiply and divide (D80, D81), exactly](items/integer-mul-div-serving.md) | done | a lab | no | [fbs-serving-kernels](items/fbs-serving-kernels.md) | [#3386](https://github.com/UOR-Foundation/uor-r4/issues/3386) |
 | [Serve the recurrence's retention reading in the integer artifact](items/integer-retention-rates.md) | done | a lab | yes | [d11-exporter-float-trunk](items/d11-exporter-float-trunk.md) | [#3456](https://github.com/UOR-Foundation/uor-r4/issues/3456) |
 | [Solve the saved legal-construction case in exact arithmetic](items/legal-construction-exact-solve.md) | done | anyone | no | none | [#2828](https://github.com/UOR-Foundation/uor-r4/issues/2828) |
