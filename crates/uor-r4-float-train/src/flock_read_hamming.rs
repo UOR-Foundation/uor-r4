@@ -184,9 +184,9 @@ pub fn hamming_reads() -> Option<HammingReads> {
 
 /// claude-235: break the read's ties as the integer session does, by ascending bit distance and
 /// then ascending position, for the forward passes that follow on this thread
-/// ([`choose_sorted`]). On is the default since claude-239, so the trainer and every float
-/// reference keep the sets the integer session keeps. Off, the sort's own tie order stands: on
-/// CUDA a bitonic sort's, which leaves the order of equal keys open.
+/// ([`choose_sorted`]). On is the default since claude-239, so wherever the float read
+/// runs it keeps the sets the integer session keeps, unless turned off. Off, the sort's own tie
+/// order stands: on CUDA a bitonic sort's, which leaves the order of equal keys open.
 pub fn set_hamming_tie_rule(on: bool) {
     TIE.with(|t| t.set(on));
 }
@@ -1045,7 +1045,8 @@ mod tests {
         let (time, width, kept) = (40, 64, HAMMING_KEPT);
         // Few distinct codes, so many candidates tie at every distance. claude-239: each
         // coordinate is ±1 only to its last bit, as the read's straight-through `p + (bits − p)`
-        // can leave it, and the rule must see past that.
+        // can leave it, so the rule runs on noisy codes. At this noise no key moves by ½, so
+        // this does not pin `.round()`.
         let noise = [1.0 - f32::EPSILON / 2.0, 1.0, 1.0 + f32::EPSILON];
         let code = |r: usize| -> Vec<f32> {
             let pattern = (r * 7) % 5;

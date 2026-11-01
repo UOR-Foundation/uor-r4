@@ -106,8 +106,8 @@ It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-
        - **The tests:**
          - CUDA test A runs a real `read()` with planted ties, checked against the host's nearest 16 by (bits, `s`). It fails with the default off and with the read's wiring off.
          - Test B, now on codes with last-bit noise, fails with `choose_sorted`'s tie branch removed.
-         - 44 CUDA tests pass restored. A's off run keeps a different set in 307 of 512 rows.
-       - **Checkpoints trained before this unit** learned under the sort's order, so for them the forward as trained is the `d11` arm.
+         - Restored, the 44 `flock_read_hamming::` and `fbs_export::` tests pass with `--features cuda`. A's off run keeps a different set in 307 of 512 rows.
+       - **Checkpoints trained before this unit** trained with the rule off (claude-146's `choose_sorted` is one arg-sort). The `d11` arm turns the rule off; it is not shown to reproduce their training forward exactly.
        - **Next:** the bars on claude-146's checkpoints and on DEV, with the default on (done-when 2). That needs a prep sheet, its FIT and a pre-run review.
   6. the speed.
 

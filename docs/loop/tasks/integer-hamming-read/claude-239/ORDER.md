@@ -25,12 +25,12 @@ claude-238 (#3478, `fe1619192`) put the read's float forward on its trained path
 **The change, in `flock_read_hamming.rs` and `fbs-snapshot.rs` only.**
 - **`TIE` defaults to on.** Ties then break by ascending bit distance, then ascending `s`, on every thread unless `set_hamming_tie_rule(false)` turns them off.
   - The read's codes are ±1 forward, `p + (bits − p).detach()`, so `round(mean|q − k| · width / 2)` removes only the codes' last-bit noise. Only the order among equal distances changes.
-  - The selection is detached, so no gradient moves.
+  - The selection is detached, so no gradient flows through the choice itself. *Amended after review:* a different kept set still changes the forward and its gradients wherever a tie crosses the 16th place.
   - `tie_keys_exact` already refuses a head whose keys would pass 2^24.
 - **The docs** of `set_hamming_tie_rule`, `choose_sorted` and `fbs-snapshot`'s trace arms say the new default. `d11` and `d11-rounded` are now the explicit off arms, the sort's own order, kept so a later trace can still measure the gap.
 - **The CPU test** `the_trace_and_the_tie_rule_start_off` becomes "the trace starts off and the tie rule on".
 - **CUDA test A (new):** a real `read()` with planted ties and the trace on, at the default. Every traced kept set must equal the 16 nearest by (bits, `s`), computed on the host from the traced codes. It also runs with the rule off, to show that the plant ties across the 16th place and that the sort's own order breaks some of those ties against the rule. Without that, A could pass on a read with no ties to break.
-- **CUDA test B** (`the_tie_rule_keeps_the_integer_sessions_order`, existing) gets its first set-aside run. Its codes get last-bit noise, so the test also covers the noise that `.round()` exists for.
+- **CUDA test B** (`the_tie_rule_keeps_the_integer_sessions_order`, existing) gets its first set-aside run. Its codes get last-bit noise, so the rule runs on noisy codes. *Amended after review:* at this noise no key moves by ½, so the test does not pin `.round()`.
 
 ## Cancel probe (run first)
 
