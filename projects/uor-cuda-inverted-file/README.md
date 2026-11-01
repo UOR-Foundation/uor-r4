@@ -85,7 +85,7 @@ Do not infer any of the following without a later registered measurement:
 - A comparison with Faiss or another library.
 - Any language-model or useful-conversation capability.
 
-Matched kernel/API/end-to-end measurements exist for RTX 5090/driver 580.178.04 and RTX 4090/driver 615.78.08, with raw manifests in `docs/labs/uor-cuda-inverted-file/`. Energy, other architectures/drivers, and cross-library comparisons are **NOT_RUN**. External independent replication and public release remain separate gates.
+The summary is in `docs/labs/uor-cuda-inverted-file/`; raw manifests and per-run logs are in the linked retained run roots and Hugging Face commits. Earlier measurements are being recollected after review found a full-scan publication race and benchmark warmup/oracle defects. No performance result is currently accepted. Energy, other architectures/drivers, and cross-library comparisons are **NOT_RUN**. External independent replication and public release remain separate gates.
 
 ## Before a public release
 

@@ -47,3 +47,9 @@ Attempt 2 at `3fd8408f2` passed all 504 correctness rows but stopped before timi
 ## Separate architecture FIT: RTX 4090
 
 **TEST FITNESS: FIT**, non-author, 2026-11-01. Exact source head: `7badaf6ccd18fd4ec8768a197b84347c2f138795`. Scope: one RTX 4090, compute capability 8.9, `UOR_NVCC_ARCH=compute_89` (`sm_89`), one driver release and one CUDA 12.8 toolkit captured in `gpu-info.txt` and `nvcc-info.txt`; the same V/K grid, fixed query seed 7, warmup 3 plus 10 retained repetitions, three scopes, 240 JSONL records and 504-row correctness evidence in new root `cuda-performance-4`. The 5090 evidence at `local/kimi/cuda-performance-3` and HF `c2cec27d7a9b3b9da3835fdf01403b0a0ef3a66b` is sealed and untouched. Verify `.target sm_89`, retain the emitted module and flag/identity logs, and report only a separate card row: no cross-card ratio, portability claim, release claim, or additional external replication is licensed. Any source change requires a new pushed head and FIT.
+
+## Rejected measurement attempt and required recollection
+
+The exact-head performance review rejected both first measurement runs: all threads could publish full-scan prediction/status after only thread 0 finished ranking, complete-caller warmup was skipped, and the persistent kernel oracle was checked only after the whole loop. The independent third-driver run has the same defect. Those records are retained as **REJECTED_DEFECTIVE_RACE_AND_BENCHMARK_PROTOCOL**, not valid performance evidence. The clean-consumer host check remains valid.
+
+The repair confines prediction/status publication to thread 0, checks every launch's result against the oracle after synchronization, and executes the complete-caller path during every warmup iteration. A new pushed head and FIT are required before any corrected measurement; both cards must be rerun with the 504-row gate and all 240 records. No current performance or release claim is accepted.

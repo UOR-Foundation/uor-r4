@@ -233,6 +233,8 @@ extern "C" __global__ void uor_if_full_scan(
     if (threadIdx.x == 0) admit_cells(roots, query, offsets, row, k, admitted);
     __syncthreads();
     rank_full_scan(roots, table, count, query, k, admitted + row * 16, top8 + row * 8);
-    predictions[row] = top8[row * 8];
-    status[row] = predictions[row] == ABSENT ? 1 : 0;
+    if (threadIdx.x == 0) {
+        predictions[row] = top8[row * 8];
+        status[row] = predictions[row] == ABSENT ? 1 : 0;
+    }
 }

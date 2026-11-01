@@ -312,7 +312,8 @@ bool same_result(const ScanResult& a, const ScanResult& b) {
 Status benchmark_kernel(const Table& table, const Query& query, std::uint32_t k,
                         const Index& index, bool full_scan, std::uint32_t warmup,
                         std::uint32_t repetitions, std::vector<double>& kernel_ms,
-                        BenchmarkMeasurement& resources, ScanResult& result) {
+                        BenchmarkMeasurement& resources, ScanResult& result,
+                        const ScanResult& oracle) {
     if (validate(table, index) != Status::Ok) return Status::CsrInvariant;
     Session session;
     auto status = open(session);
@@ -379,6 +380,13 @@ Status benchmark_kernel(const Table& table, const Query& query, std::uint32_t k,
             return Status::CudaFailure;
         }
         status = synchronize();
+        if (status != Status::Ok) return status;
+        if ((status = read(&kernel_status, status_d)) != Status::Ok) return status;
+        if (kernel_status != 0) return status_from_kernel(kernel_status);
+        if ((status = read(&result.prediction, predictions_d)) != Status::Ok ||
+            (status = read(result.admitted.data(), admitted_d)) != Status::Ok ||
+            (status = read(result.top8.data(), top8_d)) != Status::Ok) return status;
+        if (!same_result(result, oracle)) return Status::CudaFailure;
         float elapsed = 0;
         const auto elapsed_status = cuEventElapsedTime(&elapsed, start, end);
         cuEventDestroy(start);
@@ -408,7 +416,7 @@ Status benchmark_scan(const Table& table, const Query& query, std::uint32_t k,
     std::vector<double> kernel_ms;
     ScanResult gpu_result;
     status = benchmark_kernel(table, query, k, index, full_scan, warmup, repetitions,
-                              kernel_ms, resources, gpu_result);
+                              kernel_ms, resources, gpu_result, oracle);
     if (status != Status::Ok) return status;
     if (!same_result(gpu_result, oracle) || kernel_ms.size() != repetitions) return Status::CudaFailure;
     for (std::uint32_t iteration = 0; iteration < warmup + repetitions; ++iteration) {
@@ -419,7 +427,19 @@ Status benchmark_scan(const Table& table, const Query& query, std::uint32_t k,
         const auto direct_ms = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - direct_start).count();
         if (!same_result(result, oracle)) return Status::CudaFailure;
-        if (iteration < warmup) continue;
+        if (iteration < warmup) {
+            if (full_scan) {
+                status = uor_inverted_file::cuda::full_scan(table, query, k, result);
+            } else {
+                Index warmup_built;
+                status = uor_inverted_file::build(table, warmup_built);
+                if (status == Status::Ok) {
+                    status = uor_inverted_file::cuda::probe(table, query, k, warmup_built, result);
+                }
+            }
+            if (status != Status::Ok || !same_result(result, oracle)) return Status::CudaFailure;
+            continue;
+        }
         const auto end_start = std::chrono::steady_clock::now();
         if (full_scan) {
             status = uor_inverted_file::cuda::full_scan(table, query, k, result);

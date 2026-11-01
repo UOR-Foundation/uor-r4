@@ -6,10 +6,11 @@ Lab: kimi. Item: #3475. Order: [ORDER.md](ORDER.md). Measured source: `7badaf6cc
 
 - FIT reviews rejected the first design for incorrect parallelization, cold-context timing, mismatched build work, missing oracle/index checks, and incomplete identity evidence. No timing was credited to those designs.
 - Attempt 1 at `5bc7c547e` stopped on an ambiguous CPU/CUDA `probe` call before correctness. Attempt 2 at `3fd8408f2` passed 504 correctness rows but stopped when the hash helper treated normal EOF as an error. Both failures were archived and the pods deleted; no timing was credited. `7badaf6cc` fixed those issues and passed the final FIT.
+- **The measurements below are rejected, not valid performance evidence.** Exact-head review found a cross-thread prediction/status publication race, missing complete-caller warmups, and a final-only kernel oracle check. The independent third-driver run shares the defect and is rejected too. The clean-consumer host check remains valid. Corrected runs are required at a new head with every launch checked and every scope warmed.
 - This is a fixed grid, not a general exact-kNN, portability, energy, cross-library, or release result. The >4096 serial fallback, other V/K, other architectures/drivers, concurrent kernels, and external replication beyond the currently running independent check remain unclaimed.
 - Kernel-only medians are not end-to-end speedups. Direct API and complete-caller scopes are dominated by context/module/transfer overhead, so a kernel advantage is mostly invisible at those scopes.
 
-## Measured evidence
+## Rejected measurement attempt
 
 At the same source, both cards passed all 504 correctness rows, every GPU/fresh-CPU index comparison, and every configuration's oracle check. Each produced 240 raw JSONL records with warmup 3 plus 10 retained repetitions, three timing scopes, fixed query seed 7, and a manifest binding source, module, hardware logs, correctness rows, and raw-file hashes.
 

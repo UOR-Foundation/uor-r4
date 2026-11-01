@@ -13,13 +13,13 @@ This record covers a new standalone CUDA C++17 package in `projects/uor-cuda-inv
 - Two repeated host runs and one clean-copy run produced identical test output, SHA-256 `7b6f674abcef33a37753de8aac6000ff1584e983ebeb4eb35fc67bf5d45d5e7d`.
 - Clean-copy host build required no UOR-R4 checkout or external dependency.
 - Separately, one RTX 5090 passed AOT/CUDA correctness at `18a1c8ad7`: 504/504 rows in each of three byte-identical executions, with identical module hashes after a clean rebuild. See [GPU results](gpu-sm120-results.json).
-- Matched performance at `7badaf6cc` is measured on RTX 5090/580.178.04 and RTX 4090/615.78.08: 504 correctness rows and 240 measurements per card, with all oracle/index checks passing. See [performance results](gpu-performance-results.json). External replication is in progress.
+- The first two-card performance measurements at `7badaf6cc` were rejected for a publication race and benchmark protocol defects. See [rejected evidence](gpu-performance-results.json). A host-only clean-consumer check passed; corrected GPU replication is required.
 
 [Machine-readable host results](host-results.json) and [package results](../../../projects/uor-cuda-inverted-file/RESULTS.md) carry the exact commands and limitations.
 
 ## NOT_RUN
 
-On the laptop, `nvcc` is unavailable, so local AOT/CUDA execution is **NOT_RUN**. The separate RTX 5090 correctness result above is limited to its named source/card/grid. GPU timing, tuned comparisons, additional architectures/drivers, energy, cross-library comparison, and external replication remain **NOT_RUN**.
+On the laptop, `nvcc` is unavailable, so local AOT/CUDA execution is **NOT_RUN**. The separate RTX 5090 correctness result above is limited to its named source/card/grid. Corrected performance replication, additional architectures/drivers, energy, and cross-library comparison remain **NOT_RUN**.
 
 ## Provenance
 
