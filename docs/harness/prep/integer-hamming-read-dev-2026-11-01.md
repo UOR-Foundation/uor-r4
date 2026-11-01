@@ -157,22 +157,22 @@ The single tokens reach no read, so their agreement is reported only.
      - each of the six saved fingerprints (five plans and the vector head's 8/8 `geometry`) is this build's plan with only the kernel's hash put back;
      - the copy then loads, with every check `StackModel::load` makes.
 
-     Then the job checks that the copy's tensors and run config are the pinned files byte for byte; that it holds 4 files; and that its step config is the checkpoint's with exactly the six printed fingerprints replaced.
-   - **The Gate R half, read on the laptop.** Two inspections are held to claude-146's sealed inspection at step 16,384, over all 14,287 of DEV's scored rows, field by field over the sealed line's own 20 fields. Fields the head's inspection gained after claude-146 are not compared.
+     Then the job checks that the copy's tensors and run config are the pinned files byte for byte; that it holds 4 files; and that its step config is the checkpoint's with exactly the six printed fingerprints replaced. That replay checks that nothing else changed, not that each new fingerprint is right; only the tool's own load of the copy checks that.
+   - **The Gate R half, read on the laptop.** Two inspections are held to claude-146's sealed inspection at step 16,384, over all 14,287 of DEV's scored rows, field by field over the sealed line's own 22 fields, nulls included. Two of them, `flock_weight_mean_abs` and `content_weight_mean_abs`, are null in the sealed line, since neither the Flock read nor the content read is set; each inspection must report null there too. Fields the head's inspection gained after claude-146 are not compared.
      - **H:** the copy's inspection as trained, at this head.
      - **C, the control:** claude-146's own build, `train-in-space` at `df1d7892`, inspecting the original checkpoint with claude-146's command. It loads there unchanged. C only classifies a miss of H, so a C that does not build or run is recorded and the job goes on.
-     - **The counts:** `scored_rows`, `top1_hits`, `nearest.hits`, `nearest.opening_rows`, `nearest.opening_hits`, `nearest.commonest_opening_rows`, `nearest.opening_distinct_picks`, `admitted_hits`, `token_unviolated_hits`, `probe_rows` and `distinct_first_cells`. The other nine fields are floats (margins, spreads, means) and a string.
+     - **The counts:** `scored_rows`, `top1_hits`, `nearest.hits`, `nearest.opening_rows`, `nearest.opening_hits`, `nearest.commonest_opening_rows`, `nearest.opening_distinct_picks`, `admitted_hits`, `token_unviolated_hits`, `probe_rows` and `distinct_first_cells`. The other eleven fields are floats (margins, spreads, means), the two nulls and a string.
    - **The rows, per seed, read in order:**
 
      | Row | H | C | The seed |
      |---|---|---|---|
      | holds | every field equal | (recorded) | the copy is the checkpoint as claude-146 evaluated it |
-     | holds on counts | every count equal, a float differs | every count equal, a float differs | holds; the pod's floats do not reproduce claude-146's own build either. The REPORT says so |
+     | holds on counts | every count equal, a float differs | every count equal, a float differs | holds; the pod's floats do not reproduce claude-146's own build either. The REPORT says so, and says whether H's floats equal C's on the same pod |
      | 0, the head | otherwise | every count equal, and H differs in a count; or every field equal | row 0: this head's forward or evaluator differs from claude-146's build. `inspect_run` itself has changed since `df1d7892`, so a decision review classifies which |
      | 0, unclassified | otherwise | a count differs, or C did not run | row 0: the pod or the build. The control is repeated on another pod |
 
    - **Every seed is held to it.** "Meets" is at all three seeds (§3), so a seed in a row 0 means no parity call. Its numbers, and the other seeds', are still computed and reported as readings.
-   - **The rule:** the REPORT says whether H's line and the inspection under the rule differ. If they are equal, DEV has no tie that moves the inspection, and the gate cannot see which rule ran. The rule is then pinned only by `I-GPU-Tests` and the form's own test.
+   - **The rule:** the REPORT says whether H's line and the inspection under the rule differ (unknown if either line is missing). If they are equal, DEV has no tie that moves the inspection, and the gate cannot see which rule ran. The rule is then pinned only by `I-GPU-Tests` and the form's own test.
    - **What the class rests on:** the static half proves only that the copy is the checkpoint, byte for byte, with the forward kernel's text unchanged. The Hamming read's Rust forward and the native stack have changed since `df1d7892`: hooks that are off unless set, an `as_trained` path, and the tie rule. That the copy computes claude-146's forward at this head rests on H and C, not on the rebind.
    - **The sealed inspections' pins** are claude-146's seal lines (§5).
 
@@ -291,6 +291,8 @@ It read the sheet, `fbs-snapshot.rs`, `fbs_export.rs`, `hamilton_sheet.rs`, `flo
 
 **Left for the pre-run review:** `fbs-compare --parity-only` on DEV's variable-length sequences (that d counts sequence positions only), and the `fbs-toks` command forms.
 
+**Attempt 2's delta: FIT** (claude, a fresh reviewer, 1 Nov, at `de83faabf`, with decision round 2, §11). It read §4.10's `I-Rebind`, the amended §2, §5, §6 and §8, and `read.sh`'s Gate R half.
+
 ## 10. Pre-run review
 
 **PASS** (claude, 1 Nov, at `5ab73fc01`). Two fresh read-only reviewers, neither of which wrote the sheet or the scripts, each took one side.
@@ -324,6 +326,14 @@ It read the sheet, `fbs-snapshot.rs`, `fbs_export.rs`, `hamilton_sheet.rs`, `flo
 - Each row of §3 names what it unlocks.
 - `uor-pod status`, 1 Nov: 0 pods, $0/h of $8/h; a 5090 at $0.563/h, 2 h leased, `--count 1`.
 
+**Attempt 2's delta: PASS** (claude, 1 Nov, at `de83faabf`). A fresh read-only reviewer that wrote neither the scripts nor the tool took the job's new steps against `fbs-snapshot.rs`, `inspect_run` at `df1d7892`, claude-146's job log and sealed inspection, and `read.sh`. No blocker, no major.
+- The two new forms' parses, and the job's grep and sed, match the tool's prints byte for byte. The control's command is claude-146's, apart from its paths.
+- Every failure path seals through `end()`. A failed control is only recorded.
+- **Its minor findings:**
+  - the sed replay checks that nothing else changed, not each new fingerprint (§4.10 now says so);
+  - the tie-rule setting is seen on the pod only through `rule_changes_the_line`, which §4.10's "The rule" already reports;
+  - the control is a cold CUDA build, a guess of 5 to 15 minutes, still well inside the 2-hour lease.
+
 ## 11. Attempt 1, and the decision review
 
 **Attempt 1 (1 Nov, at `50a824385`): row 0, an instrument fault, before any measurement.**
@@ -338,3 +348,9 @@ It read the sheet, `fbs-snapshot.rs`, `fbs_export.rs`, `hamilton_sheet.rs`, `flo
   2. *Major:* `inspect_run` has changed since `df1d7892`, and the pod could be the cause, so a miss is classified with a control: claude-146's own build on the original checkpoint, on the same pod. Each seed has its own row.
   3. *Minor:* the static half proves only the copy and the forward kernel's text. That the copy computes claude-146's forward rests on H and C.
   4. *Minor:* the gate cannot see the rule if DEV has no tie that moves the inspection, so the REPORT says whether the two inspections differ.
+- **Round 2 (at `de83faabf`): APPROVE, and the delta FIT: FIT.** A fresh reviewer found all four findings fixed. It enumerated the 16 pairs of H and C (all equal, a float differs, a count differs, missing) and found that each falls in exactly one row read top-down, as the jq in `read.sh` does. It checked the three sealed pins against the seal, and attempt 1's facts against its stored log. Its three minor findings, each applied here and in `read.sh`:
+  1. the comparison skipped the sealed line's two null fields. It now compares all 22, nulls included (§4.10);
+  2. in the row "holds on counts", the REPORT also says whether H's floats equal C's, which `read.sh` records as `as_trained_against_control`;
+  3. a missing tie-rule line now reads as unknown, not as "the rule changes the line".
+
+  On eight synthetic cases plus one with a changed null field, the edited jq gives the intended row. The changed null field now lands in 0-head, where the old jq passed it.
