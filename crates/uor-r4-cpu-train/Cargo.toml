@@ -1,0 +1,15 @@
+[package]
+name = "uor-r4-cpu-train"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Isolated CPU development trainers for the UOR-R4 geometric model"
+publish = false
+
+[dependencies]
+rayon = "1.10"
+uor-r4-discrete = { path = "../uor-r4-discrete" }
+
+[[bin]]
+name = "cpu-writer-bench"
+path = "src/bin/cpu-writer-bench.rs"
