@@ -1,6 +1,6 @@
 # ORDER: authorize and register the CPU training repair program, deepseek-1
 
-Lab: deepseek. Item: `cpu-training-program`. Base: `381ae4d98` from fresh `origin/main`.
+Lab: deepseek. Item: [cpu-training-program](../../../../roadmap/items/cpu-training-program.md) (#3507). Base: `381ae4d98` from fresh `origin/main`.
 
 ## Goal
 
