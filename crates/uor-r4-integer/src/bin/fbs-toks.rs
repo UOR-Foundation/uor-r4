@@ -56,6 +56,14 @@
 //! is fed one token at a time, and each offset records the pick, the whole writer table's
 //! runner-up and both scores at Q12. It refuses a point-key artifact and one whose head is not
 //! the nearest one, and writes the rows new to `FILE`.
+//!
+//! Q5's trace, the integer side R (claude-249), both options of `--forced`:
+//! - `--decision-trace TRACE_JSON` writes, new, every decision of claude-247's five kinds at each
+//!   step of each row run (`uor-r4.decision-trace/1`, side `R`): each layer's rate buckets and
+//!   the read after it, the readout read, the turn memory's lookup, and from the prompt's last
+//!   step on the nearest, with R's Q12 query. The session refuses an artifact off R's path.
+//! - `--force FORCE_JSON` (`uor-r4.decision-force/1`) runs only the rows it names, each under
+//!   its own forced rate buckets and codes. The rows written keep `--forced`'s format.
 
 use std::process::{Command, ExitCode};
 use std::time::Instant;
@@ -63,15 +71,17 @@ use std::time::Instant;
 use serde::Deserialize;
 use serde_json::json;
 use uor_r4_integer::fbs_snapshot::{
-    compare_hamming_traces, copy_code_check, copy_code_reads, write_new_file, FbsFloatReadout,
-    FbsReadoutMode, HammingTrace, COPY_CODES_SCHEMA, HAMMING_TRACE_SCHEMA,
+    compare_hamming_traces, copy_code_check, copy_code_reads, write_new_file, DecisionForce,
+    DecisionForceWindow, DecisionNearest, DecisionStep, DecisionTrace, DecisionWindow,
+    FbsFloatReadout, FbsReadoutMode, HammingTrace, COPY_CODES_SCHEMA, DECISION_FORCE_SCHEMA,
+    DECISION_TRACE_SCHEMA, HAMMING_TRACE_SCHEMA,
 };
 use uor_r4_integer::stack::{
     hamming_trace_window, panel_reply, read_hamming_uorlut01, served_copy_codes_uorlut01,
     IntegerStackModel, ReplyEnd,
 };
 
-const USAGE: &str = "usage: fbs-toks ARTIFACT [--prompt ID,ID,...] [--stages] [--parts]\n       fbs-toks ARTIFACT --replies PROMPTS_JSON --out FILE [--reply-tokens N]\n       fbs-toks ARTIFACT --forced PROMPTS_JSON --out FILE\n       fbs-toks ARTIFACT --hamming-trace D11_READOUT_JSON TRACE_JSON\n       fbs-toks --hamming-trace-compare FIRST_TRACE SECOND_TRACE\n       fbs-toks ARTIFACT --copy-codes FLOAT_TRACE INTEGER_TRACE OUT_JSON\n       fbs-toks ARTIFACT --context-sweep [--tokens TOKENS_U16]";
+const USAGE: &str = "usage: fbs-toks ARTIFACT [--prompt ID,ID,...] [--stages] [--parts]\n       fbs-toks ARTIFACT --replies PROMPTS_JSON --out FILE [--reply-tokens N]\n       fbs-toks ARTIFACT --forced PROMPTS_JSON --out FILE [--decision-trace TRACE_JSON] [--force FORCE_JSON]\n       fbs-toks ARTIFACT --hamming-trace D11_READOUT_JSON TRACE_JSON\n       fbs-toks --hamming-trace-compare FIRST_TRACE SECOND_TRACE\n       fbs-toks ARTIFACT --copy-codes FLOAT_TRACE INTEGER_TRACE OUT_JSON\n       fbs-toks ARTIFACT --context-sweep [--tokens TOKENS_U16]";
 
 /// The prefills `--context-sweep` times, each followed by `DECODE` steps (claude-235).
 const SWEEP_PREFILLS: [usize; 4] = [32, 64, 96, 128];
@@ -370,15 +380,20 @@ struct Forced {
     score_q12: Vec<i64>,
     runner_score_q12: Vec<i64>,
     capped: bool,
+    /// Under a decision trace (claude-249), each step's decisions, the nearest filled in from the
+    /// prompt's last step on.
+    steps: Option<Vec<DecisionStep>>,
 }
 
 /// `prompt` stepped as `panel_reply` steps it, then the `reference` fed one token at a time
 /// (claude-244). Offset 0 reads the step after the prompt's last token; offset `i` the step after
-/// `reference[i - 1]`. Each offset's pick must be the whole table's nearest row.
+/// `reference[i - 1]`. Each offset's pick must be the whole table's nearest row. Under `force`
+/// the session records its decisions and forces those `force` names (claude-249).
 fn forced_picks(
     model: &IntegerStackModel,
     prompt: &[u32],
     reference: &[u32],
+    force: Option<&DecisionForceWindow>,
 ) -> Result<Forced, String> {
     let (vocab, context) = (model.shape().vocab, model.shape().context);
     if prompt.is_empty() || prompt.len() > context {
@@ -396,6 +411,11 @@ fn forced_picks(
         return Err(format!("token {t} is outside the vocabulary {vocab}"));
     }
     let mut session = model.session();
+    if let Some(force) = force {
+        session
+            .set_decision_trace(force)
+            .map_err(|e| format!("the decision trace: {e}"))?;
+    }
     let mut step = None;
     for (row, &token) in prompt.iter().enumerate() {
         if row + 1 == prompt.len() {
@@ -410,7 +430,9 @@ fn forced_picks(
         score_q12: Vec::with_capacity(n),
         runner_score_q12: Vec::with_capacity(n),
         capped: reference.len() > n,
+        steps: None,
     };
+    let mut queries = Vec::with_capacity(if force.is_some() { n } else { 0 });
     for i in 0..n {
         if i > 0 {
             step = session
@@ -430,8 +452,70 @@ fn forced_picks(
         forced.runner_up.push(top[1].0);
         forced.score_q12.push(top[0].1);
         forced.runner_score_q12.push(top[1].1);
+        if force.is_some() {
+            queries.push(step.query_q12.clone());
+        }
+    }
+    if force.is_some() {
+        let mut steps = session
+            .take_decision_trace()
+            .ok_or("the decision trace is off")?;
+        let first = prompt.len() - 1;
+        if steps.len() != first + n {
+            return Err(format!(
+                "the decision trace holds {} steps, not {}",
+                steps.len(),
+                first + n
+            ));
+        }
+        for (i, query_q12) in queries.into_iter().enumerate() {
+            steps[first + i].nearest = Some(DecisionNearest {
+                pick: forced.picks[i],
+                score_q12: forced.score_q12[i],
+                runner_up: forced.runner_up[i],
+                runner_score_q12: forced.runner_score_q12[i],
+                query_q12,
+            });
+        }
+        forced.steps = Some(steps);
     }
     Ok(forced)
+}
+
+/// `--force`'s file at `path` (claude-249), read by [`force_windows`].
+fn read_force(
+    path: &str,
+    rows: &[PanelPrompt],
+) -> Result<std::collections::BTreeMap<usize, DecisionForceWindow>, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+    force_windows(&bytes, rows).map_err(|e| format!("{path}: {e}"))
+}
+
+/// A `uor-r4.decision-force/1` file's forced sets by their rows' positions (claude-249).
+/// Refused: a file of another schema, a position named twice, and one that names no row of
+/// `rows`.
+fn force_windows(
+    bytes: &[u8],
+    rows: &[PanelPrompt],
+) -> Result<std::collections::BTreeMap<usize, DecisionForceWindow>, String> {
+    let file: DecisionForce = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
+    if file.schema != DECISION_FORCE_SCHEMA {
+        return Err(format!(
+            "the schema is {}, not {DECISION_FORCE_SCHEMA}",
+            file.schema
+        ));
+    }
+    let mut windows = std::collections::BTreeMap::new();
+    for window in file.windows {
+        let position = window.position;
+        if !rows.iter().any(|r| r.position == position) {
+            return Err(format!("position {position} names no prompt"));
+        }
+        if windows.insert(position, window).is_some() {
+            return Err(format!("position {position} is named twice"));
+        }
+    }
+    Ok(windows)
 }
 
 /// One `--forced` output row (claude-244).
@@ -446,27 +530,73 @@ fn forced_row(position: usize, forced: &Forced) -> serde_json::Value {
 }
 
 /// `--forced` (integer-nearest-readout, claude-244): each panel prompt's teacher-forced top two on
-/// a nearest-head artifact (`forced_picks`), written new to `out` as a JSON array of rows. It
-/// prints one JSON line: rows, offsets read, capped rows and the file's sha256.
-fn forced(model: &IntegerStackModel, prompts: &str, out: &str) -> Result<(), String> {
+/// a nearest-head artifact (`forced_picks`), written new to `out` as a JSON array of rows. Under
+/// `trace` (claude-249) it also writes, new, each row's decisions as R's `uor-r4.decision-trace/1`;
+/// under `force`, the `uor-r4.decision-force/1` file there, it runs only the rows that file
+/// names, each under its own forced set. It prints one JSON line: rows, offsets read, capped rows,
+/// the time per row in microseconds, and each file's sha256.
+fn forced(
+    model: &IntegerStackModel,
+    artifact: &[u8],
+    prompts: &str,
+    out: &str,
+    trace: Option<&str>,
+    force: Option<&str>,
+) -> Result<(), String> {
     forced_artifact(model)?;
     let bytes = std::fs::read(prompts).map_err(|e| format!("{prompts}: {e}"))?;
     let rows: Vec<PanelPrompt> =
         serde_json::from_slice(&bytes).map_err(|e| format!("{prompts}: {e}"))?;
+    let force = force.map(|path| read_force(path, &rows)).transpose()?;
+    let none = DecisionForceWindow::default();
     let (mut written, mut positions, mut capped) = (Vec::with_capacity(rows.len()), 0usize, 0usize);
+    let mut windows = Vec::new();
+    let started = Instant::now();
     for row in &rows {
-        let forced = forced_picks(model, &row.prompt, &row.reference)
+        let window = match &force {
+            Some(forced) => match forced.get(&row.position) {
+                Some(window) => Some(window),
+                None => continue,
+            },
+            None => trace.is_some().then_some(&none),
+        };
+        let forced = forced_picks(model, &row.prompt, &row.reference, window)
             .map_err(|e| format!("position {}: {e}", row.position))?;
         positions += forced.picks.len();
         capped += usize::from(forced.capped);
         written.push(forced_row(row.position, &forced));
+        if let Some(steps) = forced.steps {
+            let fed = &row.reference[..forced.picks.len() - 1];
+            windows.push(DecisionWindow {
+                position: row.position,
+                ids: row.prompt.iter().chain(fed).copied().collect(),
+                reply_start: row.prompt.len() - 1,
+                steps,
+            });
+        }
     }
+    let per_row_us = started.elapsed().as_micros() / written.len().max(1) as u128;
     let text = serde_json::to_vec(&written).map_err(|e| e.to_string())?;
     write_new_file(std::path::Path::new(out), &text).map_err(|e| format!("{out}: {e}"))?;
-    println!(
-        "{}",
-        json!({ "rows": rows.len(), "positions": positions, "capped": capped, "out": out, "sha256": hex::encode(<sha2::Sha256 as sha2::Digest>::digest(&text)) })
-    );
+    let mut line = json!({ "rows": written.len(), "positions": positions, "capped": capped, "per_row_us": per_row_us as u64, "out": out, "sha256": hex::encode(<sha2::Sha256 as sha2::Digest>::digest(&text)) });
+    if let Some(path) = trace {
+        let reads = read_hamming_uorlut01(artifact).map_err(|e| format!("the reads: {e}"))?;
+        let (heads, kept) = reads.map_or((0, 0), |r| (r.record.heads, r.record.kept));
+        let record = DecisionTrace {
+            schema: DECISION_TRACE_SCHEMA.to_owned(),
+            side: "R".to_owned(),
+            layers: model.shape().layers(),
+            lanes: model.shape().lanes(),
+            heads,
+            kept,
+            windows,
+        };
+        let text = serde_json::to_vec(&record).map_err(|e| e.to_string())?;
+        write_new_file(std::path::Path::new(path), &text).map_err(|e| format!("{path}: {e}"))?;
+        line["decision_trace"] = json!(path);
+        line["decision_trace_sha256"] = json!(hex::encode(<sha2::Sha256 as sha2::Digest>::digest(&text)));
+    }
+    println!("{line}");
     Ok(())
 }
 
@@ -809,13 +939,29 @@ fn run() -> Result<(), String> {
         return replies(&model, prompts, out, reply_tokens);
     }
     if args.iter().any(|a| a == "--forced") {
-        let (path, prompts, out) = match args.as_slice() {
-            [path, f, prompts, o, out] if f == "--forced" && o == "--out" => (path, prompts, out),
+        let (path, prompts, out, rest) = match args.as_slice() {
+            [path, f, prompts, o, out, rest @ ..] if f == "--forced" && o == "--out" => {
+                (path, prompts, out, rest)
+            }
             _ => return Err(USAGE.to_owned()),
         };
+        // claude-249's options, each at most once, in either order.
+        let (mut trace, mut force) = (None, None);
+        let mut rest = rest.iter();
+        while let Some(flag) = rest.next() {
+            let slot = match flag.as_str() {
+                "--decision-trace" => &mut trace,
+                "--force" => &mut force,
+                _ => return Err(USAGE.to_owned()),
+            };
+            let value = rest.next().ok_or_else(|| USAGE.to_owned())?;
+            if slot.replace(value.as_str()).is_some() {
+                return Err(USAGE.to_owned());
+            }
+        }
         let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
         let model = IntegerStackModel::parse(&bytes).map_err(|e| format!("parse: {e}"))?;
-        return forced(&model, prompts, out);
+        return forced(&model, &bytes, prompts, out, trace, force);
     }
     match args.as_slice() {
         [flag, first, second] if flag == "--hamming-trace-compare" => {
@@ -1217,7 +1363,7 @@ mod tests {
             let mut checked = 0;
             for prompt in prompts(model.shape().vocab) {
                 let reply = panel_reply(&model, &prompt, 64, None).expect("reply").reply;
-                let forced = forced_picks(&model, &prompt, &[0]).expect("forced");
+                let forced = forced_picks(&model, &prompt, &[0], None).expect("forced");
                 if let Some(&first) = reply.first() {
                     assert_eq!(forced.picks[0], first, "prompt {prompt:?}");
                     checked += 1;
@@ -1235,7 +1381,7 @@ mod tests {
                 if reply.is_empty() {
                     continue;
                 }
-                let forced = forced_picks(&model, &prompt, &reply).expect("forced");
+                let forced = forced_picks(&model, &prompt, &reply, None).expect("forced");
                 assert!(forced.picks.len() >= reply.len(), "prompt {prompt:?}");
                 assert_eq!(
                     &forced.picks[..reply.len()],
@@ -1254,7 +1400,7 @@ mod tests {
             let vocab = model.shape().vocab;
             let mut checked = 0;
             for prompt in prompts(vocab).into_iter().filter(|p| p.len() <= 4) {
-                let p0 = forced_picks(&model, &prompt, &[0]).expect("forced").picks[0];
+                let p0 = forced_picks(&model, &prompt, &[0], None).expect("forced").picks[0];
                 let reference: Vec<u32> = (1..=3)
                     .map(|k| ((p0 as usize + k) % vocab) as u32)
                     .collect();
@@ -1264,7 +1410,7 @@ mod tests {
                     reply.first(),
                     "the reference is not the greedy reply"
                 );
-                let forced = forced_picks(&model, &prompt, &reference).expect("forced");
+                let forced = forced_picks(&model, &prompt, &reference, None).expect("forced");
                 assert_eq!(forced.picks.len(), 3, "prompt {prompt:?}");
                 let mut session = model.session();
                 for (row, &token) in prompt.iter().enumerate() {
@@ -1299,7 +1445,7 @@ mod tests {
             assert_eq!(model.shape().context, 8);
             let prompt: Vec<u32> = (0..3).map(|i| ((i * 5 + 2) % vocab) as u32).collect();
             let reference: Vec<u32> = (0..20).map(|i| ((i * 3 + 1) % vocab) as u32).collect();
-            let forced = forced_picks(&model, &prompt, &reference).expect("forced");
+            let forced = forced_picks(&model, &prompt, &reference, None).expect("forced");
             assert!(forced.capped);
             let row = forced_row(42, &forced);
             let keys: Vec<&str> = row
@@ -1327,19 +1473,111 @@ mod tests {
                 assert!(s >= r, "{s} {r}");
             }
             // A reference the context holds whole is not capped.
-            let whole = forced_picks(&model, &prompt, &reference[..6]).expect("forced");
+            let whole = forced_picks(&model, &prompt, &reference[..6], None).expect("forced");
             assert!(!whole.capped && whole.picks.len() == 6);
             // Refusals: an artifact whose head is not the nearest one, an empty reference, an
             // empty prompt, a prompt past the context, and a fed token outside the vocabulary.
             assert!(forced_artifact(&artifact(false))
                 .expect_err("not the nearest head")
                 .contains("is not it"));
-            assert!(forced_picks(&model, &prompt, &[]).is_err());
-            assert!(forced_picks(&model, &[], &reference).is_err());
-            assert!(forced_picks(&model, &[1; 9], &reference).is_err());
-            assert!(forced_picks(&model, &prompt, &[vocab as u32, 1]).is_err());
+            assert!(forced_picks(&model, &prompt, &[], None).is_err());
+            assert!(forced_picks(&model, &[], &reference, None).is_err());
+            assert!(forced_picks(&model, &[1; 9], &reference, None).is_err());
+            assert!(forced_picks(&model, &prompt, &[vocab as u32, 1], None).is_err());
             // The last reference token is never fed, so it may lie outside the vocabulary.
-            assert!(forced_picks(&model, &prompt, &[1, vocab as u32]).is_ok());
+            assert!(forced_picks(&model, &prompt, &[1, vocab as u32], None).is_ok());
+        }
+
+        /// claude-249: the synthetic trunk exported as R's artifact is: neither the gates nor
+        /// the transition snapped, with the nearest head.
+        fn raw_artifact() -> IntegerStackModel {
+            use uor_r4_integer::stack::{export_fbs_trunk_uorlut01_with, FbsExportSnaps};
+            let mut snap = synthetic_fbs_trunk(7);
+            snap.readout_nearest = true;
+            let raw = FbsExportSnaps {
+                gates: false,
+                transition: false,
+            };
+            let bytes = export_fbs_trunk_uorlut01_with(&snap, raw).expect("export");
+            IntegerStackModel::parse(&bytes).expect("parse")
+        }
+
+        /// claude-249: under the decision trace each row is the untraced row; the trace holds a
+        /// step for each id fed and the nearest from the prompt's last step on, each the whole
+        /// table's top two of its own query. Forced to its own buckets, the row and its trace are
+        /// the same. A snapped artifact is refused.
+        #[test]
+        fn the_decision_trace_fills_the_nearest_and_changes_no_row() {
+            use uor_r4_integer::fbs_snapshot::ForcedBucket;
+            let model = raw_artifact();
+            let none = DecisionForceWindow::default();
+            let reference = [3u32, 5, 7];
+            let mut checked = 0;
+            for prompt in prompts(model.shape().vocab).into_iter().filter(|p| p.len() <= 4) {
+                let plain = forced_picks(&model, &prompt, &reference, None).expect("forced");
+                let traced = forced_picks(&model, &prompt, &reference, Some(&none)).expect("traced");
+                assert_eq!(forced_row(1, &traced), forced_row(1, &plain), "prompt {prompt:?}");
+                assert_eq!(plain.steps, None);
+                let steps = traced.steps.expect("the trace");
+                let first = prompt.len() - 1;
+                assert_eq!(steps.len(), first + plain.picks.len(), "a step for each id fed");
+                for (t, step) in steps.iter().enumerate() {
+                    let Some(nearest) = &step.nearest else {
+                        assert!(t < first, "prompt {prompt:?} step {t}: the nearest from the prompt's last step");
+                        continue;
+                    };
+                    let i = t - first;
+                    let top = model.whole_table_nearest_two(&nearest.query_q12).expect("top two");
+                    assert_eq!(
+                        (nearest.pick, nearest.score_q12, nearest.runner_up, nearest.runner_score_q12),
+                        (top[0].0, top[0].1, top[1].0, top[1].1),
+                        "prompt {prompt:?} step {t}"
+                    );
+                    assert_eq!((nearest.pick, nearest.runner_up), (plain.picks[i], plain.runner_up[i]));
+                }
+                let mut own = DecisionForceWindow::default();
+                for (step, s) in steps.iter().enumerate() {
+                    for (layer, l) in s.layers.iter().enumerate() {
+                        own.buckets.extend(l.entry.iter().enumerate().map(|(lane, &entry)| ForcedBucket { step, layer, lane, entry }));
+                    }
+                }
+                let forced = forced_picks(&model, &prompt, &reference, Some(&own)).expect("forced to its own");
+                assert_eq!(forced_row(1, &forced), forced_row(1, &plain), "prompt {prompt:?}");
+                assert_eq!(forced.steps.as_ref(), Some(&steps), "prompt {prompt:?}");
+                checked += 1;
+            }
+            assert!(checked >= 3, "{checked}");
+            let refused = forced_picks(&artifact(true), &[1], &[2], Some(&none)).expect_err("snapped");
+            assert!(refused.contains("the decision trace"), "{refused}");
+        }
+
+        /// claude-249: `--force`'s file names rows by position; another schema, a position named
+        /// twice and one naming no prompt are refused.
+        #[test]
+        fn a_force_file_names_rows_by_position() {
+            let rows: Vec<PanelPrompt> = [4usize, 9]
+                .iter()
+                .map(|&position| PanelPrompt {
+                    position,
+                    prompt: vec![1],
+                    reference: vec![2],
+                    float_keyed: None,
+                })
+                .collect();
+            let file = |schema: &str, positions: &[usize]| {
+                let windows: Vec<_> = positions
+                    .iter()
+                    .map(|p| json!({ "position": p, "buckets": [], "codes": [] }))
+                    .collect();
+                serde_json::to_vec(&json!({ "schema": schema, "windows": windows })).expect("json")
+            };
+            let windows = force_windows(&file(DECISION_FORCE_SCHEMA, &[9]), &rows).expect("one row");
+            assert_eq!(windows.keys().copied().collect::<Vec<_>>(), [9]);
+            assert!(force_windows(&file("uor-r4.decision-force/0", &[9]), &rows).is_err());
+            let twice = force_windows(&file(DECISION_FORCE_SCHEMA, &[9, 9]), &rows).expect_err("twice");
+            assert!(twice.contains("named twice"), "{twice}");
+            let unknown = force_windows(&file(DECISION_FORCE_SCHEMA, &[5]), &rows).expect_err("no row");
+            assert!(unknown.contains("names no prompt"), "{unknown}");
         }
     }
 
