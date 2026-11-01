@@ -54,7 +54,7 @@ jq -n --slurpfile i I --slurpfile f F '($i[0]|length) as $n
 **Why 3%, and its margin without the snap:** it is claude-232's bar, registered against claude-227's snapped residual (0.33% of sequence positions, 1.78% of single tokens, against a D11 forward that snaps too). The raw export's rounding residual against the trained forward is not measured. The bar is kept, not re-derived (the card's constraint). A first token follows up to 186 positions, with the memory and the Hamming read on top.
 
 **Readings, no bar,** each graded with the same grader:
-- **S against F′:** the snap's share, with the ties now equal. It is the card's control for the snap.
+- **S against F′:** the snap's share, with the ties now equal. It is the card's control for the snap. On a PASS row, if S against F′ also meets ⌊0.03 n⌋ in every cell, the card's line holds: the snap is shown harmless here, and either export is a served recipe. The item then records both, the raw one first. S never decides the row.
 - **F′ against F:** the code's change on G's path since `eb762e602`. By the code that is the tie rule alone (the card lists the six commits), but `train-in-space` has no switch to test it, so the reading is not credited to the tie rule.
 - **R against F:** the raw export against the stored reference.
 - **Whole-reply agreement** of every pair, and R's capped count (expected 26 of 310 on DEV and 136 of 1,202 on p-w per seed, as S's).
@@ -121,7 +121,7 @@ Steps 4 and 5 run as one script, `local/claude/claude-243/grade.sh`, adapted fro
   - (b) The throughput projection is claude-220's run of this exact command on the same GPU type.
   - Each seed runs about 2 h 45 min, past the ladder's hour per arm. Arm G itself is about 6 min on DEV and 23 min on p-w per seed (claude-220's `main-s1.out`). The rest is arms that run because the command is claude-220's unchanged.
   - Cutting them needs a new switch in `train-in-space.rs`. That is outside this item's scope, and it would end "the same command" that I-Flags and the card rest on. The lab's call is to run it whole, as claude-220 did after its own projection review.
-- **The watcher** (`watch.sh`): a spend stop at $4, a time stop at 6 hours, and a stall stop at 60 unchanged minutes. Its leases are renewed every 25 minutes. The longest silent stretch of a process is one p-w decode file, about 32 minutes with four processes. The job's trap leaves an `EXIT` file on every way out, so a crash is seen at the next check.
+- **The watcher** (`watch.sh`): a spend stop at $4, a time stop at 6 hours, and a stall stop at 60 unchanged minutes. Its leases are renewed every 25 minutes, and for 2 hours before any stop, so a stopped healthy run or a finished one is never reaped while the session answers. The longest silent stretch of a process is one p-w decode file, about 32 minutes with four processes. The job's trap leaves an `EXIT` file on every way out, so a crash is seen at the next check.
   - A spend or time stop wakes the session, which extends the stop for a healthy run and notes it. A healthy run is never cancelled for a self-set budget.
 - **Stop rule:** any §4 check that fails stops the run as row 0, never counted. The bar is read only after every check holds.
 
@@ -147,4 +147,37 @@ TEST FITNESS: FIT
 
 ## 10. Pre-run review
 
-To be filled in.
+PRE-RUN: GO
+
+Two fresh reviewers, 1 Nov, at `4a587a588`. Neither wrote the work, and neither decoded or read an outcome.
+
+**Round 1 (the tools, inputs, scripts, FIT and caps): GO, no blocker.**
+- **The code did not move since the laptop checks:** `git diff --stat ccf1523d3 4a587a588 -- crates Cargo.lock` is empty. This branch changes no crate (`git diff origin/main...HEAD -- crates` is empty), so the laptop's `fbs-toks` carries the head's code.
+- **The command parses:** every flag `job.sh` passes has its parse line in `train-in-space.rs` at the head. The eight tests it greps exist (`flock_read_hamming.rs:952, 1021, 1043, 1094`; `in_space_long.rs:10787, 10879, 10919, 11113`).
+- **The store holds every input** (`uor-store ls`): the driver data (5 of 5), both panels with their sums, and each seed's `SHA256SUMS`, `config.json` and the five files of `step-016384/`. The laptop holds claude-232's prompts, S and grades, R's three artifacts, F's six G files and `fbs-toks`. No output folder exists yet.
+- **The scripts:** `bash -n` passes, and the data and sums lines match claude-220's job. The `wait`, the trap, the sums grep, I-Repeat, the split-to-file map and the bar arithmetic (9 and 36) read correctly. Four GPU processes need about 15 GB of the card's 32 GB.
+- **The caps:** `uor-pod status`, 0 pods running, $0 of $8.00/h. The cheapest 5090 is $0.563/h, so about $2.80 for 5 hours.
+- **Advisories, made:**
+  1. Every watcher stop ended its lease renewals, so a stopped healthy run could be reaped about 80 minutes later. `watch.sh` now renews each lease for 2 hours before any stop (§8).
+  2. `grade.sh` checks R's artifacts against `R/a7/SHA256SUMS` (the sheet's three sums) before any decode, and logs `fbs-toks`'s sha256 and the worktree head.
+  3. The two seed-3 processes cannot collide: every scoring write is under its own `--out` and created new, never replaced (`in_space_long.rs:3061–5870`, `write_new` at `:5177`).
+  4. Left as is: `job.sh` refuses an existing `out/` before its trap, so it writes no `EXIT`. That cannot happen on a fresh pod.
+
+**Round 2 (the chain and what each outcome unlocks): CONFIRMED, no blocker.**
+- **The chain:** the run serves the order's step 2, the readout served in integers, and step 4, one model served and scored with tok/s. Done-when 3 is the bar; done-when 4 is R s1's speed. It unblocks point-key-integer's rerun on p-x, which the item and PLAN hold until parity is rechecked. Nothing cheaper comes first: R against F alone cannot meet the bar by construction (the card).
+- **Each row decides:**
+  - Row 0 holds F′ back as the reference until it is repaired.
+  - PASS meets done-when 3 for the raw export, and names its recipe.
+  - MISS keeps the item `ready`, and moves the localization to R against F′ on the same rules.
+  - The ORDER's spend line names the sheet's $4.
+- **Advisories, made:**
+  - The card's "either export" line on S is now in §3's readings.
+  - The ORDER's quote of done-when 3 is marked as the text before the card.
+  - A narrow MISS is read as possibly the bar's unmeasured margin, not an integer fault, when the next unit is scoped. The REPORT carries this.
+
+**The scripts as run** (`local/claude/claude-243/`, not in git):
+```
+a52295ee4bf1104dcbcefe4784a15193547a9908fde849c1d48364284ea3ccf6  job.sh
+de6a68f9bab827d7afbc15370e88d67e9967e61c0ea6607d63b9ac20f61ebce6  watch.sh
+41bbeb3545aff690c499729b579b49c3b1292dd97bde8cc9b070e88413148291  grade.sh
+```

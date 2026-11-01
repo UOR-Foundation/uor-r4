@@ -4,7 +4,7 @@ Lab: claude. Item: [integer-nearest-readout](../../../../roadmap/items/integer-n
 
 ## Goal
 
-The item's done-when reads:
+The item's done-when read, at the base and before this unit's card amended done-when 3 (the amended text names R against F′, and is in the item):
 
 > 1. **The artifact carries its readout,** with a negative gate. An artifact without it decodes byte for byte as at the base, and an engine without it refuses a nearest artifact.
 > 2. **The nearest step** serves `stack_whole_table_nearest`'s rule under the field, with a test against a reference scan and a negative gate.
