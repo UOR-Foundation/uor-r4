@@ -39,7 +39,7 @@ claude-235's `--context-sweep` is the start. It took done-when 3 early and stopp
   - the prompt is the token file's first 32,704 ids;
   - it refuses an odd-length file, a file shorter than the largest prefill, an id outside the vocabulary, and an artifact whose context is under 32,768;
   - without `--tokens`, `--context-sweep` is unchanged.
-- **The tokens.** DEV's `tokens.u16`, from the store's `w2-inputs/2026-10-25/driver-data/ft/dev/`: 85,776 bytes, so 42,888 ids. It is real text, so the read's matches are the language's, not a repeated pattern's.
+- **The tokens.** DEV's `tokens.u16`, from the store's `w2-inputs/2026-10-25/driver-data/ft/dev/`: a `UORT` file, 85,776 bytes. Its 64-byte header counts 42,856 ids at vocabulary 4,096, claude-146's. It is real text, so the read's matches are the language's, not a repeated pattern's. The sweep reads it as `fbs-export --point-key` does.
 - **The machine.** This M1 on AC power, with no build or timing of this lab's running. Load averages and the top CPU users are recorded before and after the sweep. Another lab's process is never stopped; if the machine is busy, the sweep waits for a quiet time, and the REPORT says when it ran.
 
 ## Cancel probe (run first)
@@ -75,7 +75,10 @@ The unit is cancelled if either check fails:
 
 1. **The sweep exists and is tested.** `fbs-toks --context-sweep --tokens` runs the protocol at the five prefills above. Tests cover the token file's reading and each refusal. The tokenless form keeps its prefills and schema.
 2. **I-Same:** the short re-export equals the stored `artifact.uorlut` byte for byte. If the exporter's bytes moved since claude-240's build, the stored artifact is the short arm, and the REPORT names the change.
-3. **I-Reply:** the long artifact gives the short artifact's reply at a prefill of 128, with the read and without it, over the same 128 DEV ids.
+3. **I-Reply:** the long artifact gives the short artifact's replies. The short artifact cannot run the long sweep, so the check has three parts (amended at the run):
+   - the tokenless `--context-sweep`, at prefills 32 to 128, with the read and without it;
+   - `--prompt` over DEV's first 128 ids, with the read;
+   - the long sweep's 128-point reply with the read equals the second part's.
 4. **The numbers.** At each context end (192 to 32,768), with the read and without it, the REPORT gives:
    - decode tok/s, as the median and p95 of the 20 runs;
    - the read's share of decode time;
