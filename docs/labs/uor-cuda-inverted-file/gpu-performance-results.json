@@ -1,0 +1,43 @@
+{
+  "schema": "uor-r4.cuda-inverted-file-performance-results/1",
+  "date": "2026-11-01",
+  "source": "7badaf6ccd18fd4ec8768a197b84347c2f138795",
+  "grid": {"v": [64, 256, 1024, 4096], "k": [1, 8, 16], "query_seed": 7, "warmup": 3, "retained_repetitions": 10},
+  "correctness_rows": 504,
+  "measurements_per_card": 240,
+  "cards": [
+    {
+      "gpu": "NVIDIA GeForce RTX 5090",
+      "compute_capability": "12.0",
+      "driver_release": "580.178.04",
+      "cuda_toolkit": "12.8.93",
+      "hf_store_commit": "c2cec27d7a9b3b9da3835fdf01403b0a0ef3a66b",
+      "median_ms": {
+        "full_scan": {"kernel": 0.108527999, "direct_api": 115.454276, "complete_caller": 115.5313035},
+        "probe": {"kernel": 0.1611840015, "direct_api": 115.3370935, "complete_caller": 115.5050255}
+      },
+      "probe_over_full_kernel_median_ratio_by_v": {"64": 1.15, "256": 1.72, "1024": 1.78, "4096": 1.83}
+    },
+    {
+      "gpu": "NVIDIA GeForce RTX 4090",
+      "compute_capability": "8.9",
+      "driver_release": "615.78.08",
+      "cuda_toolkit": "12.8.93",
+      "hf_store_commit": "38a15d3c3c46324ab485ec5d82bf05950ada6c33",
+      "median_ms": {
+        "full_scan": {"kernel": 0.1095679995, "direct_api": 155.0174085, "complete_caller": 155.071555},
+        "probe": {"kernel": 0.1816159935, "direct_api": 155.131332, "complete_caller": 155.4034915}
+      },
+      "probe_over_full_kernel_median_ratio_by_v": {"64": 1.13, "256": 1.74, "1024": 1.97, "4096": 1.90}
+    }
+  ],
+  "all_status_ok": true,
+  "oracle_match": true,
+  "index_match": true,
+  "non_author_replication": "IN_PROGRESS",
+  "external_consumer": "IN_PROGRESS",
+  "second_architecture_serial_fallback_over_4096": "NOT_RUN",
+  "energy": "NOT_RUN",
+  "cross_library_comparison": "NOT_RUN",
+  "upstream_acceptance": "NOT_CLAIMED"
+}

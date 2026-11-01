@@ -17,7 +17,7 @@ The CSR bucketed writer and PTX admission gate are the most transferable parts o
 
 ## What is missing
 
-**Host package and single-card CUDA correctness are complete at their declared scopes.** Clean-copy host evidence and one RTX 5090 AOT/Driver API correctness run exist. Performance, tuned full-scan comparisons, additional architectures/drivers, independent replication, and external-consumer validation remain **NOT_RUN** and are required before release or upstream submission.
+**Host correctness and matched two-architecture/two-driver performance are complete at their declared scopes.** Clean-copy host evidence, RTX 5090 AOT/CUDA correctness, and matched measurements on RTX 5090/580.178.04 and RTX 4090/615.78.08 exist. Independent replication and external-consumer validation are in progress and remain required before release or upstream submission.
 
 ## Done when
 
