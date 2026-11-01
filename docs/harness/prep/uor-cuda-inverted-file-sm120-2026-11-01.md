@@ -38,3 +38,9 @@ This is one card/driver/Toolkit and a fixed grid. V ∈ {1,4096}, stale/corrupt 
 One leased RTX 5090 on Vast, initially one hour at the displayed rate (about $0.563/h; actual provider uptime/rate is reported). Setup, three short executions, negative controls, and archival are projected below 40 minutes; renew a healthy instrument delay rather than canceling it for an estimate. Stop and tear down on a source defect because host repair needs no GPU. No other pod/GPU is touched, and the shared ≤4 pods/≤$8/h caps apply.
 
 The original evidence root is `/workspace/uor-r4/evals/cuda-release-1/` on the pod, within the tool's archive coverage. Copy every command, source/module checksum, PTX/cubin, row file, failure, and retry there before teardown. Pull and verify SHA-256 locally under `local/kimi/cuda-release-1/`; retain new attempts under new run ids, never rewrite a sealed root. Local build preparation adds less than 100 MiB and remote evidence is expected below 20 MiB. No generated binary is committed.
+
+## FIT record
+
+**TEST FITNESS: FIT**, 2026-11-01, third non-author check (`uor-experiment-designer`). Exact source head: `71c84dfa3b083889fb3896886da973354fa87afa`. Scope: one RTX 5090 AOT/Driver API correctness gate with 498 rows per `--out` execution and three byte-identical row files. Any change to the kernel, driver, CUDA test, or Make recipe, and any architecture change, requires a new pushed head and another FIT.
+
+`cuda::full_scan` constructs its comparison CSR with the CPU `build(table, index, true)` before running the CUDA full-scan kernel. Probe rows use the GPU-built CSR. This is intentional control structure, not a claim that both scans consume a GPU-built index. The `make cuda-test` smoke run is not counted among the three `--out` determinism executions. CPU and CUDA are separate transcriptions of one algorithm; shared design errors are outside this parity check's detection scope.
