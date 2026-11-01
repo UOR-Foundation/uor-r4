@@ -11482,6 +11482,102 @@ mod tests {
         assert_eq!(gap, 0.0, "the opening points are the rows' own points");
     }
 
+    /// claude-251 (Done-when 3, on the GPU): side F's trace of a small trunk with both Hamming
+    /// reads. Tracing changes no pick, and the trace holds the one window named, in R's order and
+    /// lengths: six layers, the stream read after layer 2 only, the readout read, no memory, and a
+    /// nearest at each scored offset. Each recorded entry is the kernel's bucket of its recorded
+    /// score (`rate_select` returns that entry's λ); each code is `pack_signs` of its recorded
+    /// coordinates; each kept set is in R's order; each pick is the kernel's argmax for its
+    /// recorded query.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn a_traced_forward_records_the_kernels_choices_in_rs_order() {
+        use crate::flock_read_hamming::{pack_signs, set_hamming_reads, HammingReads, HAMMING_KEPT};
+        use crate::geometric_stack::{rate_index, rate_select, RATE_TABLE};
+        let device = Device::new_cuda(0).unwrap();
+        let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
+        set_hamming_reads(Some(HammingReads::new(4, hs::SHEET_WIDTH, &device).unwrap()));
+        // Two documents, each BOS, a prompt, a reply, a prompt, a reply.
+        let (mut tokens, mut mask) = (Vec::new(), Vec::new());
+        for doc in 0..2u32 {
+            tokens.push(hs::SHEET_BOS_ID);
+            mask.push(0u8);
+            for (ids, flag) in [(10..20u32, 0u8), (20..26, 1), (26..30, 0), (30..34, 1)] {
+                for t in ids {
+                    tokens.push(t + 40 * doc);
+                    mask.push(flag);
+                }
+            }
+        }
+        let (windows, _) =
+            hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID).unwrap();
+        assert_eq!(windows.len(), 2);
+        let picks = |trace: Option<&mut FTrace>| {
+            row_picks(&model, &windows, &mask, 1, 0, trace, |_, _| Ok(())).unwrap()
+        };
+        let plain = picks(None);
+        let named = &windows[1];
+        let mut trace = FTrace::new(&[named.scored_corpus_positions[0]]).unwrap();
+        assert_eq!(picks(Some(&mut trace)), plain, "tracing changes no pick");
+        let host_table = trace.table.clone().unwrap();
+        let trace = trace.finish().unwrap();
+        set_hamming_reads(None);
+        assert_eq!((trace.layers, trace.heads), (6, 4));
+        let [w] = trace.windows.as_slice() else { panic!("one window is traced") };
+        let last = *named.scored_offsets.last().unwrap();
+        assert_eq!((w.position, w.reply_start), (named.scored_corpus_positions[0], named.scored_offsets[0]));
+        assert_eq!((w.ids.as_slice(), w.steps.len()), (&named.input_ids[..=last], last + 1));
+        let (mut scores, mut entries) = (Vec::new(), Vec::new());
+        let (mut queries, mut picked) = (Vec::new(), Vec::new());
+        for (t, step) in w.steps.iter().enumerate() {
+            assert_eq!(step.layers.len(), 6);
+            for (l, layer) in step.layers.iter().enumerate() {
+                assert_eq!((layer.score_f32.len(), layer.entry.len()), (trace.lanes, trace.lanes));
+                for (&bits, &entry) in layer.score_f32.iter().zip(&layer.entry) {
+                    assert_eq!(entry as usize, rate_index(f32::from_bits(bits)));
+                    scores.push(f32::from_bits(bits));
+                    entries.push(entry as usize);
+                }
+                assert_eq!(layer.read.as_ref().map(|r| r.depth), (l == 1).then_some(2));
+            }
+            let readout = step.readout.as_ref().map(|r| r.depth);
+            assert_eq!((readout, step.memory.is_none()), (Some(6), true));
+            let reads = step.layers[1].read.iter().chain(&step.readout);
+            for head in reads.flat_map(|r| &r.heads) {
+                let signs = |bits: &[u32]| pack_signs(&bits.iter().map(|&b| f32::from_bits(b)).collect::<Vec<_>>());
+                assert_eq!((signs(&head.query_f32), signs(&head.key_f32)), (vec![head.query], vec![head.key]));
+                assert_eq!(head.kept.len(), t.saturating_sub(1).min(HAMMING_KEPT), "row {t}");
+            }
+            assert_eq!(step.nearest.is_some(), named.scored_offsets.contains(&t));
+            if let Some(nearest) = &step.nearest {
+                assert_ne!(nearest.runner_up, nearest.pick);
+                queries.extend(nearest.query_f32.iter().map(|&b| f32::from_bits(b)));
+                picked.push(nearest.pick);
+            }
+        }
+        // Each kept set is nearest first by Hamming distance to its key, ties to the earlier
+        // position: checked on the readout's first head, whose keys the trace's codes give.
+        let keys: Vec<u64> = w.steps.iter().map(|s| s.readout.as_ref().unwrap().heads[0].key).collect();
+        for step in &w.steps {
+            let head = &step.readout.as_ref().unwrap().heads[0];
+            let order: Vec<(u32, u32)> =
+                head.kept.iter().map(|&s| ((head.query ^ keys[s as usize]).count_ones(), s)).collect();
+            assert!(order.windows(2).all(|p| p[0] < p[1]), "a kept set out of R's order");
+        }
+        let lambdas = rate_select(&Tensor::from_vec(scores.clone(), scores.len(), &device).unwrap())
+            .unwrap()
+            .to_vec2::<f32>()
+            .unwrap();
+        for (lambda, &entry) in lambdas.iter().zip(&entries) {
+            assert_eq!(lambda[0].to_bits(), RATE_TABLE[entry].to_bits(), "an entry the kernel did not choose");
+        }
+        let width = queries.len() / picked.len();
+        let query = Tensor::from_vec(queries, (picked.len(), width), &device).unwrap();
+        let points = Tensor::from_vec(host_table.clone(), (host_table.len() / width, width), &device).unwrap();
+        let best = nearest_scores(&query, &points).unwrap().argmax(1).unwrap().to_vec1::<u32>().unwrap();
+        assert_eq!(best, picked, "each pick is the kernel's argmax for its recorded query");
+    }
+
     /// claude-218 (FIT round 1): each query is named by the commonest target among the TRAIN
     /// openings at its least L1 distance, ties to the smaller id, across the search's blocks and
     /// inside one; and by sign pattern, whose L1 is the Hamming distance over the width. On the
