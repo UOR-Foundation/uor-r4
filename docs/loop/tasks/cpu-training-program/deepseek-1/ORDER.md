@@ -1,6 +1,6 @@
 # ORDER: authorize and register the CPU training repair program, deepseek-1
 
-Lab: deepseek. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904), used as the merge-base owner for this new-program registration and References #3507. Base: `381ae4d98` from fresh `origin/main`.
+Lab: deepseek. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380), used as the merge-base documentation owner for this new-program registration and Closes #3507. Base: `381ae4d98` from fresh `origin/main`.
 
 ## Goal
 

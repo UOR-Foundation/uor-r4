@@ -31,8 +31,9 @@ Labels: **proof**, **measurement**, **hypothesis**. See [`docs/formal_vocabulary
 The real exports are `init`, `tickClock`, `loadStack`, `step`, `saveSession`, `restoreSession`,
 `weightsPerToken`, `allocEvents` and `leakedModels`
 ([`wasm_bindgen_exports.rs`](../../crates/uor-r4-integer/src/wasm_bindgen_exports.rs)). Serving an
-exported D11 artifact on a client device is allowed; the GPU-only research-compute rule does not
-apply to product serving ([charter](../../CHARTER.md), section 3.6).
+exported D11 artifact on a client device is allowed; the GPU-first research-compute rule does not
+apply to product serving ([charter](../../CHARTER.md), section 3.6). D84's CPU training program is
+development research and does not qualify the browser runtime.
 
 ## What exists today
 
