@@ -30,4 +30,4 @@ The fixed-codebook digest identifies only those 512 payload bytes, not a model, 
 
 ## Next upstream step
 
-Evaluate a vendor-neutral loaded-model artifact-digest attribute with the OpenTelemetry semantic-conventions community, after checking prior art, privacy/cardinality, and real SDK/collector interoperability. Do not submit UOR hashes as trace or span IDs.
+Open a discussion issue with the generic operator problem and collector evidence, then add a real loaded-model consumer and second independent runtime/example before any YAML PR. Check prior art and privacy/cardinality throughout. Do not submit UOR hashes as trace or span IDs.
