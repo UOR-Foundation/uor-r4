@@ -19,7 +19,7 @@ This record covers a new standalone CUDA C++17 package in `projects/uor-cuda-inv
 
 ## NOT_RUN
 
-On the laptop, `nvcc` is unavailable, so local AOT/CUDA execution is **NOT_RUN**. The separate RTX 5090 correctness result above is limited to its named source/card/grid. Independent corrected replication, additional architectures/drivers, energy, and cross-library comparison remain **NOT_RUN**.
+On the laptop, `nvcc` is unavailable, so local AOT/CUDA execution is **NOT_RUN**. The separate RTX 5090 correctness result above is limited to its named source/card/grid. Any replication beyond the completed independent RTX 5090/595.71.05 check, additional architectures/drivers, energy, and cross-library comparison remain **NOT_RUN**.
 
 ## Provenance
 

@@ -57,7 +57,7 @@ At the same source, a non-author rerun on another RTX 5090 (driver 595.71.05) pa
 
 The laptop still has no `nvcc`; the successful CUDA result came from leased GPUs, not the laptop. The following remain **NOT_RUN**, not passes:
 
-- Energy, other architectures/drivers, and independent external replication beyond the check currently in progress.
+- Energy, other architectures/drivers, and independent external replication beyond the completed corrected check.
 - Kernel-side corrupt-CSR rejection, additional corrupt variants, all-absent CUDA scans, K=0/17, V=1, the >4096 serial fallback, and concurrent kernels.
 - Faiss or any other cross-library comparison.
 
