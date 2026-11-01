@@ -313,7 +313,10 @@ mod tests {
     fn the_dev_sample_keeps_every_eighth_window_from_the_first() {
         assert_eq!(PARITY_WINDOW_STRIDE, 8);
         let windows: Vec<Vec<u32>> = (0..17u32).map(|w| vec![w; 3]).collect();
-        assert_eq!(sample_windows(windows), vec![vec![0; 3], vec![8; 3], vec![16; 3]]);
+        assert_eq!(
+            sample_windows(windows),
+            vec![vec![0; 3], vec![8; 3], vec![16; 3]]
+        );
         // DEV's 428 windows give 54.
         assert_eq!(sample_windows(vec![Vec::new(); 428]).len(), 54);
     }
