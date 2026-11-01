@@ -1,0 +1,17 @@
+{
+  "schema": "uor-r4.cuda-inverted-file-host-results/1",
+  "date": "2026-11-01",
+  "source_base": "3d39b0c720dbe95693efe8aea93b3873247a7ba1",
+  "admission": {"passed": 10, "failed": 0},
+  "cpu_parity": {"status": "PASS", "incremental_moves": 64, "fresh_build_mismatches": 0},
+  "repeat_output_sha256": "26d8c1b6d01ab779f0a1eb2fd8a41b995a1ec32e8f66893008ee791ecae83e31",
+  "repeat_runs_identical": true,
+  "clean_copy": {"status": "PASS", "uor_r4_checkout_required": false},
+  "aot_cuda_compilation": "NOT_RUN",
+  "cuda_driver_execution": "NOT_RUN",
+  "cuda_cpu_parity": "NOT_RUN",
+  "gpu_timing": "NOT_RUN",
+  "additional_architectures": "NOT_RUN",
+  "energy": "NOT_RUN",
+  "cross_library_comparison": "NOT_RUN"
+}
