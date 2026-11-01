@@ -85,7 +85,10 @@ bool valid_result(const Table& table, const Query& query, const ScanResult& resu
     if (result.prediction >= table.tokens.size() || result.prediction != result.top8[0]) return false;
     std::array<bool, 256> seen{};
     std::array<bool, 256> occupied{};
-    for (const auto& token : table.tokens) occupied[cell_of(token)] = true;
+    for (const auto& token : table.tokens) {
+        const auto cell = cell_of(token);
+        if (cell != ABSENT) occupied[cell] = true;
+    }
     for (const auto cell : result.admitted) {
         if (cell == ABSENT) continue;
         if (cell >= 256 || !occupied[cell] || seen[cell]) return false;
@@ -209,10 +212,15 @@ int main(int argc, char** argv) {
             }
             table.tokens[0][0] = roots[0];
             status = uor_inverted_file::cuda::update(table, 0, index);
-            const auto reinsert_valid = uor_inverted_file::validate(table, index);
-            log_row(v, k, "reinsert_gpu", 0, status,
-                    status == Status::Ok && reinsert_valid == Status::Ok);
-            if (status != Status::Ok || reinsert_valid != Status::Ok) {
+            Index reinsert_fresh;
+            const auto fresh_status = uor_inverted_file::build(table, reinsert_fresh);
+            const bool reinsert_exact = fresh_status == Status::Ok &&
+                                        index.offsets == reinsert_fresh.offsets &&
+                                        index.members == reinsert_fresh.members &&
+                                        index.cells == reinsert_fresh.cells &&
+                                        index.absent_count == reinsert_fresh.absent_count;
+            log_row(v, k, "reinsert_gpu", 0, status, status == Status::Ok && reinsert_exact);
+            if (status != Status::Ok || !reinsert_exact) {
                 std::cerr << "CUDA ABSENT-to-cell update failed\n";
                 return 1;
             }

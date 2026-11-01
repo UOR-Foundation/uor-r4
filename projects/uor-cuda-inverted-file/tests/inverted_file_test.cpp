@@ -208,6 +208,13 @@ int main() {
     expect(uor_inverted_file::update(removal, 0, removal_index) == Status::Ok, "ABSENT to cell update");
     expect(removal_index.absent_count == 0, "ABSENT count after reinsertion");
     expect(uor_inverted_file::validate(removal, removal_index) == Status::Ok, "reinsertion CSR invariant");
+    Index reinsert_fresh;
+    expect(uor_inverted_file::build(removal, reinsert_fresh) == Status::Ok, "fresh build after reinsertion");
+    expect(removal_index.offsets == reinsert_fresh.offsets &&
+               removal_index.members == reinsert_fresh.members &&
+               removal_index.cells == reinsert_fresh.cells &&
+               removal_index.absent_count == reinsert_fresh.absent_count,
+           "reinsertion matches fresh build exactly");
 
     Table drained = few;
     Index drained_index;

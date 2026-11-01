@@ -2,6 +2,12 @@
   "schema": "uor-r4.cuda-inverted-file-host-results/1",
   "date": "2026-11-01",
   "source_base": "7d8a0c2642600f5ff02d5ef30d130ec8fe8056d8",
+  "source_file_sha256": {
+    "src/inverted_file.cpp": "8903daedc6522ab4d9d02982b2ed2aa8c193613a64cb41097d7d6fe19fb14197",
+    "tests/inverted_file_test.cpp": "e354ac31562e857609bb14a1be8481711c696050ab918831b7b3268d51d410d3",
+    "tests/cuda_parity_test.cpp": "9321ff98922b6b3457e86bee2385e80143d0cbea4fbc2b8fed9f33cb1ef50b72",
+    "Makefile": "79406fce648367f67feec00935e2604c1f492e62e50505125d16055556df3ad8"
+  },
   "admission": {"passed": 13, "failed": 0},
   "cpu_parity": {"status": "PASS", "incremental_moves": 64, "fresh_build_mismatches": 0},
   "repeat_output_sha256": "7b6f674abcef33a37753de8aac6000ff1584e983ebeb4eb35fc67bf5d45d5e7d",

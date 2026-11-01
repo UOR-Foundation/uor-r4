@@ -12,6 +12,7 @@ namespace {
 struct Buffer {
     CUdeviceptr ptr = 0;
     std::size_t bytes = 0;
+    std::size_t capacity_bytes = 0;
 
     Buffer() = default;
     Buffer(const Buffer&) = delete;
@@ -22,6 +23,7 @@ struct Buffer {
 Status allocate(Buffer& buffer, std::size_t bytes) {
     if (bytes == 0) return Status::InvalidArgument;
     buffer.bytes = bytes;
+    buffer.capacity_bytes = bytes;
     return cuMemAlloc(&buffer.ptr, bytes) == CUDA_SUCCESS ? Status::Ok : Status::CudaFailure;
 }
 
@@ -30,9 +32,14 @@ Status write(const Buffer& buffer, const void* source) {
         ? Status::Ok : Status::CudaFailure;
 }
 
-Status read(void* destination, const Buffer& buffer) {
-    return cuMemcpyDtoH(destination, buffer.ptr, buffer.bytes) == CUDA_SUCCESS
+Status read(void* destination, const Buffer& buffer, std::size_t bytes) {
+    if (bytes > buffer.capacity_bytes) return Status::InvalidArgument;
+    return cuMemcpyDtoH(destination, buffer.ptr, bytes) == CUDA_SUCCESS
         ? Status::Ok : Status::CudaFailure;
+}
+
+Status read(void* destination, const Buffer& buffer) {
+    return read(destination, buffer, buffer.bytes);
 }
 
 template <typename T>
@@ -199,8 +206,11 @@ Status update(const Table& table, std::uint32_t moved_token, Index& index) {
     if ((status = synchronize()) != Status::Ok ||
         (status = read(&kernel_status, status_d)) != Status::Ok) return status;
     if (kernel_status != 0) return status_from_kernel(kernel_status);
-    if ((status = read(index.offsets.data(), offsets_d)) != Status::Ok ||
-        (status = read(index.members.data(), members_d)) != Status::Ok ||
+    if ((status = read(index.offsets.data(), offsets_d)) != Status::Ok) return status;
+    if (index.offsets[256] > count) return Status::CsrInvariant;
+    index.members.resize(count);
+    if ((status = read(index.members.data(), members_d,
+                       index.offsets[256] * sizeof(std::uint32_t))) != Status::Ok ||
         (status = read(index.cells.data(), cells_d)) != Status::Ok ||
         (status = read(&index.absent_count, absent_d)) != Status::Ok) return status;
     index.members.resize(index.offsets[256]);

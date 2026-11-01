@@ -28,7 +28,7 @@ The clean copy was created in a fresh directory, and no UOR-R4 source path or ch
 ## Covered behavior
 
 - Clean and comment-only PTX acceptance; float/tensor/approximate-exponential rejection; missing/extra/duplicate entry rejection.
-- Seeded parity for `V ∈ {1,64,256,4096}` and `K ∈ {1,8,16}`.
+- Seeded parity for `V ∈ {1,64,256,4096}` and `K ∈ {1,8,16}`, with all 32 vector elements varied; a 24-row sensitivity check requires at least three top-8 changes and one prediction change against the zero-middle control.
 - Single-cell collapse, fewer than K occupied cells, non-root endpoint refusal, and exact token-id tie breaking.
 - Sixty-four incremental updates with fresh-build CSR equality and search parity after each update.
 - Removal to and reinsertion from `ABSENT`.
