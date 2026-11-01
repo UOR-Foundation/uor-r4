@@ -58,13 +58,13 @@ Add rank-margin learning without softmax or dense matrix multiplication. Require
 
 Add Hamming reads and exact turn memory, then integer-aware continuation. Compare float-shadow and integer-server scores on identical rows and reject any gain that disappears after exact export.
 
-### 6. CPU pilot and disposition
-
-Run a bounded corpus pilot on the Ryzen 9 9950X only after the component parity gates pass. Report context-tokens/s, target visits/s, peak RSS, resume determinism and complete-reply/fresh-phrasing outcomes. A final disposition report marks every historical family as repaired, superseded, or retained as a rejected configuration, with links to its evidence.
-
-### 7. Whole-path exact updates
+### 6. Whole-path exact updates
 
 Port the historical whole-path decision-recording and bounded legal-update mechanics into the isolated CPU crate after the exact writer exists. Preserve update order, acceptance checks and recovery traces, but do not import the old M2 objective or depend on `uor-r4-training`. This closes the remaining CPU reference path and supplies an exact control for the newer trainers.
+
+### 7. CPU pilot and disposition
+
+Run a bounded corpus pilot on the Ryzen 9 9950X only after the component parity gates pass. Report context-tokens/s, target visits/s, peak RSS, resume determinism and complete-reply/fresh-phrasing outcomes. A final disposition report marks every historical family as repaired, superseded, or retained as a rejected configuration, with links to its evidence.
 
 ## Why this order
 

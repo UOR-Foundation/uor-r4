@@ -34,6 +34,6 @@ Stop if a current owner direction still forbids CPU model compute at the claimed
 ## Done when
 
 - D84 and every summary of the compute rule agree that GPU remains the qualification authority.
-- Six child items carry dependencies, implementation scopes and explicit done/cancel conditions.
-- All nine historical training families have an evidence-based disposition.
+- Seven child items carry dependencies, implementation scopes and explicit done/cancel conditions.
+- All ten historical training families have an evidence-based disposition.
 - Roadmap sync/render, owner-path policy, link checks and a fresh exact-head review pass.

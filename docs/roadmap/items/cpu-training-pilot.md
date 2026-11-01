@@ -45,5 +45,5 @@ First collect the child REPORTs and rerun their parity/resume checks at the pilo
 ## Sources
 
 - `docs/research/cpu-training-program.md`
-- The five preceding CPU roadmap items and their REPORTs
+- The six preceding CPU component items and their REPORTs
 - The current evaluator and panel selected by the pre-registration
