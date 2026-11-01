@@ -1,13 +1,13 @@
 # UOR Inverted-File CUDA Example 0.1.0
 
-A prepared source-and-evidence release definition for the standalone exact integer inverted-file index, CPU oracle, optional CUDA Driver API implementation, and build-time PTX admission gate. **Publication and published-asset verification are pending.** This is intended for scoped community review, not as the UOR-R4 model's M8 release or an NVIDIA-endorsed sample.
+A [source-and-evidence release](https://github.com/UOR-Foundation/uor-r4/releases/tag/cuda-inverted-file-v0.1.0) of the standalone exact integer inverted-file index, CPU oracle, optional CUDA Driver API implementation, and build-time PTX admission gate. Published assets were downloaded and passed checksum and extracted-test verification. This is a scoped community-review release, not the UOR-R4 model's M8 release or an NVIDIA-endorsed sample.
 
-## Planned assets and verification
+## Assets and verification
 
 - `uor-cuda-inverted-file-0.1.0.tar.gz`: the complete standalone project, its CUDA lab evidence and task records, the roadmap item linked by those records, and the linked telemetry conventions. No generated binaries, model checkpoint, corpus, or third-party data are included.
 - `SHA256SUMS`: the SHA-256 manifest for the archive.
 
-After publication, download both assets, then verify and extract them:
+Download both assets, then verify and extract them:
 
 ```sh
 shasum -a 256 -c SHA256SUMS
@@ -29,7 +29,7 @@ A missing toolchain or GPU is `NOT_RUN`, not a passing CUDA result. See `README.
 
 ## Source identity
 
-Planned release tag: `cuda-inverted-file-v0.1.0`, to target the protected `main` merge commit that contains this release definition. The measured CUDA implementation is `719a9a7861deb595dfc5269ffec8a5e7e53cb39b`; the only later changes in the standalone project before this release metadata were documentation, so the packaged CUDA/telemetry implementation is unchanged.
+Release tag: [`cuda-inverted-file-v0.1.0`](https://github.com/UOR-Foundation/uor-r4/releases/tag/cuda-inverted-file-v0.1.0), targeting protected `main` merge `4daf787f3064e348d5659c4f623429aa8b5c9f30`. The measured CUDA implementation is `719a9a7861deb595dfc5269ffec8a5e7e53cb39b`; the only later changes in the standalone project before the release metadata were documentation, so the packaged CUDA/telemetry implementation is unchanged.
 
 ## Measured evidence
 

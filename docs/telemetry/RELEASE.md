@@ -1,13 +1,13 @@
 # Opt-in UOR Artifact Telemetry 0.1.0
 
-A prepared source-and-evidence release definition for the standalone OTLP/HTTP JSON example, its explicit loopback OpenTelemetry Collector check, and a vendor-neutral **draft** loaded-artifact identity convention. **Publication and published-asset verification are pending.** This is not an OpenTelemetry SDK, production exporter, accepted semantic convention, or the UOR-R4 model's M8 release.
+A [source-and-evidence release](https://github.com/UOR-Foundation/uor-r4/releases/tag/otel-artifact-v0.1.0) of the standalone OTLP/HTTP JSON example, its explicit loopback OpenTelemetry Collector check, and a vendor-neutral **draft** loaded-artifact identity convention. Published assets were downloaded and passed checksum and extracted-test verification. This is not an OpenTelemetry SDK, production exporter, accepted semantic convention, or the UOR-R4 model's M8 release.
 
-## Planned assets and verification
+## Assets and verification
 
 - `uor-otel-artifact-0.1.0.tar.gz`: the standalone consumer and its required source, the collector configuration, local conventions and draft proposal, collector results, and task records. No generated binaries, credentials, model checkpoint, corpus, or user content are included.
 - `SHA256SUMS`: the SHA-256 manifest for the archive.
 
-After publication, download both assets, then verify and extract them:
+Download both assets, then verify and extract them:
 
 ```sh
 shasum -a 256 -c SHA256SUMS
@@ -25,7 +25,7 @@ UOR_OTEL_OUT=build/trace.json make instrumented-example
 
 To repeat the collector experiment, follow `examples/otel/README.md`. It uses the official Collector Contrib image pinned by digest, binds only loopback, requires Docker, and must be stopped after inspection. Repeating it is optional; the recorded collector result is not represented as a new run.
 
-Planned release tag: `otel-artifact-v0.1.0`, to target the protected `main` merge commit that contains this release definition.
+Release tag: [`otel-artifact-v0.1.0`](https://github.com/UOR-Foundation/uor-r4/releases/tag/otel-artifact-v0.1.0), targeting protected `main` merge `4daf787f3064e348d5659c4f623429aa8b5c9f30`.
 
 ## Recorded collector evidence
 
