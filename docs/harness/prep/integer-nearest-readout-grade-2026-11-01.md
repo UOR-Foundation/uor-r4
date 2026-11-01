@@ -97,7 +97,7 @@ The outcome is read on the tested strata only, after Row 0 holds.
 
 | Outcome | What holds | What it unlocks |
 |---|---|---|
-| **LOSS** | Some tested stratum fails, named by test and stratum. | A LOSS of any class fails done-when 3 for R, and no later card re-bars it once read. The next unit classifies the failing strata by trace (CHARTER §4.2) only to choose the remedy: a finer fixed point for rounding, or a located fix for a fault, after which Q1 to Q5 are read again on the new artifact. The one exception is an instrument fault that Row 0 missed, shown by a rerun to have made the count wrong: then this reading is void, repaired and read again. The item stays `ready`. |
+| **LOSS** | Some tested stratum fails, named by test and stratum. | A LOSS of any class fails done-when 3 for R, and no later card re-bars it once read. The next unit classifies the failing strata by trace (CHARTER §4.2) only to choose the remedy: a finer fixed point for rounding, or a located fix for a fault, after which Q1 to Q5 are read again on the new artifact. The one exception is an instrument fault that Row 0 missed, shown by a rerun to have made the count wrong, under §8's three conditions: then this reading is void, repaired and read again. The item stays `ready`. |
 | **Held** | Every tested stratum of Q1 to Q4 holds. | Q5's card, then its sheet with a FIT and a pre-run review, then the trace. Done-when 3 is met only if Q5 holds as well. The item stays `ready`. |
 
 This unit does not classify a LOSS; it states it with its failing strata.
@@ -174,15 +174,24 @@ Every input is read from its local copy, checked against the manifest below, and
 | R's stored greedy replies (claude-243's laptop run) | `results/claude/integer-nearest-readout-tie-parity-2026-11-01/laptop/SHA256SUMS` | `801b8ad875132237f42f830088c9c53fb72660d03b0c66bc1e7ec02e0a383c3d` |
 | claude-232's prompt files | `results/claude/integer-nearest-readout-parity-2026-10-31/SHA256SUMS` | `b739b7789075f46a7c4d4c003ebf7b3a10d47e1c53fe0b77bfe7e5d50db9bb88` |
 
-- **R** is claude-243's raw export of (r-drop) step 16,384, `a7r-s1/2/3.uorlut`. It is not opened here: its picks are claude-244's sealed forced decodes and claude-243's sealed greedy replies.
-- **The data split** is DEV and the held-out-phrasing panel p-w, through claude-232's prompt files: 310 rows of DEV (284 counted, 26 cut) and 1,202 of p-w (1,067 counted, 135 cut), at each seed. Both were already opened for parity by claude-232, claude-243 and claude-244. No TRAIN data and no other panel is read.
+### 5.1 Base artifact
+
+**R** is claude-243's raw export of (r-drop) step 16,384, `a7r-s1/2/3.uorlut`. It is not opened here: its picks are claude-244's sealed forced decodes and claude-243's sealed greedy replies. **F′** is the float model at the same step, decoded by claude-243's binary `train-in-space-4170b844` (§4.1).
+
+### 5.2 Data split
+
+DEV and the held-out-phrasing panel p-w, through claude-232's prompt files: 310 rows of DEV (284 counted, 26 cut) and 1,202 of p-w (1,067 counted, 135 cut), at each seed. Both were already opened for parity by claude-232, claude-243 and claude-244. No TRAIN data and no other panel is read.
+
+### 5.3 What the files hold, and what was seen
+
 - **The files' structure,** read with no pick compared, in all six cells: no reference is empty and none opens with `<|bos|>` (id 0). No greedy reply of R or F′ is empty, and none contains id 0. So every cut-window row is eligible for I-Align at its opening.
 - **Seen before this sheet** (disclosed, not a reading of the bar): while finding F′'s commit, the author saw claude-243's GPU log print F′'s own `nearest_hits` over every scored row of DEV and p-w at seed 1 (11,841 of 14,287 and 37,049 of 49,251). That is F′ alone, over rows and positions the bar does not count, and it gives neither a nor b. The bar was fixed in claude-245 before it was seen.
+- **No count of R against the reference was printed** in any log of R's. claude-243's fifteen decode and export logs, claude-244's twelve forced-decode logs and both units' `grade.log` hold no line naming hits, top-1, correct or accuracy. They were counted with `grep -c`, and no value was shown. So F′'s `nearest_hits` above cannot be paired with an R total.
 
 ## 6. Steps and the grader
 
 1. This sheet gets a fresh non-author FIT (§9) and a pre-run review (§10).
-2. Run `local/claude/claude-246/grade.sh` once, its output to `grade.log`. It runs Row 0 (§4) in order, then the six cells' readings, then the decision.
+2. Run `local/claude/claude-246/grade.sh` once. It refuses if `grades/` or `grade.log` already exists, and it writes `grade.log` itself. It runs Row 0 (§4) in order, then the six cells' readings, then the decision.
 3. Seal `grades/`, `grade.log`, the grader and its probes with a `SHA256SUMS` under `results/claude/integer-nearest-readout-grade-2026-11-01/`, and read them back.
 4. Record the outcome: the item's "What is missing", a row in `m4-serving.md`, and the REPORT, negatives first.
 
@@ -190,7 +199,7 @@ Every input is read from its local copy, checked against the manifest below, and
 
 | File | sha256 |
 |---|---|
-| `grade.sh` (the runner) | `5433335b85e9912cb9bbdef73292dd66af82778c54fe8144bde21471681df7c0` |
+| `grade.sh` (the runner) | `87f5b89e78e1844caf8a93b80b712db4579d14c118c0378fbe51834ba3f63ab9` |
 | `grade-cell.jq` (one cell: checks, then readings) | `6bac0aa087ff2db68743cef6340f326dcba1da16a5a8e9b822bebf7040029781` |
 | `decide.jq` (Q1 to Q4 over the strata, and the outcome) | `783a058c6c9ff6b615b5ab174205824bef800d6af871ca4ea395928b9e684300` |
 | `probe/decide-cases.json` (the seven decision cases) | `2275ed10710f1127a1976e9ee4fea8e03f4d05f9b3fa87e759e289779fd6e94b` |
@@ -211,7 +220,10 @@ These are the card's figures, under its assumptions.
 - **Cost:** $0. A count in `jq` on the laptop, minutes long. No pod and no lease.
 - **Stop rule:**
   - Any Row 0 check that fails stops the grade before any reading. The instrument is repaired, the failure recorded, and the whole grade rerun into a new folder; a partial count is never read.
-  - The readings are computed once. A rerun after them is only for an instrument fault, shown by a rerun.
+  - The readings are computed once. A rerun after them is only for an instrument fault, shown by a rerun, and it counts only if all three hold:
+    - a known-answer probe that uses no reading data fails on the old grader and passes on the repaired one;
+    - a fresh non-author FIT reads the repair before the rerun;
+    - both readings are recorded and sealed, the rerun in a new folder.
   - A bar change is only ever a new decision card, with its own decision review, logged on #3462.
 - **Nothing in CHARTER §3 or the caps is touched.**
 
@@ -269,6 +281,24 @@ TEST FITNESS: NOT_FIT
 
 TEST FITNESS: FIT
 
+**Round 4,** after the pre-run review's round 1 (§10): pending. Two non-author jobs read the runner in full at `87f5b89e…` and check the author's answers above at F′'s commit. The verdict above stands only if both confirm.
+
 ## 10. Pre-run review
 
-Pending, after the FIT.
+**Round 1** (a fresh `delegate:reviewer`, on the sheet at `a8f4e3600`). It ran no grader and opened no reading file. Verdict: FAIL, on one Major.
+- **What passed:**
+  - the grader's four hashes against §6;
+  - the four manifests against §5 and the store's copies, and `shasum -c` on claude-244's seal;
+  - the runner's gates, with no `grades/` and no `grade.log` yet;
+  - the chain from §3.3 to the item's done-when 3 and the ORDER's done-when 3 to 5;
+  - the cost: $0, no pod, 26 GiB free, against 56 KB of claude-244's grades.
+- **Its findings, and what was done:**
+  1. Major: round 1 of the FIT read `grade.sh` before fix 2 changed it, and no non-author has read the runner's grading section (from line 100) since. Sent to FIT round 4 (§9).
+  2. Minor: the author's answers to round 3's Minors and Nit were not checked by a non-author. Sent to FIT round 4.
+  3. Minor: the rerun exception could justify itself. §8 now requires a known-answer probe, a fresh FIT of the repair, and both readings sealed.
+  4. Nit: the runner counted `PRE-RUN REVIEW: PASS` lines, so a later FAIL would not stop it. It now reads the last `PRE-RUN REVIEW:` line.
+  5. Nit: nothing kept a second run from overwriting `grade.log`. The runner now refuses if the log exists, and writes the log itself.
+  - It could not tell whether a total of R's against the reference was printed anywhere. None was (§5.3).
+- **Also changed:** §5 is split into Base artifact, Data split and what was seen, for the sheet-shape rule. The runner's hash in §6 is now `87f5b89e…`.
+
+**Round 2:** pending, after FIT round 4.
