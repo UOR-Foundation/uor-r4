@@ -20,10 +20,10 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 24 |
+| ready | 23 |
 | held | 10 |
 | decision | 1 |
-| done | 88 |
+| done | 89 |
 | total | 123 |
 
 ## Start here
@@ -149,7 +149,6 @@ These items are ready and open to anyone.
 | [Split the training backward, and run a cheaper rival search against (a)](items/training-step-cost.md) | ready | a lab | yes | [fbs-cost-profile](items/fbs-cost-profile.md) | [#3391](https://github.com/UOR-Foundation/uor-r4/issues/3391) |
 | [Serve the turn memory from the integer artifact on the laptop](items/turn-memory-integer.md) | ready | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | [#3392](https://github.com/UOR-Foundation/uor-r4/issues/3392) |
 | [Package a standalone UOR inverted-file CUDA example](items/uor-cuda-inverted-file.md) | ready | a lab | no | none | [#3475](https://github.com/UOR-Foundation/uor-r4/issues/3475) |
-| [Add opt-in artifact telemetry to the standalone CUDA example](items/uor-telemetry.md) | ready | a lab | no | [uor-cuda-inverted-file](items/uor-cuda-inverted-file.md) | [#3478](https://github.com/UOR-Foundation/uor-r4/issues/3478) |
 | [Make the native writer's admission hold at every seed](items/writer-admission.md) | ready | a lab | yes | [one-decoder](items/one-decoder.md) | [#3394](https://github.com/UOR-Foundation/uor-r4/issues/3394) |
 | [Build a sigmoid-free gate for E8 orbit memory and rerun it on GPU](items/e8-orbit-memory-sigmoid-free-iteration.md) | held | a lab | yes | [float-training-module](items/float-training-module.md) | [#2822](https://github.com/UOR-Foundation/uor-r4/issues/2822) |
 | [Run the Hopf retained-fibre language test](items/hopf-retained-fibre-test.md) | held | a lab | yes | none | [#2825](https://github.com/UOR-Foundation/uor-r4/issues/2825) |
@@ -184,6 +183,7 @@ These items are ready and open to anyone.
 | [Route the user's turn to an exact memory built from TRAIN, read at the readout](items/route-plus-memory.md) | done | a lab | yes | none | [#3390](https://github.com/UOR-Foundation/uor-r4/issues/3390) |
 | [Measure SpiralCore/FBS descent and tokens per second in a float sheet](items/spiralcore-fbs-offline-float-sheet.md) | done | a lab | yes | [float-training-module](items/float-training-module.md), [r-secant-surrogate-descent](items/r-secant-surrogate-descent.md) | [#2891](https://github.com/UOR-Foundation/uor-r4/issues/2891) |
 | [Carry the turn memory past a reply's first word](items/turn-memory-reply.md) | done | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | [#3393](https://github.com/UOR-Foundation/uor-r4/issues/3393) |
+| [Add opt-in artifact telemetry to the standalone CUDA example](items/uor-telemetry.md) | done | a lab | no | [uor-cuda-inverted-file](items/uor-cuda-inverted-file.md) | [#3478](https://github.com/UOR-Foundation/uor-r4/issues/3478) |
 
 ## Infrastructure
 

@@ -3,7 +3,7 @@ id: uor-telemetry
 title: Add opt-in artifact telemetry to the standalone CUDA example
 milestone: research
 area: mechanism
-status: ready
+status: done
 open_to: lab
 needs_gpu: false
 depends_on: [uor-cuda-inverted-file]
@@ -17,7 +17,7 @@ A local, opt-in OpenTelemetry consumer can demonstrate how artifact identity rel
 
 ## What is missing
 
-The standalone example needs a consumer that emits OTLP/HTTP JSON only when explicitly requested, uses random execution IDs, and records artifact digests as metadata rather than trace or span IDs. GPU execution and collector integration are not part of this host-only unit.
+**The host-only consumer is complete.** Explicit `UOR_OTEL_OUT` output contains valid OTLP/HTTP JSON with all four operations, real parent links, random execution IDs, and stable codebook SHA-256 metadata. Default operation creates no file or endpoint, and the existing host/clean-copy evidence passes. GPU execution and collector interoperability remain **NOT_RUN** and are outside this unit. The local namespace and the separate generic upstream path are documented in `docs/telemetry/uor-conventions.md`; the CUDA advertising gates are in `projects/uor-cuda-inverted-file/ADVERTISING.md`.
 
 ## Done when
 
