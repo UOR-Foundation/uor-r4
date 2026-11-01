@@ -18,10 +18,10 @@ The artifact is claude-235's, so this repeats its reading (13–17%, 3,812–4,1
 ## What did not work, first
 
 - **The float forward as trained does not meet parity** (the d11 arm). d is 174 of 1,536 at s1 and 243 at s3, against a bar of 46. Its copy-head cells keep 47–48% of their sets past t = 17 equal, against a bar of 95%. So the item's done-when 2 is not met against the checkpoint's own forward. It holds only with one tie rule on both sides (row T, below).
-- **The cause is the order among ties, and it is large.** With every copy code now equal on both sides, 1,448 to 1,567 of each cell's 3,072 sets in the d11 arm hold a tie across the 16th place. The GPU arg-sort, whose order among ties is not specified, breaks them differently from the integer session's rule (ascending bits, then ascending `s`). The two float arms differ in top-1 at no fewer than 168 positions (s1, 174 − 6) and 216 (s3, 243 − 27). So the trained readout depends, at 11–14% of positions, on an order the trainer never fixed.
+- **The cause is the order among ties, and it is large.** With every copy code now equal on both sides, 1,448 to 1,567 of the 3,072 sets in each of the d11 arm's three fully judged cells hold a tie across the 16th place. The fourth cell, judged on only 306 (s1) and 304 (s3) sets, holds 2 and 1. The GPU arg-sort, whose order among ties is not specified, breaks them differently from the integer session's rule (ascending bits, then ascending `s`). Read from the two arms' readouts (`next`), d11 and d11-tie differ in top-1 at 174 of 1,536 positions at s1 (11.3%) and 227 at s3 (14.8%), and at 0 of 4,096 single tokens. So the trained readout depends, at 11–15% of its positions, on an order the trainer never fixed.
 - **Small differences remain with the tie rule matched**, all type-head query flips: 8 sets at the first read at both seeds, and 11 (s1) and 26 (s3) at the second. The arms count 0 ties, 0 key flips and 0 faults, and every copy code is equal. So they come from the type heads' only trunk-dependent input, the query from the residual. The trunk alone already differs at 5 and 11 positions. This is read from the counts; no residual coordinate was traced.
 - **The pod had two GPUs; the sheet registered one.** I left `--count 1` off `uor-pod up`, so Vast billed 2 × $0.563/h. The job used one. Up about 15 minutes, so about $0.28 against the sheet's $2 ceiling.
-- **claude-235's two tie-switch tests were not written.** The item's step 5 asked this pod to run them, but they never existed (claude-235's Still open). The run shows the switch acts: the tie arms count 0 ties where d11 counts about 1,450 per cell. Still, no CUDA test runs `read()` with the rule on and checks the traced order, and `the_tie_rule_keeps_the_integer_sessions_order` has had no set-aside check.
+- **claude-235's two tie-switch tests were not written.** The item's step 5 asked this pod to run them, but they never existed (claude-235's Still open). The run shows the switch acts: the tie arms count 0 ties where d11 counts 1,448–1,567 in each fully judged cell. Still, no CUDA test runs `read()` with the rule on and checks the traced order, and `the_tie_rule_keeps_the_integer_sessions_order` has had no set-aside check.
 - **Two record slips on the laptop, neither touching a number.**
   - `read.sh`'s per-seed log line says "two copy-code checks written" while it wrote four, one per arm (the files and `SHA256SUMS` hold all four).
   - `reading/read.log` took its last line ("done") after the folder's sums were taken, as claude-235's did. It is the one file that fails them.
@@ -30,11 +30,12 @@ The artifact is claude-235's, so this repeats its reading (13–17%, 3,812–4,1
 ## What changed
 
 - `crates/uor-r4-float-train/src/flock_read_hamming.rs`:
-  - **The guard** (`as_trained`, commit `148f6cb5a`): every gate call of the read runs inside `hamilton_sheet::with_d11_snaps(D11Snaps { gates: false, transition: is_snapping_transition() }, …)`. These are the key, query, value and step `rotate`s, and the step path's direct `hamilton_gate`. Inside, the arm is `HamiltonActive`, the trainer's pass-through, and the export flag is off. `with_d11_snaps` gives back the arm, call index, export flag, transition snap and telemetry flag afterwards, so the trunk's later gates snap and number as before.
-  - **Two CUDA tests:**
-    - **T1,** `the_read_runs_as_trained_under_the_d11_and_export_gates`: a read with off-icosian rotations gives the same output, bit for bit, under `with_d11_mode`, under `with_d11_export_gates` and under `with_gate_mode(HamiltonActive, …)`. The test also asserts that a plain gate under D11 differs from the pass-through, so it cannot pass vacuously.
-    - **T2,** `the_trunks_gates_after_the_read_still_snap`: under D11, a gate after the read still snaps, and the snap capture holds 1 entry, where it holds 5 without the guard.
-  - **The doc comment** names every arm (review finding 1, commit `829bd87dd`).
+  - **The guard** (`as_trained`, commit `148f6cb5a`): every gate call of the read runs inside `hamilton_sheet::with_d11_snaps(D11Snaps { gates: false, transition: is_snapping_transition() }, …)`. These are the key, query, value and step `rotate`s, and the step path's direct `hamilton_gate`. Inside, the arm is `HamiltonActive`, the trainer's pass-through, and the export flag is off. `with_d11_snaps` gives back the arm, call index, export flag, transition snap and telemetry flag when the read returns, `Ok` or `Err`, so the trunk's later gates snap and number as before. A panic inside the read skips that restore (Still open).
+  - **Two CUDA tests,** both on reads with the type heads' spin on (`with_type_spin()`), so the step arm runs:
+    - **T1,** `the_read_runs_as_trained_under_the_d11_and_export_gates`: a read whose key, query, value and step rotations sit off the icosians gives the same output, bit for bit, under `with_d11_mode`, under `with_d11_export_gates` and under `with_gate_mode(HamiltonActive, …)`. The test also asserts that a plain gate under D11 differs from the pass-through, so it cannot pass vacuously.
+    - **T2,** `the_trunks_gates_after_the_read_still_snap`: under D11, a gate after the read still snaps, and the snap capture holds 1 entry, where it holds 13 with the guard a pass-through and 9 with only the step arm outside it.
+  - **The doc comment** names every arm (review finding 1, commit `829bd87dd`), and says what the restore covers.
+  - **The review round** (`1e8894ff2`): the exact-head code review found that T1 and T2 built their reads without the spin, so the step arm inside the guard never ran in either test. Both now build with it and set the step rotation off the icosians, and T2's trunk gate moved to its own rotation (k = 4).
 - **The prep sheet**, its two FIT rounds (NOT FIT, then FIT) and its pre-run review (GO), each a fresh reviewer, with every point taken (`3ff95f8b5`, `ab1f713ec`, `d4af1adec`; #3385 6554654953).
 - **The ORDER's stop-rule line** on the trunk-only d, amended after the FIT. It now reads it as a path or toolchain fault, not a guard leak, and names T2 as the leak check.
 - **The item's step 5** records this result and the next step. **The notebook row** is in `m4-serving.md`.
@@ -69,7 +70,7 @@ The single tokens agree at 4,023 and 3,992 of 4,096 in every arm, the same as th
 The rounded arms give their unrounded twins' counts in every cell, except that s3 d11-rounded's d is 242. The comparisons' own top-1 (the nearest kept member) for d11-tie is 3,040 of 3,040 at both copy cells, 3,037 of 3,040 at the first read's type heads, and 1,821 of 1,826 (s1) and 1,741 of 1,750 (s3) at the second's.
 
 **The causes** of the judged sets that differ:
-- **d11:** ties (1,448–1,567 per cell), plus the type-head query flips below. 0 key flips, 0 faults.
+- **d11:** ties (1,448–1,567 in each of the three fully judged cells; 2 and 1 in the fourth), plus the type-head query flips below. 0 key flips, 0 faults.
 - **The tie arms:** query flips only: 8 at the first read's type heads at both seeds, and 11 (s1) and 26 (s3) at the second's. 0 ties, 0 key flips, 0 faults.
 
 ### The instrument checks (the sheet's §4): all hold
@@ -77,6 +78,11 @@ The rounded arms give their unrounded twins' counts in every cell, except that s
 - **`I-Data`:** every checkpoint file passed the run's sums, and all 24 of claude-233's h and t files passed the sheet's pins, on the pod. On the laptop, the pod's 155 output files and claude-233's two artifacts passed again.
 - **`I-GPU-Tests`:** at `d4af1adec`, after the restore, 43 `flock_read_hamming::` and `fbs_export::` tests passed and 0 failed. The five named tests all ran ok: T1, T2, `the_copy_code_snap_is_the_gpu_hooks_own`, `recording_the_trace_leaves_the_read_unchanged` and `the_tie_rule_keeps_the_integer_sessions_order`.
 - **`I-Negative`:** with `guard.patch` (`f0e91ea6…7d40`) reversed, T1 and T2 ran alone and both failed by name, in a run of 2 after a rebuild of `uor-r4-float-train`. T1 failed at "the D11 mode" (the output under D11 differed from the pass-through), T2 at its capture count. The guard was restored, the tree was clean against `HEAD`, and `HEAD` was the pinned head before the tests and the builds.
+- **`I-Negative`, the review round, at `1e8894ff2`** (tests with the step arm on; `out/negatives.txt` in the store's `integer-hamming-read-astrained-tests-2026-11-01/`):
+  - **The guard a pass-through** (`guard-off.patch`, `7c592020…7057`): T1 and T2 ran alone after a rebuild of the crate, and both failed by name. T1 failed at "the D11 mode", and T2's capture held 13 entries, not 1.
+  - **Only the step arm outside the guard** (`step-out.patch`, `11ff9f81…7f70`; the key, query and value rotations stay inside): both failed by name again. T1 failed at "the D11 mode", and T2's capture held 9. So the tests now pin the step arm on its own.
+  - Each patch was reversed, and the tree was the pinned head again, clean, before the next step.
+- **`I-GPU-Tests`, the review round:** at `1e8894ff2`, after the restores, 43 `flock_read_hamming::` and `fbs_export::` tests passed and 0 failed, the five named among them.
 - **`I-Trunk`:** at both seeds, the trunk alone's `snapshot.json`, its three readouts and its `compare.json` are claude-233's byte for byte (`out/i-trunk.txt`). So the trunk's path and the pod's toolchain are claude-233's.
 - **`I-Guard-Effect`:** each seed's d11 readout differs from claude-233's (`8c0c1b92…` against `6b3d9d7d…`, and `9487a1a6…` against `bf34b819…`; `out/i-guard-effect.txt`).
 - **`I-Integer`:** both integer traces are claude-235's byte for byte (`a8dbc19c…`, `cca428db…`; `reading/i-integer.txt`).
@@ -95,7 +101,7 @@ So the integer port computes the read the float forward computes, once the two s
 - The two tie-switch CUDA tests owed since claude-235 come with it.
 - Then the bars run again. That means claude-146's checkpoints (done-when 2's named reference, row P's next) and (r-drop), whose readout with the rule on is the d11-tie arm measured here.
 
-Retraining is not in that step. A checkpoint trained under the GPU's tie order moved 11–14% of its top-1 decodes when the order changed. Whether it loses quality that way is a separate question, measured by the one-model path's own scoring, not by parity.
+Retraining is not in that step. Changing the order moved 174 and 227 of this checkpoint's 1,536 top-1 decodes (11.3% and 14.8%), and none of its 4,096 single tokens. Whether it loses quality that way is a separate question, measured by the one-model path's own scoring, not by parity.
 
 ### Cost and records
 
@@ -106,6 +112,7 @@ Retraining is not in that step. A checkpoint trained under the GPU's tie order m
   - `out/`, the pod's sealed output, with `job.sh` and `guard.patch` inside it. Its `SHA256SUMS` is `c1d19bec…75d0`, and it read back 155 of 155 OK.
   - `bin/`, the two binaries (`fbs-snapshot` `2781763a…`, `fbs-compare` `e6a02bff…`), matching `out/binaries.sha256`.
   - `laptop/`: `reading/`, `read.sh`, `watch.sh`, `watch.log` and the review note. Its `SHA256SUMS` is `b57c2ae5…a654`.
+- **The review round's pod:** vast-58631700, one RTX 5090 at $0.563/h, up about 6 minutes (07:27–07:32:52Z), so about $0.06. Finite CUDA tests only, so no sheet (CHARTER §4.5). The job ran 07:29:03–07:29:59Z, ended EXIT 0, and the watcher saw it finish at 07:30:10Z (`watch2.log`). Its 13 output files, `job2.sh` and both patches among them, are in the store at `results/claude/integer-hamming-read-astrained-tests-2026-11-01/out/` (`SHA256SUMS` `4f4f39ef…dabc`, 13 of 13 OK on the laptop). The lease was released, and the pod was deleted with `--confirm-archived` after the store listing. No pod is running.
 - **The reviews:** the FIT, its two rounds, and the pre-run review, GO (#3385, 6554654953).
 
 ## Checks run at the head
@@ -117,6 +124,9 @@ Retraining is not in that step. A checkpoint trained under the GPU's tie order m
   - the CUDA code type-checks with the stub nvcc (`cargo check --features cuda --bin fbs-snapshot --lib --tests`): 0 errors;
   - `cargo clippy -p uor-r4-float-train --lib --tests`: no warning in `flock_read_hamming.rs`. The crate's six are in other files, on main;
   - `rustfmt --check` on `flock_read_hamming.rs`: 20 diffs, the same 20 as main's copy of the file, line for line after this unit's insertions. None is in this unit's lines.
+- **The review round, at `1e8894ff2`** (the last code change; the commits after it are docs):
+  - on the pod: both `I-Negative` set-asides, then `I-GPU-Tests` (43 passed);
+  - on the laptop: the CPU library tests, 194 passed and 0 failed (`local/claude/cpu-float-train-r2.log`); the stub-nvcc type check of `--lib --tests` with each set-aside and without, 0 errors; clippy, nothing in `flock_read_hamming.rs`; `rustfmt --check`, still the same 20 diffs, none in this unit's lines; `uor-harness loop gates --full`, 11 gates, all GREEN (`local/claude/gates/1793518530-64369`).
 - `uor-harness loop report --check` and `uor-harness loop pr-check --local`.
 
 ## Skills used
@@ -129,6 +139,9 @@ None.
 - **Then parity on claude-146's checkpoints,** done-when 2's named reference, and on DEV.
 - **The type heads' residual query flips** (8 at the first read, 11 and 26 at the second) are not traced to a coordinate. They are well inside the bars, and the trunk alone differs at 5 and 11 positions.
 - **The timing at long contexts:** the sweep stops at 192, the readout window. A longer sweep on an idle machine is still owed (done-when 3).
+- **The guard's restore on a panic.** `with_d11_snaps` (in `hamilton_sheet.rs`, outside this unit's scope) restores the hook on `Ok` and `Err` only. A panic inside the read leaves the arm `HamiltonActive` on that thread. In `uor-r4-float-train` only two of `hamilton_sheet`'s own tests catch a panic and go on, and neither runs a read, so nothing hits it today; a drop guard in `with_d11_snaps` would close it.
+- **The read's backward is not guarded.** The guard covers the forward. A D11-bridge training step (`with_d11_training`) would still run the read's backward through the snap, and no trainer runs one with a read.
+- **The read is absent from the hook's telemetry and snap capture by design.** A reading of either sees the trunk's gates only, and its call numbers are a trunk's without the read.
 - **The item stays `ready`;** done-when 2 and 3 remain open.
 
 ## Plain summary
