@@ -6,7 +6,7 @@ Lab: deepseek. Item: [cpu-training-program](../../../../roadmap/items/cpu-traini
 
 - **No CPU training method has been repaired in this unit.** It records authority, dispositions and the implementation sequence. No model compute ran, and the new notebook has no result rows.
 - **The repository-wide `cargo test -p uor-r4-harness` is red on the base.** On clean `origin/main`, the representative tests for the milestone-registry mismatch, the malformed CUDA performance sheet and the registry PR gate fail unchanged. The full suite at this head reports 663 passed, 14 failed and 1 ignored. These findings predate this documentation branch and are outside its scope.
-- **The exact-head GitHub `harness rules and tests` job is red on those same baseline failures:** https://github.com/UOR-Foundation/uor-r4/actions/runs/41354932462/job/124992950297. This is reported, not waived.
+- **The exact-head GitHub `harness rules and tests` job is red on those same baseline failures:** https://github.com/UOR-Foundation/uor-r4/actions/runs/41356999172/job/124999322336. This is reported, not waived.
 - **`uor-harness check` is red on the base at one error plus warnings.** The error is the existing malformed `docs/harness/prep/uor-cuda-inverted-file-performance-2026-11-01.md` sheet (six missing shape blocks). Most warnings are existing claims, presence, pre-registration and documentation-command debt. This PR does not claim a green global check.
 - **The initial commit combined ORDER registration with the unit content.** That raises the D76 commit-order advisory; it is not a source or owner-path failure. The branch stays as pushed because rewriting a protected-topic branch is unnecessary for an advisory.
 
