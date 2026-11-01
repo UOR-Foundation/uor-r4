@@ -48,7 +48,8 @@ use std::time::Instant;
 use serde::Deserialize;
 use serde_json::json;
 use uor_r4_integer::fbs_snapshot::{
-    compare_hamming_traces, write_new_file, FbsFloatReadout, FbsReadoutMode, HammingTrace, HAMMING_TRACE_SCHEMA,
+    compare_hamming_traces, write_new_file, FbsFloatReadout, FbsReadoutMode, HammingTrace,
+    HAMMING_TRACE_SCHEMA,
 };
 use uor_r4_integer::stack::{
     hamming_trace_window, panel_reply, read_hamming_uorlut01, IntegerStackModel, ReplyEnd,
@@ -62,24 +63,38 @@ const SWEEP_PREFILLS: [usize; 4] = [32, 64, 96, 128];
 /// `--hamming-trace` (claude-235): each read's choices in a fresh session over each sequence of
 /// the float D11 readout at `readout`, written new to `out`; it prints the window count and the
 /// file's sha256.
-fn hamming_trace(model: &IntegerStackModel, bytes: &[u8], readout: &str, out: &str) -> Result<(), String> {
+fn hamming_trace(
+    model: &IntegerStackModel,
+    bytes: &[u8],
+    readout: &str,
+    out: &str,
+) -> Result<(), String> {
     let image = read_hamming_uorlut01(bytes)
         .map_err(|e| format!("the Hamming reads: {e}"))?
         .ok_or("the artifact has no Hamming read to trace")?;
     let text = std::fs::read(readout).map_err(|e| format!("{readout}: {e}"))?;
-    let readout: FbsFloatReadout = serde_json::from_slice(&text).map_err(|e| format!("{readout}: {e}"))?;
+    let readout: FbsFloatReadout =
+        serde_json::from_slice(&text).map_err(|e| format!("{readout}: {e}"))?;
     if readout.mode != FbsReadoutMode::D11 {
-        return Err(format!("the readout was read in the {:?} mode, not D11", readout.mode));
+        return Err(format!(
+            "the readout was read in the {:?} mode, not D11",
+            readout.mode
+        ));
     }
     let mut windows = Vec::with_capacity(readout.sequences.len());
     for (i, sequence) in readout.sequences.iter().enumerate() {
         let mut session = model.session();
         session.set_hamming_trace(true);
         for &token in &sequence.tokens {
-            session.step_native(token).map_err(|e| format!("sequence {i}: {e}"))?;
+            session
+                .step_native(token)
+                .map_err(|e| format!("sequence {i}: {e}"))?;
         }
         let steps = session.take_hamming_trace().ok_or("the trace was off")?;
-        windows.push(hamming_trace_window(&sequence.tokens, &steps).map_err(|e| format!("sequence {i}: {e}"))?);
+        windows.push(
+            hamming_trace_window(&sequence.tokens, &steps)
+                .map_err(|e| format!("sequence {i}: {e}"))?,
+        );
     }
     let trace = HammingTrace {
         schema: HAMMING_TRACE_SCHEMA.to_owned(),
@@ -121,7 +136,11 @@ fn hamming_trace_compare(first: &str, second: &str) -> Result<(), String> {
 
 /// `--context-sweep` (claude-235): the protocol at each of `SWEEP_PREFILLS` over the fixed
 /// prompt's first tokens, on `model` and on the same model without its Hamming read.
-fn context_sweep(model: &IntegerStackModel, without: &IntegerStackModel, prompt: &[u32]) -> Result<serde_json::Value, String> {
+fn context_sweep(
+    model: &IntegerStackModel,
+    without: &IntegerStackModel,
+    prompt: &[u32],
+) -> Result<serde_json::Value, String> {
     let mut points = Vec::with_capacity(SWEEP_PREFILLS.len());
     for prefill in SWEEP_PREFILLS {
         let prompt = &prompt[..prefill];
@@ -539,7 +558,10 @@ fn run() -> Result<(), String> {
         _ => {}
     }
     let sweep = args.iter().any(|a| a == "--context-sweep");
-    let args: Vec<String> = args.into_iter().filter(|a| a != "--context-sweep").collect();
+    let args: Vec<String> = args
+        .into_iter()
+        .filter(|a| a != "--context-sweep")
+        .collect();
     let parts = args.iter().any(|a| a == "--parts");
     let stages = parts || args.iter().any(|a| a == "--stages");
     let args: Vec<String> = args
@@ -588,10 +610,17 @@ fn run() -> Result<(), String> {
         if stages || prompt_arg.is_some() {
             return Err(format!("--context-sweep takes no other flag: {USAGE}"));
         }
-        if read_hamming_uorlut01(&bytes).map_err(|e| format!("the Hamming reads: {e}"))?.is_none() {
-            return Err("--context-sweep times the Hamming read, and the artifact has none".to_owned());
+        if read_hamming_uorlut01(&bytes)
+            .map_err(|e| format!("the Hamming reads: {e}"))?
+            .is_none()
+        {
+            return Err(
+                "--context-sweep times the Hamming read, and the artifact has none".to_owned(),
+            );
         }
-        let without = IntegerStackModel::parse(&bytes).map_err(|e| format!("parse: {e}"))?.without_hamming_read();
+        let without = IntegerStackModel::parse(&bytes)
+            .map_err(|e| format!("parse: {e}"))?
+            .without_hamming_read();
         let report = json!({
             "schema": "uor-r4.fbs-toks-context/1",
             "artifact_sha256": model.artifact_sha256(),

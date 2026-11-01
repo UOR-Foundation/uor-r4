@@ -530,10 +530,16 @@ fn kept_set(kept: &[u32], t: usize, most: usize) -> Result<Vec<u32>, String> {
 /// same query code and the same key code at every position either keeps, and each position only
 /// one keeps sits at the last kept place's distance (else an instrument fault); anything else is
 /// a sign flip.
-pub fn compare_hamming_traces(first: &HammingTrace, second: &HammingTrace) -> Result<HammingTraceComparison, String> {
+pub fn compare_hamming_traces(
+    first: &HammingTrace,
+    second: &HammingTrace,
+) -> Result<HammingTraceComparison, String> {
     for trace in [first, second] {
         if trace.schema != HAMMING_TRACE_SCHEMA {
-            return Err(format!("the {} trace's schema is {}, not {HAMMING_TRACE_SCHEMA}", trace.side, trace.schema));
+            return Err(format!(
+                "the {} trace's schema is {}, not {HAMMING_TRACE_SCHEMA}",
+                trace.side, trace.schema
+            ));
         }
     }
     let (heads, most) = (first.heads, first.kept);
@@ -544,28 +550,44 @@ pub fn compare_hamming_traces(first: &HammingTrace, second: &HammingTrace) -> Re
         ));
     }
     if first.windows.len() != second.windows.len() || first.windows.is_empty() {
-        return Err(format!("the traces hold {} and {} windows", first.windows.len(), second.windows.len()));
+        return Err(format!(
+            "the traces hold {} and {} windows",
+            first.windows.len(),
+            second.windows.len()
+        ));
     }
     let copy = heads / 2;
     let mut rows: Vec<HammingCompareRow> = first.windows[0]
         .reads
         .iter()
         .flat_map(|r| {
-            ["copy", "type"].map(|kind| HammingCompareRow { depth: r.depth, kind: kind.to_owned(), ..Default::default() })
+            ["copy", "type"].map(|kind| HammingCompareRow {
+                depth: r.depth,
+                kind: kind.to_owned(),
+                ..Default::default()
+            })
         })
         .collect();
     let mut faults = Vec::new();
     for (w, (a, b)) in first.windows.iter().zip(&second.windows).enumerate() {
         let time = a.ids.len();
         let depths = |x: &HammingTraceWindow| x.reads.iter().map(|r| r.depth).collect::<Vec<_>>();
-        if a.ids != b.ids || depths(a) != depths(b) || 2 * a.reads.len() != rows.len() || depths(a) != rows.iter().step_by(2).map(|r| r.depth).collect::<Vec<_>>() {
+        if a.ids != b.ids
+            || depths(a) != depths(b)
+            || 2 * a.reads.len() != rows.len()
+            || depths(a) != rows.iter().step_by(2).map(|r| r.depth).collect::<Vec<_>>()
+        {
             return Err(format!("window {w}: the traces' ids or reads differ"));
         }
         // Whether every earlier read's sets agreed at each position and before it.
         let mut earlier = vec![true; time];
         for (r, (ra, rb)) in a.reads.iter().zip(&b.reads).enumerate() {
             if ra.heads.len() != heads || (rb.heads.len() != heads && rb.heads.len() != copy) {
-                return Err(format!("window {w}, read {r}: {} and {} heads, not {heads}", ra.heads.len(), rb.heads.len()));
+                return Err(format!(
+                    "window {w}, read {r}: {} and {} heads, not {heads}",
+                    ra.heads.len(),
+                    rb.heads.len()
+                ));
             }
             let mut agree = vec![true; time];
             for h in 0..heads {
@@ -581,7 +603,10 @@ pub fn compare_hamming_traces(first: &HammingTrace, second: &HammingTrace) -> Re
                     }
                 }
                 for t in 0..time {
-                    let (sa, sb) = (kept_set(&ha.kept[t], t, most), kept_set(&hb.kept[t], t, most));
+                    let (sa, sb) = (
+                        kept_set(&ha.kept[t], t, most),
+                        kept_set(&hb.kept[t], t, most),
+                    );
                     let same = matches!((&sa, &sb), (Ok(x), Ok(y)) if x == y);
                     agree[t] &= same;
                     if r > 0 && h >= copy && !earlier[t] {
@@ -595,15 +620,21 @@ pub fn compare_hamming_traces(first: &HammingTrace, second: &HammingTrace) -> Re
                             row.instrument_faults += 1;
                             let why = sa.err().or(sb.err()).unwrap_or_default();
                             if faults.len() < MAX_FAULTS_LISTED {
-                                faults.push(format!("window {w}, read {r}, head {h}, position {t}: {why}"));
+                                faults.push(format!(
+                                    "window {w}, read {r}, head {h}, position {t}: {why}"
+                                ));
                             }
                             continue;
                         }
                     };
-                    let distance = |x: &HammingTraceHead, s: u32| (x.query[t] ^ x.key[s as usize]).count_ones();
+                    let distance = |x: &HammingTraceHead, s: u32| {
+                        (x.query[t] ^ x.key[s as usize]).count_ones()
+                    };
                     if !sa.is_empty() {
                         row.top1_judged += 1;
-                        let nearest = |x: &HammingTraceHead, set: &[u32]| set.iter().copied().min_by_key(|&s| (distance(x, s), s));
+                        let nearest = |x: &HammingTraceHead, set: &[u32]| {
+                            set.iter().copied().min_by_key(|&s| (distance(x, s), s))
+                        };
                         row.top1_equal += usize::from(nearest(ha, &sa) == nearest(hb, &sb));
                     }
                     if same {
@@ -614,16 +645,21 @@ pub fn compare_hamming_traces(first: &HammingTrace, second: &HammingTrace) -> Re
                     union.sort_unstable();
                     union.dedup();
                     let query_same = ha.query[t] == hb.query[t];
-                    let keys_same = union.iter().all(|&s| ha.key[s as usize] == hb.key[s as usize]);
+                    let keys_same = union
+                        .iter()
+                        .all(|&s| ha.key[s as usize] == hb.key[s as usize]);
                     match (query_same, keys_same) {
                         (true, true) => {
-                            let last = |set: &[u32]| set.iter().map(|&s| distance(ha, s)).max();
-                            let place = last(&sa);
+                            // Both sets are the same size, so each side keeps an odd position;
+                            // with every odd one at `place`, the second's last place is `place` too.
+                            let place = sa.iter().map(|&s| distance(ha, s)).max();
                             let odd_at_place = union
                                 .iter()
-                                .filter(|s| sa.binary_search(s).is_err() || sb.binary_search(s).is_err())
+                                .filter(|s| {
+                                    sa.binary_search(s).is_err() || sb.binary_search(s).is_err()
+                                })
                                 .all(|&s| Some(distance(ha, s)) == place);
-                            if place == last(&sb) && odd_at_place {
+                            if odd_at_place {
                                 row.ties += 1;
                             } else {
                                 row.instrument_faults += 1;
@@ -648,7 +684,11 @@ pub fn compare_hamming_traces(first: &HammingTrace, second: &HammingTrace) -> Re
             }
         }
     }
-    Ok(HammingTraceComparison { windows: first.windows.len(), rows, faults })
+    Ok(HammingTraceComparison {
+        windows: first.windows.len(),
+        rows,
+        faults,
+    })
 }
 
 #[cfg(test)]

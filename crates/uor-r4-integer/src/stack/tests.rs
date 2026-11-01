@@ -5779,9 +5779,10 @@ fn the_hamming_trace_records_each_reads_choices_and_changes_no_step() {
 }
 
 /// claude-235: one full set of the stream read's copy head at a row where a candidate it left
-/// out sits at its last kept place's distance: the head, the row, a member at that distance, the
-/// candidate, and a candidate farther than the place.
-fn a_tie_at_the_last_place(trace: &crate::fbs_snapshot::HammingTrace) -> (usize, usize, u32, u32, Option<u32>) {
+/// out sits at its last kept place's distance, with a member nearer than the place and a
+/// candidate farther: the head, the row, a member at the place, the candidate, the nearer member
+/// and the farther candidate.
+fn a_tie_at_the_last_place(trace: &crate::fbs_snapshot::HammingTrace) -> (usize, usize, u32, u32, u32, u32) {
     let read = &trace.windows[0].reads[0];
     for (h, head) in read.heads[..trace.heads / 2].iter().enumerate() {
         for t in trace.kept + 1..head.kept.len() {
@@ -5789,34 +5790,37 @@ fn a_tie_at_the_last_place(trace: &crate::fbs_snapshot::HammingTrace) -> (usize,
             let set = &head.kept[t];
             let place = set.iter().map(|&s| distance(s)).max().expect("a full set");
             let left: Vec<u32> = (1..t as u32).filter(|s| !set.contains(s)).collect();
-            if let Some(&out) = left.iter().find(|&&s| distance(s) == place) {
+            let out = left.iter().copied().find(|&s| distance(s) == place);
+            let near = set.iter().copied().find(|&s| distance(s) < place);
+            let far = left.iter().copied().find(|&s| distance(s) > place);
+            if let (Some(out), Some(near), Some(far)) = (out, near, far) {
                 let member = *set.iter().find(|&&s| distance(s) == place).expect("a member at the place");
-                let far = left.iter().copied().find(|&s| distance(s) > place);
-                return (h, t, member, out, far);
+                return (h, t, member, out, near, far);
             }
         }
     }
-    panic!("no copy-head row ties across its last kept place");
+    panic!("no copy-head row ties across its last kept place with a nearer member and a farther candidate");
 }
 
 /// claude-235: the comparison classes a planted difference by the item's rule. A set swapping a
 /// member for a candidate at the same last-place distance is a tie, and the readout read's type
 /// sets from that row on are downstream. A swap with the query code flipped is a query flip, and
-/// with a kept position's key flipped a key flip. A set one short, or a swap off the place's
-/// distance with the same codes, is an instrument fault. Traces that do not line up are refused.
+/// with a kept position's key flipped a key flip. A set one short, or a swap with the same codes
+/// that brings in a farther candidate or drops a nearer member, is an instrument fault. Traces
+/// that do not line up are refused.
 #[test]
 fn the_trace_comparison_classes_ties_flips_and_instrument_faults() {
     use crate::fbs_snapshot::compare_hamming_traces;
     let (integer, ..) = integer_hamming_trace();
-    let (h, t, member, out, far) = a_tie_at_the_last_place(&integer);
+    let (h, t, member, out, near, far) = a_tie_at_the_last_place(&integer);
     let (time, types) = (integer.windows[0].ids.len(), integer.heads - integer.heads / 2);
     let planted = |plant: &dyn Fn(&mut crate::fbs_snapshot::HammingTraceHead)| {
         let mut first = integer.clone();
         plant(&mut first.windows[0].reads[0].heads[h]);
         compare_hamming_traces(&first, &integer).expect("compare")
     };
-    let swap = |head: &mut crate::fbs_snapshot::HammingTraceHead, to: u32| {
-        let at = head.kept[t].iter().position(|&s| s == member).expect("the member");
+    let swap = |head: &mut crate::fbs_snapshot::HammingTraceHead, from: u32, to: u32| {
+        let at = head.kept[t].iter().position(|&s| s == from).expect("the member");
         head.kept[t][at] = to;
     };
     let causes = |c: &crate::fbs_snapshot::HammingTraceComparison| {
@@ -5824,18 +5828,18 @@ fn the_trace_comparison_classes_ties_flips_and_instrument_faults() {
         (r.judged - r.equal, r.ties, r.query_flips, r.key_flips, r.query_and_key_flips, r.instrument_faults)
     };
 
-    let tie = planted(&|head| swap(head, out));
+    let tie = planted(&|head| swap(head, member, out));
     assert_eq!(causes(&tie), (1, 1, 0, 0, 0, 0), "{:?}", tie.rows[0]);
     assert_eq!(tie.rows[3].downstream, (time - t) * types, "the readout's type sets from row {t} on");
     assert_eq!(tie.rows[2].judged, tie.rows[2].equal, "the readout's copy sets are still judged");
 
     let query = planted(&|head| {
-        swap(head, out);
+        swap(head, member, out);
         head.query[t] ^= 1;
     });
     assert_eq!(causes(&query), (1, 0, 1, 0, 0, 0), "{:?}", query.rows[0]);
     let key = planted(&|head| {
-        swap(head, out);
+        swap(head, member, out);
         head.key[out as usize] ^= 1;
     });
     assert_eq!(causes(&key), (1, 0, 0, 1, 0, 0), "{:?}", key.rows[0]);
@@ -5845,9 +5849,11 @@ fn the_trace_comparison_classes_ties_flips_and_instrument_faults() {
     });
     assert_eq!(causes(&short), (1, 0, 0, 0, 0, 1), "{:?}", short.rows[0]);
     assert!(short.faults[0].contains(&format!("{} kept, not {}", integer.kept - 1, integer.kept)), "{:?}", short.faults);
-    if let Some(far) = far {
-        let off = planted(&|head| swap(head, far));
-        assert_eq!(causes(&off), (1, 0, 0, 0, 0, 1), "{:?}", off.rows[0]);
+    // Off the place's distance: a farther candidate in for the member at the place (the place
+    // moves), or the candidate at the place in for a nearer member (the place stays).
+    for (from, to) in [(member, far), (near, out)] {
+        let off = planted(&|head| swap(head, from, to));
+        assert_eq!(causes(&off), (1, 0, 0, 0, 0, 1), "{to} in for {from}: {:?}", off.rows[0]);
     }
 
     let mut other = integer.clone();
