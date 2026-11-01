@@ -20,11 +20,11 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 20 |
+| ready | 27 |
 | held | 10 |
 | decision | 1 |
 | done | 94 |
-| total | 125 |
+| total | 132 |
 
 ## Start here
 
@@ -138,6 +138,13 @@ These items are ready and open to anyone.
 
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
+| [Port exact CPU reads, counterfactual updates and BVG-K](items/cpu-discrete-training-path.md) | ready | a lab | no | [cpu-discrete-writer-core](items/cpu-discrete-writer-core.md) | [#3501](https://github.com/UOR-Foundation/uor-r4/issues/3501) |
+| [Build an exact CPU discrete writer and admission oracle](items/cpu-discrete-writer-core.md) | ready | a lab | no | [cpu-training-program](items/cpu-training-program.md) | [#3502](https://github.com/UOR-Foundation/uor-r4/issues/3502) |
+| [Add CPU quantization-aware training and exact memory](items/cpu-quantization-exact-memory.md) | ready | a lab | no | [cpu-shared-vector-train](items/cpu-shared-vector-train.md), [cpu-discrete-training-path](items/cpu-discrete-training-path.md) | [#3503](https://github.com/UOR-Foundation/uor-r4/issues/3503) |
+| [Build CPU forward parity for the shared token/vector path](items/cpu-shared-vector-forward.md) | ready | a lab | no | [cpu-training-program](items/cpu-training-program.md) | [#3504](https://github.com/UOR-Foundation/uor-r4/issues/3504) |
+| [Train the CPU shared-vector path with a lawful rank margin](items/cpu-shared-vector-train.md) | ready | a lab | no | [cpu-shared-vector-forward](items/cpu-shared-vector-forward.md) | [#3505](https://github.com/UOR-Foundation/uor-r4/issues/3505) |
+| [Run and grade the bounded CPU training pilot](items/cpu-training-pilot.md) | ready | a lab | no | [cpu-discrete-training-path](items/cpu-discrete-training-path.md), [cpu-shared-vector-train](items/cpu-shared-vector-train.md), [cpu-quantization-exact-memory](items/cpu-quantization-exact-memory.md) | [#3506](https://github.com/UOR-Foundation/uor-r4/issues/3506) |
+| [Authorize and sequence systematic CPU training repair](items/cpu-training-program.md) | ready | a lab | no | none | [#3507](https://github.com/UOR-Foundation/uor-r4/issues/3507) |
 | [Bring every status page, picture and tracker up to 31 Oct 2026](items/docs-status-refresh.md) | ready | a lab | no | none | [#3380](https://github.com/UOR-Foundation/uor-r4/issues/3380) |
 | [Serve prompts and conversations past the 192-token window](items/integer-long-context.md) | ready | a lab | yes | [integer-hamming-read](items/integer-hamming-read.md) | [#3471](https://github.com/UOR-Foundation/uor-r4/issues/3471) |
 | [Serve the trained model's readout in the integer artifact](items/integer-nearest-readout.md) | ready | a lab | no | [integer-retention-rates](items/integer-retention-rates.md), [one-decoder](items/one-decoder.md) | [#3462](https://github.com/UOR-Foundation/uor-r4/issues/3462) |
@@ -226,6 +233,13 @@ An arrow points from an item to the item that depends on it.
 
 ```mermaid
 flowchart LR
+  n_cpu_discrete_training_path["cpu-discrete-training-path"]
+  n_cpu_discrete_writer_core["cpu-discrete-writer-core"]
+  n_cpu_quantization_exact_memory["cpu-quantization-exact-memory"]
+  n_cpu_shared_vector_forward["cpu-shared-vector-forward"]
+  n_cpu_shared_vector_train["cpu-shared-vector-train"]
+  n_cpu_training_pilot["cpu-training-pilot"]
+  n_cpu_training_program["cpu-training-program"]
   n_d11_exporter_float_trunk["d11-exporter-float-trunk"]
   n_d41_driver_math_pilot["d41-driver-math-pilot"]
   n_e8_orbit_memory_sigmoid_free_iteration["e8-orbit-memory-sigmoid-free-iteration"]
@@ -327,6 +341,15 @@ flowchart LR
   n_uor_otel_artifact_convention["uor-otel-artifact-convention"]
   n_uor_telemetry["uor-telemetry"]
   n_writer_admission["writer-admission"]
+  n_cpu_discrete_training_path --> n_cpu_quantization_exact_memory
+  n_cpu_discrete_training_path --> n_cpu_training_pilot
+  n_cpu_discrete_writer_core --> n_cpu_discrete_training_path
+  n_cpu_quantization_exact_memory --> n_cpu_training_pilot
+  n_cpu_shared_vector_forward --> n_cpu_shared_vector_train
+  n_cpu_shared_vector_train --> n_cpu_quantization_exact_memory
+  n_cpu_shared_vector_train --> n_cpu_training_pilot
+  n_cpu_training_program --> n_cpu_discrete_writer_core
+  n_cpu_training_program --> n_cpu_shared_vector_forward
   n_d11_exporter_float_trunk --> n_integer_retention_rates
   n_d41_driver_math_pilot --> n_m2_donor_corpus_generation
   n_fbs_cost_profile --> n_fbs_serving_kernels

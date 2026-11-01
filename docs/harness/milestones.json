@@ -388,7 +388,7 @@
     },
     {
       "id": "D24",
-      "rule": "No CPU model compute; no GPU on work that cannot change a decision. A host-side fallback is a defect, not a cost to report.",
+      "rule": "GPU-first model compute; no GPU on work that cannot change a decision. A silent host-side fallback is a defect. D84 permits only an owner-authorized, named, separately scanned CPU training program to run CPU training, evaluation, or parity as development research; CPU results do not replace a GPU qualification bar without a later owner decision.",
       "scope": "all",
       "source": "docs/integration/DECISIONS.md"
     },

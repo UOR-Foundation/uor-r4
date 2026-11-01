@@ -14,6 +14,18 @@ flowchart LR
 
 An entry gives the date, what changed, which charter clauses it touches, and who decided. The owner's own words are recorded verbatim when they are the reason. Old text is never edited or deleted: it moves unchanged to the `archive/` folder, and the live decision index keeps one line saying where each decision went (see the [decision map](decision-map.md)).
 
+## 1 November 2026: owner-authorized CPU training program (D84)
+
+**Decided by:** the owner (Casey), in the DeepSeek/Codex session on the project workstation, recorded by the lab at `2026-11-01T21:51:23Z`. He wrote:
+
+> "dude I am the owner and I am giving you approval... please go ahead and plan to systematically repair these cpu training methods, all of them, and begin to work your way through them, remember you need to be comitting work to github main so we know it's there, and I do not want your work to directly break anything claude is doing on the main track, but we do need all of this stuff done as well, so please plan and execute this all as a goal, use subagents and whatever you need locally to install or whatever"
+
+**What changed:**
+
+1. **Clause 3.5 is now GPU-first.** GPU remains the default for training, qualification and parity references. A named CPU training program authorized by the owner may run CPU training, evaluation and parity as development research in a separately scanned Rust module. It cannot substitute for a GPU qualification bar without a later owner decision.
+2. **The CPU path must be explicit.** It names its CPU hardware, uses the same deterministic evaluator and controls where comparison is claimed, has no silent GPU fallback, and preserves every historical negative. The geometric, no-squashing and no-matmul rules are unchanged.
+3. **The program is registered.** `cpu-training-program` records the ordered CPU workstreams and the disposition of every historical training family. Implementation proceeds in isolated crates and branches so Claude's active float/integer serving path is not edited.
+
 ## 30 October 2026: M1 closes; mission status records 1 of 8 (D83)
 
 **Decided by:** M1's close and its supersession of the older D39 closing criteria were approved through claude-211's D67–D69 whole-chain decision review, recorded in the #2029 owner log at [decision log 6515151261](https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6515151261); the log is explicit that this is a reversible lab decision, not a direct owner sign-off. Claude-211 also supplies bar (f). Kimi records the decision here under the owner-approved documentation plan, answer **"Approved Plan"** at `2026-10-30T15:30:07Z`.

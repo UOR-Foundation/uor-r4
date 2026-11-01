@@ -55,6 +55,7 @@ Rules for keeping a notebook:
 | `m3-durable-memory` | [m3-durable-memory.md](./m3-durable-memory.md) | Can conversation be stored and rebuilt exactly, so memory lasts across sessions? | 1 |
 | `m4-serving` | [m4-serving.md](./m4-serving.md) | Can the trained model be served with integers and tables only? | 0 |
 | `data-tokenizer` | [data-tokenizer.md](./data-tokenizer.md) | Which data and which tokenizer does the model train on? | 0 |
+| `cpu-training` | [cpu-training.md](./cpu-training.md) | Can the historical lawful training families be repaired on the owner's CPU without becoming a separate model path? | 0 |
 | `harness-governance` | [harness-governance.md](./harness-governance.md) | Is the research tooling and process worth its cost? | 0 |
 
 *Source of the counts: [`archive/catalog.jsonl`](../../../archive/catalog.jsonl), records dated 12 October 2026 or later whose outcome is positive, negative, inconclusive, diagnostic-stop or blocked, counted with `jq`. Pages with 0 rows have records on those dates, but all of them are tooling, planning or process records. The page says so.*
