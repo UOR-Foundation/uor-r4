@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <vector>
 
 namespace {
@@ -87,10 +88,39 @@ int main() {
                     std::cerr << "CUDA scan failed\n";
                     return 1;
                 }
-                if (!same(gpu_bucket, gpu_full) || !same(gpu_bucket, cpu)) {
+                if (!same(gpu_bucket, gpu_full) || !same(gpu_bucket, cpu) ||
+                    gpu_bucket.prediction >= v || gpu_full.prediction >= v) {
                     std::cerr << "CUDA/CPU parity mismatch\n";
                     return 1;
                 }
+            }
+
+            table.tokens[0][0] = Block{};
+            if (uor_inverted_file::cuda::update(table, 0, index) != Status::NonRootBlock) {
+                std::cerr << "non-root CUDA update was not refused\n";
+                return 1;
+            }
+            if (uor_inverted_file::remove_token(table, 0, index) != Status::Ok) {
+                std::cerr << "explicit removal setup failed\n";
+                return 1;
+            }
+            table.tokens[0][0] = roots[0];
+            if (uor_inverted_file::cuda::update(table, 0, index) != Status::Ok) {
+                std::cerr << "CUDA ABSENT-to-cell update failed\n";
+                return 1;
+            }
+            auto extreme_query = query_at(0);
+            for (size_t block = 1; block < 3; ++block) extreme_query[block].fill(std::numeric_limits<int32_t>::min());
+            for (auto& token : table.tokens) {
+                for (size_t block = 1; block < 3; ++block) token[block].fill(std::numeric_limits<int32_t>::max());
+            }
+            ScanResult gpu_bucket, gpu_full, cpu;
+            if (uor_inverted_file::cuda::probe(table, extreme_query, 1, index, gpu_bucket) != Status::Ok ||
+                uor_inverted_file::cuda::full_scan(table, extreme_query, 1, gpu_full) != Status::Ok ||
+                uor_inverted_file::full_scan(table, extreme_query, 1, cpu) != Status::Ok ||
+                !same(gpu_bucket, gpu_full) || !same(gpu_bucket, cpu)) {
+                std::cerr << "extreme-value CUDA/CPU parity mismatch\n";
+                return 1;
             }
         }
     }

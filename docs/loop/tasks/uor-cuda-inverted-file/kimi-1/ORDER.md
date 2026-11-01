@@ -1,6 +1,6 @@
 # ORDER: standalone UOR inverted-file CUDA package, kimi-1
 
-Lab: kimi. Item: uor-cuda-inverted-file (#3473). Base: `3d39b0c720dbe95693efe8aea93b3873247a7ba1`.
+Lab: kimi. Item: uor-cuda-inverted-file (#3475). Base: `3d39b0c720dbe95693efe8aea93b3873247a7ba1`.
 
 ## Goal
 

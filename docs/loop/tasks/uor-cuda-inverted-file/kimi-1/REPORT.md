@@ -1,6 +1,6 @@
 # REPORT: standalone UOR inverted-file CUDA package, kimi-1
 
-Lab: kimi. Order: [ORDER.md](ORDER.md). References #3473.
+Lab: kimi. Order: [ORDER.md](ORDER.md). References #3475.
 
 This unit created a standalone CUDA C++17 example and its host evidence. No model training, model/API/worker/engine change, GPU evaluation, paid compute, production deployment, or Claude-owned file changed.
 
@@ -10,6 +10,7 @@ This unit created a standalone CUDA C++17 example and its host evidence. No mode
 - The CSR validator initially missed stale annotations in the parallel `cells[token]` array. A new consistency check catches them. Removal/reinsertion and corrupted offsets are also covered.
 - The first clean-copy hash comparison failed because one log contained compiler commands and the other did not. Normalizing to actual test output produced three identical results; no test was weakened.
 - `nvcc` is unavailable, so AOT compilation and CUDA execution are **NOT_RUN**. The package reports this explicitly rather than treating the optional path as verified.
+- The whole-branch review then found the CUDA link/loader defects, unsafe ABSENT updates, small distance sentinels, a tautological full-scan path, and reproducibility gaps. I made probe use actual CSR members while full scan independently enumerates tokens, separated explicit removal from non-root refusal, allocated update capacity, used `cuModuleLoad`, widened sentinels, added all-absent/corrupt/extreme controls, and added the reproducible `make evidence` bundle. Roadmap sync created the canonical issue #3475; the manual placeholder #3473 was closed instead of duplicating it.
 
 ## What changed
 
@@ -21,8 +22,8 @@ This unit created a standalone CUDA C++17 example and its host evidence. No mode
 
 ## Verification
 
-- `make -s clean host-test` twice plus one clean-copy run: identical output, SHA-256 `26d8c1b6d01ab779f0a1eb2fd8a41b995a1ec32e8f66893008ee791ecae83e31`.
-- Admission: **10/10 passed**. CPU parity/update/fault checks: **PASS**. Clean-copy build required no UOR-R4 checkout.
+- `make -s clean host-test` twice plus one clean-copy run: identical output, SHA-256 `7b6f674abcef33a37753de8aac6000ff1584e983ebeb4eb35fc67bf5d45d5e7d`.
+- Admission: **13/13 passed**. CPU parity/update/fault checks: **PASS**. Clean-copy build required no UOR-R4 checkout.
 - `make cuda` and `make cuda-test`: **NOT_RUN**, `nvcc` unavailable. No generated PTX/cubin or GPU result is claimed.
 - Documentation/scope checks and fresh exact-head review are recorded with the final delivery.
 

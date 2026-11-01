@@ -73,7 +73,7 @@ Status open(Session& session) {
     CUdevice device = 0;
     if (cuDeviceGet(&device, 0) != CUDA_SUCCESS) return Status::CudaUnavailable;
     if (cuCtxCreate(&session.context, 0, device) != CUDA_SUCCESS) return Status::CudaUnavailable;
-    if (cuModuleLoadFatBinary(&session.module, "build/uor_inverted_file.cubin") != CUDA_SUCCESS) {
+    if (cuModuleLoad(&session.module, "build/uor_inverted_file.cubin") != CUDA_SUCCESS) {
         return Status::CudaFailure;
     }
     if (cuModuleGetFunction(&session.build_fn, session.module, "uor_if_build") != CUDA_SUCCESS ||
@@ -175,7 +175,8 @@ Status update(const Table& table, std::uint32_t moved_token, Index& index) {
     if ((status = upload(table_values, table_d)) != Status::Ok ||
         (status = upload(root_values, roots_d)) != Status::Ok ||
         (status = upload(index.offsets, offsets_d)) != Status::Ok ||
-        (status = upload(index.members, members_d)) != Status::Ok ||
+        (status = allocate(members_d, count * sizeof(std::uint32_t))) != Status::Ok ||
+        (status = write(members_d, index.members.data())) != Status::Ok ||
         (status = upload(index.cells, cells_d)) != Status::Ok ||
         (status = allocate(absent_d, sizeof(std::uint32_t))) != Status::Ok ||
         (status = write(absent_d, &index.absent_count)) != Status::Ok ||
@@ -194,18 +195,21 @@ Status update(const Table& table, std::uint32_t moved_token, Index& index) {
         (status = read(index.members.data(), members_d)) != Status::Ok ||
         (status = read(index.cells.data(), cells_d)) != Status::Ok ||
         (status = read(&index.absent_count, absent_d)) != Status::Ok) return status;
+    index.members.resize(index.offsets[256]);
     return validate(table, index);
 }
 
 Status run_scan(const Table& table, const Query& query, std::uint32_t k,
                 const Index& index, ScanResult& result, bool full_scan) {
     if (k == 0 || k > 16) return Status::InvalidArgument;
+    if (validate(table, index) != Status::Ok) return Status::CsrInvariant;
     Session session;
     auto status = open(session);
     if (status != Status::Ok) return status;
     const auto table_values = table_bytes(table);
     const auto root_values = roots_bytes();
     const auto query_values = query_bytes(query);
+    const std::uint32_t count = static_cast<std::uint32_t>(table.tokens.size());
     Buffer table_d, roots_d, queries_d, offsets_d, members_d, cells_d;
     Buffer predictions_d, admitted_d, top8_d, status_d;
     if ((status = upload(table_values, table_d)) != Status::Ok ||
@@ -220,12 +224,21 @@ Status run_scan(const Table& table, const Query& query, std::uint32_t k,
         (status = allocate(status_d, sizeof(std::uint32_t))) != Status::Ok) return status;
     std::uint32_t kernel_status = 0, rows = 1;
     if ((status = write(status_d, &kernel_status)) != Status::Ok) return status;
-    void* args[] = {&table_d.ptr, &roots_d.ptr, &queries_d.ptr, &rows, &offsets_d.ptr,
-                    &members_d.ptr, &cells_d.ptr, &k, &predictions_d.ptr, &admitted_d.ptr,
-                    &top8_d.ptr, &status_d.ptr};
     const auto function = full_scan ? session.full_scan_fn : session.probe_fn;
-    if (cuLaunchKernel(function, 1, 1, 1, 1, 1, 1, 0, nullptr, args, nullptr) != CUDA_SUCCESS) {
-        return Status::CudaFailure;
+    if (full_scan) {
+        void* args[] = {&table_d.ptr, &roots_d.ptr, &count, &queries_d.ptr, &rows,
+                        &offsets_d.ptr, &members_d.ptr, &cells_d.ptr, &k, &predictions_d.ptr,
+                        &admitted_d.ptr, &top8_d.ptr, &status_d.ptr};
+        if (cuLaunchKernel(function, 1, 1, 1, 1, 1, 1, 0, nullptr, args, nullptr) != CUDA_SUCCESS) {
+            return Status::CudaFailure;
+        }
+    } else {
+        void* args[] = {&table_d.ptr, &roots_d.ptr, &queries_d.ptr, &rows, &offsets_d.ptr,
+                        &members_d.ptr, &cells_d.ptr, &k, &predictions_d.ptr, &admitted_d.ptr,
+                        &top8_d.ptr, &status_d.ptr};
+        if (cuLaunchKernel(function, 1, 1, 1, 1, 1, 1, 0, nullptr, args, nullptr) != CUDA_SUCCESS) {
+            return Status::CudaFailure;
+        }
     }
     if ((status = synchronize()) != Status::Ok ||
         (status = read(&kernel_status, status_d)) != Status::Ok) return status;
@@ -243,6 +256,9 @@ Status probe(const Table& table, const Query& query, std::uint32_t k,
 
 Status full_scan(const Table& table, const Query& query, std::uint32_t k,
                  ScanResult& result) {
+    Index index;
+    const auto status = build(table, index, true);
+    if (status != Status::Ok) return status;
     return run_scan(table, query, k, index, result, true);
 }
 

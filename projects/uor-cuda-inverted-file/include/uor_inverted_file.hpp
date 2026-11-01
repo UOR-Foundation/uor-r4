@@ -40,12 +40,14 @@ enum class Status {
 
 extern const std::array<Block, 16> codebook;
 
-[[nodiscard]] Status build(const Table& table, Index& index);
+[[nodiscard]] Status build(const Table& table, Index& index, bool allow_absent = false);
 [[nodiscard]] Status update(const Table& table, std::uint32_t moved_token, Index& index);
+[[nodiscard]] Status remove_token(const Table& table, std::uint32_t moved_token, Index& index);
 [[nodiscard]] Status probe(const Table& table, const Query& query, std::uint32_t k,
                            const Index& index, ScanResult& result);
 [[nodiscard]] Status full_scan(const Table& table, const Query& query, std::uint32_t k,
                                ScanResult& result);
 [[nodiscard]] Status validate(const Table& table, const Index& index);
+[[nodiscard]] Status validate_structure(const Index& index);
 
 } // namespace uor_inverted_file

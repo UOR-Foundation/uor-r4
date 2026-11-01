@@ -13,15 +13,26 @@ std::string without_comments(std::string_view input) {
     std::string output;
     output.reserve(input.size());
     enum class Comment { None, Line, Block } state = Comment::None;
+    bool in_string = false;
     for (std::size_t i = 0; i < input.size(); ++i) {
         const char c = input[i];
         const char next = i + 1 < input.size() ? input[i + 1] : '\0';
-        if (state == Comment::None && c == '/' && next == '/') {
+        if (state == Comment::None && c == '"') {
+            in_string = !in_string;
+            output.push_back(c);
+            continue;
+        }
+        if (state == Comment::None && in_string && c == '\\') {
+            output.push_back(c);
+            if (i + 1 < input.size()) output.push_back(input[++i]);
+            continue;
+        }
+        if (state == Comment::None && !in_string && c == '/' && next == '/') {
             state = Comment::Line;
             ++i;
             continue;
         }
-        if (state == Comment::None && c == '/' && next == '*') {
+        if (state == Comment::None && !in_string && c == '/' && next == '*') {
             state = Comment::Block;
             ++i;
             continue;

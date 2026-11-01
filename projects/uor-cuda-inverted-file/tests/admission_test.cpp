@@ -53,11 +53,17 @@ int main() {
            "extra entry rejected");
     expect(admit_ptx(clean_module() + entry("uor_if_build"), entries) == Status::CudaFailure,
            "duplicate entry rejected");
+    expect(admit_ptx("/* add.f32 %r1,%r2,%r3; */\n" + clean_module(), entries) == Status::Ok,
+           "block comment is ignored");
+    expect(admit_ptx(".file \"a//b\";\nadd.f32 %r1,%r2,%r3;\n" + clean_module(), entries) == Status::CudaFailure,
+           "line-comment markers inside strings do not hide instructions");
+    expect(admit_ptx(".file \"a/*b*/\";\nadd.f32 %r1,%r2,%r3;\n" + clean_module(), entries) == Status::CudaFailure,
+           "block-comment markers inside strings do not hide instructions");
 
     if (failures != 0) {
         std::cerr << failures << " admission assertions failed\n";
         return 1;
     }
-    std::cout << "admission tests: 10/10 passed\n";
+    std::cout << "admission tests: 13/13 passed\n";
     return 0;
 }

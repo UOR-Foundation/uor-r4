@@ -4,24 +4,23 @@ Date: 2026-11-01. Source base: `3d39b0c720dbe95693efe8aea93b3873247a7ba1`.
 
 ## Host and clean-copy results
 
-The following commands ran on the package and on a clean copy containing only `projects/uor-cuda-inverted-file/`:
+`make evidence` runs the host suite twice, creates a clean copy containing only `projects/uor-cuda-inverted-file/`, runs it there, and compares all three outputs:
 
 ```sh
-make -s clean host-test
-make -s clean host-test
+make evidence
 ```
 
 All three runs produced this exact output:
 
 ```text
-admission tests: 10/10 passed
+admission tests: 13/13 passed
 inverted-file tests: all parity, update, refusal, and fault checks passed
 ```
 
 Normalized test-output SHA-256 for each run:
 
 ```text
-26d8c1b6d01ab779f0a1eb2fd8a41b995a1ec32e8f66893008ee791ecae83e31
+7b6f674abcef33a37753de8aac6000ff1584e983ebeb4eb35fc67bf5d45d5e7d
 ```
 
 The clean copy was created in a fresh directory, and no UOR-R4 source path or checkout was referenced by the build. The byte-identical outputs demonstrate repeatability of the test text, not independent GPU or cross-architecture correctness.

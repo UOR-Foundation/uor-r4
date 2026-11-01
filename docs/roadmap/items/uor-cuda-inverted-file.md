@@ -17,7 +17,7 @@ The CSR bucketed writer and PTX admission gate are the most transferable parts o
 
 ## What is missing
 
-The package needs a CPU oracle, matching CUDA build/update/probe/full-scan operations, admission and negative controls, provenance, and a clean-clone verification path. No GPU timing or portability claim is made in this unit.
+**Host package and clean-copy verification are complete.** The CPU oracle, four CUDA operations, admission and negative controls, provenance, and clean-clone evidence exist. AOT compilation and GPU parity remain **NOT_RUN** because no compatible `nvcc`/GPU is available on this machine. A later pre-registered hardware run is still required before release or upstream submission.
 
 ## Done when
 
@@ -41,6 +41,7 @@ The package needs a CPU oracle, matching CUDA build/update/probe/full-scan opera
 
 ## Sources
 
+- Issue #3475 and `docs/labs/uor-cuda-inverted-file/`
 - `crates/uor-r4-discrete/src/bucket_source.rs` and `build.rs`
 - `docs/labs/m1-faster-writer/README.md`
 - `docs/superpowers/specs/2026-10-31-cuda-inverted-file-package-design.md`
