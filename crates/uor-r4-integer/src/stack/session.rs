@@ -1090,6 +1090,41 @@ impl IntegerStackModel {
         self.memory.as_ref()?.point.as_ref()?.reference_name(query)
     }
 
+    /// The whole writer table's top two tokens to `query` by `-L1` at Q12, best first, each with its
+    /// score, ties to the smaller id in both places (claude-244): the served nearest pick and its
+    /// runner-up, for the teacher-forced margin reading. It reads only, off the step's path.
+    pub fn whole_table_nearest_two(&self, query: &[i32]) -> Result<[(u32, i64); 2], StackError> {
+        let fbs = self.fbs.as_deref().ok_or(StackError::MissingData)?;
+        let vocab = self.shape.vocab;
+        if vocab < 2 {
+            return Err(StackError::Numerics(format!(
+                "the top two need a writer table of two or more rows, not {vocab}"
+            )));
+        }
+        let d = fbs.writer_table.len() / vocab;
+        if query.len() != d || d * vocab != fbs.writer_table.len() {
+            return Err(StackError::Numerics(format!(
+                "a query of width {} against a writer table of {vocab} rows of width {d}",
+                query.len()
+            )));
+        }
+        let (mut best, mut second) = ((u32::MAX, i64::MIN), (u32::MAX, i64::MIN));
+        for (candidate, row) in fbs.writer_table.chunks_exact(d).enumerate() {
+            let mut sum = 0i64;
+            for (&x, &t) in query.iter().zip(row) {
+                sum = sum.wrapping_add(i64::from(x.abs_diff(i32::from(t))));
+            }
+            let score = sum.wrapping_neg();
+            if score > best.1 {
+                second = best;
+                best = (candidate as u32, score);
+            } else if score > second.1 {
+                second = (candidate as u32, score);
+            }
+        }
+        Ok([best, second])
+    }
+
     /// How many opening and reply keys the turn memory's tables hold, if it has one.
     pub fn turn_memory_table_lengths(&self) -> Option<(usize, Option<usize>)> {
         self.memory
@@ -4686,6 +4721,65 @@ mod fbs_stage_tests {
         }
         assert_eq!(plain.save_state(), timed.save_state());
         assert_eq!(plain.tokens(), timed.tokens());
+    }
+
+    /// Every writer row's score to `q` (`-L1` at Q12), sorted by score descending then id
+    /// ascending, by brute force: the first two are the top two (claude-244).
+    fn brute_top_two(fbs: &FbsModel, vocab: usize, q: &[i32]) -> [(u32, i64); 2] {
+        let mut all: Vec<(u32, i64)> = fbs
+            .writer_table
+            .chunks(q.len())
+            .take(vocab)
+            .enumerate()
+            .map(|(id, row)| {
+                let distance: i64 = q
+                    .iter()
+                    .zip(row)
+                    .map(|(&x, &t)| (i64::from(x) - i64::from(t)).abs())
+                    .sum();
+                (id as u32, -distance)
+            })
+            .collect();
+        all.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        [all[0], all[1]]
+    }
+
+    #[test]
+    fn the_nearest_two_are_the_brute_top_two_and_the_served_pick() {
+        let mut snap = super::super::synthetic::synthetic_fbs_trunk(7);
+        snap.readout_nearest = true;
+        let bytes = super::super::export_fbs_trunk_uorlut01(&snap).expect("export");
+        let model = IntegerStackModel::parse(&bytes).expect("parse");
+        assert!(model.shape().head_nearest());
+        let fbs = model.fbs.as_ref().expect("an FBS model");
+        let (vocab, context) = (model.shape.vocab, model.shape.context);
+        let mut session = model.session();
+        let mut checked = 0;
+        for i in 0..context {
+            let token = ((i * 37 + 5) % vocab) as u32;
+            let step = session.step_native(token).expect("step");
+            let top = model.whole_table_nearest_two(&step.query_q12).expect("top two");
+            assert_eq!(top, brute_top_two(fbs, vocab, &step.query_q12), "position {i}");
+            assert_eq!(top[0].0, step.token, "position {i}");
+            assert!(top[0].1 >= top[1].1 && top[0].0 != top[1].0, "position {i}");
+            checked += 1;
+        }
+        assert!(checked >= 4, "{checked}");
+        assert!(model.whole_table_nearest_two(&[0]).is_err(), "a query of the wrong width");
+    }
+
+    #[test]
+    fn the_nearest_two_take_the_smaller_ids_on_an_exact_tie() {
+        let mut snap = super::super::synthetic::synthetic_fbs_trunk(7);
+        let d = snap.width;
+        let row0: Vec<f32> = snap.embed[..d].to_vec();
+        snap.embed[d..2 * d].copy_from_slice(&row0);
+        let bytes = super::super::export_fbs_trunk_uorlut01(&snap).expect("export");
+        let model = IntegerStackModel::parse(&bytes).expect("parse");
+        let fbs = model.fbs.as_ref().expect("an FBS model");
+        assert_eq!(fbs.writer_table[..d], fbs.writer_table[d..2 * d], "rows 0 and 1 are equal");
+        let query: Vec<i32> = fbs.writer_table[..d].iter().map(|&t| i32::from(t)).collect();
+        assert_eq!(model.whole_table_nearest_two(&query).expect("top two"), [(0, 0), (1, 0)]);
     }
 
     #[test]
