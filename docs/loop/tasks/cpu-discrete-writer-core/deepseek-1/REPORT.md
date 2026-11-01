@@ -15,13 +15,13 @@ Lab: deepseek. Item: [cpu-discrete-writer-core](../../../../roadmap/items/cpu-di
 - Added checked codebook decoding from the canonical 16-root orbit into 4,096 vectors and 256 writer cells.
 - Added exact outer-cell L1 admission with `(distance, cell id)` ordering.
 - Added full-vector L1 ranking inside admitted cells with `(distance, token id)` ordering.
-- Added top-8, target rank/admission readings, deterministic lower-token tie handling and malformed-input refusal.
+- Added top-8, per-row target rank/admission readings, aggregate top-1/top-8/admitted-target counts, deterministic lower-token tie handling and malformed-input refusal.
 - Added a release benchmark for 1, 8, 16 and 32 threads.
 - Added a test that keeps the crate out of the workspace default-member set.
 
 ## Measurements
 
-- `cargo test -p uor-r4-cpu-train`: 9 passed, 0 failed.
+- `cargo test -p uor-r4-cpu-train`: 10 passed, 0 failed.
 - Existing host-oracle parity: 256 / 256 deterministic queries matched `writer_score_full_outer_l1` exactly for top-8 and admitted-cell order.
 - Benchmark, 32,768 timed rows after 128 warm-up rows:
   - 1 thread: 202,529 rows/s, 161.794 ms;
@@ -41,8 +41,8 @@ This benchmark measures component decisions on synthetic canonical vectors. It i
 - `uor-harness ratchet d23`: PASS, baseline unchanged.
 - `uor-harness ratchet d25`: PASS, baseline unchanged.
 - `uor-harness ratchet d32`: PASS, baseline unchanged.
-- `uor-harness loop gates --full`: PASS, 11/11.
-- `uor-harness loop pr-check --local`: PASS with the documented commit-order and pre-existing FILEMAP advisories.
+- `uor-harness loop gates --full`: PASS, 11/11 at `468538a43`; final rerun recorded on the PR.
+- `uor-harness loop pr-check --local`: PASS at `468538a43`, with the documented commit-order and pre-existing FILEMAP advisories; final rerun recorded on the PR.
 - `cargo fmt --package uor-r4-cpu-train`: PASS.
 
 ## Skills used
@@ -53,6 +53,7 @@ No repository skill was invoked for this code unit.
 
 - Bind an exact checkpoint/table/query fixture from a stored GPU evaluation and reproduce its per-row top-8 and admitted cells.
 - Add snapshot/model parsing and token encoding after that fixture is available.
+- Aggregate counts now exist; binding them to a checked-in evaluation panel remains part of the stored-observation unit.
 - The item remains `ready`; this PR references #3502 and does not close it.
 
 ## Plain summary

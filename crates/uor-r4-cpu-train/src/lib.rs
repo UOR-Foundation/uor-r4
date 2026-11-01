@@ -64,6 +64,14 @@ pub struct WriterReading {
     pub target_top8: bool,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct WriterSummary {
+    pub rows: u64,
+    pub top1_hits: u64,
+    pub top8_hits: u64,
+    pub target_admitted: u64,
+}
+
 #[derive(Debug, Clone)]
 pub struct CpuWriterCore {
     vectors: Vec<Vector>,
@@ -218,6 +226,21 @@ impl CpuWriterCore {
             target_top1: decision.top8[0] == target,
             target_top8: decision.top8.contains(&target),
         })
+    }
+
+    pub fn summarize(&self, queries: &[Vector], targets: &[u32]) -> Result<WriterSummary> {
+        if queries.len() != targets.len() {
+            return Err(invalid("queries and targets must have equal length"));
+        }
+        let mut summary = WriterSummary::default();
+        for (query, &target) in queries.iter().zip(targets) {
+            let reading = self.read_target(query, target)?;
+            summary.rows += 1;
+            summary.top1_hits += u64::from(reading.target_top1);
+            summary.top8_hits += u64::from(reading.target_top8);
+            summary.target_admitted += u64::from(reading.target_admitted);
+        }
+        Ok(summary)
     }
 
     pub fn admitted_count(&self, decision: &WriterDecision) -> usize {
@@ -411,6 +434,26 @@ mod tests {
         assert_eq!(other.target_top8, other.top8.contains(&2777));
         assert_eq!(other.target_top1, other.top1 == 2777);
         assert!(core.read_target(&query, VOCABULARY as u32).is_err());
+    }
+
+    #[test]
+    fn aggregate_readings_count_rank_and_admission_separately() {
+        let core = CpuWriterCore::from_roots(&roots(), 8).unwrap();
+        let queries = [
+            *core.token_vector(11).unwrap(),
+            *core.token_vector(2777).unwrap(),
+        ];
+        let exact = core.summarize(&queries, &[11, 2777]).unwrap();
+        assert_eq!(
+            exact,
+            WriterSummary {
+                rows: 2,
+                top1_hits: 2,
+                top8_hits: 2,
+                target_admitted: 2,
+            }
+        );
+        assert!(core.summarize(&queries, &[11]).is_err());
     }
 
     #[test]
