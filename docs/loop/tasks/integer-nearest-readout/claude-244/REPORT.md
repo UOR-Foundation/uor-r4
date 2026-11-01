@@ -7,7 +7,7 @@ Lab: claude. Item: [integer-nearest-readout](../../../../roadmap/items/integer-n
 No new decode speed is claimed. R's decode speed is still claude-243's: 1,204 tok/s median decode on R s1, on this M1.
 - The new `--forced` mode stepped 312 positions/s on DEV (4,447 positions in about 14.2 s) and 250 on p-w (15,349 in about 61.4 s).
 - That rate includes each prompt's prefill, the whole table's top two at every offset, and the per-offset check that the step's token is the nearest. It is an instrument's rate, not a serving reading.
-- **Peak resident memory:** 190,660,608 to 190,709,760 bytes per decode (`/usr/bin/time -l`), the same as claude-243's greedy decode.
+- **Peak resident memory:** 190,660,608 to 190,709,760 bytes per decode (`/usr/bin/time -l`), within 0.03% of claude-243's greedy decode (190,676,992).
 
 ## What did not work, first
 
@@ -37,7 +37,7 @@ No new decode speed is claimed. R's decode speed is still claude-243's: 1,204 to
 | DEV s2 | 3 of 284 | 43 of 3,863 | 22,526 | 0.913 | 0.903 |
 | DEV s3 | 4 of 284 | 65 of 3,863 | 24,022 | 0.928 | 0.919 |
 
-- **The disagreements sit at margins 80 to 100 times smaller than typical.** On p-w the median g at a disagreement is 1,778, 1,635 and 1,568, against a median over all positions of 183,087, 145,694 and 128,152.
+- **The disagreements sit at margins 82 to 103 times smaller than typical.** On p-w the median g at a disagreement is 1,778, 1,635 and 1,568, against a median over all positions of 183,087, 145,694 and 128,152.
 - **No pick anywhere was an exact tie** (z₀ = 0 in all six cells). The ties-to-the-smaller-id rule never decided a pick.
 - **The gap is per position, not special to the opening.** On pooled p-w, r₀ = 132 of 3,201 (4.12%) and r₊ = 1,114 of 38,592 (2.89%). That is 1.43×, under the sheet's 2×. On DEV, r₀ is 1.29% and r₊ is 1.59%.
 - **The sheet's next unit follows from its table:** near-tie residual with pooled r₊ ≤ 3%, so a decision card re-derives the first-token bar from this measured per-position residual. No start is named for a card.
@@ -50,7 +50,7 @@ No new decode speed is claimed. R's decode speed is still claude-243's: 1,204 to
   - I-RunnerUp: 0 wrong.
   - Negative margins: none.
   - I-Exit: all six decodes exited 0, none capped.
-- **I-Offset0 reproduces claude-243 exactly:** 4, 4, 5 and 64, 47, 78. The counted openings plus the cut windows' openings give the same numbers, 41 + 23, 34 + 13 and 57 + 21 on p-w. So F′'s teacher-forced opening equals its greedy first token at every opening, as it must.
+- **I-Offset0 reproduces claude-243 exactly:** 4, 4, 5 and 64, 47, 78. The counted openings plus the cut windows' openings give the same numbers, 41 + 23, 34 + 13 and 57 + 21 on p-w. So the two counts agree. At the counted openings, I-Align also checks F′'s forced opening against its greedy first token one by one.
 - **The grader's probes** passed before any decode: the hand-counted cell, the checks-only pass, the bad cell, and 7 of 7 pooled decisions.
 
 ## What changed
@@ -66,16 +66,22 @@ No new decode speed is claimed. R's decode speed is still claude-243's: 1,204 to
 ## Measurements
 
 - **The inputs:** R is claude-243's raw export, `R/a7/a7r-sN.uorlut`. F′ is claude-243's sealed GPU rows and greedy samples, from `tie-parity/out/r-drop-sN/`. The prompts are claude-232's six prompt files.
-- **The decodes:** `fbs-toks C243/R/a7/a7r-sN.uorlut --forced C232/prompts/prompts-SPLIT-sN.json --out R/forced/forced-SPLIT-sN.json`, run one after another from `local/claude/claude-244/`. They took 13.95 to 14.29 s per DEV cell and 61.21 to 61.47 s per p-w cell, with load averages of 1.6, 2.4 and 2.7 (1, 5 and 15 minutes) read just after.
-- **`fbs-toks`:** `b3d6c601…`, built at the head (`c5af11201`, crates unchanged since `45397f50b`).
+- **The decodes:** `fbs-toks C243/R/a7/a7r-sN.uorlut --forced C232/prompts/prompts-SPLIT-sN.json --out R/forced/forced-SPLIT-sN.json`, run one after another from `local/claude/claude-244/`. They took 13.95 to 14.29 s per DEV cell and 61.21 to 61.47 s per p-w cell.
+- **`fbs-toks`:** `b3d6c601…`, built at `c5af11201`. The crates are unchanged from `45397f50b` to the head.
 - **The grader:** `grade.sh` `bb248a0d…`, `grade-cell.jq` `984e2fe9…`, `pooled.jq` `12ad3d2a…`.
 - **The sealed run:** `results/claude/integer-nearest-readout-margin-2026-11-01/`. It holds the six forced decodes, their logs, the checks and readings per cell, the pooled readings, `grade.log`, the grader and its probes. It has its own SHA256SUMS, and all 45 read back equal from the store.
 
 ## Checks run at the head
 
 - The sheet's §4 checks, each read from the run's files, as above.
-- The `--forced` and `whole_table_nearest_two` tests and their negative gates, and the integer library suite.
-- `loop gates` and `loop pr-check`, as recorded on the PR.
+- `cargo test -p uor-r4-integer --features fbs-synthetic,serving-wasm`:
+  - `--bin fbs-toks`: 9 passed;
+  - `--lib`: 409 passed, 1 ignored;
+  - `--lib nearest_two`: 2 passed.
+- **The feed's negative gate:** with `forced_picks` stepping its own previous pick instead of `reference[i - 1]`, `each_offset_reads_the_step_after_the_reference_token` fails. Restored, all 9 pass.
+- `cargo fmt --check` is clean.
+- **Clippy** gives no warning in `fbs-toks.rs` or in this unit's `session.rs` hunks. Under `--all-targets -D warnings`, the crate already has 68 errors in files and lines this unit did not touch (for example `session.rs:733`, from `0bc09d12e`).
+- `loop gates --full`: 11 of 11 green. `loop report --check` and `loop pr-check --local` pass.
 
 ## Skills used
 
@@ -86,7 +92,7 @@ None.
 - **The next unit: the decision card, as the sheet's table names it.** It re-derives the first-token bar from this measured per-position residual. That needs my own fresh decision review, logged on #3462. It must state how it treats p-w s3's 3.09% and the 151 clear-margin disagreements.
 - **Trace the clear-margin disagreements** (g > G₁₀, 12% on p-w), layer by layer: trunk, Hamming read, memory, readout.
 - **Read F′'s top two** at the disagreeing positions, so the residual is bounded from both sides.
-- **The cut windows' openings** disagree about three to four and a half times as often as the counted ones. That is a reading for the localization, with no bar yet.
+- **The cut windows' openings** disagree 2.9 to 4.4 times as often as the counted ones per seed (3.4 times pooled). That is a reading for the localization, with no bar yet.
 - **Speed:** the nearest scan is 65% of a decode step (claude-243), so a cheaper exact nearest is still the speed lead.
 - **Carried from earlier units:**
   - making raw the default, or the snap faithful;
