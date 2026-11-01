@@ -9,7 +9,7 @@ needs_gpu: false
 depends_on: [cpu-training-program]
 notebook: docs/research/notebook/cpu-training.md
 done_class: host
-scope: [crates/uor-r4-cpu-train/**, Cargo.toml, Cargo.lock, docs/loop/tasks/cpu-discrete-writer-core/**, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-discrete-writer-core.md]
+scope: [crates/uor-r4-cpu-train/**, Cargo.toml, Cargo.lock, docs/loop/tasks/cpu-discrete-writer-core/**, docs/research/notebook/cpu-training.md, docs/start/FILEMAP.md, docs/roadmap/items/cpu-discrete-writer-core.md]
 ---
 
 ## Why it matters
