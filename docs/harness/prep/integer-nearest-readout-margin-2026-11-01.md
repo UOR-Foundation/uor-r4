@@ -32,41 +32,70 @@ claude-243 read R against F′ on first tokens only: 64, 47 and 78 of 1,202 p-w 
 - **R's own margin** at every position: g = score − runner-up score ≥ 0, in Q12 `L1` units.
   - G₁₀ is the 10th percentile of g over all of the cell's positions, by nearest rank.
   - The **concentration** c is the share of the cell's disagreements, at any offset, with g ≤ G₁₀.
+  - The **null share** q is the share of the cell's positions with g ≤ G₁₀. Nearest rank makes q ≥ 0.10, and margins that tie at G₁₀ make it larger: g is an integer, and exact ties at g = 0 can occur.
+  - The **lift** L = c / q, reported with no bar. It cannot exceed 1/q, so it is not what the table reads.
+  - The **excess concentration** κ = (c − q) / (1 − q): the share of the largest possible excess over the null that c reaches.
+    - It is 0 when disagreements fall in the low stratum at the null rate, and 1 when all of them do, at any q < 1.
+    - Ties at G₁₀ therefore cannot put a row out of reach.
+  - g_max is the largest g at any disagreement. It bounds 2ε from below.
+  - z₀ is the share of positions with g = 0 (exact ties), and d_z the disagreements among them. Both are reported with no bar.
+- **Pooled over the three seeds,** each cell against its own G₁₀:
+  - r₀ = Σd₀ / Σn₀ and r₊ = Σd₊ / Σn₊;
+  - c = Σ #(disagreements with g ≤ the cell's G₁₀) / Σd, where d = d₀ + d₊;
+  - q = Σ #(positions with g ≤ the cell's G₁₀) / Σ positions;
+  - L = c / q and κ = (c − q) / (1 − q).
 
-**Why R's own margin can tell a residual from a fault.** Let ε be the largest difference, over the table's rows, between R's score and F′'s score for the same row at one position. That covers the query's residual and the table's rounding together.
+**Why R's own margin can tell a residual from a fault.** Let ε be the largest difference, over the table's rows, between R's score and F′'s score for the same row at one position. That covers the query's residual, the table's rounding, and any drift built up along the prefix.
 - If R picks w_R and F′ picks w_F ≠ w_R, then R's own gap from w_R to w_F is at most 2ε, because F′ prefers w_F.
 - So R's top-two gap g is at most 2ε.
-- A small residual can therefore flip a pick only where g is small. Under the null that disagreements do not depend on g, c ≈ 0.10.
+- A small ε can therefore flip a pick only where g is small. Under the null that disagreements do not depend on g, c ≈ q, so κ ≈ 0.
+- A clear-margin reading therefore says that ε is not small at those positions. It does not by itself say that the cause is something other than numerics.
 
 **The decision table.** The p-w cells decide, pooled over the three seeds. DEV is a reading.
+- The table reads κ, with N the pooled positions and N_low the pooled positions with g ≤ their cell's G₁₀.
+- At q = 0.10, its thresholds 4/9 and 1/6 are exactly c ≥ 0.50 and c ≥ 0.25.
+- Each threshold is compared in integers, so no rounding can move a reading across it: κ ≥ 4/9 is 9 d_low N ≥ 4 d N + 5 d N_low, and κ ≥ 1/6 is 6 d_low N ≥ d N + 5 d N_low.
+- The near-tie and mixed rows also need the excess to be clear of chance: c − q ≥ 3 √(q(1 − q)/d). Otherwise the reading is the clear-margin row, since the disagreements are then not concentrated at near ties.
+- The rows are read top to bottom, and the first that holds is the kind.
 
 | Reading (p-w, pooled) | Kind | The next unit |
 |---|---|---|
-| c ≥ 0.50 | **Near-tie residual**: the gap is the export's numeric residual where R's readout is nearly tied. | It sizes the fix. Either a decision card re-derives the first-token bar from this sheet's measured per-position residual, or the readout's precision is raised. It chooses by r₊ against the bar. |
-| 0.25 ≤ c < 0.50 | **Mixed** | It traces the clear-margin disagreements (g > G₁₀) first, layer by layer: trunk, Hamming read, memory, readout. |
-| c < 0.25 | **Clear-margin difference**: most differences are where R is not near a tie, which is a systematic difference. | The same trace as the mixed row. A residual explanation is set aside. |
+| d < 150, or q = 1 | **Underpowered**: c is reported with its standard error √(q(1 − q)/d), and no kind is read. | The mixed row's trace. |
+| κ ≥ 4/9, clear of chance | **Near-tie residual**: the gap is the export's numeric residual where R's readout is nearly tied. | It sizes the fix. If r₊ ≤ 3%, a decision card re-derives the first-token bar from this sheet's measured per-position residual. If r₊ > 3%, the readout's precision is raised. |
+| 1/6 ≤ κ < 4/9, clear of chance | **Mixed** | It traces the clear-margin disagreements (g > G₁₀) first, layer by layer: trunk, Hamming read, memory, readout. |
+| otherwise | **Clear-margin difference**: most differences are where R is not near a tie, which is a systematic difference. | The same trace as the mixed row. A residual explanation is set aside. |
 
-**The opening contrast (p-w, pooled), read beside the kind.** It is **opening-specific** if r₀ > 2 r₊ and r₀ − r₊ > 2 √(r₀(1 − r₀)/n₀ + r₊(1 − r₊)/n₊). Then the next unit starts at the opening, with the memory's opening keys (`keys-*.json` distances). Otherwise the difference is per position.
+**The opening contrast (p-w, pooled), read beside the kind.** It is **opening-specific** if r₀ > 2 r₊ and r₀ − r₊ > 2 √(r₀(1 − r₀)/n₀ + r₊(1 − r₊)/n₊).
+- The kind picks the next unit's work. The contrast picks only where trace or precision work starts; the near-tie row's decision card has no start.
+- If the contrast is opening-specific, that work starts at the opening, with the memory's opening keys (`keys-*.json` distances). Otherwise the difference is per position, and it starts at offset 1.
 
 **Also reported, with no bar:**
-- r₀ and r₊ per cell;
+- r₀, r₊, c, q, L, κ, g_max, z₀ and d_z per cell;
 - r₊ against claude-243's 3% bar;
 - g's quartiles at disagreeing positions and at all positions;
 - the excluded rows' first-token disagreements;
 - the same readings on DEV.
+- d₀ will not reproduce claude-243's 64, 47 and 78, by design. It leaves the cut windows out, reads F′'s teacher-forced nearest, and counts an opening where both sides pick `<|bos|>` as agreeing. I-Offset0 reproduces the old count with the old rule.
 
 ## 4. Instrument checks (any failure is row 0: nothing is counted, then repair and rerun)
 
 1. **I-Inputs:**
    - R's three artifacts pass against `R/a7/SHA256SUMS`;
    - F′'s six rows files and six greedy files pass against `tie-parity/SHA256SUMS`;
+   - R's six stored greedy replies pass against claude-243's `seal/laptop/SHA256SUMS`;
    - claude-232's six prompt files pass against its store's sums.
-2. **I-Tests:** the `--forced` tests pass at the head, and both of the mode's negative gates (the feed and the runner-up) fail with their fix set aside.
-3. **I-Forced-Greedy:** in every row, at every offset i inside R's stored greedy reply (claude-243's `integer-greedy-SPLIT.json`) where that reply equals the reference on offsets 0 to i − 1, R's forced pick equals R's greedy token. Every such position must agree.
-4. **I-Align:** the same for F′, at every such position of a counted row: the rows' `nearest` must equal F′'s greedy token (`samples-memory.json` on DEV, `samples-p-w-greedy-memory.json` on p-w). Also, the rows' `targets` must equal the reference at every compared position.
-5. **I-Offset0:** over all rows, R's forced pick at offset 0 against F′'s greedy first token reproduces claude-243's first-token disagreement in every cell: 4, 4, 5 and 64, 47, 78.
-6. **I-Coverage:** every compared position is in F′'s rows. n₀ is the count of counted rows, and each cell's positions sum to the mode's printed `positions` over those rows.
-7. **I-Exit:** every forced decode exits 0, and every margin is g ≥ 0.
+2. **I-NoKey:** no opening of R is served by a point key. The mode refuses an artifact with a point table, and every row of R's stored greedy replies has `keyed` null. The served pick at every offset is therefore the whole table's nearest, which the mode checks at each offset.
+3. **I-Tests:** the `--forced` tests pass at the head, and both of the mode's negative gates (the feed and the runner-up) fail with their fix set aside.
+4. **I-Forced-Greedy:** in every row, at every offset i inside R's stored greedy reply (claude-243's `integer-greedy-SPLIT.json`) where that reply equals the reference on offsets 0 to i − 1, R's forced pick equals R's greedy token. Every such position must agree.
+5. **I-Align:** the same for F′, at every such position of a counted row: the rows' `nearest` must equal F′'s greedy token (`samples-memory.json` on DEV, `samples-p-w-greedy-memory.json` on p-w). Also, the rows' `targets` must equal the reference at every compared position.
+6. **I-Offset0:** over all rows, R's forced pick at offset 0 against F′'s greedy first token reproduces claude-243's first-token disagreement in every cell: 4, 4, 5 and 64, 47, 78. It uses claude-243's rule: an opening agrees only when R's pick is not `<|bos|>` (id 0) and equals F′'s greedy first token.
+7. **I-Coverage:**
+   - every compared position is in F′'s rows;
+   - each counted row's recorded offsets number `len(reference)`;
+   - n₀ is the count of counted rows;
+   - each cell's positions sum to the mode's printed `positions`.
+8. **I-RunnerUp:** at every offset the runner-up differs from the pick, and where g = 0 the runner-up's id is larger than the pick's (ties go to the smaller id).
+9. **I-Exit:** every forced decode exits 0, and every margin is g ≥ 0.
 
 ## 5. Base artifact and data split
 
@@ -79,13 +108,16 @@ claude-243 read R against F′ on first tokens only: 64, 47 and 78 of 1,202 p-w 
 1. Build `fbs-toks` at the head (`-p uor-r4-integer --release`), then run I-Tests.
 2. Run I-Inputs.
 3. Run the six forced decodes (I-Exit).
-4. Grade with a `jq` script kept beside the outputs, its sha256 recorded in the REPORT. The checks come first (I-Forced-Greedy, I-Align, I-Offset0, I-Coverage), then the readings.
+4. Grade with a `jq` script kept beside the outputs, its sha256 recorded in the REPORT. The checks come first (I-NoKey, I-Forced-Greedy, I-Align, I-Offset0, I-Coverage, I-RunnerUp) in all six cells. The readings are computed and written only after every check holds. The grade refuses to start unless the worktree's crates match the head that built `fbs-toks`.
 5. Seal the outputs with a `SHA256SUMS` under `results/claude/integer-nearest-readout-margin-2026-11-01/`, and read them back.
 
 ## 7. Minimum test power
 
 - **The counted p-w positions per seed:** about 1,067 openings and about 13,000 later offsets. Pooled, that is about 3,200 and 39,000.
-- **c:** with at least 150 pooled disagreements, c's standard error under the null is about √(0.1 × 0.9 / 150) ≈ 0.025. Both thresholds, 0.25 and 0.50, sit at least 6 standard errors above chance.
+- **c:** with at least 150 pooled disagreements, c's standard error under the null is about √(q(1 − q)/150), or 0.025 at q = 0.10. At that q, the two thresholds (c = 0.25 and c = 0.50) sit at least 6 standard errors above chance.
+  - At a larger q the standard error grows, to 0.041 at q = 0.5. The 3-standard-error clearance in the table keeps a chance excess from reading as near-tie or mixed.
+  - Below 150, the table's underpowered row applies.
+- **These standard errors are optimistic.** Pooling counts the same openings once per seed, and positions inside one row are correlated. The 2× ratio in the opening contrast and the 6-standard-error slack on c are there to absorb that.
 - **The opening contrast:** at r₀ ≈ 5% on about 3,200 openings, r₀'s standard error is about 0.4%, so a 2× contrast against r₊ is detectable.
 
 ## 8. Cost and stop rule
@@ -97,6 +129,51 @@ claude-243 read R against F′ on first tokens only: 64, 47 and 78 of 1,202 p-w 
 
 ## 9. Non-author TEST FITNESS review
 
-TEST FITNESS: PENDING
+**Round 1 (fresh reviewer, 1 Nov 2026), before any forced decode of R existed.**
 
-To fill in by a fresh reviewer before any forced decode of R is read.
+TEST FITNESS: NOT_FIT
+
+- **What it confirmed on the sealed float files:**
+  - the cut windows (26 DEV and 135 p-w rows at every seed);
+  - the counted rows fit the context (at most 136 and 140 tokens);
+  - 1,067 openings and 12,864 later offsets per p-w seed;
+  - the `position_k + i` rule (the rows' `targets` equal the reference at every counted position);
+  - F′'s half of I-Align and I-Coverage, with 0 failures in all six cells;
+  - the 2ε bound.
+- **Why NOT_FIT:**
+  - With ties at G₁₀, the null for c is q, not 0.10, so the old thresholds could change the reported kind.
+  - The near-tie row left its next unit to the author.
+- **The fixes, all made above:**
+  - c is read as the lift L = c/q, with q and g_max reported;
+  - the near-tie row names its next unit by r₊ against 3%;
+  - "pooled" is defined;
+  - the kind takes precedence over the opening contrast;
+  - an underpowered row covers fewer than 150 disagreements, with a note that the standard errors are optimistic;
+  - the d₀ line explains why it differs from claude-243's count;
+  - I-Inputs now covers R's greedy replies;
+  - I-NoKey, the recorded-offsets check and I-RunnerUp are new.
+
+**Round 2 (a second fresh reviewer, 1 Nov 2026), before any forced decode of R existed.**
+
+TEST FITNESS: NOT_FIT
+
+- **What it confirmed:**
+  - round 1's eight findings are fixed in the text;
+  - the grader matches the sheet's definitions, checks and order;
+  - I-NoKey can fail, since every row of R's greedy files carries `keyed`.
+- **Why NOT_FIT:** the lift L = c/q cannot exceed 1/q. So with q > 0.2 from ties at G₁₀, a pure near-tie residual would be read as mixed. That is round 1's defect pointing the other way.
+- **The fixes, all made above:**
+  - the table reads the excess concentration κ = (c − q)/(1 − q), which can reach every row at any q < 1;
+  - its thresholds are the original ones at q = 0.10, compared in integers;
+  - the near-tie and mixed rows need a 3-standard-error clearance;
+  - q = 1 is underpowered, and the rows are read top to bottom;
+  - z₀ and d_z report the exact-tie stratum;
+  - the contrast's start applies only to trace or precision work.
+- **The grader's fixes:**
+  - a clean-tree check;
+  - an n₀ check that can fail;
+  - a count check on R's greedy sums;
+  - readings written only after every check holds;
+  - known-answer probes for the pooled decision as well.
+
+**Round 3:** to fill in by a fresh reviewer before any forced decode of R is read.
