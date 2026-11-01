@@ -20,11 +20,11 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 19 |
+| ready | 22 |
 | held | 10 |
 | decision | 1 |
 | done | 88 |
-| total | 118 |
+| total | 121 |
 
 ## Start here
 
@@ -52,7 +52,7 @@ These items are ready and open to anyone.
 | [Replace the 5-value address key with a full-vector metric](items/m1-address-key-full-vector.md) | done | a lab | yes | [m1-w2-capacity-capture](items/m1-w2-capacity-capture.md) | [#2834](https://github.com/UOR-Foundation/uor-r4/issues/2834) |
 | [Draft the BVG-K Stage T pre-registration sheet (C2 has passed)](items/m1-bvg-k-block-apply-c2.md) | done | a lab | no | [m1-a8-full-dose-rerun](items/m1-a8-full-dose-rerun.md), [m1-w2-code-utilization](items/m1-w2-code-utilization.md) | [#2835](https://github.com/UOR-Foundation/uor-r4/issues/2835) |
 | [Train the BVG-K batched-coordinate law on two seeds](items/m1-bvg-k-stage-t-training.md) | done | a lab | yes | [m1-w2-capacity-capture](items/m1-w2-capacity-capture.md), [m1-bvg-k-block-apply-c2](items/m1-bvg-k-block-apply-c2.md), [m1-a8-full-dose-rerun](items/m1-a8-full-dose-rerun.md), [m1-w2-code-utilization](items/m1-w2-code-utilization.md), [m1-address-key-full-vector](items/m1-address-key-full-vector.md) | [#2836](https://github.com/UOR-Foundation/uor-r4/issues/2836) |
-| [Close M1 with one saved discrete model passing all five bars](items/m1-close-saved-model.md) | done | a lab | yes | [m1-a8-full-dose-rerun](items/m1-a8-full-dose-rerun.md), [m1-bvg-k-stage-t-training](items/m1-bvg-k-stage-t-training.md), [m1-export-gap-and-toks](items/m1-export-gap-and-toks.md) | [#2837](https://github.com/UOR-Foundation/uor-r4/issues/2837) |
+| [Close M1's close-grade bars (a)–(e) with one saved discrete model](items/m1-close-saved-model.md) | done | a lab | yes | [m1-a8-full-dose-rerun](items/m1-a8-full-dose-rerun.md), [m1-bvg-k-stage-t-training](items/m1-bvg-k-stage-t-training.md), [m1-export-gap-and-toks](items/m1-export-gap-and-toks.md) | [#2837](https://github.com/UOR-Foundation/uor-r4/issues/2837) |
 | [Build the D11 exporter CLI, GPU panel scorer and tok/s harness for step 6](items/m1-d11-artifact-scorer.md) | done | a lab | yes | [m1-d11-exporter-discrete](items/m1-d11-exporter-discrete.md) | [#3248](https://github.com/UOR-Foundation/uor-r4/issues/3248) |
 | [Write the exporter from a trained discrete model to a D11 file](items/m1-d11-exporter-discrete.md) | done | anyone | no | none | [#2838](https://github.com/UOR-Foundation/uor-r4/issues/2838) |
 | [Measure export gap and tokens per second on a trained model](items/m1-export-gap-and-toks.md) | done | a lab | yes | [m1-d11-exporter-discrete](items/m1-d11-exporter-discrete.md), [m1-bvg-k-stage-t-training](items/m1-bvg-k-stage-t-training.md), [m1-d11-artifact-scorer](items/m1-d11-artifact-scorer.md) | [#2839](https://github.com/UOR-Foundation/uor-r4/issues/2839) |
@@ -138,11 +138,14 @@ These items are ready and open to anyone.
 
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
-| [Bring every status page, picture and tracker up to 30 Oct 2026](items/docs-status-refresh.md) | ready | a lab | no | none | [#3380](https://github.com/UOR-Foundation/uor-r4/issues/3380) |
+| [Bring every status page, picture and tracker up to 31 Oct 2026](items/docs-status-refresh.md) | ready | a lab | no | none | [#3380](https://github.com/UOR-Foundation/uor-r4/issues/3380) |
+| [An exact icosian snap by sorting, in place of the 17-candidate scan](items/fbs-snap-sort.md) | ready | a lab | no | [fbs-serving-vector-kernel](items/fbs-serving-vector-kernel.md) | not yet synced |
 | [Serve the Hamming read from the integer artifact on the laptop](items/integer-hamming-read.md) | ready | a lab | yes | [float-training-module](items/float-training-module.md), [spiralcore-fbs-offline-float-sheet](items/spiralcore-fbs-offline-float-sheet.md) | [#3385](https://github.com/UOR-Foundation/uor-r4/issues/3385) |
+| [Serve prompts and conversations past the 192-token window](items/integer-long-context.md) | ready | a lab | yes | [integer-hamming-read](items/integer-hamming-read.md) | not yet synced |
 | [Serve the trained model's readout in the integer artifact](items/integer-nearest-readout.md) | ready | a lab | no | [integer-retention-rates](items/integer-retention-rates.md), [one-decoder](items/one-decoder.md) | [#3462](https://github.com/UOR-Foundation/uor-r4/issues/3462) |
 | [Score one model end to end on prompts it has not seen, with tokens per second](items/one-model-end-to-end.md) | ready | a lab | yes | [turn-memory-reply](items/turn-memory-reply.md) | [#3407](https://github.com/UOR-Foundation/uor-r4/issues/3407) |
 | [Serve the point key's opening in the integer artifact on the laptop](items/point-key-integer.md) | ready | a lab | no | [one-model-end-to-end](items/one-model-end-to-end.md), [turn-memory-integer](items/turn-memory-integer.md), [integer-retention-rates](items/integer-retention-rates.md), [integer-nearest-readout](items/integer-nearest-readout.md) | [#3450](https://github.com/UOR-Foundation/uor-r4/issues/3450) |
+| [Measure how ability grows with width and data](items/scale-probe.md) | ready | a lab | yes | [one-model-end-to-end](items/one-model-end-to-end.md) | not yet synced |
 | [Split the training backward, and run a cheaper rival search against (a)](items/training-step-cost.md) | ready | a lab | yes | [fbs-cost-profile](items/fbs-cost-profile.md) | [#3391](https://github.com/UOR-Foundation/uor-r4/issues/3391) |
 | [Serve the turn memory from the integer artifact on the laptop](items/turn-memory-integer.md) | ready | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | [#3392](https://github.com/UOR-Foundation/uor-r4/issues/3392) |
 | [Make the native writer's admission hold at every seed](items/writer-admission.md) | ready | a lab | yes | [one-decoder](items/one-decoder.md) | [#3394](https://github.com/UOR-Foundation/uor-r4/issues/3394) |
@@ -225,6 +228,7 @@ flowchart LR
   n_fbs_cost_profile["fbs-cost-profile"]
   n_fbs_serving_kernels["fbs-serving-kernels"]
   n_fbs_serving_vector_kernel["fbs-serving-vector-kernel"]
+  n_fbs_snap_sort["fbs-snap-sort"]
   n_float_training_module["float-training-module"]
   n_hamilton_gate_offline_float_sheet["hamilton-gate-offline-float-sheet"]
   n_in_space_trunk_to_text["in-space-trunk-to-text"]
@@ -245,6 +249,7 @@ flowchart LR
   n_infra_loop_pr12_git_hooks["infra-loop-pr12-git-hooks"]
   n_infra_loop_render_review["infra-loop-render-review"]
   n_integer_hamming_read["integer-hamming-read"]
+  n_integer_long_context["integer-long-context"]
   n_integer_mul_div_serving["integer-mul-div-serving"]
   n_integer_nearest_readout["integer-nearest-readout"]
   n_integer_retention_rates["integer-retention-rates"]
@@ -308,6 +313,7 @@ flowchart LR
   n_r_vocab_4096_vs_16384["r-vocab-4096-vs-16384"]
   n_recurrence_gates_six_recurrence_fit["recurrence-gates-six-recurrence-fit"]
   n_route_plus_memory["route-plus-memory"]
+  n_scale_probe["scale-probe"]
   n_spiralcore_fbs_offline_float_sheet["spiralcore-fbs-offline-float-sheet"]
   n_training_step_cost["training-step-cost"]
   n_turn_memory_integer["turn-memory-integer"]
@@ -319,6 +325,7 @@ flowchart LR
   n_fbs_cost_profile --> n_training_step_cost
   n_fbs_serving_kernels --> n_fbs_serving_vector_kernel
   n_fbs_serving_kernels --> n_integer_mul_div_serving
+  n_fbs_serving_vector_kernel --> n_fbs_snap_sort
   n_float_training_module --> n_d11_exporter_float_trunk
   n_float_training_module --> n_e8_orbit_memory_sigmoid_free_iteration
   n_float_training_module --> n_hamilton_gate_offline_float_sheet
@@ -348,6 +355,7 @@ flowchart LR
   n_infra_loop_pr07c_queue_board --> n_infra_loop_pr10_supervisor
   n_infra_loop_pr09_client_adapters --> n_infra_loop_pr10_supervisor
   n_infra_loop_render_review --> n_loop_render_review_hardening
+  n_integer_hamming_read --> n_integer_long_context
   n_integer_nearest_readout --> n_point_key_integer
   n_integer_retention_rates --> n_integer_nearest_readout
   n_integer_retention_rates --> n_point_key_integer
@@ -426,6 +434,7 @@ flowchart LR
   n_one_decoder --> n_integer_nearest_readout
   n_one_decoder --> n_writer_admission
   n_one_model_end_to_end --> n_point_key_integer
+  n_one_model_end_to_end --> n_scale_probe
   n_owner_decision_float_path_scope --> n_d11_exporter_float_trunk
   n_owner_decision_float_path_scope --> n_float_training_module
   n_pipeline_map --> n_pipeline_map_revision
