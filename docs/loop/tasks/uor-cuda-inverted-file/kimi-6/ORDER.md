@@ -31,8 +31,8 @@ Stop if `docs/roadmap/README.md` is not in the harness's shared-file list, if th
 - No new-item scope entry covers a shared file; the item is claimable by the harness's actual rule.
 - README and item match official-collector PASS, corrected independent replication PASS, SDK/multi-runtime and real-loaded-model NOT_RUN, and experimental local `uor.*` attributes.
 - Full 11-gate run, roadmap/render/diff checks, shared-file harness tests, and local policy execute at the final text commit; exact results are posted on the PR.
-- A fresh-context reviewer approves the corrected exact head; GitHub required checks are green; References only.
+- A fresh-context reviewer approves the corrected exact head; GitHub required checks are green. The top-session [status decision](DECISION.md) closes completed #3475, while #3492 remains open with References only.
 
 ## Stop and report
 
-Stop after the claimable registration merges. Do not publish releases, close either issue, rewrite earlier repair history, or start upstream outreach.
+Stop after the claimable registration merges. Do not publish releases, close #3492, rewrite earlier repair history, or start upstream outreach.
