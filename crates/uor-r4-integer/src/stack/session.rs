@@ -1026,6 +1026,16 @@ impl IntegerStackModel {
         if fbs.hamming.is_some() || self.memory.is_some() {
             return None;
         }
+        self.fbs_trunk_image()
+    }
+
+    /// The parsed SpiralCore/FBS trunk and writer without its optional Hamming or memory
+    /// facilities, for an evaluator that reads those facilities separately. Unlike
+    /// [`Self::fbs_image`], this view may accompany an artifact with either facility; an
+    /// evaluator that executes this trunk alone would serve a different model. The CPU
+    /// development crate uses it with the public Hamming and memory image readers.
+    pub fn fbs_trunk_image(&self) -> Option<FbsImage<'_>> {
+        let fbs = self.fbs.as_deref()?;
         let layers = fbs
             .layers
             .iter()
