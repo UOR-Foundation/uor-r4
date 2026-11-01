@@ -102,6 +102,13 @@ It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-
          - then the same bars on claude-146's checkpoints and on DEV (done-when 2).
 
          Decode on the M1 under load: 3,068–4,085 tok/s with the read, 4,306–4,857 without, at contexts 96–192;
+     - **The tie rule is on by default (claude-239).** The float read now breaks ties by ascending bits, then ascending `s`, on every thread, unless `set_hamming_tie_rule(false)` turns it off. `fbs-snapshot`'s `d11` arm is now that explicit off arm, the GPU sort's own order.
+       - **The tests:**
+         - CUDA test A runs a real `read()` with planted ties, checked against the host's nearest 16 by (bits, `s`). It fails with the default off and with the read's wiring off.
+         - Test B, now on codes with last-bit noise, fails with `choose_sorted`'s tie branch removed.
+         - Restored, the 44 `flock_read_hamming::` and `fbs_export::` tests pass with `--features cuda`. A's off run keeps a different set in 307 of 512 rows.
+       - **Checkpoints trained before this unit** trained with the rule off (claude-146's `choose_sorted` is one arg-sort). The `d11` arm turns the rule off; it is not shown to reproduce their training forward exactly.
+       - **Next:** the bars on claude-146's checkpoints and on DEV, with the default on (done-when 2). That needs a prep sheet, its FIT and a pre-run review.
   6. the speed.
 
 ## Done when
