@@ -6,7 +6,7 @@ Setup row: 2 (item-file maintenance: a scope addition to a gap item).
 
 ## Goal
 
-This unit adds to [integer-nearest-readout](../../../../roadmap/items/integer-nearest-readout.md)'s scope (#3462) the five files that claude-247's [decision card](../integer-nearest-readout/claude-247/DECISION.md) named. The guard enforces an item's scope as it stands on `main`, so the scope must merge before the code that needs it (claude-197's finding, claude-203's precedent).
+This unit adds to [integer-nearest-readout](../../../../roadmap/items/integer-nearest-readout.md)'s scope (#3462) the five files that claude-247's [decision card](../../integer-nearest-readout/claude-247/DECISION.md) named. The guard enforces an item's scope as it stands on `main`, so the scope must merge before the code that needs it (claude-197's finding, claude-203's precedent).
 
 **Why the item needs it.** Done-when 3 now waits on Q5 alone: an exact trace of 184 clear-margin disagreements, under claude-247's rule.
 - That rule records every discrete decision of five kinds on F, T and R. It forces codes and rate buckets, and it writes each side's query at p.
