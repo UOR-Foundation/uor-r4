@@ -71,7 +71,7 @@ thread_local! {
     static ACTIVE: RefCell<Option<HammingReads>> = const { RefCell::new(None) };
     static CUT: std::cell::Cell<Option<(ReadScope, usize)>> = const { std::cell::Cell::new(None) };
     static ROW_CUT: RefCell<Option<(ReadScope, Vec<usize>)>> = const { RefCell::new(None) };
-    static TIE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static TIE: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
     static TRACE: RefCell<Option<Vec<HammingTraceWindow>>> = const { RefCell::new(None) };
 }
 
@@ -184,8 +184,9 @@ pub fn hamming_reads() -> Option<HammingReads> {
 
 /// claude-235: break the read's ties as the integer session does, by ascending bit distance and
 /// then ascending position, for the forward passes that follow on this thread
-/// ([`choose_sorted`]). Off, the default, the sort's own tie order stands: on CUDA a bitonic
-/// sort's, which leaves the order of equal keys open.
+/// ([`choose_sorted`]). On is the default since claude-239, so the trainer and every float
+/// reference keep the sets the integer session keeps. Off, the sort's own tie order stands: on
+/// CUDA a bitonic sort's, which leaves the order of equal keys open.
 pub fn set_hamming_tie_rule(on: bool) {
     TIE.with(|t| t.set(on));
 }
@@ -662,7 +663,8 @@ impl HammingRead {
             Tensor::zeros((rows, 1), DType::F32, device)?,
             Tensor::zeros((rows, 1), DType::F32, device)?,
         ];
-        // claude-235: both off by default, and then the read computes as before them.
+        // claude-235: with both off, the read computes as before them. Since claude-239 the tie
+        // rule is on by default and the trace off.
         let tie = TIE.with(|t| t.get());
         let tracing = TRACE.with(|t| t.borrow().is_some());
         let mut traced = Vec::new();
@@ -865,7 +867,8 @@ const FAR: f32 = 1.0e30;
 /// candidates; `time` limits none (claude-215, claude-216).
 /// One sort per call, where claude-144's choice (`flock_read::choose_nearest`) takes `kept` argmin
 /// rounds per window; with `first` 0, the same nearest set, hard and detached. Ties may come out in
-/// another order, unless `tie` sets the integer session's tie rule (claude-235) for ±1 codes:
+/// another order, unless `tie` sets the integer session's tie rule (claude-235; the read's default
+/// since claude-239) for ±1 codes:
 /// each distance taken as its whole bit count `h` and sorted by the exact key `h · time + s`
 /// ([`tie_key`]), so equal distances go to the earlier position whatever the sort's own tie
 /// order. Without `tie`, the choice is the one before claude-235.
@@ -1012,18 +1015,20 @@ mod tests {
         assert!(push_trace_reads(&mut windows, &ids, 4, vec![read(2)], false).is_err());
     }
 
-    /// claude-235: the switches start off on a thread, the trace is taken and stays on empty,
-    /// and turning it off drops it.
+    /// claude-235, claude-239: on a new thread the trace starts off and the tie rule on; the
+    /// trace is taken and stays on empty, turning it off drops it, and the rule turns off and on.
     #[test]
-    fn the_trace_and_the_tie_rule_start_off() {
+    fn the_trace_starts_off_and_the_tie_rule_on() {
         std::thread::spawn(|| {
-            assert!(!hamming_tie_rule());
+            assert!(hamming_tie_rule());
             assert_eq!(take_hamming_trace(), None);
             set_hamming_trace(true);
             assert_eq!(take_hamming_trace(), Some(Vec::new()));
             assert_eq!(take_hamming_trace(), Some(Vec::new()));
             set_hamming_trace(false);
             assert_eq!(take_hamming_trace(), None);
+            set_hamming_tie_rule(false);
+            assert!(!hamming_tie_rule());
             set_hamming_tie_rule(true);
             assert!(hamming_tie_rule());
         })
@@ -1038,11 +1043,17 @@ mod tests {
     fn the_tie_rule_keeps_the_integer_sessions_order() {
         let device = Device::new_cuda(0).unwrap();
         let (time, width, kept) = (40, 64, HAMMING_KEPT);
-        // Few distinct codes, so many candidates tie at every distance.
+        // Few distinct codes, so many candidates tie at every distance. claude-239: each
+        // coordinate is ±1 only to its last bit, as the read's straight-through `p + (bits − p)`
+        // can leave it, and the rule must see past that.
+        let noise = [1.0 - f32::EPSILON / 2.0, 1.0, 1.0 + f32::EPSILON];
         let code = |r: usize| -> Vec<f32> {
             let pattern = (r * 7) % 5;
             (0..width)
-                .map(|i| if (i * 3 + pattern) % 8 < 2 + pattern { 1.0 } else { -1.0 })
+                .map(|i| {
+                    let positive = (i * 3 + pattern) % 8 < 2 + pattern;
+                    noise[(r * 31 + i) % 3] * if positive { 1.0 } else { -1.0 }
+                })
                 .collect()
         };
         let rows: Vec<Vec<f32>> = (0..time).map(code).collect();
@@ -1072,8 +1083,70 @@ mod tests {
         assert!(tied > 100, "the planted codes tie too rarely: {tied}");
     }
 
+    /// claude-239 (claude-235's owed GPU test): a real read, at the default, keeps in every head
+    /// the positions the integer session keeps. Each traced kept set is, in order, the nearest 16
+    /// by ascending bit distance and then ascending `s`, computed here from the traced codes. The
+    /// tokens repeat, so ties cross the 16th place. With the rule turned off, the same read keeps
+    /// sets just as near but breaks some of those ties otherwise, so the test can fail.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn a_read_breaks_its_ties_by_the_integer_sessions_rule_by_default() {
+        let device = Device::new_cuda(0).unwrap();
+        let reads = HammingReads::new(4, 256, &device).unwrap();
+        let (batch, time) = (2, 64);
+        let x = residual(batch, time, 256, &device);
+        // Three tokens, so every key code is one of three and a row's distances take few values.
+        let ids: Vec<u32> = (0..batch * time).map(|i| (i % 3) as u32).collect();
+        let table = table(3, 256, &device);
+        let trace = || {
+            set_hamming_trace(true);
+            reads.reads[0].apply(&x, &ids, &table).unwrap();
+            let windows = take_hamming_trace().unwrap();
+            set_hamming_trace(false);
+            windows
+        };
+        // Each test runs on its own thread, so the rule is at its default here.
+        let on = trace();
+        set_hamming_tie_rule(false);
+        let off = trace();
+        set_hamming_tie_rule(true);
+        assert_eq!((on.len(), off.len()), (batch, batch));
+        let (mut crossing, mut broken) = (0, 0);
+        for (window, other) in on.iter().zip(&off) {
+            for (head, other) in window.reads[0].heads.iter().zip(&other.reads[0].heads) {
+                assert_eq!((&head.query, &head.key), (&other.query, &other.key));
+                for t in 0..time {
+                    let bits = |s: u32| (head.query[t] ^ head.key[s as usize]).count_ones();
+                    let mut nearest: Vec<(u32, u32)> =
+                        (1..t as u32).map(|s| (bits(s), s)).collect();
+                    nearest.sort_unstable();
+                    let kept = nearest.len().min(HAMMING_KEPT);
+                    crossing += usize::from(
+                        nearest
+                            .get(kept)
+                            .is_some_and(|next| next.0 == nearest[kept - 1].0),
+                    );
+                    let expected: Vec<u32> = nearest[..kept].iter().map(|n| n.1).collect();
+                    assert_eq!(head.kept[t], expected, "on, window row {t}");
+                    // Off, the set is as near, and only its ties may break otherwise.
+                    let mut near: Vec<u32> = other.kept[t].iter().map(|&s| bits(s)).collect();
+                    near.sort_unstable();
+                    let nearest_bits: Vec<u32> = nearest[..kept].iter().map(|n| n.0).collect();
+                    assert_eq!(near, nearest_bits, "off, window row {t}");
+                    let mut set = other.kept[t].clone();
+                    set.sort_unstable();
+                    let mut wanted = expected;
+                    wanted.sort_unstable();
+                    broken += usize::from(set != wanted);
+                }
+            }
+        }
+        assert!(crossing > 100, "too few ties across the 16th place: {crossing}");
+        assert!(broken > 0, "off, the sort broke every tie as the rule does");
+    }
+
     /// claude-235 (its GPU half): recording changes nothing the read computes, and the trace's
-    /// kept sets are the read's real picks; with the tie rule off, the choice is `choose_sorted`'s.
+    /// kept sets are the read's real picks, at the default tie rule.
     #[cfg(feature = "cuda")]
     #[test]
     fn recording_the_trace_leaves_the_read_unchanged() {
@@ -1086,7 +1159,7 @@ mod tests {
         let ids: Vec<u32> = (0..48).map(|i| (i % 5) as u32).collect();
         let table = table(8, 256, &device);
         let plain = |out: Tensor| out.flatten_all().unwrap().to_vec1::<f32>().unwrap();
-        // Each test runs on its own thread, so the switches start off here.
+        // Each test runs on its own thread, so here the trace starts off and the tie rule on.
         let off = plain(reads.reads[0].apply(&x, &ids, &table).unwrap());
         let off_readout = plain(reads.reads[1].apply_readout(&x, &ids, &table).unwrap());
         set_hamming_trace(true);
