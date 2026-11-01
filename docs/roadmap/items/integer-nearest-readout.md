@@ -13,7 +13,7 @@ scope: [crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-integer/src/sta
 
 ## Why it matters
 
-The project's first hurdle is one working model end to end, served from its integer artifact. The served model must decode as the trained one does. Claude-231 built that readout on native and browser paths, but claude-232's end-to-end parity check missed in every cell. Claude-243's, with both sides on the same rules, meets the old bar on DEV and misses on p-w. Under claude-245's bar, Q1 to Q4 hold (claude-246). The item stays ready until Q5's exact trace is read.
+The project's first hurdle is one working model end to end, served from its integer artifact. The served model must decode as the trained one does. Claude-231 built that readout on native and browser paths, but claude-232's end-to-end parity check missed in every cell. Claude-243's, with both sides on the same rules, meets the old bar on DEV and misses on p-w. Under claude-245's bar, Q1 to Q4 hold (claude-246). Claude-247 fixed Q5's rule, and the item stays ready until Q5's exact trace is read.
 
 - **The trained model decodes by nearest.** (r-drop) trained with `objective: "cell"`, and `in_space_long` decodes such a model as the whole table's nearest token: `decodes_nearest`, "Whether replies decode as the whole table's nearest token, not the writer's pick". [`one-decoder`](one-decoder.md) (claude-150) made whole-table nearest the float side's served decoder.
 - **Before claude-231, the integer session decoded by the native writer.** It computed whole-table nearest only beside the writer, for timing. In [`point-key-integer`](point-key-integer.md)'s real run (claude-229, #3460), integer greedy's first token equalled claude-220's float greedy on 0 of 310 DEV prompts and 2 of 1,202 on p-w. The float's own first token equalled the reference on 129 and 179. The run's grade read nothing and ended at row 0.
@@ -32,12 +32,17 @@ The project's first hurdle is one working model end to end, served from its inte
   - R's net loss b − a (positions only F′ gets right, less those only R gets right) under teacher forcing is +1, +6 and +2 on DEV (Q2's bound 20) and −17, +2 and −7 on p-w (bound 69). Pooled, it is +9 of 12,441 on DEV and −22 of 41,793 on p-w; p-w's cut windows give +12 of 4,254.
   - At the free-decode opening (Q3), it is +1, −6 and −2 on p-w, −7 pooled, −1 on the cut windows and +2 of 852 on DEV pooled.
   - Q4, carried from claude-244: κ is 0.84 to 0.97 in every cell, against 4/9.
+- **Claude-247 fixed Q5's rule** ([decision card](../../loop/tasks/integer-nearest-readout/claude-247/DECISION.md), logged on #3462; Casey can reverse it). It read no trace value.
+  - **The set:** 184 positions in 169 windows, listed from sealed files only. That is 162 counted (11 on DEV, 151 on p-w) and 22 on p-w's cut windows.
+  - **The rule:** a three-way trace of F (F′ rerun), T (F's path on parameters rounded as exported) and R. Each step whose picks differ, structure (F, T) and arithmetic (T, R), is replayed with its discrete decisions forced in the forward's order. A position is accounted for only when every decision forced, and any pick difference left, is a near tie by the decile rule. A kept set or memory lookup that differs fails the step outright.
 
 ## What is missing
 
-- **Next: Q5's own decision card fixes the trace's rule,** meeting the four requirements in claude-245's card. A sheet follows, with a FIT and a pre-run review, and then the trace. Q1 to Q4 held in claude-246, so done-when 3 now waits on Q5 alone.
-  - It covers every clear-margin disagreement: for this R, 151 on p-w's counted rows and 11 on DEV's, plus p-w's cut windows' own. I-Align holds on the cut windows (claude-246), so theirs count at every position.
-  - The leading proposal reads R against its float twin T (`fbs-snapshot`, the same artifact in float) and F′. That separates R's integer arithmetic from the exported structure without a rounding bound.
+- **Next: the trace instrument, then the sheet that reads Q5,** under claude-247's card. Q1 to Q4 held in claude-246, so done-when 3 waits on Q5 alone.
+  - **The instrument** records every decision of the card's five kinds on F, T and R: Hamming codes, kept sets, memory lookups, rate buckets and the nearest. It forces codes and rate buckets, and writes each side's query at the traced positions, so each side can score the other's pick.
+    - Its ORDER adds the card's scope change to this item: `stack/hamming.rs`, `flock_read_hamming.rs`, `geometric_stack_native.rs`, `cuda_stack.cu` and `in_space_long.rs`.
+    - It builds T's rounded copy beside `--rebind-fbs-backward`.
+  - **The sheet** registers the card's rule verbatim, with a fresh FIT and a pre-run review. Its Row 0 is the card's: I-F, I-R, I-Twin, I-Rerun, I-Force, I-Align, I-Complete, I-Set and I-Inputs. GPU for F and T, under an hour; the laptop for R.
 - **Leads for the trace,** layer by layer: the trunk, Hamming read, memory and readout. Recheck end-to-end parity before rerunning p-x.
   - **The clear-margin disagreements** (g above G₁₀) first, as Q5 requires.
   - **Read F′'s own top two** at the disagreeing positions. Its sealed rows carry no scores, so claude-244's residual bound is one-sided.
@@ -65,7 +70,7 @@ The project's first hurdle is one working model end to end, served from its inte
      - R picks the reference token as often as F′ does: no loss beyond 3 row-clustered SE (Q1), and at most half a point (Q2);
      - the same holds at the opening, on free decode (Q3);
      - R's differences sit at its own near ties (Q4: κ ≥ 4/9).
-     - **Q5:** every clear-margin disagreement is also accounted for by an exact trace, under its own card's rule.
+     - **Q5:** every clear-margin disagreement is also accounted for by an exact trace, under claude-247's [decision card](../../loop/tasks/integer-nearest-readout/claude-247/DECISION.md), logged on #3462; Casey can reverse it.
      - First-token and whole-reply agreement stay reported as readings; claude-243's MISS on the old bar is recorded as it is.
    - **The item is done only when the bar passes.** On a miss, the sheet's row is recorded, the item stays `ready`, and the next unit locates the gap.
    - Integer decodes run on the laptop: product serving (CHARTER §3.6), under the owner's 31 Oct allowance for this chain. The float side runs on the GPU.
