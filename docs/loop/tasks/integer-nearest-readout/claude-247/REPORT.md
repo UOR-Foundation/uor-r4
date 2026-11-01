@@ -30,6 +30,10 @@ No new speed is claimed: this unit ran nothing. R's decode speed is still claude
   - under a 16-bit GPU build, values must be judged as the decision reads them;
   - a rate family's decile can be loose when its scores crowd at 0 or 1, so each family's G₁₀ is reported against 1/32;
   - where each stream read runs, including at depth 0, is cited only in the sheet.
+- **The exact-head review at `774027328` was APPROVE with three minors, all applied:**
+  - the pick near tie needs each side's score for the other side's pick, which may lie below R's sealed top two, so every side's trace now writes its query at p;
+  - the item and this REPORT said the instrument forces all five kinds, but it forces only codes and rate buckets;
+  - one link in the card was one level short.
 - **The rule has named blind spots** (the card's residual risks):
   - a fault confined to near ties passes;
   - forced replay shows that the forced set suffices, not that each member matters;
@@ -102,7 +106,7 @@ None.
 
 ## Still open
 
-- **The next unit: the trace instrument.** It records and forces the five kinds on F, T and R, writes F's top two with their scores, and builds T's rounded copy. Its ORDER carries the card's scope change, five files.
+- **The next unit: the trace instrument.** It records the five kinds on F, T and R, and forces codes and rate buckets. It writes each side's query at the traced positions, so each side can score the other's pick, and it builds T's rounded copy. Its ORDER carries the card's scope change, five files.
 - **Then the sheet that reads Q5.** It registers the card's rule verbatim, with a fresh FIT and a pre-run review, and round 2's three minors: the `act_t` build, G₁₀ against 1/32, and the depth-0 citation.
 - **Carried:**
   - **Speed:** the nearest scan is 65% of a decode step (claude-243), so a cheaper exact nearest is the speed lead.

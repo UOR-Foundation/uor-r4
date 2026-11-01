@@ -115,8 +115,8 @@ No trace value of any position in the set has been read: no code, coordinate, ke
 
 **The three sides.** Each runs one cell (split × seed), under teacher forcing, on the set's rows. Each row runs from its window's start to its last position in the set.
 - **F** reruns F′:
-  - F′'s own scoring path, `score_rows`, with claude-243's arguments for that seed (its [sheet](../../../harness/prep/integer-nearest-readout-tie-parity-2026-11-01.md), line 22), on the GPU;
-  - with the trace on and the top two written with their scores.
+  - F′'s own scoring path, `score_rows`, with claude-243's arguments for that seed (its [sheet](../../../../harness/prep/integer-nearest-readout-tie-parity-2026-11-01.md), line 22), on the GPU;
+  - with the trace on, and its query at each traced position written, so any token's score can be computed (below).
 - **T** is R's float twin:
   - F's path, with F's build and arguments, on an evaluation copy of the seed's checkpoint;
   - in that copy, every parameter the artifact holds (the trunk's tables, the Hamming reads and the turn memory) is rounded as `fbs-export --raw-gates --raw-transition` rounds it. So T's parameters are R's, and only its arithmetic is float.
@@ -149,7 +149,8 @@ It does not read the readout read's choices or the pick at any q < p. Their outp
   - P picks u, Q picks w, and G₁₀ is the cell's sealed G₁₀;
   - s_P(u) − s_P(w) ≤ G₁₀, and s_Q(w) − s_Q(u) ≤ G₁₀.
 - **Each score is in R's units,** the Q12 of −L1:
-  - R's s_Q(u) is its own sealed score.
+  - The rule needs each side's score for the other side's pick, which may lie below its own top two. So every side's trace writes its query at p, and each score is computed from that query and the side's table.
+  - R's score is s_R(u) = −Σ_j |Q_j − T_{u,j}|, from R's Q12 query and table, by the nearest's own rule (kind 4). For R's pick and runner-up it equals the sealed score, which I-R checks.
   - A float side's score is s(u) = −2^12 · Σ_j |q_j − e_{u,j}| over the 256 coordinates, computed in f64 from the side's f32 query at p and its own table. That table is F's float table for F, and for T the rounded table, which is R's table divided by 4096 exactly.
   - This is 2^20 times `nearest_scores`' negative mean L1 (`in_space_long.rs:672`).
   - The cell's sealed G₁₀ is R's. Applying it to F's and T's margins is a convention, stated here and fixed.
@@ -247,7 +248,7 @@ A position that cannot be traced is an instrument repair, never a fault: its row
   - `crates/uor-r4-integer/src/stack/hamming.rs`: the trace records each code's 64 coordinates, and a forced code replaces the computed one;
   - `crates/uor-r4-float-train/src/flock_read_hamming.rs`: the same for the float read, with a force switch beside its `TIE` and `TRACE`;
   - `crates/uor-r4-float-train/src/geometric_stack_native.rs` and `crates/uor-r4-float-train/src/cuda_stack.cu`: the recurrence records each lane's rate score and entry, and a forced entry replaces `rate_select`'s;
-  - `crates/uor-r4-float-train/src/in_space_long.rs`: `score_rows` writes each position's top two with their scores, and runs on chosen rows with the trace and a forced set.
+  - `crates/uor-r4-float-train/src/in_space_long.rs`: `score_rows` writes each traced position's query and its top two with their scores, and runs on chosen rows with the trace and a forced set.
 
   Already in scope:
   - `stack/session.rs`: R's recurrence records each lane's `s_q16` and entry, and a forced entry replaces the computed one;

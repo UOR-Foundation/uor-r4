@@ -34,12 +34,12 @@ The project's first hurdle is one working model end to end, served from its inte
   - Q4, carried from claude-244: κ is 0.84 to 0.97 in every cell, against 4/9.
 - **Claude-247 fixed Q5's rule** ([decision card](../../loop/tasks/integer-nearest-readout/claude-247/DECISION.md), logged on #3462; Casey can reverse it). It read no trace value.
   - **The set:** 184 positions in 169 windows, listed from sealed files only. That is 162 counted (11 on DEV, 151 on p-w) and 22 on p-w's cut windows.
-  - **The rule:** a three-way trace of F (F′ rerun), T (F's path on parameters rounded as exported) and R. Each step whose picks differ, structure (F, T) and arithmetic (T, R), is replayed with its discrete decisions forced in the forward's order. A position is accounted for only when every decision forced, and any pick difference left, is a near tie by the decile rule.
+  - **The rule:** a three-way trace of F (F′ rerun), T (F's path on parameters rounded as exported) and R. Each step whose picks differ, structure (F, T) and arithmetic (T, R), is replayed with its discrete decisions forced in the forward's order. A position is accounted for only when every decision forced, and any pick difference left, is a near tie by the decile rule. A kept set or memory lookup that differs fails the step outright.
 
 ## What is missing
 
 - **Next: the trace instrument, then the sheet that reads Q5,** under claude-247's card. Q1 to Q4 held in claude-246, so done-when 3 waits on Q5 alone.
-  - **The instrument** records and forces every decision of the card's five kinds on F, T and R: Hamming codes, kept sets, memory lookups, rate buckets and the nearest. It also writes F's top two with their scores.
+  - **The instrument** records every decision of the card's five kinds on F, T and R: Hamming codes, kept sets, memory lookups, rate buckets and the nearest. It forces codes and rate buckets, and writes each side's query at the traced positions, so each side can score the other's pick.
     - Its ORDER adds the card's scope change to this item: `stack/hamming.rs`, `flock_read_hamming.rs`, `geometric_stack_native.rs`, `cuda_stack.cu` and `in_space_long.rs`.
     - It builds T's rounded copy beside `--rebind-fbs-backward`.
   - **The sheet** registers the card's rule verbatim, with a fresh FIT and a pre-run review. Its Row 0 is the card's: I-F, I-R, I-Twin, I-Rerun, I-Force, I-Align, I-Complete, I-Set and I-Inputs. GPU for F and T, under an hour; the laptop for R.
