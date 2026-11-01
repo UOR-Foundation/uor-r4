@@ -11,8 +11,8 @@ This unit corrects [integer-nearest-readout](../../../../roadmap/items/integer-n
 **Why.** Casey's call on 1 Nov (Claude's chat, recorded on #3462, `6564833770`): "Finish Q5 first". R's side merged in claude-249 (#3499). F's and T's sides record the card's five kinds from `train-in-space --score-rows`, on the GPU. A read-only scout of `origin/main` found that three of the files they need are not in the scope.
 
 **Three files added, each named by what the card requires of it:**
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`: kind 3, the turn memory's lookup. `TurnMemory::stored` (`table.get(&key)`) and `stored_reply` run inside `apply_readout`, so the key, what was stored, and whether the row is the opening are known only there. T's memory must also be rounded as exported, and no helper does that today.
-- `crates/uor-r4-float-train/src/geometric_stack_native_cuda.rs`: kind 5, the rate bucket. `rate_select_fwd` is the op that launches `cuda_stack.cu`'s selection kernel. The card records the entry "as the decision reads it", and forces it, so the op must carry the recorded and forced entries.
+- `crates/uor-r4-float-train/src/flock_read_memory.rs`: kind 3, the turn memory's lookup. `TurnMemory::stored` (`table.get(&key)`) and `stored_reply` run inside `apply_readout`. The opening's key is built only there, from `opening_slots`, and is not returned, so recording it means editing this file. T's memory must also be rounded as exported, and no helper does that today.
+- `crates/uor-r4-float-train/src/geometric_stack_native_cuda.rs`: kind 5, the rate bucket. `rate_select_fwd` is the op that launches `cuda_stack.cu`'s selection kernel. The card records the entry "as the decision reads it", and forces it. Forcing an entry the kernel computes from the score means changing the op.
 - `crates/uor-r4-float-train/src/bin/train-in-space.rs`: the options. `--score-rows`'s arguments are parsed there, so a `--decision-trace` and a `--force` option are too.
 
 **Two files removed:** `crates/uor-r4-integer/src/wasm_serve.rs` and `crates/uor-r4-integer/src/wasm_bindgen_exports.rs`.

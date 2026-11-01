@@ -11,7 +11,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). References #3462.
   - The unit was claimed by hand under Casey's 1 Nov direction, quoted verbatim in the [ORDER](ORDER.md#how-this-unit-was-claimed). The hand claim made the same writes as `loop claim`, and passed every check but the overlap by hand.
   - No open PR changes `integer-nearest-readout.md` or any of the five files below, so the supersede takes nothing from either lab.
   - Noted for Kimi and DeepSeek on #2028 (`6565213467`).
-- **The three added files are shared with other items,** by literal path:
+- **The three added files are shared with other ready items,** by literal path (done items that list them are left out):
   - `flock_read_memory.rs` with `one-model-end-to-end` and `turn-memory-integer`;
   - `geometric_stack_native_cuda.rs` with `training-step-cost`;
   - `bin/train-in-space.rs` with `one-model-end-to-end`, `point-key-integer`, `training-step-cost`, `turn-memory-integer` and `writer-admission`.
@@ -23,7 +23,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). References #3462.
 
 - **`docs/roadmap/items/integer-nearest-readout.md`:**
   - **`scope:`** adds three files and removes two, and nothing else changes in it. Added, each for one of claude-247's [decision card](../../integer-nearest-readout/claude-247/DECISION.md) kinds:
-    - `crates/uor-r4-float-train/src/flock_read_memory.rs`, for kind 3, the memory lookups. `TurnMemory::stored` and `stored_reply` form the key and read the table inside `apply_readout`.
+    - `crates/uor-r4-float-train/src/flock_read_memory.rs`, for kind 3, the memory lookups. `TurnMemory::stored` and `stored_reply` read the table inside `apply_readout`, and the opening's key is built only there and not returned.
     - `crates/uor-r4-float-train/src/geometric_stack_native_cuda.rs`, for kind 5, the rate buckets. `rate_select_fwd` launches the selection kernel, and the card forces its entries.
     - `crates/uor-r4-float-train/src/bin/train-in-space.rs`, for the `--score-rows` options: the trace and the forcing set.
 
@@ -49,6 +49,7 @@ None.
 ## Still open
 
 - **F's side of the trace** (next, under `integer-nearest-readout`): `train-in-space --score-rows --decision-trace` writes side F's `uor-r4.decision-trace/1` on the GPU, with the five kinds in R's order. With the trace on, the rows files must stay byte-identical.
+  - **Record the buckets at `geometric_stack_native.rs:1449`,** where the score is clamped and `rate_select` called. That file is in the scope. The secant hook in `rate_select_fwd` (`on_rate_select_fwd_values`) would need `secant_descent.rs`, which is not (review LOW 2). `geometric_stack_native_cuda.rs` is for forcing.
 - **Then T's side, the replay driver and grader, and the sheet,** under claude-247's card.
 - **`loop claim` cannot claim `infra-loop-harness` while any lab has an order open.** Noted in Claude's friction log; no harness change here.
 
