@@ -239,3 +239,46 @@ fn round_shift(value: i128, shift: u32) -> i128 {
         -((half - value) >> shift)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn memory_moves_round_half_away_from_zero() {
+        let positive = Table {
+            keys: Vec::new(),
+            values: Vec::new(),
+            weight: vec![1 << 11],
+        };
+        let negative = Table {
+            weight: vec![-(1 << 11); 1],
+            ..positive.clone()
+        };
+        let mut norm = [0i64];
+        move_point(&positive, 0, &[1], &mut norm);
+        assert_eq!(norm, [1]);
+        norm[0] = 0;
+        move_point(&negative, 0, &[1], &mut norm);
+        assert_eq!(norm, [-1]);
+    }
+
+    #[test]
+    fn malformed_memory_and_point_dimensions_are_refused() {
+        assert!(Table::new(
+            &MemoryTableImage {
+                keys: Vec::new(),
+                values: Vec::new(),
+                weight: Vec::new(),
+            },
+            1,
+        )
+        .is_err());
+        assert!(PointKey::new(PointKeyImage {
+            width: 2,
+            points: vec![0],
+            targets: vec![1],
+        })
+        .is_err());
+    }
+}

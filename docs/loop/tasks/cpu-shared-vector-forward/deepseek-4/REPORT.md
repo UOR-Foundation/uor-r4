@@ -4,9 +4,9 @@ Lab: deepseek. Item: [cpu-shared-vector-forward](../../../../roadmap/items/cpu-s
 
 ## What did not work
 
-- **Session restart is not established.** The CPU forward can clear its reply signal and anchors and match an unsignalled serving session, but this unit does not serialize recurrence, Hamming payloads and memory anchors into a resumable checkpoint. Serving still refuses `restore_state` for a turn-memory artifact.
+- **Saved-session restart is not established.** The CPU forward can clear its state and restart fresh with the same loaded tables, but this unit does not serialize recurrence, Hamming payloads and memory anchors into a resumable checkpoint. Serving still refuses `restore_state` for a turn-memory artifact.
 - **Parity is synthetic, not trained-artifact evidence.** The tests construct exact artifact tables with known opening and reply hits, but no trained checkpoint or captured model panel is bound.
-- **The point-key fixture is deliberately small.** One synthetic point row verifies fallback naming and token override; a trained point table with ties and distance-bound evidence remains for the trained-artifact gate.
+- **The point-key fixtures are synthetic.** They verify a unique target, the commonest target, and the smaller-id tie; a trained point table and captured-query panel remain for the trained-artifact gate.
 - **No serving behavior changed.** `fbs_image` still returns `None` when Hamming or memory is present. The new `fbs_trunk_image` is explicitly a trunk-only evaluator view and must accompany separate read/memory execution.
 
 ## What changed
@@ -18,16 +18,20 @@ Lab: deepseek. Item: [cpu-shared-vector-forward](../../../../roadmap/items/cpu-s
   - Q12 writer-point promotion and complete-sum half-away-from-zero rounding;
   - point-key L1 naming, commonest-target ties to the smaller id, and opening-miss token override.
 - Integrated memory after the Hamming readout, before final Q12 conversion and the writer head, matching serving order.
-- Added `mark_reply_start` and `clear_reply_start` to the CPU forward.
+- Added `mark_reply_start`, `clear_reply_start` and fresh-stream `reset` to the CPU forward.
 - Extended the full-path release benchmark to a Hamming-plus-memory artifact where the opening and every timed reply row hit.
 
 ## Measurements
 
-- `cargo test --locked -p uor-r4-cpu-train`: 31 passed, 0 failed.
+- `cargo test --locked -p uor-r4-cpu-train`: 37 passed, 0 failed.
 - Exact opening and reply moves match serving for writer and nearest heads.
+- Fractional positive and negative weights match serving; a direct primitive test covers the positive and negative half-away ties.
 - A missed exact opening uses the point key and names token 99 exactly as serving does.
+- Point fallback tests cover a two-row commonest target and an equal-count smaller-id tie.
+- A short key window crosses blocks, restarts from EOS, drops the prompt turn after leaving its block, and matches serving at every row.
 - Combined Hamming plus memory matches for writer and nearest configurations.
 - Without a reply signal, and after clearing one, every step matches a memory artifact's un-signalled serving session.
+- CPU reset reproduces a fresh memory stream with the same table; malformed memory and point dimensions are refused.
 - Release benchmark on the Ryzen 9 9950X:
 
 | Path | Timed steps | Elapsed | Tokens/s | Checksum |
@@ -41,7 +45,7 @@ Process peak RSS was 32,792 KiB. The full path includes the 4,096-token table, s
 
 ## Checks run at the head
 
-- `cargo test --locked -p uor-r4-cpu-train`: PASS, 31 tests.
+- `cargo test --locked -p uor-r4-cpu-train`: PASS, 37 tests.
 - `cargo clippy --locked -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings`: PASS.
 - `cargo run --locked --release -p uor-r4-cpu-train --bin cpu-fbs-forward-bench`: PASS; readings above.
 - `cargo fmt --package uor-r4-cpu-train -- --check`: PASS.

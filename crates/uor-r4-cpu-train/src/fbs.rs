@@ -246,6 +246,23 @@ impl CpuFbsForward {
         self.memory_anchors = MemoryAnchors::default();
     }
 
+    /// Start a new stream with the same loaded tables.
+    pub fn reset(&mut self) {
+        self.position = 0;
+        self.tokens.clear();
+        for state in &mut self.state {
+            state.fill(0);
+        }
+        for history in &mut self.history {
+            history.fill(0);
+        }
+        for payloads in &mut self.hamming_payloads {
+            payloads.fill(0);
+        }
+        self.memory_anchors = MemoryAnchors::default();
+        self.reply_start = None;
+    }
+
     pub fn step(&mut self, token: u32, head: CpuFbsHead) -> Result<CpuFbsStep> {
         if token as usize >= self.vocab {
             return Err(invalid(format!(
@@ -984,6 +1001,24 @@ mod tests {
         point: bool,
         opening_hit: bool,
     ) -> (IntegerStackModel, CpuFbsForward) {
+        memory_fixture_with(
+            seed,
+            head,
+            hamming,
+            opening_hit,
+            1.0,
+            point.then(|| vec![99]),
+        )
+    }
+
+    fn memory_fixture_with(
+        seed: u64,
+        head: CpuFbsHead,
+        hamming: bool,
+        opening_hit: bool,
+        memory_weight: f32,
+        point_targets: Option<Vec<u32>>,
+    ) -> (IntegerStackModel, CpuFbsForward) {
         let mut snapshot = synthetic_fbs_trunk_with(
             seed,
             FbsSynth {
@@ -1013,7 +1048,7 @@ mod tests {
         } else {
             vec![13, 17]
         };
-        let weight = vec![1.0; snapshot.width];
+        let weight = vec![memory_weight; snapshot.width];
         snapshot.memory = Some(FbsMemorySnapshot {
             k: 4,
             key_window: 192,
@@ -1038,13 +1073,13 @@ mod tests {
             }),
         });
         let mut bytes = export_fbs_trunk_uorlut01(&snapshot).unwrap();
-        if point {
+        if let Some(targets) = point_targets {
             bytes = add_point_key_uorlut01(
                 &bytes,
                 &PointKeyImage {
                     width: snapshot.width,
-                    points: vec![0; snapshot.width],
-                    targets: vec![99],
+                    points: vec![0; snapshot.width * targets.len()],
+                    targets,
                 },
             )
             .unwrap();
@@ -1061,7 +1096,33 @@ mod tests {
         point: bool,
         opening_hit: bool,
     ) -> Vec<u32> {
-        let (model, mut cpu) = memory_fixture(seed, head, hamming, point, opening_hit);
+        assert_memory_parity_with_weight(seed, head, hamming, point, opening_hit, 1.0)
+    }
+
+    fn assert_memory_parity_with_weight(
+        seed: u64,
+        head: CpuFbsHead,
+        hamming: bool,
+        point: bool,
+        opening_hit: bool,
+        memory_weight: f32,
+    ) -> Vec<u32> {
+        let (model, mut cpu) = memory_fixture_with(
+            seed,
+            head,
+            hamming,
+            opening_hit,
+            memory_weight,
+            point.then(|| vec![99]),
+        );
+        run_memory_parity(&model, &mut cpu, head)
+    }
+
+    fn run_memory_parity(
+        model: &IntegerStackModel,
+        cpu: &mut CpuFbsForward,
+        head: CpuFbsHead,
+    ) -> Vec<u32> {
         let mut session = model.session();
         let mut served = Vec::new();
         for (row, token) in memory_script().into_iter().enumerate() {
@@ -1080,6 +1141,57 @@ mod tests {
             served.push(actual.token);
         }
         served
+    }
+
+    fn window_memory_fixture() -> (IntegerStackModel, CpuFbsForward) {
+        let mut snapshot = synthetic_fbs_trunk_with(
+            107,
+            FbsSynth {
+                vocab: 512,
+                d: 64,
+                mlp: 96,
+                layers: 3,
+                context: 24,
+                kept: 8,
+                gain_lo: 0.75,
+                gain_span: 1.5,
+                table: 0.5,
+                decay_step: 0.25,
+            },
+        );
+        snapshot.readout_nearest = true;
+        let weight = vec![1.0; snapshot.width];
+        snapshot.memory = Some(FbsMemorySnapshot {
+            k: 2,
+            key_window: 4,
+            opening: vec![FbsMemoryEntry {
+                key: vec![20],
+                value: 42,
+            }],
+            opening_weight: weight.clone(),
+            reply: Some(FbsReplyTable {
+                turn: 2,
+                entries: vec![
+                    FbsMemoryEntry {
+                        key: vec![20, MEMORY_PAD, 1, MEMORY_PAD, 42],
+                        value: 77,
+                    },
+                    FbsMemoryEntry {
+                        key: vec![20, MEMORY_PAD, 2, MEMORY_PAD, 77],
+                        value: 99,
+                    },
+                    FbsMemoryEntry {
+                        key: vec![MEMORY_PAD, 1, MEMORY_PAD, 99],
+                        value: 123,
+                    },
+                ],
+                weight,
+            }),
+        });
+        let bytes = export_fbs_trunk_uorlut01(&snapshot).unwrap();
+        let model = IntegerStackModel::parse(&bytes).unwrap();
+        let cpu = CpuFbsForward::from_artifact(&bytes).unwrap();
+        (model, cpu)
     }
 
     #[test]
@@ -1156,9 +1268,75 @@ mod tests {
     }
 
     #[test]
+    fn fractional_positive_and_negative_memory_weights_match_serving() {
+        assert_memory_parity_with_weight(74, CpuFbsHead::Writer, false, false, true, 0.5);
+        assert_memory_parity_with_weight(75, CpuFbsHead::Nearest, false, false, true, -0.25);
+    }
+
+    #[test]
     fn point_fallback_names_the_missed_opening() {
         let served = assert_memory_parity(79, CpuFbsHead::Writer, false, true, false);
         assert_eq!(served[2], 99);
+    }
+
+    #[test]
+    fn point_fallback_counts_targets_then_breaks_ties_by_smaller_id() {
+        let (model, mut cpu) = memory_fixture_with(
+            81,
+            CpuFbsHead::Nearest,
+            false,
+            false,
+            1.0,
+            Some(vec![90, 90, 70]),
+        );
+        let served = run_memory_parity(&model, &mut cpu, CpuFbsHead::Nearest);
+        assert_eq!(served[2], 90);
+
+        let (model, mut cpu) = memory_fixture_with(
+            82,
+            CpuFbsHead::Nearest,
+            false,
+            false,
+            1.0,
+            Some(vec![30, 20]),
+        );
+        let served = run_memory_parity(&model, &mut cpu, CpuFbsHead::Nearest);
+        assert_eq!(served[2], 20);
+    }
+
+    #[test]
+    fn memory_keys_cross_windows_and_restart_after_eos() {
+        let (model, mut cpu) = window_memory_fixture();
+        let tokens = [9, 10, 11, 12, 1, 20, 42, 77, 99];
+        let mut session = model.session();
+        let mut served = Vec::new();
+        for (row, token) in tokens.into_iter().enumerate() {
+            if row + 1 == 6 {
+                session.mark_reply_start();
+                cpu.mark_reply_start();
+            }
+            let expected = session.step_native(token).unwrap();
+            let actual = cpu.step(token, CpuFbsHead::Nearest).unwrap();
+            assert_eq!(actual.query_q12, expected.query_q12, "row {row}");
+            assert_eq!(actual.token, expected.token, "row {row}");
+            assert_eq!(actual.kept_cells, expected.kept_cells, "row {row}");
+            served.push(actual.token);
+        }
+        assert_eq!(&served[5..], &[42, 77, 99, 123]);
+
+        let (model, mut cpu) = window_memory_fixture();
+        let mut session = model.session();
+        for (row, token) in [9, 10, 11, 12, 1].into_iter().enumerate() {
+            if row + 1 == 5 {
+                session.mark_reply_start();
+                cpu.mark_reply_start();
+            }
+            let expected = session.step_native(token).unwrap();
+            let actual = cpu.step(token, CpuFbsHead::Nearest).unwrap();
+            assert_eq!(actual.query_q12, expected.query_q12);
+            assert_eq!(actual.token, expected.token);
+            assert_eq!(actual.kept_cells, expected.kept_cells);
+        }
     }
 
     #[test]
@@ -1201,6 +1379,29 @@ mod tests {
         let (model, _) = memory_fixture(103, CpuFbsHead::Writer, true, false, true);
         assert!(model.fbs_image().is_none());
         assert!(model.fbs_trunk_image().is_some());
+    }
+
+    #[test]
+    fn reset_starts_a_fresh_memory_stream() {
+        let (_, mut reused) = memory_fixture(104, CpuFbsHead::Writer, true, true, true);
+        for token in memory_script() {
+            reused.step(token, CpuFbsHead::Writer).unwrap();
+        }
+        reused.reset();
+
+        let (_, mut fresh) = memory_fixture(104, CpuFbsHead::Writer, true, true, true);
+        let mut expected = Vec::new();
+        for (row, token) in memory_script().into_iter().enumerate() {
+            if row + 1 == 3 {
+                reused.mark_reply_start();
+                fresh.mark_reply_start();
+            }
+            let reset_step = reused.step(token, CpuFbsHead::Writer).unwrap();
+            let fresh_step = fresh.step(token, CpuFbsHead::Writer).unwrap();
+            assert_eq!(reset_step, fresh_step);
+            expected.push(reset_step.token);
+        }
+        assert!(!expected.is_empty());
     }
 
     #[test]
