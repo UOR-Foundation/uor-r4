@@ -15,7 +15,7 @@ scope: [crates/uor-r4-integer/src/stack/hamming.rs, crates/uor-r4-integer/src/st
 
 This is unit U3 of the [pipeline map](../../model/pipeline-map.md)'s order of work. claude-146's induction-keyed Hamming read (`crates/uor-r4-float-train/src/flock_read_hamming.rs`) solves the project's recall probe: far-bucket recall 0.984–0.994 at both seeds, against chance with no read ([claude-146 REPORT](../../loop/tasks/in-space-trunk-to-text/claude-146/REPORT.md)). It exists only in the float trainer. The map's stage 5 (look-back) says: "Serving: none. The integer runtime has no Hamming read."
 
-The read is cheap to serve by construction: per position, 4 heads × 64 sign bits, 32 bytes of code per read; a token costs a popcount pass over the context per head. At a context of 32,768 that is about 2 MiB per token, against 16 GiB for a dense model's cache at Llama-2-7B's shape (the map's stage 5, proof by arithmetic). claude-242 timed it on the laptop (step 6 below): at 32,768 the read is 97% of decode time.
+The read's memory is small by construction (its time is not, step 6 below): per position, 4 heads × 64 sign bits, 32 bytes of code per read; a token costs a popcount pass over the context per head. At a context of 32,768 that is about 2 MiB per token, against 16 GiB for a dense model's cache at Llama-2-7B's shape (the map's stage 5, proof by arithmetic). claude-242 timed it on the laptop (step 6 below): at 32,768 the read is 97% of decode time.
 
 It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-export`, `fbs-toks`). Their item, `d11-exporter-float-trunk`, stays open for its export gap, which this unit does not need to close: its parity is the read's own, against the float forward of the same checkpoint.
 
@@ -126,7 +126,7 @@ It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-
        - With the read, decode is 4,647 tok/s at 192, 3,345 at 576, 1,851 at 2,112, 659 at 8,256 and 177 at 32,768.
        - Without it, decode is 5,462 to 6,093 at every length.
        - The read's share of decode is 24% at 192, 66% at 2,112 and 97% at 32,768.
-     - **The cost is linear in the context:** about 167 ns per earlier position per decode token, or about 20 ns per candidate for each of the 8 head-reads. `nearest` sorts every candidate to keep 16. That is read from the code; how the time splits was not profiled.
+     - **The cost is linear in the context:** about 167 ns per earlier position per decode token, or about 20 ns per candidate for each of the 8 head-reads. `nearest` sorts every candidate to keep 16. That is read from the code, and it is a candidate cause: how the time splits was not profiled, and the flat slope shows no sign of a sort's log factor.
      - **The checks:**
        - I-Same: the short re-export is the stored artifact byte for byte.
        - I-Reply: the long export differs only in its header's context, and gives the same replies.

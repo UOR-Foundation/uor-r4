@@ -9,9 +9,9 @@ This is a reading, not a bar. It used `fbs-toks ARTIFACT --context-sweep --token
 | Prefill | Context end | Decode with the read | Decode without | The read's share of decode | The read per token | Prefill with / without |
 |---|---|---|---|---|---|---|
 | 128 | 192 | 4,647 (4,577) | 6,093 (5,918) | 23.7% | 51.0 µs | 5,061 / 6,140 |
-| 512 | 576 | 3,345 (2,663) | 5,462 (4,520) | 38.7% | 115.8 µs | 3,984 / 5,293 |
+| 512 | 576 | 3,345 (2,663) | 5,462 (4,520) | 38.8% | 115.8 µs | 3,984 / 5,293 |
 | 2,048 | 2,112 | 1,851 (1,388) | 5,462 (3,946) | 66.1% | 357.0 µs | 2,598 / 5,504 |
-| 8,192 | 8,256 | 659 (502) | 5,590 (5,019) | 88.1% | 1,337.0 µs | 1,126 / 5,497 |
+| 8,192 | 8,256 | 659 (502) | 5,590 (5,019) | 88.2% | 1,337.0 µs | 1,126 / 5,497 |
 | 32,704 | 32,768 | **177** (164) | **5,923** (5,552) | **97.0%** | 5,466.8 µs | 348 / 5,865 |
 
 How to read the table:
@@ -24,14 +24,19 @@ How to read the table:
 - **The read's time grows with the context, and at long contexts it is nearly all of decode.**
   - At 32,768, decode is 177 tok/s with the read and 5,923 without, so the read takes 97% of the time.
   - Without the read, the trunk stays flat at 5,462 to 6,093 tok/s from 192 to 32,768, as a recurrence should.
-  - So the item's "cheap to serve by construction" holds for the read's memory (about 2 MiB of codes per token at 32,768), not for its time. 5.47 ms per token over 2 MiB is about 0.38 GB/s, far below this machine's memory bandwidth. The read is limited by its own computation, not by memory.
+  - So the item's "cheap to serve by construction" holds for the read's memory, not for its time.
+  - **Probably computation, not memory traffic (an inference, not measured).** 5.47 ms per token is long for this little data. The copy-head keys are looked up through each position's token, from codes built once per vocabulary entry, so the bytes touched per token were not counted. Nothing here measures memory traffic.
 - **The cost is linear in the context: 157 to 169 ns per earlier position per decode token.** That is about 20 ns per candidate for each of the 8 head-reads (2 reads × 4 heads).
   - **Why, from the code, not from a profiler.** `nearest` (`stack/hamming.rs:281`) builds a new `Vec` of `(popcount, s)` over every earlier position, sorts the whole of it with `sort_unstable`, and keeps 16. It does this for each head-read at every step.
   - The slope does not rise from 576 to 32,768, so the sort's log factor is not visible. How the 20 ns splits between the scan, the key lookup and the sort was not measured.
 - **The machine was not idle.**
   - Before: load averages 3.64, 5.12 and 6.61. `kernel_task` was at 91%, with WindowServer, `mediaanalysisd`, Codex and `lean` running.
   - After: 2.82, 3.23 and 3.87, with Kimi Code, Codex and `lean` running.
-  - The ORDER does not stop another lab's processes, so they ran beside the sweep. The noise shows in the no-read arm's p95: 4,520 and 3,946 at 576 and 2,112, against medians of 5,462. The medians are the reading.
+  - **I ran the sweep anyway.** The ORDER says a busy machine waits for a quiet time. This was the lab's own call, recorded here:
+    - the load came from other labs' sessions with no end in view;
+    - the ORDER does not stop another lab's processes;
+    - at each prefill the two arms run back to back (`context_sweep`), so the read's share compares runs under the same load.
+  - The noise shows in the no-read arm. Its medians are not monotonic (6,093, 5,462, 5,462, 5,590, 5,923), and its p95 falls to 4,520 and 3,946 at 576 and 2,112. The medians are the reading.
 - **The first I-Reply run read DEV's `tokens.u16` as raw ids.**
   - Its first id, 20,309, is "UO", the start of the file's `UORT` magic. `fbs-toks` refused it: "prompt token 20309 is outside the vocabulary 4096".
   - No number was taken from that run. The prompt is now read past the 64-byte header, and the new sweep parses `UORT` the way `fbs-export` does.
@@ -100,7 +105,17 @@ The docs:
 
 ## Reviews
 
-- **The in-unit fresh-context review** of the PR at its exact head is recorded on the PR.
+The review was in-unit, by a fresh-context reviewer that did not write the work. Its record is on #3484.
+
+- **At `0a7125d92`: APPROVE.** It found no blocker and no major, four minors and five nits.
+  - It re-ran the `fbs-toks` tests: 5 passed.
+  - It recomputed every number from the sealed `sweep-1.json`, re-hashed the artifacts, and checked I-Reply's equalities independently.
+- **The minors, all applied in the docs-only commit after it:**
+  - the busy-machine run recorded as the lab's own call;
+  - the cause marked as a candidate in the notebook row and the item;
+  - the memory-versus-computation sentence marked as an inference, with the 2 MiB figure dropped;
+  - the item's "cheap to serve by construction" limited to memory.
+- **Two rounding nits applied:** 38.8% and 88.2%. The other three nits are under Still open.
 
 ## Measurements and cost
 
@@ -141,6 +156,10 @@ None.
   - One ascending pass over `s` then keeps every `d < d*`, and `d = d*` in ascending `s` until 16 are kept. That is the same set and order the tie rule gives now, with no allocation and no sort.
   - Codes kept per position, rather than looked up through the token each time, would also drop one dependent load per candidate.
   - Both keep the read linear in the context, which the item's design makes it. Neither has been timed.
+- **The review's nits, left open:**
+  - `long_sweep_prompt` does not compare the header's vocabulary field (bytes 16 to 24) with the artifact's. A file from another tokenizer whose ids fit would sweep silently; `fbs-export`'s reader has the same gap.
+  - `instrument-checks.txt` does not record the `jq` expression behind the reply digests. The replies' equality was checked independently in review.
+  - The sweep's JSON records the token file's absolute local path.
 - **claude-241's snap work:** its remaining 32% of samples is unsplit.
 - **Carried minors:**
   - claude-240's three code minors;
@@ -156,4 +175,4 @@ The integer look-back read was timed on this laptop at contexts from 192 to 32,7
   - about 1,900 at 2,000;
   - 177 at 32,768, where the read is 97% of the time.
 
-The long-context copy of the model is the same model: its replies are the same token for token. The slow part is the way the read picks its 16 nearest positions. It sorts every candidate. A counting method gives the same answer without the sort, and it is the next thing to try.
+The long-context copy of the model is the same model: its replies are the same token for token. The likely slow part, not yet profiled, is the way the read picks its 16 nearest positions: it sorts every candidate. A counting method gives the same answer without the sort, and it is the next thing to try.
