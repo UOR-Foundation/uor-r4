@@ -501,6 +501,10 @@ pub struct HammingCompareRow {
     pub downstream: usize,
     /// Type-head sets the second trace does not hold (its read serves no type heads).
     pub not_served: usize,
+    /// Of the judged sets that are real kept sets, how many have their two query codes `d` bits
+    /// apart, at index `d` (0 to 64): a few bits is a coordinate near a sign, half the word codes
+    /// that share nothing.
+    pub query_bits: Vec<usize>,
 }
 
 /// One side's kept set at row `t`, sorted, or why it cannot be a real kept set: real candidates
@@ -564,6 +568,7 @@ pub fn compare_hamming_traces(
             ["copy", "type"].map(|kind| HammingCompareRow {
                 depth: r.depth,
                 kind: kind.to_owned(),
+                query_bits: vec![0; 65],
                 ..Default::default()
             })
         })
@@ -627,6 +632,7 @@ pub fn compare_hamming_traces(
                             continue;
                         }
                     };
+                    row.query_bits[(ha.query[t] ^ hb.query[t]).count_ones() as usize] += 1;
                     let distance = |x: &HammingTraceHead, s: u32| {
                         (x.query[t] ^ x.key[s as usize]).count_ones()
                     };

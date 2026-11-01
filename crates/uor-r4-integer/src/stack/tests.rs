@@ -5838,6 +5838,9 @@ fn the_trace_comparison_classes_ties_flips_and_instrument_faults() {
         head.query[t] ^= 1;
     });
     assert_eq!(causes(&query), (1, 0, 1, 0, 0, 0), "{:?}", query.rows[0]);
+    let bits = |c: &crate::fbs_snapshot::HammingTraceComparison| (c.rows[0].query_bits[0], c.rows[0].query_bits[1]);
+    assert_eq!(bits(&tie), (tie.rows[0].judged, 0), "no query differs");
+    assert_eq!(bits(&query), (query.rows[0].judged - 1, 1), "one query differs, by one bit");
     let key = planted(&|head| {
         swap(head, member, out);
         head.key[out as usize] ^= 1;
