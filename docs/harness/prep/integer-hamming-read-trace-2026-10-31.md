@@ -59,12 +59,12 @@ The single tokens reach no read (claude-233: 0 of 4,096 moved), so they are repo
 
 **Row F's next step,** by the most common cause:
 - **Type-head query flips:** the trunk residual sits near a code's sign. The next step is the BitNet b1.58 lesson: train (r-drop) with the D11 forward in the loop (`with_d11_training`). claude-130 and claude-131 closed only those configurations (§4.1).
-- **Copy-head flips or key flips,** which depend only on the table and the read's rotations: an export or port fault outside the two leads. It is traced in the next unit.
+- **Copy-head flips or key flips,** which depend only on the table and the read's rotations: the rotation arithmetic, or a fault. The rounded arm puts only the parameters on the integer grid. The float still normalizes `g/|g|` in f32 and rotates by `hamilton_gate`, while the integer uses `stack_rotation` and `stack_hamilton` through D11's tables, so a coordinate near 0 can flip from arithmetic alone. The next unit tells the two apart.
 
 The rows are read in order, and the first that holds applies. Outside row 0 they are exhaustive.
 - **In every row, each arm's d and whether it moves the gap are reported.**
 - **A lead that moves the gap without closing it** is named a partial cause.
-- **If the seeds disagree** (an arm closes at one seed only), the reading is row F, with both seeds' counts.
+- **An arm that closes at one seed only** does not count as closing. The rows are then read as usual, and both seeds' counts are reported.
 
 ## 4. Instrument checks (any failure is row 0)
 
@@ -74,7 +74,8 @@ The rows are read in order, and the first that holds applies. Outside row 0 they
 2. **`I-GPU-Tests`:** the `flock_read_hamming::` and `fbs_export::` CUDA tests pass at the head, with at least one run. They include:
    - `recording_the_trace_leaves_the_read_unchanged`;
    - `the_tie_rule_keeps_the_integer_sessions_order`.
-3. **`I-Repro`, the ORDER's done-when 1 end to end.** Each seed's d11 readout is byte-identical to claude-233's h_s `readout-d11.json`. Its comparison reproduces d = 694 and 823, with claude-233's `artifact_sha256`.
+3. **`I-Repro`, the ORDER's done-when 1 end to end.** Each seed's d11 readout is byte-identical to claude-233's h_s `readout-d11.json`. Its `compare.json` is byte-identical to claude-233's (`ef617640…`, `0d9484bf…`), which carries d = 694 and 823 and claude-233's `artifact_sha256`.
+   - The code is unchanged between claude-233's run head (`ecabcc93b`) and this unit's base (`7a1cbcffc`): only three crate READMEs differ. So the float readout pins the float read, and the comparison pins the integer read, each with this unit's switches off.
    - A mismatch means the capture or a switch is not bit-identical when off. The job stops there (the ORDER's stop rule).
    - The d11 comparison runs before the check, so the mismatch is recorded.
 4. **`I-Trace-Shape`:**
@@ -83,6 +84,9 @@ The rows are read in order, and the first that holds applies. Outside row 0 they
 5. **`I-Faults`:**
    - every arm's comparison counts 0 instrument faults;
    - the two tie arms count 0 ties. With one tie rule on both sides, equal codes give equal sets, so a tie there means the float rule is not the integer's.
+   - **Two known ways to reach row 0 here, neither a false row:**
+     - the comparison expects min(16, t − 1) kept positions, every earlier position a candidate. `fbs-snapshot` sets neither `set_read_cut` nor `set_row_cut`, so `row_limits` gives every row its full window;
+     - a float coordinate of exactly 0 packs as bit 1, while its distance sits on a half step, so a tie arm could count a tie. That is very unlikely.
 6. **`I-Finite`:** every tool exits 0.
    - An arm whose tool fails is logged, and the others still run. The job ends with EXIT 7.
    - A missing comparison or trace is row 0.
@@ -123,7 +127,7 @@ The rows are read in order, and the first that holds applies. Outside row 0 they
 
 - **1,536 sequence positions per seed,** against a bar of 46. claude-233's gap of 694 and 823 is 15 to 18 times the bar.
   - A lead that removes the cause shows as d falling toward the trunk's own 5 and 11.
-  - A cause half removed still moves the gap by far more than 2√(d(d11) + d(arm)), about 50.
+  - A cause half removed moves the gap by 347 and 412, far past 2√(d(d11) + d(arm)), about 65 and 70.
 - **Sets per seed:** 8 windows × 192 positions × 2 reads × 4 heads = 12,288 kept sets. Of these, the readout's type-head sets after a stream-read difference are counted apart. Positions 0 and 1 have empty sets and count as equal.
 - **Out of reach:** a fault seen only on real prompts, or only through the turn memory, cannot show here.
 
@@ -142,7 +146,24 @@ The rows are read in order, and the first that holds applies. Outside row 0 they
 
 ## 9. Non-author TEST FITNESS review
 
-Pending.
+**Round 1** (a fresh reviewer, at `b1d4a9ad2`): no blocker.
+- **It checked:**
+  - the arms against `trace_arm` and main's D11 path, so I-Repro's byte identity is sound;
+  - the comparison rule against step 5;
+  - that the tie arms must show 0 ties. Equal codes on both sides and one key (bits, s) cannot keep a position on one side only, and the float's mean L1 between ±1 codes is exactly 2h/width.
+- **Its six minor points, all taken:**
+  1. the power figure is now 65 and 70, not 50 (§7);
+  2. an arm closing at one seed only no longer forces row F, so row T stays reachable (§3);
+  3. row F's copy and key flips now name the rotation arithmetic as well as a fault (§3);
+  4. and 5. the full-window assumption and exactly-zero codes are noted under `I-Faults` (§4);
+  6. the REPORT leads with tokens/s.
+- **Added after it:** I-Repro also pins each comparison byte for byte (§4.3).
+- **Left to the pre-run review:**
+  - `fbs-toks`'s argument parsing;
+  - `stack/hamming.rs`'s `record`;
+  - claude-233's 0 of 4,096 single tokens moved.
+
+TEST FITNESS: FIT
 
 ## 10. Pre-run review
 
