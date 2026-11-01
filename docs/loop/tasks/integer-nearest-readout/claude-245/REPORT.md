@@ -52,7 +52,7 @@ No new speed is claimed: this unit ran nothing. R's decode speed is still claude
 - [DECISION.md](DECISION.md): the card, with both review rounds recorded.
 - [ORDER.md](ORDER.md), with the cancel probe's result (instrument class), and this REPORT.
 - The item: done-when 3 now names the card's bar. "What is missing" names the next two units, Q1 to Q3 and then Q5. It stays `ready`.
-- `docs/roadmap/README.md` was re-rendered.
+- The roadmap's rendered view is unchanged. `docs/roadmap/README.md` shows only the item's front matter, which this unit did not touch, and pr-check's rendered-lock confirms that.
 
 ## Measurements
 
