@@ -23,14 +23,21 @@ The project's first hurdle is one working model end to end, served from its inte
 - **Claude-243 re-ran the parity with both sides on the same rules** ([REPORT](../../loop/tasks/integer-nearest-readout/claude-243/REPORT.md), #3488): the raw export (R) against the float reference re-decoded on the GPU with the read's tie rule on (F′). It is a **MISS** on p-w at every seed and meets the bar on DEV.
   - First-token disagreement is 4, 4 and 5 of 310 on DEV (bar 9), and 64, 47 and 78 of 1,202 on p-w (bar 36). Whole-reply agreement is 188, 247 and 201 on DEV, and 488, 751 and 547 on p-w.
   - The icosian snap was the larger difference behind claude-232's MISS: the snapped export against F′ agrees on 291/285/284 and 909/777/64 first tokens. F′ against F, the float code's change since `eb762e602`, moves at most 12 first tokens. By the code that change is the tie rule, but `train-in-space` has no switch to test it, so the reading is not credited to it.
-  - The remaining p-w disagreements are diffuse; no first token is over-concentrated. The raw export's own rounding residual, the bar's margin, is not measured.
+  - The remaining p-w disagreements are diffuse; no first token is over-concentrated.
+- **Claude-244 measured the bar's margin** ([REPORT](../../loop/tasks/integer-nearest-readout/claude-244/REPORT.md)), under teacher forcing with the new `fbs-toks --forced`. R's disagreements with F′ sit where R's own top two are nearly tied: 88% of the pooled p-w disagreements are in R's lowest-margin decile, and the median margin there is 80 to 100 times below typical. The gap is per position, not special to the opening.
 
 ## What is missing
 
-- **Locate claude-243's p-w gap on R against F′,** on the first disagreeing prompts, layer by layer: the trunk, Hamming read, memory and readout. Then recheck end-to-end parity before rerunning p-x. Under a sheet; three leads, the first one first:
-  - **Measure the bar's margin:** claude-227's trunk parity on the raw export against the trained forward, on p-w windows.
+- **Re-derive the first-token bar from the measured residual, in a decision card.** Claude-244 ([REPORT](../../loop/tasks/integer-nearest-readout/claude-244/REPORT.md)) measured where R's disagreements with F′ sit under teacher forcing, against R's own top-two margin g.
+  - On pooled p-w, 1,095 of 1,246 disagreements are in R's lowest-margin decile (c = 0.879 against q = 0.100; κ = 0.865). DEV reads the same (κ = 0.937).
+  - The gap is per position, not opening-specific: r₀ is 4.12% and r₊ is 2.89%. That is the sheet's near-tie residual row with pooled r₊ ≤ 3%, and its next unit is this card.
+  - The card needs my own fresh decision review, logged on #3462. It must say how it treats p-w s3 (r₊ 3.09% alone) and the 151 disagreements (12%) at clear margins.
+- **Then locate what remains of claude-243's p-w gap on R against F′,** layer by layer: the trunk, Hamming read, memory and readout. Recheck end-to-end parity before rerunning p-x. Under a sheet; the leads:
+  - **Trace the clear-margin disagreements** (g above G₁₀) first.
+  - **Read F′'s own top two** at the disagreeing positions. Its sealed rows carry no scores, so claude-244's residual bound is one-sided.
+  - **The cut windows' openings** disagree three to four and a half times as often as the counted ones (claude-244, a reading).
   - **Split the disagreements by exact-key status,** as claude-232 did on DEV s1. p-w is the panel where the memory names fewer replies.
-  - **Count near ties at the readout:** how close F′'s and R's two nearest rows are at the disagreeing openings.
+  - claude-227's trunk parity on the raw export against the trained forward, on p-w windows, would give the residual layer by layer.
   - The two differences between claude-232's sides, the float reference's tie order (claude-238, claude-240) and the integer side's icosian snap (claude-233), are removed in claude-243's arms. Its sealed run is `results/claude/integer-nearest-readout-tie-parity-2026-11-01/`; claude-232's is `results/claude/integer-nearest-readout-parity-2026-10-31/`.
   - The float replies are sealed data, so this item does not wait on [`one-model-end-to-end`](one-model-end-to-end.md), which made them.
 - **Making raw the default, or the snap faithful,** is a follow-up: S against F′ now measures what the snap costs.
