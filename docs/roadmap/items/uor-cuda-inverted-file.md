@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: false
 depends_on: []
 done_class: host
-scope: [projects/uor-cuda-inverted-file/**, docs/labs/uor-cuda-inverted-file/**, docs/loop/tasks/uor-cuda-inverted-file/kimi-1/**, docs/loop/tasks/uor-cuda-inverted-file/kimi-2/**, docs/harness/prep/uor-cuda-inverted-file-sm120-2026-11-01.md, docs/superpowers/specs/2026-10-31-cuda-inverted-file-package-design.md, docs/superpowers/plans/2026-10-31-cuda-inverted-file-package.md, docs/superpowers/plans/2026-11-01-cuda-public-readiness.md, docs/roadmap/items/uor-cuda-inverted-file.md, docs/roadmap/README.md, docs/roadmap/issues.json]
+scope: [projects/uor-cuda-inverted-file/**, docs/labs/uor-cuda-inverted-file/**, docs/loop/tasks/uor-cuda-inverted-file/kimi-1/**, docs/loop/tasks/uor-cuda-inverted-file/kimi-2/**, docs/loop/tasks/uor-cuda-inverted-file/kimi-3/**, docs/harness/prep/uor-cuda-inverted-file-sm120-2026-11-01.md, docs/harness/prep/uor-cuda-inverted-file-performance-2026-11-01.md, docs/superpowers/specs/2026-10-31-cuda-inverted-file-package-design.md, docs/superpowers/plans/2026-10-31-cuda-inverted-file-package.md, docs/superpowers/plans/2026-11-01-cuda-public-readiness.md, docs/roadmap/items/uor-cuda-inverted-file.md, docs/roadmap/README.md, docs/roadmap/issues.json]
 ---
 
 ## Why it matters

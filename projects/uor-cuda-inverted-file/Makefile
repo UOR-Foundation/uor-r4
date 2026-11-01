@@ -3,7 +3,7 @@ CPPFLAGS ?= -Iinclude -Isrc
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -Werror -pedantic -O2
 BUILD_DIR := build
 
-.PHONY: all host-test telemetry-test instrumented-example test cuda cuda-test check-nvcc evidence clean
+.PHONY: all host-test telemetry-test instrumented-example test cuda cuda-test cuda-benchmark check-nvcc evidence clean
 all: host-test
 
 $(BUILD_DIR):
@@ -56,8 +56,8 @@ $(BUILD_DIR)/uor_inverted_file.cubin: $(BUILD_DIR)/uor_inverted_file.ptx $(BUILD
 	./$(BUILD_DIR)/admit $(BUILD_DIR)/uor_inverted_file.ptx
 	$(NVCC) -cubin -arch=$(SM_ARCH) -o $@ $(BUILD_DIR)/uor_inverted_file.ptx
 
-$(BUILD_DIR)/cuda_parity_test: src/cuda_driver.cpp src/cuda_driver.hpp include/uor_inverted_file.hpp src/inverted_file.cpp src/codebook.cpp tests/cuda_parity_test.cpp $(BUILD_DIR)/uor_inverted_file.cubin
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -I$(CUDA_HOME)/include src/cuda_driver.cpp src/inverted_file.cpp src/codebook.cpp tests/cuda_parity_test.cpp -L$(CUDA_HOME)/lib64/stubs -lcuda -o $@
+$(BUILD_DIR)/cuda_parity_test: src/cuda_driver.cpp src/cuda_driver.hpp include/uor_inverted_file.hpp src/sha256.cpp src/sha256.hpp src/inverted_file.cpp src/codebook.cpp tests/cuda_parity_test.cpp $(BUILD_DIR)/uor_inverted_file.cubin
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -I$(CUDA_HOME)/include src/cuda_driver.cpp src/sha256.cpp src/inverted_file.cpp src/codebook.cpp tests/cuda_parity_test.cpp -L$(CUDA_HOME)/lib64/stubs -lcuda -o $@
 
 check-nvcc:
 	@command -v $(NVCC) >/dev/null 2>&1 || { echo 'NOT_RUN: nvcc is unavailable; CUDA compilation and tests were not performed'; exit 2; }
@@ -67,6 +67,23 @@ cuda: check-nvcc $(BUILD_DIR)/uor_inverted_file.cubin
 
 cuda-test: check-nvcc $(BUILD_DIR)/cuda_parity_test
 	./$(BUILD_DIR)/cuda_parity_test
+
+$(BUILD_DIR)/cuda_benchmark: src/cuda_driver.cpp src/cuda_driver.hpp include/uor_inverted_file.hpp src/sha256.cpp src/sha256.hpp src/inverted_file.cpp src/codebook.cpp tests/cuda_benchmark.cpp $(BUILD_DIR)/uor_inverted_file.cubin
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -I$(CUDA_HOME)/include src/cuda_driver.cpp src/sha256.cpp src/inverted_file.cpp src/codebook.cpp tests/cuda_benchmark.cpp -L$(CUDA_HOME)/lib64/stubs -lcuda -o $@
+
+UOR_BENCH_OUT ?= build/benchmark.jsonl
+UOR_BENCH_RUN_ID ?= local
+UOR_BENCH_SOURCE ?= unknown
+UOR_BENCH_CORRECTNESS ?= build/correctness.tsv
+UOR_BENCH_GPU_INFO ?= build/gpu-info.txt
+UOR_BENCH_NVCC_INFO ?= build/nvcc-info.txt
+
+cuda-benchmark: cuda-test $(BUILD_DIR)/cuda_benchmark
+	nvidia-smi --query-gpu=name,driver_version,compute_cap --format=csv,noheader > $(UOR_BENCH_GPU_INFO)
+	$(NVCC) --version > $(UOR_BENCH_NVCC_INFO)
+	./$(BUILD_DIR)/cuda_parity_test --out $(UOR_BENCH_CORRECTNESS)
+	test "$$(wc -l < $(UOR_BENCH_CORRECTNESS))" -eq 504
+	./$(BUILD_DIR)/cuda_benchmark --out $(UOR_BENCH_OUT) --run-id $(UOR_BENCH_RUN_ID) --source $(UOR_BENCH_SOURCE) --correctness $(UOR_BENCH_CORRECTNESS) --gpu-info $(UOR_BENCH_GPU_INFO) --nvcc-info $(UOR_BENCH_NVCC_INFO)
 
 evidence:
 	@mkdir -p evidence
