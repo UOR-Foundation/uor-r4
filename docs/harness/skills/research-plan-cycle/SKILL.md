@@ -38,7 +38,8 @@ D22 are in [DECISIONS.md](../../../integration/DECISIONS.md#d21--three-negatives
 4. **Pre-register before compute** with the `experiment-prereg` skill: bar, panel
    noise, base artifact, data split, seeds/rows, steps, stop rule and complete
    cost, posted on the milestone issue, then a `TEST FITNESS: FIT` review on that
-   issue. Existing training/M2 rental holds remain; FIT releases no hold.
+   issue. D67 retired the blanket training/M2 rental holds; the run proceeds
+   through the lab's pre-run review after the required FIT.
    Admit resources per `cost-and-compute-admission`: non-model CPU work locally;
    qualification model/reference work on the GPU through `scripts/pod/uor-pod`
    within the caps (≤ 4 pods, ≤ $8/h all labs, no new spending class). D84's

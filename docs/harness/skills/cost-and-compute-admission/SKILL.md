@@ -26,8 +26,10 @@ artifacts and compute", and D24 in [DECISIONS.md](../../../integration/DECISIONS
      outputs run locally. The historical native prose learner is not admitted by
      D84; model or parity fixtures run as host checks only when the named CPU
      program owns them or the repository already specifies a host oracle.
-   - Default model work is GPU-only through uor-pod, subject to D23–D25 and
-     applicable holds. **Training and M2 training/rental remain held; FIT lifts neither.**
+   - Default qualification model work is GPU-only through uor-pod, subject to
+     D23–D25. A GPU or CPU training run proceeds after its required
+     pre-registration/FIT and the lab's D67 pre-run review; D67 retired the
+     blanket Training/M2 holds.
    - Model compute outside the named D84 program never runs on the CPU (D24).
      Training, evaluation and every part of the forward that scoring,
      normalization or the value mix touches remain GPU work by default; a silent

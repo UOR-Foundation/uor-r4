@@ -57,9 +57,10 @@ has the surface, and `uor-harness check` lists every rule with the fix for each 
 
 1. **Your number.** Read fresh main's AGENTS, current plan/state, D23–D25, your milestone and its
    newest owner direction. Register a bounded claim with owned paths/dependencies.
-2. **Training remains held.** M2's separate training/rental hold remains. No
-   training, full-model evaluation/generation/benchmark, or CPU model reference
-   during operator preparation. FIT does not release an owner hold.
+2. **Training admission.** D67 retired the blanket Training/M2 holds. A training
+   or full-model evaluation run proceeds after the required pre-registration/FIT
+   and the lab's D67 pre-run review. A CPU model reference runs only inside the
+   named D84 development program and is not qualification evidence.
 3. No softmax/softplus/sigmoid/tanh or equivalent forms anywhere in the executed
    model/learning/output/teacher/comparator path; no dense matrix multiplication;
    GPU-first model compute with no silent host fallback. D84 permits only the
@@ -119,8 +120,8 @@ docs/integration/project-track.md, current-state.md, DECISIONS.md D23-D25,
 docs/labs/session-goal.md, the operator-phase record and your live milestone.
 Kimi is project manager; Casey retains strategy and hold/criterion authority.
 
-TRAINING IS HELD. M2 has a separate no-training/no-rental hold. No FIT verdict,
-source delivery, old prompt, free GPU or pod cap releases a hold. No softmax,
+Training admission follows D67: no blanket training/M2 hold remains. A run
+proceeds after its required FIT and the lab's pre-run review. No softmax,
 softplus, sigmoid, tanh or equivalent squashing anywhere in executed model,
 objective, backward, output, teacher or comparator paths. No dense matmul/GEMM,
 including handwritten dense contractions. GPU-first model/reference execution;
