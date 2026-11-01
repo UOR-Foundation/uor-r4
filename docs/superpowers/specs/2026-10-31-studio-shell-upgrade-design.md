@@ -8,7 +8,7 @@ The reviewed defect is fragmented state ownership. Independent DOM writers repor
 
 ## Rebased review and scope decision
 
-- Current `main` is `381ae4d98b0a5100d241a268d283629ab9b5fd1f`. Its Studio source is byte-identical to the original design base; there is no newer implementation to adopt. The source is 11,068 lines across HTML, CSS, and JavaScript with no component build system. `node web/studio/verify_studio_page.mjs --strict-router` passes its static zero-external-load check.
+- Reviewed at `381ae4d98b0a5100d241a268d283629ab9b5fd1f` and merge-forwarded to `03800ffd24c183e806c6690f684495becbe1cf25`: Studio source is byte-identical to the original design base and unchanged by the merge-forward; there is no newer implementation to adopt. The source is 11,068 lines across HTML, CSS, and JavaScript with no component build system. `node web/studio/verify_studio_page.mjs --strict-router` passes its static zero-external-load check.
 - DeepSeek's completed v2 and its historical plain-JS constraint stay untouched. This is a new owner-approved scope, tracked separately, not a reopening or rejection of that work.
 - Keep the selected Preact + Vite + TypeScript approach. The defect is still architectural, but delivery is phased: a foundation unit first, workflow migrations second, full-parity cutover last. There is no implementation in this design PR.
 - Correct the original loading assumption: `model_sources.js` already emits real downloaded-byte counts, totals when known, and percentages. The new store must expose them. Only finalization stages without events are indeterminate.
