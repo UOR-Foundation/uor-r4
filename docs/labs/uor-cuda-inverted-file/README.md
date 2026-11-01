@@ -12,7 +12,7 @@ This record covers a new standalone CUDA C++17 package in `projects/uor-cuda-inv
 - Removal/reinsertion from `ABSENT`, non-root refusal, exact ties, and planted stale/corrupt/over-pruned controls: **PASS**.
 - Two repeated host runs and one clean-copy run produced identical test output, SHA-256 `7b6f674abcef33a37753de8aac6000ff1584e983ebeb4eb35fc67bf5d45d5e7d`.
 - Clean-copy host build required no UOR-R4 checkout or external dependency.
-- Separately, one RTX 5090 passed AOT/CUDA correctness at `aef414859`: 498/498 rows in each of three byte-identical executions, with identical module hashes after a clean rebuild. See [GPU results](gpu-sm120-results.json). Performance and additional hardware remain unmeasured.
+- Separately, one RTX 5090 passed AOT/CUDA correctness at `18a1c8ad7`: 504/504 rows in each of three byte-identical executions, with identical module hashes after a clean rebuild. See [GPU results](gpu-sm120-results.json). Performance and additional hardware remain unmeasured.
 
 [Machine-readable host results](host-results.json) and [package results](../../../projects/uor-cuda-inverted-file/RESULTS.md) carry the exact commands and limitations.
 
