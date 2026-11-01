@@ -3,7 +3,7 @@ id: uor-community-evidence-releases
 title: Publish the CUDA and OpenTelemetry evidence bundles as versioned releases
 milestone: research
 area: tooling
-status: ready
+status: done
 open_to: lab
 needs_gpu: false
 depends_on: [uor-cuda-inverted-file, uor-otel-artifact-convention]
@@ -17,7 +17,7 @@ The standalone inverted-file CUDA example and its opt-in OpenTelemetry experimen
 
 ## What is missing
 
-Two actual public GitHub releases do not yet exist. The CUDA implementation and measurements are complete at their declared scopes, and the official collector check passed; only release metadata, archive verification, protected delivery, publication, and read-back verification remain. SDK and multi-runtime interoperability and a real loaded-model example remain NOT_RUN; local `uor.*` attributes remain experimental. No NVIDIA or OpenTelemetry submission or acceptance is implied.
+Nothing for this item. Both actual public releases target protected `main` merge `4daf787f3064e348d5659c4f623429aa8b5c9f30`, are non-draft/non-prerelease and not Latest, and their published assets passed download, checksum, and extracted-test verification: [`cuda-inverted-file-v0.1.0`](https://github.com/UOR-Foundation/uor-r4/releases/tag/cuda-inverted-file-v0.1.0) with archive SHA-256 `dff4c9043385abbdc36d388593d35168ff6843227b2e8064ffcfd3450ce9307b`, and [`otel-artifact-v0.1.0`](https://github.com/UOR-Foundation/uor-r4/releases/tag/otel-artifact-v0.1.0) with archive SHA-256 `e7175c276bb6fc7c350d5ca242f53d1a4e5e7f0b1e74dd4b43caf073185d8fed`. SDK and multi-runtime interoperability and a real loaded-model example remain NOT_RUN; local `uor.*` attributes remain experimental. No NVIDIA or OpenTelemetry submission or acceptance is implied.
 
 ## Done when
 

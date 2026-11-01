@@ -87,10 +87,10 @@ Do not infer any of the following without a later registered measurement:
 
 The summary is in `docs/labs/uor-cuda-inverted-file/`; raw manifests and per-run logs are in the linked retained run roots and Hugging Face commits. Final corrected measurements at `719a9a78` pass on RTX 5090/580.178.04 and RTX 4090/580.95.05; earlier attempts are explicitly rejected and not used for claims. Energy, other architectures/drivers, and cross-library comparisons are **NOT_RUN**. The host-only clean-consumer check and corrected independent replication pass at their declared scopes.
 
-## Release preparation and community review
+## Release and community review
 
-The planned `cuda-inverted-file-v0.1.0` source/evidence archive has [prepared release instructions](RELEASE.md). It will include the clean-consumer host result, two-card/two-driver measurements, independent corrected replication, raw-evidence links, MIT licensing, and source-commit provenance. **Publication and published-asset verification are pending; no public release URL is claimed yet.**
+[Download `cuda-inverted-file-v0.1.0`](https://github.com/UOR-Foundation/uor-r4/releases/tag/cuda-inverted-file-v0.1.0) for the checksummed source/evidence archive and [release instructions](RELEASE.md). The `0.1.0` release includes the clean-consumer host result, two-card/two-driver measurements, independent corrected replication, raw-evidence links, MIT licensing, and source-commit provenance. Published assets were downloaded and passed checksum and extracted-test verification.
 
-This release is intended for community review, not as an NVIDIA-endorsed sample or the UOR-R4 model's M8 release. NVIDIA/community feedback and any upstream submission remain separate decisions.
+This release is for community review, not an NVIDIA-endorsed sample or the UOR-R4 model's M8 release. NVIDIA/community feedback and any upstream submission remain separate decisions.
 
 See `PROVENANCE.md`, `RESULTS.md`, `CITATION.cff`, and `OUTREACH.md` for provenance, measured results, citation metadata, and outreach drafts.
