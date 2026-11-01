@@ -1306,6 +1306,137 @@ const fn golden_axes() -> [[u8; 3]; 12] {
     axes
 }
 
+/// For each ordered pair `(p, q)` of distinct axes, the golden block whose
+/// roots hold `phi/2` on axis `p` and `1/2` on axis `q`. An even permutation of
+/// four axes is fixed by its first two entries (the other two go in the one
+/// order of the right parity), so the twelve pairs name the twelve blocks.
+/// `u8::MAX` on the diagonal. Built at compile time from [`GOLDEN_AXES`].
+const GOLDEN_BLOCK_OF: [[u8; 4]; 4] = golden_block_of();
+
+const fn golden_block_of() -> [[u8; 4]; 4] {
+    let mut table = [[u8::MAX; 4]; 4];
+    let mut block = 0;
+    while block < 12 {
+        let [p, q, _] = GOLDEN_AXES[block];
+        assert!(table[p as usize][q as usize] == u8::MAX, "two golden blocks share (p, q)");
+        table[p as usize][q as usize] = block as u8;
+        block += 1;
+    }
+    table
+}
+
+/// The pairs of axes whose comparisons index [`SNAP_ORDERS`], bit `k` for
+/// pair `k`, set when the first axis has the larger magnitude.
+const SNAP_ORDER_PAIRS: [[usize; 2]; 6] = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]];
+
+/// The candidates of the snap's fast path (claude-241), by the order of the
+/// query's magnitudes, for a query with no zero coordinate and four distinct
+/// magnitudes. Each entry is a count and positions in that query's row of
+/// [`SNAP_CANDIDATES`]: for such a query the row holds the four axis roots by
+/// axis at positions `0..4`, the one compatible half-root at `4`, and golden
+/// block `k`'s compatible root at `5 + k`. Positions ascend, so the roots stay
+/// in index order. A row is 8 bytes, so that its offset is a shift.
+///
+/// Why these hold every maximizer. Rank the axes by magnitude,
+/// `s_r0 > s_r1 > s_r2 > s_r3`. The axis maximum is `2 s_r0`, at `r0`'s root.
+/// A golden root scores `phi s_p + s_q + (phi - 1) s_t`, so it puts the
+/// coefficients `c = (phi, 1, phi - 1, 0)` on the axes in some order `pi` of
+/// the ranks. With `d_k = c_k - c_{k+1} = (phi - 1, 2 - phi, phi - 1)`, all
+/// positive, Abel summation gives the loss against the sorted order as
+/// `sum_k d_k (S_k - S_k(pi))`, where `S_k` sums the `k + 1` largest
+/// magnitudes and `S_k(pi)` the magnitudes `pi` puts on the first `k + 1`
+/// coefficients. Each term is at least `d_k (s_rk - s_r(k+1)) > 0` where `pi`
+/// moves the set of its first `k + 1` ranks, and zero elsewhere. So:
+/// - the sorted order is the only best of all 24, and is a root when it is an
+///   even permutation, block `(r0, r1)`;
+/// - otherwise an even order moving one such set is a swap of neighbouring
+///   ranks, `(r1, r0)`, `(r0, r2)` or `(r0, r1)` with `r3` on `phi - 1`. An
+///   order moving two or more loses strictly more than one of those swaps.
+///
+/// Those swaps can tie with each other: `(r1, r0)` with `(r0, r1)` when
+/// `s_r0 - s_r1 = s_r2 - s_r3`. The half-root and the axis roots score `B = 0`
+/// and a golden root `B > 0`, so neither ties a golden root. They can tie each
+/// other, `r0`'s axis root with the half-root when `2 s_r0` is the total, but
+/// then block `(r0, r1)` beats both. Every tie is settled as the scan settles
+/// it: the lowest index.
+///
+/// A code with a cycle cannot come from distinct magnitudes. It keeps count
+/// 0, which sends the query to the scan.
+struct SnapOrders {
+    counts: [u8; 64],
+    slots: [[u8; 8]; 64],
+}
+
+static SNAP_ORDERS: SnapOrders = snap_orders();
+
+const fn snap_orders() -> SnapOrders {
+    let mut counts = [0u8; 64];
+    let mut slots = [[0u8; 8]; 64];
+    let mut code = 0;
+    while code < 64 {
+        // How many axes each axis beats under this code.
+        let mut wins = [0usize; 4];
+        let mut pair = 0;
+        while pair < 6 {
+            let [i, j] = SNAP_ORDER_PAIRS[pair];
+            if (code >> pair) & 1 == 1 {
+                wins[i] += 1;
+            } else {
+                wins[j] += 1;
+            }
+            pair += 1;
+        }
+        // rank[k]: the axis beating 3 - k others. A cycle leaves two axes on
+        // the same count.
+        let mut rank = [4usize; 4];
+        let mut ordered = true;
+        let mut axis = 0;
+        while axis < 4 {
+            let place = 3 - wins[axis];
+            if rank[place] != 4 {
+                ordered = false;
+            }
+            rank[place] = axis;
+            axis += 1;
+        }
+        if ordered {
+            let (r0, r1, r2) = (rank[0], rank[1], rank[2]);
+            let sorted = GOLDEN_BLOCK_OF[r0][r1];
+            let mut golden = [sorted, 0, 0];
+            let mut n = 1;
+            if GOLDEN_AXES[sorted as usize][2] as usize != r2 {
+                golden[1] = GOLDEN_BLOCK_OF[r1][r0];
+                golden[2] = GOLDEN_BLOCK_OF[r0][r2];
+                n = 3;
+            }
+            // Ascending block order is ascending root index.
+            let mut a = 0;
+            while a < n {
+                let mut b = a + 1;
+                while b < n {
+                    if golden[b] < golden[a] {
+                        let t = golden[a];
+                        golden[a] = golden[b];
+                        golden[b] = t;
+                    }
+                    b += 1;
+                }
+                a += 1;
+            }
+            slots[code][0] = r0 as u8;
+            slots[code][1] = 4;
+            let mut g = 0;
+            while g < n {
+                slots[code][2 + g] = 5 + golden[g];
+                g += 1;
+            }
+            counts[code] = (2 + n) as u8;
+        }
+        code += 1;
+    }
+    SnapOrders { counts, slots }
+}
+
 /// The score `(A, B)` of root `j` against a query it is sign-compatible with,
 /// from `s = |raw|` and `total = s_0 + s_1 + s_2 + s_3` (claude-168). On a
 /// compatible root every term `raw_c (a_c, b_c)` is `s_c` times a fixed small
@@ -1336,7 +1467,9 @@ fn snap_compatible_score(j: usize, s: &[i64; 4], total: i64) -> (i64, i64) {
 ///
 /// Only the roots compatible with `raw`'s signs are scored ([`SNAP_CANDIDATES`]),
 /// in index order, so the strict comparison keeps the lowest-index maximizer
-/// exactly as a scan of all 120 does.
+/// exactly as a scan of all 120 does. A query with no zero coordinate and four
+/// distinct magnitudes scores only 3 or 5 of its 17 ([`SNAP_ORDERS`], which
+/// says why they hold every maximizer); any other query scores them all.
 #[inline(never)]
 pub fn stack_snap_select(raw: [i32; 4]) -> usize {
     let lane = |value: i32| usize::from(value > 0) | (usize::from(value < 0) << 1);
@@ -1357,9 +1490,34 @@ pub fn stack_snap_select(raw: [i32; 4]) -> usize {
         core::hint::black_box(i64::from(raw[3].unsigned_abs())),
     ];
     let total = s[0] + s[1] + s[2] + s[3];
+    let row = &SNAP_CANDIDATES.roots[pattern];
+    // The fast path: 17 candidates means no zero coordinate.
+    let distinct = s[0] != s[1]
+        && s[0] != s[2]
+        && s[0] != s[3]
+        && s[1] != s[2]
+        && s[1] != s[3]
+        && s[2] != s[3];
+    let mut chosen = [0u8; 8];
+    let mut candidates: &[u8] = &row[..count];
+    if count == 17 && distinct {
+        let code = usize::from(s[0] > s[1])
+            | (usize::from(s[0] > s[2]) << 1)
+            | (usize::from(s[0] > s[3]) << 2)
+            | (usize::from(s[1] > s[2]) << 3)
+            | (usize::from(s[1] > s[3]) << 4)
+            | (usize::from(s[2] > s[3]) << 5);
+        let n = usize::from(SNAP_ORDERS.counts[code]);
+        if n != 0 {
+            for (slot, &position) in chosen.iter_mut().zip(&SNAP_ORDERS.slots[code][..n]) {
+                *slot = row[usize::from(position)];
+            }
+            candidates = &chosen[..n];
+        }
+    }
     let mut best = 0usize;
     let (mut best_a, mut best_b) = (0i64, 0i64);
-    for (k, &index) in SNAP_CANDIDATES.roots[pattern][..count].iter().enumerate() {
+    for (k, &index) in candidates.iter().enumerate() {
         let (a, b) = snap_compatible_score(usize::from(index), &s, total);
         if k == 0 || snap_difference_positive(a.wrapping_sub(best_a), b.wrapping_sub(best_b)) {
             best = usize::from(index);
@@ -2505,6 +2663,207 @@ mod tests {
                 let other = point(second, 1 << 20);
                 let raw: [i32; 4] = std::array::from_fn(|c| ((on[c] + other[c]) >> 1) as i32);
                 assert_eq!(stack_snap_select(raw), snap_select_full_scan(raw), "{raw:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_row_without_zeros_has_the_fast_paths_layout() {
+        // Every pattern of signs (0 zero, 1 positive, 2 negative per lane).
+        let mut without_zeros = 0;
+        for pattern in 0..SNAP_PATTERNS {
+            let lanes: [usize; 4] = std::array::from_fn(|c| (pattern >> (2 * c)) & 3);
+            if lanes.contains(&3) {
+                continue;
+            }
+            let count = usize::from(SNAP_CANDIDATES.counts[pattern]);
+            let row = &SNAP_CANDIDATES.roots[pattern];
+            if lanes.contains(&0) {
+                assert!(count > 17, "a pattern with a zero lane, {pattern:#x}, has {count}");
+                continue;
+            }
+            without_zeros += 1;
+            assert_eq!(count, 17, "{pattern:#x}");
+            for (axis, &index) in row[..4].iter().enumerate() {
+                assert!(index < 8 && usize::from(index >> 1) == axis, "{pattern:#x} axis {axis}");
+            }
+            assert!((8..24).contains(&row[4]), "{pattern:#x}");
+            for (block, &index) in row[5..17].iter().enumerate() {
+                assert_eq!(usize::from(index - 24) >> 3, block, "{pattern:#x} block {block}");
+            }
+        }
+        assert_eq!(without_zeros, 16);
+    }
+
+    #[test]
+    fn the_orders_name_their_sorted_block_and_its_neighbouring_swaps() {
+        // Each of the twelve ordered pairs names one block, and that block
+        // holds phi/2 on p and 1/2 on q.
+        let mut named = 0;
+        for p in 0..4 {
+            for q in 0..4 {
+                let block = GOLDEN_BLOCK_OF[p][q];
+                if p == q {
+                    assert_eq!(block, u8::MAX);
+                    continue;
+                }
+                let [bp, bq, _] = GOLDEN_AXES[usize::from(block)];
+                assert_eq!((usize::from(bp), usize::from(bq)), (p, q));
+                named += 1;
+            }
+        }
+        assert_eq!(named, 12);
+        // Every order of four distinct magnitudes, by its code: the axis of
+        // the largest, the half-root, and the golden candidates the proof
+        // names, with the axis on phi - 1 each one implies.
+        let mut orders = 0;
+        let mut odd = 0;
+        let ranks = (0..256usize)
+            .map(|n| [n & 3, (n >> 2) & 3, (n >> 4) & 3, (n >> 6) & 3])
+            .filter(|r| (0..4).all(|i| (i + 1..4).all(|j| r[i] != r[j])));
+        for rank in ranks {
+            // rank[k] is the axis with the (k + 1)-th largest magnitude.
+            let magnitude = |axis: usize| 4 - rank.iter().position(|&r| r == axis).unwrap();
+            let code = SNAP_ORDER_PAIRS
+                .iter()
+                .enumerate()
+                .map(|(k, &[i, j])| usize::from(magnitude(i) > magnitude(j)) << k)
+                .sum::<usize>();
+            let n = usize::from(SNAP_ORDERS.counts[code]);
+            let slots = &SNAP_ORDERS.slots[code][..n];
+            assert_eq!(&slots[..2], &[rank[0] as u8, 4], "order {rank:?}");
+            let t_of = |position: u8| usize::from(GOLDEN_AXES[usize::from(position - 5)][2]);
+            let pq_of = |position: u8| {
+                let [p, q, _] = GOLDEN_AXES[usize::from(position - 5)];
+                (usize::from(p), usize::from(q))
+            };
+            let mut golden: Vec<((usize, usize), usize)> =
+                slots[2..].iter().map(|&s| (pq_of(s), t_of(s))).collect();
+            golden.sort();
+            let sorted_t = usize::from(GOLDEN_AXES[usize::from(GOLDEN_BLOCK_OF[rank[0]][rank[1]])][2]);
+            if sorted_t == rank[2] {
+                assert_eq!(golden, vec![((rank[0], rank[1]), rank[2])], "even {rank:?}");
+            } else {
+                odd += 1;
+                let mut want = vec![
+                    ((rank[0], rank[1]), rank[3]),
+                    ((rank[1], rank[0]), rank[2]),
+                    ((rank[0], rank[2]), rank[1]),
+                ];
+                want.sort();
+                assert_eq!(golden, want, "odd {rank:?}");
+            }
+            assert!(slots[1..].windows(2).all(|w| w[0] < w[1]), "ascending {slots:?}");
+            orders += 1;
+        }
+        assert_eq!(orders, 24);
+        assert_eq!(odd, 12);
+        // Codes with a cycle send the query to the scan.
+        assert_eq!(SNAP_ORDERS.counts.iter().filter(|&&n| n != 0).count(), 24);
+    }
+
+    /// How many roots share the full scan's best exact score.
+    fn snap_maximizers(raw: [i32; 4]) -> usize {
+        let score = |root: &[[i8; 2]; 4]| -> (i64, i64) {
+            root.iter().zip(&raw).fold((0, 0), |(a, b), (coefficient, &value)| {
+                let v = i64::from(value);
+                (a + small_mul(v, coefficient[0]), b + small_mul(v, coefficient[1]))
+            })
+        };
+        let best = score(&H4_ROOT_COEFFICIENTS[snap_select_full_scan(raw)]);
+        H4_ROOT_COEFFICIENTS.iter().filter(|root| score(root) == best).count()
+    }
+
+    #[test]
+    fn the_fast_snap_is_the_full_scan_on_every_query_from_minus_8_to_8() {
+        let fast = |raw: [i32; 4]| {
+            let s: [u32; 4] = raw.map(i32::unsigned_abs);
+            !s.contains(&0) && (0..4).all(|i| (i + 1..4).all(|j| s[i] != s[j]))
+        };
+        let (mut grid, mut taken, mut tied) = (0, 0, 0);
+        for w in -8..=8 {
+            for x in -8..=8 {
+                for y in -8..=8 {
+                    for z in -8..=8 {
+                        let raw = [w, x, y, z];
+                        assert_eq!(stack_snap_select(raw), snap_select_full_scan(raw), "{raw:?}");
+                        grid += 1;
+                        if fast(raw) {
+                            taken += 1;
+                            if snap_maximizers(raw) > 1 {
+                                tied += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(grid, 83_521);
+        // 8 * 7 * 6 * 5 magnitudes, times 16 sign patterns.
+        assert_eq!(taken, 26_880);
+        // The fast path meets exact ties (two neighbouring swaps, or r0's axis
+        // root with the half-root), so the grid's equality pins the tie rule.
+        assert!(tied > 0, "no tie on the fast path");
+    }
+
+    #[test]
+    fn the_fast_snap_is_the_full_scan_on_large_ties_and_at_the_i32_limits() {
+        // Two neighbouring swaps tie when s_r0 - s_r1 = s_r2 - s_r3. Draw the
+        // magnitudes so that a golden root often wins, below 2^31, both signs.
+        let golden = |index: usize| index >= 24;
+        let (mut golden_wins, mut golden_ties) = (0, 0);
+        let mut rng = Lcg(0x05ee_d241);
+        for _ in 0..200_000 {
+            let draw = rng.next();
+            let base = (draw >> 35) as i64 + 1;
+            let gap = (rng.next() >> 36) as i64 + 1;
+            let wide = (rng.next() >> 35) as i64 + 1;
+            // s_r0 - s_r1 = s_r2 - s_r3 = gap, s_r1 - s_r2 = wide; s_r0 is at
+            // most 2^29 + 2^29 + 2^29, below 2^31.
+            let mut s = [base + 2 * gap + wide, base + gap + wide, base + gap, base];
+            let shuffle = rng.next();
+            for k in (1..4).rev() {
+                s.swap(k, (shuffle >> (8 * k)) as usize % (k + 1));
+            }
+            let raw: [i32; 4] = std::array::from_fn(|c| {
+                let v = i32::try_from(s[c]).expect("each magnitude is below 2^31");
+                if (draw >> c) & 1 == 1 { -v } else { v }
+            });
+            let chosen = snap_select_full_scan(raw);
+            assert_eq!(stack_snap_select(raw), chosen, "{raw:?}");
+            if golden(chosen) {
+                golden_wins += 1;
+                if snap_maximizers(raw) > 1 {
+                    golden_ties += 1;
+                }
+            }
+        }
+        // The draws reach the golden roots and their exact ties (120,044 and
+        // 35,084 of 200,000 at this seed).
+        assert!(
+            golden_wins > 100_000 && golden_ties > 30_000,
+            "{golden_wins} golden winners, {golden_ties} of them tied"
+        );
+        // Every order and sign of four magnitudes at the i32 limits, the
+        // first pair with gaps 1 and 1: i32::MIN's magnitude is 2^31.
+        for magnitudes in [
+            [i32::MIN, i32::MAX, 2, 1],
+            [i32::MIN, i32::MAX, i32::MAX - 1, i32::MAX - 2],
+            [i32::MAX, i32::MAX - 1, 2, 1],
+        ] {
+            for order in 0..24usize {
+                let mut q = magnitudes;
+                let mut rest = order;
+                for k in (1..4).rev() {
+                    q.swap(k, rest % (k + 1));
+                    rest /= k + 1;
+                }
+                for signs in 0..16 {
+                    let raw: [i32; 4] = std::array::from_fn(|c| {
+                        if (signs >> c) & 1 == 1 { q[c].wrapping_neg() } else { q[c] }
+                    });
+                    assert_eq!(stack_snap_select(raw), snap_select_full_scan(raw), "{raw:?}");
+                }
             }
         }
     }
