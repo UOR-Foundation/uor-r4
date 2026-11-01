@@ -1,5 +1,6 @@
 #include "../src/instrumented.hpp"
 #include "../src/sha256.hpp"
+#include "json.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -81,6 +82,10 @@ int main() {
            "instrumented parity preserved");
 
     const auto json = read_file(enabled_output);
+    expect(test_json::valid(json), "instrumented output is one valid JSON document");
+    expect(json.find("\"key\":\"uor.artifact.byte_size\",\"value\":{\"stringValue\":\"512\"}") !=
+               std::string::npos,
+           "artifact size covers every hashed codebook byte");
     expect(json.find("uor.cuda.index.build") != std::string::npos, "build span emitted");
     expect(json.find("uor.cuda.index.update") != std::string::npos, "update span emitted");
     expect(json.find("uor.cuda.index.probe") != std::string::npos, "probe span emitted");
@@ -108,6 +113,9 @@ int main() {
     for (std::size_t i = 0; i < 4; ++i) {
         expect(field(json, "traceId", i) == field(json, "traceId", 0), "operations share one trace");
         if (i != 0) expect(field(json, "parentSpanId", i - 1) == build_span, "child references build parent");
+        expect(field(json, "startTimeUnixNano", i).size() >= 19 &&
+                   field(json, "endTimeUnixNano", i).size() >= 19,
+               "timestamps use Unix nanoseconds rather than microseconds");
     }
 
     const auto digest = uor_inverted_file::sha256_hex(
@@ -121,6 +129,17 @@ int main() {
     expect(field(json, "traceId", 0) != field(second_json, "traceId", 0),
            "separate executions produce different trace IDs");
     expect(second_json.find(digest) != std::string::npos, "second execution keeps artifact digest");
+
+    const std::filesystem::path missing_parent = "build/missing-parent";
+    std::filesystem::remove_all(missing_parent);
+    Instrumented failed_output(missing_parent / "trace.json");
+    Index completed_index;
+    expect(failed_output.build(fixture(), completed_index) == Status::TelemetryFailure,
+           "telemetry I/O failure is not mislabeled as CUDA failure");
+    expect(uor_inverted_file::validate(fixture(), completed_index) == Status::Ok,
+           "telemetry failure does not undo or invalidate the completed CPU build");
+    expect(failed_output.full_scan(fixture(), query, 0, full) == Status::InvalidArgument,
+           "CPU operation errors take precedence over export errors");
 
     if (failures != 0) {
         std::cerr << failures << " instrumented telemetry assertions failed\n";

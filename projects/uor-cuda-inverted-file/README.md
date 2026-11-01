@@ -49,7 +49,7 @@ UOR_OTEL_OUT=build/trace.json make instrumented-example
 make telemetry-test                               # IDs, JSON, default-off, and CPU parity
 ```
 
-Only an explicit `UOR_OTEL_OUT` path enables the file sink. Each run uses random trace/span IDs; the fixed codebook's SHA-256 digest stays an artifact attribute and is never an execution ID. The build span is the parent of update, probe, and full-scan spans. The sink replaces the file with the current complete in-memory trace after each operation.
+Only an explicit `UOR_OTEL_OUT` path enables the file sink. Each run uses random trace/span IDs; the fixed codebook's SHA-256 digest and 512-byte size stay artifact attributes and are never execution IDs. The build span is the parent of update, probe, and full-scan spans. The sink writes a temporary file and renames it over the current complete in-memory trace after each operation. `TelemetryFailure` reports an export I/O error separately from CUDA failures; CPU errors take precedence and completed CPU side effects are not rolled back.
 
 This instruments the **CPU oracle**, not the CUDA kernels. It does not send data to a collector or emit prompt/completion content. Collector interoperability, GPU timing, and production export are **NOT_RUN**. See [`../../docs/telemetry/uor-conventions.md`](../../docs/telemetry/uor-conventions.md).
 

@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: false
 depends_on: [uor-cuda-inverted-file]
 done_class: host
-scope: [projects/uor-cuda-inverted-file/**, docs/telemetry/uor-conventions.md, docs/labs/uor-telemetry/**, docs/loop/tasks/uor-telemetry/kimi-1/**, docs/superpowers/specs/2026-11-01-uor-telemetry-design.md, docs/superpowers/plans/2026-11-01-uor-telemetry.md, docs/roadmap/items/uor-telemetry.md]
+scope: [projects/uor-cuda-inverted-file/**, docs/telemetry/uor-conventions.md, docs/labs/uor-telemetry/**, docs/loop/tasks/uor-telemetry/kimi-1/**, docs/superpowers/specs/2026-11-01-uor-telemetry-design.md, docs/superpowers/plans/2026-11-01-uor-telemetry.md, docs/roadmap/items/uor-telemetry.md, docs/roadmap/README.md, docs/roadmap/issues.json]
 ---
 
 ## Why it matters

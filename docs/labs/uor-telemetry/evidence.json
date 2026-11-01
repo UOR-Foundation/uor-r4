@@ -33,11 +33,12 @@
   },
   "identity": {
     "trace_ids": [
-      "7043687a3b0e22ee80c8ca32c470b7d1",
-      "652e308aa063d3812f894cbd0cf723e3"
+      "d5a347d6befa7a98faa6796597c2a4de",
+      "cbfc4aa11994f573d189fa93931f926b"
     ],
     "trace_ids_differ": true,
     "artifact_identity_kind": "fixed-codebook",
+    "artifact_byte_size": 512,
     "artifact_payload_sha256": "9d98bd50f46cdedd5c481a8d696a609936bbc540997e7eaef6af2bdb3bc15597",
     "artifact_digest_stable": true,
     "digest_used_as_execution_id": false

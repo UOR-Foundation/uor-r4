@@ -15,6 +15,7 @@ Add a local-only, opt-in OTLP/HTTP JSON consumer to the standalone inverted-file
 - `docs/superpowers/specs/2026-11-01-uor-telemetry-design.md`
 - `docs/superpowers/plans/2026-11-01-uor-telemetry.md`
 - `docs/roadmap/items/uor-telemetry.md`
+- `docs/roadmap/README.md` and `docs/roadmap/issues.json` (canonical roadmap sync outputs)
 
 No other paths. No model, artifact, API, worker, engine, desktop, `.github/**`, production deployment, third-party SDK, secret, or paid compute changes.
 

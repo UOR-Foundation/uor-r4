@@ -1,4 +1,5 @@
 #include "../src/telemetry.hpp"
+#include "json.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -47,6 +48,10 @@ int main() {
     expect(enabled.enabled(), "explicit output enables telemetry");
     expect(enabled.export_trace(resource, span) == Status::Ok, "explicit export succeeds");
     const auto json = read_file(output);
+    expect(test_json::valid(json), "export is one syntactically valid JSON document");
+    expect(!test_json::valid("{\"resourceSpans\":[]}\n{\"resourceSpans\":[]}"),
+           "JSON parser rejects multiple documents");
+    expect(!test_json::valid("{\"resourceSpans\":[]"), "JSON parser rejects a missing closing brace");
     expect(json.find("\"resourceSpans\"") != std::string::npos, "resourceSpans present");
     expect(json.find("\"scopeSpans\"") != std::string::npos, "scopeSpans present");
     expect(json.find("\"spans\"") != std::string::npos, "spans present");
@@ -70,9 +75,32 @@ int main() {
     expect(batch.find("\"parentSpanId\":\"0123456789abcdef\"") != std::string::npos,
            "batch preserves the child parent link");
 
+    expect(test_json::valid(batch), "batch is one valid JSON document");
+    const Resource escaped{{{"quote\" slash\\ line\n tab\t snowman \xE2\x98\x83",
+                             "control\x01 and \xE2\x98\x83"}}};
+    expect(enabled.export_trace(escaped, span) == Status::Ok, "escaped Unicode export succeeds");
+    const auto escaped_json = read_file(output);
+    expect(test_json::valid(escaped_json), "escaped output remains valid JSON and UTF-8");
+    expect(escaped_json.find("quote\\\" slash\\\\ line\\n tab\\t") != std::string::npos,
+           "quotes, slashes, and control characters are escaped");
+    expect(escaped_json.find("control\\u0001") != std::string::npos, "control byte uses a Unicode escape");
+
+    const Resource malformed{{{"bad.utf8", std::string("\xC3\x28", 2)}}};
+    const auto before_malformed = read_file(output);
+    expect(enabled.export_trace(malformed, span) == Status::InvalidArgument, "malformed UTF-8 refused");
+    expect(read_file(output) == before_malformed, "refusal preserves the last complete document");
+
     Span invalid = span;
     invalid.ids.trace_id = "not-a-trace-id";
     expect(enabled.export_trace(resource, invalid) == Status::InvalidArgument, "invalid ID refused");
+
+    const std::filesystem::path temporary = "build.tmp";
+    std::filesystem::remove(temporary);
+    Telemetry directory_output("build");
+    expect(directory_output.export_trace(resource, span) == Status::TelemetryFailure,
+           "file replacement failure has a telemetry-specific status");
+    expect(std::filesystem::is_directory("build"), "failed replacement preserves the destination");
+    expect(!std::filesystem::exists(temporary), "failed replacement removes its temporary file");
 
     if (failures != 0) {
         std::cerr << failures << " telemetry exporter assertions failed\n";

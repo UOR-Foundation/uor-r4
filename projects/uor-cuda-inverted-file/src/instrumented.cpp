@@ -9,7 +9,8 @@ namespace uor_inverted_file {
 namespace {
 
 std::uint64_t now_ns() {
-    return static_cast<std::uint64_t>(std::chrono::system_clock::now().time_since_epoch().count());
+    const auto elapsed = std::chrono::system_clock::now().time_since_epoch();
+    return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count());
 }
 
 std::string status_name(Status status) {
@@ -20,19 +21,20 @@ std::string status_name(Status status) {
         case Status::CsrInvariant: return "csr-invariant";
         case Status::CudaUnavailable: return "cuda-unavailable";
         case Status::CudaFailure: return "cuda-failure";
+        case Status::TelemetryFailure: return "telemetry-failure";
     }
     return "unknown";
 }
 
 Resource resource_for_codebook() {
-    const auto digest = sha256_hex(reinterpret_cast<const std::uint8_t*>(codebook.data()),
-                                   codebook.size() * sizeof(Block));
+    const auto byte_size = codebook.size() * sizeof(Block);
+    const auto digest = sha256_hex(reinterpret_cast<const std::uint8_t*>(codebook.data()), byte_size);
     return Resource{{
         {"uor.schema.version", "uor.telemetry/1"},
         {"uor.artifact.payload_sha256", digest},
         {"uor.artifact.digest.algorithm", "sha256"},
         {"uor.artifact.identity_kind", "fixed-codebook"},
-        {"uor.artifact.byte_size", "128"},
+        {"uor.artifact.byte_size", std::to_string(byte_size)},
         {"uor.serving.kernel", "cpu-oracle"},
     }};
 }
@@ -61,7 +63,8 @@ Status Instrumented::build(const Table& table, Index& index) {
     const auto status = uor_inverted_file::build(table, index);
     Span span{"uor.cuda.index.build", SpanIds{}, start, now_ns(),
               {{"uor.operation.status", status_name(status)}}};
-    return emit(std::move(span)) == Status::Ok ? status : Status::CudaFailure;
+    const auto telemetry_status = emit(std::move(span));
+    return status == Status::Ok ? telemetry_status : status;
 }
 
 Status Instrumented::update(const Table& table, std::uint32_t moved_token, Index& index) {
@@ -70,7 +73,8 @@ Status Instrumented::update(const Table& table, std::uint32_t moved_token, Index
     Span span{"uor.cuda.index.update", SpanIds{}, start, now_ns(),
               {{"uor.operation.status", status_name(status)},
                {"uor.operation.moved_token", std::to_string(moved_token)}}};
-    return emit(std::move(span)) == Status::Ok ? status : Status::CudaFailure;
+    const auto telemetry_status = emit(std::move(span));
+    return status == Status::Ok ? telemetry_status : status;
 }
 
 Status Instrumented::probe(const Table& table, const Query& query, std::uint32_t k,
@@ -80,7 +84,8 @@ Status Instrumented::probe(const Table& table, const Query& query, std::uint32_t
     Span span{"uor.cuda.index.probe", SpanIds{}, start, now_ns(),
               {{"uor.operation.status", status_name(status)},
                {"uor.operation.k", std::to_string(k)}}};
-    return emit(std::move(span)) == Status::Ok ? status : Status::CudaFailure;
+    const auto telemetry_status = emit(std::move(span));
+    return status == Status::Ok ? telemetry_status : status;
 }
 
 Status Instrumented::full_scan(const Table& table, const Query& query, std::uint32_t k,
@@ -90,7 +95,8 @@ Status Instrumented::full_scan(const Table& table, const Query& query, std::uint
     Span span{"uor.cuda.index.full_scan", SpanIds{}, start, now_ns(),
               {{"uor.operation.status", status_name(status)},
                {"uor.operation.k", std::to_string(k)}}};
-    return emit(std::move(span)) == Status::Ok ? status : Status::CudaFailure;
+    const auto telemetry_status = emit(std::move(span));
+    return status == Status::Ok ? telemetry_status : status;
 }
 
 } // namespace uor_inverted_file

@@ -36,6 +36,7 @@ enum class Status {
     CsrInvariant,
     CudaUnavailable,
     CudaFailure,
+    TelemetryFailure,
 };
 
 extern const std::array<Block, 16> codebook;

@@ -12,7 +12,8 @@ This branch adds an opt-in local OTLP/HTTP JSON consumer to the standalone inver
 - `nvcc` is unavailable on Darwin arm64. Both `make cuda` and `make cuda-test` stop with `NOT_RUN: nvcc is unavailable; CUDA compilation and tests were not performed`. AOT compilation, Driver API execution, CPU/GPU parity, and GPU timing are **NOT_RUN**.
 - Collector ingestion, OpenTelemetry SDK interoperability, production export, performance, energy, portability, and upstream acceptance are **NOT_RUN** or **NOT_CLAIMED**. The JSON file is not evidence that a collector accepted it.
 - The first direct `mdbook build` lacked the required staged source. The documented `book-stage` pipeline was then run successfully. mdBook also reported the existing preprocessor/tool version mismatch (`0.4.36` versus `0.4.40`) without failing the build.
-- A completion edit temporarily replaced the mandatory roadmap `What is missing` heading; the required heading was restored and roadmap validation passed. Normal roadmap sync marked #3478 done and closed it after the host acceptance criteria were met; protected branch delivery is reported separately rather than inferred from that issue state.
+- A completion edit temporarily replaced the mandatory roadmap `What is missing` heading; the required heading was restored and roadmap validation passed. Roadmap sync closed #3478 before protected delivery; it was reopened with an explicit correction and will close through the delivered PR.
+- The first exact-head review at `8a1849c1b` blocked delivery. It found the 128-versus-512 byte metadata error, telemetry I/O mislabeled as `CudaFailure`, substring-only JSON checks, generated roadmap paths missing from declared scope, and premature issue closure, plus timestamp, atomic-rewrite, and stale-header-build risks. The corrected consumer derives 512 from the hashed payload, has `TelemetryFailure` with CPU-error precedence, validates JSON/UTF-8 and replacement failures in automated tests, writes via temporary file plus rename, converts explicitly to nanoseconds, and declares all transitive header/test dependencies. Both generated roadmap files are now in the ORDER and item scope.
 
 ## What changed
 
@@ -26,7 +27,7 @@ This branch adds an opt-in local OTLP/HTTP JSON consumer to the standalone inver
 
 - `make -C projects/uor-cuda-inverted-file telemetry-test`: **PASS**, all three executables.
 - Default example run in an empty directory: **PASS**, directory remained empty; no telemetry file or endpoint was created.
-- Two explicit file runs: **PASS**, each one `jq`-validated JSON document with four spans and correct emitted parent links. Trace IDs differed (`7043687a3b0e22ee80c8ca32c470b7d1`, `652e308aa063d3812f894cbd0cf723e3`); both retained codebook SHA-256 `9d98bd50f46cdedd5c481a8d696a609936bbc540997e7eaef6af2bdb3bc15597`.
+- Two explicit file runs on the corrected consumer: **PASS**, each one `jq`-validated JSON document with four spans, correct emitted parent links, and artifact byte size 512. Trace IDs differed (`d5a347d6befa7a98faa6796597c2a4de`, `cbfc4aa11994f573d189fa93931f926b`); both retained codebook SHA-256 `9d98bd50f46cdedd5c481a8d696a609936bbc540997e7eaef6af2bdb3bc15597`.
 - `make -C projects/uor-cuda-inverted-file evidence`: **PASS**. Two host runs and one clean-copy run produced identical output, SHA-256 `7b6f674abcef33a37753de8aac6000ff1584e983ebeb4eb35fc67bf5d45d5e7d` for each log.
 - `cargo test --locked -p xtask`: **220 passed, 0 failed**.
 - `cargo run -q --locked -p uor-r4-claim-wording -- .`: **PASS**.

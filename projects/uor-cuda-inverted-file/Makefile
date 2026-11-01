@@ -22,13 +22,13 @@ host-test: $(BUILD_DIR)/admission_test $(BUILD_DIR)/inverted_file_test
 $(BUILD_DIR)/telemetry_ids_test: src/sha256.cpp src/sha256.hpp src/telemetry_ids.cpp src/telemetry_ids.hpp tests/telemetry_ids_test.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/sha256.cpp src/telemetry_ids.cpp tests/telemetry_ids_test.cpp -o $@
 
-$(BUILD_DIR)/telemetry_test: src/telemetry.cpp src/telemetry.hpp src/telemetry_ids.cpp tests/telemetry_test.cpp | $(BUILD_DIR)
+$(BUILD_DIR)/telemetry_test: src/telemetry.cpp src/telemetry.hpp src/telemetry_ids.cpp src/telemetry_ids.hpp include/uor_inverted_file.hpp tests/telemetry_test.cpp tests/json.hpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/telemetry.cpp src/telemetry_ids.cpp tests/telemetry_test.cpp -o $@
 
-$(BUILD_DIR)/instrumented_test: src/instrumented.cpp src/instrumented.hpp src/telemetry.cpp src/sha256.cpp src/telemetry_ids.cpp src/inverted_file.cpp src/codebook.cpp tests/instrumented_test.cpp | $(BUILD_DIR)
+$(BUILD_DIR)/instrumented_test: src/instrumented.cpp src/instrumented.hpp src/telemetry.cpp src/telemetry.hpp src/telemetry_ids.cpp src/telemetry_ids.hpp src/sha256.cpp src/sha256.hpp src/inverted_file.cpp src/codebook.cpp include/uor_inverted_file.hpp tests/instrumented_test.cpp tests/json.hpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/instrumented.cpp src/telemetry.cpp src/sha256.cpp src/telemetry_ids.cpp src/inverted_file.cpp src/codebook.cpp tests/instrumented_test.cpp -o $@
 
-$(BUILD_DIR)/instrumented_example: src/instrumented.cpp src/telemetry.cpp src/sha256.cpp src/telemetry_ids.cpp src/inverted_file.cpp src/codebook.cpp examples/instrumented.cpp | $(BUILD_DIR)
+$(BUILD_DIR)/instrumented_example: src/instrumented.cpp src/instrumented.hpp src/telemetry.cpp src/telemetry.hpp src/telemetry_ids.cpp src/telemetry_ids.hpp src/sha256.cpp src/sha256.hpp src/inverted_file.cpp src/codebook.cpp include/uor_inverted_file.hpp examples/instrumented.cpp | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) src/instrumented.cpp src/telemetry.cpp src/sha256.cpp src/telemetry_ids.cpp src/inverted_file.cpp src/codebook.cpp examples/instrumented.cpp -o $@
 
 telemetry-test: $(BUILD_DIR)/telemetry_ids_test $(BUILD_DIR)/telemetry_test $(BUILD_DIR)/instrumented_test

@@ -28,7 +28,7 @@ Resource attributes:
 - `uor.artifact.payload_sha256`: full lowercase SHA-256 digest of the codebook bytes.
 - `uor.artifact.digest.algorithm`: literal `sha256`.
 - `uor.artifact.identity_kind`: literal `fixed-codebook`.
-- `uor.artifact.byte_size`: decimal byte count, `128` for this codebook.
+- `uor.artifact.byte_size`: decimal byte count, `512` for this codebook (16 blocks × eight 32-bit integers).
 - `uor.serving.kernel`: literal `cpu-oracle`; it does not claim a CUDA kernel ran.
 
 Span names are `uor.cuda.index.build`, `uor.cuda.index.update`, `uor.cuda.index.probe`, and `uor.cuda.index.full_scan`. These names describe the index API family; the current consumer calls its CPU implementations. `uor.operation.status` is the typed operation result. Update spans include `uor.operation.moved_token`; scan spans include `uor.operation.k`.
