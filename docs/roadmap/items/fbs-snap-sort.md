@@ -3,10 +3,11 @@ id: fbs-snap-sort
 title: An exact icosian snap by sorting, in place of the 17-candidate scan
 milestone: research
 area: serving
-status: ready
+status: done
 open_to: lab
 needs_gpu: false
 depends_on: [fbs-serving-vector-kernel]
+done_class: host
 notebook: docs/research/notebook/m4-serving.md
 scope: [crates/uor-r4-integer/src/stack/kernels.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, scripts/audit_zero_matmul_serving.py, docs/model/pipeline-map.md, docs/roadmap/items/fbs-snap-sort.md, docs/loop/tasks/fbs-snap-sort/**, docs/research/notebook/m4-serving.md]
 ---
@@ -29,6 +30,8 @@ The owner, 31 Oct 2026, in claude's chat: "why is the icosian snap 42% of our ti
 **How often it runs** (claude-163): two snaps per 4-channel block in each layer's recurrence core (the lane's transition and the output gate), and one per 4-unit block in its gated product.
 
 [`fbs-serving-vector-kernel`](fbs-serving-vector-kernel.md) left "fewer golden candidates" open and "named for a follow-up item". This is that item.
+
+**Done on 1 Nov 2026 (claude-241).** All five done-when are met: the first candidate below, sort instead of scan, is in `stack_snap_select`. A query with no zero coordinate and four distinct magnitudes now scores 3 or 5 roots, not 17. Decode on claude-126's export rose from 4,915 to 6,480 tok/s, and every reply is byte-identical. The snap is still the largest single kernel, at 32% of the sampled thread. The second candidate (one fixed-point product for the exact sign) was not tried. Both are in the [REPORT](../loop/tasks/fbs-snap-sort/claude-241/REPORT.md).
 
 ## What is missing
 
