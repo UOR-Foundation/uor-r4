@@ -1,6 +1,6 @@
 # Before advertising or submitting this CUDA package
 
-**Current decision: do not advertise performance or submit the package upstream yet.** The standalone host suite and clean-copy build pass. AOT CUDA compilation, CUDA Driver API execution, GPU parity, and GPU measurements are **NOT_RUN** on the verification machine because `nvcc` is unavailable. The original UOR-R4 bucket-writer's hardware results are provenance, not results for this package.
+**Current decision: do not advertise performance or submit the package upstream yet.** The standalone host suite and clean-copy build pass. Single-card AOT/CUDA correctness now passes on one RTX 5090 at source `aef414859`: 498/498 rows in each of three byte-identical executions, with identical module hashes after a clean rebuild. GPU timing, tuned comparisons, additional architectures/drivers, and external replication remain **NOT_RUN**. The original UOR-R4 bucket-writer's hardware results are provenance, not results for this package.
 
 The useful community contribution is the combination of an exact integer inverted-file index and a mechanical PTX instruction/inventory gate. It does not require adopting UOR-R4's model or geometry. That usefulness still needs the following evidence.
 
