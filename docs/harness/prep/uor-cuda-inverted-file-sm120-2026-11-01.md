@@ -53,3 +53,33 @@ At `71c84dfa3b083889fb3896886da973354fa87afa`, host oracle and AOT/admission pas
 ## Evidence erratum
 
 The original attempt-3 `admission-negative-command.txt` used a non-replayable shorthand. The sealed file was not rewritten. `local/kimi/cuda-release-3-erratum/admission-negative-command-erratum.txt` supplies the actual executed mutation, `printf "\n.visible .entry planted_extra()\n" >> /workspace/uor-r4/evals/cuda-release-3/admission-negative.ptx`, and is preserved separately in the project store at commit `32b4ad06c04ff680de04ecb5a566d5c43433b176` with download checksum verification.
+
+## Bar
+
+All 504 rows pass in each of three byte-identical executions, with four-entry AOT admission, planted-entry rejection, and identical clean-rebuild module hashes. Any mismatch is a scoped failure, never a pass.
+
+## Base artifact
+
+Correctness source `18a1c8ad79a468025b0e82e79705c7266abac03c`, with the emitted PTX/cubin and source/module hashes in the attempt-3 archive. Delivery-only edits do not change that executed source.
+
+## Data split
+
+No training or fit split exists. This is a fixed, openly declared correctness grid: V ∈ {64,256}, K ∈ {1,8,16}, four query seeds per configuration, 64 update steps, reinsertion/refusal controls, and extreme values. No fresh-evaluation or generalization claim is made.
+
+## Steps
+
+Run the identity and host-oracle checks, AOT/admission, planted negative admission, CUDA smoke, three direct `--out` executions, clean rebuild, and SHA-256 archive/read-back exactly as in the arms above. Preserve the negative PTX and the separate command erratum.
+
+## Stop rule
+
+Stop before performance work on any source compile, admission, load, status, refusal, row-parity, determinism, or archive failure. Classify recipe/instrument faults separately from source defects; a source repair requires a new pushed head, FIT, and evidence root.
+
+## Cost
+
+One RTX 5090 lease initially one hour at the displayed $0.563/h, with renewal only for a healthy instrument delay and teardown after archival. No other GPU is touched. Provider invoice totals are not inferred.
+
+## Minimum test power
+
+This is a fixed exhaustive grid, not a sampled estimate: 84 rows per configuration × 6 configurations = 504 rows per execution, three executions = 1,512 rows. Each row must pass; each row file must contain 504 lines and be byte-identical. Generalization beyond the named card/grid is not measured.
+
+TEST FITNESS: FIT
