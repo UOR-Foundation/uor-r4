@@ -29,7 +29,7 @@ This unit runs no model compute. The registration counts are 9 historical famili
 - `cargo run -q -p xtask -- links`: exit 0; 23,840 links checked, 1,216 pre-existing broken-link reports remain in the repository-wide count.
 - `cargo test -q -p uor-r4-harness --test lab_registry_cli --test loop_shared_files --test loop_review --test loop_claim --test loop_next`: PASS, 5, 7, 34, 33 and 37 tests.
 - `uor-harness loop gates --full`: PASS, 11/11 green.
-- `uor-harness loop pr-check --local`: PASS. The expected new-item scope advisory, commit-order advisory and FILEMAP advisory remain; owner paths, rule sources, ORDER and REPORT pass.
+- `uor-harness loop pr-check --local`: PASS. The expected scope advisory names 14 files outside the reused documentation parent, because the new program item does not exist at the merge base; the commit-order and FILEMAP advisories also remain. Owner paths, rule sources, ORDER and REPORT pass.
 - `cargo test -q -p uor-r4-harness`: FAIL, 663 passed / 14 failed / 1 ignored. Representative failures were rerun at clean `origin/main` and fail there unchanged.
 - `uor-harness check`: FAIL on the same pre-existing malformed pre-registration sheet, with warnings; no claim of a green global check.
 

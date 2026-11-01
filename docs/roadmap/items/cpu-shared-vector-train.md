@@ -9,7 +9,7 @@ needs_gpu: false
 depends_on: [cpu-shared-vector-forward]
 notebook: docs/research/notebook/cpu-training.md
 done_class: host
-scope: [crates/uor-r4-cpu-train/**, Cargo.toml, Cargo.lock, docs/loop/tasks/cpu-shared-vector-train/**, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-shared-vector-train.md]
+scope: [crates/uor-r4-cpu-train/**, Cargo.toml, Cargo.lock, crates/uor-r4-harness/src/ratchet.rs, scripts/no-softmax-baseline.json, scripts/no-matmul-baseline.json, scripts/no-discrete-float-baseline.json, docs/loop/tasks/cpu-shared-vector-train/**, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-shared-vector-train.md]
 ---
 
 ## Why it matters
@@ -41,6 +41,7 @@ Use the finite forward from `cpu-shared-vector-forward` as the only model graph.
 - Rank margin only; no implicit vocabulary normalization.
 - No dense matrix multiplication, including hand loops and wrappers.
 - Loss is reported beside admission, exact export and complete-reply outcomes.
+- Reuse only independently reimplemented lawful patterns; the new crate has no dependency edge to `uor-r4-training` and receives its own scanned allowlist and ratchet entry.
 
 ## Sources
 

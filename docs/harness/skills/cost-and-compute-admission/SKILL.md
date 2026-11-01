@@ -23,8 +23,9 @@ artifacts and compute", and D24 in [DECISIONS.md](../../../integration/DECISIONS
 
 1. **Classify the work before choosing a machine.**
    - Non-model editing/build/static checks, Rust preparation and grading stored
-     outputs run locally. The native prose learner and model/parity fixtures are
-     not CPU exceptions.
+     outputs run locally. The historical native prose learner is not admitted by
+     D84; model or parity fixtures run as host checks only when the named CPU
+     program owns them or the repository already specifies a host oracle.
    - Default model work is GPU-only through uor-pod, subject to D23–D25 and
      applicable holds. **Training and M2 training/rental remain held; FIT lifts neither.**
    - Model compute outside the named D84 program never runs on the CPU (D24).
