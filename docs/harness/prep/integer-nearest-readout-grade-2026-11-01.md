@@ -318,4 +318,18 @@ TEST FITNESS: FIT
   - It could not tell whether a total of R's against the reference was printed anywhere. None was (§5.3).
 - **Also changed:** §5 is split into Base artifact, Data split and what was seen, for the sheet-shape rule. The runner's hash in §6 is now `87f5b89e…`.
 
-**Round 2:** pending, on the sheet and the runner after FIT round 4.
+**Round 2** (a fresh `delegate:reviewer`, on the sheet at `62acfe99d` and the runner at `50130637…`). It ran the grader only on the synthetic probe, and opened no reading file. No Blocker, Major or Minor.
+- **What passed:**
+  - round 1's Major and Minors are resolved: §9 round 4 records the non-author reads, and §8 bounds the rerun;
+  - the six runner changes match §9 round 4a, and none changes which files are read or how a reading is computed;
+  - under bash 3.2, a `fail` and a failing command inside the piped body each end the script with status 1;
+  - the good probe's expression is true, and false with one expected value changed;
+  - the four hashes equal §6;
+  - the gates refuse as stated, and neither `grades/` nor `grade.log` exists;
+  - nothing that gives a, b or an opening count is printed or written before the readings.
+- **Its Nits, left as they are,** since a change now would move the reviewed hash, and none changes an outcome:
+  1. I-NoKey would also accept an object of rows. The six files are arrays.
+  2. A `jq` inside one `echo` can fail without stopping the run; the `jq -e` on the same file next line does stop it.
+  3. The join-agreement check can only fire if an input changed between the two passes, which §8's rerun rule covers.
+
+PRE-RUN REVIEW: PASS
