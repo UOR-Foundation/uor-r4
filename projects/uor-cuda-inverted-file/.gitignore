@@ -1,0 +1,10 @@
+build/
+dist/
+*.ptx
+*.cubin
+*.o
+*.a
+*.so
+*.dylib
+uor_if_tests
+uor_if_cuda_tests

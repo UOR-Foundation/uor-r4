@@ -7,6 +7,7 @@
   "fbs-cost-profile": 3381,
   "fbs-serving-kernels": 3382,
   "fbs-serving-vector-kernel": 3383,
+  "fbs-snap-sort": 3470,
   "float-training-module": 2823,
   "hamilton-gate-offline-float-sheet": 2824,
   "hopf-retained-fibre-test": 2825,
@@ -31,6 +32,7 @@
   "infra-loop-render-review": 3036,
   "infra-outsider-repairs": 3433,
   "integer-hamming-read": 3385,
+  "integer-long-context": 3471,
   "integer-mul-div-serving": 3386,
   "integer-nearest-readout": 3462,
   "integer-retention-rates": 3456,
@@ -112,9 +114,11 @@
   "read-binding-on-lawful-read": 2889,
   "recurrence-gates-six-recurrence-fit": 2890,
   "route-plus-memory": 3390,
+  "scale-probe": 3472,
   "spiralcore-fbs-offline-float-sheet": 2891,
   "training-step-cost": 3391,
   "turn-memory-integer": 3392,
   "turn-memory-reply": 3393,
+  "uor-cuda-inverted-file": 3475,
   "writer-admission": 3394
 }

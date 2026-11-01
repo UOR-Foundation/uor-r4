@@ -20,11 +20,11 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 22 |
+| ready | 23 |
 | held | 10 |
 | decision | 1 |
 | done | 88 |
-| total | 121 |
+| total | 122 |
 
 ## Start here
 
@@ -139,15 +139,16 @@ These items are ready and open to anyone.
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
 | [Bring every status page, picture and tracker up to 31 Oct 2026](items/docs-status-refresh.md) | ready | a lab | no | none | [#3380](https://github.com/UOR-Foundation/uor-r4/issues/3380) |
-| [An exact icosian snap by sorting, in place of the 17-candidate scan](items/fbs-snap-sort.md) | ready | a lab | no | [fbs-serving-vector-kernel](items/fbs-serving-vector-kernel.md) | not yet synced |
+| [An exact icosian snap by sorting, in place of the 17-candidate scan](items/fbs-snap-sort.md) | ready | a lab | no | [fbs-serving-vector-kernel](items/fbs-serving-vector-kernel.md) | [#3470](https://github.com/UOR-Foundation/uor-r4/issues/3470) |
 | [Serve the Hamming read from the integer artifact on the laptop](items/integer-hamming-read.md) | ready | a lab | yes | [float-training-module](items/float-training-module.md), [spiralcore-fbs-offline-float-sheet](items/spiralcore-fbs-offline-float-sheet.md) | [#3385](https://github.com/UOR-Foundation/uor-r4/issues/3385) |
-| [Serve prompts and conversations past the 192-token window](items/integer-long-context.md) | ready | a lab | yes | [integer-hamming-read](items/integer-hamming-read.md) | not yet synced |
+| [Serve prompts and conversations past the 192-token window](items/integer-long-context.md) | ready | a lab | yes | [integer-hamming-read](items/integer-hamming-read.md) | [#3471](https://github.com/UOR-Foundation/uor-r4/issues/3471) |
 | [Serve the trained model's readout in the integer artifact](items/integer-nearest-readout.md) | ready | a lab | no | [integer-retention-rates](items/integer-retention-rates.md), [one-decoder](items/one-decoder.md) | [#3462](https://github.com/UOR-Foundation/uor-r4/issues/3462) |
 | [Score one model end to end on prompts it has not seen, with tokens per second](items/one-model-end-to-end.md) | ready | a lab | yes | [turn-memory-reply](items/turn-memory-reply.md) | [#3407](https://github.com/UOR-Foundation/uor-r4/issues/3407) |
 | [Serve the point key's opening in the integer artifact on the laptop](items/point-key-integer.md) | ready | a lab | no | [one-model-end-to-end](items/one-model-end-to-end.md), [turn-memory-integer](items/turn-memory-integer.md), [integer-retention-rates](items/integer-retention-rates.md), [integer-nearest-readout](items/integer-nearest-readout.md) | [#3450](https://github.com/UOR-Foundation/uor-r4/issues/3450) |
-| [Measure how ability grows with width and data](items/scale-probe.md) | ready | a lab | yes | [one-model-end-to-end](items/one-model-end-to-end.md) | not yet synced |
+| [Measure how ability grows with width and data](items/scale-probe.md) | ready | a lab | yes | [one-model-end-to-end](items/one-model-end-to-end.md) | [#3472](https://github.com/UOR-Foundation/uor-r4/issues/3472) |
 | [Split the training backward, and run a cheaper rival search against (a)](items/training-step-cost.md) | ready | a lab | yes | [fbs-cost-profile](items/fbs-cost-profile.md) | [#3391](https://github.com/UOR-Foundation/uor-r4/issues/3391) |
 | [Serve the turn memory from the integer artifact on the laptop](items/turn-memory-integer.md) | ready | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | [#3392](https://github.com/UOR-Foundation/uor-r4/issues/3392) |
+| [Package a standalone UOR inverted-file CUDA example](items/uor-cuda-inverted-file.md) | ready | a lab | no | none | [#3475](https://github.com/UOR-Foundation/uor-r4/issues/3475) |
 | [Make the native writer's admission hold at every seed](items/writer-admission.md) | ready | a lab | yes | [one-decoder](items/one-decoder.md) | [#3394](https://github.com/UOR-Foundation/uor-r4/issues/3394) |
 | [Build a sigmoid-free gate for E8 orbit memory and rerun it on GPU](items/e8-orbit-memory-sigmoid-free-iteration.md) | held | a lab | yes | [float-training-module](items/float-training-module.md) | [#2822](https://github.com/UOR-Foundation/uor-r4/issues/2822) |
 | [Run the Hopf retained-fibre language test](items/hopf-retained-fibre-test.md) | held | a lab | yes | none | [#2825](https://github.com/UOR-Foundation/uor-r4/issues/2825) |
