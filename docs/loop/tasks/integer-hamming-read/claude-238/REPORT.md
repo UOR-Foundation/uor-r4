@@ -4,7 +4,7 @@ Lab: claude. Item: [integer-hamming-read](../../../../roadmap/items/integer-hamm
 
 ## Tokens per second
 
-`fbs-toks --context-sweep` on claude-233's h1 artifact (`28b01bba…`), on this laptop: an Apple M1, 8 cores, 16 GiB. It ran on mains power at a load average of 3.3–4.8 (`sweep-load.txt` and the run's own `uptime`), so read these as this machine's numbers under load, not its best. Each point decodes 64 tokens after its prefill; the figures are medians of 20 timed runs.
+`fbs-toks --context-sweep` on claude-233's h1 artifact (`28b01bba…`), on this laptop: an Apple M1, 8 cores, 16 GiB. It ran on mains power at load averages of 3.75–4.83 (1, 5 and 15 minutes, taken twice in `sweep-load.txt`), so read these as this machine's numbers under load, not its best. Each point decodes 64 tokens after its prefill; the figures are medians of 20 timed runs.
 
 | Context (prefill + 64) | Decode, with the read | Decode, without | The read's cost | Prefill, with / without |
 |---|---|---|---|---|
@@ -112,7 +112,7 @@ Retraining is not in that step. Changing the order moved 174 and 227 of this che
   - `out/`, the pod's sealed output, with `job.sh` and `guard.patch` inside it. Its `SHA256SUMS` is `c1d19bec…75d0`, and it read back 155 of 155 OK.
   - `bin/`, the two binaries (`fbs-snapshot` `2781763a…`, `fbs-compare` `e6a02bff…`), matching `out/binaries.sha256`.
   - `laptop/`: `reading/`, `read.sh`, `watch.sh`, `watch.log` and the review note. Its `SHA256SUMS` is `b57c2ae5…a654`.
-- **The review round's pod:** vast-58631700, one RTX 5090 at $0.563/h, up about 6 minutes (07:27–07:32:52Z), so about $0.06. Finite CUDA tests only, so no sheet (CHARTER §4.5). The job ran 07:29:03–07:29:59Z, ended EXIT 0, and the watcher saw it finish at 07:30:10Z (`watch2.log`). Its 13 output files, `job2.sh` and both patches among them, are in the store at `results/claude/integer-hamming-read-astrained-tests-2026-11-01/out/` (`SHA256SUMS` `4f4f39ef…dabc`, 13 of 13 OK on the laptop). The lease was released, and the pod was deleted with `--confirm-archived` after the store listing. No pod is running.
+- **The review round's pod:** vast-58631700, one RTX 5090 at $0.563/h, up about 6 minutes, so about $0.06. Its bootstrap logged 07:28:26Z at +75 s, so it started about 07:27:11Z, and it was deleted at 07:32:52Z; both times come from this session's terminal, not from a stored file. Finite CUDA tests only, so no sheet (CHARTER §4.5). The job ran 07:29:03–07:29:59Z, ended EXIT 0, and the watcher saw it finish at 07:30:10Z (`watch2.log`). Its 13 output files, `job2.sh` and both patches among them, are in the store at `results/claude/integer-hamming-read-astrained-tests-2026-11-01/out/` (`SHA256SUMS` `4f4f39ef…dabc`, 13 of 13 OK on the laptop). The lease was released, and the pod was deleted with `--confirm-archived` after the store listing. No pod is running.
 - **The reviews:** the FIT, its two rounds, and the pre-run review, GO (#3385, 6554654953).
 
 ## Checks run at the head
@@ -141,6 +141,7 @@ None.
 - **The timing at long contexts:** the sweep stops at 192, the readout window. A longer sweep on an idle machine is still owed (done-when 3).
 - **The guard's restore on a panic.** `with_d11_snaps` (in `hamilton_sheet.rs`, outside this unit's scope) restores the hook on `Ok` and `Err` only. A panic inside the read leaves the arm `HamiltonActive` on that thread. In `uor-r4-float-train` only two of `hamilton_sheet`'s own tests catch a panic and go on, and neither runs a read, so nothing hits it today; a drop guard in `with_d11_snaps` would close it.
 - **The read's backward is not guarded.** The guard covers the forward. A D11-bridge training step (`with_d11_training`) would still run the read's backward through the snap, and no trainer runs one with a read.
+- **T1's export-gates leg has no negative of its own** (the round-2 code review, low). Under both set-asides T1 stops at its D11 assertion, which comes first, so no run shows the export assertion failing alone. A regression on the export path alone (the guard no longer clearing the export flag) would rest on that assertion unproven. `with_d11_snaps` clears the flag unconditionally, so the risk is small; comparing both legs before asserting would close it.
 - **The read is absent from the hook's telemetry and snap capture by design.** A reading of either sees the trunk's gates only, and its call numbers are a trunk's without the read.
 - **The item stays `ready`;** done-when 2 and 3 remain open.
 
