@@ -242,6 +242,33 @@ TEST FITNESS: NOT_FIT
   - The quoted bar is verbatim: the quote, with its `> ` prefix stripped, matches the card's lines 56 to 104 under `diff`.
   - The files' structure (§5): no empty or BOS-opening reference, and no empty greedy reply or BOS inside one, on either side.
 
+**Round 2** (a fresh `delegate:reviewer`, on the sheet at `f6431a73e`). It also reached its context limit, before the sampler question. It found no Blocker or Major.
+- It confirmed that round 1's five fixes landed: `git diff 2eda041ec f6431a73e` touches only the sheet, and each fix reads as recorded above.
+- **Its one finding,** a Nit: check 4 cited `margins_negative` as check 8; it is check 9. Fixed in `792d97878`.
+
+**Round 3**, split into three small non-author jobs so that none reaches its limit. None counted a pick or ran `grade.sh`.
+- **3a, the sampler path in `in_space_long.rs`** (a fresh `delegate:reviewer`). It read `score_rows` and `decode_reply` at F′'s commit against §4.1. Verdict: `SAMPLER-ISL: CONFIRMED`.
+  - **Minor:** two calls could hold state that a later row reads, and it did not open them: `row_picks` (5407) and `crate::flock_read::points` under the turn memory (4518).
+  - **Nit:** `flags` (5451) is built under `ReadScope::Full` and never read. It is harmless.
+- **3b, the state across forwards** (a fresh `delegate:reviewer`, on `flock_read_memory.rs` and `geometric_stack_native.rs`). Verdict: `SAMPLER-STATE: CONFIRMED`.
+  - **Minor:** the forward never clears the memory rows or the reply rows; the callers must.
+  - **Nit:** the setters of four statics were not opened: `GATE_HOOK` (`hamilton_sheet.rs:569`), `HOOK_STATE` (`secant_descent.rs:173`), the two kernel `CACHE`s, and the Hamming `TRACE` (`flock_read_hamming.rs:75`).
+- **3c, the quote and the structure** (a `delegate:runner`, scripted). The quote, with its `> ` prefix stripped, matches `DECISION.md` lines 56 to 104 under `diff`: `VERBATIM-OK`. The structure facts of §5 hold in all six cells.
+- **The two Minors, resolved by the author:**
+  - `decode_reply` sets the rows at 4491 and 4503 to 4506 and clears them at 4519 to 4521, before the next forward.
+  - `row_picks` sets them at 1085 and 1097 and clears them at 1110 and 1111, right after its forward and before it reads the hidden state.
+  - 3b found the turn memory read-only: its tables are `Arc<HashMap>`, its methods take `&self`, and the register slots are cleared on each forward. So `flock_read::points` under it reads the same tables at every row.
+- **The statics' Nit, checked by the author** at F′'s commit:
+  - **`GATE_HOOK`:** `decode_reply` and `row_picks` run their forwards inside `hs::with_gate_mode(HamiltonActive, seed, _, false, …)` (`in_space_long.rs` 4462 and 1060). It sets the arm and zeroes the call counter `fwd_call_idx` on entry (`hamilton_sheet.rs` 1986 to 1993). Under that arm, with the export mode off, the gate's forward uses the gate as it is (1042 to 1058); the counter feeds only the `RandomGateNull` arm. Telemetry is off, and its records are writes only (611 to 660).
+  - **`TRACE`:** it is written only when switched on, and the read computes the same either way (`flock_read_hamming.rs` 666 to 669, 753 to 756).
+  - **`HOOK_STATE`:** the decode path never calls `secant_descent`. Its one call in `in_space_long.rs` is at 4791, outside `score_rows` and `decode_reply`.
+  - **The two `CACHE`s** hold fixed geometry, built once and keyed by device: the projection plan's device copy, keyed also by the plan's fingerprint (`geometric_stack_native_cuda.rs` 149 to 162), and the 120 icosian roots (`hamilton_sheet.rs` 679 to 695). Nothing a row computes is stored in them.
+- **`flags`** stays a Nit: it is unused and harmless.
+
+**The verdict over the three rounds.** No round found a Blocker or Major. Each decisive question has a non-author's answer: the bar's decidability, the grader and the outcomes in round 1; round 1's fixes in round 2; the sampler, the state across forwards, the quote and the structure in round 3.
+
+TEST FITNESS: FIT
+
 ## 10. Pre-run review
 
 Pending, after the FIT.
