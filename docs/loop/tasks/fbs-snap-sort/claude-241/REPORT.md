@@ -33,12 +33,13 @@ Lab: claude. Item: [fbs-snap-sort](../../../../roadmap/items/fbs-snap-sort.md) (
 
 - **`crates/uor-r4-integer/src/stack/kernels.rs`:**
   - **`GOLDEN_BLOCK_OF`** (line 1314): the golden block of each ordered pair `(p, q)`. It is built at compile time from `GOLDEN_AXES`, and it asserts that the 12 blocks name 12 distinct pairs.
-  - **`SNAP_ORDERS`** (line 1368): for each of the 64 codes of the six pairwise comparisons, the fast path's 3 or 5 slots in the 17-root row. A code that is a cycle keeps count 0, and its query keeps the scan.
-  - **The fast path in `stack_snap_select`** (line 1501). It applies when a query has 17 compatible roots (no zero coordinate) and four distinct magnitudes. It ranks the axes and reads the slots from `SNAP_ORDERS`. Then it runs the same strict comparison, in index order, over those roots only. Every other query keeps the scan.
-  - **Three tests:**
+  - **`SNAP_ORDERS`** (line 1370): for each of the 64 codes of the six pairwise comparisons, the fast path's 3 or 5 slots in the 17-root row. A code that is a cycle keeps count 0, and its query keeps the scan.
+  - **The fast path in `stack_snap_select`** (line 1503). It applies when a query has 17 compatible roots (no zero coordinate) and four distinct magnitudes. It ranks the axes and reads the slots from `SNAP_ORDERS`. Then it runs the same strict comparison, in index order, over those roots only. Every other query keeps the scan.
+  - **Four tests:**
     - `a_row_without_zeros_has_the_fast_paths_layout`;
     - `the_orders_name_their_sorted_block_and_its_neighbouring_swaps`;
-    - `the_fast_snap_is_the_full_scan_on_every_query_from_minus_8_to_8`.
+    - `the_fast_snap_is_the_full_scan_on_every_query_from_minus_8_to_8`;
+    - `the_fast_snap_is_the_full_scan_on_large_ties_and_at_the_i32_limits` (added after the code review).
 - **`crates/uor-r4-integer/src/stack/tests.rs`:**
   - The independent oracle becomes a function, `snap_oracle` (line 442).
   - A new test holds `stack_snap_select` equal to it on all 83,521 queries in `−8..=8` (line 489).
@@ -84,8 +85,12 @@ The same strict loop then keeps the lowest index on an exact tie, as the scan do
 **Exactness.**
 - `the_fast_snap_is_the_full_scan_on_every_query_from_minus_8_to_8`:
   - it equals `snap_select_full_scan` on all 83,521 queries;
-  - the fast path takes 26,880 of them (8 · 7 · 6 · 5 magnitudes, times 16 sign patterns), and some of those are exact ties;
-  - it also holds on 200,000 drawn queries of up to 31 bits, built so that `s_r0 − s_r1 = s_r2 − s_r3` (a tie between neighbouring swaps).
+  - the fast path takes 26,880 of them (8 · 7 · 6 · 5 magnitudes, times 16 sign patterns), and some of those are exact ties.
+- `the_fast_snap_is_the_full_scan_on_large_ties_and_at_the_i32_limits`:
+  - it equals the scan on 200,000 drawn queries below 2^31, both signs, built so that `s_r0 − s_r1 = s_r2 − s_r3`, which is a tie between neighbouring swaps;
+  - a golden root wins 120,044 of them, and 35,084 of those are exact ties, so the draws reach the golden tie rule;
+  - it also holds on every order and sign of three sets of magnitudes at the `i32` limits, `i32::MIN` (magnitude 2^31) and `i32::MAX` included.
+  - The first form of this loop drew the base magnitude up to 2^30 and the gaps up to 2^24, so the half-root won almost every draw (the code review). It is now drawn so that golden roots win.
 - `snap_selection_matches_the_oracle_on_every_query_from_minus_8_to_8` holds the independent oracle equal on the same 83,521.
 - The existing snap tests pass unchanged, `snap_selection_matches_an_independent_exact_oracle` included.
 - The layout test checks that all 16 patterns without a zero have 17 roots in the fast path's layout, and that every pattern with a zero has more than 17.
@@ -94,11 +99,11 @@ The same strict loop then keeps the lowest index on an exact tie, as the scan do
 
 | Gate | Change | Result |
 |---|---|---|
-| A, a wrong tie rule | golden candidates in descending index order | **fails** both sweeps at `[-8, -7, -2, -3]`, a tie of two neighbouring swaps (8 − 7 = 3 − 2): root 80 against 56 |
+| A, a wrong tie rule | golden candidates in descending index order | **fails** both grids at `[-8, -7, -2, -3]`, a tie of two neighbouring swaps (8 − 7 = 3 − 2): the fast snap picks root 80, the scan 56. Run again on the large-tie test alone, it **fails** at `[-507964944, 575523952, -124356986, 56797978]`: 84 against the scan's 59 |
 | B | the half-root before the axis root | passes, and must (proof above) |
-| C | the sorted block only, without the neighbouring swaps (`n = 1`) | **fails** both sweeps at `[-8, -7, -2, -6]`: root 8 against 88 |
+| C | the sorted block only, without the neighbouring swaps (`n = 1`) | **fails** both grids at `[-8, -7, -2, -6]`: the fast snap picks root 8, the scan 88 |
 
-After the gates, all 146 stack tests passed on the restored code.
+After gates A to C, all 146 stack tests passed on the restored code, with 1 ignored. With the large-tie test added, 147 pass, with 1 ignored.
 
 **Replies,** base against new (sha256 of `[prompt, reply]`):
 
@@ -163,18 +168,36 @@ The read now costs 20 to 24% of decode, against 16 to 20% at base, since the res
 
 **Sealed** to `caseyallard/uor-r4-store:results/claude/fbs-snap-sort-2026-11-01/`. It holds 52 files: the replies, the A/B outputs and samples, both audits on both builds, the gate logs, the probe and the patch. The `SHA256SUMS` sha256 is `9fb5b81560981078a644a7ab7fff55e90c4e893e515c03843676b039769f78f8`. On read-back, every file verifies.
 
+Gate A's run on the large-tie test came after that seal. So it is sealed on its own, beside it rather than inside it, in `results/claude/fbs-snap-sort-2026-11-01-review/`. That folder's `SHA256SUMS` sha256 is `e773e0ea27ff4ecc90d135093e7c540a62a1896d38aa23742304a433c2b51e15`, and it reads back OK.
+
 **Classification.** This is an exact kernel change measured with qualified instruments, and no reply changes. It is a positive result for the snap's candidate count. The snap's remaining cost is an open reading, not a negative.
 
 ## Checks run at the head
 
-The code is unchanged since `6e4b25c79`, the commit every binary above was built at. The later commits are docs only.
-- **`cargo test --locked -p uor-r4-integer --features serving-wasm --no-fail-fast`:** 612 passed, 35 failed, 4 ignored.
-  - All 35 panic on a missing local input, the same count claude-182 and claude-186 recorded: 34 on a bundle or tokenizer file not found, and one on `assert!(tok_path.exists())`.
+The serving code is unchanged since `6e4b25c79`, the commit every binary above was built at. Later commits change the tests, one doc comment and the docs.
+- **`cargo test --locked -p uor-r4-integer --features serving-wasm --no-fail-fast`** (at `6e4b25c79`): 612 passed, 35 failed, 4 ignored.
+  - All 35 panic on a missing local file, a bundle or `tokenizer.json`, as a not-found error or an existence assert. That is the same count claude-182 and claude-186 recorded.
   - The new tests and every snap test pass.
+- **After the review's test fix:** the 147 stack tests pass, with 1 ignored.
 - **`cargo fmt -p uor-r4-integer -- --check`:** clean.
 - **`uor-harness loop gates --full`:** 11 of 11 green.
 - **`uor-harness loop report --check` and `loop pr-check --local`:** PASS. The pr-check warnings are the ORDER's size, and FILEMAP rows for folders this unit does not touch.
-- **The fresh review:** see below.
+- **The fresh reviews,** three reviewers, each given only the item, the ORDER and the diff:
+  - **Code** (at `a8e2b4bc3`): APPROVE. It re-derived the proof:
+    - the golden roots are exactly the 12 even assignments;
+    - an order changing only prefix set `k` is the swap `(k, k + 1)`;
+    - swap `(1, 2)` cannot tie the others, since `φ` is irrational;
+    - every difference stays inside `snap_difference_positive`'s bounds, `i32::MIN` included.
+
+    It re-ran the snap tests: 27 passed. Its one Medium: the 200,000 large ties rarely reached a golden tie and never came near 2^31. That is fixed by the new test above. Its two Lows were comment wording, both fixed in the doc comment.
+  - **Claims, two passes** (at `a8e2b4bc3` and `7c6e17700`): APPROVE. Between them they recomputed every number here and in the notebook row from the raw files. The Lows were:
+    - the sampler being one run a side;
+    - the map's base;
+    - which side of each gate's assert is which;
+    - the ignored test;
+    - the wording of the 35 failures.
+
+    All are fixed.
 
 ## Skills used
 

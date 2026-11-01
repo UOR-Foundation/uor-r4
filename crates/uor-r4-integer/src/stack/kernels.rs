@@ -1353,10 +1353,12 @@ const SNAP_ORDER_PAIRS: [[usize; 2]; 6] = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3
 ///   ranks, `(r1, r0)`, `(r0, r2)` or `(r0, r1)` with `r3` on `phi - 1`. An
 ///   order moving two or more loses strictly more than one of those swaps.
 ///
-/// Those swaps can tie with each other. The half-root and the axis roots
-/// score `B = 0` and a golden root `B > 0`, so neither ties a golden root, but
-/// they can tie each other. Every tie is settled as the scan settles it: the
-/// lowest index.
+/// Those swaps can tie with each other: `(r1, r0)` with `(r0, r1)` when
+/// `s_r0 - s_r1 = s_r2 - s_r3`. The half-root and the axis roots score `B = 0`
+/// and a golden root `B > 0`, so neither ties a golden root. They can tie each
+/// other, `r0`'s axis root with the half-root when `2 s_r0` is the total, but
+/// then block `(r0, r1)` beats both. Every tie is settled as the scan settles
+/// it: the lowest index.
 ///
 /// A code with a cycle cannot come from distinct magnitudes. It keeps count
 /// 0, which sends the query to the scan.
@@ -2799,27 +2801,70 @@ mod tests {
         assert_eq!(grid, 83_521);
         // 8 * 7 * 6 * 5 magnitudes, times 16 sign patterns.
         assert_eq!(taken, 26_880);
-        // The fast path meets exact ties (s_r0 - s_r1 = s_r2 - s_r3 on an odd
-        // order, or 2 s_r0 against the sum), so the sweep tests its tie rule.
+        // The fast path meets exact ties (two neighbouring swaps, or r0's axis
+        // root with the half-root), so the grid's equality pins the tie rule.
         assert!(tied > 0, "no tie on the fast path");
-        // The same ties at large magnitudes, both signs.
+    }
+
+    #[test]
+    fn the_fast_snap_is_the_full_scan_on_large_ties_and_at_the_i32_limits() {
+        // Two neighbouring swaps tie when s_r0 - s_r1 = s_r2 - s_r3. Draw the
+        // magnitudes so that a golden root often wins, below 2^31, both signs.
+        let golden = |index: usize| index >= 24;
+        let (mut golden_wins, mut golden_ties) = (0, 0);
         let mut rng = Lcg(0x05ee_d241);
         for _ in 0..200_000 {
             let draw = rng.next();
-            let base = (draw >> 34) as i64 + 1;
-            let gap = (rng.next() >> 40) as i64 + 1;
-            let wide = (rng.next() >> 40) as i64 + 1;
-            // s_r0 - s_r1 = s_r2 - s_r3 = gap, s_r1 - s_r2 = wide.
+            let base = (draw >> 35) as i64 + 1;
+            let gap = (rng.next() >> 36) as i64 + 1;
+            let wide = (rng.next() >> 35) as i64 + 1;
+            // s_r0 - s_r1 = s_r2 - s_r3 = gap, s_r1 - s_r2 = wide; s_r0 is at
+            // most 2^29 + 2^29 + 2^29, below 2^31.
             let mut s = [base + 2 * gap + wide, base + gap + wide, base + gap, base];
             let shuffle = rng.next();
             for k in (1..4).rev() {
                 s.swap(k, (shuffle >> (8 * k)) as usize % (k + 1));
             }
             let raw: [i32; 4] = std::array::from_fn(|c| {
-                let v = s[c].min(i64::from(i32::MAX)) as i32;
+                let v = i32::try_from(s[c]).expect("each magnitude is below 2^31");
                 if (draw >> c) & 1 == 1 { -v } else { v }
             });
-            assert_eq!(stack_snap_select(raw), snap_select_full_scan(raw), "{raw:?}");
+            let chosen = snap_select_full_scan(raw);
+            assert_eq!(stack_snap_select(raw), chosen, "{raw:?}");
+            if golden(chosen) {
+                golden_wins += 1;
+                if snap_maximizers(raw) > 1 {
+                    golden_ties += 1;
+                }
+            }
+        }
+        // The draws reach the golden roots and their exact ties (120,044 and
+        // 35,084 of 200,000 at this seed).
+        assert!(
+            golden_wins > 100_000 && golden_ties > 30_000,
+            "{golden_wins} golden winners, {golden_ties} of them tied"
+        );
+        // Every order and sign of four magnitudes at the i32 limits, the
+        // first pair with gaps 1 and 1: i32::MIN's magnitude is 2^31.
+        for magnitudes in [
+            [i32::MIN, i32::MAX, 2, 1],
+            [i32::MIN, i32::MAX, i32::MAX - 1, i32::MAX - 2],
+            [i32::MAX, i32::MAX - 1, 2, 1],
+        ] {
+            for order in 0..24usize {
+                let mut q = magnitudes;
+                let mut rest = order;
+                for k in (1..4).rev() {
+                    q.swap(k, rest % (k + 1));
+                    rest /= k + 1;
+                }
+                for signs in 0..16 {
+                    let raw: [i32; 4] = std::array::from_fn(|c| {
+                        if (signs >> c) & 1 == 1 { q[c].wrapping_neg() } else { q[c] }
+                    });
+                    assert_eq!(stack_snap_select(raw), snap_select_full_scan(raw), "{raw:?}");
+                }
+            }
         }
     }
 }
