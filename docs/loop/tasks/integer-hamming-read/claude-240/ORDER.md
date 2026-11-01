@@ -28,6 +28,8 @@ claude-238 (#3478) put the float reference on the read as trained. With one tie 
 - **DEV:** `w2-inputs/2026-10-25/driver-data/ft/dev/`.
   - It is loaded with its pins (`hamilton_sheet::load_pinned_uort_split`) and cut into the trainer's windows (`build_document_windows` at `SHEET_CONTEXT`, 192), as `in_space_long.rs` cuts it.
   - The sample is every 8th window, claude-126's `PARITY_WINDOW_STRIDE` rule (`spiralcore_fbs_sheet.rs`).
+  - Each sampled window is cut after its last scored position (amended 1 Nov, after the first commit). The trainer pads every window with BOS to 192, and about 44% of the padded positions are padding. The model is causal, so the cut changes no scored prediction and keeps the padding out of the counts.
+  - The sample is then 54 windows and 5,795 positions, 4,823 of them past t = 17. `fbs-snapshot --dev` prints both counts.
 - **The code gap, in this scope:**
   - `fbs-snapshot`'s readouts and its `--hamming-trace` form read only `fbs_float_readout`'s fixed 8 × 192 sequences;
   - the trace refuses any count other than 8 windows.
@@ -70,18 +72,18 @@ Class: **instrument** (the parity reference's inputs). The unit goes ahead.
 ## Done when
 
 1. **The DEV option is in, with a test that fails without it.** `fbs-snapshot --dev DATA_ROOT` works in both forms:
-   - DEV is loaded with its pins, cut into the trainer's windows and sampled every 8th window;
+   - DEV is loaded with its pins, cut into the trainer's windows and sampled every 8th window, each cut after its last scored position;
    - the readouts are taken on that sample;
    - the trace checks the sample's count.
 
-   A CPU test pins the sample rule, and fails with the rule set aside. Checks:
+   CPU tests pin the sample rule and the cut, and each fails with its rule set aside. Checks:
    - the crate's tests pass;
    - `uor-harness loop gates --full` is green;
    - the CUDA build type-checks with the stub nvcc.
 2. **A prep sheet** (`docs/harness/prep/integer-hamming-read-dev-2026-11-01.md`) registers the bars, with a fresh FIT and a fresh pre-run review, each posted on #3385.
 3. **One pod job** produces each seed's outputs on DEV: the snapshot, the plain, export and D11 readouts, and the `d11-tie` and `d11` traces. It also produces the fixed-sequence `d11-tie` trace.
    - The outputs are sealed and stored before release and down.
-   - The laptop computes the integer traces, the comparisons, `fbs-compare --parity-only` and the copy codes from the stored files.
+   - The laptop computes the integer side from the stored files: the export, `fbs-compare --parity-only`, the integer traces, the comparisons and the copy codes. It also takes a context sweep on s1's artifact, a reading for done-when 3, not a bar (amended 1 Nov, with the sheet).
 4. **The REPORT** gives both numbers per seed and arm, and the sheet's row. Also:
    - a notebook row;
    - the item's step 5 records the result.
@@ -91,7 +93,7 @@ Class: **instrument** (the parity reference's inputs). The unit goes ahead.
 ## Stop and ask if
 
 Each of these means stop and decide in a decision review, never stop and wait:
-- DEV's pins or window count differ from the trainer's (14,287 targets, 428 windows);
+- DEV's pins or window count differ from the trainer's (14,287 targets, 428 windows), or the sample's from the sheet's (54 windows, 5,795 positions, 4,823 past t = 17);
 - a claude-146 checkpoint fails a pin, or `fbs-snapshot` refuses it;
 - the sample rule's test passes with the rule set aside;
 - the throughput check projects the job past 2 hours;

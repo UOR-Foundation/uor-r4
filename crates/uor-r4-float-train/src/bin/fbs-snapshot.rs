@@ -138,9 +138,16 @@ fn dev_sample(data_root: &str) -> Result<Vec<Vec<u32>>> {
     let all = windows.len();
     let sample: Vec<Vec<u32>> = sample_windows(windows).iter().map(scored_prefix).collect();
     let positions: usize = sample.iter().map(Vec::len).sum();
+    // Up to t = HAMMING_KEPT + 1 a read keeps every earlier position, so only the later ones
+    // can choose: the parity bars count those (the prep sheet's P2).
+    let choosing: usize = sample
+        .iter()
+        .map(|w| w.len().saturating_sub(HAMMING_KEPT + 2))
+        .sum();
     println!(
-        "dev: {all} windows, {} sampled, {positions} positions",
-        sample.len()
+        "dev: {all} windows, {} sampled, {positions} positions, {choosing} past t = {}",
+        sample.len(),
+        HAMMING_KEPT + 1
     );
     Ok(sample)
 }
