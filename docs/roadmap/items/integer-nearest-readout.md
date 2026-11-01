@@ -22,7 +22,7 @@ The project's first hurdle is one working model end to end, served from its inte
 - **The readout was necessary but not sufficient.** The gap is largest on exact-key misses, and p-w seed 3 over-concentrates on one first token. The trunk, Hamming read and readout remain suspects, not located causes. The parity bar must pass before the item closes.
 - **Claude-243 re-ran the parity with both sides on the same rules** ([REPORT](../../loop/tasks/integer-nearest-readout/claude-243/REPORT.md), #3488): the raw export (R) against the float reference re-decoded on the GPU with the read's tie rule on (F′). It is a **MISS** on p-w at every seed and meets the bar on DEV.
   - First-token disagreement is 4, 4 and 5 of 310 on DEV (bar 9), and 64, 47 and 78 of 1,202 on p-w (bar 36). Whole-reply agreement is 188, 247 and 201 on DEV, and 488, 751 and 547 on p-w.
-  - The icosian snap was the larger difference behind claude-232's MISS: the snapped export against F′ agrees on 291/285/284 and 909/777/64 first tokens. The tie order moves at most 12 first tokens (F′ against F).
+  - The icosian snap was the larger difference behind claude-232's MISS: the snapped export against F′ agrees on 291/285/284 and 909/777/64 first tokens. F′ against F, the float code's change since `eb762e602`, moves at most 12 first tokens. By the code that change is the tie rule, but `train-in-space` has no switch to test it, so the reading is not credited to it.
   - The remaining p-w disagreements are diffuse; no first token is over-concentrated. The raw export's own rounding residual, the bar's margin, is not measured.
 
 ## What is missing

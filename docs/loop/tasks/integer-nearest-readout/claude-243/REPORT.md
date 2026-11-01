@@ -4,7 +4,7 @@ Lab: claude. Item: [integer-nearest-readout](../../../../roadmap/items/integer-n
 
 ## Tokens per second (done-when 4)
 
-R s1 (`a7r-s1.uorlut`, the raw export with the nearest readout), `fbs-toks ARTIFACT`'s plain protocol: 1 warmup and 20 timed runs of a 128-token prefill and 64 decode steps. Measured on this M1 on AC power, at load averages of 2.6 to 3.2 from other work.
+R s1 (`a7r-s1.uorlut`, the raw export with the nearest readout), `fbs-toks ARTIFACT`'s plain protocol: 1 warmup and 20 timed runs of a 128-token prefill and 64 decode steps. Measured on this M1 on AC power, at load averages of 2.6 to 3.0 from other work.
 
 | | Median | p95 |
 |---|---|---|
@@ -37,7 +37,10 @@ R s1 (`a7r-s1.uorlut`, the raw export with the nearest readout), `fbs-toks ARTIF
 | R against F | 306 / 306 / 304 | 1,138 / 1,149 / 1,122 |
 | F′ against F | 310 / 310 / 309 | 1,190 / 1,190 / 1,191 |
 
-- **So the snap was the larger difference behind claude-232's MISS.** The tie order moves 0 to 1 of DEV's 310 first tokens and 11 to 12 of p-w's 1,202 (F′ against F). It moves more of the whole replies: F′ and F agree on 298 to 300 of 310 and 1,071 to 1,130 of 1,202. By the code, F′ against F is the tie rule alone, but `train-in-space` has no switch to test it, so the reading is not credited to it (the card).
+- **So the snap was the larger difference behind claude-232's MISS.** The other side's change is smaller.
+  - F′ against F, the float code's change on G's path since `eb762e602`, moves 0 to 1 of DEV's 310 first tokens and 11 to 12 of p-w's 1,202.
+  - It moves more of the whole replies: F′ and F agree on 298 to 300 of 310 and 1,071 to 1,130 of 1,202.
+  - By the code that change is the tie rule alone. `train-in-space` has no switch to test it, so the sheet and the card do not credit the reading to the tie rule.
 - **Whole-reply agreement:**
   - R against F′: 188, 247 and 201 on DEV; 488, 751 and 547 on p-w.
   - S against F′: 83, 163 and 129 on DEV; 59, 113 and 36 on p-w.
@@ -65,6 +68,7 @@ R s1 (`a7r-s1.uorlut`, the raw export with the nearest readout), `fbs-toks ARTIF
 - [ORDER.md](ORDER.md), and the prep sheet with its FIT (§9) and pre-run review (§10).
 - The item: done-when 3 amended under the card; this unit's row and speed recorded; it stays `ready`.
 - One row in [m4-serving](../../../../research/notebook/m4-serving.md).
+- `docs/roadmap/README.md`, re-rendered. The render also moves `integer-hamming-read` to done: its item was already `status: done` on main, and main's render was stale.
 
 ## Measurements
 
@@ -101,6 +105,6 @@ None.
 
 ## Plain summary
 
-Converting the model without rounding its gate weights to the nearest of 120 fixed shapes fixed most of the mismatch the last check found. On the main check set, the converted model now starts its answer the way the trained model does on 305 or 306 of 310 prompts at each seed, inside the bar. On the panel of new phrasings it matches on 1,124 to 1,155 of 1,202, up from as few as 64. That is still short of the bar's 1,166.
+Converting the model without rounding its gate and transition weights to the nearest of 120 fixed shapes fixed most of the mismatch the last check found. On the main check set, the converted model now starts its answer the way the trained model does on 305 or 306 of 310 prompts at each seed, inside the bar. On the panel of new phrasings it matches on 1,124 to 1,155 of 1,202, up from as few as 64. That is still short of the bar's 1,166.
 
 The remaining mismatches are spread thin over many words, not stuck on one. The next step is to measure how much of that comes from the conversion's own rounding, and where in the model the rest begins.
