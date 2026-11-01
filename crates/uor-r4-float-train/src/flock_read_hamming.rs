@@ -54,6 +54,7 @@ use std::cell::RefCell;
 use std::path::Path;
 
 use candle_core::{DType, Device, Tensor, Var};
+use uor_r4_integer::fbs_snapshot::{HammingTraceHead, HammingTraceRead, HammingTraceWindow};
 
 use crate::geometric_stack::hamilton_gate;
 use crate::{invalid, Result};
@@ -70,6 +71,8 @@ thread_local! {
     static ACTIVE: RefCell<Option<HammingReads>> = const { RefCell::new(None) };
     static CUT: std::cell::Cell<Option<(ReadScope, usize)>> = const { std::cell::Cell::new(None) };
     static ROW_CUT: RefCell<Option<(ReadScope, Vec<usize>)>> = const { RefCell::new(None) };
+    static TIE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static TRACE: RefCell<Option<Vec<HammingTraceWindow>>> = const { RefCell::new(None) };
 }
 
 /// Which earlier positions the read may choose while a reply decodes (claude-215), or, for a
@@ -177,6 +180,119 @@ pub fn set_hamming_reads(reads: Option<HammingReads>) {
 /// The Hamming reads `StackModel::hidden` applies on this thread, if set.
 pub fn hamming_reads() -> Option<HammingReads> {
     ACTIVE.with(|cell| cell.borrow().clone())
+}
+
+/// claude-235: break the read's ties as the integer session does, by ascending bit distance and
+/// then ascending position, for the forward passes that follow on this thread
+/// ([`choose_sorted`]). Off, the default, the sort's own tie order stands: on CUDA a bitonic
+/// sort's, which leaves the order of equal keys open.
+pub fn set_hamming_tie_rule(on: bool) {
+    TIE.with(|t| t.set(on));
+}
+
+/// Whether [`set_hamming_tie_rule`] is on for this thread.
+pub fn hamming_tie_rule() -> bool {
+    TIE.with(|t| t.get())
+}
+
+/// claude-235: record what every Hamming read chooses on this thread from now on (`true`), or
+/// stop and drop the record (`false`, the default). Each window a forward reads becomes one
+/// [`HammingTraceWindow`]: the stream read opens it and the readout read joins it. Recording
+/// copies codes and picks to the host and changes nothing the read computes.
+pub fn set_hamming_trace(on: bool) {
+    TRACE.with(|t| *t.borrow_mut() = on.then(Vec::new));
+}
+
+/// The windows recorded since recording started or was last taken, leaving it on with an empty
+/// record; `None` when it is off.
+pub fn take_hamming_trace() -> Option<Vec<HammingTraceWindow>> {
+    TRACE.with(|t| t.borrow_mut().as_mut().map(std::mem::take))
+}
+
+/// One head's codes and choice over a forward's rows, copied to the host for the trace.
+struct HeadChoice {
+    query: Vec<Vec<f32>>,
+    key: Vec<Vec<f32>>,
+    picks: Vec<Vec<u32>>,
+    real: Vec<Vec<u8>>,
+}
+
+/// One head's trace over one window's rows: each row's query and key code packed as
+/// [`pack_signs`] packs it, one word, so a head of at most 64 coordinates; and each row's real
+/// picks, in the order chosen.
+fn trace_head(
+    query: &[Vec<f32>],
+    key: &[Vec<f32>],
+    picks: &[Vec<u32>],
+    real: &[Vec<u8>],
+) -> Result<HammingTraceHead> {
+    let rows = query.len();
+    if key.len() != rows || picks.len() != rows || real.len() != rows {
+        return Err(invalid("the Hamming trace needs a code and a choice for every row"));
+    }
+    let word = |row: &Vec<f32>| -> Result<u64> {
+        match pack_signs(row).as_slice() {
+            [word] => Ok(*word),
+            _ => Err(invalid("the Hamming trace records heads of 1 to 64 coordinates")),
+        }
+    };
+    let kept = picks
+        .iter()
+        .zip(real)
+        .map(|(picks, real)| {
+            if picks.len() != real.len() {
+                return Err(invalid("the Hamming trace needs a real flag for every pick"));
+            }
+            Ok(picks.iter().zip(real).filter(|(_, &ok)| ok == 1).map(|(&s, _)| s).collect())
+        })
+        .collect::<Result<Vec<Vec<u32>>>>()?;
+    Ok(HammingTraceHead {
+        query: query.iter().map(word).collect::<Result<_>>()?,
+        key: key.iter().map(word).collect::<Result<_>>()?,
+        kept,
+    })
+}
+
+/// Add one forward's reads, one per window of `time` positions of `ids`, to the record: a
+/// stream read opens a window per batch row, and the readout read joins the windows the stream
+/// read opened on the same ids. A readout read with no such windows is refused.
+fn push_trace_reads(
+    windows: &mut Vec<HammingTraceWindow>,
+    ids: &[u32],
+    time: usize,
+    reads: Vec<HammingTraceRead>,
+    readout: bool,
+) -> Result<()> {
+    if time == 0 || ids.len() != reads.len() * time {
+        return Err(invalid("the Hamming trace needs one read per whole window"));
+    }
+    if !readout {
+        windows.extend(reads.into_iter().zip(ids.chunks(time)).map(|(read, ids)| {
+            HammingTraceWindow {
+                ids: ids.to_vec(),
+                reads: vec![read],
+            }
+        }));
+        return Ok(());
+    }
+    let open = windows
+        .len()
+        .checked_sub(reads.len())
+        .ok_or_else(|| invalid("the Hamming trace's readout read has no stream read before it"))?;
+    let tail = &mut windows[open..];
+    if tail
+        .iter()
+        .zip(ids.chunks(time))
+        .any(|(window, ids)| window.ids != ids || window.reads.len() != 1)
+    {
+        return Err(invalid(
+            "the Hamming trace's readout read does not follow a stream read on its windows",
+        ));
+    }
+    for (window, read) in tail.iter_mut().zip(reads) {
+        window.reads.push(read);
+    }
+    Ok(())
 }
 
 /// Each coordinate's sign bit, packed 64 to a word in coordinate order: the serving form of a
@@ -542,13 +658,26 @@ impl HammingRead {
             Tensor::zeros((rows, 1), DType::F32, device)?,
             Tensor::zeros((rows, 1), DType::F32, device)?,
         ];
+        // claude-235: both off by default, and then the read computes as before them.
+        let tie = TIE.with(|t| t.get());
+        let tracing = TRACE.with(|t| t.borrow().is_some());
+        let mut traced = Vec::new();
         for h in 0..self.heads {
             let q = query.narrow(1, h * head_width, head_width)?.contiguous()?;
             let k = key.narrow(1, h * head_width, head_width)?.contiguous()?;
             // A window's first position has no previous token, so its key names nothing: the
             // candidates start at 1.
             let limits = row_limits(cut, row_cut.as_ref(), h, self.copy_heads(), time, rows);
-            let (picks, real) = choose_sorted(&q, &k, batch, time, HAMMING_KEPT, 1, &limits)?;
+            let (picks, real) =
+                choose_sorted(&q, &k, batch, time, HAMMING_KEPT, 1, &limits, tie)?;
+            if tracing {
+                traced.push(HeadChoice {
+                    query: q.to_vec2::<f32>()?,
+                    key: k.to_vec2::<f32>()?,
+                    picks: picks.to_vec2::<u32>()?,
+                    real: real.to_vec2::<u8>()?,
+                });
+            }
             // A pick that is not real points at its window's first position, whose successor is
             // still inside the window, and carries weight 0.
             let picks = real.where_cond(&picks, &zero.broadcast_as(picks.shape())?)?;
@@ -594,6 +723,31 @@ impl HammingRead {
             )?;
             found[kind] =
                 found[kind].add(&weights.gt(0.0)?.to_dtype(DType::F32)?.max_keepdim(1)?)?;
+        }
+        if tracing {
+            // The stream read is the first of `HAMMING_DEPTHS`; the readout read, the last.
+            let depth = if readout { HAMMING_READOUT_DEPTH } else { HAMMING_DEPTHS[0] };
+            let reads = (0..batch)
+                .map(|b| {
+                    let window = b * time..(b + 1) * time;
+                    let heads = traced
+                        .iter()
+                        .map(|c: &HeadChoice| {
+                            trace_head(
+                                &c.query[window.clone()],
+                                &c.key[window.clone()],
+                                &c.picks[window.clone()],
+                                &c.real[window.clone()],
+                            )
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    Ok(HammingTraceRead { depth, heads })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            TRACE.with(|t| match t.borrow_mut().as_mut() {
+                Some(windows) => push_trace_reads(windows, ids, time, reads, readout),
+                None => Ok(()),
+            })?;
         }
         // Each kind's mean over the heads that found something, so a head that found nothing does
         // not dilute one that did.
@@ -687,7 +841,11 @@ const FAR: f32 = 1.0e30;
 /// candidates; `time` limits none (claude-215, claude-216).
 /// One sort per call, where claude-144's choice (`flock_read::choose_nearest`) takes `kept` argmin
 /// rounds per window; with `first` 0, the same nearest set, hard and detached. Ties may come out in
-/// another order.
+/// another order, unless `tie` sets the integer session's tie rule (claude-235) for ±1 codes:
+/// each distance taken as its whole bit count `h` and sorted by the exact key `h · time + s`
+/// ([`tie_key`]), so equal distances go to the earlier position whatever the sort's own tie
+/// order. Without `tie`, the choice is the one before claude-235.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn choose_sorted(
     query: &Tensor,
     key: &Tensor,
@@ -696,6 +854,7 @@ pub(crate) fn choose_sorted(
     neighbours: usize,
     first: usize,
     limits: &[usize],
+    tie: bool,
 ) -> Result<(Tensor, Tensor)> {
     let device = query.device();
     let kept = neighbours.min(time.saturating_sub(1)).max(1);
@@ -704,6 +863,23 @@ pub(crate) fn choose_sorted(
     let q = query.detach().reshape((batch, time, 1, width))?;
     let k = key.detach().reshape((batch, 1, time, width))?;
     let distance = q.broadcast_sub(&k)?.abs()?.mean(3)?.reshape((rows, time))?;
+    // Between ±1 codes the mean of `|q − k|` is `2h / width`, so `h` is that times `width / 2`,
+    // rounded off the codes' last-bit noise.
+    let distance = if tie {
+        if !tie_keys_exact(width, time) {
+            return Err(invalid(format!(
+                "the read's tie keys for {width} coordinates over {time} positions pass 2^24"
+            )));
+        }
+        let positions: Vec<f32> = (0..time).map(|s| tie_key(0, s, time)).collect();
+        distance
+            .affine(width as f64 / 2.0, 0.0)?
+            .round()?
+            .affine(time as f64, 0.0)?
+            .broadcast_add(&Tensor::from_vec(positions, (1, time), device)?)?
+    } else {
+        distance
+    };
     let earlier: Vec<u8> = (0..rows * time)
         .map(|i| u8::from(is_candidate(i % time, (i / time) % time, first, limits[i / time])))
         .collect();
@@ -718,6 +894,18 @@ pub(crate) fn choose_sorted(
     Ok((order, real))
 }
 
+/// The tie rule's sort key for a candidate at bit distance `bits` and window position `s`, in a
+/// window of `time` positions: `bits · time + s`, which orders as `(bits, s)`.
+fn tie_key(bits: usize, s: usize, time: usize) -> f32 {
+    (bits * time + s) as f32
+}
+
+/// Whether every tie key of a head of `width` coordinates over `time` positions is an exact
+/// `f32`: the largest, `width · time + time − 1`, must be below `2^24`.
+fn tie_keys_exact(width: usize, time: usize) -> bool {
+    (width + 1) * time <= 1 << 24
+}
+
 /// The Hamming distance between ±1 codes, `(a − b)² / 4` summed over the last dimension: the
 /// popcount of the XOR forward. Its gradient is zero on agreeing bits and pulls a disagreeing bit
 /// toward the other code.
@@ -729,6 +917,173 @@ pub(crate) fn hamming_bits(a: &Tensor, b: &Tensor) -> Result<Tensor> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// claude-235: the tie key orders candidates by bit distance and then by position, every key
+    /// of a 64-coordinate head over the 192-token window is an exact `f32`, and a window past the
+    /// bound is refused.
+    #[test]
+    fn the_tie_key_orders_by_bits_then_position_and_is_exact() {
+        let (width, time) = (64, 192);
+        assert!(tie_keys_exact(width, time));
+        let mut previous = -1.0f32;
+        for bits in 0..=width {
+            for s in 0..time {
+                let key = tie_key(bits, s, time);
+                assert!(key > previous, "({bits}, {s})");
+                assert_eq!(key as usize, bits * time + s, "({bits}, {s}) is not exact");
+                previous = key;
+            }
+        }
+        assert!(!tie_keys_exact(width, 1 << 18));
+        assert!(tie_keys_exact(width, (1 << 24) / (width + 1)));
+        assert!(!tie_keys_exact(width, (1 << 24) / (width + 1) + 1));
+    }
+
+    /// claude-235: a head's trace packs each row's codes into one word and keeps only the real
+    /// picks, in the order chosen; a head wider than one word and a row without its choice are
+    /// refused.
+    #[test]
+    fn a_head_trace_packs_the_codes_and_keeps_only_real_picks() {
+        let row = |ones: &[usize]| -> Vec<f32> {
+            (0..64).map(|i| if ones.contains(&i) { 1.0 } else { -1.0 }).collect()
+        };
+        let query = vec![row(&[0]), row(&[1, 63]), row(&[])];
+        let key = vec![row(&[2]), row(&[]), row(&[5])];
+        let picks = vec![vec![0, 0], vec![1, 0], vec![2, 1]];
+        let real = vec![vec![0, 0], vec![1, 0], vec![1, 1]];
+        let head = trace_head(&query, &key, &picks, &real).unwrap();
+        assert_eq!(head.query, vec![1, 0b10 | (1 << 63), 0]);
+        assert_eq!(head.key, vec![1 << 2, 0, 1 << 5]);
+        assert_eq!(head.kept, vec![vec![], vec![1], vec![2, 1]]);
+        let wide = vec![vec![1.0f32; 65]; 3];
+        assert!(trace_head(&wide, &wide, &picks, &real).is_err());
+        assert!(trace_head(&query, &key, &picks[..2], &real).is_err());
+        assert!(trace_head(&query, &key, &picks, &[vec![1], vec![1, 0], vec![1, 1]]).is_err());
+    }
+
+    /// claude-235: a stream read opens one window per batch row, the readout read joins them,
+    /// and a readout read with no stream read on the same ids before it is refused.
+    #[test]
+    fn the_readout_read_joins_the_windows_its_stream_read_opened() {
+        let read = |depth: usize| HammingTraceRead {
+            depth,
+            heads: Vec::new(),
+        };
+        let ids = [7u32, 8, 9, 10, 11, 12];
+        let mut windows = Vec::new();
+        assert!(push_trace_reads(&mut windows, &ids, 3, vec![read(6), read(6)], true).is_err());
+        push_trace_reads(&mut windows, &ids, 3, vec![read(2), read(2)], false).unwrap();
+        assert_eq!(windows.len(), 2);
+        assert_eq!(windows[1].ids, vec![10, 11, 12]);
+        let other = [7u32, 8, 9, 10, 11, 0];
+        assert!(push_trace_reads(&mut windows, &other, 3, vec![read(6), read(6)], true).is_err());
+        push_trace_reads(&mut windows, &ids, 3, vec![read(6), read(6)], true).unwrap();
+        let depths: Vec<Vec<usize>> = windows
+            .iter()
+            .map(|w| w.reads.iter().map(|r| r.depth).collect())
+            .collect();
+        assert_eq!(depths, vec![vec![2, 6], vec![2, 6]]);
+        // A window has one stream read and one readout read, never a second readout.
+        assert!(push_trace_reads(&mut windows, &ids, 3, vec![read(6), read(6)], true).is_err());
+        assert!(push_trace_reads(&mut windows, &ids, 4, vec![read(2)], false).is_err());
+    }
+
+    /// claude-235: the switches start off on a thread, the trace is taken and stays on empty,
+    /// and turning it off drops it.
+    #[test]
+    fn the_trace_and_the_tie_rule_start_off() {
+        std::thread::spawn(|| {
+            assert!(!hamming_tie_rule());
+            assert_eq!(take_hamming_trace(), None);
+            set_hamming_trace(true);
+            assert_eq!(take_hamming_trace(), Some(Vec::new()));
+            assert_eq!(take_hamming_trace(), Some(Vec::new()));
+            set_hamming_trace(false);
+            assert_eq!(take_hamming_trace(), None);
+            set_hamming_tie_rule(true);
+            assert!(hamming_tie_rule());
+        })
+        .join()
+        .unwrap();
+    }
+
+    /// claude-235 (its GPU half): on ±1 codes with planted ties, the tie rule keeps, in order,
+    /// the positions the integer session keeps: ascending bit distance, then ascending `s`.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_tie_rule_keeps_the_integer_sessions_order() {
+        let device = Device::new_cuda(0).unwrap();
+        let (time, width, kept) = (40, 64, HAMMING_KEPT);
+        // Few distinct codes, so many candidates tie at every distance.
+        let code = |r: usize| -> Vec<f32> {
+            let pattern = (r * 7) % 5;
+            (0..width)
+                .map(|i| if (i * 3 + pattern) % 8 < 2 + pattern { 1.0 } else { -1.0 })
+                .collect()
+        };
+        let rows: Vec<Vec<f32>> = (0..time).map(code).collect();
+        let flat: Vec<f32> = rows.iter().flatten().copied().collect();
+        let points = Tensor::from_vec(flat, (time, width), &device).unwrap();
+        let (picks, real) =
+            choose_sorted(&points, &points, 1, time, kept, 1, &vec![time; time], true).unwrap();
+        let (picks, real) = (picks.to_vec2::<u32>().unwrap(), real.to_vec2::<u8>().unwrap());
+        let words: Vec<u64> = rows.iter().map(|r| pack_signs(r)[0]).collect();
+        let mut tied = 0;
+        for t in 0..time {
+            let mut expected: Vec<(u32, usize)> = (1..t)
+                .map(|s| ((words[t] ^ words[s]).count_ones(), s))
+                .collect();
+            expected.sort_unstable();
+            expected.truncate(kept);
+            tied += expected.windows(2).filter(|w| w[0].0 == w[1].0).count();
+            let chosen: Vec<usize> = picks[t]
+                .iter()
+                .zip(&real[t])
+                .filter(|(_, &ok)| ok == 1)
+                .map(|(&s, _)| s as usize)
+                .collect();
+            let expected: Vec<usize> = expected.into_iter().map(|(_, s)| s).collect();
+            assert_eq!(chosen, expected, "row {t}");
+        }
+        assert!(tied > 100, "the planted codes tie too rarely: {tied}");
+    }
+
+    /// claude-235 (its GPU half): recording changes nothing the read computes, and the trace's
+    /// kept sets are the read's real picks; with the tie rule off, the choice is `choose_sorted`'s.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn recording_the_trace_leaves_the_read_unchanged() {
+        let device = Device::new_cuda(0).unwrap();
+        let reads = HammingReads::new(4, 256, &device).unwrap();
+        for var in [&reads.reads[0].weight, &reads.reads[1].weight] {
+            var.set(&Tensor::full(0.5f32, var.dims(), &device).unwrap()).unwrap();
+        }
+        let x = residual(2, 24, 256, &device);
+        let ids: Vec<u32> = (0..48).map(|i| (i % 5) as u32).collect();
+        let table = table(8, 256, &device);
+        let plain = |out: Tensor| out.flatten_all().unwrap().to_vec1::<f32>().unwrap();
+        // Each test runs on its own thread, so the switches start off here.
+        let off = plain(reads.reads[0].apply(&x, &ids, &table).unwrap());
+        let off_readout = plain(reads.reads[1].apply_readout(&x, &ids, &table).unwrap());
+        set_hamming_trace(true);
+        let on = plain(reads.reads[0].apply(&x, &ids, &table).unwrap());
+        let on_readout = plain(reads.reads[1].apply_readout(&x, &ids, &table).unwrap());
+        let windows = take_hamming_trace().unwrap();
+        set_hamming_trace(false);
+        assert_eq!(on, off);
+        assert_eq!(on_readout, off_readout);
+        assert_eq!(windows.len(), 2);
+        assert_eq!(windows[0].ids, ids[..24].to_vec());
+        let depths: Vec<usize> = windows[1].reads.iter().map(|r| r.depth).collect();
+        assert_eq!(depths, HAMMING_DEPTHS.to_vec());
+        assert_eq!(windows[1].reads[1].heads.len(), 4);
+        for head in &windows[1].reads[1].heads {
+            assert_eq!(head.query.len(), 24);
+            assert!(head.kept.iter().enumerate().all(|(t, kept)| kept.len()
+                == t.saturating_sub(1).min(HAMMING_KEPT)
+                && kept.iter().all(|&s| s >= 1 && (s as usize) < t)));
+        }
+    }
 
     /// claude-215: the decode scope limits only the heads it names, to positions before the cut;
     /// no scope, or `Full`, limits none; a cut past the window limits nothing more.
@@ -791,8 +1146,8 @@ mod tests {
             .map(|i| (((i * 2_654_435_761) % 10_007) as f32) / 997.0)
             .collect();
         let points = Tensor::from_vec(values, (batch * time, width), &device).unwrap();
-        let (open, open_real) = choose_sorted(&points, &points, batch, time, 4, 1, &vec![time; batch * time]).unwrap();
-        let (cut_picks, cut_real) = choose_sorted(&points, &points, batch, time, 4, 1, &vec![cut; batch * time]).unwrap();
+        let (open, open_real) = choose_sorted(&points, &points, batch, time, 4, 1, &vec![time; batch * time], false).unwrap();
+        let (cut_picks, cut_real) = choose_sorted(&points, &points, batch, time, 4, 1, &vec![cut; batch * time], false).unwrap();
         let rows = |p: Tensor, r: Tensor| -> Vec<Vec<u32>> {
             let (p, r) = (p.to_vec2::<u32>().unwrap(), r.to_vec2::<u8>().unwrap());
             p.into_iter()
@@ -820,7 +1175,7 @@ mod tests {
         // claude-216: a limit per row, as training's row cut gives; every pick is before its own
         // row's limit.
         let per_row: Vec<usize> = (0..batch * time).map(|r| 2 + r % 9).collect();
-        let (row_picks, row_real) = choose_sorted(&points, &points, batch, time, 4, 1, &per_row).unwrap();
+        let (row_picks, row_real) = choose_sorted(&points, &points, batch, time, 4, 1, &per_row, false).unwrap();
         for (r, picks) in rows(row_picks, row_real).iter().enumerate() {
             assert!(picks.iter().all(|&s| (s as usize) < per_row[r]), "row {r}: {picks:?}");
         }
@@ -844,7 +1199,7 @@ mod tests {
             .map(|i| (((i * 2_654_435_761) % 10_007) as f32) / 997.0)
             .collect();
         let points = Tensor::from_vec(values, (batch * time, width), &device).unwrap();
-        let (local, fast_real) = choose_sorted(&points, &points, batch, time, 4, 0, &vec![time; batch * time]).unwrap();
+        let (local, fast_real) = choose_sorted(&points, &points, batch, time, 4, 0, &vec![time; batch * time], false).unwrap();
         // The sorted choice gives positions inside each window; claude-144's gives global rows.
         let starts: Vec<u32> = (0..batch * time)
             .map(|r| ((r / time) * time) as u32)

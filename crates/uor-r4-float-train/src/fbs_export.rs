@@ -38,6 +38,12 @@ pub const FBS_PROJECTIONS: [&str; 6] = [
     "rec.in", "rec.gate", "rec.out", "mlp.gate", "mlp.up", "mlp.down",
 ];
 
+/// The integer artifact's Hamming exponents, as `uor-r4-integer`'s `stack/format.rs` sets them
+/// (its native build does not expose `stack`); a test holds them to that file.
+const HAMMING_ROTATION_EXP: i32 = -24;
+const HAMMING_MARGIN_EXP: i32 = -16;
+const HAMMING_WEIGHT_EXP: i32 = -24;
+
 /// Refuse a trunk the integer FBS session cannot serve, each for its own reason.
 pub fn check_fbs_export_config(
     config: &StackConfig,
@@ -479,6 +485,40 @@ pub fn round_tables_as_exported(model: &StackModel) -> Result<()> {
     Ok(())
 }
 
+/// claude-235: round the Hamming reads' parameters as the integer artifact
+/// holds them (`quantize_fixed_i32` on [`fbs_hamming_snapshot`]'s tables):
+/// the rotations at `2^HAMMING_ROTATION_EXP`, the margins at
+/// `2^HAMMING_MARGIN_EXP` and the weights at `2^HAMMING_WEIGHT_EXP`, so the
+/// float read computes with the values the integer read serves. Only the
+/// trace's rounded arms call it. A value of magnitude 1 or more cannot hold
+/// every `2^-24` step in `f32`, and keeps the nearest `f32` to its step.
+pub fn round_hamming_as_exported(reads: &HammingReads) -> Result<()> {
+    for read in &reads.reads {
+        if read.step_rotation.is_some() {
+            return Err(invalid(
+                "a Hamming read with the type spin (step_rotation) has no exported form to round to",
+            ));
+        }
+        for (var, exp) in [
+            (&read.query_rotation, HAMMING_ROTATION_EXP),
+            (&read.key_rotation, HAMMING_ROTATION_EXP),
+            (&read.value_rotation, HAMMING_ROTATION_EXP),
+            (&read.margin, HAMMING_MARGIN_EXP),
+            (&read.weight, HAMMING_WEIGHT_EXP),
+        ] {
+            let tensor = var.as_tensor();
+            let rounded: Vec<f32> = tensor
+                .flatten_all()?
+                .to_vec1::<f32>()?
+                .into_iter()
+                .map(|v| fixed_value(v, exp) as f32)
+                .collect();
+            var.set(&Tensor::from_vec(rounded, tensor.shape(), tensor.device())?)?;
+        }
+    }
+    Ok(())
+}
+
 /// Refuse a trunk whose tables are not as the exported artifact holds them
 /// ([`round_tables_as_exported`]): only on those does the D11 mode compute
 /// what the artifact computes.
@@ -828,6 +868,103 @@ mod tests {
     /// claude-200: saved Hamming reads snapshot exactly as they load, row-major, at the depths
     /// `HAMMING_DEPTHS`, and the JSON reads back equal. A trunk of another depth, a read with the
     /// type spin, a table of another width and a value that is not finite are refused by text.
+    /// claude-235: the exponents the rounding uses are the integer format's own.
+    #[test]
+    fn the_hamming_exponents_are_the_integer_formats() {
+        let format = include_str!("../../uor-r4-integer/src/stack/format.rs");
+        for (name, exp) in [
+            ("HAMMING_ROTATION_EXP", HAMMING_ROTATION_EXP),
+            ("HAMMING_MARGIN_EXP", HAMMING_MARGIN_EXP),
+            ("HAMMING_WEIGHT_EXP", HAMMING_WEIGHT_EXP),
+        ] {
+            let line = format!("pub const {name}: i32 = {exp};");
+            assert!(format.contains(&line), "stack/format.rs has no `{line}`");
+        }
+    }
+
+    /// claude-235: rounding the reads as exported puts every parameter on its
+    /// export step, half away from zero as `quantize_fixed_i32` rounds, leaves a
+    /// value already on its step alone, and is idempotent; a read with the type
+    /// spin is refused.
+    #[test]
+    fn rounding_the_hamming_reads_holds_the_exported_values() -> Result<()> {
+        let device = candle_core::Device::Cpu;
+        let (heads, width) = (4, 32);
+        let reads = HammingReads::new(heads, width, &device)?;
+        let mut rng = Lcg(235);
+        let values = |var: &Var| var.flatten_all().unwrap().to_vec1::<f32>().unwrap();
+        let mut before = Vec::new();
+        for read in &reads.reads {
+            for var in [
+                &read.query_rotation,
+                &read.key_rotation,
+                &read.value_rotation,
+                &read.margin,
+                &read.weight,
+            ] {
+                let mut random: Vec<f32> = (0..var.elem_count())
+                    .map(|_| (rng.next() % 2_000_001) as f32 / 1_000_003.0 - 1.0)
+                    .collect();
+                // One value exactly half a margin step past a step, which rounds away from 0.
+                random[0] = -(3.0 + 0.5) * 2f32.powi(HAMMING_MARGIN_EXP);
+                var.set(&Tensor::from_vec(random, var.shape(), &device)?)?;
+                before.push(values(var));
+            }
+        }
+        round_hamming_as_exported(&reads)?;
+        let exps = [
+            HAMMING_ROTATION_EXP,
+            HAMMING_ROTATION_EXP,
+            HAMMING_ROTATION_EXP,
+            HAMMING_MARGIN_EXP,
+            HAMMING_WEIGHT_EXP,
+        ];
+        let mut moved = 0;
+        let mut after = Vec::new();
+        for (r, read) in reads.reads.iter().enumerate() {
+            let vars = [
+                &read.query_rotation,
+                &read.key_rotation,
+                &read.value_rotation,
+                &read.margin,
+                &read.weight,
+            ];
+            for (k, (var, exp)) in vars.into_iter().zip(exps).enumerate() {
+                let (old, new) = (&before[r * 5 + k], values(var));
+                for (&o, &n) in old.iter().zip(&new) {
+                    let step = (f64::from(n) * 2f64.powi(-exp)).round() * 2f64.powi(exp);
+                    assert_eq!(f64::from(n), step, "{n} is off its 2^{exp} step");
+                    assert_eq!(n, fixed_value(o, exp) as f32);
+                    moved += usize::from(o != n);
+                }
+                if exp == HAMMING_MARGIN_EXP {
+                    assert_eq!(new[0], -4.0 * 2f32.powi(HAMMING_MARGIN_EXP));
+                }
+                after.push(new);
+            }
+        }
+        assert!(moved > 0, "no value moved, so the rounding had no work");
+        round_hamming_as_exported(&reads)?;
+        let again: Vec<Vec<f32>> = reads
+            .reads
+            .iter()
+            .flat_map(|read| {
+                [
+                    &read.query_rotation,
+                    &read.key_rotation,
+                    &read.value_rotation,
+                    &read.margin,
+                    &read.weight,
+                ]
+                .map(values)
+            })
+            .collect();
+        assert_eq!(again, after);
+        let spun = HammingReads::new(heads, width, &device)?.with_type_spin()?;
+        assert!(round_hamming_as_exported(&spun).is_err());
+        Ok(())
+    }
+
     #[test]
     fn saved_hamming_reads_snapshot_as_they_load() -> Result<()> {
         let device = candle_core::Device::Cpu;
