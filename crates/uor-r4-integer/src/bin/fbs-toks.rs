@@ -46,7 +46,10 @@
 //!   `uor-r4.copy-codes/1` new to `OUT_JSON`;
 //! - `--context-sweep` runs the protocol with prefills of 32, 64, 96 and 128 tokens, each
 //!   followed by the 64 decode steps, with the artifact's Hamming read and without it: decode
-//!   tokens per second against context, the read's long-context cost.
+//!   tokens per second against context, the read's long-context cost;
+//! - `--context-sweep --tokens TOKENS_U16` (claude-242) runs the same protocol at prefills of
+//!   128, 512, 2,048, 8,192 and 32,704 tokens, over the first 32,704 ids of a `UORT` token
+//!   file, so the contexts end at 192 to 32,768. The artifact's context must hold the last.
 
 use std::process::{Command, ExitCode};
 use std::time::Instant;
@@ -62,10 +65,14 @@ use uor_r4_integer::stack::{
     IntegerStackModel, ReplyEnd,
 };
 
-const USAGE: &str = "usage: fbs-toks ARTIFACT [--prompt ID,ID,...] [--stages] [--parts]\n       fbs-toks ARTIFACT --replies PROMPTS_JSON --out FILE [--reply-tokens N]\n       fbs-toks ARTIFACT --hamming-trace D11_READOUT_JSON TRACE_JSON\n       fbs-toks --hamming-trace-compare FIRST_TRACE SECOND_TRACE\n       fbs-toks ARTIFACT --copy-codes FLOAT_TRACE INTEGER_TRACE OUT_JSON\n       fbs-toks ARTIFACT --context-sweep";
+const USAGE: &str = "usage: fbs-toks ARTIFACT [--prompt ID,ID,...] [--stages] [--parts]\n       fbs-toks ARTIFACT --replies PROMPTS_JSON --out FILE [--reply-tokens N]\n       fbs-toks ARTIFACT --hamming-trace D11_READOUT_JSON TRACE_JSON\n       fbs-toks --hamming-trace-compare FIRST_TRACE SECOND_TRACE\n       fbs-toks ARTIFACT --copy-codes FLOAT_TRACE INTEGER_TRACE OUT_JSON\n       fbs-toks ARTIFACT --context-sweep [--tokens TOKENS_U16]";
 
 /// The prefills `--context-sweep` times, each followed by `DECODE` steps (claude-235).
 const SWEEP_PREFILLS: [usize; 4] = [32, 64, 96, 128];
+
+/// The prefills `--context-sweep --tokens` times (claude-242), each followed by `DECODE` steps,
+/// so the contexts end at 192, 576, 2,112, 8,256 and 32,768.
+const LONG_SWEEP_PREFILLS: [usize; 5] = [128, 512, 2_048, 8_192, 32_704];
 
 /// `--hamming-trace` (claude-235): each read's choices in a fresh session over each sequence of
 /// the float D11 readout at `readout`, written new to `out`; it prints the window count and the
@@ -208,15 +215,16 @@ fn copy_codes(path: &str, float_trace: &str, integer_trace: &str, out: &str) -> 
     Ok(())
 }
 
-/// `--context-sweep` (claude-235): the protocol at each of `SWEEP_PREFILLS` over the fixed
-/// prompt's first tokens, on `model` and on the same model without its Hamming read.
+/// `--context-sweep` (claude-235): the protocol at each of `prefills` over the prompt's first
+/// tokens, on `model` and on the same model without its Hamming read.
 fn context_sweep(
     model: &IntegerStackModel,
     without: &IntegerStackModel,
     prompt: &[u32],
+    prefills: &[usize],
 ) -> Result<serde_json::Value, String> {
-    let mut points = Vec::with_capacity(SWEEP_PREFILLS.len());
-    for prefill in SWEEP_PREFILLS {
+    let mut points = Vec::with_capacity(prefills.len());
+    for &prefill in prefills {
         let prompt = &prompt[..prefill];
         points.push(json!({
             "prefill": prefill,
@@ -226,6 +234,54 @@ fn context_sweep(
         }));
     }
     Ok(json!(points))
+}
+
+/// The prompt `--context-sweep --tokens` sweeps (claude-242): a `UORT` token file's first ids, as
+/// many as the largest of `LONG_SWEEP_PREFILLS`. The file is read as `fbs-export --point-key`
+/// reads one: a 64-byte header starting `UORT`, whose count at bytes 8 to 16 must match the
+/// payload, then little-endian `u16` ids. It refuses an artifact whose `context` cannot hold that
+/// prefill and its decode, a file that is not `UORT` or whose count disagrees, one with too few
+/// ids, and an id outside `vocab`.
+fn long_sweep_prompt(bytes: &[u8], vocab: usize, context: usize) -> Result<Vec<u32>, String> {
+    let largest = LONG_SWEEP_PREFILLS[LONG_SWEEP_PREFILLS.len() - 1];
+    if context < largest + DECODE {
+        return Err(format!(
+            "the artifact's context {context} is shorter than {largest} + {DECODE}"
+        ));
+    }
+    if bytes.len() < 64 || &bytes[..4] != b"UORT" {
+        return Err("the token file is not a UORT token file".to_owned());
+    }
+    let mut count = [0u8; 8];
+    count.copy_from_slice(&bytes[8..16]);
+    let count = u64::from_le_bytes(count);
+    let payload = &bytes[64..];
+    if usize::try_from(count).ok().and_then(|c| c.checked_mul(2)) != Some(payload.len()) {
+        return Err(format!(
+            "the token file's header counts {count} ids, its payload holds {} bytes",
+            payload.len()
+        ));
+    }
+    if payload.len() / 2 < largest {
+        return Err(format!(
+            "the token file holds {} ids, fewer than {largest}",
+            payload.len() / 2
+        ));
+    }
+    let prompt: Vec<u32> = payload[..2 * largest]
+        .chunks_exact(2)
+        .map(|b| u32::from(u16::from_le_bytes([b[0], b[1]])))
+        .collect();
+    if let Some((i, &t)) = prompt
+        .iter()
+        .enumerate()
+        .find(|(_, &t)| t as usize >= vocab)
+    {
+        return Err(format!(
+            "token {t} at {i} is outside the vocabulary {vocab}"
+        ));
+    }
+    Ok(prompt)
 }
 
 /// One panel prompt for `--replies` (claude-224), as `train-in-space --panel-prompts` writes it:
@@ -645,9 +701,10 @@ fn run() -> Result<(), String> {
         .into_iter()
         .filter(|a| a != "--stages" && a != "--parts")
         .collect();
-    let (path, prompt_arg) = match args.as_slice() {
-        [path] => (path, None),
-        [path, flag, ids] if flag == "--prompt" => (path, Some(ids)),
+    let (path, prompt_arg, tokens_arg) = match args.as_slice() {
+        [path] => (path, None, None),
+        [path, flag, ids] if flag == "--prompt" => (path, Some(ids), None),
+        [path, flag, file] if flag == "--tokens" && sweep => (path, None, Some(file)),
         _ => return Err(USAGE.to_owned()),
     };
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
@@ -695,16 +752,33 @@ fn run() -> Result<(), String> {
                 "--context-sweep times the Hamming read, and the artifact has none".to_owned(),
             );
         }
+        let (prompt, prefills, tokens) = match tokens_arg {
+            None => (prompt, &SWEEP_PREFILLS[..], None),
+            Some(file) => {
+                let raw = std::fs::read(file).map_err(|e| format!("{file}: {e}"))?;
+                let prompt = long_sweep_prompt(&raw, vocab, context)?;
+                let tokens = json!({
+                    "file": file,
+                    "sha256": hex::encode(<sha2::Sha256 as sha2::Digest>::digest(&raw)),
+                    "ids": (raw.len() - 64) / 2,
+                });
+                (prompt, &LONG_SWEEP_PREFILLS[..], Some(tokens))
+            }
+        };
         let without = IntegerStackModel::parse(&bytes)
             .map_err(|e| format!("parse: {e}"))?
             .without_hamming_read();
-        let report = json!({
+        let mut report = json!({
             "schema": "uor-r4.fbs-toks-context/1",
             "artifact_sha256": model.artifact_sha256(),
             "decode_tokens": DECODE,
-            "points": context_sweep(&model, &without, &prompt)?,
+            "points": context_sweep(&model, &without, &prompt, prefills)?,
             "hardware": hardware(),
         });
+        if let Some(tokens) = tokens {
+            report["context"] = json!(context);
+            report["tokens"] = tokens;
+        }
         println!("{report}");
         return Ok(());
     }
@@ -883,6 +957,92 @@ mod tests {
         assert_eq!(p95(&[7]), 7);
         assert_eq!(tokens_per_second(64, 1_000_000), 64_000);
         assert_eq!(tokens_per_second(64, 0), 64_000_000_000);
+    }
+
+    #[test]
+    fn the_long_sweep_reads_a_uort_file_and_refuses_what_it_cannot_sweep() {
+        // The tokenless sweep keeps claude-235's prefills; the long one ends at 192 and 32,768.
+        assert_eq!(SWEEP_PREFILLS, [32, 64, 96, 128]);
+        let largest = LONG_SWEEP_PREFILLS[LONG_SWEEP_PREFILLS.len() - 1];
+        let end = largest + DECODE;
+        assert_eq!(LONG_SWEEP_PREFILLS[0] + DECODE, 192);
+        assert_eq!(end, 32_768);
+        // A UORT file: the magic, a version, the id count, then the ids low byte first.
+        let uort = |ids: &[u16], count: u64| -> Vec<u8> {
+            let mut b = vec![0u8; 64];
+            b[..4].copy_from_slice(b"UORT");
+            b[4] = 1;
+            b[8..16].copy_from_slice(&count.to_le_bytes());
+            b.extend(ids.iter().flat_map(|i| i.to_le_bytes()));
+            b
+        };
+        let bytes_of = |ids: &[u16]| uort(ids, ids.len() as u64);
+        // One id more than the largest prefill. The first reads 258 low byte first (513 if not).
+        let mut ids: Vec<u16> = (0..=largest).map(|i| (i % 1000) as u16).collect();
+        ids[0] = 0x0102;
+        let bytes = bytes_of(&ids);
+        let prompt = long_sweep_prompt(&bytes, 1000, end).expect("prompt");
+        assert_eq!(prompt.len(), largest);
+        assert_eq!(prompt[0], 258);
+        assert_eq!(prompt[largest - 1], ((largest - 1) % 1000) as u32);
+        // An artifact one position short of the last context.
+        assert_eq!(
+            long_sweep_prompt(&bytes, 1000, end - 1).expect_err("short context"),
+            format!(
+                "the artifact's context {} is shorter than {largest} + {DECODE}",
+                end - 1
+            )
+        );
+        // Raw ids with no header, a wrong magic, and a header shorter than 64 bytes.
+        let raw: Vec<u8> = ids.iter().flat_map(|i| i.to_le_bytes()).collect();
+        let not_uort = "the token file is not a UORT token file";
+        assert_eq!(
+            long_sweep_prompt(&raw, 1000, end).expect_err("raw"),
+            not_uort
+        );
+        let mut magic = bytes.clone();
+        magic[3] = b'X';
+        assert_eq!(
+            long_sweep_prompt(&magic, 1000, end).expect_err("magic"),
+            not_uort
+        );
+        assert_eq!(
+            long_sweep_prompt(&bytes[..63], 1000, end).expect_err("short"),
+            not_uort
+        );
+        // A count that disagrees with the payload, and a payload of odd length.
+        assert_eq!(
+            long_sweep_prompt(&uort(&ids, ids.len() as u64 + 1), 1000, end).expect_err("count"),
+            format!(
+                "the token file's header counts {} ids, its payload holds {} bytes",
+                ids.len() + 1,
+                2 * ids.len()
+            )
+        );
+        assert!(long_sweep_prompt(&bytes[..bytes.len() - 1], 1000, end)
+            .expect_err("odd length")
+            .contains("its payload holds"));
+        // A file an id short of the largest prefill.
+        assert_eq!(
+            long_sweep_prompt(&bytes_of(&ids[..largest - 1]), 1000, end).expect_err("an id short"),
+            format!(
+                "the token file holds {} ids, fewer than {largest}",
+                largest - 1
+            )
+        );
+        // An id at the vocabulary's size in the prompt is refused; past the prompt it is not read.
+        let mut inside = ids.clone();
+        inside[largest - 1] = 1000;
+        assert_eq!(
+            long_sweep_prompt(&bytes_of(&inside), 1000, end).expect_err("outside the vocabulary"),
+            format!(
+                "token 1000 at {} is outside the vocabulary 1000",
+                largest - 1
+            )
+        );
+        let mut past = ids;
+        past[largest] = 1000;
+        assert!(long_sweep_prompt(&bytes_of(&past), 1000, end).is_ok());
     }
 
     #[test]
