@@ -4,7 +4,7 @@ Isolated CPU development trainers authorized by D84. GPU remains the qualificati
 
 The first unit provides `CpuWriterCore`, an independent implementation of exact cell admission followed by full-vector token ranking. `WriterReading` exposes one row's top-8 and target outcomes; `WriterSummary` aggregates top-1, top-8 and target admission. These are component oracles, not a training result.
 
-`CpuFbsForward` executes the no-Hamming-read SpiralCore/FBS trunk from a parsed `FbsImage`. It reproduces the serving query at Q12 and supports both whole-table nearest and native-cell writer heads. The current parity scope excludes Hamming reads and exact turn memory.
+`CpuFbsForward` executes the SpiralCore/FBS trunk and reproduces the serving query at Q12 with both whole-table nearest and native-cell writer heads. `from_artifact` loads the `lut-stack/6` Hamming copy/type reads and executes their stream and readout hooks; `from_model` remains the no-read entry point. Exact turn memory is not yet supported.
 
 ## Checks
 
@@ -14,3 +14,5 @@ cargo clippy -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings
 cargo run --release -p uor-r4-cpu-train --bin cpu-writer-bench
 cargo run --release -p uor-r4-cpu-train --bin cpu-fbs-forward-bench
 ```
+
+The forward benchmark prints read-free, copy-only and copy-plus-type cases with hashes and process peak RSS. Its readings are component throughput, not training or language evidence.
