@@ -222,6 +222,10 @@ int main() {
            "corrupted probe refused");
     expect(uor_inverted_file::update(ties, 0, corrupt) == Status::CsrInvariant,
            "corrupted update refused");
+    Index out_of_range = tie_index;
+    out_of_range.cells[0] = 999;
+    expect(uor_inverted_file::update(ties, 0, out_of_range) == Status::CsrInvariant,
+           "out-of-range old cell refused");
 
     Table over = few;
     Index over_index;

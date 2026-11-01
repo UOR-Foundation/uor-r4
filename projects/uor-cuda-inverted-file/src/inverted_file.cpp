@@ -187,6 +187,7 @@ Status update(const Table& table, std::uint32_t moved_token, Index& index) {
     }
     if (validate_structure(index) != Status::Ok) return Status::CsrInvariant;
     const auto old_cell = index.cells[moved_token];
+    if (old_cell != ABSENT && old_cell > 255) return Status::CsrInvariant;
     const auto new_cell = token_cell(table.tokens[moved_token]);
     if (new_cell == ABSENT) return Status::NonRootBlock;
     if (old_cell == new_cell) return Status::Ok;
