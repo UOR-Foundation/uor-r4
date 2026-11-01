@@ -156,6 +156,12 @@ If 1 matches 2, the GPU read was handed other inputs. If 1 matches 3, the artifa
   - `cargo clippy -p uor-r4-float-train --all-targets`: no new warning. The one in `fbs_export.rs` (`manual_is_multiple_of`, line 384) is claude-200's line, on main.
 - `cargo fmt -p uor-r4-integer -- --check`: clean. The float crate is not rustfmt-clean on main. `fbs_export.rs` has the same 10 diffs as at the merge base with `origin/main` (`7a1cbcffc`), and this unit's lines in it are formatted; `bin/fbs-snapshot.rs` is clean.
 - `uor-harness loop report --check` and `uor-harness loop pr-check --local`.
+- **CI, `harness rules and tests`: red, and not from this branch.** It has been red on every branch that ran it since 31 Oct (`kimi/docs-current-status`, `claude/locate-gap`). On main's own files it fails:
+  - `the_real_repo_passes_the_ported_rules`: three DeepSeek REPORTs document `pr-check --local ->`;
+  - `the_real_repo_agrees_with_its_own_prompts`: "evaluation integrity" is missing from the milestone registry;
+  - four `prgates` tests fail there too.
+
+  This branch touches neither the harness crate nor those files. The job runs here only because the unit adds a prep sheet under `docs/harness/prep/`.
 - `cargo run -p xtask -- roadmap render`: this unit's edit renders no change. The render's two other rows (the titles of `m1-close-saved-model` and `docs-status-refresh`) are the drift claude-234 recorded, and are left to their items.
 
 ## Skills used
@@ -169,6 +175,7 @@ None.
   - no test runs `read()` with the tie rule on. The run's moved sets show the switch acted, but a broken wiring would leave the tie arm silently equal to d11. A CUDA test that sets `set_hamming_tie_rule(true)` on planted ties and checks the traced order closes that.
   - `the_tie_rule_keeps_the_integer_sessions_order` has had no set-aside check. With its tie branch removed it may still pass, if the CUDA sort happens to keep ties in order on its 40 columns. Its codes carry no last-bit noise either, so `.round()` is not pinned; building them as `p + (bits − p)` would pin it.
 - **The timing at long contexts:** the sweep stops at the readout window, 192. The item's done-when 3 asks for tokens/s against context; a longer sweep, on mains power and an idle machine, is still owed.
+- **The red `harness rules and tests` job** is main's, in the harness and in other labs' files. Both are outside this unit's scope, so it is left to their owners.
 - **The item stays `ready`;** done-when 2 and 3 remain open.
 
 ## Plain summary
