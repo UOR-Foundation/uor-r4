@@ -52,7 +52,7 @@ No new decode speed is claimed, and the served path is unchanged (see the checks
 - **`crates/uor-r4-integer/src/bin/fbs-toks.rs`:** `--forced` takes `--decision-trace TRACE_JSON` and `--force FORCE_JSON`, each at most once.
   - The trace (side `R`) fills each reply offset's nearest from `whole_table_nearest_two`.
   - `--force` runs only the rows it names, by position, and refuses another schema, a position named twice, and one that names no prompt.
-  - The rows keep claude-244's format. The printed line adds `per_row_us` and the trace's sha256.
+  - The rows keep claude-244's format. The printed line adds `per_row_us` and the trace's sha256, even without either option. Under `--force` its `rows` counts only the rows run.
 - **Tests:** three in `stack/tests.rs` and two in `fbs-toks.rs`, below.
 - **The item's "What is missing"** names the next three units.
 
@@ -74,7 +74,36 @@ No new decode speed is claimed, and the served path is unchanged (see the checks
 
 ## Checks run at the head
 
-CHECKS_PENDING
+All at e5608dc84, clean tree, on this M1 (log: `local/claude/claude-249/gates-final.log` in the worktree).
+
+- **The crate's tests:** `cargo test -p uor-r4-integer --features fbs-synthetic,serving-wasm --lib --bins --no-fail-fast`. The library has 412 passed and 1 ignored. Every binary's tests pass: fbs-toks 11, uor-chat 3, fbs-compare 1.
+- **The served path's audit:** `scripts/audit_zero_matmul_serving.py --stack` on the release `uor-r4-stack` is a FULL PASS. It finds 0 floats, and 52 / 1 scalar multiplies and divides in the symbol ranges, 131 / 15 in the call graph, all allowed (D80, D81). It checked 129 call-graph functions, with 0 violations.
+- **The WASM library builds** (`--target wasm32-unknown-unknown --features serving-wasm --lib`).
+- **The WASM call-graph audit** (`scripts/audit_zero_matmul_wasm.py --serving --call-graph --tap`): five roots pass. Both step roots fail at the base (381ae4d98, built from a `git archive` of it) and at this head alike:
+
+  | Root | Side | mul | div | float | unclassified | instructions | functions |
+  |---|---|---|---|---|---|---|---|
+  | `step` | base | 29 | 14 | 0 | 340 | 40,268 | 95 |
+  | `step` | head | 46 | 16 | 0 | 397 | 44,733 | 97 |
+  | `IntegerStackSession::step` | base | 29 | 14 | 0 | 334 | 39,175 | 82 |
+  | `IntegerStackSession::step` | head | 46 | 16 | 0 | 391 | 43,640 | 84 |
+
+- **Formatting:** `cargo fmt -p uor-r4-integer --check` passes.
+- **Clippy** (`-p uor-r4-integer --all-targets --features serving-wasm -- -D warnings`) reports 68 findings in 21 files. Blame puts none of them in this unit's commits; the nearest are tests.rs and session.rs:736, from earlier units.
+- **`uor-harness loop gates --full`:** 11 of 11 green.
+- **The negative gates.** Each place below was set aside alone, against the tree it was taken from, and its test failed; each was then restored and the tests passed:
+  - A: `BucketTrace::decide`'s forced entry. Failed at tests.rs:6142.
+  - B, C, D: the forced query and the two forced keys in the copy and type heads' `choose_forced`. Each failed at tests.rs:6173, the kept-set check.
+  - E: `type_mean`'s forced query. Failed at 6177, the served-change check.
+  - F: the forced arm of the served copy read in `stream` and `readout`. Failed at 6177.
+  - G: `record`'s forced query. Failed at 6168, the forced-code check.
+  - H: the timed step's refusal of a traced session. Failed at 6210.
+- **The three reviews.** Each slice had a fresh reviewer, and each returned APPROVE with LOW items only:
+  - slice 1: `hamming.rs` and `tests.rs`;
+  - slice 2: `session.rs` and `fbs_snapshot.rs`;
+  - slice 3: `fbs-toks.rs`, this REPORT and the item.
+
+  Slice 2's first item is fixed (H). The LOW items not fixed are under Still open.
 
 ## Skills used
 
@@ -94,6 +123,8 @@ None.
   - The key test checks that a forced key changes a kept set and what R serves. It does not check each later row on its own.
   - No test forces a code at a depth inside the model that no read runs at. The refusal is in `ServedHamming::forcing`.
   - `BucketTrace::decide` is on the served step's call graph. It is not marked inline, and it grows a `Vec`. The native stack audit passes with it. If a later audit objects, write into preallocated slots, as `SnapTrace::record` does.
+  - `fbs-toks` writes `--out` before the trace. If the trace's path already exists, or is `--out`'s, the command fails after writing the rows, and a retry then fails on `--out`. Checking both paths up front, before the run, closes it.
+  - `--force` without `--decision-trace` still builds the trace and drops it. That costs time only.
 - **Carried from earlier units:**
   - making raw the default, or the snap faithful;
   - a cheaper exact nearest, which is 65% of a decode step;
