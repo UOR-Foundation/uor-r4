@@ -228,7 +228,10 @@ extern "C" __global__ void uor_if_full_scan(
 ) {
     const U row = blockIdx.x;
     if (row >= rows) return;
-    if (k == 0 || k > 16) { status[row] = 1; return; }
+    if (k == 0 || k > 16) {
+        if (threadIdx.x == 0) status[row] = 1;
+        return;
+    }
     const int* query = queries + row * 32;
     if (threadIdx.x == 0) admit_cells(roots, query, offsets, row, k, admitted);
     __syncthreads();
