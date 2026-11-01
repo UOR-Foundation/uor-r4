@@ -18,9 +18,21 @@ The item's done-when reads:
 > 3. **Speed on this laptop:** `fbs-toks` decode tokens/s against context, with the read and without, on the same artifact.
 > 4. One notebook row; the result on main.
 
+## This unit
+
+claude-237 (#3474) found the stage: in D11 mode, the CUDA gate hook snaps the read's rotations to icosians. Training (`HamiltonActive`) and the artifact (`lut-stack/5`'s raw gates) do not snap them. Its decision review passed (A): keep the read out of the hook in the float forward. The owner log is #3385 6554327155. This unit makes that fix, re-traces on the GPU, and measures the parity against a reference that computes the read as trained.
+
+**The fix, in `flock_read_hamming.rs` only.** The read's gate calls are every `rotate` (key, query, value, step) and the step path's direct `hamilton_gate`. They run inside `hamilton_sheet::with_d11_snaps(D11Snaps { gates: false, transition: is_snapping_transition() }, …)`. That helper saves and restores the whole hook state: arm, call index, export flag, transition snap and telemetry flag. claude-237's item list left out the telemetry flag.
+- **Inside the guard,** the arm is `HamiltonActive`, the training path's pass-through, and export is off, so `FbsReadoutMode::Export` stops snapping the read too.
+- **After the guard,** the trunk's later gates snap as before, and their call numbering is unchanged.
+- **Outside D11,** nothing changes. Only `in_space_long.rs` (under `HamiltonActive`) and `fbs-snapshot.rs` install a read, so the control arms, telemetry capture and D11-bridge training never meet one.
+
 ## Cancel probe (run first)
 
-To fill in.
+- **Does an open PR touch these files?** No open PR changes `flock_read_hamming.rs`, `hamilton_sheet.rs` or `geometric_stack_native*.rs` (`gh pr list`, 1 Nov).
+- **Has the gap closed on main?** No. Main is at this ORDER's base `ebe0930ba`, claude-237's merge, and the item's step 5 names this fix as next.
+
+Class: **instrument** (the reference's arithmetic). The unit goes ahead.
 
 ## Files in scope
 
@@ -43,8 +55,24 @@ To fill in.
 
 ## Done when
 
-To fill in.
+1. **The guard is in,** with CUDA tests that fail with it set aside (shown on the pod):
+   - (T1) a read with non-identity rotations computes the same output bit for bit under `with_d11_mode`, under `with_d11_export_gates` and under `with_gate_mode(HamiltonActive, …)`;
+   - (T2) under `with_d11_mode`, a gate after the read is still snapped, and the snap capture holds the trunk's gates only.
+
+   The CPU suite and `loop gates --full` are green. The CUDA code type-checks with the stub nvcc.
+2. **A prep sheet** with its FIT and a pre-run review, then one pod. It runs:
+   - the CUDA tests, T1 and T2 with the guard set aside as well;
+   - claude-235's d11 and d11-rounded arms at s1 and s3, and their `fbs-compare` against claude-233's files;
+   - a trunk-only readout, which must equal claude-233's d of 5 and 11.
+3. **On the laptop:**
+   - `fbs-toks --copy-codes` on the new traces: the float trace must equal (a) at every code (an instrument check);
+   - `--hamming-trace-compare` against claude-235's integer traces;
+   - each seed's d against the bar of 46, with the kept-set share and top-1 against the bar the sheet registers (the item's done-when 2, on (r-drop)).
+4. **The write-up:** a REPORT, a notebook row, and the item's step 5 updated.
 
 ## Stop and ask if
 
-To fill in.
+This is stop and decide, never stop and wait.
+- **T1 cannot hold bit for bit:** decide by a decision review whether the pass-through differs from training's path. Do not loosen the test.
+- **The trunk-only d moves:** the guard leaks into the trunk. That is an instrument fault, and the run counts nothing.
+- **The new float trace differs from (a):** a second stage remains. Classify it, then trace it; do not call it parity.
