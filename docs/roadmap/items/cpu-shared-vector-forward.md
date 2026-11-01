@@ -9,7 +9,7 @@ needs_gpu: false
 depends_on: [cpu-training-program]
 notebook: docs/research/notebook/cpu-training.md
 done_class: host
-scope: [crates/uor-r4-cpu-train/**, Cargo.toml, Cargo.lock, docs/loop/tasks/cpu-shared-vector-forward/**, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-shared-vector-forward.md]
+scope: [crates/uor-r4-cpu-train/**, crates/uor-r4-integer/src/stack/session.rs, Cargo.toml, Cargo.lock, docs/loop/tasks/cpu-shared-vector-forward/**, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-shared-vector-forward.md]
 ---
 
 ## Why it matters
