@@ -7,7 +7,7 @@
 //! so `restore_state` refuses a session with them rather than continue differently.
 
 use crate::bitcode::popcount_swar;
-use crate::fbs_snapshot::{HammingTraceHead, HammingTraceRead, HammingTraceWindow};
+use crate::fbs_snapshot::{CodeRole, ForcedCode, HammingTraceHead, HammingTraceRead, HammingTraceWindow};
 
 use super::format::{Container, StackHamming, HAMMING_WEIGHT_EXP};
 use super::kernels::{stack_div_u64, stack_hamilton, NORM_FINE_EXP, RESIDUAL_EXP};
@@ -193,6 +193,17 @@ impl CopyHeads {
         nearest(self.code(last, h), tokens.len() - 1, self.kept, |s| self.code(tokens[s - 1], h))
     }
 
+    /// [`Self::choose`] with the codes `force` names in place of the computed ones (Q5's forced
+    /// replay, claude-249): the row's query, and each candidate `s`'s key.
+    fn choose_forced(&self, h: usize, tokens: &[u32], force: &HeadForce) -> Vec<(usize, u32)> {
+        let Some(&last) = tokens.last() else {
+            return Vec::new();
+        };
+        let t = tokens.len() - 1;
+        let query = force.query(t).unwrap_or_else(|| self.code(last, h));
+        nearest(query, t, self.kept, |s| force.key(s).unwrap_or_else(|| self.code(tokens[s - 1], h)))
+    }
+
     /// The copy heads' mean at the last row of `tokens`, at [`COPY_MEAN_EXP`], or `None` when no
     /// copy head kept a candidate inside its margin.
     ///
@@ -202,13 +213,18 @@ impl CopyHeads {
     /// that found a candidate, so a head that found nothing does not dilute one that did. Both
     /// quotients truncate toward zero.
     pub fn mean(&self, tokens: &[u32], table: &[i16]) -> Option<Vec<i128>> {
+        self.mean_by(tokens, table, |h| self.choose(h, tokens))
+    }
+
+    /// [`Self::mean`] over the kept positions `choose` gives each head.
+    fn mean_by(&self, tokens: &[u32], table: &[i16], choose: impl Fn(usize) -> Vec<(usize, u32)>) -> Option<Vec<i128>> {
         let width = self.width;
         let mut sum = vec![0i128; width];
         let mut found = 0i128;
         for h in 0..self.copy {
             let mut head = vec![0i128; width];
             let mut count = 0i128;
-            for (s, d) in self.choose(h, tokens) {
+            for (s, d) in choose(h) {
                 let weight = copy_weight_q31(self.margins[h], d);
                 if weight == 0 {
                     continue;
@@ -361,19 +377,33 @@ impl TypeHeads {
         nearest(query, tokens.len() - 1, self.kept, |s| self.key(tokens[s - 1], j))
     }
 
+    /// [`Self::choose`] with each candidate `s`'s key code that `force` names in place of the
+    /// computed one (claude-249). A forced query is the caller's `query`.
+    fn choose_forced(&self, j: usize, query: u64, tokens: &[u32], force: &HeadForce) -> Vec<(usize, u32)> {
+        if tokens.is_empty() {
+            return Vec::new();
+        }
+        nearest(query, tokens.len() - 1, self.kept, |s| force.key(s).unwrap_or_else(|| self.key(tokens[s - 1], j)))
+    }
+
     /// The type heads' mean at the last row of `tokens`, at the payloads' exponent minus 31, or
     /// `None` when no type head kept a candidate inside its margin. `queries` are the row's codes
     /// ([`Self::queries`]) and `payloads` holds `width` values for each position up to the row,
     /// as the copy mean: each head's `Σ w_s · v_s / max(1, #{w_s > 0})`, then the mean over the
     /// heads that found a candidate, both truncating toward zero.
     pub fn mean(&self, queries: &[u64], tokens: &[u32], payloads: &[i64]) -> Option<Vec<i128>> {
+        self.mean_by(queries, payloads, |j, query| self.choose(j, query, tokens))
+    }
+
+    /// [`Self::mean`] over the kept positions `choose` gives each head for its query code.
+    fn mean_by(&self, queries: &[u64], payloads: &[i64], choose: impl Fn(usize, u64) -> Vec<(usize, u32)>) -> Option<Vec<i128>> {
         let width = self.width;
         let mut sum = vec![0i128; width];
         let mut found = 0i128;
         for (j, &query) in queries.iter().enumerate() {
             let mut head = vec![0i128; width];
             let mut count = 0i128;
-            for (s, d) in self.choose(j, query, tokens) {
+            for (s, d) in choose(j, query) {
                 let weight = copy_weight_q31(self.margins[j], d);
                 if weight == 0 {
                     continue;
@@ -443,6 +473,31 @@ pub struct HammingStepHead {
     pub key: u64,
     /// The kept positions at `t`, in the order `nearest` keeps them.
     pub kept: Vec<u32>,
+}
+
+/// One head's forced codes in one window, by step (Q5's forced replay, claude-249): `query[t]`
+/// replaces row `t`'s query, and `key[s]` candidate `s`'s key at every later row, since a key is
+/// the code of `x_{s−1}`, decided once at step `s`.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct HeadForce {
+    query: Vec<Option<u64>>,
+    key: Vec<Option<u64>>,
+}
+
+impl HeadForce {
+    fn query(&self, t: usize) -> Option<u64> {
+        self.query.get(t).copied().flatten()
+    }
+
+    fn key(&self, s: usize) -> Option<u64> {
+        self.key.get(s).copied().flatten()
+    }
+}
+
+/// One read's forced codes: a [`HeadForce`] for each head it serves, the copy heads first.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ReadForce {
+    heads: Vec<HeadForce>,
 }
 
 /// The trace of one window `ids` from its session's recorded reads `steps`, each step's reads in
@@ -551,39 +606,100 @@ impl ServedHamming {
             .collect()
     }
 
+    /// Each read's forced codes in one window (claude-249), a [`ReadForce`] per read in the
+    /// served order, from `codes` over a window of at most `context` steps. Refused: a depth no
+    /// read runs at (0, past the layer count, or a second read at a depth), a head the read does
+    /// not serve, a step past the context, a key at step 0 (it names no candidate), and a code
+    /// forced twice.
+    pub(crate) fn forcing(&self, codes: &[ForcedCode], context: usize) -> Result<Vec<ReadForce>, StackError> {
+        let mut reads: Vec<ReadForce> = self
+            .reads
+            .iter()
+            .map(|r| ReadForce {
+                heads: vec![HeadForce::default(); r.copy.copy + r.types.as_ref().map_or(0, |t| t.heads - t.copy)],
+            })
+            .collect();
+        for code in codes {
+            let i = self
+                .reads
+                .iter()
+                .position(|r| r.depth == code.depth)
+                .filter(|_| (1..=self.layers).contains(&code.depth))
+                .ok_or(StackError::Shape("a forced code names a depth no read runs at"))?;
+            let head = reads[i]
+                .heads
+                .get_mut(code.head)
+                .ok_or(StackError::Shape("a forced code names a head its read does not serve"))?;
+            if code.step >= context {
+                return Err(StackError::Shape("a forced code names a step past the context"));
+            }
+            let slots = match code.role {
+                CodeRole::Query => &mut head.query,
+                CodeRole::Key if code.step == 0 => {
+                    return Err(StackError::Shape("a forced key at step 0 names no candidate"));
+                }
+                CodeRole::Key => &mut head.key,
+            };
+            if slots.len() <= code.step {
+                slots.resize(code.step + 1, None);
+            }
+            if slots[code.step].replace(code.code).is_some() {
+                return Err(StackError::Shape("a code is forced twice"));
+            }
+        }
+        Ok(reads)
+    }
+
     /// The type mean at the last row `t` of `tokens` for the read `i`, with the hook's input
-    /// `point`: `point`'s payload is kept at row `t` first, for the rows after it.
-    fn type_mean(&self, i: usize, point: &[i64], tokens: &[u32], payloads: &mut [Vec<i64>]) -> Option<Vec<i128>> {
+    /// `point`: `point`'s payload is kept at row `t` first, for the rows after it. A `force`
+    /// replaces the codes it names (claude-249).
+    fn type_mean(&self, i: usize, point: &[i64], tokens: &[u32], payloads: &mut [Vec<i64>], force: Option<&ReadForce>) -> Option<Vec<i128>> {
         let types = self.reads[i].types.as_ref()?;
         let t = tokens.len().checked_sub(1)?;
         let cache = &mut payloads[i];
         types.payload(point, &mut cache[t * self.width..][..self.width]);
-        types.mean(&types.queries(point), tokens, &cache[..(t + 1) * self.width])
+        let payloads = &cache[..(t + 1) * self.width];
+        let Some(force) = force else {
+            return types.mean(&types.queries(point), tokens, payloads);
+        };
+        let heads = &force.heads[self.reads[i].copy.copy..];
+        let mut queries = types.queries(point);
+        for (query, head) in queries.iter_mut().zip(heads) {
+            if let Some(forced) = head.query(t) {
+                *query = forced;
+            }
+        }
+        types.mean_by(&queries, payloads, |j, query| types.choose_forced(j, query, tokens, &heads[j]))
     }
 
     /// Read `i`'s choices at the last row `t` of `tokens`, its type heads asking with the hook's
-    /// input `point` (claude-235's trace). It recomputes what the read's means choose, so the
-    /// served sums are untouched by it.
+    /// input `point` (claude-235's trace): the codes as used, `force`'s where it names one
+    /// (claude-249). It recomputes what the read's means choose, so the served sums are
+    /// untouched by it.
     #[inline(never)]
-    fn record(&self, i: usize, point: &[i64], tokens: &[u32]) -> HammingStepRead {
+    fn record(&self, i: usize, point: &[i64], tokens: &[u32], force: Option<&ReadForce>) -> HammingStepRead {
         let read = &self.reads[i];
         let (Some(&last), t) = (tokens.last(), tokens.len().saturating_sub(1)) else {
             return HammingStepRead { depth: read.depth, heads: Vec::new() };
         };
+        let none = HeadForce::default();
+        let forced = |h: usize| force.map_or(&none, |f| &f.heads[h]);
         let kept = |chosen: Vec<(usize, u32)>| chosen.into_iter().map(|(s, _)| s as u32).collect();
         let mut heads: Vec<HammingStepHead> = (0..read.copy.copy)
             .map(|h| HammingStepHead {
-                query: read.copy.code(last, h),
-                key: if t == 0 { 0 } else { read.copy.code(tokens[t - 1], h) },
-                kept: kept(read.copy.choose(h, tokens)),
+                query: forced(h).query(t).unwrap_or_else(|| read.copy.code(last, h)),
+                key: if t == 0 { 0 } else { forced(h).key(t).unwrap_or_else(|| read.copy.code(tokens[t - 1], h)) },
+                kept: kept(read.copy.choose_forced(h, tokens, forced(h))),
             })
             .collect();
         if let Some(types) = &read.types {
             for (j, query) in types.queries(point).into_iter().enumerate() {
+                let head = forced(read.copy.copy + j);
+                let query = head.query(t).unwrap_or(query);
                 heads.push(HammingStepHead {
                     query,
-                    key: if t == 0 { 0 } else { types.key(tokens[t - 1], j) },
-                    kept: kept(types.choose(j, query, tokens)),
+                    key: if t == 0 { 0 } else { head.key(t).unwrap_or_else(|| types.key(tokens[t - 1], j)) },
+                    kept: kept(types.choose_forced(j, query, tokens, head)),
                 });
             }
         }
@@ -595,25 +711,31 @@ impl ServedHamming {
     /// `tokens`, each sum formed exactly and rounded once to the residual's Q16, half away from
     /// zero, as `q16` rounds the sum. A kind of head that found no candidate adds nothing, as the
     /// float's `sums / max(found, 1)` is 0 there. A depth with no read, or the layer count (the
-    /// readout's), is left alone. A `trace` receives the read's choices (claude-235).
+    /// readout's), is left alone. A `trace` receives the read's choices (claude-235), and
+    /// `force`, each read's from [`Self::forcing`], replaces the codes it names (claude-249).
     #[inline(never)]
-    pub(crate) fn stream(&self, depth: usize, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], x: &mut [i32], trace: Option<&mut Vec<HammingStepRead>>) {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn stream(&self, depth: usize, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], x: &mut [i32], trace: Option<&mut Vec<HammingStepRead>>, force: Option<&[ReadForce]>) {
         if depth == self.layers {
             return;
         }
         let Some(i) = self.reads.iter().position(|r| r.depth == depth) else {
             return;
         };
+        let force = force.and_then(|f| f.get(i));
         if let Some(trace) = trace {
             let point: Vec<i64> = x.iter().map(|&v| i64::from(v)).collect();
-            trace.push(self.record(i, &point, tokens));
+            trace.push(self.record(i, &point, tokens, force));
         }
         let read = &self.reads[i];
-        let copy = read.copy.mean(tokens, table);
+        let copy = match force {
+            None => read.copy.mean(tokens, table),
+            Some(f) => read.copy.mean_by(tokens, table, |h| read.copy.choose_forced(h, tokens, &f.heads[h])),
+        };
         let typed = match read.types {
             Some(_) => {
                 let point: Vec<i64> = x.iter().map(|&v| i64::from(v)).collect();
-                self.type_mean(i, &point, tokens, payloads)
+                self.type_mean(i, &point, tokens, payloads, force)
             }
             None => None,
         };
@@ -632,18 +754,22 @@ impl ServedHamming {
     /// of `tokens`, plus `w_y ⊙ y` where a type head did. The type term is pre-rounded 43 bits
     /// below `n`'s grid ([`readout_sum`]), and the sum then rounded once to `n`'s exponent. Not
     /// rounded to Q16, as the float trunk does not round the readout read. A `trace` receives the
-    /// read's choices (claude-235).
+    /// read's choices (claude-235), and `force` replaces the codes it names (claude-249).
     #[inline(never)]
-    pub(crate) fn readout(&self, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], n: &mut [i64], trace: Option<&mut Vec<HammingStepRead>>) {
+    pub(crate) fn readout(&self, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], n: &mut [i64], trace: Option<&mut Vec<HammingStepRead>>, force: Option<&[ReadForce]>) {
         let Some(i) = self.reads.iter().position(|r| r.depth == self.layers) else {
             return;
         };
+        let force = force.and_then(|f| f.get(i));
         if let Some(trace) = trace {
-            trace.push(self.record(i, n, tokens));
+            trace.push(self.record(i, n, tokens, force));
         }
         let read = &self.reads[i];
-        let copy = read.copy.mean(tokens, table);
-        let typed = self.type_mean(i, n, tokens, payloads);
+        let copy = match force {
+            None => read.copy.mean(tokens, table),
+            Some(f) => read.copy.mean_by(tokens, table, |h| read.copy.choose_forced(h, tokens, &f.heads[h])),
+        };
+        let typed = self.type_mean(i, n, tokens, payloads, force);
         if copy.is_none() && typed.is_none() {
             return;
         }

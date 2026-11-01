@@ -5979,3 +5979,260 @@ fn the_trace_comparison_classes_ties_flips_and_instrument_faults() {
     fewer.windows[0].reads[1].heads[0].query.pop();
     assert!(compare_hamming_traces(&fewer, &integer).is_err(), "a head short of the window");
 }
+
+/// claude-249: the decision script's reply length, so its window spans the opening and 12 reply rows.
+const DECISION_REPLY: usize = 12;
+
+/// claude-249: R's export under Q5's card, the gates and the transition both unsnapped.
+const DECISION_RAW: super::FbsExportSnaps = super::FbsExportSnaps {
+    gates: false,
+    transition: false,
+};
+
+/// claude-249: an artifact on R's path under Q5's card, exported under `snaps` after `edit`: a
+/// nearest stack with retention, a Hamming read after layer 1 and on the readout with both kinds
+/// of head, and a turn memory with a reply table whose opening the decision script's turn hits.
+fn decision_stack(snaps: super::FbsExportSnaps, edit: impl FnOnce(&mut super::FbsTrunkSnapshot)) -> Vec<u8> {
+    let (tokens, _) = turn_memory_script(DECISION_REPLY);
+    let mut snap = turn_memory_trunk(tokens.len());
+    snap.retain_rates = true;
+    snap.readout_nearest = true;
+    snap.hamming = Some(super::synthetic::synthetic_hamming(snap.width, snap.layers.len(), 4, 188));
+    let mut memory = synthetic_memory(snap.vocab, snap.width, 4, true, 249);
+    memory.opening = vec![super::FbsMemoryEntry { key: vec![12, 13, 14, 15], value: 42 }];
+    snap.memory = Some(memory);
+    edit(&mut snap);
+    super::export_fbs_trunk_uorlut01_with(&snap, snaps).expect("export")
+}
+
+/// claude-249: `model` stepped over the decision script, the reply marked before the prompt's last
+/// token, under the forced set `force` (`None`: the trace off): each step's served output, and
+/// the trace.
+fn decision_run(
+    model: &IntegerStackModel,
+    force: Option<&crate::fbs_snapshot::DecisionForceWindow>,
+) -> (Vec<super::NativeStep>, Option<Vec<crate::fbs_snapshot::DecisionStep>>) {
+    let (tokens, reply_start) = turn_memory_script(DECISION_REPLY);
+    let mut session = model.session();
+    if let Some(force) = force {
+        session.set_decision_trace(force).expect("the trace is on");
+    }
+    let steps = tokens
+        .iter()
+        .enumerate()
+        .map(|(row, &token)| {
+            if row + 1 == reply_start {
+                session.mark_reply_start();
+            }
+            session.step_native(token).expect("step")
+        })
+        .collect();
+    (steps, session.take_decision_trace())
+}
+
+/// claude-249: the forced set naming every decision `trace` records: each lane's entry, and each
+/// read's query and key codes, the keys from step 1 on (step 0's names no candidate).
+fn force_all(trace: &[crate::fbs_snapshot::DecisionStep]) -> crate::fbs_snapshot::DecisionForceWindow {
+    use crate::fbs_snapshot::{CodeRole, DecisionForceWindow, ForcedBucket, ForcedCode};
+    let mut force = DecisionForceWindow::default();
+    for (step, s) in trace.iter().enumerate() {
+        for (layer, l) in s.layers.iter().enumerate() {
+            force.buckets.extend(l.entry.iter().enumerate().map(|(lane, &entry)| ForcedBucket { step, layer, lane, entry }));
+        }
+        for read in s.layers.iter().filter_map(|l| l.read.as_ref()).chain(&s.readout) {
+            for (head, h) in read.heads.iter().enumerate() {
+                let code = |role, code| ForcedCode { step, depth: read.depth, head, role, code };
+                force.codes.push(code(CodeRole::Query, h.query));
+                if step > 0 {
+                    force.codes.push(code(CodeRole::Key, h.key));
+                }
+            }
+        }
+    }
+    force
+}
+
+/// claude-249 (Q5's I-R, and I-Force's second part): R's decision trace on R's path. A traced
+/// session, and one forced to every decision the trace recorded, serve what an untraced session
+/// serves at every step, and the forced one records the same trace. The trace holds the five
+/// kinds in the forward's order: each layer's buckets, each lane's entry the one its score
+/// chooses; the read after layer 1, none after layer 2, then the readout's, each head's codes and
+/// kept set the Hamming trace's; the turn memory's lookups from the opening on; no nearest, which
+/// the caller fills.
+#[test]
+fn rs_decision_trace_records_its_decisions_and_changes_no_step() {
+    use crate::fbs_snapshot::DecisionForceWindow;
+    let model = IntegerStackModel::parse(&decision_stack(DECISION_RAW, |_| ())).expect("R's path");
+    let (tokens, reply_start) = turn_memory_script(DECISION_REPLY);
+    let (plain, off) = decision_run(&model, None);
+    assert_eq!(off, None, "off unless set");
+    let (traced, trace) = decision_run(&model, Some(&DecisionForceWindow::default()));
+    assert_eq!(traced, plain, "the trace changes no step");
+    let trace = trace.expect("the trace");
+    assert_eq!(trace.len(), tokens.len());
+
+    let mut hamming = model.session();
+    hamming.set_hamming_trace(true);
+    for (row, &token) in tokens.iter().enumerate() {
+        if row + 1 == reply_start {
+            hamming.mark_reply_start();
+        }
+        hamming.step_native(token).expect("step");
+    }
+    let reads = hamming.take_hamming_trace().expect("the Hamming trace");
+    assert_eq!(reads.len(), 2 * tokens.len(), "two reads a step");
+    let lanes = model.shape().lanes();
+    let mut kept = 0;
+    for (t, step) in trace.iter().enumerate() {
+        assert_eq!(step.layers.len(), 2, "step {t}");
+        for layer in &step.layers {
+            assert_eq!(layer.score_q16.len(), lanes, "step {t}");
+            let own: Vec<u8> = layer.score_q16.iter().map(|&s| (s >> 12).min(15) as u8).collect();
+            assert_eq!(layer.entry, own, "step {t}: each lane's entry is its score's");
+        }
+        assert_eq!(step.layers[1].read, None, "step {t}: no read after the last layer");
+        let ours = [step.layers[0].read.as_ref(), step.readout.as_ref()];
+        for (read, served) in ours.into_iter().zip(&reads[2 * t..2 * t + 2]) {
+            let read = read.expect("both reads run");
+            assert_eq!(read.depth, served.depth, "step {t}");
+            assert_eq!(read.heads.len(), 4, "step {t}: both kinds of head");
+            for (h, s) in read.heads.iter().zip(&served.heads) {
+                assert_eq!((h.query, h.key, &h.kept), (s.query, s.key, &s.kept), "step {t}");
+                kept += usize::from(h.kept.len() == 2);
+            }
+        }
+        assert_eq!(step.nearest, None, "step {t}: the caller's");
+        match step.memory.as_ref() {
+            None => assert!(t + 1 < reply_start, "step {t}: a lookup from the opening on"),
+            Some(m) if t + 1 == reply_start => assert_eq!((m.opening, m.stored), (true, Some(42)), "the opening hits"),
+            Some(m) => assert!(!m.opening && t >= reply_start, "step {t}: a reply lookup"),
+        }
+    }
+    assert!(kept > 0, "some rows keep a full set");
+    assert!(trace.iter().any(|s| s.layers.iter().any(|l| l.entry.iter().any(|&e| e != l.entry[0]))), "buckets vary");
+
+    let all = force_all(&trace);
+    let (forced, retrace) = decision_run(&model, Some(&all));
+    assert_eq!(forced, plain, "forced to its own decisions, R serves what it serves");
+    assert_eq!(retrace.as_ref(), Some(&trace), "and records the same trace");
+}
+
+/// claude-249 (I-Force's first part): a forced bucket, and a forced query or key code of either
+/// kind of head, each takes the forced value in the trace and changes what comes after it, while
+/// every step before it is the served one. A forced query changes its own row's kept set; a forced
+/// key, candidate s's, a later row's; a forced bucket, the step's query.
+#[test]
+fn a_forced_bucket_or_code_takes_the_forced_value_and_changes_what_follows() {
+    use crate::fbs_snapshot::{CodeRole, DecisionForceWindow, DecisionRead, DecisionStep, ForcedBucket, ForcedCode};
+    let model = IntegerStackModel::parse(&decision_stack(DECISION_RAW, |_| ())).expect("R's path");
+    let (plain, trace) = decision_run(&model, Some(&DecisionForceWindow::default()));
+    let trace = trace.expect("the trace");
+    let run = |force: DecisionForceWindow, at: usize, what: &str| {
+        let (steps, got) = decision_run(&model, Some(&force));
+        let got = got.expect("the trace");
+        assert_eq!(steps[..at], plain[..at], "{what}: the steps before are the served ones");
+        assert_eq!(got[..at], trace[..at], "{what}: and their decisions");
+        (steps, got)
+    };
+
+    let (step, layer, lane) = (4, 0, 0);
+    let entry = (trace[step].layers[layer].entry[lane] + 8) % 16;
+    let force = DecisionForceWindow { buckets: vec![ForcedBucket { step, layer, lane, entry }], ..Default::default() };
+    let (steps, got) = run(force, step, "a bucket");
+    assert_eq!(got[step].layers[layer].entry[lane], entry, "the forced entry is the one used");
+    assert_eq!(got[step].layers[layer].score_q16, trace[step].layers[layer].score_q16, "from the same scores");
+    assert_ne!(steps[step].query_q12, plain[step].query_q12, "the step's query changes");
+
+    let read = |s: &DecisionStep, depth: usize| -> DecisionRead {
+        if depth == 1 { s.layers[0].read.clone() } else { s.readout.clone() }.expect("the read")
+    };
+    // A copy head's and a type head's query, a copy head's and a type head's key, at both depths.
+    let cases = [(CodeRole::Query, 6, 1, 0), (CodeRole::Query, 7, 2, 3), (CodeRole::Key, 3, 1, 1), (CodeRole::Key, 4, 2, 2)];
+    for (role, step, depth, head) in cases {
+        let what = format!("{role:?} at step {step}, depth {depth}, head {head}");
+        let own = read(&trace[step], depth).heads[head].clone();
+        let code = !match role {
+            CodeRole::Query => own.query,
+            CodeRole::Key => own.key,
+        };
+        let force = DecisionForceWindow {
+            codes: vec![ForcedCode { step, depth, head, role, code }],
+            ..Default::default()
+        };
+        let (steps, got) = run(force, step, &what);
+        let used = read(&got[step], depth).heads[head].clone();
+        let used = match role {
+            CodeRole::Query => used.query,
+            CodeRole::Key => used.key,
+        };
+        assert_eq!(used, code, "{what}: the forced code is the one used");
+        let later = match role {
+            CodeRole::Query => step..step + 1,
+            CodeRole::Key => step + 1..got.len(),
+        };
+        assert!(
+            later.into_iter().any(|u| read(&got[u], depth).heads[head].kept != read(&trace[u], depth).heads[head].kept),
+            "{what}: a kept set it decides changes"
+        );
+        assert_ne!(steps[step..], plain[step..], "{what}: what R serves changes");
+    }
+}
+
+/// claude-249: the decision trace refuses an artifact off R's path under the card (a dense stack,
+/// a snapped gate or transition, the writer head), a session that has stepped, and a forced set
+/// naming a step, layer, lane, entry, depth or head outside the model, a key at step 0, or one
+/// decision twice; a model without reads refuses any forced code. A refused trace stays off. A
+/// recurrence that is not geometric is refused by the shape's own validation before a session
+/// exists (`a_retained_fbs_stack_serves_the_retained_reference`).
+#[test]
+fn the_decision_trace_refuses_what_is_off_rs_path() {
+    use crate::fbs_snapshot::{CodeRole, DecisionForceWindow, ForcedBucket, ForcedCode};
+    let none = DecisionForceWindow::default();
+    let refused = |bytes: &[u8], force: &DecisionForceWindow, what: &str| {
+        let model = IntegerStackModel::parse(bytes).expect(what);
+        let mut session = model.session();
+        assert!(session.set_decision_trace(force).is_err(), "{what}");
+        assert_eq!(session.take_decision_trace(), None, "{what}: the trace stays off");
+    };
+    refused(&artifact(7), &none, "a dense stack");
+    for snaps in FBS_EXPORT_SNAP_CHOICES.into_iter().filter(|&s| s != DECISION_RAW) {
+        refused(&decision_stack(snaps, |_| ()), &none, &format!("snapped: {snaps:?}"));
+    }
+    refused(&decision_stack(DECISION_RAW, |s| s.readout_nearest = false), &none, "the writer head");
+
+    let bytes = decision_stack(DECISION_RAW, |_| ());
+    let model = IntegerStackModel::parse(&bytes).expect("R's path");
+    let mut stepped = model.session();
+    stepped.step_native(0).expect("step");
+    assert!(stepped.set_decision_trace(&none).is_err(), "a session that has stepped");
+
+    let (context, lanes) = (model.shape().context, model.shape().lanes());
+    let bucket = |step, layer, lane, entry| ForcedBucket { step, layer, lane, entry };
+    let code = |step, depth, head, role| ForcedCode { step, depth, head, role, code: 1 };
+    let with = |buckets: Vec<ForcedBucket>, codes: Vec<ForcedCode>| DecisionForceWindow { buckets, codes, ..Default::default() };
+    let outside = [
+        with(vec![bucket(context, 0, 0, 0)], vec![]),
+        with(vec![bucket(0, 2, 0, 0)], vec![]),
+        with(vec![bucket(0, 0, lanes, 0)], vec![]),
+        with(vec![bucket(0, 0, 0, 16)], vec![]),
+        with(vec![bucket(1, 0, 0, 3), bucket(1, 0, 0, 3)], vec![]),
+        with(vec![], vec![code(context, 1, 0, CodeRole::Query)]),
+        with(vec![], vec![code(0, 0, 0, CodeRole::Query)]),
+        with(vec![], vec![code(0, 3, 0, CodeRole::Query)]),
+        with(vec![], vec![code(0, 1, 4, CodeRole::Query)]),
+        with(vec![], vec![code(0, 1, 0, CodeRole::Key)]),
+        with(vec![], vec![code(2, 2, 1, CodeRole::Key), code(2, 2, 1, CodeRole::Key)]),
+    ];
+    for force in &outside {
+        refused(&bytes, force, &format!("{force:?}"));
+    }
+    let edges = with(
+        vec![bucket(context - 1, 1, lanes - 1, 15), bucket(0, 0, 0, 0)],
+        vec![code(context - 1, 2, 3, CodeRole::Key), code(0, 1, 0, CodeRole::Query), code(1, 1, 0, CodeRole::Key)],
+    );
+    assert!(model.session().set_decision_trace(&edges).is_ok(), "the model's edges are inside it");
+    let no_reads = decision_stack(DECISION_RAW, |s| s.hamming = None);
+    let model = IntegerStackModel::parse(&no_reads).expect("no reads");
+    assert!(model.session().set_decision_trace(&none).is_ok(), "no read, no code: a trace");
+    refused(&no_reads, &with(vec![], vec![code(0, 1, 0, CodeRole::Query)]), "a code on a model without reads");
+}
