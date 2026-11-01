@@ -23,8 +23,8 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 | ready | 23 |
 | held | 10 |
 | decision | 1 |
-| done | 88 |
-| total | 122 |
+| done | 89 |
+| total | 123 |
 
 ## Start here
 
@@ -183,6 +183,7 @@ These items are ready and open to anyone.
 | [Route the user's turn to an exact memory built from TRAIN, read at the readout](items/route-plus-memory.md) | done | a lab | yes | none | [#3390](https://github.com/UOR-Foundation/uor-r4/issues/3390) |
 | [Measure SpiralCore/FBS descent and tokens per second in a float sheet](items/spiralcore-fbs-offline-float-sheet.md) | done | a lab | yes | [float-training-module](items/float-training-module.md), [r-secant-surrogate-descent](items/r-secant-surrogate-descent.md) | [#2891](https://github.com/UOR-Foundation/uor-r4/issues/2891) |
 | [Carry the turn memory past a reply's first word](items/turn-memory-reply.md) | done | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | [#3393](https://github.com/UOR-Foundation/uor-r4/issues/3393) |
+| [Add opt-in artifact telemetry to the standalone CUDA example](items/uor-telemetry.md) | done | a lab | no | [uor-cuda-inverted-file](items/uor-cuda-inverted-file.md) | [#3478](https://github.com/UOR-Foundation/uor-r4/issues/3478) |
 
 ## Infrastructure
 
@@ -319,6 +320,8 @@ flowchart LR
   n_training_step_cost["training-step-cost"]
   n_turn_memory_integer["turn-memory-integer"]
   n_turn_memory_reply["turn-memory-reply"]
+  n_uor_cuda_inverted_file["uor-cuda-inverted-file"]
+  n_uor_telemetry["uor-telemetry"]
   n_writer_admission["writer-admission"]
   n_d11_exporter_float_trunk --> n_integer_retention_rates
   n_d41_driver_math_pilot --> n_m2_donor_corpus_generation
@@ -448,4 +451,5 @@ flowchart LR
   n_spiralcore_fbs_offline_float_sheet --> n_integer_hamming_read
   n_turn_memory_integer --> n_point_key_integer
   n_turn_memory_reply --> n_one_model_end_to_end
+  n_uor_cuda_inverted_file --> n_uor_telemetry
 ```
