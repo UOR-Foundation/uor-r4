@@ -55,7 +55,7 @@ use uor_r4_float_train::flock_read_hamming::{
 use uor_r4_float_train::flock_read_memory::TurnMemory;
 use uor_r4_float_train::geometric_stack::{set_retention_rates, StackModel};
 use uor_r4_float_train::hamilton_sheet::{
-    build_document_windows, load_pinned_uort_split, EXPECTED_DEV_ELIGIBLE_TARGETS,
+    build_document_windows, load_pinned_uort_split, CausalWindow, EXPECTED_DEV_ELIGIBLE_TARGETS,
     EXPECTED_DEV_TOKENS, PINNED_DEV_MASK_SHA256, PINNED_DEV_TOKENS_SHA256, SHEET_BOS_ID,
     SHEET_CONTEXT, SHEET_VOCAB,
 };
@@ -109,7 +109,7 @@ fn output_place(path: &str) -> Result<PathBuf> {
 }
 
 /// claude-240: every `PARITY_WINDOW_STRIDE`-th window, from the first (claude-126's rule).
-fn sample_windows(windows: Vec<Vec<u32>>) -> Vec<Vec<u32>> {
+fn sample_windows<T>(windows: Vec<T>) -> Vec<T> {
     windows.into_iter().step_by(PARITY_WINDOW_STRIDE).collect()
 }
 
@@ -136,13 +136,25 @@ fn dev_sample(data_root: &str) -> Result<Vec<Vec<u32>>> {
         )));
     }
     let all = windows.len();
-    let sample = sample_windows(windows.into_iter().map(|w| w.input_ids).collect());
-    println!("dev: {all} windows, {} sampled", sample.len());
+    let sample: Vec<Vec<u32>> = sample_windows(windows).iter().map(scored_prefix).collect();
+    let positions: usize = sample.iter().map(Vec::len).sum();
+    println!(
+        "dev: {all} windows, {} sampled, {positions} positions",
+        sample.len()
+    );
     Ok(sample)
 }
 
-/// A readout on the DEV sample when there is one, else on the fixed sequences. A sample window
-/// that is not the model's context long is refused, since the trainer cut DEV at its context.
+/// A window's inputs up to its last scored position. The trainer pads each window with BOS to
+/// `SHEET_CONTEXT`, and the model is causal, so the cut changes no scored prediction and keeps the
+/// padding out of the parity counts. `build_document_windows` keeps only windows that score.
+fn scored_prefix(window: &CausalWindow) -> Vec<u32> {
+    let last = window.scored_offsets.iter().max().copied().unwrap_or(0);
+    window.input_ids[..=last].to_vec()
+}
+
+/// A readout on the DEV sample when there is one, else on the fixed sequences. The trainer cut
+/// DEV at `SHEET_CONTEXT`, so a model with another context, or a window past it, is refused.
 fn readout_on(
     model: &StackModel,
     mode: FbsReadoutMode,
@@ -152,10 +164,9 @@ fn readout_on(
         return fbs_float_readout(model, mode);
     };
     let context = model.config.context;
-    if let Some(w) = sample.iter().find(|w| w.len() != context) {
+    if context != SHEET_CONTEXT || sample.iter().any(|w| w.is_empty() || w.len() > context) {
         return Err(FloatTrainError::Invalid(format!(
-            "a DEV window is {} long, and the model's context is {context}",
-            w.len()
+            "the model's context is {context}, and DEV was cut at {SHEET_CONTEXT} into windows of 1 to {SHEET_CONTEXT}"
         )));
     }
     fbs_float_readout_on(model, mode, sample)
@@ -306,7 +317,21 @@ fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{output_place, sample_windows, PARITY_WINDOW_STRIDE};
+    use super::{output_place, sample_windows, scored_prefix, CausalWindow, PARITY_WINDOW_STRIDE};
+
+    /// claude-240: a DEV window is cut after its last scored position, so its BOS padding never
+    /// reaches the parity counts, and every scored position and its prefix stay.
+    #[test]
+    fn a_dev_window_is_cut_after_its_last_scored_position() {
+        let window = CausalWindow {
+            doc_id: 0,
+            input_ids: vec![0, 5, 6, 7, 8, 0, 0, 0],
+            scored_offsets: vec![1, 3],
+            scored_targets: vec![6, 8],
+            scored_corpus_positions: vec![2, 4],
+        };
+        assert_eq!(scored_prefix(&window), vec![0, 5, 6, 7]);
+    }
 
     /// claude-240: the DEV sample is claude-126's, every 8th window from the first, in order.
     #[test]
@@ -318,7 +343,7 @@ mod tests {
             vec![vec![0; 3], vec![8; 3], vec![16; 3]]
         );
         // DEV's 428 windows give 54.
-        assert_eq!(sample_windows(vec![Vec::new(); 428]).len(), 54);
+        assert_eq!(sample_windows(vec![0u8; 428]).len(), 54);
     }
 
     /// claude-235: two spellings of one output are one place, so the trace refuses them.
