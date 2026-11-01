@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: false
 depends_on: [integer-retention-rates, one-decoder]
 notebook: docs/research/notebook/m4-serving.md
-scope: [crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/kernels.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/src/wasm_serve.rs, crates/uor-r4-integer/src/wasm_bindgen_exports.rs, crates/uor-r4-float-train/src/fbs_export.rs, crates/uor-r4-float-train/src/bin/fbs-snapshot.rs, docs/roadmap/items/integer-nearest-readout.md, docs/harness/prep/integer-nearest-readout*, docs/labs/integer-nearest-readout/**, docs/loop/tasks/integer-nearest-readout/**, docs/research/notebook/m4-serving.md]
+scope: [crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/kernels.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/src/wasm_serve.rs, crates/uor-r4-integer/src/wasm_bindgen_exports.rs, crates/uor-r4-float-train/src/fbs_export.rs, crates/uor-r4-float-train/src/bin/fbs-snapshot.rs, crates/uor-r4-integer/src/stack/hamming.rs, crates/uor-r4-float-train/src/flock_read_hamming.rs, crates/uor-r4-float-train/src/geometric_stack_native.rs, crates/uor-r4-float-train/src/cuda_stack.cu, crates/uor-r4-float-train/src/in_space_long.rs, docs/roadmap/items/integer-nearest-readout.md, docs/harness/prep/integer-nearest-readout*, docs/labs/integer-nearest-readout/**, docs/loop/tasks/integer-nearest-readout/**, docs/research/notebook/m4-serving.md]
 ---
 
 ## Why it matters
@@ -40,7 +40,7 @@ The project's first hurdle is one working model end to end, served from its inte
 
 - **Next: the trace instrument, then the sheet that reads Q5,** under claude-247's card. Q1 to Q4 held in claude-246, so done-when 3 waits on Q5 alone.
   - **The instrument** records every decision of the card's five kinds on F, T and R: Hamming codes, kept sets, memory lookups, rate buckets and the nearest. It forces codes and rate buckets, and writes each side's query at the traced positions, so each side can score the other's pick.
-    - Its ORDER adds the card's scope change to this item: `stack/hamming.rs`, `flock_read_hamming.rs`, `geometric_stack_native.rs`, `cuda_stack.cu` and `in_space_long.rs`.
+    - The card's scope change is in place: `stack/hamming.rs`, `flock_read_hamming.rs`, `geometric_stack_native.rs`, `cuda_stack.cu` and `in_space_long.rs` are in this item's `scope:` (claude-248).
     - It builds T's rounded copy beside `--rebind-fbs-backward`.
   - **The sheet** registers the card's rule verbatim, with a fresh FIT and a pre-run review. Its Row 0 is the card's: I-F, I-R, I-Twin, I-Rerun, I-Force, I-Align, I-Complete, I-Set and I-Inputs. GPU for F and T, under an hour; the laptop for R.
 - **Leads for the trace,** layer by layer: the trunk, Hamming read, memory and readout. Recheck end-to-end parity before rerunning p-x.
