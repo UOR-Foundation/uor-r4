@@ -46,7 +46,7 @@ use super::kernels::{
     stack_snap_select, stack_square, to_exp_i32, PackedMatrix, ARCOSH_TABLE_LEN, PRODUCT_EXP,
     NORM_FINE_EXP, RESIDUAL_EXP,
 };
-use super::hamming::{hamming_image, ServedHamming};
+use super::hamming::{hamming_image, HammingStepRead, ServedHamming};
 use super::memory::{memory_image, MemoryAnchors, MemoryMove, ServedTurnMemory};
 use super::StackError;
 
@@ -1055,6 +1055,16 @@ impl IntegerStackModel {
         &self.sha256
     }
 
+    /// The same model with its Hamming reads dropped, for timing the session without them
+    /// (claude-235: decode tokens/s with the read and without, on one artifact). Its steps are the
+    /// read-free trunk's, so it serves nothing the artifact was exported for.
+    pub fn without_hamming_read(mut self) -> Self {
+        if let Some(fbs) = self.fbs.as_mut() {
+            fbs.hamming = None;
+        }
+        self
+    }
+
     /// The turn memory the artifact carries, if any (`uor-r4.lut-stack/7`): its recorded key
     /// sizes, table counts and weight exponent. A model without one serves the trunk alone.
     pub fn turn_memory(&self) -> Option<&StackTurnMemory> {
@@ -1346,6 +1356,7 @@ impl IntegerStackModel {
                 .as_ref()
                 .and_then(|f| f.hamming.as_ref())
                 .map_or_else(Vec::new, |h| h.payload_caches(context)),
+            hamming_trace: None,
             pointer_keys: vec![0; pointer_dim * context],
             pointer_lifts: if pointer_lorentz {
                 vec![0; context]
@@ -1687,6 +1698,8 @@ pub struct IntegerStackSession<'m> {
     /// For each Hamming read with type heads, the payload of every position stepped so far,
     /// `context * width` (claude-195); empty for a read without them.
     hamming_payloads: Vec<Vec<i64>>,
+    /// While `Some`, each Hamming read's choices at every step (claude-235's trace).
+    hamming_trace: Option<Vec<HammingStepRead>>,
     /// The pointer head's keys `[position][dim]` (exponent -16) and Lorentz
     /// key lifts `[position]` (exponent -32), for the whole context.
     pointer_keys: Vec<i32>,
@@ -1767,6 +1780,19 @@ pub(super) fn max_serialized_session_bytes(model: &IntegerStackModel) -> u64 {
 impl IntegerStackSession<'_> {
     pub fn position(&self) -> usize {
         self.position
+    }
+
+    /// Record every Hamming read's choices from the next step on (claude-235), or stop and drop
+    /// what is recorded. Off in a fresh session; the served steps are the same either way.
+    pub fn set_hamming_trace(&mut self, on: bool) {
+        self.hamming_trace = on.then(Vec::new);
+    }
+
+    /// The reads' choices recorded since the trace was turned on, in step order, each step's
+    /// stream reads in depth order and then its readout read; the trace stays on, empty. `None`
+    /// while it is off.
+    pub fn take_hamming_trace(&mut self) -> Option<Vec<HammingStepRead>> {
+        self.hamming_trace.as_mut().map(std::mem::take)
     }
 
     /// Mark that the turn memory's reply begins at the next token this session predicts (units
@@ -3217,7 +3243,7 @@ fn stack_step_fbs(
             *x = x.saturating_add(*p);
         }
         if let Some(hamming) = &fbs.hamming {
-            hamming.stream(l + 1, &session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.x);
+            hamming.stream(l + 1, &session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.x, session.hamming_trace.as_mut());
         }
         #[cfg(test)]
         super::hamming::LAYER_TRACE.with(|trace| {
@@ -3229,7 +3255,7 @@ fn stack_step_fbs(
     stack_rms_norm_fine(&b.x, n.rms_eps, &mut b.scratch[..d]);
     stack_norm_gain(&mut b.scratch[..d], &fbs.final_gain);
     if let Some(hamming) = &fbs.hamming {
-        hamming.readout(&session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.scratch[..d]);
+        hamming.readout(&session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.scratch[..d], session.hamming_trace.as_mut());
     }
     // The turn memory's move (units 2-3), after the Hamming readout as in the float trunk: the
     // opening table at the reply's first step's row, the reply table each later row.
@@ -3391,14 +3417,14 @@ fn stack_step_fbs_timed(
         }
         // A Hamming read is timed inside the block it follows, so the stage list is unchanged.
         if let Some(hamming) = &fbs.hamming {
-            hamming.stream(l + 1, &session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.x);
+            hamming.stream(l + 1, &session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.x, session.hamming_trace.as_mut());
         }
         lap(&mut since, ns);
     }
     stack_rms_norm_fine(&b.x, n.rms_eps, &mut b.scratch[..d]);
     stack_norm_gain(&mut b.scratch[..d], &fbs.final_gain);
     if let Some(hamming) = &fbs.hamming {
-        hamming.readout(&session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.scratch[..d]);
+        hamming.readout(&session.tokens, &fbs.writer_table, &mut session.hamming_payloads, &mut b.scratch[..d], session.hamming_trace.as_mut());
     }
     // The turn memory's move (units 2-3), after the Hamming readout as in the float trunk: the
     // opening table at the reply's first step's row, the reply table each later row.

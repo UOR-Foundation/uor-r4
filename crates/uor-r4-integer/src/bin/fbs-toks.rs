@@ -31,15 +31,109 @@
 //! which splits each layer's two blocks into nine parts. It adds `parts`: the
 //! same profile by part, and under `against_blocks` each block's parts summed
 //! against that block's median from the `--stages` run, per mille.
+//!
+//! The Hamming read's trace (integer-hamming-read, claude-235):
+//! - `--hamming-trace D11_READOUT_JSON TRACE_JSON` steps a fresh session over each sequence of
+//!   the float D11 readout (`fbs-snapshot`'s) and writes what each read chose
+//!   (`uor-r4.hamming-trace/1`), as `fbs-snapshot --hamming-trace` writes the float's;
+//! - `--hamming-trace-compare FIRST SECOND` holds two traces side by side
+//!   (`compare_hamming_traces`) and prints the comparison;
+//! - `--context-sweep` runs the protocol with prefills of 32, 64, 96 and 128 tokens, each
+//!   followed by the 64 decode steps, with the artifact's Hamming read and without it: decode
+//!   tokens per second against context, the read's long-context cost.
 
 use std::process::{Command, ExitCode};
 use std::time::Instant;
 
 use serde::Deserialize;
 use serde_json::json;
-use uor_r4_integer::stack::{panel_reply, IntegerStackModel, ReplyEnd};
+use uor_r4_integer::fbs_snapshot::{
+    compare_hamming_traces, write_new_file, FbsFloatReadout, FbsReadoutMode, HammingTrace, HAMMING_TRACE_SCHEMA,
+};
+use uor_r4_integer::stack::{
+    hamming_trace_window, panel_reply, read_hamming_uorlut01, IntegerStackModel, ReplyEnd,
+};
 
-const USAGE: &str = "usage: fbs-toks ARTIFACT [--prompt ID,ID,...] [--stages] [--parts]\n       fbs-toks ARTIFACT --replies PROMPTS_JSON --out FILE [--reply-tokens N]";
+const USAGE: &str = "usage: fbs-toks ARTIFACT [--prompt ID,ID,...] [--stages] [--parts]\n       fbs-toks ARTIFACT --replies PROMPTS_JSON --out FILE [--reply-tokens N]\n       fbs-toks ARTIFACT --hamming-trace D11_READOUT_JSON TRACE_JSON\n       fbs-toks --hamming-trace-compare FIRST_TRACE SECOND_TRACE\n       fbs-toks ARTIFACT --context-sweep";
+
+/// The prefills `--context-sweep` times, each followed by `DECODE` steps (claude-235).
+const SWEEP_PREFILLS: [usize; 4] = [32, 64, 96, 128];
+
+/// `--hamming-trace` (claude-235): each read's choices in a fresh session over each sequence of
+/// the float D11 readout at `readout`, written new to `out`; it prints the window count and the
+/// file's sha256.
+fn hamming_trace(model: &IntegerStackModel, bytes: &[u8], readout: &str, out: &str) -> Result<(), String> {
+    let image = read_hamming_uorlut01(bytes)
+        .map_err(|e| format!("the Hamming reads: {e}"))?
+        .ok_or("the artifact has no Hamming read to trace")?;
+    let text = std::fs::read(readout).map_err(|e| format!("{readout}: {e}"))?;
+    let readout: FbsFloatReadout = serde_json::from_slice(&text).map_err(|e| format!("{readout}: {e}"))?;
+    if readout.mode != FbsReadoutMode::D11 {
+        return Err(format!("the readout was read in the {:?} mode, not D11", readout.mode));
+    }
+    let mut windows = Vec::with_capacity(readout.sequences.len());
+    for (i, sequence) in readout.sequences.iter().enumerate() {
+        let mut session = model.session();
+        session.set_hamming_trace(true);
+        for &token in &sequence.tokens {
+            session.step_native(token).map_err(|e| format!("sequence {i}: {e}"))?;
+        }
+        let steps = session.take_hamming_trace().ok_or("the trace was off")?;
+        windows.push(hamming_trace_window(&sequence.tokens, &steps).map_err(|e| format!("sequence {i}: {e}"))?);
+    }
+    let trace = HammingTrace {
+        schema: HAMMING_TRACE_SCHEMA.to_owned(),
+        side: "integer".to_owned(),
+        arm: "integer".to_owned(),
+        heads: image.record.heads,
+        kept: image.record.kept,
+        windows,
+    };
+    let text = serde_json::to_vec(&trace).map_err(|e| e.to_string())?;
+    write_new_file(std::path::Path::new(out), &text).map_err(|e| format!("{out}: {e}"))?;
+    println!(
+        "{}",
+        json!({ "windows": trace.windows.len(), "out": out, "sha256": hex::encode(<sha2::Sha256 as sha2::Digest>::digest(&text)) })
+    );
+    Ok(())
+}
+
+/// `--hamming-trace-compare` (claude-235): the comparison of the trace at `first` with the one
+/// at `second`, as one JSON line.
+fn hamming_trace_compare(first: &str, second: &str) -> Result<(), String> {
+    let read = |path: &str| -> Result<HammingTrace, String> {
+        let text = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+        serde_json::from_slice(&text).map_err(|e| format!("{path}: {e}"))
+    };
+    let (a, b) = (read(first)?, read(second)?);
+    let comparison = compare_hamming_traces(&a, &b)?;
+    println!(
+        "{}",
+        json!({
+            "schema": "uor-r4.hamming-trace-compare/1",
+            "first": { "path": first, "side": a.side, "arm": a.arm },
+            "second": { "path": second, "side": b.side, "arm": b.arm },
+            "comparison": comparison,
+        })
+    );
+    Ok(())
+}
+
+/// `--context-sweep` (claude-235): the protocol at each of `SWEEP_PREFILLS` over the fixed
+/// prompt's first tokens, on `model` and on the same model without its Hamming read.
+fn context_sweep(model: &IntegerStackModel, without: &IntegerStackModel, prompt: &[u32]) -> Result<serde_json::Value, String> {
+    let mut points = Vec::with_capacity(SWEEP_PREFILLS.len());
+    for prefill in SWEEP_PREFILLS {
+        let prompt = &prompt[..prefill];
+        points.push(json!({
+            "prefill": prefill,
+            "context_end": prefill + DECODE,
+            "with_read": protocol(|| model.session(), prompt)?,
+            "without_read": protocol(|| without.session(), prompt)?,
+        }));
+    }
+    Ok(json!(points))
+}
 
 /// One panel prompt for `--replies` (claude-224), as `train-in-space --panel-prompts` writes it:
 /// the reply's corpus position, the prompt's ids, the reference reply, and optionally the float
@@ -433,6 +527,19 @@ fn run() -> Result<(), String> {
         let model = IntegerStackModel::parse(&bytes).map_err(|e| format!("parse: {e}"))?;
         return replies(&model, prompts, out, reply_tokens);
     }
+    match args.as_slice() {
+        [flag, first, second] if flag == "--hamming-trace-compare" => {
+            return hamming_trace_compare(first, second);
+        }
+        [path, flag, readout, out] if flag == "--hamming-trace" => {
+            let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+            let model = IntegerStackModel::parse(&bytes).map_err(|e| format!("parse: {e}"))?;
+            return hamming_trace(&model, &bytes, readout, out);
+        }
+        _ => {}
+    }
+    let sweep = args.iter().any(|a| a == "--context-sweep");
+    let args: Vec<String> = args.into_iter().filter(|a| a != "--context-sweep").collect();
     let parts = args.iter().any(|a| a == "--parts");
     let stages = parts || args.iter().any(|a| a == "--stages");
     let args: Vec<String> = args
@@ -476,6 +583,24 @@ fn run() -> Result<(), String> {
         return Err(format!(
             "prompt token {t} is outside the vocabulary {vocab}"
         ));
+    }
+    if sweep {
+        if stages || prompt_arg.is_some() {
+            return Err(format!("--context-sweep takes no other flag: {USAGE}"));
+        }
+        if read_hamming_uorlut01(&bytes).map_err(|e| format!("the Hamming reads: {e}"))?.is_none() {
+            return Err("--context-sweep times the Hamming read, and the artifact has none".to_owned());
+        }
+        let without = IntegerStackModel::parse(&bytes).map_err(|e| format!("parse: {e}"))?.without_hamming_read();
+        let report = json!({
+            "schema": "uor-r4.fbs-toks-context/1",
+            "artifact_sha256": model.artifact_sha256(),
+            "decode_tokens": DECODE,
+            "points": context_sweep(&model, &without, &prompt)?,
+            "hardware": hardware(),
+        });
+        println!("{report}");
+        return Ok(());
     }
     let timing = protocol(|| model.session(), &prompt)?;
     let mut report = json!({

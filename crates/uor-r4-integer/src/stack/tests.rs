@@ -5693,3 +5693,167 @@ fn the_run_readout_is_its_objective() {
     assert!(readout(r#"{"objective":3}"#).is_err());
     assert!(readout("not json").is_err());
 }
+
+/// claude-235: the integer side of the Hamming trace, on the synthetic trunk with a read after
+/// layer 1 and on the readout, both kinds of head served. The trace over `repeating_tokens`, the
+/// served model, and the read's record.
+fn integer_hamming_trace() -> (crate::fbs_snapshot::HammingTrace, IntegerStackModel, super::HammingImage) {
+    use crate::fbs_snapshot::{HammingTrace, HAMMING_TRACE_SCHEMA};
+    let (_, _, with_read) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    let model = IntegerStackModel::parse(&with_read).expect("the read is served");
+    let image = super::read_hamming_uorlut01(&with_read).expect("parse").expect("the reads");
+    let tokens = repeating_tokens();
+    let mut session = model.session();
+    session.set_hamming_trace(true);
+    for &token in &tokens {
+        session.step_native(token).expect("step");
+    }
+    let steps = session.take_hamming_trace().expect("the trace is on");
+    let window = super::hamming_trace_window(&tokens, &steps).expect("one window");
+    let trace = HammingTrace {
+        schema: HAMMING_TRACE_SCHEMA.to_owned(),
+        side: "integer".to_owned(),
+        arm: "integer".to_owned(),
+        heads: image.record.heads,
+        kept: image.record.kept,
+        windows: vec![window],
+    };
+    (trace, model, image)
+}
+
+/// claude-235: with the trace on, every step serves what it serves with the trace off, and the
+/// trace holds each read's choices at every row: a copy head's query and key are its vocabulary
+/// codes and its kept set is `CopyHeads::choose`'s; a type head's key is its vocabulary code and
+/// its set holds `min(kept, t − 1)` positions. A trace compared with itself agrees everywhere.
+#[test]
+fn the_hamming_trace_records_each_reads_choices_and_changes_no_step() {
+    use crate::fbs_snapshot::compare_hamming_traces;
+    let (trace, model, image) = integer_hamming_trace();
+    let tokens = repeating_tokens();
+    let (mut traced, mut plain) = (model.session(), model.session());
+    assert_eq!(plain.take_hamming_trace(), None, "off in a fresh session");
+    traced.set_hamming_trace(true);
+    for (t, &token) in tokens.iter().enumerate() {
+        assert_eq!(traced.step_native(token).expect("step"), plain.step_native(token).expect("step"), "position {t}");
+    }
+    assert_eq!(traced.save_state(), plain.save_state());
+    assert_eq!(traced.take_hamming_trace().map(|s| s.len()), Some(2 * tokens.len()), "two reads a step");
+    assert_eq!(traced.take_hamming_trace(), Some(Vec::new()), "taken, and still on");
+
+    let free = IntegerStackModel::parse(&served_read_trunk(&[1, 3], 1.0, 1.0).1).expect("parse");
+    let table = free.fbs_image().expect("an FBS model").writer_table.to_vec();
+    let (vocab, width) = (free.shape().vocab, free.shape().width);
+    let (heads, copy) = (image.record.heads, image.record.heads / 2);
+    let window = &trace.windows[0];
+    assert_eq!(window.reads.iter().map(|r| r.depth).collect::<Vec<_>>(), [1, 3]);
+    let mut full = 0;
+    for (read, served) in window.reads.iter().zip(&image.reads) {
+        assert_eq!(read.heads.len(), heads, "both kinds of head");
+        let copies = super::CopyHeads::new(&image.record, served, &table, vocab, width);
+        let types = super::TypeHeads::new(&image.record, served, &table, vocab, width);
+        for t in 0..tokens.len() {
+            let want = image.record.kept.min(t.saturating_sub(1));
+            for h in 0..heads {
+                let head = &read.heads[h];
+                assert_eq!(head.kept[t].len(), want, "head {h}, row {t}");
+                if h < copy {
+                    let chosen: Vec<u32> = copies.choose(h, &tokens[..=t]).into_iter().map(|(s, _)| s as u32).collect();
+                    assert_eq!(head.kept[t], chosen, "copy head {h}, row {t}");
+                    assert_eq!(head.query[t], copies.code(tokens[t], h));
+                    assert_eq!(head.key[t], if t == 0 { 0 } else { copies.code(tokens[t - 1], h) });
+                } else {
+                    assert_eq!(head.key[t], if t == 0 { 0 } else { types.key(tokens[t - 1], h - copy) });
+                }
+                full += usize::from(want == image.record.kept);
+            }
+        }
+    }
+    assert!(full > 0, "some rows keep a full set");
+    let same = compare_hamming_traces(&trace, &trace).expect("compare");
+    assert!(same.faults.is_empty());
+    for row in &same.rows {
+        assert_eq!((row.equal, row.top1_equal), (row.judged, row.top1_judged), "{row:?}");
+        assert_eq!(row.judged, tokens.len() * copy, "{row:?}");
+        assert_eq!(row.downstream + row.not_served + row.ties + row.instrument_faults, 0, "{row:?}");
+    }
+}
+
+/// claude-235: one full set of the stream read's copy head at a row where a candidate it left
+/// out sits at its last kept place's distance: the head, the row, a member at that distance, the
+/// candidate, and a candidate farther than the place.
+fn a_tie_at_the_last_place(trace: &crate::fbs_snapshot::HammingTrace) -> (usize, usize, u32, u32, Option<u32>) {
+    let read = &trace.windows[0].reads[0];
+    for (h, head) in read.heads[..trace.heads / 2].iter().enumerate() {
+        for t in trace.kept + 1..head.kept.len() {
+            let distance = |s: u32| (head.query[t] ^ head.key[s as usize]).count_ones();
+            let set = &head.kept[t];
+            let place = set.iter().map(|&s| distance(s)).max().expect("a full set");
+            let left: Vec<u32> = (1..t as u32).filter(|s| !set.contains(s)).collect();
+            if let Some(&out) = left.iter().find(|&&s| distance(s) == place) {
+                let member = *set.iter().find(|&&s| distance(s) == place).expect("a member at the place");
+                let far = left.iter().copied().find(|&s| distance(s) > place);
+                return (h, t, member, out, far);
+            }
+        }
+    }
+    panic!("no copy-head row ties across its last kept place");
+}
+
+/// claude-235: the comparison classes a planted difference by the item's rule. A set swapping a
+/// member for a candidate at the same last-place distance is a tie, and the readout read's type
+/// sets from that row on are downstream. A swap with the query code flipped is a query flip, and
+/// with a kept position's key flipped a key flip. A set one short, or a swap off the place's
+/// distance with the same codes, is an instrument fault. Traces that do not line up are refused.
+#[test]
+fn the_trace_comparison_classes_ties_flips_and_instrument_faults() {
+    use crate::fbs_snapshot::compare_hamming_traces;
+    let (integer, ..) = integer_hamming_trace();
+    let (h, t, member, out, far) = a_tie_at_the_last_place(&integer);
+    let (time, types) = (integer.windows[0].ids.len(), integer.heads - integer.heads / 2);
+    let planted = |plant: &dyn Fn(&mut crate::fbs_snapshot::HammingTraceHead)| {
+        let mut first = integer.clone();
+        plant(&mut first.windows[0].reads[0].heads[h]);
+        compare_hamming_traces(&first, &integer).expect("compare")
+    };
+    let swap = |head: &mut crate::fbs_snapshot::HammingTraceHead, to: u32| {
+        let at = head.kept[t].iter().position(|&s| s == member).expect("the member");
+        head.kept[t][at] = to;
+    };
+    let causes = |c: &crate::fbs_snapshot::HammingTraceComparison| {
+        let r = &c.rows[0];
+        (r.judged - r.equal, r.ties, r.query_flips, r.key_flips, r.query_and_key_flips, r.instrument_faults)
+    };
+
+    let tie = planted(&|head| swap(head, out));
+    assert_eq!(causes(&tie), (1, 1, 0, 0, 0, 0), "{:?}", tie.rows[0]);
+    assert_eq!(tie.rows[3].downstream, (time - t) * types, "the readout's type sets from row {t} on");
+    assert_eq!(tie.rows[2].judged, tie.rows[2].equal, "the readout's copy sets are still judged");
+
+    let query = planted(&|head| {
+        swap(head, out);
+        head.query[t] ^= 1;
+    });
+    assert_eq!(causes(&query), (1, 0, 1, 0, 0, 0), "{:?}", query.rows[0]);
+    let key = planted(&|head| {
+        swap(head, out);
+        head.key[out as usize] ^= 1;
+    });
+    assert_eq!(causes(&key), (1, 0, 0, 1, 0, 0), "{:?}", key.rows[0]);
+
+    let short = planted(&|head| {
+        head.kept[t].pop();
+    });
+    assert_eq!(causes(&short), (1, 0, 0, 0, 0, 1), "{:?}", short.rows[0]);
+    assert!(short.faults[0].contains(&format!("{} kept, not {}", integer.kept - 1, integer.kept)), "{:?}", short.faults);
+    if let Some(far) = far {
+        let off = planted(&|head| swap(head, far));
+        assert_eq!(causes(&off), (1, 0, 0, 0, 0, 1), "{:?}", off.rows[0]);
+    }
+
+    let mut other = integer.clone();
+    other.windows[0].ids[0] ^= 1;
+    assert!(compare_hamming_traces(&other, &integer).is_err(), "other ids");
+    let mut fewer = integer.clone();
+    fewer.windows[0].reads[1].heads[0].query.pop();
+    assert!(compare_hamming_traces(&fewer, &integer).is_err(), "a head short of the window");
+}

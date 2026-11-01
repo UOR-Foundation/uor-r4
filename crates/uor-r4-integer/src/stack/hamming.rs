@@ -7,6 +7,7 @@
 //! so `restore_state` refuses a session with them rather than continue differently.
 
 use crate::bitcode::popcount_swar;
+use crate::fbs_snapshot::{HammingTraceHead, HammingTraceRead, HammingTraceWindow};
 
 use super::format::{Container, StackHamming, HAMMING_WEIGHT_EXP};
 use super::kernels::{stack_div_u64, stack_hamilton, NORM_FINE_EXP, RESIDUAL_EXP};
@@ -379,6 +380,61 @@ const READOUT_TYPE_DROP: u32 = (COPY_MEAN_EXP - NORM_FINE_EXP + TYPE_MEAN_SHIFT 
 /// The largest payload cache a session may hold (claude-195), the session read cache's bound.
 const MAX_PAYLOAD_BYTES: u64 = super::format::MAX_READ_CACHE_BYTES;
 
+/// One read's choices at one session step, recorded while the session's trace is on
+/// (claude-235): its depth (the layer count for the readout read) and each served head's.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HammingStepRead {
+    pub depth: usize,
+    /// The copy heads, then the type heads where the read serves them, in head order.
+    pub heads: Vec<HammingStepHead>,
+}
+
+/// One head's choice at one step's row `t`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HammingStepHead {
+    /// The query code at `t`.
+    pub query: u64,
+    /// The key code at `t`, the code of `x_{t−1}`'s point; 0 at row 0, which names no candidate.
+    pub key: u64,
+    /// The kept positions at `t`, in the order `nearest` keeps them.
+    pub kept: Vec<u32>,
+}
+
+/// The trace of one window `ids` from its session's recorded reads `steps`, each step's reads in
+/// the order the step runs them (claude-235): the record `fbs-toks --hamming-trace` writes, as the
+/// float `fbs-snapshot --hamming-trace` writes it. Refused unless every step recorded the same
+/// reads with the same heads.
+pub fn hamming_trace_window(ids: &[u32], steps: &[HammingStepRead]) -> Result<HammingTraceWindow, StackError> {
+    let per_step = if ids.is_empty() { 0 } else { steps.len() / ids.len() };
+    if per_step == 0 || per_step * ids.len() != steps.len() {
+        return Err(StackError::Shape("the Hamming trace does not hold the same reads at every step"));
+    }
+    let first = &steps[..per_step];
+    let mut reads: Vec<HammingTraceRead> = first
+        .iter()
+        .map(|r| HammingTraceRead {
+            depth: r.depth,
+            heads: vec![
+                HammingTraceHead { query: Vec::with_capacity(ids.len()), key: Vec::with_capacity(ids.len()), kept: Vec::with_capacity(ids.len()) };
+                r.heads.len()
+            ],
+        })
+        .collect();
+    for step in steps.chunks_exact(per_step) {
+        for (read, at) in reads.iter_mut().zip(step) {
+            if at.depth != read.depth || at.heads.len() != read.heads.len() {
+                return Err(StackError::Shape("the Hamming trace does not hold the same reads at every step"));
+            }
+            for (head, choice) in read.heads.iter_mut().zip(&at.heads) {
+                head.query.push(choice.query);
+                head.key.push(choice.key);
+                head.kept.push(choice.kept.clone());
+            }
+        }
+    }
+    Ok(HammingTraceWindow { ids: ids.to_vec(), reads })
+}
+
 /// One read on the served path: its copy heads and `w_c`, weight row 0; and its type heads and
 /// `w_y`, weight row 1, when any `w_y` is not zero.
 struct ServedRead {
@@ -460,20 +516,53 @@ impl ServedHamming {
         types.mean(&types.queries(point), tokens, &cache[..(t + 1) * self.width])
     }
 
+    /// Read `i`'s choices at the last row `t` of `tokens`, its type heads asking with the hook's
+    /// input `point` (claude-235's trace). It recomputes what the read's means choose, so the
+    /// served sums are untouched by it.
+    #[inline(never)]
+    fn record(&self, i: usize, point: &[i64], tokens: &[u32]) -> HammingStepRead {
+        let read = &self.reads[i];
+        let (Some(&last), t) = (tokens.last(), tokens.len().saturating_sub(1)) else {
+            return HammingStepRead { depth: read.depth, heads: Vec::new() };
+        };
+        let kept = |chosen: Vec<(usize, u32)>| chosen.into_iter().map(|(s, _)| s as u32).collect();
+        let mut heads: Vec<HammingStepHead> = (0..read.copy.copy)
+            .map(|h| HammingStepHead {
+                query: read.copy.code(last, h),
+                key: if t == 0 { 0 } else { read.copy.code(tokens[t - 1], h) },
+                kept: kept(read.copy.choose(h, tokens)),
+            })
+            .collect();
+        if let Some(types) = &read.types {
+            for (j, query) in types.queries(point).into_iter().enumerate() {
+                heads.push(HammingStepHead {
+                    query,
+                    key: if t == 0 { 0 } else { types.key(tokens[t - 1], j) },
+                    kept: kept(types.choose(j, query, tokens)),
+                });
+            }
+        }
+        HammingStepRead { depth: read.depth, heads }
+    }
+
     /// The read inside the stream after `depth` layers, as the float trunk's
     /// `x = q16(read.apply(&x, ids, &table))`: `x + w_c ⊙ c + w_y ⊙ y` at the last row of
     /// `tokens`, each sum formed exactly and rounded once to the residual's Q16, half away from
     /// zero, as `q16` rounds the sum. A kind of head that found no candidate adds nothing, as the
     /// float's `sums / max(found, 1)` is 0 there. A depth with no read, or the layer count (the
-    /// readout's), is left alone.
+    /// readout's), is left alone. A `trace` receives the read's choices (claude-235).
     #[inline(never)]
-    pub(crate) fn stream(&self, depth: usize, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], x: &mut [i32]) {
+    pub(crate) fn stream(&self, depth: usize, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], x: &mut [i32], trace: Option<&mut Vec<HammingStepRead>>) {
         if depth == self.layers {
             return;
         }
         let Some(i) = self.reads.iter().position(|r| r.depth == depth) else {
             return;
         };
+        if let Some(trace) = trace {
+            let point: Vec<i64> = x.iter().map(|&v| i64::from(v)).collect();
+            trace.push(self.record(i, &point, tokens));
+        }
         let read = &self.reads[i];
         let copy = read.copy.mean(tokens, table);
         let typed = match read.types {
@@ -497,12 +586,16 @@ impl ServedHamming {
     /// `apply_readout`: `n + w_c ⊙ (c − n)` where a copy head found a candidate at the last row
     /// of `tokens`, plus `w_y ⊙ y` where a type head did. The type term is pre-rounded 43 bits
     /// below `n`'s grid ([`readout_sum`]), and the sum then rounded once to `n`'s exponent. Not
-    /// rounded to Q16, as the float trunk does not round the readout read.
+    /// rounded to Q16, as the float trunk does not round the readout read. A `trace` receives the
+    /// read's choices (claude-235).
     #[inline(never)]
-    pub(crate) fn readout(&self, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], n: &mut [i64]) {
+    pub(crate) fn readout(&self, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], n: &mut [i64], trace: Option<&mut Vec<HammingStepRead>>) {
         let Some(i) = self.reads.iter().position(|r| r.depth == self.layers) else {
             return;
         };
+        if let Some(trace) = trace {
+            trace.push(self.record(i, n, tokens));
+        }
         let read = &self.reads[i];
         let copy = read.copy.mean(tokens, table);
         let typed = self.type_mean(i, n, tokens, payloads);

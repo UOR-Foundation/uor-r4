@@ -459,6 +459,198 @@ pub struct HammingTraceHead {
     pub kept: Vec<Vec<u32>>,
 }
 
+/// How two [`HammingTrace`]s' kept sets compare (claude-235, the item's step 5): a row per read
+/// and head kind, in read order, the copy row before the type row.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HammingTraceComparison {
+    pub windows: usize,
+    pub rows: Vec<HammingCompareRow>,
+    /// The first [`MAX_FAULTS_LISTED`] instrument faults, each with its window, read, head and
+    /// position.
+    pub faults: Vec<String>,
+}
+
+/// The most instrument faults a [`HammingTraceComparison`] lists by place.
+pub const MAX_FAULTS_LISTED: usize = 20;
+
+/// One read's sets of one head kind, compared.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HammingCompareRow {
+    /// The read's depth.
+    pub depth: usize,
+    /// `copy` or `type`.
+    pub kind: String,
+    /// The sets judged, and of them those equal.
+    pub judged: usize,
+    pub equal: usize,
+    /// Of the judged sets that hold a candidate, those whose nearest member, by each side's own
+    /// codes (bit distance, then position), is the same.
+    pub top1_judged: usize,
+    pub top1_equal: usize,
+    /// A judged set that differs, by cause: a tie across the last kept place; a sign flip in
+    /// the query alone, in a key alone, or in both; an instrument fault.
+    pub ties: usize,
+    pub query_flips: usize,
+    pub key_flips: usize,
+    pub query_and_key_flips: usize,
+    pub instrument_faults: usize,
+    /// Type-head sets of a later read where an earlier read's sets differ at or before the
+    /// position, so its residual carries that difference: counted apart, not judged.
+    pub downstream: usize,
+    /// Type-head sets the second trace does not hold (its read serves no type heads).
+    pub not_served: usize,
+}
+
+/// One side's kept set at row `t`, sorted, or why it cannot be a real kept set: real candidates
+/// are `1 ≤ s < t`, each once, `min(kept, t − 1)` of them.
+fn kept_set(kept: &[u32], t: usize, most: usize) -> Result<Vec<u32>, String> {
+    let mut set = kept.to_vec();
+    set.sort_unstable();
+    let want = most.min(t.saturating_sub(1));
+    if set.len() != want {
+        return Err(format!("{} kept, not {want}", set.len()));
+    }
+    if set.windows(2).any(|w| w[0] == w[1]) || set.iter().any(|&s| s == 0 || s as usize >= t) {
+        return Err(format!("{set:?} are not distinct positions 1 ≤ s < {t}"));
+    }
+    Ok(set)
+}
+
+/// Compare the `first` trace with the `second` on the same windows (claude-235): normally the
+/// float D11 readout's against the integer session's. A record that does not line up (other
+/// windows, reads, heads or lengths) is refused; a set that cannot be a kept set is counted an
+/// instrument fault.
+///
+/// Every copy-head set, and every type-head set of the first read, is judged at every position:
+/// their codes come from the table or from the trunk below the read. A later read's type-head
+/// set is judged only where every earlier read's sets agree at its position and before it, and
+/// counted as downstream elsewhere. A judged set that differs is a tie when both sides have the
+/// same query code and the same key code at every position either keeps, and each position only
+/// one keeps sits at the last kept place's distance (else an instrument fault); anything else is
+/// a sign flip.
+pub fn compare_hamming_traces(first: &HammingTrace, second: &HammingTrace) -> Result<HammingTraceComparison, String> {
+    for trace in [first, second] {
+        if trace.schema != HAMMING_TRACE_SCHEMA {
+            return Err(format!("the {} trace's schema is {}, not {HAMMING_TRACE_SCHEMA}", trace.side, trace.schema));
+        }
+    }
+    let (heads, most) = (first.heads, first.kept);
+    if heads == 0 || heads % 2 != 0 || second.heads != heads || second.kept != most {
+        return Err(format!(
+            "the traces hold {} and {} heads keeping {} and {}: they must agree, an even count",
+            first.heads, second.heads, first.kept, second.kept
+        ));
+    }
+    if first.windows.len() != second.windows.len() || first.windows.is_empty() {
+        return Err(format!("the traces hold {} and {} windows", first.windows.len(), second.windows.len()));
+    }
+    let copy = heads / 2;
+    let mut rows: Vec<HammingCompareRow> = first.windows[0]
+        .reads
+        .iter()
+        .flat_map(|r| {
+            ["copy", "type"].map(|kind| HammingCompareRow { depth: r.depth, kind: kind.to_owned(), ..Default::default() })
+        })
+        .collect();
+    let mut faults = Vec::new();
+    for (w, (a, b)) in first.windows.iter().zip(&second.windows).enumerate() {
+        let time = a.ids.len();
+        let depths = |x: &HammingTraceWindow| x.reads.iter().map(|r| r.depth).collect::<Vec<_>>();
+        if a.ids != b.ids || depths(a) != depths(b) || 2 * a.reads.len() != rows.len() || depths(a) != rows.iter().step_by(2).map(|r| r.depth).collect::<Vec<_>>() {
+            return Err(format!("window {w}: the traces' ids or reads differ"));
+        }
+        // Whether every earlier read's sets agreed at each position and before it.
+        let mut earlier = vec![true; time];
+        for (r, (ra, rb)) in a.reads.iter().zip(&b.reads).enumerate() {
+            if ra.heads.len() != heads || (rb.heads.len() != heads && rb.heads.len() != copy) {
+                return Err(format!("window {w}, read {r}: {} and {} heads, not {heads}", ra.heads.len(), rb.heads.len()));
+            }
+            let mut agree = vec![true; time];
+            for h in 0..heads {
+                let row = &mut rows[2 * r + usize::from(h >= copy)];
+                let Some(hb) = rb.heads.get(h) else {
+                    row.not_served += time;
+                    continue;
+                };
+                let ha = &ra.heads[h];
+                for x in [ha, hb] {
+                    if x.query.len() != time || x.key.len() != time || x.kept.len() != time {
+                        return Err(format!("window {w}, read {r}, head {h}: the codes and sets do not cover the window's {time} positions"));
+                    }
+                }
+                for t in 0..time {
+                    let (sa, sb) = (kept_set(&ha.kept[t], t, most), kept_set(&hb.kept[t], t, most));
+                    let same = matches!((&sa, &sb), (Ok(x), Ok(y)) if x == y);
+                    agree[t] &= same;
+                    if r > 0 && h >= copy && !earlier[t] {
+                        row.downstream += 1;
+                        continue;
+                    }
+                    row.judged += 1;
+                    let (sa, sb) = match (sa, sb) {
+                        (Ok(sa), Ok(sb)) => (sa, sb),
+                        (sa, sb) => {
+                            row.instrument_faults += 1;
+                            let why = sa.err().or(sb.err()).unwrap_or_default();
+                            if faults.len() < MAX_FAULTS_LISTED {
+                                faults.push(format!("window {w}, read {r}, head {h}, position {t}: {why}"));
+                            }
+                            continue;
+                        }
+                    };
+                    let distance = |x: &HammingTraceHead, s: u32| (x.query[t] ^ x.key[s as usize]).count_ones();
+                    if !sa.is_empty() {
+                        row.top1_judged += 1;
+                        let nearest = |x: &HammingTraceHead, set: &[u32]| set.iter().copied().min_by_key(|&s| (distance(x, s), s));
+                        row.top1_equal += usize::from(nearest(ha, &sa) == nearest(hb, &sb));
+                    }
+                    if same {
+                        row.equal += 1;
+                        continue;
+                    }
+                    let mut union: Vec<u32> = sa.iter().chain(&sb).copied().collect();
+                    union.sort_unstable();
+                    union.dedup();
+                    let query_same = ha.query[t] == hb.query[t];
+                    let keys_same = union.iter().all(|&s| ha.key[s as usize] == hb.key[s as usize]);
+                    match (query_same, keys_same) {
+                        (true, true) => {
+                            let last = |set: &[u32]| set.iter().map(|&s| distance(ha, s)).max();
+                            let place = last(&sa);
+                            let odd_at_place = union
+                                .iter()
+                                .filter(|s| sa.binary_search(s).is_err() || sb.binary_search(s).is_err())
+                                .all(|&s| Some(distance(ha, s)) == place);
+                            if place == last(&sb) && odd_at_place {
+                                row.ties += 1;
+                            } else {
+                                row.instrument_faults += 1;
+                                if faults.len() < MAX_FAULTS_LISTED {
+                                    faults.push(format!(
+                                        "window {w}, read {r}, head {h}, position {t}: the same codes, but a position only one side keeps is off the last kept place's distance"
+                                    ));
+                                }
+                            }
+                        }
+                        (false, true) => row.query_flips += 1,
+                        (true, false) => row.key_flips += 1,
+                        (false, false) => row.query_and_key_flips += 1,
+                    }
+                }
+            }
+            // A read's sets agree at `t` when they agree there and at every earlier position.
+            let mut so_far = true;
+            for (e, a) in earlier.iter_mut().zip(agree) {
+                so_far &= a;
+                *e &= so_far;
+            }
+        }
+    }
+    Ok(HammingTraceComparison { windows: first.windows.len(), rows, faults })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

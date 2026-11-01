@@ -98,7 +98,10 @@ pub use point_key::{
     PointKeyWindow, ReplyEnd,
     POINT_KEY_BOS, POINT_KEY_WINDOW,
 };
-pub use hamming::{copy_weight_q31, read_hamming_uorlut01, CopyHeads, HammingImage, HammingReadImage, TypeHeads, COPY_MEAN_EXP};
+pub use hamming::{
+    copy_weight_q31, hamming_trace_window, read_hamming_uorlut01, CopyHeads, HammingImage, HammingReadImage, HammingStepHead, HammingStepRead, TypeHeads,
+    COPY_MEAN_EXP,
+};
 pub use kernels::{stack_argmax, stack_memory_select, stack_snap_select, MAX_SELECT_SIDE};
 pub use session::{
     sample_mean_sd_t_ci95, student_t_0975, student_t_975, validate_protocol_v3_energy_receipt,
