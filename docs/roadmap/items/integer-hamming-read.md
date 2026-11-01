@@ -90,6 +90,18 @@ It builds on the FBS exporter and session already merged (`fbs_export.rs`, `fbs-
        - then read the kept-set share and top-1 against the registered bar (done-when 2).
 
        The same pod runs claude-237's CUDA-only snap test and claude-235's two tie-switch tests;
+     - **The re-trace's result (claude-238, row T): with one tie rule on both sides, the read is at parity on (r-drop).** The guard (`as_trained`) is in, and T1 and T2, on reads with the type heads' step arm on, fail with it set aside and with only the step arm outside it. The trunk alone is claude-233's byte for byte. Every float copy code now equals the CPU control (a), with 0 differing bits.
+       - **d11-tie meets both bars at both seeds:**
+         - d is 6 and 27 of 1,536 (bar 46);
+         - the copy-head sets past t = 17 are all equal;
+         - the first read's type heads are at 0.997;
+         - the second read's type heads are at 0.993 and 0.983, on 1,570 and 1,494 judged sets.
+       - **d11, the forward as trained, does not:** d is 174 and 243. With equal codes, 1,448–1,567 of the 3,072 sets in each of the three fully judged cells tie across the 16th place, and the GPU arg-sort's unspecified order breaks them differently: d11 and d11-tie differ in top-1 at 174 and 227 of 1,536 positions. The rounded arms change no code. claude-235's two tie-switch tests were never written, so they did not run.
+       - **Next:**
+         - the trainer and every float reference take the integer session's tie rule by default (`set_hamming_tie_rule`, ascending bits then ascending `s`), with the two tie-switch CUDA tests;
+         - then the same bars on claude-146's checkpoints and on DEV (done-when 2).
+
+         Decode on the M1 under load: 3,068–4,085 tok/s with the read, 4,306–4,857 without, at contexts 96–192;
   6. the speed.
 
 ## Done when

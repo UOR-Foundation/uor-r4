@@ -583,44 +583,48 @@ impl HammingRead {
         };
         let current = token_points(ids.to_vec())?;
         let previous = token_points(previous)?;
-        // Copy heads ask with the current token's point through the key's own rotation, so a
-        // repeated token stays an exact match however that rotation learns; type heads ask with
-        // the residual through the query's. Rotations act lane by lane, so each half is cut after.
-        let copy_asks = Self::rotate(&self.key_rotation, &current)?;
-        let type_asks = Self::rotate(&self.query_rotation, &points)?;
-        let query = Tensor::cat(
-            &[
-                &copy_asks.narrow(1, 0, copy_width)?,
-                &type_asks.narrow(1, copy_width, width - copy_width)?,
-            ],
-            1,
-        )?;
-        let key = Self::rotate(&self.key_rotation, &previous)?;
-        // The type heads' position signal, when on: each position's frame is the product of its
-        // window's icosian steps so far, one per token; a type head's query at `t` and key at `s`
-        // are each turned by their own frame's inverse, so their angle depends only on the steps
-        // between (the sign codes below also see the frame the two share).
-        let (query, key) = match &self.step_rotation {
-            None => (query, key),
-            Some(step_rotation) => {
-                let type_width = width - copy_width;
-                let steps = snap_icosian(
-                    &Self::rotate(step_rotation, &current)?
-                        .narrow(1, copy_width, type_width)?
-                        .contiguous()?,
-                )?;
-                let inverse = conjugate(&prefix_frames(&steps, batch, time)?)?;
-                let turn = |p: &Tensor| -> Result<Tensor> {
-                    let turned = hamilton_gate(
-                        &inverse,
-                        &p.narrow(1, copy_width, type_width)?.contiguous()?,
+        let (query, key, value) = as_trained(|| {
+            // Copy heads ask with the current token's point through the key's own rotation, so a
+            // repeated token stays an exact match however that rotation learns; type heads ask
+            // with the residual through the query's. Rotations act lane by lane, so each half is
+            // cut after.
+            let copy_asks = Self::rotate(&self.key_rotation, &current)?;
+            let type_asks = Self::rotate(&self.query_rotation, &points)?;
+            let query = Tensor::cat(
+                &[
+                    &copy_asks.narrow(1, 0, copy_width)?,
+                    &type_asks.narrow(1, copy_width, width - copy_width)?,
+                ],
+                1,
+            )?;
+            let key = Self::rotate(&self.key_rotation, &previous)?;
+            // The type heads' position signal, when on: each position's frame is the product of
+            // its window's icosian steps so far, one per token; a type head's query at `t` and key
+            // at `s` are each turned by their own frame's inverse, so their angle depends only on
+            // the steps between (the sign codes below also see the frame the two share).
+            let (query, key) = match &self.step_rotation {
+                None => (query, key),
+                Some(step_rotation) => {
+                    let type_width = width - copy_width;
+                    let steps = snap_icosian(
+                        &Self::rotate(step_rotation, &current)?
+                            .narrow(1, copy_width, type_width)?
+                            .contiguous()?,
                     )?;
-                    Ok(Tensor::cat(&[&p.narrow(1, 0, copy_width)?, &turned], 1)?)
-                };
-                (turn(&query)?, turn(&key)?)
-            }
-        };
-        let value = Self::rotate(&self.value_rotation, &points)?;
+                    let inverse = conjugate(&prefix_frames(&steps, batch, time)?)?;
+                    let turn = |p: &Tensor| -> Result<Tensor> {
+                        let turned = hamilton_gate(
+                            &inverse,
+                            &p.narrow(1, copy_width, type_width)?.contiguous()?,
+                        )?;
+                        Ok(Tensor::cat(&[&p.narrow(1, 0, copy_width)?, &turned], 1)?)
+                    };
+                    (turn(&query)?, turn(&key)?)
+                }
+            };
+            let value = Self::rotate(&self.value_rotation, &points)?;
+            Ok((query, key, value))
+        })?;
         // ±1 by `p ≥ 0` forward, as `pack_signs` packs it, so 0 is a 1 bit; the identity backward.
         let code = |p: &Tensor| -> Result<Tensor> {
             let bits = p.ge(0.0)?.to_dtype(DType::F32)?.affine(2.0, -1.0)?;
@@ -768,6 +772,26 @@ impl HammingRead {
             .add(&means[1].broadcast_mul(&type_weight)?)?;
         Ok(points.add(&added)?.reshape((batch, time, width))?)
     }
+}
+
+/// claude-238: runs `f`, the read's rotations, as training ran them, through the gate hook's
+/// pass-through (`HamiltonActive`) and never its D11 or export snap. The artifact serves the
+/// rotations raw (`lut-stack/5`), and a snapped read was the float reference's own gap
+/// (claude-237). `with_d11_snaps` gives the hook back whole when `f` returns, `Ok` or `Err` (arm,
+/// call index, export flag, transition snap, telemetry; a panic inside `f` skips it), so the
+/// trunk's gates after the read snap as before and number their calls as a trunk without the read
+/// would. Whatever the arm outside, the read's
+/// forward runs as `HamiltonActive`, uncounted by telemetry and snap capture; only
+/// `in_space_long.rs` (itself `HamiltonActive`) and `fbs-snapshot` install a read, so no control
+/// arm meets one. It covers the forward only: a D11-bridge training step (`with_d11_training`)
+/// would still run the read's backward through the snap, and no trainer runs one with a read.
+fn as_trained<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
+    use crate::hamilton_sheet::{is_snapping_transition, with_d11_snaps, D11Snaps};
+    let snaps = D11Snaps {
+        gates: false,
+        transition: is_snapping_transition(),
+    };
+    with_d11_snaps(snaps, f)
 }
 
 /// Each 4-block of `points` `(rows, 4 · lanes)` as the unit icosian (the 120 elements of 2I,
@@ -1787,5 +1811,124 @@ mod tests {
         set_hamming_reads(None);
         assert_eq!(zero, plain);
         assert_ne!(moved, plain);
+    }
+
+    /// claude-238: unit rotations off the 120 icosians, a different one per lane and per
+    /// rotation `k`, so a snap moves every lane.
+    #[cfg(feature = "cuda")]
+    fn off_icosian(lanes: usize, k: usize, device: &Device) -> Tensor {
+        let values: Vec<f32> = (0..lanes)
+            .flat_map(|l| {
+                let q = [0.9, 0.3, 0.2 + 0.002 * l as f32, 0.1 + 0.01 * k as f32];
+                let norm = q.iter().map(|v| v * v).sum::<f32>().sqrt();
+                q.map(|v| v / norm)
+            })
+            .collect();
+        Tensor::from_vec(values, (lanes, 4), device).unwrap()
+    }
+
+    /// claude-238: `read`'s key, query and value rotations set off the icosians, and its step
+    /// rotation too when the type heads' spin is on.
+    #[cfg(feature = "cuda")]
+    fn set_off_icosian(read: &HammingRead, device: &Device) {
+        let rotations = [
+            &read.key_rotation,
+            &read.query_rotation,
+            &read.value_rotation,
+        ];
+        let rotations = rotations.into_iter().chain(&read.step_rotation);
+        for (k, var) in rotations.enumerate() {
+            var.set(&off_icosian(64, k, device)).unwrap();
+        }
+    }
+
+    /// claude-238: a tensor's values, flat.
+    #[cfg(feature = "cuda")]
+    fn flat(t: Tensor) -> Result<Vec<f32>> {
+        Ok(t.flatten_all()?.to_vec1::<f32>()?)
+    }
+
+    /// claude-238: a read whose rotations sit off the icosians, its type heads' step rotation
+    /// among them, computes the same output, bit for bit, under the D11 mode, the export gates
+    /// and the training arm, for the stream read and the readout. The hook does snap those
+    /// rotations, so without the read's guard the first two would differ.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_read_runs_as_trained_under_the_d11_and_export_gates() {
+        use crate::hamilton_sheet::{with_d11_export_gates, with_d11_mode, with_gate_mode};
+        let device = Device::new_cuda(0).unwrap();
+        let reads = HammingReads::new(4, 256, &device)
+            .unwrap()
+            .with_type_spin()
+            .unwrap();
+        let read = &reads.reads[0];
+        set_off_icosian(read, &device);
+        read.weight
+            .set(&Tensor::full(0.5f32, (2, 256), &device).unwrap())
+            .unwrap();
+        let x = residual(2, 24, 256, &device);
+        let ids: Vec<u32> = (0..48).map(|i| (i % 5) as u32).collect();
+        let table = table(8, 256, &device);
+        let active = crate::hamilton_sheet::HamiltonArm::HamiltonActive;
+        let both = || -> Result<Vec<f32>> {
+            let stream = flat(read.apply(&x, &ids, &table)?)?;
+            Ok([stream, flat(read.apply_readout(&x, &ids, &table)?)?].concat())
+        };
+        let trained = with_gate_mode(active, 1, 0, false, both).unwrap();
+        let bits = |v: Vec<f32>| v.iter().map(|x| x.to_bits()).collect::<Vec<u32>>();
+        let (d11, export) = (with_d11_mode(both), with_d11_export_gates(both));
+        assert_eq!(bits(d11.unwrap()), bits(trained.clone()), "the D11 mode");
+        assert_eq!(bits(export.unwrap()), bits(trained), "the export gates");
+        // The hook snaps these rotations outside the read, so the read's guard is what holds.
+        let points = x.reshape((48, 256)).unwrap();
+        let gate = off_icosian(64, 0, &device)
+            .reshape((1, 256))
+            .unwrap()
+            .broadcast_as((48, 256))
+            .unwrap()
+            .contiguous()
+            .unwrap();
+        let turn = || flat(hamilton_gate(&gate, &points)?);
+        let snapped = with_d11_mode(turn).unwrap();
+        assert_ne!(snapped, with_gate_mode(active, 1, 0, false, turn).unwrap());
+    }
+
+    /// claude-238: under the D11 mode, a trunk gate after the read is still snapped, and the snap
+    /// capture holds that gate alone, none of the read's rotations or its type heads' turns.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_trunks_gates_after_the_read_still_snap() {
+        use crate::hamilton_sheet::{with_d11_mode, with_gate_mode, with_snap_capture};
+        let device = Device::new_cuda(0).unwrap();
+        let reads = HammingReads::new(4, 256, &device)
+            .unwrap()
+            .with_type_spin()
+            .unwrap();
+        let read = &reads.reads[0];
+        set_off_icosian(read, &device);
+        let x = residual(1, 24, 256, &device);
+        let ids: Vec<u32> = (0..24).map(|i| (i % 5) as u32).collect();
+        let table = table(8, 256, &device);
+        let points = x.reshape((24, 256)).unwrap();
+        let gate = off_icosian(64, 4, &device)
+            .reshape((1, 256))
+            .unwrap()
+            .broadcast_as((24, 256))
+            .unwrap()
+            .contiguous()
+            .unwrap();
+        let turn = || flat(hamilton_gate(&gate, &points)?);
+        let (after, captures) = with_snap_capture(|| {
+            with_d11_mode(|| {
+                read.apply(&x, &ids, &table)?;
+                turn()
+            })
+        })
+        .unwrap();
+        assert_eq!(captures.len(), 1, "the trunk's gate alone snaps");
+        assert_eq!(after, with_d11_mode(turn).unwrap());
+        let active = crate::hamilton_sheet::HamiltonArm::HamiltonActive;
+        let unsnapped = with_gate_mode(active, 1, 0, false, turn).unwrap();
+        assert_ne!(after, unsnapped, "it is snapped");
     }
 }
