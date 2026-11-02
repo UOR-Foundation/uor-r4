@@ -1,6 +1,6 @@
 # ORDER: migrate the Studio core workflows to typed components
 
-Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500), continuing the approved phased design after merged foundation PR #3520. Base: `22fecde5a9f4e486bec8c0b3d8757dc7a907ec3a`.
+Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500), continuing the approved phased design after merged foundation PR #3520. Base: `0fa4c5fce17961c8bf2a68cba1eeb5c740c80e57`.
 
 ## Goal
 
