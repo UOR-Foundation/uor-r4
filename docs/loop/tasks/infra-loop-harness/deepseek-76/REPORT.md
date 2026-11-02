@@ -6,7 +6,7 @@ Lab: deepseek. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-h
 
 - `cargo test --locked -p uor-r4-harness` started with 13 failing tests after legitimate milestone progress changed the live registry. The failures were fixture and heartbeat assumptions, not failed product checks: several tests still named pre-M1 lines and counts, the archived PR-lint fixture still expected the old line, and the heartbeat fixture let unrelated active milestones leak into a one-milestone scenario.
 - `pivot_at_three` printed a hard-coded `3` denominator. That matched the old registry shape by accident and would misreport any current or future line whose denominator is not three.
-- Documentation examples referred to a removed `uor-harness claim-wording` command and used shell semicolons inside command fences, so the documented-command parser treated prose as an executable command.
+- Documentation examples referred to a retired top-level claim-wording subcommand and used shell semicolons inside command fences, so the documented-command parser treated prose as an executable command.
 
 ## What changed
 
