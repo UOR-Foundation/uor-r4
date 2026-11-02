@@ -12,8 +12,12 @@ use uor_r4_discrete::normalization_mechanism::{identify_orbit_root, orbit_root_c
 mod fbs;
 mod hamming;
 mod memory;
+mod train;
 
 pub use fbs::{CpuFbsForward, CpuFbsHead, CpuFbsStep, FbsForwardError};
+pub use train::{
+    CpuRankMarginTrainer, RankMarginConfig, RankMarginReading, RankMarginSample, RankMarginStep,
+};
 
 pub const VOCABULARY: usize = 4_096;
 pub const TRUNK_BLOCKS: usize = 4;

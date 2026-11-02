@@ -235,6 +235,22 @@ impl CpuFbsForward {
         self.vocab
     }
 
+    pub(crate) fn token_table(&self) -> &[i16] {
+        &self.writer_table
+    }
+
+    pub(crate) fn writer_roots(&self) -> &[[i32; 8]; 16] {
+        &self.roots_q12
+    }
+
+    pub(crate) fn kept_cell_count(&self) -> usize {
+        self.kept_cells
+    }
+
+    pub(crate) fn context_length(&self) -> usize {
+        self.context
+    }
+
     /// Mark that the next step's row is the prompt's last row and the opening move runs there.
     pub fn mark_reply_start(&mut self) {
         self.reply_start = Some(self.position + 1);
