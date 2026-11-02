@@ -19,10 +19,10 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 
 ## Measurements
 
-- Focused tests: 3 passed.
+- Focused tests: 4 passed.
 - Serialized nonzero-action Route reads match `IntegerDiscreteModel` on four prefixes.
 - Identity Route output is deterministic; empty and out-of-vocabulary prefixes are refused.
-- Malformed artifact, non-orbit root, structure and bounds controls pass.
+- Serialized Relation, bad-action, bad-map, short-span, malformed artifact and non-orbit-root controls pass.
 - Release benchmark on the Ryzen 9 9950X: 1,024 prefix reads, width 32, four blocks, five stages and 64-token prefix in 1.006 ms (`1,018,351.206` rows/s), checksum `401ffb34401ffb34`, peak RSS 3,336 KiB.
 
 ## Checks run at the head
