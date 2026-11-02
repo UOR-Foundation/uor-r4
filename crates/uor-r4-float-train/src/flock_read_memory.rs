@@ -155,6 +155,15 @@ pub struct TurnMemory {
     pub(crate) reply: Option<ReplyTable>,
 }
 
+/// One row's turn-memory lookup (claude-251, Q5's decision trace): the key formed, the token it
+/// named (`None` on a miss), and whether the row opens the reply.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemoryLookup {
+    pub key: Vec<u32>,
+    pub stored: Option<u32>,
+    pub opening: bool,
+}
+
 /// The reply table of a [`TurnMemory`] and the per-coordinate weight of its move.
 #[derive(Clone)]
 pub(crate) struct ReplyTable {
@@ -252,6 +261,25 @@ impl TurnMemory {
     /// positions: for every `batch · time` row, the stored token (0 where none) and a 0/1 hit,
     /// set only at the opening `rows` whose key the table holds.
     pub fn stored(&self, ids: &[u32], time: usize, rows: &[usize]) -> Result<(Vec<u32>, Vec<f32>)> {
+        let total = ids.len();
+        let (mut stored, mut hit) = (vec![0u32; total], vec![0f32; total]);
+        for (r, key) in self.opening_keys(ids, time, rows)? {
+            if let Some(&token) = self.table.get(&key) {
+                stored[r] = token;
+                hit[r] = 1.0;
+            }
+        }
+        Ok((stored, hit))
+    }
+
+    /// Each opening row's key, `(row, key)`: the ids at the turn anchor's first `k` slots of the
+    /// row's window, the key [`stored`](Self::stored) looks up.
+    fn opening_keys(
+        &self,
+        ids: &[u32],
+        time: usize,
+        rows: &[usize],
+    ) -> Result<Vec<(usize, Vec<u32>)>> {
         if time == 0 || !ids.len().is_multiple_of(time) {
             return Err(invalid("the turn memory needs whole windows"));
         }
@@ -265,19 +293,46 @@ impl TurnMemory {
             }
             by_window.entry(r / time).or_default().push(r % time);
         }
-        let (mut stored, mut hit) = (vec![0u32; total], vec![0f32; total]);
+        let mut keys = Vec::with_capacity(rows.len());
         for (b, offsets) in by_window {
             let window = &ids[b * time..(b + 1) * time];
             let slots = opening_slots(window, self.k, OpeningAnchor::Turn);
             for t in offsets {
-                let key: Vec<u32> = slots[t].iter().map(|&s| window[s]).collect();
-                if let Some(&token) = self.table.get(&key) {
-                    stored[b * time + t] = token;
-                    hit[b * time + t] = 1.0;
-                }
+                keys.push((b * time + t, slots[t].iter().map(|&s| window[s]).collect()));
             }
         }
-        Ok((stored, hit))
+        Ok(keys)
+    }
+
+    /// claude-251, Q5's decision trace: each row's lookup in a forward of windows `ids` of
+    /// `time` positions, as [`apply_readout`](Self::apply_readout) makes it. An opening row
+    /// looks its key up in the opening table; a named reply row, in the reply table where the
+    /// memory has one; every other row looks nothing up.
+    pub fn lookups(
+        &self,
+        ids: &[u32],
+        time: usize,
+        rows: &[usize],
+        reply_rows: &[(usize, Vec<u32>)],
+    ) -> Result<Vec<Option<MemoryLookup>>> {
+        let total = ids.len();
+        let mut lookups = vec![None; total];
+        for (r, key) in self.opening_keys(ids, time, rows)? {
+            let stored = self.table.get(&key).copied();
+            lookups[r] = Some(MemoryLookup { key, stored, opening: true });
+        }
+        if self.reply.is_some() {
+            for (r, key) in reply_rows {
+                if *r >= total {
+                    return Err(invalid(format!(
+                        "reply row {r} is outside the {total} rows of this forward"
+                    )));
+                }
+                let stored = self.reply_stored(key);
+                lookups[*r] = Some(MemoryLookup { key: key.clone(), stored, opening: false });
+            }
+        }
+        Ok(lookups)
     }
 
     /// The host side of the reply move for a forward of `total` rows: for every row, the reply
@@ -723,6 +778,39 @@ mod tests {
         // Rows past the forward, or a ragged window, are refused.
         assert!(memory.stored(&window, 10, &[10]).is_err());
         assert!(memory.stored(&window, 3, &[0]).is_err());
+    }
+
+    /// claude-251: each row's lookup is the key the move reads and the entry it names, and a
+    /// memory without a reply table looks no reply row up.
+    #[test]
+    fn each_rows_lookup_is_the_key_and_entry_the_move_reads() {
+        let window = vec![SHEET_BOS_ID, 11, 12, 13, 50, 51, SHEET_EOS_ID, 21, 22, 60];
+        let mut table = HashMap::new();
+        table.insert(vec![11, 12], 50);
+        let mut replies = HashMap::new();
+        replies.insert(vec![11, PAD, 2, PAD, 51], 52u32);
+        let memory = TurnMemory::new(2, table.clone(), 4, &Device::Cpu)
+            .unwrap()
+            .with_reply(replies)
+            .unwrap();
+        let reply = vec![(5, vec![11, PAD, 2, PAD, 51]), (9, vec![21, PAD, 1, PAD, 60])];
+        let lookups = memory.lookups(&window, 10, &[3, 8], &reply).unwrap();
+        let lookup = |key: Vec<u32>, stored, opening| Some(MemoryLookup { key, stored, opening });
+        assert_eq!(lookups[3], lookup(vec![11, 12], Some(50), true));
+        // An opening the table misses is still a lookup, with no entry.
+        assert_eq!(lookups[8], lookup(vec![21, 22], None, true));
+        assert_eq!(lookups[5], lookup(vec![11, PAD, 2, PAD, 51], Some(52), false));
+        assert_eq!(lookups[9], lookup(vec![21, PAD, 1, PAD, 60], None, false));
+        assert_eq!(lookups.iter().flatten().count(), 4);
+        // The opening lookups name what `stored` moves toward.
+        let (stored, hit) = memory.stored(&window, 10, &[3, 8]).unwrap();
+        for r in [3, 8] {
+            let named = lookups[r].as_ref().unwrap().stored;
+            assert_eq!(named, (hit[r] == 1.0).then_some(stored[r]));
+        }
+        let plain = TurnMemory::new(2, table, 4, &Device::Cpu).unwrap();
+        assert_eq!(plain.lookups(&window, 10, &[3], &reply).unwrap().iter().flatten().count(), 1);
+        assert!(memory.lookups(&window, 10, &[3], &[(10, vec![1])]).is_err());
     }
 
     #[test]

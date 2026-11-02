@@ -16,6 +16,7 @@
 //! 2. writes greedy replies to fixed DEV prompts as text, beside the true replies;
 //! 3. saves the model.
 
+use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -23,11 +24,16 @@ use std::time::Instant;
 
 use candle_core::{DType, Device, Tensor};
 use serde::{Deserialize, Serialize};
+use uor_r4_integer::fbs_snapshot::{
+    DecisionHead, DecisionLayer, DecisionMemory, DecisionNearest, DecisionRead, DecisionStep,
+    DecisionTrace, DecisionWindow, HammingTraceRead, HammingTraceWindow, DECISION_TRACE_SCHEMA,
+};
 use uor_r4_tokenizer::ByteBpeTokenizer;
 
 pub use crate::flock_read_hamming::ReadScope;
+use crate::flock_read_memory::MemoryLookup;
 use crate::geometric_stack::stage_clock::{self, StageTime};
-use crate::geometric_stack::{StackAdamW, StackModel};
+use crate::geometric_stack::{RateScores, StackAdamW, StackModel};
 use crate::hamilton_sheet::{self as hs, CausalWindow, HamiltonArm, SHEET_CONTEXT};
 use crate::spiralcore_fbs_arms::{self as arms, FbsArm};
 use crate::spiralcore_fbs_sheet::{build_fbs_model_at, panel_loss};
@@ -989,7 +995,7 @@ fn nearest_reading(
     step: usize,
 ) -> Result<(NearestReading, WriterReading)> {
     let (mut all_queries, mut opening_queries) = (Vec::new(), Vec::new());
-    let picks = row_picks(model, dev, mask, seed, step, |query, opens| {
+    let picks = row_picks(model, dev, mask, seed, step, None, |query, opens| {
         let at: Vec<u32> = (0..opens.len() as u32)
             .filter(|&i| opens[i as usize])
             .collect();
@@ -1046,13 +1052,15 @@ fn fold_picks(picks: &[RowPick]) -> (NearestReading, WriterReading) {
 /// Every scored row of `dev` decoded by `model`, in panel order: the nearest token and the
 /// writer's pick from the same points, with the turn memory named at the rows training names
 /// (its openings, and its reply table's later rows). `on_query` sees each batch's query rows
-/// and which of them open a reply.
+/// and which of them open a reply. A `trace` (claude-251) records the decisions of the windows it
+/// names, in this same forward.
 fn row_picks(
     model: &StackModel,
     dev: &[CausalWindow],
     mask: &[u8],
     seed: u64,
     step: usize,
+    mut trace: Option<&mut FTrace>,
     mut on_query: impl FnMut(&Tensor, &[bool]) -> Result<()>,
 ) -> Result<Vec<RowPick>> {
     let table = table(model)?;
@@ -1065,6 +1073,10 @@ fn row_picks(
             if scored.is_empty() {
                 continue;
             }
+            let traced: Vec<usize> = match trace.as_deref() {
+                Some(t) => (0..windows.len()).filter(|&b| t.wants(windows[b])).collect(),
+                None => Vec::new(),
+            };
             let opens: Vec<bool> = windows
                 .iter()
                 .flat_map(|w| w.scored_corpus_positions.iter())
@@ -1106,15 +1118,54 @@ fn row_picks(
             if trained_cut_on() {
                 set_reply_mask(Some(window_input_mask(&windows, mask)?));
             }
+            // The rows the memory reads in this forward, read back as it will read them.
+            let named = (!traced.is_empty()).then(|| {
+                (
+                    crate::flock_read_memory::memory_rows(),
+                    crate::flock_read_memory::reply_rows(),
+                )
+            });
+            if named.is_some() {
+                set_decision_capture(true);
+            }
             let hidden = trained_points(model, &ids, windows.len());
             crate::flock_read_memory::set_memory_rows(None);
             crate::flock_read_memory::set_reply_rows(None);
+            let captured = named.is_some().then(|| {
+                let captured = (
+                    crate::flock_read_hamming::take_hamming_trace().unwrap_or_default(),
+                    crate::geometric_stack::take_rate_trace().unwrap_or_default(),
+                );
+                set_decision_capture(false);
+                captured
+            });
             let hidden = hidden?;
             let idx = Tensor::from_vec(scored.clone(), scored.len(), model.device())?;
             let query = hidden.index_select(&idx, 0)?.detach();
-            let best = nearest_scores(&query, &table)?
-                .argmax(1)?
-                .to_vec1::<u32>()?;
+            let scores = nearest_scores(&query, &table)?;
+            let best = scores.argmax(1)?.to_vec1::<u32>()?;
+            if let (Some(sink), Some((rows, reply)), Some((hamming, rates))) =
+                (trace.as_deref_mut(), named, captured)
+            {
+                // The memory's lookups, where the forward ran it (`StackModel::hidden`'s rule).
+                let lookups = match crate::flock_read_memory::turn_memory() {
+                    Some(memory) if rows.is_some() || reply.is_some() => Some(memory.lookups(
+                        &ids,
+                        SHEET_CONTEXT,
+                        &rows.unwrap_or_default(),
+                        &reply.unwrap_or_default(),
+                    )?),
+                    _ => None,
+                };
+                let recorded = Recorded { hamming, rates, lookups };
+                let at = traced_rows(&scored, &traced);
+                let index = Tensor::from_vec(at.clone(), at.len(), query.device())?;
+                let queries = query.index_select(&index, 0)?.to_vec2::<f32>()?;
+                let row_scores = scores.index_select(&index, 0)?.to_vec2::<f32>()?;
+                sink.hold_table(&table)?;
+                sink.record(&windows, &traced, &ids, &scored, &best, &queries, &row_scores, recorded)?;
+            }
+            drop(scores);
             // The served decoder on the same points: the writer's pick among its kept cells.
             let served = writer
                 .write(&query)?
@@ -1154,6 +1205,323 @@ fn row_picks(
         }
         Ok(out)
     })
+}
+
+/// claude-251, Q5's decision trace (side F, `uor-r4.decision-trace/1`): one split's windows to
+/// trace, each named by its `position` (its first scored position, as `split_prompts` names a
+/// panel row), and what [`row_picks`] recorded for them in its own forward, in panel order. Row
+/// `t` of a window is R's step `t`. Recording copies to the host and changes nothing computed.
+pub struct FTrace {
+    positions: std::collections::BTreeSet<usize>,
+    trace: DecisionTrace,
+    /// The shared table on the host, row-major, for the nearest's scores in R's units.
+    table: Option<Vec<f32>>,
+}
+
+/// What one traced forward recorded beside its points.
+struct Recorded {
+    hamming: Vec<HammingTraceWindow>,
+    rates: Vec<RateScores>,
+    /// Each `batch · time` row's turn-memory lookup; `None` where the forward ran no memory.
+    lookups: Option<Vec<Option<MemoryLookup>>>,
+}
+
+impl FTrace {
+    /// A trace of the windows `positions` name, each named once.
+    pub fn new(positions: &[usize]) -> Result<Self> {
+        let set: std::collections::BTreeSet<usize> = positions.iter().copied().collect();
+        if set.len() != positions.len() {
+            return Err(invalid("a decision trace names each position once"));
+        }
+        Ok(Self {
+            positions: set,
+            trace: DecisionTrace {
+                schema: DECISION_TRACE_SCHEMA.to_owned(),
+                side: "F".to_owned(),
+                layers: 0,
+                lanes: 0,
+                heads: 0,
+                kept: crate::flock_read_hamming::HAMMING_KEPT,
+                windows: Vec::new(),
+            },
+            table: None,
+        })
+    }
+
+    fn wants(&self, window: &CausalWindow) -> bool {
+        window
+            .scored_corpus_positions
+            .first()
+            .is_some_and(|p| self.positions.contains(p))
+    }
+
+    /// The trace, once every position has named exactly one window.
+    pub fn finish(self) -> Result<DecisionTrace> {
+        let found: Vec<usize> = self.trace.windows.iter().map(|w| w.position).collect();
+        let distinct: std::collections::BTreeSet<usize> = found.iter().copied().collect();
+        if distinct.len() != found.len() {
+            return Err(invalid("--decision-trace: a position names two windows"));
+        }
+        if let Some(missing) = self.positions.difference(&distinct).next() {
+            return Err(invalid(format!(
+                "--decision-trace: position {missing} names no window of its split"
+            )));
+        }
+        Ok(self.trace)
+    }
+
+    /// The shared table on the host, copied once per trace: the points the nearest scores against.
+    fn hold_table(&mut self, points: &Tensor) -> Result<()> {
+        if self.table.is_none() {
+            self.table = Some(points.flatten_all()?.to_vec1::<f32>()?);
+        }
+        Ok(())
+    }
+
+    /// The decisions of the `traced` windows of one batch, from what its forward `recorded`:
+    /// at each window's rows 0 to its last scored offset, each layer's rate buckets and the stream
+    /// read after its layer, the readout read, the memory's lookup, and at each scored offset the
+    /// nearest. `scored` and `best` are the batch's scored rows and picks, as decoded; `queries`
+    /// and `row_scores` the [`traced_rows`] of its points and `nearest_scores`, on the host.
+    #[allow(clippy::too_many_arguments)]
+    fn record(
+        &mut self,
+        windows: &[&CausalWindow],
+        traced: &[usize],
+        ids: &[u32],
+        scored: &[u32],
+        best: &[u32],
+        queries: &[Vec<f32>],
+        row_scores: &[Vec<f32>],
+        recorded: Recorded,
+    ) -> Result<()> {
+        let time = SHEET_CONTEXT;
+        let Recorded { hamming, rates, lookups } = recorded;
+        let lanes = rates.first().map_or(0, |r| r.dims.2);
+        if rates
+            .iter()
+            .enumerate()
+            .any(|(l, r)| r.layer != l || r.dims != (windows.len(), time, lanes))
+        {
+            return Err(invalid(
+                "the decision trace's rate scores are not one per layer in order (an instrument fault)",
+            ));
+        }
+        if !hamming.is_empty() && hamming.len() != windows.len() {
+            return Err(invalid(
+                "the decision trace's Hamming record is not one per window (an instrument fault)",
+            ));
+        }
+        let heads = hamming
+            .first()
+            .and_then(|w| w.reads.first())
+            .map_or(0, |r| r.heads.len());
+        let shape = (rates.len(), lanes, heads);
+        if self.trace.windows.is_empty() {
+            (self.trace.layers, self.trace.lanes, self.trace.heads) = shape;
+        } else if (self.trace.layers, self.trace.lanes, self.trace.heads) != shape {
+            return Err(invalid("the decision trace's shape changed between batches"));
+        }
+        let host_table = self
+            .table
+            .as_deref()
+            .ok_or_else(|| invalid("the decision trace holds no table (an instrument fault)"))?;
+        let at = traced_rows(scored, traced);
+        if queries.len() != at.len() || row_scores.len() != at.len() {
+            return Err(invalid(
+                "the decision trace's host rows are not the traced windows' scored rows (an instrument fault)",
+            ));
+        }
+        let mut next = 0;
+        for &b in traced {
+            let window = windows[b];
+            let (&first, &last) = window
+                .scored_offsets
+                .first()
+                .zip(window.scored_offsets.last())
+                .ok_or_else(|| invalid("a traced window has no scored row"))?;
+            let reads = match hamming.get(b) {
+                None => &[][..],
+                Some(w) if w.ids[..] == ids[b * time..(b + 1) * time] => &w.reads[..],
+                Some(_) => {
+                    return Err(invalid(
+                        "the decision trace's Hamming record names another window (an instrument fault)",
+                    ))
+                }
+            };
+            // The stream read opens a window's Hamming record and the readout read joins it.
+            let (stream, readout) = match reads {
+                [] => (None, None),
+                [s] => (Some(s), None),
+                [s, r] => (Some(s), Some(r)),
+                _ => return Err(invalid("a window's Hamming record holds more than two reads")),
+            };
+            let nearest_rows: BTreeMap<usize, usize> = window
+                .scored_offsets
+                .iter()
+                .enumerate()
+                .map(|(j, &off)| (off, next + j))
+                .collect();
+            next += window.scored_offsets.len();
+            let mut steps = Vec::with_capacity(last + 1);
+            for t in 0..=last {
+                let row = b * time + t;
+                let layers = rates
+                    .iter()
+                    .enumerate()
+                    .map(|(l, r)| {
+                        let score = &r.score[row * lanes..(row + 1) * lanes];
+                        Ok(DecisionLayer {
+                            score_q16: Vec::new(),
+                            score_f32: score.iter().map(|s| s.to_bits()).collect(),
+                            entry: score
+                                .iter()
+                                .map(|&s| crate::geometric_stack::rate_index(s) as u8)
+                                .collect(),
+                            read: match stream {
+                                Some(s) if s.depth == l + 1 => Some(decision_read(s, t)?),
+                                _ => None,
+                            },
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                let nearest = match nearest_rows.get(&t) {
+                    None => None,
+                    Some(&i) => {
+                        let pick = best[at[i] as usize];
+                        let runner = runner_up(&row_scores[i], pick)?;
+                        let width = queries[i].len();
+                        let score = |u: u32| -> Result<Option<u64>> {
+                            let point = host_table
+                                .get(u as usize * width..(u as usize + 1) * width)
+                                .ok_or_else(|| invalid("a pick names no row of the table"))?;
+                            Ok(Some(l1_score_r(&queries[i], point).to_bits()))
+                        };
+                        Some(DecisionNearest {
+                            pick,
+                            score_q12: None,
+                            score_f64: score(pick)?,
+                            runner_up: runner,
+                            runner_score_q12: None,
+                            runner_score_f64: score(runner)?,
+                            query_q12: Vec::new(),
+                            query_f32: queries[i].iter().map(|v| v.to_bits()).collect(),
+                        })
+                    }
+                };
+                steps.push(DecisionStep {
+                    layers,
+                    readout: readout.map(|r| decision_read(r, t)).transpose()?,
+                    memory: lookups.as_ref().and_then(|l| l[row].as_ref()).map(|m| {
+                        DecisionMemory {
+                            key: m.key.clone(),
+                            stored: m.stored,
+                            opening: m.opening,
+                        }
+                    }),
+                    nearest,
+                });
+            }
+            self.trace.windows.push(DecisionWindow {
+                position: window.scored_corpus_positions[0],
+                ids: window.input_ids[..=last].to_vec(),
+                reply_start: first,
+                steps,
+            });
+        }
+        Ok(())
+    }
+}
+
+/// The traced windows' scored rows, in panel order: their indices into a batch's `scored` rows,
+/// each a `window · SHEET_CONTEXT + offset` row of the batch.
+fn traced_rows(scored: &[u32], traced: &[usize]) -> Vec<u32> {
+    (0..scored.len() as u32)
+        .filter(|&i| traced.contains(&(scored[i as usize] as usize / SHEET_CONTEXT)))
+        .collect()
+}
+
+/// One read's choices at row `t`, from its Hamming record: each head's codes, its coordinates,
+/// and its kept set in R's order ([`kept_in_order`]).
+fn decision_read(read: &HammingTraceRead, t: usize) -> Result<DecisionRead> {
+    let heads = read
+        .heads
+        .iter()
+        .map(|h| {
+            let row = |rows: &[Vec<u32>]| -> Result<Vec<u32>> {
+                rows.get(t)
+                    .cloned()
+                    .ok_or_else(|| invalid("a traced head has no coordinates (an instrument fault)"))
+            };
+            Ok(DecisionHead {
+                query: h.query[t],
+                key: h.key[t],
+                kept: kept_in_order(h.query[t], &h.key, &h.kept[t]),
+                query_f32: row(&h.query_f32)?,
+                key_f32: row(&h.key_f32)?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(DecisionRead { depth: read.depth, heads })
+}
+
+/// The kept positions in R's order: nearest first by the Hamming distance from the query code
+/// to each position's key code, ties to the earlier position.
+fn kept_in_order(query: u64, keys: &[u64], kept: &[u32]) -> Vec<u32> {
+    let mut kept = kept.to_vec();
+    kept.sort_by_key(|&s| ((query ^ keys[s as usize]).count_ones(), s));
+    kept
+}
+
+/// The best-scoring token other than `pick` in one row of `nearest_scores`, ties to the smaller
+/// id: the nearest's runner-up as the GPU scored it.
+fn runner_up(scores: &[f32], pick: u32) -> Result<u32> {
+    let mut best: Option<(u32, f32)> = None;
+    for (u, &s) in scores.iter().enumerate() {
+        if u as u32 != pick && best.is_none_or(|(_, b)| s > b) {
+            best = Some((u as u32, s));
+        }
+    }
+    best.map(|(u, _)| u)
+        .ok_or_else(|| invalid("the nearest needs two tokens to name a runner-up"))
+}
+
+/// A token's nearest score in R's units, `−2^12 · Σ_j |q_j − e_j|` in f64 over the f32 query and
+/// table point: R scores its Q12 query against the Q12 table, so one Q12 unit is one here.
+fn l1_score_r(query: &[f32], point: &[f32]) -> f64 {
+    let sum: f64 = query
+        .iter()
+        .zip(point)
+        .map(|(&q, &e)| (f64::from(q) - f64::from(e)).abs())
+        .sum();
+    -4096.0 * sum
+}
+
+/// claude-251: turn on (or off) every capture a traced forward makes: the Hamming reads' codes
+/// with their coordinates, and each layer's rate scores.
+fn set_decision_capture(on: bool) {
+    crate::flock_read_hamming::set_hamming_trace(on);
+    crate::flock_read_hamming::set_hamming_trace_coords(on);
+    crate::geometric_stack::set_rate_trace(on);
+}
+
+/// claude-251: the reads R does not serve, any of which would make a decision the trace leaves
+/// out; the trace refuses a checkpoint that sets one.
+fn unserved_reads() -> Vec<&'static str> {
+    let mut set = Vec::new();
+    if crate::flock_read::flock_read().is_some() {
+        set.push("the Flock read");
+    }
+    if crate::flock_read_content::content_read().is_some() {
+        set.push("the content read");
+    }
+    if crate::flock_read_opening::opening_read().is_some() {
+        set.push("the opening read");
+    }
+    if crate::flock_read_register::prompt_register().is_some() {
+        set.push("the prompt register");
+    }
+    set
 }
 
 /// A seeded order of `0..n` (xorshift64*, Fisher-Yates), one per epoch.
@@ -5271,6 +5639,7 @@ pub fn score_rows(
     keys: bool,
     keyed: &[(String, f32)],
     served_arm: bool,
+    traces: &[(String, Vec<usize>)],
     device: &Device,
 ) -> Result<Vec<ScoredFile>> {
     check_run_arm(checkpoint, arm)?;
@@ -5343,6 +5712,13 @@ pub fn score_rows(
             samples: true,
         });
     }
+    for (i, (name, _)) in traces.iter().enumerate() {
+        if !splits.iter().any(|s| s.name == *name) || traces[..i].iter().any(|(n, _)| n == name) {
+            return Err(invalid(format!(
+                "--decision-trace {name}: a trace names a scored split (dev, fresh-v2 or a panel), once"
+            )));
+        }
+    }
     fs::create_dir_all(out)?;
     arms::set_fbs_arm(Some(arm));
     crate::geometric_stack::set_retention_rates(retain_rates);
@@ -5351,6 +5727,13 @@ pub fn score_rows(
     let _guard = ArmGuard;
     let model = StackModel::load(checkpoint, device)?;
     load_reads(checkpoint, device)?;
+    let unserved = unserved_reads();
+    if !traces.is_empty() && !unserved.is_empty() {
+        return Err(invalid(format!(
+            "--decision-trace records the decisions R serves, and this checkpoint also sets {}",
+            unserved.join(", ")
+        )));
+    }
     // A run trained with the reply's read held to the prompt scores its rows the same way
     // (claude-216); its decodes take the cut through `--reply-read`, as served.
     let trained = run_trained_cut(checkpoint)?;
@@ -5404,7 +5787,23 @@ pub fn score_rows(
         crate::flock_read_memory::set_turn_memory(if on { memory.clone() } else { None });
         let label = if on { "memory" } else { "no-memory" };
         for split in &splits {
-            let picks = row_picks(&model, &split.windows, &split.mask, seed, step, |_, _| Ok(()))?;
+            // Q5's decision trace (claude-251), in the memory pass only, as F′'s rows are read.
+            let mut trace = match traces.iter().find(|(name, _)| on && *name == split.name) {
+                Some((_, positions)) => Some(FTrace::new(positions)?),
+                None => None,
+            };
+            let picks =
+                row_picks(&model, &split.windows, &split.mask, seed, step, trace.as_mut(), |_, _| Ok(()))?;
+            if let Some(trace) = trace {
+                let file = format!("decision-trace-{}.json", split.name);
+                let trace = trace.finish()?;
+                write_new(&out.join(&file), &serde_json::to_vec(&trace)?)?;
+                println!(
+                    "[trace] {file}: {} windows, {} steps",
+                    trace.windows.len(),
+                    trace.windows.iter().map(|w| w.steps.len()).sum::<usize>()
+                );
+            }
             let rows = ScoredRows {
                 split: split.name.clone(),
                 memory: on,
@@ -9151,6 +9550,135 @@ mod tests {
         assert!(nearest > 0.0 && nearest <= farthest);
     }
 
+    /// claude-251: a traced window's steps hold, in R's order, each layer's buckets and the stream
+    /// read at its depth, the readout read, the memory's lookup and, at each scored offset only,
+    /// the nearest: the decoded pick, the scores' runner-up (ties to the smaller id), both scores
+    /// in R's units. Kept sets come nearest first, ties to the earlier position.
+    #[test]
+    fn a_traced_window_records_the_five_kinds_in_rs_order() {
+        use uor_r4_integer::fbs_snapshot::HammingTraceHead;
+        let time = SHEET_CONTEXT;
+        let window = |offsets: Vec<usize>, first: usize, seed: u32| CausalWindow {
+            doc_id: 0,
+            input_ids: (0..time as u32).map(|i| (i * 7 + seed) % 3).collect(),
+            scored_targets: vec![0; offsets.len()],
+            scored_corpus_positions: offsets.iter().map(|o| first + o).collect(),
+            scored_offsets: offsets,
+        };
+        let windows = [window(vec![3, 4], 97, 1), window(vec![2, 3, 5], 498, 2)];
+        let refs: Vec<&CausalWindow> = windows.iter().collect();
+        let ids: Vec<u32> = windows.iter().flat_map(|w| w.input_ids.clone()).collect();
+        let scored: Vec<u32> = [3, 4, time + 2, time + 3, time + 5].map(|r| r as u32).to_vec();
+        let best = [9, 9, 1, 2, 1];
+        let points = vec![0f32, 0.0, 1.0, 0.0, 0.0, 2.0];
+        let queries = [[0f32, 0.0], [0.0, 0.0], [0.9, 0.1], [0.1, 1.9], [0.5, -0.25]];
+        let rows = [[0f32; 3], [0.0; 3], [-0.5, -0.1, -1.4], [-1.0, -1.0, -0.1], [-0.5, -0.5, -1.0]];
+        // Two layers of two lanes: layer l's lane j at row r scores ((r + 5j + l) mod 17) / 16, at most 1.
+        let rates: Vec<RateScores> = (0..2)
+            .map(|layer| RateScores {
+                layer,
+                dims: (2, time, 2),
+                score: (0..2 * time * 2)
+                    .map(|i| (((i / 2 + 5 * (i % 2) + layer) % 17) as f32 / 16.0).min(1.0))
+                    .collect(),
+            })
+            .collect();
+        // One head; at row 5 it keeps 4, 2, 1 and 3, at distances 1, 1, 0 and 2.
+        let head = |b: u64| {
+            let mut key = vec![0u64; time];
+            (key[1], key[2], key[3], key[4]) = (0b1010, 0b1011, 0b0000, 0b1000);
+            let mut kept = vec![Vec::new(); time];
+            kept[5] = vec![4, 2, 1, 3];
+            HammingTraceHead {
+                query: (0..time as u64).map(|t| if t == 5 { 0b1010 } else { t + b }).collect(),
+                key,
+                kept,
+                query_f32: (0..time).map(|t| vec![(t as f32).to_bits()]).collect(),
+                key_f32: (0..time).map(|t| vec![(-(t as f32)).to_bits()]).collect(),
+            }
+        };
+        let hamming = |ids: &[u32], b: u64| HammingTraceWindow {
+            ids: ids.to_vec(),
+            reads: vec![
+                HammingTraceRead { depth: 1, heads: vec![head(b)] },
+                HammingTraceRead { depth: 2, heads: vec![head(b)] },
+            ],
+        };
+        let recorded = |hamming: Vec<HammingTraceWindow>| {
+            let mut lookups = vec![None; 2 * time];
+            lookups[time + 2] = Some(MemoryLookup { key: vec![1, 2], stored: Some(4), opening: true });
+            lookups[time + 3] = Some(MemoryLookup { key: vec![1, 9], stored: None, opening: false });
+            Recorded { hamming, rates: rates.clone(), lookups: Some(lookups) }
+        };
+        let both = || vec![hamming(&ids[..time], 0), hamming(&ids[time..], 1)];
+        // What `row_picks` copies to the host: the traced rows of the points and of the scores.
+        let run = |trace: &mut FTrace, hamming: Vec<HammingTraceWindow>| {
+            let traced: Vec<usize> = (0..2).filter(|&b| trace.wants(refs[b])).collect();
+            let at = traced_rows(&scored, &traced);
+            let q: Vec<Vec<f32>> = at.iter().map(|&i| queries[i as usize].to_vec()).collect();
+            let s: Vec<Vec<f32>> = at.iter().map(|&i| rows[i as usize].to_vec()).collect();
+            trace.table = Some(points.clone());
+            trace.record(&refs, &traced, &ids, &scored, &best, &q, &s, recorded(hamming))
+        };
+        let mut trace = FTrace::new(&[500]).unwrap();
+        run(&mut trace, both()).unwrap();
+        let trace = trace.finish().unwrap();
+        assert_eq!((trace.side.as_str(), trace.layers, trace.lanes, trace.heads), ("F", 2, 2, 1));
+        let [w] = trace.windows.as_slice() else { panic!("one window is traced") };
+        assert_eq!((w.position, w.reply_start), (500, 2));
+        assert_eq!((w.ids.as_slice(), w.steps.len()), (&windows[1].input_ids[..6], 6));
+        let mut clamped = false;
+        for (t, step) in w.steps.iter().enumerate() {
+            let row = time + t;
+            for (l, layer) in step.layers.iter().enumerate() {
+                let score = &rates[l].score[row * 2..row * 2 + 2];
+                assert_eq!(layer.score_f32, score.iter().map(|s| s.to_bits()).collect::<Vec<_>>());
+                // The kernel's entry, min(⌊s·16⌋, 15), written out here rather than read from
+                // `rate_index`; a score of 1 takes the last entry.
+                let entry: Vec<u8> = score.iter().map(|&s| ((s * 16.0).floor() as u8).min(15)).collect();
+                clamped |= score.iter().zip(&layer.entry).any(|(&s, &e)| s == 1.0 && e == 15);
+                assert_eq!((layer.entry.clone(), layer.score_q16.len()), (entry, 0));
+                assert_eq!(layer.read.as_ref().map(|r| r.depth), (l == 0).then_some(1));
+            }
+            let readout = step.readout.as_ref().unwrap();
+            assert_eq!((readout.depth, readout.heads[0].query_f32.clone()), (2, vec![(t as f32).to_bits()]));
+            assert_eq!(step.nearest.is_some(), [2, 3, 5].contains(&t));
+            let opening = match t {
+                2 => Some(true),
+                3 => Some(false),
+                _ => None,
+            };
+            assert_eq!(step.memory.as_ref().map(|m| m.opening), opening);
+        }
+        assert!(clamped, "the window holds a score of 1, at the last entry");
+        // Nearest first; 2 and 4 tie at distance 1, and the earlier comes first.
+        let read = &w.steps[5].layers[0].read.as_ref().unwrap().heads[0];
+        assert_eq!((read.query, read.kept.clone()), (0b1010, vec![1, 2, 4, 3]));
+        assert_eq!((read.key, read.key_f32.clone()), (0, vec![(-5.0f32).to_bits()]));
+        let nearest = |t: usize| w.steps[t].nearest.clone().unwrap();
+        let (n2, n3, n5) = (nearest(2), nearest(3), nearest(5));
+        assert_eq!((n2.pick, n2.runner_up, n3.pick, n3.runner_up, n5.runner_up), (1, 0, 2, 0, 0));
+        // −2^12 · (|0.9f32 − 1| + |0.1f32|), summed in f64; an f32 sum rounds it.
+        assert_eq!(n2.score_f64.map(f64::from_bits), Some(-819.200_103_759_765_6));
+        assert_ne!((-4096.0 * ((0.9f32 - 1.0).abs() + 0.1f32)) as f64, -819.200_103_759_765_6);
+        assert_eq!(n5.score_f64.map(f64::from_bits), Some(-3072.0));
+        assert_eq!(n5.runner_score_f64.map(f64::from_bits), Some(-3072.0));
+        assert_eq!(n3.query_f32, queries[3].map(f32::to_bits).to_vec());
+        assert!(n2.score_q12.is_none() && n2.runner_score_q12.is_none() && n2.query_q12.is_empty());
+        // A position no window holds, a position named twice, a Hamming record of another
+        // window, a head without coordinates and a one-token table are refused.
+        let mut missing = FTrace::new(&[500, 777]).unwrap();
+        run(&mut missing, both()).unwrap();
+        assert!(missing.finish().is_err());
+        assert!(FTrace::new(&[500, 500]).is_err());
+        let swapped = vec![hamming(&ids[time..], 1), hamming(&ids[..time], 0)];
+        assert!(run(&mut FTrace::new(&[500]).unwrap(), swapped).is_err());
+        let mut bare = head(0);
+        bare.query_f32.clear();
+        assert!(decision_read(&HammingTraceRead { depth: 1, heads: vec![bare] }, 5).is_err());
+        assert!(runner_up(&[1.0], 0).is_err());
+    }
+
     #[test]
     fn a_reply_opens_where_the_token_before_is_not_a_response_token() {
         // prompt, prompt, reply, reply, prompt, reply: the scored targets are the reply tokens
@@ -10947,7 +11475,7 @@ mod tests {
         assert_eq!(positions, [11, 21]);
         assert_eq!(targets, [20, 30]);
         let mut seen = Vec::new();
-        row_picks(&model, &windows, &mask, 1, 0, |query, opens| {
+        row_picks(&model, &windows, &mask, 1, 0, None, |query, opens| {
             let rows: Vec<u32> = (0..opens.len() as u32).filter(|&i| opens[i as usize]).collect();
             let idx = Tensor::from_vec(rows.clone(), rows.len(), query.device())?;
             seen.push(query.index_select(&idx, 0)?);
@@ -10957,6 +11485,117 @@ mod tests {
         let seen = Tensor::cat(&seen, 0).unwrap();
         let gap = (points - seen).unwrap().abs().unwrap().max_all().unwrap().to_scalar::<f32>().unwrap();
         assert_eq!(gap, 0.0, "the opening points are the rows' own points");
+    }
+
+    /// claude-251 (Done-when 3, on the GPU): side F's trace of a small trunk with both Hamming
+    /// reads. Tracing changes no pick, and the trace holds the one window named, in R's order and
+    /// lengths: six layers, the stream read after layer 2 only, the readout read, no memory, and a
+    /// nearest at each scored offset. Each recorded entry is the kernel's bucket of its recorded
+    /// score (`rate_select` returns that entry's λ); each code is `pack_signs` of its recorded
+    /// coordinates; each kept set is in R's order; each pick is the kernel's argmax for its
+    /// recorded query.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn a_traced_forward_records_the_kernels_choices_in_rs_order() {
+        use crate::flock_read_hamming::{pack_signs, set_hamming_reads, HammingReads, HAMMING_KEPT};
+        use crate::geometric_stack::{rate_index, rate_select, RATE_TABLE};
+        let device = Device::new_cuda(0).unwrap();
+        let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
+        set_hamming_reads(Some(HammingReads::new(4, hs::SHEET_WIDTH, &device).unwrap()));
+        // Two documents, each BOS, a prompt, a reply, a prompt, a reply.
+        let (mut tokens, mut mask) = (Vec::new(), Vec::new());
+        for doc in 0..2u32 {
+            tokens.push(hs::SHEET_BOS_ID);
+            mask.push(0u8);
+            for (ids, flag) in [(10..20u32, 0u8), (20..26, 1), (26..30, 0), (30..34, 1)] {
+                for t in ids {
+                    tokens.push(t + 40 * doc);
+                    mask.push(flag);
+                }
+            }
+        }
+        let (windows, _) =
+            hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID).unwrap();
+        assert_eq!(windows.len(), 2);
+        let picks = |trace: Option<&mut FTrace>| {
+            row_picks(&model, &windows, &mask, 1, 0, trace, |_, _| Ok(())).unwrap()
+        };
+        let plain = picks(None);
+        let named = &windows[1];
+        let mut trace = FTrace::new(&[named.scored_corpus_positions[0]]).unwrap();
+        assert_eq!(picks(Some(&mut trace)), plain, "tracing changes no pick");
+        let host_table = trace.table.clone().unwrap();
+        let trace = trace.finish().unwrap();
+        set_hamming_reads(None);
+        assert_eq!((trace.layers, trace.heads), (6, 4));
+        let [w] = trace.windows.as_slice() else { panic!("one window is traced") };
+        let last = *named.scored_offsets.last().unwrap();
+        assert_eq!((w.position, w.reply_start), (named.scored_corpus_positions[0], named.scored_offsets[0]));
+        assert_eq!((w.ids.as_slice(), w.steps.len()), (&named.input_ids[..=last], last + 1));
+        let (mut scores, mut entries) = (Vec::new(), Vec::new());
+        let (mut queries, mut picked) = (Vec::new(), Vec::new());
+        let mut unsigned = false;
+        for (t, step) in w.steps.iter().enumerate() {
+            assert_eq!(step.layers.len(), 6);
+            for (l, layer) in step.layers.iter().enumerate() {
+                assert_eq!((layer.score_f32.len(), layer.entry.len()), (trace.lanes, trace.lanes));
+                for (&bits, &entry) in layer.score_f32.iter().zip(&layer.entry) {
+                    assert_eq!(entry as usize, rate_index(f32::from_bits(bits)));
+                    scores.push(f32::from_bits(bits));
+                    entries.push(entry as usize);
+                }
+                assert_eq!(layer.read.as_ref().map(|r| r.depth), (l == 1).then_some(2));
+            }
+            let readout = step.readout.as_ref().map(|r| r.depth);
+            assert_eq!((readout, step.memory.is_none()), (Some(6), true));
+            let reads = step.layers[1].read.iter().chain(&step.readout);
+            for head in reads.flat_map(|r| &r.heads) {
+                let signs = |bits: &[u32]| pack_signs(&bits.iter().map(|&b| f32::from_bits(b)).collect::<Vec<_>>());
+                assert_eq!((signs(&head.query_f32), signs(&head.key_f32)), (vec![head.query], vec![head.key]));
+                assert_eq!(head.kept.len(), t.saturating_sub(1).min(HAMMING_KEPT), "row {t}");
+                // The coordinates the sign read, not its ±1 codes.
+                unsigned |= head.query_f32.iter().chain(&head.key_f32).any(|&b| f32::from_bits(b).abs() != 1.0);
+            }
+            assert_eq!(step.nearest.is_some(), named.scored_offsets.contains(&t));
+            if let Some(nearest) = &step.nearest {
+                assert_ne!(nearest.runner_up, nearest.pick);
+                queries.extend(nearest.query_f32.iter().map(|&b| f32::from_bits(b)));
+                picked.push(nearest.pick);
+            }
+        }
+        assert!(unsigned, "the trace records the coordinates, not the codes");
+        let mut distinct = entries.clone();
+        distinct.sort();
+        distinct.dedup();
+        assert!(distinct.len() > 1, "the window's scores fall in more than one bucket");
+        // Each kept set, as the kernel chose it, is the 16 positions 1 ≤ s < t nearest the row's
+        // query word by Hamming distance to their key words, nearest first, ties to the earlier
+        // position: so the recorded words are the ones the kernel chose by. Every head of both reads.
+        let read = |s: &DecisionStep, r: usize| if r == 0 { s.layers[1].read.clone() } else { s.readout.clone() };
+        for r in 0..2 {
+            for h in 0..4 {
+                let keys: Vec<u64> = w.steps.iter().map(|s| read(s, r).unwrap().heads[h].key).collect();
+                for (t, step) in w.steps.iter().enumerate() {
+                    let head = &read(step, r).unwrap().heads[h];
+                    let mut nearest: Vec<u32> = (1..t as u32).collect();
+                    nearest.sort_by_key(|&s| ((head.query ^ keys[s as usize]).count_ones(), s));
+                    nearest.truncate(HAMMING_KEPT);
+                    assert_eq!(head.kept, nearest, "read {r}, head {h}, row {t}");
+                }
+            }
+        }
+        let lambdas = rate_select(&Tensor::from_vec(scores.clone(), scores.len(), &device).unwrap())
+            .unwrap()
+            .to_vec2::<f32>()
+            .unwrap();
+        for (lambda, &entry) in lambdas.iter().zip(&entries) {
+            assert_eq!(lambda[0].to_bits(), RATE_TABLE[entry].to_bits(), "an entry the kernel did not choose");
+        }
+        let width = queries.len() / picked.len();
+        let query = Tensor::from_vec(queries, (picked.len(), width), &device).unwrap();
+        let points = Tensor::from_vec(host_table.clone(), (host_table.len() / width, width), &device).unwrap();
+        let best = nearest_scores(&query, &points).unwrap().argmax(1).unwrap().to_vec1::<u32>().unwrap();
+        assert_eq!(best, picked, "each pick is the kernel's argmax for its recorded query");
     }
 
     /// claude-218 (FIT round 1): each query is named by the commonest target among the TRAIN

@@ -1772,6 +1772,8 @@ impl DecisionState {
                     query: h.query,
                     key: h.key,
                     kept: h.kept,
+                    query_f32: Vec::new(),
+                    key_f32: Vec::new(),
                 })
                 .collect(),
         })
@@ -3457,6 +3459,7 @@ fn stack_step_fbs(
         if let (Some(step), Some(decision), Some(buckets)) = (traced.as_mut(), session.decision.as_deref_mut(), buckets) {
             step.layers.push(DecisionLayer {
                 score_q16: buckets.score_q16,
+                score_f32: Vec::new(),
                 entry: buckets.entry,
                 read: decision.take_read(),
             });

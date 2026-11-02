@@ -68,6 +68,35 @@ pub fn reflected_floor() -> bool {
     REFLECTED_FLOOR.load(std::sync::atomic::Ordering::SeqCst)
 }
 
+thread_local! {
+    static RATE_TRACE: std::cell::RefCell<Option<Vec<RateScores>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// One layer's rate scores over one forward, as [`rate_select`] reads them (claude-251, Q5's
+/// decision trace). Each score's entry is [`rate_index`] of it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RateScores {
+    pub layer: usize,
+    /// `(batch, time, lanes)`.
+    pub dims: (usize, usize, usize),
+    /// The scores in row-major order.
+    pub score: Vec<f32>,
+}
+
+/// claude-251: record every layer's rate scores on this thread from now on (`true`), copied to
+/// the host as [`rate_select`] reads them, or stop and drop the record (`false`, the default).
+/// Recording changes nothing the recurrence computes.
+pub fn set_rate_trace(on: bool) {
+    RATE_TRACE.with(|t| *t.borrow_mut() = on.then(Vec::new));
+}
+
+/// The layers recorded since recording started or was last taken, in the order run, leaving it
+/// on with an empty record; `None` when it is off.
+pub fn take_rate_trace() -> Option<Vec<RateScores>> {
+    RATE_TRACE.with(|t| t.borrow_mut().as_mut().map(std::mem::take))
+}
+
 /// Where the shared vector table learns from. Off (the default): from both its roles, input
 /// encoding and the output points the predicted point is scored against. On (`in_space_long`, 27
 /// Oct 2026): the input reads the same points but passes them no gradient, so only the prediction
@@ -1446,6 +1475,14 @@ impl StackModel {
         } else {
             raw_score.clamp(0., 1.)?
         };
+        if RATE_TRACE.with(|t| t.borrow().is_some()) {
+            let recorded = RateScores {
+                layer,
+                dims: score.dims3()?,
+                score: score.flatten_all()?.to_vec1::<f32>()?,
+            };
+            RATE_TRACE.with(|t| t.borrow_mut().as_mut().map(|r| r.push(recorded)));
+        }
         let selected = rate_select(&score)?;
         let (lambda, keep) = if retention_rates() {
             // Carry 1 - 2^-(k+1) of the state. `keep` is the norm-preserving input share; it is
