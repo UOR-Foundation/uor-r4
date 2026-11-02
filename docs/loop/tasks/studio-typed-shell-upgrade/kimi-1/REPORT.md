@@ -23,7 +23,7 @@ Added the pure migration snapshot reader and deterministic copy-forward plan. `m
 
 Added strict TypeScript, Vite library build, Vitest/jsdom configuration, and pinned dependencies. No component, page, publisher, deployment, engine, worker, tokenizer, or `studio_api.js` change was made. #3500 remains ready for the next workflow unit.
 
-Diff against `origin/main` at `728cf3f6ce0101e3f7d1cc7e2ebd16d7ab9f021b` before this report: 19 files, 4,738 insertions and 15 deletions. Final report-inclusive size is recorded on the PR. No size cap applies.
+Diff against `origin/main` at `728cf3f6ce0101e3f7d1cc7e2ebd16d7ab9f021b`: 19 files, 4,740 insertions and 16 deletions. No size cap applies.
 
 ## Measurements
 
@@ -34,11 +34,19 @@ Diff against `origin/main` at `728cf3f6ce0101e3f7d1cc7e2ebd16d7ab9f021b` before 
 - `npm run build`: PASS, `dist/studio-foundation.js` 47.08 kB (gzip 13.32 kB), generated output uncommitted.
 - `node verify_studio_page.mjs --strict-router`: PASS, both strict pages clean with zero failures. No new browser, accessibility, or model-capability claim is made.
 
-## Checks and delivery
+## Checks run at the head
 
-The complete foundation suite, typecheck, build, Node hooks, and static strict-page check pass after merging `origin/main` at `728cf3f6`. Final repository gates, claim wording, local policy, diff check, clean status, and exact delivery head/tree are rerun after this report and recorded on the PR before queueing. GitHub checks and a fresh exact-head review remain required.
+- At `38a32c5076d6fa3b2a283962d0cb34bd365d0393`, the complete foundation suite, typecheck, build, Node hooks, and static strict-page check pass after merging `origin/main` at `728cf3f6`.
+- `uor-harness loop gates --full`: 11/11 GREEN, ledger `local/kimi/gates/1793581218-34127`.
+- Claim wording and `git diff --check`: PASS; worktree clean at the checked head.
+- Local policy initially failed because this rewritten report omitted its required `Checks run at the head` and `Skills used` headings. Those headings are restored and policy is rerun before queueing. Expected D76 advisories are limited to the reviewed plan/declaration/test scope registrations and known FILEMAP gaps; no implementation-scope waiver is used.
+- The final report-only commit, exact delivery head/tree, fresh review, and GitHub checks are recorded on the PR before queueing.
 
 No npm test used real browser data, a real model, a pod, a deployment, or a production publish. Modern Web Guidance informed native progress semantics, no invented percentages/stages, and fail-closed endpoint privacy; no component UI is included here.
+
+## Skills used
+
+Writing/executing plans, TDD with failing-first cycles, isolated worktrees, solution integrity, scope guard, systematic debugging, modern web guidance for progress and privacy, verification before completion, and independent builder/delivery review. No model compute or paid resource was used.
 
 ## Deferred minors
 
