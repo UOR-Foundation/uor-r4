@@ -19,7 +19,7 @@ No trainer, serving, corpus or GPU edit. No corpus-scale training runs in this u
 
 - Base artifacts: public `dual-c131-seed-1-raw_both.uorlut` (`a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd`) and seed 2 (`da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1`).
 - Corpus: public `caseyallard/uor-r4-data` dev token bytes (`0919e90f…`) and mask (`a838bb1a…`), 42,856 tokens and 14,287 response targets, artifact context 192 and manifest horizon 256.
-- Split by complete BOS documents: odd `evaluation_stride=2` documents reserved for evaluation, no overlap with training. Cap evaluation at 1,024 deterministically.
+- Split by complete BOS documents: odd `evaluation_stride=2` documents reserved for document-disjoint internal evaluation, no overlap with the subsequent training documents. Cap evaluation at 1,024 deterministically. The public manifest says `split=train`, and base-model exposure to these documents is unverified.
 - Arms: zero-update baseline and exactly 256 rank-margin updates per artifact seed, using the same training order and schedule for both seeds.
 - Checkpoint every 64 steps and at final, with a reloaded checkpoint and final artifact identity.
 
@@ -32,7 +32,7 @@ No trainer, serving, corpus or GPU edit. No corpus-scale training runs in this u
 
 ## Claim boundary
 
-This sheet tests public internal-development fit only. It is not fresh-phrasing evidence. Sealed `m2-fresh256` complete-reply inputs/labels remain unavailable without credentials, so complete-reply and genuine fresh-phrasing outcomes are explicitly `NOT_RUN`; this sheet does not close the full #3506 contract.
+This sheet tests the effect of the subsequent 256 CPU updates on public document-disjoint internal-development fit only. It is not fresh-phrasing evidence and does not establish that the published base models were unexposed to the public documents. Sealed `m2-fresh256` complete-reply inputs/labels remain unavailable without credentials, so complete-reply and genuine fresh-phrasing outcomes are explicitly `NOT_RUN`. Public-corpus restart is also `NOT_RUN` because the driver has no resume CLI; this sheet does not close the full #3506 contract.
 
 ## Done when
 
