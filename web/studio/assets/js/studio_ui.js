@@ -115,7 +115,14 @@
         var map = { nav: ['btnToggleNav', 'btnNavCollapse', 'btnMobileNav'], inspector: ['btnToggleInspector', 'btnToggleInspector2', 'btnToggleInspector3', 'btnToggleInspector4'] };
         (map[name] || []).forEach(function (id) { var node = document.getElementById(id); if (node) node.setAttribute('aria-expanded', expanded ? 'true' : 'false'); });
         if (persist) { var patch = {}; patch[name] = value; writeUi(patch); }
-        if (name === 'nav') document.documentElement.classList.toggle('nav-open', expanded && window.matchMedia('(max-width: 900px)').matches);
+        if (name === 'nav') {
+            var mobile = window.matchMedia('(max-width: 900px)').matches;
+            document.documentElement.classList.toggle('nav-open', expanded && mobile);
+            var scrim = document.getElementById('btnNavScrim');
+            if (scrim) scrim.hidden = !expanded;
+            var main = document.getElementById('mainColumn');
+            if (main) main.inert = expanded && mobile;
+        }
     }
     function toggleChrome(name) { if (!app) return; var current = app.getAttribute('data-' + name) === 'collapsed' ? 'collapsed' : 'expanded'; setChrome(name, current === 'expanded' ? 'collapsed' : 'expanded', true); }
 
@@ -804,6 +811,7 @@
         on('btnToggleNav', 'click', function () { toggleChrome('nav'); });
         on('btnNavCollapse', 'click', function () { toggleChrome('nav'); });
         on('btnMobileNav', 'click', function () { toggleChrome('nav'); });
+        on('btnNavScrim', 'click', function () { setChrome('nav', 'collapsed', true); });
         ['btnToggleInspector', 'btnToggleInspector2', 'btnToggleInspector3', 'btnToggleInspector4', 'btnInspectorCollapse'].forEach(function (id) { on(id, 'click', function () { toggleChrome('inspector'); }); });
         on('btnOpenModelSources', 'click', function () { activateSection('models'); });
         on('ctxOpenFiles', 'click', function () { activateSection('files'); });
@@ -883,6 +891,11 @@
             var meta = event.metaKey || event.ctrlKey;
             var target = event.target;
             var typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
+            if (event.key === 'Escape' && app && app.getAttribute('data-nav') === 'expanded' && window.matchMedia('(max-width: 900px)').matches) {
+                event.preventDefault();
+                setChrome('nav', 'collapsed', true);
+                return;
+            }
             if (meta && (event.key === 'k' || event.key === 'K')) { event.preventDefault(); if (paletteOpen) closePalette(); else openPalette(); return; }
             if (meta && event.key === ',') { event.preventDefault(); openSettings(); return; }
             if (meta && ['1', '2', '3', '4'].indexOf(event.key) >= 0 && !event.shiftKey && !event.altKey) { event.preventDefault(); activateSection({ '1': 'agent', '2': 'workspace', '3': 'models', '4': 'guide' }[event.key]); return; }
