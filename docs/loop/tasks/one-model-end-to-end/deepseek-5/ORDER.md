@@ -19,6 +19,7 @@ only the override required for a like-for-like evaluation.
 ## Scope
 
 - `crates/uor-r4-float-train/src/in_space_long.rs`
+- `crates/uor-r4-float-train/src/bin/fbs-snapshot.rs`
 - `crates/uor-r4-float-train/src/bin/train-in-space.rs`
 - `docs/harness/prep/one-model-end-to-end-served-comparison-2026-11-02.md`
 - `docs/loop/tasks/one-model-end-to-end/deepseek-5/**`
