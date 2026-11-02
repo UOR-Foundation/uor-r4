@@ -24,6 +24,11 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 - `CARGO_TARGET_DIR=target/deepseek-proposals-serial CARGO_BUILD_JOBS=1 cargo test --release --locked -p uor-r4-cpu-train`: PASS after one known duplicate-artifact collision retry, 74 passed and three ignored.
 - `CARGO_TARGET_DIR=target/deepseek-proposals-serial CARGO_BUILD_JOBS=1 cargo clippy --locked -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings`: PASS; dependency crates emitted pre-existing dead-code warnings.
 - `cargo fmt --package uor-r4-cpu-train -- --check`: PASS.
+- `UOR_LAB=deepseek uor-harness ratchet d23`: PASS, 4,451 sites, baseline unchanged.
+- `UOR_LAB=deepseek uor-harness ratchet d25`: PASS, 93 sites, baseline unchanged.
+- `UOR_LAB=deepseek uor-harness ratchet d32`: PASS, 31 sites, baseline unchanged.
+- `UOR_LAB=deepseek uor-harness loop pr-check --local`: PASS.
+- `UOR_LAB=deepseek uor-harness loop gates --full`: PASS, 11 gates green.
 
 ## Skills used
 
