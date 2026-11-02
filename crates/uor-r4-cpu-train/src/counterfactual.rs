@@ -242,7 +242,7 @@ impl CpuCounterfactualTrainer {
                 }
                 let replace = best
                     .as_ref()
-                    .is_none_or(|(_, _, current)| rank_key(&after) < rank_key(current));
+                    .is_none_or(|(_, _, current)| after.margin_loss < current.margin_loss);
                 if replace {
                     best = Some((candidate, evaluator, after));
                 }
@@ -284,7 +284,7 @@ impl CpuCounterfactualTrainer {
         let Some(best_at) = eligible
             .iter()
             .enumerate()
-            .min_by_key(|(_, (_, _, reading))| rank_key(reading))
+            .min_by_key(|(_, (_, _, reading))| reading.margin_loss)
             .map(|(index, _)| index)
         else {
             return Ok(None);
@@ -675,12 +675,8 @@ fn route_input_atoms(suffix: &str, shape: &StackShape) -> usize {
     }
 }
 
-fn rank_key(reading: &RankMarginReading) -> (i64, usize) {
-    (reading.margin_loss, reading.target_rank)
-}
-
 fn strictly_better(after: &RankMarginReading, before: &RankMarginReading) -> bool {
-    rank_key(after) < rank_key(before)
+    after.margin_loss < before.margin_loss
 }
 
 fn candidate_improves(after: &RankMarginReading, before: &RankMarginReading) -> bool {
@@ -1094,22 +1090,80 @@ mod tests {
     }
 
     #[test]
+    fn malformed_spans_and_grid_boundaries_are_refused() {
+        let mut artifact = artifact();
+        let (_, start) = table_location(&artifact, "l0.rec_norm_gain", TableKind::I16).unwrap();
+        artifact[start..start + 2].copy_from_slice(&2047i16.to_le_bytes());
+        assert!(IntegerStackModel::parse(&artifact).is_ok());
+        let overflow_code = CounterfactualCandidate {
+            table: "l0.rec_norm_gain".to_owned(),
+            index: 0,
+            field: CounterfactualField::Value,
+            delta: 1,
+        };
+        assert!(patch_candidates(
+            &artifact,
+            &[overflow_code],
+            CounterfactualConfig {
+                group: CounterfactualGroup::Normalization,
+                ..CounterfactualConfig::default()
+            },
+        )
+        .is_err());
+
+        let mut truncated = artifact.clone();
+        truncated.truncate(truncated.len() - 1);
+        let candidate = CounterfactualCandidate {
+            table: "l0.rec_norm_gain".to_owned(),
+            index: 0,
+            field: CounterfactualField::Value,
+            delta: 16,
+        };
+        assert!(patch_candidates(
+            &truncated,
+            &[candidate],
+            CounterfactualConfig {
+                group: CounterfactualGroup::Normalization,
+                ..CounterfactualConfig::default()
+            },
+        )
+        .is_err());
+    }
+
+    #[test]
     fn route_frame_and_atom_moves_keep_legal_fields() {
-        let artifact = artifact();
+        let mut artifact = artifact();
         let name = "l0.rec_in.fbs";
         let (len, _) = table_section(&artifact, name, TableKind::U32).unwrap();
         assert!(len > 0);
+        let index = 0;
+        let (_, at) = table_location(&artifact, name, TableKind::U32).unwrap();
+        let initial = u32::from_le_bytes(
+            artifact[at + index * 4..at + index * 4 + 4]
+                .try_into()
+                .unwrap(),
+        );
+        artifact[at + index * 4..at + index * 4 + 4]
+            .copy_from_slice(&(initial & 0xffff).to_le_bytes());
+        assert!(IntegerStackModel::parse(&artifact).is_ok());
         let frame = CounterfactualCandidate {
             table: name.to_owned(),
-            index: 0,
+            index,
             field: CounterfactualField::RouteFrame,
             delta: -1,
         };
+        let old = u32::from_le_bytes(
+            artifact[at + index * 4..at + index * 4 + 4]
+                .try_into()
+                .unwrap(),
+        );
+        let atom = old & 0xffff;
+        let atom_delta = if atom + 1 < 8 { 1 } else { -1 };
         let atom = CounterfactualCandidate {
             table: name.to_owned(),
-            index: 0,
+            index,
             field: CounterfactualField::RouteAtom,
-            delta: 1,
+            delta: atom_delta,
         };
         let frame_patch = patch_candidates(
             &artifact,
@@ -1120,11 +1174,13 @@ mod tests {
             },
         )
         .unwrap();
-        let (_, at) = table_location(&artifact, name, TableKind::U32).unwrap();
-        let old = u32::from_le_bytes(artifact[at..at + 4].try_into().unwrap());
-        let new = u32::from_le_bytes(frame_patch[at..at + 4].try_into().unwrap());
+        let new = u32::from_le_bytes(
+            frame_patch[at + index * 4..at + index * 4 + 4]
+                .try_into()
+                .unwrap(),
+        );
         assert_eq!(old & 0xffff, new & 0xffff);
-        assert_eq!((new >> 16) & 63, (((old >> 16) & 63) + 63) & 63);
+        assert_eq!((new >> 16) & 63, 63);
 
         let atom_patch = patch_candidates(
             &artifact,
@@ -1135,9 +1191,29 @@ mod tests {
             },
         )
         .unwrap();
-        let new = u32::from_le_bytes(atom_patch[at..at + 4].try_into().unwrap());
-        assert_eq!(new & 0xffff, (old & 0xffff) + 1);
+        let new = u32::from_le_bytes(
+            atom_patch[at + index * 4..at + index * 4 + 4]
+                .try_into()
+                .unwrap(),
+        );
+        assert_eq!(new & 0xffff, (old & 0xffff).wrapping_add_signed(atom_delta));
         assert_eq!(new & 0xffff_0000, old & 0xffff_0000);
+
+        let outside = CounterfactualCandidate {
+            table: name.to_owned(),
+            index,
+            field: CounterfactualField::RouteAtom,
+            delta: -(i64::from(old & 0xffff) as i32) - 1,
+        };
+        assert!(patch_candidates(
+            &artifact,
+            &[outside],
+            CounterfactualConfig {
+                group: CounterfactualGroup::Route,
+                ..CounterfactualConfig::default()
+            },
+        )
+        .is_err());
     }
 
     #[test]
@@ -1216,10 +1292,82 @@ mod tests {
         assert!(candidate_improves(&reading(10, 7, true), &before));
         assert!(!candidate_improves(&reading(10, 7, false), &before));
         assert!(!candidate_improves(&reading(20, 8, true), &before));
-        assert!(candidate_improves(
-            &reading(20, 7, true),
-            &reading(20, 8, true)
-        ));
+        assert!(!candidate_improves(&reading(20, 7, true), &before));
+    }
+
+    #[test]
+    fn full_forward_rejections_leave_every_artifact_unchanged() {
+        let artifact = artifact();
+        let sample = sample_at(&artifact, 0).unwrap();
+        for (group, delta) in [
+            (CounterfactualGroup::Normalization, 16),
+            (CounterfactualGroup::Bias, 1_000_000),
+            (CounterfactualGroup::Decay, 1_000_000),
+            (CounterfactualGroup::Route, 1),
+        ] {
+            let mut trainer = trainer(&artifact, sample.clone(), group, delta, 16);
+            let step = trainer.train_steps(1).unwrap().remove(0);
+            assert!(step.tried > 0, "{group:?} evaluated no candidates");
+            assert!(step.accepted.is_none(), "{group:?} unexpectedly changed");
+            assert_eq!(step.after, step.before);
+            assert_eq!(trainer.artifact(), artifact);
+        }
+    }
+
+    #[test]
+    fn a_patched_full_forward_candidate_that_loses_admission_is_rejected() {
+        let artifact = artifact();
+        for (group, delta) in [
+            (CounterfactualGroup::Normalization, 32_767),
+            (CounterfactualGroup::Bias, i32::MAX / 2),
+            (CounterfactualGroup::Decay, i32::MAX / 2),
+            (CounterfactualGroup::Route, 1),
+            (CounterfactualGroup::Route, 7),
+        ] {
+            for input in 0u32..64 {
+                let dummy = RankMarginSample {
+                    input: vec![input],
+                    target: 0,
+                };
+                let trainer = trainer(&artifact, dummy.clone(), group, delta, 64);
+                let mut baseline =
+                    rank_evaluator(&artifact, std::slice::from_ref(&dummy), 1, 23).unwrap();
+                let query = baseline.query_for(&dummy).unwrap();
+                let baseline_reading = baseline.reading(&query, 0).unwrap();
+                for coordinate in trainer.coordinates().unwrap() {
+                    for candidate in coordinate.lanes(delta, &artifact).unwrap() {
+                        let Ok(patched) = patch_candidates(
+                            &artifact,
+                            std::slice::from_ref(&candidate),
+                            trainer.config,
+                        ) else {
+                            continue;
+                        };
+                        let mut changed =
+                            rank_evaluator(&patched, std::slice::from_ref(&dummy), 1, 23).unwrap();
+                        let changed_query = changed.query_for(&dummy).unwrap();
+                        let changed_reading = changed.reading(&changed_query, 0).unwrap();
+                        let Some(target) = (0..VOCABULARY as u32).find(|&token| {
+                            baseline_reading.admitted_cells.contains(&(token % 256))
+                                && !changed_reading.admitted_cells.contains(&(token % 256))
+                        }) else {
+                            continue;
+                        };
+                        let sample = RankMarginSample {
+                            input: vec![input],
+                            target,
+                        };
+                        let before = baseline.evaluate_sample(&sample).unwrap();
+                        let after = changed.evaluate_sample(&sample).unwrap();
+                        if before.target_admitted && !after.target_admitted {
+                            assert!(!candidate_improves(&after, &before));
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+        panic!("no patched candidate lost target admission");
     }
 
     #[test]
