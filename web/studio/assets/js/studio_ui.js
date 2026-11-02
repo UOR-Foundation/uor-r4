@@ -455,6 +455,7 @@
             if (inspector) { var row = document.createElement('li'); row.className = 'attachment-row'; row.textContent = item.name; inspector.appendChild(row); }
         });
     }
+    function removeAttachment(name) { attachments = attachments.filter(function (item) { return item.name !== name; }); saveAttachments(); renderAttachments(); }
     function clearAttachments() { attachments = []; saveAttachments(); renderAttachments(); }
     function attachContext() {
         var files = window.__studioFiles;
@@ -996,6 +997,7 @@
             updateStatus: updateStatus,
             getAttachments: function () { return attachments.slice(); },
             addAttachment: addAttachment,
+            removeAttachment: removeAttachment,
             clearAttachments: clearAttachments,
             templatePrompt: templatePrompt,
             clearSessions: clearSessions,

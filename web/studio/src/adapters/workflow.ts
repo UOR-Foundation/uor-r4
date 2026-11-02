@@ -89,6 +89,7 @@ export interface StudioUiApi {
     updateSettings(patch: Partial<StudioSettings>): void;
     getAttachments(): Attachment[];
     addAttachment(entry: Attachment): void;
+    removeAttachment(name: string): void;
     clearAttachments(): void;
     templatePrompt(kind: string): string;
     clearSessions(): void;

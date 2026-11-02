@@ -1,0 +1,32 @@
+import { render } from 'preact';
+import { act } from 'preact/test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LifecycleStore } from '../state/lifecycle.js';
+import type { StudioSettings, StudioUiApi } from '../adapters/workflow.js';
+import { Inspector } from './Inspector.js';
+
+let host: HTMLDivElement;
+beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); });
+afterEach(() => { render(null, host); host.remove(); });
+
+function ui(): StudioUiApi {
+    return {
+        setView: vi.fn(), toast: vi.fn(),
+        getSettings: vi.fn((): StudioSettings => ({ theme: 'dark', reduceMotion: false, fontSize: 13, tabSize: 4, wordWrap: false })),
+        updateSettings: vi.fn(), getAttachments: vi.fn(() => [{ name: 'notes.md', content: 'not secret', source: 'editor' }]),
+        addAttachment: vi.fn(), removeAttachment: vi.fn(), clearAttachments: vi.fn(), templatePrompt: vi.fn(() => ''),
+        clearSessions: vi.fn(), clearEditor: vi.fn(),
+    };
+}
+
+describe('Inspector', () => {
+    it('renders details only when opened', () => {
+        const store = new LifecycleStore();
+        act(() => { render(<Inspector store={store} ui={ui()} open={false} onClose={vi.fn()} />, host); });
+        expect(host.textContent).toBe('');
+        act(() => { render(<Inspector store={store} ui={ui()} open onClose={vi.fn()} />, host); });
+        expect(host.querySelector('#studio-inspector')).not.toBeNull();
+        expect(host.textContent).toContain('notes.md');
+        expect(host.textContent).toContain('No source selected');
+    });
+});
