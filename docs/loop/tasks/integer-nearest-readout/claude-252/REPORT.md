@@ -13,7 +13,7 @@ No decode speed is claimed, and no served path changes. R's decode speed is stil
 - **Q5 is not read, and nothing here moves done-when 3.** This unit builds T's side of the trace. The replay driver, the near-tie grader and the sheet come next, in that order.
 - **No snapshot equals claude-227's, the one R was exported from;** the check holds on the artifact instead.
   - This head's `fbs-snapshot` adds a `readout_nearest` field that claude-227's snapshots lack.
-  - The copy's snapshot differs from the as-trained one from about byte 100, where its rounded floats begin.
+  - The copy's snapshot differs from the as-trained one at every seed (sha256). A `cmp` over ssh at s1 put the first difference at about byte 100, where the rounded floats begin; its output was not saved, so the sha256s are the record.
   - All nine exports (three per seed) still equal R's sealed artifacts. So I-Twin is read on the artifact's sha256, as the card defines it, not on the snapshot.
 - **The agreements below are readings, not Q5.** They come from 308 DEV windows outside Q5's set, with nothing forced, over the first scored rows only.
   - By the card, attribution alone accounts for nothing: whether a flip is a near tie or a fault is the replay driver's and the grader's to decide.
@@ -56,7 +56,7 @@ No decode speed is claimed, and no served path changes. R's decode speed is stil
     - The export of a copy that is its own rounding holds that copy's values, so T's values are R's.
     - I-Twin alone would not show this (above).
   - **The host tests pin the read-back.** The copy holds every group's rounding bit for bit, every parameter moved, and setting the memory's rounding aside makes the copy refuse itself (gates m1, m2).
-  - **Two signs that the copy changed values.** Its snapshots differ from orig's at every seed by sha256 (s1 `3c0f3394…` against `8844a04e…`, s2 `799502b0…` against `e42e3146…`, s3 `5e17e783…` against `bd6492a9…`). At s1, a `cmp` run over ssh after the job found the first difference at byte 100. And T's picks differ from F's on 190 rows.
+  - **Two signs that the copy changed values.** Its snapshots differ from orig's at every seed by sha256 (s1 `3c0f3394…` against `8844a04e…`, s2 `799502b0…` against `e42e3146…`, s3 `5e17e783…` against `bd6492a9…`). (A `cmp` over ssh at s1 found the first difference at byte 100; that output was not saved.) And T's picks differ from F's on 190 rows.
   - **Two controls ran in the same pass,** each also equal to R's artifact at every seed. Had I-Twin failed, they would have located the fault:
     - *rerun*, claude-227's snapshot exported again by this build. It places a fault in the export;
     - *orig*, the as-trained step snapshotted at this head, then exported. It places a fault in the snapshot.
@@ -100,7 +100,7 @@ The pod run used the binaries `fbs-snapshot` `31666fcc…`, `train-in-space` `79
 | I-Twin | the copy's snapshot, exported raw, against R's sealed `a7r-sN` (sha256) | 3 of 3 equal |
 | Control: rerun | claude-227's snapshot `sN`, exported again by this build | 3 of 3 equal |
 | Control: orig | this head's snapshot of the as-trained step, exported | 3 of 3 equal |
-| Snapshots | orig and the copy's, each against claude-227's; the copy's against orig, by sha256 in `SHA256SUMS` (and at s1 by `cmp` over ssh after the job) | all differ (a new field; the rounded floats) |
+| Snapshots | orig and the copy's, each against claude-227's; the copy's against orig, by sha256 in `SHA256SUMS` | all differ (a new field; the rounded floats) |
 | The copy's run config | sha256 against the checkpoint's in `copy-sN.out`; the job's `cmp`, which stops it on a difference | 3 of 3 equal |
 | T's smoke: side | the trace's `side` | `T` |
 | T's smoke: on = off | `cmp`, the six rows files, trace on against off | 6 equal |
@@ -170,7 +170,10 @@ None.
   - The source's sha256s are taken after it was loaded, so a source changed in between would be recorded by its new hash.
   - `run_of` takes the step's grandparent without checking that its parent is `models`, so a nested output inside the source step would be accepted.
   - Nothing is synced to disk before the marker and the rename. A crash would leave a copy the side refuses, not a wrong `T`.
-  - Between the second `OUT_RUN` check and the rename, an empty folder made there would still be replaced.
+  - Between the second `OUT_RUN` check and the rename, an empty folder made there would still be replaced. That second check is read, not tested: no test can make the folder appear between the copy's two checks.
+- **What review round 2 found and left (all LOW).**
+  - The staging claim now comes before the step is read, so a refused copy can leave empty parent folders it made for `OUT_RUN` (never anything inside them).
+  - The forged-marker test covers the trunk and the memory, not `hamming_read.safetensors`. The side's check reaches the reads through the same re-rounding comparison.
 - **Carried from claude-251 and claude-249:** the open items of their "Still open", unchanged.
 
 ## Plain summary
