@@ -1,7 +1,7 @@
 //! Independent CPU Route and Flock reads for four-table discrete artifacts.
 
 use uor_r4_core::spiralcore_operator::{cl06_finite_composition_table, Cl06FiniteCompositionTable};
-use uor_r4_discrete::normalization_mechanism::orbit_root_coords;
+use uor_r4_discrete::normalization_mechanism::{orbit_root_coords, NormFrameTable};
 
 use crate::CpuTrainError;
 
@@ -802,6 +802,210 @@ impl CpuDiscreteRelation {
 
     pub fn read(&self, prefix: &[u32]) -> Result<Vec<i32>> {
         self.0.read(prefix)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CpuDiscreteProposalMode {
+    Route,
+    Flock,
+    Relation,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CpuDiscreteProposalKind {
+    Route,
+    Table,
+    Gate,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CpuDiscreteProposal {
+    pub lane: usize,
+    pub current_loss: u64,
+    pub selected_loss: u64,
+    pub epoch: u64,
+    pub sensitive: bool,
+}
+
+#[derive(Clone)]
+pub struct CpuDiscreteProposalChooser {
+    mode: CpuDiscreteProposalMode,
+    blocks: usize,
+    stages: usize,
+    routes: Vec<u32>,
+    token_blocks: Vec<Vec<[i32; 8]>>,
+    gate_count: usize,
+    move_actions: [u8; 16],
+    composition: Cl06FiniteCompositionTable,
+}
+
+impl CpuDiscreteProposalChooser {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let header = header(bytes)?;
+        let shape = &header["shape"];
+        let blocks = usize::try_from(shape["blocks"].as_u64().unwrap_or(0))
+            .map_err(|_| invalid("proposal chooser blocks"))?;
+        let stages = usize::try_from(shape["stages"].as_u64().unwrap_or(0))
+            .map_err(|_| invalid("proposal chooser stages"))?;
+        let gate_count = blocks
+            .checked_mul(stages)
+            .ok_or_else(|| invalid("proposal chooser gate count overflows"))?;
+        let (mode, routes, token_blocks, gate_count) = match shape["read_mode"].as_str() {
+            Some("route") => {
+                let route = CpuDiscreteRoute::from_bytes(bytes)?;
+                (
+                    CpuDiscreteProposalMode::Route,
+                    route.routes.into_iter().flatten().collect(),
+                    route.token_blocks,
+                    gate_count,
+                )
+            }
+            Some("flock") => {
+                let flock = ActiveLeafModel::from_bytes(bytes, ActiveLeafKind::Flock)?;
+                (
+                    CpuDiscreteProposalMode::Flock,
+                    Vec::new(),
+                    flock.token_blocks,
+                    gate_count,
+                )
+            }
+            Some("relation") => {
+                let relation = ActiveLeafModel::from_bytes(bytes, ActiveLeafKind::Relation)?;
+                (
+                    CpuDiscreteProposalMode::Relation,
+                    Vec::new(),
+                    relation.token_blocks,
+                    gate_count + RELATION_EDGE_TYPES * stages,
+                )
+            }
+            _ => return Err(invalid("proposal chooser read mode differs")),
+        };
+        let composition =
+            cl06_finite_composition_table().map_err(|error| invalid(error.to_string()))?;
+        let mut move_actions = [0u8; 16];
+        for (candidate, action) in move_actions.iter_mut().enumerate() {
+            *action = NormFrameTable::new(16, vec![candidate as u8; 16])
+                .map_err(|error| invalid(error.to_string()))?
+                .block_frame(0)
+                .map_err(|error| invalid(error.to_string()))?;
+        }
+        Ok(Self {
+            mode,
+            blocks,
+            stages,
+            routes,
+            token_blocks,
+            gate_count,
+            move_actions,
+            composition,
+        })
+    }
+
+    pub fn choose(
+        &self,
+        kind: CpuDiscreteProposalKind,
+        index: usize,
+        losses: &[u64; 16],
+        epoch: u64,
+    ) -> Result<CpuDiscreteProposal> {
+        match kind {
+            CpuDiscreteProposalKind::Gate if self.mode == CpuDiscreteProposalMode::Route => {
+                return Err(invalid("Gate proposal requires Flock or Relation mode"));
+            }
+            CpuDiscreteProposalKind::Route if self.mode != CpuDiscreteProposalMode::Route => {
+                return Err(invalid("Route proposal requires Route mode"));
+            }
+            _ => {}
+        }
+        match kind {
+            CpuDiscreteProposalKind::Gate if index >= self.gate_count => {
+                return Err(invalid("Gate proposal index outside gate inventory"));
+            }
+            CpuDiscreteProposalKind::Route if index >= self.blocks * self.stages => {
+                return Err(invalid("Route proposal index outside map inventory"));
+            }
+            CpuDiscreteProposalKind::Table if index >= self.token_blocks.len() * self.blocks => {
+                return Err(invalid("Table proposal index outside codebook inventory"));
+            }
+            _ => {}
+        }
+
+        let active = if kind == CpuDiscreteProposalKind::Gate {
+            3
+        } else {
+            16
+        };
+        let sensitive = losses[1..active].iter().any(|&loss| loss != losses[0]);
+        let mut best = 0usize;
+        if kind == CpuDiscreteProposalKind::Gate {
+            for lane in 1..3 {
+                if losses[lane] < losses[best] {
+                    best = lane;
+                }
+            }
+        } else {
+            for lane in 1..16 {
+                let tie = best != 0
+                    && losses[lane] == losses[best]
+                    && self.resulting_port(kind, index, lane)?
+                        < self.resulting_port(kind, index, best)?;
+                if losses[lane] < losses[best] || tie {
+                    best = lane;
+                }
+            }
+        }
+        Ok(CpuDiscreteProposal {
+            lane: best,
+            current_loss: losses[0],
+            selected_loss: losses[best],
+            epoch,
+            sensitive,
+        })
+    }
+
+    fn resulting_port(
+        &self,
+        kind: CpuDiscreteProposalKind,
+        index: usize,
+        candidate: usize,
+    ) -> Result<u32> {
+        let action = self.move_actions[candidate];
+        match kind {
+            CpuDiscreteProposalKind::Route => {
+                let route = *self
+                    .routes
+                    .get(index)
+                    .ok_or_else(|| invalid("Route proposal index absent"))?;
+                self.composition
+                    .compose_index(action, route as u8)
+                    .map(u32::from)
+                    .ok_or_else(|| invalid("Route proposal composition failed"))
+            }
+            CpuDiscreteProposalKind::Table => {
+                let token = index / self.blocks;
+                let block = index % self.blocks;
+                let point = self
+                    .token_blocks
+                    .get(token)
+                    .and_then(|token| token.get(block))
+                    .ok_or_else(|| invalid("Table proposal index absent"))?;
+                let root: [i8; 8] = std::array::from_fn(|dimension| (point[dimension] / 2) as i8);
+                let moved = self
+                    .composition
+                    .state(action)
+                    .ok_or_else(|| invalid("Table proposal action state absent"))?
+                    .apply_root_key(root)
+                    .map_err(|error| invalid(error.to_string()))?;
+                let moved = moved.map(|value| i32::from(value) * 2);
+                root_id(&moved)
+                    .map(|root| root as u32)
+                    .ok_or_else(|| invalid("Table proposal moved outside orbit"))
+            }
+            CpuDiscreteProposalKind::Gate => {
+                Err(invalid("Gate proposals do not have resulting ports"))
+            }
+        }
     }
 }
 
@@ -1719,6 +1923,233 @@ mod tests {
             2
         ))
         .is_err());
+    }
+
+    #[test]
+    fn gate_chooser_uses_strict_improvement_and_ignores_inactive_lanes() {
+        let artifact = serialized_flock_fixture(
+            6,
+            &[[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]],
+            &[0, 1, 0, 1],
+            2,
+        );
+        let chooser = CpuDiscreteProposalChooser::from_bytes(&artifact).unwrap();
+        let mut improved = [12u64; 16];
+        improved[1] = 10;
+        improved[2] = 9;
+        let selected = chooser
+            .choose(CpuDiscreteProposalKind::Gate, 0, &improved, 7)
+            .unwrap();
+        assert_eq!(selected.lane, 2);
+        assert!(selected.sensitive);
+
+        let mut tied = [11u64; 16];
+        tied[3] = 0;
+        let selected = chooser
+            .choose(CpuDiscreteProposalKind::Gate, 0, &tied, 7)
+            .unwrap();
+        assert_eq!(selected.lane, 0);
+        assert!(!selected.sensitive);
+
+        let mut all_worse = [10u64; 16];
+        all_worse[1] = 11;
+        all_worse[2] = 12;
+        let selected = chooser
+            .choose(CpuDiscreteProposalKind::Gate, 0, &all_worse, 8)
+            .unwrap();
+        assert_eq!(selected.lane, 0);
+        assert!(selected.sensitive);
+        assert_eq!(selected.epoch, 8);
+    }
+
+    #[test]
+    fn route_and_table_ties_choose_the_lower_resulting_port() {
+        const ROUTE_PORTS: [u32; 15] = [16, 27, 34, 41, 47, 2, 3, 4, 5, 21, 22, 23, 24, 25, 26];
+        const TABLE_PORTS: [u32; 15] = [0, 10, 2, 5, 6, 5, 13, 7, 9, 11, 0, 2, 8, 7, 4];
+        let composition = cl06_finite_composition_table().unwrap();
+        let oracle_actions = std::array::from_fn::<_, 16, _>(|candidate| {
+            NormFrameTable::new(16, vec![candidate as u8; 16])
+                .unwrap()
+                .block_frame(0)
+                .unwrap()
+        });
+        let independent_route_ports = std::array::from_fn::<_, 15, _>(|lane| {
+            u32::from(
+                composition
+                    .compose_index(oracle_actions[lane + 1], 1)
+                    .unwrap(),
+            )
+        });
+        assert_eq!(independent_route_ports, ROUTE_PORTS);
+        let point = orbit_root_coords(3).unwrap();
+        let independent_table_ports = std::array::from_fn::<_, 15, _>(|lane| {
+            uor_r4_discrete::normalization_mechanism::identify_orbit_root(
+                &uor_r4_discrete::normalization_mechanism::transform_block_by_frame(
+                    oracle_actions[lane + 1],
+                    &point,
+                )
+                .unwrap(),
+            )
+            .unwrap() as u32
+        });
+        assert_eq!(independent_table_ports, TABLE_PORTS);
+
+        let route_artifact = serialized_route_with("route", vec![1, 2, 3, 4], 0, 0, 2, None, false);
+        let route = CpuDiscreteProposalChooser::from_bytes(&route_artifact).unwrap();
+        let observed_route_ports = std::array::from_fn::<_, 15, _>(|lane| {
+            route
+                .resulting_port(CpuDiscreteProposalKind::Route, 0, lane + 1)
+                .unwrap()
+        });
+        assert_eq!(observed_route_ports, ROUTE_PORTS);
+        let mut losses = [1u64; 16];
+        losses[0] = 2;
+        let route_expected = 1 + ROUTE_PORTS
+            .iter()
+            .enumerate()
+            .min_by_key(|&(lane, &port)| (port, lane))
+            .unwrap()
+            .0;
+        assert_eq!(
+            route
+                .choose(CpuDiscreteProposalKind::Route, 0, &losses, 3)
+                .unwrap()
+                .lane,
+            route_expected
+        );
+        let tied_to_current = [1u64; 16];
+        assert_eq!(
+            route
+                .choose(CpuDiscreteProposalKind::Route, 0, &tied_to_current, 3)
+                .unwrap()
+                .lane,
+            0
+        );
+        let mut lower_loss = [1u64; 16];
+        lower_loss[7] = 0;
+        assert_eq!(
+            route
+                .choose(CpuDiscreteProposalKind::Route, 0, &lower_loss, 3)
+                .unwrap()
+                .lane,
+            7
+        );
+
+        let table_artifact = serialized_flock_fixture(
+            6,
+            &[[3, 2], [1, 0], [7, 4], [9, 8], [5, 6]],
+            &[1, 0, 1, 0],
+            2,
+        );
+        let table = CpuDiscreteProposalChooser::from_bytes(&table_artifact).unwrap();
+        let observed_table_ports = std::array::from_fn::<_, 15, _>(|lane| {
+            table
+                .resulting_port(CpuDiscreteProposalKind::Table, 0, lane + 1)
+                .unwrap()
+        });
+        assert_eq!(observed_table_ports, TABLE_PORTS);
+        let table_expected = 1 + TABLE_PORTS
+            .iter()
+            .enumerate()
+            .min_by_key(|&(lane, &port)| (port, lane))
+            .unwrap()
+            .0;
+        assert_eq!(
+            table
+                .choose(CpuDiscreteProposalKind::Table, 0, &losses, 3)
+                .unwrap()
+                .lane,
+            table_expected
+        );
+        assert_eq!(
+            table
+                .choose(CpuDiscreteProposalKind::Table, 0, &tied_to_current, 3)
+                .unwrap()
+                .lane,
+            0
+        );
+        assert_eq!(
+            table
+                .choose(CpuDiscreteProposalKind::Table, 0, &lower_loss, 3)
+                .unwrap()
+                .lane,
+            7
+        );
+    }
+
+    #[test]
+    fn proposal_chooser_refuses_invalid_modes_and_inventory() {
+        let route_artifact = serialized_route_with("route", vec![1, 2, 3, 4], 0, 0, 2, None, false);
+        let route = CpuDiscreteProposalChooser::from_bytes(&route_artifact).unwrap();
+        let losses = [0u64; 16];
+        assert!(route
+            .choose(CpuDiscreteProposalKind::Gate, 0, &losses, 0)
+            .is_err());
+        assert!(route
+            .choose(CpuDiscreteProposalKind::Route, 4, &losses, 0)
+            .is_err());
+        assert!(route
+            .choose(CpuDiscreteProposalKind::Table, 6, &losses, 0)
+            .is_err());
+
+        let relation_artifact = serialized_relation_fixture(
+            6,
+            &[[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]],
+            &[0, 1, 0, 1],
+            &[[0; RELATION_EDGE_TYPES]; 2],
+            2,
+            1,
+        );
+        let relation = CpuDiscreteProposalChooser::from_bytes(&relation_artifact).unwrap();
+        assert!(relation
+            .choose(CpuDiscreteProposalKind::Route, 0, &losses, 0)
+            .is_err());
+        assert!(relation
+            .choose(CpuDiscreteProposalKind::Gate, 14, &losses, 0)
+            .is_err());
+        assert!(CpuDiscreteProposalChooser::from_bytes(b"bad").is_err());
+    }
+
+    #[test]
+    #[ignore = "release benchmark"]
+    fn release_proposal_chooser_benchmark() {
+        use std::time::Instant;
+
+        const ROWS: usize = 1_000_000;
+        let artifact = serialized_relation_fixture(
+            6,
+            &[[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]],
+            &[0, 1, 0, 1],
+            &[[1, -1, 1, -1, 1], [-1, 1, -1, 1, -1]],
+            2,
+            2,
+        );
+        let chooser = CpuDiscreteProposalChooser::from_bytes(&artifact).unwrap();
+        let losses = [12, 11, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        for _ in 0..4 {
+            chooser
+                .choose(CpuDiscreteProposalKind::Gate, 0, &losses, 1)
+                .unwrap();
+        }
+        let started = Instant::now();
+        let mut checksum = 0u64;
+        for row in 0..ROWS {
+            let selected = chooser
+                .choose(CpuDiscreteProposalKind::Gate, 0, &losses, row as u64)
+                .unwrap();
+            checksum = checksum
+                .rotate_left(7)
+                .wrapping_add(selected.lane as u64)
+                .wrapping_add(selected.current_loss)
+                .wrapping_add(selected.selected_loss)
+                .wrapping_add(selected.epoch);
+        }
+        let seconds = started.elapsed().as_secs_f64();
+        println!(
+            "benchmark=proposal-chooser rows={ROWS} elapsed_ms={:.3} decisions_per_second={:.3} checksum={checksum:016x}",
+            seconds * 1_000.0,
+            ROWS as f64 / seconds
+        );
     }
 
     #[test]
