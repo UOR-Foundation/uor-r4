@@ -4897,9 +4897,8 @@ fn greedy_reply_with_mode(
 /// The native writer's next token from the last row of `hidden`, rounded to the served Q12 grid
 /// when `served`.
 fn native_writer_next_token(model: &StackModel, hidden: &Tensor, served: bool) -> Result<u32> {
-    let (_, time, width) = hidden.dims3()?;
-    let rows = hidden.reshape((time, width))?;
-    let point = rows.narrow(0, time.saturating_sub(1), 1)?;
+    let (rows, _) = hidden.dims2()?;
+    let point = hidden.narrow(0, rows.saturating_sub(1), 1)?;
     let point = if served {
         hs::q12_query(&point)?
     } else {
