@@ -877,16 +877,7 @@ mod tests {
 
     fn driver_args(extra: &[&str]) -> Vec<String> {
         let mut values = [
-            "artifact",
-            "tokens",
-            "mask",
-            "manifest",
-            "1",
-            "8",
-            "2",
-            "16",
-            "2",
-            "out",
+            "artifact", "tokens", "mask", "manifest", "1", "8", "2", "16", "2", "out",
         ]
         .into_iter()
         .map(str::to_owned)
