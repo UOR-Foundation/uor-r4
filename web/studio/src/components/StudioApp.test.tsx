@@ -123,9 +123,29 @@ describe('StudioApp', () => {
         const insert = Array.from(host.querySelectorAll<HTMLButtonElement>('article[data-role="assistant"] button')).find((node) => node.textContent === 'Insert into editor')!;
         act(() => { insert.click(); });
         expect(destination('Workspace').getAttribute('aria-current')).toBe('page');
-        expect(store.getState().file.path).toMatch(/^agent-message-\d+\.md$/);
+        expect(store.getState().file.path).toMatch(/^agent-message-\d+-\d+\.md$/);
         expect(store.getState().file.phase).toBe('dirty');
         expect(store.canSave()).toBe(true);
+    });
+
+    it('clears the top-level error after a successful retry', async () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'file/opened', path: 'a.md' });
+        store.dispatch({ type: 'file/dirty' });
+        const files = makeFiles();
+        files.treeSummary = vi.fn(() => ({ mode: 'local', rootName: 'project', fileCount: 1, tabs: [{ path: 'a.md', dirty: true }], activePath: 'a.md' }));
+        files.activeFile = vi.fn(() => ({ path: 'a.md', name: 'a.md', content: 'edited', mode: 'local' }));
+        files.saveActive = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={files} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { destination('Workspace').click(); });
+        await act(async () => { button('Save').click(); await Promise.resolve(); });
+        await vi.waitFor(() => expect(store.getState().file.phase).toBe('error'));
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('Save did not complete.');
+        await act(async () => { button('Save').click(); await Promise.resolve(); });
+        await vi.waitFor(() => expect(store.getState().file.phase).toBe('saved'));
+        expect(host.querySelector('[role="alert"]')).toBeNull();
     });
 
     it('closes lifecycle file state when editor tabs are cleared outside Workspace', () => {

@@ -95,7 +95,7 @@ export interface StudioUiApi {
     removeAttachment(name: string): void;
     clearAttachments(): void;
     templatePrompt(kind: string): string;
-    clearSessions(): { cleared: number; total: number };
+    clearSessions(): { cleared: number; total: number; error?: string };
     clearEditor(): void;
 }
 

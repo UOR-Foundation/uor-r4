@@ -21,7 +21,8 @@ export function Settings({ ui, onClose, onChange, onError }: SettingsProps) {
     function confirmClear() {
         if (clearing === 'sessions') {
             const result = ui.clearSessions();
-            if (result.cleared < result.total) onError?.(`Cleared ${result.cleared} of ${result.total} sessions; stop the current reply before deleting the rest.`);
+            if (result.error) onError?.(result.error);
+            else if (result.cleared < result.total) onError?.(`Cleared ${result.cleared} of ${result.total} sessions; stop the current reply before deleting the rest.`);
         }
         if (clearing === 'editor') ui.clearEditor();
         setClearing(null);

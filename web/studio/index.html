@@ -934,11 +934,12 @@
 
         function renderDiscretePrediction(message) {
             var predictionGenerationId = app.predictionRequests[message.id];
-            if (message.id !== app.activePredictionRequestId || predictionGenerationId === undefined) return;
-            delete app.predictionRequests[message.id];
-            app.activePredictionRequestId = null;
-            if (app.activeGenerationId === predictionGenerationId) app.activeGenerationId = null;
-            document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: 'complete', generationId: predictionGenerationId } }));
+            if (message.id === app.activePredictionRequestId && predictionGenerationId !== undefined) {
+                delete app.predictionRequests[message.id];
+                app.activePredictionRequestId = null;
+                if (app.activeGenerationId === predictionGenerationId) app.activeGenerationId = null;
+                document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: 'complete', generationId: predictionGenerationId } }));
+            }
             var result = $('#predictorResult');
             var list = $('#predictorTop');
             var status = $('#predictorStatus');
@@ -985,6 +986,10 @@
             var status = $('#predictorStatus');
             if (app.activePredictionRequestId) {
                 toast('Wait for the current prediction to finish.', 'warn');
+                return false;
+            }
+            if (app.generating) {
+                toast('Stop the current reply before predicting.', 'warn');
                 return false;
             }
             if (!app.worker || !app.caps || !isDiscreteCapabilities(app.caps)) {

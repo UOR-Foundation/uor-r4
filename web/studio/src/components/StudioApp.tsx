@@ -69,6 +69,11 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         };
     }, [store]);
 
+    useEffect(() => {
+        if (state.file.phase === 'saved' || state.artifact.phase === 'ready' || state.session.phase === 'complete') setError(null);
+    }, [state.file.phase, state.artifact.phase, state.session.phase]);
+    useEffect(() => { setError(null); }, [activeSection]);
+
     const selected = state.selectedSource;
     const activeGeneration = state.session.activeGeneration;
     let privacy: string = activeGeneration?.privacy || 'localWASM';

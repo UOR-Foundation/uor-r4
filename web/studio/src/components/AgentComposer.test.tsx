@@ -164,6 +164,20 @@ describe('AgentComposer', () => {
         expect(host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!.value).toBe('Prompt for test');
     });
 
+    it('keeps inserted filenames unique when timestamps collide', () => {
+        const { sessionApi, fileApi } = mount();
+        sessionApi.getConversationMessages = vi.fn(() => [{ role: 'assistant', content: 'First' }, { role: 'assistant', content: 'Second' }]);
+        const now = vi.spyOn(Date, 'now').mockReturnValue(123);
+        act(() => { document.dispatchEvent(new CustomEvent('uor-session-messages-changed')); });
+        const buttons = Array.from(host.querySelectorAll('article[data-role="assistant"]')).map((article) => Array.from(article.querySelectorAll('button')).find((node) => node.textContent === 'Insert into editor')!);
+        act(() => { buttons[0].click(); buttons[1].click(); });
+        const names = vi.mocked(fileApi.insertText).mock.calls.map((call) => call[1]);
+        expect(names[0]).not.toBe(names[1]);
+        expect(names[0]).toMatch(/^agent-message-123-\d+\.md$/);
+        expect(names[1]).toMatch(/^agent-message-123-\d+\.md$/);
+        now.mockRestore();
+    });
+
     it('forwards message copy, insert, save, and retry actions', () => {
         const { store, sessionApi, fileApi, generation, copy, download } = mount();
         const messages = [{ role: 'user', content: 'Original prompt' }, { role: 'assistant', content: 'Assistant answer' }];
@@ -174,7 +188,7 @@ describe('AgentComposer', () => {
         act(() => { action('Copy').click(); });
         expect(copy).toHaveBeenCalledWith('Assistant answer');
         act(() => { action('Insert into editor').click(); });
-        expect(fileApi.insertText).toHaveBeenCalledWith('Assistant answer', expect.stringMatching(/^agent-message-\d+\.md$/));
+        expect(fileApi.insertText).toHaveBeenCalledWith('Assistant answer', expect.stringMatching(/^agent-message-\d+-\d+\.md$/));
         act(() => { action('Save as file').click(); });
         expect(download).toHaveBeenCalledWith('studio-message.md', 'Assistant answer');
         act(() => { store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' }); });

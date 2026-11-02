@@ -15,8 +15,8 @@ function pageHooks() {
         caps: { schema: 'uor-r4.lut-discrete-trunk/1', shape: { vocab: 17, context: 64 } },
         tokenizerArtifact: { sentinel: true },
         generationSerial: 0,
-        activeGenerationId: null,
-        activePredictionRequestId: null,
+        activeGenerationId: null as number | null,
+        activePredictionRequestId: null as string | null,
         predictionRequests: {},
         generating: false,
         mode: 'wasm',
@@ -29,7 +29,7 @@ function pageHooks() {
          ${section('function nextGenerationId', 'function beginGeneration')}
          ${section('function onWorkerMessage', 'function activeAssistantElement')}
          return { runPrediction, renderDiscretePrediction, onWorkerMessage };`);
-    const hooks = factory(app, document, window, vi.fn(), vi.fn(), vi.fn(), vi.fn(() => [1, 2]), vi.fn(), () => null) as {
+    const hooks = factory(app, document, window, vi.fn(), vi.fn(), vi.fn(), vi.fn(() => [1, 2]), vi.fn(), (selector: string) => document.querySelector(selector)) as {
         runPrediction(prompt?: string): boolean;
         renderDiscretePrediction(message: unknown): void;
         onWorkerMessage(event: { data: Record<string, unknown> }): void;
@@ -60,6 +60,32 @@ describe('actual page prediction hooks', () => {
         expect(completed.mock.calls[0][0].detail).toMatchObject({ outcome: 'complete', generationId: 1 });
         expect(app.activeGenerationId).toBeNull();
         dispose();
+    });
+
+    it('renders diagnostic results without completing the typed prediction', () => {
+        const { app, hooks } = pageHooks();
+        document.body.innerHTML = '<div id="predictorResult"></div><ol id="predictorTop"></ol><span id="predictorPrediction"></span><span id="predictorMs"></span><span id="predictorStatus"></span>';
+        const completed = vi.fn();
+        const dispose = events('uor-generation-finished', completed);
+        expect(hooks.runPrediction('hello')).toBe(true);
+        hooks.onWorkerMessage({ data: { action: 'discrete_prediction_result', id: 'diagnostic-predict', top8: [7], decoded: [{ id: 7, text: 'x' }] } });
+        expect(completed).not.toHaveBeenCalled();
+        expect(app.activeGenerationId).toBe(1);
+        expect(document.documentElement.dataset.predictorTop).toBe('[7]');
+        expect(document.documentElement.dataset.predictorTopCount).toBe('1');
+        expect(document.documentElement.dataset.predictorDecoded).toBe('[{"id":7,"text":"x"}]');
+        expect(document.getElementById('predictorTop')?.textContent).toContain('id 7');
+        dispose();
+    });
+
+    it('refuses prediction while a chat generation is active', () => {
+        const { app, hooks } = pageHooks();
+        app.generating = true;
+        app.activeGenerationId = 42;
+        app.generationSerial = 42;
+        expect(hooks.runPrediction('hello')).toBe(false);
+        expect(app.worker.postMessage).not.toHaveBeenCalled();
+        expect(app.activeGenerationId).toBe(42);
     });
 
     it('returns a correlated worker error without completing the active prediction', () => {

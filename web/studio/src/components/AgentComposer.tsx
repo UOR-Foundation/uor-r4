@@ -15,6 +15,13 @@ interface AgentComposerProps {
     download(name: string, content: string): void;
 }
 
+let insertSequence = 0;
+
+function nextInsertName(): string {
+    insertSequence += 1;
+    return `agent-message-${Date.now()}-${insertSequence}.md`;
+}
+
 const templates = [
     ['ux', 'Studio UX improvement brief'],
     ['api', 'API integration checklist'],
@@ -72,7 +79,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                         <strong>{message.role}</strong>
                         <p>{message.content}</p>
                         <button type="button" onClick={() => void copy(message.content)}>Copy</button>
-                        <button type="button" onClick={() => files.insertText(message.content, `agent-message-${Date.now()}.md`)}>Insert into editor</button>
+                        <button type="button" onClick={() => files.insertText(message.content, nextInsertName())}>Insert into editor</button>
                         <button type="button" onClick={() => download('studio-message.md', message.content)}>Save as file</button>
                         {message.role === 'assistant' && (
                             <button type="button" disabled={!store.canRun()} onClick={() => {
