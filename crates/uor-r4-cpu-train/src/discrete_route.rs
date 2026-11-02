@@ -29,6 +29,7 @@ const FLOCK_OPERATOR_KAPPA: &str =
     "blake3:a0ea3a10dd10c5f4856b0d881d33d94c3293bad0e68bd07a47918e2bb82c819b";
 const FLOCK_COMPOSITION_KAPPA: &str =
     "blake3:f2986c8e68dcb30a9cb511a42547179a87b66ef212a87b728765d03e70e640b0";
+const RELATION_EDGE_TYPES: usize = 5;
 
 const BRANCH: [[u8; 3]; 16] = [
     [0, 14, 3],
@@ -268,27 +269,70 @@ impl CpuDiscreteRoute {
 }
 
 #[derive(Clone)]
-pub struct CpuDiscreteFlock {
+enum ActiveLeafMode {
+    Flock,
+    Relation {
+        sweeps: usize,
+        relation_gates: Vec<[i32; RELATION_EDGE_TYPES]>,
+    },
+}
+
+#[derive(Clone, Copy)]
+enum ActiveLeafKind {
+    Flock,
+    Relation,
+}
+
+impl ActiveLeafKind {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Flock => "Flock",
+            Self::Relation => "Relation",
+        }
+    }
+
+    fn mode_name(self) -> &'static str {
+        match self {
+            Self::Flock => "flock",
+            Self::Relation => "relation",
+        }
+    }
+}
+
+#[derive(Clone)]
+struct ActiveLeafModel {
     context: usize,
     blocks: usize,
     stages: usize,
     kept: usize,
     token_blocks: Vec<Vec<[i32; 8]>>,
     level_gates: Vec<Vec<i32>>,
+    mode: ActiveLeafMode,
     composition: Cl06FiniteCompositionTable,
 }
 
-impl CpuDiscreteFlock {
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+#[derive(Clone)]
+pub struct CpuDiscreteFlock(ActiveLeafModel);
+
+#[derive(Clone)]
+pub struct CpuDiscreteRelation(ActiveLeafModel);
+
+impl ActiveLeafModel {
+    fn from_bytes(bytes: &[u8], kind: ActiveLeafKind) -> Result<Self> {
+        let label = kind.label();
         let header = header(bytes)?;
         if header["schema"].as_str() != Some("uor-r4.lut-discrete/1") {
-            return Err(invalid("Flock CPU read requires uor-r4.lut-discrete/1"));
+            return Err(invalid(format!(
+                "{label} CPU read requires uor-r4.lut-discrete/1"
+            )));
         }
         let shape = &header["shape"];
-        if shape["read_mode"].as_str() != Some("flock")
+        if shape["read_mode"].as_str() != Some(kind.mode_name())
             || shape["read_initialization"].as_str() != Some("active_leaf_v1")
         {
-            return Err(invalid("Flock CPU read refuses non-Flock initialization"));
+            return Err(invalid(format!(
+                "{label} CPU read refuses non-{label} initialization"
+            )));
         }
         let vocab = usize::try_from(shape["vocabulary"].as_u64().unwrap_or(0))
             .map_err(|_| invalid("vocabulary"))?;
@@ -302,65 +346,114 @@ impl CpuDiscreteFlock {
             .map_err(|_| invalid("kept_cells"))?;
         let kept = usize::try_from(shape["read_kept"].as_u64().unwrap_or(0))
             .map_err(|_| invalid("read_kept"))?;
+        let sweeps = usize::try_from(shape["read_sweeps"].as_u64().unwrap_or(0))
+            .map_err(|_| invalid("read_sweeps"))?;
+        let sweeps_valid = match kind {
+            ActiveLeafKind::Flock => sweeps == 0,
+            ActiveLeafKind::Relation => (1..=5).contains(&sweeps),
+        };
         if !(2..=8192).contains(&vocab)
             || !(2..=16).contains(&blocks)
             || !(1..=243).contains(&context)
             || !(1..=16).contains(&kept_cells)
             || kept_cells > vocab
             || !(1..=8).contains(&kept)
-            || shape["read_sweeps"].as_u64() != Some(0)
+            || !sweeps_valid
             || expected_stages(context) != Some(stages)
             || !matches!(
                 shape["objective_policy"].as_str(),
                 Some("nearest_address_margin_v1" | "occupied_cell_rank_hinge_v1")
             )
         {
-            return Err(invalid("Flock shape differs"));
+            return Err(invalid(format!("{label} shape differs")));
         }
         if header["matrices"]
             .as_array()
             .is_none_or(|matrices| !matrices.is_empty())
         {
-            return Err(invalid("Flock artifact requires an empty matrices array"));
+            return Err(invalid(format!(
+                "{label} artifact requires an empty matrices array"
+            )));
         }
         let source = &header["source"];
         if source["snapshot_schema"].as_str() != Some(FLOCK_SNAPSHOT_SCHEMA)
             || source["operator_kappa"].as_str() != Some(FLOCK_OPERATOR_KAPPA)
             || source["composition_kappa"].as_str() != Some(FLOCK_COMPOSITION_KAPPA)
         {
-            return Err(invalid("Flock artifact source geometry differs"));
+            return Err(invalid(format!("{label} artifact source geometry differs")));
         }
         validate_header_padding(bytes)?;
         let tables = header["tables"]
             .as_array()
-            .ok_or_else(|| invalid("Flock artifact tables differ"))?;
+            .ok_or_else(|| invalid(format!("{label} artifact tables differ")))?;
         if tables.len() != 4 {
-            return Err(invalid("Flock artifact requires four tables"));
+            return Err(invalid(format!("{label} artifact requires four tables")));
         }
         let table = section_i32(bytes, &header, "discrete.table", vocab * blocks * 8, "i32")?;
         let cells = section_u32(bytes, &header, "discrete.cells", vocab, "u32")?;
         let routes = section_u32(bytes, &header, "discrete.routes", blocks * stages, "u32")?;
-        let gates = section_i32(bytes, &header, "discrete.gates", blocks * stages, "i32")?;
+        let base_gate_count = blocks * stages;
+        let gate_count = base_gate_count
+            + match kind {
+                ActiveLeafKind::Flock => 0,
+                ActiveLeafKind::Relation => RELATION_EDGE_TYPES * stages,
+            };
+        let gates = section_i32(bytes, &header, "discrete.gates", gate_count, "i32")?;
         if routes.iter().any(|&action| action >= 64) {
-            return Err(invalid("Flock route action outside 0..64"));
+            return Err(invalid(format!("{label} route action outside 0..64")));
         }
         if gates.iter().any(|&gate| !(-1..=1).contains(&gate)) {
-            return Err(invalid("Flock level gate outside -1..=1"));
+            return Err(invalid(format!("{label} gate trit outside -1..=1")));
         }
-        let token_blocks = decode_token_blocks(&table, &cells, vocab, blocks, "Flock")?;
+        let token_blocks = decode_token_blocks(&table, &cells, vocab, blocks, label)?;
         validate_layout(bytes, &header)?;
-        let level_gates = gates.chunks_exact(stages).map(|row| row.to_vec()).collect();
-        Self::from_parts(context, kept, token_blocks, level_gates)
+        let level_gates = gates[..base_gate_count]
+            .chunks_exact(stages)
+            .map(<[i32]>::to_vec)
+            .collect();
+        let mode = match kind {
+            ActiveLeafKind::Flock => ActiveLeafMode::Flock,
+            ActiveLeafKind::Relation => {
+                let relation_gates = (0..stages)
+                    .map(|stage| {
+                        let start = base_gate_count + stage * RELATION_EDGE_TYPES;
+                        gates[start..start + RELATION_EDGE_TYPES]
+                            .try_into()
+                            .expect("the relation gate slice has five entries")
+                    })
+                    .collect();
+                ActiveLeafMode::Relation {
+                    sweeps,
+                    relation_gates,
+                }
+            }
+        };
+        Self::from_parts(label, context, kept, token_blocks, level_gates, mode)
     }
 
-    pub fn from_parts(
+    fn from_parts(
+        label: &str,
         context: usize,
         kept: usize,
         token_blocks: Vec<Vec<[i32; 8]>>,
         level_gates: Vec<Vec<i32>>,
+        mode: ActiveLeafMode,
     ) -> Result<Self> {
         let blocks = token_blocks.first().map_or(0, Vec::len);
         let stages = level_gates.first().map_or(0, Vec::len);
+        let mode_valid = match &mode {
+            ActiveLeafMode::Flock => true,
+            ActiveLeafMode::Relation {
+                sweeps,
+                relation_gates,
+            } => {
+                (1..=5).contains(sweeps)
+                    && relation_gates.len() == stages
+                    && relation_gates
+                        .iter()
+                        .all(|row| row.iter().all(|gate| (-1..=1).contains(gate)))
+            }
+        };
         if !(2..=8192).contains(&token_blocks.len())
             || !(2..=16).contains(&blocks)
             || !(1..=8).contains(&kept)
@@ -372,8 +465,9 @@ impl CpuDiscreteFlock {
             || token_blocks.iter().any(|token| {
                 token.len() != blocks || token.iter().any(|block| root_id(block).is_none())
             })
+            || !mode_valid
         {
-            return Err(invalid("Flock parts differ"));
+            return Err(invalid(format!("{label} parts differ")));
         }
         let composition =
             cl06_finite_composition_table().map_err(|error| invalid(error.to_string()))?;
@@ -384,19 +478,24 @@ impl CpuDiscreteFlock {
             kept,
             token_blocks,
             level_gates,
+            mode,
             composition,
         })
     }
 
-    pub fn read(&self, prefix: &[u32]) -> Result<Vec<i32>> {
+    fn read(&self, prefix: &[u32]) -> Result<Vec<i32>> {
+        let label = match self.mode {
+            ActiveLeafMode::Flock => "Flock",
+            ActiveLeafMode::Relation { .. } => "Relation",
+        };
         if prefix.is_empty() || prefix.len() > self.context {
-            return Err(invalid("Flock prefix outside context"));
+            return Err(invalid(format!("{label} prefix outside context")));
         }
         if prefix
             .iter()
             .any(|&token| token as usize >= self.token_blocks.len())
         {
-            return Err(invalid("Flock prefix token outside vocabulary"));
+            return Err(invalid(format!("{label} prefix token outside vocabulary")));
         }
         let plan = build_row_plan(prefix.len())?;
         let length = prefix.len();
@@ -405,8 +504,8 @@ impl CpuDiscreteFlock {
         for block in 0..self.blocks {
             let frame_block = if block == 0 { self.blocks - 1 } else { 0 };
             let query_frame = &self.token_blocks[last_token][frame_block];
-            let query_frame_root =
-                root_id(query_frame).ok_or_else(|| invalid("Flock query frame outside orbit"))?;
+            let query_frame_root = root_id(query_frame)
+                .ok_or_else(|| invalid("active-leaf query frame outside orbit"))?;
             let mut value = self.token_blocks[last_token][block];
             let mut terms = 1usize;
 
@@ -416,12 +515,12 @@ impl CpuDiscreteFlock {
                 if let Some(atom) = node.atom {
                     let token = prefix[atom] as usize;
                     frames[node_index] = root_id(&self.token_blocks[token][frame_block])
-                        .ok_or_else(|| invalid("Flock atom frame outside orbit"))?;
+                        .ok_or_else(|| invalid("active-leaf atom frame outside orbit"))?;
                     payload[node_index] = self.token_blocks[token][block];
                 } else {
                     let children = node
                         .children
-                        .ok_or_else(|| invalid("Flock non-atom node missing children"))?;
+                        .ok_or_else(|| invalid("active-leaf non-atom missing children"))?;
                     frames[node_index] = frames[children[0]];
                     let mut sum = [0i32; 8];
                     for &child in &children {
@@ -436,12 +535,131 @@ impl CpuDiscreteFlock {
                 }
             }
 
+            let mut relation_scores = vec![0i32; plan.nodes.len()];
+            if let ActiveLeafMode::Relation {
+                sweeps,
+                relation_gates,
+            } = &self.mode
+            {
+                let mut previous = (0..plan.nodes.len())
+                    .map(|node| {
+                        8i32 - i32::try_from(root_cost(query_frame, frames[node]).0)
+                            .expect("root distance fits i32")
+                    })
+                    .collect::<Vec<_>>();
+                for _ in 0..*sweeps {
+                    for node in 0..plan.nodes.len() {
+                        if plan.nodes[node].last >= length {
+                            continue;
+                        }
+                        let level = plan.nodes[node].level;
+                        for (edge, &gate) in relation_gates[level].iter().enumerate() {
+                            if gate == 0 {
+                                continue;
+                            }
+                            let mut sum = 0i32;
+                            match edge {
+                                0 => {
+                                    if let Some(children) = plan.nodes[node].children {
+                                        for child in children {
+                                            if plan.nodes[child].last < length {
+                                                sum += previous[child];
+                                            }
+                                        }
+                                    }
+                                    for (parent, &previous_parent) in previous
+                                        .iter()
+                                        .enumerate()
+                                        .take(plan.nodes.len())
+                                        .skip(node + 1)
+                                    {
+                                        if plan.nodes[parent].last < length
+                                            && plan.nodes[parent]
+                                                .children
+                                                .is_some_and(|children| children.contains(&node))
+                                        {
+                                            sum += previous_parent;
+                                        }
+                                    }
+                                }
+                                1 => {
+                                    for parent in (node + 1)..plan.nodes.len() {
+                                        let Some(children) = plan.nodes[parent].children else {
+                                            continue;
+                                        };
+                                        if plan.nodes[parent].last >= length {
+                                            continue;
+                                        }
+                                        if node == children[0]
+                                            && plan.nodes[children[1]].last < length
+                                        {
+                                            sum += previous[children[1]];
+                                        } else if node == children[1] {
+                                            if plan.nodes[children[0]].last < length {
+                                                sum += previous[children[0]];
+                                            }
+                                            if plan.nodes[children[2]].last < length {
+                                                sum += previous[children[2]];
+                                            }
+                                        } else if node == children[2]
+                                            && plan.nodes[children[1]].last < length
+                                        {
+                                            sum += previous[children[1]];
+                                        }
+                                    }
+                                }
+                                2 => {
+                                    for (sibling, &previous_sibling) in
+                                        previous.iter().enumerate().take(node)
+                                    {
+                                        if plan.nodes[sibling].last < length
+                                            && plan.nodes[sibling].level == level
+                                            && plan.nodes[sibling].last + 1
+                                                == plan.nodes[node].first
+                                        {
+                                            sum += previous_sibling;
+                                        }
+                                    }
+                                }
+                                3 => {
+                                    if level == 0 {
+                                        let token = prefix[plan.nodes[node].last];
+                                        for peer in 0..node {
+                                            if plan.nodes[peer].last < length
+                                                && plan.nodes[peer].level == 0
+                                                && prefix[plan.nodes[peer].last] == token
+                                            {
+                                                sum = previous[peer];
+                                            }
+                                        }
+                                    }
+                                }
+                                4 => {
+                                    for peer in 0..node {
+                                        if plan.nodes[peer].last < length
+                                            && plan.nodes[peer].level == level
+                                            && frames[peer] == frames[node]
+                                        {
+                                            sum = previous[peer];
+                                        }
+                                    }
+                                }
+                                _ => unreachable!("the edge loop has five entries"),
+                            }
+                            relation_scores[node] += if gate > 0 { sum } else { -sum };
+                        }
+                    }
+                    previous.copy_from_slice(&relation_scores);
+                }
+            }
+
             for level in 0..self.stages {
                 let gate = self.level_gates[block][level];
                 if gate == 0 {
                     continue;
                 }
                 let mut top = [0usize; 8];
+                let mut key_relation = [0i32; 8];
                 let mut key_distance = [u32::MAX; 8];
                 let mut key_hamming = [u32::MAX; 8];
                 let mut found = 0usize;
@@ -450,22 +668,27 @@ impl CpuDiscreteFlock {
                         continue;
                     }
                     let (distance, hamming) = root_cost(query_frame, frames[node]);
+                    let relation = relation_scores[node];
                     let mut at = found;
                     while at > 0 {
                         let previous = top[at - 1];
-                        let better = distance < key_distance[at - 1]
-                            || (distance == key_distance[at - 1]
-                                && (hamming < key_hamming[at - 1]
-                                    || (hamming == key_hamming[at - 1]
-                                        && (plan.nodes[node].last > plan.nodes[previous].last
-                                            || (plan.nodes[node].last
-                                                == plan.nodes[previous].last
-                                                && node < previous)))));
+                        let better = relation > key_relation[at - 1]
+                            || (relation == key_relation[at - 1]
+                                && (distance < key_distance[at - 1]
+                                    || (distance == key_distance[at - 1]
+                                        && (hamming < key_hamming[at - 1]
+                                            || (hamming == key_hamming[at - 1]
+                                                && (plan.nodes[node].last
+                                                    > plan.nodes[previous].last
+                                                    || (plan.nodes[node].last
+                                                        == plan.nodes[previous].last
+                                                        && node < previous)))))));
                         if !better {
                             break;
                         }
                         if at < self.kept {
                             top[at] = previous;
+                            key_relation[at] = key_relation[at - 1];
                             key_distance[at] = key_distance[at - 1];
                             key_hamming[at] = key_hamming[at - 1];
                         }
@@ -473,6 +696,7 @@ impl CpuDiscreteFlock {
                     }
                     if at < self.kept {
                         top[at] = node;
+                        key_relation[at] = relation;
                         key_distance[at] = distance;
                         key_hamming[at] = hamming;
                         found += usize::from(found < self.kept);
@@ -515,10 +739,69 @@ impl CpuDiscreteFlock {
         let out = self
             .composition
             .state(action as u8)
-            .ok_or_else(|| invalid("Flock action state absent"))?
+            .ok_or_else(|| invalid("active-leaf action state absent"))?
             .apply_root_key(root)
             .map_err(|error| invalid(error.to_string()))?;
         Ok(out.map(|value| i32::from(value) * 2))
+    }
+}
+
+impl CpuDiscreteFlock {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        ActiveLeafModel::from_bytes(bytes, ActiveLeafKind::Flock).map(Self)
+    }
+
+    pub fn from_parts(
+        context: usize,
+        kept: usize,
+        token_blocks: Vec<Vec<[i32; 8]>>,
+        level_gates: Vec<Vec<i32>>,
+    ) -> Result<Self> {
+        ActiveLeafModel::from_parts(
+            "Flock",
+            context,
+            kept,
+            token_blocks,
+            level_gates,
+            ActiveLeafMode::Flock,
+        )
+        .map(Self)
+    }
+
+    pub fn read(&self, prefix: &[u32]) -> Result<Vec<i32>> {
+        self.0.read(prefix)
+    }
+}
+
+impl CpuDiscreteRelation {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        ActiveLeafModel::from_bytes(bytes, ActiveLeafKind::Relation).map(Self)
+    }
+
+    pub fn from_parts(
+        context: usize,
+        kept: usize,
+        sweeps: usize,
+        token_blocks: Vec<Vec<[i32; 8]>>,
+        level_gates: Vec<Vec<i32>>,
+        relation_gates: Vec<[i32; RELATION_EDGE_TYPES]>,
+    ) -> Result<Self> {
+        ActiveLeafModel::from_parts(
+            "Relation",
+            context,
+            kept,
+            token_blocks,
+            level_gates,
+            ActiveLeafMode::Relation {
+                sweeps,
+                relation_gates,
+            },
+        )
+        .map(Self)
+    }
+
+    pub fn read(&self, prefix: &[u32]) -> Result<Vec<i32>> {
+        self.0.read(prefix)
     }
 }
 
@@ -1174,6 +1457,271 @@ mod tests {
     }
 
     #[test]
+    fn serialized_relation_matches_host_across_sweeps_and_levels() {
+        let roots = [
+            [0, 1],
+            [2, 3],
+            [4, 5],
+            [6, 7],
+            [8, 9],
+            [10, 11],
+            [12, 13],
+            [14, 15],
+        ];
+        let level_gates = [1, 1, -1, 1, -1, 1];
+        let relation_gates = [[1, -1, 1, -1, 1], [-1, 1, -1, 1, -1], [1, 1, -1, -1, 1]];
+        for sweeps in [1, 2, 5] {
+            let artifact =
+                serialized_relation_fixture(9, &roots, &level_gates, &relation_gates, 3, sweeps);
+            let cpu = CpuDiscreteRelation::from_bytes(&artifact).unwrap();
+            let oracle = IntegerDiscreteModel::from_bytes(&artifact).unwrap();
+            for prefix in [
+                &[0u32][..],
+                &[0, 1][..],
+                &[0, 1, 2, 3, 4][..],
+                &[0, 1, 2, 3, 4, 5, 6, 7, 0][..],
+                &[7, 6, 5, 4, 3, 2, 1, 0, 5][..],
+            ] {
+                assert_eq!(
+                    cpu.read(prefix).unwrap(),
+                    oracle.evaluate_prefix(prefix).unwrap().read_vector,
+                    "sweeps={sweeps} prefix={prefix:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn each_relation_edge_kind_matches_host() {
+        let roots = [
+            [0, 1],
+            [2, 3],
+            [4, 5],
+            [6, 7],
+            [8, 9],
+            [10, 11],
+            [12, 13],
+            [14, 15],
+        ];
+        let level_gates = [1, 1, -1, 1, -1, 1];
+        let prefix = [0u32, 1, 2, 3, 4, 5, 6, 7, 0];
+        let zero_artifact = serialized_relation_fixture(
+            9,
+            &roots,
+            &level_gates,
+            &[[0; RELATION_EDGE_TYPES]; 3],
+            2,
+            2,
+        );
+        let zero_read = CpuDiscreteRelation::from_bytes(&zero_artifact)
+            .unwrap()
+            .read(&prefix)
+            .unwrap();
+        let mut changed = false;
+        for edge in 0..RELATION_EDGE_TYPES {
+            let mut relation_gates = [[0i32; RELATION_EDGE_TYPES]; 3];
+            relation_gates[0][edge] = 1;
+            let artifact =
+                serialized_relation_fixture(9, &roots, &level_gates, &relation_gates, 2, 2);
+            let cpu = CpuDiscreteRelation::from_bytes(&artifact).unwrap();
+            let oracle = IntegerDiscreteModel::from_bytes(&artifact).unwrap();
+            let read = cpu.read(&prefix).unwrap();
+            assert_eq!(
+                read,
+                oracle.evaluate_prefix(&prefix).unwrap().read_vector,
+                "edge={edge}"
+            );
+            changed |= read != zero_read;
+        }
+        assert!(changed);
+    }
+
+    #[test]
+    fn zero_relation_gates_equal_the_corresponding_flock_read() {
+        let roots = [
+            [0, 1],
+            [2, 3],
+            [4, 5],
+            [6, 7],
+            [8, 9],
+            [10, 11],
+            [12, 13],
+            [14, 15],
+        ];
+        let level_gates = [1, 1, -1, 1, -1, 1];
+        let relation = serialized_relation_fixture(
+            9,
+            &roots,
+            &level_gates,
+            &[[0; RELATION_EDGE_TYPES]; 3],
+            3,
+            2,
+        );
+        let flock = serialized_flock_fixture(9, &roots, &level_gates, 3);
+        let relation = CpuDiscreteRelation::from_bytes(&relation).unwrap();
+        let flock = CpuDiscreteFlock::from_bytes(&flock).unwrap();
+        for prefix in [
+            &[0u32, 1][..],
+            &[0, 1, 2, 3, 4][..],
+            &[0, 1, 2, 3, 4, 5, 6, 7, 0][..],
+        ] {
+            assert_eq!(relation.read(prefix).unwrap(), flock.read(prefix).unwrap());
+        }
+    }
+
+    #[test]
+    #[ignore = "release benchmark"]
+    fn release_relation_read_benchmark() {
+        use std::time::Instant;
+
+        const VOCAB: usize = 4_096;
+        const BLOCKS: usize = 4;
+        const CONTEXT: usize = 192;
+        const PREFIX: usize = 64;
+        const KEPT: usize = 3;
+        const SWEEPS: usize = 2;
+        const ROWS: usize = 1_024;
+
+        let token_blocks = (0..VOCAB)
+            .map(|token| {
+                (0..BLOCKS)
+                    .map(|block| orbit_root_coords(((token + block * 7) & 15) as u8).unwrap())
+                    .collect()
+            })
+            .collect();
+        let stages = expected_stages(CONTEXT).unwrap();
+        let level_gates = (0..BLOCKS)
+            .map(|block| {
+                (0..stages)
+                    .map(|level| ((block + level) % 3) as i32 - 1)
+                    .collect()
+            })
+            .collect();
+        let relation_gates = (0..stages)
+            .map(|level| std::array::from_fn(|edge| ((level + edge) % 3) as i32 - 1))
+            .collect();
+        let relation = CpuDiscreteRelation::from_parts(
+            CONTEXT,
+            KEPT,
+            SWEEPS,
+            token_blocks,
+            level_gates,
+            relation_gates,
+        )
+        .unwrap();
+        let prefix = (0..PREFIX as u32)
+            .map(|index| (index * 997 + 17) % VOCAB as u32)
+            .collect::<Vec<_>>();
+        for _ in 0..4 {
+            relation.read(&prefix).unwrap();
+        }
+        let started = Instant::now();
+        let mut checksum = 0u64;
+        for _ in 0..ROWS {
+            for value in relation.read(&prefix).unwrap() {
+                checksum = checksum.rotate_left(7).wrapping_add(value as i64 as u64);
+            }
+        }
+        let seconds = started.elapsed().as_secs_f64();
+        println!(
+            "benchmark=relation vocab={VOCAB} blocks={BLOCKS} stages={stages} kept={KEPT} sweeps={SWEEPS} prefix={PREFIX} rows={ROWS} elapsed_ms={:.3} rows_per_second={:.3} checksum={checksum:016x}",
+            seconds * 1_000.0,
+            ROWS as f64 / seconds
+        );
+    }
+
+    #[test]
+    fn non_relation_and_malformed_relation_artifacts_are_refused() {
+        let roots = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]];
+        let level_gates = [0, 1, 0, 1];
+        let relation_gates = [[0; RELATION_EDGE_TYPES]; 2];
+        let artifact = serialized_relation_fixture(6, &roots, &level_gates, &relation_gates, 2, 2);
+
+        for mode in ["flock", "route"] {
+            let wrong_mode = rewrite_header(artifact.clone(), |header| {
+                header["shape"]["read_mode"] = json!(mode);
+            });
+            assert!(CpuDiscreteRelation::from_bytes(&wrong_mode).is_err());
+        }
+        for sweeps in [0, 6] {
+            let wrong_sweeps = rewrite_header(artifact.clone(), |header| {
+                header["shape"]["read_sweeps"] = json!(sweeps);
+            });
+            assert!(CpuDiscreteRelation::from_bytes(&wrong_sweeps).is_err());
+        }
+        for kept in [0, 9] {
+            let wrong_kept = rewrite_header(artifact.clone(), |header| {
+                header["shape"]["read_kept"] = json!(kept);
+            });
+            assert!(CpuDiscreteRelation::from_bytes(&wrong_kept).is_err());
+        }
+        let wrong_initialization = rewrite_header(artifact.clone(), |header| {
+            header["shape"]["read_initialization"] = json!("zero_gates_v1");
+        });
+        assert!(CpuDiscreteRelation::from_bytes(&wrong_initialization).is_err());
+
+        let mut bad_level_gate = level_gates;
+        bad_level_gate[0] = 2;
+        assert!(
+            CpuDiscreteRelation::from_bytes(&serialized_relation_fixture(
+                6,
+                &roots,
+                &bad_level_gate,
+                &relation_gates,
+                2,
+                2
+            ))
+            .is_err()
+        );
+
+        let mut bad_relation_gates = relation_gates;
+        bad_relation_gates[0][0] = 2;
+        assert!(
+            CpuDiscreteRelation::from_bytes(&serialized_relation_fixture(
+                6,
+                &roots,
+                &level_gates,
+                &bad_relation_gates,
+                2,
+                2
+            ))
+            .is_err()
+        );
+
+        let short_gate_table = rewrite_header(artifact.clone(), |header| {
+            header["tables"][3]["len"] = json!(header["tables"][3]["len"].as_u64().unwrap() - 1);
+            header["tables"][3]["span"]["bytes"] =
+                json!(header["tables"][3]["span"]["bytes"].as_u64().unwrap() - 4);
+        });
+        assert!(CpuDiscreteRelation::from_bytes(&short_gate_table).is_err());
+
+        let mut bad_map = artifact.clone();
+        set_table_u32(&mut bad_map, "discrete.routes", 0, 64);
+        assert!(CpuDiscreteRelation::from_bytes(&bad_map).is_err());
+
+        let relation = CpuDiscreteRelation::from_bytes(&serialized_relation_fixture(
+            6,
+            &roots,
+            &level_gates,
+            &relation_gates,
+            2,
+            2,
+        ))
+        .unwrap();
+        assert!(relation.read(&[]).is_err());
+        assert!(relation.read(&[5]).is_err());
+        assert!(relation.read(&[0, 1, 2, 3, 4, 0, 1]).is_err());
+
+        assert!(CpuDiscreteRelation::from_bytes(&serialized_flock_fixture(
+            6,
+            &roots,
+            &level_gates,
+            2
+        ))
+        .is_err());
+    }
+
+    #[test]
     fn non_route_and_malformed_route_artifacts_are_refused() {
         assert!(CpuDiscreteRoute::from_bytes(&serialized_route_with(
             "relation",
@@ -1438,6 +1986,21 @@ mod tests {
         out
     }
 
+    fn set_table_u32(artifact: &mut [u8], name: &str, index: usize, value: u32) {
+        let parsed = header(artifact).unwrap();
+        let header_len = u64::from_le_bytes(artifact[8..16].try_into().unwrap()) as usize;
+        let data_start = (16 + header_len).div_ceil(64) * 64;
+        let table = parsed["tables"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|table| table["name"].as_str() == Some(name))
+            .unwrap();
+        let offset = table["span"]["offset"].as_u64().unwrap() as usize;
+        let start = data_start + offset + index * 4;
+        artifact[start..start + 4].copy_from_slice(&value.to_le_bytes());
+    }
+
     fn serialized_flock_fixture(
         context: u32,
         roots: &[[u8; 2]],
@@ -1466,6 +2029,70 @@ mod tests {
                 "vocabulary": roots.len(), "blocks": 2, "context": context,
                 "kept_cells": 2, "stages": stages, "read_mode": "flock",
                 "read_kept": kept, "read_sweeps": 0,
+                "objective_policy": "nearest_address_margin_v1",
+                "read_initialization": "active_leaf_v1", "seed": 7, "epoch": 0
+            },
+            "matrices": [],
+            "tables": [
+                {"name":"discrete.table","kind":"i32","len":table.len(),"span":table_span},
+                {"name":"discrete.cells","kind":"u32","len":cells.len(),"span":cells_span},
+                {"name":"discrete.routes","kind":"u32","len":routes.len(),"span":routes_span},
+                {"name":"discrete.gates","kind":"i32","len":gates.len(),"span":gates_span}
+            ],
+            "source": {
+                "snapshot_schema":"uor-r4.discrete-spiralcore-fbs/2",
+                "snapshot_sha256":"00".repeat(32),
+                "operator_kappa":"blake3:a0ea3a10dd10c5f4856b0d881d33d94c3293bad0e68bd07a47918e2bb82c819b",
+                "composition_kappa":"blake3:f2986c8e68dcb30a9cb511a42547179a87b66ef212a87b728765d03e70e640b0",
+                "kernel_sha256":"11".repeat(32),
+                "source_sha256":"22".repeat(32),
+                "geometry_sha256":"33".repeat(32)
+            }
+        });
+        let header = serde_json::to_vec(&header).unwrap();
+        let mut out = Vec::new();
+        out.extend_from_slice(b"UORLUT01");
+        out.extend_from_slice(&(header.len() as u64).to_le_bytes());
+        out.extend_from_slice(&header);
+        out.resize(out.len().div_ceil(64) * 64, 0);
+        out.extend_from_slice(&blob);
+        out
+    }
+
+    fn serialized_relation_fixture(
+        context: u32,
+        roots: &[[u8; 2]],
+        level_gates: &[i32],
+        relation_gates: &[[i32; RELATION_EDGE_TYPES]],
+        kept: u32,
+        sweeps: u32,
+    ) -> Vec<u8> {
+        let stages = expected_stages(context as usize).unwrap();
+        assert_eq!(level_gates.len(), 2 * stages);
+        assert_eq!(relation_gates.len(), stages);
+        let stages = stages as u32;
+        let mut table = Vec::new();
+        let mut cells = Vec::new();
+        for blocks in roots {
+            for &root in blocks {
+                table.extend_from_slice(&orbit_root_coords(root).unwrap());
+            }
+            cells.push(u32::from(blocks[0] << 4 | blocks[1]));
+        }
+        let routes = vec![0u32; 2 * stages as usize];
+        let mut gates = level_gates.to_vec();
+        gates.extend(relation_gates.iter().flatten());
+        let mut blob = Vec::new();
+        let table_span = append(&mut blob, &ints_i32(&table));
+        let cells_span = append(&mut blob, &ints_u32(&cells));
+        let routes_span = append(&mut blob, &ints_u32(&routes));
+        let gates_span = append(&mut blob, &ints_i32(&gates));
+        let header = json!({
+            "schema": "uor-r4.lut-discrete/1",
+            "shape": {
+                "vocabulary": roots.len(), "blocks": 2, "context": context,
+                "kept_cells": 2, "stages": stages, "read_mode": "relation",
+                "read_kept": kept, "read_sweeps": sweeps,
                 "objective_policy": "nearest_address_margin_v1",
                 "read_initialization": "active_leaf_v1", "seed": 7, "epoch": 0
             },

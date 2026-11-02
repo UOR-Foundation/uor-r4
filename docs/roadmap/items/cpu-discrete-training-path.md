@@ -18,7 +18,7 @@ The discrete learner is the strongest comparison-heavy CPU candidate, but its ea
 
 ## What is missing
 
-Route and Flock reads now have independent finite parity slices. Port Relation next; then the 16-lane counterfactual proposal rule, strict-improvement and tie semantics, staged atomic-free apply, BVG-K and the deterministic cursor/checkpoint path. Preserve the current status codes and post-apply checks.
+Route, Flock and Relation reads now have independent finite parity slices. Next port the 16-lane counterfactual proposal rule, strict-improvement and tie semantics, staged atomic-free apply, BVG-K and the deterministic cursor/checkpoint path. Preserve the current status codes and post-apply checks.
 
 ## Done when
 

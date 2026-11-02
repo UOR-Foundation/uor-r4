@@ -21,7 +21,7 @@ pub use counterfactual::{
     CounterfactualBundle, CounterfactualCandidate, CounterfactualConfig, CounterfactualField,
     CounterfactualGroup, CounterfactualStep, CpuCounterfactualTrainer,
 };
-pub use discrete_route::{CpuDiscreteFlock, CpuDiscreteRoute};
+pub use discrete_route::{CpuDiscreteFlock, CpuDiscreteRelation, CpuDiscreteRoute};
 pub use fbs::{CpuFbsForward, CpuFbsHead, CpuFbsStep, FbsForwardError};
 pub use panel::{
     panel_admission_gate, CpuPanelEvaluator, PanelDelta, PanelExportReading, PanelGateDecision,
