@@ -35,6 +35,7 @@ impl PanelExportReading {
 pub struct PanelReading {
     pub artifact_digest: [u8; 32],
     pub sample_fingerprint: [u8; 32],
+    pub margin_q12: i32,
     pub samples: usize,
     pub target_admitted: usize,
     pub top1_correct: usize,
@@ -69,6 +70,9 @@ impl PanelDelta {
         }
         if before.sample_fingerprint != after.sample_fingerprint {
             return Err(invalid("panel comparison sample sets differ"));
+        }
+        if before.margin_q12 != after.margin_q12 {
+            return Err(invalid("panel comparison margin configurations differ"));
         }
         if before.export.query_coordinates_checked != after.export.query_coordinates_checked
             || before.export.kept_cells_checked != after.export.kept_cells_checked
@@ -168,6 +172,7 @@ impl CpuPanelEvaluator {
         let mut reading = PanelReading {
             artifact_digest: *blake3::hash(&self.artifact).as_bytes(),
             sample_fingerprint: sample_fingerprint(&self.samples),
+            margin_q12: self.evaluator.config().margin_q12,
             samples: self.samples.len(),
             target_admitted: 0,
             top1_correct: 0,
@@ -407,6 +412,10 @@ mod tests {
         let mut different_evaluator =
             CpuPanelEvaluator::from_artifact(&artifact, different, 1).unwrap();
         assert!(PanelDelta::between(&before, &different_evaluator.evaluate().unwrap()).is_err());
+
+        let mut margin_evaluator =
+            CpuPanelEvaluator::from_artifact(&artifact, samples(), 2).unwrap();
+        assert!(PanelDelta::between(&before, &margin_evaluator.evaluate().unwrap()).is_err());
     }
 
     #[test]

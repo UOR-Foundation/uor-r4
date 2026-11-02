@@ -15,12 +15,13 @@ Lab: deepseek. Item: [cpu-shared-vector-train](../../../../roadmap/items/cpu-sha
 - Each row runs through the CPU rank-margin forward and a fresh `IntegerStackSession` stream. The reading records:
   - artifact BLAKE3 digest;
   - the complete sample-set fingerprint;
+  - the exact `margin_q12` configuration;
   - sample, target-admission, top-1 and top-8 counts;
   - summed exact rank margin and target rank;
   - checked and mismatching query coordinates;
   - checked and mismatching serving tokens;
   - checked and mismatching kept-cell entries.
-- `PanelDelta` reports admitted, top-1, top-8, margin and exact-export differences only when the sample set and checked export shapes match.
+- `PanelDelta` reports admitted, top-1, top-8, margin and exact-export differences only when the sample set, margin configuration and checked export shapes match.
 - `panel_admission_gate` accepts only non-decreasing admission with an exact serving export. It separately refuses admission loss and export mismatch.
 - A trained tied-table checkpoint and its resumed trainer produce byte-identical artifacts and identical panel readings, with zero export mismatch.
 - Added `cpu-panel-export-bench` for release rows/s and process peak RSS.
