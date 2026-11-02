@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 use uor_r4_discrete::normalization_mechanism::{identify_orbit_root, orbit_root_coords};
 
 mod counterfactual;
+mod discrete_route;
 mod fbs;
 mod hamming;
 mod memory;
@@ -20,6 +21,7 @@ pub use counterfactual::{
     CounterfactualBundle, CounterfactualCandidate, CounterfactualConfig, CounterfactualField,
     CounterfactualGroup, CounterfactualStep, CpuCounterfactualTrainer,
 };
+pub use discrete_route::CpuDiscreteRoute;
 pub use fbs::{CpuFbsForward, CpuFbsHead, CpuFbsStep, FbsForwardError};
 pub use panel::{
     panel_admission_gate, CpuPanelEvaluator, PanelDelta, PanelExportReading, PanelGateDecision,
