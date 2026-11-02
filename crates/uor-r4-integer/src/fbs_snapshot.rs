@@ -1924,6 +1924,177 @@ pub fn replay_step(
     })
 }
 
+/// The counts a [`ReplayTally`] keeps: the replays accounted for or not, refused, and ending at a
+/// kept set, a memory lookup or p's nearest, and the passes they ran.
+pub const REPLAY_COUNTS: [&str; 7] = [
+    "accounted",
+    "unaccounted",
+    "refused",
+    "ended_kept",
+    "ended_memory",
+    "ended_nearest",
+    "passes",
+];
+
+/// What a `--decision-replay` run records of its replays (claude-257): `fbs-toks`'s of the
+/// arithmetic step (T, R) and `train-in-space`'s of the structure step (F, T). Each entry is a
+/// replay's position, offset, step and [`StepReplay`], or its position, offset and refusal, in the
+/// order run. With a line file, each entry is also appended to it, one JSON object a line, and
+/// flushed as its replay ends, so a run cut short keeps every replay it finished.
+#[derive(Debug)]
+pub struct ReplayTally {
+    pub replayed: Vec<serde_json::Value>,
+    /// Each of [`REPLAY_COUNTS`]; a refused replay counts no passes.
+    pub counts: BTreeMap<&'static str, usize>,
+    lines: Option<std::fs::File>,
+}
+
+impl Default for ReplayTally {
+    fn default() -> Self {
+        Self {
+            replayed: Vec::new(),
+            counts: REPLAY_COUNTS.into_iter().map(|k| (k, 0)).collect(),
+            lines: None,
+        }
+    }
+}
+
+impl ReplayTally {
+    /// A tally that also appends each entry to a line file at `path`, created new.
+    pub fn with_lines(path: &Path) -> std::io::Result<Self> {
+        Ok(Self {
+            lines: Some(OpenOptions::new().write(true).create_new(true).open(path)?),
+            ..Self::default()
+        })
+    }
+
+    /// Records the replay at `offset` of the window at `position`: `done` is its step and replay,
+    /// or its refusal.
+    pub fn record(
+        &mut self,
+        position: usize,
+        offset: usize,
+        done: Result<(usize, StepReplay), String>,
+    ) -> std::io::Result<()> {
+        let mut count = |key: &'static str, n: usize| {
+            *self.counts.entry(key).or_default() += n;
+        };
+        let entry = match done {
+            Ok((step, replay)) => {
+                count(
+                    match replay.passes.last() {
+                        Some(PassOutcome::Kept { .. }) => "ended_kept",
+                        Some(PassOutcome::Memory { .. }) => "ended_memory",
+                        _ => "ended_nearest",
+                    },
+                    1,
+                );
+                count(
+                    if replay.accounted {
+                        "accounted"
+                    } else {
+                        "unaccounted"
+                    },
+                    1,
+                );
+                count("passes", replay.passes.len());
+                serde_json::json!({
+                    "position": position,
+                    "offset": offset,
+                    "step": step,
+                    "replay": replay,
+                })
+            }
+            Err(refused) => {
+                count("refused", 1);
+                serde_json::json!({
+                    "position": position,
+                    "offset": offset,
+                    "refused": refused,
+                })
+            }
+        };
+        if let Some(lines) = &mut self.lines {
+            let mut line = serde_json::to_vec(&entry)?;
+            line.push(b'\n');
+            lines.write_all(&line)?;
+            lines.flush()?;
+        }
+        self.replayed.push(entry);
+        Ok(())
+    }
+
+    /// Whether the run holds: no replay refused. Otherwise how many were, each recorded in `out`.
+    pub fn refusals(&self, out: &str) -> Result<(), String> {
+        match self.counts["refused"] {
+            0 => Ok(()),
+            refused => Err(format!(
+                "{refused} of {} replays were refused; each is recorded in {out}",
+                self.replayed.len()
+            )),
+        }
+    }
+}
+
+/// A file's sha256, in hex.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(<sha2::Sha256 as sha2::Digest>::digest(bytes))
+}
+
+/// The decision trace at `path` and its file's sha256.
+pub fn read_decision_trace(path: &str) -> Result<(DecisionTrace, String), String> {
+    let text = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+    let trace = serde_json::from_slice(&text).map_err(|e| format!("{path}: {e}"))?;
+    Ok((trace, sha256_hex(&text)))
+}
+
+/// The deciles in the file at `path`, whose bytes are `text` (claude-254). A file that names no
+/// trace its G₁₀s were read from is refused (claude-256): no grade could say whose they are.
+pub fn parse_deciles(path: &str, text: &[u8]) -> Result<DecisionDeciles, String> {
+    let deciles: DecisionDeciles =
+        serde_json::from_slice(text).map_err(|e| format!("{path}: {e}"))?;
+    if deciles.trace.is_none() {
+        return Err(format!(
+            "{path}: the deciles name no trace they were read from"
+        ));
+    }
+    Ok(deciles)
+}
+
+/// The step at offset `offset` of `window`'s reply, refused past the window's steps.
+pub fn offset_step(window: &DecisionWindow, offset: usize) -> Result<usize, String> {
+    window
+        .reply_start
+        .checked_add(offset)
+        .filter(|&s| s < window.steps.len())
+        .ok_or_else(|| {
+            format!(
+                "position {}, offset {offset}: past the window's {} steps",
+                window.position,
+                window.steps.len()
+            )
+        })
+}
+
+/// F's own nearest table (claude-247), from the bytes of the snapshot at `path`: its `embed`, as
+/// rows of its `width`, and that width.
+pub fn snapshot_embed_table(path: &str, bytes: &[u8]) -> Result<(Vec<f32>, usize), String> {
+    #[derive(Deserialize)]
+    struct Embed {
+        vocab: usize,
+        width: usize,
+        embed: Vec<f32>,
+    }
+    let snapshot: Embed = serde_json::from_slice(bytes).map_err(|e| format!("{path}: {e}"))?;
+    if snapshot.embed.len() != snapshot.vocab * snapshot.width {
+        return Err(format!(
+            "{path}: the embed is not {} rows of {}",
+            snapshot.vocab, snapshot.width
+        ));
+    }
+    Ok((snapshot.embed, snapshot.width))
+}
+
 /// What [`check_decision_trace`] checked on one unforced trace.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -4327,5 +4498,91 @@ mod tests {
         // And a pass that fails is the pass's error.
         let err = g_replay(&p, |_: &DecisionForceWindow| Err("no GPU".to_owned())).unwrap_err();
         assert_eq!(err, "pass 0: no GPU");
+    }
+
+    /// claude-257: the tally counts each replay by how it ended, keeps a refused one with its
+    /// refusal and no passes, and writes each entry to its line file, a line a replay, as it is
+    /// recorded. The line file is created new, and the run fails once any replay was refused.
+    #[test]
+    fn the_replay_tally_counts_each_replay_and_streams_it_as_it_ends() {
+        struct Scratch(PathBuf);
+        impl Drop for Scratch {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let dir = Scratch(
+            std::env::temp_dir().join(format!("uor_fbs_replay_tally_{}", std::process::id())),
+        );
+        std::fs::create_dir_all(&dir.0).expect("scratch");
+        let path = dir.0.join("replay.lines.jsonl");
+        let nearest = PassOutcome::Nearest {
+            reference_pick: 1,
+            other_pick: 1,
+            reference_margin: 0.0,
+            other_margin: 0.0,
+            g10: 5,
+            near_tie: true,
+        };
+        let kept = PassOutcome::Kept {
+            step: 3,
+            depth: 1,
+            head: 0,
+            reference: vec![1, 2],
+            other: vec![2, 1],
+        };
+        let replay = |passes: Vec<PassOutcome>, accounted| StepReplay {
+            passes,
+            forced: DecisionForceWindow {
+                position: 7,
+                ..Default::default()
+            },
+            accounted,
+        };
+        let mut tally = ReplayTally::with_lines(&path).expect("a new line file");
+        tally
+            .record(7, 0, Ok((4, replay(vec![nearest.clone()], true))))
+            .expect("recorded");
+        let lines = std::fs::read_to_string(&path).expect("lines");
+        assert_eq!(
+            lines.lines().count(),
+            1,
+            "the first replay is on disk as it ends"
+        );
+        tally
+            .record(7, 2, Ok((6, replay(vec![nearest, kept], false))))
+            .expect("recorded");
+        assert_eq!(tally.refusals("out.json"), Ok(()));
+        tally
+            .record(9, 1, Err("pass 0: no GPU".to_owned()))
+            .expect("recorded");
+        let counts: Vec<usize> = REPLAY_COUNTS.iter().map(|k| tally.counts[k]).collect();
+        // accounted, unaccounted, refused, ended_kept, ended_memory, ended_nearest, passes
+        assert_eq!(counts, [1, 1, 1, 1, 0, 1, 3]);
+        assert_eq!(
+            tally.replayed[2],
+            serde_json::json!({ "position": 9, "offset": 1, "refused": "pass 0: no GPU" })
+        );
+        assert_eq!(tally.replayed[1]["step"], 6);
+        let lines: Vec<serde_json::Value> = std::fs::read_to_string(&path)
+            .expect("lines")
+            .lines()
+            .map(|l| serde_json::from_str(l).expect("a JSON line"))
+            .collect();
+        assert_eq!(
+            lines, tally.replayed,
+            "each line is its replay's entry, in order"
+        );
+        assert_eq!(
+            tally.refusals("out.json"),
+            Err("1 of 3 replays were refused; each is recorded in out.json".to_owned())
+        );
+        // A line file is never replaced, and a tally without one keeps its entries only.
+        assert!(ReplayTally::with_lines(&path).is_err());
+        let mut plain = ReplayTally::default();
+        plain
+            .record(9, 1, Err("refused".to_owned()))
+            .expect("recorded");
+        assert_eq!(plain.replayed.len(), 1);
     }
 }

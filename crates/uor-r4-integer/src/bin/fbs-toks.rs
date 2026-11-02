@@ -98,12 +98,13 @@ use serde::Deserialize;
 use serde_json::json;
 use uor_r4_integer::fbs_snapshot::{
     check_decision_trace, compare_hamming_traces, copy_code_check, copy_code_reads,
-    decision_deciles, grade_pass, replay_step, write_new_file, DecisionDeciles, DecisionForce,
+    decision_deciles, grade_pass, offset_step, parse_deciles, read_decision_trace, replay_step,
+    sha256_hex, snapshot_embed_table, write_new_file, DecisionDeciles, DecisionForce,
     DecisionForceWindow, DecisionNearest, DecisionSource, DecisionStep, DecisionTrace,
     DecisionWindow, FbsFloatReadout, FbsReadoutMode, GradeSide, HammingTrace, NearestTable,
-    PassOutcome, StepReplay, COPY_CODES_SCHEMA, DECISION_CHECK_SCHEMA, DECISION_DECILES_SCHEMA,
-    DECISION_FORCE_SCHEMA, DECISION_GRADE_SCHEMA, DECISION_REPLAY_SCHEMA, DECISION_TRACE_SCHEMA,
-    HAMMING_TRACE_SCHEMA,
+    PassOutcome, ReplayTally, StepReplay, COPY_CODES_SCHEMA, DECISION_CHECK_SCHEMA,
+    DECISION_DECILES_SCHEMA, DECISION_FORCE_SCHEMA, DECISION_GRADE_SCHEMA, DECISION_REPLAY_SCHEMA,
+    DECISION_TRACE_SCHEMA, HAMMING_TRACE_SCHEMA,
 };
 use uor_r4_integer::stack::{
     hamming_trace_window, panel_reply, read_hamming_uorlut01, served_copy_codes_uorlut01,
@@ -193,18 +194,6 @@ fn hamming_trace_compare(first: &str, second: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// A file's sha256, in hex.
-fn sha256_hex(bytes: &[u8]) -> String {
-    hex::encode(<sha2::Sha256 as sha2::Digest>::digest(bytes))
-}
-
-/// The decision trace at `path` and its file's sha256.
-fn read_decision_trace(path: &str) -> Result<(DecisionTrace, String), String> {
-    let text = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
-    let trace = serde_json::from_slice(&text).map_err(|e| format!("{path}: {e}"))?;
-    Ok((trace, sha256_hex(&text)))
-}
-
 /// A side's own nearest table, owned (claude-247): R's writer table at Q12 and T's, that table
 /// divided by 4096, from R's artifact; F's float table, its snapshot's `embed`.
 enum OwnedTable {
@@ -235,20 +224,8 @@ fn load_table(side: &str, path: &str) -> Result<(OwnedTable, String), String> {
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
     let sha = sha256_hex(&bytes);
     let table = if side == "F" {
-        #[derive(Deserialize)]
-        struct Embed {
-            vocab: usize,
-            width: usize,
-            embed: Vec<f32>,
-        }
-        let snapshot: Embed = serde_json::from_slice(&bytes).map_err(|e| format!("{path}: {e}"))?;
-        if snapshot.embed.len() != snapshot.vocab * snapshot.width {
-            return Err(format!(
-                "{path}: the embed is not {} rows of {}",
-                snapshot.vocab, snapshot.width
-            ));
-        }
-        OwnedTable::F32(snapshot.embed, snapshot.width)
+        let (embed, width) = snapshot_embed_table(path, &bytes)?;
+        OwnedTable::F32(embed, width)
     } else {
         let served = served_copy_codes_uorlut01(&bytes)
             .map_err(|e| format!("{path}: the Hamming reads: {e}"))?
@@ -361,34 +338,6 @@ fn needed<'a>(
     name: &str,
 ) -> Result<&'a str, String> {
     flags.get(name).copied().ok_or_else(|| USAGE.to_owned())
-}
-
-/// The deciles in the file at `path`, whose bytes are `text` (claude-254). A file that names no
-/// trace its G₁₀s were read from is refused (claude-256): no grade could say whose they are.
-fn parse_deciles(path: &str, text: &[u8]) -> Result<DecisionDeciles, String> {
-    let deciles: DecisionDeciles =
-        serde_json::from_slice(text).map_err(|e| format!("{path}: {e}"))?;
-    if deciles.trace.is_none() {
-        return Err(format!(
-            "{path}: the deciles name no trace they were read from"
-        ));
-    }
-    Ok(deciles)
-}
-
-/// The step at offset `offset` of `window`'s reply, refused past the window's steps.
-fn offset_step(window: &DecisionWindow, offset: usize) -> Result<usize, String> {
-    window
-        .reply_start
-        .checked_add(offset)
-        .filter(|&s| s < window.steps.len())
-        .ok_or_else(|| {
-            format!(
-                "position {}, offset {offset}: past the window's {} steps",
-                window.position,
-                window.steps.len()
-            )
-        })
 }
 
 /// `--decision-grade` (claude-254): one pass of the forced replay (`grade_pass`) at each chosen
@@ -1244,55 +1193,17 @@ fn decision_replay_out(path: &str, args: &[String]) -> Result<(), String> {
         }
         (chosen, None, None)
     };
-    let kinds = [
-        "accounted",
-        "unaccounted",
-        "refused",
-        "ended_kept",
-        "ended_memory",
-        "ended_nearest",
-        "passes",
-    ];
-    let mut counts: std::collections::BTreeMap<&str, usize> =
-        kinds.into_iter().map(|k| (k, 0)).collect();
-    let mut replayed = Vec::with_capacity(chosen.len());
+    let mut tally = ReplayTally::default();
     let started = Instant::now();
     // Each replay is recorded as it ends; a refused one is recorded with its refusal, and the
     // run goes on.
     for (position, offset, unforced) in chosen {
-        let (step, replay) = match run.replay(row_at(position)?, offset, unforced) {
-            Ok(done) => done,
-            Err(refused) => {
-                *counts.entry("refused").or_default() += 1;
-                replayed.push(json!({
-                    "position": position,
-                    "offset": offset,
-                    "refused": refused,
-                }));
-                continue;
-            }
-        };
-        let end = match replay.passes.last() {
-            Some(PassOutcome::Kept { .. }) => "ended_kept",
-            Some(PassOutcome::Memory { .. }) => "ended_memory",
-            _ => "ended_nearest",
-        };
-        *counts.entry(end).or_default() += 1;
-        *counts
-            .entry(if replay.accounted {
-                "accounted"
-            } else {
-                "unaccounted"
-            })
-            .or_default() += 1;
-        *counts.entry("passes").or_default() += replay.passes.len();
-        replayed.push(json!({
-            "position": position,
-            "offset": offset,
-            "step": step,
-            "replay": replay,
-        }));
+        let done = run.replay(row_at(position)?, offset, unforced);
+        tally
+            .record(position, offset, done)
+            .map_err(|e| e.to_string())?;
     }
+    let (replayed, counts) = (&tally.replayed, &tally.counts);
     let elapsed_ms = started.elapsed().as_millis() as u64;
     let record = json!({
         "schema": DECISION_REPLAY_SCHEMA,
@@ -1317,13 +1228,7 @@ fn decision_replay_out(path: &str, args: &[String]) -> Result<(), String> {
         "{}",
         json!({ "schema": DECISION_REPLAY_SCHEMA, "offsets_compared": record["offsets_compared"], "picks_beyond_r": record["picks_beyond_r"], "equal": record["equal"], "replays": record["replays"], "counts": record["counts"], "replay_ms": elapsed_ms, "out": out, "sha256": sha256_hex(&text) })
     );
-    match counts["refused"] {
-        0 => Ok(()),
-        refused => Err(format!(
-            "{refused} of {} replays were refused; each is recorded in {out}",
-            replayed.len()
-        )),
-    }
+    tally.refusals(out)
 }
 
 const PREFILL: usize = 128;
