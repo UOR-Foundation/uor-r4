@@ -9,8 +9,8 @@
   },
   "checkpoints": [
     {
-      "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/cpu-corpus-resume-fit-3baaf5a36/seed2-partial/step-000000000064.binding.json",
-      "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/cpu-corpus-resume-fit-3baaf5a36/seed2-partial/step-000000000064.ckpt",
+      "binding_path": "local/deepseek/cpu-public-resume-postfit2/seed2-partial3/step-000000000064.binding.json",
+      "path": "local/deepseek/cpu-public-resume-postfit2/seed2-partial3/step-000000000064.ckpt",
       "sha256": "de9deb91e32e85cdcbbc07d45114ad73d6708a0b922a2ec0afeed26b4ccfa5bf",
       "step": 64
     }
@@ -35,13 +35,13 @@
   },
   "final_artifact": {
     "matches_source": false,
-    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/cpu-corpus-resume-fit-3baaf5a36/seed2-partial/final.uorlut",
+    "path": "local/deepseek/cpu-public-resume-postfit2/seed2-partial3/final.uorlut",
     "reloaded": true,
     "sha256": "92476ffb6679ba5de2725e339c9ac10f25d3ab16aaad87233946b27bc051dd0c"
   },
   "final_checkpoint": {
-    "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/cpu-corpus-resume-fit-3baaf5a36/seed2-partial/final.binding.json",
-    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/cpu-corpus-resume-fit-3baaf5a36/seed2-partial/final.ckpt",
+    "binding_path": "local/deepseek/cpu-public-resume-postfit2/seed2-partial3/final.binding.json",
+    "path": "local/deepseek/cpu-public-resume-postfit2/seed2-partial3/final.ckpt",
     "sha256": "de9deb91e32e85cdcbbc07d45114ad73d6708a0b922a2ec0afeed26b4ccfa5bf"
   },
   "panel_baseline": {
@@ -87,21 +87,21 @@
   "resume": null,
   "run": {
     "accepted_updates": 2,
-    "checkpoint_elapsed_ms": 1.880839,
+    "checkpoint_elapsed_ms": 1.906928,
     "context_tokens": 4885,
-    "context_tokens_per_second": 5181.263892164376,
+    "context_tokens_per_second": 5210.912777382354,
     "executed_steps": 64,
-    "mean_step_ms": 14.73156484375,
-    "peak_rss_kib": 52312,
+    "mean_step_ms": 14.64774565625,
+    "peak_rss_kib": 52364,
     "refused_steps": 62,
     "resumed_from_step": 0,
     "seed": 1,
-    "step_elapsed_ms": 942.82015,
+    "step_elapsed_ms": 937.455722,
     "steps": 64,
-    "steps_per_second": 67.88145119724054,
+    "steps_per_second": 68.26989104451805,
     "target_visits": 64,
-    "target_visits_per_second": 67.88145119724054,
-    "wall_elapsed_ms": 62351.089889999996
+    "target_visits_per_second": 68.26989104451805,
+    "wall_elapsed_ms": 61796.162518000005
   },
   "schema": "uor-r4.cpu-masked-corpus-run/1",
   "scope": "CPU development-research component run; not GPU qualification, language quality or complete-reply evidence",

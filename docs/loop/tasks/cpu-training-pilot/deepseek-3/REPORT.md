@@ -33,7 +33,7 @@ Filesystem hashes from the six run receipts were compared directly. `resume-comp
 | 2 | 64 / 192 | `6781fe807a1a1e47d386b50a78d7f0367e405da58c2cc5038b6b9967e0d23570` | `6781fe807a1a1e47d386b50a78d7f0367e405da58c2cc5038b6b9967e0d23570` | yes: `85235546…` | yes: `224/285/292` | yes |
 
 - Seed 1 interval checkpoint: `1ba0d8febe534d6f933b150a45a48c1ca8a87cfc6ba1bd4036debb504690f314`; resume finished 24 accepted / 168 refused remaining steps at 4,785.321 context-tokens/s.
-- Seed 2 interval checkpoint: `de9deb91e32e85cdcbbc07d45114ad73d6708a0b922a2ec0afeed26b4ccfa5bf`; resume finished 17 accepted / 175 refused remaining steps at 5,029.280 context-tokens/s.
+- Seed 2 interval checkpoint: `de9deb91e32e85cdcbbc07d45114ad73d6708a0b922a2ec0afeed26b4ccfa5bf`; resume finished 17 accepted / 175 refused remaining steps at 5,021.598 context-tokens/s.
 - Every uninterrupted and resumed arm had zero CPU/serving mismatches over 262,144 query coordinates, 1,024 tokens and 8,192 kept cells.
 - Binary SHA-256: `200b5166172b10a70f05aae274caf5a1d371e0b682740cda4329a24a871c1241`.
 - Machine: AMD Ryzen 9 9950X, 16 cores / 32 threads; Rust/Cargo 1.97.1; Ubuntu kernel 7.0.0-42-generic.

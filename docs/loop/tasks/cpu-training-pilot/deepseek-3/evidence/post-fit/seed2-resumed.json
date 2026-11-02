@@ -9,20 +9,20 @@
   },
   "checkpoints": [
     {
-      "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/cpu-corpus-resume-fit-3baaf5a36/seed2-resumed/step-000000000128.binding.json",
-      "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/cpu-corpus-resume-fit-3baaf5a36/seed2-resumed/step-000000000128.ckpt",
+      "binding_path": "local/deepseek/cpu-public-resume-postfit2/seed2-resumed2/step-000000000128.binding.json",
+      "path": "local/deepseek/cpu-public-resume-postfit2/seed2-resumed2/step-000000000128.ckpt",
       "sha256": "c0238de17f99a66a9249d792e063164dbbb77afc50a97d937a9959108c09e34d",
       "step": 128
     },
     {
-      "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/cpu-corpus-resume-fit-3baaf5a36/seed2-resumed/step-000000000192.binding.json",
-      "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/cpu-corpus-resume-fit-3baaf5a36/seed2-resumed/step-000000000192.ckpt",
+      "binding_path": "local/deepseek/cpu-public-resume-postfit2/seed2-resumed2/step-000000000192.binding.json",
+      "path": "local/deepseek/cpu-public-resume-postfit2/seed2-resumed2/step-000000000192.ckpt",
       "sha256": "e4547819c97fc4716561fe08d2e5074473270dd00d09a6412167d0043601af27",
       "step": 192
     },
     {
-      "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/cpu-corpus-resume-fit-3baaf5a36/seed2-resumed/step-000000000256.binding.json",
-      "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/cpu-corpus-resume-fit-3baaf5a36/seed2-resumed/step-000000000256.ckpt",
+      "binding_path": "local/deepseek/cpu-public-resume-postfit2/seed2-resumed2/step-000000000256.binding.json",
+      "path": "local/deepseek/cpu-public-resume-postfit2/seed2-resumed2/step-000000000256.ckpt",
       "sha256": "85235546615a2a94954f41631c6dbdcc543e5230730a0ea94cc0bca972d0da9c",
       "step": 256
     }
@@ -47,13 +47,13 @@
   },
   "final_artifact": {
     "matches_source": false,
-    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/cpu-corpus-resume-fit-3baaf5a36/seed2-resumed/final.uorlut",
+    "path": "local/deepseek/cpu-public-resume-postfit2/seed2-resumed2/final.uorlut",
     "reloaded": true,
     "sha256": "6781fe807a1a1e47d386b50a78d7f0367e405da58c2cc5038b6b9967e0d23570"
   },
   "final_checkpoint": {
-    "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/cpu-corpus-resume-fit-3baaf5a36/seed2-resumed/final.binding.json",
-    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/cpu-corpus-resume-fit-3baaf5a36/seed2-resumed/final.ckpt",
+    "binding_path": "local/deepseek/cpu-public-resume-postfit2/seed2-resumed2/final.binding.json",
+    "path": "local/deepseek/cpu-public-resume-postfit2/seed2-resumed2/final.ckpt",
     "sha256": "85235546615a2a94954f41631c6dbdcc543e5230730a0ea94cc0bca972d0da9c"
   },
   "panel_baseline": {
@@ -97,30 +97,30 @@
   },
   "qualification": "gpu-required",
   "resume": {
-    "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/cpu-corpus-resume-fit-3baaf5a36/seed2-partial/step-000000000064.binding.json",
+    "binding_path": "local/deepseek/cpu-public-resume-postfit2/seed2-partial2/step-000000000064.binding.json",
     "binding_sha256": "12068f4cc4060b791370fcb161bbf56ed9b7ee6ddf2f27699e25bee6c4252973",
-    "checkpoint_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/cpu-corpus-resume-fit-3baaf5a36/seed2-partial/step-000000000064.ckpt",
+    "checkpoint_path": "local/deepseek/cpu-public-resume-postfit2/seed2-partial2/step-000000000064.ckpt",
     "checkpoint_sha256": "de9deb91e32e85cdcbbc07d45114ad73d6708a0b922a2ec0afeed26b4ccfa5bf",
     "completed_steps": 64,
     "verified": true
   },
   "run": {
     "accepted_updates": 17,
-    "checkpoint_elapsed_ms": 5.871894,
+    "checkpoint_elapsed_ms": 5.953027,
     "context_tokens": 15820,
-    "context_tokens_per_second": 5029.279930493444,
+    "context_tokens_per_second": 5021.597785740487,
     "executed_steps": 192,
-    "mean_step_ms": 16.38322671875,
-    "peak_rss_kib": 52048,
+    "mean_step_ms": 16.408290119791666,
+    "peak_rss_kib": 52080,
     "refused_steps": 175,
     "resumed_from_step": 64,
     "seed": 1,
-    "step_elapsed_ms": 3145.57953,
+    "step_elapsed_ms": 3150.391703,
     "steps": 256,
-    "steps_per_second": 61.038037083106275,
+    "steps_per_second": 60.94480245652171,
     "target_visits": 192,
-    "target_visits_per_second": 61.038037083106275,
-    "wall_elapsed_ms": 64230.281047000004
+    "target_visits_per_second": 60.94480245652171,
+    "wall_elapsed_ms": 64095.978179
   },
   "schema": "uor-r4.cpu-masked-corpus-run/1",
   "scope": "CPU development-research component run; not GPU qualification, language quality or complete-reply evidence",
