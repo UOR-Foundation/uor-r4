@@ -28,7 +28,7 @@ The served session is unchanged byte for byte (below), and on the laptop it deco
   - It was claude-254's `--decision-check` and self-grade on F's trace. Both read stored traces and tables and never run the served session.
   - The replacement is a base-against-head decode of R's artifact, plain and forced. The ORDER records the amendment, and that it was written after the decodes ran (their script was written before).
 - **The forced-against-unforced comparison in `decodes.sh` is weak.** The forced run decodes the 3 windows `force-own-3.json` names, and the plain run decodes 4. So "DIFFER" there shows only that the outputs are not one file. What carries the forced branch is the base-equals-head comparison of the forced run itself.
-- **The 36 failing tests of `uor-r4-integer --features serving-wasm` are still red.** They are the base's own: claude-254's run at `4edc6e841`, whose crate tree is identical to `05021840e`, failed the same 36 plus the two this unit repairs. They are the M1/M2/M3 challenger and timing tests and the frozen-panel CLI test. Of their panics, 30 are a bundle file not found, 3 a missing `tokenizer.json`, and 1 is `verify_m7_parity.mjs` at its WASM target check. None is touched here.
+- **The 36 failing tests of `uor-r4-integer --features serving-wasm` are still red.** They are the base's own: claude-254's run at `4edc6e841`, whose crate tree is identical to `05021840e`, failed the same 36 plus the two this unit repairs. They are the M1/M2/M3 challenger and timing tests and the frozen-panel CLI test. Of their 36 panics, 32 are a quaternion or Householder bundle not found, 3 a missing `tokenizer.json`, and 1 is `verify_m7_parity.mjs` at its WASM target check. None is touched here.
 
 ## What changed
 
