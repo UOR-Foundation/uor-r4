@@ -7,6 +7,7 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 - **The first BVG-K apply validated active lanes too late.** Gate lanes `3..=15` and Route/Table lanes above `15` could reach mutation; a bad later Gate member could leave an earlier member written before the batch refused.
 - **The first decision silently filtered malformed records.** A mismatched kind or read mode was removed from member selection instead of reaching CUDA-compatible apply refusals `14` or `9`.
 - **The first failure tests covered only status `17`, duplicate `15` and a subset of single-apply refusals.** They did not exercise status order, every batch refusal, epoch exhaustion or a bad later member.
+- **The first full gate run hit a transient test-harness race.** Its fake `gh` executable returned `Text file busy`; the unchanged full gate rerun passed.
 
 ## What changed
 
@@ -29,6 +30,8 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 - `UOR_LAB=deepseek uor-harness ratchet d23`: PASS, 4,451 sites, baseline unchanged.
 - `UOR_LAB=deepseek uor-harness ratchet d25`: PASS, 93 sites, baseline unchanged.
 - `UOR_LAB=deepseek uor-harness ratchet d32`: PASS, 31 sites, baseline unchanged.
+- `UOR_LAB=deepseek uor-harness loop pr-check --local`: PASS, including ORDER-first, scope, report, banned-presence, rule-source and read-path checks.
+- `UOR_LAB=deepseek uor-harness loop gates --full`: PASS on the unchanged rerun, all 11 gates green.
 
 ## Skills used
 
