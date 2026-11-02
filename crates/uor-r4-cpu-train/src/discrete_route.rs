@@ -100,7 +100,7 @@ impl CpuDiscreteRoute {
             return Err(invalid("Route artifact requires four tables"));
         }
         let table = section_i32(bytes, &header, "discrete.table", vocab * blocks * 8, "i32")?;
-        section_u32(bytes, &header, "discrete.cells", vocab, "u32")?;
+        let cells = section_u32(bytes, &header, "discrete.cells", vocab, "u32")?;
         let routes = section_u32(bytes, &header, "discrete.routes", blocks * stages, "u32")?;
         let gates = section_i32(bytes, &header, "discrete.gates", blocks * stages, "i32")?;
         if gates.iter().any(|gate| *gate != 0) {
@@ -124,6 +124,14 @@ impl CpuDiscreteRoute {
             }
             token_blocks.push(values);
         }
+        for (token, (blocks, &cell)) in token_blocks.iter().zip(&cells).enumerate() {
+            let first = root_id(&blocks[0]).unwrap() as u32;
+            let last = root_id(blocks.last().unwrap()).unwrap() as u32;
+            if cell != first * 16 + last {
+                return Err(invalid(format!("Route cell for token {token} differs")));
+            }
+        }
+        validate_layout(bytes, &header)?;
         let routes = routes
             .chunks_exact(stages)
             .map(|row| row.to_vec())
@@ -349,10 +357,22 @@ fn section<'a>(
     if entry["kind"].as_str() != Some(expected_kind) {
         return Err(invalid(format!("{name} kind differs")));
     }
+    let width = if expected_kind == "i16" { 2 } else { 4 };
+    if entry["span"]["bytes"].as_u64() != Some((expected_len * width) as u64) {
+        return Err(invalid(format!("{name} span byte length differs")));
+    }
     let header_len = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
-    let start = (16 + header_len as usize).div_ceil(64) * 64
-        + usize::try_from(entry["span"]["offset"].as_u64().unwrap_or(u64::MAX))
-            .map_err(|_| invalid("section offset"))?;
+    let offset = usize::try_from(entry["span"]["offset"].as_u64().unwrap_or(u64::MAX))
+        .map_err(|_| invalid("section offset"))?;
+    if offset % 64 != 0 {
+        return Err(invalid(format!("{name} is not 64-byte aligned")));
+    }
+    let start = (16 + header_len as usize)
+        .checked_add(63)
+        .ok_or_else(|| invalid("data start overflow"))?
+        / 64
+        * 64
+        + offset;
     let len = usize::try_from(entry["span"]["bytes"].as_u64().unwrap_or(0))
         .map_err(|_| invalid("section bytes"))?;
     let end = start
@@ -361,6 +381,40 @@ fn section<'a>(
     bytes
         .get(start..end)
         .ok_or_else(|| invalid(format!("{name} outside artifact")))
+}
+
+fn validate_layout(bytes: &[u8], header: &serde_json::Value) -> Result<()> {
+    let mut spans: Vec<(usize, usize, &str)> = header["tables"]
+        .as_array()
+        .ok_or_else(|| invalid("Route tables differ"))?
+        .iter()
+        .map(|entry| {
+            let offset = usize::try_from(entry["span"]["offset"].as_u64().unwrap_or(u64::MAX))
+                .map_err(|_| invalid("layout offset"))?;
+            let len = usize::try_from(entry["span"]["bytes"].as_u64().unwrap_or(u64::MAX))
+                .map_err(|_| invalid("layout bytes"))?;
+            let end = offset
+                .checked_add(len)
+                .ok_or_else(|| invalid("layout end overflow"))?;
+            Ok((offset, end, entry["name"].as_str().unwrap_or("")))
+        })
+        .collect::<Result<_>>()?;
+    spans.sort_unstable_by_key(|span| span.0);
+    let header_len = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
+    let data = &bytes[(16 + header_len as usize).div_ceil(64) * 64..];
+    let mut cursor = 0usize;
+    for (start, end, name) in spans {
+        if start < cursor || end > data.len() || data[cursor..start].iter().any(|byte| *byte != 0) {
+            return Err(invalid(format!(
+                "{name} layout overlaps or has nonzero padding"
+            )));
+        }
+        cursor = end;
+    }
+    if data[cursor..].iter().any(|byte| *byte != 0) {
+        return Err(invalid("Route artifact has nonzero trailing padding"));
+    }
+    Ok(())
 }
 
 fn section_i32(
@@ -444,7 +498,39 @@ mod tests {
         }
     }
 
+    #[test]
+    fn non_route_and_malformed_route_artifacts_are_refused() {
+        assert!(CpuDiscreteRoute::from_bytes(&serialized_route_with(
+            "relation",
+            vec![1, 2, 3, 4],
+            false
+        ))
+        .is_err());
+        assert!(CpuDiscreteRoute::from_bytes(&serialized_route_with(
+            "route",
+            vec![64, 2, 3, 4],
+            false
+        ))
+        .is_err());
+        assert!(CpuDiscreteRoute::from_bytes(&serialized_route_with(
+            "route",
+            vec![1, 2, 3],
+            false
+        ))
+        .is_err());
+        assert!(CpuDiscreteRoute::from_bytes(&serialized_route_with(
+            "route",
+            vec![1, 2, 3, 4],
+            true
+        ))
+        .is_err());
+    }
+
     fn serialized_route() -> Vec<u8> {
+        serialized_route_with("route", vec![1, 2, 3, 4], false)
+    }
+
+    fn serialized_route_with(mode: &str, routes: Vec<u32>, short_span: bool) -> Vec<u8> {
         let roots = [[0u8, 1], [2, 3], [4, 5]];
         let mut table = Vec::new();
         let mut cells = Vec::new();
@@ -454,18 +540,20 @@ mod tests {
             }
             cells.push(u32::from(blocks[0] << 4 | blocks[1]));
         }
-        let routes = vec![1u32, 2, 3, 4];
         let gates = vec![0i32; 4];
         let mut blob = Vec::new();
         let table_span = append(&mut blob, &ints_i32(&table));
         let cells_span = append(&mut blob, &ints_u32(&cells));
-        let routes_span = append(&mut blob, &ints_u32(&routes));
+        let mut routes_span = append(&mut blob, &ints_u32(&routes));
+        if short_span {
+            routes_span["bytes"] = json!(1);
+        }
         let gates_span = append(&mut blob, &ints_i32(&gates));
         let header = json!({
             "schema": "uor-r4.lut-discrete/1",
             "shape": {
                 "vocabulary": 3, "blocks": 2, "context": 3, "kept_cells": 2,
-                "stages": 2, "read_mode": "route", "read_kept": 0,
+                "stages": 2, "read_mode": mode, "read_kept": 0,
                 "read_sweeps": 0, "objective_policy": "nearest_address_margin_v1",
                 "read_initialization": "zero_gates_v1", "seed": 1, "epoch": 0
             },
