@@ -5,9 +5,11 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
 ## Goal
 
 Add an explicit served-forward override for checkpoint inspection and row
-scoring, then run one bounded matched comparison of ordinary training and full
-served-surrogate training. The comparison is two training modes at two fixed
-seeds: four runs total, not four model mechanisms.
+scoring and pre-register one bounded matched comparison of ordinary training
+and full served-surrogate training. The comparison is two training modes at two
+fixed seeds: four runs total, not four model mechanisms. This host
+deliverable makes the comparison executable; its GPU execution is a separately
+gated follow-up.
 
 ## Cancel probe
 
@@ -31,12 +33,11 @@ only the override required for a like-for-like evaluation.
 - A documented `--served-forward 0|1` scoring override applies only to
   `--inspect`, `--decode-speed` and `--score-rows`; it does not alter training.
 - Host controls pin the override selection and reject it outside those modes.
-- The four matched GPU runs complete under the pre-registration, with finite
-  losses, model hashes, step-256 served-evaluator results, decode throughput and
-  export-rounding evidence.
-- The report classifies the result as instrument, operational, or model-quality
-  evidence at the sheet's registered scope; a short run cannot support a
-  capability claim.
+- The pre-registration is FIT and names a runnable same-mode evaluation-copy
+  procedure, data pins, cost, stop rules and the four-run evidence required on
+  a GPU.
+- The report states the four GPU runs as `NOT_RUN` on this host and leaves them
+  to the registered follow-up; it makes no training or capability claim.
 - Tests, formatting, policy, exact-head review, merge and fresh-main verification
   follow the standard delivery path.
 

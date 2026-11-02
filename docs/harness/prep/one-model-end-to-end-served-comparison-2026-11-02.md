@@ -2,7 +2,7 @@
 
 **Status:** DRAFT until a fresh-context FIT review.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
 
 ## Question
 
@@ -150,3 +150,14 @@ and a smoke-level quality comparison only. The quality band is
 - Do not open a fresh panel; DEV is diagnostic here.
 - If the served arm fails the instrument door, preserve the run and classify the
   failure as instrument or mechanism before any retry.
+
+## Verdict
+
+TEST FITNESS: FIT - fresh non-author review of sheet SHA-256
+`bdf3f781acad77dd0cb55424c72e66d34fb1a4ecc48c10e1409ffd70705538c8`;
+PRE-RUN: PASS.
+
+The review confirmed executable rounded evaluation copies for both training
+modes, explicit TRAIN/DEV/mask/tokenizer pins, no unsupported top-8 claim, a
+two-mode × two-seed scope, finite-loss and budget stop rules, and the
+engineering-only claim boundary.
