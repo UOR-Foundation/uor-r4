@@ -4,7 +4,7 @@
 
 **Goal:** Build all eight approved typed Studio workflow components against the lifecycle store and existing public browser modules, without replacing the live page or changing its engine.
 
-**Architecture:** Preact components consume one subscribed lifecycle store and narrow injected TypeScript bridges over `__studioFiles`, `__studioUi`, `UORModelSources`, and `UORStudioApi`. Small additive legacy hooks expose editor content, generation completion, and settings updates; components never scrape DOM or duplicate model/file/API/persistence behavior. The library exports an unmounted `StudioApp`; the legacy `index.html` remains live.
+**Architecture:** Preact components are composed around one lifecycle store through subscribing views and prop/callback-coordinated views, with narrow injected TypeScript bridges over `__studioFiles`, `__studioUi`, `UORModelSources`, and `UORStudioApi`. Small additive legacy hooks expose editor content, generation completion, and settings updates; components never scrape DOM or duplicate model/file/API/persistence behavior. The library exports an unmounted `StudioApp`; the legacy `index.html` remains live.
 
 **Tech Stack:** TypeScript/TSX, Preact, Vite, Vitest/jsdom, existing JavaScript browser modules, Node's built-in test runner.
 

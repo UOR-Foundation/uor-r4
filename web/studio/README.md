@@ -69,8 +69,9 @@ were "not organized or labeled very well". The page is now a workable AI studio:
 
 The `src/` library now contains the lifecycle store and all eight approved core components:
 AppShell, ModelPicker, WorkspaceEditor, AgentComposer, SessionList, Inspector, Guide, and Settings.
-`StudioApp` composes them without mounting or replacing the live page. Stateful views subscribe to
-one store, while Guide, Settings, and shell controls are coordinated through props and callbacks.
+`StudioApp` composes them without mounting or replacing the live page. AgentComposer, WorkspaceEditor,
+ModelPicker, and Inspector subscribe to one store; AppShell, SessionList, Guide, and Settings are
+coordinated through props and callbacks.
 The components call the existing file/session/UI/model-source APIs through typed bridges. Small public
 hooks forward editor content, generation completion, settings, and attachment changes; the engine,
 worker, tokenizer, and `studio_api.js` remain unchanged. Existing provider credentials are not

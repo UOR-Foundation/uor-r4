@@ -18,7 +18,7 @@ Implement the approved AppShell, ModelPicker, WorkspaceEditor, AgentComposer, Se
 
 ## Done when
 
-- All eight named components render from lifecycle state, use native progress/dialog semantics, and expose accessible names and truthful enabled/disabled states in behavioral tests.
+- The composed workflow uses lifecycle state through subscribing views and prop/callback-coordinated views, native progress/dialog semantics, accessible names, and truthful enabled/disabled states in behavioral tests.
 - The store notifies component subscribers of external adapter completion without changing existing transition guarantees.
 - Typed adapters call existing public APIs; additive editor/generation/settings hooks preserve legacy behavior and never scrape DOM or duplicate engine, tokenization, hashing, persistence, or API logic.
 - Model, workspace, agent, session, inspector, guide, and settings behavior is covered with synthetic fixtures, including negative cases and explicit remaining parity records.

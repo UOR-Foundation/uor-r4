@@ -721,7 +721,7 @@
     function clearSessions() {
         var list = hook('listSessions');
         var deleteFn = hook('deleteSession');
-        if (!list || !deleteFn) { toast('Session store not ready.', 'error'); return; }
+        if (!list || !deleteFn) { toast('Session store not ready.', 'error'); return { cleared: 0, total: 0 }; }
         var sessions = list();
         var cleared = 0;
         sessions.forEach(function (session) { if (deleteFn(session.id)) cleared += 1; });
