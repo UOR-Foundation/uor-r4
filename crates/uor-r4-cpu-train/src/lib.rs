@@ -23,7 +23,8 @@ pub use counterfactual::{
 };
 pub use discrete_route::{
     CpuDiscreteFlock, CpuDiscreteProposal, CpuDiscreteProposalChooser, CpuDiscreteProposalKind,
-    CpuDiscreteProposalMode, CpuDiscreteRelation, CpuDiscreteRoute,
+    CpuDiscreteProposalMode, CpuDiscreteProposalSample, CpuDiscreteProposalScorer,
+    CpuDiscreteProposalScoring, CpuDiscreteRelation, CpuDiscreteRoute, CpuDiscreteScoreError,
 };
 pub use fbs::{CpuFbsForward, CpuFbsHead, CpuFbsStep, FbsForwardError};
 pub use panel::{

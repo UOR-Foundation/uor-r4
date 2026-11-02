@@ -1,7 +1,9 @@
 //! Independent CPU Route and Flock reads for four-table discrete artifacts.
 
 use uor_r4_core::spiralcore_operator::{cl06_finite_composition_table, Cl06FiniteCompositionTable};
-use uor_r4_discrete::normalization_mechanism::{orbit_root_coords, NormFrameTable};
+use uor_r4_discrete::normalization_mechanism::{
+    identify_orbit_root, orbit_root_coords, NormFrameTable,
+};
 
 use crate::CpuTrainError;
 
@@ -1007,6 +1009,517 @@ impl CpuDiscreteProposalChooser {
             }
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct CpuDiscreteProposalSample {
+    pub prefix: Vec<u32>,
+    pub target: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CpuDiscreteProposalScoring {
+    pub losses: [u64; 16],
+    pub eligible_rows: usize,
+    pub proposal: CpuDiscreteProposal,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CpuDiscreteScoreError {
+    pub status: u32,
+    pub message: String,
+}
+
+impl std::fmt::Display for CpuDiscreteScoreError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "status {}: {}", self.status, self.message)
+    }
+}
+
+impl std::error::Error for CpuDiscreteScoreError {}
+
+#[derive(Clone)]
+enum CpuDiscreteProposalModel {
+    Route(CpuDiscreteRoute),
+    Active(ActiveLeafModel),
+}
+
+#[derive(Clone)]
+pub struct CpuDiscreteProposalScorer {
+    chooser: CpuDiscreteProposalChooser,
+    model: CpuDiscreteProposalModel,
+    kept_cells: usize,
+    objective: CpuDiscreteObjective,
+}
+
+#[derive(Clone, Copy)]
+enum CpuDiscreteObjective {
+    NearestAddressMargin,
+    OccupiedCellRankHinge,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CpuWriterLoss {
+    loss: u64,
+    token_rivals: usize,
+}
+
+impl CpuDiscreteProposalScorer {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let header = header(bytes)?;
+        let shape = &header["shape"];
+        if header["matrices"]
+            .as_array()
+            .is_none_or(|matrices| !matrices.is_empty())
+        {
+            return Err(invalid("proposal scorer requires an empty matrices array"));
+        }
+        let source = &header["source"];
+        if source["snapshot_schema"].as_str() != Some(FLOCK_SNAPSHOT_SCHEMA)
+            || source["operator_kappa"].as_str() != Some(FLOCK_OPERATOR_KAPPA)
+            || source["composition_kappa"].as_str() != Some(FLOCK_COMPOSITION_KAPPA)
+        {
+            return Err(invalid("proposal scorer source geometry differs"));
+        }
+        if !matches!(
+            shape["objective_policy"].as_str(),
+            Some("nearest_address_margin_v1" | "occupied_cell_rank_hinge_v1")
+        ) {
+            return Err(invalid("proposal scorer objective policy differs"));
+        }
+        validate_header_padding(bytes)?;
+        let model = match shape["read_mode"].as_str() {
+            Some("route") => CpuDiscreteProposalModel::Route(CpuDiscreteRoute::from_bytes(bytes)?),
+            Some("flock") => CpuDiscreteProposalModel::Active(ActiveLeafModel::from_bytes(
+                bytes,
+                ActiveLeafKind::Flock,
+            )?),
+            Some("relation") => CpuDiscreteProposalModel::Active(ActiveLeafModel::from_bytes(
+                bytes,
+                ActiveLeafKind::Relation,
+            )?),
+            _ => return Err(invalid("proposal scorer read mode differs")),
+        };
+        let kept_cells = usize::try_from(shape["kept_cells"].as_u64().unwrap_or(0))
+            .map_err(|_| invalid("proposal scorer kept_cells"))?;
+        let objective = match shape["objective_policy"].as_str() {
+            Some("nearest_address_margin_v1") => CpuDiscreteObjective::NearestAddressMargin,
+            Some("occupied_cell_rank_hinge_v1") => CpuDiscreteObjective::OccupiedCellRankHinge,
+            _ => return Err(invalid("proposal scorer objective policy differs")),
+        };
+        Ok(Self {
+            chooser: CpuDiscreteProposalChooser::from_bytes(bytes)?,
+            model,
+            kept_cells,
+            objective,
+        })
+    }
+
+    pub fn score(
+        &self,
+        kind: CpuDiscreteProposalKind,
+        index: usize,
+        samples: &[CpuDiscreteProposalSample],
+        epoch: u64,
+    ) -> std::result::Result<CpuDiscreteProposalScoring, CpuDiscreteScoreError> {
+        self.validate_proposal(kind, index)
+            .map_err(|error| score_error(self.proposal_refusal_status(kind), error.to_string()))?;
+        if samples.is_empty() {
+            return Err(score_error(8, "proposal scorer requires at least one row"));
+        }
+
+        let mut eligible = Vec::new();
+        for sample in samples {
+            let query = self
+                .read(&self.model, &sample.prefix)
+                .map_err(|error| score_error(2, error.to_string()))?;
+            let table = self.token_blocks(&self.model);
+            let loss = writer_loss(
+                &query,
+                table,
+                sample.target,
+                self.kept_cells,
+                self.objective,
+            )
+            .map_err(writer_score_error)?;
+            if loss.token_rivals != 0 {
+                eligible.push((sample, loss.loss));
+            }
+        }
+        if eligible.is_empty() {
+            return Err(score_error(
+                8,
+                "proposal baseline admitted no eligible rows",
+            ));
+        }
+
+        let active_lanes = if kind == CpuDiscreteProposalKind::Gate {
+            3
+        } else {
+            16
+        };
+        let mut losses = [u64::MAX; 16];
+        for (candidate, lane_loss) in losses.iter_mut().enumerate().take(active_lanes) {
+            let model = if candidate == 0 {
+                self.model.clone()
+            } else {
+                self.virtual_model(kind, index, candidate)
+                    .map_err(|error| score_error(4, error.to_string()))?
+            };
+            let mut total = 0u64;
+            let mut sentinel = false;
+            for (sample, baseline_loss) in &eligible {
+                let cost = if candidate == 0 {
+                    Some(*baseline_loss)
+                } else {
+                    let query = self
+                        .read(&model, &sample.prefix)
+                        .map_err(|error| score_error(2, error.to_string()))?;
+                    let loss = writer_loss(
+                        &query,
+                        self.token_blocks(&model),
+                        sample.target,
+                        self.kept_cells,
+                        self.objective,
+                    )
+                    .map_err(writer_score_error)?;
+                    (loss.token_rivals != 0 && loss.loss != u64::MAX).then_some(loss.loss)
+                };
+                match accumulate_lane(total, cost)? {
+                    Some(next) => total = next,
+                    None => {
+                        sentinel = true;
+                        break;
+                    }
+                }
+            }
+            *lane_loss = if sentinel { u64::MAX } else { total };
+        }
+
+        let proposal = self
+            .chooser
+            .choose(kind, index, &losses, epoch)
+            .map_err(|error| score_error(4, error.to_string()))?;
+        Ok(CpuDiscreteProposalScoring {
+            losses,
+            eligible_rows: eligible.len(),
+            proposal,
+        })
+    }
+
+    fn validate_proposal(&self, kind: CpuDiscreteProposalKind, index: usize) -> Result<()> {
+        match (&self.model, kind) {
+            (CpuDiscreteProposalModel::Route(_), CpuDiscreteProposalKind::Gate) => {
+                Err(invalid("Gate proposal requires Flock or Relation mode"))
+            }
+            (CpuDiscreteProposalModel::Active(_), CpuDiscreteProposalKind::Route) => {
+                Err(invalid("Route proposal requires Route mode"))
+            }
+            (CpuDiscreteProposalModel::Route(model), CpuDiscreteProposalKind::Route)
+                if index >= model.blocks * model.stages =>
+            {
+                Err(invalid("Route proposal index outside map inventory"))
+            }
+            (_, CpuDiscreteProposalKind::Gate) if index >= self.chooser.gate_count => {
+                Err(invalid("Gate proposal index outside gate inventory"))
+            }
+            (_, CpuDiscreteProposalKind::Table)
+                if index >= self.chooser.token_blocks.len() * self.chooser.blocks =>
+            {
+                Err(invalid("Table proposal index outside codebook inventory"))
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn proposal_refusal_status(&self, kind: CpuDiscreteProposalKind) -> u32 {
+        match (&self.model, kind) {
+            (CpuDiscreteProposalModel::Route(_), CpuDiscreteProposalKind::Gate)
+            | (CpuDiscreteProposalModel::Active(_), CpuDiscreteProposalKind::Route) => 9,
+            _ => 4,
+        }
+    }
+
+    fn virtual_model(
+        &self,
+        kind: CpuDiscreteProposalKind,
+        index: usize,
+        candidate: usize,
+    ) -> Result<CpuDiscreteProposalModel> {
+        let action = self.chooser.move_actions[candidate];
+        let mut model = self.model.clone();
+        match (&mut model, kind) {
+            (CpuDiscreteProposalModel::Route(route), CpuDiscreteProposalKind::Route) => {
+                let block = index / route.stages;
+                let stage = index % route.stages;
+                let current = route.routes[block][stage];
+                route.routes[block][stage] = u32::from(
+                    route
+                        .composition
+                        .compose_index(action, current as u8)
+                        .ok_or_else(|| invalid("Route proposal composition failed"))?,
+                );
+            }
+            (CpuDiscreteProposalModel::Active(active), CpuDiscreteProposalKind::Gate) => {
+                let base_gates = active.blocks * active.stages;
+                if index < base_gates {
+                    let block = index / active.stages;
+                    let level = index % active.stages;
+                    active.level_gates[block][level] =
+                        sibling_gate(active.level_gates[block][level], candidate)?;
+                } else {
+                    let tail = index - base_gates;
+                    let level = tail / RELATION_EDGE_TYPES;
+                    let edge = tail % RELATION_EDGE_TYPES;
+                    let ActiveLeafMode::Relation { relation_gates, .. } = &mut active.mode else {
+                        return Err(invalid("Gate proposal relation tail differs"));
+                    };
+                    let current = relation_gates
+                        .get(level)
+                        .ok_or_else(|| invalid("Gate proposal level outside inventory"))?[edge];
+                    relation_gates[level][edge] = sibling_gate(current, candidate)?;
+                }
+            }
+            (model, CpuDiscreteProposalKind::Table) => {
+                let blocks = model.blocks();
+                let token = index / blocks;
+                let block = index % blocks;
+                let table = model.token_blocks_mut();
+                let point = table
+                    .get_mut(token)
+                    .and_then(|token| token.get_mut(block))
+                    .ok_or_else(|| invalid("Table proposal index outside codebook"))?;
+                *point = move_root(point, action, &self.chooser.composition)?;
+            }
+            _ => return Err(invalid("proposal kind differs from read mode")),
+        }
+        Ok(model)
+    }
+
+    fn read(&self, model: &CpuDiscreteProposalModel, prefix: &[u32]) -> Result<Vec<i32>> {
+        match model {
+            CpuDiscreteProposalModel::Route(route) => route.read(prefix),
+            CpuDiscreteProposalModel::Active(active) => active.read(prefix),
+        }
+    }
+
+    fn token_blocks<'a>(&self, model: &'a CpuDiscreteProposalModel) -> &'a [Vec<[i32; 8]>] {
+        match model {
+            CpuDiscreteProposalModel::Route(route) => &route.token_blocks,
+            CpuDiscreteProposalModel::Active(active) => &active.token_blocks,
+        }
+    }
+}
+
+fn score_error(status: u32, message: impl Into<String>) -> CpuDiscreteScoreError {
+    CpuDiscreteScoreError {
+        status,
+        message: message.into(),
+    }
+}
+
+fn writer_score_error(error: CpuTrainError) -> CpuDiscreteScoreError {
+    let message = error.to_string();
+    let status = if message.contains("overflow") { 12 } else { 8 };
+    score_error(status, message)
+}
+
+fn accumulate_lane(
+    total: u64,
+    cost: Option<u64>,
+) -> std::result::Result<Option<u64>, CpuDiscreteScoreError> {
+    let Some(cost) = cost else {
+        return Ok(None);
+    };
+    total
+        .checked_add(cost)
+        .map(Some)
+        .ok_or_else(|| score_error(12, "proposal lane loss sum overflows"))
+}
+
+impl CpuDiscreteProposalModel {
+    fn blocks(&self) -> usize {
+        match self {
+            Self::Route(route) => route.blocks,
+            Self::Active(active) => active.blocks,
+        }
+    }
+
+    fn token_blocks_mut(&mut self) -> &mut Vec<Vec<[i32; 8]>> {
+        match self {
+            Self::Route(route) => &mut route.token_blocks,
+            Self::Active(active) => &mut active.token_blocks,
+        }
+    }
+}
+
+fn sibling_gate(current: i32, candidate: usize) -> Result<i32> {
+    const ORDER: [i32; 3] = [0, -1, 1];
+    if candidate == 0 {
+        return Ok(current);
+    }
+    ORDER
+        .into_iter()
+        .filter(|gate| *gate != current)
+        .nth(candidate - 1)
+        .ok_or_else(|| invalid("Gate proposal candidate outside active inventory"))
+}
+
+fn move_root(
+    point: &[i32; 8],
+    action: u8,
+    composition: &Cl06FiniteCompositionTable,
+) -> Result<[i32; 8]> {
+    let root: [i8; 8] = std::array::from_fn(|dimension| (point[dimension] / 2) as i8);
+    let moved = composition
+        .state(action)
+        .ok_or_else(|| invalid("proposal move action absent"))?
+        .apply_root_key(root)
+        .map_err(|error| invalid(error.to_string()))?;
+    Ok(moved.map(|value| i32::from(value) * 2))
+}
+
+fn writer_loss(
+    query: &[i32],
+    token_blocks: &[Vec<[i32; 8]>],
+    target: u32,
+    kept_cells: usize,
+    objective: CpuDiscreteObjective,
+) -> Result<CpuWriterLoss> {
+    let blocks = token_blocks
+        .first()
+        .map(Vec::len)
+        .ok_or_else(|| invalid("proposal writer codebook is empty"))?;
+    let width = blocks
+        .checked_mul(8)
+        .ok_or_else(|| invalid("proposal writer width overflows"))?;
+    if query.len() != width || target as usize >= token_blocks.len() {
+        return Err(invalid("proposal writer row shape differs"));
+    }
+    let mut token_cells = Vec::with_capacity(token_blocks.len());
+    let mut occupied = [false; 256];
+    for token in token_blocks {
+        if token.len() != blocks {
+            return Err(invalid("proposal writer block count differs"));
+        }
+        let first = identify_orbit_root(&token[0])
+            .ok_or_else(|| invalid("proposal writer first block off orbit"))?;
+        let last = identify_orbit_root(token.last().unwrap())
+            .ok_or_else(|| invalid("proposal writer last block off orbit"))?;
+        let cell = usize::from(first) * 16 + usize::from(last);
+        occupied[cell] = true;
+        token_cells.push(cell);
+    }
+    let target_cell = token_cells[target as usize];
+    let mut used = [false; 256];
+    let mut admitted = Vec::with_capacity(kept_cells);
+    for _ in 0..kept_cells {
+        let mut best = None;
+        for cell in 0..256 {
+            if occupied[cell] && !used[cell] {
+                let cost = writer_cell_distance(query, blocks, cell);
+                if best.is_none_or(|(best_cost, best_cell)| {
+                    cost < best_cost || (cost == best_cost && cell < best_cell)
+                }) {
+                    best = Some((cost, cell));
+                }
+            }
+        }
+        let Some((_, cell)) = best else {
+            break;
+        };
+        used[cell] = true;
+        admitted.push(cell);
+    }
+    let mut best_token = None;
+    let mut rival_distance = None;
+    let mut rival_address = None;
+    let mut token_rivals = 0usize;
+    for &cell in &admitted {
+        let address = writer_cell_distance(query, blocks, cell);
+        if cell != target_cell {
+            rival_address = Some(rival_address.map_or(address, |value: u32| value.min(address)));
+        }
+        for (token, &token_cell) in token_cells.iter().enumerate() {
+            if token_cell != cell {
+                continue;
+            }
+            let distance = writer_token_distance(query, blocks, &token_blocks[token]);
+            if best_token.is_none_or(|(best_distance, best_id)| {
+                distance < best_distance || (distance == best_distance && token < best_id)
+            }) {
+                best_token = Some((distance, token));
+            }
+            if token != target as usize {
+                token_rivals += 1;
+                rival_distance =
+                    Some(rival_distance.map_or(distance, |value: u32| value.min(distance)));
+            }
+        }
+    }
+    if best_token.is_none() {
+        return Err(invalid("proposal writer admitted no token"));
+    }
+    let width_u64 = u64::try_from(width).map_err(|_| invalid("proposal width overflow"))?;
+    let target_distance = writer_token_distance(query, blocks, &token_blocks[target as usize]);
+    let target_address = writer_cell_distance(query, blocks, target_cell);
+    let token_hinge = rival_distance.map_or(0u64, |rival| {
+        let threshold = width_u64 + u64::from(target_distance);
+        threshold.saturating_sub(u64::from(rival))
+    });
+    let address_hinge = rival_address.map_or(0u64, |rival| {
+        8u64.saturating_add(u64::from(target_address))
+            .saturating_sub(u64::from(rival))
+    });
+    let rank_hinge = if matches!(objective, CpuDiscreteObjective::OccupiedCellRankHinge) {
+        let rank = 1
+            + (0..256)
+                .filter(|&cell| occupied[cell])
+                .filter(|&cell| {
+                    let distance = writer_cell_distance(query, blocks, cell);
+                    distance < target_address || (distance == target_address && cell < target_cell)
+                })
+                .count();
+        u64::try_from(rank.saturating_sub(kept_cells))
+            .map_err(|_| invalid("proposal rank overflow"))?
+    } else {
+        0
+    };
+    let weighted_token = token_hinge
+        .checked_mul(8)
+        .ok_or_else(|| invalid("proposal token loss overflows"))?;
+    let weighted_address = address_hinge
+        .checked_mul(width_u64)
+        .ok_or_else(|| invalid("proposal address loss overflows"))?;
+    let weighted_rank = rank_hinge
+        .checked_mul(width_u64)
+        .ok_or_else(|| invalid("proposal rank loss overflows"))?;
+    let loss = match objective {
+        CpuDiscreteObjective::NearestAddressMargin => weighted_token
+            .checked_add(weighted_address)
+            .ok_or_else(|| invalid("proposal nearest loss overflows"))?,
+        CpuDiscreteObjective::OccupiedCellRankHinge => weighted_token
+            .checked_add(weighted_rank)
+            .ok_or_else(|| invalid("proposal rank loss overflows"))?,
+    };
+    Ok(CpuWriterLoss { loss, token_rivals })
+}
+
+fn writer_cell_distance(query: &[i32], blocks: usize, cell: usize) -> u32 {
+    let first: &[i32; 8] = query[..8]
+        .try_into()
+        .expect("writer query width was checked");
+    let last: &[i32; 8] = query[(blocks - 1) * 8..blocks * 8]
+        .try_into()
+        .expect("writer query width was checked");
+    root_cost(first, cell / 16).0 + root_cost(last, cell % 16).0
+}
+
+fn writer_token_distance(query: &[i32], blocks: usize, token: &[[i32; 8]]) -> u32 {
+    (0..blocks)
+        .flat_map(|block| query[block * 8..(block + 1) * 8].iter().zip(token[block]))
+        .map(|(&left, right)| left.abs_diff(right))
+        .fold(0u32, u32::saturating_add)
 }
 
 fn root_id(block: &[i32; 8]) -> Option<usize> {
@@ -2108,6 +2621,282 @@ mod tests {
             .choose(CpuDiscreteProposalKind::Gate, 14, &losses, 0)
             .is_err());
         assert!(CpuDiscreteProposalChooser::from_bytes(b"bad").is_err());
+    }
+
+    #[test]
+    fn proposal_writer_baseline_matches_host_for_both_objectives() {
+        let roots = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]];
+        let nearest = serialized_flock_fixture(6, &roots, &[1, 0, 1, 0], 2);
+        let rank = rewrite_header(nearest.clone(), |header| {
+            header["shape"]["objective_policy"] = json!("occupied_cell_rank_hinge_v1");
+        });
+        let sample = CpuDiscreteProposalSample {
+            prefix: vec![0, 1, 2, 3, 4, 1],
+            target: 2,
+        };
+        for artifact in [nearest, rank] {
+            let scorer = CpuDiscreteProposalScorer::from_bytes(&artifact).unwrap();
+            let scoring = scorer
+                .score(
+                    CpuDiscreteProposalKind::Gate,
+                    0,
+                    std::slice::from_ref(&sample),
+                    1,
+                )
+                .unwrap();
+            let oracle = IntegerDiscreteModel::from_bytes(&artifact).unwrap();
+            assert_eq!(
+                scoring.losses[0],
+                oracle
+                    .observe_target(&sample.prefix, sample.target)
+                    .unwrap()
+                    .selected_loss
+            );
+            assert_eq!(scoring.eligible_rows, 1);
+        }
+    }
+
+    #[test]
+    fn proposal_virtual_moves_match_serialized_host_states() {
+        let roots = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]];
+        let sample = CpuDiscreteProposalSample {
+            prefix: vec![0, 1, 2, 3, 4, 1],
+            target: 2,
+        };
+
+        let gate_artifact = serialized_flock_fixture(6, &roots, &[1, 0, 1, 0], 2);
+        let gate_scorer = CpuDiscreteProposalScorer::from_bytes(&gate_artifact).unwrap();
+        let gate_scoring = gate_scorer
+            .score(
+                CpuDiscreteProposalKind::Gate,
+                0,
+                std::slice::from_ref(&sample),
+                1,
+            )
+            .unwrap();
+        let gate_mutated = serialized_flock_fixture(6, &roots, &[0, 0, 1, 0], 2);
+        assert_eq!(
+            gate_scoring.losses[1],
+            IntegerDiscreteModel::from_bytes(&gate_mutated)
+                .unwrap()
+                .observe_target(&sample.prefix, sample.target)
+                .unwrap()
+                .selected_loss
+        );
+        let rank_gate = rewrite_header(gate_artifact, |header| {
+            header["shape"]["objective_policy"] = json!("occupied_cell_rank_hinge_v1");
+        });
+        let rank_gate_scorer = CpuDiscreteProposalScorer::from_bytes(&rank_gate).unwrap();
+        let rank_gate_scoring = rank_gate_scorer
+            .score(
+                CpuDiscreteProposalKind::Gate,
+                0,
+                std::slice::from_ref(&sample),
+                1,
+            )
+            .unwrap();
+        let rank_gate_mutated = rewrite_header(gate_mutated, |header| {
+            header["shape"]["objective_policy"] = json!("occupied_cell_rank_hinge_v1");
+        });
+        assert_eq!(
+            rank_gate_scoring.losses[1],
+            IntegerDiscreteModel::from_bytes(&rank_gate_mutated)
+                .unwrap()
+                .observe_target(&sample.prefix, sample.target)
+                .unwrap()
+                .selected_loss
+        );
+
+        let table_artifact = serialized_flock_fixture(6, &roots, &[1, 0, 1, 0], 2);
+        let table_scorer = CpuDiscreteProposalScorer::from_bytes(&table_artifact).unwrap();
+        let table_scoring = table_scorer
+            .score(
+                CpuDiscreteProposalKind::Table,
+                0,
+                std::slice::from_ref(&sample),
+                1,
+            )
+            .unwrap();
+        let mut moved_roots = roots;
+        moved_roots[0][0] = identify_orbit_root(
+            &move_root(
+                &orbit_root_coords(roots[0][0]).unwrap(),
+                table_scorer.chooser.move_actions[1],
+                &table_scorer.chooser.composition,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let table_mutated = serialized_flock_fixture(6, &moved_roots, &[1, 0, 1, 0], 2);
+        assert_eq!(
+            table_scoring.losses[1],
+            IntegerDiscreteModel::from_bytes(&table_mutated)
+                .unwrap()
+                .observe_target(&sample.prefix, sample.target)
+                .unwrap()
+                .selected_loss
+        );
+
+        let route_sample = CpuDiscreteProposalSample {
+            prefix: vec![0, 1, 2],
+            target: 2,
+        };
+        let route_artifact = serialized_route_with("route", vec![1, 2, 3, 4], 0, 0, 2, None, false);
+        let route_scorer = CpuDiscreteProposalScorer::from_bytes(&route_artifact).unwrap();
+        let route_scoring = route_scorer
+            .score(
+                CpuDiscreteProposalKind::Route,
+                0,
+                std::slice::from_ref(&route_sample),
+                1,
+            )
+            .unwrap();
+        let moved_route = route_scorer
+            .chooser
+            .composition
+            .compose_index(route_scorer.chooser.move_actions[1], 1)
+            .unwrap();
+        let route_mutated = serialized_route_with(
+            "route",
+            vec![u32::from(moved_route), 2, 3, 4],
+            0,
+            0,
+            2,
+            None,
+            false,
+        );
+        assert_eq!(
+            route_scoring.losses[1],
+            IntegerDiscreteModel::from_bytes(&route_mutated)
+                .unwrap()
+                .observe_target(&route_sample.prefix, route_sample.target)
+                .unwrap()
+                .selected_loss
+        );
+    }
+
+    #[test]
+    fn proposal_scorer_refuses_all_ineligible_rows_and_invalid_requests() {
+        let mut fixture = DiscreteFixture::flock();
+        fixture.kept = 1;
+        let artifact = rewrite_header(serialized_discrete(fixture), |header| {
+            header["shape"]["kept_cells"] = json!(1);
+        });
+        let scorer = CpuDiscreteProposalScorer::from_bytes(&artifact).unwrap();
+        let ineligible = CpuDiscreteProposalSample {
+            prefix: vec![2],
+            target: 2,
+        };
+        assert_eq!(
+            scorer
+                .score(
+                    CpuDiscreteProposalKind::Gate,
+                    0,
+                    std::slice::from_ref(&ineligible),
+                    1
+                )
+                .unwrap_err()
+                .status,
+            8
+        );
+        assert_eq!(
+            scorer
+                .score(CpuDiscreteProposalKind::Gate, 0, &[], 1)
+                .unwrap_err()
+                .status,
+            8
+        );
+        assert_eq!(
+            scorer
+                .score(
+                    CpuDiscreteProposalKind::Route,
+                    0,
+                    std::slice::from_ref(&ineligible),
+                    1
+                )
+                .unwrap_err()
+                .status,
+            9
+        );
+        assert_eq!(
+            scorer
+                .score(
+                    CpuDiscreteProposalKind::Gate,
+                    4,
+                    std::slice::from_ref(&ineligible),
+                    1
+                )
+                .unwrap_err()
+                .status,
+            4
+        );
+        assert_eq!(
+            scorer
+                .score(CpuDiscreteProposalKind::Route, 0, &[], 1)
+                .unwrap_err()
+                .status,
+            9
+        );
+        assert_eq!(
+            scorer
+                .score(CpuDiscreteProposalKind::Gate, 4, &[], 1)
+                .unwrap_err()
+                .status,
+            4
+        );
+        let route = serialized_route_with("route", vec![1, 2, 3, 4], 0, 0, 2, None, false);
+        let bad_route_header = rewrite_header(route, |header| {
+            header["matrices"] = json!([{"name": "unexpected"}]);
+        });
+        assert!(CpuDiscreteProposalScorer::from_bytes(&bad_route_header).is_err());
+    }
+
+    #[test]
+    fn proposal_lane_sentinel_and_checked_overflow_are_explicit() {
+        assert_eq!(accumulate_lane(7, None).unwrap(), None);
+        assert_eq!(accumulate_lane(7, Some(5)).unwrap(), Some(12));
+        assert_eq!(
+            accumulate_lane(u64::MAX - 1, Some(2)).unwrap_err().status,
+            12
+        );
+    }
+
+    #[test]
+    #[ignore = "release benchmark"]
+    fn release_proposal_scoring_benchmark() {
+        use std::time::Instant;
+
+        const ROWS: usize = 512;
+        let roots = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]];
+        let artifact = serialized_flock_fixture(6, &roots, &[1, 0, 1, 0], 2);
+        let scorer = CpuDiscreteProposalScorer::from_bytes(&artifact).unwrap();
+        let samples = [CpuDiscreteProposalSample {
+            prefix: vec![0, 1, 2, 3, 4, 1],
+            target: 2,
+        }];
+        for _ in 0..4 {
+            scorer
+                .score(CpuDiscreteProposalKind::Gate, 0, &samples, 1)
+                .unwrap();
+        }
+        let started = Instant::now();
+        let mut checksum = 0u64;
+        for row in 0..ROWS {
+            let scoring = scorer
+                .score(CpuDiscreteProposalKind::Gate, 0, &samples, row as u64)
+                .unwrap();
+            for loss in scoring.losses {
+                checksum = checksum.rotate_left(7).wrapping_add(loss);
+            }
+            checksum = checksum.wrapping_add(scoring.proposal.lane as u64);
+        }
+        let seconds = started.elapsed().as_secs_f64();
+        println!(
+            "benchmark=proposal-scoring rows={ROWS} samples={} elapsed_ms={:.3} scores_per_second={:.3} checksum={checksum:016x}",
+            samples.len(),
+            seconds * 1_000.0,
+            ROWS as f64 / seconds
+        );
     }
 
     #[test]
