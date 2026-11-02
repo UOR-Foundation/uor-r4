@@ -20,7 +20,7 @@ Order: [ORDER.md](ORDER.md). References #2859.
   D80/D81 exemption recognizes ARM general-register syntax. On release binary
   `b1be73742c75d429ef4690334393a36fc95da1bc4b4d4de21a3521f06986c487`
   it flags three symbols containing four scalar `mul` instructions; the
-  evidence debug binary yields ten flagged symbols containing 23 such
+  evidence debug binary yields ten flagged symbols containing 54 such
   instructions. Both runs report two missing mandatory symbols, and the non-TAP
   call-graph path cannot run because `otool` is unavailable. Its self-test
   passes, but no full audit pass is claimed.
@@ -82,7 +82,7 @@ Exact transcripts and ids are in
 - Full x86 stack disassembly audit: not admissible. Release binary
   `b1be73742c75d429ef4690334393a36fc95da1bc4b4d4de21a3521f06986c487`
   reports three flagged symbols with four scalar `mul` instructions; the debug
-  evidence binary reports ten symbols containing 23 instructions. Both also
+  evidence binary reports ten symbols containing 54 instructions. Both also
   report two missing mandatory symbols, and the non-TAP call-graph path cannot
   run because `otool` is unavailable.
 - Fresh reviewer: `TEST FITNESS: FIT`, `PRE-RUN: PASS` at

@@ -49,7 +49,7 @@ test automatic extraction.
   `b1be73742c75d429ef4690334393a36fc95da1bc4b4d4de21a3521f06986c487`,
   it reports three flagged symbols containing four existing scalar `mul`
   instructions; the evidence debug binary reports ten flagged symbols
-  containing 23 such instructions. Both also report two missing mandatory
+  containing 54 such instructions. Both also report two missing mandatory
   symbols, and the non-TAP call-graph path cannot run because `otool` is
   unavailable. The audit self-test passes. No audit pass or portable serving
   qualification is claimed here.
@@ -253,5 +253,8 @@ Reviewed at exact head
 `codex` reviewer using `deepseek-flash` in session
 `01a19e0b-7e34-78d0-8341-940e919a9b8b`. The reviewer confirmed that the REPL
 uses the tested command-state function, set/show/clear/one-turn/invalid
-transitions are covered, the corrected audit accounting matches both binaries,
+transitions are covered, the corrected release-binary audit accounting matches,
 all pins match, and the rerun root was absent. It ran no model inference.
+A final evidence check corrected the debug-binary count to ten flagged symbols
+containing 54 scalar multiplies; this does not change FIT because the sheet
+never claims that audit passes.

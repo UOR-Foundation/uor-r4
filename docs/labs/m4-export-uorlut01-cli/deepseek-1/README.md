@@ -84,7 +84,7 @@ the release binary
 `b1be73742c75d429ef4690334393a36fc95da1bc4b4d4de21a3521f06986c487`
 reports three flagged symbols containing four existing scalar `mul`
 instructions; the debug binary used for the product run reports ten flagged
-symbols containing 23 such instructions. Both also report two missing mandatory
+symbols containing 54 such instructions. Both also report two missing mandatory
 symbols, and the non-TAP call-graph path cannot run because `otool` is
 unavailable. The audit self-test passes, but no full native or WebAssembly audit
 claim is made for this x86 run.
