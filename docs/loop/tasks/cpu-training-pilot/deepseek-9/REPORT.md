@@ -53,13 +53,17 @@ Throughput:
 - seed 2 updates: 68.64-68.73 visits/s; 14.550-14.568 ms per update;
 - active-run wall time: 75.761-78.488 s; baseline wall: 61.208-61.526 s;
 - peak RSS: 50,816-52,556 KiB.
+- every arm ended at local trainer epoch `0` (1,024 attempts did not exhaust
+  one 7,080-target permutation).
 
 Machine: Ryzen 9 9950X, 16 cores / 32 threads, Rust 1.97.1, Linux
-`7.0.0-42-generic`. External cost: `$0`.
+`7.0.0-42-generic`. External cost: `$0`. Source `15e52c068`; release driver
+SHA-256 `6394604e49f6ca88c315dc85e3934cc6f967e27d0e1ab106f609b800e1d85d3c`.
 
 Final artifact and checkpoint hashes, report hashes and all per-arm readings
 are in [rank-step-comparison.json](evidence/rank-step-comparison.json) and its
-`SHA256SUMS`.
+`SHA256SUMS`. The epoch-instrumented rerun reproduced every prior artifact,
+checkpoint and panel reading byte-for-byte.
 
 ## Checks run at the head
 
@@ -71,8 +75,10 @@ are in [rank-step-comparison.json](evidence/rank-step-comparison.json) and its
   benchmarks ignored.
 - `cargo clippy -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings`:
   passed.
-- Changed-file formatting, report/pr checks and exact-head review: recorded in
-  the PR review record.
+- The inserted source lines have no rustfmt diff. File-wide `rustfmt --check`
+  still reports pre-existing import-order differences in this driver.
+- Report/pr checks, evidence checksums and exact-head review: recorded in the
+  PR review record.
 
 ## Skills used
 
