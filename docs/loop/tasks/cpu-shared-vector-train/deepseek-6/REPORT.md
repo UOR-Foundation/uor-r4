@@ -7,6 +7,7 @@ Lab: deepseek. Item: [cpu-shared-vector-train](../../../../roadmap/items/cpu-sha
 - **The merged corpus driver saved a trainer checkpoint but not a model artifact.** That checkpoint contains the artifact bytes, but `uor-chat --stack` and serving-side evaluators require a standalone `UORLUT01` file.
 - **Writing the trainer bytes alone would not prove the handoff.** The implementation now reads the file back, compares the complete byte vector, and reparses it with `IntegerStackModel` before a successful report.
 - **The final checkpoint was only written, not independently reloaded.** The driver now resumes it and requires the resumed artifact to equal the current trainer artifact.
+- **The driver printed its JSON report before checking exact CPU/serving parity.** A mismatch could therefore print a success-shaped report and then exit nonzero. The parity refusal now runs before report construction.
 
 ## What changed
 
@@ -16,6 +17,7 @@ Lab: deepseek. Item: [cpu-shared-vector-train](../../../../roadmap/items/cpu-sha
 - A zero-step run must reproduce the source artifact byte-for-byte.
 - The JSON report records the final artifact path, SHA-256, successful reload and zero-step source identity.
 - Added a temporary-directory control that writes, reloads and parses a synthetic `UORLUT01` artifact.
+- Added a corrupt-byte control that refuses before creating either the final artifact or its partial file.
 
 ## Measurements
 

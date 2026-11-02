@@ -177,6 +177,9 @@ fn run() -> Result<(), String> {
     let final_artifact_path = config.checkpoint_dir.join("final.uorlut");
     write_verified_artifact(&final_artifact_path, &final_artifact)?;
     let final_artifact_sha256 = uor_r4_discrete::corpus::sha256(&final_artifact);
+    if !baseline.export.is_exact() || !final_reading.export.is_exact() {
+        return Err("CPU/serving query, token or kept-cell export mismatch".to_owned());
+    }
     let step_seconds = step_elapsed.as_secs_f64();
     let report = serde_json::json!({
         "schema": "uor-r4.cpu-masked-corpus-run/1",
@@ -260,13 +263,12 @@ fn run() -> Result<(), String> {
         "{}",
         serde_json::to_string_pretty(&report).map_err(|error| error.to_string())?
     );
-    if !baseline.export.is_exact() || !final_reading.export.is_exact() {
-        return Err("CPU/serving query, token or kept-cell export mismatch".to_owned());
-    }
     Ok(())
 }
 
 fn write_verified_artifact(path: &Path, artifact: &[u8]) -> Result<(), String> {
+    IntegerStackModel::parse(artifact)
+        .map_err(|error| format!("final artifact does not parse: {error}"))?;
     let partial = path.with_extension("partial");
     let mut file = std::fs::File::create(&partial)
         .map_err(|error| format!("final artifact {}: {error}", partial.display()))?;
@@ -279,10 +281,10 @@ fn write_verified_artifact(path: &Path, artifact: &[u8]) -> Result<(), String> {
     let reloaded = std::fs::read(path)
         .map_err(|error| format!("final artifact reload {}: {error}", path.display()))?;
     if reloaded != artifact {
+        std::fs::remove_file(path)
+            .map_err(|error| format!("failed final artifact {}: {error}", path.display()))?;
         return Err("final artifact reload differs from the trainer artifact".to_owned());
     }
-    IntegerStackModel::parse(&reloaded)
-        .map_err(|error| format!("final artifact does not parse: {error}"))?;
     Ok(())
 }
 
@@ -386,6 +388,24 @@ mod tests {
         write_verified_artifact(&path, &artifact).unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), artifact);
         IntegerStackModel::parse(&artifact).unwrap();
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn final_artifact_write_refuses_non_uorlut_bytes() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "uor-r4-cpu-corpus-invalid-{}-{nonce}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("final.uorlut");
+        assert!(write_verified_artifact(&path, b"not a UORLUT01 artifact").is_err());
+        assert!(!path.exists());
+        assert!(!path.with_extension("partial").exists());
         std::fs::remove_dir_all(directory).unwrap();
     }
 }
