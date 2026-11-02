@@ -130,21 +130,33 @@ Run the six fixed entries in this order:
 6. `conv-unk-01`: `What did I eat for breakfast yesterday?`
 
 For each memory entry, start one REPL process and send every `user_turns`
-entry in order, followed by `/quit`. Capture stdout and stderr separately.
+entry in order, followed by `/quit`. Before every user turn and after every
+assistant turn, send `/tokens`; the post-turn list makes the generated reply
+ids auditable without changing serving code. Capture stdout and stderr
+separately.
 The exact seed 1 commands are:
 
 ```sh
 printf '%s\n' \
+  '/tokens' \
   'The new puppy at our house is named Pickle.' \
-  'What did we name the new puppy?' '/quit' |
+  '/tokens' \
+  'What did we name the new puppy?' \
+  '/tokens' \
+  '/quit' |
   "$BIN" --stack "$ARTIFACT" --tokenizer "$TOKENIZER" --protocol 2 \
     --threads 16 --temperature 0 --max-tokens 16 \
     >mem-01.txt 2>mem-01.err
 
 printf '%s\n' \
+  '/tokens' \
   'Grandpa grows tomatoes in a box by the window.' \
+  '/tokens' \
   'He waters them every day.' \
-  'What does grandpa grow?' '/quit' |
+  '/tokens' \
+  'What does grandpa grow?' \
+  '/tokens' \
+  '/quit' |
   "$BIN" --stack "$ARTIFACT" --tokenizer "$TOKENIZER" --protocol 2 \
     --threads 16 --temperature 0 --max-tokens 16 \
     >mem-02.txt 2>mem-02.err
@@ -176,6 +188,14 @@ For every reply record or REPL turn, record:
   case-insensitively;
 - for `conv-mem-02`, whether the third reply contains `tomato` or `tomatoes`
   case-insensitively.
+
+For a REPL turn, read the `[served] N id(s) | ...` line and take the final `N`
+integers from the immediately following `/tokens` history list as the exact
+reply ids. Check that the post-turn history is longer than the pre-turn history,
+that `N` is between 1 and 16, and that the recorded reply text is the decode of
+those ids. The initial and pre-turn `/tokens` snapshots are the controls for
+this extraction. The seed-1 repeat comparison uses the extracted id lists, not
+the full history lists.
 
 Report every transcript, including failures. The seed-1 repeat must match the
 first pass in reply text, reply ids and stop reason for all eleven replies.

@@ -39,6 +39,8 @@ No model, serving-format, tokenizer or training code changes.
   tokens and 16 worker threads.
 - Run one-turn prompts in one-shot `--say` mode. Run the memory category as two
   turns in one REPL process.
+- Capture `/tokens` before and after every REPL turn, and define the extraction
+  of each exact reply-id suffix from the post-turn history before inference.
 - Repeat one seed to confirm deterministic transcripts.
 - Record exact response text and ids, stop reason, latency, ids/s and history
   depth.
