@@ -28,7 +28,7 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
     const [providerDraft, setProviderDraft] = useState<ProviderDraft>(emptyDraft);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [providerOpen, setProviderOpen] = useState(false);
-    const [removing, setRemoving] = useState<ApiProvider | null>(null);
+    const [removing, setRemoving] = useState<{ id: string; label: string } | null>(null);
     const [, setRevision] = useState(0);
     const refresh = () => setRevision((value) => value + 1);
     const report = (error: unknown) => onError(error instanceof Error ? error.message : String(error));
@@ -55,6 +55,9 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
                 };
                 if (providerDraft.apiKey) patch.apiKey = providerDraft.apiKey;
                 sources.updateApi(editingId, patch);
+                if (state.selectedSource?.kind === 'api' && state.selectedSource.id === editingId) {
+                    adapter.selectApi(editingId, providerDraft.baseUrl);
+                }
             } else {
                 sources.addApi(providerDraft);
             }
@@ -134,9 +137,9 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
                             <strong>{provider.label}</strong>
                             <span>{provider.baseUrl} · {provider.model}</span>
                             <button type="button" onClick={() => adapter.selectApi(provider.id, provider.baseUrl)}>{`Use ${provider.label}`}</button>
-                            <button type="button" onClick={() => run(adapter.testApi(provider.id))}>{`Test ${provider.label}`}</button>
+                            <button type="button" onClick={() => { adapter.selectApi(provider.id, provider.baseUrl); run(adapter.testApi(provider.id)); }}>{`Test ${provider.label}`}</button>
                             <button type="button" onClick={() => editProvider(provider)}>{`Edit ${provider.label}`}</button>
-                            <button type="button" onClick={() => setRemoving(provider)}>{`Remove ${provider.label}`}</button>
+                            <button type="button" onClick={() => setRemoving({ id: provider.id, label: provider.label })}>{`Remove ${provider.label}`}</button>
                         </li>
                     ))}
                 </ul>
@@ -163,7 +166,15 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
                 <Modal title="Remove API provider" onClose={() => setRemoving(null)}>
                     <p>Remove {removing.label}? Existing conversations are preserved.</p>
                     <button type="button" autofocus onClick={() => setRemoving(null)}>Keep provider</button>
-                    <button type="button" onClick={() => { sources.removeApi(removing.id); setRemoving(null); refresh(); }}>Confirm removal</button>
+                    <button type="button" onClick={() => {
+                        const id = removing.id;
+                        sources.removeApi(id);
+                        if (state.selectedSource?.kind === 'api' && state.selectedSource.id === id) {
+                            store.dispatch({ type: 'artifact/selected', sourceId: sources.active().id || 'bundled-demo' });
+                        }
+                        setRemoving(null);
+                        refresh();
+                    }}>Confirm removal</button>
                 </Modal>
             )}
         </section>

@@ -97,6 +97,24 @@ describe('WorkspaceEditor', () => {
         expect(button('Save').disabled).toBe(false);
     });
 
+    it('does not apply an old save result to a newly selected file', async () => {
+        const { store, fileApi, onError } = mount();
+        fileApi.summary.mode = 'directory';
+        fileApi.summary.rootName = 'project';
+        fileApi.summary.activePath = 'a.md';
+        fileApi.setActive({ path: 'a.md', name: 'a.md', content: 'alpha', mode: 'directory' });
+        act(() => { emit(fileApi); });
+        let finish!: (value: boolean) => void;
+        fileApi.api.saveActive = vi.fn(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+        act(() => { button('Save').click(); });
+        fileApi.summary.activePath = 'b.md';
+        fileApi.setActive({ path: 'b.md', name: 'b.md', content: 'bravo', mode: 'directory' });
+        act(() => { emit(fileApi); });
+        await act(async () => { finish(false); await Promise.resolve(); });
+        expect(store.getState().file).toMatchObject({ path: 'b.md', phase: 'clean', error: null });
+        expect(onError).not.toHaveBeenCalled();
+    });
+
     it('uses save-as and closes tabs through the existing API', () => {
         const { store, fileApi } = mount();
         fileApi.summary.mode = 'directory';

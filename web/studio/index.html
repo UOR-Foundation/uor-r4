@@ -653,10 +653,10 @@
         function deleteConversation(id) {
             if (app.generating) {
                 toast('Stop the current reply before deleting a conversation.', 'warn');
-                return;
+                return false;
             }
             var conversation = app.conversations.find(function (item) { return item.id === id; });
-            if (!conversation) return;
+            if (!conversation) return false;
             if (app.worker && app.mode === 'wasm') {
                 app.worker.postMessage({ action: 'close_session', payload: { conversationId: id } });
             }
@@ -668,6 +668,7 @@
             renderConversationList();
             renderMessages();
             restoreActiveConversation();
+            return true;
         }
 
         function selectConversation(id) {
@@ -969,24 +970,27 @@
             document.documentElement.dataset.predictorMs = String(Number.isFinite(durationMs) ? durationMs : 0);
             document.documentElement.dataset.predictorPromptLength = String(promptTokens || 0);
             document.documentElement.dataset.predictorDecoded = JSON.stringify(decoded);
+            var predictionGenerationId = app.activeGenerationId;
+            app.activeGenerationId = null;
+            document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: 'complete', generationId: predictionGenerationId } }));
         }
 
         function runPrediction() {
             var status = $('#predictorStatus');
             if (!app.worker || !app.caps || !isDiscreteCapabilities(app.caps)) {
                 toast('Load the M1 discrete model first under Model sources.', 'warn');
-                return;
+                return false;
             }
             if (!app.tokenizerArtifact) {
                 toast('This model has no stack-bound tokenizer loaded; prediction needs it to encode the prompt.', 'error');
                 if (status) status.textContent = 'No stack-bound tokenizer is loaded for this artifact.';
-                return;
+                return false;
             }
             var input = $('#predictorInput');
             var prompt = input ? input.value : '';
             if (!prompt || !prompt.trim()) {
                 toast('Type a prompt to predict from.', 'warn');
-                return;
+                return false;
             }
             var vocab = discreteVocabSize();
             var tokenIds;
@@ -995,18 +999,20 @@
             } catch (error) {
                 toast('Tokenizer could not encode the prompt: ' + error, 'error');
                 if (status) status.textContent = 'Tokenizer error: ' + error;
-                return;
+                return false;
             }
             if (!tokenIds || tokenIds.length === 0) {
                 toast('The tokenizer returned no token ids for that prompt.', 'error');
-                return;
+                return false;
             }
             if (status) status.textContent = 'Predicting from ' + tokenIds.length + ' prompt tokens…';
+            nextGenerationId();
             app.worker.postMessage({
                 action: 'predict_discrete',
                 id: 'predict-' + Date.now().toString(36),
                 payload: { tokenIds: tokenIds, topK: 8 },
             });
+            return true;
         }
 
         /* ------------------------------------------------------------ status & toasts */
@@ -1249,7 +1255,14 @@
             return null;
         }
 
+        function nextGenerationId() {
+            app.generationSerial = (app.generationSerial || 0) + 1;
+            app.activeGenerationId = app.generationSerial;
+            return app.activeGenerationId;
+        }
+
         function beginGeneration(conversation) {
+            nextGenerationId();
             app.generating = true;
             app.assistantBuffer = '';
             updateComposerState();
@@ -1303,7 +1316,9 @@
             requestCheckpoint(conversation);
             renderConversationList();
             scrollChat(false);
-            document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: message.stoppedBy === 'cancelled' ? 'stopped' : 'complete' } }));
+            var localGenerationId = app.activeGenerationId;
+            app.activeGenerationId = null;
+            document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: message.stoppedBy === 'cancelled' ? 'stopped' : 'complete', generationId: localGenerationId } }));
         }
 
         function finishGenerationWithError(errorText) {
@@ -1333,7 +1348,9 @@
             setMetrics('Error');
             toast(String(errorText), 'error');
             scrollChat(true);
-            document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: 'error' } }));
+            var failedGenerationId = app.activeGenerationId;
+            app.activeGenerationId = null;
+            document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: 'error', generationId: failedGenerationId, error: String(errorText) } }));
         }
 
         function generationTokenLimit() {
@@ -1403,7 +1420,9 @@
                         setMetrics('API response · ' + text.length + ' chars');
                         renderConversationList();
                         scrollChat(false);
-                        document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: result && result.stopped ? 'stopped' : 'complete' } }));
+                        var apiGenerationId = app.activeGenerationId;
+                        app.activeGenerationId = null;
+                        document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: result && result.stopped ? 'stopped' : 'complete', generationId: apiGenerationId } }));
                     },
                     onError: function (error) {
                         finishApiWithError(error);
@@ -1922,9 +1941,9 @@
             },
             deleteSession: function (id) {
                 var wasActive = app.activeConversationId === id;
-                deleteConversation(id);
-                if (wasActive) startNewChat();
-                return true;
+                var deleted = deleteConversation(id);
+                if (wasActive && deleted) startNewChat();
+                return deleted;
             },
             getConversationMessages: function (id) {
                 var conversation = id
@@ -1969,7 +1988,13 @@
                 if (!input) return false;
                 input.value = String(text || '');
                 sendFromComposer();
-                return app.generating;
+                return app.generating ? app.activeGenerationId : false;
+            },
+            predict: function (text) {
+                var input = $('#predictorInput');
+                if (!input) return false;
+                input.value = String(text || '');
+                return runPrediction() ? app.activeGenerationId : false;
             },
             stopGeneration: stopGeneration
         };

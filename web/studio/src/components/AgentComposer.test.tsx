@@ -15,7 +15,7 @@ function sessions(): SessionApi {
         getMode: vi.fn((): 'wasm' | 'api' => 'api'), listSessions: vi.fn(() => []), activeSessionId: vi.fn(() => null),
         selectSession: vi.fn(() => true), newSession: vi.fn(() => true), renameSession: vi.fn(() => true),
         duplicateSession: vi.fn(() => null), exportSession: vi.fn(() => null), deleteSession: vi.fn(() => true),
-        getConversationMessages: vi.fn(() => []), setComposerText: vi.fn(() => true), sendPrompt: vi.fn(() => true), stopGeneration: vi.fn(),
+        getConversationMessages: vi.fn(() => []), setComposerText: vi.fn(() => true), sendPrompt: vi.fn(() => 1), predict: vi.fn(() => 1), stopGeneration: vi.fn(),
     };
 }
 
@@ -89,6 +89,14 @@ describe('AgentComposer', () => {
         expect(generation.stop).toHaveBeenCalledOnce();
         act(() => { store.dispatch({ type: 'generation/finished', outcome: 'error' }); });
         expect(host.textContent).toContain('Session: error');
+    });
+
+    it('disables send when the selected API endpoint is missing', () => {
+        const { store } = mount();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: undefined as unknown as string });
+        prompt('Hello');
+        expect(button('Send').disabled).toBe(true);
+        expect(store.canRun()).toBe(false);
     });
 
     it('labels discrete local execution as next-token prediction', () => {

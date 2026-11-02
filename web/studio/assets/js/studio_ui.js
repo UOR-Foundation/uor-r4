@@ -723,8 +723,10 @@
         var deleteFn = hook('deleteSession');
         if (!list || !deleteFn) { toast('Session store not ready.', 'error'); return; }
         var sessions = list();
-        sessions.forEach(function (session) { deleteFn(session.id); });
-        toast('Cleared ' + sessions.length + ' session(s).', 'success');
+        var cleared = 0;
+        sessions.forEach(function (session) { if (deleteFn(session.id)) cleared += 1; });
+        if (cleared === sessions.length) toast('Cleared ' + cleared + ' session(s).', 'success');
+        else toast('Cleared ' + cleared + ' of ' + sessions.length + ' session(s); stop the current reply before deleting the rest.', 'warn');
         window.setTimeout(renderSessionEnhancements, 60);
     }
     function clearEditor() { var files = window.__studioFiles; if (files && files.closeAll) files.closeAll(); else { var text = document.getElementById('editorText'); if (text) text.value = ''; } toast('Editor tabs cleared.', 'success'); }

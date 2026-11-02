@@ -61,6 +61,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
             <h1>Agent</h1>
             <p>{prediction ? 'Local next-token prediction' : selected?.kind === 'artifact' ? 'Local generation' : 'API chat'}</p>
             <p>Session: {state.session.phase}</p>
+            {state.session.error && <p role="alert">{state.session.error}</p>}
             {activeGeneration && <p>Generating with {activeGeneration.source.id} ({activeGeneration.privacy})</p>}
 
             <div aria-label="Conversation messages">

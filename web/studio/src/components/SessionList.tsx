@@ -28,14 +28,14 @@ export function SessionList({ store, sessions, download, onError, onChange }: Se
     return (
         <section aria-label="Sessions">
             <h2>Sessions</h2>
-            <button type="button" onClick={() => { sessions.newSession(); activate(); }}>New session</button>
+            <button type="button" onClick={() => { if (sessions.newSession()) activate(); else onError('Could not create a session.'); }}>New session</button>
             {items.length === 0 && <p>No sessions yet</p>}
             <ul>
                 {items.map((session) => (
                     <li>
                         <strong>{session.title}</strong>
                         <span>{session.messageCount} messages · {session.preview}</span>
-                        <button type="button" onClick={() => { sessions.selectSession(session.id); activate(); }}>{`Select ${session.title}`}</button>
+                        <button type="button" onClick={() => { if (sessions.selectSession(session.id)) activate(); else onError('Could not select that session.'); }}>{`Select ${session.title}`}</button>
                         <button type="button" onClick={() => rename(session)}>{`Rename ${session.title}`}</button>
                         <button type="button" onClick={() => { sessions.duplicateSession(session.id); refresh(); }}>{`Duplicate ${session.title}`}</button>
                         <button type="button" onClick={() => {
@@ -64,7 +64,14 @@ export function SessionList({ store, sessions, download, onError, onChange }: Se
                 <Modal title="Delete session" onClose={() => setDeleting(null)}>
                     <p>Delete {deleting.title}? This affects only the selected local session.</p>
                     <button type="button" autofocus onClick={() => setDeleting(null)}>Keep session</button>
-                    <button type="button" onClick={() => { sessions.deleteSession(deleting.id); setDeleting(null); activate(); }}>Confirm delete</button>
+                    <button type="button" onClick={() => {
+                        if (sessions.deleteSession(deleting.id)) {
+                            setDeleting(null);
+                            activate();
+                        } else {
+                            onError('Could not delete that session. Stop the current reply first.');
+                        }
+                    }}>Confirm delete</button>
                 </Modal>
             )}
         </section>

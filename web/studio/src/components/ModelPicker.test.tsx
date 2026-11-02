@@ -114,11 +114,13 @@ describe('ModelPicker', () => {
     });
 
     it('manages providers through native dialogs without rendering an existing secret', () => {
-        const { modelAdapter, modelSources } = mount();
+        const { store, modelAdapter, modelSources } = mount();
+        modelAdapter.selectApi = vi.fn((id: string, endpoint: string) => store.dispatch({ type: 'api/selected', sourceId: id, endpoint }));
         expect(host.innerHTML).not.toContain('secret-sentinel');
         button('Use API A').click();
         expect(modelAdapter.selectApi).toHaveBeenCalledWith('api-a', provider.baseUrl);
         button('Test API A').click();
+        expect(modelAdapter.selectApi).toHaveBeenCalledTimes(2);
         expect(modelAdapter.testApi).toHaveBeenCalledWith('api-a');
         act(() => { button('Edit API A').click(); });
         expect(host.querySelector('dialog')).not.toBeNull();
@@ -130,8 +132,11 @@ describe('ModelPicker', () => {
         act(() => { host.querySelector('form[data-action="save-provider"]')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
         expect(modelSources.updateApi).toHaveBeenCalledWith('api-a', expect.objectContaining({ baseUrl: 'https://new.example.com/v1' }));
         expect(vi.mocked(modelSources.updateApi).mock.calls[0][1]).not.toHaveProperty('apiKey');
+        expect(modelAdapter.selectApi).toHaveBeenCalledWith('api-a', 'https://new.example.com/v1');
         act(() => { button('Remove API A').click(); });
         act(() => { button('Confirm removal').click(); });
         expect(modelSources.removeApi).toHaveBeenCalledWith('api-a');
+        expect(store.getState().selectedSource?.kind).toBe('artifact');
+        expect(store.canRun()).toBe(false);
     });
 });

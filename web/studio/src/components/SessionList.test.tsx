@@ -22,7 +22,7 @@ function sessions(items: SessionSummary[] = [summary]): SessionApi {
         selectSession: vi.fn(() => true), newSession: vi.fn(() => true), renameSession: vi.fn(() => true),
         duplicateSession: vi.fn(() => 'session-copy'), exportSession: vi.fn(() => '{"schema":"uor-r4.studio-session/1"}'),
         deleteSession: vi.fn(() => true), getConversationMessages: vi.fn(() => []), setComposerText: vi.fn(() => true),
-        sendPrompt: vi.fn(() => true), stopGeneration: vi.fn(),
+        sendPrompt: vi.fn(() => 1), predict: vi.fn(() => 1), stopGeneration: vi.fn(),
     };
 }
 

@@ -129,7 +129,7 @@ describe('file lifecycle', () => {
         const store = new LifecycleStore();
         expect(store.getState().file.phase).toBe('no-folder');
         expect(store.canSave()).toBe(false);
-        store.dispatch({ type: 'file/saveStarted' });
+        store.dispatch({ type: 'file/saveStarted', path: 'notes.md' });
         expect(store.getState().file.phase).toBe('no-folder');
     });
 
@@ -139,10 +139,10 @@ describe('file lifecycle', () => {
         expect(store.getState().file.phase).toBe('clean');
         store.dispatch({ type: 'file/dirty' });
         expect(store.getState().file.phase).toBe('dirty');
-        store.dispatch({ type: 'file/saveStarted' });
+        store.dispatch({ type: 'file/saveStarted', path: 'notes.md' });
         expect(store.getState().file.phase).toBe('saving');
         expect(store.canSave()).toBe(false);
-        store.dispatch({ type: 'file/saveFinished' });
+        store.dispatch({ type: 'file/saveFinished', path: 'notes.md' });
         expect(store.getState().file.phase).toBe('saved');
         expect(store.canSave()).toBe(true);
     });
@@ -151,11 +151,20 @@ describe('file lifecycle', () => {
         const store = new LifecycleStore();
         store.dispatch({ type: 'file/opened', path: 'notes.md' });
         store.dispatch({ type: 'file/dirty' });
-        store.dispatch({ type: 'file/saveStarted' });
-        store.dispatch({ type: 'file/saveFailed', error: 'disk full' });
+        store.dispatch({ type: 'file/saveStarted', path: 'notes.md' });
+        store.dispatch({ type: 'file/saveFailed', path: 'notes.md', error: 'disk full' });
         expect(store.getState().file.phase).toBe('error');
         expect(store.getState().file.error).toBe('disk full');
         expect(store.canSave()).toBe(true);
+    });
+
+    it('does not apply an old save result to a newly selected file', () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'file/opened', path: 'a.md' });
+        store.dispatch({ type: 'file/saveStarted', path: 'a.md' });
+        store.dispatch({ type: 'file/opened', path: 'b.md' });
+        store.dispatch({ type: 'file/saveFailed', path: 'a.md', error: 'old failure' });
+        expect(store.getState().file).toMatchObject({ path: 'b.md', phase: 'clean', error: null });
     });
 });
 

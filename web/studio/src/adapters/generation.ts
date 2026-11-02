@@ -11,9 +11,9 @@ export interface GenerationAdapter {
 
 export function createGenerationAdapter(store: LifecycleStore, sessions: SessionApi): GenerationAdapter {
     const finished = (event: Event) => {
-        const detail = (event as CustomEvent<{ outcome?: 'complete' | 'stopped' | 'error' }>).detail;
+        const detail = (event as CustomEvent<{ outcome?: 'complete' | 'stopped' | 'error'; generationId?: number; error?: string }>).detail;
         if (detail?.outcome === 'complete' || detail?.outcome === 'stopped' || detail?.outcome === 'error') {
-            store.dispatch({ type: 'generation/finished', outcome: detail.outcome });
+            store.dispatch({ type: 'generation/finished', outcome: detail.outcome, generationId: detail.generationId, error: detail.error });
         }
     };
     document.addEventListener(GENERATION_FINISHED_EVENT, finished);
@@ -23,15 +23,22 @@ export function createGenerationAdapter(store: LifecycleStore, sessions: Session
             const selected = store.getState().selectedSource;
             if (!selected || !prompt.trim() || !store.canRun()) return false;
             if (store.getState().session.phase === 'new') store.dispatch({ type: 'session/activated' });
-            store.dispatch({ type: 'generation/started', source: selected });
-            if (store.getState().session.phase !== 'generating') return false;
-            try {
-                const accepted = sessions.sendPrompt(prompt);
-                if (!accepted) store.dispatch({ type: 'generation/finished', outcome: 'error' });
-                return accepted;
-            } catch {
-                store.dispatch({ type: 'generation/finished', outcome: 'error' });
+            const prediction = selected.kind === 'artifact'
+                && store.getState().residentArtifact?.canGenerate === false
+                && store.getState().residentArtifact?.canPredict === true;
+            const fail = () => {
+                store.dispatch({ type: 'generation/started', source: selected });
+                const active = store.getState().session.activeGeneration;
+                if (active) store.dispatch({ type: 'generation/finished', outcome: 'error', generationId: active.generationId, error: 'Generation could not be started.' });
                 return false;
+            };
+            try {
+                const generationId = prediction ? sessions.predict(prompt) : sessions.sendPrompt(prompt);
+                if (generationId === false) return fail();
+                store.dispatch({ type: 'generation/started', source: selected, generationId });
+                return store.getState().session.phase === 'generating';
+            } catch {
+                return fail();
             }
         },
         stop() {

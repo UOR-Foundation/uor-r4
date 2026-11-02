@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
+import { saveActiveFile } from '../adapters/fileSave.js';
 import type { WorkspaceApi, WorkspaceSummary } from '../adapters/workflow.js';
 import type { LifecycleStore } from '../state/lifecycle.js';
 import { useLifecycle } from '../state/useLifecycle.js';
@@ -67,21 +68,7 @@ export function WorkspaceEditor({ store, files, onError }: WorkspaceEditorProps)
     }
 
     async function save() {
-        if (!store.canSave()) return;
-        store.dispatch({ type: 'file/saveStarted' });
-        refresh();
-        try {
-            const saved = await files.saveActive();
-            if (saved) {
-                store.dispatch({ type: 'file/saveFinished' });
-            } else {
-                store.dispatch({ type: 'file/saveFailed', error: 'Save did not complete.' });
-                onError('Save did not complete.');
-            }
-        } catch (error) {
-            store.dispatch({ type: 'file/saveFailed', error: error instanceof Error ? error.message : String(error) });
-            report(error);
-        }
+        await saveActiveFile(store, files, onError);
         sync(files.treeSummary());
         refresh();
     }

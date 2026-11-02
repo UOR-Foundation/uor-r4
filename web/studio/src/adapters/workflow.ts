@@ -64,7 +64,8 @@ export interface SessionApi {
     deleteSession(id: string): boolean;
     getConversationMessages(id?: string): ChatMessage[];
     setComposerText(text: string): boolean;
-    sendPrompt(prompt: string): boolean;
+    sendPrompt(prompt: string): number | false;
+    predict(prompt: string): number | false;
     stopGeneration(): void;
 }
 

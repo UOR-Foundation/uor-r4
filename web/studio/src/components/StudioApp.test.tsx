@@ -61,4 +61,53 @@ describe('StudioApp', () => {
         expect(host.querySelector('[role="status"]')?.textContent).toContain('Invalid API endpoint');
         expect(host.querySelector('[role="status"]')?.textContent).not.toContain('localWASM');
     });
+
+    it('uses lifecycle transitions for palette saves', async () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'file/opened', path: 'a.md' });
+        store.dispatch({ type: 'file/dirty' });
+        const files = makeFiles();
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={files} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { button('Command palette').click(); });
+        const input = host.querySelector<HTMLInputElement>('input[aria-label="Search commands"]')!;
+        act(() => { input.value = 'Save file'; input.dispatchEvent(new Event('input', { bubbles: true })); });
+        await act(async () => {
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+            await Promise.resolve();
+        });
+        expect(store.getState().file.phase).toBe('saved');
+    });
+
+    it('uses current selection privacy after a previous generation completes', () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-a' } });
+        store.dispatch({ type: 'generation/finished', outcome: 'complete' });
+        store.dispatch({ type: 'artifact/selected', sourceId: 'model-a' });
+        act(() => {
+            store.dispatch({ type: 'artifact/ready', operation: store.getState().operation!, artifact: { schema: 'uor-r4.lut-stack/1', canGenerate: true } });
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        expect(host.querySelector('[role="status"]')?.textContent).toContain('localWASM');
+        expect(host.querySelector('[role="status"]')?.textContent).not.toContain('remoteAPI');
+    });
+
+    it('refreshes the session list after confirmed clearing', () => {
+        const store = new LifecycleStore();
+        const sessions = makeSessions();
+        const ui = makeUi();
+        let items = [{ id: 'session-a', title: 'Session A', createdAt: 1, updatedAt: 2, messageCount: 1, preview: 'message' }];
+        sessions.listSessions = vi.fn(() => items);
+        ui.clearSessions = vi.fn(() => { items = []; });
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessions} ui={ui} download={vi.fn()} />, host);
+        });
+        expect(host.textContent).toContain('Session A');
+        act(() => { button('Settings').click(); });
+        act(() => { button('Clear sessions').click(); });
+        act(() => { button('Confirm clear sessions').click(); });
+        expect(host.textContent).toContain('No sessions yet');
+    });
 });

@@ -19,7 +19,7 @@ function sessions(): SessionApi {
         selectSession: vi.fn(() => true), newSession: vi.fn(() => true), renameSession: vi.fn(() => true),
         duplicateSession: vi.fn(() => null), exportSession: vi.fn(() => null), deleteSession: vi.fn(() => true),
         getConversationMessages: vi.fn(() => []), setComposerText: vi.fn(() => true),
-        sendPrompt: vi.fn(() => true), stopGeneration: vi.fn(),
+        sendPrompt: vi.fn(() => 1), predict: vi.fn(() => 1), stopGeneration: vi.fn(),
     };
 }
 

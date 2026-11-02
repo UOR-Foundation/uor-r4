@@ -46,10 +46,12 @@ export interface ApiState {
 export interface FileState {
     phase: FilePhase;
     path: string | null;
+    savePath: string | null;
     error: string | null;
 }
 
 export interface GenerationSnapshot {
+    generationId: number;
     source: SourceRef;
     privacy: Privacy;
 }
@@ -58,6 +60,7 @@ export interface SessionState {
     phase: SessionPhase;
     activeGeneration: GenerationSnapshot | null;
     lastGeneration: GenerationSnapshot | null;
+    error: string | null;
 }
 
 export interface LifecycleState {
@@ -90,11 +93,11 @@ export type LifecycleAction =
     | { type: 'file/closed' }
     | { type: 'session/activated' }
     | { type: 'file/dirty' }
-    | { type: 'file/saveStarted' }
-    | { type: 'file/saveFinished' }
-    | { type: 'file/saveFailed'; error: string }
-    | { type: 'generation/started'; source: SourceRef }
-    | { type: 'generation/finished'; outcome: 'complete' | 'stopped' | 'error' };
+    | { type: 'file/saveStarted'; path: string }
+    | { type: 'file/saveFinished'; path: string }
+    | { type: 'file/saveFailed'; path: string; error: string }
+    | { type: 'generation/started'; source: SourceRef; generationId?: number }
+    | { type: 'generation/finished'; outcome: 'complete' | 'stopped' | 'error'; generationId?: number; error?: string };
 
 function initialState(): LifecycleState {
     return {
@@ -104,14 +107,15 @@ function initialState(): LifecycleState {
         residentArtifact: null,
         api: { testStatus: 'untested' },
         progress: null,
-        file: { phase: 'no-folder', path: null, error: null },
-        session: { phase: 'new', activeGeneration: null, lastGeneration: null },
+        file: { phase: 'no-folder', path: null, savePath: null, error: null },
+        session: { phase: 'new', activeGeneration: null, lastGeneration: null, error: null },
     };
 }
 
 export class LifecycleStore {
     private state: LifecycleState = initialState();
     private nextOperationId = 0;
+    private nextGenerationId = 0;
     private listeners = new Set<() => void>();
 
     getState(): LifecycleState {
@@ -124,8 +128,16 @@ export class LifecycleStore {
     }
 
     canRun(): boolean {
-        if (this.state.session.phase === 'generating' || this.state.session.phase === 'error' || !this.state.selectedSource) return false;
-        if (this.state.selectedSource.kind === 'api') return true;
+        if (this.state.session.phase === 'generating' || !this.state.selectedSource) return false;
+        if (this.state.selectedSource.kind === 'api') {
+            try {
+                if (!this.state.selectedSource.endpoint) return false;
+                classifyEndpoint(this.state.selectedSource.endpoint);
+                return true;
+            } catch {
+                return false;
+            }
+        }
         return this.state.artifact.phase === 'ready';
     }
 
@@ -230,27 +242,27 @@ export class LifecycleStore {
             case 'folder/opened':
                 this.state = {
                     ...this.state,
-                    file: { phase: 'no-open-file', path: null, error: null },
+                    file: { phase: 'no-open-file', path: null, savePath: null, error: null },
                 };
                 return;
             case 'file/closed':
                 this.state = {
                     ...this.state,
-                    file: { phase: 'no-open-file', path: null, error: null },
+                    file: { phase: 'no-open-file', path: null, savePath: null, error: null },
                 };
                 return;
             case 'session/activated':
                 if (this.state.session.phase !== 'generating') {
                     this.state = {
                         ...this.state,
-                        session: { ...this.state.session, phase: 'active', activeGeneration: null },
+                        session: { ...this.state.session, phase: 'active', activeGeneration: null, error: null },
                     };
                 }
                 return;
             case 'file/opened':
                 this.state = {
                     ...this.state,
-                    file: { phase: 'clean', path: action.path, error: null },
+                    file: { phase: 'clean', path: action.path, savePath: null, error: null },
                 };
                 return;
             case 'file/dirty':
@@ -259,23 +271,23 @@ export class LifecycleStore {
                 }
                 return;
             case 'file/saveStarted':
-                if (this.state.file.path !== null && this.state.file.phase !== 'saving') {
-                    this.state = { ...this.state, file: { ...this.state.file, phase: 'saving', error: null } };
+                if (this.state.file.path === action.path && this.state.file.phase !== 'saving') {
+                    this.state = { ...this.state, file: { ...this.state.file, phase: 'saving', savePath: action.path, error: null } };
                 }
                 return;
             case 'file/saveFinished':
-                if (this.state.file.path !== null && this.state.file.phase === 'saving') {
-                    this.state = { ...this.state, file: { ...this.state.file, phase: 'saved', error: null } };
+                if (this.state.file.path === action.path && this.state.file.phase === 'saving' && this.state.file.savePath === action.path) {
+                    this.state = { ...this.state, file: { ...this.state.file, phase: 'saved', savePath: null, error: null } };
                 }
                 return;
             case 'file/saveFailed':
-                if (this.state.file.path !== null) {
-                    this.state = { ...this.state, file: { ...this.state.file, phase: 'error', error: action.error } };
+                if (this.state.file.path === action.path && this.state.file.phase === 'saving' && this.state.file.savePath === action.path) {
+                    this.state = { ...this.state, file: { ...this.state.file, phase: 'error', savePath: null, error: action.error } };
                 }
                 return;
             case 'generation/started': {
                 const selected = this.state.selectedSource;
-                if (!this.canRun() || !selected || selected.kind !== action.source.kind || selected.id !== action.source.id) return;
+                if (this.state.session.phase === 'generating' || !selected || selected.kind !== action.source.kind || selected.id !== action.source.id) return;
                 let privacy: Privacy;
                 try {
                     if (selected.kind === 'api' && !selected.endpoint) throw new TypeError('An API endpoint is required.');
@@ -283,23 +295,26 @@ export class LifecycleStore {
                 } catch {
                     this.state = {
                         ...this.state,
-                        session: { phase: 'error', activeGeneration: null, lastGeneration: null },
+                        session: { ...this.state.session, phase: 'error', activeGeneration: null, error: 'Invalid API endpoint.' },
                     };
                     return;
                 }
-                const generation = { source: { ...selected }, privacy };
+                if (!this.canRun()) return;
+                const generationId = action.generationId ?? this.nextGenerationId + 1;
+                this.nextGenerationId = Math.max(this.nextGenerationId, generationId);
+                const generation = { generationId, source: { ...selected }, privacy };
                 this.state = {
                     ...this.state,
-                    session: { phase: 'generating', activeGeneration: generation, lastGeneration: this.state.session.lastGeneration },
+                    session: { phase: 'generating', activeGeneration: generation, lastGeneration: this.state.session.lastGeneration, error: null },
                 };
                 return;
             }
             case 'generation/finished': {
                 const active = this.state.session.activeGeneration;
-                if (!active) return;
+                if (!active || (action.generationId !== undefined && active.generationId !== action.generationId)) return;
                 this.state = {
                     ...this.state,
-                    session: { phase: action.outcome, activeGeneration: null, lastGeneration: active },
+                    session: { phase: action.outcome, activeGeneration: null, lastGeneration: active, error: action.error ?? null },
                 };
                 return;
             }

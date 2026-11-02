@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { ModelSourceAdapter } from '../adapters/modelSourceAdapter.js';
 import type { ModelSourcesApi } from '../../assets/js/model_sources.js';
 import { createGenerationAdapter } from '../adapters/generation.js';
+import { saveActiveFile } from '../adapters/fileSave.js';
 import type { SessionApi, StudioUiApi, WorkspaceApi } from '../adapters/workflow.js';
 import { classifyEndpoint } from '../state/lifecycle.js';
 import type { LifecycleStore } from '../state/lifecycle.js';
@@ -50,13 +51,15 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     useEffect(() => () => generation.dispose(), [generation]);
 
     const selected = state.selectedSource;
-    const activeGeneration = state.session.activeGeneration || state.session.lastGeneration;
+    const activeGeneration = state.session.activeGeneration;
     let privacy: string = activeGeneration?.privacy || 'localWASM';
     if (!activeGeneration && selected?.kind === 'api') {
         if (!selected.endpoint) privacy = 'Invalid API endpoint';
         else {
             try { privacy = classifyEndpoint(selected.endpoint); } catch { privacy = 'Invalid API endpoint'; }
         }
+    } else if (!activeGeneration && !selected && state.session.lastGeneration) {
+        privacy = `Last generation: ${state.session.lastGeneration.privacy}`;
     }
     const status: ShellStatus = {
         source: selected ? `${selected.kind}: ${selected.id}` : 'No source selected',
@@ -71,9 +74,16 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         { id: 'workspace', group: 'Navigation', label: 'Go to Workspace', description: 'Files and editor', run: () => setActiveSection('workspace') },
         { id: 'models', group: 'Navigation', label: 'Go to Models', description: 'Artifacts and providers', run: () => setActiveSection('models') },
         { id: 'guide', group: 'Navigation', label: 'Go to Guide', description: 'Workflows and limits', run: () => setActiveSection('guide') },
-        { id: 'new-session', group: 'Sessions', label: 'New session', description: 'Start a clean thread', run: () => { sessions.newSession(); store.dispatch({ type: 'session/activated' }); setSessionRevision((value) => value + 1); } },
+        { id: 'new-session', group: 'Sessions', label: 'New session', description: 'Start a clean thread', run: () => {
+            if (sessions.newSession()) {
+                store.dispatch({ type: 'session/activated' });
+                setSessionRevision((value) => value + 1);
+            } else {
+                report('Could not create a session.');
+            }
+        } },
         { id: 'open-folder', group: 'Workspace', label: 'Open folder', description: 'Use the existing folder picker', run: () => { files.openFolder().catch((reason) => report(reason instanceof Error ? reason.message : String(reason))); } },
-        { id: 'save', group: 'Workspace', label: 'Save file', description: 'Save through the existing file API', shortcut: 'Ctrl+S', disabled: !store.canSave(), run: () => { files.saveActive().catch((reason) => report(reason instanceof Error ? reason.message : String(reason))); } },
+        { id: 'save', group: 'Workspace', label: 'Save file', description: 'Save through the existing file API', shortcut: 'Ctrl+S', disabled: !store.canSave(), run: () => { void saveActiveFile(store, files, report); } },
         { id: 'save-as', group: 'Workspace', label: 'Save as', description: 'Download a copy', disabled: !store.canSave(), run: () => { files.saveAsCopy(); } },
         { id: 'load-demo', group: 'Models', label: 'Load bundled demo', description: 'Load the synthetic local artifact', run: () => { adapter.loadBundled().catch((reason) => report(reason instanceof Error ? reason.message : String(reason))); } },
         { id: 'inspector', group: 'Interface', label: 'Toggle inspector', description: 'Show or hide details', run: () => setInspectorOpen((value) => !value) },
@@ -113,7 +123,10 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
             {activeSection === 'guide' && <Guide />}
             <Inspector store={store} ui={ui} open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
             {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
-            {settingsOpen && <Settings ui={ui} onClose={() => setSettingsOpen(false)} />}
+            {settingsOpen && <Settings ui={ui} onClose={() => setSettingsOpen(false)} onChange={() => {
+                setSessionRevision((value) => value + 1);
+                store.dispatch({ type: 'session/activated' });
+            }} />}
         </AppShell>
     );
 }

@@ -5,9 +5,10 @@ import { Modal } from './Modal.js';
 interface SettingsProps {
     ui: StudioUiApi;
     onClose(): void;
+    onChange?(): void;
 }
 
-export function Settings({ ui, onClose }: SettingsProps) {
+export function Settings({ ui, onClose, onChange }: SettingsProps) {
     const [settings, setSettings] = useState<StudioSettings>(() => ui.getSettings());
     const [clearing, setClearing] = useState<'sessions' | 'editor' | null>(null);
 
@@ -20,6 +21,7 @@ export function Settings({ ui, onClose }: SettingsProps) {
         if (clearing === 'sessions') ui.clearSessions();
         if (clearing === 'editor') ui.clearEditor();
         setClearing(null);
+        onChange?.();
     }
 
     return (
