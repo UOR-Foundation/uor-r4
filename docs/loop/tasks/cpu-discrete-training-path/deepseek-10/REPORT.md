@@ -13,6 +13,7 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 - Successful Table apply now copies the updated codebook into chooser state.
 - Tests pin exact Route composition and Table root movement, chooser synchronization, refusal immutability and epoch-`u64::MAX` refusal.
 - Sequential Route and Table controls now choose the next equal-loss tie from the updated chooser maps/codebooks.
+- Apply initialization now preserves the artifact's epoch field; a nonzero-epoch control advances from 5 to 6.
 
 ## Measurements
 

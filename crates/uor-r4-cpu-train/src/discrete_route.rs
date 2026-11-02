@@ -1344,9 +1344,13 @@ pub struct CpuDiscreteProposalApplier {
 
 impl CpuDiscreteProposalApplier {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let header = header(bytes)?;
+        let epoch = header["shape"]["epoch"]
+            .as_u64()
+            .ok_or_else(|| invalid("proposal apply epoch differs"))?;
         Ok(Self {
             scorer: CpuDiscreteProposalScorer::from_bytes(bytes)?,
-            epoch: 0,
+            epoch,
         })
     }
 
@@ -3229,6 +3233,18 @@ mod tests {
         assert_eq!(
             applier.scorer.read(&applier.scorer.model, &prefix).unwrap(),
             initial_read
+        );
+        let epoch_five = rewrite_header(artifact, |header| {
+            header["shape"]["epoch"] = json!(5);
+        });
+        let mut applier = CpuDiscreteProposalApplier::from_bytes(&epoch_five).unwrap();
+        assert_eq!(applier.epoch(), 5);
+        assert_eq!(
+            applier
+                .apply(CpuDiscreteProposalKind::Gate, 0, proposal(1, 2, 1, 5))
+                .unwrap()
+                .epoch_after,
+            6
         );
     }
 
