@@ -10,6 +10,8 @@ The first unit provides `CpuWriterCore`, an independent implementation of exact 
 
 `CpuCounterfactualTrainer` extends the same exact full-forward acceptance loop to normalization gains, convolution/gate biases, decay offsets and all six FBS route tables through bounded BVG-K coordinate blocks. `CpuPanelEvaluator` grades a finite panel and records target admission, top-1/top-8, rank margin and component-wise CPU-versus-serving query/token/kept-cell gaps. `panel_admission_gate` refuses checkpoint admission loss or any serving mismatch; these are component controls, not a language result.
 
+`cpu-public-discrete-parity` binds the public M1 seed-1 discrete artifact and public DEV split by SHA-256, extracts the trained codebook, and compares `CpuWriterCore` with `IntegerDiscreteModel` across all 14,287 eligible rows. It reproduces the published GPU aggregate `9,012` admitted, `7,002` top-1 and `7,485` top-8 with zero row mismatches.
+
 ## Checks
 
 ```sh
@@ -20,6 +22,7 @@ cargo run --release -p uor-r4-cpu-train --bin cpu-fbs-forward-bench
 cargo run --release -p uor-r4-cpu-train --bin cpu-rank-margin-bench
 cargo run --release -p uor-r4-cpu-train --bin cpu-counterfactual-bench
 cargo run --release -p uor-r4-cpu-train --bin cpu-panel-export-bench
+cargo run --release -p uor-r4-cpu-train --bin cpu-public-discrete-parity -- <public-fixture-dir>
 ```
 
 The forward benchmark prints read-free, copy-only, copy-plus-type and full Hamming-plus-memory cases with hashes and process peak RSS. Its readings are component throughput, not training or language evidence.

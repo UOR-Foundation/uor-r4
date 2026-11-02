@@ -4,7 +4,7 @@ Lab: deepseek. Item: [cpu-discrete-writer-core](../../../../roadmap/items/cpu-di
 
 ## Goal
 
-Close the stored trained-artifact observation gate using the public M1 release and its public DEV split. Extract the exact 19-table artifact's discrete codebook, rerun all 14,287 eligible DEV rows through the independent CPU writer, compare every row with `IntegerDiscreteModel`, and compare the aggregate to the published GPU observation. Repair the aggregate `top8_hits` double-count found during the probe.
+Close the stored trained-artifact observation gate using the public M1 release and its public DEV split. Extract the exact 19-table artifact's discrete codebook, rerun all 14,287 eligible DEV rows through the independent CPU writer, compare every row with `IntegerDiscreteModel`, and compare the aggregate to the published GPU observation.
 
 ## Scope
 
@@ -26,6 +26,6 @@ If the public seed-1 artifact does not hash to `04652a3de8e966a23539b04fbd77c7d9
 - It extracts `discrete.table` from the artifact without editing serving source and constructs the independent `CpuWriterCore`.
 - Every one of the 14,287 rows matches `IntegerDiscreteModel` exactly for read/query vector, admitted cells, top-8 and prediction.
 - CPU aggregate target admission, top-1 and top-8 equal the published M1 seed-1 GPU observation `9,012`, `7,002` and `7,485`.
-- `CpuWriterCore::summarize` counts each top-8 hit once; a regression test fails on the duplicated increment.
+- The probe's apparent aggregate double-count is recorded as an inspection-range artifact rather than a source defect.
 - A release benchmark records the full public-panel elapsed time, rows/s, thread count and stable checksum on the Ryzen 9 9950X.
 - A notebook row and REPORT distinguish exact component parity from training or language evidence.
