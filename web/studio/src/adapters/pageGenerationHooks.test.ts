@@ -27,12 +27,14 @@ function pageHooks() {
          ${section('function renderDiscretePrediction', 'function runPrediction')}
          ${section('function runPrediction', '/* ------------------------------------------------------------ status & toasts */')}
          ${section('function nextGenerationId', 'function beginGeneration')}
+         ${section('function sendFromComposer', '/* ------------------------------------------------------------ model sources */')}
          ${section('function onWorkerMessage', 'function activeAssistantElement')}
-         return { runPrediction, renderDiscretePrediction, onWorkerMessage };`);
+         return { runPrediction, renderDiscretePrediction, onWorkerMessage, sendFromComposer };`);
     const hooks = factory(app, document, window, vi.fn(), vi.fn(), vi.fn(), vi.fn(() => [1, 2]), vi.fn(), (selector: string) => document.querySelector(selector)) as {
         runPrediction(prompt?: string): boolean;
         renderDiscretePrediction(message: unknown): void;
         onWorkerMessage(event: { data: Record<string, unknown> }): void;
+        sendFromComposer(prompt?: string): number | false;
     };
     return { app, hooks };
 }
@@ -76,6 +78,15 @@ describe('actual page prediction hooks', () => {
         expect(document.documentElement.dataset.predictorDecoded).toBe('[{"id":7,"text":"x"}]');
         expect(document.getElementById('predictorTop')?.textContent).toContain('id 7');
         dispose();
+    });
+
+    it('refuses a chat send while prediction is in flight', () => {
+        const { app, hooks } = pageHooks();
+        app.activePredictionRequestId = 'predict-existing';
+        app.activeGenerationId = 7;
+        expect(hooks.sendFromComposer('chat')).toBe(false);
+        expect(app.activeGenerationId).toBe(7);
+        expect(app.worker.postMessage).not.toHaveBeenCalled();
     });
 
     it('refuses prediction while a chat generation is active', () => {
