@@ -17,7 +17,7 @@ DeepSeek's v2 Studio is published and its engine/model-source/API layer is prese
 
 ## What is missing
 
-The foundation and core typed workflow components are implemented without replacing the live page. AppShell, ModelPicker, WorkspaceEditor, AgentComposer, SessionList, Inspector, Guide, and Settings now consume the lifecycle store through narrow legacy bridges, with component behavior tests and a production library build. Complete real-browser parity, one-time browser-data migration, and cutover remain. The migration must preserve every current feature and browser-data key, use real download-byte progress without inventing later load stages, and leave the live page untouched until all legacy/new checks pass.
+The foundation and core typed workflow components are implemented without replacing the live page. AppShell, ModelPicker, WorkspaceEditor, AgentComposer, SessionList, Inspector, Guide, and Settings are composed around the lifecycle store through narrow legacy bridges and callbacks, with component behavior tests and a production library build. Complete real-browser parity, one-time browser-data migration, and cutover remain. The migration must preserve every current feature and browser-data key, use real download-byte progress without inventing later load stages, and leave the live page untouched until all legacy/new checks pass.
 
 ## Done when
 
