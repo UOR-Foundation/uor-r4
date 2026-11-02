@@ -628,6 +628,8 @@
         if (!tab) return false;
         tab.content = String(content);
         tab.dirty = true;
+        var text = document.getElementById('editorText');
+        if (text) text.value = tab.content;
         updateEditorHeader(tab);
         updateStats(tab.content);
         renderTabs();
