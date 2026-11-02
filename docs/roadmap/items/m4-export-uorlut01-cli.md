@@ -31,7 +31,7 @@ attention stacks. All-recurrence FBS trunks at widths 512 and 1,024 export and
 serve in exact synthetic controls, matching the native writer's existing width
 limit and the Hamming read's separate head geometry. Claude's real width-512
 checkpoints still need re-export after merge. See
-[the wide-export report](../../loop/tasks/m4-export-uorlut01-cli/deepseek-wide-fbs/REPORT.md).
+[the wide-export report](../../loop/tasks/m4-export-uorlut01-cli/deepseek-2/REPORT.md).
 
 The native and WASM serving audits pass at their declared scopes. The final M4 build must retain 0 float, 0 softmax or squashing and 0 dense matmul; integer multiply and divide are allowed and audited under D80/D81.
 
