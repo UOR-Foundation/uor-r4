@@ -1122,11 +1122,11 @@ impl CpuDiscreteProposalScorer {
         samples: &[CpuDiscreteProposalSample],
         epoch: u64,
     ) -> std::result::Result<CpuDiscreteProposalScoring, CpuDiscreteScoreError> {
+        self.validate_proposal(kind, index)
+            .map_err(|error| score_error(self.proposal_refusal_status(kind), error.to_string()))?;
         if samples.is_empty() {
             return Err(score_error(8, "proposal scorer requires at least one row"));
         }
-        self.validate_proposal(kind, index)
-            .map_err(|error| score_error(self.proposal_refusal_status(kind), error.to_string()))?;
 
         let mut eligible = Vec::new();
         for sample in samples {
@@ -2813,6 +2813,20 @@ mod tests {
                     std::slice::from_ref(&ineligible),
                     1
                 )
+                .unwrap_err()
+                .status,
+            4
+        );
+        assert_eq!(
+            scorer
+                .score(CpuDiscreteProposalKind::Route, 0, &[], 1)
+                .unwrap_err()
+                .status,
+            9
+        );
+        assert_eq!(
+            scorer
+                .score(CpuDiscreteProposalKind::Gate, 4, &[], 1)
                 .unwrap_err()
                 .status,
             4

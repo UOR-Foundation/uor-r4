@@ -5,6 +5,8 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 ## What did not work
 
 - **The first exact-head review requested changes.** Arithmetic matched, but scorer errors did not carry numeric statuses, Route scorer construction accepted header forms the host rejects, and some failure controls were absent.
+- **Legal four-table states cannot reach status 12 in this scorer.** Root coordinates are bounded to the 16-root orbit, so the checked u64 products remain far below overflow under the admitted widths. The checked branch remains fail-closed but has no legal-value overflow fixture.
+- **Candidate-only ineligibility has no dedicated fixture yet.** Baseline ineligibility and status precedence are pinned; candidate MAX propagation remains code-reviewed but not independently exercised.
 
 ## What changed
 
