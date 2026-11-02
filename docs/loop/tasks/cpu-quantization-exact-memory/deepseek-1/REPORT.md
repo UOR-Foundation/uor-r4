@@ -19,18 +19,19 @@ Lab: deepseek. Item: [cpu-quantization-exact-memory](../../../../roadmap/items/c
 - Hamming cache shape validation uses the parsed read inventory rather than trusting serialized lengths.
 - Added a real child-process restore control on a combined Hamming-plus-turn-memory artifact with point-key fallback.
 - Added a reset control proving that restored and fresh sessions produce identical subsequent steps and checkpoint bytes.
+- Added a second-reply control proving that a pending opening round-trips the prior reply's still-inert anchors before the next step overwrites them.
 - Added coherently resealed corruption controls for identity, shape, array length, token range, Hamming cache, memory anchors and reply cursor, plus stale-artifact, truncation and trailing-byte refusals.
 
 ## Measurements
 
-- FBS module suite: 27 passed.
-- Full `uor-r4-cpu-train` release suite: 96 passed, 4 ignored release benchmarks.
+- FBS module suite: 28 passed.
+- Full `uor-r4-cpu-train` release suite: 97 passed, 4 ignored release benchmarks.
 - The child process resumed the exact checkpoint and produced the same next token, kept cells, complete Q12 query and checkpoint SHA-256 as the uninterrupted session.
 - No corpus run, training run, float-shadow result or language result occurred.
 
 ## Checks run at the head
 
-- `CARGO_TARGET_DIR=target/deepseek-hamming-memory CARGO_BUILD_JOBS=1 cargo test --release --locked -p uor-r4-cpu-train`: PASS after the known duplicate-artifact collision retry, 96 passed and 4 ignored benchmarks.
+- `CARGO_TARGET_DIR=target/deepseek-hamming-memory CARGO_BUILD_JOBS=1 cargo test --release --locked -p uor-r4-cpu-train`: PASS after the known duplicate-artifact collision retry, 97 passed and 4 ignored benchmarks.
 - `CARGO_TARGET_DIR=target/deepseek-hamming-memory CARGO_BUILD_JOBS=1 cargo clippy --locked -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings`: PASS; dependency crates emitted pre-existing dead-code warnings.
 - `cargo fmt --package uor-r4-cpu-train -- --check`: PASS.
 - `UOR_LAB=deepseek uor-harness ratchet d23`: PASS, 4,451 sites, baseline unchanged.

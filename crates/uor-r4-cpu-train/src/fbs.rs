@@ -471,11 +471,11 @@ impl CpuFbsForward {
                     && start <= payload.position.saturating_add(1)
                     && start <= self.context.saturating_add(1)
                     && self.memory.as_ref().is_none_or(|memory| {
-                        if start <= payload.position {
-                            anchors == &memory.anchors_at(&payload.tokens, start)
-                        } else {
-                            anchors == &MemoryAnchors::default()
-                        }
+                        // A pending opening has not overwritten the anchors from the
+                        // previous reply yet. Their structurally valid prior values
+                        // are inert and must round-trip exactly.
+                        start > payload.position
+                            || anchors == &memory.anchors_at(&payload.tokens, start)
                     })
             }
         };
@@ -1732,6 +1732,31 @@ mod tests {
         std::fs::remove_file(checkpoint_path).unwrap();
         std::fs::remove_file(artifact_path).unwrap();
         std::fs::remove_file(output_path).unwrap();
+    }
+
+    #[test]
+    fn pending_second_reply_round_trips_with_prior_anchors() {
+        let artifact =
+            memory_artifact_with(111, CpuFbsHead::Writer, true, true, 1.0, Some(vec![99]));
+        let mut uninterrupted = CpuFbsForward::from_artifact(&artifact).unwrap();
+        for (row, token) in memory_script().into_iter().take(5).enumerate() {
+            if row == 1 {
+                uninterrupted.mark_reply_start();
+            }
+            uninterrupted.step(token, CpuFbsHead::Writer).unwrap();
+        }
+        uninterrupted.mark_reply_start();
+        let checkpoint = uninterrupted.checkpoint_bytes().unwrap();
+        let mut restored = CpuFbsForward::resume(&checkpoint, &artifact).unwrap();
+        assert_eq!(restored.checkpoint_bytes().unwrap(), checkpoint);
+        assert_eq!(
+            restored.step(99, CpuFbsHead::Writer).unwrap(),
+            uninterrupted.step(99, CpuFbsHead::Writer).unwrap()
+        );
+        assert_eq!(
+            restored.checkpoint_bytes().unwrap(),
+            uninterrupted.checkpoint_bytes().unwrap()
+        );
     }
 
     #[test]
