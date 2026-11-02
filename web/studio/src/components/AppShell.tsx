@@ -9,6 +9,7 @@ interface AppShellProps {
     sessions?: ComponentChildren;
     children: ComponentChildren;
     onPalette?(): void;
+    onSettings?(): void;
     onInspector?(): void;
     inspectorOpen?: boolean;
 }
@@ -20,7 +21,7 @@ const destinations: Array<{ id: StudioSection; label: string }> = [
     { id: 'guide', label: 'Guide' },
 ];
 
-export function AppShell({ activeSection, onSection, status, sessions, children, onPalette, onInspector, inspectorOpen = false }: AppShellProps) {
+export function AppShell({ activeSection, onSection, status, sessions, children, onPalette, onSettings, onInspector, inspectorOpen = false }: AppShellProps) {
     const [drawerOpen, setDrawerOpen] = useState(false);
     return (
         <div class="studio-shell">
@@ -28,6 +29,7 @@ export function AppShell({ activeSection, onSection, status, sessions, children,
                 <button type="button" aria-label="Toggle navigation" aria-controls="studio-navigation" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(!drawerOpen)}>Menu</button>
                 <strong>UOR-R4 Studio</strong>
                 {onPalette && <button type="button" onClick={onPalette}>Command palette</button>}
+                {onSettings && <button type="button" onClick={onSettings}>Settings</button>}
                 {onInspector && <button type="button" aria-controls="studio-inspector" aria-expanded={inspectorOpen} onClick={onInspector}>Inspector</button>}
                 <div role="status" aria-live="polite" class="studio-status">
                     <span>{status.source}</span><span>{status.artifact}</span><span>{status.privacy}</span><span>{status.file}</span><span>{status.session}</span>

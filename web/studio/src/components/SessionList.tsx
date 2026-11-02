@@ -8,15 +8,16 @@ interface SessionListProps {
     sessions: SessionApi;
     download(name: string, content: string): void;
     onError(message: string): void;
+    onChange?(): void;
 }
 
-export function SessionList({ store, sessions, download, onError }: SessionListProps) {
+export function SessionList({ store, sessions, download, onError, onChange }: SessionListProps) {
     const [, setRevision] = useState(0);
     const [renaming, setRenaming] = useState<SessionSummary | null>(null);
     const [deleting, setDeleting] = useState<SessionSummary | null>(null);
     const [title, setTitle] = useState('');
     const refresh = () => setRevision((value) => value + 1);
-    const activate = () => { store.dispatch({ type: 'session/activated' }); refresh(); };
+    const activate = () => { store.dispatch({ type: 'session/activated' }); refresh(); onChange?.(); };
     const items = sessions.listSessions();
 
     function rename(session: SessionSummary) {
