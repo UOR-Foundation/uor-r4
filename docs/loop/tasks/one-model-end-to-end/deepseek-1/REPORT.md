@@ -17,7 +17,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
 - Updated `heldout-panel` to emit the complete corpus manifest needed by the evaluator.
 - Added four focused tests for lexicographic run matching, prompt/reply metadata, deterministic capping and 4-/8-gram overlap.
 
-Size: implementation and tests are mostly code; the panel-manifest repair is a small code/doc change.
+Size at delivery: 5 code files (+847/−5), 3 docs (+108), and 4 generated/other files (+115/−7).
 
 ## Measurements
 
@@ -44,7 +44,11 @@ Report SHA-256: `c8575d290eac2ece0674fca188b712fc21e6e1949be7f9bbb2e80c4f4f88340
 ## Checks run at the head
 
 - `cargo test --locked --quiet`: 4 evidence tests and 1 panel-writer test passed.
+- `cargo clippy --locked --all-targets --no-deps -- -D warnings`: the instrument passed; warnings shown from path dependencies are pre-existing.
 - `cargo run --release --locked --bin m2-evidence`: public artifact/panel smoke run completed and wrote the measured report.
+- `uor-harness check`: 0 errors and 40 existing/site-wide warnings.
+- `cargo run --locked -p xtask -- roadmap check`: 134 items OK.
+- `cargo run --locked -p xtask -- links`: completed; it reports repository-wide historical broken links, with no command failure.
 - The command reads the integer artifact through `IntegerDiscreteModel::evaluate_prefix`; it does not invoke CUDA or modify model weights.
 
 ## Skills used
