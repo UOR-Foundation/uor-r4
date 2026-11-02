@@ -24,7 +24,7 @@ If the public seed-1 artifact does not hash to `04652a3de8e966a23539b04fbd77c7d9
 
 - The tool binds the public seed-1 artifact, tokenizer, DEV token stream and mask by exact hashes.
 - It extracts `discrete.table` from the artifact without editing serving source and constructs the independent `CpuWriterCore`.
-- Every one of the 14,287 rows matches `IntegerDiscreteModel` exactly for read/query vector, admitted cells, top-8 and prediction.
+- Every one of the 14,287 rows matches `IntegerDiscreteModel` exactly for admitted cells, top-8 and prediction, with the host-oracle query supplied to the writer as fixed input. CPU query generation remains #3501 work.
 - CPU aggregate target admission, top-1 and top-8 equal the published M1 seed-1 GPU observation `9,012`, `7,002` and `7,485`.
 - The probe's apparent aggregate double-count is recorded as an inspection-range artifact rather than a source defect.
 - A release benchmark records the full public-panel elapsed time, rows/s, thread count and stable checksum on the Ryzen 9 9950X.

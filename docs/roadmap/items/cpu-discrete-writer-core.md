@@ -42,7 +42,6 @@ The host-oracle core and the stored trained-artifact gate are complete. The publ
 
 | Reading | Result |
 |---|---:|
-| Query-vector mismatches | 0 |
 | Admitted-cell-order mismatches | 0 |
 | Top-8 mismatches | 0 |
 | Prediction mismatches | 0 |
@@ -51,7 +50,7 @@ The host-oracle core and the stored trained-artifact gate are complete. The publ
 | CPU top-8 | 7,485 |
 | Published M1 GPU observation | 9,012 admitted / 7,002 top-1 / 7,485 top-8 |
 
-Release runtime on the Ryzen 9 9950X was 952.864 ms for 14,287 rows (`14,993.740` rows/s, one thread), with stable checksum `cc84145641b5d7a2`. This is exact component parity, not training or language evidence. See [the REPORT](../../loop/tasks/cpu-discrete-writer-core/deepseek-2/REPORT.md).
+Release runtime on the Ryzen 9 9950X was 964.919 ms for 14,287 rows (`14,806.427` rows/s, one thread), with stable checksum `cc84145641b5d7a2`. This is exact component parity, not training or language evidence. See [the REPORT](../../loop/tasks/cpu-discrete-writer-core/deepseek-2/REPORT.md).
 
 ## Rules that apply
 

@@ -7,6 +7,7 @@ Lab: deepseek. Item: [cpu-discrete-writer-core](../../../../roadmap/items/cpu-di
 - **The first private-store premise was unavailable, not false.** The private artifact cannot be read without credentials. The public M1 release supplies the same seed-1 artifact bytes, so this unit binds that public copy and does not claim private-store access.
 - **The apparent `summarize` double-count was not a source defect.** An overlapping inspection range displayed one line twice; the committed function increments once. No code change was made for that false alarm.
 - **The GPU comparison is aggregate.** Every row is checked against `IntegerDiscreteModel`; the published GPU observation supplies the full-panel admitted, top-1 and top-8 counts, not a public row dump.
+- **The CPU read path is not tested here.** The evaluator supplies the exact host-oracle query vector as fixed input; independent Route/Flock/Relation query generation belongs to #3501.
 - **This is not training or language evidence.** It is an exact writer component parity result on a trained artifact and public DEV panel.
 
 ## What changed
@@ -15,7 +16,7 @@ Lab: deepseek. Item: [cpu-discrete-writer-core](../../../../roadmap/items/cpu-di
 - Bound the public M1 seed-1 artifact, driver/model tokenizers, DEV manifest, token stream and mask by SHA-256.
 - Added exact `discrete.table` extraction from the 19-table artifact without editing serving source.
 - Constructed the independent `CpuWriterCore` from the trained 4,096 × 32 codebook.
-- Checked every eligible DEV row against `IntegerDiscreteModel` for query vector, admitted-cell order, top-8 and prediction.
+- Supplied each row's host-oracle query as fixed input and checked every eligible DEV row against `IntegerDiscreteModel` for admitted-cell order, top-8 and prediction. Independent CPU query generation remains #3501 work.
 - Compared CPU aggregate target admission, top-1 and top-8 with the published M1 seed-1 GPU observation.
 - Recorded rows/s, elapsed time, stable checksum and peak RSS.
 
@@ -35,7 +36,6 @@ Exact parity:
 | Reading | Result |
 |---|---:|
 | Rows | 14,287 |
-| Query-vector mismatches | 0 |
 | Admitted-cell-order mismatches | 0 |
 | Top-8 mismatches | 0 |
 | Prediction mismatches | 0 |
@@ -44,7 +44,20 @@ Exact parity:
 | Top-8 | 7,485 |
 | Stable checksum | `cc84145641b5d7a2` |
 
-Release benchmark on the Ryzen 9 9950X: 952.864 ms, 14,993.740 rows/s, one thread, 772,988 KiB peak RSS.
+Release benchmark on the Ryzen 9 9950X: 964.919 ms, 14,806.427 rows/s, one thread, 772,992 KiB peak RSS.
+
+Reproduce the public fixture from the released sources:
+
+```sh
+mkdir -p local/deepseek/public-m1-parity
+curl -fL https://huggingface.co/caseyallard/uor-r4-m1-model/resolve/main/t16-frozen-zero-seed1-trunk.d11 -o local/deepseek/public-m1-parity/t16-frozen-zero-seed1-trunk.d11
+curl -fL https://huggingface.co/caseyallard/uor-r4-m1-model/resolve/main/tokenizer-seed-1.json -o local/deepseek/public-m1-parity/tokenizer-seed-1.json
+curl -fL https://huggingface.co/datasets/caseyallard/uor-r4-data/resolve/main/dev/manifest.json -o local/deepseek/public-m1-parity/dev-manifest.json
+curl -fL https://huggingface.co/datasets/caseyallard/uor-r4-data/resolve/main/dev/tokens.u16 -o local/deepseek/public-m1-parity/dev-tokens.u16
+curl -fL https://huggingface.co/datasets/caseyallard/uor-r4-data/resolve/main/dev/response_mask.u8 -o local/deepseek/public-m1-parity/dev-response-mask.u8
+curl -fL https://huggingface.co/datasets/caseyallard/uor-r4-data/resolve/main/tokenizer.json -o local/deepseek/public-m1-parity/driver-tokenizer.json
+cargo run --locked --release -p uor-r4-cpu-train --bin cpu-public-discrete-parity -- local/deepseek/public-m1-parity
+```
 
 ## Checks run at the head
 

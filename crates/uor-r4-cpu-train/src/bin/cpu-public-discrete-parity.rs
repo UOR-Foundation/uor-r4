@@ -83,7 +83,6 @@ fn main() -> Result<(), String> {
                 .read_target(&query, target)
                 .map_err(|error| error.to_string())?;
             result.rows += 1;
-            result.query_mismatches += u64::from(evaluation.read_vector != query);
             result.cell_mismatches += u64::from(evaluation.admitted_cells != cpu_cells);
             result.top8_mismatches += u64::from(evaluation.top8 != decision.top8);
             result.token_mismatches += u64::from(evaluation.prediction != decision.top8[0]);
@@ -110,7 +109,6 @@ fn main() -> Result<(), String> {
         || result.admitted != EXPECTED_ADMITTED
         || result.top1 != EXPECTED_TOP1
         || result.top8 != EXPECTED_TOP8
-        || result.query_mismatches != 0
         || result.cell_mismatches != 0
         || result.top8_mismatches != 0
         || result.token_mismatches != 0
@@ -131,7 +129,6 @@ fn main() -> Result<(), String> {
             "threads": 1,
             "elapsed_ms": elapsed * 1_000.0,
             "rows_per_second": result.rows as f64 / elapsed,
-            "query_mismatches": result.query_mismatches,
             "cell_mismatches": result.cell_mismatches,
             "top8_mismatches": result.top8_mismatches,
             "token_mismatches": result.token_mismatches,
@@ -148,7 +145,6 @@ fn main() -> Result<(), String> {
 #[derive(Debug, Default)]
 struct PanelResult {
     rows: u64,
-    query_mismatches: u64,
     cell_mismatches: u64,
     top8_mismatches: u64,
     token_mismatches: u64,
