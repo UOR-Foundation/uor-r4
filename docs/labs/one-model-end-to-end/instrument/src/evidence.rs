@@ -544,6 +544,16 @@ fn bind_tokenizer(corpus: &Corpus, tokenizer: &TokenizerCensus) -> Result<()> {
     Ok(())
 }
 
+fn validate_reference_role(corpus: &Corpus, role: ReferenceRole) -> Result<()> {
+    if role == ReferenceRole::CanonicalTrain && corpus.split != "train" {
+        return Err(format!(
+            "canonical_train reference manifest split is {:?}, not \"train\"",
+            corpus.split
+        ));
+    }
+    Ok(())
+}
+
 fn read_corpus(files: &CorpusFiles, context: usize, vocabulary: usize, bos: u32) -> Result<Corpus> {
     let token_bytes =
         fs::read(&files.tokens).map_err(|e| format!("{}: {e}", files.tokens.display()))?;
@@ -1173,6 +1183,7 @@ pub fn evaluate(
         .transpose()?;
     if let Some(train) = &train {
         bind_tokenizer(train, &tokenizer)?;
+        validate_reference_role(train, reference_role.expect("checked with train"))?;
     }
     let report = evaluate_model(
         &artifact_bytes,
@@ -1495,6 +1506,19 @@ mod tests {
     }
 
     #[test]
+    fn canonical_train_role_requires_a_train_manifest() {
+        let mut reference = corpus(&[0, 10, 20], &[0, 0, 1]);
+        validate_reference_role(&reference, ReferenceRole::CanonicalTrain).unwrap();
+        reference.split = "dev".to_owned();
+        assert!(
+            validate_reference_role(&reference, ReferenceRole::CanonicalTrain)
+                .unwrap_err()
+                .contains("not \"train\"")
+        );
+        validate_reference_role(&reference, ReferenceRole::GeneratedControl).unwrap();
+    }
+
+    #[test]
     fn malformed_uort_and_manifest_identity_are_refused() {
         assert!(parse_uort(b"not-uort", &[]).is_err());
         let empty = uort(&[], 4096);
@@ -1536,6 +1560,7 @@ mod tests {
         assert_eq!(metadata.prompt_seen, None);
         assert_eq!(metadata.keyed, None);
         assert_eq!(metadata.reply_seen, None);
+        assert_eq!(metadata.prompt_template_seen, None);
 
         let mut strata = BTreeMap::new();
         let row = Reading {
@@ -1546,6 +1571,7 @@ mod tests {
         };
         for (name, value) in [
             ("prompt-overlap", metadata.prompt_seen),
+            ("prompt-template", metadata.prompt_template_seen),
             ("memory-key", metadata.keyed),
             ("reference-reply-overlap", metadata.reply_seen),
         ] {
@@ -1557,6 +1583,7 @@ mod tests {
             add_stratum(&mut strata, format!("{name}:{value}"), &row);
         }
         assert!(strata.contains_key("prompt-overlap:unavailable"));
+        assert!(strata.contains_key("prompt-template:unavailable"));
         assert!(strata.contains_key("memory-key:unavailable"));
         assert!(strata.contains_key("reference-reply-overlap:unavailable"));
     }

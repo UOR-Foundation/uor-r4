@@ -20,7 +20,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
 - Added independent `CpuWriterCore` recomputation from the integer serving trunk's Q12 query, with fail-closed admitted-cell, top-8 and token parity.
 - Bound manifest bytes, split, M-world cell, seed, conversation count and tokenizer hash into each corpus identity. `train-role` distinguishes canonical TRAIN from a generated control.
 - Updated `heldout-panel` to emit the complete corpus manifest needed by the evaluator.
-- Added nine library tests and three CLI tests covering exact run indexing, prompt/reply metadata, deterministic capping, 4-/8-gram overlap, malformed UORT/manifests, artifact vocabulary/BOS mismatch, empty inputs, absent-reference strata, a planted writer-metric error, deterministic serialization, argument refusal and create-new output.
+- Added thirteen library tests and three CLI tests covering exact run indexing, prompt/reply metadata, deterministic capping, 4-/8-gram overlap, value masking, tokenizer binding, malformed UORT/manifests, artifact vocabulary/BOS mismatch, empty inputs, absent-reference strata, a planted writer-metric error, deterministic serialization, argument refusal and create-new output.
 
 Generated panel/token payloads are not committed.
 
@@ -61,9 +61,18 @@ target/release/m2-evidence artifact=.../m1-s1.d11 \
 The exact panel and control identities are in `evidence-deepseek-1-smoke.json`.
 Report SHA-256: `ee4e855be4b9ff28690ccb18892cf4bd2094afd73299e88a2a7cffcd028fbe03`.
 
+The two generated corpora can be recreated from the public tokenizer with:
+
+```sh
+heldout-panel out=.../panel tokenizer=.../tokenizer-seed-1.json \
+  cell=dev,dev conversations=16 seed=4201 protocol=2
+heldout-panel out=.../train-control tokenizer=.../tokenizer-seed-1.json \
+  cell=train,train conversations=64 seed=4101 protocol=2
+```
+
 ## Checks run at the head
 
-- `cargo test --offline --all-targets`: 12 evidence tests, 1 panel-writer test and 3 CLI tests passed.
+- `cargo test --offline --all-targets`: 13 evidence tests, 1 panel-writer test and 3 CLI tests passed.
 - `cargo clippy --offline --all-targets -- -D warnings`: passed; only pre-existing path-dependency warnings appeared.
 - `rustfmt --check` on the changed Rust files: passed.
 - `cargo run --release --locked --bin m2-evidence`: public artifact/panel smoke run completed and wrote the measured report.
