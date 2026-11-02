@@ -32,3 +32,7 @@ path = "src/bin/cpu-counterfactual-bench.rs"
 [[bin]]
 name = "cpu-panel-export-bench"
 path = "src/bin/cpu-panel-export-bench.rs"
+
+[[bin]]
+name = "cpu-public-discrete-parity"
+path = "src/bin/cpu-public-discrete-parity.rs"
