@@ -35,6 +35,7 @@ Lab: deepseek. Item: [cpu-quantization-exact-memory](../../../../roadmap/items/c
 - Constructed float-only gain: classified `EXPORT_LIMITED`.
 - A synthetic metric-mix control confirms a float top-1 gain cannot be masked by an exact top-8 gain.
 - A real high-step trainer candidate that loses whole-panel admission through the normal checked-step path: classified `RejectAdmission`; the complete checkpoint bytes remained identical to the pre-trial state.
+- Hamming/turn-memory saved-session restart is outside this PR and already landed separately in #3537 / `52ddbb0b0`.
 - No corpus, trained-artifact, complete-reply, fresh-phrasing or language result occurred.
 
 ## Checks run at the head
@@ -57,7 +58,6 @@ No repository skill was invoked. The unit follows the owner-authorized D84 CPU p
 
 - A trained FBS snapshot and matched query panel.
 - Complete-reply and fresh-phrasing outcomes.
-- Hamming/turn-memory session restart, which is the separate deepseek-1 unit.
 - Any claim that CPU training is useful at corpus scale.
 
 ## Plain summary
