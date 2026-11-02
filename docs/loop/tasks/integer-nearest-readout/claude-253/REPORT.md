@@ -50,11 +50,19 @@ The pod run checks the instrument; it is not a speed result. One RTX 5090 (Vast)
   - **A forced code** `(step, depth, head, role, code)` changes the head's query or key code at its row, after the ±1 codes are made and before the read uses them (`flock_read_hamming.rs`, `force_codes`). Only the coordinates whose bit differs are changed, each to the exact ±1. The rest keep their computed values, last-bit noise included, which the margin weights read. So forcing a side to its own codes is the identity. The read's kept sets are chosen from the forced codes. The trace records the forced codes, and its sign check is waived at a forced row, for that head and role only.
   - **Rows.** A traced window `b` of a batch forces its rows `b · SHEET_CONTEXT + step`, the layout `row_picks` and `record` use. The force is set before the batch's forward and cleared right after it, even if the forward fails.
 - **The refusals, before any forward:** another schema; a position not traced, or named twice; a step past the context or past the window's traced steps; a layer, lane or entry outside the model; a depth with no read; a head the read does not serve; a key at step 0; a code with a bit past its head's width; a decision forced twice. After the forward, each forced decision must appear in the trace as forced, or the run is refused as an instrument fault.
-- **The host tests and their negative gates.** At `9859c419f` the host suite passes (228 tests), as do the stub-nvcc `cargo check --features cuda --all-targets` and clippy. Each gate sets one piece aside and runs the test that pins it. All eleven fail as expected, each at its own assertion, and the restored tree passes (`local/claude/claude-253/neg/host.sh`):
-  - G1, the not-taken refusal; G2, the trace's exemption; G3, the entry as used;
-  - G4, `check_forced`'s refusals; G5, the batch rows;
-  - G6–G8, the schema, an untraced position and a position named twice;
-  - G9, a step past the window (round 1); G10, the key's not-taken check (round 1); G11, the head width (round 1).
+- **The checks and the negative gates pass** (below). Each gate fails at its own assertion, and the restored tree passes.
+
+## What changed
+
+| File | Change |
+|---|---|
+| `crates/uor-r4-float-train/src/in_space_long.rs` | `FTrace::with_force` and the checks `check_forced` and `forced_within`, before any forward; `batch_force`, which sets each batch's forced rows before its forward and clears them after; `forced_taken` after it; the trace's record of each forced decision as used. Tests: the CUDA test `a_forced_forward_takes_each_forced_decision`, and the force cases added to the host test `a_traced_window_records_the_five_kinds_in_rs_order` |
+| `crates/uor-r4-float-train/src/geometric_stack_native.rs` | `set_rate_force` and `force_rates`: a forced lane gets its bucket's centre score before `rate_select` |
+| `crates/uor-r4-float-train/src/flock_read_hamming.rs` | `set_code_force` and `force_codes`, the head-width guard, and the trace's sign-check exemption at forced rows. Tests: `a_forced_code_wider_than_64_bits_is_refused`, and the exemption's case in `a_head_trace_with_coordinates_keeps_them_bit_for_bit` |
+| `crates/uor-r4-float-train/src/bin/train-in-space.rs` | `--decision-force SPLIT=FORCE_JSON`, for `--score-rows` only and beside the same split's `--decision-trace` |
+| `docs/roadmap/items/integer-nearest-readout.md` | the progress bullet, and the replay driver's need for a float mode that runs only the windows it names |
+
+## Measurements
 
 - **I-Force on F's s1** (the pod run at `f6097ced9`, DEV seed 1's 308 traced windows):
   - **The base** traces 308 windows and 36,541 steps. Its trace's sha256 is `9e7c9bf312fa…`, the same as claude-251's.
@@ -73,3 +81,52 @@ The pod run checks the instrument; it is not a speed result. One RTX 5090 (Vast)
   - `r1/`: round 1's CUDA suite.
   - `SEAL-SHA256SUMS` (`8b666c70…`) covers the 132 files put. The 54 small files are on the laptop under `local/claude/claude-253/pulled/` and match the seal.
   - The pod was up 30 minutes, about $0.50, and is down.
+
+## Checks run at the head
+
+The code's last change is round 1's head, `9859c419f`. After it the branch adds only this REPORT, the item's bullet and a merge of `origin/main`, whose three commits touch `uor-r4-cpu-train` and DeepSeek's task folders.
+
+| Gate | Command | Result |
+|---|---|---|
+| Host tests (float, `9859c419f`) | `cargo test --offline --locked -p uor-r4-float-train --no-fail-fast`: the library, its bins and integration targets | 228 passed, 0 failed (201 in the library) |
+| CUDA type-check (`9859c419f`) | `cargo check --offline --locked --features cuda --all-targets -p uor-r4-float-train`, stub nvcc, `UOR_NVCC_ARCH=compute_120` | exit 0 |
+| Clippy (`9859c419f`) | clippy on the float crate with its CUDA features, stub nvcc | 7 findings in the float crate, the same as the base's; none is on a line this unit adds, and `in_space_long.rs`'s two (lines 5446 and 5500) are older than the branch by blame |
+| Formatting (`9859c419f`) | `rustfmt` on this unit's own hunks (`local/claude/claude-253/fmt-own.sh`) | each file's drift at or below its base's (above) |
+| CUDA library suite (RTX 5090, `f6097ced9`) | `cargo test --release --locked -p uor-r4-float-train --features cuda --lib -- --test-threads=1` | 276 passed, 0 failed, 6 ignored |
+| CUDA library suite (RTX 5090, `9859c419f`) | the same | 277 passed, 0 failed, 6 ignored; the forcing and trace tests pass by name |
+
+### Negative gates
+
+**On the host** (`local/claude/claude-253/neg/host.sh`, its logs and patches beside it). Each gate sets one piece aside with `sed` on a clean tree, saves the patch, runs the one test that pins it, reverses the patch and checks the tree is clean. Every test failed at an assertion, not a build. The restored tree then passed the gated tests.
+
+| Gate | Piece set aside | Test | Result |
+|---|---|---|---|
+| G1 | The not-taken refusal after the forward (`forced_taken`) | `a_traced_window_records_the_five_kinds_in_rs_order` | FAILED |
+| G2 | The trace's sign-check exemption at a forced row | `a_head_trace_with_coordinates_keeps_them_bit_for_bit` | FAILED |
+| G3 | The entry recorded as used, not as computed | `a_traced_window_records_the_five_kinds_in_rs_order` | FAILED |
+| G4 | `check_forced`'s refusals | the same | FAILED |
+| G5 | A batch's rows `b · SHEET_CONTEXT + step` | the same | FAILED |
+| G6 | The schema check | the same | FAILED |
+| G7 | An untraced position's refusal | the same | FAILED |
+| G8 | A position named twice | the same | FAILED |
+| G9 | A step past its window, before any forward (round 1) | the same | FAILED |
+| G10 | The key's not-taken check (round 1) | the same | FAILED |
+| G11 | The head-width guard (round 1) | `a_forced_code_wider_than_64_bits_is_refused` | FAILED |
+
+**On the GPU** (the pod run at `f6097ced9`): n1 and n2, above. Each made `a_forced_forward_takes_each_forced_decision` fail, and the restored tree passed it.
+
+## Skills used
+
+None.
+
+## Still open
+
+- **Next, under the same card: the replay driver and the near-tie grader.** The driver forces the first differing code or bucket in forward order, structure (F, T) and arithmetic (T, R), and the grader judges each pick by G₁₀ on the reference side. Then come the sheet, with the card's rule verbatim, a fresh FIT and a pre-run review, and the GPU run that reads Q5.
+- **A float mode that runs only the windows it names.** Each float pass is now a whole `score_rows` run, 204 s on F's s1. The replay runs single-window passes, so the driver needs this mode first.
+- **The float side has no resume,** so I-Force's resumed-pass clause stays R's alone.
+
+## Plain summary
+
+To find out why the integer model and the trained model sometimes pick different words, claude-247's rule replays each step where they part: it forces one side's discrete choices to the other's and sees whether the pick then agrees. R's side could already be forced (claude-249). This unit lets the trained model's side be forced too, one rate bucket or one Hamming code at a time, at the exact step and row named.
+
+On the GPU, forcing every one of the trained model's 14.6 million recorded choices to what it chose anyway changes nothing, byte for byte, so forcing itself adds no drift. Forcing one bucket and one code at one step changes that window from that step on and nothing else. With the forcing removed, the tests fail. The next unit uses this to replay the disagreements one at a time and grade each one.
