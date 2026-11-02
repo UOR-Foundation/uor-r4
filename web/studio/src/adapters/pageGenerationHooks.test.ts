@@ -244,15 +244,19 @@ describe('actual page prediction hooks', () => {
         dispose();
     });
 
-    it('uses the pinned API abort or worker cancel channel for stop', () => {
-        const { app, hooks } = pageHooks();
-        app.generating = true;
-        app.activeGenerationKind = 'api';
-        app.abortController = { abort: vi.fn() } as unknown as AbortController;
+    it('uses the started generation channel after the picker mode changes', async () => {
+        const { app, hooks, conversation } = pageHooks();
+        app.mode = 'api';
+        app.apiConfig = { baseUrl: 'https://api.example.com/v1' };
+        await hooks.sendViaApi('api', conversation);
+        const abort = vi.spyOn(app.abortController!, 'abort');
+        app.mode = 'wasm';
         hooks.stopGeneration();
-        expect(vi.mocked(app.abortController.abort)).toHaveBeenCalledOnce();
+        expect(abort).toHaveBeenCalledOnce();
         expect(app.worker.postMessage).not.toHaveBeenCalled();
-        app.activeGenerationKind = 'wasm';
+        app.mode = 'wasm';
+        hooks.sendViaWorker('local', conversation);
+        app.mode = 'api';
         hooks.stopGeneration();
         expect(app.worker.postMessage).toHaveBeenCalledWith({ action: 'cancel' });
     });

@@ -46,10 +46,24 @@ describe('Settings', () => {
         const ui = makeUi();
         ui.clearSessions = vi.fn(() => ({ cleared: 1, total: 2 }));
         const onError = vi.fn();
-        act(() => { render(<Settings ui={ui} onClose={vi.fn()} onError={onError} />, host); });
+        const onChange = vi.fn();
+        act(() => { render(<Settings ui={ui} onClose={vi.fn()} onError={onError} onChange={onChange} />, host); });
         act(() => { button('Clear sessions').click(); });
         act(() => { button('Confirm clear sessions').click(); });
         expect(onError).toHaveBeenCalledWith('Cleared 1 of 2 sessions; stop the current reply before deleting the rest.');
+        expect(onChange).toHaveBeenCalledWith('sessions');
+    });
+
+    it('does not activate a session after the clear operation errors', () => {
+        const ui = makeUi();
+        ui.clearSessions = vi.fn(() => ({ cleared: 0, total: 1, error: 'Session store not ready.' }));
+        const onChange = vi.fn();
+        const onError = vi.fn();
+        act(() => { render(<Settings ui={ui} onClose={vi.fn()} onError={onError} onChange={onChange} />, host); });
+        act(() => { button('Clear sessions').click(); });
+        act(() => { button('Confirm clear sessions').click(); });
+        expect(onError).toHaveBeenCalledWith('Session store not ready.');
+        expect(onChange).not.toHaveBeenCalled();
     });
 
     it('requires confirmation before clearing sessions or editor tabs', () => {

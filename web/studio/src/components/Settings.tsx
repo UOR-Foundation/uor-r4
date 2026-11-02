@@ -36,14 +36,21 @@ export function Settings({ ui, onClose, onChange, onError, onSettingsChange }: S
     }
 
     function confirmClear() {
+        let completed = false;
         if (clearing === 'sessions') {
             const result = ui.clearSessions();
             if (result.error) onError?.(result.error);
-            else if (result.cleared < result.total) onError?.(`Cleared ${result.cleared} of ${result.total} sessions; stop the current reply before deleting the rest.`);
+            else {
+                completed = true;
+                if (result.cleared < result.total) onError?.(`Cleared ${result.cleared} of ${result.total} sessions; stop the current reply before deleting the rest.`);
+            }
         }
-        if (clearing === 'editor') ui.clearEditor();
+        if (clearing === 'editor') {
+            ui.clearEditor();
+            completed = true;
+        }
         setClearing(null);
-        if (clearing) onChange?.(clearing);
+        if (completed && clearing) onChange?.(clearing);
     }
 
     return (

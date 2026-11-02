@@ -70,6 +70,17 @@ describe('SessionList', () => {
         expect(host.querySelector('dialog')).not.toBeNull();
     });
 
+    it('reports rejected export and delete operations', () => {
+        const { api, onError } = mount();
+        api.exportSession = vi.fn(() => null);
+        api.deleteSession = vi.fn(() => false);
+        act(() => { button('Export Session A').click(); });
+        expect(onError).toHaveBeenCalledWith('Session export is unavailable.');
+        act(() => { button('Delete Session A').click(); });
+        act(() => { button('Confirm delete').click(); });
+        expect(onError).toHaveBeenCalledWith('Could not delete that session. Stop the current reply first.');
+    });
+
     it('supports new, select, rename, duplicate, export, and confirmed delete', () => {
         const { store, api, download } = mount();
         act(() => { button('New session').click(); });

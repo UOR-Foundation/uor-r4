@@ -91,6 +91,14 @@ describe('generation adapter', () => {
         adapter.dispose();
     });
 
+    it('does nothing when stop has no active generation', () => {
+        const api = sessions();
+        const adapter = createGenerationAdapter(store, api);
+        adapter.stop();
+        expect(api.stopGeneration).not.toHaveBeenCalled();
+        adapter.dispose();
+    });
+
     it('retains generation error details and permits a valid-source retry', () => {
         const api = sessions();
         const adapter = createGenerationAdapter(store, api);

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ModelSourceAdapter } from '../adapters/modelSourceAdapter.js';
 import type { ApiProvider, ModelSourcesApi } from '../../assets/js/model_sources.js';
 import type { LifecycleStore } from '../state/lifecycle.js';
+import { classifyEndpoint } from '../state/lifecycle.js';
 import { useLifecycle } from '../state/useLifecycle.js';
 import { Modal } from './Modal.js';
 
@@ -81,6 +82,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
         event.preventDefault();
         setProviderError(null);
         try {
+            classifyEndpoint(providerDraft.baseUrl);
             if (editingId) {
                 const patch: Partial<ApiProvider> = {
                     label: providerDraft.label,
@@ -210,7 +212,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
 
             <section aria-label="API providers">
                 <h2>API providers</h2>
-                <p>Connection test: {state.api.testStatus}. Selection does not prove reachability.</p>
+                <p>Connection test: {state.selectedSource?.kind === 'api' ? testResults[state.selectedSource.id] || state.api.testStatus : 'untested'}. Selection does not prove reachability.</p>
                 {providerError && !providerOpen && !removing && <p role="alert">{providerError}</p>}
                 <button type="button" onClick={() => editProvider()}>Add API provider</button>
                 <ul>

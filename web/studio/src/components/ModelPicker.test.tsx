@@ -142,6 +142,7 @@ describe('ModelPicker', () => {
         expect(modelSources.testApi).toHaveBeenCalledWith('api-a');
         expect(store.getState().selectedSource?.id).toBe('api-a');
         expect(host.textContent).toContain('Test: passed');
+        expect(host.textContent).toContain('Connection test: passed');
         act(() => { button('Edit API A').click(); });
         expect(host.querySelector('dialog')).not.toBeNull();
         expect(host.innerHTML).not.toContain('secret-sentinel');
@@ -234,5 +235,22 @@ describe('ModelPicker', () => {
         act(() => { button('Confirm removal').click(); });
         expect(modelSources.setActive).not.toHaveBeenCalled();
         expect(store.getState().selectedSource?.kind).toBe('artifact');
+    });
+
+    it('rejects a non-HTTP provider edit before writing or emitting config', () => {
+        const { modelSources, onError } = mount();
+        const configChanged = vi.fn();
+        document.addEventListener('uor-api-config-changed', configChanged);
+        act(() => { button('Edit API A').click(); });
+        act(() => {
+            input('Provider base URL').value = 'ftp://example.com/v1';
+            input('Provider base URL').dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        act(() => { host.querySelector('form[data-action="save-provider"]')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+        expect(modelSources.updateApi).not.toHaveBeenCalled();
+        expect(configChanged).not.toHaveBeenCalled();
+        expect(host.querySelector('dialog [role="alert"]')?.textContent).toContain('Only HTTP(S) API endpoints are supported.');
+        expect(onError).toHaveBeenCalledWith('Only HTTP(S) API endpoints are supported.');
+        document.removeEventListener('uor-api-config-changed', configChanged);
     });
 });
