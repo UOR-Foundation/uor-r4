@@ -94,3 +94,25 @@ X **carries** when it is better at all three seeds. The rows are read in order; 
   - A diverged loss (non-finite) or an export refusal is an instrument fault: that arm stops, and the fault is repaired in its own unit, never counted.
   - Outputs go to `results/claude/one-model-end-to-end-capacity-2026-11-02/sN/` with `SHA256SUMS`, read back, before any pod goes down.
   - A watcher is armed for every terminal state (`EXIT`), and pods go down after their save.
+
+## Amendment, 2 Nov 2026, 16:20Z: round 1's smoke and the layout of round 2
+
+I-1 did its job on round 1. On seed 2 (pod `vast-58846821`, started 16:14:12Z), every arm passed its step-0 evaluation, then:
+- (W) ran out of GPU memory at 49 s, alone on GPU 1, a 32 GB RTX 5090 (`CUDA_ERROR_OUT_OF_MEMORY`). So (W) does not fit this card at batch 16.
+- (b) and (w) ran out of GPU memory together at 16:16:05Z, sharing GPU 0 with (h). GPU 0 held 27.7 GB at the last sample before that.
+- (h), then alone on GPU 0, passed: 256 steps, about 8.7 GB.
+
+Round 1 ended at exit 5, since the base arm failed its smoke. It is kept as it was in `/workspace/capacity`, and it is saved with the results.
+
+Round 2 changes the layout only. Arms, steps, readings and the table are unchanged:
+- **(b) and (h) share GPU 0.** Both are width 256.
+- **(w) has GPU 1 alone.**
+- **(W) is dropped,** under the ORDER's stop rule. It is **absent**, never level: it was not measured. So row 2 is barred, and the size question at 1,024 stays open for a larger card or a recipe change, which this unit does not make.
+- **Scoring runs one arm at a time on each GPU.** The two GPUs still score side by side.
+- **Round 2 writes to `/workspace/capacity-r2`** (L-002), and its smoke repeats I-1 for this layout.
+- **The job** is `job.sh` at sha256 `71fc10fe82234b9c48552b271c5a7788da1180ca152830ba3a1bb550ac1c265d`.
+
+**Cost.** Vast's 5090 price rose from $0.563 per GPU-hour at the review to $0.89–1.17 at launch:
+- The pods are $2.33/h (seed 1), $1.775/h (seed 2) and $2.171/h (seed 3), or $6.28/h in all. That is inside the $8/h cap but above the $4.20/h projected.
+- Seed 1's first pod (`vast-58845589`) never opened SSH, and `uor-pod up` deleted it after 900 s, about $0.45.
+- The watcher's budget is $24. A healthy run is extended past it, never cancelled.
