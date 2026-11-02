@@ -7,7 +7,7 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 - **The public development ranking did not move.** Both artifact seeds kept exactly their baseline top-1, top-8 and target-admission counts after 256 update attempts.
 - **The tiny margin reduction was not a capability gain.** Margin loss fell by 1,039 and 1,069 units on seeds 1 and 2, but the registered primary ranking bar required increases of 43/47 and 40/44 rows respectively. A loss-only change is retained as a negative.
 - **The seed-2 timing probe accepted no update.** All 16 probe attempts were refusals, so the 256-step arm could not be predicted to find updates from the probe alone. The probe's role was cost projection, not an outcome gate; both projections remained below one CPU hour.
-- **Public-run restart was not executable with this CLI.** The driver reloaded only its final checkpoint, while two-resume equality was covered by trainer-level tests. Public-corpus restart from an interval checkpoint was `NOT_RUN` in this unit; [deepseek-3](../deepseek-3/REPORT.md) later added and executed the bound interval restart.
+- **Public-run restart is not executable with this CLI.** The driver reloads its final checkpoint, while two-resume equality is covered by trainer-level tests. Public-corpus restart from an interval checkpoint remains `NOT_RUN`.
 - **No complete-reply or genuinely fresh-phrasing panel is available without credentials.** The sealed inputs return HTTP 401 and were not opened.
 
 ## What changed
@@ -72,7 +72,7 @@ No repository skill was invoked. The pilot used the merged D84 CPU program, its 
 ## Still open
 
 - A configuration that clears the public ranking bar.
-- Public-corpus restart from an interval checkpoint was closed later by [deepseek-3](../deepseek-3/REPORT.md); the substantive gaps remain capability and sealed-panel grading.
+- Public-corpus restart from an interval checkpoint.
 - A genuine trained FBS float shadow.
 - Complete-reply and fresh-phrasing correctness on credentialed sealed panels.
 - The final program-wide decision on whether CPU training is useful for development; this single failed public configuration is not enough to answer it.
