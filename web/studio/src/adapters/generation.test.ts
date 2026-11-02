@@ -94,6 +94,23 @@ describe('generation adapter', () => {
         adapter.dispose();
     });
 
+    it('stops an active generation on remount and ignores its late completion', () => {
+        const api = sessions();
+        const first = createGenerationAdapter(store, api);
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        expect(first.send('hello')).toBe(true);
+        const generationId = store.getState().session.activeGeneration!.generationId;
+        first.dispose();
+        const second = createGenerationAdapter(store, api);
+        expect(api.stopGeneration).toHaveBeenCalledOnce();
+        expect(store.getState().session.phase).toBe('stopped');
+        expect(store.getState().session.activeGeneration).toBeNull();
+        document.dispatchEvent(new CustomEvent(GENERATION_FINISHED_EVENT, { detail: { outcome: 'complete', generationId } }));
+        expect(store.getState().session.phase).toBe('stopped');
+        expect(store.getState().session.activeGeneration).toBeNull();
+        second.dispose();
+    });
+
     it('ignores a duplicate terminal event from an older generation', () => {
         const api = sessions();
         api.sendPrompt = vi.fn().mockReturnValueOnce(1).mockReturnValueOnce(2);

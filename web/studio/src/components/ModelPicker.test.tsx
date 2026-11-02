@@ -293,6 +293,19 @@ describe('ModelPicker', () => {
         expect(input('API key').value).toBe('');
     });
 
+    it('clears an unsaved API key when the provider dialog closes', () => {
+        mount();
+        act(() => { button('Add API provider').click(); });
+        act(() => {
+            input('API key').value = 'unsaved-secret';
+            input('API key').dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        act(() => { host.querySelector<HTMLDialogElement>('dialog')!.close(); });
+        expect(host.querySelector('dialog')).toBeNull();
+        act(() => { button('Add API provider').click(); });
+        expect(input('API key').value).toBe('');
+    });
+
     it('rejects a non-HTTP provider selection before writing or emitting config', () => {
         const modelAdapter = adapter();
         const modelSources = sources();

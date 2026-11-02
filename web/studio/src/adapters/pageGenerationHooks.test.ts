@@ -44,6 +44,7 @@ function pageHooks() {
     const apiRequests: CapturedApiRequest[] = [];
     let synchronousApiError: string | null = null;
     let requestSequence = 0;
+    const setMetrics = vi.fn();
     const factory = new Function(
         'app', 'document', 'window', 'toast', 'setMetrics', 'setEngineStatus', 'encodeTextWithArtifact', 'fillPredictorSha', '$',
         'activeConversation', 'appendMessageElement', 'touchConversation', 'updateComposerState', 'requestCheckpoint',
@@ -64,7 +65,7 @@ function pageHooks() {
          return { runPrediction, renderDiscretePrediction, onModelSourceChanged, onWorkerMessage, sendFromComposer, sendViaWorker, sendViaApi, stopGeneration, finishLocalGeneration, finishGenerationWithError };`,
     );
     const hooks = factory(
-        app, document, window, vi.fn(), vi.fn(), vi.fn(), vi.fn(() => [1, 2]), vi.fn(), (selector: string) => document.querySelector(selector),
+        app, document, window, vi.fn(), setMetrics, vi.fn(), vi.fn(() => [1, 2]), vi.fn(), (selector: string) => document.querySelector(selector),
         () => currentConversation, vi.fn(() => null), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(() => '1'), vi.fn(),
         () => `gen-${++requestSequence}`, vi.fn(async (options: CapturedApiRequest) => {
             if (synchronousApiError) {
@@ -89,7 +90,7 @@ function pageHooks() {
         finishLocalGeneration(message: { id?: string; fullText?: string; tokenCount?: number }): void;
         finishGenerationWithError(error: string, requestId?: string | number, generationId?: number | null): boolean | void;
     };
-    return { app, hooks, conversation, apiRequests, clearConversation: () => { currentConversation = null; }, failNextApi: (message: string) => { synchronousApiError = message; } };
+    return { app, hooks, conversation, apiRequests, setMetrics, clearConversation: () => { currentConversation = null; }, failNextApi: (message: string) => { synchronousApiError = message; } };
 }
 
 function events(type: string, listener: (event: CustomEvent) => void) {
@@ -228,7 +229,7 @@ describe('actual page prediction hooks', () => {
     });
 
     it('rolls back a worker start exception without persisting the turn', () => {
-        const { app, hooks, conversation } = pageHooks();
+        const { app, hooks, conversation, setMetrics } = pageHooks();
         app.conversations = [conversation];
         app.activeConversationId = conversation.id;
         app.worker.postMessage = vi.fn(() => { throw new Error('clone failed'); });
@@ -237,6 +238,8 @@ describe('actual page prediction hooks', () => {
         expect(app.generating).toBe(false);
         expect(app.activeGenerationId).toBeNull();
         expect(app.chatGenerationId).toBeNull();
+        expect(app.chatRequests).toEqual({});
+        expect(setMetrics).toHaveBeenLastCalledWith('Ready');
     });
 
     it('rolls back an API attachment failure before generation', () => {

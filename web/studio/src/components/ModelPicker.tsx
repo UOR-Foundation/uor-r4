@@ -266,7 +266,7 @@ export function ModelPicker({ store, adapter, sources, operations, onError, onSu
             </details>
 
             {providerOpen && (
-                <Modal title={editingId ? 'Edit API provider' : 'Add API provider'} onClose={() => { setProviderOpen(false); setEditingId(null); }}>
+                <Modal title={editingId ? 'Edit API provider' : 'Add API provider'} onClose={() => { setProviderOpen(false); setEditingId(null); setProviderDraft(emptyDraft); }}>
                     {providerError && providerError.operation === `provider:save:${editingId || 'new'}` && <p role="alert">{providerError.message}</p>}
                     <form data-action="save-provider" onSubmit={saveProvider}>
                         <label>Provider name<input aria-label="Provider name" required value={providerDraft.label} onInput={(event) => setProviderDraft({ ...providerDraft, label: event.currentTarget.value })} /></label>

@@ -1570,7 +1570,7 @@
                 activeId: app.activeGenerationId,
                 chatId: app.chatGenerationId,
                 requestId: app.activeChatRequestId,
-                requests: app.chatRequests,
+                requests: { ...app.chatRequests },
                 kind: app.activeGenerationKind,
                 generating: app.generating,
                 abortController: app.abortController,
@@ -1601,6 +1601,7 @@
                 renderConversationList();
                 renderMessages();
                 updateComposerState();
+                setMetrics('Ready');
             }
             try {
                 var conversation = ensureConversation();

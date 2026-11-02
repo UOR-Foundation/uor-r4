@@ -2,6 +2,7 @@ import type { LifecycleStore } from '../state/lifecycle.js';
 import type { SessionApi } from './workflow.js';
 
 export const GENERATION_FINISHED_EVENT = 'uor-generation-finished';
+const attachedStores = new WeakSet<LifecycleStore>();
 
 export interface GenerationAdapter {
     send(prompt: string): boolean;
@@ -22,6 +23,12 @@ export function createGenerationAdapter(store: LifecycleStore, sessions: Session
             store.dispatch({ type: 'generation/finished', outcome: detail.outcome, generationId: detail.generationId, error: detail.error });
         }
     };
+    const active = store.getState().session.activeGeneration;
+    if (attachedStores.has(store) && active) {
+        if (active.canStop !== false) sessions.stopGeneration();
+        store.dispatch({ type: 'generation/finished', outcome: 'stopped', generationId: active.generationId });
+    }
+    attachedStores.add(store);
     document.addEventListener(GENERATION_FINISHED_EVENT, finished);
 
     return {

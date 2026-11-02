@@ -354,6 +354,20 @@ describe('StudioApp', () => {
         expect(host.querySelector('[role="alert"]')).toBeNull();
     });
 
+    it('clears a SessionList new-session error after a palette retry', () => {
+        const store = new LifecycleStore();
+        const sessions = makeSessions();
+        sessions.newSession = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessions} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { button('New session').click(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('Could not create a session.');
+        act(() => { button('Command palette').click(); });
+        act(() => { host.querySelector<HTMLButtonElement>('button[data-command-id="new-session"]')!.click(); });
+        expect(host.querySelector('[role="alert"]')).toBeNull();
+    });
+
     it('clears a palette new-session error after a successful retry', () => {
         const store = new LifecycleStore();
         const sessions = makeSessions();

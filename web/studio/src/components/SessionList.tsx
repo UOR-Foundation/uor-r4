@@ -28,7 +28,10 @@ export function SessionList({ store, sessions, download, onError, onChange, onSu
         callback?.(operation);
     };
     const activate = (operation: string) => { store.dispatch({ type: 'session/activated' }); succeed(operation, onChange); };
-    const reportError = (message: string, operation: string) => { setError({ message, operation }); onError(message, operation); };
+    const reportError = (message: string, operation: string) => {
+        if (operation.startsWith('session:rename:') || operation.startsWith('session:delete:')) setError({ message, operation });
+        onError(message, operation);
+    };
     const items = sessions.listSessions();
 
     function rename(session: SessionSummary) {
@@ -40,7 +43,6 @@ export function SessionList({ store, sessions, download, onError, onChange, onSu
     return (
         <section aria-label="Sessions">
             <h2>Sessions</h2>
-            {error && !renaming && !deleting && <p role="alert">{error.message}</p>}
             <button type="button" disabled={generating} onClick={() => { if (sessions.newSession()) activate('session:new'); else reportError('Could not create a session.', 'session:new'); }}>New session</button>
             {items.length === 0 && <p>No sessions yet</p>}
             <ul>
