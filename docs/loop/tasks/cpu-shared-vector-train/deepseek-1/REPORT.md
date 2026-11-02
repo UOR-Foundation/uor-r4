@@ -28,22 +28,22 @@ Lab: deepseek. Item: [cpu-shared-vector-train](../../../../roadmap/items/cpu-sha
 
 ## Measurements
 
-- `cargo test --locked -p uor-r4-cpu-train`: 43 passed, 0 failed.
+- `cargo test --locked -p uor-r4-cpu-train`: 44 passed, 0 failed.
 - An accepted update lowers the exact margin, moves target and rival as specified, preserves target cell identity, and changes no artifact byte outside `writer.table`.
 - A Hamming artifact rebuilt after update matches the serving integer session's complete Q12 query, token and kept cells.
-- Stop/checkpoint/resume matches the uninterrupted next reading and checkpoint bytes exactly; truncated and mismatched-sample checkpoints are refused.
+- Stop/checkpoint/resume matches the uninterrupted next reading and checkpoint bytes exactly across a real multi-sample epoch boundary; truncated, mismatched-sample, duplicate-order and oversized-order checkpoints are refused.
 - A scheduled sample obtains its query through the actual CPU forward and accepts a bounded update while logging all exact metrics.
 - Release benchmark on the Ryzen 9 9950X:
 
 | Timed steps | Accepted | Elapsed | Steps/s | Final margin | Peak RSS |
 |---:|---:|---:|---:|---:|---:|
-| 64 | 56 | 271.829 ms | 235.442 | 9,838 | 11,416 KiB |
+| 64 | 56 | 271.414 ms | 235.802 | 9,838 | 11,440 KiB |
 
 Checkpoint SHA-256: `f4561fb028718df033b85ca1de16b58fe742cc65014b09b14e0ef50bb4e0726f`.
 
 ## Checks run at the head
 
-- `cargo test --locked -p uor-r4-cpu-train`: PASS, 43 tests.
+- `cargo test --locked -p uor-r4-cpu-train`: PASS, 44 tests.
 - `cargo clippy --locked -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings`: PASS.
 - `cargo run --locked --release -p uor-r4-cpu-train --bin cpu-rank-margin-bench`: PASS; readings above.
 - `cargo fmt --package uor-r4-cpu-train -- --check`: PASS.

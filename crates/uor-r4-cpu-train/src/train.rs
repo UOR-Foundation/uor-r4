@@ -106,6 +106,7 @@ impl CpuRankMarginTrainer {
         if samples.is_empty() {
             return Err(invalid("rank-margin training needs at least one sample"));
         }
+        validate_training_model(artifact)?;
         let forward = CpuFbsForward::from_artifact(artifact)
             .map_err(|error| invalid(format!("rank-margin artifact does not load: {error}")))?;
         validate_samples(&samples, &forward)?;
@@ -237,12 +238,19 @@ impl CpuRankMarginTrainer {
         }
         let order_len =
             usize::try_from(input.u32()?).map_err(|_| invalid("order length exceeds usize"))?;
+        if order_len != samples.len() {
+            return Err(invalid("rank-margin checkpoint order length differs"));
+        }
         let mut order = Vec::with_capacity(order_len);
+        let mut seen = vec![false; samples.len()];
         for _ in 0..order_len {
             let index =
                 usize::try_from(input.u32()?).map_err(|_| invalid("order index exceeds usize"))?;
             if index >= samples.len() {
                 return Err(invalid("rank-margin checkpoint order is out of range"));
+            }
+            if std::mem::replace(&mut seen[index], true) {
+                return Err(invalid("rank-margin checkpoint order repeats a sample"));
             }
             order.push(index);
         }
@@ -258,6 +266,7 @@ impl CpuRankMarginTrainer {
         if cursor > order.len() {
             return Err(invalid("rank-margin checkpoint cursor is out of range"));
         }
+        validate_training_model(&artifact)?;
         let forward = CpuFbsForward::from_artifact(&artifact)
             .map_err(|error| invalid(format!("rank-margin checkpoint artifact: {error}")))?;
         validate_samples(&samples, &forward)?;
@@ -487,6 +496,20 @@ impl CpuRankMarginTrainer {
             admitted_cells: admitted,
         })
     }
+}
+
+fn validate_training_model(artifact: &[u8]) -> Result<()> {
+    let model = IntegerStackModel::parse(artifact)
+        .map_err(|error| invalid(format!("rank-margin model does not parse: {error}")))?;
+    if model.shape().vocab != VOCABULARY {
+        return Err(invalid("rank-margin training requires vocabulary 4096"));
+    }
+    if !model.shape().head_native_vector() || model.shape().head_nearest() {
+        return Err(invalid(
+            "rank-margin training requires the native cell-writer head",
+        ));
+    }
+    Ok(())
 }
 
 fn validate_samples(samples: &[RankMarginSample], forward: &CpuFbsForward) -> Result<()> {
@@ -897,9 +920,33 @@ mod tests {
         let mut short = checkpoint.clone();
         short.truncate(short.len() - 1);
         assert!(CpuRankMarginTrainer::resume(&short, samples.clone()).is_err());
+        let mut oversized = checkpoint.clone();
+        oversized[96..100].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(CpuRankMarginTrainer::resume(&oversized, samples.clone()).is_err());
+        let mut duplicate = checkpoint.clone();
+        let first: [u8; 4] = duplicate[100..104].try_into().unwrap();
+        duplicate[104..108].copy_from_slice(&first);
+        assert!(CpuRankMarginTrainer::resume(&duplicate, samples.clone()).is_err());
         let mut other = samples;
         other[0].target = 0;
         assert!(CpuRankMarginTrainer::resume(&checkpoint, other).is_err());
+    }
+
+    #[test]
+    fn the_trainer_requires_the_native_cell_writer_head() {
+        let mut snapshot = canonical_snapshot(false);
+        snapshot.readout_nearest = true;
+        let artifact = export_fbs_trunk_uorlut01(&snapshot).unwrap();
+        assert!(CpuRankMarginTrainer::from_artifact(
+            &artifact,
+            vec![RankMarginSample {
+                input: vec![0],
+                target: 0,
+            }],
+            RankMarginConfig::default(),
+            7,
+        )
+        .is_err());
     }
 
     #[test]
