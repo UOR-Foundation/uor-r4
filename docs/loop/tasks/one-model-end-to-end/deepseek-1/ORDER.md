@@ -21,11 +21,14 @@ No edits to Claude-owned float-train, integer or Q5 files. No sealed panel is re
 ## Done when
 
 - A deterministic Rust instrument accepts explicit corpus, mask, manifest and integer-artifact paths.
-- It reports artifact identity, exact CPU-versus-serving query/token/kept-cell parity, target admission, top-1/top-8 and row counts.
+- It reports artifact identity, target admission, top-1/top-8 and row counts.
+- It independently recomputes the writer from the serving Q12 query and reports admitted-cell, top-8 and top-1 parity.
+  - Full two-sided CPU-trunk parity is required only when the CPU path supports the artifact family.
+  - The current 19-table M1 artifact has only writer parity; full trunk parity is reported `unavailable` with the missing mechanism.
 - Where the inputs permit, it reports exact prompt/TRAIN overlap, value-masked prompt-template overlap, keyed/unkeyed status, complete/incomplete output, exact reply/TRAIN overlap and reply n-gram novelty in separate strata.
 - Every unavailable metric is named `unavailable`, with the missing input or boundary, rather than inferred.
 - Count-table, memory-off or no-read controls are reported where already available; missing controls remain explicit.
-- Focused tests cover tie/boundary cases, absent fields, malformed artifacts, deterministic output and a planted wrong metric.
+- Focused tests cover tie/boundary cases, absent fields, malformed corpus and artifact inputs, empty inputs, argument refusal, create-new output, deterministic output and a planted wrong metric.
 - README and task REPORT state exact commands, measured output, limitations and the next M2 decision it informs.
 
 ## Stop

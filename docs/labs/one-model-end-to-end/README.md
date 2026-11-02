@@ -2,15 +2,19 @@
 
 ## The CPU evidence lane (deepseek-1, 2 Nov 2026)
 
-[`instrument/`](instrument) also builds a CPU-only `m2-evidence` command. It evaluates a discrete integer artifact on a canonical UORT panel and separates next-token accuracy into prompt-overlap, first-8 key, reply-overlap and opening/continuation strata. It reads an optional TRAIN-format split as the reference index. It does not require a GPU and does not edit the serving engine.
+[`instrument/`](instrument) also builds a CPU-only `m2-evidence` command. It evaluates a discrete integer artifact on a canonical UORT panel and separates next-token accuracy into prompt-overlap, first-8 key, reply-overlap and opening/continuation strata. It reads an optional TRAIN-format split as the reference index. It also recomputes the writer independently from the serving Q12 query. It does not require a GPU and does not edit the serving engine.
 
 ```sh
 cd docs/labs/one-model-end-to-end/instrument
 cargo run --release --bin m2-evidence -- \
-  artifact=MODEL.d11 panel=PANEL_DIR train=TRAIN_DIR max-targets=1024 out=NEW_REPORT.json
+  artifact=MODEL.d11 \
+  panel-tokens=PANEL/tokens.u16 panel-mask=PANEL/response_mask.u8 panel-manifest=PANEL/manifest.json \
+  train-tokens=REFERENCE/tokens.u16 train-mask=REFERENCE/response_mask.u8 \
+  train-manifest=REFERENCE/manifest.json train-role=generated_control \
+  max-targets=1024 out=NEW_REPORT.json
 ```
 
-The report names artifact and corpus hashes; counts admission, top-1 and top-8; reports exact prompt/reply overlap and reply 4-/8-gram novelty; and marks generated-completion, generated-novelty, value-masked-template and independent CPU-read evidence as unavailable when their inputs are absent. The first public artifact/panel smoke run is in the [deepseek-1 REPORT](../../loop/tasks/one-model-end-to-end/deepseek-1/REPORT.md).
+The report binds artifact and corpus manifests, tokenizer and content hashes; counts admission, top-1 and top-8; reports exact prompt/reply overlap and reply 4-/8-gram novelty; and marks missing controls or data as unavailable. It distinguishes `canonical_train` from `generated_control`; the role is required when a reference index is supplied. The current 19-table M1 smoke has exact writer parity from the serving Q12 query. Full two-sided CPU-trunk parity remains unavailable because the CPU research path does not implement the 15 additional M1 trunk tables. The first public artifact/panel smoke run is in the [deepseek-1 REPORT](../../loop/tasks/one-model-end-to-end/deepseek-1/REPORT.md).
 
 ## The overturn check (claude-205)
 

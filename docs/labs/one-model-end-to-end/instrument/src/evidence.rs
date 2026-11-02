@@ -3,9 +3,10 @@
 //! This instrument evaluates the discrete integer artifact through the same
 //! `IntegerDiscreteModel` used by native serving. It reports next-token
 //! admission/top-1/top-8, checks the independent CPU writer on the serving
-//! query, and stratifies panel rows by whole-run overlap with a supplied TRAIN
-//! split. It does not call generated text "complete" and does not infer
-//! generated-reply novelty when no generated-reply file is supplied.
+//! query where its fixed width-four codebook applies, and stratifies panel rows
+//! by whole-run overlap with a supplied TRAIN or control split. It does not
+//! call generated text "complete" and does not infer generated-reply novelty
+//! when no generated-reply file is supplied.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -14,6 +15,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use uor_r4_cpu_train::{CpuWriterCore, ABSENT_CELL, READ_WIDTH, VOCABULARY};
 use uor_r4_integer::discrete_d11::IntegerDiscreteModel;
 
 type Result<T> = std::result::Result<T, String>;
@@ -50,6 +52,8 @@ pub struct ArtifactIdentity {
     pub path: String,
     pub sha256: String,
     pub model_sha256: String,
+    pub schema: String,
+    pub tables: usize,
     pub vocabulary: u32,
     pub context: u32,
     pub blocks: u32,
@@ -60,6 +64,13 @@ pub struct ArtifactIdentity {
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub struct CorpusIdentity {
     pub path: String,
+    pub manifest_sha256: String,
+    pub split: String,
+    pub cell_phrasing: Option<String>,
+    pub cell_value: Option<String>,
+    pub seed: Option<u64>,
+    pub conversations: Option<usize>,
+    pub tokenizer_sha256: String,
     pub tokens_sha256: String,
     pub mask_sha256: String,
     pub documents: usize,
@@ -68,18 +79,89 @@ pub struct CorpusIdentity {
     pub prompt_runs: usize,
     pub reply_runs: usize,
     pub max_tokens: usize,
+    pub reference_role: Option<ReferenceRole>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReferenceRole {
+    CanonicalTrain,
+    GeneratedControl,
+}
+
+impl ReferenceRole {
+    pub fn parse(value: &str) -> Result<Self> {
+        match value {
+            "canonical_train" => Ok(Self::CanonicalTrain),
+            "generated_control" => Ok(Self::GeneratedControl),
+            _ => Err(format!(
+                "train-role= must be canonical_train or generated_control, not {value:?}"
+            )),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CorpusFiles {
+    pub tokens: PathBuf,
+    pub mask: PathBuf,
+    pub manifest: PathBuf,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub struct ReplyOverlap {
     pub reference_replies: u64,
-    pub reference_replies_seen_in_train: u64,
-    pub reference_prompts_seen_in_train: u64,
-    pub reference_prompts_keyed_in_train: u64,
+    pub reference_replies_seen_in_reference: u64,
+    pub reference_prompts_seen_in_reference: u64,
+    pub reference_prompts_keyed_in_reference: u64,
     pub reference_reply_new_4grams: u64,
     pub reference_reply_total_4grams: u64,
     pub reference_reply_new_8grams: u64,
     pub reference_reply_total_8grams: u64,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct WriterParity {
+    pub rows: u64,
+    pub admitted_cell_mismatches: u64,
+    pub top8_mismatches: u64,
+    pub token_mismatches: u64,
+    pub query_source: String,
+    pub full_cpu_trunk_parity: String,
+}
+
+impl WriterParity {
+    fn unavailable(reason: impl Into<String>) -> Self {
+        Self {
+            rows: 0,
+            admitted_cell_mismatches: 0,
+            top8_mismatches: 0,
+            token_mismatches: 0,
+            query_source: "unavailable".to_owned(),
+            full_cpu_trunk_parity: reason.into(),
+        }
+    }
+
+    fn is_exact(&self) -> bool {
+        self.rows > 0
+            && self.admitted_cell_mismatches == 0
+            && self.top8_mismatches == 0
+            && self.token_mismatches == 0
+    }
+
+    fn from_serving_query() -> Self {
+        Self {
+            rows: 0,
+            admitted_cell_mismatches: 0,
+            top8_mismatches: 0,
+            token_mismatches: 0,
+            query_source: "integer_serving_trunk_q12".to_owned(),
+            full_cpu_trunk_parity:
+                "unavailable: the independent CPU writer consumes the serving trunk's Q12 query; \
+                 the 19-table M1 trunk is not duplicated by the CPU research path"
+                    .to_owned(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -92,6 +174,7 @@ pub struct EvidenceReport {
     pub overall: Reading,
     pub strata: BTreeMap<String, Reading>,
     pub reply_overlap: Option<ReplyOverlap>,
+    pub writer_parity: WriterParity,
     pub unavailable: BTreeMap<String, String>,
 }
 
@@ -112,6 +195,13 @@ struct Corpus {
     runs: Vec<Run>,
     tokens_sha256: String,
     mask_sha256: String,
+    manifest_sha256: String,
+    split: String,
+    cell_phrasing: Option<String>,
+    cell_value: Option<String>,
+    seed: Option<u64>,
+    conversations: Option<usize>,
+    tokenizer_sha256: String,
     max_tokens: usize,
 }
 
@@ -127,6 +217,7 @@ struct Metadata {
 struct Target {
     prefix: Vec<u32>,
     target: u32,
+    target_cell: u32,
     metadata: Metadata,
 }
 
@@ -173,10 +264,114 @@ fn sha256(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
+fn artifact_header(bytes: &[u8]) -> Result<serde_json::Value> {
+    if bytes.len() < 16 || &bytes[..8] != b"UORLUT01" {
+        return Err("artifact is not a canonical UORLUT01 file".to_owned());
+    }
+    let header_len = u64::from_le_bytes(
+        bytes[8..16]
+            .try_into()
+            .map_err(|_| "artifact header length differs".to_owned())?,
+    );
+    let header_end = usize::try_from(header_len)
+        .ok()
+        .and_then(|length| length.checked_add(16))
+        .filter(|&end| end <= bytes.len())
+        .ok_or_else(|| "artifact header length is out of bounds".to_owned())?;
+    serde_json::from_slice(&bytes[16..header_end])
+        .map_err(|error| format!("artifact header: {error}"))
+}
+
+fn artifact_identity(
+    path: &Path,
+    bytes: &[u8],
+    model: &IntegerDiscreteModel,
+) -> Result<ArtifactIdentity> {
+    let header = artifact_header(bytes)?;
+    let schema = header["schema"]
+        .as_str()
+        .ok_or_else(|| "artifact schema differs".to_owned())?
+        .to_owned();
+    let tables = header["tables"]
+        .as_array()
+        .ok_or_else(|| "artifact tables differ".to_owned())?
+        .len();
+    let shape = model.shape();
+    Ok(ArtifactIdentity {
+        path: path.display().to_string(),
+        sha256: sha256(bytes),
+        model_sha256: model.artifact_sha256().to_owned(),
+        schema,
+        tables,
+        vocabulary: shape.vocabulary,
+        context: shape.context,
+        blocks: shape.blocks,
+        kept_cells: shape.kept_cells,
+        read_mode: shape.read_mode.clone(),
+    })
+}
+
+fn codebook_from_artifact(bytes: &[u8]) -> Result<Vec<i32>> {
+    let header = artifact_header(bytes)?;
+    let header_len = u64::from_le_bytes(
+        bytes[8..16]
+            .try_into()
+            .map_err(|_| "artifact header length differs".to_owned())?,
+    );
+    let unaligned = 16usize
+        .checked_add(
+            usize::try_from(header_len)
+                .map_err(|_| "artifact header length exceeds usize".to_owned())?,
+        )
+        .ok_or_else(|| "artifact data offset overflows".to_owned())?;
+    let data_start = unaligned
+        .checked_add(63)
+        .ok_or_else(|| "artifact alignment overflows".to_owned())?
+        / 64
+        * 64;
+    let table = header["tables"]
+        .as_array()
+        .and_then(|tables| {
+            tables
+                .iter()
+                .find(|table| table["name"].as_str() == Some("discrete.table"))
+        })
+        .ok_or_else(|| "artifact has no discrete.table".to_owned())?;
+    if table["kind"].as_str() != Some("i32")
+        || table["len"].as_u64() != Some((VOCABULARY * READ_WIDTH) as u64)
+    {
+        return Err("artifact discrete.table is not the 4096 x 32 i32 codebook".to_owned());
+    }
+    let offset = usize::try_from(
+        table["span"]["offset"]
+            .as_u64()
+            .ok_or_else(|| "artifact table offset differs".to_owned())?,
+    )
+    .map_err(|_| "artifact table offset exceeds usize".to_owned())?;
+    let expected_bytes = VOCABULARY * READ_WIDTH * 4;
+    if table["span"]["bytes"].as_u64() != Some(expected_bytes as u64) {
+        return Err("artifact discrete.table byte span differs".to_owned());
+    }
+    let start = data_start
+        .checked_add(offset)
+        .ok_or_else(|| "artifact table start overflows".to_owned())?;
+    let end = start
+        .checked_add(expected_bytes)
+        .ok_or_else(|| "artifact table end overflows".to_owned())?;
+    let section = bytes
+        .get(start..end)
+        .ok_or_else(|| "artifact discrete.table span is out of bounds".to_owned())?;
+    Ok(section
+        .chunks_exact(4)
+        .map(|word| i32::from_le_bytes(word.try_into().expect("four-byte chunk")))
+        .collect())
+}
+
 #[derive(Deserialize)]
 struct ManifestToken {
     vocab_size: usize,
     bos_id: u32,
+    sha256: String,
 }
 
 #[derive(Deserialize)]
@@ -190,6 +385,13 @@ struct Manifest {
     mask_sha256: String,
     response_tokens: usize,
     max_tokens: usize,
+    split: String,
+    #[serde(default)]
+    cell: Option<serde_json::Value>,
+    #[serde(default)]
+    seed: Option<u64>,
+    #[serde(default)]
+    conversations: Option<usize>,
     tokenizer: ManifestToken,
 }
 
@@ -213,6 +415,7 @@ fn parse_uort(token_bytes: &[u8], mask: &[u8]) -> Result<Vec<u32>> {
             .map_err(|_| "UORT vocabulary differs".to_owned())?,
     );
     if version != 1
+        || count == 0
         || token_bytes[20..64].iter().any(|&byte| byte != 0)
         || usize::try_from(count)
             .ok()
@@ -230,17 +433,21 @@ fn parse_uort(token_bytes: &[u8], mask: &[u8]) -> Result<Vec<u32>> {
         .collect())
 }
 
-fn read_corpus(path: &Path, context: usize, vocabulary: usize, bos: u32) -> Result<Corpus> {
-    let token_bytes = fs::read(path.join("tokens.u16"))
-        .map_err(|e| format!("{}: {e}", path.join("tokens.u16").display()))?;
-    let mask = fs::read(path.join("response_mask.u8"))
-        .map_err(|e| format!("{}: {e}", path.join("response_mask.u8").display()))?;
-    let manifest = fs::read(path.join("manifest.json"))
-        .map_err(|e| format!("{}: {e}", path.join("manifest.json").display()))?;
+fn valid_sha256(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn read_corpus(files: &CorpusFiles, context: usize, vocabulary: usize, bos: u32) -> Result<Corpus> {
+    let token_bytes =
+        fs::read(&files.tokens).map_err(|e| format!("{}: {e}", files.tokens.display()))?;
+    let mask = fs::read(&files.mask).map_err(|e| format!("{}: {e}", files.mask.display()))?;
+    let manifest =
+        fs::read(&files.manifest).map_err(|e| format!("{}: {e}", files.manifest.display()))?;
     let identity: Manifest =
         serde_json::from_slice(&manifest).map_err(|error| format!("manifest: {error}"))?;
     if identity.schema != "uor-r4-chat-corpus/v1"
         || identity.mask_schema != "uor-r4-response-mask/u8/v1"
+        || identity.split.is_empty()
         || identity.tokenizer.vocab_size != vocabulary
         || identity.tokenizer.bos_id != bos
         || identity.tokens_bytes != token_bytes.len()
@@ -248,14 +455,16 @@ fn read_corpus(path: &Path, context: usize, vocabulary: usize, bos: u32) -> Resu
         || identity.response_tokens != mask.iter().filter(|&&m| m == 1).count()
         || identity.tokens_sha256 != sha256(&token_bytes)
         || identity.mask_sha256 != sha256(&mask)
+        || !valid_sha256(&identity.tokenizer.sha256)
     {
         return Err(format!(
             "{}: corpus manifest identity or artifact vocabulary/BOS differs",
-            path.display()
+            files.manifest.display()
         ));
     }
     let tokens = parse_uort(&token_bytes, &mask)?;
     if identity.tokens != tokens.len()
+        || identity.tokens == 0
         || identity.max_tokens < context
         || mask.iter().any(|&value| value > 1)
         || tokens.iter().any(|&token| token as usize >= vocabulary)
@@ -267,20 +476,56 @@ fn read_corpus(path: &Path, context: usize, vocabulary: usize, bos: u32) -> Resu
         .enumerate()
         .filter_map(|(index, &token)| (token == bos).then_some(index))
         .collect();
+    if starts.is_empty() {
+        return Err("corpus has no BOS-delimited documents".to_owned());
+    }
+    if starts[0] != 0 {
+        return Err("corpus does not begin with BOS".to_owned());
+    }
     let documents: Vec<Range<usize>> = starts
         .iter()
         .enumerate()
         .map(|(index, &start)| start..starts.get(index + 1).copied().unwrap_or(tokens.len()))
         .collect();
     let runs = collect_runs(&mask, &documents);
+    if identity
+        .conversations
+        .is_some_and(|conversations| conversations != documents.len())
+    {
+        return Err("corpus manifest conversation count differs".to_owned());
+    }
+    if !runs.iter().any(|run| run.mask == 1) {
+        return Err("corpus has no response runs".to_owned());
+    }
+    let (cell_phrasing, cell_value) = identity
+        .cell
+        .as_ref()
+        .map(|cell| {
+            (
+                cell["phrasing"].as_str().map(str::to_owned),
+                cell["value"].as_str().map(str::to_owned),
+            )
+        })
+        .unwrap_or((None, None));
     Ok(Corpus {
-        path: path.to_path_buf(),
+        path: files
+            .manifest
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf(),
         tokens,
         mask,
         documents,
         runs,
         tokens_sha256: identity.tokens_sha256,
         mask_sha256: identity.mask_sha256,
+        manifest_sha256: sha256(&manifest),
+        split: identity.split,
+        cell_phrasing,
+        cell_value,
+        seed: identity.seed,
+        conversations: identity.conversations,
+        tokenizer_sha256: identity.tokenizer.sha256,
         max_tokens: identity.max_tokens,
     })
 }
@@ -307,9 +552,16 @@ fn collect_runs(mask: &[u8], documents: &[Range<usize>]) -> Vec<Run> {
     runs
 }
 
-fn corpus_identity(corpus: &Corpus) -> CorpusIdentity {
+fn corpus_identity(corpus: &Corpus, reference_role: Option<ReferenceRole>) -> CorpusIdentity {
     CorpusIdentity {
         path: corpus.path.display().to_string(),
+        manifest_sha256: corpus.manifest_sha256.clone(),
+        split: corpus.split.clone(),
+        cell_phrasing: corpus.cell_phrasing.clone(),
+        cell_value: corpus.cell_value.clone(),
+        seed: corpus.seed,
+        conversations: corpus.conversations,
+        tokenizer_sha256: corpus.tokenizer_sha256.clone(),
         tokens_sha256: corpus.tokens_sha256.clone(),
         mask_sha256: corpus.mask_sha256.clone(),
         documents: corpus.documents.len(),
@@ -318,6 +570,7 @@ fn corpus_identity(corpus: &Corpus) -> CorpusIdentity {
         prompt_runs: corpus.runs.iter().filter(|run| run.mask == 0).count(),
         reply_runs: corpus.runs.iter().filter(|run| run.mask == 1).count(),
         max_tokens: corpus.max_tokens,
+        reference_role,
     }
 }
 
@@ -366,7 +619,12 @@ fn metadata_for(
     }
 }
 
-fn targets_in(corpus: &Corpus, context: usize, reply_metadata: &[Metadata]) -> Vec<Target> {
+fn targets_in(
+    corpus: &Corpus,
+    context: usize,
+    cells: &[u32],
+    reply_metadata: &[Metadata],
+) -> Vec<Target> {
     let mut targets = Vec::with_capacity(corpus.mask.iter().filter(|&&mask| mask == 1).count());
     for (reply_ordinal, run) in corpus.runs.iter().filter(|run| run.mask == 1).enumerate() {
         let document = &corpus.documents[run.document];
@@ -383,6 +641,7 @@ fn targets_in(corpus: &Corpus, context: usize, reply_metadata: &[Metadata]) -> V
             targets.push(Target {
                 prefix: corpus.tokens[prefix_start..target_position].to_vec(),
                 target: corpus.tokens[target_position],
+                target_cell: cells[corpus.tokens[target_position] as usize],
                 metadata,
             });
         }
@@ -406,18 +665,53 @@ fn add_stratum(strata: &mut BTreeMap<String, Reading>, name: impl Into<String>, 
     strata.entry(name.into()).or_default().merge(reading);
 }
 
+fn observe_writer_parity(
+    writer: &CpuWriterCore,
+    evaluation: &uor_r4_integer::discrete_d11::DiscretePrefixEvaluation,
+    writer_parity: &mut WriterParity,
+) -> Result<()> {
+    let query: &[i32; READ_WIDTH] = evaluation.read_vector.as_slice().try_into().map_err(|_| {
+        format!(
+            "serving query has {} coordinates, not {READ_WIDTH}",
+            evaluation.read_vector.len()
+        )
+    })?;
+    let decision = writer.decide(query);
+    let admitted_cells = decision.admitted[..decision.admitted_count]
+        .iter()
+        .copied()
+        .filter(|&cell| cell != ABSENT_CELL)
+        .map(u32::from)
+        .collect::<Vec<_>>();
+    let mut served_top8 = [u32::MAX; 8];
+    for (slot, &token) in evaluation.top8.iter().take(8).enumerate() {
+        served_top8[slot] = token;
+    }
+    writer_parity.rows += 1;
+    writer_parity.admitted_cell_mismatches +=
+        u64::from(admitted_cells != evaluation.admitted_cells);
+    writer_parity.top8_mismatches += u64::from(decision.top8 != served_top8);
+    writer_parity.token_mismatches += u64::from(decision.top8[0] != evaluation.prediction);
+    Ok(())
+}
+
 fn observe_targets<F>(
     artifact: &ArtifactIdentity,
     targets: &[Target],
+    writer: Option<&CpuWriterCore>,
+    writer_parity: &mut WriterParity,
     mut predict: F,
 ) -> Result<(Reading, BTreeMap<String, Reading>)>
 where
-    F: FnMut(&[u32], u32) -> Result<(bool, bool, bool)>,
+    F: FnMut(&[u32]) -> Result<uor_r4_integer::discrete_d11::DiscretePrefixEvaluation>,
 {
     let mut overall = Reading::default();
     let mut strata = BTreeMap::new();
     for (index, sample) in targets.iter().enumerate() {
-        let (admitted, top1, top8) = predict(&sample.prefix, sample.target)?;
+        let evaluation = predict(&sample.prefix)?;
+        let admitted = evaluation.admitted_cells.contains(&sample.target_cell);
+        let top1 = evaluation.prediction == sample.target;
+        let top8 = evaluation.top8.contains(&sample.target);
         let mut row = Reading::default();
         row.observe(admitted, top1, top8);
         overall.merge(&row);
@@ -442,6 +736,9 @@ where
             };
             add_stratum(&mut strata, format!("{name}:{value}"), &row);
         }
+        if let Some(writer) = writer {
+            observe_writer_parity(writer, &evaluation, writer_parity)?;
+        }
         if (index + 1) % 1000 == 0 {
             eprintln!(
                 "{index} of {} targets evaluated for {}",
@@ -456,11 +753,15 @@ where
 fn evaluate_model(
     artifact_bytes: &[u8],
     artifact: &ArtifactIdentity,
+    model: &IntegerDiscreteModel,
     corpus: &Corpus,
     train: Option<&Corpus>,
+    reference_role: Option<ReferenceRole>,
     max_targets: Option<usize>,
 ) -> Result<EvidenceReport> {
-    let model = IntegerDiscreteModel::from_bytes(artifact_bytes).map_err(|e| e.to_string())?;
+    if max_targets == Some(0) {
+        return Err("max-targets must be positive".to_owned());
+    }
     let shape = model.shape();
     let prompt_index = train.map(|train| run_index(train, 0));
     let reply_index = train.map(|train| run_index(train, 1));
@@ -488,20 +789,41 @@ fn evaluate_model(
         })
         .collect();
     let targets = evenly_cap(
-        targets_in(corpus, shape.context as usize, &metadata),
+        targets_in(corpus, shape.context as usize, model.cells(), &metadata),
         max_targets,
     );
-    let (overall, strata) = observe_targets(artifact, &targets, |prefix, target| {
-        let evaluation = model.evaluate_prefix(prefix).map_err(|e| e.to_string())?;
-        let admitted = evaluation
-            .admitted_cells
-            .contains(&model.cells()[target as usize]);
-        Ok((
-            admitted,
-            evaluation.prediction == target,
-            evaluation.top8.contains(&target),
-        ))
-    })?;
+    if targets.is_empty() {
+        return Err("panel has no measured response targets".to_owned());
+    }
+    let (writer, mut writer_parity) = if shape.vocabulary as usize == VOCABULARY
+        && shape.blocks as usize == READ_WIDTH / 8
+        && (1..=16).contains(&shape.kept_cells)
+    {
+        let codebook = codebook_from_artifact(artifact_bytes)?;
+        let writer = CpuWriterCore::from_codebook(&codebook, shape.kept_cells as usize)
+            .map_err(|error| format!("independent CPU writer: {error}"))?;
+        (Some(writer), WriterParity::from_serving_query())
+    } else {
+        (
+            None,
+            WriterParity::unavailable(format!(
+                "unsupported CPU writer shape: vocabulary {}, blocks {}, kept {}",
+                shape.vocabulary, shape.blocks, shape.kept_cells
+            )),
+        )
+    };
+    let (overall, strata) = observe_targets(
+        artifact,
+        &targets,
+        writer.as_ref(),
+        &mut writer_parity,
+        |prefix| model.evaluate_prefix(prefix).map_err(|e| e.to_string()),
+    )?;
+    if writer_parity.rows > 0 && !writer_parity.is_exact() {
+        return Err(format!(
+            "independent CPU writer differs from integer serving: {writer_parity:?}"
+        ));
+    }
 
     let mut unavailable = BTreeMap::new();
     unavailable.insert(
@@ -518,40 +840,59 @@ fn evaluate_model(
         "requires the generator's value spans or a precomputed masked-template census".to_owned(),
     );
     unavailable.insert(
-        "independent_cpu_read".to_owned(),
-        "this instrument calls the native integer serving engine directly; independent CPU-trunk parity belongs to the isolated CPU-crate lane"
-            .to_owned(),
+        "independent_cpu_trunk_query".to_owned(),
+        writer_parity.full_cpu_trunk_parity.clone(),
+    );
+    unavailable.insert(
+        "count_table_control".to_owned(),
+        "no count-table arm is supplied to this evidence pass".to_owned(),
+    );
+    unavailable.insert(
+        "memory_off_control".to_owned(),
+        "no serving-session memory-off arm is supplied to this evidence pass".to_owned(),
+    );
+    unavailable.insert(
+        "no_read_control".to_owned(),
+        "no model read-ablation arm is supplied to this evidence pass".to_owned(),
     );
     let reply_overlap = train.map(|train| reply_overlap(corpus, train));
     Ok(EvidenceReport {
         schema: SCHEMA.to_owned(),
         artifact: artifact.clone(),
-        panel: corpus_identity(corpus),
-        train: train.map(corpus_identity),
+        panel: corpus_identity(corpus, None),
+        train: train.map(|train| corpus_identity(train, reference_role)),
         measured_targets: targets.len(),
         overall,
         strata,
         reply_overlap,
+        writer_parity,
         unavailable,
     })
 }
 
-/// Evaluate a panel. `artifact` is a discrete UORLUT01 file; `panel` has
-/// canonical `tokens.u16`, `response_mask.u8` and `manifest.json`. The current
-/// implementation deliberately leaves TRAIN overlap unavailable until the
-/// `train` index is wired, instead of reporting it as zero.
+/// Evaluate a panel. `artifact` is a discrete UORLUT01 file. Every corpus names
+/// its `tokens.u16`, `response_mask.u8` and `manifest.json` explicitly. When a
+/// reference corpus is supplied, `reference_role` must distinguish canonical
+/// TRAIN from a generated control.
 pub fn evaluate(
     artifact_path: &Path,
-    panel_path: &Path,
-    train_path: Option<&Path>,
+    panel: &CorpusFiles,
+    train: Option<&CorpusFiles>,
+    reference_role: Option<ReferenceRole>,
     max_targets: Option<usize>,
 ) -> Result<EvidenceReport> {
+    if train.is_some() != reference_role.is_some() {
+        return Err("train inputs and train-role must be supplied together".to_owned());
+    }
+    if max_targets == Some(0) {
+        return Err("max-targets must be positive".to_owned());
+    }
     let artifact_bytes =
         fs::read(artifact_path).map_err(|e| format!("{}: {e}", artifact_path.display()))?;
     let model = IntegerDiscreteModel::from_bytes(&artifact_bytes).map_err(|e| e.to_string())?;
     let shape = model.shape();
-    let manifest = fs::read(panel_path.join("manifest.json"))
-        .map_err(|e| format!("{}: {e}", panel_path.join("manifest.json").display()))?;
+    let manifest =
+        fs::read(&panel.manifest).map_err(|e| format!("{}: {e}", panel.manifest.display()))?;
     let parsed: serde_json::Value =
         serde_json::from_slice(&manifest).map_err(|e| format!("manifest: {e}"))?;
     let bos = parsed["tokenizer"]["bos_id"]
@@ -559,30 +900,29 @@ pub fn evaluate(
         .and_then(|value| u32::try_from(value).ok())
         .ok_or_else(|| "manifest tokenizer.bos_id differs".to_owned())?;
     let corpus = read_corpus(
-        panel_path,
+        panel,
         shape.context as usize,
         shape.vocabulary as usize,
         bos,
     )?;
-    let identity = ArtifactIdentity {
-        path: artifact_path.display().to_string(),
-        sha256: sha256(&artifact_bytes),
-        model_sha256: model.artifact_sha256().to_owned(),
-        vocabulary: shape.vocabulary,
-        context: shape.context,
-        blocks: shape.blocks,
-        kept_cells: shape.kept_cells,
-        read_mode: shape.read_mode.clone(),
-    };
-
-    let train = train_path
-        .map(|path| read_corpus(path, shape.context as usize, shape.vocabulary as usize, bos))
+    let identity = artifact_identity(artifact_path, &artifact_bytes, &model)?;
+    let train = train
+        .map(|files| {
+            read_corpus(
+                files,
+                shape.context as usize,
+                shape.vocabulary as usize,
+                bos,
+            )
+        })
         .transpose()?;
     let report = evaluate_model(
         &artifact_bytes,
         &identity,
+        &model,
         &corpus,
         train.as_ref(),
+        reference_role,
         max_targets,
     )?;
     Ok(report)
@@ -613,9 +953,9 @@ fn reply_overlap(panel: &Corpus, train: &Corpus) -> ReplyOverlap {
     let n8 = ngram_index(train, 8);
     let mut reading = ReplyOverlap {
         reference_replies: 0,
-        reference_replies_seen_in_train: 0,
-        reference_prompts_seen_in_train: 0,
-        reference_prompts_keyed_in_train: 0,
+        reference_replies_seen_in_reference: 0,
+        reference_prompts_seen_in_reference: 0,
+        reference_prompts_keyed_in_reference: 0,
         reference_reply_new_4grams: 0,
         reference_reply_total_4grams: 0,
         reference_reply_new_8grams: 0,
@@ -624,11 +964,12 @@ fn reply_overlap(panel: &Corpus, train: &Corpus) -> ReplyOverlap {
     for reply in panel.runs.iter().filter(|run| run.mask == 1) {
         let reply_tokens = run_tokens(panel, reply);
         reading.reference_replies += 1;
-        reading.reference_replies_seen_in_train += u64::from(replies.contains(reply_tokens));
+        reading.reference_replies_seen_in_reference += u64::from(replies.contains(reply_tokens));
         if let Some(prompt) = prompt_run_before(panel, reply.ordinal) {
             let prompt_tokens = run_tokens(panel, prompt);
-            reading.reference_prompts_seen_in_train += u64::from(prompts.contains(prompt_tokens));
-            reading.reference_prompts_keyed_in_train += u64::from(
+            reading.reference_prompts_seen_in_reference +=
+                u64::from(prompts.contains(prompt_tokens));
+            reading.reference_prompts_keyed_in_reference += u64::from(
                 keys.contains(&prompt_tokens[..prompt_tokens.len().min(OPENING_KEY_TOKENS)]),
             );
         }
@@ -647,6 +988,80 @@ fn reply_overlap(panel: &Corpus, train: &Corpus) -> ReplyOverlap {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT_TEMP: AtomicU64 = AtomicU64::new(1);
+
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "uor-m2-evidence-{name}-{}-{}",
+                std::process::id(),
+                NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
+            ));
+            let _ = fs::remove_dir_all(&path);
+            fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn uort(tokens: &[u32], vocabulary: u32) -> Vec<u8> {
+        let mut bytes = vec![0u8; 64];
+        bytes[..4].copy_from_slice(b"UORT");
+        bytes[4..8].copy_from_slice(&1u32.to_le_bytes());
+        bytes[8..16].copy_from_slice(&(tokens.len() as u64).to_le_bytes());
+        bytes[16..20].copy_from_slice(&vocabulary.to_le_bytes());
+        for token in tokens {
+            bytes.extend(u16::try_from(*token).unwrap().to_le_bytes());
+        }
+        bytes
+    }
+
+    fn written_corpus(name: &str, tokens: &[u32], mask: &[u8]) -> (TempDir, CorpusFiles) {
+        let directory = TempDir::new(name);
+        let token_bytes = uort(tokens, 4096);
+        let manifest = serde_json::json!({
+            "schema": "uor-r4-chat-corpus/v1",
+            "mask_schema": "uor-r4-response-mask/u8/v1",
+            "split": "train",
+            "cell": {"phrasing": "train", "value": "train"},
+            "seed": 7,
+            "conversations": 1,
+            "tokens": tokens.len(),
+            "tokens_bytes": token_bytes.len(),
+            "tokens_sha256": sha256(&token_bytes),
+            "mask_bytes": mask.len(),
+            "mask_sha256": sha256(mask),
+            "response_tokens": mask.iter().filter(|&&value| value == 1).count(),
+            "max_tokens": 192,
+            "tokenizer": {
+                "vocab_size": 4096,
+                "bos_id": 0,
+                "sha256": "ab".repeat(32),
+            },
+        });
+        let files = CorpusFiles {
+            tokens: directory.0.join("tokens.u16"),
+            mask: directory.0.join("response_mask.u8"),
+            manifest: directory.0.join("manifest.json"),
+        };
+        fs::write(&files.tokens, token_bytes).unwrap();
+        fs::write(&files.mask, mask).unwrap();
+        fs::write(
+            &files.manifest,
+            serde_json::to_vec_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+        (directory, files)
+    }
 
     fn corpus(tokens: &[u32], mask: &[u8]) -> Corpus {
         let documents: Vec<Range<usize>> = tokens
@@ -672,6 +1087,13 @@ mod tests {
             runs,
             tokens_sha256: "00".repeat(32),
             mask_sha256: "11".repeat(32),
+            manifest_sha256: "22".repeat(32),
+            split: "train".to_owned(),
+            cell_phrasing: Some("train".to_owned()),
+            cell_value: Some("train".to_owned()),
+            seed: Some(7),
+            conversations: Some(1),
+            tokenizer_sha256: "33".repeat(32),
             max_tokens: 32,
         }
     }
@@ -730,9 +1152,155 @@ mod tests {
             &[0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         );
         let reading = reply_overlap(&panel, &train);
-        assert_eq!(reading.reference_replies_seen_in_train, 1);
+        assert_eq!(reading.reference_replies_seen_in_reference, 1);
         assert_eq!(reading.reference_reply_new_4grams, 0);
         assert_eq!(reading.reference_reply_new_8grams, 0);
-        assert_eq!(reading.reference_prompts_keyed_in_train, 1);
+        assert_eq!(reading.reference_prompts_keyed_in_reference, 1);
+    }
+
+    #[test]
+    fn malformed_uort_and_manifest_identity_are_refused() {
+        assert!(parse_uort(b"not-uort", &[]).is_err());
+        let empty = uort(&[], 4096);
+        assert!(parse_uort(&empty, &[]).is_err());
+
+        let (_directory, files) = written_corpus("manifest-mismatch", &[0, 10, 20], &[0, 0, 1]);
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&files.manifest).unwrap()).unwrap();
+        manifest["mask_sha256"] = serde_json::json!("00".repeat(32));
+        fs::write(&files.manifest, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        assert!(read_corpus(&files, 8, 4096, 0)
+            .unwrap_err()
+            .contains("manifest identity"));
+    }
+
+    #[test]
+    fn vocabulary_bos_and_empty_response_inputs_fail_closed() {
+        let (_directory, files) = written_corpus("artifact-mismatch", &[0, 10, 20], &[0, 0, 1]);
+        assert!(read_corpus(&files, 8, 4097, 0)
+            .unwrap_err()
+            .contains("vocabulary/BOS"));
+        assert!(read_corpus(&files, 8, 4096, 1)
+            .unwrap_err()
+            .contains("vocabulary/BOS"));
+
+        let (_directory, empty) = written_corpus("empty-response", &[0, 10], &[0, 0]);
+        assert!(read_corpus(&empty, 8, 4096, 0)
+            .unwrap_err()
+            .contains("no response"));
+        assert!(evenly_cap((0..10).collect::<Vec<_>>(), Some(0)).is_empty());
+        assert!(codebook_from_artifact(b"not-an-artifact").is_err());
+    }
+
+    #[test]
+    fn absent_reference_fields_become_explicit_unavailable_strata() {
+        let panel = corpus(&[0, 10, 11, 20, 21], &[0, 0, 0, 1, 1]);
+        let reply = panel.runs.iter().find(|run| run.mask == 1).unwrap();
+        let metadata = metadata_for(&panel, reply, None, None, None);
+        assert_eq!(metadata.prompt_seen, None);
+        assert_eq!(metadata.keyed, None);
+        assert_eq!(metadata.reply_seen, None);
+
+        let mut strata = BTreeMap::new();
+        let row = Reading {
+            targets: 1,
+            admitted: 1,
+            top1: 1,
+            top8: 1,
+        };
+        for (name, value) in [
+            ("prompt-overlap", metadata.prompt_seen),
+            ("memory-key", metadata.keyed),
+            ("reference-reply-overlap", metadata.reply_seen),
+        ] {
+            let value = match value {
+                Some(true) => "present",
+                Some(false) => "absent",
+                None => "unavailable",
+            };
+            add_stratum(&mut strata, format!("{name}:{value}"), &row);
+        }
+        assert!(strata.contains_key("prompt-overlap:unavailable"));
+        assert!(strata.contains_key("memory-key:unavailable"));
+        assert!(strata.contains_key("reference-reply-overlap:unavailable"));
+    }
+
+    #[test]
+    fn planted_writer_metric_error_is_counted() {
+        let roots = vec![[0u8; 4]; VOCABULARY];
+        let writer = CpuWriterCore::from_roots(&roots, 2).unwrap();
+        let query = *writer.token_vector(0).unwrap();
+        let decision = writer.decide(&query);
+        let mut served = uor_r4_integer::discrete_d11::DiscretePrefixEvaluation {
+            read_vector: query.to_vec(),
+            admitted_cells: decision.admitted[..decision.admitted_count]
+                .iter()
+                .copied()
+                .filter(|&cell| cell != ABSENT_CELL)
+                .map(u32::from)
+                .collect(),
+            top8: decision.top8.to_vec(),
+            prediction: decision.top8[0],
+            relation_scores: None,
+        };
+        let mut parity = WriterParity::from_serving_query();
+        observe_writer_parity(&writer, &served, &mut parity).unwrap();
+        assert!(parity.is_exact());
+
+        served.prediction = decision.top8[1];
+        served.top8.reverse();
+        served.admitted_cells.clear();
+        observe_writer_parity(&writer, &served, &mut parity).unwrap();
+        assert_eq!(parity.admitted_cell_mismatches, 1);
+        assert_eq!(parity.top8_mismatches, 1);
+        assert_eq!(parity.token_mismatches, 1);
+        assert!(!parity.is_exact());
+    }
+
+    #[test]
+    fn report_serialization_is_byte_deterministic() {
+        let report = EvidenceReport {
+            schema: SCHEMA.to_owned(),
+            artifact: ArtifactIdentity {
+                path: "a".to_owned(),
+                sha256: "00".repeat(32),
+                model_sha256: "11".repeat(32),
+                schema: "uor-r4.lut-discrete/1".to_owned(),
+                tables: 4,
+                vocabulary: 4096,
+                context: 192,
+                blocks: 4,
+                kept_cells: 8,
+                read_mode: "relation".to_owned(),
+            },
+            panel: corpus_identity(
+                &corpus(&[0, 10, 20], &[0, 0, 1]),
+                Some(ReferenceRole::GeneratedControl),
+            ),
+            train: None,
+            measured_targets: 1,
+            overall: Reading {
+                targets: 1,
+                admitted: 1,
+                top1: 1,
+                top8: 1,
+            },
+            strata: BTreeMap::from([(
+                "reply-position:opening".to_owned(),
+                Reading {
+                    targets: 1,
+                    admitted: 1,
+                    top1: 1,
+                    top8: 1,
+                },
+            )]),
+            reply_overlap: None,
+            writer_parity: WriterParity::from_serving_query(),
+            unavailable: BTreeMap::new(),
+        };
+        assert_eq!(
+            serde_json::to_vec_pretty(&report).unwrap(),
+            serde_json::to_vec_pretty(&report).unwrap()
+        );
     }
 }
