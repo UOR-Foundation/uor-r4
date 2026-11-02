@@ -1966,6 +1966,34 @@ mod tests {
     fn route_and_table_ties_choose_the_lower_resulting_port() {
         const ROUTE_PORTS: [u32; 15] = [16, 27, 34, 41, 47, 2, 3, 4, 5, 21, 22, 23, 24, 25, 26];
         const TABLE_PORTS: [u32; 15] = [0, 10, 2, 5, 6, 5, 13, 7, 9, 11, 0, 2, 8, 7, 4];
+        let composition = cl06_finite_composition_table().unwrap();
+        let oracle_actions = std::array::from_fn::<_, 16, _>(|candidate| {
+            NormFrameTable::new(16, vec![candidate as u8; 16])
+                .unwrap()
+                .block_frame(0)
+                .unwrap()
+        });
+        let independent_route_ports = std::array::from_fn::<_, 15, _>(|lane| {
+            u32::from(
+                composition
+                    .compose_index(oracle_actions[lane + 1], 1)
+                    .unwrap(),
+            )
+        });
+        assert_eq!(independent_route_ports, ROUTE_PORTS);
+        let point = orbit_root_coords(3).unwrap();
+        let independent_table_ports = std::array::from_fn::<_, 15, _>(|lane| {
+            uor_r4_discrete::normalization_mechanism::identify_orbit_root(
+                &uor_r4_discrete::normalization_mechanism::transform_block_by_frame(
+                    oracle_actions[lane + 1],
+                    &point,
+                )
+                .unwrap(),
+            )
+            .unwrap() as u32
+        });
+        assert_eq!(independent_table_ports, TABLE_PORTS);
+
         let route_artifact = serialized_route_with("route", vec![1, 2, 3, 4], 0, 0, 2, None, false);
         let route = CpuDiscreteProposalChooser::from_bytes(&route_artifact).unwrap();
         let observed_route_ports = std::array::from_fn::<_, 15, _>(|lane| {

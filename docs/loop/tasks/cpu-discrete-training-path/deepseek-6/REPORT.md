@@ -9,6 +9,7 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 ## What changed
 
 - Route and Table tests now compare all 15 nonzero resulting ports against independently pinned numeric vectors.
+- A separate test oracle recomputes those vectors from `NormFrameTable` generator frames, the finite composition table and the root transform, without calling the chooser's resulting-port implementation.
 - Equal current/candidate losses keep lane 0 even when nonzero candidates have lower ports.
 - A strictly lower-loss candidate still wins over the better-port tie among other lanes.
 
