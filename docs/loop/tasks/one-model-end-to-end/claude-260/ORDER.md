@@ -1,70 +1,69 @@
-# ORDER: one-model-end-to-end, claude-260
+# ORDER: one-model-end-to-end, claude-260 (the copy read's key: two tokens, trained as served)
 
-Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md). Base: `5e50f3e19`.
+Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). Base: `5e50f3e19`.
 
 ## Goal
 
-The item's done-when reads:
+Casey, 2 Nov 2026: "your goal is to get us to a working chat model using the training and serving methods we have described - you need to figure out how to stitch all of that together". Asked "Trace the copy read on conv-a to confirm the cause before I build the new key?", Casey answered: "um yes I think so". The trace is done ([claude-259's REPORT](../claude-259/REPORT.md), "Also found"; the trace file is in `docs/labs/one-model-end-to-end/capacity-2026-11-02/trace/`).
 
-> 1. **The census (laptop, counts only, CHARTER §4.5).** A standalone Rust instrument under `docs/labs/one-model-end-to-end/instrument/` must:
->    - resolve the TRAIN size conflict, and build the TRAIN reply index (exact replies and reply 8- and 13-grams);
->    - report for DEV, Fresh V2 and `m2-fresh256`: the share of reply n-grams in TRAIN replies, the share of prompt templates seen in TRAIN with values masked, and the 8-token key share;
->    - read only the manifest of the K16 fresh slice, and leave the slice unopened.
->
->    It also says which panel, if any, holds new templates.
-> 2. **The overturn check (GPU, under a prep sheet with a fresh FIT and a pre-run review).** Score turn-memory-reply claude-194's (r), (r0), and (r) with its memory off.
->    - **Pinned in the sheet:** the checkpoints by store path, `SHA256SUMS` and step; the binary's sha; a lease and cost inside the caps.
->    - **The pod** also seals a float reference for the read's parity: claude-194's (r), with its memory off, at both seeds. That is every DEV row's writer and nearest pick, and its 64 greedy samples. The parity itself, kept sets and top-1, is `integer-hamming-read`'s step 5, on the checkpoint that item's prep sheet names; the first greedy divergence is done-when 3's integer-artifact measure (claude-205's decision review, on #3407).
->    - **Rows:** DEV's 3,406 later rows the reply table does not name, and its 32 unkeyed openings, judged pooled (3,438).
->    - **Band, fixed in advance:** `max(2·√(b+c), the two-seed spread)`, where b and c are the paired discordant rows.
->    - **The cells:**
->      - (r) ahead at both seeds, beyond the band: the memory recipe stays the training default;
->      - (r) behind at both seeds, beyond the band: a memory-dropout arm joins the training run;
->      - mixed (the seeds disagree, or either seed is inside the band): both arms train.
->    - **Descriptive only:** Fresh V2, and 64 greedy samples per arm scored against the census index.
-> 3. **The protocol.** A prep sheet, with a fresh FIT, written before the training run of the model to ship. It holds:
->    - **Strata:**
->      - keyed rows;
->      - unkeyed rows;
->      - new-template rows, from a panel no decision has touched. Fresh V2 is never one.
->    - **Arms:** (r), memory-off, (r0), tables only, and a longest-suffix table over TRAIN.
->    - **Scores:**
->      - teacher-forced top-1, per stratum;
->      - free generation: the share of replies that are verbatim TRAIN replies, new n-grams for n = 4–8, distinct-1 and distinct-2, the repeated-n-gram rate, and the table hit rate under generation against teacher forcing;
->      - on the integer artifact: kept-set agreement, first divergence, and tok/s against context.
->    - **Decode rules:** greedy, and a Flock rank rule with the harmonic weights of `stack/flock.rs`.
->    - **The verdict rule, written in advance:**
->      - "memorized": the gains appear only on keyed rows, and generated replies are mostly TRAIN replies;
->      - "generalizes": the model beats (r0) and the longest-suffix table on unkeyed and new-template rows, with novelty near DEV's own replies.
->
->    The training run itself (ASSESSMENT §6, step 5) adds:
->    - the transport controls: frozen and identity SpiralCore routes, under the fixed backward;
->    - the read-by-meaning arms: the Flock read, and the type spin.
-> 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
+**Plan step (the claim check):** path step 4 of the lab's order (`local/claude/onboarding/run-claude.txt`): one model trained with all of its parts, exported, served and scored end to end. The served chat answers "your friend is 47" because of a fault the trace confirmed. **What it changes in the model:** the copy heads' key, in training (`flock_read_hamming.rs`), in the artifact (`stack/format.rs`, `fbs_snapshot.rs`, `fbs_export.rs`) and in serving (`stack/hamming.rs`). It is the first change to what the read can find since the read was built (claude-146).
 
-## Cancel probe (run first)
+**The fault, measured.**
+- A copy head's key at `s` names only the token before `s`. Its query at `t` names only `x_t` (`flock_read_hamming.rs`, module doc, points 1 and 5).
+- In conv-a turn 3, at the reply's " is" (position 80), both copy heads at both depths keep the five positions that follow an earlier " is" (8, 26, 37, 51, 64). They read the mean of what follows. Maya (64) is found but cannot be preferred. The served next id was the space before 47.
+- A key on (" friend", " is") matches only position 64.
 
-To fill in.
+**The change.** Copy key 2 (the ordered two-token key):
+- A copy head's 64-bit code holds two token codes. Its first half is from the token before `s`; its second half is from the token two before `s`, through the same key rotation.
+- The query takes its first half from `x_t` and its second half from `x_{t−1}`.
+- The distance is still one popcount, and it is exactly the sum of the two tokens' half-distances. So an exact two-token repeat is distance 0. Where only the last token repeats, the distance is about a quarter of the head's bits on average, which is the copy heads' starting margin.
+- Type heads, weights, margins, the payload and the tie rule are unchanged. An artifact with copy key 1 stays byte for byte as before.
+
+**My decisions (logged on #3407, reversible by Casey):**
+- **TRAIN stays the pinned corpus.** The REPORT's open item 1 also named memory lines in TRAIN (`recall=oracle`). Changing the corpus and the key in one run would leave either result unreadable. So the memory-line corpus is its own unit, and this run changes the key only.
+- **The slot key (gcd over a clause's content atoms) comes later.** It needs entity and attribute atoms that the trunk does not mark. The two-token key fixes the measured case with no new parameters. If the two-token key leaves the copy fault, the slot key is the next unit.
+- **DeepSeek's FIT four-run comparison folds in** ([sheet](../../../../harness/prep/one-model-end-to-end-served-comparison-2026-11-02.md), deepseek-5, `NOT_RUN` for lack of a GPU). It tests plain against served training, at two seeds and 256 steps each, for about $1.50. This run trains with that served form, so the comparison is its throughput probe. It runs on seed 1's pod first, read by its own sheet's bar.
+
+## Cancel probe (run first; results)
+
+1. **A two-token copy key already?** `git grep -i -e "two-token key" -e copy_key -e "n-let key"` over `crates/`, `docs/mechanisms/` and the notebooks finds none for the Hamming read. `docs/mechanisms/exact-memory.md:86` lists "ordered n-let keys" as not built. The n-gram tables' two-token keys (`uor-r4-graph-format/src/ngram.rs`) belong to the old table model, not this read. Not cancelled.
+2. **Another lab on these files?** `gh pr list --state open` shows only this draft (#3578). DeepSeek's wide-export PR #3576, the one open PR on `format.rs` this session, merged as this unit's base. Not cancelled.
+3. **Inputs:** TRAIN, DEV, the tokenizer, p-w and p-v are in the HF store at the sheet `one-model-end-to-end-capacity-2026-11-02.md`'s paths and sums. The base recipe is that sheet's (b). Not cancelled.
+
+Classed instrument (no model ran).
 
 ## Files in scope
 
-- `docs/labs/one-model-end-to-end/**`
 - `docs/harness/prep/one-model-end-to-end*`
 - `docs/loop/tasks/one-model-end-to-end/**`
+- `docs/labs/one-model-end-to-end/**`
 - `docs/research/notebook/float-training.md`
-- `docs/roadmap/items/one-model-end-to-end.md`
-- `crates/uor-r4-float-train/src/hamilton_sheet.rs`
-- `crates/uor-r4-float-train/src/geometric_stack_native.rs`
+- `docs/roadmap/items/one-model-end-to-end.md` (status, and the scope widened to the files below)
+- `crates/uor-r4-float-train/src/flock_read_hamming.rs`
 - `crates/uor-r4-float-train/src/in_space_long.rs`
 - `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`
-- `crates/uor-r4-float-train/src/flock_read_hamming.rs`
-- `crates/uor-r4-training/examples/m-world.rs`
+- `crates/uor-r4-float-train/src/fbs_export.rs`
+- `crates/uor-r4-integer/src/fbs_snapshot.rs`
+- `crates/uor-r4-integer/src/stack/format.rs`
+- `crates/uor-r4-integer/src/stack/hamming.rs`
+- `crates/uor-r4-integer/src/stack/synthetic.rs`
+- `crates/uor-r4-integer/src/stack/tests.rs`
 
 ## Done when
 
-To fill in.
+1. **The key, end to end.** `--hamming-copy-key 1|2` (default 1) trains the key above. It is saved in `hamming_read.safetensors` and `config.json`, carried by `FbsHammingSnapshot` and `StackHamming` as `copy_key`, and served by `CopyHeads`. The tests show:
+   - (a) on a window holding two facts with the same last token, a copy-key-2 head keeps the right position at distance 0 and the others past it, in float and in the integer read; under copy key 1 they tie;
+   - (b) float and integer kept sets agree on a trained-shape copy-key-2 read;
+   - (c) a copy-key-1 artifact, snapshot and `config.json` are byte for byte as before;
+   - (d) a copy key other than 1 or 2, or copy key 2 on a head whose halves do not fall on whole lanes, is refused.
+2. **The sheet** `docs/harness/prep/one-model-end-to-end-copy-key-2026-11-02.md`, one page, with the shape the harness reads (Base artifact, Data split, Bar, Steps, Minimum test power), a fresh FIT, and a fresh pre-run review (D67) on #3407.
+3. **The run** on Vast RTX 5090s inside the caps. Arms (b) and (k2), at seeds 1–3, 8,192 steps each, trained as served. DeepSeek's four runs go first on seed 1's pod. The outputs are sealed in the HF store with `SHA256SUMS`.
+4. **Scored and served:** the sheet's readings and decision table. Each arm's seed-1 export is served on conv-a, conv-b and conv-c, with transcripts and decode tok/s.
+5. **The REPORT**, negatives first, with one notebook row. It also corrects claude-259's REPORT, which cites deepseek-3 under #3565 (it landed as #3563).
 
 ## Stop and ask if
 
-To fill in.
+Each of these is decided in the unit, never waited on:
+- **The run needs a new instrument, trace or audit.** That is outside the track's bound: bring it to Casey.
+- **An arm's smoke fails in the trainer or the exporter.** If (k2) fails, the code is repaired in this unit before any long run. If (b) fails, the served form itself is broken: stop the pod and record it.
+- **The projected cost passes the caps**, or an arm projects past about an hour of training: cut its steps equally for both arms, and record why.
