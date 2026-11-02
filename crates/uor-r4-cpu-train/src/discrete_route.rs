@@ -1024,6 +1024,20 @@ pub struct CpuDiscreteProposalScoring {
     pub proposal: CpuDiscreteProposal,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CpuDiscreteScoreError {
+    pub status: u32,
+    pub message: String,
+}
+
+impl std::fmt::Display for CpuDiscreteScoreError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "status {}: {}", self.status, self.message)
+    }
+}
+
+impl std::error::Error for CpuDiscreteScoreError {}
+
 #[derive(Clone)]
 enum CpuDiscreteProposalModel {
     Route(CpuDiscreteRoute),
@@ -1054,6 +1068,26 @@ impl CpuDiscreteProposalScorer {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         let header = header(bytes)?;
         let shape = &header["shape"];
+        if header["matrices"]
+            .as_array()
+            .is_none_or(|matrices| !matrices.is_empty())
+        {
+            return Err(invalid("proposal scorer requires an empty matrices array"));
+        }
+        let source = &header["source"];
+        if source["snapshot_schema"].as_str() != Some(FLOCK_SNAPSHOT_SCHEMA)
+            || source["operator_kappa"].as_str() != Some(FLOCK_OPERATOR_KAPPA)
+            || source["composition_kappa"].as_str() != Some(FLOCK_COMPOSITION_KAPPA)
+        {
+            return Err(invalid("proposal scorer source geometry differs"));
+        }
+        if !matches!(
+            shape["objective_policy"].as_str(),
+            Some("nearest_address_margin_v1" | "occupied_cell_rank_hinge_v1")
+        ) {
+            return Err(invalid("proposal scorer objective policy differs"));
+        }
+        validate_header_padding(bytes)?;
         let model = match shape["read_mode"].as_str() {
             Some("route") => CpuDiscreteProposalModel::Route(CpuDiscreteRoute::from_bytes(bytes)?),
             Some("flock") => CpuDiscreteProposalModel::Active(ActiveLeafModel::from_bytes(
@@ -1087,15 +1121,18 @@ impl CpuDiscreteProposalScorer {
         index: usize,
         samples: &[CpuDiscreteProposalSample],
         epoch: u64,
-    ) -> Result<CpuDiscreteProposalScoring> {
+    ) -> std::result::Result<CpuDiscreteProposalScoring, CpuDiscreteScoreError> {
         if samples.is_empty() {
-            return Err(invalid("proposal scorer requires at least one row"));
+            return Err(score_error(8, "proposal scorer requires at least one row"));
         }
-        self.validate_proposal(kind, index)?;
+        self.validate_proposal(kind, index)
+            .map_err(|error| score_error(self.proposal_refusal_status(kind), error.to_string()))?;
 
         let mut eligible = Vec::new();
         for sample in samples {
-            let query = self.read(&self.model, &sample.prefix)?;
+            let query = self
+                .read(&self.model, &sample.prefix)
+                .map_err(|error| score_error(2, error.to_string()))?;
             let table = self.token_blocks(&self.model);
             let loss = writer_loss(
                 &query,
@@ -1103,13 +1140,17 @@ impl CpuDiscreteProposalScorer {
                 sample.target,
                 self.kept_cells,
                 self.objective,
-            )?;
+            )
+            .map_err(writer_score_error)?;
             if loss.token_rivals != 0 {
                 eligible.push((sample, loss.loss));
             }
         }
         if eligible.is_empty() {
-            return Err(invalid("proposal baseline admitted no eligible rows"));
+            return Err(score_error(
+                8,
+                "proposal baseline admitted no eligible rows",
+            ));
         }
 
         let active_lanes = if kind == CpuDiscreteProposalKind::Gate {
@@ -1122,7 +1163,8 @@ impl CpuDiscreteProposalScorer {
             let model = if candidate == 0 {
                 self.model.clone()
             } else {
-                self.virtual_model(kind, index, candidate)?
+                self.virtual_model(kind, index, candidate)
+                    .map_err(|error| score_error(4, error.to_string()))?
             };
             let mut total = 0u64;
             let mut sentinel = false;
@@ -1130,14 +1172,17 @@ impl CpuDiscreteProposalScorer {
                 let cost = if candidate == 0 {
                     *baseline_loss
                 } else {
-                    let query = self.read(&model, &sample.prefix)?;
+                    let query = self
+                        .read(&model, &sample.prefix)
+                        .map_err(|error| score_error(2, error.to_string()))?;
                     let loss = writer_loss(
                         &query,
                         self.token_blocks(&model),
                         sample.target,
                         self.kept_cells,
                         self.objective,
-                    )?;
+                    )
+                    .map_err(writer_score_error)?;
                     if loss.token_rivals == 0 {
                         sentinel = true;
                         break;
@@ -1146,12 +1191,15 @@ impl CpuDiscreteProposalScorer {
                 };
                 total = total
                     .checked_add(cost)
-                    .ok_or_else(|| invalid("proposal lane loss sum overflows"))?;
+                    .ok_or_else(|| score_error(12, "proposal lane loss sum overflows"))?;
             }
             *lane_loss = if sentinel { u64::MAX } else { total };
         }
 
-        let proposal = self.chooser.choose(kind, index, &losses, epoch)?;
+        let proposal = self
+            .chooser
+            .choose(kind, index, &losses, epoch)
+            .map_err(|error| score_error(4, error.to_string()))?;
         Ok(CpuDiscreteProposalScoring {
             losses,
             eligible_rows: eligible.len(),
@@ -1181,6 +1229,14 @@ impl CpuDiscreteProposalScorer {
                 Err(invalid("Table proposal index outside codebook inventory"))
             }
             _ => Ok(()),
+        }
+    }
+
+    fn proposal_refusal_status(&self, kind: CpuDiscreteProposalKind) -> u32 {
+        match (&self.model, kind) {
+            (CpuDiscreteProposalModel::Route(_), CpuDiscreteProposalKind::Gate)
+            | (CpuDiscreteProposalModel::Active(_), CpuDiscreteProposalKind::Route) => 9,
+            _ => 4,
         }
     }
 
@@ -1253,6 +1309,19 @@ impl CpuDiscreteProposalScorer {
             CpuDiscreteProposalModel::Active(active) => &active.token_blocks,
         }
     }
+}
+
+fn score_error(status: u32, message: impl Into<String>) -> CpuDiscreteScoreError {
+    CpuDiscreteScoreError {
+        status,
+        message: message.into(),
+    }
+}
+
+fn writer_score_error(error: CpuTrainError) -> CpuDiscreteScoreError {
+    let message = error.to_string();
+    let status = if message.contains("overflow") { 12 } else { 8 };
+    score_error(status, message)
 }
 
 impl CpuDiscreteProposalModel {
@@ -2705,33 +2774,54 @@ mod tests {
             prefix: vec![2],
             target: 2,
         };
-        assert!(scorer
-            .score(
-                CpuDiscreteProposalKind::Gate,
-                0,
-                std::slice::from_ref(&ineligible),
-                1
-            )
-            .is_err());
-        assert!(scorer
-            .score(CpuDiscreteProposalKind::Gate, 0, &[], 1)
-            .is_err());
-        assert!(scorer
-            .score(
-                CpuDiscreteProposalKind::Route,
-                0,
-                std::slice::from_ref(&ineligible),
-                1
-            )
-            .is_err());
-        assert!(scorer
-            .score(
-                CpuDiscreteProposalKind::Gate,
-                4,
-                std::slice::from_ref(&ineligible),
-                1
-            )
-            .is_err());
+        assert_eq!(
+            scorer
+                .score(
+                    CpuDiscreteProposalKind::Gate,
+                    0,
+                    std::slice::from_ref(&ineligible),
+                    1
+                )
+                .unwrap_err()
+                .status,
+            8
+        );
+        assert_eq!(
+            scorer
+                .score(CpuDiscreteProposalKind::Gate, 0, &[], 1)
+                .unwrap_err()
+                .status,
+            8
+        );
+        assert_eq!(
+            scorer
+                .score(
+                    CpuDiscreteProposalKind::Route,
+                    0,
+                    std::slice::from_ref(&ineligible),
+                    1
+                )
+                .unwrap_err()
+                .status,
+            9
+        );
+        assert_eq!(
+            scorer
+                .score(
+                    CpuDiscreteProposalKind::Gate,
+                    4,
+                    std::slice::from_ref(&ineligible),
+                    1
+                )
+                .unwrap_err()
+                .status,
+            4
+        );
+        let route = serialized_route_with("route", vec![1, 2, 3, 4], 0, 0, 2, None, false);
+        let bad_route_header = rewrite_header(route, |header| {
+            header["matrices"] = json!([{"name": "unexpected"}]);
+        });
+        assert!(CpuDiscreteProposalScorer::from_bytes(&bad_route_header).is_err());
     }
 
     #[test]

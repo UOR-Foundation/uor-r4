@@ -24,7 +24,7 @@ pub use counterfactual::{
 pub use discrete_route::{
     CpuDiscreteFlock, CpuDiscreteProposal, CpuDiscreteProposalChooser, CpuDiscreteProposalKind,
     CpuDiscreteProposalMode, CpuDiscreteProposalSample, CpuDiscreteProposalScorer,
-    CpuDiscreteProposalScoring, CpuDiscreteRelation, CpuDiscreteRoute,
+    CpuDiscreteProposalScoring, CpuDiscreteRelation, CpuDiscreteRoute, CpuDiscreteScoreError,
 };
 pub use fbs::{CpuFbsForward, CpuFbsHead, CpuFbsStep, FbsForwardError};
 pub use panel::{
