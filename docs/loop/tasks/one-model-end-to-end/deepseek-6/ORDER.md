@@ -37,8 +37,8 @@ No model, serving-format, tokenizer or training code changes.
   conversational panel before seeing outputs.
 - Use the trained dialogue protocol 2, greedy decoding, 16 maximum response
   tokens and 16 worker threads.
-- Run one-turn prompts in one-shot `--say` mode. Run the memory category as two
-  turns in one REPL process.
+- Run one-turn prompts in one-shot `--say` mode. Run each of the two memory
+  entries in its own REPL process: one with two user turns and one with three.
 - Capture `/tokens` before and after every REPL turn, and define the extraction
   of each exact reply-id suffix from the post-turn history before inference.
 - Repeat one seed to confirm deterministic transcripts.

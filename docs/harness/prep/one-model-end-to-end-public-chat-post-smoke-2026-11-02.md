@@ -51,6 +51,14 @@ All paths are absolute and outside the documentation worktree.
 - Source:
   `crates/uor-r4-integer/src/bin/uor-chat.rs`, SHA-256
   `e98ffae93bb96a5351e5af83a130764d7df51f42284ad62d8dc5b9826034cfdc`.
+- Protocol encoder source:
+  `crates/uor-r4-tokenizer/src/dialogue.rs`, SHA-256
+  `d3f70a92165ae08a1a359bf77fb83c1f0fa95fe609bbaa51d723758a01254a56`.
+- Dependency lock: `Cargo.lock`, SHA-256
+  `9ab8edb75b2a651430bda0f70edc3116d070c272b7c20ca91e85df9e386a27eb`.
+- Toolchain pin: `rust-toolchain.toml`, SHA-256
+  `0a4b55522951f5475fcdd9ebcbfbbe650bfac272e8baff599585f0e8a120d5ee`;
+  selected Cargo and Rust are both `1.97.1`.
 - Build:
 
 ```sh
@@ -59,8 +67,9 @@ CARGO_TARGET_DIR=/home/callard/projects/codex-playground/uor-r4-chat-baseline/lo
   --features serving-wasm --bin uor-chat
 ```
 
-The repository's `rust-toolchain.toml` selects Cargo/Rust 1.97.1. The
-`/usr/bin` Cargo 1.75 cannot parse the workspace and is not the build tool.
+The binary's dependency file, mtime and embedded Rust commit must all postdate
+the source pins and agree with this build. The `/usr/bin` Cargo 1.75 cannot
+parse the workspace and is not the build tool.
 
 ## Data split
 
@@ -93,9 +102,12 @@ Every invocation uses:
 - `--temperature 0`;
 - `--max-tokens 16`.
 
-Before any prompt, verify all four artifact/tokenizer hashes, the panel hash,
-the executable hash and `uor-chat --version`. Re-hash the executable after the
-run. Stop before model output if any pin differs.
+Before any prompt, verify all four artifact/tokenizer hashes, both tokenizers'
+`stack_sha256` fields against their matching artifact hashes, the panel hash,
+the executable and source hashes, and `uor-chat --version`. The native loader
+checks vocabulary and tokenizer content identity but does not itself enforce
+the JSON `stack_sha256` field, so this explicit pair check is required. Re-hash
+the executable after the run. Stop before model output if any pin differs.
 
 ## Steps
 
@@ -112,12 +124,21 @@ seed-2/
 seed-1-repeat/
 ```
 
+Use this exact pass mapping:
+
+| Pass | Artifact | Tokenizer | Output directory |
+|---|---|---|---|
+| seed 1 | seed 1 path above | seed 1 path above | `seed-1/` |
+| seed 2 | seed 2 path above | seed 2 path above | `seed-2/` |
+| seed-1 repeat | seed 1 path above | seed 1 path above | `seed-1-repeat/` |
+
 For each one-turn entry, run:
 
 ```sh
-"$BIN" --stack "$ARTIFACT" --tokenizer "$TOKENIZER" --protocol 2 \
-  --threads 16 --temperature 0 --max-tokens 16 --say "$PROMPT" \
-  >OUT.json 2>ERR.log
+/usr/bin/time -v -o OUT.time \
+  "$BIN" --stack "$ARTIFACT" --tokenizer "$TOKENIZER" --protocol 2 \
+    --threads 16 --temperature 0 --max-tokens 16 --say "$PROMPT" \
+    >OUT.json 2>ERR.log
 ```
 
 Run the six fixed entries in this order:
@@ -128,6 +149,9 @@ Run the six fixed entries in this order:
 4. `conv-talk-01`: `Hello! How is your day going?`
 5. `conv-story-01`: `Once upon a time, there was a little bunny who lost his carrot. What happened next?`
 6. `conv-unk-01`: `What did I eat for breakfast yesterday?`
+
+Use the panel id as each output basename: for example
+`seed-1/conv-do-01.json`, `.err` and `.time`.
 
 For each memory entry, start one REPL process and send every `user_turns`
 entry in order, followed by `/quit`. Before every user turn and after every
@@ -144,9 +168,10 @@ printf '%s\n' \
   'What did we name the new puppy?' \
   '/tokens' \
   '/quit' |
-  "$BIN" --stack "$ARTIFACT" --tokenizer "$TOKENIZER" --protocol 2 \
-    --threads 16 --temperature 0 --max-tokens 16 \
-    >mem-01.txt 2>mem-01.err
+  /usr/bin/time -v -o mem-01.time \
+    "$BIN" --stack "$ARTIFACT" --tokenizer "$TOKENIZER" --protocol 2 \
+      --threads 16 --temperature 0 --max-tokens 16 \
+      >mem-01.txt 2>mem-01.err
 
 printf '%s\n' \
   '/tokens' \
@@ -157,9 +182,10 @@ printf '%s\n' \
   'What does grandpa grow?' \
   '/tokens' \
   '/quit' |
-  "$BIN" --stack "$ARTIFACT" --tokenizer "$TOKENIZER" --protocol 2 \
-    --threads 16 --temperature 0 --max-tokens 16 \
-    >mem-02.txt 2>mem-02.err
+  /usr/bin/time -v -o mem-02.time \
+    "$BIN" --stack "$ARTIFACT" --tokenizer "$TOKENIZER" --protocol 2 \
+      --threads 16 --temperature 0 --max-tokens 16 \
+      >mem-02.txt 2>mem-02.err
 ```
 
 The seed 2 and seed 1 repeat commands replace `ARTIFACT`, `TOKENIZER`, and the
@@ -222,15 +248,32 @@ connectivity, protocol selection, deterministic serving and two fixed memory
 anchors. It has no power to estimate general answer quality or language
 capability.
 
+Panel noise is not applicable: this run computes no quality rate or seed
+comparison. Its two repeated checks are exact transcript equality, and its
+memory anchors are diagnostic booleans at both seeds. Neither is promoted to a
+capability estimate.
+
 ## Cost and stop rule
 
-- Local Ryzen 9 9950X only, 16 worker threads, no GPU and no external spend.
-- Preparation and build are under one minute from a warm cache. The expected
-  model panel is under one minute per seed.
-- New output is under 1 MiB. The build target may retain several GiB locally.
+- Local Ryzen 9 9950X only, one process at a time, 16 worker threads. There is
+  no GPU, no pod and no external spend.
+- Preparation and build project at 10 seconds warm-cache and at most 2 minutes
+  cold. The 33 model replies project at under 2 minutes total. Review and
+  delivery project at under 15 minutes.
+- Every process records wall time, CPU use and peak RSS with `/usr/bin/time -v`.
+  Projected peak RSS is below 256 MiB; above 1 GiB is an instrument failure.
+- The existing build target is about 1.1 GiB and is retained as an ignored local
+  build. New transcripts and timing records are below 1 MiB. There are no
+  checkpoints or temporary datasets. Delivery is the report and this task
+  record; no model state is retained.
+- There is no automatic retry. If an instrument check fails, stop and create a
+  fresh sibling output root only under a recorded repair; never overwrite or
+  append to the failed run.
+- Before execution verify at least `30 GiB + 128 MiB` free disk and a charged
+  total of `$0.00` external compute.
 - Stop on any pin mismatch, a missing toolchain, a command over 60 seconds, a
   nonzero exit, an absent or malformed reply record, a protocol other than 2,
-  or a non-deterministic seed-1 repeat.
+  peak RSS over 1 GiB, or a non-deterministic seed-1 repeat.
 
 ## Claim boundary
 
