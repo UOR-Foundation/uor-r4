@@ -88,6 +88,8 @@ Cancel if origin/main already has a replay driver, or if an open PR touches this
    - Without `--at`, it replays every offset of the reference's windows where the unforced picks differ, and counts the rest as equal.
    - It writes `uor-r4.decision-replay/1` new: each replay's passes, its forced set and whether it is accounted for.
    - A host test shows that a pass cut at p gives the same steps up to p as the whole window.
+
+   *Amended during the work, before any reading ran.* T's trace reads on past the prompts file's reference: its first window holds 99 ids, against R's 50. So "every offset of the reference's windows" became every offset inside R's window. The reference's offsets past it are counted, not compared, and its tokens inside R's window must be R's (I-Align), with a test and two negative gates.
 3. **claude-254's round-2 points**, each with a test where it is code:
    - a float pick that falls behind the other token in f64 by more than its f32 rounding bound is refused (negative gate);
    - on R, a pick that ties the other side's pick but has the larger id is refused (negative gate);

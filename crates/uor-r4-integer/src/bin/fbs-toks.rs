@@ -82,8 +82,10 @@
 //! - `ARTIFACT --decision-replay REFERENCE --prompts PROMPTS_JSON --deciles DECILES_JSON --g10 G
 //!   --reference-table TABLE [--at POSITION:OFFSET]... --out OUT_JSON` (claude-256) runs the
 //!   whole forced replay (`replay_step`) of the arithmetic step (T, R), R from ARTIFACT as Q, at
-//!   each chosen position, or, without `--at`, at every offset of REFERENCE's windows where R's
-//!   unforced pick is not the reference's, the rest counted equal. Each pass steps the row's
+//!   each chosen position, or, without `--at`, at every offset of REFERENCE's windows inside R's
+//!   (the row's prompt and reference) where R's unforced pick is not the reference's, the rest
+//!   counted equal. A float window reads on past the reference; its offsets there are counted
+//!   beyond R's window, not compared. Each pass steps the row's
 //!   prompt and its reference up to the offset under Φ, as `--forced --force` steps a row. It
 //!   writes `uor-r4.decision-replay/1` new: each replay's passes, Φ, and whether it accounts for
 //!   its step.
@@ -1050,26 +1052,50 @@ impl ReplayRun<'_> {
     }
 }
 
-/// The picks of `window`'s reply, one per offset from the prompt's last step on (claude-256).
-fn reply_picks(window: &DecisionWindow) -> Result<Vec<u32>, String> {
+/// The offsets of the reference's `window` inside R's window of `row` (its prompt and its
+/// reference less the last token) where R's unforced picks `r_picks` differ (claude-256), and how
+/// many of the window's offsets lie past R's. A float side's window may read on past the
+/// reference; the forward is causal, so its first offsets read R's tokens. A window that does not
+/// start its reply at the prompt's last step, does not reach R's last offset, or reads other
+/// tokens in R's window is refused (I-Align).
+fn differing_offsets(
+    window: &DecisionWindow,
+    row: &PanelPrompt,
+    r_picks: &[u32],
+) -> Result<(Vec<usize>, usize), String> {
+    let n = r_picks.len();
+    let fed = &row.reference[..n.saturating_sub(1)];
+    let ids: Vec<u32> = row.prompt.iter().chain(fed).copied().collect();
     let reply = window.steps.get(window.reply_start..).unwrap_or_default();
-    reply
-        .iter()
-        .enumerate()
-        .map(|(offset, s)| {
-            s.nearest.as_ref().map(|n| n.pick).ok_or_else(|| {
-                format!(
-                    "position {}, offset {offset}: the reference has no nearest",
-                    window.position
-                )
-            })
-        })
-        .collect()
+    if window.reply_start + 1 != row.prompt.len()
+        || reply.len() < n
+        || window.ids.get(..ids.len()) != Some(&ids[..])
+    {
+        return Err(format!(
+            "position {}: the reference does not read R's {} tokens with its reply from the prompt's last step through R's {n} offsets (I-Align)",
+            window.position,
+            ids.len()
+        ));
+    }
+    let mut differ = Vec::new();
+    for (offset, (step, &r)) in reply.iter().zip(r_picks).enumerate() {
+        let pick = step.nearest.as_ref().map(|n| n.pick).ok_or_else(|| {
+            format!(
+                "position {}, offset {offset}: the reference has no nearest",
+                window.position
+            )
+        })?;
+        if pick != r {
+            differ.push(offset);
+        }
+    }
+    Ok((differ, reply.len() - n))
 }
 
 /// `--decision-replay` (claude-256): claude-247's forced replay of the arithmetic step (T, R),
 /// R from the artifact at `path` as Q, at each chosen position, or, without `--at`, at every
-/// offset of the reference's windows where R's unforced pick is not the reference's; written new
+/// offset inside R's window where R's unforced pick is not the reference's (`differing_offsets`,
+/// which counts the reference's offsets past R's window); written new
 /// as `uor-r4.decision-replay/1`. `args` follow `--decision-replay` on the command line. It
 /// prints one JSON line: the offsets compared and equal, the replays, their counts and the file's
 /// sha256.
@@ -1127,33 +1153,22 @@ fn decision_replay_out(path: &str, args: &[String]) -> Result<(), String> {
             .find(|r| r.position == position)
             .ok_or_else(|| format!("position {position}: {prompts} has no such row"))
     };
-    // The offsets named, or every one of the reference's where R's unforced pick differs.
-    let (chosen, compared) = if at.is_empty() {
-        let (mut chosen, mut compared) = (Vec::new(), 0usize);
+    // The offsets named, or every one of the reference's inside R's window where R's unforced
+    // pick differs, and the reference's offsets past R's window.
+    let (chosen, compared, beyond) = if at.is_empty() {
+        let (mut chosen, mut compared, mut beyond) = (Vec::new(), 0usize, 0usize);
         for window in &rt.windows {
             let row = row_at(window.position)?;
             let unforced = forced_picks(&model, &row.prompt, &row.reference, None)
                 .map_err(|e| format!("position {}: {e}", row.position))?;
-            let picks = reply_picks(window)?;
-            if picks.len() != unforced.picks.len() {
-                return Err(format!(
-                    "position {}: the reference picks at {} offsets, R at {} (I-Align)",
-                    window.position,
-                    picks.len(),
-                    unforced.picks.len()
-                ));
-            }
-            compared += picks.len();
-            let differ = picks.iter().zip(&unforced.picks).enumerate();
-            chosen.extend(
-                differ
-                    .filter(|(_, (p, r))| p != r)
-                    .map(|(offset, _)| (window.position, offset)),
-            );
+            let (differ, past) = differing_offsets(window, row, &unforced.picks)?;
+            compared += unforced.picks.len();
+            beyond += past;
+            chosen.extend(differ.into_iter().map(|offset| (window.position, offset)));
         }
-        (chosen, Some(compared))
+        (chosen, Some(compared), Some(beyond))
     } else {
-        (at, None)
+        (at, None, None)
     };
     let mut counts = std::collections::BTreeMap::<&str, usize>::new();
     let mut replayed = Vec::with_capacity(chosen.len());
@@ -1194,6 +1209,7 @@ fn decision_replay_out(path: &str, args: &[String]) -> Result<(), String> {
         "deciles": { "path": deciles_path, "sha256": sha256_hex(&deciles_text), "trace": deciles.trace },
         "g10": g10,
         "offsets_compared": compared,
+        "offsets_beyond_r": beyond,
         "equal": compared.map(|c| c - replayed.len()),
         "replays": replayed.len(),
         "counts": counts,
@@ -1204,7 +1220,7 @@ fn decision_replay_out(path: &str, args: &[String]) -> Result<(), String> {
     write_new_file(std::path::Path::new(out), &text).map_err(|e| format!("{out}: {e}"))?;
     println!(
         "{}",
-        json!({ "schema": DECISION_REPLAY_SCHEMA, "offsets_compared": record["offsets_compared"], "equal": record["equal"], "replays": record["replays"], "counts": record["counts"], "replay_ms": elapsed_ms, "out": out, "sha256": sha256_hex(&text) })
+        json!({ "schema": DECISION_REPLAY_SCHEMA, "offsets_compared": record["offsets_compared"], "offsets_beyond_r": record["offsets_beyond_r"], "equal": record["equal"], "replays": record["replays"], "counts": record["counts"], "replay_ms": elapsed_ms, "out": out, "sha256": sha256_hex(&text) })
     );
     Ok(())
 }
@@ -2263,6 +2279,53 @@ mod tests {
             );
             assert_eq!(forced.forced.buckets.first(), Some(&want));
             assert!(forced.passes.len() >= 2, "{forced:?}");
+        }
+
+        /// claude-256: the unforced comparison reads the reference's offsets inside R's window,
+        /// and counts those past it, as a float window that reads on past the reference has
+        /// them; a pick that differs there is chosen. A window that reads other tokens in R's
+        /// window, stops short of R's last offset or starts its reply elsewhere is refused.
+        #[test]
+        fn the_unforced_comparison_reads_r_window_and_counts_the_rest() {
+            let model = raw_artifact();
+            let none = DecisionForceWindow::default();
+            let prompt = prompts(model.shape().vocab)[2].clone();
+            let reference = [3u32, 5, 7];
+            let whole = forced_picks(&model, &prompt, &reference, Some(&none)).expect("whole");
+            let picks = whole.picks.clone();
+            let window = forced_window(4, &prompt, &reference, whole).expect("window");
+            let row = PanelPrompt {
+                position: 4,
+                prompt: prompt.clone(),
+                reference: reference.to_vec(),
+                float_keyed: None,
+            };
+            assert_eq!(differing_offsets(&window, &row, &picks), Ok((vec![], 0)));
+            let mut longer = window.clone();
+            let last = longer.steps.last().cloned().expect("a step");
+            longer.ids.extend([7, 9]);
+            longer.steps.extend([last.clone(), last]);
+            assert_eq!(differing_offsets(&longer, &row, &picks), Ok((vec![], 2)));
+            let mut differs = longer.clone();
+            let nearest = differs.steps[window.reply_start + 1]
+                .nearest
+                .as_mut()
+                .expect("a nearest");
+            nearest.pick = (nearest.pick + 1) % model.shape().vocab as u32;
+            assert_eq!(differing_offsets(&differs, &row, &picks), Ok((vec![1], 2)));
+            let refused = |w: &DecisionWindow| {
+                let e = differing_offsets(w, &row, &picks).expect_err("refused");
+                assert!(e.contains("(I-Align)"), "{e}");
+            };
+            let mut other = longer.clone();
+            other.ids[prompt.len()] = (reference[0] + 1) % model.shape().vocab as u32;
+            refused(&other);
+            let mut short = window.clone();
+            short.steps.pop();
+            refused(&short);
+            let mut moved = longer;
+            moved.reply_start -= 1;
+            refused(&moved);
         }
 
         /// claude-249: under the decision trace each row is the untraced row; the trace holds a
