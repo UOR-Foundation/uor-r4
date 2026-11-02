@@ -28,13 +28,17 @@ function pageHooks() {
          ${section('function runPrediction', '/* ------------------------------------------------------------ status & toasts */')}
          ${section('function nextGenerationId', 'function beginGeneration')}
          ${section('function sendFromComposer', '/* ------------------------------------------------------------ model sources */')}
+         ${section('function finishLocalGeneration', 'function generationTokenLimit')}
+         ${section('function finishGenerationWithError', 'function generationTokenLimit')}
          ${section('function onWorkerMessage', 'function activeAssistantElement')}
-         return { runPrediction, renderDiscretePrediction, onWorkerMessage, sendFromComposer };`);
+         return { runPrediction, renderDiscretePrediction, onWorkerMessage, sendFromComposer, finishLocalGeneration, finishGenerationWithError };`);
     const hooks = factory(app, document, window, vi.fn(), vi.fn(), vi.fn(), vi.fn(() => [1, 2]), vi.fn(), (selector: string) => document.querySelector(selector)) as {
         runPrediction(prompt?: string): boolean;
         renderDiscretePrediction(message: unknown): void;
         onWorkerMessage(event: { data: Record<string, unknown> }): void;
         sendFromComposer(prompt?: string): number | false;
+        finishLocalGeneration(message: { fullText?: string; tokenCount?: number }): void;
+        finishGenerationWithError(error: string): void;
     };
     return { app, hooks };
 }
@@ -97,6 +101,19 @@ describe('actual page prediction hooks', () => {
         expect(hooks.runPrediction('hello')).toBe(false);
         expect(app.worker.postMessage).not.toHaveBeenCalled();
         expect(app.activeGenerationId).toBe(42);
+    });
+
+    it('ignores late chat completion and error while prediction is active', () => {
+        const { app, hooks } = pageHooks();
+        app.activePredictionRequestId = 'predict-existing';
+        app.activeGenerationId = 7;
+        const completed = vi.fn();
+        const dispose = events('uor-generation-finished', completed);
+        hooks.finishLocalGeneration({ fullText: 'late', tokenCount: 1 });
+        hooks.finishGenerationWithError('late error');
+        expect(completed).not.toHaveBeenCalled();
+        expect(app.activeGenerationId).toBe(7);
+        dispose();
     });
 
     it('returns a correlated worker error without completing the active prediction', () => {

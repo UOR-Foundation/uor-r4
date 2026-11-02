@@ -22,7 +22,8 @@ function button(label: string): HTMLButtonElement {
 describe('Settings', () => {
     it('updates appearance and editor preferences through the existing writer', () => {
         const ui = makeUi();
-        act(() => { render(<Settings ui={ui} onClose={vi.fn()} />, host); });
+        const onSettingsChange = vi.fn();
+        act(() => { render(<Settings ui={ui} onClose={vi.fn()} onSettingsChange={onSettingsChange} />, host); });
         const theme = host.querySelector<HTMLSelectElement>('select[aria-label="Theme"]')!;
         act(() => { theme.value = 'light'; theme.dispatchEvent(new Event('change', { bubbles: true })); });
         const reduce = host.querySelector<HTMLInputElement>('input[aria-label="Reduce motion"]')!;
@@ -38,6 +39,7 @@ describe('Settings', () => {
         expect(ui.updateSettings).toHaveBeenCalledWith({ fontSize: 16 });
         expect(ui.updateSettings).toHaveBeenCalledWith({ tabSize: 2 });
         expect(ui.updateSettings).toHaveBeenCalledWith({ wordWrap: true });
+        expect(onSettingsChange).toHaveBeenLastCalledWith({ theme: 'light', reduceMotion: true, fontSize: 16, tabSize: 2, wordWrap: true });
     });
 
     it('reports partial session clearing through the typed error channel', () => {

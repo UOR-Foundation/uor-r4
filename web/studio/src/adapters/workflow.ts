@@ -122,7 +122,7 @@ export function syncWorkspaceSummary(store: LifecycleStore, summary: WorkspaceSu
             store.dispatch({ type: 'file/opened', path: summary.activePath });
         }
         const activeTab = summary.tabs.find((tab) => tab.path === summary.activePath);
-        if (activeTab?.dirty && !['dirty', 'saving', 'error', 'saved'].includes(store.getState().file.phase)) {
+        if (activeTab?.dirty && !['dirty', 'saving', 'error'].includes(store.getState().file.phase)) {
             store.dispatch({ type: 'file/dirty' });
         }
     } else if (store.getState().file.path !== null) {

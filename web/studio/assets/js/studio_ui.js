@@ -454,10 +454,9 @@
             if (chips) chips.appendChild(chip);
             if (inspector) { var row = document.createElement('li'); row.className = 'attachment-row'; row.textContent = item.name; inspector.appendChild(row); }
         });
+        document.dispatchEvent(new CustomEvent('uor-attachments-changed', { detail: { count: attachments.length } }));
     }
     function removeAttachment(name) { attachments = attachments.filter(function (item) { return item.name !== name; }); saveAttachments(); renderAttachments(); }
-    document.dispatchEvent(new CustomEvent('uor-attachments-changed', { detail: { count: attachments.length } }));
-    }
     function clearAttachments() { attachments = []; saveAttachments(); renderAttachments(); }
     function attachContext() {
         var files = window.__studioFiles;

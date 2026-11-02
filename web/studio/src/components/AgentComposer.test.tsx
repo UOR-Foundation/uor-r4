@@ -78,6 +78,7 @@ function prompt(value: string) {
 describe('AgentComposer', () => {
     it('requires a ready source and keeps generation source/privacy pinned', () => {
         const { store, generation } = mount();
+        expect(host.textContent).toContain('No source selected');
         expect(button('Send').disabled).toBe(true);
         act(() => { store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' }); });
         prompt('Hello');
@@ -140,11 +141,12 @@ describe('AgentComposer', () => {
         store.dispatch({ type: 'artifact/selected', sourceId: 'model-a' });
         act(() => {
             store.dispatch({ type: 'artifact/ready', operation: store.getState().operation!, artifact: {
-                schema: 'uor-r4.lut-stack/1', canGenerate: true, engineSupported: true,
+                schema: 'uor-r4.lut-discrete-trunk/1', canGenerate: false, canPredict: true, engineSupported: false,
             } });
         });
         expect(host.textContent).toContain('API chat');
         expect(host.textContent).not.toContain('Local generation');
+        expect(host.textContent).not.toContain('Generation unavailable');
     });
 
     it('labels discrete local execution as next-token prediction', () => {

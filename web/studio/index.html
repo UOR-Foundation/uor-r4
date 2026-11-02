@@ -1288,6 +1288,7 @@
 
         function beginGeneration(conversation) {
             nextGenerationId();
+            app.chatGenerationId = app.activeGenerationId;
             app.activeGenerationKind = app.mode;
             app.generating = true;
             app.assistantBuffer = '';
@@ -1305,6 +1306,7 @@
         }
 
         function finishLocalGeneration(message) {
+            if (app.activePredictionRequestId) return;
             var conversation = activeConversation();
             if (!conversation) {
                 app.generating = false;
@@ -1344,12 +1346,13 @@
             requestCheckpoint(conversation);
             renderConversationList();
             scrollChat(false);
-            var localGenerationId = app.activeGenerationId;
-            app.activeGenerationId = null;
+            var localGenerationId = app.chatGenerationId;
+            app.chatGenerationId = null;
             document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: message.stoppedBy === 'cancelled' ? 'stopped' : 'complete', generationId: localGenerationId } }));
         }
 
         function finishGenerationWithError(errorText) {
+            if (app.activePredictionRequestId) return;
             var friendlyError = String(errorText);
             if (/ContextFull/i.test(friendlyError)) {
                 friendlyError = 'The bundled demo has a 64-token context. Shorten the prompt, or load the M1 trunk / an API provider for a longer context.';
@@ -1376,8 +1379,8 @@
             setMetrics('Error');
             toast(String(errorText), 'error');
             scrollChat(true);
-            var failedGenerationId = app.activeGenerationId;
-            app.activeGenerationId = null;
+            var failedGenerationId = app.chatGenerationId;
+            app.chatGenerationId = null;
             document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: 'error', generationId: failedGenerationId, error: String(errorText) } }));
         }
 
@@ -1438,6 +1441,7 @@
                         scrollChat(false);
                     },
                     onDone: function (result) {
+                        if (app.activePredictionRequestId) return;
                         var text = app.assistantBuffer;
                         var placeholder = document.querySelector('#chatMessages .msg[data-streaming="true"]');
                         if (placeholder) {
@@ -1457,8 +1461,8 @@
                         setMetrics('API response · ' + text.length + ' chars');
                         renderConversationList();
                         scrollChat(false);
-                        var apiGenerationId = app.activeGenerationId;
-                        app.activeGenerationId = null;
+                        var apiGenerationId = app.chatGenerationId;
+                        app.chatGenerationId = null;
                         document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: result && result.stopped ? 'stopped' : 'complete', generationId: apiGenerationId } }));
                     },
                     onError: function (error) {

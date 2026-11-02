@@ -135,7 +135,12 @@ describe('StudioApp', () => {
         const files = makeFiles();
         files.treeSummary = vi.fn(() => ({ mode: 'local', rootName: 'project', fileCount: 1, tabs: [{ path: 'a.md', dirty: true }], activePath: 'a.md' }));
         files.activeFile = vi.fn(() => ({ path: 'a.md', name: 'a.md', content: 'edited', mode: 'local' }));
-        files.saveActive = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+        let successful = true;
+        files.saveActive = vi.fn(async () => {
+            successful = !successful;
+            files.treeSummary = vi.fn(() => ({ mode: 'local', rootName: 'project', fileCount: 1, tabs: [{ path: 'a.md', dirty: !successful }], activePath: 'a.md' }));
+            return successful;
+        });
         act(() => {
             render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={files} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
         });

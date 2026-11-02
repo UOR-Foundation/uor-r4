@@ -7,15 +7,18 @@ interface SettingsProps {
     onClose(): void;
     onChange?(kind: 'sessions' | 'editor'): void;
     onError?(message: string): void;
+    onSettingsChange?(settings: StudioSettings): void;
 }
 
-export function Settings({ ui, onClose, onChange, onError }: SettingsProps) {
+export function Settings({ ui, onClose, onChange, onError, onSettingsChange }: SettingsProps) {
     const [settings, setSettings] = useState<StudioSettings>(() => ui.getSettings());
     const [clearing, setClearing] = useState<'sessions' | 'editor' | null>(null);
 
     function update<K extends keyof StudioSettings>(key: K, value: StudioSettings[K]) {
-        setSettings({ ...settings, [key]: value });
+        const next = { ...settings, [key]: value };
+        setSettings(next);
         ui.updateSettings({ [key]: value });
+        onSettingsChange?.(next);
     }
 
     function confirmClear() {

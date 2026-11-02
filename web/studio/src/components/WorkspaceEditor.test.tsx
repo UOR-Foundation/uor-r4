@@ -2,7 +2,7 @@ import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LifecycleStore } from '../state/lifecycle.js';
-import type { StudioFile, WorkspaceApi, WorkspaceSummary } from '../adapters/workflow.js';
+import type { StudioFile, StudioSettings, WorkspaceApi, WorkspaceSummary } from '../adapters/workflow.js';
 import { WorkspaceEditor } from './WorkspaceEditor.js';
 
 let host: HTMLDivElement;
@@ -23,11 +23,11 @@ function files() {
     return { api, summary, setActive(file: StudioFile | null) { active = file; }, get active() { return active; } };
 }
 
-function mount() {
+function mount(settings?: StudioSettings) {
     const store = new LifecycleStore();
     const fileApi = files();
     const onError = vi.fn();
-    act(() => { render(<WorkspaceEditor store={store} files={fileApi.api} onError={onError} />, host); });
+    act(() => { render(<WorkspaceEditor store={store} files={fileApi.api} onError={onError} settings={settings} />, host); });
     return { store, fileApi, onError };
 }
 
@@ -116,6 +116,21 @@ describe('WorkspaceEditor', () => {
         await act(async () => { finish(false); await Promise.resolve(); });
         expect(store.getState().file).toMatchObject({ path: 'b.md', phase: 'clean', error: null });
         expect(onError).not.toHaveBeenCalled();
+    });
+
+    it('applies font, wrap, and Tab settings to the typed editor', () => {
+        const { fileApi } = mount({ theme: 'dark', reduceMotion: true, fontSize: 20, tabSize: 2, wordWrap: false });
+        fileApi.summary.mode = 'directory';
+        fileApi.summary.rootName = 'project';
+        fileApi.summary.activePath = 'a.md';
+        fileApi.setActive({ path: 'a.md', name: 'a.md', content: 'a', mode: 'directory' });
+        act(() => { emit(fileApi); });
+        const editor = host.querySelector('textarea')!;
+        expect(editor.style.fontSize).toBe('20px');
+        expect(editor.getAttribute('wrap')).toBe('off');
+        editor.setSelectionRange(1, 1);
+        act(() => { editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })); });
+        expect(fileApi.api.setActiveContent).toHaveBeenCalledWith('a  ');
     });
 
     it('uses save-as and closes tabs through the existing API', () => {

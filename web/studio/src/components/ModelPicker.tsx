@@ -29,6 +29,7 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
     const [editingId, setEditingId] = useState<string | null>(null);
     const [providerOpen, setProviderOpen] = useState(false);
     const [removing, setRemoving] = useState<{ id: string; label: string } | null>(null);
+    const [testResults, setTestResults] = useState<Record<string, 'testing' | 'passed' | 'failed'>>({});
     const [, setRevision] = useState(0);
     const refresh = () => setRevision((value) => value + 1);
     const report = (error: unknown) => onError(error instanceof Error ? error.message : String(error));
@@ -49,6 +50,20 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
     const total = progress?.total ?? null;
     const resident = state.residentArtifact;
 
+    function testProvider(provider: ApiProvider) {
+        if (state.selectedSource?.kind === 'api' && state.selectedSource.id === provider.id) {
+            run(adapter.testApi(provider.id));
+            return;
+        }
+        setTestResults({ ...testResults, [provider.id]: 'testing' });
+        run(sources.testApi(provider.id).then((result) => {
+            setTestResults({ ...testResults, [provider.id]: result.ok ? 'passed' : 'failed' });
+        }).catch((error) => {
+            setTestResults({ ...testResults, [provider.id]: 'failed' });
+            report(error);
+        }));
+    }
+
     function editProvider(provider?: ApiProvider) {
         setEditingId(provider?.id ?? null);
         setProviderDraft(provider ? { label: provider.label, preset: provider.preset, baseUrl: provider.baseUrl, model: provider.model, apiKey: '' } : emptyDraft);
@@ -68,7 +83,7 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
                 if (providerDraft.apiKey) patch.apiKey = providerDraft.apiKey;
                 sources.updateApi(editingId, patch);
                 if (state.selectedSource?.kind === 'api' && state.selectedSource.id === editingId) {
-                    adapter.selectApi(editingId, providerDraft.baseUrl);
+                    store.dispatch({ type: 'api/selected', sourceId: editingId, endpoint: providerDraft.baseUrl });
                 }
             } else {
                 sources.addApi(providerDraft);
@@ -148,8 +163,9 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
                         <li>
                             <strong>{provider.label}</strong>
                             <span>{provider.baseUrl} · {provider.model}</span>
+                            <span>Test: {testResults[provider.id] || (state.selectedSource?.kind === 'api' && state.selectedSource.id === provider.id ? state.api.testStatus : 'untested')}</span>
                             <button type="button" onClick={() => adapter.selectApi(provider.id, provider.baseUrl)}>{`Use ${provider.label}`}</button>
-                            <button type="button" onClick={() => { adapter.selectApi(provider.id, provider.baseUrl); run(adapter.testApi(provider.id)); }}>{`Test ${provider.label}`}</button>
+                            <button type="button" onClick={() => testProvider(provider)}>{`Test ${provider.label}`}</button>
                             <button type="button" onClick={() => editProvider(provider)}>{`Edit ${provider.label}`}</button>
                             <button type="button" onClick={() => setRemoving({ id: provider.id, label: provider.label })}>{`Remove ${provider.label}`}</button>
                         </li>

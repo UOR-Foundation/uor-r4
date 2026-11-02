@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
+import type { StudioSettings } from '../adapters/workflow.js';
 import { saveActiveFile } from '../adapters/fileSave.js';
 import { syncWorkspaceSummary } from '../adapters/workflow.js';
 import type { WorkspaceApi, WorkspaceSummary } from '../adapters/workflow.js';
@@ -9,9 +10,12 @@ interface WorkspaceEditorProps {
     store: LifecycleStore;
     files: WorkspaceApi;
     onError(message: string): void;
+    settings?: StudioSettings;
 }
 
-export function WorkspaceEditor({ store, files, onError }: WorkspaceEditorProps) {
+const defaultSettings: StudioSettings = { theme: 'dark', reduceMotion: false, fontSize: 13, tabSize: 4, wordWrap: false };
+
+export function WorkspaceEditor({ store, files, onError, settings = defaultSettings }: WorkspaceEditorProps) {
     const state = useLifecycle(store);
     const [, setRevision] = useState(0);
     const refresh = () => setRevision((value) => value + 1);
@@ -92,7 +96,21 @@ export function WorkspaceEditor({ store, files, onError }: WorkspaceEditorProps)
                 <textarea
                     aria-label="File contents"
                     disabled={!active || state.file.phase === 'saving'}
+                    style={{ fontSize: `${settings.fontSize}px` }}
+                    wrap={settings.wordWrap ? 'soft' : 'off'}
                     value={active?.content ?? ''}
+                    onKeyDown={(event) => {
+                        if (event.key !== 'Tab' || !active) return;
+                        event.preventDefault();
+                        const input = event.currentTarget;
+                        const padding = ' '.repeat(settings.tabSize);
+                        const start = input.selectionStart;
+                        const end = input.selectionEnd;
+                        files.setActiveContent(`${input.value.slice(0, start)}${padding}${input.value.slice(end)}`);
+                        store.dispatch({ type: 'file/dirty' });
+                        input.setSelectionRange(start + padding.length, start + padding.length);
+                        refresh();
+                    }}
                     onInput={(event) => {
                         if (!active) return;
                         files.setActiveContent(event.currentTarget.value);

@@ -48,6 +48,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     const [inspectorOpen, setInspectorOpen] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [sessionRevision, setSessionRevision] = useState(0);
+    const [editorSettings, setEditorSettings] = useState(() => ui.getSettings());
     const generation = useMemo(() => createGenerationAdapter(store, sessions), [store, sessions]);
     useEffect(() => () => generation.dispose(), [generation]);
     useEffect(() => {
@@ -116,6 +117,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     ];
 
     return (
+        <div data-reduce-motion={editorSettings.reduceMotion ? '1' : '0'}>
         <AppShell
             activeSection={activeSection}
             onSection={setActiveSection}
@@ -142,12 +144,12 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
                     download={download}
                 />
             )}
-            {activeSection === 'workspace' && <WorkspaceEditor store={store} files={files} onError={report} />}
+            {activeSection === 'workspace' && <WorkspaceEditor store={store} files={files} onError={report} settings={editorSettings} />}
             {activeSection === 'models' && <ModelPicker store={store} adapter={adapter} sources={sources} onError={report} />}
             {activeSection === 'guide' && <Guide />}
             <Inspector store={store} ui={ui} open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
             {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
-            {settingsOpen && <Settings ui={ui} onClose={() => setSettingsOpen(false)} onError={report} onChange={(kind) => {
+            {settingsOpen && <Settings ui={ui} onClose={() => setSettingsOpen(false)} onError={report} onSettingsChange={setEditorSettings} onChange={(kind) => {
                 if (kind === 'editor') store.dispatch({ type: 'file/closed' });
                 else {
                     setSessionRevision((value) => value + 1);
@@ -155,5 +157,6 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
                 }
             }} />}
         </AppShell>
+        </div>
     );
 }
