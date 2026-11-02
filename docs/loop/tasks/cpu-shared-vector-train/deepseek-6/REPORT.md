@@ -25,8 +25,12 @@ Lab: deepseek. Item: [cpu-shared-vector-train](../../../../roadmap/items/cpu-sha
 
 ## Checks run at the head
 
-- Focused bin test: PASS, 1/1.
-- Full release suite, strict clippy, formatting, D23/D25/D32 ratchets, local PR check and all loop gates.
+- Full release suite: PASS after the known duplicate-artifact retry, 111 library tests plus 1 artifact-export test, with 4 release benchmarks ignored.
+- Strict clippy: PASS.
+- Formatting and `git diff --check`: PASS.
+- D23/D25/D32 ratchets: PASS, 4,451 / 93 / 31 sites and baselines unchanged.
+- Local PR check: PASS.
+- Full loop gates: PASS, all 11 green.
 - Public zero-update fixture: PASS with artifact SHA-256 `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` and final checkpoint SHA-256 `cbe9b44a35fd48fec15601cdf82fc08a326542ed9bd1d21647c2b43e11221bae`.
 - Fresh exact-head adversarial review.
 
