@@ -42,13 +42,17 @@ Built-in browser checks exercised the live page, not only component fixtures:
 
 These are live visual/non-model checks, not model, API, real-disk, production-publish, accessibility-certification, or typed-library parity claims.
 
-## Checks and delivery
+## Checks run at the head
 
 Focused tests were written failing-first for readiness, demo guard/restoration, and navigation. Tasks 1–3 have committed red/green records in the SDD ledger. Full Studio checks, repository gates, claim wording, local policy, exact-head review, and green GitHub checks precede queueing. PR uses `References #3500`; #3500 remains open for later parity/migration/cutover.
 
 ## Skills used
 
 Brainstorming, design and implementation planning, isolated worktrees, TDD, systematic debugging, modern web guidance, verification before completion, and independent exact-head delivery review. No model compute, paid resource, real credential, or real user data was used.
+
+## Still open
+
+This delivery does not provide real model/API/disk trajectories or mount the typed component library. Production publication and full typed-library parity/migration remain later units; #3500 stays open.
 
 ## Plain summary
 
