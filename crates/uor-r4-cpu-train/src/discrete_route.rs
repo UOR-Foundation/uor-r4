@@ -3081,6 +3081,32 @@ mod tests {
         .unwrap();
         assert_eq!(after_table, expected_table);
         assert_eq!(table.scorer.chooser.token_blocks[0][0], expected_table);
+        let tie_losses = {
+            let mut losses = [1u64; 16];
+            losses[0] = 2;
+            losses
+        };
+        let table_expected = (1..16)
+            .min_by_key(|&lane| {
+                (
+                    table
+                        .scorer
+                        .chooser
+                        .resulting_port(CpuDiscreteProposalKind::Table, 0, lane)
+                        .unwrap(),
+                    lane,
+                )
+            })
+            .unwrap();
+        assert_eq!(
+            table
+                .scorer
+                .chooser
+                .choose(CpuDiscreteProposalKind::Table, 0, &tie_losses, 1)
+                .unwrap()
+                .lane,
+            table_expected
+        );
 
         let route_artifact = serialized_route_with("route", vec![1, 2, 3, 4], 0, 0, 2, None, false);
         let mut route = CpuDiscreteProposalApplier::from_bytes(&route_artifact).unwrap();
@@ -3103,6 +3129,27 @@ mod tests {
         };
         assert_eq!(after_route, 16);
         assert_eq!(route.scorer.chooser.routes[0], 16);
+        let route_expected = (1..16)
+            .min_by_key(|&lane| {
+                (
+                    route
+                        .scorer
+                        .chooser
+                        .resulting_port(CpuDiscreteProposalKind::Route, 0, lane)
+                        .unwrap(),
+                    lane,
+                )
+            })
+            .unwrap();
+        assert_eq!(
+            route
+                .scorer
+                .chooser
+                .choose(CpuDiscreteProposalKind::Route, 0, &tie_losses, 1)
+                .unwrap()
+                .lane,
+            route_expected
+        );
     }
 
     #[test]
@@ -3182,6 +3229,78 @@ mod tests {
         assert_eq!(
             applier.scorer.read(&applier.scorer.model, &prefix).unwrap(),
             initial_read
+        );
+    }
+
+    #[test]
+    fn sequential_apply_refreshes_route_and_table_tie_ports() {
+        let proposal = CpuDiscreteProposal {
+            lane: 1,
+            current_loss: 2,
+            selected_loss: 1,
+            epoch: 0,
+            sensitive: true,
+        };
+        let route_artifact = serialized_route_with("route", vec![1, 2, 3, 4], 0, 0, 2, None, false);
+        let mut route = CpuDiscreteProposalApplier::from_bytes(&route_artifact).unwrap();
+        route
+            .apply(CpuDiscreteProposalKind::Route, 0, proposal)
+            .unwrap();
+        let route_losses = [2u64, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+        let expected_route = (1..16)
+            .min_by_key(|&lane| {
+                let port = route
+                    .scorer
+                    .chooser
+                    .composition
+                    .compose_index(
+                        route.scorer.chooser.move_actions[lane],
+                        route.scorer.chooser.routes[0] as u8,
+                    )
+                    .unwrap();
+                (port, lane)
+            })
+            .unwrap();
+        assert_eq!(
+            route
+                .scorer
+                .chooser
+                .choose(CpuDiscreteProposalKind::Route, 0, &route_losses, 1)
+                .unwrap()
+                .lane,
+            expected_route
+        );
+
+        let table_artifact = serialized_flock_fixture(
+            6,
+            &[[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]],
+            &[1, 0, 1, 0],
+            2,
+        );
+        let mut table = CpuDiscreteProposalApplier::from_bytes(&table_artifact).unwrap();
+        table
+            .apply(CpuDiscreteProposalKind::Table, 0, proposal)
+            .unwrap();
+        let table_losses = [2u64, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+        let expected_table = (1..16)
+            .min_by_key(|&lane| {
+                let moved = move_root(
+                    &table.scorer.chooser.token_blocks[0][0],
+                    table.scorer.chooser.move_actions[lane],
+                    &table.scorer.chooser.composition,
+                )
+                .unwrap();
+                (identify_orbit_root(&moved).unwrap(), lane)
+            })
+            .unwrap();
+        assert_eq!(
+            table
+                .scorer
+                .chooser
+                .choose(CpuDiscreteProposalKind::Table, 0, &table_losses, 1)
+                .unwrap()
+                .lane,
+            expected_table
         );
     }
 
