@@ -704,16 +704,17 @@ fn memory_tables(memory: Option<&TurnMemory>) -> Result<MemoryTables> {
 /// holds rounded as the export rounds it: the trunk's tables ([`round_tables_as_exported`]), the
 /// Hamming reads ([`round_hamming_as_exported`]) and the turn memory's weights
 /// ([`round_memory_as_exported`]). The step's `config.json` and the run's are copied byte for
-/// byte. Everything is read, checked and rounded on the CPU before anything is written:
-/// - an `OUT_RUN` that exists, or its staging folder `OUT_RUN.partial`, is refused;
+/// byte. Everything is read, checked and rounded on the CPU before any file is written:
+/// - an `OUT_RUN` that exists is refused. The staging folder `OUT_RUN.partial` is claimed with
+///   one `create_dir`, which refuses a folder that exists, so two copies never share one;
 /// - a step file the copy does not know, and whatever the export refuses in the step, the run's
 ///   rate reading or the trunk's configuration, is refused;
 /// - the copy is written to the staging folder, read back with every check the loaders make, and
 ///   refused unless it holds the rounded values bit for bit, re-rounding it changes nothing, its
 ///   memory tables are the source's, and it holds the source's files;
-/// - the marker [`ROUNDED_COPY_MARKER`] is written last, and the staging folder is then renamed
-///   to `OUT_RUN`. On any refusal after the staging folder is made, it is removed, so no partial
-///   copy is ever left.
+/// - the marker [`ROUNDED_COPY_MARKER`] is written last, `OUT_RUN` is checked again, and the
+///   staging folder is then renamed to it. On any refusal after the claim, the staging folder is
+///   removed, so no partial copy is ever left; a folder the claim refused is never touched.
 pub fn write_rounded_copy(model_dir: &Path, out_dir: &Path) -> Result<RoundedCopy> {
     let (run, out_run) = (run_of(model_dir)?, run_of(out_dir)?);
     if out_dir.file_name() != model_dir.file_name() {
@@ -724,14 +725,40 @@ pub fn write_rounded_copy(model_dir: &Path, out_dir: &Path) -> Result<RoundedCop
     let mut staging = out_run.clone().into_os_string();
     staging.push(".partial");
     let staging = PathBuf::from(staging);
-    for place in [&out_run, &staging] {
-        if place.symlink_metadata().is_ok() {
-            return Err(invalid(format!(
-                "{} exists, and the copy never replaces one",
-                place.display()
-            )));
-        }
+    if out_run.symlink_metadata().is_ok() {
+        return Err(exists(&out_run));
     }
+    if let Some(parent) = staging.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    match std::fs::create_dir(&staging) {
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return Err(exists(&staging)),
+        claimed => claimed?,
+    }
+    let written = copy_into(model_dir, out_dir, &run, &out_run, &staging);
+    if written.is_err() {
+        let _ = std::fs::remove_dir_all(&staging);
+    }
+    written
+}
+
+/// The copy's refusal of an output or staging folder that exists.
+fn exists(place: &Path) -> crate::FloatTrainError {
+    invalid(format!(
+        "{} exists, and the copy never replaces one",
+        place.display()
+    ))
+}
+
+/// [`write_rounded_copy`] once its staging folder is claimed: read, check and round the step,
+/// stage the copy, and rename it into place.
+fn copy_into(
+    model_dir: &Path,
+    out_dir: &Path,
+    run: &Path,
+    out_run: &Path,
+    staging: &Path,
+) -> Result<RoundedCopy> {
     let mut names = Vec::new();
     for entry in std::fs::read_dir(model_dir)? {
         let entry = entry?;
@@ -765,28 +792,27 @@ pub fn write_rounded_copy(model_dir: &Path, out_dir: &Path) -> Result<RoundedCop
     }
     let step = staging.join(
         out_dir
-            .strip_prefix(&out_run)
+            .strip_prefix(out_run)
             .map_err(|e| invalid(e.to_string()))?,
     );
-    let staged = StagedCopy {
+    let marker = StagedCopy {
         model_dir,
-        run: &run,
-        staging: &staging,
+        run,
+        staging,
         step: &step,
         run_config: &run_config,
         names: &names,
         model: &model,
         reads: reads.as_ref(),
         memory: memory.as_ref(),
-    };
-    let written = staged.write().and_then(|marker| {
-        std::fs::rename(&staging, &out_run)?;
-        Ok(marker)
-    });
-    if written.is_err() {
-        let _ = std::fs::remove_dir_all(&staging);
     }
-    written
+    .write()?;
+    // Checked again: a rename replaces an empty folder made since the first check.
+    if out_run.symlink_metadata().is_ok() {
+        return Err(exists(out_run));
+    }
+    std::fs::rename(staging, out_run)?;
+    Ok(marker)
 }
 
 /// A checkpoint read and rounded on the CPU, and where [`write_rounded_copy`] stages its copy.
@@ -899,8 +925,10 @@ impl StagedCopy<'_> {
 
 /// claude-252: the decision-trace side of the checkpoint `dir`: `T` when it is an evaluation copy
 /// rounded as exported ([`write_rounded_copy`]), `F` when it holds no marker. A marker that does
-/// not parse, or a copy whose files or run config are not the ones its marker names, is refused,
-/// so a trace on side `T` is always of the rounded parameters.
+/// not parse, or a copy whose files or run config are not the ones its marker names, is refused.
+/// The rounding itself is then checked again, not taken from the marker: the trunk's tables, and
+/// the reads and memory unchanged by re-rounding ([`check_rounded_as_exported`]). So a trace on
+/// side `T` is always of the rounded parameters, whoever wrote the marker.
 pub fn checkpoint_trace_side(dir: &Path) -> Result<&'static str> {
     let path = dir.join(ROUNDED_COPY_MARKER);
     if path.symlink_metadata().is_err() {
@@ -943,7 +971,33 @@ pub fn checkpoint_trace_side(dir: &Path) -> Result<&'static str> {
             )));
         }
     }
+    check_rounded_as_exported(dir)?;
     Ok("T")
+}
+
+/// Refuse the checkpoint `dir` unless every parameter the artifact holds is its own export
+/// rounding: its trunk's tables ([`check_tables_rounded_as_exported`]), and its Hamming reads and
+/// turn memory's weights, which re-rounding must leave bit for bit as they are. The copy's own
+/// read-back makes the same checks and more ([`StagedCopy::write`]).
+fn check_rounded_as_exported(dir: &Path) -> Result<()> {
+    let device = candle_core::Device::Cpu;
+    check_tables_rounded_as_exported(&StackModel::load(dir, &device)?)?;
+    let reads = HammingReads::load(dir, &device)?;
+    let memory = TurnMemory::load(dir, &device)?;
+    let held = read_values(reads.as_ref(), memory.as_ref())?;
+    if let Some(reads) = &reads {
+        round_hamming_as_exported(reads)?;
+    }
+    if let Some(memory) = &memory {
+        round_memory_as_exported(memory)?;
+    }
+    if held != read_values(reads.as_ref(), memory.as_ref())? {
+        return Err(invalid(format!(
+            "{}'s reads or memory are not as the export rounds them",
+            dir.display()
+        )));
+    }
+    Ok(())
 }
 
 /// Refuse a trunk whose tables are not as the exported artifact holds them
@@ -1487,9 +1541,9 @@ mod tests {
                 let mut v: Vec<f32> = (0..width)
                     .map(|_| ((rng.next() % 2_000_001) as f32 / 1_000_003.0 - 1.0) / 3.0)
                     .collect();
-                // Half a step past a step, which rounds away from 0; and one f32 spacing past 1,
-                // on its 2^-24 step already.
-                v[0] = -3.5 * step;
+                // Half a step past a step, which rounds away from 0 (to even, it would go to -2);
+                // and one f32 spacing past 1, on its 2^-24 step already.
+                v[0] = -2.5 * step;
                 v[1] = 1.0 + 2f32.powi(-23);
                 v
             })
@@ -1511,7 +1565,7 @@ mod tests {
                 );
                 moved += usize::from(o != n);
             }
-            assert_eq!(new[0], -4.0 * step, "half a step rounds away from 0");
+            assert_eq!(new[0], -3.0 * step, "half a step rounds away from 0");
             assert_eq!(new[1], old[1], "on its step already");
         }
         assert!(moved > 0, "no weight moved, so the rounding had no work");
@@ -1786,6 +1840,23 @@ mod tests {
         )?;
         side_refused("schema");
         std::fs::write(&marker_path, &text)?;
+        // A marker naming an unrounded file by its true sha256 is refused all the same: the side
+        // checks the rounding itself.
+        for (name, text_refused) in [
+            ("model.safetensors", "not its exported"),
+            ("turn_memory.safetensors", "not as the export rounds them"),
+        ] {
+            let kept = std::fs::read(out.join(name))?;
+            std::fs::copy(source.join(name), out.join(name))?;
+            let mut forged: RoundedCopy = serde_json::from_str(&text)?;
+            for file in forged.files.iter_mut().filter(|f| f.name == name) {
+                file.copy_sha256 = file_sha256(&out.join(name))?;
+            }
+            std::fs::write(&marker_path, serde_json::to_vec_pretty(&forged)?)?;
+            side_refused(text_refused);
+            std::fs::write(out.join(name), &kept)?;
+            std::fs::write(&marker_path, &text)?;
+        }
         assert_eq!(checkpoint_trace_side(&out)?, "T", "restored");
         Ok(())
     }
