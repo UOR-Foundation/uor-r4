@@ -71,10 +71,13 @@ pub fn reflected_floor() -> bool {
 thread_local! {
     static RATE_TRACE: std::cell::RefCell<Option<Vec<RateScores>>> =
         const { std::cell::RefCell::new(None) };
+    static RATE_FORCE: std::cell::RefCell<Vec<ForcedRate>> =
+        const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// One layer's rate scores over one forward, as [`rate_select`] reads them (claude-251, Q5's
-/// decision trace). Each score's entry is [`rate_index`] of it.
+/// One layer's rate scores over one forward, as computed (claude-251, Q5's decision trace), and
+/// the entry [`rate_select`] read for each: [`rate_index`] of the score, or a forced entry
+/// (claude-253).
 #[derive(Clone, Debug, PartialEq)]
 pub struct RateScores {
     pub layer: usize,
@@ -82,6 +85,46 @@ pub struct RateScores {
     pub dims: (usize, usize, usize),
     /// The scores in row-major order.
     pub score: Vec<f32>,
+    /// The entries used, in the same order.
+    pub entry: Vec<u8>,
+}
+
+/// claude-253, Q5's forced replay: at `layer`, row `row` of the forward's `batch · time` rows
+/// and lane `lane`, rate selection reads entry `entry` in place of the one the lane's score
+/// chooses, through the entry's centre `(entry + 0.5) / 16`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ForcedRate {
+    pub layer: usize,
+    pub row: usize,
+    pub lane: usize,
+    pub entry: u8,
+}
+
+/// claude-253: force `buckets` in every forward on this thread from now on; an empty set, the
+/// default, forces none.
+pub fn set_rate_force(buckets: Vec<ForcedRate>) {
+    RATE_FORCE.with(|f| *f.borrow_mut() = buckets);
+}
+
+/// `score`, `(batch, time, lanes)`, with each of `forced` (a row-major index and its entry) set
+/// to its entry's centre, which [`rate_index`] and the kernel's `rate_index_of` both read as that
+/// entry.
+fn force_rates(score: &Tensor, forced: &[(usize, u8)]) -> Result<Tensor> {
+    let total = score.elem_count();
+    let (mut mask, mut centre) = (vec![0u8; total], vec![0f32; total]);
+    for &(at, entry) in forced {
+        if at >= total || usize::from(entry) >= RATE_ENTRIES {
+            return Err(invalid(
+                "a forced bucket names a row, lane or entry outside the forward (an instrument fault)",
+            ));
+        }
+        mask[at] = 1;
+        centre[at] = (f32::from(entry) + 0.5) / RATE_ENTRIES as f32;
+    }
+    let device = score.device();
+    let mask = Tensor::from_vec(mask, score.shape(), device)?;
+    let centre = Tensor::from_vec(centre, score.shape(), device)?;
+    Ok(mask.where_cond(&centre, score)?)
 }
 
 /// claude-251: record every layer's rate scores on this thread from now on (`true`), copied to
@@ -1475,15 +1518,41 @@ impl StackModel {
         } else {
             raw_score.clamp(0., 1.)?
         };
+        // claude-253: the buckets forced at this layer, by row-major index.
+        let forced = RATE_FORCE.with(|f| {
+            f.borrow()
+                .iter()
+                .filter(|b| b.layer == layer)
+                .map(|b| match b.lane < lanes && b.row < batch * time {
+                    true => Ok((b.row * lanes + b.lane, b.entry)),
+                    false => Err(invalid(
+                        "a forced bucket names a row or lane outside the forward (an instrument fault)",
+                    )),
+                })
+                .collect::<Result<Vec<_>>>()
+        })?;
+        let used = if forced.is_empty() {
+            score.clone()
+        } else {
+            force_rates(&score, &forced)?
+        };
         if RATE_TRACE.with(|t| t.borrow().is_some()) {
+            let entries = |s: &Tensor| -> Result<Vec<u8>> {
+                Ok(s.flatten_all()?
+                    .to_vec1::<f32>()?
+                    .iter()
+                    .map(|&s| rate_index(s) as u8)
+                    .collect())
+            };
             let recorded = RateScores {
                 layer,
                 dims: score.dims3()?,
                 score: score.flatten_all()?.to_vec1::<f32>()?,
+                entry: entries(&used)?,
             };
             RATE_TRACE.with(|t| t.borrow_mut().as_mut().map(|r| r.push(recorded)));
         }
-        let selected = rate_select(&score)?;
+        let selected = rate_select(&used)?;
         let (lambda, keep) = if retention_rates() {
             // Carry 1 - 2^-(k+1) of the state. `keep` is the norm-preserving input share; it is
             // held constant in the backward, so the score's credit flows through `lambda` only.

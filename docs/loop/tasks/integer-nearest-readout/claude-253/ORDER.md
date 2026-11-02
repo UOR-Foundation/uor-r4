@@ -55,11 +55,12 @@ The item's scope. This unit edits:
 1. **Forcing applies on the float forward.**
    - Each forced bucket takes its entry, and each forced code its code, at its own row, read and head. The trace records them as used.
    - The forced set is set before the forward it applies to and cleared after it.
-2. **I-Force, host tests** (the CPU forward, on the tests' small model):
-   - **Self-force:** forcing a side to every one of its own buckets and codes leaves its trace and its rows byte-identical.
-   - **One forced bucket**, set to another entry: it takes that entry and its score stays as computed. The forward downstream of it changes.
-   - **One forced query code and one forced key code**, each set to another code: each takes its code. The kept sets that read it are chosen from it.
-   - **Each refusal** above.
+2. **I-Force, tests.** The vendored candle refuses tensor compute on the CPU (D24), so the forward's tests are CUDA tests, run on the pod; the host tests cover the rest.
+   - **CUDA, on the sheet's model:**
+     - **Self-force:** forcing a side to every one of its own buckets and codes leaves its trace and its rows byte-identical.
+     - **One forced bucket**, set to another entry: it takes that entry and its score stays as computed. The forward downstream of it changes.
+     - **One forced query code and one forced key code**, each set to another code: each takes its code. The kept sets that read it are chosen from it.
+   - **Host:** each refusal above; each forced decision recorded as used, and a forced decision not taken refused; the rows a batch forces; the trace's sign check exempt at a forced row only.
 
    Each has a negative gate: the force's own lines set aside, and the test then fails. The crate passes:
    - its host suite;
