@@ -16,9 +16,19 @@ scope: [crates/uor-r4-cpu-train/**, Cargo.toml, Cargo.lock, crates/uor-r4-harnes
 
 This is the CPU form of direct token-to-vector training. It matters only if the forward is already parity-checked and the trainer preserves admission rather than optimizing a disconnected score.
 
+## Progress
+
+The component trainer is delivered but the item is not complete:
+
+- #3518 added exact tied-token-table rank-margin updates with full-forward acceptance, Hamming refresh, admission guard and deterministic checkpoint/resume.
+- #3522 added exact BVG-K counterfactual groups for normalization gains, convolution/gate biases, decay offsets and all six FBS route tables.
+- #3523 added matched panel evaluation, exact CPU-versus-serving query/token/kept-cell gaps, checkpoint/resume panel identity and a gate that refuses target-admission or export loss.
+
+All three are synthetic finite component results on fresh `main`; none is a corpus-training, complete-reply, fresh-phrasing or language result.
+
 ## What is missing
 
-Add rank-margin gradients for the shared token table and lawful route/gate/normalization parameters, deterministic update order, clipping and checkpoint/resume. Evaluate the exact integer artifact immediately after checkpoints and preserve complete-reply and fresh-phrasing controls.
+Run the bounded pilot registered under `cpu-training-pilot` after its dependencies close. Bind a trained artifact and query panel, compare a float shadow with the exact integer server on the same rows, and preserve complete-reply and fresh-phrasing controls. The private-store parity prerequisite for the separate discrete path remains #3502/#3501.
 
 ## Done when
 
@@ -34,7 +44,7 @@ Forward parity misses, the trainer cannot preserve admission, or the only appare
 
 ## How to start
 
-Use the finite forward from `cpu-shared-vector-forward` as the only model graph. Add one parameter group at a time, beginning with the shared token table under the existing rank-margin objective. Save the pre-registration before any corpus-scale step.
+Start from the reports named under Progress and rerun their parity/resume tests at the pilot head. Prepare the bounded `cpu-training-pilot` registration only after the trained-artifact/query input and remaining dependency state are explicit; save it before any corpus-scale step.
 
 ## Rules that apply
 
@@ -45,6 +55,7 @@ Use the finite forward from `cpu-shared-vector-forward` as the only model graph.
 
 ## Sources
 
+- `crates/uor-r4-cpu-train/src/train.rs`, `counterfactual.rs` and `panel.rs`
 - `crates/uor-r4-training/src/joint_optimizer.rs` and `joint_campaign.rs` for reusable checkpoint/cursor patterns
 - `crates/uor-r4-float-train/src/in_space_long.rs` for the current serving-aligned training objective
 - `docs/model/pipeline-map.md`, stages 6-8
