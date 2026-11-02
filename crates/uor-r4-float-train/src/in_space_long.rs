@@ -9583,12 +9583,12 @@ mod tests {
                     .collect(),
             })
             .collect();
-        // One head; at row 5 it keeps 4, 1 and 3, at distances 1, 0 and 2.
+        // One head; at row 5 it keeps 4, 2, 1 and 3, at distances 1, 1, 0 and 2.
         let head = |b: u64| {
             let mut key = vec![0u64; time];
-            (key[1], key[3], key[4]) = (0b1010, 0b0000, 0b1000);
+            (key[1], key[2], key[3], key[4]) = (0b1010, 0b1011, 0b0000, 0b1000);
             let mut kept = vec![Vec::new(); time];
-            kept[5] = vec![4, 1, 3];
+            kept[5] = vec![4, 2, 1, 3];
             HammingTraceHead {
                 query: (0..time as u64).map(|t| if t == 5 { 0b1010 } else { t + b }).collect(),
                 key,
@@ -9627,15 +9627,16 @@ mod tests {
         let [w] = trace.windows.as_slice() else { panic!("one window is traced") };
         assert_eq!((w.position, w.reply_start), (500, 2));
         assert_eq!((w.ids.as_slice(), w.steps.len()), (&windows[1].input_ids[..6], 6));
+        let mut clamped = false;
         for (t, step) in w.steps.iter().enumerate() {
             let row = time + t;
             for (l, layer) in step.layers.iter().enumerate() {
                 let score = &rates[l].score[row * 2..row * 2 + 2];
                 assert_eq!(layer.score_f32, score.iter().map(|s| s.to_bits()).collect::<Vec<_>>());
-                let entry: Vec<u8> = score
-                    .iter()
-                    .map(|&s| crate::geometric_stack::rate_index(s) as u8)
-                    .collect();
+                // The kernel's entry, min(⌊s·16⌋, 15), written out here rather than read from
+                // `rate_index`; a score of 1 takes the last entry.
+                let entry: Vec<u8> = score.iter().map(|&s| ((s * 16.0).floor() as u8).min(15)).collect();
+                clamped |= score.iter().zip(&layer.entry).any(|(&s, &e)| s == 1.0 && e == 15);
                 assert_eq!((layer.entry.clone(), layer.score_q16.len()), (entry, 0));
                 assert_eq!(layer.read.as_ref().map(|r| r.depth), (l == 0).then_some(1));
             }
@@ -9649,13 +9650,17 @@ mod tests {
             };
             assert_eq!(step.memory.as_ref().map(|m| m.opening), opening);
         }
+        assert!(clamped, "the window holds a score of 1, at the last entry");
+        // Nearest first; 2 and 4 tie at distance 1, and the earlier comes first.
         let read = &w.steps[5].layers[0].read.as_ref().unwrap().heads[0];
-        assert_eq!((read.query, read.kept.clone()), (0b1010, vec![1, 4, 3]));
+        assert_eq!((read.query, read.kept.clone()), (0b1010, vec![1, 2, 4, 3]));
         assert_eq!((read.key, read.key_f32.clone()), (0, vec![(-5.0f32).to_bits()]));
         let nearest = |t: usize| w.steps[t].nearest.clone().unwrap();
         let (n2, n3, n5) = (nearest(2), nearest(3), nearest(5));
         assert_eq!((n2.pick, n2.runner_up, n3.pick, n3.runner_up, n5.runner_up), (1, 0, 2, 0, 0));
-        assert_eq!(n2.score_f64, Some(l1_score_r(&queries[2], &[1.0, 0.0]).to_bits()));
+        // −2^12 · (|0.9f32 − 1| + |0.1f32|), summed in f64; an f32 sum rounds it.
+        assert_eq!(n2.score_f64.map(f64::from_bits), Some(-819.200103759765625));
+        assert_ne!((-4096.0 * ((0.9f32 - 1.0).abs() + 0.1f32)) as f64, -819.200103759765625);
         assert_eq!(n5.score_f64.map(f64::from_bits), Some(-3072.0));
         assert_eq!(n5.runner_score_f64.map(f64::from_bits), Some(-3072.0));
         assert_eq!(n3.query_f32, queries[3].map(f32::to_bits).to_vec());
@@ -11529,6 +11534,7 @@ mod tests {
         assert_eq!((w.ids.as_slice(), w.steps.len()), (&named.input_ids[..=last], last + 1));
         let (mut scores, mut entries) = (Vec::new(), Vec::new());
         let (mut queries, mut picked) = (Vec::new(), Vec::new());
+        let mut unsigned = false;
         for (t, step) in w.steps.iter().enumerate() {
             assert_eq!(step.layers.len(), 6);
             for (l, layer) in step.layers.iter().enumerate() {
@@ -11547,6 +11553,8 @@ mod tests {
                 let signs = |bits: &[u32]| pack_signs(&bits.iter().map(|&b| f32::from_bits(b)).collect::<Vec<_>>());
                 assert_eq!((signs(&head.query_f32), signs(&head.key_f32)), (vec![head.query], vec![head.key]));
                 assert_eq!(head.kept.len(), t.saturating_sub(1).min(HAMMING_KEPT), "row {t}");
+                // The coordinates the sign read, not its ±1 codes.
+                unsigned |= head.query_f32.iter().chain(&head.key_f32).any(|&b| f32::from_bits(b).abs() != 1.0);
             }
             assert_eq!(step.nearest.is_some(), named.scored_offsets.contains(&t));
             if let Some(nearest) = &step.nearest {
@@ -11555,14 +11563,25 @@ mod tests {
                 picked.push(nearest.pick);
             }
         }
-        // Each kept set is nearest first by Hamming distance to its key, ties to the earlier
-        // position: checked on the readout's first head, whose keys the trace's codes give.
-        let keys: Vec<u64> = w.steps.iter().map(|s| s.readout.as_ref().unwrap().heads[0].key).collect();
-        for step in &w.steps {
-            let head = &step.readout.as_ref().unwrap().heads[0];
-            let order: Vec<(u32, u32)> =
-                head.kept.iter().map(|&s| ((head.query ^ keys[s as usize]).count_ones(), s)).collect();
-            assert!(order.windows(2).all(|p| p[0] < p[1]), "a kept set out of R's order");
+        assert!(unsigned, "the trace records the coordinates, not the codes");
+        let mut distinct = entries.clone();
+        (distinct.sort(), distinct.dedup());
+        assert!(distinct.len() > 1, "the window's scores fall in more than one bucket");
+        // Each kept set, as the kernel chose it, is the 16 positions 1 ≤ s < t nearest the row's
+        // query word by Hamming distance to their key words, nearest first, ties to the earlier
+        // position: so the recorded words are the ones the kernel chose by. Every head of both reads.
+        let read = |s: &DecisionStep, r: usize| if r == 0 { s.layers[1].read.clone() } else { s.readout.clone() };
+        for r in 0..2 {
+            for h in 0..4 {
+                let keys: Vec<u64> = w.steps.iter().map(|s| read(s, r).unwrap().heads[h].key).collect();
+                for (t, step) in w.steps.iter().enumerate() {
+                    let head = &read(step, r).unwrap().heads[h];
+                    let mut nearest: Vec<u32> = (1..t as u32).collect();
+                    nearest.sort_by_key(|&s| ((head.query ^ keys[s as usize]).count_ones(), s));
+                    nearest.truncate(HAMMING_KEPT);
+                    assert_eq!(head.kept, nearest, "read {r}, head {h}, row {t}");
+                }
+            }
         }
         let lambdas = rate_select(&Tensor::from_vec(scores.clone(), scores.len(), &device).unwrap())
             .unwrap()
