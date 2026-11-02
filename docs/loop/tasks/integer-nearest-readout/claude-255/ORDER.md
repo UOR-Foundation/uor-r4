@@ -80,7 +80,8 @@ Run `m5_full_path_cost_controls` with `--features serving-wasm` at base `0502184
 3. The type mean is unchanged.
    - `uor-r4-integer`'s suite with `--features serving-wasm` fails no test beyond the base's own failures.
    - The forced-read tests from claude-249 and the hamming tests pass.
-   - claude-254's `fbs-toks --decision-check` and its self-grade on F's DEV s1 trace give the same "check" and "graded" fields as `reading-r1`.
+   - The base's and the head's release `fbs-toks` decode R's artifact (`a7r-s1.uorlut`) byte for byte alike, teacher-forced on claude-249's DEV s1 smoke prompts, plain and with its forced windows, with their decision traces.
+   - **Amended, 2 Nov, during the work** (this text was written after the decodes ran; their script, `local/claude/claude-255/decodes.sh`, was written before), from "claude-254's `--decision-check` and self-grade on F's DEV s1 trace give the same fields". That check reads stored traces and tables and never runs the served session, so it could not see this change. R's artifact has type weights in both reads (256 nonzero each, in F's snapshot), so its decodes run `TypeHeads::mean`, and with `--force` they run `mean_by`'s forced branch.
 4. A REPORT with the negatives first, and one notebook row in `docs/research/notebook/m4-serving.md`.
 
 The item stays `ready`: Q5 is not read in this unit.
