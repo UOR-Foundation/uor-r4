@@ -546,7 +546,7 @@ fn parse_uort(token_bytes: &[u8], mask: &[u8], expected_vocabulary: usize) -> Re
         || usize::try_from(count).ok() != Some(mask.len())
         || usize::try_from(vocabulary).ok() != Some(expected_vocabulary)
     {
-        return Err("UORT header or payload length differs".to_owned());
+        return Err("UORT header or payload identity differs".to_owned());
     }
     Ok(token_bytes[64..]
         .chunks_exact(2)
@@ -1527,6 +1527,18 @@ mod tests {
         assert_eq!(metadata.prompt_seen, Some(true));
         assert_eq!(metadata.keyed, Some(true));
         assert_eq!(metadata.reply_seen, Some(true));
+
+        let successor = corpus(
+            &[0, 10, 11, 20, 21, 30, 31, 40, 41],
+            &[0, 0, 0, 1, 1, 0, 0, 1, 1],
+        );
+        let prompts = successor
+            .runs
+            .iter()
+            .filter(|run| run.mask == 0)
+            .map(|run| run_tokens(&successor, run).to_vec())
+            .collect::<Vec<_>>();
+        assert_eq!(prompts, vec![vec![10, 11], vec![30, 31]]);
     }
 
     #[test]

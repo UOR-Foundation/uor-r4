@@ -23,4 +23,3 @@ No edits to Claude-owned float-train, integer or serving files. No model-weight 
 - Missing prompt/reply runs, empty evidence, malformed inputs, unknown arguments and report replacement fail closed.
 - Public smoke evidence is regenerated and deterministic, with the 19-table M1 limitation and four-table parity result recorded separately.
 - README and REPORT state exact commands, test results and limitations.
-

@@ -47,7 +47,8 @@ These are instrument readings against public data, not M2 capability results. Th
 
 - `cargo test --offline --features cpu-parity --lib --bin m2-evidence -j1`: 13 evidence tests and 3 CLI tests passed.
 - `cargo test --offline --features panel-writer --bin heldout-panel -j1`: the panel-writer test passed after the repository's known duplicate Cargo artifact race was cleared.
-- `cargo clippy --offline --all-targets -- -D warnings`: passed; only pre-existing path-dependency warnings appeared.
+- `cargo clippy --offline --features cpu-parity --all-targets -- -D warnings`: passed.
+- `cargo clippy --offline --features panel-writer --bin heldout-panel -- -D warnings`: passed after the known duplicate artifact race was cleared.
 - `cargo fmt -- --check`: passed.
 - `git diff --check`: passed.
 - Two 19-table smoke executions produced the same report SHA-256.
@@ -69,4 +70,3 @@ The CPU evidence report now follows the same BOS and value-mask conventions as t
 binds every relevant corpus identity, and distinguishes new prompt templates from known reply
 templates. It independently reproduces the full CPU discrete path for a four-table artifact and
 clearly limits the current 19-table M1 report to writer parity.
-
