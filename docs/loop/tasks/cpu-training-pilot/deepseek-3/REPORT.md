@@ -16,7 +16,13 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 - Refused a resume before continuation when any bound input, the step count or the checkpoint bytes differ.
 - Extended the driver tests to compare an uninterrupted run with an interval-resumed run and to exercise source, token, manifest, seed, split and checkpoint-hash tampering.
 
-## Measurements
+## Pre-FIT diagnostic measurements
+
+The initial six-process comparison ran before the pre-registration sheet reached
+the test tree and before it had a fresh non-author FIT review. It is retained
+under [evidence/prefit-diagnostic](evidence/prefit-diagnostic/) as an executable
+instrument diagnostic only. Its byte equality does not satisfy the registered
+post-FIT outcome and is not the evidence used to close the restart claim.
 
 The same pinned public inputs from the earlier pilot were used: both raw dual-c131 artifacts, public tokens and mask, trainer seed `1`, evaluation stride `2`, cap `1024`, and checkpoint interval `64`. For each artifact seed, a separate process ran 256 uninterrupted attempts; another process stopped at 64 and exited; a third process resumed that bound checkpoint to total step 256.
 
@@ -37,7 +43,11 @@ Evidence and its verified SHA-256 inventory are in [evidence](evidence/).
 
 ### Decision
 
-**The public 64→256 restart control passes on both seeds.** The driver can continue an authenticated public-corpus training run in a new process and reaches byte-identical final artifact and checkpoint state.
+**The pre-FIT diagnostic was byte-identical on both seeds but is not a
+registered pass.** It establishes that the six commands are executable and
+produced no observed continuity difference. The public restart disposition
+remains pending until the pre-registration is FIT and the six runs are repeated
+against the reviewed source and binary.
 
 The program-level usefulness verdict is now explicit:
 
@@ -59,10 +69,15 @@ No repository skill was invoked. The work used the D84 CPU program, the existing
 
 ## Still open
 
+- The registered post-FIT restart comparison and its evidence receipt.
 - Credentialed sealed complete-reply and genuinely fresh-phrasing grading.
 - A new pre-registered configuration that clears a stated capability bar without admission or export loss.
 - A genuine trained FBS float shadow, if a lawful snapshot becomes available.
 
 ## Plain summary
 
-The CPU trainer can now stop after an authenticated checkpoint and finish in a fresh process with exactly the same model bytes and evaluation reading. That closes the public restart gap, but it does not turn the earlier zero-gain training result into capability.
+The pre-FIT diagnostic of the CPU trainer stopped after an authenticated
+checkpoint and finished in a fresh process with exactly the same model bytes
+and evaluation reading. That is a promising instrument diagnostic, not the
+registered restart result. The post-FIT comparison remains outstanding, and
+neither outcome changes the earlier zero-gain training result into capability.
