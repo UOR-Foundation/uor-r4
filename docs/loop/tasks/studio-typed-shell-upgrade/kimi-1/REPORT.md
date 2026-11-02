@@ -1,45 +1,44 @@
 # REPORT: implement the Studio typed lifecycle foundation, kimi-1
 
-Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500). Order: [ORDER.md](ORDER.md). Draft PR: #3520. Final implementation head: `6aea969f0dd3ea325fb5a1b5cca5a3e1f0877053`; tree: `cb1af77f82cde1ea86bdb8977a8142fe32471b5c`. This report and the synchronized roadmap input follow. Exact delivery-head evidence is posted on the PR.
+Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500). Order: [ORDER.md](ORDER.md). Draft PR: #3520. Verified implementation head: `e6fe23fba5d53e9d218f8774c2047c4ac4ee8ace`; tree: `97611da287600149cd83bd6de8d5f06ac48391e5`. Only this report follows that implementation. Exact delivery-head evidence is posted on the PR.
 
 ## What did not work
 
 - The first lifecycle implementation nested resident identity differently from the public test API and dropped operation source identity. The JavaScript declaration and Vite/Vitest typing also needed correction. The published-load wrapper dropped operation metadata, unknown totals leaked into finalization, and Vitest initially picked up the Node-specific `.mjs` suite. These implementation defects were corrected before the first review.
-- **The fresh review at `d03e6b533` returned CHANGES.** Worker results could be attributed to a newer load. Loads are now serialized, `load_model` carries the operation ID, readiness matches the posted operation plus filename/hash when reported, and matching operation errors fail only their own load. Rejected loads enter `artifact/failed`; unrelated errors do not revoke readiness.
-- API test completion could relabel a subsequently selected source, and omitted IDs were rejected. Selection now calls the existing `setActive`; test actions and completion are source-ID scoped, and an omitted ID uses the selected source.
-- Raw `theme` values were parsed as JSON, malformed entries could receive copy destinations, and the live provider key retained secret-bearing plan values. Theme now remains a raw string; malformed entries are non-copyable; `modelSources.v1` has `raw: null`, `value: null`, and `destinationKey: null` in the plan.
-- Generation privacy could use a caller-supplied endpoint, and hostname prefixes could misclassify public DNS names. Generation snapshots the selected source, invalid endpoints fail closed, exact IP-literal ranges cover `fe80::/10`, and DNS names default to remote.
-- The real source result omitted `expectedSha256`, resident metadata was reduced to schema, rejected loads had no error transition, and folder-open/file-close/session-activate states were unreachable. The hash now reaches the worker, resident verification/capability metadata is retained, and those transitions exist.
-- The first report cited a pre-merge-forward head and the roadmap still said no implementation existed. This record uses the final implementation head and current measurements; #3500 remains ready for later workflows.
-- Local policy correctly refused the required REPORT while it was missing. The initial D76 advisories were limited to reviewed plan/declaration/test scope registrations and known FILEMAP gaps; no implementation-scope waiver is used.
+- **The fresh review at `d03e6b533` returned CHANGES.** Worker results could be attributed to a newer load, API test completion could relabel a subsequently selected source, and omitted IDs were rejected. Raw `theme` values were parsed as JSON; malformed entries could receive destinations; the live provider plan retained secret-bearing values. Generation privacy could use a caller-supplied endpoint; hostname prefixes could misclassify public DNS names. The real source result omitted `expectedSha256`, resident metadata was reduced to schema, rejected loads had no error transition, and folder-open/file-close/session-activate states were unreachable. Tests and fixes cover each finding.
+- **The second fresh review at `a6a1df522` returned CHANGES.** It found that the worker queue awaited only `postMessage`, not terminal completion, so same-name/same-hash results could still misattribute success. It also found that an old API test could mark a changed endpoint passed under the same source ID, and that the report/ledger named intermediate heads. That head was not queued.
+- The worker queue now awaits each load's terminal success/error before releasing the next load. `load_model` carries the operation ID; readiness matches the pending operation plus filename/hash when reported; stale success drains without marking the replacement ready; matching errors fail only their own load. Same-name/same-hash replacement and late-success regressions fail before the fix and pass afterward.
+- API selection calls the existing `setActive`; test actions are source-ID scoped, omitted IDs use the selected source, and completion additionally requires the originally tested endpoint to remain selected. The same-ID endpoint-change regression fails before the fix and passes afterward.
+- Theme remains a raw string; malformed entries are non-copyable; `modelSources.v1` has `raw: null`, `value: null`, and `destinationKey: null` in the plan. Generation snapshots the selected source, invalid endpoints fail closed, exact IP-literal ranges cover `fe80::/10`, and DNS names default to remote. The hash reaches the worker, resident verification/capability metadata is retained, rejected loads enter `artifact/failed`, unrelated errors do not revoke readiness, and the missing file/session transitions exist.
+- The roadmap no longer says no implementation exists and remains ready for later workflows. Local policy correctly refused the required REPORT while it was missing and later caught two headings dropped in a rewrite; both are restored. Expected D76 advisories are limited to reviewed plan/declaration/test scope registrations and known FILEMAP gaps; no implementation-scope waiver is used.
 
 ## What changed
 
-Added a typed lifecycle store with artifact operation IDs, real byte progress, indeterminate finalization, stale-event rejection, run-readiness separation, source-scoped API tests, file/session states, and per-generation source/privacy snapshots.
+Added a typed lifecycle store with artifact operation IDs, real byte progress, indeterminate finalization, stale-event rejection, run-readiness separation, source/endpoint-scoped API tests, file/session states, and per-generation source/privacy snapshots.
 
-Added structured `uor-model-load-progress` events and optional operation metadata for published, URL, local-file, and bundled loads. Stale completion returns `{ stale: true }` without selecting, persisting, or emitting source-changed. The narrow adapter uses existing model-source methods and worker readiness rather than reimplementing the engine.
+Added structured `uor-model-load-progress` events and optional operation metadata for published, URL, local-file, and bundled loads. Stale completion returns `{ stale: true }` without selecting, persisting, or emitting source-changed. The narrow adapter uses existing model-source methods and completion-serialized worker readiness rather than reimplementing the engine.
 
 Added the pure migration snapshot reader and deterministic copy-forward plan. `modelSources.v1` remains the only live provider/compatibility key; there is no second secret store, write, marker, or real browser-data access.
 
 Added strict TypeScript, Vite library build, Vitest/jsdom configuration, and pinned dependencies. No component, page, publisher, deployment, engine, worker, tokenizer, or `studio_api.js` change was made. #3500 remains ready for the next workflow unit.
 
-Diff against `origin/main` at `728cf3f6ce0101e3f7d1cc7e2ebd16d7ab9f021b`: 19 files, 4,740 insertions and 16 deletions. No size cap applies.
+Diff against `origin/main` at `7c22961429fd7c2b6feb954933618870466c7284`: 19 files, 4,795 insertions and 16 deletions at the verified implementation head. The report-only update is included in the final PR size. No size cap applies.
 
 ## Measurements
 
-- **48 Vitest tests pass:** 26 lifecycle, 12 adapter, 9 migration, and 1 public entry.
+- **50 Vitest tests pass:** 26 lifecycle, 14 adapter, 9 migration, and 1 public entry.
 - **7 Node model-source tests pass:** real progress, unknown totals, stale completion, legacy calls, published metadata, local-file finalization, and bundled finalization.
-- **55 tests total, 0 failures.** The omitted-ID adapter test failed first with `Cannot test a non-selected API source`, then passed after deriving the selected ID.
+- **57 tests total, 0 failures.** The omitted-ID, same-artifact worker replacement, and same-ID endpoint-change adapter regressions each failed for their intended reason before their fixes.
 - `npm run typecheck`: PASS, no TypeScript errors.
-- `npm run build`: PASS, `dist/studio-foundation.js` 47.08 kB (gzip 13.32 kB), generated output uncommitted.
+- `npm run build`: PASS, `dist/studio-foundation.js` 47.25 kB (gzip 13.40 kB), generated output uncommitted.
 - `node verify_studio_page.mjs --strict-router`: PASS, both strict pages clean with zero failures. No new browser, accessibility, or model-capability claim is made.
 
 ## Checks run at the head
 
-- At `38a32c5076d6fa3b2a283962d0cb34bd365d0393`, the complete foundation suite, typecheck, build, Node hooks, and static strict-page check pass after merging `origin/main` at `728cf3f6`.
-- `uor-harness loop gates --full`: 11/11 GREEN, ledger `local/kimi/gates/1793581218-34127`.
-- Claim wording and `git diff --check`: PASS; worktree clean at the checked head.
-- Local policy initially failed because this rewritten report omitted its required `Checks run at the head` and `Skills used` headings. Those headings are restored and policy is rerun before queueing. Expected D76 advisories are limited to the reviewed plan/declaration/test scope registrations and known FILEMAP gaps; no implementation-scope waiver is used.
+- At `e6fe23fba5d53e9d218f8774c2047c4ac4ee8ace`, tree `97611da287600149cd83bd6de8d5f06ac48391e5`, the complete foundation suite, typecheck, build, Node hooks, and static strict-page check pass after merging `origin/main` at `7c229614`.
+- `uor-harness loop gates --full`: 11/11 GREEN at that implementation head, ledger `local/kimi/gates/1793582389-94366`.
+- `uor-harness loop pr-check --local`: PASS at that implementation head, with only the disclosed D76 scope and FILEMAP advisories.
+- Claim wording and `git diff --check`: PASS; worktree clean at the checked implementation head.
 - The final report-only commit, exact delivery head/tree, fresh review, and GitHub checks are recorded on the PR before queueing.
 
 No npm test used real browser data, a real model, a pod, a deployment, or a production publish. Modern Web Guidance informed native progress semantics, no invented percentages/stages, and fail-closed endpoint privacy; no component UI is included here.
